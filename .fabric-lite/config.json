@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "runner": {
+    "type": "kiro-headless",
+    "executable": "/Users/adam2/.local/bin/kiro-cli",
+    "workerAgent": "fabric-lite-worker",
+    "defaultModel": null
+  },
+  "budgets": {
+    "maxAiCalls": 7,
+    "maxPlannerCalls": 1,
+    "maxWorkerCalls": 5,
+    "maxVerifierCalls": 1,
+    "maxConcurrency": 3,
+    "maxRetriesPerCall": 1,
+    "maxPromptCharsPerCall": 30000,
+    "maxContextCharsPerCall": 24000,
+    "maxOutputCharsPerWorker": 8000,
+    "maxOutputCharsVerifier": 16000,
+    "maxTotalAiInputChars": 120000,
+    "maxTotalAiOutputChars": 40000,
+    "executionTimeoutMs": 180000,
+    "aiCallTimeoutMs": 90000
+  },
+  "filesystem": {
+    "allowWrite": [],
+    "denySymlinkEscape": true,
+    "maxFilesPerReadMany": 20,
+    "maxCharsPerFile": 20000,
+    "maxTotalReadChars": 100000
+  },
+  "shell": {
+    "enabled": false,
+    "allowedCommands": [],
+    "timeoutMs": 30000,
+    "maxOutputChars": 20000
+  },
+  "output": {
+    "maxFinalChars": 20000,
+    "includeMetrics": true
+  }
+}

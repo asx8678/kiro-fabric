@@ -1,0 +1,5 @@
+const paths = ["src/pricing.ts", "test/pricing.check.ts"];
+const reads = await fabric.fs.readMany({ paths });
+const workers = await fabric.ai.parallel({ tasks: reads.map((file) => ({ instruction: "Audit this file for concrete defects or coverage gaps. Cite path and evidence; do not guess.", context: file, role: "worker", outputSchema: { type: "object", properties: { path: {type:"string"}, findings: {type:"array",items:{type:"object",properties:{claim:{type:"string"},evidence:{type:"string"}},required:["claim","evidence"],additionalProperties:false}}}, required:["path","findings"], additionalProperties:false } })), concurrency: 2 });
+const verified = await fabric.ai.run({ instruction: "Verify and deduplicate findings. Reject unsupported claims.", context: workers, role: "verifier", outputSchema: {type:"object",properties:{findings:{type:"array",items:{type:"object",properties:{path:{type:"string"},claim:{type:"string"},evidence:{type:"string"}},required:["path","claim","evidence"],additionalProperties:false}},coverageComplete:{type:"boolean"}},required:["findings","coverageComplete"],additionalProperties:false} });
+return verified.value;

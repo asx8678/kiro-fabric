@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "runId": "run_4f8a3bcf6ab342fd",
+  "status": "succeeded",
+  "value": {
+    "accepted": [
+      "src/pricing.ts: discount lacks percent validation"
+    ],
+    "rejected": [
+      "src/missing.ts: SQL injection"
+    ]
+  },
+  "metrics": {
+    "elapsedMs": 7452,
+    "aiCalls": 1,
+    "workerCalls": 0,
+    "retries": 0,
+    "inputChars": 514,
+    "outputChars": 174
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "fabric-lite",
+  "version": "1.0.0",
+  "description": "A bounded programmable Kiro CLI reasoning runtime",
+  "type": "module",
+  "bin": { "fabric-lite": "./dist/cli/main.js" },
+  "exports": {
+    ".": "./dist/index.js",
+    "./types": "./types/fabric-lite.d.ts"
+  },
+  "files": ["dist", "types", "prompts", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && vitest run",
+    "test:smoke": "FABRIC_LITE_KIRO_SMOKE=1 vitest run test/kiro",
+    "setup:kiro": "bash scripts/setup-kiro.sh",
+    "prepack": "pnpm build"
+  },
+  "engines": { "node": ">=20" },
+  "packageManager": "pnpm@10.33.2",
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "fast-glob": "^3.3.3",
+    "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "vitest": "^3.2.4"
+  }
+}

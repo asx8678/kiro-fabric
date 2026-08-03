@@ -1,0 +1,1 @@
+Correct only the invalid JSON against the supplied schema and validation errors. Do not repeat semantic analysis. Return one framed JSON value.

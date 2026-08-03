@@ -1,0 +1,2 @@
+import { readFile } from "node:fs/promises";
+export async function programInput(file?:string):Promise<string>{if(file)return readFile(file,"utf8");if(process.stdin.isTTY)throw new Error("Provide --file or pipe a program on stdin");let value="";for await(const chunk of process.stdin)value+=String(chunk);return value;}

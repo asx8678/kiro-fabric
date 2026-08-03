@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "runId": "run_d9cde5469bbe4f27",
+  "status": "succeeded",
+  "value": {
+    "findings": [
+      {
+        "path": "src/pricing.ts",
+        "claim": "total() does not validate that array elements are finite numbers; NaN or Infinity entries will silently corrupt the sum.",
+        "evidence": "No type-runtime check or filter before reduce; TypeScript types alone do not prevent NaN at runtime."
+      },
+      {
+        "path": "src/pricing.ts",
+        "claim": "discounted() does not clamp or validate the percent parameter; values >100 produce negative results, and negative percents produce amounts greater than the original.",
+        "evidence": "Math.round(cents  (1 - percent / 100)) — with percent=200, result is cents  -1; with percent=-50, result is cents  1.5."
+      },
+      {
+        "path": "src/pricing.ts",
+        "claim": "discounted() does not guard against non-integer cent values as input, risking floating-point drift before Math.round.",
+        "evidence": "If cents is already a fractional value (e.g., 99.5), multiplying by a fraction and then rounding may produce off-by-one results compared to expectations."
+      },
+      {
+        "path": "test/pricing.check.ts",
+        "claim": "No test coverage for edge cases: empty array passed to total, zero discount, discount exceeding 100%, or negative values.",
+        "evidence": "Only two happy-path assertions exist: total([125,75]) and discounted(1000,10). No boundary or invalid-input scenarios are tested."
+      },
+      {
+        "path": "test/pricing.check.ts",
+        "claim": "No test coverage for non-integer or floating-point inputs.",
+        "evidence": "Both assertions use clean integers (125, 75, 1000, 10). Floating-point rounding behavior of total and discounted is never exercised."
+      },
+      {
+        "path": "test/pricing.check.ts",
+        "claim": "File is a bare script with no test framework; failures produce unhelpful output and non-standard exit behavior.",
+        "evidence": "Tests are plain if/throw statements rather than using a test runner (e.g., vitest, node:test). A failure yields only a generic Error with no diff or context."
+      },
+      {
+        "path": "test/pricing.check.ts",
+        "claim": "Import uses .js extension which may fail depending on TypeScript module resolution settings.",
+        "evidence": "import { discounted, total } from \"../src/pricing.js\" — if tsconfig does not enable NodeNext/Node16 module resolution or the project is not configured for ESM with .js extensions mapping to .ts, this import can fail at compile time."
+      }
+    ],
+    "coverageComplete": true
+  },
+  "metrics": {
+    "elapsedMs": 23538,
+    "aiCalls": 3,
+    "workerCalls": 2,
+    "retries": 0,
+    "inputChars": 4628,
+    "outputChars": 5017
+  }
+}

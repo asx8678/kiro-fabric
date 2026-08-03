@@ -1,3 +1,15 @@
 .pi/
 planfabric.md
+pi-fabric-implement-kiro-fabric-lite-prompt.md
+IMPLEMENTATION_PLAN.md
+IMPLEMENTATION_REPORT.md
+docs/KIRO_ENVIRONMENT_REPORT.md
+docs/BENCHMARK.md
+docs/E2E_SCENARIOS.md
 pi-fabric/
+node_modules/
+dist/
+coverage/
+.fabric-lite/runs/
+.fabric-lite/cache/
+*.tgz

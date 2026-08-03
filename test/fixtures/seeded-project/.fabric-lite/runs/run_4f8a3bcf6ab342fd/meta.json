@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "runId": "run_4f8a3bcf6ab342fd",
+  "startedAt": "2026-08-03T16:56:38.168Z",
+  "programSha256": "50bf2a41fa06358deaf9680ca224506c163e52b8f53267b5d18f9b34f360718c",
+  "budgets": {
+    "maxAiCalls": 7,
+    "maxPlannerCalls": 1,
+    "maxWorkerCalls": 5,
+    "maxVerifierCalls": 1,
+    "maxConcurrency": 3,
+    "maxRetriesPerCall": 1,
+    "maxPromptCharsPerCall": 30000,
+    "maxContextCharsPerCall": 24000,
+    "maxOutputCharsPerWorker": 8000,
+    "maxOutputCharsVerifier": 16000,
+    "maxTotalAiInputChars": 120000,
+    "maxTotalAiOutputChars": 40000,
+    "executionTimeoutMs": 180000,
+    "aiCallTimeoutMs": 90000
+  },
+  "runner": {
+    "type": "kiro-headless",
+    "workerAgent": "fabric-lite-worker"
+  }
+}

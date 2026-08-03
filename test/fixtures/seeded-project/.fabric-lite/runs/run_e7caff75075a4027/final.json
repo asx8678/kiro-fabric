@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "runId": "run_e7caff75075a4027",
+  "status": "succeeded",
+  "value": {
+    "cause": "The test expectation is wrong. The discounted function computes Math.round(1000 * (1 - 10 / 100)) which equals Math.round(1000 * 0.9) = 900. The test asserts the result should be 800, which is a stale/incorrect expectation.",
+    "smallestFix": "Change the test expectation from 800 to 900: if (discounted(1000, 10) !== 900)",
+    "evidence": "src/pricing.ts line 6: return Math.round(cents * (1 - percent / 100)); → discounted(1000, 10) = Math.round(1000  0.9) = 900. test/pricing.failing.ts line 4 asserts discounted(1000, 10) !== 800, meaning it expects 800, but the correct result is 900. The test comment on line 3 confirms: 'implementation returns 900, while this stale expectation says 800.'"
+  },
+  "metrics": {
+    "elapsedMs": 11501,
+    "aiCalls": 1,
+    "workerCalls": 1,
+    "retries": 0,
+    "inputChars": 968,
+    "outputChars": 811
+  }
+}
