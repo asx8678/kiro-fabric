@@ -1,0 +1,4 @@
+const paths = (await fabric.fs.glob({ pattern: "src/**/*.ts", maxResults: 50 })).slice(0, 20);
+const partitions = fabric.util.chunk(paths, Math.max(1, Math.ceil(paths.length / 5))).slice(0, 5);
+const reports = await fabric.ai.parallel({ tasks: await Promise.all(partitions.map(async partition => ({ role: "worker" as const, instruction: "Audit only this finite partition. Do not repartition, delegate, recurse, or call Fabric Lite. Cite path/line/quote evidence.", context: await fabric.fs.readMany({ paths: partition, maxCharsPerFile: 4000 }), outputSchema: { type: "object", properties: { claims: { type: "array" } }, required: ["claims"], additionalProperties: false } }))), concurrency: 3, failFast: false });
+return { status: reports.every(report => report.error) ? "failed" : reports.some(report => report.error) ? "partial" : "succeeded", reports };

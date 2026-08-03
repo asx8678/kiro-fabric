@@ -1,0 +1,1 @@
+Verify, deduplicate, rank, and reconcile supplied findings. Reject unsupported claims and state incomplete coverage.

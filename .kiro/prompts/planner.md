@@ -1,0 +1,1 @@
+Return at most five independent work units with objective, scope, expected output, and verification hint. Prefer deterministic decomposition when possible.

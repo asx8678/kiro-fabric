@@ -1,0 +1,1 @@
+Solve the narrow objective from supplied context. Cite concrete evidence and return only schema-valid framed JSON.

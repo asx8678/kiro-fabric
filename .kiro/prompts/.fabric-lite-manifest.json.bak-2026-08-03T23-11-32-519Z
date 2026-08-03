@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "files": {
+    "evidence-change.md": "f0cf782a9adbabdc7b7857dd93b7ebb48c913741bdbccf265f0bfc4d5b58c19f",
+    "evidence-ledger.md": "58018e69586100b7c1082fe0e7e8a43f87359466a574aacab2a615dacd23f538",
+    "fabric-context-decompose.md": "b149c7cd4e64f47b8126188de24a7b925ed61838ac81740aab20fad2498ff17b",
+    "fabric-council.md": "33df6751989d44830be412175036b6ec295a035324b67a761753863f78ac545e",
+    "fabric-fusion.md": "8bb2c8218d6b7ea98b3cf68b0381f1efb5cc05e8dc101f37c46e8b032928abdc",
+    "fabric-guide.md": "7d68d48937bf001996304e5efb564d70c736210982824571b22951fc3cc11b92",
+    "fabric-workflow.md": "12e9d3625d37cd92ef4de50cb5859c4f9f780dd98244426d344db2a436795983",
+    "parent-agent.md": "f4779de4adc06877db5db24fdee61c34b85f1685fc0899f0341fad890f3d0c58",
+    "planner.md": "d0e6406249741bead27dc12f0b75158b6589e2031f8c2cce2fcf67d08e297519",
+    "repair-json.md": "ee3c756fcd03d24c4e7278f927456b466d3db585852c28ed0c8704e441f41e91",
+    "repository-delivery.md": "e2fbdf10b5a88bf671200a99b81d7e7e7532ad0b5740673001ed7fa32698b882",
+    "spec-audit.md": "cbe2eafe7b5866721f4133e3ea211e7a4e404c4f18aee94dbd8c8535e7797953",
+    "verifier.md": "5c5279f51a0d67e9cf681ccda1f9a7f0b284195578908d895b9b422e689719b8",
+    "worker.md": "7baac86f987040eb3a3bb7fe62d3b2b977b6d3c42eed48c54b93c4ca0e8b3e8d",
+    "worker-agent.md": "8b9259157281046a4c2b287299892cd313f654ecf742492737f0f4c26799389e",
+    "workspace-policy.md": "68022b84dae46d84b3557227efc7c745e6c848c86c1e2670b4b29471b52ae91d"
+  }
+}

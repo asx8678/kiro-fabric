@@ -1,0 +1,3 @@
+# Workspace policy
+
+Use the repository's existing package manager, lockfile, scripts, and conventions. Rebuild every artifact consumed by the requested work and run the smallest relevant authorized checks. Before release or commit, run the repository's documented comprehensive check when authorized; otherwise state that it was not run. For the Fabric Lite source workspace specifically, use pnpm and keep generated `.kiro/agents` as snapshots; this package-specific rule must not be copied into unrelated target repositories. Kiro prompt files are optional discoverability aids, never a runtime `@`-expansion dependency. Do not assert that `.kiro/system.md` or rules auto-load without verified Kiro support.

@@ -1,0 +1,3 @@
+# Non-enforcing evidence change
+
+Default to a proposal when writes are denied. Only when writes are already allowlisted and explicitly requested: read the exact preimage, preserve that preimage, apply the smallest exact patch, read back the changed region, inspect related call sites, then run the smallest relevant allowlisted checks. Verification after change is mandatory; a write is not completion. Report observations with result status `success`, `partial`, or `failed`; on any write, read-back, or check failure, record the actual changed state honestly. Never claim a transaction, certification, rollback, atomic rollback, or rollback guarantee.

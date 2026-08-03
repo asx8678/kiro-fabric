@@ -1,0 +1,5 @@
+# Fabric Lite finite context decomposition
+
+Partition deterministically into at most five non-overlapping, independently answerable tasks at exactly one level. Use stable ordering and project only the bounded context needed by each partition. Give each partition a deterministic context brief containing objective, owned scope, evidence pointers, relevant changes, open errors or contradictions, status, expected output/check, and the exact omitted count and reason. Workers must not repartition, spawn, delegate, recurse, use tools, or invoke Fabric Lite.
+
+Run each partition once with bounded concurrency and preserve each result or error. Never automatically rerun the whole decomposition because one partition fails. If all partitions fail, return `failed` and identify the complete failed coverage; otherwise return `success` only for complete requested coverage or `partial` with every omitted, failed, or unverified partition stated honestly. Budget up to one JSON-repair call for each call where repair is enabled before deciding how many partitions or whether a verifier fits.

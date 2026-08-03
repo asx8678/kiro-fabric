@@ -15,6 +15,14 @@ describe("bounded child process capture", () => {
     await expect(runProcess(process.execPath, ["-e", "process.stdout.write('x'.repeat(1000))"], { timeoutMs: 5000, maxChars: 64 })).rejects.toThrow(/stdout limit of 64/);
   });
 
+  it("rejects with a typed timeout error and kills the child", async () => {
+    const started = Date.now();
+    await expect(
+      runProcess(process.execPath, ["-e", "setTimeout(()=>{},10000)"], { timeoutMs: 30 }),
+    ).rejects.toMatchObject({ code: "TIMEOUT", message: "Process timed out after 30ms" });
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
   it("terminates on cancellation", async () => {
     const controller = new AbortController();
     const pending = runProcess(process.execPath, ["-e", "setTimeout(()=>{},10000)"], { timeoutMs: 15000, signal: controller.signal });

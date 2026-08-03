@@ -1,0 +1,5 @@
+# Fabric Lite conditional model fusion
+
+A requested model ID is only a request. Record `requestedModel`, `resolvedModel`, and `resolutionSource` separately; never copy or infer the resolved ID from the request.
+
+The distinct-resolved-model gate passes only when at least two successful calls each expose tested machine-readable Kiro metadata, each has `resolutionSource: "kiro-metadata"`, and their non-empty `resolvedModel` IDs are distinct. Same resolved IDs mean non-distinct fallback. Any missing ID, unknown/runner attribution, failed call, or untested metadata keeps fusion `unverified`. Reports may still be useful individually, but must not be described as fused. Preserve disagreement and failed coverage; model diversity and agreement are not evidence. Do not automatically rerun all calls, and reserve repair capacity when JSON repair is enabled.

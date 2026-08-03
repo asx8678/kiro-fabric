@@ -1,0 +1,3 @@
+# Repository delivery
+
+Inspect repository state deterministically, identify the smallest implementation set, and deliver only the requested change. Use repository paths as evidence. Verification after change is mandatory: read back the result, inspect related call sites, and run the smallest relevant requested allowlisted validation; otherwise state that validation was not run. Use only machine-facing result statuses `success`, `partial`, and `failed`. Never broaden scope, recurse, or delegate from workers.

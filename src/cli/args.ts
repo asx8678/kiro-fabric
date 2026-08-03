@@ -1,2 +1,64 @@
-export interface Args { command?:string;file?:string;format:"json"|"text";cwd:string;compact:boolean;force:boolean;dryRun:boolean;topic?:string;smoke:boolean }
-export function parseArgs(argv:string[]):Args{const out:Args={format:"text",cwd:process.cwd(),compact:false,force:false,dryRun:false,smoke:false};const command=argv.shift();if(command!==undefined)out.command=command;while(argv.length){const x=argv.shift()!;if(x==="--file"){const file=argv.shift();if(file!==undefined)out.file=file;}else if(x==="--format")out.format=(argv.shift() as "json"|"text")??"text";else if(x==="--cwd")out.cwd=argv.shift()??out.cwd;else if(x==="--compact")out.compact=true;else if(x==="--force")out.force=true;else if(x==="--dry-run")out.dryRun=true;else if(x==="--smoke")out.smoke=true;else if(!x.startsWith("--"))out.topic=out.topic?`${out.topic} ${x}`:x;else throw new Error(`Unknown option: ${x}`);}return out;}
+export type OutputFormat = "json" | "text";
+
+export interface Args {
+  command?: string;
+  file?: string;
+  format: OutputFormat;
+  cwd: string;
+  compact: boolean;
+  force: boolean;
+  dryRun: boolean;
+  topic?: string;
+  smoke: boolean;
+}
+
+function requiredValue(argv: string[], option: string): string {
+  const value = argv.shift();
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(`${option} requires a value`);
+  }
+  return value;
+}
+
+export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => void): Args {
+  const remaining = [...argv];
+  const out: Args = {
+    format: "text",
+    cwd: process.cwd(),
+    compact: false,
+    force: false,
+    dryRun: false,
+    smoke: false,
+  };
+  const command = remaining.shift();
+  if (command !== undefined) out.command = command;
+
+  while (remaining.length) {
+    const option = remaining.shift()!;
+    if (option === "--file") {
+      out.file = requiredValue(remaining, option);
+    } else if (option === "--format") {
+      const format = requiredValue(remaining, option);
+      if (format !== "json" && format !== "text") {
+        throw new Error(`Invalid --format value: ${format}; expected json or text`);
+      }
+      out.format = format;
+      onFormat?.(format);
+    } else if (option === "--cwd") {
+      out.cwd = requiredValue(remaining, option);
+    } else if (option === "--compact") {
+      out.compact = true;
+    } else if (option === "--force") {
+      out.force = true;
+    } else if (option === "--dry-run") {
+      out.dryRun = true;
+    } else if (option === "--smoke") {
+      out.smoke = true;
+    } else if (!option.startsWith("--")) {
+      out.topic = out.topic ? `${out.topic} ${option}` : option;
+    } else {
+      throw new Error(`Unknown option: ${option}`);
+    }
+  }
+  return out;
+}

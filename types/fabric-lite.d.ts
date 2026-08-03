@@ -8,7 +8,7 @@ interface GitStatusResult { branch: string | null; clean: boolean; entries: stri
 interface GitDiffResult { diff: string; truncated: boolean }
 interface ShellResult { command: string; exitCode: number | null; stdout: string; stderr: string; truncated: boolean; timedOut: boolean }
 interface AiRunInput { instruction: string; context?: unknown; model?: string; role?: "planner" | "worker" | "verifier" | "general"; outputSchema?: JsonSchema; maxInputChars?: number; maxOutputChars?: number; timeoutMs?: number; retryInvalidJson?: boolean }
-interface AiRunResult<T = unknown> { value: T | undefined; role: string; model?: string; inputChars: number; outputChars: number; repaired: boolean; error?: { code: string; message: string } }
+interface AiRunResult<T = unknown> { value: T | undefined; role: string; /** @deprecated requested/legacy model */ model?: string; requestedModel?: string; resolvedModel?: string; resolutionSource: "kiro-metadata" | "runner" | "unknown"; inputChars: number; outputChars: number; repaired: boolean; error?: { code: string; message: string } }
 interface AiParallelInput { tasks: AiRunInput[]; concurrency?: number; failFast?: boolean }
 interface AiMapInput<T> { items: T[]; createTask: (item: T, index: number) => AiRunInput; concurrency?: number; maxItems?: number }
 interface FabricLiteApi {
