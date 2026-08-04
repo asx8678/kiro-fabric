@@ -1,6 +1,10 @@
 # Kiro Fabric
 
-Kiro Fabric is a safe, programmable layer for using the **Kiro CLI LLM** with checked TypeScript workflows. It can select project context, run a few focused AI calls, validate structured answers, and return one result.
+Kiro Fabric is a local runtime that lets TypeScript programs use Kiro CLI as a structured reasoning backend. Instead of relying on one free-form chat prompt, Kiro writes a small checked TypeScript script for the task. That script uses the `fabric` API to gather only the project context it needs, then invokes the Kiro LLM programmatically with explicit instructions, input data, and an optional JSON Schema. The script receives parsed, schema-checked data—not an unstructured chat response—and can inspect, transform, save, or return the result as JSON.
+
+This makes the LLM a callable step inside deterministic automation. For example, a Kiro-generated script can search files, read selected excerpts, call `fabric.ai.run()` for analysis, validate the answer, call `fabric.ai.parallel()` for independent follow-up tasks, and return one final structured result. The workflow is code, so it can be reviewed, tested, repeated, and composed with ordinary development logic.
+
+Under the hood, Kiro Fabric type-checks each script before execution, enforces filesystem and shell permissions, applies AI call and size limits, can run independent AI tasks concurrently, validates responses against JSON Schema, records run metrics, and optionally caches deterministic calls.
 
 > Kiro Fabric is not a separate LLM model. It orchestrates the model configured in Kiro CLI.
 

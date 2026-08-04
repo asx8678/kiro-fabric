@@ -1,7 +1,7 @@
 {
   "name": "fabric-lite",
   "version": "1.0.0",
-  "description": "A bounded programmable Kiro CLI reasoning runtime",
+  "description": "Run checked TypeScript workflows that programmatically orchestrate Kiro CLI with bounded tools, structured output, and local safety controls",
   "type": "module",
   "bin": { "fabric-lite": "./dist/cli/main.js" },
   "exports": {
