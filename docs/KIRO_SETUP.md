@@ -1,10 +1,38 @@
 # Kiro setup
 
-## One-command setup
+## Interactive installer (recommended)
+
+```bash
+pnpm run setup
+```
+
+Launches a keyboard-navigable, box-drawn setup tool that detects the current state and adapts its options:
+
+- **Nothing installed** → **Install** (choose *Workspace* or *Read-only* write mode)
+- **Partially installed** → **Repair** (completes missing components)
+- **Fully installed** → **Update** (rebuild + reinstall agents) and **Delete**
+- **Delete** requires a two-step confirmation: first `Are you absolutely sure? [y/N]`, then typing the exact word **`yes`**
+- **Pull latest** checks `origin` for newer commits, shows a banner, and pulls + rebuilds
+
+Flags:
+
+```bash
+# Install read-only without prompting
+pnpm run setup -- --allow-write read
+
+# Target a different directory
+pnpm run setup -- --cwd /path/to/project
+
+# Skip install/update confirmations (delete still asks)
+pnpm run setup -- --yes
+```
+
+After a successful **install** (or repair), the app shows a **"✓ App installed successfully"** screen with a single **Quit** option. After an **update**, the installer auto-closes once the update finishes (**"Update finished — closing installer..."**), so you are dropped back to the shell ready to run `kiro-cli --agent fabric-lite`.
+
+## Legacy headless setup
 
 ```bash
 pnpm run setup:kiro
-# or: pnpm setup:kiro
 ```
 
 This installs locked dependencies, builds Fabric Lite, installs and validates both Kiro agents, creates project configuration, and runs `doctor`. Preview with `pnpm run setup:kiro --dry-run`; use `--force` only when replacing existing generated files (backups are created first).

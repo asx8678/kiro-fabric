@@ -118,23 +118,27 @@ Kiro Fabric limits calls and characters; it does not measure or promise a fixed 
 ```bash
 git clone https://github.com/asx8678/kiro-fabric.git
 cd kiro-fabric
-pnpm run setup:kiro
+pnpm install
+pnpm run setup
 ```
 
-Setup installs dependencies, builds Kiro Fabric, creates the Kiro agents, prompts, and `.fabric-lite/config.json`, then runs a health check.
+The interactive **setup** installs dependencies, builds Kiro Fabric, creates the Kiro agents, prompts, and `.fabric-lite/config.json`, then runs a health check. It detects the current state and adapts its options (Install / Update / Repair / Delete / Pull latest), enables writable access + mutations by default, and shows clear completion states.
 
 ```bash
-# Preview generated agent, prompt, and configuration files
-pnpm run setup:kiro --dry-run
+# Interactive-only (after dependencies are installed)
+pnpm run setup
 
-# Back up and replace conflicting generated files
-pnpm run setup:kiro --force
+# Install read-only without prompting for the write mode
+pnpm run setup -- --allow-write read
 
-# Optional: create a read-only fresh install
-pnpm run setup:kiro -- --allow-write read
+# Target a different directory
+pnpm run setup -- --cwd /path/to/project
+
+# Skip install/update confirmations (delete still asks)
+pnpm run setup -- --yes
 ```
 
-A dry run still installs dependencies and rebuilds `dist/`; it only avoids writing generated Kiro and configuration files. `--force` backs up then replaces installer-owned agents and prompts, but never touches a user-owned `.fabric-lite/config.json` (see below).
+The legacy non-interactive setup is still available as `pnpm run setup:kiro` (with `--dry-run` and `--force` for previews and conflict replacement) — see [docs/KIRO_SETUP.md](docs/KIRO_SETUP.md).
 
 ### Interactive installer
 
@@ -158,20 +162,6 @@ The dashboard shows Kiro CLI + version, build state, config/agents/worker/prompt
 **Keeps you on the latest version.** On launch the installer checks `origin` via git (fetch + compare). If newer commits are available it shows a **"New version available — N commit(s) behind"** banner and highlights a **⇣ Pull latest** option. Selecting it lists the new commits, pulls with `git pull --ff-only` (safely keeping uncommitted work), and rebuilds so you're immediately on the newest source.
 
 **Clear completion states.** After a successful **install** (or repair), the app shows a **"✓ App installed successfully"** screen with a single **Quit** option. After an **update**, the installer auto-closes once the update finishes (**"Update finished — closing installer..."**), so you're dropped back to the shell ready to run `kiro-cli --agent fabric-lite`.
-
-```bash
-pnpm run setup -- --allow-write read
-```
-
-Other flags:
-
-```bash
-# target a different directory
-pnpm run setup -- --cwd /path/to/project
-
-# skip install/update confirmations (delete still asks)
-pnpm run setup -- --yes
-```
 
 Non-interactive (piped) input falls back to a numbered menu, so scripts/tests can drive it with e.g. `echo 2 | node scripts/install.mjs`.
 
@@ -217,7 +207,7 @@ The CLI defaults to readable text output for `check`, `run`, and `exec`, styled 
 
 Fresh installs are editable by default: `.fabric-lite/config.json` is created with `mutation.enabled=true` and `filesystem.allowWrite=["**"]`. The safe-write path still denies parent traversal, sensitive paths (`.env*`, `.git`, `node_modules`, `dist`, `build`, `.fabric-lite`, secrets), and symlink escapes. Each write runs inside a guarded `fabric.mutate.begin()` session.
 
-For a read-only fresh install, pass `--allow-write read` (with the pnpm script: `pnpm run setup:kiro -- --allow-write read`). This creates `mutation.enabled=false` and `filesystem.allowWrite=[]`.
+For a read-only fresh install, pass `--allow-write read` (with the pnpm script: `pnpm run setup -- --allow-write read`, or `pnpm run setup:kiro -- --allow-write read` for the legacy headless setup). This creates `mutation.enabled=false` and `filesystem.allowWrite=[]`.
 
 The choice applies only when a config is created. On reinstall or `--force`, an existing user-owned `.fabric-lite/config.json` is never overwritten or backed up.
 
