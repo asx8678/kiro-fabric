@@ -22,6 +22,12 @@ describe("loadConfig validation", () => {
   it.each([
     { shell: { enabled: "yes" } },
     { git: { allowCommit: "yes" } },
+    { mutation: { enabled: "yes" } },
+    { mutation: { require: "dirty" } },
+    { mutation: { maxDiffChars: 0 } },
+    { cache: { enabled: "yes" } },
+    { cache: { maxEntries: 0 } },
+    { cache: { ttlMs: -1 } },
     { git: { surprise: true } },
     { permissions: { execute: "sometimes" } },
     { permissions: { commit: true } },
@@ -53,6 +59,8 @@ describe("loadConfig validation", () => {
       version: 1,
       budgets: { maxConcurrency: 2, maxRetriesPerCall: 0 },
       shell: { enabled: true, allowedCommands: ["git status"] },
+      mutation: { enabled: true, maxDiffChars: 123 },
+      cache: { enabled: true, maxEntries: 4 },
     });
     const config = await loadConfig(root);
     expect(config.projectRoot).toBe(root);
@@ -62,11 +70,15 @@ describe("loadConfig validation", () => {
       maxAiCalls: defaults.budgets.maxAiCalls,
     });
     expect(config.git).toEqual({ allowCommit: false });
+    expect(config.mutation).toMatchObject({ enabled: true, require: "clean", maxDiffChars: 123 });
+    expect(config.cache).toEqual({ enabled: true, maxEntries: 4, ttlMs: defaults.cache.ttlMs });
     expect(config.permissions).toEqual(defaults.permissions);
     expect(config.shell).toMatchObject({
       enabled: true,
       allowedCommands: ["git status"],
       timeoutMs: defaults.shell.timeoutMs,
     });
+    expect(defaults.mutation).toEqual({ enabled: false, require: "clean", maxDiffChars: 30000 });
+    expect(defaults.cache).toEqual({ enabled: false, maxEntries: 200, ttlMs: 0 });
   });
 });

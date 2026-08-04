@@ -9,15 +9,22 @@ export interface GitStatusResult { branch: string | null; clean: boolean; entrie
 export interface GitDiffResult { diff: string; truncated: boolean }
 export interface GitTextResult { text: string; truncated: boolean }
 export interface GitCommitResult { hash: string; branch: string | null; message: string; paths: string[] }
+export type MutationMode = "clean" | "checkpoint";
+export interface MutationCheckpoint { id: string; mode: MutationMode; baseHead: string }
+export interface MutationBeginResult { checkpoint: MutationCheckpoint; guidance: string }
+export interface MutationDiffResult { diff: string; truncated: boolean; createdFiles: string[]; changedFiles: string[] }
+export interface MutationReviewVerdict { approved: boolean; issues: string[]; summary: string }
+export interface MutationRollbackResult { restored: true; checkpoint: string; removedFiles: string[]; guidance: string }
+export interface MutationCompleteResult { checkpoint: MutationCheckpoint; createdFiles: string[]; rollbackGuidance: string }
 export interface InspectionResult { tool: string; operation: string; stdout: string; stderr: string; exitCode: number | null; truncated: boolean }
 export interface ShellResult { command: string; exitCode: number | null; stdout: string; stderr: string; truncated: boolean; timedOut: boolean }
 export type PermissionPolicy = "allow" | "ask" | "deny";
 export interface PermissionsPolicy { read: PermissionPolicy; commit: PermissionPolicy; execute: PermissionPolicy; network: PermissionPolicy; destructive: PermissionPolicy }
 export interface AiRunInput { instruction: string; context?: unknown; model?: string; role?: "planner" | "worker" | "verifier" | "general"; outputSchema?: JsonSchema; maxInputChars?: number; maxOutputChars?: number; timeoutMs?: number; retryInvalidJson?: boolean }
-export interface AiRunResult<T = unknown> { value: T | undefined; role: string; /** @deprecated requested/legacy model */ model?: string; requestedModel?: string; resolvedModel?: string; resolutionSource: "kiro-metadata" | "runner" | "unknown"; inputChars: number; outputChars: number; repaired: boolean; error?: { code: string; message: string } }
+export interface AiRunResult<T = unknown> { value: T | undefined; role: string; /** @deprecated requested/legacy model */ model?: string; requestedModel?: string; resolvedModel?: string; resolutionSource: "kiro-metadata" | "runner" | "unknown"; inputChars: number; outputChars: number; repaired: boolean; cached?: boolean; error?: { code: string; message: string } }
 export interface AiParallelInput { tasks: AiRunInput[]; concurrency?: number; failFast?: boolean }
 export interface AiMapInput<T> { items: T[]; createTask: (item: T, index: number) => AiRunInput; concurrency?: number; maxItems?: number }
-export interface Metrics { aiCalls: number; workerCalls: number; retries: number; inputChars: number; outputChars: number }
+export interface Metrics { aiCalls: number; workerCalls: number; retries: number; inputChars: number; outputChars: number; cacheHits: number }
 export interface FabricLiteApi {
   fs: {
     read(input: string | { path: string; maxChars?: number; startLine?: number; endLine?: number; offset?: number; limit?: number; start?: number; max?: number } | { file: string; maxChars?: number; startLine?: number; endLine?: number; offset?: number; limit?: number; start?: number; max?: number }): Promise<FileReadResult>;
@@ -41,6 +48,13 @@ export interface FabricLiteApi {
     branches(): Promise<string[]>;
     remotes(): Promise<string[]>;
     commit(input: { message: string; paths: string[] }): Promise<GitCommitResult>;
+  };
+  mutate: {
+    begin(input?: { mode?: MutationMode; label?: string }): Promise<MutationBeginResult>;
+    diff(input?: { maxChars?: number }): Promise<MutationDiffResult>;
+    review(input?: { instruction?: string }): Promise<AiRunResult<MutationReviewVerdict>>;
+    rollback(): Promise<MutationRollbackResult>;
+    complete(): Promise<MutationCompleteResult>;
   };
   inspect: {
     postgres(input: { query: string; host?: string; port?: number; user?: string; database?: string }): Promise<InspectionResult>;

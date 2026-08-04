@@ -1,8 +1,8 @@
-# Fabric Lite
+# Kiro Fabric
 
-Fabric Lite is a safe, programmable layer for using the **Kiro CLI LLM** with checked TypeScript workflows. It can select project context, run a few focused AI calls, validate structured answers, and return one result.
+Kiro Fabric is a safe, programmable layer for using the **Kiro CLI LLM** with checked TypeScript workflows. It can select project context, run a few focused AI calls, validate structured answers, and return one result.
 
-> Fabric Lite is not a separate LLM model. It orchestrates the model configured in Kiro CLI.
+> Kiro Fabric is not a separate LLM model. It orchestrates the model configured in Kiro CLI.
 
 ## Features and benefits
 
@@ -15,7 +15,7 @@ Fabric Lite is a safe, programmable layer for using the **Kiro CLI LLM** with ch
 | Project-contained tools and permissions | Safer access to files, Git, shell, and inspections |
 | Local run records | Easier debugging with programs, diagnostics, metrics, and results |
 
-Token savings depend on the task and model. Fabric Lite limits calls and characters; it does not measure or promise a fixed number of provider tokens.
+Token savings depend on the task and model. Kiro Fabric limits calls and characters; it does not measure or promise a fixed number of provider tokens.
 
 ## Requirements
 
@@ -32,7 +32,7 @@ cd kiro-fabric
 pnpm run setup:kiro
 ```
 
-Setup installs dependencies, builds Fabric Lite, creates the Kiro agents, prompts, and `.fabric-lite/config.json`, then runs a health check.
+Setup installs dependencies, builds Kiro Fabric, creates the Kiro agents, prompts, and `.fabric-lite/config.json`, then runs a health check.
 
 ```bash
 # Preview generated agent, prompt, and configuration files
@@ -58,7 +58,7 @@ Then ask a normal question, such as:
 Find the cause of the failing tests and suggest a fix.
 ```
 
-To configure another repository, run this from the Fabric Lite clone:
+To configure another repository, run this from the Kiro Fabric clone:
 
 ```bash
 node dist/cli/main.js install-kiro --cwd /path/to/your/project
@@ -66,7 +66,7 @@ cd /path/to/your/project
 kiro-cli --agent fabric-lite
 ```
 
-From the Fabric Lite clone, check a configured project with:
+From the Kiro Fabric clone, check a configured project with:
 
 ```bash
 node dist/cli/main.js doctor --cwd /path/to/your/project --format json
@@ -85,7 +85,7 @@ sequenceDiagram
     autonumber
     actor You
     participant Kiro as Kiro CLI
-    participant Fabric as Fabric Lite (local)
+    participant Fabric as Kiro Fabric (local)
     participant LLM as Kiro LLM
 
     You->>Kiro: Ask a question
@@ -107,6 +107,33 @@ sequenceDiagram
 ```
 
 Defaults allow up to 7 AI calls with concurrency up to 3. Change limits and permissions in `.fabric-lite/config.json`.
+
+## Safe mutation workflow
+
+Writes remain disabled unless `.fabric-lite/config.json` sets `mutation.enabled` and `filesystem.allowWrite`. Configure `mutation.require` as `clean` (default) or `checkpoint`, and bound review diffs with `mutation.maxDiffChars` (default `30000`). A checkpoint snapshots the dirty tracked worktree with a temporary Git index; ignored files are not included and the real index and branch are unchanged.
+
+```ts
+const session = await fabric.mutate.begin({ mode: "checkpoint", label: "update config" });
+await fabric.fs.write({ path: "src/config.ts", content: "export const enabled = true;\n" });
+const diff = await fabric.mutate.diff();
+const review = await fabric.mutate.review();
+if (review.value?.approved) return await fabric.mutate.complete();
+return await fabric.mutate.rollback();
+```
+
+After `complete()`, use its rollback guidance. In checkpoint mode it includes `git restore --source=<checkpoint> --worktree -- .`, manual deletion of created files, and `git update-ref -d refs/fabric-lite/checkpoints/<unique-id>`.
+
+## AI call caching
+
+Caching is disabled by default. Enable it for deterministic requests with bounded entries and optional expiry:
+
+```json
+{
+  "cache": { "enabled": true, "maxEntries": 200, "ttlMs": 3600000 }
+}
+```
+
+Keys include the redacted request context, instruction, role, schema, model, limits, and runner configuration. Cache hits do not consume AI budgets; entries live in `.fabric-lite/cache/`.
 
 ## Programmatic LLM usage
 
@@ -156,7 +183,7 @@ Programs are TypeScript function bodies with top-level `await` and `return`; `im
 - Commands classified as destructive are denied. If you enable generic shell, approved commands are still powerful.
 - Headless runs deny actions with an `ask` policy. In interactive mode, **Allow session** approves the whole category until the process exits.
 - `.fabric-lite/runs/` is persistent and may contain sensitive data. The installer adds it to `.gitignore`; verify this in every project.
-- Fabric Lite runs trusted local programs and is not a sandbox for hostile JavaScript.
+- Kiro Fabric runs trusted local programs and is not a sandbox for hostile JavaScript.
 
 See [security details](docs/SECURITY.md).
 

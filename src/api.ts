@@ -1,6 +1,7 @@
 import path from "node:path";
+import { randomBytes } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
-import { lstat, mkdtemp, open, realpath, readFile, rename, rm } from "node:fs/promises";
+import { lstat, mkdtemp, open, realpath, readFile, rename, rm, unlink } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { tmpdir } from "node:os";
@@ -14,6 +15,7 @@ import { FabricError } from "./errors.js";
 import { parseFramed } from "./runners/parser.js";
 import { RequestRedactor } from "./redaction.js";
 import { loadPrompt } from "./prompts.js";
+import { AiCache, type CacheEntry } from "./cache.js";
 import {
   PermissionGate,
   commitRequest,
@@ -333,6 +335,17 @@ async function command(
 
 export type AiResult<T = unknown> = AiRunResult<T>;
 
+type MutationMode = "clean" | "checkpoint";
+interface MutationSession {
+  checkpointId: string;
+  checkpointRef?: string;
+  baseHead: string;
+  mode: MutationMode;
+  label?: string;
+  createdFiles: Set<string>;
+  modifiedFiles: Set<string>;
+}
+
 class BudgetState {
   readonly metrics: Metrics = {
     aiCalls: 0,
@@ -340,6 +353,7 @@ class BudgetState {
     retries: 0,
     inputChars: 0,
     outputChars: 0,
+    cacheHits: 0,
   };
   private roles = { planner: 0, worker: 0, verifier: 0, general: 0 };
 
@@ -377,6 +391,10 @@ class BudgetState {
     } else {
       this.metrics.retries++;
     }
+  }
+
+  cacheHit(): void {
+    this.metrics.cacheHits++;
   }
 
   output(chars: number): void {
@@ -439,13 +457,28 @@ export function createApi(
   runner: AiRunner,
   gateOptions?: { prompter?: ApprovalPrompter },
 ): { fabric: FabricLiteApi; metrics: Metrics } {
- const root=path.resolve(config.projectRoot); const budgets=new BudgetState(config);
+ const root=path.resolve(config.projectRoot); const budgets=new BudgetState(config); const cache=new AiCache(root,config);
  const gate=new PermissionGate({
    policy:config.permissions,
    prompter:gateOptions?.prompter ?? headlessPrompter,
    allowedCommands:config.shell.allowedCommands,
    projectRoot: root,
  });
+ let mutationSession: MutationSession | undefined;
+ const mutationWriteRequired = (): MutationSession => {
+   if (config.mutation.enabled && !mutationSession) {
+     throw new FabricError("POLICY_DENIED", "Mutation writes require fabric.mutate.begin first");
+   }
+   if (!mutationSession) throw new FabricError("RUNTIME_FAILED", "No active mutation session");
+   return mutationSession;
+ };
+ const recordMutationWrite = (session: MutationSession, target: { absolute: string; relative: string }, existed: boolean): void => {
+   // The caller records only after the write succeeds; existed is the state
+   // before the first successful write to this path during this session.
+   if (!session.createdFiles.has(target.relative) && !session.modifiedFiles.has(target.relative)) {
+     (existed ? session.modifiedFiles : session.createdFiles).add(target.relative);
+   }
+ };
  const fsApi: FabricLiteApi["fs"] = {
   async read(...args: unknown[]) {
    const rawInput = positionalArguments("fabric.fs.read", args, ["path"]);
@@ -528,8 +561,8 @@ export function createApi(
     };
   },
   async stat(...args: unknown[]) { const input = positionalArguments("fabric.fs.stat", args, ["path"]); const filePath = requiredString("fabric.fs.stat", input.path, "path"); const p = await safePath(root, filePath), s = await lstat(p); return { path: path.relative(root, p), type: (s.isDirectory() ? "directory" : "file") as "directory" | "file", size: s.size, modifiedMs: s.mtimeMs }; },
-  async write(...args: unknown[]) { const input = aliasedArguments(positionalArguments("fabric.fs.write", args, ["path", "content"]), { file: "path", contents: "content", body: "content", text: "content" }) as { path: string; content: string }; requiredString("fabric.fs.write", input.path, "path"); requiredString("fabric.fs.write", input.content, "content"); const target=await safeWritePath(root,input.path,config.filesystem.allowWrite);let parentHandle:Awaited<ReturnType<typeof open>>|undefined;let handle:Awaited<ReturnType<typeof open>>|undefined;try{const noFollow=fsConstants.O_NOFOLLOW;const directory=fsConstants.O_DIRECTORY;const parentFdPath=descriptorPath(0);if(noFollow===undefined||directory===undefined||!parentFdPath)throw new FabricError("POLICY_DENIED",`Platform cannot establish a safe write primitive: ${input.path}`);parentHandle=await open(path.dirname(target.absolute),fsConstants.O_RDONLY|directory|noFollow);const targetFromParent=descriptorChildPath(parentHandle.fd,path.basename(target.absolute));handle=await open(targetFromParent??target.absolute,fsConstants.O_WRONLY|fsConstants.O_CREAT|noFollow,0o666);const verified=await verifyOpenedWriteTarget(handle,root,config.filesystem.allowWrite,input.path,target.absolute);await handle.truncate(0);await handle.writeFile(input.content,"utf8");return{path:verified.relative,bytesWritten:Buffer.byteLength(input.content)};}catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==="ELOOP"||code==="ENXIO") throw new FabricError("POLICY_DENIED",`Refusing unsafe symlink write target: ${input.path}`);throw error;}finally{await handle?.close().catch(()=>undefined);await parentHandle?.close().catch(()=>undefined);}},
-  async patch(...args: unknown[]) { const input = positionalArguments("fabric.fs.patch", args, ["path", "patch"]) as { path: string; patch: string }; requiredString("fabric.fs.patch", input.path, "path"); requiredString("fabric.fs.patch", input.patch, "patch"); const read=await fsApi.read({path:input.path,maxChars:config.filesystem.maxCharsPerFile});if(read.truncated)throw new FabricError("BUDGET_EXCEEDED","Refusing to patch a truncated file");const current=read.content; let spec:{old:string;new:string};try{spec=JSON.parse(input.patch) as {old:string;new:string};}catch{throw new FabricError("POLICY_DENIED",'patch must be JSON: {"old":"exact text","new":"replacement"}');}if(typeof spec.old!=="string"||typeof spec.new!=="string"||!current.includes(spec.old))throw new FabricError("POLICY_DENIED","Patch old text not found");await fsApi.write({path:input.path,content:current.replace(spec.old,spec.new)});return{path:input.path,applied:true};}
+  async write(...args: unknown[]) { const input = aliasedArguments(positionalArguments("fabric.fs.write", args, ["path", "content"]), { file: "path", contents: "content", body: "content", text: "content" }) as { path: string; content: string }; requiredString("fabric.fs.write", input.path, "path"); requiredString("fabric.fs.write", input.content, "content"); const session=config.mutation.enabled?mutationWriteRequired():mutationSession; const target=await safeWritePath(root,input.path,config.filesystem.allowWrite);let existed=false;if(session){try{await lstat(target.absolute);existed=true;}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;}}let parentHandle:Awaited<ReturnType<typeof open>>|undefined;let handle:Awaited<ReturnType<typeof open>>|undefined;try{const noFollow=fsConstants.O_NOFOLLOW;const directory=fsConstants.O_DIRECTORY;const parentFdPath=descriptorPath(0);if(noFollow===undefined||directory===undefined||!parentFdPath)throw new FabricError("POLICY_DENIED",`Platform cannot establish a safe write primitive: ${input.path}`);parentHandle=await open(path.dirname(target.absolute),fsConstants.O_RDONLY|directory|noFollow);const targetFromParent=descriptorChildPath(parentHandle.fd,path.basename(target.absolute));handle=await open(targetFromParent??target.absolute,fsConstants.O_WRONLY|fsConstants.O_CREAT|noFollow,0o666);const verified=await verifyOpenedWriteTarget(handle,root,config.filesystem.allowWrite,input.path,target.absolute);await handle.truncate(0);await handle.writeFile(input.content,"utf8");if(session)recordMutationWrite(session,{absolute:target.absolute,relative:verified.relative},existed);return{path:verified.relative,bytesWritten:Buffer.byteLength(input.content)};}catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==="ELOOP"||code==="ENXIO") throw new FabricError("POLICY_DENIED",`Refusing unsafe symlink write target: ${input.path}`);throw error;}finally{await handle?.close().catch(()=>undefined);await parentHandle?.close().catch(()=>undefined);}},
+  async patch(...args: unknown[]) { const input = positionalArguments("fabric.fs.patch", args, ["path", "patch"]) as { path: string; patch: string }; requiredString("fabric.fs.patch", input.path, "path"); requiredString("fabric.fs.patch", input.patch, "patch"); if(config.mutation.enabled) mutationWriteRequired(); const read=await fsApi.read({path:input.path,maxChars:config.filesystem.maxCharsPerFile});if(read.truncated)throw new FabricError("BUDGET_EXCEEDED","Refusing to patch a truncated file");const current=read.content; let spec:{old:string;new:string};try{spec=JSON.parse(input.patch) as {old:string;new:string};}catch{throw new FabricError("POLICY_DENIED",'patch must be JSON: {"old":"exact text","new":"replacement"}');}if(typeof spec.old!=="string"||typeof spec.new!=="string"||!current.includes(spec.old))throw new FabricError("POLICY_DENIED","Patch old text not found");await fsApi.write({path:input.path,content:current.replace(spec.old,spec.new)});return{path:input.path,applied:true};}
  };
  const git: FabricLiteApi["git"] = {
   async status(){const r=await command(["git","status","--porcelain=v1","--branch"],root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());const lines=r.stdout.trimEnd().split("\n"),head=lines.shift()??"";return{branch:head.match(/^## ([^. ]+)/)?.[1]??null,clean:lines.length===0,entries:lines};},
@@ -597,18 +630,144 @@ const inspectionResult=(tool:string,operation:string,result:CommandResult)=>{if(
   const schemaText=JSON.stringify(schema??{}),inputChars=safeInstruction.length+context.length+schemaText.length;
   const requestedModel=request.model!==undefined?request.model:config.runner.defaultModel??undefined;
   const normalized:NormalizedAiRequest={instruction:safeInstruction,context,role,maxOutputChars:Math.min(request.maxOutputChars??(role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),timeoutMs:Math.min(request.timeoutMs??config.budgets.aiCallTimeoutMs,config.budgets.aiCallTimeoutMs),...(requestedModel!==undefined?{model:requestedModel}:{}),...(schema?{schema}:{})};
+  const cached=await cache.get(normalized);
+  if(cached){
+   budgets.cacheHit();
+   return{value:cached.value as T,role,...(cached.model?{model:cached.model}:{}),...(cached.requestedModel?{requestedModel:cached.requestedModel}:{}),...(cached.resolvedModel?{resolvedModel:cached.resolvedModel}:{}),resolutionSource:cached.resolutionSource,inputChars:cached.inputChars,outputChars:cached.outputChars,repaired:false,cached:true};
+  }
+  const cacheResult=async(result:AiResult<T>):Promise<AiResult<T>>=>{
+   const entry:CacheEntry={value:result.value,...(result.model?{model:result.model}:{}),...(result.requestedModel?{requestedModel:result.requestedModel}:{}),...(result.resolvedModel?{resolvedModel:result.resolvedModel}:{}),resolutionSource:result.resolutionSource,inputChars:result.inputChars,outputChars:result.outputChars,storedAt:Date.now()};
+   await cache.set(normalized,entry);return result;
+  };
   budgets.reserve(role,inputChars);let raw:Awaited<ReturnType<AiRunner["run"]>>|undefined;
-  try{raw=await runner.run(normalized,signal);const safeStdout=redactor.redact(raw.stdout);budgets.output(safeStdout.length);const value=redactor.value(parseFramed(safeStdout,normalized.schema,normalized.maxOutputChars) as T);return{value,role,...(raw.model?{model:raw.model}:{}),...(raw.requestedModel?{requestedModel:raw.requestedModel}:{}),...(raw.resolvedModel?{resolvedModel:raw.resolvedModel}:{}),resolutionSource:raw.resolutionSource??"unknown",inputChars,outputChars:safeStdout.length,repaired:false};}
+  try{raw=await runner.run(normalized,signal);const safeStdout=redactor.redact(raw.stdout);budgets.output(safeStdout.length);const value=redactor.value(parseFramed(safeStdout,normalized.schema,normalized.maxOutputChars) as T);return await cacheResult({value,role,...(raw.model?{model:raw.model}:{}),...(raw.requestedModel?{requestedModel:raw.requestedModel}:{}),...(raw.resolvedModel?{resolvedModel:raw.resolvedModel}:{}),resolutionSource:raw.resolutionSource??"unknown",inputChars,outputChars:safeStdout.length,repaired:false});}
   catch(e){
    if(!(e instanceof FabricError)||e.code!=="INVALID_AI_OUTPUT"||request.retryInvalidJson===false||config.budgets.maxRetriesPerCall<1)throw e;
    const bad=redactor.redact(raw?.stdout?.slice(-normalized.maxOutputChars)??"(unparseable output)"),details=redactor.redact(JSON.stringify(e.details??[{message:e.message}]));
    const repairInstruction=`${loadPrompt("repair-json").trimEnd()}\n\nINVALID:\n${bad}\nSCHEMA_ERRORS:\n${details}\nSCHEMA:\n${schemaText}`;
    const repair={...normalized,instruction:repairInstruction,context:"",repair:true},repairChars=repairInstruction.length+schemaText.length;
    budgets.reserve(role,repairChars,true);const fixed=await runner.run(repair,signal),safeFixed=redactor.redact(fixed.stdout);budgets.output(safeFixed.length);const value=redactor.value(parseFramed(safeFixed,normalized.schema,normalized.maxOutputChars) as T);
-   return{value,role,...(fixed.model?{model:fixed.model}:{}),...(fixed.requestedModel?{requestedModel:fixed.requestedModel}:{}),...(fixed.resolvedModel?{resolvedModel:fixed.resolvedModel}:{}),resolutionSource:fixed.resolutionSource??"unknown",inputChars:inputChars+repairChars,outputChars:(raw?.stdout.length??0)+safeFixed.length,repaired:true};
+   return await cacheResult({value,role,...(fixed.model?{model:fixed.model}:{}),...(fixed.requestedModel?{requestedModel:fixed.requestedModel}:{}),...(fixed.resolvedModel?{resolvedModel:fixed.resolvedModel}:{}),resolutionSource:fixed.resolutionSource??"unknown",inputChars:inputChars+repairChars,outputChars:(raw?.stdout.length??0)+safeFixed.length,repaired:true});
   }
  }
  async function parallel<T=unknown>(input:any):Promise<AiResult<T>[]> {const request=argumentRecord("fabric.ai.parallel",input) as any;if(!Array.isArray(request.tasks))invalidArguments("fabric.ai.parallel","tasks must be an array");const tasks=request.tasks as any[];if(tasks.some((task)=>!isArgumentRecord(task)))invalidArguments("fabric.ai.parallel","tasks must contain options objects");const concurrency=Math.min(request.concurrency??config.budgets.maxConcurrency,config.budgets.maxConcurrency);if(concurrency<1)throw new FabricError("BUDGET_EXCEEDED","Concurrency must be at least one");const results=new Array(tasks.length),controller=new AbortController();let next=0,failed:unknown;async function worker(){while(true){if(failed&&request.failFast)return;const i=next++;if(i>=tasks.length)return;try{results[i]=await aiRun(tasks[i],controller.signal);}catch(e){if(request.failFast){if(failed===undefined){failed=e;controller.abort();}return;}results[i]={value:undefined,role:tasks[i].role??"worker",resolutionSource:"unknown",inputChars:0,outputChars:0,repaired:false,error:{code:e instanceof FabricError?e.code:"RUNTIME_FAILED",message:new RequestRedactor().redact(e instanceof Error?e.message:String(e))}};}}}await Promise.all(Array.from({length:Math.min(concurrency,tasks.length)},worker));if(failed)throw failed;return results as AiResult<T>[];}
  const ai={run:aiRun,parallel,async map<TItem,TResult=unknown>(input:any):Promise<AiResult<TResult>[]> {const items=(input.items as TItem[]).slice(0,input.maxItems??input.items.length);return parallel<TResult>({tasks:items.map(input.createTask),concurrency:input.concurrency});}};
- return {fabric:{fs:fsApi,git,inspect,shell,ai,util:{chunk<T>(items:T[],size:number){if(!Number.isInteger(size)||size<1)throw new Error("chunk size must be positive");return Array.from({length:Math.ceil(items.length/size)},(_,i)=>items.slice(i*size,(i+1)*size));},unique<T>(items:T[]){return[...new Set(items)];},sortBy<T>(items:T[],selector:(x:T)=>string|number){return[...items].sort((a,b)=>{const x=selector(a),y=selector(b);return x<y?-1:x>y?1:0;});},truncate(text:string,max:number){return text.length<=max?text:text.slice(0,Math.max(0,max-1))+"…";},compactJson(value:unknown,max:number){const s=JSON.stringify(value);return s.length<=max?s:s.slice(0,Math.max(0,max-1))+"…";}}},metrics:budgets.metrics};
+ const mutation: FabricLiteApi["mutate"] = {
+  async begin(input?: { mode?: MutationMode; label?: string }) {
+   if (mutationSession) throw new FabricError("RUNTIME_FAILED", "A mutation session is already active");
+   if (!config.mutation.enabled) throw new FabricError("POLICY_DENIED", "The mutation workflow is disabled by project policy");
+   if (input !== undefined && !isArgumentRecord(input)) invalidArguments("fabric.mutate.begin", "expected an options object");
+   const requested = input as { mode?: unknown; label?: unknown } | undefined;
+   const mode = (requested?.mode ?? config.mutation.require) as MutationMode;
+   if (mode !== "clean" && mode !== "checkpoint") invalidArguments("fabric.mutate.begin", "mode must be clean or checkpoint");
+   const label = requested?.label;
+   if (label !== undefined && (typeof label !== "string" || label.length > 200 || /[\u0000-\u001f\u007f]/.test(label))) {
+    invalidArguments("fabric.mutate.begin", "label must be at most 200 safe characters");
+   }
+   const repository = await command(["git", "rev-parse", "--show-toplevel"], root);
+   const baseHeadResult = await command(["git", "rev-parse", "HEAD"], root);
+   if (repository.code !== 0 || baseHeadResult.code !== 0 || !baseHeadResult.stdout.trim()) {
+    throw new FabricError("POLICY_DENIED", "Mutation workflow requires a Git repository with HEAD");
+   }
+   const repositoryRoot = path.resolve(repository.stdout.trim());
+   if (await realpath(repositoryRoot) !== await realpath(root)) throw new FabricError("POLICY_DENIED", "Git repository root must equal the Fabric project root");
+   const baseHead = baseHeadResult.stdout.trim();
+   if (mode === "clean") {
+    const status = await command(["git", "-c", "core.fsmonitor=false", "status", "--porcelain=v1"], root);
+    if (status.code !== 0) throw new FabricError("RUNTIME_FAILED", status.stderr.trim() || "Git status failed");
+    const dirty = status.stdout.split(/\r?\n/).filter(Boolean);
+    if (dirty.length > 0) {
+     const paths = dirty.slice(0, 10).map((line) => line.length > 3 ? line.slice(3) : line);
+     throw new FabricError("POLICY_DENIED", `Mutation requires a clean worktree; dirty paths: ${paths.join(", ")}`);
+    }
+    mutationSession = { checkpointId: baseHead, baseHead, mode, ...(label === undefined ? {} : { label }), createdFiles: new Set(), modifiedFiles: new Set() };
+    return { checkpoint: { id: baseHead, mode, baseHead }, guidance: `Mutation session started from clean HEAD ${baseHead}. Review the diff before completing or roll back to this commit.` };
+   }
+   const checkpointId = `cp_${Date.now().toString(36)}_${randomBytes(4).toString("hex")}`;
+   const checkpointRef = `refs/fabric-lite/checkpoints/${checkpointId}`;
+   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), "fabric-mutation-index-"));
+   const temporaryIndex = path.join(temporaryDirectory, "index");
+   const indexEnv: NodeJS.ProcessEnv = { ...process.env, GIT_INDEX_FILE: temporaryIndex };
+   try {
+    const initialized = await command(["git", "read-tree", "HEAD"], root, 30000, indexEnv);
+    if (initialized.code !== 0) throw new FabricError("RUNTIME_FAILED", initialized.stderr.trim() || "Git checkpoint index initialization failed");
+    const added = await command(["git", "-c", "core.fsmonitor=false", "add", "-A"], root, 30000, indexEnv);
+    if (added.code !== 0) throw new FabricError("RUNTIME_FAILED", added.stderr.trim() || "Git checkpoint staging failed");
+    const tree = await command(["git", "-c", "core.fsmonitor=false", "write-tree"], root, 30000, indexEnv);
+    if (tree.code !== 0 || !tree.stdout.trim()) throw new FabricError("RUNTIME_FAILED", tree.stderr.trim() || "Git checkpoint tree creation failed");
+    const message = `fabric-lite mutation checkpoint${label ? ` ${label}` : ""}`;
+    const created = await command(["git", "-c", "commit.gpgSign=false", "commit-tree", tree.stdout.trim(), "-p", baseHead], root, 30000, indexEnv, 100000, `${message}\n`);
+    if (created.code !== 0 || !/^[0-9a-f]{40}$/.test(created.stdout.trim())) throw new FabricError("RUNTIME_FAILED", created.stderr.trim() || "Git checkpoint commit creation failed");
+    const updated = await command(["git", "update-ref", checkpointRef, created.stdout.trim()], root);
+    if (updated.code !== 0) throw new FabricError("RUNTIME_FAILED", updated.stderr.trim() || "Git checkpoint ref creation failed");
+    mutationSession = { checkpointId: created.stdout.trim(), checkpointRef, baseHead, mode, ...(label === undefined ? {} : { label }), createdFiles: new Set(), modifiedFiles: new Set() };
+    return { checkpoint: { id: created.stdout.trim(), mode, baseHead }, guidance: `Mutation checkpoint ${created.stdout.trim()} created without changing the branch or real index. Gitignored files are not included.` };
+   } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+   }
+  },
+  async diff(input?: { maxChars?: number }) {
+   const session = mutationSession;
+   if (!session) throw new FabricError("RUNTIME_FAILED", "No active mutation session");
+   if (input !== undefined && !isArgumentRecord(input)) invalidArguments("fabric.mutate.diff", "expected an options object");
+   const requested = input as { maxChars?: unknown } | undefined;
+   const requestedMax = requested?.maxChars;
+   if (requestedMax !== undefined && (!Number.isInteger(requestedMax) || (requestedMax as number) < 0)) invalidArguments("fabric.mutate.diff", "maxChars must be a nonnegative integer");
+   const maxChars = Math.min((requestedMax as number | undefined) ?? config.mutation.maxDiffChars, config.mutation.maxDiffChars);
+   const result = await command(["git", "-c", "core.fsmonitor=false", "diff", session.checkpointId], root, 30000, undefined, maxChars + 1);
+   if (result.code !== 0) throw new FabricError("RUNTIME_FAILED", result.stderr.trim() || "Git mutation diff failed");
+   const bounded = truncate(result.stdout, maxChars);
+   return { diff: bounded.text, truncated: bounded.truncated || result.stdoutTruncated, createdFiles: [...session.createdFiles], changedFiles: [...session.modifiedFiles] };
+  },
+  async review(input?: { instruction?: string }) {
+   const session = mutationSession;
+   if (!session) throw new FabricError("RUNTIME_FAILED", "No active mutation session");
+   if (input !== undefined && !isArgumentRecord(input)) invalidArguments("fabric.mutate.review", "expected an options object");
+   const instruction = (input as { instruction?: unknown } | undefined)?.instruction;
+   if (instruction !== undefined && (typeof instruction !== "string" || instruction.length === 0)) invalidArguments("fabric.mutate.review", "instruction must be a non-empty string");
+   const diff = await mutation.diff({ maxChars: Math.min(config.mutation.maxDiffChars, Math.max(0, config.budgets.maxContextCharsPerCall - 256)) });
+   const outputSchema = { type: "object", required: ["approved", "issues", "summary"], properties: { approved: { type: "boolean" }, issues: { type: "array", items: { type: "string" } }, summary: { type: "string" } } };
+   return aiRun({
+    instruction: instruction ?? "Review this Fabric Lite mutation diff for correctness and safety. Identify risks, regressions, or missing changes and decide whether it is safe to complete.",
+    context: JSON.stringify(diff), role: "verifier", outputSchema,
+   });
+  },
+  async rollback() {
+   const session = mutationSession;
+   if (!session) throw new FabricError("RUNTIME_FAILED", "No active mutation session");
+   const restored = await command(["git", "-c", "core.fsmonitor=false", "restore", `--source=${session.checkpointId}`, "--worktree", "--", "."], root);
+   if (restored.code !== 0) throw new FabricError("RUNTIME_FAILED", restored.stderr.trim() || "Git mutation rollback failed");
+   const removedFiles: string[] = [];
+   for (const relative of session.createdFiles) {
+    try {
+     const target = await safeWritePath(root, relative, config.filesystem.allowWrite);
+     const info = await lstat(target.absolute);
+     if (!info.isFile() || info.isSymbolicLink()) continue;
+     await unlink(target.absolute);
+     removedFiles.push(relative);
+    } catch (error) {
+     if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof FabricError && error.code === "POLICY_DENIED") continue;
+     throw error;
+    }
+   }
+   if (session.checkpointRef) {
+    const removed = await command(["git", "update-ref", "-d", session.checkpointRef], root);
+    if (removed.code !== 0) throw new FabricError("RUNTIME_FAILED", removed.stderr.trim() || "Git checkpoint ref deletion failed");
+   }
+   mutationSession = undefined;
+   return { restored: true as const, checkpoint: session.checkpointId, removedFiles, guidance: `Tracked files were restored to ${session.checkpointId}; files created during this session were removed where safely allowlisted.` };
+  },
+  async complete() {
+   const session = mutationSession;
+   if (!session) throw new FabricError("RUNTIME_FAILED", "No active mutation session");
+   mutationSession = undefined;
+   const checkpoint = { id: session.checkpointId, mode: session.mode, baseHead: session.baseHead };
+   const created = [...session.createdFiles];
+   const rollbackGuidance = session.checkpointRef
+    ? `To roll back tracked files, run git restore --source=${session.checkpointId} --worktree -- .; delete created files manually (${created.join(", ") || "none"}); then clean up the checkpoint with git update-ref -d ${session.checkpointRef}.`
+    : `To roll back tracked files, run git restore --source=${session.checkpointId} --worktree -- .; delete created files manually (${created.join(", ") || "none"}).`;
+   return { checkpoint, createdFiles: created, rollbackGuidance };
+  },
+ };
+ return {fabric:{fs:fsApi,git,mutate:mutation,inspect,shell,ai,util:{chunk<T>(items:T[],size:number){if(!Number.isInteger(size)||size<1)throw new Error("chunk size must be positive");return Array.from({length:Math.ceil(items.length/size)},(_,i)=>items.slice(i*size,(i+1)*size));},unique<T>(items:T[]){return[...new Set(items)];},sortBy<T>(items:T[],selector:(x:T)=>string|number){return[...items].sort((a,b)=>{const x=selector(a),y=selector(b);return x<y?-1:x>y?1:0;});},truncate(text:string,max:number){return text.length<=max?text:text.slice(0,Math.max(0,max-1))+"…";},compactJson(value:unknown,max:number){const s=JSON.stringify(value);return s.length<=max?s:s.slice(0,Math.max(0,max-1))+"…";}}},metrics:budgets.metrics};
 }

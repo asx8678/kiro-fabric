@@ -39,6 +39,16 @@ export interface FabricConfig {
   git: {
     allowCommit: boolean;
   };
+  mutation: {
+    enabled: boolean;
+    require: "clean" | "checkpoint";
+    maxDiffChars: number;
+  };
+  cache: {
+    enabled: boolean;
+    maxEntries: number;
+    ttlMs: number;
+  };
   permissions: {
     read: "allow" | "ask" | "deny";
     commit: "allow" | "ask" | "deny";
@@ -92,6 +102,16 @@ export const defaults: FabricConfig = {
   },
   git: {
     allowCommit: false,
+  },
+  mutation: {
+    enabled: false,
+    require: "clean",
+    maxDiffChars: 30000,
+  },
+  cache: {
+    enabled: false,
+    maxEntries: 200,
+    ttlMs: 0,
   },
   permissions: {
     read: "allow",
@@ -192,6 +212,18 @@ const configShape: Shape = {
   git: {
     allowCommit: booleanValue,
   },
+  mutation: {
+    enabled: booleanValue,
+    require: (value, location) => {
+      if (value !== "clean" && value !== "checkpoint") fail(location, "clean or checkpoint");
+    },
+    maxDiffChars: positiveInteger,
+  },
+  cache: {
+    enabled: booleanValue,
+    maxEntries: positiveInteger,
+    ttlMs: nonnegativeInteger,
+  },
   permissions: {
     read: permissionValue,
     commit: permissionValue,
@@ -270,6 +302,8 @@ export async function loadConfig(cwd: string): Promise<FabricConfig> {
       budgets: { ...defaults.budgets },
       filesystem: { ...defaults.filesystem, allowWrite: [...defaults.filesystem.allowWrite] },
       git: { ...defaults.git },
+      mutation: { ...defaults.mutation },
+      cache: { ...defaults.cache },
       permissions: { ...defaults.permissions },
       shell: { ...defaults.shell, allowedCommands: [...defaults.shell.allowedCommands] },
       output: { ...defaults.output },
