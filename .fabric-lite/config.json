@@ -24,17 +24,7 @@
   },
   "filesystem": {
     "allowWrite": [
-      "src/**",
-      "test/**",
-      "docs/**",
-      ".kiro/**",
-      "README.md",
-      "package.json",
-      "pnpm-lock.yaml",
-      "pnpm-workspace.yaml",
-      "tsconfig.json",
-      "tsconfig.build.json",
-      "vitest.config.ts"
+      "**"
     ],
     "denySymlinkEscape": true,
     "maxFilesPerReadMany": 20,
