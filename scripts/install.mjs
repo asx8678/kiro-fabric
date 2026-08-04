@@ -516,6 +516,11 @@ async function actionDelete(st) {
   if (ASSUME_YES) print(`  ${B.warn} ${C.red("--yes does not bypass this destructive confirm")}`);
   const sure = await confirm(C.red("Are you absolutely sure?"), false);
   if (sure !== true) { print(`  ${B.info} delete cancelled\n`); return; }
+  // Second, stronger confirmation: the user must type the exact word.
+  print(`  ${C.red("⚠  Final confirmation — this permanently removes all Fabric Lite files from:")} ${C.cyan(root)}`);
+  print(`  ${C.gray("Type")} ${C.yellow(C.bold("yes"))} ${C.gray("to permanently delete, or anything else / Enter to cancel.")}`);
+  const final = await askLine(`  ${C.bold("Type 'yes' to delete")}: `);
+  if (final.trim().toLowerCase() !== "yes") { print(`  ${B.info} delete cancelled\n`); return "cancelled"; }
   let removed = 0, failed = 0;
   for (const t of targets) {
     try { await rm(t, { recursive: true, force: true }); removed++; }
