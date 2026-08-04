@@ -22,6 +22,34 @@ interface Payload {
   runId: string;
 }
 
+function validateReturnValue(value: unknown, ancestors: Set<object>): void {
+  if (value === undefined) throw new FabricError("RUNTIME_FAILED", "Final result cannot be serialized: undefined value");
+  if (typeof value === "bigint") throw new FabricError("RUNTIME_FAILED", "Final result cannot be serialized: bigint value");
+  if (typeof value === "number" && !Number.isFinite(value)) throw new FabricError("RUNTIME_FAILED", "Final result cannot be serialized: non-finite number");
+  if (typeof value === "function" || typeof value === "symbol") throw new FabricError("RUNTIME_FAILED", "Final result cannot be serialized: unsupported value");
+  if (typeof value !== "object" || value === null) return;
+  if (ancestors.has(value)) throw new FabricError("RUNTIME_FAILED", "Final result cannot be serialized: cyclic value");
+  ancestors.add(value);
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index++) validateReturnValue(value[index], ancestors);
+  } else {
+    for (const key of Object.keys(value)) validateReturnValue((value as Record<string, unknown>)[key], ancestors);
+  }
+  ancestors.delete(value);
+}
+
+function serializeReturnValue(value: unknown): unknown {
+  validateReturnValue(value, new Set<object>());
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined) throw new FabricError("RUNTIME_FAILED", "Final result cannot be serialized: undefined value");
+    return JSON.parse(serialized) as unknown;
+  } catch (error) {
+    if (error instanceof FabricError) throw error;
+    throw new FabricError("RUNTIME_FAILED", `Final result serialization failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 // stdout is a protocol channel. Route guest diagnostics (including direct writes) to stderr.
 const writeEnvelope = process.stdout.write.bind(process.stdout);
 globalThis.console = new Console({ stdout: process.stderr, stderr: process.stderr });
@@ -55,8 +83,10 @@ try {
 
   const started = Date.now();
   const value = await fn(fabric);
-  const serialized = JSON.stringify(value);
-  if (serialized.length > payload.config.output.maxFinalChars) {
+  const safeValue = serializeReturnValue(value);
+  const safeSerialized = JSON.stringify(safeValue);
+  if (safeSerialized === undefined) throw new FabricError("RUNTIME_FAILED", "Final result cannot be serialized: undefined value");
+  if (safeSerialized.length > payload.config.output.maxFinalChars) {
     throw new FabricError(
       "BUDGET_EXCEEDED",
       `Final result exceeds ${payload.config.output.maxFinalChars} characters`,
@@ -67,7 +97,7 @@ try {
       version: 1,
       runId: payload.runId,
       status: "succeeded",
-      value,
+      value: safeValue,
       metrics: { elapsedMs: Date.now() - started, ...metrics },
     }),
   );

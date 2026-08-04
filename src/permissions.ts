@@ -52,19 +52,88 @@ function structuredPreview(label: string, value: unknown): string {
 }
 
 /** Defense-in-depth detector, not a proof that an approved shell is safe. */
+function shellTokens(command: string): string[] {
+  const tokens: string[] = [];
+  let token = "";
+  let quote: "'" | '"' | undefined;
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i]!;
+    if (quote) {
+      if (char === quote) quote = undefined;
+      else token += char;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+    } else if (/\s/.test(char)) {
+      if (token) { tokens.push(token); token = ""; }
+    } else if (";&|()".includes(char)) {
+      if (token) { tokens.push(token); token = ""; }
+      tokens.push(char);
+    } else {
+      token += char;
+    }
+  }
+  if (token) tokens.push(token);
+  return tokens;
+}
+
+function executableName(token: string): string {
+  return token.replaceAll("\\", "/").split("/").pop()?.toLowerCase() ?? "";
+}
+
+function hasDestructiveRm(tokens: string[]): boolean {
+  for (let i = 0; i < tokens.length; i++) {
+    if (executableName(tokens[i]!) !== "rm" && executableName(tokens[i]!) !== "rm.exe") continue;
+    let recursive = false;
+    let force = false;
+    for (let j = i + 1; j < tokens.length && !";&|()".includes(tokens[j]!); j++) {
+      const arg = tokens[j]!.toLowerCase();
+      if (arg === "--recursive" || arg === "--dir" || arg === "-r" || (/^-[^-]/.test(arg) && arg.includes("r"))) recursive = true;
+      if (arg === "--force" || arg === "-f" || (/^-[^-]/.test(arg) && arg.includes("f"))) force = true;
+    }
+    if (recursive || force) return true;
+  }
+  return false;
+}
+
+function hasNestedShell(tokens: string[]): boolean {
+  for (let i = 0; i < tokens.length; i++) {
+    const name = executableName(tokens[i]!);
+    if (!["sh", "bash", "zsh", "dash", "ksh", "sh.exe", "bash.exe", "zsh.exe", "dash.exe", "ksh.exe"].includes(name)) continue;
+    for (let j = i + 1; j < tokens.length && !";&|()".includes(tokens[j]!); j++) {
+      if (tokens[j] === "-c" || tokens[j] === "--command") return true;
+    }
+  }
+  return false;
+}
+
+function hasDestructiveGit(tokens: string[]): boolean {
+  for (let i = 0; i < tokens.length; i++) {
+    if (executableName(tokens[i]!) !== "git") continue;
+    // Git accepts global options before the subcommand. Scan the whole command
+    // segment rather than assuming the subcommand is token two: a safe-looking
+    // option such as --no-pager or -c key=value must not hide a mutation.
+    for (let j = i + 1; j < tokens.length && !";&|()".includes(tokens[j]!); j++) {
+      if (["push", "reset", "clean"].includes(executableName(tokens[j]!))) return true;
+    }
+  }
+  return false;
+}
+
 export function isDestructive(command: string): boolean {
   const text = command.trim();
-  const lower = text.toLowerCase();
-  // rm with either recursive and force flags, including /bin/rm and wrappers.
-  if (/(^|[;&|\s])(?:command\s+|sudo\s+|env(?:\s+[^;&|]+)?\s+)*(?:\/bin\/)?rm\b[^;&|\n]*-(?=[a-z]*r)(?=[a-z]*f)|(^|[;&|\s])(?:command\s+|sudo\s+|env(?:\s+[^;&|]+)?\s+)*(?:\/bin\/)?rm\b[^;&|\n]*-(?=[a-z]*f)(?=[a-z]*r)/i.test(text)) return true;
-  if (/(^|[;&|\s])(?:command\s+|sudo\s+|env(?:\s+[^;&|]+)?\s+)*(?:\/bin\/)?(?:sh|bash|zsh|dash|ksh)\b[^;&|\n]*\s-c(?:\s|$)/i.test(text)) return true;
+  // Command substitutions can execute an arbitrary hidden command. Treat all
+  // forms conservatively as destructive, including substitutions in quotes.
+  if (text.includes("$(") || text.includes("`")) return true;
+  const tokens = shellTokens(text);
+  if (hasDestructiveRm(tokens) || hasNestedShell(tokens) || hasDestructiveGit(tokens)) return true;
   if (/\bfind\b[^;&|\n]*\s-delete\b/i.test(text)) return true;
-  if (/\bgit\b(?:\s+-C\s+[^\s;&|]+)*\s+(?:push\b|reset\s+--hard\b|clean\s+(?:-[^\s;&|]*[fdx]|--force|--interactive))/i.test(text)) return true;
   if (/\bkubectl\b(?:\s+[^;&|\n]*)?\s+(?:delete|apply)\b/i.test(text)) return true;
   if (/\bterraform\b(?:\s+[^;&|\n]*)?\s+(?:apply|destroy)\b/i.test(text)) return true;
   if (/(^|[\s;&|])(?:mkfs(?:\.[\w-]+)?|dd\s+(?:if|of)=|shutdown\b|reboot\b)/i.test(text)) return true;
   // Mutating SQL, including common statements passed through command wrappers.
-  return /\b(?:insert\s+into|update\s+[a-z0-9_.`"]+\s+set|delete\s+from|drop\s+(?:database|table|schema|view|index)|truncate\b|alter\s+|create\s+(?:database|table|schema|index|view)|merge\s+into|grant\s+|revoke\s+|vacuum\b)\b/i.test(lower);
+  return /\b(?:insert\s+into|update\s+[a-z0-9_.`"]+\s+set|delete\s+from|drop\s+(?:database|table|schema|view|index)|truncate\b|alter\s+|create\s+(?:database|table|schema|index|view)|merge\s+into|grant\s+|revoke\s+|vacuum\b)\b/i.test(text.toLowerCase());
 }
 
 export function classifyShell(command: string, cwd = "."): { category: PermissionCategory; preview: string } {

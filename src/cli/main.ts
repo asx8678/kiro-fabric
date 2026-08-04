@@ -114,6 +114,7 @@ async function doctor(cwd: string, format: OutputFormat, smoke: boolean): Promis
         context: "",
         role: "general",
         schema,
+        ...(config.runner.defaultModel !== null ? { model: config.runner.defaultModel } : {}),
         maxOutputChars: 1000,
         timeoutMs: config.budgets.aiCallTimeoutMs,
       });

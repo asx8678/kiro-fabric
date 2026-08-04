@@ -137,6 +137,16 @@ const stringArray: Validator = (value, location) => {
     fail(location, "an array of strings");
   }
 };
+const writePatternArray: Validator = (value, location) => {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+    fail(location, "an array of relative write patterns");
+  }
+  for (const pattern of value as string[]) {
+    if (!pattern || path.posix.isAbsolute(pattern) || path.win32.isAbsolute(pattern) || /(^|[\\/])\.\.([\\/]|$)/.test(pattern)) {
+      fail(location, "an array of relative write patterns without parent traversal");
+    }
+  }
+};
 const permissionValue: Validator = (value, location) => {
   if (value !== "allow" && value !== "ask" && value !== "deny") fail(location, "allow, ask, or deny");
 };
@@ -173,7 +183,7 @@ const configShape: Shape = {
     aiCallTimeoutMs: positiveInteger,
   },
   filesystem: {
-    allowWrite: stringArray,
+    allowWrite: writePatternArray,
     denySymlinkEscape: booleanValue,
     maxFilesPerReadMany: positiveInteger,
     maxCharsPerFile: positiveInteger,

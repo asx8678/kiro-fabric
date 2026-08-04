@@ -1,5 +1,7 @@
 import path from "node:path";
-import { lstat, realpath, readFile, writeFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { lstat, mkdtemp, open, realpath, readFile, rename, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import fg from "fast-glob";
 import { spawn } from "node:child_process";
 import type { FabricConfig } from "./config.js";
@@ -59,6 +61,119 @@ async function safePath(root: string, candidate: string, existing = true): Promi
     if (existing || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   return absolute;
+}
+
+function normalizedRelative(root: string, absolute: string): string {
+  return path.relative(root, absolute).replaceAll(path.sep, "/");
+}
+
+function writeAllowPattern(pattern: string): string {
+  return pattern.replaceAll("\\", "/").replace(/^\.\//, "");
+}
+
+function writeAllowed(relative: string, patterns: readonly string[]): boolean {
+  return patterns.some((pattern) => {
+    const normalized = writeAllowPattern(pattern);
+    return relative === normalized ||
+      (normalized.endsWith("/**") && relative.startsWith(`${normalized.slice(0, -3)}/`));
+  });
+}
+
+async function safeWritePath(
+  root: string,
+  candidate: string,
+  allowWrite: readonly string[],
+): Promise<{ absolute: string; relative: string }> {
+  const lexical = await safePath(root, candidate, false);
+  const actualRoot = await realpath(root);
+  let parent: string;
+  try {
+    parent = await realpath(path.dirname(lexical));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new FabricError("POLICY_DENIED", `Write parent does not exist: ${candidate}`);
+    }
+    throw error;
+  }
+  const canonical = path.join(parent, path.basename(lexical));
+  const relative = normalizedRelative(actualRoot, canonical);
+  if (
+    !relative ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative) ||
+    denied.test(relative) ||
+    !writeAllowed(relative, allowWrite)
+  ) {
+    throw new FabricError("POLICY_DENIED", `Filesystem writes are disabled or canonical path is not allowlisted: ${candidate}`);
+  }
+  try {
+    const info = await lstat(lexical);
+    if (info.isSymbolicLink()) {
+      throw new FabricError("POLICY_DENIED", `Refusing to follow symlink write target: ${candidate}`);
+    }
+  } catch (error) {
+    if (error instanceof FabricError || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return { absolute: canonical, relative };
+}
+
+function descriptorPath(fd: number): string | undefined {
+  if (process.platform === "linux") return `/proc/self/fd/${fd}`;
+  if (["darwin", "freebsd", "openbsd", "netbsd"].includes(process.platform)) return `/dev/fd/${fd}`;
+  return undefined;
+}
+
+function descriptorChildPath(fd: number, child: string): string | undefined {
+  // Linux procfs supports openat-like path traversal through a directory fd.
+  // macOS exposes /dev/fd for verification, but does not reliably support
+  // appending a child path to that pseudo-symlink; its safe fallback opens
+  // without truncation and verifies the resulting target descriptor first.
+  return process.platform === "linux" ? `/proc/self/fd/${fd}/${child}` : undefined;
+}
+
+async function verifyOpenedWriteTarget(
+  handle: Awaited<ReturnType<typeof open>>,
+  root: string,
+  allowWrite: readonly string[],
+  candidate: string,
+  openedPath: string,
+): Promise<{ relative: string }> {
+  const fdPath = descriptorPath(handle.fd);
+  let canonical: string;
+  try {
+    // /dev/fd on macOS is useful for identifying the descriptor but does not
+    // resolve to the underlying path, so verify its stable inode against the
+    // canonical path opened without truncation.
+    canonical = process.platform === "darwin"
+      ? await realpath(openedPath)
+      : fdPath
+        ? await realpath(fdPath)
+        : await realpath(openedPath);
+    const opened = await handle.stat();
+    const canonicalInfo = await lstat(canonical);
+    if (opened.dev !== canonicalInfo.dev || opened.ino !== canonicalInfo.ino) {
+      throw new FabricError("POLICY_DENIED", `Opened write target changed during verification: ${candidate}`);
+    }
+  } catch (error) {
+    if (error instanceof FabricError) throw error;
+    throw new FabricError("POLICY_DENIED", `Unable to verify opened write target: ${candidate}`);
+  }
+  const actualRoot = await realpath(root);
+  const relative = normalizedRelative(actualRoot, canonical);
+  if (
+    !relative ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative) ||
+    denied.test(relative) ||
+    !writeAllowed(relative, allowWrite)
+  ) {
+    throw new FabricError("POLICY_DENIED", `Opened write target is outside the canonical allowlist: ${candidate}`);
+  }
+  const info = await handle.stat();
+  if (!info.isFile()) {
+    throw new FabricError("POLICY_DENIED", `Write target is not a regular file: ${candidate}`);
+  }
+  return { relative };
 }
 
 function truncate(text: string, max: number): { text: string; truncated: boolean } {
@@ -229,10 +344,10 @@ export function createApi(
  const fsApi={
   async read(input:{path:string;maxChars?:number;startLine?:number;endLine?:number}) { const p=await safePath(root,input.path); const raw=textContent(await readFile(p),input.path); const lines=raw.split("\n"), start=Math.max(1,input.startLine??1), end=Math.min(lines.length,input.endLine??lines.length); const selected=lines.slice(start-1,end).join("\n"), t=truncate(selected,Math.min(input.maxChars??config.filesystem.maxCharsPerFile,config.filesystem.maxCharsPerFile)); return {path:path.relative(root,p),content:t.text,chars:t.text.length,truncated:t.truncated,startLine:start,endLine:start+t.text.split("\n").length-1}; },
   async readMany(input:{paths:string[];maxFiles?:number;maxCharsPerFile?:number;maxTotalChars?:number}) { const maxFiles=Math.min(input.maxFiles??config.filesystem.maxFilesPerReadMany,config.filesystem.maxFilesPerReadMany); if(input.paths.length>maxFiles) throw new FabricError("BUDGET_EXCEEDED",`readMany file limit ${maxFiles} exceeded`); const out=[]; let total=0,maxTotal=Math.min(input.maxTotalChars??config.filesystem.maxTotalReadChars,config.filesystem.maxTotalReadChars); for(const p of input.paths){const r=await fsApi.read({path:p,maxChars:input.maxCharsPerFile??config.filesystem.maxCharsPerFile});if(total+r.chars>maxTotal){const left=Math.max(0,maxTotal-total);out.push({...r,content:r.content.slice(0,left),chars:left,truncated:true});break;}out.push(r);total+=r.chars;} return out; },
-  async glob(input:{pattern:string;cwd?:string;maxResults?:number;ignore?:string[]}) { const cwd=await safePath(root,input.cwd??"."); const max=Math.min(input.maxResults??1000,5000); const values=await fg(input.pattern,{cwd,onlyFiles:true,dot:false,followSymbolicLinks:false,ignore:[...deniedGlobs,...(input.ignore??[])]}); return values.sort().slice(0,max).map(x=>path.relative(root,path.resolve(cwd,x)).replaceAll(path.sep,"/")); },
+  async glob(input:{pattern:string;cwd?:string;maxResults?:number;ignore?:string[]}) { if(typeof input?.pattern!=="string"||path.posix.isAbsolute(input.pattern)||path.win32.isAbsolute(input.pattern)||/^(?:[A-Za-z]:|[\\\\])/.test(input.pattern)||/(^|[\\\\/])\.\.([\\\\/]|$)/.test(input.pattern)) throw new FabricError("POLICY_DENIED","Glob patterns must be relative and cannot contain parent traversal"); const requestedCwd=await safePath(root,input.cwd??"."); const cwd=await realpath(requestedCwd); const cwdInfo=await lstat(cwd);if(!cwdInfo.isDirectory())throw new FabricError("POLICY_DENIED","Glob cwd must be a directory"); const canonicalRoot=await realpath(root); const max=Math.min(input.maxResults??1000,5000); const values=await fg(input.pattern,{cwd,onlyFiles:true,dot:false,followSymbolicLinks:false,ignore:[...deniedGlobs,...(input.ignore??[])]}); const results:string[]=[]; for(const value of values.sort().slice(0,max)){const candidate=path.resolve(cwd,value);let canonical:string;try{canonical=await realpath(candidate);}catch{throw new FabricError("POLICY_DENIED","Unable to verify glob result");}const relative=normalizedRelative(canonicalRoot,canonical);if(relative.startsWith("..")||path.isAbsolute(relative)||denied.test(relative)) throw new FabricError("POLICY_DENIED","Glob result escaped project root");results.push(relative);} return results; },
   async grep(input:{query:string;paths?:string[];glob?:string;maxMatches?:number;contextLines?:number}) { let regex:RegExp;try{regex=new RegExp(input.query,"i");}catch{throw new FabricError("POLICY_DENIED","Invalid grep regular expression");} const files=input.paths??await fsApi.glob({pattern:input.glob??"**/*",maxResults:2000}),max=input.maxMatches??200,ctx=Math.min(input.contextLines??0,10),matches:any[]=[]; for(const file of files){let r;try{r=await fsApi.read({path:file,maxChars:config.filesystem.maxCharsPerFile});}catch{continue;}const lines=r.content.split("\n");for(let i=0;i<lines.length;i++)if(regex.test(lines[i]!)){matches.push({path:file,line:i+1,text:lines[i],before:lines.slice(Math.max(0,i-ctx),i),after:lines.slice(i+1,i+1+ctx)});if(matches.length>=max)return{matches,files:[...new Set(matches.map(x=>x.path))],truncated:true};}}return{matches,files:[...new Set(matches.map(x=>x.path))],truncated:false}; },
   async stat(input:{path:string}) {const p=await safePath(root,input.path),s=await lstat(p);return{path:path.relative(root,p),type:s.isDirectory()?"directory":"file",size:s.size,modifiedMs:s.mtimeMs};},
-  async write(input:{path:string;content:string}) { if(!config.filesystem.allowWrite.some(pattern=>input.path===pattern||(pattern.endsWith("/**")&&input.path.startsWith(pattern.slice(0,-3)+"/")))) throw new FabricError("POLICY_DENIED","Filesystem writes are disabled or path is not allowlisted");const p=await safePath(root,input.path,false);await writeFile(p,input.content,"utf8");return{path:path.relative(root,p),bytesWritten:Buffer.byteLength(input.content)};},
+  async write(input:{path:string;content:string}) { const target=await safeWritePath(root,input.path,config.filesystem.allowWrite);let parentHandle:Awaited<ReturnType<typeof open>>|undefined;let handle:Awaited<ReturnType<typeof open>>|undefined;try{const noFollow=fsConstants.O_NOFOLLOW;const directory=fsConstants.O_DIRECTORY;const parentFdPath=descriptorPath(0);if(noFollow===undefined||directory===undefined||!parentFdPath)throw new FabricError("POLICY_DENIED",`Platform cannot establish a safe write primitive: ${input.path}`);parentHandle=await open(path.dirname(target.absolute),fsConstants.O_RDONLY|directory|noFollow);const targetFromParent=descriptorChildPath(parentHandle.fd,path.basename(target.absolute));handle=await open(targetFromParent??target.absolute,fsConstants.O_WRONLY|fsConstants.O_CREAT|noFollow,0o666);const verified=await verifyOpenedWriteTarget(handle,root,config.filesystem.allowWrite,input.path,target.absolute);await handle.truncate(0);await handle.writeFile(input.content,"utf8");return{path:verified.relative,bytesWritten:Buffer.byteLength(input.content)};}catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==="ELOOP"||code==="ENXIO") throw new FabricError("POLICY_DENIED",`Refusing unsafe symlink write target: ${input.path}`);throw error;}finally{await handle?.close().catch(()=>undefined);await parentHandle?.close().catch(()=>undefined);}},
   async patch(input:{path:string;patch:string}) { const read=await fsApi.read({path:input.path,maxChars:config.filesystem.maxCharsPerFile});if(read.truncated)throw new FabricError("BUDGET_EXCEEDED","Refusing to patch a truncated file");const current=read.content; let spec:{old:string;new:string};try{spec=JSON.parse(input.patch) as {old:string;new:string};}catch{throw new FabricError("POLICY_DENIED",'patch must be JSON: {"old":"exact text","new":"replacement"}');}if(typeof spec.old!=="string"||typeof spec.new!=="string"||!current.includes(spec.old))throw new FabricError("POLICY_DENIED","Patch old text not found");await fsApi.write({path:input.path,content:current.replace(spec.old,spec.new)});return{path:input.path,applied:true};}
  };
  const git={
@@ -260,16 +375,27 @@ export function createApi(
    const canonicalPaths=[...new Set(entries.map((entry)=>"absolute" in entry?entry.absolute:path.join(repository,entry.relative)))];
    if(!(await gate.authorize(commitRequest(input.message,repository,canonicalPaths))))throw new FabricError("POLICY_DENIED","Local Git commit was not approved");
    const unique=[...new Set(paths)];
-   for(const entry of entries.filter((value,index)=>paths.indexOf(value.relative)===index)){
-    if("deleted" in entry){const removed=await command(["git","-c","core.fsmonitor=false","update-index","--force-remove","--",entry.relative],root);if(removed.code!==0)throw new FabricError("RUNTIME_FAILED",removed.stderr.trim()||"Git index deletion failed");continue;}
-    const content=await readFile(entry.absolute);if(content.length>config.filesystem.maxCharsPerFile)throw new FabricError("BUDGET_EXCEEDED",`Commit file exceeds ${config.filesystem.maxCharsPerFile} bytes: ${entry.relative}`);const hashed=await command(["git","hash-object","-w","--stdin"],root,30000,undefined,100000,content);if(hashed.code!==0||!/^[0-9a-f]{40}$/.test(hashed.stdout.trim()))throw new FabricError("RUNTIME_FAILED",hashed.stderr.trim()||"Git object hashing failed");
-    const stagedEntry=await command(["git","-c","core.fsmonitor=false","update-index","--add","--cacheinfo",`${entry.mode},${hashed.stdout.trim()},${entry.relative}`],root);if(stagedEntry.code!==0)throw new FabricError("RUNTIME_FAILED",stagedEntry.stderr.trim()||"Git index update failed");
-   }
-   const staged=await command(["git","diff","--cached","--name-only"],root);if(staged.code!==0)throw new FabricError("RUNTIME_FAILED",staged.stderr.trim());const committedPaths=staged.stdout.trim().split("\n").filter(Boolean);if(committedPaths.length===0)throw new FabricError("RUNTIME_FAILED","Explicit paths contain no changes to commit");if(committedPaths.some(file=>!unique.includes(file)))throw new FabricError("POLICY_DENIED","Git staged a path outside the explicit commit set");
-   const [oldHead,branch,tree]=await Promise.all([command(["git","rev-parse","HEAD"],root),command(["git","symbolic-ref","--quiet","--short","HEAD"],root),command(["git","-c","core.fsmonitor=false","write-tree"],root)]);if(oldHead.code!==0||tree.code!==0)throw new FabricError("RUNTIME_FAILED",oldHead.stderr.trim()||tree.stderr.trim());if(branch.code!==0||!branch.stdout.trim())throw new FabricError("POLICY_DENIED","Local commits require an attached branch");
-   const created=await command(["git","-c","commit.gpgSign=false","commit-tree",tree.stdout.trim(),"-p",oldHead.stdout.trim()],root,30000,undefined,100000,`${input.message}\n`);if(created.code!==0||!/^[0-9a-f]{40}$/.test(created.stdout.trim()))throw new FabricError("RUNTIME_FAILED",created.stderr.trim()||"Git commit object creation failed");
-   const ref=`refs/heads/${branch.stdout.trim()}`;const updated=await command(["git","update-ref",ref,created.stdout.trim(),oldHead.stdout.trim()],root);if(updated.code!==0)throw new FabricError("RUNTIME_FAILED",updated.stderr.trim()||"Git branch update failed");
-   return{hash:created.stdout.trim(),branch:branch.stdout.trim(),message:input.message,paths:committedPaths};
+   const temporaryDirectory=await mkdtemp(path.join(tmpdir(),"fabric-index-"));
+   const temporaryIndex=path.join(temporaryDirectory,"index");
+   const indexEnv:NodeJS.ProcessEnv={...process.env,GIT_INDEX_FILE:temporaryIndex};
+   try {
+    const initialized=await command(["git","read-tree","HEAD"],root,30000,indexEnv);if(initialized.code!==0)throw new FabricError("RUNTIME_FAILED",initialized.stderr.trim()||"Git temporary index initialization failed");
+    for(const entry of entries.filter((value,index)=>paths.indexOf(value.relative)===index)){
+     if("deleted" in entry){const removed=await command(["git","-c","core.fsmonitor=false","update-index","--force-remove","--",entry.relative],root,30000,indexEnv);if(removed.code!==0)throw new FabricError("RUNTIME_FAILED",removed.stderr.trim()||"Git index deletion failed");continue;}
+     const content=await readFile(entry.absolute);if(content.length>config.filesystem.maxCharsPerFile)throw new FabricError("BUDGET_EXCEEDED",`Commit file exceeds ${config.filesystem.maxCharsPerFile} bytes: ${entry.relative}`);const hashed=await command(["git","hash-object","-w","--stdin"],root,30000,undefined,100000,content);if(hashed.code!==0||!/^[0-9a-f]{40}$/.test(hashed.stdout.trim()))throw new FabricError("RUNTIME_FAILED",hashed.stderr.trim()||"Git object hashing failed");
+     const stagedEntry=await command(["git","-c","core.fsmonitor=false","update-index","--add","--cacheinfo",`${entry.mode},${hashed.stdout.trim()},${entry.relative}`],root,30000,indexEnv);if(stagedEntry.code!==0)throw new FabricError("RUNTIME_FAILED",stagedEntry.stderr.trim()||"Git index update failed");
+    }
+    const staged=await command(["git","diff","--cached","--name-only"],root,30000,indexEnv);if(staged.code!==0)throw new FabricError("RUNTIME_FAILED",staged.stderr.trim());const committedPaths=staged.stdout.trim().split("\n").filter(Boolean);if(committedPaths.length===0)throw new FabricError("RUNTIME_FAILED","Explicit paths contain no changes to commit");if(committedPaths.some(file=>!unique.includes(file)))throw new FabricError("POLICY_DENIED","Git staged a path outside the explicit commit set");
+    const [oldHead,branch,tree]=await Promise.all([command(["git","rev-parse","HEAD"],root),command(["git","symbolic-ref","--quiet","--short","HEAD"],root),command(["git","-c","core.fsmonitor=false","write-tree"],root,30000,indexEnv)]);if(oldHead.code!==0||tree.code!==0)throw new FabricError("RUNTIME_FAILED",oldHead.stderr.trim()||tree.stderr.trim());if(branch.code!==0||!branch.stdout.trim())throw new FabricError("POLICY_DENIED","Local commits require an attached branch");
+    const created=await command(["git","-c","commit.gpgSign=false","commit-tree",tree.stdout.trim(),"-p",oldHead.stdout.trim()],root,30000,undefined,100000,`${input.message}\n`);if(created.code!==0||!/^[0-9a-f]{40}$/.test(created.stdout.trim()))throw new FabricError("RUNTIME_FAILED",created.stderr.trim()||"Git commit object creation failed");
+    // Build the post-commit index before moving the branch. The real index is
+    // untouched until this succeeds, and replacing it atomically avoids
+    // staging unrelated worktree changes or exposing a partial index.
+    const indexPathResult=await command(["git","rev-parse","--git-path","index"],root);if(indexPathResult.code!==0||!indexPathResult.stdout.trim())throw new FabricError("RUNTIME_FAILED",indexPathResult.stderr.trim()||"Git index path lookup failed");const realIndex=path.resolve(root,indexPathResult.stdout.trim());const syncDirectory=await mkdtemp(path.join(path.dirname(realIndex),".fabric-index-sync-"));const syncIndex=path.join(syncDirectory,"index");try{const synchronized=await command(["git","read-tree",created.stdout.trim()],root,30000,{...indexEnv,GIT_INDEX_FILE:syncIndex});if(synchronized.code!==0)throw new FabricError("RUNTIME_FAILED",synchronized.stderr.trim()||"Git index synchronization failed");
+     const ref=`refs/heads/${branch.stdout.trim()}`;const updated=await command(["git","update-ref",ref,created.stdout.trim(),oldHead.stdout.trim()],root);if(updated.code!==0)throw new FabricError("RUNTIME_FAILED",updated.stderr.trim()||"Git branch update failed");await rename(syncIndex,realIndex);
+    } finally { await rm(syncDirectory,{recursive:true,force:true}); }
+    return{hash:created.stdout.trim(),branch:branch.stdout.trim(),message:input.message,paths:committedPaths};
+   } finally { await rm(temporaryDirectory,{recursive:true,force:true}); }
   }
  };
 const inspectionResult=(tool:string,operation:string,result:CommandResult)=>{if(result.code!==0)throw new FabricError("RUNTIME_FAILED",result.stderr.trim()||`${tool} ${operation} failed`);return{tool,operation,stdout:result.stdout,stderr:result.stderr,exitCode:result.code,truncated:result.stdoutTruncated||result.stderrTruncated};};
@@ -287,7 +413,8 @@ const inspectionResult=(tool:string,operation:string,result:CommandResult)=>{if(
   const contextCap=Math.min(input.maxInputChars??config.budgets.maxContextCharsPerCall,config.budgets.maxContextCharsPerCall);
   if(context.length>contextCap)throw new FabricError("BUDGET_EXCEEDED",`AI context character budget exceeded (${context.length} > ${contextCap})`);
   const schemaText=JSON.stringify(schema??{}),inputChars=instruction.length+context.length+schemaText.length;
-  const normalized:NormalizedAiRequest={instruction,context,role,maxOutputChars:Math.min(input.maxOutputChars??(role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),timeoutMs:Math.min(input.timeoutMs??config.budgets.aiCallTimeoutMs,config.budgets.aiCallTimeoutMs),...(input.model?{model:input.model}:{}),...(schema?{schema}:{})};
+  const requestedModel=input.model!==undefined?input.model:config.runner.defaultModel??undefined;
+  const normalized:NormalizedAiRequest={instruction,context,role,maxOutputChars:Math.min(input.maxOutputChars??(role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),timeoutMs:Math.min(input.timeoutMs??config.budgets.aiCallTimeoutMs,config.budgets.aiCallTimeoutMs),...(requestedModel!==undefined?{model:requestedModel}:{}),...(schema?{schema}:{})};
   budgets.reserve(role,inputChars);let raw:Awaited<ReturnType<AiRunner["run"]>>|undefined;
   try{raw=await runner.run(normalized,signal);const safeStdout=redactor.redact(raw.stdout);budgets.output(safeStdout.length);const value=redactor.value(parseFramed(safeStdout,normalized.schema,normalized.maxOutputChars) as T);return{value,role,...(raw.model?{model:raw.model}:{}),...(raw.requestedModel?{requestedModel:raw.requestedModel}:{}),...(raw.resolvedModel?{resolvedModel:raw.resolvedModel}:{}),resolutionSource:raw.resolutionSource??"unknown",inputChars,outputChars:safeStdout.length,repaired:false};}
   catch(e){

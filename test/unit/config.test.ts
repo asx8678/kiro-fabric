@@ -26,6 +26,8 @@ describe("loadConfig validation", () => {
     { permissions: { execute: "sometimes" } },
     { permissions: { commit: true } },
     { filesystem: { allowWrite: ["src/**", 1] } },
+    { filesystem: { allowWrite: ["../outside/**"] } },
+    { filesystem: { allowWrite: ["/tmp/**"] } },
     { budgets: { maxRetriesPerCall: -1 } },
     { budgets: { aiCallTimeoutMs: 0 } },
     { runner: { type: "other" } },
