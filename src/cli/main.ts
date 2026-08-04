@@ -14,7 +14,9 @@ import { executeProgram } from "../runtime/executor.js";
 import { parseArgs, type OutputFormat } from "./args.js";
 import { programInput } from "./input.js";
 
-const usage = "fabric-lite <check|run|exec|docs|models|doctor|install-kiro> [options]";
+const usage = "fabric-lite <check|run|exec|docs|models|doctor|install-kiro> [options]\n" +
+  "  run/exec options: --file <path> --format json|text --cwd <dir> --permissions headless|interactive\n" +
+  "  --permissions interactive prompts a human (Allow once / Allow session / Deny) for ask policies; headless fails closed";
 let errorFormat: OutputFormat = "text";
 
 function output(value: unknown, format: OutputFormat): void {
