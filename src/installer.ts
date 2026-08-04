@@ -46,7 +46,17 @@ function agents(cli: string) {
       toolAliases: {},
       allowedTools: [],
       resources: [],
-      toolsSettings: {},
+      toolsSettings: {
+        shell: {
+          // Kiro persists trusted shell commands as glob patterns. The parent
+          // agent uses shell only to invoke the Fabric Lite CLI, which
+          // enforces its own permission policy, so pre-trust every CLI
+          // invocation (quoted or unquoted) and read-only pipeline helpers
+          // like `head`/`tail` to avoid an approval prompt per run.
+          allowedCommands: [cli, `${cli} *`, `'${cli}'`, `'${cli}' *`],
+          autoAllowReadonly: true,
+        },
+      },
       includeMcpJson: false,
       model: null,
     },
@@ -169,6 +179,7 @@ export async function installKiro(options: InstallOptions) {
 
     const backups: string[] = [];
     const conflicts: string[] = [];
+    const kept: string[] = [];
     const installHome = options.home ?? homedir();
     for (const [name, value] of Object.entries(generated)) {
       const content = `${JSON.stringify(value, null, 2)}\n`;
@@ -208,19 +219,21 @@ export async function installKiro(options: InstallOptions) {
       conflicts,
     );
 
-    const config: FabricConfig = {
-      ...defaults,
-      projectRoot: ".",
-      runner: { ...defaults.runner, executable: kiro },
-    };
-    await place(
-      path.join(options.root, ".fabric-lite/config.json"),
-      `${JSON.stringify(config, null, 2)}\n`,
-      options.force,
-      options.dryRun,
-      backups,
-      conflicts,
-    );
+    // config.json is user-owned policy (allowWrite, allowCommit, permissions),
+    // unlike the installer-owned agents and prompts above: create it when
+    // missing, never overwrite or back it up — even with --force.
+    const configPath = path.join(options.root, ".fabric-lite/config.json");
+    if (await exists(configPath)) {
+      kept.push(configPath);
+    } else if (!options.dryRun) {
+      const config: FabricConfig = {
+        ...defaults,
+        projectRoot: ".",
+        runner: { ...defaults.runner, executable: kiro },
+      };
+      await mkdir(path.dirname(configPath), { recursive: true });
+      await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    }
 
     const ignore = path.join(options.root, ".gitignore");
     let existing = (await exists(ignore)) ? await readFile(ignore, "utf8") : "";
@@ -244,6 +257,7 @@ export async function installKiro(options: InstallOptions) {
       ],
       backups,
       conflicts,
+      kept,
       launch: `${kiro} --agent fabric-lite`,
     };
   } finally {

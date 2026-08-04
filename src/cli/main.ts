@@ -13,6 +13,7 @@ import { parseFramed } from "../runners/parser.js";
 import { executeProgram } from "../runtime/executor.js";
 import { parseArgs, type OutputFormat } from "./args.js";
 import { programInput } from "./input.js";
+import { renderCheckText, renderRunText } from "./render.js";
 
 const usage = "fabric-lite <check|run|exec|docs|models|doctor|install-kiro> [options]\n" +
   "  run/exec options: --file <path> --format json|text --cwd <dir> --permissions headless|interactive\n" +
@@ -150,10 +151,14 @@ async function main(): Promise<void> {
     case "check": {
       const body = await programInput(args.file);
       const result = checkProgram(body);
-      output(
-        { version: 1, status: result.ok ? "valid" : "failed", diagnostics: result.diagnostics },
-        args.format,
-      );
+      if (args.format === "text") {
+        output(`${renderCheckText(result, body)}\n`, args.format);
+      } else {
+        output(
+          { version: 1, status: result.ok ? "valid" : "failed", diagnostics: result.diagnostics },
+          args.format,
+        );
+      }
       if (!result.ok) process.exitCode = 2;
       break;
     }
@@ -162,25 +167,37 @@ async function main(): Promise<void> {
       const body = await programInput(args.file);
       const checked = checkProgram(body);
       if (!checked.ok) {
-        output(
-          {
-            version: 1,
-            runId: "none",
-            status: "failed",
-            error: {
-              code: "TYPECHECK_FAILED",
-              message: "Program failed type checking",
-              diagnostics: checked.diagnostics,
+        if (args.format === "text") {
+          output(`${renderCheckText(checked, body)}\n`, args.format);
+        } else {
+          output(
+            {
+              version: 1,
+              runId: "none",
+              status: "failed",
+              error: {
+                code: "TYPECHECK_FAILED",
+                message: "Program failed type checking",
+                diagnostics: checked.diagnostics,
+              },
             },
-          },
-          args.format,
-        );
+            args.format,
+          );
+        }
         process.exitCode = 2;
         break;
       }
       const config = await loadConfig(args.cwd);
-      const run = await executeProgram(body, config, { permissions: args.permissions });
-      output(run.envelope, args.format);
+      const run = await executeProgram(body, config, {
+        permissions: args.permissions,
+        progress: args.format === "text",
+      });
+      if (args.format === "text") {
+        const highlight = /^(1|true|yes|on)$/i.test(process.env.FABRIC_LITE_HIGHLIGHT ?? "");
+        output(`${renderRunText({ body, envelope: run.envelope }, { highlight })}\n`, args.format);
+      } else {
+        output(run.envelope, args.format);
+      }
       process.exitCode = run.exitCode;
       break;
     }

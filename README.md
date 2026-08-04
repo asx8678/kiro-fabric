@@ -1,84 +1,135 @@
 # Fabric Lite
 
-Fabric Lite lets **Kiro CLI** use an LLM through small, checked TypeScript programs. These programs can safely read a project, split work into a few AI calls, check structured answers, and return one final result.
+Fabric Lite is a safe, programmable layer for using the **Kiro CLI LLM** with checked TypeScript workflows. It can select project context, run a few focused AI calls, validate structured answers, and return one result.
 
-## At a glance
+> Fabric Lite is not a separate LLM model. It orchestrates the model configured in Kiro CLI.
 
-```mermaid
-flowchart LR
-    U[You] -->|Ask a question| K[Kiro CLI]
-    K --> F[Fabric Lite]
-    F --> C{Check program}
-    C -->|Valid| T[Read approved project context]
-    C -->|Invalid| E[Return a clear error]
-    T --> L[Call Kiro LLM]
-    L --> V{Validate JSON}
-    V -->|Valid| R[Return final result]
-    V -->|Invalid| X[Repair once or fail]
-```
+## Features and benefits
+
+| Feature | Benefit |
+| --- | --- |
+| Checked TypeScript programs | Repeatable workflows that are validated before they run |
+| Bounded search and file reads | Less prompt noise and more token-efficient context |
+| JSON Schema validation | More predictable output, with one optional repair attempt |
+| Call, size, concurrency, and time limits | Controlled resource use and faster parallel analysis |
+| Project-contained tools and permissions | Safer access to files, Git, shell, and inspections |
+| Local run records | Easier debugging with programs, diagnostics, metrics, and results |
+
+Token savings depend on the task and model. Fabric Lite limits calls and characters; it does not measure or promise a fixed number of provider tokens.
 
 ## Requirements
 
+- [Git](https://git-scm.com/)
 - Node.js 20 or newer
 - [pnpm](https://pnpm.io/)
-- Kiro CLI, signed in (`kiro-cli login`)
+- [Kiro CLI](https://kiro.dev/docs/cli/) available as `kiro-cli` and signed in (`kiro-cli login`)
 
 ## Install
 
-Clone this repository, open it in a terminal, and run:
-
 ```bash
+git clone https://github.com/asx8678/kiro-fabric.git
+cd kiro-fabric
 pnpm run setup:kiro
 ```
 
-This installs dependencies, builds the app, adds the Fabric Lite Kiro agents and prompts, creates `.fabric-lite/config.json`, and checks the setup.
-
-To preview the files without changing anything:
+Setup installs dependencies, builds Fabric Lite, creates the Kiro agents, prompts, and `.fabric-lite/config.json`, then runs a health check.
 
 ```bash
+# Preview generated agent, prompt, and configuration files
 pnpm run setup:kiro --dry-run
-```
 
-If generated files already exist, use `--force` to back them up and replace them:
-
-```bash
+# Back up and replace conflicting generated files
 pnpm run setup:kiro --force
 ```
 
+A dry run still installs dependencies and rebuilds `dist/`; it only avoids writing generated Kiro and configuration files.
+
 ## Use the app
 
-Start Kiro with the Fabric Lite agent:
+In the configured repository, run:
 
 ```bash
 kiro-cli --agent fabric-lite
 ```
 
-Then ask normal questions, for example:
+Then ask a normal question, such as:
 
 ```text
 Find the cause of the failing tests and suggest a fix.
 ```
 
-Every request is turned into a checked Fabric Lite program. The program reads only approved project files, may make a limited number of LLM calls, validates the answers, and returns a compact result.
-
-Check the installation at any time:
+To configure another repository, run this from the Fabric Lite clone:
 
 ```bash
-node dist/cli/main.js doctor
+node dist/cli/main.js install-kiro --cwd /path/to/your/project
+cd /path/to/your/project
+kiro-cli --agent fabric-lite
 ```
+
+From the Fabric Lite clone, check a configured project with:
+
+```bash
+node dist/cli/main.js doctor --cwd /path/to/your/project --format json
+```
+
+### Text output
+
+The CLI defaults to readable text output for `check`, `run`, and `exec`, styled with a gold accent: a branded run header, numbered source between `─ program` and `─ result` (or red `─ error`) rules, diagnostics with carets, and live interaction on stderr — a run-start line plus one line per AI call (`›` ok, `↻` repair, `✗` failed). Retried calls are also summarized in the header. Add `// @name: My program` (and optionally `// @description: ...`) near the top of a program to label its run header. JSON output remains available with `--format json`. Set `FABRIC_LITE_HIGHLIGHT=1` (also `true`, `yes`, or `on`) to enable simple source highlighting. Colors follow the usual conventions: shown only on a TTY and disabled via `NO_COLOR`.
+
+## How it works
+
+LLM calls, project tools, and response schemas are optional. A program uses only what its task needs.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor You
+    participant Kiro as Kiro CLI
+    participant Fabric as Fabric Lite (local)
+    participant LLM as Kiro LLM
+
+    You->>Kiro: Ask a question
+    Kiro->>Fabric: Submit a TypeScript program
+    Fabric->>Fabric: Type-check it and apply limits
+
+    opt The program requests project tools
+        Fabric->>Fabric: Check each operation and gather context
+    end
+
+    opt The program requests LLM reasoning
+        Fabric->>LLM: Send focused instructions and selected context
+        LLM-->>Fabric: Return structured JSON
+        Fabric->>Fabric: Parse JSON and validate a schema if supplied
+    end
+
+    Fabric-->>Kiro: Return the program result
+    Kiro-->>You: Show the final answer
+```
+
+Defaults allow up to 7 AI calls with concurrency up to 3. Change limits and permissions in `.fabric-lite/config.json`.
 
 ## Programmatic LLM usage
 
-**Programmatic LLM usage** means calling an LLM from code instead of typing one prompt directly into a chat window. Code decides what context to send, how many calls to make, and what answer format is required.
+**Programmatic LLM usage** means calling an LLM from code. The code chooses the context, number of calls, and required output structure.
 
-A Fabric Lite program is a TypeScript function body with top-level `await` and `return`. For example, save this as `example.ts`:
+Save this as `example.ts`:
 
 ```ts
-const files = await fabric.fs.glob({ pattern: "src/**/*.ts" });
+const paths = await fabric.fs.glob({
+  pattern: "src/**/*.ts",
+  maxResults: 5,
+});
+
+const files = await fabric.fs.readMany({
+  paths,
+  maxFiles: 5,
+  maxCharsPerFile: 3000,
+  maxTotalChars: 12000,
+});
 
 const answer = await fabric.ai.run({
-  instruction: "Briefly describe this TypeScript project.",
-  context: { files },
+  instruction: "Using only these excerpts, briefly describe the project.",
+  context: files.map(({ path, content }) => ({ path, content })),
   outputSchema: {
     type: "object",
     properties: { summary: { type: "string" } },
@@ -96,60 +147,64 @@ Run it with:
 node dist/cli/main.js run --file example.ts --format json
 ```
 
-Fabric Lite type-checks the program, applies budgets and permissions, sends the request to Kiro, validates the JSON response, and saves run details in `.fabric-lite/runs/`.
+Programs are TypeScript function bodies with top-level `await` and `return`; `import` and `require` are not allowed.
 
-> Programs cannot use `import` or `require`. File access stays inside the project, writes and shell commands are disabled by default, and destructive commands are denied.
+## Security and privacy
 
-More examples are in [`examples/`](examples/). Built-in API help is available with:
+- Selected context is sent to the Kiro LLM. Secret filtering helps, but it is not complete data-loss prevention.
+- Reads are allowed by default; writes, local commits, and generic shell are disabled by default.
+- Commands classified as destructive are denied. If you enable generic shell, approved commands are still powerful.
+- Headless runs deny actions with an `ask` policy. In interactive mode, **Allow session** approves the whole category until the process exits.
+- `.fabric-lite/runs/` is persistent and may contain sensitive data. The installer adds it to `.gitignore`; verify this in every project.
+- Fabric Lite runs trusted local programs and is not a sandbox for hostile JavaScript.
+
+See [security details](docs/SECURITY.md).
+
+## Troubleshooting
+
+- **Kiro unavailable:** run `kiro-cli --version`, then `kiro-cli login`.
+- **Missing or changed agents/prompts:** run `node dist/cli/main.js doctor --format json`, then rerun setup.
+- **Setup conflict:** review the file, then use `pnpm run setup:kiro --force`; backups are created first.
+- **Changes not visible:** restart Kiro after reinstalling.
+- **Real LLM health check:** run `node dist/cli/main.js doctor --smoke`; this makes a real call and may use paid quota.
+
+## Uninstall
+
+There is no automatic uninstall command. In each configured repository, first remove only prompts listed in its installer manifest:
+
+```bash
+node --input-type=module <<'NODE'
+import { readFile, rm } from "node:fs/promises";
+import path from "node:path";
+
+const directory = ".kiro/prompts";
+const manifestPath = path.join(directory, ".fabric-lite-manifest.json");
+const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+const names = Object.keys(manifest.files ?? {});
+
+for (const name of names) {
+  const safe = name === path.posix.basename(name) && name === path.win32.basename(name);
+  if (!safe || name === ".fabric-lite-manifest.json") throw new Error(`Unsafe entry: ${name}`);
+  await rm(path.join(directory, name), { force: true });
+}
+await rm(manifestPath, { force: true });
+NODE
+```
+
+Then remove project files and, once, the global agents:
+
+```bash
+rm -rf .fabric-lite
+rm -f .kiro/agents/fabric-lite.json .kiro/agents/fabric-lite-worker.json
+rm -f ~/.kiro/agents/fabric-lite.json ~/.kiro/agents/fabric-lite-worker.json
+```
+
+Unrelated prompts and backups are left untouched. You may also remove the two `.fabric-lite/` lines added to `.gitignore` and delete the source clone.
+
+## More help
 
 ```bash
 node dist/cli/main.js docs
 ```
 
-## Uninstall
-
-There is no automatic uninstall command. From the repository root, remove the generated project files:
-
-```bash
-rm -rf .fabric-lite
-rm -f .kiro/agents/fabric-lite.json .kiro/agents/fabric-lite-worker.json
-rm -rf .kiro/prompts
-```
-
-Remove the global Kiro agent files:
-
-```bash
-rm -f ~/.kiro/agents/fabric-lite.json ~/.kiro/agents/fabric-lite-worker.json
-```
-
-If you no longer need the source checkout, delete this repository too. You may also remove the `.fabric-lite/runs/` and `.fabric-lite/cache/` lines added to `.gitignore`.
-
-> If `.kiro/prompts/` contains your own files, do not delete the whole folder; remove only the Fabric Lite files listed in `.kiro/prompts/.fabric-lite-manifest.json`.
-
-## How it works
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant Kiro as Kiro CLI
-    participant Fabric as Fabric Lite
-    participant Project as Project files
-    participant LLM as Kiro LLM
-
-    User->>Kiro: Ask a question
-    Kiro->>Fabric: Send checked TypeScript program
-    Fabric->>Fabric: Type-check and apply permissions
-    Fabric->>Project: Read approved context
-    Project-->>Fabric: Bounded file content
-    Fabric->>LLM: Instruction, context, and JSON schema
-    LLM-->>Fabric: Structured answer
-    Fabric->>Fabric: Validate answer
-    Fabric-->>Kiro: Final result and metrics
-    Kiro-->>User: Show answer
-```
-
-Each run is recorded in `.fabric-lite/runs/<run-id>/`, which can contain project-sensitive context and results. This directory is ignored by Git, but it is not temporary.
-
-Default limits allow up to 7 AI calls with concurrency up to 3. Read access is allowed; commit, command execution, and network access require approval; destructive actions are always denied. Settings are in `.fabric-lite/config.json`.
-
-For more detail, see [Kiro setup](docs/KIRO_SETUP.md) and [security](docs/SECURITY.md).
+See [`examples/`](examples/) and the detailed [Kiro setup guide](docs/KIRO_SETUP.md).

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
@@ -12,6 +12,7 @@ import {
   type ApprovalPrompter,
 } from "../permissions.js";
 import type { PermissionMode } from "../cli/args.js";
+import { formatCallEvent, formatRunStart } from "../cli/render.js";
 
 /**
  * Select the permission prompter for a run. Interactive execution (a
@@ -34,6 +35,7 @@ export interface RunEnvelope {
 export interface ExecuteOptions {
   permissions?: PermissionMode;
   prompter?: ApprovalPrompter;
+  progress?: boolean;
 }
 
 export async function executeProgram(
@@ -82,6 +84,54 @@ export async function executeProgram(
     let stderr = "";
     let stderrForwarded = 0;
     let timedOut = false;
+    let callOffset = 0;
+    let callPartial = "";
+    let polling: Promise<void> | undefined;
+    const callsPath = path.join(dir, "calls.jsonl");
+    const emitCallLine = (line: string): void => {
+      if (!line.trim()) return;
+      try {
+        process.stderr.write(`${formatCallEvent(JSON.parse(line) as { role?: string; repair?: boolean; inputChars?: number; outputChars?: number; elapsedMs?: number; exitCode?: number })}\n`);
+      } catch {
+        // A malformed or incomplete event is ignored; the worker's envelope remains authoritative.
+      }
+    };
+    const pollCalls = async (flush = false): Promise<void> => {
+      if (polling) await polling;
+      polling = (async () => {
+        let contents: string;
+        try {
+          contents = await readFile(callsPath, "utf8");
+        } catch {
+          return;
+        }
+        if (contents.length < callOffset) callOffset = 0;
+        callPartial += contents.slice(callOffset);
+        callOffset = contents.length;
+        const lines = callPartial.split("\n");
+        callPartial = lines.pop() ?? "";
+        for (const line of lines) emitCallLine(line);
+        if (flush && callPartial.trim()) {
+          emitCallLine(callPartial);
+          callPartial = "";
+        }
+      })();
+      try {
+        await polling;
+      } finally {
+        polling = undefined;
+      }
+    };
+    if (options.progress) {
+      process.stderr.write(`${formatRunStart({ runId, body })}\n`);
+    }
+    const progressTimer = options.progress
+      ? setInterval(() => { void pollCalls(); }, 250)
+      : undefined;
+    const stopProgress = async (): Promise<void> => {
+      if (progressTimer) clearInterval(progressTimer);
+      if (options.progress) await pollCalls(true);
+    };
     const kill = () => {
       try {
         child.pid && process.platform !== "win32"
@@ -108,9 +158,14 @@ export async function executeProgram(
         stderrForwarded += visible.length;
       }
     });
-    child.on("error", reject);
+    child.on("error", async (error) => {
+      clearTimeout(timer);
+      await stopProgress();
+      reject(error);
+    });
     child.on("close", async (code) => {
       clearTimeout(timer);
+      await stopProgress();
       if (timedOut) return reject(new FabricError("TIMEOUT", `Execution timed out after ${config.budgets.executionTimeoutMs}ms`));
       let envelope: RunEnvelope;
       try {

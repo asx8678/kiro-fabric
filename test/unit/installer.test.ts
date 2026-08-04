@@ -15,7 +15,8 @@ it("dry-run previews existing conflicts without overwriting", async () => {
     const configPath = path.join(root, ".fabric-lite/config.json");
     await writeFile(configPath, "existing\n");
     const result = await installKiro({ root, cliPath: "dist/cli/main.js", executable, force: false, dryRun: true });
-    expect(result.conflicts).toContain(configPath);
+    expect(result.kept).toContain(configPath);
+    expect(result.conflicts).not.toContain(configPath);
     expect(await import("node:fs/promises").then(fs => fs.readFile(configPath, "utf8"))).toBe("existing\n");
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -96,6 +97,15 @@ it("installs canonical prompts, detects drift, omits source-only policy elsewher
     const forced = await installKiro({ ...options, force: true });
     expect(forced.backups.some(file => file.startsWith(`${guide}.bak-`))).toBe(true);
     expect(await readFile(guide, "utf8")).toBe(loadPrompt("fabric-guide"));
+
+    // config.json is user-owned: created on first install, kept untouched on
+    // reinstall — even with --force and local policy customizations.
+    const configPath = path.join(root, ".fabric-lite/config.json");
+    await writeFile(configPath, "custom-policy\n");
+    const reinstalled = await installKiro({ ...options, force: true });
+    expect(reinstalled.kept).toContain(configPath);
+    expect(reinstalled.backups.some(file => file.startsWith(`${configPath}.bak-`))).toBe(false);
+    expect(await readFile(configPath, "utf8")).toBe("custom-policy\n");
   } finally {
     await rm(root, { recursive: true, force: true });
     await rm(home, { recursive: true, force: true });

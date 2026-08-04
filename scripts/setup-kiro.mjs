@@ -16,7 +16,9 @@ function fail(message) {
 }
 
 function has(cmd) {
-  const res = spawnSync(process.platform === 'win32' ? 'where' : 'command', [cmd], { shell: process.platform !== 'win32' });
+  const res = process.platform === 'win32'
+    ? spawnSync('where', [cmd], { stdio: 'ignore' })
+    : spawnSync('/bin/sh', ['-c', 'command -v "$1" >/dev/null 2>&1', 'sh', cmd]);
   return res.status === 0;
 }
 

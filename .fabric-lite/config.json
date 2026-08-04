@@ -31,7 +31,7 @@
     "maxTotalReadChars": 100000
   },
   "git": {
-    "allowCommit": true
+    "allowCommit": false
   },
   "permissions": {
     "read": "allow",
