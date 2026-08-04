@@ -24,6 +24,16 @@ function framedError(message: string, stdout: string): FabricError {
   return new FabricError("INVALID_AI_OUTPUT", `${message}; output hint: ${JSON.stringify(hint)}`);
 }
 
+/** Format Ajv errors into actionable diagnostics with instancePath, message, and params. */
+function formatSchemaErrors(errors: Array<Record<string, unknown>>): Array<{ instancePath: string; message: string; params: unknown; schemaPath?: string }> {
+  return errors.map(err => ({
+    instancePath: String(err.instancePath ?? ""),
+    message: String(err.message ?? "unknown error"),
+    params: err.params ?? {},
+    ...(err.schemaPath ? { schemaPath: String(err.schemaPath) } : {}),
+  }));
+}
+
 export function parseFramed(stdout: string, schema?: Record<string, unknown>, maxChars = 16000): unknown {
   const clean = stripAnsi(stdout)
     .replace(/FABRIC_?RESULT_?BEGIN/g, begin)
@@ -45,10 +55,11 @@ export function parseFramed(stdout: string, schema?: Record<string, unknown>, ma
     const ajv = new Ajv({ allErrors: true, strict: false });
     const valid = ajv.validate(schema, value);
     if (!valid) {
+      const details = formatSchemaErrors((ajv.errors ?? []) as Array<Record<string, unknown>>);
       throw new FabricError(
         "INVALID_AI_OUTPUT",
-        "AI output does not match schema; inspect the bounded diagnostics",
-        ajv.errors?.slice(0, 12),
+        `AI output does not match schema: ${details.slice(0, 5).map(d => `${d.instancePath || "/"}: ${d.message}`).join("; ")}`,
+        details.slice(0, 12),
       );
     }
   }
