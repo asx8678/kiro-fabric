@@ -8,6 +8,14 @@ Kiro Fabric is a local runtime that lets TypeScript programs use Kiro CLI as a s
 
 Ordinary chat prompting is useful for exploration, but a broad prompt leaves context selection, multi-step coordination, and response formatting mostly to the conversation. Kiro Fabric adds a small, inspectable program between the question and the model. Kiro can generate a TypeScript program for the task; that program gathers only the project context it needs, calls the Kiro LLM through the `fabric` API, and returns one result that the surrounding automation can inspect, transform, save, or display. The workflow can therefore be reviewed, tested, repeated, and composed with ordinary development logic rather than treated as an opaque chat exchange.
 
+
+<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/c187f287-abef-425c-ba4a-1e7fd6362f8a" />
+
+<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/d0841be0-8ceb-4a04-a010-f948d4a355e7" />
+
+
+
+
 ## How it works
 
 From a user question to one structured result:
@@ -244,3 +252,6 @@ node dist/cli/main.js docs
 ```
 
 See [`examples/`](examples/) and the detailed [Kiro setup guide](docs/KIRO_SETUP.md).
+
+
+Adam Stodulski
