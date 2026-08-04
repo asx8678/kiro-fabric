@@ -3,28 +3,40 @@
   "projectRoot": ".",
   "runner": {
     "type": "kiro-headless",
-    "executable": "/Users/adam2/.local/bin/kiro-cli",
+    "executable": "kiro-cli",
     "workerAgent": "fabric-lite-worker",
     "defaultModel": null
   },
   "budgets": {
-    "maxAiCalls": 7,
-    "maxPlannerCalls": 1,
-    "maxWorkerCalls": 5,
-    "maxVerifierCalls": 1,
+    "maxAiCalls": 15,
+    "maxPlannerCalls": 2,
+    "maxWorkerCalls": 10,
+    "maxVerifierCalls": 3,
     "maxConcurrency": 3,
-    "maxRetriesPerCall": 1,
-    "maxPromptCharsPerCall": 30000,
-    "maxContextCharsPerCall": 24000,
-    "maxOutputCharsPerWorker": 8000,
-    "maxOutputCharsVerifier": 16000,
-    "maxTotalAiInputChars": 120000,
-    "maxTotalAiOutputChars": 40000,
-    "executionTimeoutMs": 180000,
-    "aiCallTimeoutMs": 90000
+    "maxRetriesPerCall": 2,
+    "maxPromptCharsPerCall": 120000,
+    "maxContextCharsPerCall": 100000,
+    "maxOutputCharsPerWorker": 32000,
+    "maxOutputCharsVerifier": 48000,
+    "maxTotalTokens": 350000,
+    "executionTimeoutMs": 600000,
+    "aiCallTimeoutMs": 300000
   },
   "filesystem": {
-    "allowWrite": [],
+    "allowWrite": [
+      "src/**",
+      "test/**",
+      "docs/**",
+      ".kiro/**",
+      ".fabric-lite/**",
+      "README.md",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "tsconfig.json",
+      "tsconfig.build.json",
+      "vitest.config.ts"
+    ],
     "denySymlinkEscape": true,
     "maxFilesPerReadMany": 20,
     "maxCharsPerFile": 20000,
@@ -32,6 +44,11 @@
   },
   "git": {
     "allowCommit": false
+  },
+  "mutation": {
+    "enabled": true,
+    "require": "checkpoint",
+    "maxDiffChars": 30000
   },
   "permissions": {
     "read": "allow",

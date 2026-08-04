@@ -13,8 +13,8 @@ export interface Budgets {
   maxContextCharsPerCall: number;
   maxOutputCharsPerWorker: number;
   maxOutputCharsVerifier: number;
-  maxTotalAiInputChars: number;
-  maxTotalAiOutputChars: number;
+  /** Total AI token budget (input + output) across the run; 0 disables the guard, matching pi-fabric. */
+  maxTotalTokens: number;
   executionTimeoutMs: number;
   aiCallTimeoutMs: number;
 }
@@ -88,8 +88,7 @@ export const defaults: FabricConfig = {
     maxContextCharsPerCall: 24000,
     maxOutputCharsPerWorker: 8000,
     maxOutputCharsVerifier: 16000,
-    maxTotalAiInputChars: 120000,
-    maxTotalAiOutputChars: 40000,
+    maxTotalTokens: 0,
     executionTimeoutMs: 180000,
     aiCallTimeoutMs: 90000,
   },
@@ -197,8 +196,7 @@ const configShape: Shape = {
     maxContextCharsPerCall: positiveInteger,
     maxOutputCharsPerWorker: positiveInteger,
     maxOutputCharsVerifier: positiveInteger,
-    maxTotalAiInputChars: positiveInteger,
-    maxTotalAiOutputChars: positiveInteger,
+    maxTotalTokens: nonnegativeInteger,
     executionTimeoutMs: positiveInteger,
     aiCallTimeoutMs: positiveInteger,
   },

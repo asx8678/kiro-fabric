@@ -80,6 +80,10 @@ function writeAllowPattern(pattern: string): string {
 function writeAllowed(relative: string, patterns: readonly string[]): boolean {
   return patterns.some((pattern) => {
     const normalized = writeAllowPattern(pattern);
+    // Root-wide pattern: allow any project-relative path. Traversal,
+    // sensitive denied paths, and symlink escapes are still enforced by
+    // safeWritePath before this matcher runs.
+    if (normalized === "**") return true;
     return relative === normalized ||
       (normalized.endsWith("/**") && relative.startsWith(`${normalized.slice(0, -3)}/`));
   });
@@ -346,6 +350,15 @@ interface MutationSession {
   modifiedFiles: Set<string>;
 }
 
+/**
+ * Structural token estimate, matching pi-core's estimateTokens heuristic
+ * (conservative ceil(chars / 4)). Used only when a runner does not report
+ * real usage, exactly like pi-fabric's fallback.
+ */
+export function estimateTokens(chars: number): number {
+  return Math.ceil(chars / 4);
+}
+
 class BudgetState {
   readonly metrics: Metrics = {
     aiCalls: 0,
@@ -353,6 +366,9 @@ class BudgetState {
     retries: 0,
     inputChars: 0,
     outputChars: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
     cacheHits: 0,
   };
   private roles = { planner: 0, worker: 0, verifier: 0, general: 0 };
@@ -364,14 +380,19 @@ class BudgetState {
     if (this.metrics.aiCalls + 1 > budgets.maxAiCalls) {
       throw new FabricError("BUDGET_EXCEEDED", `AI call limit ${budgets.maxAiCalls} exceeded`);
     }
-    if (
-      input > budgets.maxPromptCharsPerCall ||
-      input > budgets.maxContextCharsPerCall + 6000 ||
-      this.metrics.inputChars + input > budgets.maxTotalAiInputChars
-    ) {
+    if (input > budgets.maxPromptCharsPerCall) {
       throw new FabricError(
         "BUDGET_EXCEEDED",
-        `AI input character budget exceeded by ${input}`,
+        `AI prompt character budget exceeded (${input} > ${budgets.maxPromptCharsPerCall})`,
+      );
+    }
+    // pi-fabric semantics: the token budget is a spent-based guard checked
+    // before each call; usage settles after the call completes, so the check
+    // is best-effort and the race-free ceiling is the call-count cap above.
+    if (budgets.maxTotalTokens > 0 && this.metrics.totalTokens >= budgets.maxTotalTokens) {
+      throw new FabricError(
+        "BUDGET_EXCEEDED",
+        `AI token budget exhausted (spent ${this.metrics.totalTokens} of ${budgets.maxTotalTokens})`,
       );
     }
     const limits = {
@@ -384,7 +405,6 @@ class BudgetState {
       throw new FabricError("BUDGET_EXCEEDED", `${role} call limit ${limits[role]} exceeded`);
     }
     this.metrics.aiCalls++;
-    this.metrics.inputChars += input;
     if (!retry) {
       this.roles[role]++;
       if (role === "worker" || role === "general") this.metrics.workerCalls++;
@@ -397,11 +417,20 @@ class BudgetState {
     this.metrics.cacheHits++;
   }
 
-  output(chars: number): void {
-    if (this.metrics.outputChars + chars > this.config.budgets.maxTotalAiOutputChars) {
-      throw new FabricError("BUDGET_EXCEEDED", "Total AI output character budget exceeded");
-    }
-    this.metrics.outputChars += chars;
+  /**
+   * Record usage after a call settles, matching pi-fabric's
+   * append-after-completion accounting. Real runner usage is preferred;
+   * otherwise tokens are estimated as ceil(chars / 4). Never throws: like
+   * pi-fabric, a single call may overshoot and the next reserve() guards.
+   */
+  settle(inputChars: number, outputChars: number, usage?: { input: number; output: number }): void {
+    this.metrics.inputChars += inputChars;
+    this.metrics.outputChars += outputChars;
+    const inputTokens = usage ? usage.input : estimateTokens(inputChars);
+    const outputTokens = usage ? usage.output : estimateTokens(outputChars);
+    this.metrics.inputTokens += inputTokens;
+    this.metrics.outputTokens += outputTokens;
+    this.metrics.totalTokens += inputTokens + outputTokens;
   }
 }
 
@@ -640,13 +669,13 @@ const inspectionResult=(tool:string,operation:string,result:CommandResult)=>{if(
    await cache.set(normalized,entry);return result;
   };
   budgets.reserve(role,inputChars);let raw:Awaited<ReturnType<AiRunner["run"]>>|undefined;
-  try{raw=await runner.run(normalized,signal);const safeStdout=redactor.redact(raw.stdout);budgets.output(safeStdout.length);const value=redactor.value(parseFramed(safeStdout,normalized.schema,normalized.maxOutputChars) as T);return await cacheResult({value,role,...(raw.model?{model:raw.model}:{}),...(raw.requestedModel?{requestedModel:raw.requestedModel}:{}),...(raw.resolvedModel?{resolvedModel:raw.resolvedModel}:{}),resolutionSource:raw.resolutionSource??"unknown",inputChars,outputChars:safeStdout.length,repaired:false});}
+  try{raw=await runner.run(normalized,signal);const safeStdout=redactor.redact(raw.stdout);budgets.settle(inputChars,safeStdout.length,raw.usage);const value=redactor.value(parseFramed(safeStdout,normalized.schema,normalized.maxOutputChars) as T);return await cacheResult({value,role,...(raw.model?{model:raw.model}:{}),...(raw.requestedModel?{requestedModel:raw.requestedModel}:{}),...(raw.resolvedModel?{resolvedModel:raw.resolvedModel}:{}),resolutionSource:raw.resolutionSource??"unknown",inputChars,outputChars:safeStdout.length,repaired:false});}
   catch(e){
    if(!(e instanceof FabricError)||e.code!=="INVALID_AI_OUTPUT"||request.retryInvalidJson===false||config.budgets.maxRetriesPerCall<1)throw e;
    const bad=redactor.redact(raw?.stdout?.slice(-normalized.maxOutputChars)??"(unparseable output)"),details=redactor.redact(JSON.stringify(e.details??[{message:e.message}]));
    const repairInstruction=`${loadPrompt("repair-json").trimEnd()}\n\nINVALID:\n${bad}\nSCHEMA_ERRORS:\n${details}\nSCHEMA:\n${schemaText}`;
    const repair={...normalized,instruction:repairInstruction,context:"",repair:true},repairChars=repairInstruction.length+schemaText.length;
-   budgets.reserve(role,repairChars,true);const fixed=await runner.run(repair,signal),safeFixed=redactor.redact(fixed.stdout);budgets.output(safeFixed.length);const value=redactor.value(parseFramed(safeFixed,normalized.schema,normalized.maxOutputChars) as T);
+   budgets.reserve(role,repairChars,true);const fixed=await runner.run(repair,signal),safeFixed=redactor.redact(fixed.stdout);budgets.settle(repairChars,safeFixed.length,fixed.usage);const value=redactor.value(parseFramed(safeFixed,normalized.schema,normalized.maxOutputChars) as T);
    return await cacheResult({value,role,...(fixed.model?{model:fixed.model}:{}),...(fixed.requestedModel?{requestedModel:fixed.requestedModel}:{}),...(fixed.resolvedModel?{resolvedModel:fixed.resolvedModel}:{}),resolutionSource:fixed.resolutionSource??"unknown",inputChars:inputChars+repairChars,outputChars:(raw?.stdout.length??0)+safeFixed.length,repaired:true});
   }
  }

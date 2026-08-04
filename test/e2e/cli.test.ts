@@ -1,6 +1,6 @@
 import { describe,it,expect } from "vitest";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 const cli="dist/cli/main.js";
@@ -57,6 +57,39 @@ describe("built CLI",()=>{it("checks and executes deterministic bodies",()=>{con
       const run = spawnSync(process.execPath, [cli, ...args], { encoding: "utf8" });
       expect(run.status).toBe(3);
       expect(run.stdout).toMatch(/format/);
+    }
+  });
+
+  it("update-policy migrates an existing config without touching other settings", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "fabric-policy-e2e-"));
+    try {
+      mkdirSync(path.join(root, ".fabric-lite"));
+      writeFileSync(
+        path.join(root, ".fabric-lite/config.json"),
+        JSON.stringify({ version: 1, projectRoot: ".", runner: { type: "kiro-headless", executable: "kiro-cli", workerAgent: "fabric-lite-worker", defaultModel: null }, budgets: { maxAiCalls: 42, maxPlannerCalls: 1, maxWorkerCalls: 5, maxVerifierCalls: 1, maxConcurrency: 3, maxRetriesPerCall: 1, maxPromptCharsPerCall: 30000, maxContextCharsPerCall: 24000, maxOutputCharsPerWorker: 8000, maxOutputCharsVerifier: 16000, maxTotalTokens: 0, executionTimeoutMs: 180000, aiCallTimeoutMs: 90000 }, filesystem: { allowWrite: ["src/**"], denySymlinkEscape: true, maxFilesPerReadMany: 20, maxCharsPerFile: 20000, maxTotalReadChars: 100000 }, git: { allowCommit: false }, mutation: { enabled: false, require: "clean", maxDiffChars: 30000 }, cache: { enabled: false, maxEntries: 200, ttlMs: 0 }, permissions: { read: "allow", commit: "ask", execute: "ask", network: "ask", destructive: "deny" }, shell: { enabled: false, allowedCommands: [], timeoutMs: 30000, maxOutputChars: 20000 }, output: { maxFinalChars: 20000, includeMetrics: true } }, null, 2),
+      );
+      // Dry run previews without writing.
+      const dry = spawnSync(process.execPath, [cli, "update-policy", "--cwd", root, "--allow-write", "workspace", "--dry-run", "--format", "json"], { encoding: "utf8" });
+      expect(dry.status).toBe(0);
+      const dryReport = JSON.parse(dry.stdout);
+      expect(dryReport.dryRun).toBe(true);
+      expect(dryReport.mode).toBe("workspace");
+      expect(JSON.parse(readFileSync(path.join(root, ".fabric-lite/config.json"), "utf8")).filesystem.allowWrite).toEqual(["src/**"]);
+      // Apply.
+      const applied = spawnSync(process.execPath, [cli, "update-policy", "--cwd", root, "--allow-write", "workspace", "--format", "json"], { encoding: "utf8" });
+      expect(applied.status).toBe(0);
+      const config = JSON.parse(readFileSync(path.join(root, ".fabric-lite/config.json"), "utf8"));
+      expect(config.filesystem.allowWrite).toEqual(["**"]);
+      expect(config.mutation.enabled).toBe(true);
+      expect(config.mutation.require).toBe("checkpoint");
+      expect(config.budgets.maxAiCalls).toBe(42);
+      expect(config.runner.executable).toBe("kiro-cli");
+      // Missing --allow-write is rejected.
+      const noMode = spawnSync(process.execPath, [cli, "update-policy", "--cwd", root, "--format", "json"], { encoding: "utf8" });
+      expect(noMode.status).toBe(3);
+      expect(noMode.stdout).toContain("requires --allow-write");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

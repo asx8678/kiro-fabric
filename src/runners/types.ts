@@ -2,6 +2,8 @@ export interface NormalizedAiRequest { instruction: string; context: string; rol
 export type ModelResolutionSource = "kiro-metadata" | "runner" | "unknown";
 export interface RawAiRunnerResult {
  stdout: string; stderr: string; exitCode: number; elapsedMs: number;
+ /** Actual token usage reported by the runner; when absent, tokens are estimated as ceil(chars / 4). */
+ usage?: { input: number; output: number };
  /** @deprecated Ambiguous legacy field; never treated as a resolved ID. */ model?: string;
  requestedModel?: string; resolvedModel?: string; resolutionSource?: ModelResolutionSource;
 }

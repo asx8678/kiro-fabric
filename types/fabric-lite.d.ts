@@ -24,7 +24,7 @@ export interface AiRunInput { instruction: string; context?: unknown; model?: st
 export interface AiRunResult<T = unknown> { value: T | undefined; role: string; /** @deprecated requested/legacy model */ model?: string; requestedModel?: string; resolvedModel?: string; resolutionSource: "kiro-metadata" | "runner" | "unknown"; inputChars: number; outputChars: number; repaired: boolean; cached?: boolean; error?: { code: string; message: string } }
 export interface AiParallelInput { tasks: AiRunInput[]; concurrency?: number; failFast?: boolean }
 export interface AiMapInput<T> { items: T[]; createTask: (item: T, index: number) => AiRunInput; concurrency?: number; maxItems?: number }
-export interface Metrics { aiCalls: number; workerCalls: number; retries: number; inputChars: number; outputChars: number; cacheHits: number }
+export interface Metrics { aiCalls: number; workerCalls: number; retries: number; inputChars: number; outputChars: number; inputTokens: number; outputTokens: number; totalTokens: number; cacheHits: number }
 export interface FabricLiteApi {
   fs: {
     read(input: string | { path: string; maxChars?: number; startLine?: number; endLine?: number; offset?: number; limit?: number; start?: number; max?: number } | { file: string; maxChars?: number; startLine?: number; endLine?: number; offset?: number; limit?: number; start?: number; max?: number }): Promise<FileReadResult>;
