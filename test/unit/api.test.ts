@@ -1,58 +1,609 @@
-import { describe,it,expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import { execFile } from "node:child_process";
-import { access,chmod,mkdtemp,readFile,writeFile,symlink,rm,mkdir } from "node:fs/promises";
+import { access, chmod, mkdtemp, readFile, writeFile, symlink, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApi } from "../../src/api.js";
-import { defaults,type FabricConfig } from "../../src/config.js";
+import { defaults, type FabricConfig } from "../../src/config.js";
 import { FakeAiRunner } from "../../src/runners/fake.js";
 import { loadPrompt } from "../../src/prompts.js";
-const approve=async()=>"allow" as const;
-async function fixture(){const root=await mkdtemp(path.join(tmpdir(),"fabric-api-"));await writeFile(path.join(root,"a.ts"),"one\ntwo token\nthree");await writeFile(path.join(root,".env"),"SECRET=x");await mkdir(path.join(root,"build"));await writeFile(path.join(root,"build/generated.ts"),"hidden");await mkdir(path.join(root,"coverage"));await writeFile(path.join(root,"coverage/report.ts"),"hidden");const config:FabricConfig={...defaults,projectRoot:root,budgets:{...defaults.budgets},filesystem:{...defaults.filesystem,allowWrite:[]},git:{...defaults.git},shell:{...defaults.shell},runner:{...defaults.runner},output:{...defaults.output},mutation:{...defaults.mutation,enabled:false}};return{root,config};}
-describe("deterministic API",()=>{it("reads, globs, greps and enforces policy",async()=>{const {root,config}=await fixture();try{const {fabric}=createApi(config,new FakeAiRunner());expect((await fabric.fs.read({path:"a.ts",startLine:2,endLine:2})).content).toBe("two token");expect(await fabric.fs.glob({pattern:"**/*.ts"})).toEqual(["a.ts"]);expect((await fabric.fs.grep({query:"token",paths:["a.ts"]})).matches[0]!.line).toBe(2);await expect(fabric.fs.read({path:"../outside"})).rejects.toThrow(/denied/);await expect(fabric.fs.read({path:".env"})).rejects.toThrow(/denied/);await expect(fabric.fs.write({path:"a.ts",content:"x"})).rejects.toThrow(/disabled/);}finally{await rm(root,{recursive:true,force:true});}});it("rejects unsafe glob patterns and writes through symlinks",async()=>{const {root,config}=await fixture();const outside=await mkdtemp(path.join(tmpdir(),"fabric-write-out-"));try{await mkdir(path.join(root,"allowed"));await writeFile(path.join(root,"allowed","ok.ts"),"ok");await writeFile(path.join(outside,"target.ts"),"outside");await symlink(path.join(outside,"target.ts"),path.join(root,"allowed","link.ts"));await symlink(outside,path.join(root,"alias"));await symlink(path.join(root,"allowed"),path.join(root,"cwd-link"));config.filesystem={...config.filesystem,allowWrite:["allowed/**","alias/**"]};const {fabric}=createApi(config,new FakeAiRunner());expect(await fabric.fs.glob({pattern:"*.ts",cwd:"cwd-link"})).toEqual(["allowed/ok.ts"]);await expect(fabric.fs.glob({pattern:"/etc/*"})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.fs.glob({pattern:"../**/*"})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.fs.write({path:"allowed/link.ts",content:"no"})).rejects.toMatchObject({code:"POLICY_DENIED"});expect(await readFile(path.join(outside,"target.ts"),"utf8")).toBe("outside");await expect(fabric.fs.write({path:"alias/new.ts",content:"no"})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.fs.write({path:"allowed/ok.ts",content:"yes"})).resolves.toMatchObject({path:"allowed/ok.ts"});}finally{await rm(root,{recursive:true,force:true});await rm(outside,{recursive:true,force:true});}});it("bounds shell stdout and stderr independently",async()=>{const {root,config}=await fixture();const command="printf 123456789; printf abcdefghi >&2";config.shell={...config.shell,enabled:true,allowedCommands:[command],maxOutputChars:5};try{const {fabric}=createApi(config,new FakeAiRunner(),{prompter:approve});const result=await fabric.shell.run({command});expect(result).toMatchObject({stdout:"12345",stderr:"abcde",truncated:true});}finally{await rm(root,{recursive:true,force:true});}});it("rejects symlink escape",async()=>{const {root,config}=await fixture();const outside=await mkdtemp(path.join(tmpdir(),"fabric-out-"));await writeFile(path.join(outside,"x"),"x");await symlink(path.join(outside,"x"),path.join(root,"link"));try{const {fabric}=createApi(config,new FakeAiRunner());await expect(fabric.fs.read({path:"link"})).rejects.toThrow(/Symlink/);}finally{await rm(root,{recursive:true,force:true});await rm(outside,{recursive:true,force:true});}});});
-
-it("supports a root-wide ** allowlist while still denying traversal, sensitive paths, and symlink escapes",async()=>{const {root,config}=await fixture();const outside=await mkdtemp(path.join(tmpdir(),"fabric-wide-out-"));try{await mkdir(path.join(root,"src"));await writeFile(path.join(root,"src/deep.ts"),"deep");await writeFile(path.join(root,"root.ts"),"root");await writeFile(path.join(outside,"target.ts"),"outside");await symlink(path.join(outside,"target.ts"),path.join(root,"src/link.ts"));config.filesystem={...config.filesystem,allowWrite:["**"]};config.mutation={...config.mutation,enabled:false};const {fabric}=createApi(config,new FakeAiRunner());await expect(fabric.fs.write({path:"root.ts",content:"x"})).resolves.toMatchObject({path:"root.ts"});await expect(fabric.fs.write({path:"src/other.ts",content:"y"})).resolves.toMatchObject({path:"src/other.ts"});await expect(fabric.fs.write({path:"../outside/escape.ts",content:"no"})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.fs.write({path:".env",content:"SECRET=x"})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.fs.write({path:"src/link.ts",content:"no"})).rejects.toMatchObject({code:"POLICY_DENIED"});expect(await readFile(path.join(outside,"target.ts"),"utf8")).toBe("outside");}finally{await rm(root,{recursive:true,force:true});await rm(outside,{recursive:true,force:true});}});
-
-it("greps the tail of a large source without source truncation",async()=>{const {root,config}=await fixture();try{await writeFile(path.join(root,"large.ts"),`${Array.from({length:25000},(_,index)=>`noise ${index}`).join("\n")}\nTAIL_NEEDLE\n`);config.filesystem={...config.filesystem,maxCharsPerFile:64};const {fabric}=createApi(config,new FakeAiRunner());const result=await fabric.fs.grep({query:"TAIL_NEEDLE",paths:["large.ts"]});expect(result.matches).toHaveLength(1);expect(result.matches[0]!).toMatchObject({path:"large.ts",line:25001,text:"TAIL_NEEDLE"});expect(result.truncated).toBe(false);expect(result.scannedFiles).toEqual(["large.ts"]);expect(result.skippedFiles).toEqual([]);}finally{await rm(root,{recursive:true,force:true});}});
-
-it("reports result-limit and skipped-source truncation truthfully",async()=>{const {root,config}=await fixture();try{await writeFile(path.join(root,"many.ts"),"hit\nhit\n");await writeFile(path.join(root,"binary.ts"),Buffer.from([104,105,116,0]));const {fabric}=createApi(config,new FakeAiRunner());const limited=await fabric.fs.grep({query:"hit",paths:["many.ts"],maxMatches:1});expect(limited.matches).toHaveLength(1);expect(limited.truncated).toBe(true);expect(limited.scannedFiles).toEqual(["many.ts"]);const skipped=await fabric.fs.grep({query:"hit",paths:["binary.ts"]});expect(skipped.matches).toEqual([]);expect(skipped.truncated).toBe(true);expect(skipped.scannedFiles).toEqual([]);expect(skipped.skippedFiles).toEqual(["binary.ts"]);}finally{await rm(root,{recursive:true,force:true});}});
-
-it("applies the configured default model and preserves explicit models during repair",async()=>{const {root,config}=await fixture();config.runner={...config.runner,defaultModel:"configured-model"};const runner=new FakeAiRunner((_request,call)=>call===1||call===3?"not framed":{ok:true});try{const {fabric}=createApi(config,runner);const repaired=await fabric.ai.run({instruction:"repair",outputSchema:{type:"object",required:["ok"]}});expect(runner.calls[0]?.model).toBe("configured-model");expect(runner.calls[1]?.model).toBe("configured-model");const explicit=await fabric.ai.run({instruction:"explicit",model:"explicit-model",outputSchema:{type:"object",required:["ok"]}});expect(runner.calls[2]?.model).toBe("explicit-model");expect(runner.calls[3]?.model).toBe("explicit-model");expect(explicit.requestedModel).toBe("explicit-model");expect(repaired.repaired).toBe(true);}finally{await rm(root,{recursive:true,force:true});}});
-
-it("uses the canonical JSON repair policy prefix",async()=>{const {root,config}=await fixture();const runner=new FakeAiRunner((_request,call)=>call===1?"not framed":{ok:true});try{const {fabric}=createApi(config,runner);const result=await fabric.ai.run({instruction:"answer",context:"",outputSchema:{type:"object",properties:{ok:{const:true}},required:["ok"]}});expect(result.repaired).toBe(true);expect(runner.calls[1]?.instruction.startsWith(`${loadPrompt("repair-json").trimEnd()}\n\nINVALID:\n`)).toBe(true);}finally{await rm(root,{recursive:true,force:true});}});
-
-it("accepts positional and alias forms at the runtime boundary",async()=>{const {root,config}=await fixture();config.filesystem={...config.filesystem,allowWrite:["allowed/**"]};try{await mkdir(path.join(root,"allowed"));const {fabric}=createApi(config,new FakeAiRunner());expect((await fabric.fs.read("a.ts")).content).toContain("two token");expect((await fabric.fs.read({file:"a.ts",start:2,limit:1})).content).toBe("two token");expect(await fabric.fs.glob("**/*.ts", ".", 10)).toEqual(["a.ts"]);expect((await fabric.fs.grep("token","a.ts",5)).matches[0]!.line).toBe(2);expect((await fabric.fs.grep({pattern:"token",path:"a.ts"})).matches[0]!.line).toBe(2);await expect(fabric.fs.write("allowed/out.ts","written")).resolves.toMatchObject({path:"allowed/out.ts"});expect(await readFile(path.join(root,"allowed/out.ts"),"utf8")).toBe("written");await expect((fabric.fs.read as (value: unknown) => Promise<unknown>)(42)).rejects.toMatchObject({code:"RUNTIME_FAILED",message:expect.stringContaining("Invalid arguments for fabric.fs.read")});}finally{await rm(root,{recursive:true,force:true});}});it("contains nested checkout paths at the project root",async()=>{const {root,config}=await fixture();try{await mkdir(path.join(root,"pi-fabric"));await writeFile(path.join(root,"pi-fabric/reference.ts"),"reference");const {fabric}=createApi(config,new FakeAiRunner());expect((await fabric.fs.read({path:"pi-fabric/reference.ts"})).content).toBe("reference");await expect(fabric.fs.read({path:"../pi-fabric/reference.ts"})).rejects.toThrow(/denied/);}finally{await rm(root,{recursive:true,force:true});}});
-
-async function git(root:string,...args:string[]):Promise<string>{
- return await new Promise((resolve,reject)=>execFile("git",args,{cwd:root},(error,stdout,stderr)=>error?reject(new Error(stderr||error.message)):resolve(stdout.trim())));
+const approve = async () => "allow" as const;
+async function fixture() {
+  const root = await mkdtemp(path.join(tmpdir(), "fabric-api-"));
+  await writeFile(path.join(root, "a.ts"), "one\ntwo token\nthree");
+  await writeFile(path.join(root, ".env"), "SECRET=x");
+  await mkdir(path.join(root, "build"));
+  await writeFile(path.join(root, "build/generated.ts"), "hidden");
+  await mkdir(path.join(root, "coverage"));
+  await writeFile(path.join(root, "coverage/report.ts"), "hidden");
+  const config: FabricConfig = {
+    ...defaults,
+    projectRoot: root,
+    budgets: { ...defaults.budgets },
+    filesystem: { ...defaults.filesystem, allowWrite: [] },
+    git: { ...defaults.git },
+    shell: { ...defaults.shell },
+    runner: { ...defaults.runner },
+    output: { ...defaults.output },
+    mutation: { ...defaults.mutation, enabled: false },
+  };
+  return { root, config };
 }
-
-async function gitFixture(){
- const value=await fixture();
- await git(value.root,"init","-q");
- await git(value.root,"config","user.name","Fabric Test");
- await git(value.root,"config","user.email","fabric@example.invalid");
- await git(value.root,"add","--","a.ts");
- await git(value.root,"-c","core.hooksPath=/dev/null","-c","commit.gpgSign=false","commit","-q","--no-verify","--no-gpg-sign","-m","initial");
- return value;
-}
-
-describe("bounded local Git commits",()=>{
- it("reads history, objects, branches, and remotes without mutation",async()=>{const {root,config}=await gitFixture();try{const {fabric}=createApi(config,new FakeAiRunner());expect((await fabric.git.log({maxCount:1})).text).toContain("initial");expect((await fabric.git.show({path:"a.ts"})).text).toContain("two token");expect(await fabric.git.branches()).toEqual(expect.arrayContaining([expect.stringContaining("main")]));expect(await fabric.git.remotes()).toEqual([]);expect((fabric.git as unknown as Record<string, unknown>).push).toBeUndefined();}finally{await rm(root,{recursive:true,force:true});}});
- it("enables guarded mutation writes with a root-wide allowlist by default",async()=>{const {root,config}=await gitFixture();config.mutation={...defaults.mutation};config.filesystem={...defaults.filesystem};try{const {fabric}=createApi(config,new FakeAiRunner(),{prompter:approve});await expect(fabric.fs.write({path:"new.ts",content:"x"})).rejects.toThrow(/mutate.begin/);await fabric.mutate.begin({mode:"checkpoint"});await fabric.fs.write({path:"new.ts",content:"x"});await expect(fabric.fs.write({path:".env",content:"x"})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.fs.write({path:"../out.ts",content:"x"})).rejects.toMatchObject({code:"POLICY_DENIED"});const rollback=await fabric.mutate.rollback();expect(rollback.removedFiles).toContain("new.ts");}finally{await rm(root,{recursive:true,force:true});}});
- it("denies commits by default and exposes no push API",async()=>{const {root,config}=await gitFixture();try{await writeFile(path.join(root,"a.ts"),"changed");const {fabric}=createApi(config,new FakeAiRunner());await expect(fabric.git.commit({message:"test: denied",paths:["a.ts"]})).rejects.toMatchObject({code:"POLICY_DENIED"});expect((fabric.git as unknown as Record<string, unknown>).push).toBeUndefined();}finally{await rm(root,{recursive:true,force:true});}});
- it("commits only explicit paths when independently enabled",async()=>{const {root,config}=await gitFixture();config.git.allowCommit=true;try{await writeFile(path.join(root,"tracked.ts"),"base\n");await git(root,"add","--","tracked.ts");await git(root,"-c","commit.gpgSign=false","commit","-q","--no-verify","-m","unrelated base");await writeFile(path.join(root,"tracked.ts"),"unstaged unrelated\n");await writeFile(path.join(root,".gitattributes"),"a.ts filter=evil\n");await git(root,"config","filter.evil.clean","sh -c 'touch filter-ran; cat'");const hook=path.join(root,".git/hooks/pre-commit");await writeFile(hook,"#!/bin/sh\ntouch hook-ran\n");await chmod(hook,0o755);await writeFile(path.join(root,"a.ts"),"committed");await writeFile(path.join(root,"other.ts"),"not committed");const {fabric}=createApi(config,new FakeAiRunner(),{prompter:approve});const result=await fabric.git.commit({message:"test: bounded local commit",paths:["a.ts"]});expect(result).toMatchObject({message:"test: bounded local commit",paths:["a.ts"]});expect(result.hash).toMatch(/^[0-9a-f]{40}$/);expect(await git(root,"show","--format=","--name-only","HEAD")).toBe("a.ts");expect(await git(root,"diff","--cached")).toBe("");expect(await git(root,"diff","--","tracked.ts")).toContain("unstaged unrelated");expect(await git(root,"status","--short","--","other.ts")).toContain("?? other.ts");expect(await git(root,"status","--short","--",".gitattributes")).toContain("?? .gitattributes");await expect(access(path.join(root,"filter-ran")).then(()=>true,()=>false),"clean filter must not execute").resolves.toBe(false);await expect(access(path.join(root,"hook-ran")).then(()=>true,()=>false),"commit hook must not execute").resolves.toBe(false);}finally{await rm(root,{recursive:true,force:true});}});
- it("requires explicit safe paths and safe bounded messages",async()=>{const {root,config}=await gitFixture();config.git.allowCommit=true;try{const {fabric}=createApi(config,new FakeAiRunner());await expect(fabric.git.commit({message:"test: empty",paths:[]})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.git.commit({message:" bad",paths:["a.ts"]})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.git.commit({message:"test: escape",paths:["../outside"]})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.git.commit({message:"test: metadata",paths:[".git/config"]})).rejects.toMatchObject({code:"POLICY_DENIED"});}finally{await rm(root,{recursive:true,force:true});}});
- it("leaves the real Git index unchanged when commit preparation fails",async()=>{const {root,config}=await gitFixture();config.git.allowCommit=true;try{await writeFile(path.join(root,"a.ts"),"too large");config.filesystem={...config.filesystem,maxCharsPerFile:1};const {fabric}=createApi(config,new FakeAiRunner(),{prompter:approve});await expect(fabric.git.commit({message:"test: failed preparation",paths:["a.ts"]})).rejects.toMatchObject({code:"BUDGET_EXCEEDED"});expect(await git(root,"diff","--cached","--name-only")).toBe("");}finally{await rm(root,{recursive:true,force:true});}});
- it("refuses pre-existing staged changes",async()=>{const {root,config}=await gitFixture();config.git.allowCommit=true;try{await writeFile(path.join(root,"staged.ts"),"staged");await git(root,"add","--","staged.ts");await writeFile(path.join(root,"a.ts"),"requested");const {fabric}=createApi(config,new FakeAiRunner(),{prompter:approve});await expect(fabric.git.commit({message:"test: reject mixed index",paths:["a.ts"]})).rejects.toThrow(/pre-existing staged/);}finally{await rm(root,{recursive:true,force:true});}});
- it("keeps destructive shell commands denied when commits are enabled",async()=>{const {root,config}=await gitFixture();config.git.allowCommit=true;try{const {fabric}=createApi(config,new FakeAiRunner());for(const command of ["rm -rf .","kubectl delete namespace production","psql -c 'drop database app'","git push origin main"])await expect(fabric.shell.run({command})).rejects.toMatchObject({code:"POLICY_DENIED"});}finally{await rm(root,{recursive:true,force:true});}});
+describe("deterministic API", () => {
+  it("reads, globs, greps and enforces policy", async () => {
+    const { root, config } = await fixture();
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      expect((await fabric.fs.read({ path: "a.ts", startLine: 2, endLine: 2 })).content).toBe(
+        "two token",
+      );
+      expect(await fabric.fs.glob({ pattern: "**/*.ts" })).toEqual(["a.ts"]);
+      expect((await fabric.fs.grep({ query: "token", paths: ["a.ts"] })).matches[0]!.line).toBe(2);
+      await expect(fabric.fs.read({ path: "../outside" })).rejects.toThrow(/denied/);
+      await expect(fabric.fs.read({ path: ".env" })).rejects.toThrow(/denied/);
+      await expect(fabric.fs.write({ path: "a.ts", content: "x" })).rejects.toThrow(/disabled/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("rejects unsafe glob patterns and writes through symlinks", async () => {
+    const { root, config } = await fixture();
+    const outside = await mkdtemp(path.join(tmpdir(), "fabric-write-out-"));
+    try {
+      await mkdir(path.join(root, "allowed"));
+      await writeFile(path.join(root, "allowed", "ok.ts"), "ok");
+      await writeFile(path.join(outside, "target.ts"), "outside");
+      await symlink(path.join(outside, "target.ts"), path.join(root, "allowed", "link.ts"));
+      await symlink(outside, path.join(root, "alias"));
+      await symlink(path.join(root, "allowed"), path.join(root, "cwd-link"));
+      config.filesystem = { ...config.filesystem, allowWrite: ["allowed/**", "alias/**"] };
+      const { fabric } = createApi(config, new FakeAiRunner());
+      expect(await fabric.fs.glob({ pattern: "*.ts", cwd: "cwd-link" })).toEqual(["allowed/ok.ts"]);
+      await expect(fabric.fs.glob({ pattern: "/etc/*" })).rejects.toMatchObject({
+        code: "POLICY_DENIED",
+      });
+      await expect(fabric.fs.glob({ pattern: "../**/*" })).rejects.toMatchObject({
+        code: "POLICY_DENIED",
+      });
+      await expect(
+        fabric.fs.write({ path: "allowed/link.ts", content: "no" }),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+      expect(await readFile(path.join(outside, "target.ts"), "utf8")).toBe("outside");
+      await expect(fabric.fs.write({ path: "alias/new.ts", content: "no" })).rejects.toMatchObject({
+        code: "POLICY_DENIED",
+      });
+      await expect(
+        fabric.fs.write({ path: "allowed/ok.ts", content: "yes" }),
+      ).resolves.toMatchObject({ path: "allowed/ok.ts" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+  it("bounds shell stdout and stderr independently", async () => {
+    const { root, config } = await fixture();
+    const command = "printf 123456789; printf abcdefghi >&2";
+    config.shell = {
+      ...config.shell,
+      enabled: true,
+      allowedCommands: [command],
+      maxOutputChars: 5,
+    };
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner(), { prompter: approve });
+      const result = await fabric.shell.run({ command });
+      expect(result).toMatchObject({ stdout: "12345", stderr: "abcde", truncated: true });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("rejects symlink escape", async () => {
+    const { root, config } = await fixture();
+    const outside = await mkdtemp(path.join(tmpdir(), "fabric-out-"));
+    await writeFile(path.join(outside, "x"), "x");
+    await symlink(path.join(outside, "x"), path.join(root, "link"));
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      await expect(fabric.fs.read({ path: "link" })).rejects.toThrow(/Symlink/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
 });
 
-describe("read-only inspection policy",()=>{
- it("constructs fixed read-only argv for supported inspectors",async()=>{const {root,config}=await fixture();const bin=path.join(root,"bin");await mkdir(bin);const probe=path.join(bin,"probe");await writeFile(probe,"#!/bin/sh\nprintf '%s\\n' \"$0|$*\"\n");await chmod(probe,0o755);for(const name of ["psql","redis-cli","sqlite3","kubectl","terraform"])await symlink(probe,path.join(bin,name));const prior=process.env.PATH;process.env.PATH=`${bin}:${prior??""}`;try{const {fabric}=createApi(config,new FakeAiRunner(),{prompter:approve});expect((await fabric.inspect.postgres({query:"SELECT 1"})).stdout).toContain("BEGIN READ ONLY");expect((await fabric.inspect.redis({command:"GET",args:["key"]})).stdout).toContain("GET key");expect((await fabric.inspect.sqlite({path:"a.ts",query:"SELECT 1"})).stdout).toContain("-readonly -safe");expect((await fabric.inspect.kubernetes({operation:"get",resource:"pods",namespace:"default"})).stdout).toContain("get pods -o yaml");expect((await fabric.inspect.terraform({operation:"validate"})).stdout).toContain("validate -json");}finally{process.env.PATH=prior;await rm(root,{recursive:true,force:true});}});
- it("rejects mutating and operational PostgreSQL statements",async()=>{const {root,config}=await fixture();try{const {fabric}=createApi(config,new FakeAiRunner());for(const query of ["DELETE FROM users","SELECT pg_terminate_backend(1)","SELECT 1; DROP TABLE users","EXPLAIN ANALYZE DELETE FROM users","WITH gone AS (DELETE FROM users RETURNING *) SELECT * FROM gone"])await expect(fabric.inspect.postgres({query})).rejects.toMatchObject({code:"POLICY_DENIED"});}finally{await rm(root,{recursive:true,force:true});}});
- it("rejects Redis mutation and administration commands",async()=>{const {root,config}=await fixture();try{const {fabric}=createApi(config,new FakeAiRunner());for(const command of ["SET","DEL","FLUSHALL","EVAL","PUBLISH","CONFIG","SHUTDOWN"])await expect(fabric.inspect.redis({command,args:["key"]})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.inspect.redis({command:"MEMORY",args:["PURGE"]})).rejects.toMatchObject({code:"POLICY_DENIED"});}finally{await rm(root,{recursive:true,force:true});}});
- it("rejects SQLite mutation statements",async()=>{const {root,config}=await fixture();try{const {fabric}=createApi(config,new FakeAiRunner());for(const query of ["UPDATE items SET value=1","PRAGMA journal_mode=WAL","ATTACH DATABASE 'x' AS other","SELECT 1; DELETE FROM items"])await expect(fabric.inspect.sqlite({path:"a.ts",query})).rejects.toMatchObject({code:"POLICY_DENIED"});}finally{await rm(root,{recursive:true,force:true});}});
- it("allows only fixed Kubernetes reads and denies sensitive resources",async()=>{const {root,config}=await fixture();try{const {fabric}=createApi(config,new FakeAiRunner());for(const operation of ["delete","apply","exec","patch","scale","port-forward"])await expect(fabric.inspect.kubernetes({operation: operation as "get",resource:"pods"})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.inspect.kubernetes({operation:"get",resource:"secrets"})).rejects.toMatchObject({code:"POLICY_DENIED"});await expect(fabric.inspect.kubernetes({operation:"get",resource:"pods",name:"--all-namespaces"})).rejects.toMatchObject({code:"POLICY_DENIED"});}finally{await rm(root,{recursive:true,force:true});}});
- it("allows only fixed Terraform reads",async()=>{const {root,config}=await fixture();try{const {fabric}=createApi(config,new FakeAiRunner());for(const operation of ["plan","apply","destroy","import","state-rm","force-unlock"])await expect(fabric.inspect.terraform({operation: operation as "validate"})).rejects.toMatchObject({code:"POLICY_DENIED"});}finally{await rm(root,{recursive:true,force:true});}});
+it("supports a root-wide ** allowlist while still denying traversal, sensitive paths, and symlink escapes", async () => {
+  const { root, config } = await fixture();
+  const outside = await mkdtemp(path.join(tmpdir(), "fabric-wide-out-"));
+  try {
+    await mkdir(path.join(root, "src"));
+    await writeFile(path.join(root, "src/deep.ts"), "deep");
+    await writeFile(path.join(root, "root.ts"), "root");
+    await writeFile(path.join(outside, "target.ts"), "outside");
+    await symlink(path.join(outside, "target.ts"), path.join(root, "src/link.ts"));
+    config.filesystem = { ...config.filesystem, allowWrite: ["**"] };
+    config.mutation = { ...config.mutation, enabled: false };
+    const { fabric } = createApi(config, new FakeAiRunner());
+    await expect(fabric.fs.write({ path: "root.ts", content: "x" })).resolves.toMatchObject({
+      path: "root.ts",
+    });
+    await expect(fabric.fs.write({ path: "src/other.ts", content: "y" })).resolves.toMatchObject({
+      path: "src/other.ts",
+    });
+    await expect(
+      fabric.fs.write({ path: "../outside/escape.ts", content: "no" }),
+    ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+    await expect(fabric.fs.write({ path: ".env", content: "SECRET=x" })).rejects.toMatchObject({
+      code: "POLICY_DENIED",
+    });
+    await expect(fabric.fs.write({ path: "src/link.ts", content: "no" })).rejects.toMatchObject({
+      code: "POLICY_DENIED",
+    });
+    expect(await readFile(path.join(outside, "target.ts"), "utf8")).toBe("outside");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
+it("greps the tail of a large source without source truncation", async () => {
+  const { root, config } = await fixture();
+  try {
+    await writeFile(
+      path.join(root, "large.ts"),
+      `${Array.from({ length: 25000 }, (_, index) => `noise ${index}`).join("\n")}\nTAIL_NEEDLE\n`,
+    );
+    config.filesystem = { ...config.filesystem, maxCharsPerFile: 64 };
+    const { fabric } = createApi(config, new FakeAiRunner());
+    const result = await fabric.fs.grep({ query: "TAIL_NEEDLE", paths: ["large.ts"] });
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0]!).toMatchObject({
+      path: "large.ts",
+      line: 25001,
+      text: "TAIL_NEEDLE",
+    });
+    expect(result.truncated).toBe(false);
+    expect(result.scannedFiles).toEqual(["large.ts"]);
+    expect(result.skippedFiles).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("reports result-limit and skipped-source truncation truthfully", async () => {
+  const { root, config } = await fixture();
+  try {
+    await writeFile(path.join(root, "many.ts"), "hit\nhit\n");
+    await writeFile(path.join(root, "binary.ts"), Buffer.from([104, 105, 116, 0]));
+    const { fabric } = createApi(config, new FakeAiRunner());
+    const limited = await fabric.fs.grep({ query: "hit", paths: ["many.ts"], maxMatches: 1 });
+    expect(limited.matches).toHaveLength(1);
+    expect(limited.truncated).toBe(true);
+    expect(limited.scannedFiles).toEqual(["many.ts"]);
+    const skipped = await fabric.fs.grep({ query: "hit", paths: ["binary.ts"] });
+    expect(skipped.matches).toEqual([]);
+    expect(skipped.truncated).toBe(true);
+    expect(skipped.scannedFiles).toEqual([]);
+    expect(skipped.skippedFiles).toEqual(["binary.ts"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("applies the configured default model and preserves explicit models during repair", async () => {
+  const { root, config } = await fixture();
+  config.runner = { ...config.runner, defaultModel: "configured-model" };
+  const runner = new FakeAiRunner((_request, call) =>
+    call === 1 || call === 3 ? "not framed" : { ok: true },
+  );
+  try {
+    const { fabric } = createApi(config, runner);
+    const repaired = await fabric.ai.run({
+      instruction: "repair",
+      outputSchema: { type: "object", required: ["ok"] },
+    });
+    expect(runner.calls[0]?.model).toBe("configured-model");
+    expect(runner.calls[1]?.model).toBe("configured-model");
+    const explicit = await fabric.ai.run({
+      instruction: "explicit",
+      model: "explicit-model",
+      outputSchema: { type: "object", required: ["ok"] },
+    });
+    expect(runner.calls[2]?.model).toBe("explicit-model");
+    expect(runner.calls[3]?.model).toBe("explicit-model");
+    expect(explicit.requestedModel).toBe("explicit-model");
+    expect(repaired.repaired).toBe(true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("uses the canonical JSON repair policy prefix", async () => {
+  const { root, config } = await fixture();
+  const runner = new FakeAiRunner((_request, call) => (call === 1 ? "not framed" : { ok: true }));
+  try {
+    const { fabric } = createApi(config, runner);
+    const result = await fabric.ai.run({
+      instruction: "answer",
+      context: "",
+      outputSchema: { type: "object", properties: { ok: { const: true } }, required: ["ok"] },
+    });
+    expect(result.repaired).toBe(true);
+    expect(
+      runner.calls[1]?.instruction.startsWith(
+        `${loadPrompt("repair-json").trimEnd()}\n\nINVALID:\n`,
+      ),
+    ).toBe(true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("accepts positional and alias forms at the runtime boundary", async () => {
+  const { root, config } = await fixture();
+  config.filesystem = { ...config.filesystem, allowWrite: ["allowed/**"] };
+  try {
+    await mkdir(path.join(root, "allowed"));
+    const { fabric } = createApi(config, new FakeAiRunner());
+    expect((await fabric.fs.read("a.ts")).content).toContain("two token");
+    expect((await fabric.fs.read({ file: "a.ts", start: 2, limit: 1 })).content).toBe("two token");
+    expect(await fabric.fs.glob("**/*.ts", ".", 10)).toEqual(["a.ts"]);
+    expect((await fabric.fs.grep("token", "a.ts", 5)).matches[0]!.line).toBe(2);
+    expect((await fabric.fs.grep({ pattern: "token", path: "a.ts" })).matches[0]!.line).toBe(2);
+    await expect(fabric.fs.write("allowed/out.ts", "written")).resolves.toMatchObject({
+      path: "allowed/out.ts",
+    });
+    expect(await readFile(path.join(root, "allowed/out.ts"), "utf8")).toBe("written");
+    await expect(
+      (fabric.fs.read as (value: unknown) => Promise<unknown>)(42),
+    ).rejects.toMatchObject({
+      code: "RUNTIME_FAILED",
+      message: expect.stringContaining("Invalid arguments for fabric.fs.read"),
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+it("contains nested checkout paths at the project root", async () => {
+  const { root, config } = await fixture();
+  try {
+    await mkdir(path.join(root, "pi-fabric"));
+    await writeFile(path.join(root, "pi-fabric/reference.ts"), "reference");
+    const { fabric } = createApi(config, new FakeAiRunner());
+    expect((await fabric.fs.read({ path: "pi-fabric/reference.ts" })).content).toBe("reference");
+    await expect(fabric.fs.read({ path: "../pi-fabric/reference.ts" })).rejects.toThrow(/denied/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+async function git(root: string, ...args: string[]): Promise<string> {
+  return await new Promise((resolve, reject) =>
+    execFile("git", args, { cwd: root }, (error, stdout, stderr) =>
+      error ? reject(new Error(stderr || error.message)) : resolve(stdout.trim()),
+    ),
+  );
+}
+
+async function gitFixture() {
+  const value = await fixture();
+  await git(value.root, "init", "-q");
+  await git(value.root, "config", "user.name", "Fabric Test");
+  await git(value.root, "config", "user.email", "fabric@example.invalid");
+  await git(value.root, "add", "--", "a.ts");
+  await git(
+    value.root,
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "commit.gpgSign=false",
+    "commit",
+    "-q",
+    "--no-verify",
+    "--no-gpg-sign",
+    "-m",
+    "initial",
+  );
+  return value;
+}
+
+describe("bounded local Git commits", () => {
+  it("reads history, objects, branches, and remotes without mutation", async () => {
+    const { root, config } = await gitFixture();
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      expect((await fabric.git.log({ maxCount: 1 })).text).toContain("initial");
+      expect((await fabric.git.show({ path: "a.ts" })).text).toContain("two token");
+      expect(await fabric.git.branches()).toEqual(
+        expect.arrayContaining([expect.stringContaining("main")]),
+      );
+      expect(await fabric.git.remotes()).toEqual([]);
+      expect((fabric.git as unknown as Record<string, unknown>).push).toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("enables guarded mutation writes with a root-wide allowlist by default", async () => {
+    const { root, config } = await gitFixture();
+    config.mutation = { ...defaults.mutation };
+    config.filesystem = { ...defaults.filesystem };
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner(), { prompter: approve });
+      await expect(fabric.fs.write({ path: "new.ts", content: "x" })).rejects.toThrow(
+        /mutate.begin/,
+      );
+      await fabric.mutate.begin({ mode: "checkpoint" });
+      await fabric.fs.write({ path: "new.ts", content: "x" });
+      await expect(fabric.fs.write({ path: ".env", content: "x" })).rejects.toMatchObject({
+        code: "POLICY_DENIED",
+      });
+      await expect(fabric.fs.write({ path: "../out.ts", content: "x" })).rejects.toMatchObject({
+        code: "POLICY_DENIED",
+      });
+      const rollback = await fabric.mutate.rollback();
+      expect(rollback.removedFiles).toContain("new.ts");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("denies commits by default and exposes no push API", async () => {
+    const { root, config } = await gitFixture();
+    try {
+      await writeFile(path.join(root, "a.ts"), "changed");
+      const { fabric } = createApi(config, new FakeAiRunner());
+      await expect(
+        fabric.git.commit({ message: "test: denied", paths: ["a.ts"] }),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+      expect((fabric.git as unknown as Record<string, unknown>).push).toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("commits only explicit paths when independently enabled", async () => {
+    const { root, config } = await gitFixture();
+    config.git.allowCommit = true;
+    try {
+      await writeFile(path.join(root, "tracked.ts"), "base\n");
+      await git(root, "add", "--", "tracked.ts");
+      await git(
+        root,
+        "-c",
+        "commit.gpgSign=false",
+        "commit",
+        "-q",
+        "--no-verify",
+        "-m",
+        "unrelated base",
+      );
+      await writeFile(path.join(root, "tracked.ts"), "unstaged unrelated\n");
+      await writeFile(path.join(root, ".gitattributes"), "a.ts filter=evil\n");
+      await git(root, "config", "filter.evil.clean", "sh -c 'touch filter-ran; cat'");
+      const hook = path.join(root, ".git/hooks/pre-commit");
+      await writeFile(hook, "#!/bin/sh\ntouch hook-ran\n");
+      await chmod(hook, 0o755);
+      await writeFile(path.join(root, "a.ts"), "committed");
+      await writeFile(path.join(root, "other.ts"), "not committed");
+      const { fabric } = createApi(config, new FakeAiRunner(), { prompter: approve });
+      const result = await fabric.git.commit({
+        message: "test: bounded local commit",
+        paths: ["a.ts"],
+      });
+      expect(result).toMatchObject({ message: "test: bounded local commit", paths: ["a.ts"] });
+      expect(result.hash).toMatch(/^[0-9a-f]{40}$/);
+      expect(await git(root, "show", "--format=", "--name-only", "HEAD")).toBe("a.ts");
+      expect(await git(root, "diff", "--cached")).toBe("");
+      expect(await git(root, "diff", "--", "tracked.ts")).toContain("unstaged unrelated");
+      expect(await git(root, "status", "--short", "--", "other.ts")).toContain("?? other.ts");
+      expect(await git(root, "status", "--short", "--", ".gitattributes")).toContain(
+        "?? .gitattributes",
+      );
+      await expect(
+        access(path.join(root, "filter-ran")).then(
+          () => true,
+          () => false,
+        ),
+        "clean filter must not execute",
+      ).resolves.toBe(false);
+      await expect(
+        access(path.join(root, "hook-ran")).then(
+          () => true,
+          () => false,
+        ),
+        "commit hook must not execute",
+      ).resolves.toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("requires explicit safe paths and safe bounded messages", async () => {
+    const { root, config } = await gitFixture();
+    config.git.allowCommit = true;
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      await expect(fabric.git.commit({ message: "test: empty", paths: [] })).rejects.toMatchObject({
+        code: "POLICY_DENIED",
+      });
+      await expect(fabric.git.commit({ message: " bad", paths: ["a.ts"] })).rejects.toMatchObject({
+        code: "POLICY_DENIED",
+      });
+      await expect(
+        fabric.git.commit({ message: "test: escape", paths: ["../outside"] }),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+      await expect(
+        fabric.git.commit({ message: "test: metadata", paths: [".git/config"] }),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("leaves the real Git index unchanged when commit preparation fails", async () => {
+    const { root, config } = await gitFixture();
+    config.git.allowCommit = true;
+    try {
+      await writeFile(path.join(root, "a.ts"), "too large");
+      config.filesystem = { ...config.filesystem, maxCharsPerFile: 1 };
+      const { fabric } = createApi(config, new FakeAiRunner(), { prompter: approve });
+      await expect(
+        fabric.git.commit({ message: "test: failed preparation", paths: ["a.ts"] }),
+      ).rejects.toMatchObject({ code: "BUDGET_EXCEEDED" });
+      expect(await git(root, "diff", "--cached", "--name-only")).toBe("");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("refuses pre-existing staged changes", async () => {
+    const { root, config } = await gitFixture();
+    config.git.allowCommit = true;
+    try {
+      await writeFile(path.join(root, "staged.ts"), "staged");
+      await git(root, "add", "--", "staged.ts");
+      await writeFile(path.join(root, "a.ts"), "requested");
+      const { fabric } = createApi(config, new FakeAiRunner(), { prompter: approve });
+      await expect(
+        fabric.git.commit({ message: "test: reject mixed index", paths: ["a.ts"] }),
+      ).rejects.toThrow(/pre-existing staged/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("keeps destructive shell commands denied when commits are enabled", async () => {
+    const { root, config } = await gitFixture();
+    config.git.allowCommit = true;
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      for (const command of [
+        "rm -rf .",
+        "kubectl delete namespace production",
+        "psql -c 'drop database app'",
+        "git push origin main",
+      ])
+        await expect(fabric.shell.run({ command })).rejects.toMatchObject({
+          code: "POLICY_DENIED",
+        });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("read-only inspection policy", () => {
+  it("constructs fixed read-only argv for supported inspectors", async () => {
+    const { root, config } = await fixture();
+    const bin = path.join(root, "bin");
+    await mkdir(bin);
+    const probe = path.join(bin, "probe");
+    await writeFile(probe, "#!/bin/sh\nprintf '%s\\n' \"$0|$*\"\n");
+    await chmod(probe, 0o755);
+    for (const name of ["psql", "redis-cli", "sqlite3", "kubectl", "terraform"])
+      await symlink(probe, path.join(bin, name));
+    const prior = process.env.PATH;
+    process.env.PATH = `${bin}:${prior ?? ""}`;
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner(), { prompter: approve });
+      expect((await fabric.inspect.postgres({ query: "SELECT 1" })).stdout).toContain(
+        "BEGIN READ ONLY",
+      );
+      expect((await fabric.inspect.redis({ command: "GET", args: ["key"] })).stdout).toContain(
+        "GET key",
+      );
+      expect((await fabric.inspect.sqlite({ path: "a.ts", query: "SELECT 1" })).stdout).toContain(
+        "-readonly -safe",
+      );
+      expect(
+        (
+          await fabric.inspect.kubernetes({
+            operation: "get",
+            resource: "pods",
+            namespace: "default",
+          })
+        ).stdout,
+      ).toContain("get pods -o yaml");
+      expect((await fabric.inspect.terraform({ operation: "validate" })).stdout).toContain(
+        "validate -json",
+      );
+    } finally {
+      process.env.PATH = prior;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("rejects mutating and operational PostgreSQL statements", async () => {
+    const { root, config } = await fixture();
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      for (const query of [
+        "DELETE FROM users",
+        "SELECT pg_terminate_backend(1)",
+        "SELECT 1; DROP TABLE users",
+        "EXPLAIN ANALYZE DELETE FROM users",
+        "WITH gone AS (DELETE FROM users RETURNING *) SELECT * FROM gone",
+      ])
+        await expect(fabric.inspect.postgres({ query })).rejects.toMatchObject({
+          code: "POLICY_DENIED",
+        });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("rejects Redis mutation and administration commands", async () => {
+    const { root, config } = await fixture();
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      for (const command of ["SET", "DEL", "FLUSHALL", "EVAL", "PUBLISH", "CONFIG", "SHUTDOWN"])
+        await expect(fabric.inspect.redis({ command, args: ["key"] })).rejects.toMatchObject({
+          code: "POLICY_DENIED",
+        });
+      await expect(
+        fabric.inspect.redis({ command: "MEMORY", args: ["PURGE"] }),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("rejects SQLite mutation statements", async () => {
+    const { root, config } = await fixture();
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      for (const query of [
+        "UPDATE items SET value=1",
+        "PRAGMA journal_mode=WAL",
+        "ATTACH DATABASE 'x' AS other",
+        "SELECT 1; DELETE FROM items",
+      ])
+        await expect(fabric.inspect.sqlite({ path: "a.ts", query })).rejects.toMatchObject({
+          code: "POLICY_DENIED",
+        });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("allows only fixed Kubernetes reads and denies sensitive resources", async () => {
+    const { root, config } = await fixture();
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      for (const operation of ["delete", "apply", "exec", "patch", "scale", "port-forward"])
+        await expect(
+          fabric.inspect.kubernetes({ operation: operation as "get", resource: "pods" }),
+        ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+      await expect(
+        fabric.inspect.kubernetes({ operation: "get", resource: "secrets" }),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+      await expect(
+        fabric.inspect.kubernetes({ operation: "get", resource: "pods", name: "--all-namespaces" }),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("allows only fixed Terraform reads", async () => {
+    const { root, config } = await fixture();
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      for (const operation of ["plan", "apply", "destroy", "import", "state-rm", "force-unlock"])
+        await expect(
+          fabric.inspect.terraform({ operation: operation as "validate" }),
+        ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

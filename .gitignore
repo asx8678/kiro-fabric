@@ -12,6 +12,7 @@ dist/
 coverage/
 .fabric-lite/runs/
 .fabric-lite/cache/
+.fabric-lite/config.json
 *.tgz
 .kiro/**/*.bak-*
 .fabric-lite/*.bak-*

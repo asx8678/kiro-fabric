@@ -27,13 +27,17 @@ describe("parseArgs --permissions", () => {
   });
 
   it("rejects unsupported permission modes", () => {
-    expect(() => parseArgs(["run", "--permissions", "auto"])).toThrow(/expected headless or interactive/);
+    expect(() => parseArgs(["run", "--permissions", "auto"])).toThrow(
+      /expected headless or interactive/,
+    );
     expect(() => parseArgs(["run", "--permissions"])).toThrow(/requires a value/);
   });
 
   it("rejects --permissions for commands without an approval surface", () => {
     for (const command of ["check", "docs", "models", "doctor", "install-kiro"]) {
-      expect(() => parseArgs([command, "--permissions", "interactive"])).toThrow(/only supported for run and exec/);
+      expect(() => parseArgs([command, "--permissions", "interactive"])).toThrow(
+        /only supported for run and exec/,
+      );
     }
   });
 });
@@ -46,13 +50,17 @@ describe("parseArgs --allow-write", () => {
   });
 
   it("rejects unsupported and missing values", () => {
-    expect(() => parseArgs(["install-kiro", "--allow-write", "shell"])).toThrow(/expected read or workspace/);
+    expect(() => parseArgs(["install-kiro", "--allow-write", "shell"])).toThrow(
+      /expected read or workspace/,
+    );
     expect(() => parseArgs(["install-kiro", "--allow-write"])).toThrow(/requires a value/);
   });
 
   it("rejects --allow-write for commands other than install-kiro", () => {
     for (const command of ["check", "run", "exec", "docs", "models", "doctor"]) {
-      expect(() => parseArgs([command, "--allow-write", "workspace"])).toThrow(/only supported for install-kiro and update-policy/);
+      expect(() => parseArgs([command, "--allow-write", "workspace"])).toThrow(
+        /only supported for install-kiro and update-policy/,
+      );
     }
   });
 });
@@ -64,11 +72,15 @@ describe("parseArgs update-policy", () => {
 
   it("accepts read/workspace for update-policy", () => {
     expect(parseArgs(["update-policy", "--allow-write", "read"]).writeAccess).toBe("read");
-    expect(parseArgs(["update-policy", "--allow-write", "workspace"]).writeAccess).toBe("workspace");
+    expect(parseArgs(["update-policy", "--allow-write", "workspace"]).writeAccess).toBe(
+      "workspace",
+    );
   });
 
   it("rejects unsupported values", () => {
-    expect(() => parseArgs(["update-policy", "--allow-write", "shell"])).toThrow(/expected read or workspace/);
+    expect(() => parseArgs(["update-policy", "--allow-write", "shell"])).toThrow(
+      /expected read or workspace/,
+    );
     expect(() => parseArgs(["update-policy", "--allow-write"])).toThrow(/requires a value/);
   });
 });

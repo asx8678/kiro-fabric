@@ -45,9 +45,13 @@ describe("run artifact retention", () => {
     const root = await mkdtemp(path.join(tmpdir(), "fabric-retention-"));
     try {
       await makeRun(root, "run_a", 365 * 24 * 3600_000);
-      expect(await sweepRunArtifacts(root, { runRetentionMs: 0, maxRuns: 0 })).toEqual({ removed: 0 });
+      expect(await sweepRunArtifacts(root, { runRetentionMs: 0, maxRuns: 0 })).toEqual({
+        removed: 0,
+      });
       expect(await readdir(root)).toEqual(["run_a"]);
-      expect(await sweepRunArtifacts(path.join(root, "missing"), { runRetentionMs: 1, maxRuns: 1 })).toEqual({ removed: 0 });
+      expect(
+        await sweepRunArtifacts(path.join(root, "missing"), { runRetentionMs: 1, maxRuns: 1 }),
+      ).toEqual({ removed: 0 });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

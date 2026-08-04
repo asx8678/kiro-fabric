@@ -66,9 +66,15 @@ function shellTokens(command: string): string[] {
     if (char === "'" || char === '"') {
       quote = char;
     } else if (/\s/.test(char)) {
-      if (token) { tokens.push(token); token = ""; }
+      if (token) {
+        tokens.push(token);
+        token = "";
+      }
     } else if (";&|()".includes(char)) {
-      if (token) { tokens.push(token); token = ""; }
+      if (token) {
+        tokens.push(token);
+        token = "";
+      }
       tokens.push(char);
     } else {
       token += char;
@@ -89,8 +95,15 @@ function hasDestructiveRm(tokens: string[]): boolean {
     let force = false;
     for (let j = i + 1; j < tokens.length && !";&|()".includes(tokens[j]!); j++) {
       const arg = tokens[j]!.toLowerCase();
-      if (arg === "--recursive" || arg === "--dir" || arg === "-r" || (/^-[^-]/.test(arg) && arg.includes("r"))) recursive = true;
-      if (arg === "--force" || arg === "-f" || (/^-[^-]/.test(arg) && arg.includes("f"))) force = true;
+      if (
+        arg === "--recursive" ||
+        arg === "--dir" ||
+        arg === "-r" ||
+        (/^-[^-]/.test(arg) && arg.includes("r"))
+      )
+        recursive = true;
+      if (arg === "--force" || arg === "-f" || (/^-[^-]/.test(arg) && arg.includes("f")))
+        force = true;
     }
     if (recursive || force) return true;
   }
@@ -100,7 +113,21 @@ function hasDestructiveRm(tokens: string[]): boolean {
 function hasNestedShell(tokens: string[]): boolean {
   for (let i = 0; i < tokens.length; i++) {
     const name = executableName(tokens[i]!);
-    if (!["sh", "bash", "zsh", "dash", "ksh", "sh.exe", "bash.exe", "zsh.exe", "dash.exe", "ksh.exe"].includes(name)) continue;
+    if (
+      ![
+        "sh",
+        "bash",
+        "zsh",
+        "dash",
+        "ksh",
+        "sh.exe",
+        "bash.exe",
+        "zsh.exe",
+        "dash.exe",
+        "ksh.exe",
+      ].includes(name)
+    )
+      continue;
     for (let j = i + 1; j < tokens.length && !";&|()".includes(tokens[j]!); j++) {
       if (tokens[j] === "-c" || tokens[j] === "--command") return true;
     }
@@ -131,16 +158,21 @@ export function isDestructive(command: string): boolean {
   if (/\bfind\b[^;&|\n]*\s-delete\b/i.test(text)) return true;
   if (/\bkubectl\b(?:\s+[^;&|\n]*)?\s+(?:delete|apply)\b/i.test(text)) return true;
   if (/\bterraform\b(?:\s+[^;&|\n]*)?\s+(?:apply|destroy)\b/i.test(text)) return true;
-  if (/(^|[\s;&|])(?:mkfs(?:\.[\w-]+)?|dd\s+(?:if|of)=|shutdown\b|reboot\b)/i.test(text)) return true;
+  if (/(^|[\s;&|])(?:mkfs(?:\.[\w-]+)?|dd\s+(?:if|of)=|shutdown\b|reboot\b)/i.test(text))
+    return true;
   // Mutating SQL, including common statements passed through command wrappers.
-  return /\b(?:insert\s+into|update\s+[a-z0-9_.`"]+\s+set|delete\s+from|drop\s+(?:database|table|schema|view|index)|truncate\b|alter\s+|create\s+(?:database|table|schema|index|view)|merge\s+into|grant\s+|revoke\s+|vacuum\b)\b/i.test(text.toLowerCase());
+  return /\b(?:insert\s+into|update\s+[a-z0-9_.`"]+\s+set|delete\s+from|drop\s+(?:database|table|schema|view|index)|truncate\b|alter\s+|create\s+(?:database|table|schema|index|view)|merge\s+into|grant\s+|revoke\s+|vacuum\b)\b/i.test(
+    text.toLowerCase(),
+  );
 }
 
-export function classifyShell(command: string, cwd = "."): { category: PermissionCategory; preview: string } {
-  return {
-    category: isDestructive(command) ? "destructive" : "execute",
-    preview: shellPreview(command, cwd),
-  };
+export function classifyShell(
+  command: string,
+  cwd = ".",
+): { category: PermissionCategory; preview: string } {
+  // Delegate to the production classifier so there is a single shell path.
+  const request = shellRequest(command, cwd);
+  return { category: request.category, preview: request.preview };
 }
 
 export function shellRequest(command: string, cwd: string): PermissionRequest {
@@ -154,11 +186,11 @@ export function shellRequest(command: string, cwd: string): PermissionRequest {
   };
 }
 
-function shellPreview(command: string, cwd: string): string {
-  return structuredPreview("shell", { cwd, command });
-}
-
-export function commitRequest(message: string, repository: string, paths: string[]): PermissionRequest {
+export function commitRequest(
+  message: string,
+  repository: string,
+  paths: string[],
+): PermissionRequest {
   const identity = { operation: "local-commit", repository, message, paths: [...paths] };
   return {
     category: "commit",
@@ -167,7 +199,11 @@ export function commitRequest(message: string, repository: string, paths: string
   };
 }
 
-export function networkRequest(tool: string, operation: string, argv: readonly string[]): PermissionRequest {
+export function networkRequest(
+  tool: string,
+  operation: string,
+  argv: readonly string[],
+): PermissionRequest {
   const identity = { operation: "network-inspection", tool, name: operation, argv: [...argv] };
   return {
     category: "network",
@@ -196,7 +232,13 @@ export const interactivePrompter: ApprovalPrompter = async (request) => {
         `\nFabric permission [${request.category}]\n${request.preview}\nAllow once (a) / Allow session (s) / Deny (d): `,
         (answer) => {
           const value = answer.trim().toLowerCase();
-          resolve(value === "a" || value === "allow" || value === "once" ? "allow" : value === "s" || value === "session" ? "session" : "deny");
+          resolve(
+            value === "a" || value === "allow" || value === "once"
+              ? "allow"
+              : value === "s" || value === "session"
+                ? "session"
+                : "deny",
+          );
         },
       );
     });
@@ -229,7 +271,9 @@ export class PermissionGate {
 
   private async serializedPrompt(request: PermissionRequest): Promise<ApprovalResponse> {
     let release!: () => void;
-    const turn = new Promise<void>((resolve) => { release = resolve; });
+    const turn = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const previous = this.promptTail;
     this.promptTail = turn;
     await previous;
@@ -248,9 +292,10 @@ export class PermissionGate {
   /** Canonicalize the project root once so allowlist cwd comparison
    *  survives symlinked paths (e.g. /var vs /private/var on macOS). */
   private projectRoot(): Promise<string | undefined> {
-    this.canonicalRoot ??= this.options.projectRoot === undefined
-      ? Promise.resolve(undefined)
-      : realpath(this.options.projectRoot).catch(() => this.options.projectRoot);
+    this.canonicalRoot ??=
+      this.options.projectRoot === undefined
+        ? Promise.resolve(undefined)
+        : realpath(this.options.projectRoot).catch(() => this.options.projectRoot);
     return this.canonicalRoot;
   }
 
@@ -263,16 +308,13 @@ export class PermissionGate {
     if (
       request.category === "execute" &&
       request.cwd !== undefined &&
-      request.cwd === await this.projectRoot() &&
+      request.cwd === (await this.projectRoot()) &&
       request.command !== undefined &&
       this.options.allowedCommands?.includes(request.command)
-    ) return true;
+    )
+      return true;
     if (policy === "allow") return true;
     const response = await this.serializedPrompt(request);
     return response === "allow" || response === "session";
   }
-}
-
-export function createPermissionGate(options: PermissionGateOptions): PermissionGate {
-  return new PermissionGate(options);
 }

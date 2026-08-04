@@ -33,7 +33,10 @@ interface PromptManifest {
  */
 const WEB_MCP_SERVERS = {
   // mcp-server-fetch imports McpError, removed in mcp >= 1.23; pin the pair.
-  fetch: { command: "uvx", args: ["--from", "mcp-server-fetch==2026.7.10", "--with", "mcp<1.23", "mcp-server-fetch"] },
+  fetch: {
+    command: "uvx",
+    args: ["--from", "mcp-server-fetch==2026.7.10", "--with", "mcp<1.23", "mcp-server-fetch"],
+  },
   "ddg-search": { command: "uvx", args: ["duckduckgo-mcp-server"] },
 };
 const WEB_TOOLS = ["@fetch", "@ddg-search"];
@@ -120,7 +123,9 @@ const digest = (content: string): string => createHash("sha256").update(content)
 
 async function isFabricLiteSource(root: string): Promise<boolean> {
   try {
-    return JSON.parse(await readFile(path.join(root, "package.json"), "utf8")).name === "fabric-lite";
+    return (
+      JSON.parse(await readFile(path.join(root, "package.json"), "utf8")).name === "fabric-lite"
+    );
   } catch {
     return false;
   }

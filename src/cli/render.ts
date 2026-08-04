@@ -42,11 +42,7 @@ export interface RenderDiagnostic extends Partial<Diagnostic> {
 const MAX_PROGRAM_LINES = 200;
 const MAX_FORMATTED_VALUE = 20_000;
 
-
-export function colorEnabled(
-  stream: RenderStream = process.stdout,
-  override?: boolean,
-): boolean {
+export function colorEnabled(stream: RenderStream = process.stdout, override?: boolean): boolean {
   if (override !== undefined) return override;
   return Boolean(stream.isTTY) && !process.env.NO_COLOR;
 }
@@ -55,19 +51,37 @@ function ansi(code: string, text: string, enabled: boolean): string {
   return enabled ? `\u001b[${code}m${text}\u001b[0m` : text;
 }
 
-export function dim(text: string, enabled = colorEnabled()): string { return ansi("2", text, enabled); }
-export function bold(text: string, enabled = colorEnabled()): string { return ansi("1", text, enabled); }
-export function red(text: string, enabled = colorEnabled()): string { return ansi("31", text, enabled); }
-export function green(text: string, enabled = colorEnabled()): string { return ansi("32", text, enabled); }
-export function yellow(text: string, enabled = colorEnabled()): string { return ansi("33", text, enabled); }
-export function cyan(text: string, enabled = colorEnabled()): string { return ansi("36", text, enabled); }
+export function dim(text: string, enabled = colorEnabled()): string {
+  return ansi("2", text, enabled);
+}
+export function bold(text: string, enabled = colorEnabled()): string {
+  return ansi("1", text, enabled);
+}
+export function red(text: string, enabled = colorEnabled()): string {
+  return ansi("31", text, enabled);
+}
+export function green(text: string, enabled = colorEnabled()): string {
+  return ansi("32", text, enabled);
+}
+export function yellow(text: string, enabled = colorEnabled()): string {
+  return ansi("33", text, enabled);
+}
+export function cyan(text: string, enabled = colorEnabled()): string {
+  return ansi("36", text, enabled);
+}
 
 // Gold accent (256-color) used for the fabric-lite brand, section rules,
 // gutters, success glyphs, and retry markers across all run interaction.
 const GOLD = "38;5;220";
-export function gold(text: string, enabled = colorEnabled()): string { return ansi(GOLD, text, enabled); }
-export function goldBold(text: string, enabled = colorEnabled()): string { return ansi(`1;${GOLD}`, text, enabled); }
-export function goldDim(text: string, enabled = colorEnabled()): string { return ansi(`2;${GOLD}`, text, enabled); }
+export function gold(text: string, enabled = colorEnabled()): string {
+  return ansi(GOLD, text, enabled);
+}
+export function goldBold(text: string, enabled = colorEnabled()): string {
+  return ansi(`1;${GOLD}`, text, enabled);
+}
+export function goldDim(text: string, enabled = colorEnabled()): string {
+  return ansi(`2;${GOLD}`, text, enabled);
+}
 
 function renderColor(options: RenderOptions = {}, stream: RenderStream = process.stdout): boolean {
   return colorEnabled(options.stream ?? stream, options.color);
@@ -97,7 +111,8 @@ function gutterWidth(body: string): number {
 
 function highlightedLine(line: string, enabled: boolean): string {
   if (!enabled) return line;
-  const tokenPattern = /(\/\/.*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:const|let|var|return|async|await|if|else|for|while|function|new|true|false|null|undefined|class|type|interface|extends|try|catch|throw)\b)/g;
+  const tokenPattern =
+    /(\/\/.*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:const|let|var|return|async|await|if|else|for|while|function|new|true|false|null|undefined|class|type|interface|extends|try|catch|throw)\b)/g;
   return line.replace(tokenPattern, (token) => {
     if (token.startsWith("//")) return dim(token, true);
     if (/^["'`]/.test(token)) return yellow(token, true);
@@ -114,8 +129,11 @@ function numberedLine(line: string, number: number, width: number, options: Rend
 export function renderProgram(body: string, options: RenderOptions = {}): string {
   const lines = bodyLines(body);
   const width = gutterWidth(body);
-  const output = lines.slice(0, MAX_PROGRAM_LINES).map((line, index) => numberedLine(line, index + 1, width, options));
-  if (lines.length > MAX_PROGRAM_LINES) output.push(`… ${lines.length - MAX_PROGRAM_LINES} more lines`);
+  const output = lines
+    .slice(0, MAX_PROGRAM_LINES)
+    .map((line, index) => numberedLine(line, index + 1, width, options));
+  if (lines.length > MAX_PROGRAM_LINES)
+    output.push(`… ${lines.length - MAX_PROGRAM_LINES} more lines`);
   return output.join("\n");
 }
 
@@ -137,14 +155,16 @@ export function renderDiagnostics(
   const lines = bodyLines(body);
   const width = gutterWidth(body);
   const colored = renderColor(options);
-  return diagnostics.map((diagnostic) => {
-    const source = diagnostic.sourceLine ?? lines[diagnostic.line - 1] ?? "";
-    const number = Math.max(1, diagnostic.line);
-    const sourceGutter = goldDim(`${String(number).padStart(width)} │`, colored);
-    const caretGutter = goldDim(`${" ".repeat(width)} │`, colored);
-    const caret = `${caretGutter} ${" ".repeat(Math.max(0, diagnostic.column - 1))}${diagnosticStyle(diagnostic, "^", colored)}`;
-    return `${diagnosticStyle(diagnostic, diagnosticLabel(diagnostic), colored)}\n${sourceGutter} ${source}\n${caret}`;
-  }).join("\n");
+  return diagnostics
+    .map((diagnostic) => {
+      const source = diagnostic.sourceLine ?? lines[diagnostic.line - 1] ?? "";
+      const number = Math.max(1, diagnostic.line);
+      const sourceGutter = goldDim(`${String(number).padStart(width)} │`, colored);
+      const caretGutter = goldDim(`${" ".repeat(width)} │`, colored);
+      const caret = `${caretGutter} ${" ".repeat(Math.max(0, diagnostic.column - 1))}${diagnosticStyle(diagnostic, "^", colored)}`;
+      return `${diagnosticStyle(diagnostic, diagnosticLabel(diagnostic), colored)}\n${sourceGutter} ${source}\n${caret}`;
+    })
+    .join("\n");
 }
 
 function scalar(value: unknown): string {
@@ -154,7 +174,8 @@ function scalar(value: unknown): string {
     if (value === "") return '""';
     return value;
   }
-  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint")
+    return String(value);
   return JSON.stringify(value) ?? String(value);
 }
 
@@ -164,18 +185,25 @@ function isMultilineString(value: unknown): value is string {
 
 function renderNode(value: unknown, indent: number, ancestors: Set<object>): string[] {
   const pad = " ".repeat(indent);
-  if (isMultilineString(value)) return [`${pad}|`, ...value.split("\n").map((line) => `${pad}  ${line}`)];
+  if (isMultilineString(value))
+    return [`${pad}|`, ...value.split("\n").map((line) => `${pad}  ${line}`)];
   if (value === null || typeof value !== "object") return [`${pad}${scalar(value)}`];
   if (ancestors.has(value)) return [`${pad}[Circular]`];
   ancestors.add(value);
   let result: string[];
   if (Array.isArray(value)) {
     if (value.length === 0) result = [`${pad}[]`];
-    else result = value.flatMap((item) => {
-      if (isMultilineString(item)) return [`${pad}- |`, ...item.split("\n").map((line) => `${" ".repeat(indent + 2)}${line}`)];
-      if (item !== null && typeof item === "object") return [`${pad}-`, ...renderNode(item, indent + 2, ancestors)];
-      return [`${pad}- ${scalar(item)}`];
-    });
+    else
+      result = value.flatMap((item) => {
+        if (isMultilineString(item))
+          return [
+            `${pad}- |`,
+            ...item.split("\n").map((line) => `${" ".repeat(indent + 2)}${line}`),
+          ];
+        if (item !== null && typeof item === "object")
+          return [`${pad}-`, ...renderNode(item, indent + 2, ancestors)];
+        return [`${pad}- ${scalar(item)}`];
+      });
   } else {
     const entries = Object.entries(value as Record<string, unknown>);
     if (entries.length === 0) result = [`${pad}{}`];
@@ -183,7 +211,10 @@ function renderNode(value: unknown, indent: number, ancestors: Set<object>): str
       result = [];
       for (const [key, item] of entries) {
         if (isMultilineString(item)) {
-          result.push(`${pad}${key}: |`, ...item.split("\n").map((line) => `${" ".repeat(indent + 2)}${line}`));
+          result.push(
+            `${pad}${key}: |`,
+            ...item.split("\n").map((line) => `${" ".repeat(indent + 2)}${line}`),
+          );
         } else if (item !== null && typeof item === "object") {
           result.push(`${pad}${key}:`, ...renderNode(item, indent + 2, ancestors));
         } else {
@@ -219,7 +250,11 @@ function diagnosticArray(value: unknown): RenderDiagnostic[] {
   return value.filter((item): item is RenderDiagnostic => {
     if (typeof item !== "object" || item === null) return false;
     const candidate = item as Record<string, unknown>;
-    return typeof candidate.message === "string" && typeof candidate.line === "number" && typeof candidate.column === "number";
+    return (
+      typeof candidate.message === "string" &&
+      typeof candidate.line === "number" &&
+      typeof candidate.column === "number"
+    );
   });
 }
 
@@ -245,18 +280,28 @@ export function renderRunText(
   const { body, envelope } = input;
   const colored = renderColor(options);
   const meta = parseDisplayMeta(body);
-  const metrics = envelope.metrics as { elapsedMs?: number; aiCalls?: number; retries?: number } | undefined;
+  const metrics = envelope.metrics as
+    { elapsedMs?: number; aiCalls?: number; retries?: number } | undefined;
   const brand = `${goldBold("▸ fabric-lite", colored)} ${dim(envelope.runId, colored)}`;
   const headerFields = [brand];
   if (meta.name) headerFields.push(gold(meta.name, colored));
   headerFields.push(dim("TypeScript", colored), dim(`${lineCount(body)} lines`, colored));
   const duration = elapsed(metrics?.elapsedMs);
   if (duration) headerFields.push(dim(duration, colored));
-  if (typeof metrics?.aiCalls === "number") headerFields.push(dim(`${metrics.aiCalls} AI call${metrics.aiCalls === 1 ? "" : "s"}`, colored));
+  if (typeof metrics?.aiCalls === "number")
+    headerFields.push(
+      dim(`${metrics.aiCalls} AI call${metrics.aiCalls === 1 ? "" : "s"}`, colored),
+    );
   if (typeof metrics?.retries === "number" && metrics.retries > 0) {
-    headerFields.push(gold(`${metrics.retries} ${metrics.retries === 1 ? "retry" : "retries"}`, colored));
+    headerFields.push(
+      gold(`${metrics.retries} ${metrics.retries === 1 ? "retry" : "retries"}`, colored),
+    );
   }
-  const output = [headerFields.join(dim(" · ", colored)), rule("program", colored), renderProgram(body, options)];
+  const output = [
+    headerFields.join(dim(" · ", colored)),
+    rule("program", colored),
+    renderProgram(body, options),
+  ];
   if (envelope.status === "succeeded") {
     output.push(rule("result", colored), formatValue(envelope.value));
   } else {
@@ -268,7 +313,11 @@ export function renderRunText(
   return output.join("\n");
 }
 
-export function renderCheckText(result: CheckResult, body: string, options: RenderOptions = {}): string {
+export function renderCheckText(
+  result: CheckResult,
+  body: string,
+  options: RenderOptions = {},
+): string {
   const warnings = result.diagnostics.filter((diagnostic) => diagnostic.category === "warning");
   const colored = renderColor(options);
   if (result.ok) {

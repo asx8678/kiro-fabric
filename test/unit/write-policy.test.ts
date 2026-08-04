@@ -28,7 +28,10 @@ const customConfig: Config = {
 
 async function writeConfig(root: string, config: unknown) {
   await mkdir(path.join(root, ".fabric-lite"), { recursive: true });
-  await writeFile(path.join(root, ".fabric-lite/config.json"), `${JSON.stringify(config, null, 2)}\n`);
+  await writeFile(
+    path.join(root, ".fabric-lite/config.json"),
+    `${JSON.stringify(config, null, 2)}\n`,
+  );
 }
 
 async function readConfig(root: string): Promise<Config> {
@@ -61,7 +64,11 @@ it("migrates an existing read-only config to workspace-editable, preserving othe
 it("migrates an existing editable config to read-only, preserving unrelated mutation limits", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "fabric-policy-read-"));
   try {
-    const editable: Config = { ...customConfig, filesystem: { ...customConfig.filesystem, allowWrite: ["**"] }, mutation: { ...customConfig.mutation, enabled: true, require: "checkpoint" } };
+    const editable: Config = {
+      ...customConfig,
+      filesystem: { ...customConfig.filesystem, allowWrite: ["**"] },
+      mutation: { ...customConfig.mutation, enabled: true, require: "checkpoint" },
+    };
     await writeConfig(root, editable);
     const report = await updateWritePolicy({ root, writeAccess: "read", dryRun: false });
     expect(report.ok).toBe(true);
@@ -82,7 +89,11 @@ it("migrates an existing editable config to read-only, preserving unrelated muta
 it("is a no-op when the config already matches the requested mode", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "fabric-policy-noop-"));
   try {
-    await writeConfig(root, { ...customConfig, filesystem: { ...customConfig.filesystem, allowWrite: ["**"] }, mutation: { ...customConfig.mutation, enabled: true, require: "checkpoint" } });
+    await writeConfig(root, {
+      ...customConfig,
+      filesystem: { ...customConfig.filesystem, allowWrite: ["**"] },
+      mutation: { ...customConfig.mutation, enabled: true, require: "checkpoint" },
+    });
     const report = await updateWritePolicy({ root, writeAccess: "workspace", dryRun: false });
     expect(report.changed).toBe(false);
     const after = await readConfig(root);
@@ -98,7 +109,9 @@ it("rejects an invalid/missing config before modifying anything", async () => {
   try {
     await mkdir(path.join(root, ".fabric-lite"), { recursive: true });
     await writeFile(path.join(root, ".fabric-lite/config.json"), "{ not json ");
-    await expect(updateWritePolicy({ root, writeAccess: "workspace", dryRun: false })).rejects.toMatchObject({ code: "CONFIG_ERROR" });
+    await expect(
+      updateWritePolicy({ root, writeAccess: "workspace", dryRun: false }),
+    ).rejects.toMatchObject({ code: "CONFIG_ERROR" });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -107,7 +120,9 @@ it("rejects an invalid/missing config before modifying anything", async () => {
 it("rejects a missing config with CONFIG_ERROR", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "fabric-policy-missing-"));
   try {
-    await expect(updateWritePolicy({ root, writeAccess: "workspace", dryRun: false })).rejects.toMatchObject({ code: "CONFIG_ERROR" });
+    await expect(
+      updateWritePolicy({ root, writeAccess: "workspace", dryRun: false }),
+    ).rejects.toMatchObject({ code: "CONFIG_ERROR" });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

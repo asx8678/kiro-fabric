@@ -16,13 +16,18 @@ import { programInput } from "./input.js";
 import { renderCheckText, renderRunText } from "./render.js";
 import { updateWritePolicy } from "../write-policy.js";
 
-const usage = "fabric-lite <check|run|exec|docs|models|doctor|install-kiro|update-policy> [options]\n" +
+const usage =
+  "fabric-lite <check|run|exec|docs|models|doctor|install-kiro|update-policy> [options]\n" +
   "  run/exec options: --file <path> --format json|text --cwd <dir> --permissions headless|interactive\n" +
+  "  check options: --file <path> --format json|text\n" +
+  "  docs options: [topic] --compact --format json|text\n" +
+  "  doctor options: --cwd <dir> --smoke --format json|text\n" +
   "  install-kiro options: --cwd <dir> --force --dry-run --allow-write read|workspace\n" +
   "  update-policy options: --cwd <dir> --dry-run --allow-write read|workspace\n" +
   "  fresh installs default to editable workspace mutations; use --allow-write read for read-only mode\n" +
   "  update-policy rewrites an existing config to the requested mode without touching other settings\n" +
-  "  --permissions interactive prompts a human (Allow once / Allow session / Deny) for ask policies; headless fails closed";
+  "  --permissions interactive prompts a human (Allow once / Allow session / Deny) for ask policies; headless fails closed\n" +
+  "  --help / -h shows this usage";
 let errorFormat: OutputFormat = "text";
 
 function output(value: unknown, format: OutputFormat): void {
@@ -104,7 +109,13 @@ async function doctor(cwd: string, format: OutputFormat, smoke: boolean): Promis
       detail: result.stdout.trim() || path.resolve(cwd),
     });
   } catch {
-    checks.push({ name: "project-root", ok: true, detail: path.resolve(cwd) });
+    // Git is a hard requirement (mutation/commit depend on it); a missing or
+    // failing git must not report healthy.
+    checks.push({
+      name: "project-root",
+      ok: false,
+      detail: "git not available or not a repository",
+    });
   }
 
   if (smoke) {
@@ -196,6 +207,7 @@ async function main(): Promise<void> {
       const run = await executeProgram(body, config, {
         permissions: args.permissions,
         progress: args.format === "text",
+        diagnostics: checked.diagnostics,
       });
       if (args.format === "text") {
         const highlight = /^(1|true|yes|on)$/i.test(process.env.FABRIC_LITE_HIGHLIGHT ?? "");
@@ -241,8 +253,25 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      process.stderr.write(`${usage}\n`);
-      process.exitCode = 3;
+      if (args.help) {
+        process.stdout.write(`${usage}\n`);
+      } else if (errorFormat === "json") {
+        output(
+          {
+            version: 1,
+            status: "failed",
+            error: {
+              code: "RUNTIME_FAILED",
+              message: args.command ? `Unknown command: ${args.command}` : "No command provided",
+            },
+          },
+          errorFormat,
+        );
+        process.exitCode = 3;
+      } else {
+        process.stderr.write(`${usage}\n`);
+        process.exitCode = 3;
+      }
   }
 }
 

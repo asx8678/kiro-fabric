@@ -5,7 +5,16 @@ import type { FabricConfig } from "./config.js";
 import type { NormalizedAiRequest } from "./runners/types.js";
 import type { AiRunResult } from "../types/fabric-lite.js";
 
-export type CacheEntry = Pick<AiRunResult, "value" | "model" | "requestedModel" | "resolvedModel" | "resolutionSource" | "inputChars" | "outputChars"> & {
+export type CacheEntry = Pick<
+  AiRunResult,
+  | "value"
+  | "model"
+  | "requestedModel"
+  | "resolvedModel"
+  | "resolutionSource"
+  | "inputChars"
+  | "outputChars"
+> & {
   storedAt: number;
 };
 
@@ -65,8 +74,13 @@ export function cacheFilePath(root: string, key: string): string {
 function isCacheEntry(value: unknown): value is CacheEntry {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const entry = value as Record<string, unknown>;
-  if (!("value" in entry) || typeof entry.storedAt !== "number" || !Number.isFinite(entry.storedAt)) return false;
-  if (typeof entry.resolutionSource !== "string" || !["kiro-metadata", "runner", "unknown"].includes(entry.resolutionSource)) return false;
+  if (!("value" in entry) || typeof entry.storedAt !== "number" || !Number.isFinite(entry.storedAt))
+    return false;
+  if (
+    typeof entry.resolutionSource !== "string" ||
+    !["kiro-metadata", "runner", "unknown"].includes(entry.resolutionSource)
+  )
+    return false;
   if (!Number.isFinite(entry.inputChars) || !Number.isFinite(entry.outputChars)) return false;
   for (const key of ["model", "requestedModel", "resolvedModel"]) {
     if (key in entry && entry[key] !== undefined && typeof entry[key] !== "string") return false;
@@ -77,16 +91,22 @@ function isCacheEntry(value: unknown): value is CacheEntry {
 export class AiCache {
   private readonly directory: string;
 
-  constructor(private readonly root: string, private readonly config: FabricConfig) {
+  constructor(
+    private readonly root: string,
+    private readonly config: FabricConfig,
+  ) {
     this.directory = path.join(root, ".fabric-lite", "cache");
   }
 
   async get(request: NormalizedAiRequest): Promise<CacheEntry | undefined> {
     if (!this.config.cache.enabled) return undefined;
     try {
-      const value: unknown = JSON.parse(await readFile(cacheFilePath(this.root, cacheKey(request, this.config)), "utf8"));
+      const value: unknown = JSON.parse(
+        await readFile(cacheFilePath(this.root, cacheKey(request, this.config)), "utf8"),
+      );
       if (!isCacheEntry(value)) return undefined;
-      if (this.config.cache.ttlMs > 0 && Date.now() - value.storedAt > this.config.cache.ttlMs) return undefined;
+      if (this.config.cache.ttlMs > 0 && Date.now() - value.storedAt > this.config.cache.ttlMs)
+        return undefined;
       return value;
     } catch {
       return undefined;
@@ -99,7 +119,10 @@ export class AiCache {
     try {
       const key = cacheKey(request, this.config);
       const target = cacheFilePath(this.root, key);
-      temporary = path.join(this.directory, `.${key}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`);
+      temporary = path.join(
+        this.directory,
+        `.${key}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
+      );
       await mkdir(this.directory, { recursive: true });
       await this.evict();
       await writeFile(temporary, JSON.stringify(entry), "utf8");
@@ -117,20 +140,23 @@ export class AiCache {
       return;
     }
     if (files.length < this.config.cache.maxEntries) return;
-    const entries = await Promise.all(files.map(async (file) => {
-      const filePath = path.join(this.directory, file);
-      try {
-        const parsed: unknown = JSON.parse(await readFile(filePath, "utf8"));
-        if (isCacheEntry(parsed)) return { file, age: parsed.storedAt };
-      } catch {
-        // Fall back to mtime for corrupt or unreadable entries.
-      }
-      try {
-        return { file, age: (await stat(filePath)).mtimeMs };
-      } catch {
-        return { file, age: Number.POSITIVE_INFINITY };
-      }
-    }));
+    // Evict down to maxEntries - 1 so the subsequent set() lands at exactly maxEntries.
+    const entries = await Promise.all(
+      files.map(async (file) => {
+        const filePath = path.join(this.directory, file);
+        try {
+          const parsed: unknown = JSON.parse(await readFile(filePath, "utf8"));
+          if (isCacheEntry(parsed)) return { file, age: parsed.storedAt };
+        } catch {
+          // Fall back to mtime for corrupt or unreadable entries.
+        }
+        try {
+          return { file, age: (await stat(filePath)).mtimeMs };
+        } catch {
+          return { file, age: Number.POSITIVE_INFINITY };
+        }
+      }),
+    );
     entries.sort((a, b) => a.age - b.age);
     let count = files.length;
     for (const entry of entries) {

@@ -5,23 +5,9 @@ import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
 import type { FabricConfig } from "../config.js";
 import { FabricError } from "../errors.js";
-import { filteredKiroEnv } from "../runners/kiro.js";
-import {
-  headlessPrompter,
-  interactivePrompter,
-  type ApprovalPrompter,
-} from "../permissions.js";
+import { filteredKiroEnv, workerEnv } from "../runners/kiro.js";
 import type { PermissionMode } from "../cli/args.js";
 import { formatCallEvent, formatRunStart } from "../cli/render.js";
-
-/**
- * Select the permission prompter for a run. Interactive execution (a
- * controlling TTY) enables human approval prompts for `ask` policies;
- * everything else (piped stdin, CI, foreign agent invocations) fails closed.
- */
-export function resolvePrompter(mode: PermissionMode = "headless"): ApprovalPrompter {
-  return mode === "interactive" ? interactivePrompter : headlessPrompter;
-}
 
 export interface RunEnvelope {
   version: 1;
@@ -87,8 +73,9 @@ export async function sweepRunArtifacts(
 
 export interface ExecuteOptions {
   permissions?: PermissionMode;
-  prompter?: ApprovalPrompter;
   progress?: boolean;
+  /** Checker diagnostics to persist in the run directory. */
+  diagnostics?: unknown[];
 }
 
 export async function executeProgram(
@@ -99,10 +86,15 @@ export async function executeProgram(
   const runId = `run_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
   const runsRoot = path.join(config.projectRoot, ".fabric-lite/runs");
   const dir = path.join(runsRoot, runId);
-  await mkdir(dir, { recursive: true });
+  // 0700 so every run artifact (final.json, calls.jsonl, program.ts, ...) inherits
+  // protection from other local users without per-file mode juggling.
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   await sweepRunArtifacts(runsRoot, config.retention);
   await writeFile(path.join(dir, "program.ts"), body);
-  await writeFile(path.join(dir, "diagnostics.json"), "[]\n");
+  await writeFile(
+    path.join(dir, "diagnostics.json"),
+    `${JSON.stringify(options.diagnostics ?? [], null, 2)}\n`,
+  );
   await writeFile(path.join(dir, "calls.jsonl"), "");
   await writeFile(
     path.join(dir, "meta.json"),
@@ -121,13 +113,16 @@ export async function executeProgram(
     ),
   );
   const worker = fileURLToPath(new URL("./worker-entry.js", import.meta.url));
-  const prompter = options.prompter ?? resolvePrompter(options.permissions ?? "headless");
+  // Cloud credentials are deliberately kept out of the worker process env so
+  // guest programs (which share that env) cannot exfiltrate them; they are
+  // delivered through the payload and reattached only for the Kiro child.
+  const credentials = filteredKiroEnv({});
   return await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [worker], {
       cwd: config.projectRoot,
-      env: filteredKiroEnv({
+      env: workerEnv({
         FABRIC_LITE_RUN_DIR: dir,
-        FABRIC_LITE_PROMPTER: options.prompter ? "headless" : (options.permissions ?? "headless"),
+        FABRIC_LITE_PROMPTER: options.permissions ?? "headless",
       }),
       detached: process.platform !== "win32",
       // The interactive permission prompter opens /dev/tty directly, so the
@@ -146,7 +141,9 @@ export async function executeProgram(
     const emitCallLine = (line: string): void => {
       if (!line.trim()) return;
       try {
-        process.stderr.write(`${formatCallEvent(JSON.parse(line) as { role?: string; repair?: boolean; inputChars?: number; outputChars?: number; elapsedMs?: number; exitCode?: number })}\n`);
+        process.stderr.write(
+          `${formatCallEvent(JSON.parse(line) as { role?: string; repair?: boolean; inputChars?: number; outputChars?: number; elapsedMs?: number; exitCode?: number })}\n`,
+        );
       } catch {
         // A malformed or incomplete event is ignored; the worker's envelope remains authoritative.
       }
@@ -181,7 +178,9 @@ export async function executeProgram(
       process.stderr.write(`${formatRunStart({ runId, body })}\n`);
     }
     const progressTimer = options.progress
-      ? setInterval(() => { void pollCalls(); }, 250)
+      ? setInterval(() => {
+          void pollCalls();
+        }, 250)
       : undefined;
     const stopProgress = async (): Promise<void> => {
       if (progressTimer) clearInterval(progressTimer);
@@ -189,9 +188,8 @@ export async function executeProgram(
     };
     const kill = () => {
       try {
-        child.pid && process.platform !== "win32"
-          ? process.kill(-child.pid, "SIGKILL")
-          : child.kill("SIGKILL");
+        if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
       } catch {
         // The process may already have exited.
       }
@@ -221,12 +219,23 @@ export async function executeProgram(
     child.on("close", async (code) => {
       clearTimeout(timer);
       await stopProgress();
-      if (timedOut) return reject(new FabricError("TIMEOUT", `Execution timed out after ${config.budgets.executionTimeoutMs}ms`));
+      if (timedOut)
+        return reject(
+          new FabricError(
+            "TIMEOUT",
+            `Execution timed out after ${config.budgets.executionTimeoutMs}ms`,
+          ),
+        );
       let envelope: RunEnvelope;
       try {
         envelope = JSON.parse(stdout) as RunEnvelope;
       } catch {
-        return reject(new FabricError("RUNTIME_FAILED", `Execution worker returned invalid output: ${stderr.slice(-1000)}`));
+        return reject(
+          new FabricError(
+            "RUNTIME_FAILED",
+            `Execution worker returned invalid output: ${stderr.slice(-1000)}`,
+          ),
+        );
       }
       try {
         await writeFile(path.join(dir, "final.json"), JSON.stringify(envelope, null, 2));
@@ -235,6 +244,6 @@ export async function executeProgram(
       }
       resolve({ envelope, exitCode: code ?? 1 });
     });
-    child.stdin.end(JSON.stringify({ body, config, runId }));
+    child.stdin.end(JSON.stringify({ body, config, runId, credentials }));
   });
 }

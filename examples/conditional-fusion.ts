@@ -1,4 +1,36 @@
 const context = await fabric.git.diff({ maxChars: 12000 });
-const reports = await fabric.ai.parallel({ tasks: ["model-a", "model-b"].map(model => ({ model, role: "worker" as const, instruction: "Independently review this evidence; do not delegate.", context, outputSchema: { type: "object", properties: { findings: { type: "array" } }, required: ["findings"], additionalProperties: false } })), concurrency: 2 });
-const resolved = fabric.util.unique(reports.filter(report => report.value !== undefined && report.resolutionSource === "kiro-metadata" && report.resolvedModel !== undefined).map(report => report.resolvedModel as string));
-return { reports, fusion: resolved.length >= 2 ? "confirmed" : reports.some(report => report.resolutionSource === "unknown") ? "unverified" : "fallback", resolvedModels: resolved };
+const reports = await fabric.ai.parallel({
+  tasks: ["model-a", "model-b"].map((model) => ({
+    model,
+    role: "worker" as const,
+    instruction: "Independently review this evidence; do not delegate.",
+    context,
+    outputSchema: {
+      type: "object",
+      properties: { findings: { type: "array" } },
+      required: ["findings"],
+      additionalProperties: false,
+    },
+  })),
+  concurrency: 2,
+});
+const resolved = fabric.util.unique(
+  reports
+    .filter(
+      (report) =>
+        report.value !== undefined &&
+        report.resolutionSource === "kiro-metadata" &&
+        report.resolvedModel !== undefined,
+    )
+    .map((report) => report.resolvedModel as string),
+);
+return {
+  reports,
+  fusion:
+    resolved.length >= 2
+      ? "confirmed"
+      : reports.some((report) => report.resolutionSource === "unknown")
+        ? "unverified"
+        : "fallback",
+  resolvedModels: resolved,
+};

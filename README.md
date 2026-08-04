@@ -52,7 +52,7 @@ sequenceDiagram
     Kiro-->>You: Show the final answer
 ```
 
-Project-tool access, LLM calls, and response schemas are optional; a generated program uses only what its task needs. Defaults allow up to 7 AI calls with concurrency up to 3. Change limits and permissions in `.fabric-lite/config.json`.
+Project-tool access, LLM calls, and response schemas are optional; a generated program uses only what its task needs. Defaults allow up to 100 AI calls (`budgets.maxAiCalls`) with concurrency up to 3. Change limits and permissions in `.fabric-lite/config.json`.
 
 ### Example: a bounded programmatic call
 
@@ -157,7 +157,7 @@ The installer renders a box-drawn UI with an animated status dashboard — use *
 
 The dashboard shows Kiro CLI + version, build state, config/agents/worker/prompts presence, Git repo + dirty status, and the current **write access** and **mutation** policy. Each action prints a plan box and runs numbered steps with animated spinners, then shows a verified result panel.
 
-**Writable by default.** Install and Update always apply *Workspace* access — `.fabric-lite/config.json` is set to `filesystem.allowWrite=["**"]` and `mutation.enabled=true` (checkpoint-guarded) so you can modify files and run mutations immediately, not just read. Read-only is opt-in.
+**Writable by default.** Install and Update always apply *Workspace* access — `.fabric-lite/config.json` is set to `filesystem.allowWrite=["**"]` and `mutation.enabled=true` so you can modify files and run mutations immediately, not just read. Fresh installs use `mutation.require="clean"` (a clean-worktree guard); `update-policy --allow-write workspace` switches to `checkpoint` mode. Read-only is opt-in.
 
 **Keeps you on the latest version.** On launch the installer checks `origin` via git (fetch + compare). If newer commits are available it shows a **"New version available — N commit(s) behind"** banner and highlights a **⇣ Pull latest** option. Selecting it lists the new commits, pulls with `git pull --ff-only` (safely keeping uncommitted work), and rebuilds so you're immediately on the newest source.
 

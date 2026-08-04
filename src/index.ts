@@ -9,3 +9,8 @@ export * from "./runners/parser.js";
 export * from "./prompts.js";
 export * from "./redaction.js";
 export * from "./permissions.js";
+export * from "./cache.js";
+export * from "./write-policy.js";
+export * from "./installer.js";
+export * from "./runtime/executor.js";
+export * from "./docs.js";

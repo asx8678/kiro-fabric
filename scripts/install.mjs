@@ -15,54 +15,87 @@
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { readFileSync } from "node:fs";
-import { access, readFile, rm, writeFile } from "node:fs/promises";
+import { access, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // ── ANSI ────────────────────────────────────────────────────────────────
 const C = {
   reset: "\x1b[0m",
-  bold: (s) => `\x1b[1m${s}\x1b[22m`, dim: (s) => `\x1b[2m${s}\x1b[22m`,
-  green: (s) => `\x1b[32m${s}\x1b[39m`, yellow: (s) => `\x1b[33m${s}\x1b[39m`,
-  red: (s) => `\x1b[31m${s}\x1b[39m`, cyan: (s) => `\x1b[36m${s}\x1b[39m`,
-  magenta: (s) => `\x1b[35m${s}\x1b[39m`, blue: (s) => `\x1b[34m${s}\x1b[39m`, gray: (s) => `\x1b[90m${s}\x1b[39m`,
+  bold: (s) => `\x1b[1m${s}\x1b[22m`,
+  dim: (s) => `\x1b[2m${s}\x1b[22m`,
+  green: (s) => `\x1b[32m${s}\x1b[39m`,
+  yellow: (s) => `\x1b[33m${s}\x1b[39m`,
+  red: (s) => `\x1b[31m${s}\x1b[39m`,
+  cyan: (s) => `\x1b[36m${s}\x1b[39m`,
+  magenta: (s) => `\x1b[35m${s}\x1b[39m`,
+  blue: (s) => `\x1b[34m${s}\x1b[39m`,
+  gray: (s) => `\x1b[90m${s}\x1b[39m`,
   bg: (s) => `\x1b[44m\x1b[97m${s}\x1b[39m\x1b[49m`,
 };
 const B = {
-  ok: C.green("✔"), warn: C.yellow("⚠"), err: C.red("✘"), info: C.cyan("ℹ"),
-  arrow: C.cyan("▶"), dot: C.gray("·"), sel: C.bg(" ▸ "),
-  up: C.cyan("⬆"), repair: C.magenta("🔧"), del: C.red("🗑"), q: C.gray("✕"),
+  ok: C.green("✔"),
+  warn: C.yellow("⚠"),
+  err: C.red("✘"),
+  info: C.cyan("ℹ"),
+  arrow: C.cyan("▶"),
+  dot: C.gray("·"),
+  sel: C.bg(" ▸ "),
+  up: C.cyan("⬆"),
+  repair: C.magenta("🔧"),
+  del: C.red("🗑"),
+  q: C.gray("✕"),
 };
 const W = 58;
 const visible = (s) => String(s).replace(/\x1b\[[0-9;]*m/g, "");
 const pad = (s, n) => String(s) + " ".repeat(Math.max(0, n - visible(String(s)).length));
-const hr = () => C.gray("─".repeat(W));
 
 // ── CLI flags ───────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
-function flag(name) { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; }
+function flag(name) {
+  const i = argv.indexOf(name);
+  return i >= 0 ? argv[i + 1] : undefined;
+}
 const root = path.resolve(flag("--cwd") || process.cwd());
 const ASK_WRITE = flag("--allow-write");
 const ASSUME_YES = argv.includes("--yes");
-const VERSION = "1.3.0";
+const VERSION =
+  JSON.parse(readFileSync(path.resolve(root, "package.json"), "utf8")).version || "unknown";
 
 // ── Child helpers ───────────────────────────────────────────────────────
 function has(cmd) {
-  const res = process.platform === "win32"
-    ? spawnSync("where", [cmd], { stdio: "ignore" })
-    : spawnSync("sh", ["-c", `command -v "$1" >/dev/null 2>&1`, "sh", cmd]);
+  const res =
+    process.platform === "win32"
+      ? spawnSync("where", [cmd], { stdio: "ignore" })
+      : spawnSync("sh", ["-c", `command -v "$1" >/dev/null 2>&1`, "sh", cmd]);
   return res.status === 0;
 }
 function runCapture(cmd, cmdArgs, opts = {}) {
   const res = spawnSync(cmd, cmdArgs, { stdio: ["ignore", "pipe", "pipe"], ...opts });
-  return { exitCode: res.status, stdout: (res.stdout || "").toString().trim(), stderr: (res.stderr || "").toString().trim() };
+  return {
+    exitCode: res.status,
+    stdout: (res.stdout || "").toString().trim(),
+    stderr: (res.stderr || "").toString().trim(),
+  };
 }
 
 // ── Terminal / input ────────────────────────────────────────────────────
 const isTTY = !!process.stdin.isTTY;
 let pipedLines = null;
-if (!isTTY) pipedLines = readFileSync(0, "utf8").split(/\r?\n/);
-function writeOut(s) { process.stdout.write(s); }
-function print(s = "") { const str = String(s == null ? "" : s); console.log(str.split("\n").join("\n")); }
+if (!isTTY) {
+  try {
+    pipedLines = readFileSync(0, "utf8").split(/\r?\n/);
+  } catch {
+    // stdin is closed or unavailable (e.g. daemon spawn); fall back to interactive-free mode.
+    pipedLines = null;
+  }
+}
+function writeOut(s) {
+  process.stdout.write(s);
+}
+function print(s = "") {
+  const str = String(s == null ? "" : s);
+  console.log(str.split("\n").join("\n"));
+}
 
 function askLine(query) {
   if (pipedLines !== null) {
@@ -76,7 +109,13 @@ function askLine(query) {
     process.stdin.resume();
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     let done = false;
-    const finish = (a) => { if (!done) { done = true; rl.close(); resolve(a.trim()); } };
+    const finish = (a) => {
+      if (!done) {
+        done = true;
+        rl.close();
+        resolve(a.trim());
+      }
+    };
     rl.on("error", () => finish("q"));
     rl.on("close", () => finish("q"));
     rl.question(query, finish);
@@ -111,7 +150,8 @@ function box(title, lines = [], { width = W, titleColor = C.bold } = {}) {
 
 function boxRow(left, right, width = W) {
   const inner = width - 4;
-  const l = visible(left).length, r = visible(right).length;
+  const l = visible(left).length,
+    r = visible(right).length;
   if (l + r + 2 <= inner) return `${left}${C.gray("·".repeat(inner - l - r - 2))}${right}`;
   return left;
 }
@@ -119,7 +159,10 @@ function boxRow(left, right, width = W) {
 // ── Spinner ─────────────────────────────────────────────────────────────
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 async function spinner(label, { okText } = {}) {
-  if (!isTTY) { print(`  ${C.dim(label)}...`); return { stop: () => {} }; }
+  if (!isTTY) {
+    print(`  ${C.dim(label)}...`);
+    return { stop: () => {} };
+  }
   let i = 0;
   writeOut("\x1b[?25l");
   const id = setInterval(() => {
@@ -168,14 +211,28 @@ async function checkRemoteUpdate(st) {
   // Fetch latest refs quietly (no output). Best-effort; failure is not fatal.
   const fetch = runCapture("git", ["-C", root, "fetch", "origin", "--quiet"], { timeout: 20000 });
   if (fetch.exitCode !== 0) return st;
-  const branch = runCapture("git", ["-C", root, "symbolic-ref", "--short", "HEAD"], { timeout: 5000 }).stdout || "main";
-  const tracking = runCapture("git", ["-C", root, "rev-parse", "--abbrev-ref", branch + "@{upstream}"], { timeout: 5000 }).stdout;
+  const branch =
+    runCapture("git", ["-C", root, "symbolic-ref", "--short", "HEAD"], { timeout: 5000 }).stdout ||
+    "main";
+  const tracking = runCapture(
+    "git",
+    ["-C", root, "rev-parse", "--abbrev-ref", branch + "@{upstream}"],
+    { timeout: 5000 },
+  ).stdout;
   if (!tracking) return st;
   const localSha = runCapture("git", ["-C", root, "rev-parse", "HEAD"], { timeout: 5000 }).stdout;
-  const remoteSha = runCapture("git", ["-C", root, "rev-parse", tracking], { timeout: 5000 }).stdout;
+  const remoteSha = runCapture("git", ["-C", root, "rev-parse", tracking], {
+    timeout: 5000,
+  }).stdout;
   if (!localSha || !remoteSha) return st;
-  const behind = runCapture("git", ["-C", root, "rev-list", "--count", localSha + ".." + tracking], { timeout: 5000 }).stdout;
-  const ahead = runCapture("git", ["-C", root, "rev-list", "--count", tracking + ".." + localSha], { timeout: 5000 }).stdout;
+  const behind = runCapture(
+    "git",
+    ["-C", root, "rev-list", "--count", localSha + ".." + tracking],
+    { timeout: 5000 },
+  ).stdout;
+  const ahead = runCapture("git", ["-C", root, "rev-list", "--count", tracking + ".." + localSha], {
+    timeout: 5000,
+  }).stdout;
   st.update = {
     behind: parseInt(behind || "0", 10),
     ahead: parseInt(ahead || "0", 10),
@@ -188,20 +245,38 @@ async function checkRemoteUpdate(st) {
 /** Get newest commits available upstream (for display). */
 async function newestCommits(st, count = 5) {
   if (!st.update || st.update.behind <= 0) return [];
-  const branch = runCapture("git", ["-C", root, "symbolic-ref", "--short", "HEAD"], { timeout: 5000 }).stdout || "main";
-  const tracking = runCapture("git", ["-C", root, "rev-parse", "--abbrev-ref", branch + "@{upstream}"], { timeout: 5000 }).stdout;
+  const branch =
+    runCapture("git", ["-C", root, "symbolic-ref", "--short", "HEAD"], { timeout: 5000 }).stdout ||
+    "main";
+  const tracking = runCapture(
+    "git",
+    ["-C", root, "rev-parse", "--abbrev-ref", branch + "@{upstream}"],
+    { timeout: 5000 },
+  ).stdout;
   if (!tracking) return [];
-  const log = runCapture("git", ["-C", root, "log", "--oneline", "-n", String(count), "HEAD.." + tracking], { timeout: 5000 });
+  const log = runCapture(
+    "git",
+    ["-C", root, "log", "--oneline", "-n", String(count), "HEAD.." + tracking],
+    { timeout: 5000 },
+  );
   return log.stdout ? log.stdout.split("\n").filter(Boolean) : [];
 }
 
 // ── Detection ───────────────────────────────────────────────────────────
 async function detect() {
   const st = {
-    kiro: has("kiro-cli"), kiroVer: null,
-    built: false, config: false, agents: false, worker: false, prompts: false,
-    repo: null, dirty: false,
-    writeMode: null, mutation: null, mutationRequire: null,
+    kiro: has("kiro-cli"),
+    kiroVer: null,
+    built: false,
+    config: false,
+    agents: false,
+    worker: false,
+    prompts: false,
+    repo: null,
+    dirty: false,
+    writeMode: null,
+    mutation: null,
+    mutationRequire: null,
   };
   if (st.kiro) {
     const v = runCapture("kiro-cli", ["--version"], { timeout: 10000 });
@@ -214,12 +289,16 @@ async function detect() {
     ["worker", ".kiro/agents/fabric-lite-worker.json"],
     ["prompts", ".kiro/prompts/.fabric-lite-manifest.json"],
   ]) {
-    try { await access(path.join(root, p), 4); st[k] = true; } catch {}
+    try {
+      await access(path.join(root, p), 4);
+      st[k] = true;
+    } catch {}
   }
   if (st.config) {
     try {
       const cfg = JSON.parse(await readFile(path.join(root, ".fabric-lite/config.json"), "utf8"));
-      const allow = Array.isArray(cfg?.filesystem?.allowWrite) && cfg.filesystem.allowWrite.length > 0;
+      const allow =
+        Array.isArray(cfg?.filesystem?.allowWrite) && cfg.filesystem.allowWrite.length > 0;
       st.writeMode = allow ? "workspace" : "read";
       st.mutation = cfg?.mutation?.enabled === true;
       st.mutationRequire = cfg?.mutation?.require ?? null;
@@ -239,23 +318,29 @@ function classification(st) {
   return "install";
 }
 
-function writeBadge(st) {
-  if (st.writeMode === "workspace" && st.mutation) return `${B.ok} ${C.green("writable")} ${C.dim(`(allowWrite ** · mutations ${st.mutationRequire || "on"}`)}`;
-  if (st.writeMode === "workspace") return `${B.warn} ${C.yellow("writes on, mutations off")}`;
-  return `${B.err} ${C.red("read-only")}`;
-}
-
 // ── Panels ──────────────────────────────────────────────────────────────
 async function headerPanel(st) {
-  const branch = st.repo ? (st.repo === root ? "this directory" : path.basename(st.repo)) : "no git repo";
+  const branch = st.repo
+    ? st.repo === root
+      ? "this directory"
+      : path.basename(st.repo)
+    : "no git repo";
   const dirty = st.dirty ? ` ${B.warn} dirty` : "";
   const lines = [
     boxRow(`📁 ${C.cyan(root)}`, C.gray("v" + VERSION)),
-    boxRow(`🌿 ${branch}${dirty}`, st.kiro ? `🤖 ${C.green(st.kiroVer || "kiro-cli")}` : C.red("kiro-cli missing")),
+    boxRow(
+      `🌿 ${branch}${dirty}`,
+      st.kiro ? `🤖 ${C.green(st.kiroVer || "kiro-cli")}` : C.red("kiro-cli missing"),
+    ),
   ];
   if (st.update) {
     if (st.update.behind > 0) {
-      lines.push(boxRow(`⬇ ${C.yellow("New version available")}`, `${C.yellow(st.update.behind + " commit(s) behind")} ${C.dim(`(${st.update.remoteSha})`)}`));
+      lines.push(
+        boxRow(
+          `⬇ ${C.yellow("New version available")}`,
+          `${C.yellow(st.update.behind + " commit(s) behind")} ${C.dim(`(${st.update.remoteSha})`)}`,
+        ),
+      );
     } else if (st.update.behind === 0 && st.update.ahead === 0) {
       lines.push(boxRow(`✔ ${C.green("Up to date")}`, `${C.dim(st.update.remoteSha)}`));
     }
@@ -272,12 +357,31 @@ function statusPanel(st) {
     boxRow(`Worker agent`, st.worker ? `${B.ok} installed` : `${B.err} missing`),
     boxRow(`Prompts`, st.prompts ? `${B.ok} manifest ok` : `${B.err} missing`),
     C.gray("─".repeat(W - 2)),
-    boxRow(`Write access`, st.writeMode ? (st.writeMode === "workspace" ? `${B.ok} workspace` : `${B.err} read-only`) : C.gray("n/a")),
-    boxRow(`Mutations`, st.mutation === null ? C.gray("n/a") : st.mutation ? `${B.ok} enabled (${st.mutationRequire || "checkpoint"})` : `${B.err} disabled`),
+    boxRow(
+      `Write access`,
+      st.writeMode
+        ? st.writeMode === "workspace"
+          ? `${B.ok} workspace`
+          : `${B.err} read-only`
+        : C.gray("n/a"),
+    ),
+    boxRow(
+      `Mutations`,
+      st.mutation === null
+        ? C.gray("n/a")
+        : st.mutation
+          ? `${B.ok} enabled (${st.mutationRequire || "checkpoint"})`
+          : `${B.err} disabled`,
+    ),
   ];
   if (st.update && st.update.behind > 0) {
     rows.push(C.gray("─".repeat(W - 2)));
-    rows.push(boxRow(`⬇ Update available`, `${C.yellow(`${st.update.behind} commit(s) behind`)} ${C.dim(`→ ${st.update.remoteSha}`)}`));
+    rows.push(
+      boxRow(
+        `⬇ Update available`,
+        `${C.yellow(`${st.update.behind} commit(s) behind`)} ${C.dim(`→ ${st.update.remoteSha}`)}`,
+      ),
+    );
   } else if (st.update && st.update.behind === 0) {
     rows.push(C.gray("─".repeat(W - 2)));
     rows.push(boxRow(`⬇ Latest version`, `${B.ok} up to date ${C.dim(st.update.remoteSha)}`));
@@ -288,7 +392,12 @@ function statusPanel(st) {
 // ── Menu (advanced) ─────────────────────────────────────────────────────
 async function menu(title, items) {
   if (!isTTY) {
-    console.log(box(title, items.map((it, i) => `${C.cyan(String(i + 1))}. ${it.short || it.label}`)));
+    console.log(
+      box(
+        title,
+        items.map((it, i) => `${C.cyan(String(i + 1))}. ${it.short || it.label}`),
+      ),
+    );
     for (;;) {
       const raw = await askLine(`  ${C.bold("Choice")} [1-${items.length}]: `);
       const n = parseInt(raw, 10);
@@ -308,9 +417,7 @@ async function menu(title, items) {
       const it = items[i];
       const active = i === selected;
       const marker = active ? `${B.sel} ` : "    ";
-      const label = (active ? C.bg(" " + (it.short || it.label)) : it.label);
-      const desc = it.desc ? `
-      ${active ? "     " : "     "}${C.dim(it.desc)}` : "";
+      const label = active ? C.bg(" " + (it.short || it.label)) : it.label;
       const body = `${marker}${label}`;
       lines.push(active ? "  " + pad(body, inner) : "  " + pad(body, inner));
       if (it.desc) lines.push("      " + pad(C.dim(it.desc), inner));
@@ -332,12 +439,23 @@ async function menu(title, items) {
   try {
     while (true) {
       const seg = await readKey();
-      if (seg === "\x1b[A" || seg === "\x1bOA") { selected = (selected - 1 + items.length) % items.length; render(); }
-      else if (seg === "\x1b[B" || seg === "\x1bOB") { selected = (selected + 1) % items.length; render(); }
-      else if (seg === "\r" || seg === "\n") { process.stdin.setRawMode(wasRaw); writeOut("\n"); return items[selected].value; }
-      else if (seg === "\x1b" || seg.toLowerCase() === "q" || seg === "\u0003") { process.stdin.setRawMode(wasRaw); writeOut("\n"); return "quit"; }
+      if (seg === "\x1b[A" || seg === "\x1bOA") {
+        selected = (selected - 1 + items.length) % items.length;
+        render();
+      } else if (seg === "\x1b[B" || seg === "\x1bOB") {
+        selected = (selected + 1) % items.length;
+        render();
+      } else if (seg === "\r" || seg === "\n") {
+        process.stdin.setRawMode(wasRaw);
+        writeOut("\n");
+        return items[selected].value;
+      } else if (seg === "\x1b" || seg.toLowerCase() === "q" || seg === "\u0003") {
+        process.stdin.setRawMode(wasRaw);
+        writeOut("\n");
+        return "quit";
+      }
     }
-  } catch (e) {
+  } catch {
     process.stdin.setRawMode(wasRaw);
     return "quit";
   }
@@ -347,7 +465,9 @@ async function confirm(prompt, defaultValue = true) {
   if (ASSUME_YES && defaultValue) return true;
   const hint = defaultValue ? "Y/n" : "y/N";
   for (;;) {
-    const ans = (await askLine(`  ${C.bold(prompt)} [${hint}] ${C.gray("(enter=default, q=quit)")}: `)).toLowerCase();
+    const ans = (
+      await askLine(`  ${C.bold(prompt)} [${hint}] ${C.gray("(enter=default, q=quit)")}: `)
+    ).toLowerCase();
     if (ans === "") return defaultValue;
     if (ans === "y" || ans === "yes") return true;
     if (ans === "n" || ans === "no") return false;
@@ -363,11 +483,14 @@ function planPanel(kind, st, writeMode) {
   if (kind === "repair") rows.push(`${B.dot} Complete missing components and rebuild`);
   if (kind !== "delete") {
     rows.push(`${B.dot} Install Kiro agents + prompts + config`);
-    rows.push(`${writeMode === "workspace" ? B.ok : B.dot} Enable ${writeMode === "workspace" ? C.green("writes + mutations") : "read-only mode"} ${writeMode === "workspace" ? C.dim("(allowWrite ** · mutation checkpoint)") : ""}`);
+    rows.push(
+      `${writeMode === "workspace" ? B.ok : B.dot} Enable ${writeMode === "workspace" ? C.green("writes + mutations") : "read-only mode"} ${writeMode === "workspace" ? C.dim("(allowWrite ** · mutation checkpoint)") : ""}`,
+    );
     rows.push(`${B.dot} Verify with doctor`);
   }
   rows.push(boxRow(`Target`, C.cyan(root)));
-  if (st.dirty && kind !== "delete") rows.push(`${B.warn} Repo has uncommitted changes (left untouched)`);
+  if (st.dirty && kind !== "delete")
+    rows.push(`${B.warn} Repo has uncommitted changes (left untouched)`);
   console.log("\n" + box("Plan", rows) + "\n");
 }
 
@@ -380,16 +503,38 @@ function writeModeChoice() {
 async function askWriteMode() {
   if (ASK_WRITE === "read" || ASK_WRITE === "workspace") return ASK_WRITE;
   return menu("Write access mode", [
-    { label: `${C.green("Workspace (recommended)")}`, short: "Workspace (recommended)", desc: "read + write files, mutations enabled — work freely", value: "workspace" },
-    { label: `${C.gray("Read-only")}`, short: "Read-only", desc: "reads only, no writes or mutations", value: "read" },
+    {
+      label: `${C.green("Workspace (recommended)")}`,
+      short: "Workspace (recommended)",
+      desc: "read + write files, mutations enabled — work freely",
+      value: "workspace",
+    },
+    {
+      label: `${C.gray("Read-only")}`,
+      short: "Read-only",
+      desc: "reads only, no writes or mutations",
+      value: "read",
+    },
   ]);
 }
 
 async function buildIfNeeded(st, forceBuild) {
   if (!forceBuild && st.built) return;
   await runSteps([
-    { label: C.dim("Installing dependencies"), run: () => { const r = runCapture("pnpm", ["install"], { cwd: root, timeout: 300000 }); if (r.exitCode !== 0) throw new Error("pnpm install failed:\n" + (r.stderr || r.stdout)); } },
-    { label: C.dim("Building Fabric Lite"), run: () => { const r = runCapture("pnpm", ["build"], { cwd: root, timeout: 300000 }); if (r.exitCode !== 0) throw new Error("pnpm build failed:\n" + (r.stderr || r.stdout)); } },
+    {
+      label: C.dim("Installing dependencies"),
+      run: () => {
+        const r = runCapture("pnpm", ["install"], { cwd: root, timeout: 300000 });
+        if (r.exitCode !== 0) throw new Error("pnpm install failed:\n" + (r.stderr || r.stdout));
+      },
+    },
+    {
+      label: C.dim("Building Fabric Lite"),
+      run: () => {
+        const r = runCapture("pnpm", ["build"], { cwd: root, timeout: 300000 });
+        if (r.exitCode !== 0) throw new Error("pnpm build failed:\n" + (r.stderr || r.stdout));
+      },
+    },
   ]);
   st.built = true;
 }
@@ -408,11 +553,17 @@ async function apply(writeMode, st) {
       },
     },
     {
-      label: C.dim(writeMode === "workspace" ? "Enabling writes + mutations" : "Applying read-only policy"),
+      label: C.dim(
+        writeMode === "workspace" ? "Enabling writes + mutations" : "Applying read-only policy",
+      ),
       run: () => {
         // update-policy rewrites an existing config to the requested mode,
         // which install-kiro never does on reinstall.
-        const r = runCapture(process.execPath, [cli, "update-policy", "--format", "json", "--allow-write", writeMode], { cwd: root, timeout: 30000 });
+        const r = runCapture(
+          process.execPath,
+          [cli, "update-policy", "--format", "json", "--allow-write", writeMode],
+          { cwd: root, timeout: 30000 },
+        );
         if (r.exitCode !== 0) throw new Error("update-policy failed:\n" + (r.stderr || r.stdout));
       },
     },
@@ -421,8 +572,12 @@ async function apply(writeMode, st) {
 
 async function runDoctor(cli) {
   const s = await spinner(C.dim("Verifying with doctor"));
-  const doc = runCapture(process.execPath, [cli, "doctor", "--format", "json"], { cwd: root, timeout: 30000 });
-  let ok = doc.exitCode === 0, note = "";
+  const doc = runCapture(process.execPath, [cli, "doctor", "--format", "json"], {
+    cwd: root,
+    timeout: 30000,
+  });
+  let ok = doc.exitCode === 0,
+    note = "";
   if (doc.exitCode === 0) {
     try {
       const report = JSON.parse(doc.stdout);
@@ -443,27 +598,43 @@ async function actionInstall(st) {
   const writeMode = await askWriteMode();
   if (writeMode === "quit") return "quit";
   planPanel("install", st, writeMode);
-  if (!(await confirm("Proceed with install?", true))) { print(`  ${B.info} cancelled\n`); return "cancelled"; }
+  if (!(await confirm("Proceed with install?", true))) {
+    print(`  ${B.info} cancelled\n`);
+    return "cancelled";
+  }
   await buildIfNeeded(st, false);
   await apply(writeMode, st);
   const doc = await runDoctor(path.join(root, "dist/cli/main.js"));
   const rows = [
     boxRow(`Agents`, `${B.ok} installed`),
-    boxRow(`Write access`, writeMode === "workspace" ? `${B.ok} workspace (allowWrite **)` : `${B.err} read-only`),
-    boxRow(`Mutations`, writeMode === "workspace" ? `${B.ok} enabled (checkpoint)` : `${B.err} disabled`),
+    boxRow(
+      `Write access`,
+      writeMode === "workspace" ? `${B.ok} workspace (allowWrite **)` : `${B.err} read-only`,
+    ),
+    boxRow(
+      `Mutations`,
+      writeMode === "workspace" ? `${B.ok} enabled (checkpoint)` : `${B.err} disabled`,
+    ),
     boxRow(`Doctor`, doc.ok ? `${B.ok} healthy` : `${B.warn} ${doc.note || "warnings"}`),
     "",
     `${B.arrow} Run: ${C.cyan("kiro-cli --agent fabric-lite")}`,
   ];
-  resultPanel(rows, doc.ok ? "✓ Installation complete" : "⚠ Installed with warnings", doc.ok ? C.green : C.yellow);
+  resultPanel(
+    rows,
+    doc.ok ? "✓ Installation complete" : "⚠ Installed with warnings",
+    doc.ok ? C.green : C.yellow,
+  );
   // Return success flag so main can show the single-Quit installed screen.
-  return doc.ok ? "installed" : "installed";
+  return doc.ok ? "installed" : "failed";
 }
 
 async function actionUpdate(st) {
   const writeMode = writeModeChoice();
   planPanel("update", st, writeMode);
-  if (!(await confirm("Proceed with update?", true))) { print(`  ${B.info} cancelled\n`); return "cancelled"; }
+  if (!(await confirm("Proceed with update?", true))) {
+    print(`  ${B.info} cancelled\n`);
+    return "cancelled";
+  }
   await buildIfNeeded(st, true);
   await apply(writeMode, st);
   const doc = await runDoctor(path.join(root, "dist/cli/main.js"));
@@ -475,7 +646,11 @@ async function actionUpdate(st) {
     "",
     `${B.arrow} You can now modify files and run mutations.`,
   ];
-  resultPanel(rows, doc.ok ? "✓ Update complete" : "⚠ Updated with warnings", doc.ok ? C.green : C.yellow);
+  resultPanel(
+    rows,
+    doc.ok ? "✓ Update complete" : "⚠ Updated with warnings",
+    doc.ok ? C.green : C.yellow,
+  );
   print(`  ${B.info} ${C.green("Update finished — closing installer...")}\n`);
   // Auto-close: the app shuts down after a successful update.
   setTimeout(() => process.exit(0), 800);
@@ -485,7 +660,10 @@ async function actionUpdate(st) {
 async function actionRepair(st) {
   const writeMode = writeModeChoice();
   planPanel("repair", st, writeMode);
-  if (!(await confirm("Proceed with repair?", true))) { print(`  ${B.info} cancelled\n`); return "cancelled"; }
+  if (!(await confirm("Proceed with repair?", true))) {
+    print(`  ${B.info} cancelled\n`);
+    return "cancelled";
+  }
   await buildIfNeeded(st, false);
   await apply(writeMode, st);
   const doc = await runDoctor(path.join(root, "dist/cli/main.js"));
@@ -495,11 +673,15 @@ async function actionRepair(st) {
     boxRow(`Mutations`, writeMode === "workspace" ? `${B.ok} enabled` : `${B.err} disabled`),
     boxRow(`Doctor`, doc.ok ? `${B.ok} healthy` : `${B.warn} ${doc.note || "warnings"}`),
   ];
-  resultPanel(rows, doc.ok ? "✓ Repair complete" : "⚠ Repaired with warnings", doc.ok ? C.green : C.yellow);
+  resultPanel(
+    rows,
+    doc.ok ? "✓ Repair complete" : "⚠ Repaired with warnings",
+    doc.ok ? C.green : C.yellow,
+  );
   return "installed";
 }
 
-async function actionDelete(st) {
+async function actionDelete(_st) {
   const targets = [
     path.join(root, ".fabric-lite"),
     path.join(root, ".kiro/agents/fabric-lite.json"),
@@ -507,42 +689,100 @@ async function actionDelete(st) {
     path.join(root, ".kiro/prompts/.fabric-lite-manifest.json"),
   ];
   try {
-    const manifest = JSON.parse(await readFile(path.join(root, ".kiro/prompts/.fabric-lite-manifest.json"), "utf8"));
-    for (const name of Object.keys(manifest.files || {})) targets.push(path.join(root, ".kiro/prompts", name));
+    const manifest = JSON.parse(
+      await readFile(path.join(root, ".kiro/prompts/.fabric-lite-manifest.json"), "utf8"),
+    );
+    for (const name of Object.keys(manifest.files || {}))
+      targets.push(path.join(root, ".kiro/prompts", name));
   } catch {}
   const rows = targets.map((t) => `${B.dot} ${path.relative(root, t) || t}`);
   rows.push("", C.red("This is permanent and cannot be undone."));
-  console.log("\n" + box(C.red("🗑  Delete Fabric Lite"), rows, { titleColor: (t) => C.red(C.bold(t)) }) + "\n");
+  console.log(
+    "\n" +
+      box(C.red("🗑  Delete Fabric Lite"), rows, { titleColor: (t) => C.red(C.bold(t)) }) +
+      "\n",
+  );
   if (ASSUME_YES) print(`  ${B.warn} ${C.red("--yes does not bypass this destructive confirm")}`);
   const sure = await confirm(C.red("Are you absolutely sure?"), false);
-  if (sure !== true) { print(`  ${B.info} delete cancelled\n`); return; }
+  if (sure !== true) {
+    print(`  ${B.info} delete cancelled\n`);
+    return;
+  }
   // Second, stronger confirmation: the user must type the exact word.
-  print(`  ${C.red("⚠  Final confirmation — this permanently removes all Fabric Lite files from:")} ${C.cyan(root)}`);
-  print(`  ${C.gray("Type")} ${C.yellow(C.bold("yes"))} ${C.gray("to permanently delete, or anything else / Enter to cancel.")}`);
+  print(
+    `  ${C.red("⚠  Final confirmation — this permanently removes all Fabric Lite files from:")} ${C.cyan(root)}`,
+  );
+  print(
+    `  ${C.gray("Type")} ${C.yellow(C.bold("yes"))} ${C.gray("to permanently delete, or anything else / Enter to cancel.")}`,
+  );
   const final = await askLine(`  ${C.bold("Type 'yes' to delete")}: `);
-  if (final.trim().toLowerCase() !== "yes") { print(`  ${B.info} delete cancelled\n`); return "cancelled"; }
-  let removed = 0, failed = 0;
+  if (final.trim().toLowerCase() !== "yes") {
+    print(`  ${B.info} delete cancelled\n`);
+    return "cancelled";
+  }
+  let removed = 0,
+    failed = 0;
   for (const t of targets) {
-    try { await rm(t, { recursive: true, force: true }); removed++; }
-    catch { failed++; }
+    try {
+      await rm(t, { recursive: true, force: true });
+      removed++;
+    } catch {
+      failed++;
+    }
+  }
+  // Also remove global agent registrations (~/.kiro/agents/fabric-lite*) so Kiro
+  // stops offering a fabric-lite agent whose prompt points at the deleted CLI.
+  let globalRemoved = 0;
+  const globalAgentsDir = path.join(
+    process.env.HOME || process.env.USERPROFILE || "",
+    ".kiro",
+    "agents",
+  );
+  try {
+    const entries = await readdir(globalAgentsDir);
+    for (const entry of entries) {
+      if (entry.startsWith("fabric-lite")) {
+        await rm(path.join(globalAgentsDir, entry), { force: true });
+        globalRemoved++;
+      }
+    }
+  } catch {
+    // Global agents directory may not exist; nothing to clean.
   }
   try {
     const ip = path.join(root, ".gitignore");
     const ignore = await readFile(ip, "utf8");
     const lines = ignore.split(/\r?\n/);
     const f = lines.filter((l) => l !== ".fabric-lite/runs/" && l !== ".fabric-lite/cache/");
-    if (f.length !== lines.length) { await writeFile(ip, f.join("\n")); print(`  ${B.ok} cleaned .gitignore`); }
+    if (f.length !== lines.length) {
+      await writeFile(ip, f.join("\n"));
+      print(`  ${B.ok} cleaned .gitignore`);
+    }
   } catch {}
-  resultPanel([
-    boxRow(`Removed`, `${B.ok} ${removed} files/directories`) + (failed ? `  ${B.warn} ${failed} failed` : ""),
-    boxRow(`.gitignore`, `${B.ok} entries cleaned`),
-    `${B.info} ${C.dim("To fully remove package deps run: pnpm prune")}`,
-  ], "✓ Deleted", C.green);
+  resultPanel(
+    [
+      boxRow(`Removed`, `${B.ok} ${removed} files/directories`) +
+        (failed ? `  ${B.warn} ${failed} failed` : ""),
+      boxRow(`.gitignore`, `${B.ok} entries cleaned`),
+      boxRow(
+        `Global agents`,
+        globalRemoved
+          ? `${B.ok} ${globalRemoved} removed (~/.kiro/agents/fabric-lite*)`
+          : `${B.dot} none found`,
+      ),
+      `${B.info} ${C.dim("To fully remove package deps run: pnpm prune")}`,
+    ],
+    "✓ Deleted",
+    C.green,
+  );
 }
 
 // ── Pull latest (git sync) ──────────────────────────────────────────────
 async function actionSync(st) {
-  if (!st.repo) { print(`  ${B.err} Not a git repo — nothing to pull.\n`); return; }
+  if (!st.repo) {
+    print(`  ${B.err} Not a git repo — nothing to pull.\n`);
+    return;
+  }
   const commits = await newestCommits(st);
   const rows = [];
   if (commits.length) {
@@ -556,9 +796,19 @@ async function actionSync(st) {
 
   if (commits.length === 0) return;
   if (st.dirty) {
-    print(`  ${B.warn} ${C.yellow("Working tree has uncommitted changes — these will be kept (ff-only pull).")}`);
+    print(
+      `  ${B.warn} ${C.yellow("Working tree has uncommitted changes — these will be kept (ff-only pull).")}`,
+    );
   }
-  if (!(await confirm(`${B.arrow} Pull latest (%s) from origin?`.replace("%s", C.yellow(String(commits.length) + " commits")), true))) {
+  if (
+    !(await confirm(
+      `${B.arrow} Pull latest (%s) from origin?`.replace(
+        "%s",
+        C.yellow(String(commits.length) + " commits"),
+      ),
+      true,
+    ))
+  ) {
     print(`  ${B.info} cancelled\n`);
     return;
   }
@@ -583,8 +833,14 @@ async function actionSync(st) {
 // ── Main ────────────────────────────────────────────────────────────────
 async function main() {
   if (isTTY) writeOut("\x1b[2J\x1b[H");
-  if (!has("node")) { print(`  ${B.err} Node.js >= 20 required`); process.exit(1); }
-  if (!has("pnpm")) { print(`  ${B.err} pnpm is required — run: ${C.cyan("corepack enable")}`); process.exit(1); }
+  if (!has("node")) {
+    print(`  ${B.err} Node.js >= 20 required`);
+    process.exit(1);
+  }
+  if (!has("pnpm")) {
+    print(`  ${B.err} pnpm is required — run: ${C.cyan("corepack enable")}`);
+    process.exit(1);
+  }
 
   let st = await detect();
   // Check for updates from the remote (best-effort, background-safe fetch).
@@ -602,20 +858,61 @@ async function main() {
     const kind = classification(st);
     const items = [];
     if (kind === "install") {
-      items.push({ label: `${C.green("Install")}  ${C.dim("— set up Fabric Lite here")}`, short: `${C.green("Install")} Fabric Lite`, desc: "fresh setup with writes + mutations enabled", value: "install" });
+      items.push({
+        label: `${C.green("Install")}  ${C.dim("— set up Fabric Lite here")}`,
+        short: `${C.green("Install")} Fabric Lite`,
+        desc: "fresh setup with writes + mutations enabled",
+        value: "install",
+      });
     } else if (kind === "repair") {
-      items.push({ label: `${B.repair}  ${C.magenta("Repair")}  ${C.dim("— complete missing components")}`, short: `${B.repair} Repair installation`, desc: "fill gaps and enable writes", value: "repair" });
+      items.push({
+        label: `${B.repair}  ${C.magenta("Repair")}  ${C.dim("— complete missing components")}`,
+        short: `${B.repair} Repair installation`,
+        desc: "fill gaps and enable writes",
+        value: "repair",
+      });
     } else {
-      items.push({ label: `${B.up}  ${C.yellow("Update")}  ${C.dim("— rebuild & reinstall agents")}`, short: `${B.up} Update Fabric Lite`, desc: "rebuild, reinstall, keep writes + mutations enabled", value: "update" });
+      items.push({
+        label: `${B.up}  ${C.yellow("Update")}  ${C.dim("— rebuild & reinstall agents")}`,
+        short: `${B.up} Update Fabric Lite`,
+        desc: "rebuild, reinstall, keep writes + mutations enabled",
+        value: "update",
+      });
     }
-    if (kind !== "install") items.push({ label: `${B.del}  ${C.red("Delete")}  ${C.dim("— remove all Fabric Lite files here")}`, short: `${B.del} Delete Fabric Lite`, desc: "remove agents, prompts, config and .gitignore entries", value: "delete" });
-    if (st.repo) items.push({ label: `${C.yellow("⇣  Pull latest")}  ${C.dim("— git pull from GitHub")}`, short: `${C.yellow("⇣")} Pull latest`, desc: st.update && st.update.behind > 0 ? `${st.update.behind} commit(s) available` : "check for and pull newest source", value: "sync" });
-    items.push({ label: `${B.q}  ${C.gray("Quit")}`, short: `${B.q} Quit`, desc: "exit without changes", value: "quit" });
+    if (kind !== "install")
+      items.push({
+        label: `${B.del}  ${C.red("Delete")}  ${C.dim("— remove all Fabric Lite files here")}`,
+        short: `${B.del} Delete Fabric Lite`,
+        desc: "remove agents, prompts, config and .gitignore entries",
+        value: "delete",
+      });
+    if (st.repo)
+      items.push({
+        label: `${C.yellow("⇣  Pull latest")}  ${C.dim("— git pull from GitHub")}`,
+        short: `${C.yellow("⇣")} Pull latest`,
+        desc:
+          st.update && st.update.behind > 0
+            ? `${st.update.behind} commit(s) available`
+            : "check for and pull newest source",
+        value: "sync",
+      });
+    items.push({
+      label: `${B.q}  ${C.gray("Quit")}`,
+      short: `${B.q} Quit`,
+      desc: "exit without changes",
+      value: "quit",
+    });
 
     let choice;
-    try { choice = await menu("What would you like to do?", items); }
-    catch { break; }
-    if (choice === "quit") { print(`\n  ${B.info} Goodbye!\n`); break; }
+    try {
+      choice = await menu("What would you like to do?", items);
+    } catch {
+      break;
+    }
+    if (choice === "quit") {
+      print(`\n  ${B.info} Goodbye!\n`);
+      break;
+    }
     let actionResult = "";
     try {
       if (choice === "install") actionResult = await actionInstall(st);
@@ -639,7 +936,7 @@ async function main() {
 }
 
 /** Post-install screen: "App installed" message with only a Quit option. */
-async function installedScreen(st) {
+async function installedScreen(_st) {
   const rows = [
     C.green(C.bold("✓ App installed successfully!")),
     "",
@@ -648,9 +945,17 @@ async function installedScreen(st) {
   ];
   console.log("\n" + box("🎉 Installation complete", rows) + "\n");
   await menu("App installed — what next?", [
-    { label: `${B.q}  ${C.gray("Quit")}`, short: `${B.q} Quit`, desc: "close the installer", value: "quit" },
+    {
+      label: `${B.q}  ${C.gray("Quit")}`,
+      short: `${B.q} Quit`,
+      desc: "close the installer",
+      value: "quit",
+    },
   ]);
   print(`\n  ${B.info} Goodbye!\n`);
 }
 
-main().catch((e) => { print(`  ${B.err} ${C.red(e.message || e)}`); process.exit(1); });
+main().catch((e) => {
+  print(`  ${B.err} ${C.red(e.message || e)}`);
+  process.exit(1);
+});

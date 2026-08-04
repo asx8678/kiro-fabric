@@ -10,6 +10,7 @@ export interface Args {
   compact: boolean;
   force: boolean;
   dryRun: boolean;
+  help: boolean;
   topic?: string;
   smoke: boolean;
   permissions: PermissionMode;
@@ -32,6 +33,7 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
     compact: false,
     force: false,
     dryRun: false,
+    help: false,
     smoke: false,
     permissions: "headless",
     writeAccess: "workspace",
@@ -52,6 +54,8 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
       onFormat?.(format);
     } else if (option === "--cwd") {
       out.cwd = requiredValue(remaining, option);
+    } else if (option === "--help" || option === "-h") {
+      out.help = true;
     } else if (option === "--compact") {
       out.compact = true;
     } else if (option === "--force") {
@@ -63,7 +67,9 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
     } else if (option === "--permissions") {
       const permissions = requiredValue(remaining, option);
       if (permissions !== "headless" && permissions !== "interactive") {
-        throw new Error(`Invalid --permissions value: ${permissions}; expected headless or interactive`);
+        throw new Error(
+          `Invalid --permissions value: ${permissions}; expected headless or interactive`,
+        );
       }
       out.permissions = permissions;
     } else if (option === "--allow-write") {
@@ -72,7 +78,7 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
         throw new Error(`Invalid --allow-write value: ${value}; expected read or workspace`);
       }
       out.writeAccess = value;
-    } else if (!option.startsWith("--")) {
+    } else if (!option.startsWith("-")) {
       out.topic = out.topic ? `${out.topic} ${option}` : option;
     } else {
       throw new Error(`Unknown option: ${option}`);
@@ -81,11 +87,17 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
   if (out.permissions !== "headless" && out.command !== "run" && out.command !== "exec") {
     throw new Error("--permissions is only supported for run and exec");
   }
-  if (argv.includes("--allow-write") && out.command !== "install-kiro" && out.command !== "update-policy") {
+  if (
+    argv.includes("--allow-write") &&
+    out.command !== "install-kiro" &&
+    out.command !== "update-policy"
+  ) {
     throw new Error("--allow-write is only supported for install-kiro and update-policy");
   }
   if (out.command === "update-policy" && !argv.includes("--allow-write")) {
-    throw new Error("update-policy requires --allow-write read or workspace to choose the destination mode");
+    throw new Error(
+      "update-policy requires --allow-write read or workspace to choose the destination mode",
+    );
   }
   return out;
 }

@@ -43,21 +43,30 @@ export async function updateWritePolicy(options: UpdatePolicyOptions) {
     await loadConfig(options.root);
   } catch (error) {
     if (error instanceof FabricError) throw error;
-    throw new FabricError("CONFIG_ERROR", `Invalid config in ${path.resolve(configPath)}: ${(error as Error).message}`);
+    throw new FabricError(
+      "CONFIG_ERROR",
+      `Invalid config in ${path.resolve(configPath)}: ${(error as Error).message}`,
+    );
   }
   try {
     raw = await readFile(configPath, "utf8");
   } catch {
-    throw new FabricError("CONFIG_ERROR", `No config found at ${path.resolve(configPath)}; run install-kiro first`);
+    throw new FabricError(
+      "CONFIG_ERROR",
+      `No config found at ${path.resolve(configPath)}; run install-kiro first`,
+    );
   }
   let config: Record<string, unknown>;
   try {
     config = JSON.parse(raw) as Record<string, unknown>;
-  } catch (error) {
+  } catch {
     throw new FabricError("CONFIG_ERROR", `Invalid JSON in ${path.resolve(configPath)}`);
   }
   if (typeof config !== "object" || config === null || Array.isArray(config)) {
-    throw new FabricError("CONFIG_ERROR", `Invalid config root in ${path.resolve(configPath)}: expected an object`);
+    throw new FabricError(
+      "CONFIG_ERROR",
+      `Invalid config root in ${path.resolve(configPath)}: expected an object`,
+    );
   }
 
   const filesystem = { ...(config.filesystem as Record<string, unknown>) };
@@ -84,7 +93,8 @@ export async function updateWritePolicy(options: UpdatePolicyOptions) {
     filesystem: { allowWrite: editable ? ["**"] : [] },
     mutation: {
       enabled: editable,
-      require: (mutation.require as "clean" | "checkpoint") ?? (editable ? "checkpoint" : undefined),
+      require:
+        (mutation.require as "clean" | "checkpoint") ?? (editable ? "checkpoint" : undefined),
       maxDiffChars: mutation.maxDiffChars,
     },
   };

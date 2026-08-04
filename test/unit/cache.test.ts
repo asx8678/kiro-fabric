@@ -29,7 +29,9 @@ async function fixture(cache: Partial<FabricConfig["cache"]> = {}) {
 
 async function cacheFiles(root: string): Promise<string[]> {
   try {
-    return (await readdir(path.join(root, ".fabric-lite/cache"))).filter((file) => file.endsWith(".json"));
+    return (await readdir(path.join(root, ".fabric-lite/cache"))).filter((file) =>
+      file.endsWith(".json"),
+    );
   } catch {
     return [];
   }
@@ -70,8 +72,17 @@ describe("AI call cache", () => {
     const { fabric } = createApi(config, runner);
     await fabric.ai.run({ instruction: "same", context: "one", outputSchema: schema });
     await fabric.ai.run({ instruction: "same", context: "two", outputSchema: schema });
-    await fabric.ai.run({ instruction: "same", context: "one", outputSchema: { ...schema, required: ["ok", "other"] } });
-    await fabric.ai.run({ instruction: "same", context: "one", role: "planner", outputSchema: schema });
+    await fabric.ai.run({
+      instruction: "same",
+      context: "one",
+      outputSchema: { ...schema, required: ["ok", "other"] },
+    });
+    await fabric.ai.run({
+      instruction: "same",
+      context: "one",
+      role: "planner",
+      outputSchema: schema,
+    });
     expect(runner.calls).toHaveLength(4);
   });
 
@@ -87,7 +98,7 @@ describe("AI call cache", () => {
 
   it("caches the final value after JSON repair, not the repair request", async () => {
     const { config } = await fixture({ enabled: true });
-    const runner = new FakeAiRunner((_request, call) => call === 1 ? "invalid" : { ok: true });
+    const runner = new FakeAiRunner((_request, call) => (call === 1 ? "invalid" : { ok: true }));
     const { fabric } = createApi(config, runner);
     const first = await fabric.ai.run({ instruction: "repair me", outputSchema: schema });
     const second = await fabric.ai.run({ instruction: "repair me", outputSchema: schema });

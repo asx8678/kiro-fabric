@@ -8,7 +8,11 @@ import { defaults, type FabricConfig } from "../../src/config.js";
 import { FakeAiRunner } from "../../src/runners/fake.js";
 
 async function git(root: string, ...args: string[]): Promise<string> {
-  return await new Promise((resolve, reject) => execFile("git", args, { cwd: root }, (error, stdout, stderr) => error ? reject(new Error(stderr || error.message)) : resolve(stdout.trim())));
+  return await new Promise((resolve, reject) =>
+    execFile("git", args, { cwd: root }, (error, stdout, stderr) =>
+      error ? reject(new Error(stderr || error.message)) : resolve(stdout.trim()),
+    ),
+  );
 }
 
 async function fixture(require: "clean" | "checkpoint" = "clean", maxDiffChars = 30000) {
@@ -40,13 +44,26 @@ describe("safe mutation workflow", () => {
     const { root, config } = await fixture();
     try {
       const disabled = { ...config, mutation: { ...config.mutation, enabled: false } };
-      await expect(createApi(disabled, new FakeAiRunner()).fabric.mutate.begin()).rejects.toMatchObject({ code: "POLICY_DENIED" });
+      await expect(
+        createApi(disabled, new FakeAiRunner()).fabric.mutate.begin(),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
       const { fabric } = createApi(config, new FakeAiRunner());
-      await expect(fabric.fs.write({ path: "src/tracked.ts", content: "no\n" })).rejects.toMatchObject({ code: "POLICY_DENIED" });
-      await expect(fabric.fs.patch({ path: "src/tracked.ts", patch: JSON.stringify({ old: "before", new: "no" }) })).rejects.toMatchObject({ code: "POLICY_DENIED" });
+      await expect(
+        fabric.fs.write({ path: "src/tracked.ts", content: "no\n" }),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+      await expect(
+        fabric.fs.patch({
+          path: "src/tracked.ts",
+          patch: JSON.stringify({ old: "before", new: "no" }),
+        }),
+      ).rejects.toMatchObject({ code: "POLICY_DENIED" });
       await fabric.mutate.begin();
-      await expect(fabric.fs.write({ path: "src/tracked.ts", content: "after\n" })).resolves.toMatchObject({ path: "src/tracked.ts" });
-    } finally { await rm(root, { recursive: true, force: true }); }
+      await expect(
+        fabric.fs.write({ path: "src/tracked.ts", content: "after\n" }),
+      ).resolves.toMatchObject({ path: "src/tracked.ts" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("rejects dirty clean sessions and checkpoints dirty worktrees", async () => {
@@ -55,7 +72,9 @@ describe("safe mutation workflow", () => {
       await writeFile(path.join(clean.root, "src/tracked.ts"), "dirty\n");
       const { fabric } = createApi(clean.config, new FakeAiRunner());
       await expect(fabric.mutate.begin()).rejects.toThrow(/src\/tracked\.ts/);
-    } finally { await rm(clean.root, { recursive: true, force: true }); }
+    } finally {
+      await rm(clean.root, { recursive: true, force: true });
+    }
     const checkpoint = await fixture("checkpoint");
     try {
       await writeFile(path.join(checkpoint.root, "src/tracked.ts"), "pre-existing\n");
@@ -65,8 +84,12 @@ describe("safe mutation workflow", () => {
       expect(started.checkpoint.id).toMatch(/^[0-9a-f]{40}$/);
       await fabric.fs.write({ path: "src/tracked.ts", content: "session\n" });
       await fabric.mutate.rollback();
-      expect(await readFile(path.join(checkpoint.root, "src/tracked.ts"), "utf8")).toBe("pre-existing\n");
-    } finally { await rm(checkpoint.root, { recursive: true, force: true }); }
+      expect(await readFile(path.join(checkpoint.root, "src/tracked.ts"), "utf8")).toBe(
+        "pre-existing\n",
+      );
+    } finally {
+      await rm(checkpoint.root, { recursive: true, force: true });
+    }
   });
 
   it("reports bounded diffs and created files", async () => {
@@ -81,7 +104,9 @@ describe("safe mutation workflow", () => {
       expect(result.diff.length).toBeLessThanOrEqual(20);
       expect(result.createdFiles).toEqual(["src/created.ts"]);
       expect(result.changedFiles).toEqual(["src/tracked.ts"]);
-    } finally { await rm(root, { recursive: true, force: true }); }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("rolls back tracked modifications, deletions, and created files", async () => {
@@ -93,12 +118,22 @@ describe("safe mutation workflow", () => {
       await unlink(path.join(root, "src/delete-me.ts"));
       await fabric.fs.write({ path: "src/created.ts", content: "new\n" });
       const result = await fabric.mutate.rollback();
-      expect(result).toMatchObject({ restored: true, checkpoint: started.checkpoint.id, removedFiles: ["src/created.ts"] });
+      expect(result).toMatchObject({
+        restored: true,
+        checkpoint: started.checkpoint.id,
+        removedFiles: ["src/created.ts"],
+      });
       expect(await readFile(path.join(root, "src/tracked.ts"), "utf8")).toBe("before\n");
       expect(await readFile(path.join(root, "src/delete-me.ts"), "utf8")).toBe("delete me\n");
-      await expect(readFile(path.join(root, "src/created.ts"))).rejects.toMatchObject({ code: "ENOENT" });
-      await expect(git(root, "rev-parse", `refs/fabric-lite/checkpoints/${started.checkpoint.id}`)).rejects.toThrow();
-    } finally { await rm(root, { recursive: true, force: true }); }
+      await expect(readFile(path.join(root, "src/created.ts"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(
+        git(root, "rev-parse", `refs/fabric-lite/checkpoints/${started.checkpoint.id}`),
+      ).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("keeps checkpoint refs on complete, reviews as verifier, and rejects a second begin", async () => {
@@ -108,16 +143,25 @@ describe("safe mutation workflow", () => {
       const { fabric, metrics } = createApi(config, runner);
       const started = await fabric.mutate.begin();
       await expect(fabric.mutate.begin()).rejects.toMatchObject({ code: "RUNTIME_FAILED" });
-      await fabric.fs.patch({ path: "src/tracked.ts", patch: JSON.stringify({ old: "before", new: "after" }) });
+      await fabric.fs.patch({
+        path: "src/tracked.ts",
+        patch: JSON.stringify({ old: "before", new: "after" }),
+      });
       const review = await fabric.mutate.review();
       expect(review.value).toEqual({ approved: true, issues: [], summary: "safe" });
       expect(runner.calls[0]?.role).toBe("verifier");
       expect(metrics.aiCalls).toBe(1);
       const completed = await fabric.mutate.complete();
       expect(completed.rollbackGuidance).toContain(started.checkpoint.id);
-      expect(completed.rollbackGuidance).toMatch(/git update-ref -d refs\/fabric-lite\/checkpoints\/cp_[a-z0-9]+_[0-9a-f]{8}/);
-      await expect(git(root, "for-each-ref", "--format=%(objectname)", "refs/fabric-lite/checkpoints")).resolves.toMatch(/^[0-9a-f]{40}$/);
+      expect(completed.rollbackGuidance).toMatch(
+        /git update-ref -d refs\/fabric-lite\/checkpoints\/cp_[a-z0-9]+_[0-9a-f]{8}/,
+      );
+      await expect(
+        git(root, "for-each-ref", "--format=%(objectname)", "refs/fabric-lite/checkpoints"),
+      ).resolves.toMatch(/^[0-9a-f]{40}$/);
       expect(await readFile(path.join(root, "src/tracked.ts"), "utf8")).toBe("after\n");
-    } finally { await rm(root, { recursive: true, force: true }); }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

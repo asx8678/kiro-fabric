@@ -3,12 +3,22 @@
   "version": "1.0.0",
   "description": "Run checked TypeScript workflows that programmatically orchestrate Kiro CLI with bounded tools, structured output, and local safety controls",
   "type": "module",
-  "bin": { "fabric-lite": "./dist/cli/main.js" },
+  "bin": {
+    "fabric-lite": "./dist/cli/main.js"
+  },
   "exports": {
-    ".": "./dist/index.js",
+    ".": {
+      "types": "./types/fabric-lite.d.ts",
+      "import": "./dist/index.js"
+    },
     "./types": "./types/fabric-lite.d.ts"
   },
-  "files": ["dist", "types", "prompts", "README.md"],
+  "files": [
+    "dist",
+    "types",
+    "prompts",
+    "README.md"
+  ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && chmod +x dist/cli/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -16,10 +26,14 @@
     "test:smoke": "FABRIC_LITE_KIRO_SMOKE=1 vitest run test/kiro",
     "setup:kiro": "node scripts/setup-kiro.mjs",
     "setup": "node scripts/install.mjs",
-    "check": "pnpm run typecheck && pnpm run build && pnpm run test",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run build && pnpm exec vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write .",
     "prepack": "pnpm build"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "packageManager": "pnpm@10.33.2",
   "dependencies": {
     "ajv": "^8.17.1",
@@ -27,7 +41,13 @@
     "typescript": "^5.9.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.3.0",
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.9.0",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.66.0",
     "vitest": "^3.2.4"
   }
 }

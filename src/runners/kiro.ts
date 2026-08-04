@@ -40,13 +40,34 @@ const KIRO_ENV_KEYS = [
   "AWS_ROLE_ARN",
 ] as const;
 
+/** Secret keys forwarded to Kiro but never exposed to the guest worker process env. */
+export const KIRO_SECRET_KEYS = [
+  "KIRO_API_KEY",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "AWS_WEB_IDENTITY_TOKEN_FILE",
+  "AWS_ROLE_ARN",
+] as const;
+
 /** A value-preserving allowlist used for both the execution worker and Kiro itself. Never log this object. */
-export function filteredKiroEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+export function filteredKiroEnv(
+  extra: NodeJS.ProcessEnv = {},
+  creds: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = { NO_COLOR: "1", KIRO_LOG_NO_COLOR: "1" };
   for (const key of KIRO_ENV_KEYS) {
-    if (process.env[key] !== undefined) out[key] = process.env[key];
+    if (creds[key] !== undefined) out[key] = creds[key];
   }
   return { ...out, ...extra };
+}
+
+/** The worker process env: the full Kiro allowlist minus secrets (kept out so
+ *  guest programs cannot read them via process.env). */
+export function workerEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env = filteredKiroEnv(extra);
+  for (const key of KIRO_SECRET_KEYS) delete env[key];
+  return env;
 }
 
 interface ProcessOptions {
@@ -54,6 +75,8 @@ interface ProcessOptions {
   maxChars?: number;
   signal?: AbortSignal;
   cwd?: string;
+  /** Credential source for the Kiro env allowlist; defaults to process.env. */
+  creds?: Record<string, string | undefined>;
 }
 
 export async function runProcess(
@@ -65,7 +88,7 @@ export async function runProcess(
     const started = Date.now();
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: filteredKiroEnv(),
+      env: filteredKiroEnv({}, options.creds),
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -147,6 +170,10 @@ export class KiroHeadlessRunner implements AiRunner {
   constructor(
     readonly executable = process.env.KIRO_CLI_PATH ?? "kiro-cli",
     readonly agent = "fabric-lite-worker",
+    private readonly creds: Record<string, string | undefined> = process.env as Record<
+      string,
+      string | undefined
+    >,
   ) {}
 
   async doctor(): Promise<RunnerDoctorResult> {
@@ -166,7 +193,7 @@ export class KiroHeadlessRunner implements AiRunner {
     const result = await runProcess(
       this.executable,
       ["chat", "--list-models", "--format", "json"],
-      { timeoutMs: 20000 },
+      { timeoutMs: 20000, creds: this.creds },
     );
     if (result.exitCode !== 0) {
       throw new FabricError(
@@ -238,6 +265,7 @@ export class KiroHeadlessRunner implements AiRunner {
       timeoutMs: safeRequest.timeoutMs,
       maxChars: safeRequest.maxOutputChars * 3 + 10000,
       ...(signal ? { signal } : {}),
+      creds: this.creds,
     });
 
     // Kiro 2.16 exposes JSON for model listing, but not machine-readable resolution metadata for chat.

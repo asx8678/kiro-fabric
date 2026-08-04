@@ -1,3 +1,43 @@
-import type { AiRunner, NormalizedAiRequest, RawAiRunnerResult, RunnerDoctorResult } from "./types.js";
-export type FakeHandler = (request: NormalizedAiRequest, call: number, signal?: AbortSignal) => unknown | Promise<unknown>;
-export class FakeAiRunner implements AiRunner { readonly name = "fake"; calls: NormalizedAiRequest[] = []; active = 0; maxActive = 0; constructor(private readonly handler: FakeHandler = () => ({ ok: true })) {} async doctor(): Promise<RunnerDoctorResult> { return { ok: true, name: this.name }; } async run(request: NormalizedAiRequest, signal?: AbortSignal): Promise<RawAiRunnerResult> { const call = this.calls.push(request); this.active++; this.maxActive = Math.max(this.maxActive, this.active); try { const value = await this.handler(request, call, signal); const stdout = typeof value === "string" ? value : `FABRIC_RESULT_BEGIN\n${JSON.stringify(value)}\nFABRIC_RESULT_END`; return { stdout, stderr: "", exitCode: 0, elapsedMs: 0, ...(request.model ? { requestedModel:request.model, model:request.model } : {}), resolutionSource:"unknown" }; } finally { this.active--; } } }
+import type {
+  AiRunner,
+  NormalizedAiRequest,
+  RawAiRunnerResult,
+  RunnerDoctorResult,
+} from "./types.js";
+export type FakeHandler = (
+  request: NormalizedAiRequest,
+  call: number,
+  signal?: AbortSignal,
+) => unknown | Promise<unknown>;
+export class FakeAiRunner implements AiRunner {
+  readonly name = "fake";
+  calls: NormalizedAiRequest[] = [];
+  active = 0;
+  maxActive = 0;
+  constructor(private readonly handler: FakeHandler = () => ({ ok: true })) {}
+  async doctor(): Promise<RunnerDoctorResult> {
+    return { ok: true, name: this.name };
+  }
+  async run(request: NormalizedAiRequest, signal?: AbortSignal): Promise<RawAiRunnerResult> {
+    const call = this.calls.push(request);
+    this.active++;
+    this.maxActive = Math.max(this.maxActive, this.active);
+    try {
+      const value = await this.handler(request, call, signal);
+      const stdout =
+        typeof value === "string"
+          ? value
+          : `FABRIC_RESULT_BEGIN\n${JSON.stringify(value)}\nFABRIC_RESULT_END`;
+      return {
+        stdout,
+        stderr: "",
+        exitCode: 0,
+        elapsedMs: 0,
+        ...(request.model ? { requestedModel: request.model, model: request.model } : {}),
+        resolutionSource: "unknown",
+      };
+    } finally {
+      this.active--;
+    }
+  }
+}

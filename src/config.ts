@@ -174,13 +174,19 @@ const writePatternArray: Validator = (value, location) => {
     fail(location, "an array of relative write patterns");
   }
   for (const pattern of value as string[]) {
-    if (!pattern || path.posix.isAbsolute(pattern) || path.win32.isAbsolute(pattern) || /(^|[\\/])\.\.([\\/]|$)/.test(pattern)) {
+    if (
+      !pattern ||
+      path.posix.isAbsolute(pattern) ||
+      path.win32.isAbsolute(pattern) ||
+      /(^|[\\/])\.\.([\\/]|$)/.test(pattern)
+    ) {
       fail(location, "an array of relative write patterns without parent traversal");
     }
   }
 };
 const permissionValue: Validator = (value, location) => {
-  if (value !== "allow" && value !== "ask" && value !== "deny") fail(location, "allow, ask, or deny");
+  if (value !== "allow" && value !== "ask" && value !== "deny")
+    fail(location, "allow, ask, or deny");
 };
 
 const configShape: Shape = {
@@ -260,8 +266,14 @@ const configShape: Shape = {
 
 const dangerousKeys = new Set(["__proto__", "prototype", "constructor"]);
 
-function validateObject(value: unknown, shape: Shape, location: string, requireAll: boolean): asserts value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(location, "an object");
+function validateObject(
+  value: unknown,
+  shape: Shape,
+  location: string,
+  requireAll: boolean,
+): asserts value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    fail(location, "an object");
   const object = value as Record<string, unknown>;
   for (const key of Object.keys(object)) {
     const childLocation = location === "root" ? key : `${location}.${key}`;
@@ -273,18 +285,26 @@ function validateObject(value: unknown, shape: Shape, location: string, requireA
   }
   if (requireAll) {
     for (const key of Object.keys(shape)) {
-      if (!Object.hasOwn(object, key)) fail(location === "root" ? key : `${location}.${key}`, "a required property");
+      if (!Object.hasOwn(object, key))
+        fail(location === "root" ? key : `${location}.${key}`, "a required property");
     }
   }
 }
 
-function merge(base: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
+function merge(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
   const out = { ...base };
   for (const [key, value] of Object.entries(patch)) {
     const baseValue = base[key];
     out[key] =
-      typeof value === "object" && value !== null && !Array.isArray(value) &&
-      typeof baseValue === "object" && baseValue !== null && !Array.isArray(baseValue)
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      typeof baseValue === "object" &&
+      baseValue !== null &&
+      !Array.isArray(baseValue)
         ? merge(baseValue as Record<string, unknown>, value as Record<string, unknown>)
         : value;
   }
@@ -293,12 +313,11 @@ function merge(base: Record<string, unknown>, patch: Record<string, unknown>): R
 
 export async function loadConfig(cwd: string): Promise<FabricConfig> {
   try {
-    const raw: unknown = JSON.parse(await readFile(path.join(cwd, ".fabric-lite/config.json"), "utf8"));
-    validateObject(raw, configShape, "root", false);
-    const config = merge(
-      defaults as unknown as Record<string, unknown>,
-      raw,
+    const raw: unknown = JSON.parse(
+      await readFile(path.join(cwd, ".fabric-lite/config.json"), "utf8"),
     );
+    validateObject(raw, configShape, "root", false);
+    const config = merge(defaults as unknown as Record<string, unknown>, raw);
     validateObject(config, configShape, "root", true);
     const result = config as unknown as FabricConfig;
     if (result.permissions.read !== "allow") {
@@ -310,7 +329,14 @@ export async function loadConfig(cwd: string): Promise<FabricConfig> {
     result.projectRoot = path.resolve(cwd, result.projectRoot);
     return result;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      if (error instanceof SyntaxError)
+        throw new FabricError(
+          "CONFIG_ERROR",
+          `Invalid JSON in .fabric-lite/config.json: ${error.message}`,
+        );
+      throw error;
+    }
     return {
       ...defaults,
       runner: { ...defaults.runner },

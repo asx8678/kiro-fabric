@@ -1,3 +1,49 @@
-import { describe,it,expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import { checkProgram } from "../../src/checker.js";
-describe("checker",()=>{it("accepts checked bodies with top-level return",()=>{expect(checkProgram('const x: string = "ok";\nreturn { x };')).toEqual({ok:true,diagnostics:[]});});it("maps diagnostics to body lines",()=>{const r=checkProgram('const x: string = 1;\nreturn x;');expect(r.ok).toBe(false);expect(r.diagnostics.find(x=>x.code===2322)).toMatchObject({line:1,column:7,sourceLine:'const x: string = 1;'});});it("rejects imports and missing top-level return",()=>{const r=checkProgram('import x from "x";\nfunction nested() { return 1; }');expect(r.diagnostics.map(x=>x.code)).toEqual(expect.arrayContaining([9002,9003]));});it("types the fabric API",()=>{expect(checkProgram('const files = await fabric.fs.glob({ pattern: "**/*.ts" });\nreturn files.length;').ok).toBe(true);});it("accepts Pi-style positional filesystem calls",()=>{const result=checkProgram('const source = await fabric.fs.read("a.ts");\nconst matches = await fabric.fs.grep("token", "a.ts", 5);\nconst files = await fabric.fs.glob("**/*.ts", ".", 10);\nreturn { source, matches, files };');expect(result).toEqual({ok:true,diagnostics:[]});});it("matches Git text result declarations",()=>{const result=checkProgram('const history = await fabric.git.log({ maxCount: 1 });\nconst snapshot = await fabric.git.show();\nreturn history.text + snapshot.text;');expect(result).toEqual({ok:true,diagnostics:[]});});});
+describe("checker", () => {
+  it("accepts checked bodies with top-level return", () => {
+    expect(checkProgram('const x: string = "ok";\nreturn { x };')).toEqual({
+      ok: true,
+      diagnostics: [],
+    });
+  });
+  it("maps diagnostics to body lines", () => {
+    const r = checkProgram("const x: string = 1;\nreturn x;");
+    expect(r.ok).toBe(false);
+    expect(r.diagnostics.find((x) => x.code === 2322)).toMatchObject({
+      line: 1,
+      column: 7,
+      sourceLine: "const x: string = 1;",
+    });
+  });
+  it("rejects imports and missing top-level return", () => {
+    const r = checkProgram('import x from "x";\nfunction nested() { return 1; }');
+    expect(r.diagnostics.map((x) => x.code)).toEqual(expect.arrayContaining([9002, 9003]));
+  });
+  it("types the fabric API", () => {
+    expect(
+      checkProgram(
+        'const files = await fabric.fs.glob({ pattern: "**/*.ts" });\nreturn files.length;',
+      ).ok,
+    ).toBe(true);
+  });
+  it("does not expose the host process/global scope (pinned types)", () => {
+    // With types pinned to [], ambient @types/node is not auto-included, so a
+    // checked program cannot reach process.env (and thus cloud credentials).
+    const r = checkProgram("return process.env.AWS_SECRET_ACCESS_KEY;");
+    expect(r.ok).toBe(false);
+    expect(r.diagnostics.some((d) => /Cannot find name 'process'/.test(d.message))).toBe(true);
+  });
+  it("accepts Pi-style positional filesystem calls", () => {
+    const result = checkProgram(
+      'const source = await fabric.fs.read("a.ts");\nconst matches = await fabric.fs.grep("token", "a.ts", 5);\nconst files = await fabric.fs.glob("**/*.ts", ".", 10);\nreturn { source, matches, files };',
+    );
+    expect(result).toEqual({ ok: true, diagnostics: [] });
+  });
+  it("matches Git text result declarations", () => {
+    const result = checkProgram(
+      "const history = await fabric.git.log({ maxCount: 1 });\nconst snapshot = await fabric.git.show();\nreturn history.text + snapshot.text;",
+    );
+    expect(result).toEqual({ ok: true, diagnostics: [] });
+  });
+});
