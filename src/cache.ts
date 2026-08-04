@@ -18,6 +18,8 @@ type CacheKey = {
   model: string | null;
   schema: Record<string, unknown> | null;
   runner: { type: FabricConfig["runner"]["type"]; workerAgent: string };
+  /** Runner executable identity for cache invalidation on model rotation. */
+  runnerVersion: string;
 };
 
 function stableValue(value: unknown): unknown {
@@ -49,6 +51,9 @@ export function cacheKey(request: NormalizedAiRequest, config: FabricConfig): st
     model: request.model ?? config.runner.defaultModel,
     schema: request.schema ?? null,
     runner: { type: config.runner.type, workerAgent: config.runner.workerAgent },
+    // Include executable path as a proxy for model version: when the CLI is
+    // updated or swapped, cached results from the prior version are invalidated.
+    runnerVersion: config.runner.executable,
   };
   return createHash("sha256").update(stableSerialize(components)).digest("hex");
 }

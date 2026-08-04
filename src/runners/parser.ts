@@ -55,7 +55,7 @@ export function parseFramed(stdout: string, schema?: Record<string, unknown>, ma
     const ajv = new Ajv({ allErrors: true, strict: false });
     const valid = ajv.validate(schema, value);
     if (!valid) {
-      const details = formatSchemaErrors((ajv.errors ?? []) as Array<Record<string, unknown>>);
+      const details = formatSchemaErrors((ajv.errors ?? []) as unknown as Array<Record<string, unknown>>);
       throw new FabricError(
         "INVALID_AI_OUTPUT",
         `AI output does not match schema: ${details.slice(0, 5).map(d => `${d.instancePath || "/"}: ${d.message}`).join("; ")}`,

@@ -187,9 +187,15 @@ async function verifyOpenedWriteTarget(
 }
 
 function truncate(text: string, max: number): { text: string; truncated: boolean } {
-  return text.length <= max
-    ? { text, truncated: false }
-    : { text: text.slice(0, max), truncated: true };
+  if (text.length <= max) return { text, truncated: false };
+  // Truncate at the nearest line boundary to avoid breaking code structure.
+  // The [truncated] marker fits within the budget so callers' length checks hold.
+  const marker = "\n[truncated]";
+  const effective = max - marker.length;
+  const sliced = text.slice(0, Math.max(0, effective));
+  const lastNewline = sliced.lastIndexOf("\n");
+  const boundary = lastNewline > effective * 0.8 ? lastNewline : effective;
+  return { text: sliced.slice(0, boundary) + marker, truncated: true };
 }
 
 function textContent(buffer: Buffer, label: string): string {
@@ -481,6 +487,20 @@ function positionalArguments(ref: string, args: readonly unknown[], fields: read
   return result;
 }
 
+/** Format context with optional relevanceHint annotations for better model attention. */
+function formatContext(ctx: unknown): string {
+  if (ctx === null || ctx === undefined) return "null";
+  if (!Array.isArray(ctx)) return JSON.stringify(ctx);
+  const items = ctx as Array<unknown>;
+  const hasHints = items.some(item => typeof item === "object" && item !== null && "relevanceHint" in (item as Record<string, unknown>));
+  if (!hasHints) return JSON.stringify(ctx);
+  return JSON.stringify(items.map(item => {
+    if (typeof item !== "object" || item === null || !("relevanceHint" in (item as Record<string, unknown>))) return item;
+    const { relevanceHint, ...rest } = item as Record<string, unknown>;
+    return { _relevance: relevanceHint, ...rest };
+  }));
+}
+
 export function createApi(
   config: FabricConfig,
   runner: AiRunner,
@@ -653,7 +673,7 @@ const inspectionResult=(tool:string,operation:string,result:CommandResult)=>{if(
  }; const shell: FabricLiteApi["shell"] = {async run(...args: unknown[]){const input = aliasedArguments(positionalArguments("fabric.shell.run", args, ["command"]), { cmd: "command", shell: "command", cmdline: "command" }) as { command: string; timeoutMs?: number; timeout?: number; maxOutputChars?: number; cwd?: string }; if (input.timeout !== undefined && input.timeoutMs === undefined) input.timeoutMs = Number(input.timeout) * 1000; requiredString("fabric.shell.run", input.command, "command"); optionalNumber("fabric.shell.run", input.timeoutMs, "timeoutMs"); optionalNumber("fabric.shell.run", input.maxOutputChars, "maxOutputChars"); if(!config.shell.enabled)throw new FabricError("POLICY_DENIED","Shell is disabled by project policy");if(typeof input?.command!=="string"||input.command.length===0)throw new FabricError("POLICY_DENIED","Shell command must be a non-empty string");const requestedCwd=await safePath(root,input.cwd??".");const canonicalCwd=await realpath(requestedCwd);const cwdInfo=await lstat(canonicalCwd);if(!cwdInfo.isDirectory())throw new FabricError("POLICY_DENIED","Shell cwd must be a directory");const cwd=canonicalCwd;const request=shellRequest(input.command,cwd);if(!(await gate.authorize(request)))throw new FabricError("POLICY_DENIED",request.category==="destructive"?"Destructive commands are denied by policy":"Shell command was not approved");const max=Math.min(input.maxOutputChars??config.shell.maxOutputChars,config.shell.maxOutputChars);const r=await command([process.env.SHELL??"/bin/sh","-c",input.command],cwd,Math.min(input.timeoutMs??config.shell.timeoutMs,config.shell.timeoutMs),{PATH:process.env.PATH,HOME:process.env.HOME,NO_COLOR:"1"},max);return{command:input.command,exitCode:r.code,stdout:r.stdout,stderr:r.stderr,truncated:r.stdoutTruncated||r.stderrTruncated,timedOut:r.timedOut};}};
  async function aiRun<T=unknown>(input:any,signal?:AbortSignal):Promise<AiResult<T>>{
   const request = argumentRecord("fabric.ai.run", input) as any; const instruction = requiredString("fabric.ai.run", request.instruction, "instruction");
-  const redactor=new RequestRedactor(),role=request.role??"worker",context=redactor.redact(typeof request.context==="string"?request.context:JSON.stringify(request.context??null)),safeInstruction=redactor.redact(instruction),schema=request.outputSchema?redactor.value(request.outputSchema as Record<string,unknown>):undefined;
+  const redactor=new RequestRedactor(),role=request.role??"worker",context=redactor.redact(typeof request.context==="string"?request.context:formatContext(request.context)),safeInstruction=redactor.redact(instruction),schema=request.outputSchema?redactor.value(request.outputSchema as Record<string,unknown>):undefined;
   const contextCap=Math.min(request.maxInputChars??config.budgets.maxContextCharsPerCall,config.budgets.maxContextCharsPerCall);
   if(context.length>contextCap)throw new FabricError("BUDGET_EXCEEDED",`AI context character budget exceeded (${context.length} > ${contextCap})`);
   const schemaText=JSON.stringify(schema??{}),inputChars=safeInstruction.length+context.length+schemaText.length;
@@ -679,7 +699,7 @@ const inspectionResult=(tool:string,operation:string,result:CommandResult)=>{if(
    return await cacheResult({value,role,...(fixed.model?{model:fixed.model}:{}),...(fixed.requestedModel?{requestedModel:fixed.requestedModel}:{}),...(fixed.resolvedModel?{resolvedModel:fixed.resolvedModel}:{}),resolutionSource:fixed.resolutionSource??"unknown",inputChars:inputChars+repairChars,outputChars:(raw?.stdout.length??0)+safeFixed.length,repaired:true});
   }
  }
- async function parallel<T=unknown>(input:any):Promise<AiResult<T>[]> {const request=argumentRecord("fabric.ai.parallel",input) as any;if(!Array.isArray(request.tasks))invalidArguments("fabric.ai.parallel","tasks must be an array");const tasks=request.tasks as any[];if(tasks.some((task)=>!isArgumentRecord(task)))invalidArguments("fabric.ai.parallel","tasks must contain options objects");const concurrency=Math.min(request.concurrency??config.budgets.maxConcurrency,config.budgets.maxConcurrency);if(concurrency<1)throw new FabricError("BUDGET_EXCEEDED","Concurrency must be at least one");const results=new Array(tasks.length),controller=new AbortController();let next=0,failed:unknown;async function worker(){while(true){if(failed&&request.failFast)return;const i=next++;if(i>=tasks.length)return;try{results[i]=await aiRun(tasks[i],controller.signal);}catch(e){if(request.failFast){if(failed===undefined){failed=e;controller.abort();}return;}results[i]={value:undefined,role:tasks[i].role??"worker",resolutionSource:"unknown",inputChars:0,outputChars:0,repaired:false,error:{code:e instanceof FabricError?e.code:"RUNTIME_FAILED",message:new RequestRedactor().redact(e instanceof Error?e.message:String(e))}};}}}await Promise.all(Array.from({length:Math.min(concurrency,tasks.length)},worker));if(failed)throw failed;return results as AiResult<T>[];}
+ async function parallel<T=unknown>(input:any):Promise<AiResult<T>[]> {const request=argumentRecord("fabric.ai.parallel",input) as any;if(!Array.isArray(request.tasks))invalidArguments("fabric.ai.parallel","tasks must be an array");const tasks=request.tasks as any[];if(tasks.some((task)=>!isArgumentRecord(task)))invalidArguments("fabric.ai.parallel","tasks must contain options objects");const concurrency=Math.min(request.concurrency??config.budgets.maxConcurrency,config.budgets.maxConcurrency);if(concurrency<1)throw new FabricError("BUDGET_EXCEEDED","Concurrency must be at least one");const results=new Array(tasks.length),controller=new AbortController();let next=0,failed:unknown;async function worker(){while(true){if(failed&&request.failFast)return;const i=next++;if(i>=tasks.length)return;try{results[i]=await aiRun(tasks[i],controller.signal);}catch(e){if(request.failFast){if(failed===undefined){failed=e;controller.abort();}return;}results[i]={value:undefined,role:tasks[i].role??"worker",resolutionSource:"unknown",inputChars:0,outputChars:0,repaired:false,error:{code:e instanceof FabricError?e.code:"RUNTIME_FAILED",message:new RequestRedactor().redact(e instanceof Error?e.message:String(e)),failedIndex:i}};}}}await Promise.all(Array.from({length:Math.min(concurrency,tasks.length)},worker));if(failed)throw failed;return results as AiResult<T>[];}
  const ai={run:aiRun,parallel,async map<TItem,TResult=unknown>(input:any):Promise<AiResult<TResult>[]> {const items=(input.items as TItem[]).slice(0,input.maxItems??input.items.length);return parallel<TResult>({tasks:items.map(input.createTask),concurrency:input.concurrency});}};
  const mutation: FabricLiteApi["mutate"] = {
   async begin(input?: { mode?: MutationMode; label?: string }) {
