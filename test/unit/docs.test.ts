@@ -7,5 +7,7 @@ describe("filesystem guidance", () => {
     expect(docs).toContain("path, paths, and cwd values are project-root-relative");
     expect(docs).toContain("`..` escapes are denied");
     expect(docs).toContain("use `pi-fabric`, never `../pi-fabric`");
+    expect(docs).toContain("scannedFiles/skippedFiles");
+    expect(docs).toContain("Allow session authorizes the entire permission category");
   });
 });

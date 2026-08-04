@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KiroHeadlessRunner, runProcess } from "../../src/runners/kiro.js";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -28,6 +28,22 @@ describe("bounded child process capture", () => {
     const pending = runProcess(process.execPath, ["-e", "setTimeout(()=>{},10000)"], { timeoutMs: 15000, signal: controller.signal });
     setTimeout(() => controller.abort(), 20);
     await expect(pending).rejects.toMatchObject({ code: "CANCELLED" });
+  });
+
+  it("keeps the chat prompt in documented positional input when stdin is unsupported", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fabric-chat-"));
+    const record = path.join(root, "invocation.json");
+    try {
+      const executable = path.join(root, "kiro");
+      await writeFile(executable, `#!/usr/bin/env node\nconst fs = require("node:fs"); let input = ""; process.stdin.on("data", c => input += c); process.stdin.on("end", () => { fs.writeFileSync(${JSON.stringify(record)}, JSON.stringify({ args: process.argv.slice(2), input })); process.stdout.write("FABRIC_RESULT_BEGIN\\n{\\"ok\\":true}\\nFABRIC_RESULT_END"); });\n`);
+      await chmod(executable, 0o755);
+      const result = await new KiroHeadlessRunner(executable).run({ instruction: "stdin evidence", context: "", role: "general", maxOutputChars: 1000, timeoutMs: 5000 });
+      expect(result.exitCode).toBe(0);
+      const invocation = JSON.parse(await readFile(record, "utf8")) as { args: string[]; input: string };
+      expect(invocation.args.slice(0, 4)).toEqual(["chat", "--no-interactive", "--agent", "fabric-lite-worker"]);
+      expect(invocation.args.at(-1)).toContain("FABRIC_REQUEST_V1_BEGIN");
+      expect(invocation.input).toBe("");
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it("reports useful model JSON parse errors", async () => {

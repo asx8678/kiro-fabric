@@ -230,6 +230,9 @@ export class KiroHeadlessRunner implements AiRunner {
     };
     const args = ["chat", "--no-interactive", "--agent", this.agent];
     if (safeRequest.model) args.push("--model", safeRequest.model);
+    // Kiro CLI 2.16 documents the prompt as positional chat [INPUT] and has
+    // no stdin-prompt option. Keep using the documented argv form until a
+    // version with tested stdin support is available.
     args.push(framePrompt(safeRequest));
     const raw = await runProcess(this.executable, args, {
       timeoutMs: safeRequest.timeoutMs,

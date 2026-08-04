@@ -1,11 +1,15 @@
 import path from "node:path";
 import { constants as fsConstants } from "node:fs";
 import { lstat, mkdtemp, open, realpath, readFile, rename, rm } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { StringDecoder } from "node:string_decoder";
 import { tmpdir } from "node:os";
 import fg from "fast-glob";
 import { spawn } from "node:child_process";
 import type { FabricConfig } from "./config.js";
 import type { AiRunner, NormalizedAiRequest } from "./runners/types.js";
+import type { AiRunResult, FabricLiteApi, FileReadResult, GrepMatch, GrepResult, Metrics } from "../types/fabric-lite.js";
+export type { AiRunResult, FabricLiteApi, Metrics } from "../types/fabric-lite.js";
 import { FabricError } from "./errors.js";
 import { parseFramed } from "./runners/parser.js";
 import { RequestRedactor } from "./redaction.js";
@@ -189,6 +193,80 @@ function textContent(buffer: Buffer, label: string): string {
   return buffer.toString("utf8");
 }
 
+
+
+async function scanGrepFile(
+  filePath: string,
+  relativePath: string,
+  regex: RegExp,
+  contextLines: number,
+  matches: GrepMatch[],
+  maxMatches: number,
+): Promise<boolean> {
+  const stream = createReadStream(filePath, { highWaterMark: 64 * 1024 });
+  const decoder = new StringDecoder("utf8");
+  let pending = "";
+  let lineNumber = 1;
+  let sawLine = false;
+  let endedWithNewline = false;
+  const previous: string[] = [];
+  const waiting: Array<{ match: GrepMatch; remaining: number }> = [];
+  let foundMatches = 0;
+  let limitHit = false;
+  const consume = (line: string): void => {
+    if (line.includes("\0")) throw new FabricError("POLICY_DENIED", `Binary file denied: ${relativePath}`);
+    for (let index = waiting.length - 1; index >= 0; index--) {
+      const item = waiting[index]!;
+      item.match.after.push(line);
+      item.remaining--;
+      if (item.remaining === 0) {
+        waiting.splice(index, 1);
+        matches.push(item.match);
+      }
+    }
+    if (regex.test(line)) {
+      foundMatches++;
+      if (foundMatches > maxMatches) {
+        limitHit = true;
+      } else {
+        const match: GrepMatch = {
+          path: relativePath,
+          line: lineNumber,
+          text: line,
+          before: previous.slice(-contextLines),
+          after: [],
+        };
+        if (contextLines === 0) matches.push(match);
+        else waiting.push({ match, remaining: contextLines });
+      }
+    }
+    if (contextLines > 0) previous.push(line);
+    if (previous.length > contextLines) previous.shift();
+    lineNumber++;
+    sawLine = true;
+  };
+  try {
+    for await (const chunk of stream) {
+      const text = decoder.write(chunk as Buffer);
+      if (text.includes("\0")) throw new FabricError("POLICY_DENIED", `Binary file denied: ${relativePath}`);
+      pending += text;
+      let newline: number;
+      while ((newline = pending.indexOf("\n")) >= 0) {
+        consume(pending.slice(0, newline));
+        pending = pending.slice(newline + 1);
+        endedWithNewline = true;
+      }
+      if (pending.length > 0) endedWithNewline = false;
+    }
+    pending += decoder.end();
+    if (pending.length > 0 || !sawLine || endedWithNewline) consume(pending);
+    for (const item of waiting) matches.push(item.match);
+  } finally {
+    stream.destroy();
+  }
+  return limitHit;
+}
+
 interface CommandResult {
   code: number | null;
   stdout: string;
@@ -253,27 +331,7 @@ async function command(
   });
 }
 
-export interface Metrics {
-  aiCalls: number;
-  workerCalls: number;
-  retries: number;
-  inputChars: number;
-  outputChars: number;
-}
-
-export interface AiResult<T = unknown> {
-  value: T | undefined;
-  role: string;
-  /** @deprecated requested/legacy model */
-  model?: string;
-  requestedModel?: string;
-  resolvedModel?: string;
-  resolutionSource: "kiro-metadata" | "runner" | "unknown";
-  inputChars: number;
-  outputChars: number;
-  repaired: boolean;
-  error?: { code: string; message: string };
-}
+export type AiResult<T = unknown> = AiRunResult<T>;
 
 class BudgetState {
   readonly metrics: Metrics = {
@@ -329,11 +387,58 @@ class BudgetState {
   }
 }
 
+type ArgumentRecord = Record<string, unknown>;
+
+function invalidArguments(ref: string, expected: string): never {
+  throw new FabricError("RUNTIME_FAILED", `Invalid arguments for ${ref}: ${expected}`);
+}
+
+function isArgumentRecord(value: unknown): value is ArgumentRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function argumentRecord(ref: string, value: unknown): ArgumentRecord {
+  if (!isArgumentRecord(value)) invalidArguments(ref, "expected an options object");
+  return value;
+}
+
+function aliasedArguments(value: ArgumentRecord, aliases: Record<string, string>): ArgumentRecord {
+  const result = { ...value };
+  for (const [alias, canonical] of Object.entries(aliases)) {
+    if (alias in result) {
+      if (!(canonical in result)) result[canonical] = result[alias];
+      delete result[alias];
+    }
+  }
+  return result;
+}
+
+function requiredString(ref: string, value: unknown, name: string): string {
+  if (typeof value !== "string" || value.length === 0) invalidArguments(ref, `${name} must be a non-empty string`);
+  return value;
+}
+
+function optionalNumber(ref: string, value: unknown, name: string): void {
+  if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value))) invalidArguments(ref, `${name} must be a finite number`);
+}
+
+function positionalArguments(ref: string, args: readonly unknown[], fields: readonly string[]): ArgumentRecord {
+  if (args.length === 1 && typeof args[0] === "string") return { [fields[0]!]: args[0] };
+  if (args.length === 1) return argumentRecord(ref, args[0]);
+  if (args.length === 0 || args.length > fields.length) invalidArguments(ref, `expected an options object or ${fields.length} positional arguments`);
+  const result: ArgumentRecord = {};
+  for (let index = 0; index < args.length; index++) {
+    const value = args[index];
+    if (value !== undefined) result[fields[index]!] = value;
+  }
+  return result;
+}
+
 export function createApi(
   config: FabricConfig,
   runner: AiRunner,
   gateOptions?: { prompter?: ApprovalPrompter },
-): { fabric: any; metrics: Metrics } {
+): { fabric: FabricLiteApi; metrics: Metrics } {
  const root=path.resolve(config.projectRoot); const budgets=new BudgetState(config);
  const gate=new PermissionGate({
    policy:config.permissions,
@@ -341,21 +446,97 @@ export function createApi(
    allowedCommands:config.shell.allowedCommands,
    projectRoot: root,
  });
- const fsApi={
-  async read(input:{path:string;maxChars?:number;startLine?:number;endLine?:number}) { const p=await safePath(root,input.path); const raw=textContent(await readFile(p),input.path); const lines=raw.split("\n"), start=Math.max(1,input.startLine??1), end=Math.min(lines.length,input.endLine??lines.length); const selected=lines.slice(start-1,end).join("\n"), t=truncate(selected,Math.min(input.maxChars??config.filesystem.maxCharsPerFile,config.filesystem.maxCharsPerFile)); return {path:path.relative(root,p),content:t.text,chars:t.text.length,truncated:t.truncated,startLine:start,endLine:start+t.text.split("\n").length-1}; },
-  async readMany(input:{paths:string[];maxFiles?:number;maxCharsPerFile?:number;maxTotalChars?:number}) { const maxFiles=Math.min(input.maxFiles??config.filesystem.maxFilesPerReadMany,config.filesystem.maxFilesPerReadMany); if(input.paths.length>maxFiles) throw new FabricError("BUDGET_EXCEEDED",`readMany file limit ${maxFiles} exceeded`); const out=[]; let total=0,maxTotal=Math.min(input.maxTotalChars??config.filesystem.maxTotalReadChars,config.filesystem.maxTotalReadChars); for(const p of input.paths){const r=await fsApi.read({path:p,maxChars:input.maxCharsPerFile??config.filesystem.maxCharsPerFile});if(total+r.chars>maxTotal){const left=Math.max(0,maxTotal-total);out.push({...r,content:r.content.slice(0,left),chars:left,truncated:true});break;}out.push(r);total+=r.chars;} return out; },
-  async glob(input:{pattern:string;cwd?:string;maxResults?:number;ignore?:string[]}) { if(typeof input?.pattern!=="string"||path.posix.isAbsolute(input.pattern)||path.win32.isAbsolute(input.pattern)||/^(?:[A-Za-z]:|[\\\\])/.test(input.pattern)||/(^|[\\\\/])\.\.([\\\\/]|$)/.test(input.pattern)) throw new FabricError("POLICY_DENIED","Glob patterns must be relative and cannot contain parent traversal"); const requestedCwd=await safePath(root,input.cwd??"."); const cwd=await realpath(requestedCwd); const cwdInfo=await lstat(cwd);if(!cwdInfo.isDirectory())throw new FabricError("POLICY_DENIED","Glob cwd must be a directory"); const canonicalRoot=await realpath(root); const max=Math.min(input.maxResults??1000,5000); const values=await fg(input.pattern,{cwd,onlyFiles:true,dot:false,followSymbolicLinks:false,ignore:[...deniedGlobs,...(input.ignore??[])]}); const results:string[]=[]; for(const value of values.sort().slice(0,max)){const candidate=path.resolve(cwd,value);let canonical:string;try{canonical=await realpath(candidate);}catch{throw new FabricError("POLICY_DENIED","Unable to verify glob result");}const relative=normalizedRelative(canonicalRoot,canonical);if(relative.startsWith("..")||path.isAbsolute(relative)||denied.test(relative)) throw new FabricError("POLICY_DENIED","Glob result escaped project root");results.push(relative);} return results; },
-  async grep(input:{query:string;paths?:string[];glob?:string;maxMatches?:number;contextLines?:number}) { let regex:RegExp;try{regex=new RegExp(input.query,"i");}catch{throw new FabricError("POLICY_DENIED","Invalid grep regular expression");} const files=input.paths??await fsApi.glob({pattern:input.glob??"**/*",maxResults:2000}),max=input.maxMatches??200,ctx=Math.min(input.contextLines??0,10),matches:any[]=[]; for(const file of files){let r;try{r=await fsApi.read({path:file,maxChars:config.filesystem.maxCharsPerFile});}catch{continue;}const lines=r.content.split("\n");for(let i=0;i<lines.length;i++)if(regex.test(lines[i]!)){matches.push({path:file,line:i+1,text:lines[i],before:lines.slice(Math.max(0,i-ctx),i),after:lines.slice(i+1,i+1+ctx)});if(matches.length>=max)return{matches,files:[...new Set(matches.map(x=>x.path))],truncated:true};}}return{matches,files:[...new Set(matches.map(x=>x.path))],truncated:false}; },
-  async stat(input:{path:string}) {const p=await safePath(root,input.path),s=await lstat(p);return{path:path.relative(root,p),type:s.isDirectory()?"directory":"file",size:s.size,modifiedMs:s.mtimeMs};},
-  async write(input:{path:string;content:string}) { const target=await safeWritePath(root,input.path,config.filesystem.allowWrite);let parentHandle:Awaited<ReturnType<typeof open>>|undefined;let handle:Awaited<ReturnType<typeof open>>|undefined;try{const noFollow=fsConstants.O_NOFOLLOW;const directory=fsConstants.O_DIRECTORY;const parentFdPath=descriptorPath(0);if(noFollow===undefined||directory===undefined||!parentFdPath)throw new FabricError("POLICY_DENIED",`Platform cannot establish a safe write primitive: ${input.path}`);parentHandle=await open(path.dirname(target.absolute),fsConstants.O_RDONLY|directory|noFollow);const targetFromParent=descriptorChildPath(parentHandle.fd,path.basename(target.absolute));handle=await open(targetFromParent??target.absolute,fsConstants.O_WRONLY|fsConstants.O_CREAT|noFollow,0o666);const verified=await verifyOpenedWriteTarget(handle,root,config.filesystem.allowWrite,input.path,target.absolute);await handle.truncate(0);await handle.writeFile(input.content,"utf8");return{path:verified.relative,bytesWritten:Buffer.byteLength(input.content)};}catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==="ELOOP"||code==="ENXIO") throw new FabricError("POLICY_DENIED",`Refusing unsafe symlink write target: ${input.path}`);throw error;}finally{await handle?.close().catch(()=>undefined);await parentHandle?.close().catch(()=>undefined);}},
-  async patch(input:{path:string;patch:string}) { const read=await fsApi.read({path:input.path,maxChars:config.filesystem.maxCharsPerFile});if(read.truncated)throw new FabricError("BUDGET_EXCEEDED","Refusing to patch a truncated file");const current=read.content; let spec:{old:string;new:string};try{spec=JSON.parse(input.patch) as {old:string;new:string};}catch{throw new FabricError("POLICY_DENIED",'patch must be JSON: {"old":"exact text","new":"replacement"}');}if(typeof spec.old!=="string"||typeof spec.new!=="string"||!current.includes(spec.old))throw new FabricError("POLICY_DENIED","Patch old text not found");await fsApi.write({path:input.path,content:current.replace(spec.old,spec.new)});return{path:input.path,applied:true};}
+ const fsApi: FabricLiteApi["fs"] = {
+  async read(...args: unknown[]) {
+   const rawInput = positionalArguments("fabric.fs.read", args, ["path"]);
+   const input = aliasedArguments(rawInput, { file: "path", start: "startLine", max: "maxChars" });
+   optionalNumber("fabric.fs.read", input.offset, "offset"); optionalNumber("fabric.fs.read", input.limit, "limit"); optionalNumber("fabric.fs.read", input.startLine, "startLine"); optionalNumber("fabric.fs.read", input.endLine, "endLine"); optionalNumber("fabric.fs.read", input.maxChars, "maxChars");
+   if (input.offset !== undefined && input.startLine === undefined) input.startLine = input.offset;
+   if (input.limit !== undefined && input.endLine === undefined && typeof input.startLine === "number") input.endLine = input.startLine + Number(input.limit) - 1;
+   const filePath = requiredString("fabric.fs.read", input.path, "path");
+   const p = await safePath(root, filePath);
+   const raw = textContent(await readFile(p), filePath);
+   const lines = raw.split("\n"), start = Math.max(1, Number(input.startLine ?? 1)), end = Math.min(lines.length, Number(input.endLine ?? lines.length));
+   const selected = lines.slice(start - 1, end).join("\n"), t = truncate(selected, Math.min(Number(input.maxChars ?? config.filesystem.maxCharsPerFile), config.filesystem.maxCharsPerFile));
+   return { path: path.relative(root, p), content: t.text, chars: t.text.length, truncated: t.truncated, startLine: start, endLine: start + t.text.split("\n").length - 1 };
+  },
+  async readMany(input: unknown) {
+   const value = argumentRecord("fabric.fs.readMany", input);
+   if (!Array.isArray(value.paths) || value.paths.some((item) => typeof item !== "string")) invalidArguments("fabric.fs.readMany", "paths must be an array of strings");
+   const paths = value.paths as string[], maxFiles = Math.min(Number(value.maxFiles ?? config.filesystem.maxFilesPerReadMany), config.filesystem.maxFilesPerReadMany);
+   if (paths.length > maxFiles) throw new FabricError("BUDGET_EXCEEDED", `readMany file limit ${maxFiles} exceeded`);
+   const out: FileReadResult[] = [], totalLimit = Math.min(Number(value.maxTotalChars ?? config.filesystem.maxTotalReadChars), config.filesystem.maxTotalReadChars);
+   let total = 0;
+   for (const filePath of paths) {
+    const result = await fsApi.read({ path: filePath, maxChars: Number(value.maxCharsPerFile ?? config.filesystem.maxCharsPerFile) });
+    if (total + result.chars > totalLimit) { const left = Math.max(0, totalLimit - total); out.push({ ...result, content: result.content.slice(0, left), chars: left, truncated: true }); break; }
+    out.push(result); total += result.chars;
+   }
+   return out;
+  },
+  async glob(...args: unknown[]) { const rawInput = positionalArguments("fabric.fs.glob", args, ["pattern", "cwd", "maxResults"]); const input = aliasedArguments(rawInput, { query: "pattern", search: "pattern", regex: "pattern", path: "cwd", limit: "maxResults", max: "maxResults" }) as { pattern?: string; cwd?: string; maxResults?: number; ignore?: string[] }; const pattern = requiredString("fabric.fs.glob", input.pattern, "pattern"); if(input.cwd !== undefined && typeof input.cwd !== "string") invalidArguments("fabric.fs.glob", "cwd must be a string"); optionalNumber("fabric.fs.glob", input.maxResults, "maxResults"); if(path.posix.isAbsolute(pattern)||path.win32.isAbsolute(pattern)||/^(?:[A-Za-z]:|[\\\\])/.test(pattern)||/(^|[\\\\/])\.\.([\\\\/]|$)/.test(pattern)) throw new FabricError("POLICY_DENIED","Glob patterns must be relative and cannot contain parent traversal"); const requestedCwd=await safePath(root,input.cwd??"."); const cwd=await realpath(requestedCwd); const cwdInfo=await lstat(cwd);if(!cwdInfo.isDirectory())throw new FabricError("POLICY_DENIED","Glob cwd must be a directory"); const canonicalRoot=await realpath(root); const max=Math.min(input.maxResults??1000,5000); const values=await fg(pattern,{cwd,onlyFiles:true,dot:false,followSymbolicLinks:false,ignore:[...deniedGlobs,...(input.ignore??[])]}); const results:string[]=[]; for(const value of values.sort().slice(0,max)){const candidate=path.resolve(cwd,value);let canonical:string;try{canonical=await realpath(candidate);}catch{throw new FabricError("POLICY_DENIED","Unable to verify glob result");}const relative=normalizedRelative(canonicalRoot,canonical);if(relative.startsWith("..")||path.isAbsolute(relative)||denied.test(relative)) throw new FabricError("POLICY_DENIED","Glob result escaped project root");results.push(relative);} return results; },
+  async grep(...args: unknown[]): Promise<GrepResult> {
+    const rawInput = positionalArguments("fabric.fs.grep", args, ["query", "path", "maxMatches"]);
+    const input = aliasedArguments(rawInput, {
+      pattern: "query", regex: "query", search: "query", globPattern: "glob",
+      limit: "maxMatches", max: "maxMatches", context: "contextLines", ctx: "contextLines",
+      ic: "ignoreCase", caseInsensitive: "ignoreCase",
+    }) as {
+      query?: string; paths?: string[] | string; path?: string; glob?: string;
+      maxMatches?: number; contextLines?: number; ignoreCase?: boolean; literal?: boolean;
+    };
+    if (typeof input.paths === "string") input.paths = [input.paths];
+    if (input.path && !input.paths) input.paths = [input.path];
+    const query = requiredString("fabric.fs.grep", input.query, "query");
+    if (input.paths !== undefined && (!Array.isArray(input.paths) || input.paths.some((item) => typeof item !== "string"))) {
+      invalidArguments("fabric.fs.grep", "paths must be an array of strings");
+    }
+    if (input.glob !== undefined && typeof input.glob !== "string") invalidArguments("fabric.fs.grep", "glob must be a string");
+    optionalNumber("fabric.fs.grep", input.maxMatches, "maxMatches");
+    optionalNumber("fabric.fs.grep", input.contextLines, "contextLines");
+    let regex: RegExp;
+    try {
+      const expression = input.literal ? query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : query;
+      regex = new RegExp(expression, input.ignoreCase === false ? "" : "i");
+    } catch {
+      throw new FabricError("POLICY_DENIED", "Invalid grep regular expression");
+    }
+    const files = input.paths ?? await fsApi.glob({ pattern: input.glob ?? "**/*", maxResults: 2000 });
+    const maxMatches = Math.min(Math.max(Math.floor(input.maxMatches ?? 200), 1), 1000);
+    const contextLines = Math.min(Math.max(Math.floor(input.contextLines ?? 0), 0), 10);
+    const matches: GrepMatch[] = [];
+    const scannedFiles: string[] = [];
+    const skippedFiles: string[] = [];
+    let limitHit = false;
+    for (const file of files) {
+      try {
+        const resolved = await safePath(root, file);
+        const info = await lstat(resolved);
+        if (!info.isFile()) throw new FabricError("POLICY_DENIED", `Grep source is not a file: ${file}`);
+        limitHit ||= await scanGrepFile(resolved, file, regex, contextLines, matches, maxMatches);
+        scannedFiles.push(file);
+      } catch {
+        skippedFiles.push(file);
+      }
+    }
+    return {
+      matches,
+      files: [...new Set(matches.map((match) => match.path))],
+      truncated: limitHit || skippedFiles.length > 0,
+      scannedFiles: [...new Set(scannedFiles)],
+      skippedFiles: [...new Set(skippedFiles)],
+    };
+  },
+  async stat(...args: unknown[]) { const input = positionalArguments("fabric.fs.stat", args, ["path"]); const filePath = requiredString("fabric.fs.stat", input.path, "path"); const p = await safePath(root, filePath), s = await lstat(p); return { path: path.relative(root, p), type: (s.isDirectory() ? "directory" : "file") as "directory" | "file", size: s.size, modifiedMs: s.mtimeMs }; },
+  async write(...args: unknown[]) { const input = aliasedArguments(positionalArguments("fabric.fs.write", args, ["path", "content"]), { file: "path", contents: "content", body: "content", text: "content" }) as { path: string; content: string }; requiredString("fabric.fs.write", input.path, "path"); requiredString("fabric.fs.write", input.content, "content"); const target=await safeWritePath(root,input.path,config.filesystem.allowWrite);let parentHandle:Awaited<ReturnType<typeof open>>|undefined;let handle:Awaited<ReturnType<typeof open>>|undefined;try{const noFollow=fsConstants.O_NOFOLLOW;const directory=fsConstants.O_DIRECTORY;const parentFdPath=descriptorPath(0);if(noFollow===undefined||directory===undefined||!parentFdPath)throw new FabricError("POLICY_DENIED",`Platform cannot establish a safe write primitive: ${input.path}`);parentHandle=await open(path.dirname(target.absolute),fsConstants.O_RDONLY|directory|noFollow);const targetFromParent=descriptorChildPath(parentHandle.fd,path.basename(target.absolute));handle=await open(targetFromParent??target.absolute,fsConstants.O_WRONLY|fsConstants.O_CREAT|noFollow,0o666);const verified=await verifyOpenedWriteTarget(handle,root,config.filesystem.allowWrite,input.path,target.absolute);await handle.truncate(0);await handle.writeFile(input.content,"utf8");return{path:verified.relative,bytesWritten:Buffer.byteLength(input.content)};}catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==="ELOOP"||code==="ENXIO") throw new FabricError("POLICY_DENIED",`Refusing unsafe symlink write target: ${input.path}`);throw error;}finally{await handle?.close().catch(()=>undefined);await parentHandle?.close().catch(()=>undefined);}},
+  async patch(...args: unknown[]) { const input = positionalArguments("fabric.fs.patch", args, ["path", "patch"]) as { path: string; patch: string }; requiredString("fabric.fs.patch", input.path, "path"); requiredString("fabric.fs.patch", input.patch, "patch"); const read=await fsApi.read({path:input.path,maxChars:config.filesystem.maxCharsPerFile});if(read.truncated)throw new FabricError("BUDGET_EXCEEDED","Refusing to patch a truncated file");const current=read.content; let spec:{old:string;new:string};try{spec=JSON.parse(input.patch) as {old:string;new:string};}catch{throw new FabricError("POLICY_DENIED",'patch must be JSON: {"old":"exact text","new":"replacement"}');}if(typeof spec.old!=="string"||typeof spec.new!=="string"||!current.includes(spec.old))throw new FabricError("POLICY_DENIED","Patch old text not found");await fsApi.write({path:input.path,content:current.replace(spec.old,spec.new)});return{path:input.path,applied:true};}
  };
- const git={
+ const git: FabricLiteApi["git"] = {
   async status(){const r=await command(["git","status","--porcelain=v1","--branch"],root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());const lines=r.stdout.trimEnd().split("\n"),head=lines.shift()??"";return{branch:head.match(/^## ([^. ]+)/)?.[1]??null,clean:lines.length===0,entries:lines};},
   async changedFiles(input:{base?:string;includeUntracked?:boolean}={}){const base=input.base??"HEAD";if(base.startsWith("-")||!/^[A-Za-z0-9._\/~^{}-]+$/.test(base))throw new FabricError("POLICY_DENIED","Invalid Git base");const args=["git","diff","--name-only",base,"--"];const r=await command(args,root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());const files=r.stdout.trim().split("\n").filter(Boolean);if(input.includeUntracked){const u=await command(["git","ls-files","--others","--exclude-standard"],root);files.push(...u.stdout.trim().split("\n").filter(Boolean));}return[...new Set(files)].filter(x=>!denied.test(x));},
   async diff(input:{base?:string;paths?:string[];maxChars?:number}={}){for(const p of input.paths??[])relativeSafe(root,p);const base=input.base??"HEAD";if(base.startsWith("-")||!/^[A-Za-z0-9._\/~^{}-]+$/.test(base))throw new FabricError("POLICY_DENIED","Invalid Git base");const r=await command(["git","diff",base,"--",...(input.paths??[])],root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());const t=truncate(r.stdout,input.maxChars??30000);return{diff:t.text,truncated:t.truncated};},
-  async log(input:{maxCount?:number;ref?:string}={}){const max=Math.min(Math.max(input.maxCount??20,1),100);const ref=input.ref??"HEAD";if(ref.startsWith("-")||!/^[A-Za-z0-9._\/~^{}-]+$/.test(ref))throw new FabricError("POLICY_DENIED","Invalid Git ref");const r=await command(["git","--no-pager","log",`--max-count=${max}`,"--date=iso-strict","--format=%H%x09%ad%x09%an%x09%s",ref],root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());return truncate(r.stdout,30000);},
-  async show(input:{ref?:string;path?:string;maxChars?:number}={}){const ref=input.ref??"HEAD";if(ref.startsWith("-")||!/^[A-Za-z0-9._\/~^{}-]+$/.test(ref))throw new FabricError("POLICY_DENIED","Invalid Git ref");let spec=ref;if(input.path){const absolute=relativeSafe(root,input.path);const relative=path.relative(root,absolute).replaceAll(path.sep,"/");if(!relative)throw new FabricError("POLICY_DENIED","Invalid Git path");spec=`${ref}:${relative}`;}const r=await command(["git","--no-pager","show","--no-ext-diff","--no-textconv",spec],root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());return truncate(r.stdout,Math.min(input.maxChars??30000,30000));},
+  async log(input:{maxCount?:number;ref?:string}={}){const max=Math.min(Math.max(input.maxCount??20,1),100);const ref=input.ref??"HEAD";if(ref.startsWith("-")||!/^[A-Za-z0-9._\/~^{}-]+$/.test(ref))throw new FabricError("POLICY_DENIED","Invalid Git ref");const r=await command(["git","--no-pager","log",`--max-count=${max}`,"--date=iso-strict","--format=%H%x09%ad%x09%an%x09%s",ref],root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());const t=truncate(r.stdout,30000);return{text:t.text,truncated:t.truncated};},
+  async show(input:{ref?:string;path?:string;maxChars?:number}={}){const ref=input.ref??"HEAD";if(ref.startsWith("-")||!/^[A-Za-z0-9._\/~^{}-]+$/.test(ref))throw new FabricError("POLICY_DENIED","Invalid Git ref");let spec=ref;if(input.path){const absolute=relativeSafe(root,input.path);const relative=path.relative(root,absolute).replaceAll(path.sep,"/");if(!relative)throw new FabricError("POLICY_DENIED","Invalid Git path");spec=`${ref}:${relative}`;}const r=await command(["git","--no-pager","show","--no-ext-diff","--no-textconv",spec],root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());const t=truncate(r.stdout,Math.min(input.maxChars??30000,30000));return{text:t.text,truncated:t.truncated};},
   async branches(){const r=await command(["git","for-each-ref","--format=%(refname:short)%09%(objectname)%09%(upstream:short)","refs/heads","refs/remotes"],root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());return r.stdout.trim().split("\n").filter(Boolean);},
   async remotes(){const r=await command(["git","remote","-v"],root);if(r.code!==0)throw new FabricError("RUNTIME_FAILED",r.stderr.trim());return r.stdout.trim().split("\n").filter(Boolean);},
   async commit(input:{message:string;paths:string[]}){
@@ -401,24 +582,25 @@ export function createApi(
 const inspectionResult=(tool:string,operation:string,result:CommandResult)=>{if(result.code!==0)throw new FabricError("RUNTIME_FAILED",result.stderr.trim()||`${tool} ${operation} failed`);return{tool,operation,stdout:result.stdout,stderr:result.stderr,exitCode:result.code,truncated:result.stdoutTruncated||result.stderrTruncated};};
  const safeToken=(value:string|undefined,label:string,pattern=/^[A-Za-z0-9._\/:@-]+$/):string|undefined=>{if(value===undefined)return undefined;if(value.startsWith("-")||!pattern.test(value))throw new FabricError("POLICY_DENIED",`Invalid ${label}`);return value;};
  const readQuery=(query:string,dialect:"postgres"|"sqlite"):string=>{if(typeof query!=="string"||query.length>12000)throw new FabricError("POLICY_DENIED",`${dialect} query exceeds bounds`);const text=query.trim().replace(/;$/,"").trim();if(!text||text.includes(";")||text.includes("\\")||/--|\/\*/.test(text))throw new FabricError("POLICY_DENIED",`${dialect} inspection requires one comment-free statement`);if(!/^(select|with|table|values|show|explain(?:\s+query\s+plan)?)(\s|$)/i.test(text))throw new FabricError("POLICY_DENIED",`${dialect} inspection permits SELECT and read-only inspection statements only`);if(/\b(insert|update|delete|merge|copy|call|do|create|alter|drop|truncate|grant|revoke|vacuum|analyze|reindex|cluster|refresh|lock|listen|notify|set|reset|attach|detach|replace|upsert)\b/i.test(text)||/\bfor\s+(update|share|no\s+key\s+update|key\s+share)\b/i.test(text)||/\bselect\s+.*\binto\b/is.test(text)||/\b(pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|pg_log_backend_memory_contexts|pg_advisory|dblink|lo_import|lo_export|pg_read_file|pg_write_file|pg_ls_dir|pg_stat_file|pg_notify)\s*\(/i.test(text)||/^explain\s+(analyze|.*\banalyze\b)/i.test(text))throw new FabricError("POLICY_DENIED",`${dialect} statement may have side effects`);return text;};
- const inspect={
+ const inspect: FabricLiteApi["inspect"] = {
   async postgres(input:{query:string;host?:string;port?:number;user?:string;database?:string}){const query=readQuery(input.query,"postgres");const args=["psql","-X","--no-psqlrc","--set","ON_ERROR_STOP=1","--tuples-only","--no-align"];for(const [flag,value,label] of [["--host",input.host,"PostgreSQL host"],["--username",input.user,"PostgreSQL user"],["--dbname",input.database,"PostgreSQL database"]] as const){const safe=safeToken(value,label);if(safe)args.push(flag,safe);}if(input.port!==undefined){if(!Number.isInteger(input.port)||input.port<1||input.port>65535)throw new FabricError("POLICY_DENIED","Invalid PostgreSQL port");args.push("--port",String(input.port));}args.push("--command",`BEGIN READ ONLY; SET LOCAL statement_timeout = '30s'; ${query}; ROLLBACK;`);if(!(await gate.authorize(networkRequest("postgres","query",args))))throw new FabricError("POLICY_DENIED","PostgreSQL inspection was not approved");return inspectionResult("postgres","query",await command(args,root,30000,undefined,config.shell.maxOutputChars));},
   async redis(input:{command:string;args?:string[];host?:string;port?:number;database?:number}){if(typeof input?.command!=="string")throw new FabricError("POLICY_DENIED","Redis command must be a string");if(input.args!==undefined&&!Array.isArray(input.args))throw new FabricError("POLICY_DENIED","Redis arguments must be an array");const operation=input.command.toUpperCase();const allowed=new Set(["PING","INFO","DBSIZE","TYPE","EXISTS","TTL","PTTL","GET","MGET","STRLEN","HGET","HGETALL","HKEYS","HLEN","LRANGE","LLEN","SMEMBERS","SCARD","ZRANGE","ZCARD","ZSCORE","SCAN","SSCAN","HSCAN","ZSCAN","MEMORY"]);if(!allowed.has(operation))throw new FabricError("POLICY_DENIED",`Redis command is not read-only allowlisted: ${operation}`);const values=input.args??[];if(values.length>20||values.some(value=>typeof value!=="string"||value.length>1024))throw new FabricError("POLICY_DENIED","Redis inspection arguments exceed bounds");if(operation==="MEMORY"&&values[0]?.toUpperCase()!=="USAGE")throw new FabricError("POLICY_DENIED","Only Redis MEMORY USAGE is allowed");const args=["redis-cli","--raw"];const host=safeToken(input.host,"Redis host");if(host)args.push("-h",host);if(input.port!==undefined){if(!Number.isInteger(input.port)||input.port<1||input.port>65535)throw new FabricError("POLICY_DENIED","Invalid Redis port");args.push("-p",String(input.port));}if(input.database!==undefined){if(!Number.isInteger(input.database)||input.database<0||input.database>255)throw new FabricError("POLICY_DENIED","Invalid Redis database");args.push("-n",String(input.database));}args.push(operation,...values);if(!(await gate.authorize(networkRequest("redis",operation,args))))throw new FabricError("POLICY_DENIED","Redis inspection was not approved");return inspectionResult("redis",operation,await command(args,root,30000,undefined,config.shell.maxOutputChars));},
   async sqlite(input:{path:string;query:string}){const database=await safePath(root,input.path);const query=readQuery(input.query,"sqlite");const args=["sqlite3","-readonly","-safe","-batch","-noheader",database,query];return inspectionResult("sqlite","query",await command(args,root,30000,undefined,config.shell.maxOutputChars));},
   async kubernetes(input:{operation:string;resource?:string;name?:string;namespace?:string;context?:string;container?:string;tail?:number}){const operation=input.operation;const allowed=new Set(["get","describe","logs","explain","api-resources","api-versions"]);if(!allowed.has(operation))throw new FabricError("POLICY_DENIED",`Kubernetes operation is not read-only allowlisted: ${operation}`);const resource=safeToken(input.resource,"Kubernetes resource",/^[A-Za-z0-9._\/-]+$/);if(resource&&/(^|\/)(secrets?|tokenreviews?|subjectaccessreviews?)(\.|\/|$)/i.test(resource))throw new FabricError("POLICY_DENIED","Sensitive Kubernetes resources are denied");const args=["kubectl"];const context=safeToken(input.context,"Kubernetes context");const namespace=safeToken(input.namespace,"Kubernetes namespace");if(context)args.push("--context",context);if(namespace)args.push("--namespace",namespace);args.push(operation);if(["get","describe","explain"].includes(operation)){if(!resource)throw new FabricError("POLICY_DENIED",`${operation} requires a resource`);args.push(resource);const name=safeToken(input.name,"Kubernetes name");if(name)args.push(name);if(operation==="get")args.push("-o","yaml");}else if(operation==="logs"){const name=safeToken(input.name,"pod name");if(!name)throw new FabricError("POLICY_DENIED","logs requires a pod name");args.push(name,"--tail",String(Math.min(Math.max(input.tail??200,1),1000)));const container=safeToken(input.container,"container");if(container)args.push("--container",container);}if(!(await gate.authorize(networkRequest("kubernetes",operation,args))))throw new FabricError("POLICY_DENIED","Kubernetes inspection was not approved");return inspectionResult("kubernetes",operation,await command(args,root,30000,undefined,config.shell.maxOutputChars));},
   async terraform(input:{operation:string;cwd?:string;path?:string}){const operation=input.operation;const directory=await safePath(root,input.cwd??".");const args=["terraform","-chdir="+directory];if(operation==="validate")args.push("validate","-json");else if(operation==="show"){args.push("show","-json");if(input.path)args.push(await safePath(root,input.path));}else if(operation==="state-list")args.push("state","list");else if(operation==="providers-schema")args.push("providers","schema","-json");else throw new FabricError("POLICY_DENIED",`Terraform operation is not read-only allowlisted: ${operation}`);return inspectionResult("terraform",operation,await command(args,root,30000,undefined,config.shell.maxOutputChars));}
- }; const shell={async run(input:{command:string;timeoutMs?:number;maxOutputChars?:number;cwd?:string}){if(!config.shell.enabled)throw new FabricError("POLICY_DENIED","Shell is disabled by project policy");if(typeof input?.command!=="string"||input.command.length===0)throw new FabricError("POLICY_DENIED","Shell command must be a non-empty string");const requestedCwd=await safePath(root,input.cwd??".");const canonicalCwd=await realpath(requestedCwd);const cwdInfo=await lstat(canonicalCwd);if(!cwdInfo.isDirectory())throw new FabricError("POLICY_DENIED","Shell cwd must be a directory");const cwd=canonicalCwd;const request=shellRequest(input.command,cwd);if(!(await gate.authorize(request)))throw new FabricError("POLICY_DENIED",request.category==="destructive"?"Destructive commands are denied by policy":"Shell command was not approved");const max=Math.min(input.maxOutputChars??config.shell.maxOutputChars,config.shell.maxOutputChars);const r=await command([process.env.SHELL??"/bin/sh","-c",input.command],cwd,Math.min(input.timeoutMs??config.shell.timeoutMs,config.shell.timeoutMs),{PATH:process.env.PATH,HOME:process.env.HOME,NO_COLOR:"1"},max);return{command:input.command,exitCode:r.code,stdout:r.stdout,stderr:r.stderr,truncated:r.stdoutTruncated||r.stderrTruncated,timedOut:r.timedOut};}};
+ }; const shell: FabricLiteApi["shell"] = {async run(...args: unknown[]){const input = aliasedArguments(positionalArguments("fabric.shell.run", args, ["command"]), { cmd: "command", shell: "command", cmdline: "command" }) as { command: string; timeoutMs?: number; timeout?: number; maxOutputChars?: number; cwd?: string }; if (input.timeout !== undefined && input.timeoutMs === undefined) input.timeoutMs = Number(input.timeout) * 1000; requiredString("fabric.shell.run", input.command, "command"); optionalNumber("fabric.shell.run", input.timeoutMs, "timeoutMs"); optionalNumber("fabric.shell.run", input.maxOutputChars, "maxOutputChars"); if(!config.shell.enabled)throw new FabricError("POLICY_DENIED","Shell is disabled by project policy");if(typeof input?.command!=="string"||input.command.length===0)throw new FabricError("POLICY_DENIED","Shell command must be a non-empty string");const requestedCwd=await safePath(root,input.cwd??".");const canonicalCwd=await realpath(requestedCwd);const cwdInfo=await lstat(canonicalCwd);if(!cwdInfo.isDirectory())throw new FabricError("POLICY_DENIED","Shell cwd must be a directory");const cwd=canonicalCwd;const request=shellRequest(input.command,cwd);if(!(await gate.authorize(request)))throw new FabricError("POLICY_DENIED",request.category==="destructive"?"Destructive commands are denied by policy":"Shell command was not approved");const max=Math.min(input.maxOutputChars??config.shell.maxOutputChars,config.shell.maxOutputChars);const r=await command([process.env.SHELL??"/bin/sh","-c",input.command],cwd,Math.min(input.timeoutMs??config.shell.timeoutMs,config.shell.timeoutMs),{PATH:process.env.PATH,HOME:process.env.HOME,NO_COLOR:"1"},max);return{command:input.command,exitCode:r.code,stdout:r.stdout,stderr:r.stderr,truncated:r.stdoutTruncated||r.stderrTruncated,timedOut:r.timedOut};}};
  async function aiRun<T=unknown>(input:any,signal?:AbortSignal):Promise<AiResult<T>>{
-  const redactor=new RequestRedactor(),role=input.role??"worker",context=redactor.redact(typeof input.context==="string"?input.context:JSON.stringify(input.context??null)),instruction=redactor.redact(String(input.instruction)),schema=input.outputSchema?redactor.value(input.outputSchema as Record<string,unknown>):undefined;
-  const contextCap=Math.min(input.maxInputChars??config.budgets.maxContextCharsPerCall,config.budgets.maxContextCharsPerCall);
+  const request = argumentRecord("fabric.ai.run", input) as any; const instruction = requiredString("fabric.ai.run", request.instruction, "instruction");
+  const redactor=new RequestRedactor(),role=request.role??"worker",context=redactor.redact(typeof request.context==="string"?request.context:JSON.stringify(request.context??null)),safeInstruction=redactor.redact(instruction),schema=request.outputSchema?redactor.value(request.outputSchema as Record<string,unknown>):undefined;
+  const contextCap=Math.min(request.maxInputChars??config.budgets.maxContextCharsPerCall,config.budgets.maxContextCharsPerCall);
   if(context.length>contextCap)throw new FabricError("BUDGET_EXCEEDED",`AI context character budget exceeded (${context.length} > ${contextCap})`);
-  const schemaText=JSON.stringify(schema??{}),inputChars=instruction.length+context.length+schemaText.length;
-  const requestedModel=input.model!==undefined?input.model:config.runner.defaultModel??undefined;
-  const normalized:NormalizedAiRequest={instruction,context,role,maxOutputChars:Math.min(input.maxOutputChars??(role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),timeoutMs:Math.min(input.timeoutMs??config.budgets.aiCallTimeoutMs,config.budgets.aiCallTimeoutMs),...(requestedModel!==undefined?{model:requestedModel}:{}),...(schema?{schema}:{})};
+  const schemaText=JSON.stringify(schema??{}),inputChars=safeInstruction.length+context.length+schemaText.length;
+  const requestedModel=request.model!==undefined?request.model:config.runner.defaultModel??undefined;
+  const normalized:NormalizedAiRequest={instruction:safeInstruction,context,role,maxOutputChars:Math.min(request.maxOutputChars??(role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),timeoutMs:Math.min(request.timeoutMs??config.budgets.aiCallTimeoutMs,config.budgets.aiCallTimeoutMs),...(requestedModel!==undefined?{model:requestedModel}:{}),...(schema?{schema}:{})};
   budgets.reserve(role,inputChars);let raw:Awaited<ReturnType<AiRunner["run"]>>|undefined;
   try{raw=await runner.run(normalized,signal);const safeStdout=redactor.redact(raw.stdout);budgets.output(safeStdout.length);const value=redactor.value(parseFramed(safeStdout,normalized.schema,normalized.maxOutputChars) as T);return{value,role,...(raw.model?{model:raw.model}:{}),...(raw.requestedModel?{requestedModel:raw.requestedModel}:{}),...(raw.resolvedModel?{resolvedModel:raw.resolvedModel}:{}),resolutionSource:raw.resolutionSource??"unknown",inputChars,outputChars:safeStdout.length,repaired:false};}
   catch(e){
-   if(!(e instanceof FabricError)||e.code!=="INVALID_AI_OUTPUT"||input.retryInvalidJson===false||config.budgets.maxRetriesPerCall<1)throw e;
+   if(!(e instanceof FabricError)||e.code!=="INVALID_AI_OUTPUT"||request.retryInvalidJson===false||config.budgets.maxRetriesPerCall<1)throw e;
    const bad=redactor.redact(raw?.stdout?.slice(-normalized.maxOutputChars)??"(unparseable output)"),details=redactor.redact(JSON.stringify(e.details??[{message:e.message}]));
    const repairInstruction=`${loadPrompt("repair-json").trimEnd()}\n\nINVALID:\n${bad}\nSCHEMA_ERRORS:\n${details}\nSCHEMA:\n${schemaText}`;
    const repair={...normalized,instruction:repairInstruction,context:"",repair:true},repairChars=repairInstruction.length+schemaText.length;
@@ -426,7 +608,7 @@ const inspectionResult=(tool:string,operation:string,result:CommandResult)=>{if(
    return{value,role,...(fixed.model?{model:fixed.model}:{}),...(fixed.requestedModel?{requestedModel:fixed.requestedModel}:{}),...(fixed.resolvedModel?{resolvedModel:fixed.resolvedModel}:{}),resolutionSource:fixed.resolutionSource??"unknown",inputChars:inputChars+repairChars,outputChars:(raw?.stdout.length??0)+safeFixed.length,repaired:true};
   }
  }
- async function parallel(input:any):Promise<AiResult[]>{const tasks=input.tasks as any[],concurrency=Math.min(input.concurrency??config.budgets.maxConcurrency,config.budgets.maxConcurrency);if(concurrency<1)throw new FabricError("BUDGET_EXCEEDED","Concurrency must be at least one");const results=new Array(tasks.length),controller=new AbortController();let next=0,failed:unknown;async function worker(){while(true){if(failed&&input.failFast)return;const i=next++;if(i>=tasks.length)return;try{results[i]=await aiRun(tasks[i],controller.signal);}catch(e){if(input.failFast){if(failed===undefined){failed=e;controller.abort();}return;}results[i]={value:undefined,role:tasks[i].role??"worker",resolutionSource:"unknown",inputChars:0,outputChars:0,repaired:false,error:{code:e instanceof FabricError?e.code:"RUNTIME_FAILED",message:new RequestRedactor().redact(e instanceof Error?e.message:String(e))}};}}}await Promise.all(Array.from({length:Math.min(concurrency,tasks.length)},worker));if(failed)throw failed;return results;}
- const ai={run:aiRun,parallel,async map(input:any){const items=input.items.slice(0,input.maxItems??input.items.length);return parallel({tasks:items.map(input.createTask),concurrency:input.concurrency});}};
+ async function parallel<T=unknown>(input:any):Promise<AiResult<T>[]> {const request=argumentRecord("fabric.ai.parallel",input) as any;if(!Array.isArray(request.tasks))invalidArguments("fabric.ai.parallel","tasks must be an array");const tasks=request.tasks as any[];if(tasks.some((task)=>!isArgumentRecord(task)))invalidArguments("fabric.ai.parallel","tasks must contain options objects");const concurrency=Math.min(request.concurrency??config.budgets.maxConcurrency,config.budgets.maxConcurrency);if(concurrency<1)throw new FabricError("BUDGET_EXCEEDED","Concurrency must be at least one");const results=new Array(tasks.length),controller=new AbortController();let next=0,failed:unknown;async function worker(){while(true){if(failed&&request.failFast)return;const i=next++;if(i>=tasks.length)return;try{results[i]=await aiRun(tasks[i],controller.signal);}catch(e){if(request.failFast){if(failed===undefined){failed=e;controller.abort();}return;}results[i]={value:undefined,role:tasks[i].role??"worker",resolutionSource:"unknown",inputChars:0,outputChars:0,repaired:false,error:{code:e instanceof FabricError?e.code:"RUNTIME_FAILED",message:new RequestRedactor().redact(e instanceof Error?e.message:String(e))}};}}}await Promise.all(Array.from({length:Math.min(concurrency,tasks.length)},worker));if(failed)throw failed;return results as AiResult<T>[];}
+ const ai={run:aiRun,parallel,async map<TItem,TResult=unknown>(input:any):Promise<AiResult<TResult>[]> {const items=(input.items as TItem[]).slice(0,input.maxItems??input.items.length);return parallel<TResult>({tasks:items.map(input.createTask),concurrency:input.concurrency});}};
  return {fabric:{fs:fsApi,git,inspect,shell,ai,util:{chunk<T>(items:T[],size:number){if(!Number.isInteger(size)||size<1)throw new Error("chunk size must be positive");return Array.from({length:Math.ceil(items.length/size)},(_,i)=>items.slice(i*size,(i+1)*size));},unique<T>(items:T[]){return[...new Set(items)];},sortBy<T>(items:T[],selector:(x:T)=>string|number){return[...items].sort((a,b)=>{const x=selector(a),y=selector(b);return x<y?-1:x>y?1:0;});},truncate(text:string,max:number){return text.length<=max?text:text.slice(0,Math.max(0,max-1))+"…";},compactJson(value:unknown,max:number){const s=JSON.stringify(value);return s.length<=max?s:s.slice(0,Math.max(0,max-1))+"…";}}},metrics:budgets.metrics};
 }

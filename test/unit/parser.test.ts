@@ -1,4 +1,33 @@
-import { describe,it,expect } from "vitest";
-import { framePrompt,parseFramed,stripAnsi } from "../../src/runners/parser.js";
+import { describe, it, expect } from "vitest";
+import { framePrompt, parseFramed, stripAnsi } from "../../src/runners/parser.js";
 import { loadPrompt } from "../../src/prompts.js";
-describe("framing",()=>{it("uses the canonical worker policy with an explicit envelope boundary",()=>{expect(framePrompt({instruction:"do it",context:"data"}).startsWith(`${loadPrompt("worker-agent").trimEnd()}\n\nFABRIC_REQUEST_V1_BEGIN\n`)).toBe(true);});it("uses last complete frame and strips presentation",()=>{const s='FABRIC_RESULT_BEGIN\n{"old":1}\nFABRIC_RESULT_END\n\u001b[32m> FABRIC_RESULT_BEGIN\n> {"ok":true}\n> FABRIC_RESULT_END\u001b[0m';expect(parseFramed(s,{type:"object",required:["ok"]})).toEqual({ok:true});});it("rejects malformed and schema-invalid values",()=>{expect(()=>parseFramed("nope")).toThrow(/frame/);expect(()=>parseFramed("FABRIC_RESULT_BEGIN\n{}\nFABRIC_RESULT_END",{type:"object",required:["x"]})).toThrow(/schema/);});it("normalizes Kiro markdown-rendered frame markers",()=>{const s="\u001b[m> FABRIC_RESULT_BEGIN\u001b[0m\n{\"ok\":true}\nFABRIC\u001b[23mRESULT_END\u001b[0m";expect(parseFramed(s,{type:"object",properties:{ok:{const:true}},required:["ok"]})).toEqual({ok:true});});it("removes ANSI",()=>expect(stripAnsi("\u001b[31mred\u001b[0m")).toBe("red"));});
+
+describe("framing", () => {
+  it("uses the canonical worker policy with an explicit envelope boundary", () => {
+    expect(framePrompt({ instruction: "do it", context: "data" }).startsWith(`${loadPrompt("worker-agent").trimEnd()}\n\nFABRIC_REQUEST_V1_BEGIN\n`)).toBe(true);
+  });
+  it("uses last complete frame and strips presentation", () => {
+    const s = 'FABRIC_RESULT_BEGIN\n{"old":1}\nFABRIC_RESULT_END\n\u001b[32m> FABRIC_RESULT_BEGIN\n> {"ok":true}\n> FABRIC_RESULT_END\u001b[0m';
+    expect(parseFramed(s, { type: "object", required: ["ok"] })).toEqual({ ok: true });
+  });
+  it("rejects malformed and schema-invalid values", () => {
+    expect(() => parseFramed("nope")).toThrow(/frame/);
+    expect(() => parseFramed("FABRIC_RESULT_BEGIN\n{}\nFABRIC_RESULT_END", { type: "object", required: ["x"] })).toThrow(/schema/);
+  });
+  it("normalizes Kiro markdown-rendered frame markers", () => {
+    const s = "\u001b[m> FABRIC_RESULT_BEGIN\u001b[0m\n{\"ok\":true}\nFABRIC\u001b[23mRESULT_END\u001b[0m";
+    expect(parseFramed(s, { type: "object", properties: { ok: { const: true } }, required: ["ok"] })).toEqual({ ok: true });
+  });
+  it("removes ANSI", () => expect(stripAnsi("\u001b[31mred\u001b[0m")).toBe("red"));
+  it("bounds and redacts missing-frame diagnostics", () => {
+    const secret = "password=super-secret-value-123456789";
+    const output = `${secret}\n${"noise ".repeat(300)}`;
+    let error: unknown;
+    try { parseFramed(output); } catch (value) { error = value; }
+    expect(error).toMatchObject({ code: "INVALID_AI_OUTPUT" });
+    const message = (error as Error).message;
+    expect(message).not.toContain("super-secret-value-123456789");
+    expect(message.length).toBeLessThan(800);
+    expect(message).toContain("output hint");
+  });
+});
