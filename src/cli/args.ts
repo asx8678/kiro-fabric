@@ -1,5 +1,6 @@
 export type OutputFormat = "json" | "text";
 export type PermissionMode = "headless" | "interactive";
+export type WriteAccessMode = "read" | "workspace";
 
 export interface Args {
   command?: string;
@@ -12,6 +13,7 @@ export interface Args {
   topic?: string;
   smoke: boolean;
   permissions: PermissionMode;
+  writeAccess: WriteAccessMode;
 }
 
 function requiredValue(argv: string[], option: string): string {
@@ -32,6 +34,7 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
     dryRun: false,
     smoke: false,
     permissions: "headless",
+    writeAccess: "workspace",
   };
   const command = remaining.shift();
   if (command !== undefined) out.command = command;
@@ -63,6 +66,12 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
         throw new Error(`Invalid --permissions value: ${permissions}; expected headless or interactive`);
       }
       out.permissions = permissions;
+    } else if (option === "--allow-write") {
+      const value = requiredValue(remaining, option);
+      if (value !== "read" && value !== "workspace") {
+        throw new Error(`Invalid --allow-write value: ${value}; expected read or workspace`);
+      }
+      out.writeAccess = value;
     } else if (!option.startsWith("--")) {
       out.topic = out.topic ? `${out.topic} ${option}` : option;
     } else {
@@ -71,6 +80,12 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
   }
   if (out.permissions !== "headless" && out.command !== "run" && out.command !== "exec") {
     throw new Error("--permissions is only supported for run and exec");
+  }
+  if (argv.includes("--allow-write") && out.command !== "install-kiro" && out.command !== "update-policy") {
+    throw new Error("--allow-write is only supported for install-kiro and update-policy");
+  }
+  if (out.command === "update-policy" && !argv.includes("--allow-write")) {
+    throw new Error("update-policy requires --allow-write read or workspace to choose the destination mode");
   }
   return out;
 }

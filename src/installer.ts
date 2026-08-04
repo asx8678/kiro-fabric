@@ -7,6 +7,7 @@ import { defaults } from "./config.js";
 import { FabricError } from "./errors.js";
 import { loadPrompt, promptFiles, renderPrompt } from "./prompts.js";
 import { runProcess } from "./runners/kiro.js";
+import type { WriteAccessMode } from "./cli/args.js";
 
 export interface InstallOptions {
   root: string;
@@ -15,6 +16,7 @@ export interface InstallOptions {
   force: boolean;
   dryRun: boolean;
   home?: string;
+  writeAccess?: WriteAccessMode;
 }
 
 interface PromptManifest {
@@ -22,14 +24,28 @@ interface PromptManifest {
   files: Record<string, string>;
 }
 
+/**
+ * Web access for Fabric Lite agents. kiro-cli 2.16 ships no built-in
+ * web_search/web_fetch tool, so internet access is provided through MCP
+ * servers (started on demand by Kiro; uvx resolves them without API keys):
+ * - fetch: the reference MCP fetch server (read a URL, markdown extraction)
+ * - ddg-search: DuckDuckGo search MCP server (web search, no key required)
+ */
+const WEB_MCP_SERVERS = {
+  // mcp-server-fetch imports McpError, removed in mcp >= 1.23; pin the pair.
+  fetch: { command: "uvx", args: ["--from", "mcp-server-fetch==2026.7.10", "--with", "mcp<1.23", "mcp-server-fetch"] },
+  "ddg-search": { command: "uvx", args: ["duckduckgo-mcp-server"] },
+};
+const WEB_TOOLS = ["@fetch", "@ddg-search"];
+
 function agents(cli: string) {
   return {
     "fabric-lite-worker.json": {
       name: "fabric-lite-worker",
-      description: "No-tool bounded Fabric Lite reasoning worker",
+      description: "Bounded Fabric Lite reasoning worker with web search/fetch",
       prompt: loadPrompt("worker-agent"),
-      mcpServers: {},
-      tools: [],
+      mcpServers: WEB_MCP_SERVERS,
+      tools: [...WEB_TOOLS],
       toolAliases: {},
       allowedTools: [],
       resources: [],
@@ -41,8 +57,8 @@ function agents(cli: string) {
       name: "fabric-lite",
       description: "Parent agent for bounded programmable Kiro reasoning",
       prompt: renderPrompt("parent-agent", { FABRIC_LITE_CLI: cli }),
-      mcpServers: {},
-      tools: ["shell"],
+      mcpServers: WEB_MCP_SERVERS,
+      tools: ["shell", ...WEB_TOOLS],
       toolAliases: {},
       allowedTools: [],
       resources: [],
@@ -148,6 +164,16 @@ export async function verifyPromptManifest(
 }
 
 export async function installKiro(options: InstallOptions) {
+  // The generated config references kiro-cli portably as a PATH-resolvable
+  // command name, never a machine-specific absolute path. When a command name
+  // is supplied, resolve it to an absolute path only for install-time
+  // subprocess calls (--version, agent validate). An explicitly configured
+  // non-absolute command name is preserved in the config; an absolute path
+  // (resolved here for validation, or supplied directly) falls back to the
+  // portable default "kiro-cli". Machine-specific executables remain
+  // configurable at runtime via KIRO_CLI_PATH or a user-edited config.json
+  // (which the installer never overwrites).
+  const persistedExecutable = path.isAbsolute(options.executable) ? "kiro-cli" : options.executable;
   let kiro = options.executable;
   if (!path.isAbsolute(kiro)) {
     const found = await runProcess("which", [kiro], { timeoutMs: 5000 });
@@ -226,10 +252,24 @@ export async function installKiro(options: InstallOptions) {
     if (await exists(configPath)) {
       kept.push(configPath);
     } else if (!options.dryRun) {
+      // Write access is configured only when creating a fresh config. Editable
+      // mode is the default and allowlists the workspace root-wide; callers can
+      // explicitly select read-only. The safe-write path still denies traversal,
+      // sensitive paths, and symlink escapes.
+      const writeAccess = options.writeAccess ?? "workspace";
+      const editable = writeAccess === "workspace";
       const config: FabricConfig = {
         ...defaults,
         projectRoot: ".",
-        runner: { ...defaults.runner, executable: kiro },
+        runner: { ...defaults.runner, executable: persistedExecutable },
+        filesystem: {
+          ...defaults.filesystem,
+          allowWrite: editable ? ["**"] : [],
+        },
+        mutation: {
+          ...defaults.mutation,
+          enabled: editable,
+        },
       };
       await mkdir(path.dirname(configPath), { recursive: true });
       await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
@@ -258,7 +298,7 @@ export async function installKiro(options: InstallOptions) {
       backups,
       conflicts,
       kept,
-      launch: `${kiro} --agent fabric-lite`,
+      launch: `${persistedExecutable} --agent fabric-lite`,
     };
   } finally {
     await rm(staging, { recursive: true, force: true });

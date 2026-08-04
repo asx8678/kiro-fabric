@@ -14,9 +14,14 @@ import { executeProgram } from "../runtime/executor.js";
 import { parseArgs, type OutputFormat } from "./args.js";
 import { programInput } from "./input.js";
 import { renderCheckText, renderRunText } from "./render.js";
+import { updateWritePolicy } from "../write-policy.js";
 
-const usage = "fabric-lite <check|run|exec|docs|models|doctor|install-kiro> [options]\n" +
+const usage = "fabric-lite <check|run|exec|docs|models|doctor|install-kiro|update-policy> [options]\n" +
   "  run/exec options: --file <path> --format json|text --cwd <dir> --permissions headless|interactive\n" +
+  "  install-kiro options: --cwd <dir> --force --dry-run --allow-write read|workspace\n" +
+  "  update-policy options: --cwd <dir> --dry-run --allow-write read|workspace\n" +
+  "  fresh installs default to editable workspace mutations; use --allow-write read for read-only mode\n" +
+  "  update-policy rewrites an existing config to the requested mode without touching other settings\n" +
   "  --permissions interactive prompts a human (Allow once / Allow session / Deny) for ask policies; headless fails closed";
 let errorFormat: OutputFormat = "text";
 
@@ -220,6 +225,16 @@ async function main(): Promise<void> {
         cliPath: fileURLToPath(import.meta.url),
         executable: config.runner.executable,
         force: args.force,
+        dryRun: args.dryRun,
+        writeAccess: args.writeAccess,
+      });
+      output(result, args.format);
+      break;
+    }
+    case "update-policy": {
+      const result = await updateWritePolicy({
+        root: path.resolve(args.cwd),
+        writeAccess: args.writeAccess,
         dryRun: args.dryRun,
       });
       output(result, args.format);

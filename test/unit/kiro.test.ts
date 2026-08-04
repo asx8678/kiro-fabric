@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KiroHeadlessRunner, runProcess } from "../../src/runners/kiro.js";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -44,6 +44,24 @@ describe("bounded child process capture", () => {
       expect(invocation.args.at(-1)).toContain("FABRIC_REQUEST_V1_BEGIN");
       expect(invocation.input).toBe("");
     } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it("resolves a bare executable through PATH across platforms", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fabric-path-"));
+    const previousPath = process.env.PATH;
+    try {
+      const bin = path.join(root, "bin");
+      await mkdir(bin, { recursive: true });
+      const executable = path.join(bin, "fake-kiro-cli");
+      await writeFile(executable, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo fake-version; fi\nexit 0\n");
+      await chmod(executable, 0o755);
+      process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`;
+      await expect(new KiroHeadlessRunner("fake-kiro-cli").doctor()).resolves.toMatchObject({ ok: true, version: "fake-version" });
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("reports useful model JSON parse errors", async () => {

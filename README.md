@@ -129,9 +129,12 @@ pnpm run setup:kiro --dry-run
 
 # Back up and replace conflicting generated files
 pnpm run setup:kiro --force
+
+# Optional: create a read-only fresh install
+pnpm run setup:kiro -- --allow-write read
 ```
 
-A dry run still installs dependencies and rebuilds `dist/`; it only avoids writing generated Kiro and configuration files.
+A dry run still installs dependencies and rebuilds `dist/`; it only avoids writing generated Kiro and configuration files. `--force` backs up then replaces installer-owned agents and prompts, but never touches a user-owned `.fabric-lite/config.json` (see below).
 
 ## Use the app
 
@@ -155,6 +158,12 @@ cd /path/to/your/project
 kiro-cli --agent fabric-lite
 ```
 
+Freshly configured projects allow guarded workspace edits by default. To create a read-only project instead:
+
+```bash
+node dist/cli/main.js install-kiro --allow-write read --cwd /path/to/your/project
+```
+
 From the Kiro Fabric clone, check a configured project with:
 
 ```bash
@@ -165,9 +174,34 @@ node dist/cli/main.js doctor --cwd /path/to/your/project --format json
 
 The CLI defaults to readable text output for `check`, `run`, and `exec`, styled with a gold accent: a branded run header, numbered source between `─ program` and `─ result` (or red `─ error`) rules, diagnostics with carets, and live interaction on stderr — a run-start line plus one line per AI call (`›` ok, `↻` repair, `✗` failed). Retried calls are also summarized in the header. Add `// @name: My program` (and optionally `// @description: ...`) near the top of a program to label its run header. JSON output remains available with `--format json`. Set `FABRIC_LITE_HIGHLIGHT=1` (also `true`, `yes`, or `on`) to enable simple source highlighting. Colors follow the usual conventions: shown only on a TTY and disabled via `NO_COLOR`.
 
+## Write access on setup
+
+Fresh installs are editable by default: `.fabric-lite/config.json` is created with `mutation.enabled=true` and `filesystem.allowWrite=["**"]`. The safe-write path still denies parent traversal, sensitive paths (`.env*`, `.git`, `node_modules`, `dist`, `build`, `.fabric-lite`, secrets), and symlink escapes. Each write runs inside a guarded `fabric.mutate.begin()` session.
+
+For a read-only fresh install, pass `--allow-write read` (with the pnpm script: `pnpm run setup:kiro -- --allow-write read`). This creates `mutation.enabled=false` and `filesystem.allowWrite=[]`.
+
+The choice applies only when a config is created. On reinstall or `--force`, an existing user-owned `.fabric-lite/config.json` is never overwritten or backed up.
+
+### Update the mutation policy of an existing project
+
+`update-policy` explicitly migrates an existing `.fabric-lite/config.json` between workspace-editable and read-only; `install-kiro` never does this. It validates the existing config, rewrites only `filesystem.allowWrite` and the mutation fields needed for the chosen mode (preserving budgets, runner, permissions, and all unrelated settings), and writes the result atomically. It requires an explicit `--allow-write` destination:
+
+```bash
+# Make an existing read-only project editable across the workspace
+node dist/cli/main.js update-policy --cwd /path/to/your/project --allow-write workspace
+
+# Make an existing editable project read-only
+node dist/cli/main.js update-policy --cwd /path/to/your/project --allow-write read
+
+# Preview without writing
+node dist/cli/main.js update-policy --cwd /path/to/your/project --allow-write workspace --dry-run
+```
+
+Workspace mode sets `filesystem.allowWrite=["**"]`, `mutation.enabled=true`, and `mutation.require="checkpoint"` for checkpoint safety. Read mode sets `filesystem.allowWrite=[]` and `mutation.enabled=false`, retaining your `mutation.require` and `mutation.maxDiffChars`. An invalid or missing config is rejected before anything changes.
+
 ## Safe mutation workflow
 
-Writes remain disabled unless `.fabric-lite/config.json` sets `mutation.enabled` and `filesystem.allowWrite`. Configure `mutation.require` as `clean` (default) or `checkpoint`, and bound review diffs with `mutation.maxDiffChars` (default `30000`). A checkpoint snapshots the dirty tracked worktree with a temporary Git index; ignored files are not included and the real index and branch are unchanged.
+Writes are guarded by default: `mutation.enabled=true` and `filesystem.allowWrite=["**"]`, so every write runs inside a `fabric.mutate.begin()` session with the sensitive-path deny list still enforced. Projects can opt back into read-only with `update-policy --allow-write read`. Configure `mutation.require` as `clean` (default) or `checkpoint`, and bound review diffs with `mutation.maxDiffChars` (default `30000`). A checkpoint snapshots the dirty tracked worktree with a temporary Git index; ignored files are not included and the real index and branch are unchanged.
 
 ```ts
 const session = await fabric.mutate.begin({ mode: "checkpoint", label: "update config" });
@@ -195,7 +229,7 @@ Keys include the redacted request context, instruction, role, schema, model, lim
 ## Security and privacy
 
 - Selected context is sent to the Kiro LLM. Secret filtering helps, but it is not complete data-loss prevention.
-- Reads are allowed by default; writes, local commits, and generic shell are disabled by default.
+- Reads are allowed by default; writes are enabled by default inside guarded mutation sessions; local commits and generic shell are disabled by default.
 - Commands classified as destructive are denied. If you enable generic shell, approved commands are still powerful.
 - Headless runs deny actions with an `ask` policy. In interactive mode, **Allow session** approves the whole category until the process exits.
 - `.fabric-lite/runs/` is persistent and may contain sensitive data. The installer adds it to `.gitignore`; verify this in every project.

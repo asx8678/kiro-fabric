@@ -8,10 +8,10 @@
     "defaultModel": null
   },
   "budgets": {
-    "maxAiCalls": 15,
-    "maxPlannerCalls": 2,
-    "maxWorkerCalls": 10,
-    "maxVerifierCalls": 3,
+    "maxAiCalls": 100,
+    "maxPlannerCalls": 0,
+    "maxWorkerCalls": 0,
+    "maxVerifierCalls": 0,
     "maxConcurrency": 3,
     "maxRetriesPerCall": 2,
     "maxPromptCharsPerCall": 120000,
@@ -19,7 +19,7 @@
     "maxOutputCharsPerWorker": 32000,
     "maxOutputCharsVerifier": 48000,
     "maxTotalTokens": 350000,
-    "executionTimeoutMs": 600000,
+    "executionTimeoutMs": 3600000,
     "aiCallTimeoutMs": 300000
   },
   "filesystem": {
@@ -28,7 +28,6 @@
       "test/**",
       "docs/**",
       ".kiro/**",
-      ".fabric-lite/**",
       "README.md",
       "package.json",
       "pnpm-lock.yaml",

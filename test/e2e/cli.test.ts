@@ -8,6 +8,37 @@ describe("built CLI",()=>{it("checks and executes deterministic bodies",()=>{con
 
   it("forwards filtered Kiro auth env without leaking values",()=>{const root=mkdtempSync(path.join(tmpdir(),"fabric-env-"));try{const runner=path.join(root,"fake-kiro");writeFileSync(runner,'#!/usr/bin/env node\nif (!process.env.KIRO_API_KEY) process.exit(9); process.stdout.write(`FABRIC_RESULT_BEGIN\\n{"authenticated":true}\\nFABRIC_RESULT_END`);');chmodSync(runner,0o755);mkdirSync(path.join(root,".fabric-lite"));writeFileSync(path.join(root,".fabric-lite/config.json"),JSON.stringify({version:1,projectRoot:".",runner:{type:"kiro-headless",executable:runner,workerAgent:"fabric-lite-worker",defaultModel:null}}));const run=spawnSync(process.execPath,[path.resolve(cli),"exec","--cwd",root,"--format","json"],{input:'return await fabric.ai.run({instruction:"auth", outputSchema:{type:"object",required:["authenticated"]}});',encoding:"utf8",env:{...process.env,KIRO_API_KEY:"seeded-do-not-log"}});expect(run.status).toBe(0);expect(JSON.parse(run.stdout)).toMatchObject({status:"succeeded",value:{value:{authenticated:true}}});expect(run.stdout+run.stderr).not.toContain("seeded-do-not-log");}finally{rmSync(root,{recursive:true,force:true});}});
 
+it("truncates oversized final values with an artifact instead of failing", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "fabric-trunc-"));
+    try {
+      mkdirSync(path.join(root, ".fabric-lite"));
+      writeFileSync(
+        path.join(root, ".fabric-lite/config.json"),
+        JSON.stringify({ version: 1, projectRoot: ".", output: { maxFinalChars: 400 } }),
+      );
+      const run = spawnSync(
+        process.execPath,
+        [path.resolve(cli), "exec", "--cwd", root, "--format", "json"],
+        { input: 'return "x".repeat(5000);', encoding: "utf8" },
+      );
+      expect(run.status).toBe(0);
+      const envelope = JSON.parse(run.stdout);
+      expect(envelope.status).toBe("succeeded");
+      expect(envelope.truncated).toBe(true);
+      expect(envelope.originalChars).toBe(5002);
+      expect(typeof envelope.value).toBe("string");
+      expect(envelope.value).toContain("chars omitted");
+      expect(envelope.value).toContain("saved to:");
+      expect(envelope.value.length).toBeLessThanOrEqual(400);
+      expect(envelope.value.startsWith('"xxx')).toBe(true);
+      expect(envelope.value).toContain('xxx"');
+      const artifact = path.join(root, ".fabric-lite", "runs", envelope.runId, "final-value.json");
+      expect(readFileSync(artifact, "utf8")).toBe('"' + "x".repeat(5000) + '"');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("bounds piped programs at the checker limit", () => {
     const run = spawnSync(process.execPath, [cli, "check", "--format", "json"], {
       input: "x".repeat(100_001),

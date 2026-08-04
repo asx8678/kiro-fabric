@@ -3,7 +3,9 @@ import path from "node:path";
 import { FabricError } from "./errors.js";
 
 export interface Budgets {
+  /** Hard per-execution AI call ceiling (pi-fabric agents.maxPerExecution equivalent). */
   maxAiCalls: number;
+  /** Per-role call caps; 0 disables the cap, matching pi-fabric's 0-means-off convention. */
   maxPlannerCalls: number;
   maxWorkerCalls: number;
   maxVerifierCalls: number;
@@ -15,7 +17,9 @@ export interface Budgets {
   maxOutputCharsVerifier: number;
   /** Total AI token budget (input + output) across the run; 0 disables the guard, matching pi-fabric. */
   maxTotalTokens: number;
+  /** Whole-run wall-clock budget; defaults to the pi-fabric agent timeout (60 min) so call budgets are reachable. */
   executionTimeoutMs: number;
+  /** Per-AI-call floor: lower per-call values are ignored, callers may only request longer (pi-fabric semantics). */
   aiCallTimeoutMs: number;
 }
 
@@ -66,6 +70,12 @@ export interface FabricConfig {
     maxFinalChars: number;
     includeMetrics: boolean;
   };
+  retention: {
+    /** Age after which .fabric-lite/runs/* artifacts are swept on run start; 0 keeps runs forever (pi-fabric oneShotRunMs equivalent, default 24h). */
+    runRetentionMs: number;
+    /** Maximum number of run directories kept regardless of age; 0 disables the count cap. */
+    maxRuns: number;
+  };
 }
 
 export const defaults: FabricConfig = {
@@ -78,10 +88,10 @@ export const defaults: FabricConfig = {
     defaultModel: null,
   },
   budgets: {
-    maxAiCalls: 7,
-    maxPlannerCalls: 1,
-    maxWorkerCalls: 5,
-    maxVerifierCalls: 1,
+    maxAiCalls: 100,
+    maxPlannerCalls: 0,
+    maxWorkerCalls: 0,
+    maxVerifierCalls: 0,
     maxConcurrency: 3,
     maxRetriesPerCall: 1,
     maxPromptCharsPerCall: 30000,
@@ -89,11 +99,13 @@ export const defaults: FabricConfig = {
     maxOutputCharsPerWorker: 8000,
     maxOutputCharsVerifier: 16000,
     maxTotalTokens: 0,
-    executionTimeoutMs: 180000,
+    executionTimeoutMs: 3600000,
     aiCallTimeoutMs: 90000,
   },
   filesystem: {
-    allowWrite: [],
+    // Workspace-editable by default; traversal, sensitive paths (.git, .env,
+    // .fabric-lite, node_modules, ...), and symlink escapes remain denied.
+    allowWrite: ["**"],
     denySymlinkEscape: true,
     maxFilesPerReadMany: 20,
     maxCharsPerFile: 20000,
@@ -103,7 +115,7 @@ export const defaults: FabricConfig = {
     allowCommit: false,
   },
   mutation: {
-    enabled: false,
+    enabled: true,
     require: "clean",
     maxDiffChars: 30000,
   },
@@ -125,7 +137,8 @@ export const defaults: FabricConfig = {
     timeoutMs: 30000,
     maxOutputChars: 20000,
   },
-  output: { maxFinalChars: 20000, includeMetrics: true },
+  output: { maxFinalChars: 50000, includeMetrics: true },
+  retention: { runRetentionMs: 86400000, maxRuns: 500 },
 };
 
 type Validator = (value: unknown, location: string) => void;
@@ -187,9 +200,9 @@ const configShape: Shape = {
   },
   budgets: {
     maxAiCalls: positiveInteger,
-    maxPlannerCalls: positiveInteger,
-    maxWorkerCalls: positiveInteger,
-    maxVerifierCalls: positiveInteger,
+    maxPlannerCalls: nonnegativeInteger,
+    maxWorkerCalls: nonnegativeInteger,
+    maxVerifierCalls: nonnegativeInteger,
     maxConcurrency: positiveInteger,
     maxRetriesPerCall: nonnegativeInteger,
     maxPromptCharsPerCall: positiveInteger,
@@ -238,6 +251,10 @@ const configShape: Shape = {
   output: {
     maxFinalChars: positiveInteger,
     includeMetrics: booleanValue,
+  },
+  retention: {
+    runRetentionMs: nonnegativeInteger,
+    maxRuns: nonnegativeInteger,
   },
 };
 
@@ -305,6 +322,7 @@ export async function loadConfig(cwd: string): Promise<FabricConfig> {
       permissions: { ...defaults.permissions },
       shell: { ...defaults.shell, allowedCommands: [...defaults.shell.allowedCommands] },
       output: { ...defaults.output },
+      retention: { ...defaults.retention },
       projectRoot: path.resolve(cwd),
     };
   }

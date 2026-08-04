@@ -5,6 +5,32 @@ import path from "node:path";
 import { installKiro, validateInstalled, verifyPromptManifest } from "../../src/installer.js";
 import { loadPrompt } from "../../src/prompts.js";
 
+it("writes portable PATH-based executable config, not a machine absolute path", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "fabric-install-portable-"));
+  const previousPath = process.env.PATH;
+  try {
+    // Shadow kiro-cli on PATH so the installer resolves it through PATH for
+    // install-time validation while persisting the portable command name.
+    const bin = path.join(root, "bin");
+    await mkdir(bin, { recursive: true });
+    const executable = path.join(bin, "kiro-cli");
+    await writeFile(executable, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo kiro-test; fi\nexit 0\n");
+    await chmod(executable, 0o755);
+    process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`;
+    const result = await installKiro({ root, cliPath: "dist/cli/main.js", executable: "kiro-cli", force: false, dryRun: false });
+    const config = JSON.parse(await readFile(path.join(root, ".fabric-lite/config.json"), "utf8")) as { runner: { executable: string } };
+    expect(config.runner.executable).toBe("kiro-cli");
+    expect(config.runner.executable).not.toMatch(/^\//);
+    expect(result.launch).toBe("kiro-cli --agent fabric-lite");
+    // Resolved absolute path is used only for install-time validation.
+    expect(result.kiroVersion).toBe("kiro-test");
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it("dry-run previews existing conflicts without overwriting", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "fabric-install-"));
   try {
@@ -20,6 +46,62 @@ it("dry-run previews existing conflicts without overwriting", async () => {
     expect(await import("node:fs/promises").then(fs => fs.readFile(configPath, "utf8"))).toBe("existing\n");
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("creates editable config by default and read-only config with --allow-write read", async () => {
+  const readRoot = await mkdtemp(path.join(tmpdir(), "fabric-install-read-"));
+  const editRoot = await mkdtemp(path.join(tmpdir(), "fabric-install-edit-"));
+  const home = await mkdtemp(path.join(tmpdir(), "fabric-install-wa-home-"));
+  try {
+    const makeKiro = async (root: string) => {
+      const executable = path.join(root, "fake-kiro");
+      await writeFile(executable, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo kiro-test; fi\nexit 0\n");
+      await chmod(executable, 0o755);
+      return executable;
+    };
+    const readExe = await makeKiro(readRoot);
+    const editExe = await makeKiro(editRoot);
+
+    // Explicit read-only mode never grants writes.
+    await installKiro({ root: readRoot, home, cliPath: "dist/cli/main.js", executable: readExe, force: false, dryRun: false, writeAccess: "read" });
+    const readConfig = JSON.parse(await readFile(path.join(readRoot, ".fabric-lite/config.json"), "utf8")) as { mutation: { enabled: boolean }; filesystem: { allowWrite: string[] } };
+    expect(readConfig.mutation.enabled).toBe(false);
+    expect(readConfig.filesystem.allowWrite).toEqual([]);
+
+    // Default: mutation enabled with a workspace-wide allowlist.
+    await installKiro({ root: editRoot, home, cliPath: "dist/cli/main.js", executable: editExe, force: false, dryRun: false });
+    const editConfig = JSON.parse(await readFile(path.join(editRoot, ".fabric-lite/config.json"), "utf8")) as { mutation: { enabled: boolean }; filesystem: { allowWrite: string[] } };
+    expect(editConfig.mutation.enabled).toBe(true);
+    expect(editConfig.filesystem.allowWrite).toEqual(["**"]);
+  } finally {
+    await rm(readRoot, { recursive: true, force: true });
+    await rm(editRoot, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+it("does not flip an existing user-owned config even with --allow-write workspace and --force", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "fabric-install-preserve-"));
+  const home = await mkdtemp(path.join(tmpdir(), "fabric-install-preserve-home-"));
+  try {
+    const executable = path.join(root, "fake-kiro");
+    await writeFile(executable, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo kiro-test; fi\nexit 0\n");
+    await chmod(executable, 0o755);
+    const options = { root, home, cliPath: "dist/cli/main.js", executable, force: false, dryRun: false };
+    const first = await installKiro(options);
+    const configPath = path.join(root, ".fabric-lite/config.json");
+    expect(first.kept).not.toContain(configPath);
+
+    // User customizes the policy to read-only.
+    await writeFile(configPath, "custom-readonly\n");
+    const reinstalled = await installKiro({ ...options, force: true, writeAccess: "workspace" });
+    expect(reinstalled.kept).toContain(configPath);
+    expect(reinstalled.backups.some(file => file.startsWith(`${configPath}.bak-`))).toBe(false);
+    expect(await readFile(configPath, "utf8")).toBe("custom-readonly\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   }
 });
 

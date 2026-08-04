@@ -20,7 +20,7 @@ export interface InspectionResult { tool: string; operation: string; stdout: str
 export interface ShellResult { command: string; exitCode: number | null; stdout: string; stderr: string; truncated: boolean; timedOut: boolean }
 export type PermissionPolicy = "allow" | "ask" | "deny";
 export interface PermissionsPolicy { read: PermissionPolicy; commit: PermissionPolicy; execute: PermissionPolicy; network: PermissionPolicy; destructive: PermissionPolicy }
-export interface AiRunInput { instruction: string; context?: unknown; model?: string; role?: "planner" | "worker" | "verifier" | "general"; outputSchema?: JsonSchema; maxInputChars?: number; maxOutputChars?: number; timeoutMs?: number; retryInvalidJson?: boolean }
+export interface AiRunInput { instruction: string; context?: unknown; model?: string; role?: "planner" | "worker" | "verifier" | "general"; outputSchema?: JsonSchema; maxInputChars?: number; maxOutputChars?: number; /** Per-call wall-clock override. Like pi-fabric, the configured aiCallTimeoutMs is a floor: lower values are ignored, higher values extend the call. */ timeoutMs?: number; retryInvalidJson?: boolean }
 export interface AiRunResult<T = unknown> { value: T | undefined; role: string; /** @deprecated requested/legacy model */ model?: string; requestedModel?: string; resolvedModel?: string; resolutionSource: "kiro-metadata" | "runner" | "unknown"; inputChars: number; outputChars: number; repaired: boolean; cached?: boolean; error?: { code: string; message: string } }
 export interface AiParallelInput { tasks: AiRunInput[]; concurrency?: number; failFast?: boolean }
 export interface AiMapInput<T> { items: T[]; createTask: (item: T, index: number) => AiRunInput; concurrency?: number; maxItems?: number }

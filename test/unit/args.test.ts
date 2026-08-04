@@ -37,3 +37,38 @@ describe("parseArgs --permissions", () => {
     }
   });
 });
+
+describe("parseArgs --allow-write", () => {
+  it("defaults to workspace and accepts read/workspace for install-kiro", () => {
+    expect(parseArgs(["install-kiro"]).writeAccess).toBe("workspace");
+    expect(parseArgs(["install-kiro", "--allow-write", "read"]).writeAccess).toBe("read");
+    expect(parseArgs(["install-kiro", "--allow-write", "workspace"]).writeAccess).toBe("workspace");
+  });
+
+  it("rejects unsupported and missing values", () => {
+    expect(() => parseArgs(["install-kiro", "--allow-write", "shell"])).toThrow(/expected read or workspace/);
+    expect(() => parseArgs(["install-kiro", "--allow-write"])).toThrow(/requires a value/);
+  });
+
+  it("rejects --allow-write for commands other than install-kiro", () => {
+    for (const command of ["check", "run", "exec", "docs", "models", "doctor"]) {
+      expect(() => parseArgs([command, "--allow-write", "workspace"])).toThrow(/only supported for install-kiro and update-policy/);
+    }
+  });
+});
+
+describe("parseArgs update-policy", () => {
+  it("requires an explicit --allow-write choice", () => {
+    expect(() => parseArgs(["update-policy"])).toThrow(/requires --allow-write/);
+  });
+
+  it("accepts read/workspace for update-policy", () => {
+    expect(parseArgs(["update-policy", "--allow-write", "read"]).writeAccess).toBe("read");
+    expect(parseArgs(["update-policy", "--allow-write", "workspace"]).writeAccess).toBe("workspace");
+  });
+
+  it("rejects unsupported values", () => {
+    expect(() => parseArgs(["update-policy", "--allow-write", "shell"])).toThrow(/expected read or workspace/);
+    expect(() => parseArgs(["update-policy", "--allow-write"])).toThrow(/requires a value/);
+  });
+});

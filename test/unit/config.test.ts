@@ -78,7 +78,18 @@ describe("loadConfig validation", () => {
       allowedCommands: ["git status"],
       timeoutMs: defaults.shell.timeoutMs,
     });
-    expect(defaults.mutation).toEqual({ enabled: false, require: "clean", maxDiffChars: 30000 });
+    expect(defaults.mutation).toEqual({ enabled: true, require: "clean", maxDiffChars: 30000 });
+    expect(defaults.filesystem.allowWrite).toEqual(["**"]);
     expect(defaults.cache).toEqual({ enabled: false, maxEntries: 200, ttlMs: 0 });
+  });
+
+  it("defaults the runner executable to the portable command or the KIRO_CLI_PATH override", async () => {
+    expect(defaults.runner.executable).toBe(process.env.KIRO_CLI_PATH ?? "kiro-cli");
+    const root = await configRoot({ runner: { executable: "kiro-cli" } });
+    const config = await loadConfig(root);
+    expect(config.runner.executable).toBe("kiro-cli");
+    // A machine-specific absolute path must never be injected for a bare
+    // command name; the portable command is preserved verbatim.
+    expect(config.runner.executable).not.toMatch(/^\//);
   });
 });

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
@@ -28,8 +28,61 @@ export interface RunEnvelope {
   runId: string;
   status: "succeeded" | "failed";
   value?: unknown;
+  /** pi-fabric-style bounded output: value was middle-truncated, full value in the run-dir artifact. */
+  truncated?: boolean;
+  originalChars?: number;
+  omittedChars?: number;
   metrics?: unknown;
   error?: { code: string; message: string; diagnostics?: unknown };
+}
+
+/**
+ * Best-effort sweep of old run artifacts, matching pi-fabric's retention
+ * model: run directories older than runRetentionMs are deleted on the next
+ * run start, and maxRuns caps the total count regardless of age (0 disables
+ * each bound). Failures never block a run.
+ */
+export async function sweepRunArtifacts(
+  runsRoot: string,
+  retention: { runRetentionMs: number; maxRuns: number },
+  now = Date.now(),
+): Promise<{ removed: number }> {
+  if (retention.runRetentionMs <= 0 && retention.maxRuns <= 0) return { removed: 0 };
+  let entries: string[];
+  try {
+    entries = (await readdir(runsRoot)).filter((entry) => entry.startsWith("run_"));
+  } catch {
+    return { removed: 0 };
+  }
+  const aged: Array<{ dir: string; mtimeMs: number }> = [];
+  for (const entry of entries) {
+    try {
+      const info = await stat(path.join(runsRoot, entry));
+      if (info.isDirectory()) aged.push({ dir: entry, mtimeMs: info.mtimeMs });
+    } catch {
+      // A vanished or unreadable entry is ignored; the sweep is best-effort.
+    }
+  }
+  aged.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const doomed = new Set<string>();
+  if (retention.runRetentionMs > 0) {
+    for (const entry of aged) {
+      if (now - entry.mtimeMs > retention.runRetentionMs) doomed.add(entry.dir);
+    }
+  }
+  if (retention.maxRuns > 0) {
+    for (const entry of aged.slice(retention.maxRuns)) doomed.add(entry.dir);
+  }
+  let removed = 0;
+  for (const dir of doomed) {
+    try {
+      await rm(path.join(runsRoot, dir), { recursive: true, force: true });
+      removed++;
+    } catch {
+      // Best-effort: a locked or concurrently removed directory is skipped.
+    }
+  }
+  return { removed };
 }
 
 export interface ExecuteOptions {
@@ -44,8 +97,10 @@ export async function executeProgram(
   options: ExecuteOptions = {},
 ): Promise<{ envelope: RunEnvelope; exitCode: number }> {
   const runId = `run_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
-  const dir = path.join(config.projectRoot, ".fabric-lite/runs", runId);
+  const runsRoot = path.join(config.projectRoot, ".fabric-lite/runs");
+  const dir = path.join(runsRoot, runId);
   await mkdir(dir, { recursive: true });
+  await sweepRunArtifacts(runsRoot, config.retention);
   await writeFile(path.join(dir, "program.ts"), body);
   await writeFile(path.join(dir, "diagnostics.json"), "[]\n");
   await writeFile(path.join(dir, "calls.jsonl"), "");

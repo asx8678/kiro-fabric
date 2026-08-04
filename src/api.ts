@@ -401,7 +401,7 @@ class BudgetState {
       verifier: budgets.maxVerifierCalls,
       general: budgets.maxWorkerCalls,
     };
-    if (!retry && this.roles[role] + 1 > limits[role]) {
+    if (!retry && limits[role] > 0 && this.roles[role] + 1 > limits[role]) {
       throw new FabricError("BUDGET_EXCEEDED", `${role} call limit ${limits[role]} exceeded`);
     }
     this.metrics.aiCalls++;
@@ -658,7 +658,7 @@ const inspectionResult=(tool:string,operation:string,result:CommandResult)=>{if(
   if(context.length>contextCap)throw new FabricError("BUDGET_EXCEEDED",`AI context character budget exceeded (${context.length} > ${contextCap})`);
   const schemaText=JSON.stringify(schema??{}),inputChars=safeInstruction.length+context.length+schemaText.length;
   const requestedModel=request.model!==undefined?request.model:config.runner.defaultModel??undefined;
-  const normalized:NormalizedAiRequest={instruction:safeInstruction,context,role,maxOutputChars:Math.min(request.maxOutputChars??(role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),timeoutMs:Math.min(request.timeoutMs??config.budgets.aiCallTimeoutMs,config.budgets.aiCallTimeoutMs),...(requestedModel!==undefined?{model:requestedModel}:{}),...(schema?{schema}:{})};
+  const normalized:NormalizedAiRequest={instruction:safeInstruction,context,role,maxOutputChars:Math.min(request.maxOutputChars??(role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),role==="verifier"?config.budgets.maxOutputCharsVerifier:config.budgets.maxOutputCharsPerWorker),timeoutMs:Math.max(request.timeoutMs??config.budgets.aiCallTimeoutMs,config.budgets.aiCallTimeoutMs),...(requestedModel!==undefined?{model:requestedModel}:{}),...(schema?{schema}:{})};
   const cached=await cache.get(normalized);
   if(cached){
    budgets.cacheHit();
