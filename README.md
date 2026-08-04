@@ -1,25 +1,103 @@
 # Kiro Fabric
 
-Kiro Fabric is a local runtime that lets TypeScript programs use Kiro CLI as a structured reasoning backend. Instead of relying on one free-form chat prompt, Kiro writes a small checked TypeScript script for the task. That script uses the `fabric` API to gather only the project context it needs, then invokes the Kiro LLM programmatically with explicit instructions, input data, and an optional JSON Schema. The script receives parsed, schema-checked data—not an unstructured chat response—and can inspect, transform, save, or return the result as JSON.
+Kiro Fabric is a local runtime that lets TypeScript programs use Kiro CLI as a structured reasoning backend. It is not a separate LLM model: it orchestrates the model configured in Kiro CLI.
 
-This makes the LLM a callable step inside deterministic automation. For example, a Kiro-generated script can search files, read selected excerpts, call `fabric.ai.run()` for analysis, validate the answer, call `fabric.ai.parallel()` for independent follow-up tasks, and return one final structured result. The workflow is code, so it can be reviewed, tested, repeated, and composed with ordinary development logic.
+## Programmatic AI and why Kiro Fabric exists
 
-Under the hood, Kiro Fabric type-checks each script before execution, enforces filesystem and shell permissions, applies AI call and size limits, can run independent AI tasks concurrently, validates responses against JSON Schema, records run metrics, and optionally caches deterministic calls.
+**Programmatic AI** (or **programmatic LLM usage**) means calling an LLM from code instead of relying on one free-form chat response. The program chooses the instructions, context, number of calls, and required output structure, then handles the returned data as part of a larger workflow.
 
-> Kiro Fabric is not a separate LLM model. It orchestrates the model configured in Kiro CLI.
+Ordinary chat prompting is useful for exploration, but a broad prompt leaves context selection, multi-step coordination, and response formatting mostly to the conversation. Kiro Fabric adds a small, inspectable program between the question and the model. Kiro can generate a TypeScript program for the task; that program gathers only the project context it needs, calls the Kiro LLM through the `fabric` API, and returns one result that the surrounding automation can inspect, transform, save, or display. The workflow can therefore be reviewed, tested, repeated, and composed with ordinary development logic rather than treated as an opaque chat exchange.
 
-## Features and benefits
+## How it works
 
-| Feature | Benefit |
+From a user question to one structured result:
+
+1. **You ask a normal question in Kiro CLI.** For example, you can ask it to find the cause of failing tests.
+2. **Kiro generates a small TypeScript program** tailored to the question. The program uses the `fabric` API and can use top-level `await` and `return`.
+3. **Kiro Fabric checks the program before running it.** It type-checks the script, then applies the configured filesystem, Git, shell, AI-call, size, concurrency, and time limits.
+4. **The program gathers bounded context.** It searches or reads only the files and excerpts it requests, subject to the available project-tool permissions and limits.
+5. **The program invokes the Kiro LLM programmatically.** `fabric.ai.run()` (or `fabric.ai.parallel()` for independent calls) receives explicit instructions, selected context, and optionally a JSON Schema for the response.
+6. **Fabric validates and returns one result.** The response is parsed and checked against the schema when one is supplied, with the configured repair behavior. The program can then combine or transform its data and returns the final result to Kiro, which shows it to you.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor You
+    participant Kiro as Kiro CLI
+    participant Fabric as Kiro Fabric (local)
+    participant LLM as Kiro LLM
+
+    You->>Kiro: Ask a question
+    Kiro->>Fabric: Submit a TypeScript program
+    Fabric->>Fabric: Type-check it and apply limits
+
+    opt The program requests project tools
+        Fabric->>Fabric: Check each operation and gather context
+    end
+
+    opt The program requests LLM reasoning
+        Fabric->>LLM: Send focused instructions and selected context
+        LLM-->>Fabric: Return structured JSON
+        Fabric->>Fabric: Parse JSON and validate a schema if supplied
+    end
+
+    Fabric-->>Kiro: Return the program result
+    Kiro-->>You: Show the final answer
+```
+
+Project-tool access, LLM calls, and response schemas are optional; a generated program uses only what its task needs. Defaults allow up to 7 AI calls with concurrency up to 3. Change limits and permissions in `.fabric-lite/config.json`.
+
+### Example: a bounded programmatic call
+
+This program searches for a few TypeScript files, sends selected excerpts to the LLM, and requires a small JSON object rather than an unstructured answer:
+
+```ts
+const paths = await fabric.fs.glob({
+  pattern: "src/**/*.ts",
+  maxResults: 5,
+});
+
+const files = await fabric.fs.readMany({
+  paths,
+  maxFiles: 5,
+  maxCharsPerFile: 3000,
+  maxTotalChars: 12000,
+});
+
+const answer = await fabric.ai.run({
+  instruction: "Using only these excerpts, briefly describe the project.",
+  context: files.map(({ path, content }) => ({ path, content })),
+  outputSchema: {
+    type: "object",
+    properties: { summary: { type: "string" } },
+    required: ["summary"],
+    additionalProperties: false,
+  },
+});
+
+return answer.value;
+```
+
+Run it with:
+
+```bash
+node dist/cli/main.js run --file example.ts --format json
+```
+
+Programs are TypeScript function bodies with top-level `await` and `return`; `import` and `require` are not allowed.
+
+## Benefits
+
+| Capability | Concrete benefit |
 | --- | --- |
-| Checked TypeScript programs | Repeatable workflows that are validated before they run |
-| Bounded search and file reads | Less prompt noise and more token-efficient context |
-| JSON Schema validation | More predictable output, with one optional repair attempt |
-| Call, size, concurrency, and time limits | Controlled resource use and faster parallel analysis |
-| Project-contained tools and permissions | Safer access to files, Git, shell, and inspections |
-| Local run records | Easier debugging with programs, diagnostics, metrics, and results |
+| Checked TypeScript programs | Workflows can be reviewed, tested, repeated, and composed before they run |
+| Bounded search and file reads | Less irrelevant prompt context and potentially lower token use, depending on the task and model |
+| Explicit instructions and JSON Schema validation | More predictable parsed data for downstream code, with one optional repair attempt |
+| Call, size, concurrency, and time limits | Controlled resource use and faster independent analysis when parallel calls are appropriate |
+| Project-contained tools and permissions | Controlled access to files, Git, shell, and inspections rather than unrestricted automation |
+| Local run records | Easier debugging through saved programs, diagnostics, metrics, and results |
 
-Token savings depend on the task and model. Kiro Fabric limits calls and characters; it does not measure or promise a fixed number of provider tokens.
+Kiro Fabric limits calls and characters; it does not measure or promise a fixed number of provider tokens.
 
 ## Requirements
 
@@ -80,38 +158,6 @@ node dist/cli/main.js doctor --cwd /path/to/your/project --format json
 
 The CLI defaults to readable text output for `check`, `run`, and `exec`, styled with a gold accent: a branded run header, numbered source between `─ program` and `─ result` (or red `─ error`) rules, diagnostics with carets, and live interaction on stderr — a run-start line plus one line per AI call (`›` ok, `↻` repair, `✗` failed). Retried calls are also summarized in the header. Add `// @name: My program` (and optionally `// @description: ...`) near the top of a program to label its run header. JSON output remains available with `--format json`. Set `FABRIC_LITE_HIGHLIGHT=1` (also `true`, `yes`, or `on`) to enable simple source highlighting. Colors follow the usual conventions: shown only on a TTY and disabled via `NO_COLOR`.
 
-## How it works
-
-LLM calls, project tools, and response schemas are optional. A program uses only what its task needs.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor You
-    participant Kiro as Kiro CLI
-    participant Fabric as Kiro Fabric (local)
-    participant LLM as Kiro LLM
-
-    You->>Kiro: Ask a question
-    Kiro->>Fabric: Submit a TypeScript program
-    Fabric->>Fabric: Type-check it and apply limits
-
-    opt The program requests project tools
-        Fabric->>Fabric: Check each operation and gather context
-    end
-
-    opt The program requests LLM reasoning
-        Fabric->>LLM: Send focused instructions and selected context
-        LLM-->>Fabric: Return structured JSON
-        Fabric->>Fabric: Parse JSON and validate a schema if supplied
-    end
-
-    Fabric-->>Kiro: Return the program result
-    Kiro-->>You: Show the final answer
-```
-
-Defaults allow up to 7 AI calls with concurrency up to 3. Change limits and permissions in `.fabric-lite/config.json`.
-
 ## Safe mutation workflow
 
 Writes remain disabled unless `.fabric-lite/config.json` sets `mutation.enabled` and `filesystem.allowWrite`. Configure `mutation.require` as `clean` (default) or `checkpoint`, and bound review diffs with `mutation.maxDiffChars` (default `30000`). A checkpoint snapshots the dirty tracked worktree with a temporary Git index; ignored files are not included and the real index and branch are unchanged.
@@ -138,47 +184,6 @@ Caching is disabled by default. Enable it for deterministic requests with bounde
 ```
 
 Keys include the redacted request context, instruction, role, schema, model, limits, and runner configuration. Cache hits do not consume AI budgets; entries live in `.fabric-lite/cache/`.
-
-## Programmatic LLM usage
-
-**Programmatic LLM usage** means calling an LLM from code. The code chooses the context, number of calls, and required output structure.
-
-Save this as `example.ts`:
-
-```ts
-const paths = await fabric.fs.glob({
-  pattern: "src/**/*.ts",
-  maxResults: 5,
-});
-
-const files = await fabric.fs.readMany({
-  paths,
-  maxFiles: 5,
-  maxCharsPerFile: 3000,
-  maxTotalChars: 12000,
-});
-
-const answer = await fabric.ai.run({
-  instruction: "Using only these excerpts, briefly describe the project.",
-  context: files.map(({ path, content }) => ({ path, content })),
-  outputSchema: {
-    type: "object",
-    properties: { summary: { type: "string" } },
-    required: ["summary"],
-    additionalProperties: false,
-  },
-});
-
-return answer.value;
-```
-
-Run it with:
-
-```bash
-node dist/cli/main.js run --file example.ts --format json
-```
-
-Programs are TypeScript function bodies with top-level `await` and `return`; `import` and `require` are not allowed.
 
 ## Security and privacy
 
