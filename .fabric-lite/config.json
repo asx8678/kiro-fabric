@@ -30,6 +30,16 @@
     "maxCharsPerFile": 20000,
     "maxTotalReadChars": 100000
   },
+  "git": {
+    "allowCommit": true
+  },
+  "permissions": {
+    "read": "allow",
+    "commit": "ask",
+    "execute": "ask",
+    "network": "ask",
+    "destructive": "deny"
+  },
   "shell": {
     "enabled": false,
     "allowedCommands": [],

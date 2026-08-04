@@ -176,7 +176,7 @@ async function main(): Promise<void> {
         break;
       }
       const config = await loadConfig(args.cwd);
-      const run = await executeProgram(body, config);
+      const run = await executeProgram(body, config, { permissions: args.permissions });
       output(run.envelope, args.format);
       process.exitCode = run.exitCode;
       break;

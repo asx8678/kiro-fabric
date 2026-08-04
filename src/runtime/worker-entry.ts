@@ -6,6 +6,15 @@ import type { FabricConfig } from "../config.js";
 import { errorObject, exitCode, FabricError } from "../errors.js";
 import { FakeAiRunner } from "../runners/fake.js";
 import { KiroHeadlessRunner } from "../runners/kiro.js";
+import {
+  headlessPrompter,
+  interactivePrompter,
+  type ApprovalPrompter,
+} from "../permissions.js";
+
+function selectPrompter(): ApprovalPrompter {
+  return process.env.FABRIC_LITE_PROMPTER === "interactive" ? interactivePrompter : headlessPrompter;
+}
 
 interface Payload {
   body: string;
@@ -31,7 +40,7 @@ try {
           payload.config.runner.executable,
           payload.config.runner.workerAgent,
         );
-  const { fabric, metrics } = createApi(payload.config, runner);
+  const { fabric, metrics } = createApi(payload.config, runner, { prompter: selectPrompter() });
   const wrapped = `globalThis.__fabricMain = async function(fabric) {\n${payload.body}\n};`;
   const js = ts.transpileModule(wrapped, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },

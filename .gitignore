@@ -14,3 +14,4 @@ coverage/
 .fabric-lite/cache/
 *.tgz
 .kiro/**/*.bak-*
+.fabric-lite/*.bak-*

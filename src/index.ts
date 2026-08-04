@@ -8,3 +8,4 @@ export * from "./runners/kiro.js";
 export * from "./runners/parser.js";
 export * from "./prompts.js";
 export * from "./redaction.js";
+export * from "./permissions.js";

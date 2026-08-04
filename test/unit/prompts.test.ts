@@ -32,6 +32,7 @@ describe("canonical prompts and examples",()=>{
   expect(loadPrompt("fabric-context-decompose")).toMatch(/objective, owned scope, evidence pointers, relevant changes, open errors or contradictions, status, expected output\/check, and the exact omitted count and reason/);
   expect(loadPrompt("parent-agent")).toMatch(/exact diagnostic and declared contract[\s\S]*one narrow type\/schema repair[\s\S]*do not guess APIs or permissions, or re-analyze/);
   expect(loadPrompt("parent-agent")).toMatch(/Default to deterministic APIs with zero child AI calls[\s\S]*at most one bounded AI call[\s\S]*only when the user explicitly requests a multi-agent workflow/);
+  expect(loadPrompt("parent-agent")).toMatch(/fabric\.git\.commit\(\{ message, paths \}\)[\s\S]*no push API exists/);
   expect(loadPrompt("workspace-policy")).toMatch(/Rebuild every artifact consumed[\s\S]*documented comprehensive check when authorized/);
  });
  it("keeps installed owned prompt and parent-agent snapshots exact",async()=>{

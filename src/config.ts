@@ -36,6 +36,16 @@ export interface FabricConfig {
     maxCharsPerFile: number;
     maxTotalReadChars: number;
   };
+  git: {
+    allowCommit: boolean;
+  };
+  permissions: {
+    read: "allow" | "ask" | "deny";
+    commit: "allow" | "ask" | "deny";
+    execute: "allow" | "ask" | "deny";
+    network: "allow" | "ask" | "deny";
+    destructive: "allow" | "ask" | "deny";
+  };
   shell: {
     enabled: boolean;
     allowedCommands: string[];
@@ -80,6 +90,16 @@ export const defaults: FabricConfig = {
     maxCharsPerFile: 20000,
     maxTotalReadChars: 100000,
   },
+  git: {
+    allowCommit: false,
+  },
+  permissions: {
+    read: "allow",
+    commit: "ask",
+    execute: "ask",
+    network: "ask",
+    destructive: "deny",
+  },
   shell: {
     enabled: false,
     allowedCommands: [],
@@ -116,6 +136,9 @@ const stringArray: Validator = (value, location) => {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
     fail(location, "an array of strings");
   }
+};
+const permissionValue: Validator = (value, location) => {
+  if (value !== "allow" && value !== "ask" && value !== "deny") fail(location, "allow, ask, or deny");
 };
 
 const configShape: Shape = {
@@ -155,6 +178,16 @@ const configShape: Shape = {
     maxFilesPerReadMany: positiveInteger,
     maxCharsPerFile: positiveInteger,
     maxTotalReadChars: positiveInteger,
+  },
+  git: {
+    allowCommit: booleanValue,
+  },
+  permissions: {
+    read: permissionValue,
+    commit: permissionValue,
+    execute: permissionValue,
+    network: permissionValue,
+    destructive: permissionValue,
   },
   shell: {
     enabled: booleanValue,
@@ -211,6 +244,12 @@ export async function loadConfig(cwd: string): Promise<FabricConfig> {
     );
     validateObject(config, configShape, "root", true);
     const result = config as unknown as FabricConfig;
+    if (result.permissions.read !== "allow") {
+      fail("permissions.read", "allow (read is fixed allow)");
+    }
+    if (result.permissions.destructive !== "deny") {
+      fail("permissions.destructive", "deny (destructive is fixed deny)");
+    }
     result.projectRoot = path.resolve(cwd, result.projectRoot);
     return result;
   } catch (error) {
@@ -220,6 +259,8 @@ export async function loadConfig(cwd: string): Promise<FabricConfig> {
       runner: { ...defaults.runner },
       budgets: { ...defaults.budgets },
       filesystem: { ...defaults.filesystem, allowWrite: [...defaults.filesystem.allowWrite] },
+      git: { ...defaults.git },
+      permissions: { ...defaults.permissions },
       shell: { ...defaults.shell, allowedCommands: [...defaults.shell.allowedCommands] },
       output: { ...defaults.output },
       projectRoot: path.resolve(cwd),

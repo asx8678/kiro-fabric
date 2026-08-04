@@ -1,4 +1,5 @@
 export type OutputFormat = "json" | "text";
+export type PermissionMode = "headless" | "interactive";
 
 export interface Args {
   command?: string;
@@ -10,6 +11,7 @@ export interface Args {
   dryRun: boolean;
   topic?: string;
   smoke: boolean;
+  permissions: PermissionMode;
 }
 
 function requiredValue(argv: string[], option: string): string {
@@ -29,6 +31,7 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
     force: false,
     dryRun: false,
     smoke: false,
+    permissions: "headless",
   };
   const command = remaining.shift();
   if (command !== undefined) out.command = command;
@@ -54,11 +57,20 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
       out.dryRun = true;
     } else if (option === "--smoke") {
       out.smoke = true;
+    } else if (option === "--permissions") {
+      const permissions = requiredValue(remaining, option);
+      if (permissions !== "headless" && permissions !== "interactive") {
+        throw new Error(`Invalid --permissions value: ${permissions}; expected headless or interactive`);
+      }
+      out.permissions = permissions;
     } else if (!option.startsWith("--")) {
       out.topic = out.topic ? `${out.topic} ${option}` : option;
     } else {
       throw new Error(`Unknown option: ${option}`);
     }
+  }
+  if (out.permissions !== "headless" && out.command !== "run" && out.command !== "exec") {
+    throw new Error("--permissions is only supported for run and exec");
   }
   return out;
 }

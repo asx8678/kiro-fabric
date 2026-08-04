@@ -21,6 +21,10 @@ afterEach(async () => {
 describe("loadConfig validation", () => {
   it.each([
     { shell: { enabled: "yes" } },
+    { git: { allowCommit: "yes" } },
+    { git: { surprise: true } },
+    { permissions: { execute: "sometimes" } },
+    { permissions: { commit: true } },
     { filesystem: { allowWrite: ["src/**", 1] } },
     { budgets: { maxRetriesPerCall: -1 } },
     { budgets: { aiCallTimeoutMs: 0 } },
@@ -55,6 +59,8 @@ describe("loadConfig validation", () => {
       maxRetriesPerCall: 0,
       maxAiCalls: defaults.budgets.maxAiCalls,
     });
+    expect(config.git).toEqual({ allowCommit: false });
+    expect(config.permissions).toEqual(defaults.permissions);
     expect(config.shell).toMatchObject({
       enabled: true,
       allowedCommands: ["git status"],
