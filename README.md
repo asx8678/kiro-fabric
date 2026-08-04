@@ -136,6 +136,45 @@ pnpm run setup:kiro -- --allow-write read
 
 A dry run still installs dependencies and rebuilds `dist/`; it only avoids writing generated Kiro and configuration files. `--force` backs up then replaces installer-owned agents and prompts, but never touches a user-owned `.fabric-lite/config.json` (see below).
 
+### Interactive installer
+
+For a guided, keyboard-navigable setup, run:
+
+```bash
+pnpm run setup
+```
+
+The installer renders a box-drawn UI with an animated status dashboard — use **↑/↓** to move, **Enter** to select, and **Esc**/**q** to cancel. It detects the current state and adapts its options:
+
+- **Nothing installed** → **Install** (choose *Workspace* or *Read-only* write mode)
+- **Partially installed** → **Repair** (completes missing components) plus **Delete**
+- **Fully installed** → **Update** (rebuild + reinstall agents) and **Delete**
+- **Quit** exits without changes
+
+The dashboard shows Kiro CLI + version, build state, config/agents/worker/prompts presence, Git repo + dirty status, and the current **write access** and **mutation** policy. Each action prints a plan box and runs numbered steps with animated spinners, then shows a verified result panel.
+
+**Writable by default.** Install and Update always apply *Workspace* access — `.fabric-lite/config.json` is set to `filesystem.allowWrite=["**"]` and `mutation.enabled=true` (checkpoint-guarded) so you can modify files and run mutations immediately, not just read. Read-only is opt-in.
+
+**Keeps you on the latest version.** On launch the installer checks `origin` via git (fetch + compare). If newer commits are available it shows a **"New version available — N commit(s) behind"** banner and highlights a **⇣ Pull latest** option. Selecting it lists the new commits, pulls with `git pull --ff-only` (safely keeping uncommitted work), and rebuilds so you're immediately on the newest source.
+
+**Clear completion states.** After a successful **install** (or repair), the app shows a **"✓ App installed successfully"** screen with a single **Quit** option. After an **update**, the installer auto-closes once the update finishes (**"Update finished — closing installer..."**), so you're dropped back to the shell ready to run `kiro-cli --agent fabric-lite`.
+
+```bash
+pnpm run setup -- --allow-write read
+```
+
+Other flags:
+
+```bash
+# target a different directory
+pnpm run setup -- --cwd /path/to/project
+
+# skip install/update confirmations (delete still asks)
+pnpm run setup -- --yes
+```
+
+Non-interactive (piped) input falls back to a numbered menu, so scripts/tests can drive it with e.g. `echo 2 | node scripts/install.mjs`.
+
 ## Use the app
 
 In the configured repository, run:
@@ -247,7 +286,7 @@ See [security details](docs/SECURITY.md).
 
 ## Uninstall
 
-There is no automatic uninstall command. In each configured repository, first remove only prompts listed in its installer manifest:
+The interactive installer (`pnpm run setup`) shows a **Delete** option once Fabric Lite is installed. You can also remove everything manually. In each configured repository, first remove only prompts listed in its installer manifest:
 
 ```bash
 node --input-type=module <<'NODE'

@@ -194,7 +194,11 @@ function truncate(text: string, max: number): { text: string; truncated: boolean
   const effective = max - marker.length;
   const sliced = text.slice(0, Math.max(0, effective));
   const lastNewline = sliced.lastIndexOf("\n");
-  const boundary = lastNewline > effective * 0.8 ? lastNewline : effective;
+  // Cut at the nearest line boundary so truncation never breaks a statement.
+  // Fall back to a mid-line crop only when there is no usable newline (i.e. the
+  // whole slice is one unbroken line); lastIndexOf returns the latest newline,
+  // so this keeps the maximum complete content.
+  const boundary = lastNewline > 0 ? lastNewline : effective;
   return { text: sliced.slice(0, boundary) + marker, truncated: true };
 }
 
