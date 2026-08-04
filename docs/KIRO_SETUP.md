@@ -3,11 +3,11 @@
 ## One-command setup
 
 ```bash
-./scripts/setup-kiro.sh
+pnpm run setup:kiro
 # or: pnpm setup:kiro
 ```
 
-This installs locked dependencies, builds Fabric Lite, installs and validates both Kiro agents, creates project configuration, and runs `doctor`. Preview with `./scripts/setup-kiro.sh --dry-run`; use `--force` only when replacing existing generated files (backups are created first).
+This installs locked dependencies, builds Fabric Lite, installs and validates both Kiro agents, creates project configuration, and runs `doctor`. Preview with `pnpm run setup:kiro --dry-run`; use `--force` only when replacing existing generated files (backups are created first).
 
 ## Manual setup
 

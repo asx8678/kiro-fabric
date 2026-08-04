@@ -5,11 +5,11 @@
 From this repository, install and configure Fabric Lite for Kiro in one command:
 
 ```bash
-./scripts/setup-kiro.sh
+pnpm run setup:kiro
 # or: pnpm setup:kiro
 ```
 
-Then launch it with `kiro-cli --agent fabric-lite`. When this agent is selected, every request is routed through a checked Fabric Lite TypeScript program. The body is passed inline by heredoc, and each run is persisted under `.fabric-lite/runs/<run-id>/` (including `program.ts`, metadata, diagnostics, and the final envelope); that directory is ignored by Git but can contain source-sensitive material. Use `./scripts/setup-kiro.sh --dry-run` to preview or `--force` to back up and replace conflicting generated files.
+Then launch it with `kiro-cli --agent fabric-lite`. When this agent is selected, every request is routed through a checked Fabric Lite TypeScript program. The body is passed inline by heredoc, and each run is persisted under `.fabric-lite/runs/<run-id>/` (including `program.ts`, metadata, diagnostics, and the final envelope); that directory is ignored by Git but can contain source-sensitive material. Use `pnpm run setup:kiro --dry-run` to preview or `--force` to back up and replace conflicting generated files.
 
 Fabric Lite is a focused TypeScript orchestration runtime for Kiro CLI. A program selects repository context deterministically, performs a bounded number of one-shot Kiro reasoning calls, validates framed JSON with Ajv, and returns one compact envelope. It has no mesh, actors, recursive agents, daemon, ACP, MCP bridge, or direct provider SDK.
 

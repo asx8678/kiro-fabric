@@ -10,11 +10,12 @@
   },
   "files": ["dist", "types", "prompts", "README.md"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm build && vitest run",
     "test:smoke": "FABRIC_LITE_KIRO_SMOKE=1 vitest run test/kiro",
-    "setup:kiro": "bash scripts/setup-kiro.sh",
+    "setup:kiro": "node scripts/setup-kiro.mjs",
+    "check": "pnpm run typecheck && pnpm run build && pnpm run test",
     "prepack": "pnpm build"
   },
   "engines": { "node": ">=20" },
