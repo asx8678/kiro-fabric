@@ -6,6 +6,8 @@ export interface FileReadResult {
   truncated: boolean;
   startLine: number;
   endLine: number;
+  /** Present only from readMany with strict:false for files that do not exist; content is empty. */
+  missing?: boolean;
 }
 export interface FileStat {
   path: string;
@@ -241,6 +243,8 @@ export interface FabricLiteApi {
       maxFiles?: number;
       maxCharsPerFile?: number;
       maxTotalChars?: number;
+      /** When false, missing files become empty placeholder entries with missing:true instead of aborting the call; policy and budget violations still throw. Default true. */
+      strict?: boolean;
     }): Promise<FileReadResult[]>;
     glob(
       input:
@@ -457,7 +461,7 @@ export interface FabricLiteApi {
     unique<T>(items: T[]): T[];
     sortBy<T>(items: T[], selector: (item: T) => string | number): T[];
     truncate(text: string, maxChars: number): string;
-    compactJson(value: unknown, maxChars: number): string;
+    compactJson(value: unknown, maxChars?: number): string;
     /** Deterministic context compression to maxChars (same extraction pipeline as ai.run compressContext). */ compressText(
       text: string,
       maxChars: number,

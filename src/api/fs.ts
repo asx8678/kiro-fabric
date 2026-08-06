@@ -100,6 +100,9 @@ export function createFsApi(ctx: ApiContext): FabricLiteApi["fs"] {
         );
       if (paths.length > maxFiles)
         throw new FabricError("BUDGET_EXCEEDED", `readMany file limit ${maxFiles} exceeded`);
+      if (value.strict !== undefined && typeof value.strict !== "boolean")
+        invalidArguments("fabric.fs.readMany", "strict must be a boolean");
+      const strict = value.strict !== false;
       const out: FileReadResult[] = [],
         totalLimit = Math.min(
           Number(value.maxTotalChars ?? config.filesystem.maxTotalReadChars),
@@ -107,10 +110,28 @@ export function createFsApi(ctx: ApiContext): FabricLiteApi["fs"] {
         );
       let total = 0;
       for (const filePath of paths) {
-        const result = await fsApi.read({
-          path: filePath,
-          maxChars: Number(value.maxCharsPerFile ?? config.filesystem.maxCharsPerFile),
-        });
+        let result: FileReadResult;
+        try {
+          result = await fsApi.read({
+            path: filePath,
+            maxChars: Number(value.maxCharsPerFile ?? config.filesystem.maxCharsPerFile),
+          });
+        } catch (error) {
+          // strict:false turns absent files into explicit empty placeholders
+          // instead of aborting the whole batch; policy and budget violations
+          // always throw.
+          if (strict || error instanceof FabricError) throw error;
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          result = {
+            path: filePath,
+            content: "",
+            chars: 0,
+            truncated: false,
+            startLine: 0,
+            endLine: 0,
+            missing: true,
+          };
+        }
         if (total + result.chars > totalLimit) {
           const left = Math.max(0, totalLimit - total);
           out.push({

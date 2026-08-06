@@ -28,7 +28,10 @@ export function createShellApi(ctx: ApiContext): FabricLiteApi["shell"] {
       optionalNumber("fabric.shell.run", input.timeoutMs, "timeoutMs");
       optionalNumber("fabric.shell.run", input.maxOutputChars, "maxOutputChars");
       if (!config.shell.enabled)
-        throw new FabricError("POLICY_DENIED", "Shell is disabled by project policy");
+        throw new FabricError(
+          "POLICY_DENIED",
+          "Shell is disabled by project policy (set shell.enabled and shell.allowedCommands in .fabric-lite/config.json)",
+        );
       if (typeof input?.command !== "string" || input.command.length === 0)
         throw new FabricError("POLICY_DENIED", "Shell command must be a non-empty string");
       const requestedCwd = await safePath(root, input.cwd ?? ".");

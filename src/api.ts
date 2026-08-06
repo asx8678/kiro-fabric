@@ -98,7 +98,7 @@ export function createApi(
         truncate(text: string, max: number) {
           return text.length <= max ? text : text.slice(0, Math.max(0, max - 1)) + "…";
         },
-        compactJson(value: unknown, max: number) {
+        compactJson(value: unknown, max = 16000) {
           const s = JSON.stringify(value);
           return s.length <= max ? s : s.slice(0, Math.max(0, max - 1)) + "…";
         },

@@ -6,6 +6,8 @@
  */
 
 const LONG_LINE = 240;
+/** Lines longer than this absolute ceiling are left intact for the final head+tail truncation. */
+const LINE_KEEP_FRACTION = 8;
 
 const isCommentLine = (line: string): boolean => /^\s*(\/\/|\/\*|\*\/|\*|#|<!--)/.test(line);
 
@@ -31,9 +33,19 @@ export function compressContextText(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
 
   const normalized = text.replace(/\r\n?/g, "\n");
+  // Over-long line truncation exists to shave minified/noise lines in
+  // line-oriented text (code, logs). It must be budget-relative: a fixed cap
+  // would guillotine a single-line JSON payload (e.g. compactJson output) to a
+  // stub. Lines longer than the whole budget are left intact so the final
+  // middle truncation preserves both their head and their tail instead.
+  const longLineCap = Math.max(LONG_LINE, Math.floor(maxChars / LINE_KEEP_FRACTION));
   const lines = normalized
     .split("\n")
-    .map((line) => (line.length > LONG_LINE ? `${line.slice(0, LONG_LINE - 1)}…` : line));
+    .map((line) =>
+      line.length > longLineCap && line.length <= maxChars
+        ? `${line.slice(0, longLineCap - 1)}…`
+        : line,
+    );
 
   const deduped: string[] = [];
   for (const line of lines) {

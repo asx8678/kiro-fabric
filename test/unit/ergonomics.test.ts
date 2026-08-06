@@ -103,6 +103,23 @@ describe("deterministic context compression", () => {
     expect(compressed.length).toBeLessThanOrEqual(100);
     expect(compressed).toContain("short");
   });
+
+  it("does not guillotine single-line JSON payloads to a stub", () => {
+    // Regression: a compactJson-style one-line context must reach the final
+    // head+tail truncation, not the per-line stage — a fixed line cap turned a
+    // 220KB evidence pack into 240 chars (observed in a real fabric.ai.run).
+    const payload = JSON.stringify({
+      head: "A".repeat(10000),
+      middle: { paths: ["a.ts", "b.ts"] },
+      tail: "Z".repeat(10000),
+    });
+    const compressed = compressContextText(payload, 2000);
+    expect(compressed.length).toBeLessThanOrEqual(2000);
+    expect(compressed.length).toBeGreaterThan(1000);
+    expect(compressed).toContain("chars omitted");
+    expect(compressed).toContain("AAAA");
+    expect(compressed).toContain("ZZZZ");
+  });
 });
 
 describe("stable-first context ordering", () => {
@@ -177,6 +194,42 @@ describe("ai.run label and compressContext", () => {
       expect(result.compressed).toBe(true);
       expect(result.value).toEqual({ ok: true });
       expect(runner.calls[0]!.context.length).toBeLessThanOrEqual(500);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("readMany strict mode and compactJson default", () => {
+  it("returns missing placeholders with strict:false and still throws on policy", async () => {
+    const { root, config, runner } = await fixture();
+    try {
+      const { fabric } = createApi(config, runner);
+      const results = await fabric.fs.readMany({
+        paths: ["a.ts", "AGENTS.md", "CONTRIBUTING.md"],
+        strict: false,
+      });
+      expect(results).toHaveLength(3);
+      expect(results[0]).toMatchObject({ path: "a.ts", chars: 3 });
+      expect(results[1]).toMatchObject({ path: "AGENTS.md", content: "", missing: true });
+      expect(results[2]).toMatchObject({ path: "CONTRIBUTING.md", missing: true });
+      // Default remains strict.
+      await expect(fabric.fs.readMany({ paths: ["a.ts", "AGENTS.md"] })).rejects.toThrow();
+      // Policy violations are never softened.
+      await expect(fabric.fs.readMany({ paths: [".env"], strict: false })).rejects.toMatchObject({
+        code: "POLICY_DENIED",
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("compactJson bounds output with a default cap", async () => {
+    const { root, config, runner } = await fixture();
+    try {
+      const { fabric } = createApi(config, runner);
+      expect(fabric.util.compactJson({ a: 1 })).toBe('{"a":1}');
+      expect(fabric.util.compactJson({ a: "x".repeat(20000) }).length).toBeLessThanOrEqual(16000);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
