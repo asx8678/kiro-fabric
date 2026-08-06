@@ -259,6 +259,73 @@ export function tryRepairOutput(value: unknown, schema: Schema): RepairOutcome |
   return { value: clone, repairs };
 }
 
+/**
+ * Escape raw control characters inside JSON string literals. Raw newlines,
+ * carriage returns, tabs, and C0 controls are never valid inside a JSON
+ * string and are insignificant whitespace outside one, so this transform is
+ * unambiguous — it is the dominant deterministic fix for model outputs that
+ * embed large code blobs in string fields without escaping them. Unescaped
+ * quotes are intentionally not guessed: where a string truly ends is
+ * ambiguous and is left to schema validation or the paid repair retry.
+ */
+export function escapeStringControlChars(text: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    if (escaped) {
+      result += ch;
+      escaped = false;
+      continue;
+    }
+    if (inString && ch === "\\") {
+      result += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      result += ch;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\n") {
+        result += "\\n";
+        continue;
+      }
+      if (ch === "\r") {
+        result += "\\r";
+        continue;
+      }
+      if (ch === "\t") {
+        result += "\\t";
+        continue;
+      }
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) {
+        result += `\\u${code.toString(16).padStart(4, "0")}`;
+        continue;
+      }
+    }
+    result += ch;
+  }
+  return result;
+}
+
+/** Parse JSON, falling back to control-character escaping when the raw parse fails. */
+function parseTolerantJson(text: string): { value: unknown; escaped: boolean } | undefined {
+  try {
+    return { value: JSON.parse(text), escaped: false };
+  } catch {
+    // fall through to the escaped attempt
+  }
+  try {
+    return { value: JSON.parse(escapeStringControlChars(text)), escaped: true };
+  } catch {
+    return undefined;
+  }
+}
+
 /** Salvage the outermost JSON object/array from prose or leaked grammar. */
 export function salvageJson(text: string): unknown | undefined {
   const unfenced = text.replace(/```(?:json|JSON)?/g, "");
@@ -288,23 +355,33 @@ export function repairFramedOutput(
   let candidate: unknown;
   const framed = extractFramed(stdout);
   if (framed !== undefined && framed.length <= maxChars) {
-    try {
-      candidate = JSON.parse(framed);
-    } catch {
-      const salvaged = salvageJson(framed);
-      if (salvaged !== undefined) {
-        candidate = salvaged;
+    const tolerant = parseTolerantJson(framed);
+    if (tolerant !== undefined) {
+      candidate = tolerant.value;
+      if (tolerant.escaped) repairs.push("escapeStringControlChars");
+    } else {
+      let salvaged = salvageJson(framed);
+      if (salvaged === undefined) {
+        salvaged = salvageJson(escapeStringControlChars(framed));
+        if (salvaged !== undefined) repairs.push("salvageJson", "escapeStringControlChars");
+      } else {
         repairs.push("salvageJson");
       }
+      if (salvaged !== undefined) candidate = salvaged;
     }
   }
   if (candidate === undefined) {
     const clean = stripAnsi(stdout);
     const bounded = clean.length > maxChars ? clean.slice(-maxChars) : clean;
-    const salvaged = salvageJson(bounded);
+    let salvaged = salvageJson(bounded);
+    if (salvaged === undefined) {
+      salvaged = salvageJson(escapeStringControlChars(bounded));
+      if (salvaged !== undefined) repairs.push("salvageJson", "escapeStringControlChars");
+    } else {
+      repairs.push("salvageJson");
+    }
     if (salvaged === undefined) return undefined;
     candidate = salvaged;
-    repairs.push("salvageJson");
   }
   if (!schema) return repairs.length > 0 ? { value: candidate, repairs } : undefined;
   const fixed = tryRepairOutput(candidate, schema);

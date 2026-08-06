@@ -2,7 +2,12 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { repairFramedOutput, salvageJson, tryRepairOutput } from "../../src/runners/repair.js";
+import {
+  escapeStringControlChars,
+  repairFramedOutput,
+  salvageJson,
+  tryRepairOutput,
+} from "../../src/runners/repair.js";
 import { parseFramed } from "../../src/runners/parser.js";
 import { createApi } from "../../src/api.js";
 import { defaults, type FabricConfig } from "../../src/config.js";
@@ -149,7 +154,58 @@ async function fixture(handler?: ConstructorParameters<typeof FakeAiRunner>[0]) 
   return { root, config, runner: new FakeAiRunner(handler) };
 }
 
+describe("parse-level repair: control-character escaping", () => {
+  it("escapes raw control characters inside strings only", () => {
+    expect(escapeStringControlChars('{"a":"line1\nline2"}')).toBe('{"a":"line1\\nline2"}');
+    expect(escapeStringControlChars('{"a":"x\t\r\u0001y"}')).toBe('{"a":"x\\t\\r\\u0001y"}');
+    // Outside strings, whitespace and structure pass through unchanged.
+    expect(escapeStringControlChars('{\n  "a": 1\n}')).toBe('{\n  "a": 1\n}');
+    // Already-escaped sequences are not double-escaped.
+    expect(escapeStringControlChars('{"a":"\\n"}')).toBe('{"a":"\\n"}');
+  });
+
+  it("repairs framed output with raw newlines inside code strings", () => {
+    // The exact failure observed in production: a large code payload emitted
+    // with unescaped newlines inside JSON string values.
+    const code = "export function x() {\n  return 1;\n}";
+    const broken = `FABRIC_RESULT_BEGIN\n{"summary":"done","paths":["a.ts"],"note":"${code}"}\nFABRIC_RESULT_END`;
+    expect(() => JSON.parse('{"note":"' + code + '"}')).toThrow();
+    const out = repairFramedOutput(broken, schema as unknown as Record<string, unknown>, 16000);
+    expect(out?.value).toEqual({ summary: "done", paths: ["a.ts"], note: code });
+    expect(out?.repairs).toEqual(["escapeStringControlChars"]);
+  });
+
+  it("still returns undefined for unrecoverable syntax errors", () => {
+    // An unescaped quote mid-string cannot be disambiguated deterministically.
+    const broken =
+      'FABRIC_RESULT_BEGIN\n{"summary":"he said "hi" loudly","paths":["a"]}\nFABRIC_RESULT_END';
+    expect(
+      repairFramedOutput(broken, schema as unknown as Record<string, unknown>, 16000),
+    ).toBeUndefined();
+  });
+});
+
 describe("ai.run deterministic repair integration", () => {
+  it("repairs parse-level control-character errors without an LLM retry", async () => {
+    const { root, config, runner } = await fixture(
+      () =>
+        'FABRIC_RESULT_BEGIN\n{"summary":"first line\nsecond line","paths":["a"]}\nFABRIC_RESULT_END',
+    );
+    try {
+      const { fabric } = createApi(config, runner);
+      const result = await fabric.ai.run({
+        instruction: "x",
+        outputSchema: schema as unknown as Record<string, unknown>,
+      });
+      expect(result.value).toEqual({ summary: "first line\nsecond line", paths: ["a"] });
+      expect(result.repairPath).toBe("deterministic");
+      expect(result.repairs).toEqual(["escapeStringControlChars"]);
+      expect(runner.calls).toHaveLength(1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("repairs schema violations without an LLM retry", async () => {
     const { root, config, runner } = await fixture(() => ({
       summary: "s",
