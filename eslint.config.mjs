@@ -11,6 +11,7 @@ export default tseslint.config(
       "node_modules/**",
       "test/fixtures/**",
       "pi-fabric/**",
+      "repos/**",
       "coverage/**",
       ".fabric-lite/**",
     ],

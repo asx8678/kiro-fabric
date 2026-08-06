@@ -103,6 +103,10 @@ Programs are TypeScript function bodies with top-level `await` and `return`; `im
 | Call, size, concurrency, and time limits | Controlled resource use and faster independent analysis when parallel calls are appropriate |
 | Project-contained tools and permissions | Controlled access to files, Git, shell, and inspections rather than unrestricted automation |
 | Local run records | Easier debugging through saved programs, diagnostics, metrics, and results |
+| Deterministic output repair | Malformed structured output is fixed schema-guided (null-dropping, stringified arrays, bare-value wrapping, scalar coercion, field renames, anchor-bleed stripping) or salvaged from prose with no extra LLM call; results report `repairPath` and `repairs`, and a paid repair retry only runs when the deterministic ladder cannot fix the output |
+| Repo mapping (`fabric.context`) | `sketch`/`focus`/`impact` build a token-budgeted repo map with symbols, imports, and content hashes — deterministic context selection that consumes no AI-call budget |
+| Deterministic context compression | Over-budget contexts can be compressed (opt-in `compressContext`) instead of failing, and context arrays can be ordered stable-first (`stability: "volatile"`) for prompt-cache-friendly prefixes |
+| Named payloads and YAML | Large text stays out of the checked program via `--payloads` (`fabric.payloads`), `label` tags calls for observability, and `fabric.util.toYaml` serializes contexts and results in a token-cheaper format |
 
 Kiro Fabric limits calls and characters; it does not measure or promise a fixed number of provider tokens.
 

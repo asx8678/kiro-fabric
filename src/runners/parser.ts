@@ -42,22 +42,34 @@ function formatSchemaErrors(
   }));
 }
 
+/** Extract the last complete framed payload without throwing; undefined when frames are missing. */
+export function extractFramed(stdout: string): string | undefined {
+  const clean = stripAnsi(stdout)
+    .replace(/FABRIC_?RESULT_?BEGIN/g, begin)
+    .replace(/FABRIC_?RESULT_?END/g, end);
+  const finish = clean.lastIndexOf(end);
+  if (finish < 0) return undefined;
+  const start = clean.lastIndexOf(begin, finish);
+  if (start < 0) return undefined;
+  return clean
+    .slice(start + begin.length, finish)
+    .trim()
+    .replace(/^>\s?/gm, "");
+}
+
 export function parseFramed(
   stdout: string,
   schema?: Record<string, unknown>,
   maxChars = 16000,
 ): unknown {
-  const clean = stripAnsi(stdout)
-    .replace(/FABRIC_?RESULT_?BEGIN/g, begin)
-    .replace(/FABRIC_?RESULT_?END/g, end);
-  const finish = clean.lastIndexOf(end);
-  if (finish < 0) throw framedError("Missing FABRIC_RESULT_END frame", stdout);
-  const start = clean.lastIndexOf(begin, finish);
-  if (start < 0) throw framedError("Missing FABRIC_RESULT_BEGIN frame", stdout);
-  const raw = clean
-    .slice(start + begin.length, finish)
-    .trim()
-    .replace(/^>\s?/gm, "");
+  const raw = extractFramed(stdout);
+  if (raw === undefined) {
+    const clean = stripAnsi(stdout)
+      .replace(/FABRIC_?RESULT_?BEGIN/g, begin)
+      .replace(/FABRIC_?RESULT_?END/g, end);
+    if (clean.lastIndexOf(end) < 0) throw framedError("Missing FABRIC_RESULT_END frame", stdout);
+    throw framedError("Missing FABRIC_RESULT_BEGIN frame", stdout);
+  }
   if (raw.length > maxChars)
     throw new FabricError("INVALID_AI_OUTPUT", `AI output exceeds ${maxChars} characters`);
   let value: unknown;

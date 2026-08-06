@@ -21,6 +21,7 @@ interface Payload {
   config: FabricConfig;
   runId: string;
   credentials?: Record<string, string | undefined>;
+  payloads?: Record<string, string>;
 }
 
 function validateReturnValue(value: unknown, ancestors: Set<object>): void {
@@ -133,7 +134,10 @@ try {
           payload.config.runner.workerAgent,
           creds,
         );
-  const { fabric, metrics } = createApi(payload.config, runner, { prompter: selectPrompter() });
+  const { fabric, metrics } = createApi(payload.config, runner, {
+    prompter: selectPrompter(),
+    ...(payload.payloads ? { payloads: payload.payloads } : {}),
+  });
   const wrapped = `globalThis.__fabricMain = async function(fabric) {\n${payload.body}\n};`;
   const js = ts.transpileModule(wrapped, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },

@@ -123,7 +123,45 @@ describe("published API contract", () => {
       ).toBe(true);
       expect(typeof fabric.util.chunk).toBe("function");
       expect(fabric.util.truncate("abcdef", 3)).toBe("ab…");
+      expect(typeof fabric.util.compressText).toBe("function");
+      expect(typeof fabric.util.toYaml).toBe("function");
+      expect(fabric.payloads).toEqual({});
       await expect(fabric.shell.run({ command: "ls" })).rejects.toThrow(/disabled/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("context.* return shapes matching the declaration", async () => {
+    const { root, config } = await fixture();
+    try {
+      const { fabric } = createApi(config, new FakeAiRunner());
+      expect(keys(await fabric.context.sketch({}))).toEqual([
+        "filesScanned",
+        "outline",
+        "repoHash",
+        "testFiles",
+        "totalFiles",
+        "truncated",
+      ]);
+      const focused = await fabric.context.focus({ query: "token" });
+      expect(keys(focused)).toEqual(["files", "filesScanned", "query", "repoHash", "truncated"]);
+      expect(focused.files.length).toBeGreaterThan(0);
+      expect(keys(focused.files[0])).toEqual([
+        "hash",
+        "imports",
+        "path",
+        "score",
+        "suggestedReads",
+        "symbols",
+      ]);
+      expect(keys(await fabric.context.impact({ path: "a.ts" }))).toEqual([
+        "direct",
+        "repoHash",
+        "target",
+        "transitive",
+        "truncated",
+      ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

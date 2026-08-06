@@ -42,6 +42,23 @@ describe("parseArgs --permissions", () => {
   });
 });
 
+describe("parseArgs --payloads", () => {
+  it("accepts a payloads file for run and exec", () => {
+    expect(parseArgs(["run", "--payloads", "p.json"]).payloads).toBe("p.json");
+    expect(parseArgs(["exec", "--payloads", "p.json"]).payloads).toBe("p.json");
+    expect(parseArgs(["run"]).payloads).toBeUndefined();
+  });
+
+  it("rejects a missing value and non-run commands", () => {
+    expect(() => parseArgs(["run", "--payloads"])).toThrow(/requires a value/);
+    for (const command of ["check", "docs", "models", "doctor", "install-kiro"]) {
+      expect(() => parseArgs([command, "--payloads", "p.json"])).toThrow(
+        /only supported for run and exec/,
+      );
+    }
+  });
+});
+
 describe("parseArgs --allow-write", () => {
   it("defaults to workspace and accepts read/workspace for install-kiro", () => {
     expect(parseArgs(["install-kiro"]).writeAccess).toBe("workspace");

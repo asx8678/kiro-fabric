@@ -15,6 +15,7 @@ export interface Args {
   smoke: boolean;
   permissions: PermissionMode;
   writeAccess: WriteAccessMode;
+  payloads?: string;
 }
 
 function requiredValue(argv: string[], option: string): string {
@@ -64,6 +65,8 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
       out.dryRun = true;
     } else if (option === "--smoke") {
       out.smoke = true;
+    } else if (option === "--payloads") {
+      out.payloads = requiredValue(remaining, option);
     } else if (option === "--permissions") {
       const permissions = requiredValue(remaining, option);
       if (permissions !== "headless" && permissions !== "interactive") {
@@ -86,6 +89,9 @@ export function parseArgs(argv: string[], onFormat?: (format: OutputFormat) => v
   }
   if (out.permissions !== "headless" && out.command !== "run" && out.command !== "exec") {
     throw new Error("--permissions is only supported for run and exec");
+  }
+  if (out.payloads !== undefined && out.command !== "run" && out.command !== "exec") {
+    throw new Error("--payloads is only supported for run and exec");
   }
   if (
     argv.includes("--allow-write") &&

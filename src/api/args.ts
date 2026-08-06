@@ -57,28 +57,39 @@ export function positionalArguments(
   return result;
 }
 
-/** Format context with optional relevanceHint annotations for better model attention. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * Format context with optional relevanceHint annotations for better model
+ * attention. Array items may also carry stability: "stable" | "volatile":
+ * volatile items are moved after stable/unmarked ones (relative order within
+ * each partition preserved) so the serialized context keeps a stable prefix
+ * across calls — the cache-friendly section ordering that maximizes
+ * provider-side prompt caching.
+ */
 export function formatContext(ctx: unknown): string {
   if (ctx === null || ctx === undefined) return "null";
   if (!Array.isArray(ctx)) return JSON.stringify(ctx);
   const items = ctx as Array<unknown>;
-  const hasHints = items.some(
-    (item) =>
-      typeof item === "object" &&
-      item !== null &&
-      "relevanceHint" in (item as Record<string, unknown>),
-  );
-  if (!hasHints) return JSON.stringify(ctx);
+  const hasHints = items.some((item) => isRecord(item) && "relevanceHint" in item);
+  const hasStability = items.some((item) => isRecord(item) && "stability" in item);
+  if (!hasHints && !hasStability) return JSON.stringify(ctx);
+  const ordered = hasStability
+    ? [
+        ...items.filter((item) => !(isRecord(item) && item.stability === "volatile")),
+        ...items.filter((item) => isRecord(item) && item.stability === "volatile"),
+      ]
+    : items;
   return JSON.stringify(
-    items.map((item) => {
-      if (
-        typeof item !== "object" ||
-        item === null ||
-        !("relevanceHint" in (item as Record<string, unknown>))
-      )
-        return item;
-      const { relevanceHint, ...rest } = item as Record<string, unknown>;
-      return { _relevance: relevanceHint, ...rest };
+    ordered.map((item) => {
+      if (!isRecord(item) || (!("relevanceHint" in item) && !("stability" in item))) return item;
+      const { relevanceHint, stability, ...rest } = item;
+      return {
+        ...(relevanceHint !== undefined ? { _relevance: relevanceHint } : {}),
+        ...(stability !== undefined ? { _stability: stability } : {}),
+        ...rest,
+      };
     }),
   );
 }

@@ -76,6 +76,8 @@ export interface ExecuteOptions {
   progress?: boolean;
   /** Checker diagnostics to persist in the run directory. */
   diagnostics?: unknown[];
+  /** Named payloads exposed to the program as fabric.payloads. */
+  payloads?: Record<string, string>;
 }
 
 export async function executeProgram(
@@ -244,6 +246,14 @@ export async function executeProgram(
       }
       resolve({ envelope, exitCode: code ?? 1 });
     });
-    child.stdin.end(JSON.stringify({ body, config, runId, credentials }));
+    child.stdin.end(
+      JSON.stringify({
+        body,
+        config,
+        runId,
+        credentials,
+        ...(options.payloads ? { payloads: options.payloads } : {}),
+      }),
+    );
   });
 }

@@ -12,13 +12,13 @@ import { KiroHeadlessRunner, runProcess } from "../runners/kiro.js";
 import { parseFramed } from "../runners/parser.js";
 import { executeProgram } from "../runtime/executor.js";
 import { parseArgs, type OutputFormat } from "./args.js";
-import { programInput } from "./input.js";
+import { payloadsInput, programInput } from "./input.js";
 import { renderCheckText, renderRunText } from "./render.js";
 import { updateWritePolicy } from "../write-policy.js";
 
 const usage =
   "fabric-lite <check|run|exec|docs|models|doctor|install-kiro|update-policy> [options]\n" +
-  "  run/exec options: --file <path> --format json|text --cwd <dir> --permissions headless|interactive\n" +
+  "  run/exec options: --file <path> --format json|text --cwd <dir> --permissions headless|interactive --payloads <file.json>\n" +
   "  check options: --file <path> --format json|text\n" +
   "  docs options: [topic] --compact --format json|text\n" +
   "  doctor options: --cwd <dir> --smoke --format json|text\n" +
@@ -204,10 +204,12 @@ async function main(): Promise<void> {
         break;
       }
       const config = await loadConfig(args.cwd);
+      const payloads = args.payloads === undefined ? undefined : await payloadsInput(args.payloads);
       const run = await executeProgram(body, config, {
         permissions: args.permissions,
         progress: args.format === "text",
         diagnostics: checked.diagnostics,
+        ...(payloads ? { payloads } : {}),
       });
       if (args.format === "text") {
         const highlight = /^(1|true|yes|on)$/i.test(process.env.FABRIC_LITE_HIGHLIGHT ?? "");

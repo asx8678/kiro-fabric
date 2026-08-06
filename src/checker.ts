@@ -35,7 +35,7 @@ function diagnosticHint(code: number, message: string, sourceLine?: string): str
   if (code === 2304 && message.includes("Cannot find name"))
     return "Only 'fabric' is globally available. imports/require are not allowed. Use fabric.fs, fabric.ai, fabric.git, etc.";
   if (code === 2339 && message.includes("does not exist on type"))
-    return "Check available methods: fabric.fs.{read,readMany,glob,grep,write,patch,stat}, fabric.ai.{run,parallel,map}, fabric.git.{status,diff,log,show,branches,changedFiles,commit}";
+    return "Check available methods: fabric.fs.{read,readMany,glob,grep,write,patch,stat}, fabric.ai.{run,parallel,map}, fabric.git.{status,diff,log,show,branches,changedFiles,commit}, fabric.context.{sketch,focus,impact}";
   if (message.includes("Top-level 'await'") || message.includes("top-level await"))
     return "Top-level await is supported. Ensure you are not inside a nested async function that shadows the outer scope.";
   return undefined;

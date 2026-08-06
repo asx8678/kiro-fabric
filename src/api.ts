@@ -16,11 +16,14 @@ import { createInspectApi } from "./api/inspect.js";
 import { createShellApi } from "./api/shell.js";
 import { createAiApi } from "./api/ai.js";
 import { createMutationApi } from "./api/mutation.js";
+import { createContextApi } from "./api/repomap.js";
+import { compressContextText } from "./api/compress.js";
+import { toYaml } from "./api/yaml.js";
 
 export function createApi(
   config: FabricConfig,
   runner: AiRunner,
-  gateOptions?: { prompter?: ApprovalPrompter },
+  gateOptions?: { prompter?: ApprovalPrompter; payloads?: Record<string, string> },
 ): { fabric: FabricLiteApi; metrics: Metrics } {
   const root = path.resolve(config.projectRoot);
   const ctx: ApiContext = {
@@ -63,6 +66,7 @@ export function createApi(
   const { ai, aiRun } = createAiApi(ctx);
   ctx.aiRun = aiRun;
   const mutation = createMutationApi(ctx);
+  const context = createContextApi(ctx);
   return {
     fabric: {
       fs,
@@ -71,6 +75,9 @@ export function createApi(
       inspect,
       shell,
       ai,
+      context,
+      /** Named payloads delivered out-of-band (--payloads file): large text stays out of the checked program body. */
+      payloads: Object.freeze({ ...(gateOptions?.payloads ?? {}) }),
       util: {
         chunk<T>(items: T[], size: number) {
           if (!Number.isInteger(size) || size < 1) throw new Error("chunk size must be positive");
@@ -94,6 +101,21 @@ export function createApi(
         compactJson(value: unknown, max: number) {
           const s = JSON.stringify(value);
           return s.length <= max ? s : s.slice(0, Math.max(0, max - 1)) + "…";
+        },
+        compressText(text: string, maxChars: number) {
+          if (typeof text !== "string") throw new Error("compressText text must be a string");
+          if (!Number.isInteger(maxChars) || maxChars < 1)
+            throw new Error("compressText maxChars must be a positive integer");
+          return compressContextText(text, maxChars);
+        },
+        toYaml(value: unknown, maxChars?: number) {
+          const serialized = toYaml(value);
+          if (maxChars === undefined) return serialized;
+          if (!Number.isInteger(maxChars) || maxChars < 1)
+            throw new Error("toYaml maxChars must be a positive integer");
+          return serialized.length <= maxChars
+            ? serialized
+            : serialized.slice(0, Math.max(0, maxChars - 1)) + "…";
         },
       },
     },

@@ -3,6 +3,8 @@ import type { FabricLiteApi } from "../../types/fabric-lite.js";
 import type { AiRunner, NormalizedAiRequest } from "../runners/types.js";
 import type { CacheEntry } from "../cache.js";
 import { parseFramed } from "../runners/parser.js";
+import { repairFramedOutput } from "../runners/repair.js";
+import { compressContextText } from "./compress.js";
 import { RequestRedactor } from "../redaction.js";
 import { loadPrompt } from "../prompts.js";
 import {
@@ -25,8 +27,22 @@ export function createAiApi(ctx: ApiContext): { ai: FabricLiteApi["ai"]; aiRun: 
       invalidArguments("fabric.ai.run", "role must be planner, worker, verifier, or general");
     if (request.model !== undefined && typeof request.model !== "string")
       invalidArguments("fabric.ai.run", "model must be a string");
+    if (
+      request.label !== undefined &&
+      (typeof request.label !== "string" ||
+        request.label.length === 0 ||
+        request.label.length > 120 ||
+        /[\r\n]/.test(request.label))
+    )
+      invalidArguments(
+        "fabric.ai.run",
+        "label must be a single-line string of at most 120 characters",
+      );
+    const label = typeof request.label === "string" ? request.label : undefined;
+    if (request.compressContext !== undefined && typeof request.compressContext !== "boolean")
+      invalidArguments("fabric.ai.run", "compressContext must be a boolean");
     const redactor = new RequestRedactor(),
-      context = redactor.redact(
+      rawContext = redactor.redact(
         typeof request.context === "string" ? request.context : formatContext(request.context),
       ),
       safeInstruction = redactor.redact(instruction),
@@ -37,11 +53,19 @@ export function createAiApi(ctx: ApiContext): { ai: FabricLiteApi["ai"]; aiRun: 
       request.maxInputChars ?? config.budgets.maxContextCharsPerCall,
       config.budgets.maxContextCharsPerCall,
     );
-    if (context.length > contextCap)
-      throw new FabricError(
-        "BUDGET_EXCEEDED",
-        `AI context character budget exceeded (${context.length} > ${contextCap})`,
-      );
+    // Opt-in deterministic compression (pi-vcc style): shrink over-budget
+    // contexts by extraction instead of failing the call outright.
+    let compressed = false;
+    let context = rawContext;
+    if (context.length > contextCap) {
+      if (request.compressContext !== true)
+        throw new FabricError(
+          "BUDGET_EXCEEDED",
+          `AI context character budget exceeded (${context.length} > ${contextCap})`,
+        );
+      context = compressContextText(context, contextCap);
+      compressed = true;
+    }
     const schemaText = JSON.stringify(schema ?? {}),
       inputChars = safeInstruction.length + context.length + schemaText.length;
     const requestedModel =
@@ -79,6 +103,8 @@ export function createAiApi(ctx: ApiContext): { ai: FabricLiteApi["ai"]; aiRun: 
         inputChars: cached.inputChars,
         outputChars: cached.outputChars,
         repaired: false,
+        ...(compressed ? { compressed: true } : {}),
+        ...(label ? { label } : {}),
         cached: true,
       };
     }
@@ -98,9 +124,10 @@ export function createAiApi(ctx: ApiContext): { ai: FabricLiteApi["ai"]; aiRun: 
     };
     budgets.reserve(role, inputChars);
     let raw: Awaited<ReturnType<AiRunner["run"]>> | undefined;
+    let safeStdout = "(unparseable output)";
     try {
       raw = await runner.run(normalized, signal);
-      const safeStdout = redactor.redact(raw.stdout);
+      safeStdout = redactor.redact(raw.stdout);
       budgets.settle(inputChars, safeStdout.length, raw.usage);
       const value = redactor.value(
         parseFramed(safeStdout, normalized.schema, normalized.maxOutputChars) as T,
@@ -115,15 +142,37 @@ export function createAiApi(ctx: ApiContext): { ai: FabricLiteApi["ai"]; aiRun: 
         inputChars,
         outputChars: safeStdout.length,
         repaired: false,
+        ...(compressed ? { compressed: true } : {}),
+        ...(label ? { label } : {}),
       });
     } catch (e) {
-      if (
-        !(e instanceof FabricError) ||
-        e.code !== "INVALID_AI_OUTPUT" ||
-        request.retryInvalidJson === false ||
-        config.budgets.maxRetriesPerCall < 1
-      )
-        throw e;
+      if (!(e instanceof FabricError) || e.code !== "INVALID_AI_OUTPUT") throw e;
+      // Deterministic repair first (pi-tool-repair style): schema-guided fixes
+      // and JSON salvage cost no LLM call and run even when paid retries are
+      // disabled, saving both budget and latency.
+      const deterministic = repairFramedOutput(
+        safeStdout,
+        normalized.schema,
+        normalized.maxOutputChars,
+      );
+      if (deterministic) {
+        return await cacheResult({
+          value: redactor.value(deterministic.value as T),
+          role,
+          ...(raw?.model ? { model: raw.model } : {}),
+          ...(raw?.requestedModel ? { requestedModel: raw.requestedModel } : {}),
+          ...(raw?.resolvedModel ? { resolvedModel: raw.resolvedModel } : {}),
+          resolutionSource: raw?.resolutionSource ?? "unknown",
+          inputChars,
+          outputChars: safeStdout.length,
+          repaired: true,
+          repairPath: "deterministic" as const,
+          repairs: deterministic.repairs,
+          ...(compressed ? { compressed: true } : {}),
+          ...(label ? { label } : {}),
+        });
+      }
+      if (request.retryInvalidJson === false || config.budgets.maxRetriesPerCall < 1) throw e;
       const bad = redactor.redact(
           raw?.stdout?.slice(-normalized.maxOutputChars) ?? "(unparseable output)",
         ),
@@ -135,9 +184,24 @@ export function createAiApi(ctx: ApiContext): { ai: FabricLiteApi["ai"]; aiRun: 
       const fixed = await runner.run(repair, signal),
         safeFixed = redactor.redact(fixed.stdout);
       budgets.settle(repairChars, safeFixed.length, fixed.usage);
-      const value = redactor.value(
-        parseFramed(safeFixed, normalized.schema, normalized.maxOutputChars) as T,
-      );
+      let value: T;
+      let repairRules: string[] = [];
+      try {
+        value = redactor.value(
+          parseFramed(safeFixed, normalized.schema, normalized.maxOutputChars) as T,
+        );
+      } catch (parseError) {
+        // Give the deterministic ladder a second chance on the repair output
+        // before failing the call entirely.
+        const salvaged = repairFramedOutput(
+          safeFixed,
+          normalized.schema,
+          normalized.maxOutputChars,
+        );
+        if (!salvaged) throw parseError;
+        value = redactor.value(salvaged.value as T);
+        repairRules = salvaged.repairs;
+      }
       return await cacheResult({
         value,
         role,
@@ -148,6 +212,10 @@ export function createAiApi(ctx: ApiContext): { ai: FabricLiteApi["ai"]; aiRun: 
         inputChars: inputChars + repairChars,
         outputChars: (raw?.stdout.length ?? 0) + safeFixed.length,
         repaired: true,
+        repairPath: "llm" as const,
+        ...(repairRules.length > 0 ? { repairs: repairRules } : {}),
+        ...(compressed ? { compressed: true } : {}),
+        ...(label ? { label } : {}),
       });
     }
   }
@@ -186,6 +254,7 @@ export function createAiApi(ctx: ApiContext): { ai: FabricLiteApi["ai"]; aiRun: 
           results[i] = {
             value: undefined,
             role: tasks[i].role ?? "worker",
+            ...(typeof tasks[i].label === "string" ? { label: tasks[i].label } : {}),
             resolutionSource: "unknown",
             inputChars: 0,
             outputChars: 0,
