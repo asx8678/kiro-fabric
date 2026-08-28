@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/index.ts",
+    "src/protocol.ts",
+    "src/kernel/index.ts",
+    "src/kiro/index.ts",
+    "src/kiro/mcp-entry.ts",
+    "src/kiro/agent-worker-entry.ts",
+    "src/kiro/cli-entry.ts",
+    "src/verification/index.ts"
+  ],
+  "exclude": ["tests/**"]
+}

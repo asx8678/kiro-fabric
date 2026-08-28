@@ -1,0 +1,16 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.pi/fabric-runs/
+.pi/fabric/mesh/
+.pi/*
+.veda/
+*.log
+.DS_Store
+
+.kiro/
+results2008/
+
+# Separately versioned Cursor marketplace checkout; never stage as a parent gitlink.
+plugins/

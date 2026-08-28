@@ -1,0 +1,621 @@
+// PR 5 installer tests. All Kiro subprocess calls go through the fake
+// non-billable binary (tests/fixtures/kiro/fake-kiro.mjs) via --kiro-binary.
+
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { hostname, tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  installKiroProfile,
+  KiroInstallError,
+  planKiroProfileInstall,
+  resolveKiroProjectRoot,
+} from "../src/kiro/install.js";
+import { uninstallKiroProfile } from "../src/kiro/uninstall.js";
+import { runKiroCli } from "../src/kiro/cli.js";
+import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
+import { kiroProfilePath } from "../src/kiro/profile.js";
+import {
+  managedFileTransition,
+  managedPaths,
+  sha256Bytes,
+  writeAtomic,
+  writeManagedTransactionJournal,
+  type KiroManagedTransaction,
+} from "../src/kiro/managed.js";
+
+const execFileAsync = promisify(execFile);
+const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
+const fakeKiro = join(repoRoot, "tests", "fixtures", "kiro", "fake-kiro.mjs");
+const mcpEntry = join(repoRoot, "dist", "kiro", "mcp-entry.js");
+
+let base: string;
+const roots: string[] = [];
+let wrapperPath: string;
+
+const project = (name: string): string => {
+  const dir = join(base, name);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
+
+const installWithFake = (root: string, extra: Parameters<typeof installKiroProfile>[0] = {}) =>
+  installKiroProfile({
+    projectRoot: root,
+    kiroBinary: wrapperPath,
+    mcpEntryPath: mcpEntry,
+    skipRuntimeClosure: true,
+    fabricConfig: structuredClone(DEFAULT_FABRIC_CONFIG),
+    ...extra,
+  });
+
+beforeEach(() => {
+  base = mkdtempSync(join(tmpdir(), "kiro-fabric-install-test-"));
+  roots.push(base);
+  // Executable wrapper so execFile can run the fake directly.
+  wrapperPath = join(base, "fake-kiro");
+  writeFileSync(
+    wrapperPath,
+    `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeKiro)} "$@"\n`,
+    { mode: 0o755 },
+  );
+  chmodSync(wrapperPath, 0o755);
+});
+
+afterEach(() => {
+  for (const root of roots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+describe("resolveKiroProjectRoot", () => {
+  it("canonicalizes an explicit relative root against cwd", () => {
+    const dir = project("a");
+    expect(resolveKiroProjectRoot(dir)).toBe(realpathSync(dir));
+  });
+
+  it("resolves a symlinked root to its canonical target", () => {
+    const target = project("target");
+    const link = join(base, "link");
+    symlinkSync(target, link);
+    expect(resolveKiroProjectRoot(link)).toBe(realpathSync(target));
+  });
+
+  it("rejects a nonexistent root without walking up", () => {
+    expect(() => resolveKiroProjectRoot(join(base, "missing"))).toThrow(KiroInstallError);
+  });
+
+  it("rejects a root that is a regular file", () => {
+    const file = join(base, "file.txt");
+    writeFileSync(file, "x");
+    expect(() => resolveKiroProjectRoot(file)).toThrow(/not a directory/);
+  });
+
+  it("does not ascend to a git root", () => {
+    const nested = join(base, "repo", "src", "deep");
+    mkdirSync(nested, { recursive: true });
+    mkdirSync(join(base, "repo", ".git"));
+    expect(resolveKiroProjectRoot(nested)).toBe(realpathSync(nested));
+  });
+});
+
+describe("planKiroProfileInstall", () => {
+  it("plans create for a fresh project with canonical paths and hash", () => {
+    const dir = project("fresh");
+    const plan = planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry });
+    expect(plan.action).toBe("create");
+    expect(plan.projectRoot).toBe(realpathSync(dir));
+    expect(plan.profilePath).toBe(kiroProfilePath(realpathSync(dir)));
+    expect(plan.profileSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(plan.profileJson.endsWith("\n")).toBe(true);
+    expect(JSON.parse(plan.profileJson).mcpServers.fabric.env.KIRO_FABRIC_PROJECT_ROOT)
+      .toBe(realpathSync(dir));
+  });
+
+  it("embeds the trusted-local shell opt-in only when requested", () => {
+    const dir = project("trusted-shell");
+    const defaultPlan = planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry });
+    const defaultProfile = JSON.parse(defaultPlan.profileJson) as {
+      mcpServers: { fabric: { env: Record<string, string> } };
+    };
+    expect(defaultProfile.mcpServers.fabric.env).not.toHaveProperty(
+      "KIRO_FABRIC_ALLOW_SHELL",
+    );
+
+    const trustedPlan = planKiroProfileInstall({
+      projectRoot: dir,
+      mcpEntryPath: mcpEntry,
+      allowShell: true,
+    });
+    const trustedProfile = JSON.parse(trustedPlan.profileJson) as {
+      mcpServers: { fabric: { env: Record<string, string> } };
+    };
+    expect(trustedProfile.mcpServers.fabric.env.KIRO_FABRIC_ALLOW_SHELL).toBe("1");
+
+    expect(() => planKiroProfileInstall({
+      projectRoot: dir,
+      mcpEntryPath: mcpEntry,
+      enableSubagents: true,
+    })).toThrow(/require.*allowShell/i);
+    const fanoutPlan = planKiroProfileInstall({
+      projectRoot: dir,
+      mcpEntryPath: mcpEntry,
+      allowShell: true,
+      enableSubagents: true,
+    });
+    const fanoutProfile = JSON.parse(fanoutPlan.profileJson) as {
+      mcpServers: { fabric: { env: Record<string, string> } };
+    };
+    expect(fanoutProfile.mcpServers.fabric.env).toMatchObject({
+      KIRO_FABRIC_ALLOW_SHELL: "1",
+      KIRO_FABRIC_ENABLE_SUBAGENTS: "1",
+    });
+  });
+
+  it("blocks unknown differing content and requires --force", () => {
+    const dir = project("collision");
+    mkdirSync(dirname(kiroProfilePath(dir)), { recursive: true });
+    writeFileSync(kiroProfilePath(dir), JSON.stringify({ name: "other" }));
+    const plan = planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry });
+    expect(plan.action).toBe("blocked");
+    expect(plan.requiresForce).toBe(true);
+    const forced = planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry, force: true });
+    expect(forced.action).toBe("create");
+  });
+
+  it("adopts unknown content that is already byte-identical", () => {
+    const dir = project("identical");
+    const reference = planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry });
+    mkdirSync(dirname(kiroProfilePath(dir)), { recursive: true });
+    writeFileSync(kiroProfilePath(dir), reference.profileJson);
+    const plan = planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry });
+    expect(plan.action).toBe("adopt");
+  });
+
+  it("refuses a profile symlink even with --force", () => {
+    const dir = project("symlinked");
+    const outside = join(base, "outside.json");
+    writeFileSync(outside, "{}");
+    mkdirSync(join(dir, ".kiro", "agents"), { recursive: true });
+    symlinkSync(outside, kiroProfilePath(dir));
+    expect(() =>
+      planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry, force: true }),
+    ).toThrow(/symlink/);
+    expect(readFileSync(outside, "utf8")).toBe("{}");
+  });
+
+  it("refuses a symlink at the .kiro component", () => {
+    const dir = project("kiro-link");
+    const outside = project("elsewhere");
+    symlinkSync(outside, join(dir, ".kiro"));
+    expect(() =>
+      planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry }),
+    ).toThrow(/symlink/);
+  });
+
+  it("refuses a duplicate kiro-fabric agent name in a sibling profile", () => {
+    const dir = project("dup");
+    mkdirSync(join(dir, ".kiro", "agents"), { recursive: true });
+    writeFileSync(join(dir, ".kiro", "agents", "other.json"), JSON.stringify({ name: "kiro-fabric" }));
+    expect(() =>
+      planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry }),
+    ).toThrow(/already declares name/);
+  });
+
+  it("refuses a directory at the profile target", () => {
+    const dir = project("dirtarget");
+    mkdirSync(kiroProfilePath(dir), { recursive: true });
+    expect(() =>
+      planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry }),
+    ).toThrow(/not a regular file/);
+  });
+
+  it("refuses a symlink at .kiro/.kiro-fabric", () => {
+    const dir = project("meta-link");
+    const outside = project("outside-meta");
+    writeFileSync(join(outside, "sentinel"), "safe");
+    mkdirSync(join(dir, ".kiro"), { recursive: true });
+    symlinkSync(outside, join(dir, ".kiro", ".kiro-fabric"));
+    expect(() =>
+      planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry }),
+    ).toThrow(/symlink/);
+    expect(readFileSync(join(outside, "sentinel"), "utf8")).toBe("safe");
+  });
+});
+
+describe("installKiroProfile", () => {
+  it("rejects incompatible managed subagent accounting before any write", async () => {
+    const dir = project("accounting-preflight");
+    const fabricConfig = structuredClone(DEFAULT_FABRIC_CONFIG);
+    fabricConfig.agents.maxTokensPerChild = 10;
+    await expect(installWithFake(dir, {
+      allowShell: true,
+      enableSubagents: true,
+      fabricConfig,
+    })).rejects.toThrow(/agents.maxTokensPerChild/);
+    expect(existsSync(join(dir, ".kiro"))).toBe(false);
+  });
+
+  it("creates profile, manifest, and hashes with restrictive modes", async () => {
+    const dir = project("install");
+    const result = await installWithFake(dir);
+    expect(result.ok).toBe(true);
+    expect(result.action).toBe("create");
+    expect(result.backupPath).toBeNull();
+    const stat = lstatSync(result.profilePath);
+    expect(stat.mode & 0o777).toBe(0o600);
+    expect(readFileSync(result.profilePath, "utf8").endsWith("\n")).toBe(true);
+    const manifest = JSON.parse(readFileSync(result.manifestPath, "utf8"));
+    expect(manifest.owner).toBe("kiro-fabric");
+    expect(manifest.profile.installedSha256).toBe(result.profileSha256);
+    expect(manifest.projectRoot).toBe(realpathSync(dir));
+    expect(manifest.runtime.mcpEntryPath).toBe(mcpEntry);
+    expect(manifest.runtime.kiroCliVersion).toBe("2.20.1");
+    expect(manifest.runtime.agentEngine).toBe("v3");
+  });
+
+  it("is an idempotent no-op on the second run", async () => {
+    const dir = project("twice");
+    const first = await installWithFake(dir);
+    const before = readFileSync(first.profilePath, "utf8");
+    const second = await installWithFake(dir);
+    expect(second.action).toBe("noop");
+    expect(readFileSync(first.profilePath, "utf8")).toBe(before);
+  });
+
+  it("backs up and replaces unknown content with --force", async () => {
+    const dir = project("forced");
+    mkdirSync(dirname(kiroProfilePath(dir)), { recursive: true });
+    const original = JSON.stringify({ name: "custom", old: true }, null, 2);
+    writeFileSync(kiroProfilePath(dir), original);
+    const result = await installWithFake(dir, { force: true });
+    expect(result.backupPath).not.toBeNull();
+    expect(readFileSync(result.backupPath!, "utf8")).toBe(original);
+    const installed = JSON.parse(readFileSync(result.profilePath, "utf8"));
+    expect(installed.name).toBe("kiro-fabric");
+    expect(installed).not.toHaveProperty("old");
+  });
+
+  it("dry-run leaves the project tree byte-for-byte unchanged", async () => {
+    const dir = project("dry");
+    writeFileSync(join(dir, "existing.txt"), "keep");
+    const snapshot = (root: string): string[] => {
+      const entries: string[] = [];
+      const walk = (current: string): void => {
+        for (const entry of existsSync(current) ? readdirSync(current) : []) {
+          const path = join(current, entry);
+          const stat = lstatSync(path);
+          entries.push(
+            `${path.slice(root.length)}:${stat.isDirectory() ? "d" : "f"}:${
+              stat.isFile() ? readFileSync(path, "utf8") : ""
+            }`,
+          );
+          if (stat.isDirectory()) walk(path);
+        }
+      };
+      walk(root);
+      return entries.sort();
+    };
+    const beforeTree = snapshot(dir);
+    const result = await installWithFake(dir, { dryRun: true });
+    expect(result.dryRun).toBe(true);
+    expect(result.action).toBe("create");
+    expect(existsSync(join(dir, ".kiro"))).toBe(false);
+    expect(snapshot(dir)).toEqual(beforeTree);
+  });
+
+  it("rejects an unsupported Kiro version before writing anything", async () => {
+    await expect(installWithFake(project("okversion"))).resolves.toBeDefined();
+    const badWrapper = join(base, "fake-kiro-old");
+    writeFileSync(
+      badWrapper,
+      `#!/bin/sh\necho "kiro-cli 2.18.0"\nexit 0\n`,
+      { mode: 0o755 },
+    );
+    await expect(
+      installWithFake(project("badversion2"), { kiroBinary: badWrapper }),
+    ).rejects.toThrow(/unsupported kiro-cli version/);
+    expect(existsSync(join(base, "badversion2", ".kiro"))).toBe(false);
+  });
+
+  it("fails on validator error diagnostics even when exit code is 0", async () => {
+    const dir = project("invalid");
+    // The fake validator exits 0 with an error diagnostic for a name-less
+    // profile; our generated profile always has a name, so simulate by a
+    // wrapper that always emits an error diagnostic.
+    const badValidator = join(base, "fake-kiro-invalid");
+    writeFileSync(
+      badValidator,
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "kiro-cli 2.20.1"; exit 0; fi\nif [ "$1" = "acp" ] && [ "$2" = "--help" ]; then echo "--agent-engine v3 --auth-method cli"; exit 0; fi\necho "error: agent config invalid" >&2\nexit 0\n`,
+      { mode: 0o755 },
+    );
+    await expect(
+      installWithFake(dir, { kiroBinary: badValidator }),
+    ).rejects.toThrow(/validate reported an error/);
+    expect(existsSync(join(dir, ".kiro"))).toBe(false);
+  });
+
+  it("performs a safe managed update without --force", async () => {
+    const dir = project("update");
+    const first = await installWithFake(dir);
+    // Simulate a managed update by installing with a different node path.
+    const otherNode = join(base, "node-alt");
+    writeFileSync(otherNode, "", { mode: 0o755 });
+    const updated = await installWithFake(dir, { nodePath: otherNode });
+    expect(["update", "noop"]).toContain(updated.action);
+    const profile = JSON.parse(readFileSync(first.profilePath, "utf8"));
+    expect(profile.mcpServers.fabric.command).toBe(otherNode);
+  });
+
+  it("refuses a user-modified managed profile without --force", async () => {
+    const dir = project("drift");
+    const first = await installWithFake(dir);
+    const drifted = JSON.parse(readFileSync(first.profilePath, "utf8"));
+    drifted.prompt = "user edit";
+    writeFileSync(first.profilePath, JSON.stringify(drifted, null, 2));
+    await expect(installWithFake(dir)).rejects.toThrow(/--force/);
+  });
+
+  it("inherits the displaced-user backup across a managed update", async () => {
+    const dir = project("lineage");
+    mkdirSync(dirname(kiroProfilePath(dir)), { recursive: true });
+    const original = JSON.stringify({ name: "custom", keep: true });
+    writeFileSync(kiroProfilePath(dir), original);
+    const first = await installWithFake(dir, { force: true });
+    expect(first.backupPath).not.toBeNull();
+    expect(readFileSync(first.backupPath!, "utf8")).toBe(original);
+    const otherNode = join(base, "node-lineage");
+    writeFileSync(otherNode, "", { mode: 0o755 });
+    const updated = await installWithFake(dir, { nodePath: otherNode });
+    expect(updated.action).toBe("update");
+    expect(updated.backupPath).toBe(first.backupPath);
+    const manifest = JSON.parse(readFileSync(updated.manifestPath, "utf8"));
+    expect(manifest.profile.backup.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(readFileSync(first.backupPath!, "utf8")).toBe(original);
+  });
+
+  it("recovers an interrupted profile-before-manifest transaction", async () => {
+    const dir = project("transaction-recovery");
+    const installed = await installWithFake(dir);
+    const previousManifest = readFileSync(installed.manifestPath);
+    const otherNode = join(base, "node-transaction");
+    writeFileSync(otherNode, "", { mode: 0o755 });
+    const next = planKiroProfileInstall({
+      projectRoot: dir,
+      mcpEntryPath: mcpEntry,
+      nodePath: otherNode,
+    });
+    const paths = managedPaths(next.installRoot, next.layout);
+    const transaction: KiroManagedTransaction = {
+      format: 1,
+      owner: "kiro-fabric",
+      operation: "install",
+      layout: next.layout,
+      root: next.installRoot,
+      createdAt: Date.now(),
+      profile: managedFileTransition(next.existingSha256, next.profileJson),
+      manifest: managedFileTransition(sha256Bytes(previousManifest), next.manifestJson),
+    };
+    writeManagedTransactionJournal(next.installRoot, next.layout, transaction);
+    // Emulate SIGKILL after the first leaf replacement: the operation lock is
+    // left behind with a dead owner, exactly as a killed process would leave it.
+    writeFileSync(paths.lock, JSON.stringify({
+      token: "crashed-operation",
+      pid: 999_999_999,
+      hostname: hostname(),
+    }), { mode: 0o600 });
+    writeAtomic(next.profilePath, next.profileJson, 0o600);
+    expect(existsSync(paths.transaction)).toBe(true);
+    expect(JSON.parse(readFileSync(installed.manifestPath, "utf8")).runtime.nodePath)
+      .not.toBe(otherNode);
+
+    const recovered = await installWithFake(dir, { nodePath: otherNode });
+    expect(["noop", "update"]).toContain(recovered.action);
+    expect(existsSync(paths.transaction)).toBe(false);
+    expect(JSON.parse(readFileSync(installed.manifestPath, "utf8")).runtime.nodePath)
+      .toBe(otherNode);
+    expect(JSON.parse(readFileSync(installed.profilePath, "utf8")).mcpServers.fabric.command)
+      .toBe(otherNode);
+  });
+
+  it("refuses when an operation lock already exists", async () => {
+    const dir = project("locked");
+    await installWithFake(dir);
+    const lock = join(dir, ".kiro", ".kiro-fabric", "operation.lock");
+    writeFileSync(lock, "held\n", { mode: 0o600 });
+    await expect(installWithFake(dir, { force: true })).rejects.toThrow(/in progress/);
+  });
+
+  it("never reclaims an operation lock when liveness fails with EPERM", async () => {
+    const dir = project("locked-eperm");
+    await installWithFake(dir);
+    const lock = join(dir, ".kiro", ".kiro-fabric", "operation.lock");
+    const body = JSON.stringify({ token: "foreign", pid: 424_242, hostname: hostname() });
+    writeFileSync(lock, body, { mode: 0o600 });
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("not permitted"), { code: "EPERM" });
+    });
+    try {
+      await expect(installWithFake(dir, { force: true })).rejects.toThrow(/in progress/);
+      expect(readFileSync(lock, "utf8")).toBe(body);
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
+  it("reclaims a stale lock whose pid was reused by a newer process", async () => {
+    const dir = project("locked-pid-reuse");
+    await installWithFake(dir);
+    const lock = join(dir, ".kiro", ".kiro-fabric", "operation.lock");
+    writeFileSync(lock, JSON.stringify({
+      token: "crashed-owner",
+      pid: process.pid,
+      hostname: hostname(),
+      processStart: "older-process-instance",
+    }), { mode: 0o600 });
+
+    await expect(installWithFake(dir)).resolves.toMatchObject({ action: "noop" });
+    expect(existsSync(lock)).toBe(false);
+  });
+});
+
+describe("management CLI", () => {
+  const cliEntry = join(repoRoot, "dist", "kiro", "cli-entry.js");
+
+  it("rejects unknown commands with usage exit 2", async () => {
+    await expect(
+      execFileAsync(process.execPath, [cliEntry, "frobnicate", "kiro"]),
+    ).rejects.toMatchObject({ code: 2 });
+  });
+
+  it("prints JSON dry-run output on stdout and writes nothing", async () => {
+    const dir = project("cli-dry");
+    const { stdout } = await execFileAsync(process.execPath, [
+      cliEntry,
+      "install",
+      "kiro",
+      "--project-root",
+      dir,
+      "--kiro-binary",
+      wrapperPath,
+      "--dry-run",
+      "--json",
+    ]);
+    const parsed = JSON.parse(stdout);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.dryRun).toBe(true);
+    expect(parsed.action).toBe("create");
+    expect(existsSync(join(dir, ".kiro"))).toBe(false);
+  });
+
+  it("installs then reports noop", async () => {
+    const dir = project("cli-install");
+    const first = await execFileAsync(process.execPath, [
+      cliEntry, "install", "kiro", "--project-root", dir,
+      "--kiro-binary", wrapperPath, "--json",
+    ]);
+    expect(JSON.parse(first.stdout).action).toBe("create");
+    const second = await execFileAsync(process.execPath, [
+      cliEntry, "install", "kiro", "--project-root", dir,
+      "--kiro-binary", wrapperPath, "--json",
+    ]);
+    expect(JSON.parse(second.stdout).action).toBe("noop");
+  });
+
+  it("installs --allow-shell and --subagents as explicit managed settings", async () => {
+    const dir = project("cli-allow-shell");
+    const installed = await execFileAsync(process.execPath, [
+      cliEntry,
+      "install",
+      "kiro",
+      "--project-root",
+      dir,
+      "--kiro-binary",
+      wrapperPath,
+      "--allow-shell",
+      "--subagents",
+      "--json",
+    ]);
+    expect(JSON.parse(installed.stdout).action).toBe("create");
+    const profile = JSON.parse(readFileSync(kiroProfilePath(dir), "utf8")) as {
+      mcpServers: { fabric: { env: Record<string, string> } };
+    };
+    expect(profile.mcpServers.fabric.env.KIRO_FABRIC_ALLOW_SHELL).toBe("1");
+    expect(profile.mcpServers.fabric.env.KIRO_FABRIC_ENABLE_SUBAGENTS).toBe("1");
+  });
+
+  it("rejects --subagents without trusted shell access", async () => {
+    const dir = project("cli-subagents-without-shell");
+    await expect(execFileAsync(process.execPath, [
+      cliEntry,
+      "install",
+      "kiro",
+      "--project-root",
+      dir,
+      "--subagents",
+      "--json",
+    ])).rejects.toMatchObject({
+      code: 2,
+      stderr: expect.stringContaining("--subagents requires --allow-shell"),
+    });
+  });
+
+  it("emits a structured collision error without --force", async () => {
+    const dir = project("cli-collision");
+    mkdirSync(dirname(kiroProfilePath(dir)), { recursive: true });
+    writeFileSync(kiroProfilePath(dir), JSON.stringify({ name: "mine" }));
+    await expect(
+      execFileAsync(process.execPath, [
+        cliEntry, "install", "kiro", "--project-root", dir,
+        "--kiro-binary", wrapperPath, "--json",
+      ]),
+    ).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining('"code": "collision"'),
+    });
+  });
+});
+
+describe("user-home Kiro install", () => {
+  it("writes the agent profile into Kiro home, not the project", async () => {
+    const dir = project("user-scope-project");
+    const home = project("user-scope-home");
+    const result = await installWithFake(dir, { scope: "user", kiroHome: home });
+    expect(result.ok).toBe(true);
+    expect(result.projectRoot).toBe(realpathSync(dir));
+    expect(result.profilePath).toBe(join(realpathSync(home), "agents", "kiro-fabric.json"));
+    expect(existsSync(join(dir, ".kiro"))).toBe(false);
+    const profile = JSON.parse(readFileSync(result.profilePath, "utf8")) as {
+      mcpServers: { fabric: { env: { KIRO_FABRIC_PROJECT_ROOT: string } } };
+    };
+    expect(profile.mcpServers.fabric.env.KIRO_FABRIC_PROJECT_ROOT).toBe(realpathSync(dir));
+    const manifest = JSON.parse(
+      readFileSync(join(home, ".kiro-fabric", "install.json"), "utf8"),
+    ) as { scope?: string; projectRoot: string; profile: { path: string } };
+    expect(manifest.scope).toBe("user");
+    expect(manifest.projectRoot).toBe(realpathSync(dir));
+    expect(manifest.profile.path).toBe("agents/kiro-fabric.json");
+  });
+
+  it("uninstalls the user-home profile without creating a project .kiro tree", async () => {
+    const dir = project("user-scope-uninstall-project");
+    const home = project("user-scope-uninstall-home");
+    await installWithFake(dir, { scope: "user", kiroHome: home });
+    const result = uninstallKiroProfile({
+      scope: "user",
+      projectRoot: dir,
+      kiroHome: home,
+    });
+    expect(result.action).toBe("remove");
+    expect(existsSync(join(home, "agents", "kiro-fabric.json"))).toBe(false);
+    expect(existsSync(join(home, ".kiro-fabric", "install.json"))).toBe(false);
+    expect(existsSync(join(dir, ".kiro"))).toBe(false);
+  });
+
+  it("rejects --kiro-home without --user", async () => {
+    const code = await runKiroCli([
+      "install",
+      "kiro",
+      "--kiro-home",
+      project("orphan-home"),
+      "--json",
+    ]);
+    expect(code).toBe(2);
+  });
+});
