@@ -3,6 +3,38 @@
 This directory preserves the planning and implementation evidence from the Kiro
 integration workspaces.
 
+## Start here: run the installer
+
+Requirements: Node.js 24 or newer and an installed, authenticated Kiro CLI
+2.20.1.
+
+After installing the npm package globally, launch the guided setup console:
+
+```bash
+npm install --global kiro-fabric
+kiro-fabric-setup
+```
+
+A terminal gets an interactive menu. Automation must use an explicit command:
+
+```bash
+kiro-fabric-setup status
+kiro-fabric-setup doctor
+kiro-fabric-setup install --user --project-root /absolute/path/to/project --dry-run
+kiro-fabric-setup install --user --project-root /absolute/path/to/project
+```
+
+From a Linux or macOS source checkout, run `pnpm install`, then `pnpm run
+build`, then `sh scripts/install-kiro-fabric.sh`. The bootstrap does not fetch
+code and forwards all arguments to the same setup console. Use `--user` for a
+shared profile under `$KIRO_HOME` or `~/.kiro`; omit it for a project-local
+`<project>/.kiro` profile. Always inspect a mutation with `--dry-run` first.
+Do not use a transient package runner because the generated profile stores an
+absolute path to its managed runtime.
+
+See [installer.md](installer.md) for all commands, update/uninstall behavior,
+backups, ownership rules, troubleshooting, and exit codes.
+
 ## Which document is authoritative?
 
 | Document | Role | Status |

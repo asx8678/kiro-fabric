@@ -259,3 +259,52 @@ shutdown plus cross-process v3 `session/load`.
 See the [current v3 capability record](capabilities-2.20.1-v3.md) for the
 supported contract and remaining authenticated gates. The Release-A document
 preserves the prior v2 certification history.
+
+## Setup installer (Linux and macOS)
+
+Install the published package globally and run the setup console directly:
+
+```bash
+npm install --global kiro-fabric
+kiro-fabric-setup
+```
+
+From a repository checkout, build the compiled entry before starting the same
+console through the Linux/macOS POSIX bootstrap:
+
+```bash
+pnpm install
+pnpm run build
+sh scripts/install-kiro-fabric.sh
+
+# Explicit commands for non-interactive use:
+sh scripts/install-kiro-fabric.sh status
+sh scripts/install-kiro-fabric.sh doctor
+sh scripts/install-kiro-fabric.sh install --user \
+  --project-root /absolute/path/to/project --dry-run
+sh scripts/install-kiro-fabric.sh install --user \
+  --project-root /absolute/path/to/project
+```
+
+The bootstrap locates `node`, requires major version 24 or newer, and prints
+distribution-specific install guidance (nodejs.org, `apt`, `dnf`, `brew`, `nvm`)
+when Node is missing or old; a missing or old Node exits 1. The bootstrap itself
+performs no network fetch or `.kiro` mutation. It `exec`s
+`node <repo>/dist/kiro/setup-entry.js` with all arguments; the selected setup
+command may then update managed Kiro files.
+
+The setup console supports the subcommands `status`, `install`, `update`,
+`uninstall`, `doctor`, and `launch`, with the flags `--user`,
+`--project-root <dir>`, `--kiro-home <dir>`, `--kiro-binary <path>`,
+`--dry-run`, `--yes`, `--force`, `--json`, and `-h/--help`. A bare invocation
+shows a numbered menu only when stdin and stdout are terminals; a non-interactive
+run prints usage. Omitting `--user` selects project-local scope rooted at the
+current directory; `--user` selects `$KIRO_HOME` or `~/.kiro`. `update` requires
+an existing manifest, and the advanced grants `--allow-shell`, `--subagents`, and
+`--allow-tools` default to off. `launch` starts `kiro-cli --v3 --agent
+kiro-fabric` through a direct argv exec in the selected project root. Every
+mutation delegates to the verified install, uninstall, and doctor APIs; the
+console adds no ownership, backup, or symlink logic of its own. Exit codes:
+`0` success, no-op, or dry-run; `1` failure; `2` usage; `130` interactive
+cancel. `--json` prints one JSON object on stdout, and human-readable errors
+go to stderr.

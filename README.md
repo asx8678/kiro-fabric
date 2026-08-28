@@ -43,6 +43,44 @@ fabric_exec({ code })
 
 Use this path to install Fabric as a managed Kiro v3 agent. The commands create a profile named `kiro-fabric`; they do not change Kiro's default agent.
 
+### Run the guided installer
+
+For the shortest path, install the package globally and start the setup console:
+
+```bash
+npm install --global kiro-fabric
+kiro-fabric-setup
+```
+
+A bare command opens an interactive menu when run in a terminal. For scripts or CI, provide an explicit command:
+
+```bash
+kiro-fabric-setup status
+kiro-fabric-setup doctor
+kiro-fabric-setup install --user --project-root /absolute/path/to/project --dry-run
+kiro-fabric-setup install --user --project-root /absolute/path/to/project
+kiro-fabric-setup launch --project-root /absolute/path/to/project
+```
+
+From a source checkout on Linux or macOS, build first and run the POSIX bootstrap. It does not download code; it checks Node and starts the compiled setup console:
+
+```bash
+pnpm install
+pnpm run build
+sh scripts/install-kiro-fabric.sh
+# Non-interactive example:
+sh scripts/install-kiro-fabric.sh install --user \
+  --project-root /absolute/path/to/project --dry-run
+```
+
+Important:
+
+- Node.js 24+ and an installed, authenticated Kiro CLI 2.20.1 are required.
+- User scope (`--user`) writes under `$KIRO_HOME` or `~/.kiro`; omitting `--user` writes under `<project>/.kiro`.
+- Run `--dry-run` before the real install. Add `--yes` only to suppress confirmation; it never implies `--force`.
+- Avoid transient runners such as `npx`: the profile records an absolute path to the installed MCP runtime.
+- Run `kiro-fabric-setup --help` for every command and option. See the [installer guide](docs/kiro/installer.md) for update, uninstall, backups, and troubleshooting.
+
 ### 1. Install the package
 
 Install the package globally so the profile can keep a stable path to its MCP adapter:

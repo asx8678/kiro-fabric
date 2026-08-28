@@ -29,7 +29,8 @@
   },
   "bin": {
     "kiro-fabric": "./dist/kiro/cli-entry.js",
-    "kiro-fabric-mcp": "./dist/kiro/mcp-entry.js"
+    "kiro-fabric-mcp": "./dist/kiro/mcp-entry.js",
+    "kiro-fabric-setup": "./dist/kiro/setup-entry.js"
   },
   "files": [
     "dist/",

@@ -10,6 +10,7 @@ const result = await build({
     "src/kiro/mcp-entry.ts",
     "src/kiro/agent-worker-entry.ts",
     "src/kiro/cli-entry.ts",
+    "src/kiro/setup-entry.ts",
     "src/verification/index.ts",
   ],
   outdir: "dist",

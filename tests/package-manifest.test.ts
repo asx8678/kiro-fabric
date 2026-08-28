@@ -45,6 +45,7 @@ describe("package manifest", () => {
     expect(manifest.bin).toEqual({
       "kiro-fabric": "./dist/kiro/cli-entry.js",
       "kiro-fabric-mcp": "./dist/kiro/mcp-entry.js",
+      "kiro-fabric-setup": "./dist/kiro/setup-entry.js",
     });
     expect(manifest.exports).toMatchObject({
       "./protocol": {
