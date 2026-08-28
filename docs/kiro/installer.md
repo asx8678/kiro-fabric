@@ -39,6 +39,10 @@ A project install writes only:
 
 - `<project>/.kiro/agents/kiro-fabric.json`
 - `<project>/.kiro/.kiro-fabric/install.json`
+- the packaged `fabric-exec`, `fabric-guide`, `fabric-review`, and
+  `fabric-workflow` skills under `<project>/.kiro/skills/`
+- an immutable, digest-addressed runtime under
+  `<project>/.kiro/.kiro-fabric/runtime/<digest>/`
 - content-addressed backups under `<project>/.kiro/.kiro-fabric/backups/`
 - a short-lived `<project>/.kiro/.kiro-fabric/operation.lock` during mutation
 
@@ -47,7 +51,9 @@ A project install writes only:
 
 - `<kiro-home>/agents/kiro-fabric.json`
 - `<kiro-home>/.kiro-fabric/install.json`
-- backups and the operation lock under `<kiro-home>/.kiro-fabric/`
+- the same four managed skills under `<kiro-home>/skills/`
+- the attested runtime, backups, and operation lock under
+  `<kiro-home>/.kiro-fabric/`
 
 For managed interactive sessions, Fabric confines filesystem tools to the
 canonical directory where `kiro-cli chat` was launched. This lets one global
@@ -69,14 +75,14 @@ fan-out at four, disables recursive children, and propagates `k.bash` into each
 scoped child profile. The profile tells Main to delegate narrow, non-overlapping
 tasks in one `fabric_exec`, require focused test/build evidence, and deduplicate
 the results. Omitted child models prefer `claude-haiku-4.5` for small work,
-`qwen3-coder-next` for coding/testing, and `claude-opus-4.5` with medium
+`qwen3-coder-next` for coding/testing, and `claude-opus-4.8` with medium
 reasoning effort for complex or ambiguous work when those IDs are advertised.
 If the installed inventory exposes only `auto`, Fabric omits both model and
 effort so Kiro selects a supported route instead of launching an invalid ID.
 
 Delegation specifics: cheap available `model` routes use `claude-haiku-4.5` at
 low effort, coding/testing to `qwen3-coder-next` at low effort, and complex or
-ambiguous work to `claude-opus-4.5` at medium effort (cheap routes no longer
+ambiguous work to `claude-opus-4.8` at medium effort (cheap routes no longer
 inherit the Fabric-wide medium default). Passing `model: "auto"` lets Kiro
 choose both model and effort without Fabric forcing a default. The managed
 provider returns non-billable model discovery through
@@ -103,9 +109,10 @@ unavailable.
 
 It never passes `--trust-all-tools`. The profile advertises exactly
 `@fabric/fabric_exec`, sets both `includeMcpJson: false` and
-`includePowers: false`, and always emits a v3 `permissions` block. Its rules
-are empty by default. The explicit trusted-local `--allow-tools` opt-in adds
-only `{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "allow" }`.
+`includePowers: false`, and always emits one exact v3 `permissions` rule for
+`fabric/fabric_exec`. Its effect is `ask` by default, so broader ambient allows
+cannot bypass Fabric's approval gate. The trusted-local `--allow-tools` opt-in
+changes only that exact rule's effect to `allow`.
 Any managed-main profile carrying `--allow-shell`, `--subagents`, or
 `--allow-tools` is confined to its recorded canonical project root: selecting a
 user-level profile from another repository fails before the Fabric MCP runtime
@@ -114,10 +121,13 @@ so replacing or symlink-retargeting that path requires reinstalling the
 profile. Launching from a subdirectory of the unchanged project remains
 supported.
 
-Unknown or user-modified profile content is refused unless you pass `--force`,
-which backs up the existing regular file first. That displaced-user backup is
-preserved across later managed updates. Symlinks at `.kiro`, `.kiro/agents`,
-`.kiro/.kiro-fabric`, `backups`, the profile, or the manifest are always refused.
+Unknown or user-modified profile or same-name managed-skill content is refused
+unless you pass `--force`, which backs up each existing regular file first.
+Unrelated sibling skills are never claimed. The format-2 manifest records every
+managed skill hash and the exact final runtime file set. Digest directories are
+immutable: a hash mismatch or extra file is refused instead of recursively
+replaced. Symlinks in managed paths, leaves, or the runtime activation marker are
+always refused.
 
 ## Kiro-only core tool namespace
 
@@ -195,8 +205,10 @@ Uninstall is hash-owned:
 
 - No manifest → no-op. An independently created `kiro-fabric.json` is left alone.
 - Managed profile matching the recorded hash and no user backup → remove the profile.
-- Managed profile with a verified displaced-user backup → restore those exact bytes.
-- User-modified managed content → refuse. There is no uninstall `--force`.
+- Managed profile or skill with a verified displaced-user backup → restore those exact bytes.
+- Newly created managed skills → remove only their recorded, hash-matching leaves.
+- Runtime closure → remove only the exact attested file set; preserve unrelated siblings.
+- User-modified managed content → refuse before mutation. There is no uninstall `--force`.
 
 Uninstall never runs `kiro-cli` and never requests a model turn. A second
 uninstall is an idempotent no-op. Unrelated sibling profiles and orphaned
@@ -211,11 +223,15 @@ configuration, then starts a second ACP process, reloads the same empty session,
 and deletes that probe session — never `session/prompt`.
 
 ```bash
-kiro-fabric doctor kiro
-kiro-fabric doctor kiro --json
+kiro-fabric doctor kiro --project-root /canonical/project
+kiro-fabric doctor kiro --user --project-root /canonical/project --json
 ```
 
-Checks cover the Node/Kiro tuple, generated profile shape, `kiro-cli agent
+When invoked through the CLI, doctor first verifies the installed manifest,
+profile hash, every managed skill hash and aggregate digest, the exact runtime
+file set, and the no-follow activation marker. Format-1 manifests are reported
+as legacy and do not claim skill or closure attestation. Checks also cover the
+Node/Kiro tuple, generated profile shape, `kiro-cli agent
 validate` plus a negative control (exit 0 is not trusted), the built MCP
 adapter's `initialize`/`tools/list`, and ACP startup with process-group
 shutdown plus cross-process v3 `session/load`.

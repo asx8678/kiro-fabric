@@ -105,6 +105,7 @@ interface ManagedActor {
   runner: FabricAgentRunner;
   runnerSessionId?: string;
   kiroAgentEngine?: typeof KIRO_AGENT_ENGINE;
+  kiroSessionProfileSha256?: string;
   model?: string;
   thinking?: FabricThinking;
   tools?: string[];
@@ -1767,8 +1768,15 @@ export class ActorManager {
           if ((actor.runner === "claude" || actor.runner === "kiro") && result.runnerSessionId) {
             const nextRunnerSessionId = result.runnerSessionId;
             const kiroProvenanceChanged =
-              actor.runner === "kiro" && actor.kiroAgentEngine !== KIRO_AGENT_ENGINE;
-            if (actor.runner === "kiro") actor.kiroAgentEngine = KIRO_AGENT_ENGINE;
+              actor.runner === "kiro" &&
+              (actor.kiroAgentEngine !== KIRO_AGENT_ENGINE ||
+                actor.kiroSessionProfileSha256 !== result.kiroSessionProfileSha256);
+            if (actor.runner === "kiro") {
+              actor.kiroAgentEngine = KIRO_AGENT_ENGINE;
+              if (result.kiroSessionProfileSha256) {
+                actor.kiroSessionProfileSha256 = result.kiroSessionProfileSha256;
+              }
+            }
             const shouldPersistRunnerSessionId =
               actor.runner !== "kiro" ||
               actor.residency === "durable" ||
@@ -1943,6 +1951,9 @@ export class ActorManager {
       ...(item.images && item.images.length > 0 ? { images: item.images } : {}),
       ...(actor.responseMode === "directive" ? { schema: directiveSchema } : {}),
       ...(runnerSessionId ? { runnerSessionId } : {}),
+      ...(runnerSessionId && actor.kiroSessionProfileSha256
+        ? { kiroSessionProfileSha256: actor.kiroSessionProfileSha256 }
+        : {}),
       ...(item.binding.model ? { model: item.binding.model } : {}),
       ...(item.binding.thinking ? { thinking: item.binding.thinking } : {}),
       ...(actor.tools ? { tools: actor.tools } : {}),
@@ -1953,15 +1964,22 @@ export class ActorManager {
 
   #durableKiroRunnerSessionId(actor: ManagedActor): string | undefined {
     if (actor.runner !== "kiro" || actor.residency !== "durable") return undefined;
-    if (actor.runnerSessionId?.trim() && actor.kiroAgentEngine === KIRO_AGENT_ENGINE) {
+    if (
+      actor.runnerSessionId?.trim() &&
+      actor.kiroAgentEngine === KIRO_AGENT_ENGINE &&
+      actor.kiroSessionProfileSha256 &&
+      /^[a-f0-9]{64}$/.test(actor.kiroSessionProfileSha256)
+    ) {
       return actor.runnerSessionId;
     }
     delete actor.runnerSessionId;
-    const retained = this.#retainedRunnerSessionId(actor.id, actor.lastRunId);
+    delete actor.kiroSessionProfileSha256;
+    const retained = this.#retainedKiroSession(actor.id, actor.lastRunId);
     if (!retained) return undefined;
-    actor.runnerSessionId = retained;
+    actor.runnerSessionId = retained.runnerSessionId;
+    actor.kiroSessionProfileSha256 = retained.kiroSessionProfileSha256;
     actor.kiroAgentEngine = KIRO_AGENT_ENGINE;
-    return retained;
+    return retained.runnerSessionId;
   }
 
   async #runDurableKiroActivation<T>(
@@ -1992,11 +2010,28 @@ export class ActorManager {
     runId?: string,
     runner: FabricAgentRunner = "kiro",
   ): string | undefined {
+    if (runner === "kiro") return this.#retainedKiroSession(actorId, runId)?.runnerSessionId;
     if (!runId) return undefined;
     const status = readRunRecord(path.join(this.#actorRoot, actorId, "runs", runId, "status.json"));
-    return (runner !== "kiro" || status?.kiroAgentEngine === KIRO_AGENT_ENGINE) &&
-      typeof status?.runnerSessionId === "string" && status.runnerSessionId.trim()
+    return typeof status?.runnerSessionId === "string" && status.runnerSessionId.trim()
       ? status.runnerSessionId
+      : undefined;
+  }
+
+  #retainedKiroSession(
+    actorId: string,
+    runId?: string,
+  ): { runnerSessionId: string; kiroSessionProfileSha256: string } | undefined {
+    if (!runId) return undefined;
+    const status = readRunRecord(path.join(this.#actorRoot, actorId, "runs", runId, "status.json"));
+    return status?.kiroAgentEngine === KIRO_AGENT_ENGINE &&
+      typeof status.runnerSessionId === "string" && status.runnerSessionId.trim() &&
+      typeof status.kiroSessionProfileSha256 === "string" &&
+      /^[a-f0-9]{64}$/.test(status.kiroSessionProfileSha256)
+      ? {
+          runnerSessionId: status.runnerSessionId,
+          kiroSessionProfileSha256: status.kiroSessionProfileSha256,
+        }
       : undefined;
   }
 
@@ -2510,6 +2545,9 @@ export class ActorManager {
       runner: actor.runner,
       ...(actor.runnerSessionId ? { runnerSessionId: actor.runnerSessionId } : {}),
       ...(actor.kiroAgentEngine ? { kiroAgentEngine: actor.kiroAgentEngine } : {}),
+      ...(actor.kiroSessionProfileSha256
+        ? { kiroSessionProfileSha256: actor.kiroSessionProfileSha256 }
+        : {}),
       ...(actor.model ? { model: actor.model } : {}),
       ...(actor.thinking ? { thinking: actor.thinking } : {}),
       ...(actor.tools ? { tools: actor.tools } : {}),
@@ -2767,6 +2805,10 @@ export class ActorManager {
             })()),
         ...(record.kiroAgentEngine === KIRO_AGENT_ENGINE
           ? { kiroAgentEngine: KIRO_AGENT_ENGINE }
+          : {}),
+        ...(typeof record.kiroSessionProfileSha256 === "string" &&
+        /^[a-f0-9]{64}$/.test(record.kiroSessionProfileSha256)
+          ? { kiroSessionProfileSha256: record.kiroSessionProfileSha256 }
           : {}),
         ...(typeof record.model === "string" ? { model: record.model } : {}),
         ...(isFabricThinking(record.thinking) ? { thinking: record.thinking } : {}),

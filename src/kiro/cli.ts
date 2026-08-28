@@ -42,6 +42,9 @@ Uninstall options:
   --json
 
 Doctor options:
+  --project-root <dir>
+  --user
+  --kiro-home <dir>
   --kiro-binary <path>
   --json
 `;
@@ -115,21 +118,21 @@ const parseArgs = (argv: string[]): ParsedArgs => {
         parsed.allowTools = true;
         break;
       case "--project-root":
-        if (command !== "install" && command !== "uninstall") {
-          throw new UsageError("--project-root is install/uninstall-only");
+        if (command !== "install" && command !== "uninstall" && command !== "doctor") {
+          throw new UsageError("--project-root is only valid for Kiro lifecycle commands");
         }
         if (parsed.projectRoot !== undefined) throw new UsageError("duplicate --project-root");
         parsed.projectRoot = value();
         break;
       case "--user":
-        if (command !== "install" && command !== "uninstall") {
-          throw new UsageError("--user is install/uninstall-only");
+        if (command !== "install" && command !== "uninstall" && command !== "doctor") {
+          throw new UsageError("--user is only valid for Kiro lifecycle commands");
         }
         parsed.user = true;
         break;
       case "--kiro-home":
-        if (command !== "install" && command !== "uninstall") {
-          throw new UsageError("--kiro-home is install/uninstall-only");
+        if (command !== "install" && command !== "uninstall" && command !== "doctor") {
+          throw new UsageError("--kiro-home is only valid for Kiro lifecycle commands");
         }
         if (parsed.kiroHome !== undefined) throw new UsageError("duplicate --kiro-home");
         parsed.kiroHome = value();
@@ -167,7 +170,15 @@ export const runKiroCli = async (argv: string[]): Promise<number> => {
   }
 
   if (parsed.command === "doctor") {
+    if (parsed.kiroHome && !parsed.user) {
+      process.stderr.write(`kiro-fabric: --kiro-home requires --user\n\n${USAGE}`);
+      return 2;
+    }
     const report = await runKiroDoctor({
+      checkInstalled: true,
+      ...(parsed.projectRoot ? { projectRoot: parsed.projectRoot } : {}),
+      ...(parsed.user ? { scope: "user" as const } : {}),
+      ...(parsed.kiroHome ? { kiroHome: parsed.kiroHome } : {}),
       ...(parsed.kiroBinary ? { kiroBinary: parsed.kiroBinary } : {}),
     });
     if (parsed.json) {

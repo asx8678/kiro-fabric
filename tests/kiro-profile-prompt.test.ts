@@ -36,8 +36,10 @@ describe("Kiro profile prompt contract", () => {
     expect(profile.tools).toEqual(["@fabric/fabric_exec"]);
     expect(profile.includeMcpJson).toBe(false);
     expect(profile.includePowers).toBe(false);
-    expect(profile.permissions).toEqual({ rules: [] });
-    expect(profile).not.toHaveProperty("allowedTools");
+    expect(profile.permissions).toEqual({
+      rules: [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "ask" }],
+    });
+    expect(profile.allowedTools).toEqual(["@fabric/fabric_exec"]);
   });
 
   it("does not advertise recursive agent spawning to isolated ACP children", () => {
@@ -48,6 +50,7 @@ describe("Kiro profile prompt contract", () => {
       internalChild: { cwd: "/proj", serializedTools: '["read"]' },
     });
 
+    expect(profile.resources).toEqual([]);
     expect(profile.prompt).not.toContain("agents.run");
     expect(profile.prompt).not.toContain("agents.spawn");
     expect(profile.prompt).toMatch(/all k\.\* API calls return promises/i);
@@ -110,22 +113,26 @@ describe("Kiro profile prompt contract", () => {
     expect(profile.prompt).toContain("agents.spawn");
     expect(profile.prompt).toMatch(/at most four/i);
     expect(profile.prompt).toContain("qwen3-coder-next");
-    expect(profile.prompt).toContain("claude-opus-4.5");
+    expect(profile.prompt).toContain("claude-opus-4.8");
     expect(profile.prompt).toMatch(
-      /complex analysis or ambiguous tasks use claude-opus-4\.5 at medium effort/i,
+      /complex analysis or ambiguous tasks use claude-opus-4.8 at medium effort/i,
     );
     expect(profile.prompt).toMatch(/inventory-aware.*falls back to Kiro auto/i);
     expect(profile.prompt).toMatch(/focused tests\/builds/i);
   });
 
-  it("adds one exact v3 MCP permission only when tool auto-approval is enabled", () => {
+  it("emits one exact v3 MCP rule: ask by default, allow only with tool auto-approval", () => {
     const defaultProfile = generateKiroProfile({
       projectRoot: process.cwd(),
       mcpEntryPath: "/dist/kiro/mcp-entry.js",
       nodePath: "/usr/bin/node",
     });
-    expect(defaultProfile).not.toHaveProperty("allowedTools");
-    expect(defaultProfile.permissions).toEqual({ rules: [] });
+    expect(defaultProfile.allowedTools).toEqual(["@fabric/fabric_exec"]);
+    // Default is an explicit ask: a broader user/workspace allow cannot bypass
+    // Fabric's approval gate, while a wider deny still wins.
+    expect(defaultProfile.permissions).toEqual({
+      rules: [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "ask" }],
+    });
 
     const trustedProfile = generateKiroProfile({
       projectRoot: process.cwd(),
@@ -133,7 +140,7 @@ describe("Kiro profile prompt contract", () => {
       nodePath: "/usr/bin/node",
       allowTools: true,
     });
-    expect(trustedProfile).not.toHaveProperty("allowedTools");
+    expect(trustedProfile.allowedTools).toEqual(["@fabric/fabric_exec"]);
     expect(trustedProfile.permissions).toEqual({
       rules: [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "allow" }],
     });

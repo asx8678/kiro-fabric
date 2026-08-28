@@ -12,7 +12,11 @@ const profile = (): KiroProfileDocument => ({
   includeMcpJson: false,
   includePowers: false,
   tools: ["@fabric/fabric_exec"],
-  permissions: { rules: [] },
+  allowedTools: ["@fabric/fabric_exec"],
+  resources: ["skill://.kiro/skills/fabric-*/SKILL.md"],
+  permissions: {
+    rules: [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "ask" }],
+  },
   mcpServers: {
     fabric: {
       command: "/usr/bin/node",
@@ -43,20 +47,37 @@ describe("Kiro v3 session projection", () => {
             description: "Fabric v3 test",
             prompt: "Use the Fabric tool.",
             tools: ["@fabric/fabric_exec"],
+            allowedTools: ["@fabric/fabric_exec"],
             includeMcpJson: false,
+            includePowers: false,
+            resources: ["skill://.kiro/skills/fabric-*/SKILL.md"],
+            permissions: {
+              rules: [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "ask" }],
+            },
           }],
         },
       },
     });
   });
 
-  it("projects only an explicit permission policy", () => {
+  it("projects every security-relevant agent field unchanged (wire/disk parity)", () => {
+    const disk = profile();
+    const wire = buildKiroV3SessionParams(disk, "/workspace")._meta.kiro.customAgents[0]!;
+    for (const field of [
+      "tools",
+      "allowedTools",
+      "includeMcpJson",
+      "includePowers",
+      "resources",
+      "permissions",
+    ] as const) {
+      expect(wire[field]).toEqual(disk[field]);
+    }
+  });
+
+  it("projects the exact permission policy onto the wire", () => {
     const trusted = profile();
-    trusted.permissions.rules.push({
-      capability: "mcp",
-      match: ["fabric/fabric_exec"],
-      effect: "allow",
-    });
+    trusted.permissions.rules[0]!.effect = "allow";
     expect(
       buildKiroV3SessionParams(trusted, "/workspace")._meta.kiro.customAgents[0]
         ?.permissions,

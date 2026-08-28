@@ -3,7 +3,7 @@
 // test here is non-billable: the fake records outbound methods and the
 // doctor asserts session/prompt was never sent.
 
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { runKiroDoctor } from "../src/kiro/doctor.js";
+import { installKiroProfile } from "../src/kiro/install.js";
 import { KIRO_CLI_VERSION } from "../src/kiro/profile.js";
 
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -49,6 +50,42 @@ const runDoctor = (options: Parameters<typeof runKiroDoctor>[0] = {}) =>
   });
 
 describe("runKiroDoctor", () => {
+
+  it("attests an installed profile, skill bundle, and exact runtime closure", async () => {
+    const projectRoot = join(base, "installed-project");
+    mkdirSync(projectRoot, { recursive: true });
+    await installKiroProfile({
+      projectRoot,
+      kiroBinary: wrapperPath,
+      mcpEntryPath: mcpEntry,
+    });
+    const pristine = await runDoctor({
+      kiroBinary: wrapperPath,
+      mcpEntryPath: mcpEntry,
+      checkInstalled: true,
+      projectRoot,
+      fabricConfig: structuredClone(DEFAULT_FABRIC_CONFIG),
+    });
+    expect(check(pristine, "install.manifest")?.status).toBe("pass");
+    expect(check(pristine, "install.skills")?.status).toBe("pass");
+    expect(check(pristine, "install.runtime-closure")?.status).toBe("pass");
+
+    writeFileSync(
+      join(projectRoot, ".kiro", "skills", "fabric-review", "SKILL.md"),
+      "tampered skill\n",
+    );
+    const tampered = await runDoctor({
+      kiroBinary: wrapperPath,
+      mcpEntryPath: mcpEntry,
+      checkInstalled: true,
+      projectRoot,
+      fabricConfig: structuredClone(DEFAULT_FABRIC_CONFIG),
+    });
+    expect(check(tampered, "install.skills")?.status).toBe("fail");
+    expect(check(tampered, "install.skills")?.message).toMatch(/hash mismatch/);
+    expect(check(tampered, "install.runtime-closure")?.status).toBe("pass");
+  }, 30_000);
+
   it("passes all checks against the supported fake tuple", async () => {
     const report = await runDoctor({ kiroBinary: wrapperPath, mcpEntryPath: mcpEntry });
     expect(report.ok).toBe(true);

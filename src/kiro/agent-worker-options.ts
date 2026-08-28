@@ -37,6 +37,7 @@ export interface KiroAgentWorkerOptions {
   capabilityDigest?: string;
   projectRoot?: string;
   runnerSessionId?: string;
+  kiroSessionProfileSha256?: string;
   runRoot?: string;
   steerFile?: string;
   branch?: string;
@@ -155,6 +156,7 @@ export const parseKiroAgentWorkerOptions = (argv: readonly string[] = process.ar
     ...(pick("actor-id") ? { actorId: pick("actor-id")! } : {}), ...(pick("actor-name") ? { actorName: pick("actor-name")! } : {}),
     ...(capabilityRequirements ? { capabilityRequirements } : {}), ...(pick("capability-digest") ? { capabilityDigest: pick("capability-digest")! } : {}),
     ...(pick("project-root") ? { projectRoot: pick("project-root")! } : {}), ...(runnerSessionId ? { runnerSessionId } : {}),
+    ...(pick("kiro-session-profile-sha256") ? { kiroSessionProfileSha256: pick("kiro-session-profile-sha256")! } : {}),
     ...(pick("run-root") ? { runRoot: pick("run-root")! } : {}), ...(pick("steer-file") ? { steerFile: pick("steer-file")! } : {}),
     ...(pick("branch") ? { branch: pick("branch")! } : {}), ...(pick("worktree") ? { worktree: pick("worktree")! } : {}),
     ...(residency ? { kiroResidency: residency } : {}), ...(context ? { kiroContext: context } : {}),

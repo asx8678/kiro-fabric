@@ -157,6 +157,13 @@ export const parseWorkerOptions = (
   const worktree = optional(args, "worktree");
   const maxTokens = optional(args, "max-tokens");
   const runnerSessionId = optional(args, "runner-session-id");
+  const kiroSessionProfileSha256 = optional(args, "kiro-session-profile-sha256");
+  if (
+    kiroSessionProfileSha256 !== undefined &&
+    !/^[a-f0-9]{64}$/.test(kiroSessionProfileSha256)
+  ) {
+    throw new Error("Invalid worker Kiro session profile SHA-256");
+  }
   const kiroResidency = optional(args, "kiro-residency");
   if (kiroResidency !== undefined && kiroResidency !== "one-shot" && kiroResidency !== "resident") {
     throw new Error(`Invalid worker Kiro residency: ${kiroResidency}`);
@@ -253,6 +260,7 @@ export const parseWorkerOptions = (
     ...(ownerHostId ? { ownerHostId } : {}),
     ...(ownerIdentityId ? { ownerIdentityId } : {}),
     ...(runnerSessionId ? { runnerSessionId } : {}),
+    ...(kiroSessionProfileSha256 ? { kiroSessionProfileSha256 } : {}),
     ...(runRoot ? { runRoot } : {}),
     ...(steerFile ? { steerFile } : {}),
     ...(branch ? { branch } : {}),

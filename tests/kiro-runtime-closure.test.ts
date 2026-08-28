@@ -11,6 +11,7 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -115,6 +116,18 @@ describe("runtime closure deployment", () => {
     expect(closure.mcpEntryPath).toContain("/kiro/mcp-entry.js");
   });
 
+
+  it("refuses a symlinked activation marker without following it", () => {
+    const dir = project("marker-symlink");
+    const runtime = runtimeClosurePath(dir, "project");
+    mkdirSync(runtime, { recursive: true });
+    const outside = join(dir, "outside-marker");
+    writeFileSync(outside, "outside\n");
+    symlinkSync(outside, join(runtime, ".closure-current"));
+    expect(() => deployRuntimeClosure(dir, "project")).toThrow(/marker.*regular file|symlink/i);
+    expect(readFileSync(outside, "utf8")).toBe("outside\n");
+  });
+
   it("is idempotent: second deploy without changes returns updated=false", () => {
     const dir = project("idempotent");
     const first = deployRuntimeClosure(dir, "project");
@@ -125,11 +138,12 @@ describe("runtime closure deployment", () => {
     expect(second.digest).toBe(first.digest);
   });
 
-  it("force re-deploys even when digest matches", () => {
+  it("force never replaces an immutable digest directory", () => {
     const dir = project("force-redeploy");
     deployRuntimeClosure(dir, "project");
     const forced = deployRuntimeClosure(dir, "project", { force: true });
-    expect(forced.updated).toBe(true);
+    expect(forced.updated).toBe(false);
+    expect(forced.action).toBe("noop");
   });
 
   it("excludes source maps from the deployed closure", () => {
@@ -230,6 +244,39 @@ describe("installer with runtime closure", () => {
     const resolvedHome = realpathSync(home);
     expect(manifest.runtime.mcpEntryPath.startsWith(resolvedHome)).toBe(true);
     expect(manifest.runtime.mcpEntryPath).toContain(".kiro-fabric/runtime");
+  });
+
+
+  it("refuses a tampered or expanded digest directory instead of trusting its name", async () => {
+    const dir = project("attestation-tamper");
+    const installed = await installWithFake(dir);
+    const manifest = JSON.parse(readFileSync(installed.manifestPath, "utf8")) as {
+      runtime: { closure: { root: string } };
+    };
+    const closureRoot = join(dir, ...manifest.runtime.closure.root.split("/"));
+    const entry = join(closureRoot, "kiro", "mcp-entry.js");
+    const original = readFileSync(entry);
+    const changed = Buffer.from(original);
+    changed[0] = changed[0] === 0x20 ? 0x21 : 0x20;
+    writeFileSync(entry, changed);
+    await expect(installWithFake(dir)).rejects.toThrow(/runtime closure hash mismatch/);
+
+    writeFileSync(entry, original);
+    writeFileSync(join(closureRoot, "foreign-extra.js"), "foreign\n");
+    await expect(installWithFake(dir)).rejects.toThrow(/file set does not match/);
+  });
+
+  it("refuses uninstall before profile mutation when runtime attestation drifts", async () => {
+    const dir = project("attestation-uninstall");
+    const installed = await installWithFake(dir);
+    const manifest = JSON.parse(readFileSync(installed.manifestPath, "utf8")) as {
+      runtime: { closure: { root: string } };
+    };
+    const entry = join(dir, ...manifest.runtime.closure.root.split("/"), "kiro", "mcp-entry.js");
+    writeFileSync(entry, "tampered runtime\n");
+    expect(() => uninstallKiroProfile({ projectRoot: dir })).toThrow(/runtime closure hash mismatch/);
+    expect(existsSync(installed.profilePath)).toBe(true);
+    expect(existsSync(installed.manifestPath)).toBe(true);
   });
 
   it("update refreshes the runtime closure and profile", async () => {

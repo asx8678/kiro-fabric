@@ -10,7 +10,7 @@
 //      the same empty session, then deletes it — with zero session/prompt frames.
 
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -30,7 +30,22 @@ import {
   assertKiroVersion,
   validateKiroProfile,
 } from "./install.js";
-import { readPackageVersion } from "./managed.js";
+import {
+  lstatOrNull,
+  readPackageVersion,
+  managedPaths,
+  readManagedFileNoFollow,
+  readManifest,
+  sha256Bytes,
+  type KiroInstallManifest,
+  type KiroManagedLayout,
+} from "./managed.js";
+import { resolveKiroInstallRoots } from "./home.js";
+import {
+  runtimeClosurePath,
+  verifyRuntimeClosureAttestation,
+} from "./runtime-closure.js";
+import { managedKiroSkillBundleSha256 } from "./skills.js";
 import {
   assertKiroV3AgentModeAvailable,
   buildKiroV3SessionParams,
@@ -67,6 +82,11 @@ export interface KiroDoctorOptions {
   mcpEntryPath?: string;
   /** Fabric configuration override for deterministic read-only probes. */
   fabricConfig?: FabricConfig;
+  /** Opt in to read-only verification of a concrete managed installation. */
+  checkInstalled?: boolean;
+  projectRoot?: string;
+  scope?: KiroManagedLayout;
+  kiroHome?: string;
 }
 
 const defaultMcpEntry = (): string => {
@@ -126,6 +146,72 @@ export const runKiroDoctor = async (
     checks.push({ id, status: "skipped", durationMs: 0, message });
   };
 
+  if (options.checkInstalled || options.projectRoot || options.kiroHome) {
+    const roots = resolveKiroInstallRoots(options);
+    const paths = managedPaths(roots.installRoot, roots.layout);
+    const manifestOk = await run("install.manifest", async () => {
+      const manifest = readManifest(roots.installRoot, roots.layout);
+      if (!manifest) throw new Error("managed install manifest is absent");
+      const profile = readManagedFileNoFollow(roots.installRoot, paths.profile);
+      if (!profile) throw new Error("managed installed profile is absent");
+      if (sha256Bytes(profile) !== manifest.profile.installedSha256) {
+        throw new Error("managed installed profile hash mismatch");
+      }
+      return manifest.format === 1
+        ? "legacy format-1 profile ownership verified"
+        : "format-2 profile and manifest ownership verified";
+    });
+    const installedManifest: KiroInstallManifest | null = manifestOk
+      ? readManifest(roots.installRoot, roots.layout)
+      : null;
+    if (!manifestOk || !installedManifest) {
+      skip("install.skills", "dependency_failed");
+      skip("install.runtime-closure", "dependency_failed");
+    } else if (installedManifest.format === 1) {
+      skip("install.skills", "legacy format-1 manifest has no skill attestation");
+      skip("install.runtime-closure", "legacy format-1 manifest has no closure attestation");
+    } else {
+      await run("install.skills", async () => {
+        const records = installedManifest!.skills?.files;
+        if (!records || records.length === 0) throw new Error("managed skill attestation is absent");
+        const sources = records.map((record) => {
+          const path = join(roots.installRoot, ...record.path.split("/"));
+          const bytes = readManagedFileNoFollow(roots.installRoot, path);
+          if (!bytes) throw new Error("managed skill is absent: " + record.path);
+          if (sha256Bytes(bytes) !== record.installedSha256) {
+            throw new Error("managed skill hash mismatch: " + record.path);
+          }
+          const marker = record.path.indexOf("skills/");
+          return {
+            sourceRelative: record.path.slice(marker + "skills/".length),
+            installedRelative: record.path,
+            installedPath: path,
+            bytes,
+            sha256: record.installedSha256,
+          };
+        });
+        if (managedKiroSkillBundleSha256(sources) !== installedManifest!.skills!.bundleSha256) {
+          throw new Error("managed skill bundle digest mismatch");
+        }
+        return records.length + " managed skill files verified";
+      });
+      await run("install.runtime-closure", async () => {
+        const closure = installedManifest!.runtime.closure;
+        if (!closure) throw new Error("runtime closure attestation is absent");
+        verifyRuntimeClosureAttestation(roots.installRoot, closure);
+        const marker = join(runtimeClosurePath(roots.installRoot, roots.layout), ".closure-current");
+        const stat = lstatOrNull(marker);
+        if (!stat || stat.isSymbolicLink() || !stat.isFile()) {
+          throw new Error("runtime closure marker is missing or invalid");
+        }
+        if (readFileSync(marker, "utf8").trim() !== closure.digest) {
+          throw new Error("runtime closure marker digest mismatch");
+        }
+        return closure.files.length + " runtime closure files verified";
+      });
+    }
+  }
+
   await run("config.accounting", async () => {
     const config = options.fabricConfig ?? inspectFabricConfig({
       cwd: process.cwd(),
@@ -170,13 +256,20 @@ export const runKiroDoctor = async (
       if (JSON.stringify(profile.tools) !== JSON.stringify(["@fabric/fabric_exec"])) {
         throw new Error("profile tools must be exactly @fabric/fabric_exec");
       }
-      if ("allowedTools" in profile) {
-        throw new Error("profile contains the legacy allowedTools grant");
+      if (JSON.stringify(profile.allowedTools) !== JSON.stringify(["@fabric/fabric_exec"])) {
+        throw new Error("profile allowedTools compatibility mirror must be exactly @fabric/fabric_exec");
       }
       if (profile.includeMcpJson !== false) throw new Error("includeMcpJson must be false");
       if (profile.includePowers !== false) throw new Error("includePowers must be false");
-      if (profile.permissions.rules.length !== 0) {
-        throw new Error("default profile must not auto-approve any capability");
+      const rules = profile.permissions.rules;
+      if (
+        rules.length !== 1 ||
+        rules[0]?.capability !== "mcp" ||
+        rules[0]?.effect !== "ask" ||
+        rules[0]?.match?.length !== 1 ||
+        rules[0]?.match[0] !== "fabric/fabric_exec"
+      ) {
+        throw new Error("default profile must carry exactly one exact Fabric ask rule");
       }
       if (JSON.stringify(profile).includes("--trust-all-tools")) {
         throw new Error("profile contains --trust-all-tools");
@@ -320,7 +413,10 @@ export const runKiroDoctor = async (
             version: readPackageVersion(),
           },
         });
-        if (!("agentCapabilities" in result) && !("protocolVersion" in result)) {
+        if (
+          result.protocolVersion !== 1 ||
+          !isRecord(result.agentCapabilities)
+        ) {
           throw new Error(`unexpected ACP initialize result: ${JSON.stringify(result).slice(0, 300)}`);
         }
       };

@@ -22,9 +22,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { hostname } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-export const KIRO_INSTALL_MANIFEST_FORMAT = 1 as const;
+export const KIRO_INSTALL_MANIFEST_FORMAT = 2 as const;
+const KIRO_LEGACY_INSTALL_MANIFEST_FORMAT = 1 as const;
 const MANAGED_OWNER = "kiro-fabric" as const;
 
 export type KiroManagedLayout = "project" | "user";
@@ -38,6 +39,7 @@ const LAYOUT = {
     lock: ".kiro/.kiro-fabric/operation.lock",
     transaction: ".kiro/.kiro-fabric/transaction.json",
     agentsDir: ".kiro/agents",
+    skillsDir: ".kiro/skills",
   },
   user: {
     profile: "agents/kiro-fabric.json",
@@ -47,6 +49,7 @@ const LAYOUT = {
     lock: ".kiro-fabric/operation.lock",
     transaction: ".kiro-fabric/transaction.json",
     agentsDir: "agents",
+    skillsDir: "skills",
   },
 } as const;
 
@@ -76,8 +79,20 @@ export interface KiroBackupRecord {
   sha256: string;
 }
 
+export interface KiroManagedOwnedFile {
+  path: string;
+  installedSha256: string;
+  backup?: KiroBackupRecord;
+}
+
+export interface KiroRuntimeClosureManifest {
+  digest: string;
+  root: string;
+  files: KiroManagedOwnedFile[];
+}
+
 export interface KiroInstallManifest {
-  format: number;
+  format: 1 | 2;
   owner: string;
   packageVersion: string;
   projectRoot: string;
@@ -93,6 +108,11 @@ export interface KiroInstallManifest {
     kiroCliVersion?: string;
     /** Optional only while reading a pre-v3 manifest for an installer update. */
     agentEngine?: string;
+    closure?: KiroRuntimeClosureManifest;
+  };
+  skills?: {
+    bundleSha256: string;
+    files: KiroManagedOwnedFile[];
   };
   /** Present on user-home installs; omitted for project-scoped manifests. */
   scope?: "user";
@@ -110,6 +130,8 @@ export interface ManagedPaths {
   lock: string;
   transaction: string;
   agentsDir: string;
+  skillsDir: string;
+  runtimeDir: string;
 }
 
 export const sha256Bytes = (bytes: Buffer | string): string =>
@@ -145,6 +167,8 @@ export const managedPaths = (
     lock: join(root, ...spec.lock.split("/")),
     transaction: join(root, ...spec.transaction.split("/")),
     agentsDir: join(root, ...spec.agentsDir.split("/")),
+    skillsDir: join(root, ...spec.skillsDir.split("/")),
+    runtimeDir: join(root, ...spec.manifestDir.split("/"), "runtime"),
   };
 };
 
@@ -205,6 +229,8 @@ export const assertManagedTree = (
     paths.profile,
     paths.manifest,
     paths.backupDir,
+    paths.skillsDir,
+    paths.runtimeDir,
     paths.lock,
     paths.transaction,
   ]) {
@@ -245,6 +271,45 @@ const parseBackupRecord = (
   return { path: value.path, sha256: value.sha256 };
 };
 
+const parseOwnedFiles = (
+  value: unknown,
+  root: string,
+  layout: KiroManagedLayout,
+  allowedPrefix: string,
+  allowBackups: boolean,
+): KiroManagedOwnedFile[] => {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new KiroInstallError("manifest", "install manifest owned files are malformed");
+  }
+  const files = value.map((entry): KiroManagedOwnedFile => {
+    if (!isRecord(entry) || typeof entry.path !== "string" || !isSha256Hex(entry.installedSha256)) {
+      throw new KiroInstallError("manifest", "install manifest owned file is malformed");
+    }
+    if (
+      entry.path.includes("\\") || entry.path.includes("\0") || isAbsolute(entry.path) ||
+      entry.path.split("/").some((part) => part === "" || part === "." || part === "..") ||
+      !entry.path.startsWith(allowedPrefix)
+    ) {
+      throw new KiroInstallError("manifest", "install manifest owned file path is unsafe");
+    }
+    const backup = entry.backup === undefined
+      ? undefined
+      : allowBackups
+        ? parseBackupRecord(entry.backup, root, layout)
+        : (() => { throw new KiroInstallError("manifest", "runtime closure file cannot carry a backup"); })();
+    return {
+      path: entry.path,
+      installedSha256: entry.installedSha256,
+      ...(backup ? { backup } : {}),
+    };
+  });
+  const paths = files.map((file) => file.path);
+  if (new Set(paths).size !== paths.length || paths.some((path, index) => index > 0 && paths[index - 1]! >= path)) {
+    throw new KiroInstallError("manifest", "install manifest owned files must be sorted and unique");
+  }
+  return files;
+};
+
 export const readManifest = (
   root: string,
   layout: KiroManagedLayout = "project",
@@ -268,7 +333,11 @@ export const readManifest = (
   if (!isRecord(parsed)) {
     throw new KiroInstallError("manifest", `install manifest is malformed: ${path}`);
   }
-  if (parsed.format !== KIRO_INSTALL_MANIFEST_FORMAT || parsed.owner !== MANAGED_OWNER) {
+  if (
+    (parsed.format !== KIRO_LEGACY_INSTALL_MANIFEST_FORMAT &&
+      parsed.format !== KIRO_INSTALL_MANIFEST_FORMAT) ||
+    parsed.owner !== MANAGED_OWNER
+  ) {
     throw new KiroInstallError("manifest", `install manifest is foreign: ${path}`);
   }
   if (layout === "project") {
@@ -307,8 +376,43 @@ export const readManifest = (
     parsed.profile.backup === undefined
       ? undefined
       : parseBackupRecord(parsed.profile.backup, root, layout);
+  let skills: KiroInstallManifest["skills"];
+  let closure: KiroRuntimeClosureManifest | undefined;
+  if (parsed.format === KIRO_INSTALL_MANIFEST_FORMAT) {
+    if (!isRecord(parsed.skills) || !isSha256Hex(parsed.skills.bundleSha256)) {
+      throw new KiroInstallError("manifest", "install manifest skill attestation is malformed");
+    }
+    const skillsPrefix = relative(root, paths.skillsDir).split(sep).join("/") + "/fabric-";
+    skills = {
+      bundleSha256: parsed.skills.bundleSha256,
+      files: parseOwnedFiles(parsed.skills.files, root, layout, skillsPrefix, true),
+    };
+    if (!isRecord(parsed.runtime.closure) || !isSha256Hex(parsed.runtime.closure.digest) || typeof parsed.runtime.closure.root !== "string") {
+      throw new KiroInstallError("manifest", "install manifest runtime closure attestation is malformed");
+    }
+    const runtimeRoot = relative(root, join(paths.manifestDir, "runtime", parsed.runtime.closure.digest))
+      .split(sep).join("/");
+    if (parsed.runtime.closure.root !== runtimeRoot) {
+      throw new KiroInstallError("manifest", "install manifest runtime closure root is not managed");
+    }
+    closure = {
+      digest: parsed.runtime.closure.digest,
+      root: runtimeRoot,
+      files: parseOwnedFiles(
+        parsed.runtime.closure.files,
+        root,
+        layout,
+        runtimeRoot + "/",
+        false,
+      ),
+    };
+    const expectedEntry = join(root, ...runtimeRoot.split("/"), "kiro", "mcp-entry.js");
+    if (parsed.runtime.mcpEntryPath !== expectedEntry || !closure.files.some((file) => file.path === runtimeRoot + "/kiro/mcp-entry.js")) {
+      throw new KiroInstallError("manifest", "install manifest MCP entry is not bound to its closure");
+    }
+  }
   return {
-    format: KIRO_INSTALL_MANIFEST_FORMAT,
+    format: parsed.format,
     owner: MANAGED_OWNER,
     packageVersion: parsed.packageVersion,
     projectRoot: layout === "user" ? parsed.projectRoot : root,
@@ -326,7 +430,9 @@ export const readManifest = (
       ...(typeof parsed.runtime.agentEngine === "string"
         ? { agentEngine: parsed.runtime.agentEngine }
         : {}),
+      ...(closure ? { closure } : {}),
     },
+    ...(skills ? { skills } : {}),
     ...(layout === "user" ? { scope: "user" as const } : {}),
   };
 };
@@ -385,15 +491,24 @@ export interface KiroManagedFileTransition {
   nextBase64: string | null;
 }
 
+interface KiroManagedTransactionFile {
+  /** Canonical install-root-relative POSIX path. */
+  path: string;
+  transition: KiroManagedFileTransition;
+}
+
 export interface KiroManagedTransaction {
-  format: 1;
+  format: 1 | 2;
   owner: typeof MANAGED_OWNER;
   operation: "install" | "uninstall";
   layout: KiroManagedLayout;
   root: string;
   createdAt: number;
-  profile: KiroManagedFileTransition;
-  manifest: KiroManagedFileTransition;
+  /** Legacy format-1 leaves. */
+  profile?: KiroManagedFileTransition;
+  manifest?: KiroManagedFileTransition;
+  /** Format-2 ordered leaves; manifest must be last. */
+  files?: KiroManagedTransactionFile[];
 }
 
 export const managedFileTransition = (
@@ -471,12 +586,37 @@ const applyManagedTransition = (
     );
   }
   assertNoSymlinkComponents(root, target);
+  if (nextBytes !== null) ensureManagedDirectory(dirname(target));
   if (nextBytes === null) {
     if (current !== null) unlinkSync(target);
   } else {
     writeAtomic(target, nextBytes, 0o600);
   }
   fsyncDirectory(resolve(target, ".."));
+};
+
+const transactionRelativePath = (
+  root: string,
+  layout: KiroManagedLayout,
+  value: unknown,
+): string => {
+  if (typeof value !== "string" || value.length === 0 || value.includes("\\") || value.includes("\0")) {
+    throw new KiroInstallError("manifest", "managed transaction path is malformed");
+  }
+  const parts = value.split("/");
+  if (isAbsolute(value) || parts.some((part) => part === "" || part === "." || part === "..")) {
+    throw new KiroInstallError("manifest", "managed transaction path is unsafe");
+  }
+  const paths = managedPaths(root, layout);
+  const allowedLeaves = new Set([
+    relative(root, paths.profile).split(sep).join("/"),
+    relative(root, paths.manifest).split(sep).join("/"),
+  ]);
+  const skillsPrefix = relative(root, paths.skillsDir).split(sep).join("/") + "/fabric-";
+  if (!allowedLeaves.has(value) && !value.startsWith(skillsPrefix)) {
+    throw new KiroInstallError("manifest", "managed transaction path is outside owned leaves");
+  }
+  return value;
 };
 
 const parseManagedTransaction = (
@@ -486,16 +626,37 @@ const parseManagedTransaction = (
 ): KiroManagedTransaction => {
   if (!isRecord(value)) throw new KiroInstallError("manifest", "transaction journal is malformed");
   if (
-    value.format !== 1 ||
+    (value.format !== 1 && value.format !== 2) ||
     value.owner !== MANAGED_OWNER ||
     (value.operation !== "install" && value.operation !== "uninstall") ||
     value.layout !== layout ||
     value.root !== root ||
-    typeof value.createdAt !== "number" ||
-    !isRecord(value.profile) ||
-    !isRecord(value.manifest)
+    typeof value.createdAt !== "number"
   ) {
     throw new KiroInstallError("manifest", "transaction journal is foreign or malformed");
+  }
+  if (value.format === 1) {
+    if (!isRecord(value.profile) || !isRecord(value.manifest)) {
+      throw new KiroInstallError("manifest", "legacy transaction journal is malformed");
+    }
+  } else {
+    if (!Array.isArray(value.files) || value.files.length < 2) {
+      throw new KiroInstallError("manifest", "managed transaction file list is malformed");
+    }
+    const seen = new Set<string>();
+    for (const file of value.files) {
+      if (!isRecord(file) || !isRecord(file.transition)) {
+        throw new KiroInstallError("manifest", "managed transaction file entry is malformed");
+      }
+      const rel = transactionRelativePath(root, layout, file.path);
+      if (seen.has(rel)) throw new KiroInstallError("manifest", "managed transaction path is duplicated");
+      seen.add(rel);
+    }
+    const manifestRel = relative(root, managedPaths(root, layout).manifest).split(sep).join("/");
+    const last = value.files[value.files.length - 1];
+    if (!isRecord(last) || last.path !== manifestRel) {
+      throw new KiroInstallError("manifest", "managed transaction manifest must be last");
+    }
   }
   return value as unknown as KiroManagedTransaction;
 };
@@ -525,31 +686,41 @@ export const recoverManagedTransaction = (
     throw new KiroInstallError("manifest", `transaction journal is malformed: ${paths.transaction}`);
   }
   const transaction = parseManagedTransaction(value, root, layout);
-  applyManagedTransition(root, paths.profile, transaction.profile);
-  applyManagedTransition(root, paths.manifest, transaction.manifest);
+  if (transaction.format === 1) {
+    applyManagedTransition(root, paths.profile, transaction.profile!);
+    applyManagedTransition(root, paths.manifest, transaction.manifest!);
+  } else {
+    for (const file of transaction.files!) {
+      const rel = transactionRelativePath(root, layout, file.path);
+      applyManagedTransition(root, join(root, ...rel.split("/")), file.transition);
+    }
+  }
   assertNoSymlinkComponents(root, paths.transaction);
   unlinkSync(paths.transaction);
   fsyncDirectory(paths.manifestDir);
   return true;
 };
 
-export const commitManagedTransaction = (
+export const commitManagedFileTransaction = (
   root: string,
   layout: KiroManagedLayout,
   operation: KiroManagedTransaction["operation"],
-  profile: KiroManagedFileTransition,
-  manifest: KiroManagedFileTransition,
+  files: Array<{ path: string; transition: KiroManagedFileTransition }>,
 ): void => {
+  const normalized = files.map((file) => ({
+    path: relative(root, file.path).split(sep).join("/"),
+    transition: file.transition,
+  }));
   const transaction: KiroManagedTransaction = {
-    format: 1,
+    format: 2,
     owner: MANAGED_OWNER,
     operation,
     layout,
     root,
     createdAt: Date.now(),
-    profile,
-    manifest,
+    files: normalized,
   };
+  parseManagedTransaction(transaction, root, layout);
   writeManagedTransactionJournal(root, layout, transaction);
   recoverManagedTransaction(root, layout);
 };

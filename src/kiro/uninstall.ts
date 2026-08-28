@@ -3,13 +3,13 @@
 // backup. Never inspects or deletes a profile when no manifest is present.
 
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   acquireOperationLock,
   assertBackupBytes,
   assertManagedTree,
-  commitManagedTransaction,
+  commitManagedFileTransaction,
   fsyncDirectory,
   KiroInstallError,
   backupRelativePath,
@@ -23,10 +23,15 @@ import {
   sha256Bytes,
   type KiroBackupRecord,
   type KiroInstallManifest,
+  type KiroManagedOwnedFile,
   type KiroManagedLayout,
 } from "./managed.js";
 import { resolveKiroInstallRoots } from "./home.js";
-import { removeRuntimeClosure } from "./runtime-closure.js";
+import {
+  removeAttestedRuntimeClosure,
+  runtimeClosurePath,
+  verifyRuntimeClosureAttestation,
+} from "./runtime-closure.js";
 
 export type KiroUninstallAction = "noop" | "remove" | "restore";
 
@@ -35,6 +40,14 @@ export interface KiroUninstallOptions {
   dryRun?: boolean;
   scope?: KiroManagedLayout;
   kiroHome?: string;
+}
+
+interface KiroSkillUninstallPlan {
+  record: KiroManagedOwnedFile;
+  path: string;
+  currentSha256: string | null;
+  nextBytes: Buffer | null;
+  needsMutation: boolean;
 }
 
 export interface KiroUninstallPlan {
@@ -50,6 +63,8 @@ export interface KiroUninstallPlan {
   needsProfileMutation: boolean;
   needsManifestRemoval: boolean;
   warnings: string[];
+  skills: KiroSkillUninstallPlan[];
+  manifest: KiroInstallManifest | null;
 }
 
 export interface KiroUninstallResult {
@@ -88,6 +103,8 @@ export const planKiroProfileUninstall = (
     needsProfileMutation: false,
     needsManifestRemoval: false,
     warnings: [],
+    skills: [],
+    manifest: null,
   });
 
   const manifestStat = lstatOrNull(paths.manifest);
@@ -102,6 +119,48 @@ export const planKiroProfileUninstall = (
   const manifest: KiroInstallManifest = readManifest(installRoot, layout)!;
   const backup = manifest.profile.backup ?? null;
   if (backup) assertBackupBytes(installRoot, backup);
+
+  const ownershipWarnings: string[] = [];
+  const skills: KiroSkillUninstallPlan[] = (manifest.skills?.files ?? []).map((record) => {
+    const path = join(installRoot, ...record.path.split("/"));
+    const current = readManagedFileNoFollow(installRoot, path);
+    const currentSha256 = current === null ? null : sha256Bytes(current);
+    const backupBytes = record.backup ? assertBackupBytes(installRoot, record.backup) : null;
+    let nextBytes: Buffer | null = current;
+    let needsMutation = false;
+    if (currentSha256 === record.installedSha256) {
+      nextBytes = backupBytes;
+      needsMutation = true;
+    } else if (currentSha256 === null && backupBytes === null) {
+      nextBytes = null;
+    } else if (currentSha256 === null && backupBytes !== null) {
+      nextBytes = backupBytes;
+      needsMutation = true;
+    } else if (record.backup && currentSha256 === record.backup.sha256) {
+      nextBytes = current;
+    } else {
+      throw new KiroInstallError(
+        "ownership",
+        "managed skill changed; refusing to uninstall: " + path,
+      );
+    }
+    return { record, path, currentSha256, nextBytes, needsMutation };
+  });
+  if (manifest.runtime.closure) {
+    const closureRoot = join(installRoot, ...manifest.runtime.closure.root.split("/"));
+    if (existsSync(closureRoot)) {
+      verifyRuntimeClosureAttestation(installRoot, manifest.runtime.closure);
+      const marker = join(runtimeClosurePath(installRoot, layout), ".closure-current");
+      const markerStat = lstatOrNull(marker);
+      if (
+        !markerStat || markerStat.isSymbolicLink() || !markerStat.isFile() ||
+        readFileSync(marker, "utf8").trim() !== manifest.runtime.closure.digest
+      ) {
+        throw new KiroInstallError("ownership", "runtime closure marker does not match manifest");
+      }
+    } else ownershipWarnings.push("recorded runtime closure is already absent");
+  }
+  const ownedState = { warnings: ownershipWarnings, skills, manifest };
 
   const profileStat = lstatOrNull(paths.profile);
   let currentHash: string | null = null;
@@ -131,7 +190,7 @@ export const planKiroProfileUninstall = (
       restoredSha256: backup?.sha256 ?? null,
       needsProfileMutation: true,
       needsManifestRemoval: true,
-      warnings: [],
+      ...ownedState,
     };
   }
 
@@ -148,7 +207,7 @@ export const planKiroProfileUninstall = (
       restoredSha256: null,
       needsProfileMutation: false,
       needsManifestRemoval: true,
-      warnings: [],
+      ...ownedState,
     };
   }
 
@@ -165,7 +224,7 @@ export const planKiroProfileUninstall = (
       restoredSha256: backup.sha256,
       needsProfileMutation: true,
       needsManifestRemoval: true,
-      warnings: [],
+      ...ownedState,
     };
   }
 
@@ -182,7 +241,7 @@ export const planKiroProfileUninstall = (
       restoredSha256: backup.sha256,
       needsProfileMutation: false,
       needsManifestRemoval: true,
-      warnings: [],
+      ...ownedState,
     };
   }
 
@@ -200,7 +259,11 @@ const resultFromPlan = (
   ok: true,
   dryRun,
   action: plan.action,
-  changed: !dryRun && (plan.needsProfileMutation || plan.needsManifestRemoval),
+  changed: !dryRun && (
+    plan.needsProfileMutation ||
+    plan.needsManifestRemoval ||
+    plan.skills.some((skill) => skill.needsMutation)
+  ),
   projectRoot: plan.projectRoot,
   profilePath: plan.profilePath,
   manifestPath: plan.manifestPath,
@@ -237,18 +300,38 @@ const commitUninstall = (plan: KiroUninstallPlan): string[] => {
     nextProfile = null;
   }
 
+  for (const skill of plan.skills) {
+    const current = readManagedFileNoFollow(plan.installRoot, skill.path);
+    const hash = current === null ? null : sha256Bytes(current);
+    if (hash !== skill.currentSha256) {
+      throw new KiroInstallError("concurrency", "managed skill changed while uninstalling: " + skill.path);
+    }
+  }
   const currentManifest = readManagedFileNoFollow(plan.installRoot, plan.manifestPath);
-  commitManagedTransaction(
+  commitManagedFileTransaction(
     plan.installRoot,
     plan.layout,
     "uninstall",
-    managedFileTransition(currentProfileHash, nextProfile),
-    managedFileTransition(
-      currentManifest === null ? null : sha256Bytes(currentManifest),
-      plan.needsManifestRemoval ? null : currentManifest,
-    ),
+    [
+      {
+        path: plan.profilePath,
+        transition: managedFileTransition(currentProfileHash, nextProfile),
+      },
+      ...plan.skills.map((skill) => ({
+        path: skill.path,
+        transition: managedFileTransition(skill.currentSha256, skill.nextBytes),
+      })),
+      {
+        path: plan.manifestPath,
+        transition: managedFileTransition(
+          currentManifest === null ? null : sha256Bytes(currentManifest),
+          plan.needsManifestRemoval ? null : currentManifest,
+        ),
+      },
+    ],
   );
   fsyncDirectory(paths.agentsDir);
+  if (plan.skills.length > 0) fsyncDirectory(paths.skillsDir);
   fsyncDirectory(paths.manifestDir);
 
   if (plan.backupPath) {
@@ -260,11 +343,34 @@ const commitUninstall = (plan: KiroUninstallPlan): string[] => {
     }
   }
 
-  // Remove the runtime closure directory
+  for (const skill of plan.skills) {
+    if (skill.record.backup) {
+      try {
+        const backupPath = backupAbs(plan.installRoot, skill.record.backup);
+        const stat = lstatOrNull(backupPath);
+        if (stat?.isFile() && !stat.isSymbolicLink()) unlinkSync(backupPath);
+      } catch (error) {
+        warnings.push("could not remove skill backup: " + (error as Error).message);
+      }
+    }
+  }
+
   try {
-    removeRuntimeClosure(plan.installRoot, plan.layout);
+    if (plan.manifest?.runtime.closure) {
+      removeAttestedRuntimeClosure(plan.installRoot, plan.layout, plan.manifest.runtime.closure);
+    } else if (plan.manifest?.format === 1) {
+      warnings.push("legacy format-1 manifest has no runtime ownership proof; runtime left untouched");
+    }
   } catch (error) {
     warnings.push(`could not remove runtime closure: ${(error as Error).message}`);
+  }
+
+  const skillDirs = [...new Set(plan.skills.map((skill) => dirname(skill.path)))].sort(
+    (left, right) => right.length - left.length,
+  );
+  for (const dir of skillDirs) {
+    rmdirIfEmpty(dir);
+    rmdirIfEmpty(dirname(dir));
   }
 
   return warnings;
@@ -272,6 +378,7 @@ const commitUninstall = (plan: KiroUninstallPlan): string[] => {
 
 const cleanupEmptyManagedDirs = (root: string, layout: KiroManagedLayout): void => {
   const paths = managedPaths(root, layout);
+  rmdirIfEmpty(paths.skillsDir);
   rmdirIfEmpty(paths.backupDir);
   rmdirIfEmpty(paths.manifestDir);
   rmdirIfEmpty(paths.agentsDir);

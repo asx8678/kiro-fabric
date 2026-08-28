@@ -12,8 +12,9 @@ import {
 } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { basename, extname, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
+import { parse as parseYaml } from "yaml";
 
 import { inspectFabricConfig, type FabricConfig } from "../config.js";
 import { resolveAgentDir } from "../core/agent-dir.js";
@@ -24,7 +25,7 @@ import {
   assertManagedTree,
   assertNoSymlinkComponents,
   backupRelativePath,
-  commitManagedTransaction,
+  commitManagedFileTransaction,
   defaultMcpEntryPath,
   ensureManagedDirectory,
   fsyncDirectory,
@@ -44,6 +45,7 @@ import {
   type KiroBackupRecord,
   type KiroInstallManifest,
   type KiroManagedLayout,
+  type KiroManagedOwnedFile,
 } from "./managed.js";
 import { resolveKiroInstallRoots } from "./home.js";
 import {
@@ -54,9 +56,17 @@ import {
 } from "./profile.js";
 import {
   deployRuntimeClosure,
-  runtimeClosureMcpEntry,
+  planRuntimeClosureDeployment,
+  type RuntimeClosurePlan,
   type RuntimeClosureResult,
+  verifyRuntimeClosureAttestation,
 } from "./runtime-closure.js";
+import {
+  managedKiroSkillBundleSha256,
+  managedKiroSkillResources,
+  managedKiroSkillSources,
+  type KiroManagedSkillSource,
+} from "./skills.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -103,6 +113,13 @@ export interface KiroInstallOptions {
   skipRuntimeClosure?: boolean;
 }
 
+interface KiroSkillInstallPlan extends KiroManagedSkillSource {
+  existingSha256: string | null;
+  backupPath: string | null;
+  backup: KiroBackupRecord | null;
+  captureBackup: boolean;
+}
+
 export interface KiroInstallPlan {
   projectRoot: string;
   installRoot: string;
@@ -120,6 +137,14 @@ export interface KiroInstallPlan {
   captureBackup: boolean;
   blockedReason: string | null;
   requiresForce: boolean;
+  skills: KiroSkillInstallPlan[];
+}
+
+interface KiroInstallOperation {
+  kind: "runtime" | "profile" | "skill" | "manifest";
+  action: "publish" | "activate" | "create" | "update" | "noop";
+  path: string;
+  sha256?: string;
 }
 
 export interface KiroInstallResult {
@@ -132,6 +157,8 @@ export interface KiroInstallResult {
   backupPath: string | null;
   profileSha256: string;
   runtimeClosure?: RuntimeClosureResult;
+  /** Ordered exact deployment plan; dry-run and real install share this shape. */
+  operations: KiroInstallOperation[];
 }
 
 const buildManifest = (
@@ -140,8 +167,10 @@ const buildManifest = (
   layout: KiroManagedLayout,
   profileDigest: string,
   backup: KiroBackupRecord | null,
+  skills: readonly KiroSkillInstallPlan[],
+  closure: RuntimeClosurePlan | undefined,
 ): KiroInstallManifest => ({
-  format: KIRO_INSTALL_MANIFEST_FORMAT,
+  format: closure ? KIRO_INSTALL_MANIFEST_FORMAT : 1,
   owner: "kiro-fabric",
   packageVersion: readPackageVersion(),
   projectRoot,
@@ -155,7 +184,22 @@ const buildManifest = (
     mcpEntryPath: options.mcpEntryPath,
     kiroCliVersion: KIRO_CLI_VERSION,
     agentEngine: KIRO_AGENT_ENGINE,
+    ...(closure ? { closure: closure.attestation } : {}),
   },
+  ...(closure
+    ? {
+        skills: {
+          bundleSha256: managedKiroSkillBundleSha256(skills),
+          files: skills
+            .map((skill): KiroManagedOwnedFile => ({
+              path: skill.installedRelative,
+              installedSha256: skill.sha256,
+              ...(skill.backup ? { backup: skill.backup } : {}),
+            }))
+            .sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0),
+        },
+      }
+    : {}),
   ...(layout === "user" ? { scope: "user" as const } : {}),
 });
 
@@ -172,6 +216,7 @@ const manifestIsCurrent = (
   existing: KiroInstallManifest,
   desired: KiroInstallManifest,
 ): boolean =>
+  existing.format === desired.format &&
   existing.packageVersion === desired.packageVersion &&
   existing.runtime.nodePath === desired.runtime.nodePath &&
   existing.runtime.mcpEntryPath === desired.runtime.mcpEntryPath &&
@@ -179,24 +224,43 @@ const manifestIsCurrent = (
   existing.runtime.agentEngine === desired.runtime.agentEngine &&
   existing.profile.installedSha256 === desired.profile.installedSha256 &&
   existing.profile.path === desired.profile.path &&
-  backupRecordsEqual(existing.profile.backup, desired.profile.backup);
+  backupRecordsEqual(existing.profile.backup, desired.profile.backup) &&
+  JSON.stringify(existing.skills ?? null) === JSON.stringify(desired.skills ?? null) &&
+  JSON.stringify(existing.runtime.closure ?? null) ===
+    JSON.stringify(desired.runtime.closure ?? null);
 
-/** Scan sibling local profiles for a duplicate `name` declaration. */
+/** Scan JSON and Markdown agents for any name that can resolve as kiro-fabric. */
 const findNameCollision = (agentsDir: string, ownProfilePath: string): string | null => {
   const stat = lstatOrNull(agentsDir);
   if (!stat || !stat.isDirectory() || stat.isSymbolicLink()) return null;
   for (const entry of readdirSync(agentsDir)) {
-    const path = join(agentsDir, entry);
-    if (path === ownProfilePath) continue;
-    const entryStat = lstatOrNull(path);
-    if (!entryStat?.isFile() || entryStat.isSymbolicLink() || !entry.endsWith(".json")) {
+    const candidate = join(agentsDir, entry);
+    if (candidate === ownProfilePath) continue;
+    const entryStat = lstatOrNull(candidate);
+    const extension = extname(entry).toLowerCase();
+    if (!entryStat?.isFile() || entryStat.isSymbolicLink() || ![".json", ".md"].includes(extension)) {
       continue;
     }
+    const filenameName = basename(entry, extension);
     try {
-      const parsed = JSON.parse(readFileSync(path, "utf8")) as { name?: unknown };
-      if (parsed.name === "kiro-fabric") return path;
+      const source = readFileSync(candidate, "utf8");
+      let declaredName: unknown;
+      if (extension === ".json") {
+        const parsed = JSON.parse(source) as { name?: unknown };
+        declaredName = typeof parsed.name === "string" ? parsed.name : filenameName;
+      } else {
+        const frontmatter = /^---\s*\r?\n([\s\S]*?)\r?\n---(?:\s*\r?\n|$)/u.exec(source);
+        const parsed = frontmatter ? parseYaml(frontmatter[1]!) as unknown : undefined;
+        declaredName =
+          parsed && typeof parsed === "object" && !Array.isArray(parsed) &&
+          typeof (parsed as Record<string, unknown>).name === "string"
+            ? (parsed as Record<string, unknown>).name
+            : filenameName;
+      }
+      if (declaredName === "kiro-fabric") return candidate;
     } catch {
-      // malformed sibling JSON is not a collision
+      // A malformed same-name file can still shadow or break discovery; fail closed.
+      if (filenameName === "kiro-fabric") return candidate;
     }
   }
   return null;
@@ -204,6 +268,10 @@ const findNameCollision = (agentsDir: string, ownProfilePath: string): string | 
 
 export const planKiroProfileInstall = (
   options: KiroInstallOptions = {},
+  planning: {
+    allowMissingMcpEntry?: boolean;
+    closure?: RuntimeClosurePlan;
+  } = {},
 ): KiroInstallPlan => {
   const { layout, installRoot, projectRoot: root } = resolveKiroInstallRoots(options);
   const nodePath = options.nodePath ?? process.execPath;
@@ -211,13 +279,19 @@ export const planKiroProfileInstall = (
   if (!isAbsolute(mcpEntryPath)) {
     throw new KiroInstallError("fs", `MCP entry path must be absolute: ${mcpEntryPath}`);
   }
-  if (!existsSync(mcpEntryPath)) {
+  if (!planning.allowMissingMcpEntry && !existsSync(mcpEntryPath)) {
     throw new KiroInstallError("fs", `MCP entry not found (run pnpm build first): ${mcpEntryPath}`);
   }
   assertManagedTree(installRoot, layout);
 
   const paths = managedPaths(installRoot, layout);
   const profilePath = kiroProfilePath(installRoot, layout);
+  const skillSources = planning.closure
+    ? managedKiroSkillSources(installRoot, layout)
+    : [];
+  const skillBundleSha256 = planning.closure
+    ? managedKiroSkillBundleSha256(skillSources)
+    : undefined;
   const profile = generateKiroProfile({
     projectRoot: root,
     mcpEntryPath,
@@ -225,19 +299,32 @@ export const planKiroProfileInstall = (
     ...(options.allowShell ? { allowShell: true } : {}),
     ...(options.enableSubagents ? { enableSubagents: true } : {}),
     ...(options.allowTools ? { allowTools: true } : {}),
+    ...(planning.closure
+      ? {
+          resources: managedKiroSkillResources(layout),
+          skillBundleSha256: skillBundleSha256!,
+        }
+      : {}),
   });
   const profileJson = serializeJson(profile);
   const profileSha256 = sha256Bytes(profileJson);
 
-  const collision = findNameCollision(paths.agentsDir, profilePath);
+  const collision =
+    findNameCollision(paths.agentsDir, profilePath) ??
+    (layout === "user"
+      ? findNameCollision(join(root, ".kiro", "agents"), profilePath)
+      : null);
   if (collision) {
     throw new KiroInstallError(
       "collision",
-      `another profile already declares name "kiro-fabric": ${collision}`,
+      `another profile already declares or can resolve as name "kiro-fabric": ${collision}`,
     );
   }
 
   const manifest = readManifest(installRoot, layout);
+  if (manifest?.runtime.closure) {
+    verifyRuntimeClosureAttestation(installRoot, manifest.runtime.closure);
+  }
   let existingSha256: string | null = null;
   let existingBytes: Buffer | null = null;
   const profileStat = lstatOrNull(profilePath);
@@ -312,12 +399,66 @@ export const planKiroProfileInstall = (
     assertBackupBytes(installRoot, backupRecord);
   }
 
+  const previousSkills = new Map(
+    (manifest?.skills?.files ?? []).map((file) => [file.path, file] as const),
+  );
+  const skillPlans: KiroSkillInstallPlan[] = skillSources.map((source) => {
+    assertNoSymlinkComponents(installRoot, source.installedPath);
+    const stat = lstatOrNull(source.installedPath);
+    if (stat && (stat.isSymbolicLink() || !stat.isFile())) {
+      throw new KiroInstallError(
+        "collision",
+        "managed skill target is not a regular file: " + source.installedPath,
+      );
+    }
+    const current = stat ? readFileSync(source.installedPath) : null;
+    const currentHash = current ? sha256Bytes(current) : null;
+    const previous = previousSkills.get(source.installedRelative);
+    let backup = previous?.backup ?? null;
+    let capture = false;
+    const captureCurrentSkill = (): void => {
+      if (!currentHash) return;
+      backup = { path: backupRelativePath(currentHash, layout), sha256: currentHash };
+      capture = true;
+    };
+    if (previous) {
+      if (currentHash !== null && currentHash !== previous.installedSha256) {
+        if (!options.force) {
+          action = "blocked";
+          blockedReason ??= "managed skill modified externally; use --force to overwrite: " + source.installedRelative;
+          requiresForce = true;
+        } else {
+          captureCurrentSkill();
+        }
+      } else if (backup) {
+        assertBackupBytes(installRoot, backup);
+      }
+    } else if (currentHash !== null) {
+      if (currentHash !== source.sha256 && !options.force) {
+        action = "blocked";
+        blockedReason ??= "unmanaged skill exists; use --force to back up and replace: " + source.installedRelative;
+        requiresForce = true;
+      } else {
+        captureCurrentSkill();
+      }
+    }
+    return {
+      ...source,
+      existingSha256: currentHash,
+      backupPath: backup ? join(installRoot, ...backup.path.split("/")) : null,
+      backup,
+      captureBackup: capture,
+    };
+  });
+
   const desiredManifest = buildManifest(
     { nodePath, mcpEntryPath },
     root,
     layout,
     profileSha256,
     backupRecord,
+    skillPlans,
+    planning.closure,
   );
   if (action === "noop" && manifest && !manifestIsCurrent(manifest, desiredManifest)) {
     action = "update";
@@ -343,6 +484,7 @@ export const planKiroProfileInstall = (
     captureBackup,
     blockedReason,
     requiresForce,
+    skills: skillPlans,
   };
 };
 
@@ -435,17 +577,54 @@ const resultFromPlan = (
   plan: KiroInstallPlan,
   dryRun: boolean,
   runtimeClosure?: RuntimeClosureResult,
-): KiroInstallResult => ({
-  ok: true,
-  dryRun,
-  action: plan.action as KiroInstallAction,
-  projectRoot: plan.projectRoot,
-  profilePath: plan.profilePath,
-  manifestPath: plan.manifestPath,
-  backupPath: plan.backupPath,
-  profileSha256: plan.profileSha256,
-  ...(runtimeClosure ? { runtimeClosure } : {}),
-});
+): KiroInstallResult => {
+  const operations: KiroInstallOperation[] = [];
+  if (runtimeClosure) {
+    operations.push({
+      kind: "runtime",
+      action: runtimeClosure.action === "noop" ? "noop" : runtimeClosure.action,
+      path: join(runtimeClosure.runtimeDir, runtimeClosure.digest),
+      sha256: runtimeClosure.digest,
+    });
+  }
+  operations.push({
+    kind: "profile",
+    action: plan.existingSha256 === null
+      ? "create"
+      : plan.existingSha256 === plan.profileSha256 ? "noop" : "update",
+    path: plan.profilePath,
+    sha256: plan.profileSha256,
+  });
+  for (const skill of plan.skills) {
+    operations.push({
+      kind: "skill",
+      action: skill.existingSha256 === null
+        ? "create"
+        : skill.existingSha256 === skill.sha256 ? "noop" : "update",
+      path: skill.installedPath,
+      sha256: skill.sha256,
+    });
+  }
+  operations.push({
+    kind: "manifest",
+    action: plan.action === "create" || plan.action === "adopt" ? "create"
+      : plan.action === "noop" ? "noop" : "update",
+    path: plan.manifestPath,
+    sha256: sha256Bytes(plan.manifestJson),
+  });
+  return {
+    ok: true,
+    dryRun,
+    action: plan.action as KiroInstallAction,
+    projectRoot: plan.projectRoot,
+    profilePath: plan.profilePath,
+    manifestPath: plan.manifestPath,
+    backupPath: plan.backupPath,
+    profileSha256: plan.profileSha256,
+    ...(runtimeClosure ? { runtimeClosure } : {}),
+    operations,
+  };
+};
 
 const commitInstall = (plan: KiroInstallPlan): void => {
   if (plan.action === "blocked") {
@@ -486,20 +665,60 @@ const commitInstall = (plan: KiroInstallPlan): void => {
     if (manifest.profile.backup) assertBackupBytes(plan.installRoot, manifest.profile.backup);
   }
 
-  // Journal both leaves before either replacement. Recovery is idempotent:
-  // each leaf may be either its exact expected bytes or exact target bytes.
+  for (const skill of plan.skills) {
+    const current = readManagedFileNoFollow(plan.installRoot, skill.installedPath);
+    const currentHash = current === null ? null : sha256Bytes(current);
+    if (currentHash !== skill.existingSha256) {
+      throw new KiroInstallError(
+        "concurrency",
+        "managed skill changed while installing: " + skill.installedPath,
+      );
+    }
+    if (skill.captureBackup && skill.backupPath && current) {
+      const existingBackup = lstatOrNull(skill.backupPath);
+      if (!existingBackup) {
+        writeExclusive(skill.backupPath, current, 0o600);
+      } else {
+        assertNoSymlinkComponents(plan.installRoot, skill.backupPath);
+        if (existingBackup.isSymbolicLink() || !existingBackup.isFile()) {
+          throw new KiroInstallError("backup", "skill backup target is not a regular file");
+        }
+        if (sha256Bytes(readFileSync(skill.backupPath)) !== skill.existingSha256) {
+          throw new KiroInstallError("backup", "skill backup hash mismatch");
+        }
+      }
+    } else if (skill.backup) {
+      assertBackupBytes(plan.installRoot, skill.backup);
+    }
+  }
+
+  // Journal profile, every owned skill leaf, then manifest last. Recovery is
+  // idempotent and never exposes a manifest that describes partial skill bytes.
   const currentManifest = readManagedFileNoFollow(plan.installRoot, plan.manifestPath);
-  commitManagedTransaction(
+  commitManagedFileTransaction(
     plan.installRoot,
     plan.layout,
     "install",
-    managedFileTransition(plan.existingSha256, plan.profileJson),
-    managedFileTransition(
-      currentManifest === null ? null : sha256Bytes(currentManifest),
-      plan.manifestJson,
-    ),
+    [
+      {
+        path: plan.profilePath,
+        transition: managedFileTransition(plan.existingSha256, plan.profileJson),
+      },
+      ...plan.skills.map((skill) => ({
+        path: skill.installedPath,
+        transition: managedFileTransition(skill.existingSha256, skill.bytes),
+      })),
+      {
+        path: plan.manifestPath,
+        transition: managedFileTransition(
+          currentManifest === null ? null : sha256Bytes(currentManifest),
+          plan.manifestJson,
+        ),
+      },
+    ],
   );
   fsyncDirectory(paths.agentsDir);
+  if (plan.skills.length > 0) fsyncDirectory(paths.skillsDir);
   fsyncDirectory(paths.manifestDir);
 };
 
@@ -515,64 +734,69 @@ export const installKiroProfile = async (
     assertKiroAccountingCompatible(fabricConfig.agents, true);
   }
 
-  if (!options.dryRun) {
-    const roots = resolveKiroInstallRoots(options);
-    const transaction = managedPaths(roots.installRoot, roots.layout).transaction;
-    if (existsSync(transaction)) {
-      const recoveryLock = acquireOperationLock(roots.installRoot, roots.layout);
-      try {
-        recoverManagedTransaction(roots.installRoot, roots.layout);
-      } finally {
-        recoveryLock.release();
-      }
-    }
-  }
+  const kiroBinary = options.kiroBinary ?? "kiro-cli";
+  // The supported tuple is checked before any managed directory, lock, closure,
+  // profile, or manifest can be created.
+  await assertKiroVersion(kiroBinary);
+  await assertKiroV3Capabilities(kiroBinary);
 
-  // Deploy the runtime closure (copies dist/ and node_modules into the managed tree)
-  // so the profile does not depend on the source checkout or npm global path.
-  let closureResult: RuntimeClosureResult | undefined;
-  let effectiveMcpEntry = options.mcpEntryPath;
-  if (!options.skipRuntimeClosure && !options.dryRun) {
-    const roots = resolveKiroInstallRoots(options);
-    closureResult = deployRuntimeClosure(roots.installRoot, roots.layout, {
-      ...(options.force !== undefined ? { force: options.force } : {}),
-    });
-    effectiveMcpEntry = closureResult.mcpEntryPath;
-  } else if (!options.skipRuntimeClosure && options.dryRun) {
-    // During dry-run, compute what the closure path WOULD be without deploying.
-    // But only use it if it already exists (from a prior install).
-    const roots = resolveKiroInstallRoots(options);
-    const candidatePath = runtimeClosureMcpEntry(roots.installRoot, roots.layout);
-    if (existsSync(candidatePath)) {
-      effectiveMcpEntry = candidatePath;
-    }
-  }
-
+  const roots = resolveKiroInstallRoots(options);
+  const closurePlan = options.skipRuntimeClosure
+    ? undefined
+    : planRuntimeClosureDeployment(roots.installRoot, roots.layout);
+  const effectiveMcpEntry = closurePlan?.mcpEntryPath ?? options.mcpEntryPath;
   const planOptions: KiroInstallOptions = {
     ...options,
     ...(effectiveMcpEntry ? { mcpEntryPath: effectiveMcpEntry } : {}),
   };
-  const planned = planKiroProfileInstall(planOptions);
+  const planned = planKiroProfileInstall(planOptions, {
+    allowMissingMcpEntry: closurePlan?.action === "publish",
+    ...(closurePlan ? { closure: closurePlan } : {}),
+  });
   if (planned.action === "blocked") {
     throw new KiroInstallError("collision", planned.blockedReason ?? "profile collision");
   }
-
-  const kiroBinary = options.kiroBinary ?? "kiro-cli";
-  await assertKiroVersion(kiroBinary);
-  await assertKiroV3Capabilities(kiroBinary);
+  // Validate the exact digest-addressed profile that dry-run reports and the
+  // real install will commit. No managed-tree mutation has happened yet.
   await validateKiroProfile(planned.profileJson, kiroBinary);
 
-  if (options.dryRun) return resultFromPlan(planned, true, closureResult);
+  if (options.dryRun) return resultFromPlan(planned, true, closurePlan);
 
   const lock = acquireOperationLock(planned.installRoot, planned.layout);
   try {
     recoverManagedTransaction(planned.installRoot, planned.layout);
-    const plan = planKiroProfileInstall(planOptions);
+    const lockedClosurePlan = options.skipRuntimeClosure
+      ? undefined
+      : planRuntimeClosureDeployment(roots.installRoot, roots.layout);
+    if (closurePlan && lockedClosurePlan?.digest !== closurePlan.digest) {
+      throw new KiroInstallError(
+        "concurrency",
+        "runtime closure changed after preflight",
+      );
+    }
+    const lockedMcpEntry = lockedClosurePlan?.mcpEntryPath ?? options.mcpEntryPath;
+    const lockedOptions: KiroInstallOptions = {
+      ...options,
+      ...(lockedMcpEntry ? { mcpEntryPath: lockedMcpEntry } : {}),
+    };
+    const plan = planKiroProfileInstall(lockedOptions, {
+      allowMissingMcpEntry: lockedClosurePlan?.action === "publish",
+      ...(lockedClosurePlan ? { closure: lockedClosurePlan } : {}),
+    });
     if (plan.action === "blocked") {
       throw new KiroInstallError("collision", plan.blockedReason ?? "profile collision");
     }
-    if (plan.action === "noop") return resultFromPlan(plan, false, closureResult);
-    commitInstall(plan);
+    if (plan.profileSha256 !== planned.profileSha256) {
+      throw new KiroInstallError("concurrency", "generated profile changed after preflight");
+    }
+
+    const closureResult = lockedClosurePlan
+      ? deployRuntimeClosure(roots.installRoot, roots.layout, {
+          ...(options.force !== undefined ? { force: options.force } : {}),
+          expectedDigest: lockedClosurePlan.digest,
+        })
+      : undefined;
+    if (plan.action !== "noop") commitInstall(plan);
     return resultFromPlan(plan, false, closureResult);
   } finally {
     lock.release();

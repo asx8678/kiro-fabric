@@ -18,7 +18,7 @@ const routedModelIds = [
   "auto",
   "claude-haiku-4.5",
   "qwen3-coder-next",
-  "claude-opus-4.5",
+  "claude-opus-4.8",
 ] as const;
 const roots: string[] = [];
 
@@ -202,7 +202,7 @@ describe("managed Kiro ACP agents", () => {
       );
       expect(complex.success).toBe(true);
       expect(complex.value).toMatchObject({
-        model: "claude-opus-4.5",
+        model: "claude-opus-4.8",
         thinking: "medium",
       });
 
@@ -212,7 +212,7 @@ describe("managed Kiro ACP agents", () => {
       );
       expect(ambiguous.success).toBe(true);
       expect(ambiguous.value).toMatchObject({
-        model: "claude-opus-4.5",
+        model: "claude-opus-4.8",
         thinking: "medium",
       });
 
@@ -232,7 +232,7 @@ describe("managed Kiro ACP agents", () => {
       );
       expect(explicitThinking.success).toBe(true);
       expect(explicitThinking.value).toMatchObject({
-        model: "claude-opus-4.5",
+        model: "claude-opus-4.8",
         thinking: "high",
       });
 

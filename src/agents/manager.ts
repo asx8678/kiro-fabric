@@ -753,6 +753,9 @@ export class AgentManager {
         ...(request.runnerSessionId
           ? ["--runner-session-id", request.runnerSessionId]
           : []),
+        ...(request.kiroSessionProfileSha256
+          ? ["--kiro-session-profile-sha256", request.kiroSessionProfileSha256]
+          : []),
         "--run-root",
         path.join(runDirectory, "nested"),
         ...(runner === "kiro" && kiroResidency === "one-shot"

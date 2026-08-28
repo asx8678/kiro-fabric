@@ -102,6 +102,62 @@ describe("Kiro model inventory", () => {
     expect(entries.find((e) => e.id === "claude-opus-4.5")?.creditMultiplier).toBe(2.2);
   });
 
+  it("parses snake_case JSON with rate_multiplier emitted by Kiro CLI 2.20.1", () => {
+    expect(parseKiroModelList(JSON.stringify({
+      models: [
+        {
+          model_name: "Claude Opus 4.8 model",
+          model_id: "claude-opus-4.8",
+          context_window_tokens: 1_000_000,
+          rate_multiplier: 2.2,
+          rate_unit: "Credit",
+        },
+        {
+          model_name: "Qwen3 Coder Next",
+          model_id: "qwen3-coder-next",
+          rate_multiplier: 0.05,
+        },
+      ],
+      default_model: "auto",
+    }))).toEqual([
+      {
+        runner: "kiro",
+        provider: "kiro",
+        id: "claude-opus-4.8",
+        name: "claude-opus-4.8 — Claude Opus 4.8 model",
+        key: "kiro/claude-opus-4.8",
+        creditMultiplier: 2.2,
+        isDefault: false,
+      },
+      {
+        runner: "kiro",
+        provider: "kiro",
+        id: "qwen3-coder-next",
+        name: "qwen3-coder-next — Qwen3 Coder Next",
+        key: "kiro/qwen3-coder-next",
+        creditMultiplier: 0.05,
+        isDefault: false,
+      },
+    ]);
+  });
+
+  it("parses the exact plain output emitted by Kiro CLI 2.20.1", () => {
+    // Captured verbatim from `kiro-cli chat --v3 --list-models --format plain`.
+    const entries = parseKiroModelList(
+      `Available models (* = default):\n\n* auto                 1.00x credits      Models chosen by task for optimal usage and consistent quality\n  claude-opus-5        2.20x credits      Claude Opus 5 model with 1M context window\n  gpt-5.6-luna         0.10x credits      Experimental preview of OpenAI GPT 5.6 Luna with 272k context window\n  claude-haiku-4.5     0.40x credits      The latest Claude Haiku model\n  qwen3-coder-next     0.05x credits      Experimental preview of Qwen3 Coder Next\n`,
+    );
+    expect(entries.map((entry) => entry.id)).toEqual([
+      "auto",
+      "claude-opus-5",
+      "gpt-5.6-luna",
+      "claude-haiku-4.5",
+      "qwen3-coder-next",
+    ]);
+    expect(entries.find((e) => e.id === "auto")?.isDefault).toBe(true);
+    expect(entries.find((e) => e.id === "claude-opus-5")?.creditMultiplier).toBe(2.2);
+    expect(entries.find((e) => e.id === "gpt-5.6-luna")?.creditMultiplier).toBe(0.1);
+  });
+
   it("keeps parsing the legacy plain format as a compatibility fallback", () => {
     expect(parseKiroModelList(`Available models (* = default):\n* auto ----- credits\n`))
       .toEqual([{

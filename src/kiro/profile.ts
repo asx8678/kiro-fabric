@@ -37,6 +37,10 @@ export interface KiroProfileOptions {
   enableSubagents?: boolean;
   /** Trusted-local opt-in: auto-approve the single @fabric/fabric_exec tool. */
   allowTools?: boolean;
+  /** Kiro skill resources installed and hash-owned by the managed main profile. */
+  resources?: readonly string[];
+  /** Aggregate digest of the exact managed skill bytes at those stable URIs. */
+  skillBundleSha256?: string;
 }
 
 export interface KiroProfileDocument {
@@ -50,14 +54,19 @@ export interface KiroProfileDocument {
     requestTimeout?: number;
   }>;
   tools: string[];
+  /** Kiro CLI 2.20.1 registry compatibility; must duplicate the one exact model-visible tool. */
+  allowedTools: ["@fabric/fabric_exec"];
   includeMcpJson: false;
   includePowers: false;
+  resources: string[];
   permissions: {
-    rules: Array<{
-      capability: "mcp";
-      match: ["fabric/fabric_exec"];
-      effect: "allow";
-    }>;
+    rules: [
+      {
+        capability: "mcp";
+        match: ["fabric/fabric_exec"];
+        effect: "ask" | "allow";
+      },
+    ];
   };
 }
 
@@ -75,7 +84,7 @@ const kiroProfilePrompt = (
   const agentGuidance = internalChild
     ? " Subagents are unavailable inside ACP children; do not call agents.*."
     : enableSubagents
-      ? " For independent work, agents.run and agents.spawn launch isolated Kiro ACP children with the same trusted shell access. Fan out at most four narrowly scoped, non-overlapping tasks in one fabric_exec program (prefer Promise.all), require each relevant child to run focused tests/builds, then cross-check and deduplicate findings in Main. Omit model for inventory-aware task routing: when advertised, small tasks use claude-haiku-4.5 at low effort, coding/testing uses qwen3-coder-next at low effort, and complex analysis or ambiguous tasks use claude-opus-4.5 at medium effort; otherwise routing falls back to Kiro auto. Pass model: \"auto\" to always let Kiro pick both model and effort. Do not delegate the same broad review to every child."
+      ? " For independent work, agents.run and agents.spawn launch isolated Kiro ACP children with the same trusted shell access. Fan out at most four narrowly scoped, non-overlapping tasks in one fabric_exec program (prefer Promise.all), require each relevant child to run focused tests/builds, then cross-check and deduplicate findings in Main. Omit model for inventory-aware task routing: when advertised, small tasks use claude-haiku-4.5 at low effort, coding/testing uses qwen3-coder-next at low effort, and complex analysis or ambiguous tasks use claude-opus-4.8 at medium effort; otherwise routing falls back to Kiro auto. Pass model: \"auto\" to always let Kiro pick both model and effort. Do not delegate the same broad review to every child."
       : " Subagents are disabled in managed Kiro: do not call agents.*.";
   const agentAwaitGuidance = !internalChild && enableSubagents
     ? " All agents.* API calls also return promises, so await every agents.* call."
@@ -114,6 +123,9 @@ export const generateKiroProfile = (
   if (internal && options.enableSubagents === true) {
     throw new Error("Internal Kiro child profiles cannot enable recursive subagents");
   }
+  if (internal && (options.resources?.length ?? 0) > 0) {
+    throw new Error("Internal Kiro child profiles cannot inherit managed skills");
+  }
   // A user-level Kiro profile can be selected from any repository. Record an
   // explicit project confinement requirement whenever the profile carries a
   // dangerous ambient grant, so selecting that profile elsewhere fails before
@@ -146,6 +158,7 @@ export const generateKiroProfile = (
     ),
     includeMcpJson: false,
     includePowers: false,
+    resources: internal ? [] : [...(options.resources ?? [])],
     mcpServers: {
       fabric: {
         command: options.nodePath ?? process.execPath,
@@ -163,6 +176,9 @@ export const generateKiroProfile = (
                 KIRO_FABRIC_PROJECT_ROOT_DEV: projectIdentity!.dev,
                 KIRO_FABRIC_PROJECT_ROOT_INO: projectIdentity!.ino,
               }
+            : {}),
+          ...(!internal && options.skillBundleSha256
+            ? { KIRO_FABRIC_SKILL_BUNDLE_SHA256: options.skillBundleSha256 }
             : {}),
           ...(options.allowShell ? { KIRO_FABRIC_ALLOW_SHELL: "1" } : {}),
           ...(!internal && options.enableSubagents
@@ -182,10 +198,22 @@ export const generateKiroProfile = (
       },
     },
     tools: ["@fabric/fabric_exec"],
+    // Kiro CLI 2.20.1 silently omits public agent-registry entries without
+    // allowedTools, even though `agent validate` accepts them. Keep this exact
+    // compatibility mirror while permissions remains the authoritative v3 policy.
+    allowedTools: ["@fabric/fabric_exec"],
+    // Exactly one exact rule. Default "ask" is more restrictive than any broader
+    // user/workspace "allow", so Fabric's approval gate cannot be bypassed by an
+    // ambient allow; a deny at any wider scope still wins. --allow-tools only
+    // changes the effect to "allow" for this exact MCP tool.
     permissions: {
-      rules: options.allowTools
-        ? [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "allow" }]
-        : [],
+      rules: [
+        {
+          capability: "mcp",
+          match: ["fabric/fabric_exec"],
+          effect: options.allowTools === true ? "allow" : "ask",
+        },
+      ],
     },
   };
 };

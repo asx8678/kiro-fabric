@@ -77,11 +77,11 @@
   "author": "monotykamary",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/monotykamary/kiro-fabric.git"
+    "url": "git+https://github.com/asx8678/kiro-fabric.git"
   },
-  "homepage": "https://github.com/monotykamary/kiro-fabric#readme",
+  "homepage": "https://github.com/asx8678/kiro-fabric#readme",
   "bugs": {
-    "url": "https://github.com/monotykamary/kiro-fabric/issues"
+    "url": "https://github.com/asx8678/kiro-fabric/issues"
   },
   "engines": {
     "node": ">=24"

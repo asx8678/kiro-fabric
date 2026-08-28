@@ -34,6 +34,7 @@ import {
   buildKiroPromptBlocks,
   createBoundedKiroLogAppender,
   formatKiroSemanticContext,
+  kiroSessionProfileFingerprint,
   mapKiroEffort,
   MAX_KIRO_CONTEXT_BLOCK_CHARS,
   readKiroSteerCommands,
@@ -41,6 +42,9 @@ import {
   runKiroWorker,
   type KiroWorkerRecordHelpers,
 } from "../src/kiro/acp-worker.js";
+import { managedPaths, readManifest } from "../src/kiro/managed.js";
+import { materializeKiroRunProfile } from "../src/kiro/run-profile.js";
+import type { KiroProfileDocument } from "../src/kiro/profile.js";
 import type { AgentWorkerOptions } from "../src/agents/types.js";
 import type { KiroAgentWorkerOptions } from "../src/kiro/agent-worker-options.js";
 
@@ -117,6 +121,50 @@ const installUserFake = async (
     allowTools: true,
   });
 };
+
+/**
+ * Recompute the security-profile fingerprint the worker will derive for a
+ * project, so resume tests can present the matching digest the session was
+ * "created" with. Reads the installed profile from disk and canonicalizes cwd
+ * exactly like assertKiroWorkerLaunch does.
+ */
+const fingerprintFor = (
+  projectRoot: string,
+  extra: Partial<AgentWorkerOptions> = {},
+): string => {
+  // Reproduce the worker's run-scoped profile: same projectRoot/cwd/tools and
+  // the manifest's mcpEntryPath (which assertKiroWorkerLaunch prefers over the
+  // default). This is the exact input materializeKiroRunProfile regenerates.
+  const canonicalRoot = realpathSync(projectRoot);
+  const manifest = readManifest(canonicalRoot);
+  const lease = materializeKiroRunProfile({
+    projectRoot: canonicalRoot,
+    cwd: canonicalRoot,
+    tools: [],
+    ...(manifest?.runtime.mcpEntryPath
+      ? { mcpEntryPath: manifest.runtime.mcpEntryPath }
+      : {}),
+  });
+  const fp = kiroSessionProfileFingerprint({
+    profile: lease.profile,
+    cwd: canonicalRoot,
+    ...(typeof extra.model === "string" ? { model: extra.model } : {}),
+    ...(typeof extra.thinking === "string" ? { thinking: extra.thinking } : {}),
+  });
+  lease.cleanup();
+  return fp;
+};
+
+/** Resume options carrying the matching security-profile fingerprint. */
+const resumeOptions = (
+  projectRoot: string,
+  runnerSessionId: string,
+  extra: Partial<AgentWorkerOptions> = {},
+): Partial<AgentWorkerOptions> => ({
+  runnerSessionId,
+  kiroSessionProfileSha256: fingerprintFor(projectRoot, extra),
+  ...extra,
+} as Partial<AgentWorkerOptions>);
 
 const workerOptions = (
   projectRoot: string,
@@ -630,7 +678,7 @@ describe("runKiroWorker", () => {
     process.env.FAKE_KIRO_WORKER_LOG = logFile;
     try {
       const record = await runKiroWorker(
-        workerOptions(root, wrapper, { runnerSessionId: "saved-session" }),
+        workerOptions(root, wrapper, resumeOptions(root, "saved-session")),
         helpers,
       );
       expect(record.status).toBe("completed");
@@ -657,7 +705,7 @@ describe("runKiroWorker", () => {
     process.env.FAKE_KIRO_WORKER_SCENARIO = "load-no-id";
     try {
       const record = await runKiroWorker(
-        workerOptions(root, wrapper, { runnerSessionId: "saved-session" }),
+        workerOptions(root, wrapper, resumeOptions(root, "saved-session")),
         helpers,
       );
       expect(record.status).toBe("completed");
@@ -978,7 +1026,7 @@ describe("runKiroWorker resident session", () => {
     process.env.KIRO_FABRIC_KIRO_IDLE_MS = "600";
     try {
       const options = workerOptions(root, wrapper, {
-        runnerSessionId: "saved-session",
+        ...resumeOptions(root, "saved-session"),
         steerFile,
       });
       const run = runKiroWorker(options, helpers);
@@ -1130,6 +1178,29 @@ describe("Kiro ACP security", () => {
     }
   });
 
+  it("rejects resume without the matching security-profile fingerprint", async () => {
+    const root = tempRoot("kiro-fabric-kiro-fingerprint-");
+    const wrapper = writeWrapper(root);
+    await installFake(root, wrapper);
+
+    const missing = await runKiroWorker(
+      workerOptions(root, wrapper, { runnerSessionId: "saved-session" }),
+      helpers,
+    );
+    expect(missing.status).toBe("failed");
+    expect(missing.error ?? "").toMatch(/no security-profile fingerprint/);
+
+    const mismatched = await runKiroWorker(
+      workerOptions(root, wrapper, {
+        runnerSessionId: "saved-session",
+        kiroSessionProfileSha256: "0".repeat(64),
+      }),
+      helpers,
+    );
+    expect(mismatched.status).toBe("failed");
+    expect(mismatched.error ?? "").toMatch(/different agent profile or security configuration/);
+  });
+
   it("rejects session/load identity switches and pre-handshake spoofed text", async () => {
     const root = tempRoot("kiro-fabric-kiro-switch-");
     const wrapper = writeWrapper(root);
@@ -1137,7 +1208,7 @@ describe("Kiro ACP security", () => {
     process.env.FAKE_KIRO_WORKER_SCENARIO = "load-switch";
     try {
       const switched = await runKiroWorker(
-        workerOptions(root, wrapper, { runnerSessionId: "saved-A" }),
+        workerOptions(root, wrapper, resumeOptions(root, "saved-A")),
         helpers,
       );
       expect(switched.status).toBe("failed");

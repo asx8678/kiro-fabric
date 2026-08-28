@@ -86,6 +86,8 @@ export interface AgentRunRequest {
   capabilityDigest?: string;
   meshRoot?: string;
   runnerSessionId?: string;
+  /** SHA-256 binding a resumable Kiro session to its effective security profile. */
+  kiroSessionProfileSha256?: string;
   /** Host-created Pi branch seed ending with the native outer fabric_exec result. */
   sessionSeed?: AgentSessionSeed;
   /** Source/executor reasoning channels for trajectory thinking transfer. */
@@ -147,6 +149,8 @@ export interface AgentRunRecord {
   runner: FabricAgentRunner;
   /** Present for managed Kiro records so persisted ACP sessions have provenance. */
   kiroAgentEngine?: "v3";
+  /** SHA-256 binding the saved Kiro ACP session to its effective security profile. */
+  kiroSessionProfileSha256?: string;
   transport: FabricAgentTransport;
   cwd: string;
   model?: string;
@@ -247,6 +251,8 @@ export interface AgentWorkerOptions {
   ownerHostId?: string;
   ownerIdentityId?: string;
   kiroResidency?: "one-shot" | "resident";
+  /** SHA-256 binding a resumed Kiro session to its effective security profile. */
+  kiroSessionProfileSha256?: string;
   kiroContext?: {
     objective?: string;
     facts?: string[];

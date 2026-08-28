@@ -3,7 +3,7 @@
 **A checked TypeScript execution and orchestration layer for Kiro CLI.**
 
 [![npm](https://img.shields.io/npm/v/kiro-fabric?logo=npm&label=npm)](https://www.npmjs.com/package/kiro-fabric)
-[![checks](https://img.shields.io/github/actions/workflow/status/asx8678/kiro-fabric-v2/test.yml?branch=main&label=checks)](https://github.com/asx8678/kiro-fabric-v2/actions/workflows/test.yml)
+[![checks](https://img.shields.io/github/actions/workflow/status/asx8678/kiro-fabric/test.yml?branch=main&label=checks)](https://github.com/asx8678/kiro-fabric/actions/workflows/test.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Fabric replaces a long list of model-facing tools with one programmable tool: `fabric_exec`. The model writes a small TypeScript program, Fabric checks it, executes it in QuickJS by default, and routes every effect through a host capability boundary.
@@ -96,7 +96,7 @@ The default profile starts with the fewest Kiro-specific grants:
 - Kiro sees one tool, `@fabric/fabric_exec`.
 - Repository operations use `k.read`, `k.grep`, `k.find`, `k.ls`, `k.write`, and `k.edit` inside checked Fabric programs.
 - Shell execution and ACP subagents are unavailable.
-- Kiro asks for approval before invoking the outer `fabric_exec` tool because the v3 `permissions.rules` list is empty.
+- Kiro asks for approval before invoking the outer `fabric_exec` tool because the profile carries one exact `ask` rule for `fabric/fabric_exec`; broader ambient allows cannot bypass it.
 - Repository access is confined to the canonical directory where `kiro-cli chat` starts.
 
 The default profile is capable of edits. After Kiro approves the outer tool, nested reads, writes, and MCP calls follow the global Fabric risk policy. Shipped defaults allow write and network actions. Managed Kiro cannot open a nested approval prompt, so `ask` and `auto` fail closed while `allow` proceeds.
@@ -173,7 +173,7 @@ This writes `.kiro/agents/kiro-fabric.json` plus Fabric's ownership manifest and
 Use a local checkout when developing Fabric or when the npm package is unavailable:
 
 ```bash
-git clone https://github.com/asx8678/kiro-fabric-v2.git
+git clone https://github.com/asx8678/kiro-fabric.git
 cd kiro-fabric-v2
 pnpm install
 pnpm run build

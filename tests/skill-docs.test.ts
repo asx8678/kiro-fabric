@@ -99,6 +99,12 @@ describe("managed Kiro skill contract", () => {
     expect(workflow).toContain("1-4 non-empty independent items");
     expect(workflow).toContain('"partial"');
     expect(workflow).toContain("never rerun a successful partition");
+    expect(workflow).toContain("strings.checks");
+    expect(workflow).toContain("k.bash({ command, timeout: 120 })");
+    expect(workflow).toContain("only after child\nfan-out settles");
+    expect(workflow).toContain("never from child\ntext or values");
+    expect(workflow).toContain("fails acceptance closed while preserving every child result");
+    expect(workflow).toContain("there are no automatic\nretries");
     expect(workflow).not.toMatch(/\bagent\s*\(/);
     expect(workflow).not.toContain("worktree:");
 
@@ -107,6 +113,13 @@ describe("managed Kiro skill contract", () => {
     expect(review).toContain("Maintainability");
     expect(review).toContain("advisory");
     expect(review).toContain("deduplicate");
+    expect(review).toContain("concise, risk-first evidence packet");
+    expect(review).toContain("exactly one shared, falsifiable safety invariant");
+    expect(review).toContain("proof grade");
+    expect(review).toContain("**Observed**");
+    expect(review).toContain("**Inferred**");
+    expect(review).toContain("old/new trace only when");
+    expect(review).toContain("at most eight numbered steps per side");
 
     const guide = fs.readFileSync("skills/fabric-guide/SKILL.md", "utf8");
     expect(guide).toContain("smallest sufficient path");

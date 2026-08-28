@@ -73,8 +73,8 @@ The exact syntax is documented in Kiro's
 | Model-visible tools | Exactly `@fabric/fabric_exec` |
 | Workspace MCP servers | Disabled with `includeMcpJson: false` |
 | Powers | Disabled with `includePowers: false` |
-| Default permissions | `permissions: { rules: [] }` |
-| `--allow-tools` | One exact `mcp` allow rule for `fabric/fabric_exec` |
+| Default permissions | One exact `mcp` `ask` rule for `fabric/fabric_exec` |
+| `--allow-tools` | Changes only that exact rule's effect to `allow` |
 | ACP auth | CLI-owned; Fabric never handles the Kiro access token |
 | ACP agent binding | `_meta.kiro.customAgents` plus fail-closed `session/set_mode` activation |
 | Effort | Preserves `low`, `medium`, `high`, `xhigh`, and `max`; maps Fabric `off`/`minimal` to Kiro `low` |

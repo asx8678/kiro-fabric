@@ -258,7 +258,9 @@ async function probeProfile(tmp) {
     prompt: "You are a test agent.",
     includeMcpJson: false,
     includePowers: false,
-    permissions: { rules: [] },
+    permissions: {
+      rules: [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "ask" }],
+    },
     mcpServers: {
       fabric: { command: "node", args: ["--version"] },
     },
@@ -310,7 +312,9 @@ async function probeMcp(tmp) {
     name: "fabric-mcp-test",
     includeMcpJson: false,
     includePowers: false,
-    permissions: { rules: [] },
+    permissions: {
+      rules: [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "ask" }],
+    },
     mcpServers: { fabric: { command: "node", args: [serverPath] } },
     tools: ["@fabric/fabric_exec"],
   }, null, 2));
@@ -425,10 +429,9 @@ function v3SessionParams(tmp, agentName) {
     description: profile.description ?? agentName,
     prompt: profile.prompt || "You are a narrowly scoped Kiro Fabric probe.",
     tools: Array.isArray(profile.tools) ? profile.tools : [],
-    includeMcpJson: false,
-    ...(Array.isArray(profile.permissions?.rules) && profile.permissions.rules.length > 0
-      ? { permissions: profile.permissions }
-      : {}),
+    includeMcpJson: profile.includeMcpJson,
+    includePowers: profile.includePowers,
+    permissions: structuredClone(profile.permissions),
   };
   return {
     cwd: tmp,

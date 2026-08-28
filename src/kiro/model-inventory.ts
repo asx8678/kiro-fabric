@@ -85,7 +85,12 @@ const parseJsonModels = (output: string): KiroModelEntry[] => {
       (typeof row?.description === "string" && row.description.trim()) ||
       id;
     const rawMultiplier =
-      row?.creditMultiplier ?? row?.credit_multiplier ?? row?.credits ?? row?.multiplier;
+      row?.creditMultiplier ??
+      row?.credit_multiplier ??
+      row?.rate_multiplier ??
+      row?.rateMultiplier ??
+      row?.credits ??
+      row?.multiplier;
     const creditMultiplier =
       typeof rawMultiplier === "number" && Number.isFinite(rawMultiplier)
         ? rawMultiplier

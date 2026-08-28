@@ -12,11 +12,13 @@
  * Usage: node scripts/certify-kiro-claims.mjs [--kiro-binary <path>] [--json <path>]
  */
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -42,6 +44,25 @@ const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 const log = (message) => process.stderr.write(`${message}\n`);
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const walkRegularFiles = (root, prefix = "") => {
+  const files = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const rel = prefix ? prefix + "/" + entry.name : entry.name;
+    const full = join(root, entry.name);
+    if (entry.isDirectory()) files.push(...walkRegularFiles(full, rel));
+    else if (entry.isFile()) files.push(rel);
+    else files.push("!non-regular:" + rel);
+  }
+  return files.sort();
+};
+const attestManifestFiles = (project, files) => Array.isArray(files) && files.length > 0
+  && files.every((file) => isRecord(file)
+    && typeof file.path === "string"
+    && typeof file.installedSha256 === "string"
+    && existsSync(join(project, ...file.path.split("/")))
+    && sha256(readFileSync(join(project, ...file.path.split("/")))) === file.installedSha256);
+
 function surfaceOf(id) {
   const surface = id.split(".")[0];
   return ["pack", "doctor", "install", "mcp", "uninstall"].includes(surface) ? surface : "pack";
@@ -222,7 +243,7 @@ export const lifecycleClaims = (kiroBinary) => {
       "--json",
     ]);
     const data = installed.data;
-    const managedProfile = installed.ok
+    let managedProfile = installed.ok
       && data.action === "create"
       && data.dryRun === false
       && typeof data.profilePath === "string"
@@ -234,12 +255,41 @@ export const lifecycleClaims = (kiroBinary) => {
       && typeof data.profileSha256 === "string"
       && /^[a-f0-9]{64}$/.test(data.profileSha256);
     const closure = isRecord(data?.runtimeClosure) ? data.runtimeClosure : {};
+    let manifest = {};
+    try {
+      manifest = JSON.parse(readFileSync(data.manifestPath, "utf8"));
+    } catch {
+      manifest = {};
+    }
+    const skills = isRecord(manifest.skills) ? manifest.skills : {};
+    const skillAttestation = manifest.format === 2
+      && typeof skills.bundleSha256 === "string"
+      && /^[a-f0-9]{64}$/.test(skills.bundleSha256)
+      && Array.isArray(skills.files)
+      && skills.files.length === 6
+      && attestManifestFiles(project, skills.files);
+    const runtime = isRecord(manifest.runtime) ? manifest.runtime : {};
+    const closureManifest = isRecord(runtime.closure) ? runtime.closure : {};
+    const closureRoot = typeof closureManifest.root === "string"
+      ? join(project, ...closureManifest.root.split("/"))
+      : "";
+    const closureFileSet = Array.isArray(closureManifest.files)
+      ? closureManifest.files.map((file) => file.path.slice(closureManifest.root.length + 1))
+      : [];
     const runtimeClosure = managedProfile
+      && skillAttestation
       && typeof closure.mcpEntryPath === "string"
       && pathIsInside(project, closure.mcpEntryPath)
       && existsSync(closure.mcpEntryPath)
       && typeof closure.digest === "string"
-      && /^[a-f0-9]{64}$/.test(closure.digest);
+      && /^[a-f0-9]{64}$/.test(closure.digest)
+      && closureManifest.digest === closure.digest
+      && closureRoot !== ""
+      && existsSync(closureRoot)
+      && attestManifestFiles(project, closureManifest.files)
+      && JSON.stringify(walkRegularFiles(closureRoot)) === JSON.stringify(closureFileSet);
+
+    managedProfile = managedProfile && skillAttestation;
 
     const claims = [
       managedProfile

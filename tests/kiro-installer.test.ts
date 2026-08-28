@@ -209,13 +209,28 @@ describe("planKiroProfileInstall", () => {
     ).toThrow(/symlink/);
   });
 
-  it("refuses a duplicate kiro-fabric agent name in a sibling profile", () => {
-    const dir = project("dup");
+  it.each([
+    ["declared-json", "other.json", JSON.stringify({ name: "kiro-fabric" })],
+    ["frontmatter-md", "other.md", "---\nname: kiro-fabric\n---\nPrompt\n"],
+    ["malformed-md", "kiro-fabric.md", "---\nname: [\n---\nPrompt\n"],
+  ])("refuses a v3 agent name collision: %s", (_case, filename, content) => {
+    const dir = project(`dup-${_case}`);
     mkdirSync(join(dir, ".kiro", "agents"), { recursive: true });
-    writeFileSync(join(dir, ".kiro", "agents", "other.json"), JSON.stringify({ name: "kiro-fabric" }));
+    writeFileSync(join(dir, ".kiro", "agents", filename), content);
     expect(() =>
       planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry }),
-    ).toThrow(/already declares name/);
+    ).toThrow(/already declares or can resolve as name/);
+  });
+
+  it("blocks an unmanaged filename-derived kiro-fabric.json target", () => {
+    const dir = project("dup-filename-json");
+    mkdirSync(join(dir, ".kiro", "agents"), { recursive: true });
+    writeFileSync(
+      join(dir, ".kiro", "agents", "kiro-fabric.json"),
+      JSON.stringify({ description: "filename-derived" }),
+    );
+    expect(planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry }).action)
+      .toBe("blocked");
   });
 
   it("refuses a directory at the profile target", () => {
@@ -268,6 +283,61 @@ describe("installKiroProfile", () => {
     expect(manifest.runtime.mcpEntryPath).toBe(mcpEntry);
     expect(manifest.runtime.kiroCliVersion).toBe("2.20.1");
     expect(manifest.runtime.agentEngine).toBe("v3");
+  });
+
+
+
+  it("reads format 1 and upgrades to attested format 2 only on successful install", async () => {
+    const dir = project("manifest-upgrade");
+    const legacy = await installWithFake(dir);
+    expect(JSON.parse(readFileSync(legacy.manifestPath, "utf8")).format).toBe(1);
+    const dry = await installWithFake(dir, { skipRuntimeClosure: false, dryRun: true });
+    expect(dry.action).toBe("update");
+    expect(dry.operations[0]).toMatchObject({ kind: "runtime", action: "publish" });
+    expect(dry.operations.filter((operation) => operation.kind === "skill")).toHaveLength(6);
+    expect(dry.operations.at(-1)?.kind).toBe("manifest");
+    expect(JSON.parse(readFileSync(legacy.manifestPath, "utf8")).format).toBe(1);
+    await installWithFake(dir, { skipRuntimeClosure: false });
+    expect(JSON.parse(readFileSync(legacy.manifestPath, "utf8")).format).toBe(2);
+  });
+
+  it("installs and attests the complete managed skill bundle with the closure", async () => {
+    const dir = project("managed-skills");
+    const result = await installWithFake(dir, { skipRuntimeClosure: false });
+    const profile = JSON.parse(readFileSync(result.profilePath, "utf8")) as {
+      resources: string[];
+      mcpServers: { fabric: { env: Record<string, string> } };
+    };
+    expect(profile.resources).toEqual(["skill://.kiro/skills/fabric-*/SKILL.md"]);
+    expect(profile.mcpServers.fabric.env.KIRO_FABRIC_SKILL_BUNDLE_SHA256).toMatch(/^[a-f0-9]{64}$/);
+
+    const manifest = JSON.parse(readFileSync(result.manifestPath, "utf8")) as {
+      format: number;
+      skills: { bundleSha256: string; files: Array<{ path: string; installedSha256: string }> };
+      runtime: { closure: { files: Array<{ path: string; installedSha256: string }> } };
+    };
+    expect(manifest.format).toBe(2);
+    expect(manifest.skills.files).toHaveLength(6);
+    expect(manifest.runtime.closure.files.length).toBeGreaterThan(1);
+    for (const file of manifest.skills.files) {
+      const bytes = readFileSync(join(dir, ...file.path.split("/")));
+      expect(sha256Bytes(bytes)).toBe(file.installedSha256);
+    }
+    expect(manifest.skills.bundleSha256).toBe(
+      profile.mcpServers.fabric.env.KIRO_FABRIC_SKILL_BUNDLE_SHA256,
+    );
+  });
+
+  it("blocks a foreign same-name skill before publishing the runtime closure", async () => {
+    const dir = project("skill-collision");
+    const target = join(dir, ".kiro", "skills", "fabric-review", "SKILL.md");
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, "foreign review skill\n");
+    await expect(
+      installWithFake(dir, { skipRuntimeClosure: false }),
+    ).rejects.toThrow(/unmanaged skill exists/);
+    expect(readFileSync(target, "utf8")).toBe("foreign review skill\n");
+    expect(existsSync(join(dir, ".kiro", ".kiro-fabric", "runtime"))).toBe(false);
   });
 
   it("is an idempotent no-op on the second run", async () => {
@@ -329,7 +399,10 @@ describe("installKiroProfile", () => {
       { mode: 0o755 },
     );
     await expect(
-      installWithFake(project("badversion2"), { kiroBinary: badWrapper }),
+      installWithFake(project("badversion2"), {
+        kiroBinary: badWrapper,
+        skipRuntimeClosure: false,
+      }),
     ).rejects.toThrow(/unsupported kiro-cli version/);
     expect(existsSync(join(base, "badversion2", ".kiro"))).toBe(false);
   });
@@ -346,7 +419,10 @@ describe("installKiroProfile", () => {
       { mode: 0o755 },
     );
     await expect(
-      installWithFake(dir, { kiroBinary: badValidator }),
+      installWithFake(dir, {
+        kiroBinary: badValidator,
+        skipRuntimeClosure: false,
+      }),
     ).rejects.toThrow(/validate reported an error/);
     expect(existsSync(join(dir, ".kiro"))).toBe(false);
   });
@@ -576,15 +652,22 @@ describe("user-home Kiro install", () => {
   it("writes the agent profile into Kiro home, not the project", async () => {
     const dir = project("user-scope-project");
     const home = project("user-scope-home");
-    const result = await installWithFake(dir, { scope: "user", kiroHome: home });
+    const result = await installWithFake(dir, {
+      scope: "user",
+      kiroHome: home,
+      skipRuntimeClosure: false,
+    });
     expect(result.ok).toBe(true);
     expect(result.projectRoot).toBe(realpathSync(dir));
     expect(result.profilePath).toBe(join(realpathSync(home), "agents", "kiro-fabric.json"));
     expect(existsSync(join(dir, ".kiro"))).toBe(false);
     const profile = JSON.parse(readFileSync(result.profilePath, "utf8")) as {
+      resources: string[];
       mcpServers: { fabric: { env: { KIRO_FABRIC_PROJECT_ROOT: string } } };
     };
     expect(profile.mcpServers.fabric.env.KIRO_FABRIC_PROJECT_ROOT).toBe(realpathSync(dir));
+    expect(profile.resources).toEqual(["skill:///skills/fabric-*/SKILL.md"]);
+    expect(existsSync(join(home, "skills", "fabric-workflow", "SKILL.md"))).toBe(true);
     const manifest = JSON.parse(
       readFileSync(join(home, ".kiro-fabric", "install.json"), "utf8"),
     ) as { scope?: string; projectRoot: string; profile: { path: string } };

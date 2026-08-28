@@ -12,12 +12,12 @@ import type { FabricThinking } from "../thinking.js";
 
 const SMALL_MODEL = "claude-haiku-4.5";
 const CODE_MODEL = "qwen3-coder-next";
-const COMPLEX_MODEL = "claude-opus-4.5";
+const COMPLEX_MODEL = "claude-opus-4.8";
 
 const SMALL_THINKING: FabricThinking = "low";
 const CODE_THINKING: FabricThinking = "low";
 const COMPLEX_THINKING: FabricThinking = "medium";
-const DEFAULT_MODEL = "claude-opus-4.5";
+const DEFAULT_MODEL = "claude-opus-4.8";
 const DEFAULT_THINKING: FabricThinking = "medium";
 
 export interface KiroTaskRoute {
@@ -72,7 +72,7 @@ const stepCount = (task: string): number =>
  * - short/trivial mechanical work -> Claude Haiku 4.5, low effort
  * - code implementation/debugging/testing -> Qwen3 Coder Next, low effort
  * - architecture/security/deep analysis and mixed critical work ->
- *   Claude Opus 4.5, medium effort
+ *   Claude Opus 4.8, medium effort
  * - ambiguous/unclassified work -> Claude Opus 4.5, medium effort
  */
 export const resolveKiroTaskRoute = (task: string): KiroTaskRoute => {
@@ -122,7 +122,7 @@ export const resolveKiroTaskRoute = (task: string): KiroTaskRoute => {
     return { model: SMALL_MODEL, thinking: SMALL_THINKING };
   }
 
-  // Ambiguous / medium / unclassified tasks get Opus at medium effort rather
+  // Ambiguous / medium / unclassified tasks get Opus 4.8 at medium effort rather
   // than punting entirely to Kiro auto, balancing capability with latency and
   // credit usage for unclear or underspecified work.
   return { model: DEFAULT_MODEL, thinking: DEFAULT_THINKING };

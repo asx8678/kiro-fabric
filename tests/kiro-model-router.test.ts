@@ -13,9 +13,9 @@ describe("Kiro task model routing", () => {
     ["Fix the authentication bug in src/auth.ts", "qwen3-coder-next"],
     [
       "Design a secure service architecture and compare the operational trade-offs",
-      "claude-opus-4.5",
+      "claude-opus-4.8",
     ],
-    ["Audit the authentication flow for security vulnerabilities", "claude-opus-4.5"],
+    ["Audit the authentication flow for security vulnerabilities", "claude-opus-4.8"],
   ])("routes %j to %s", (task, expected) => {
     expect(resolveKiroTaskModel(task)).toBe(expected);
   });
@@ -23,20 +23,20 @@ describe("Kiro task model routing", () => {
   it("sets medium effort for complex analysis, including analysis of source files", () => {
     expect(resolveKiroTaskRoute(
       "Audit src/auth.ts for security vulnerabilities and explain the trade-offs",
-    )).toEqual({ model: "claude-opus-4.5", thinking: "medium" });
+    )).toEqual({ model: "claude-opus-4.8", thinking: "medium" });
   });
 
   it("routes an ambiguous medium-sized task to Opus at medium effort", () => {
     const task =
       "Evaluate the available alternatives and provide a balanced recommendation based on the supplied context. ".repeat(7);
     expect(resolveKiroTaskRoute(task)).toEqual({
-      model: "claude-opus-4.5",
+      model: "claude-opus-4.8",
       thinking: "medium",
     });
   });
 
   it("routes long or multi-step reasoning to Opus at medium effort", () => {
-    const expected = { model: "claude-opus-4.5", thinking: "medium" };
+    const expected = { model: "claude-opus-4.8", thinking: "medium" };
     expect(resolveKiroTaskRoute("Consider the supplied material carefully. ".repeat(40)))
       .toEqual(expected);
     expect(resolveKiroTaskRoute(
@@ -47,19 +47,19 @@ describe("Kiro task model routing", () => {
   it("keeps critical mixed implementation on the capable model", () => {
     expect(resolveKiroTaskRoute(
       "Implement a secure distributed architecture, fix the race condition, and add tests",
-    )).toEqual({ model: "claude-opus-4.5", thinking: "medium" });
+    )).toEqual({ model: "claude-opus-4.8", thinking: "medium" });
   });
 
   it("routes plain source-file reviews to analysis, not the coding model", () => {
     expect(resolveKiroTaskRoute(
       "Review src/auth.ts for correctness and missing edge cases",
-    )).toEqual({ model: "claude-opus-4.5", thinking: "medium" });
+    )).toEqual({ model: "claude-opus-4.8", thinking: "medium" });
   });
 
   it("does not treat short length as simplicity for reasoning-dense tasks", () => {
     expect(resolveKiroTaskRoute(
       "Determine whether this lock-free algorithm is linearizable and justify every invariant",
-    )).toEqual({ model: "claude-opus-4.5", thinking: "medium" });
+    )).toEqual({ model: "claude-opus-4.8", thinking: "medium" });
   });
 
   it("pins low effort for cheap and coding routes instead of inheriting medium", () => {

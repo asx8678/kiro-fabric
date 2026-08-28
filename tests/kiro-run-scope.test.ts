@@ -85,6 +85,7 @@ describe("materializeKiroRunProfile", () => {
     roots.push(lease.home);
     const profile = JSON.parse(readFileSync(lease.profilePath, "utf8")) as {
       tools: string[];
+      allowedTools: string[];
       includeMcpJson: boolean;
       includePowers: boolean;
       permissions: { rules: unknown[] };
@@ -93,8 +94,10 @@ describe("materializeKiroRunProfile", () => {
     expect(profile.tools).toEqual(["@fabric/fabric_exec"]);
     expect(profile.includeMcpJson).toBe(false);
     expect(profile.includePowers).toBe(false);
-    expect(profile.permissions).toEqual({ rules: [] });
-    expect(profile).not.toHaveProperty("allowedTools");
+    expect(profile.permissions).toEqual({
+      rules: [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "ask" }],
+    });
+    expect(profile.allowedTools).toEqual(["@fabric/fabric_exec"]);
     expect(profile.mcpServers.fabric.env.KIRO_FABRIC_KIRO_TOOLS)
       .toBe(serializeKiroChildTools(["read", "bash"]));
     expect(profile.mcpServers.fabric.env.KIRO_FABRIC_PROJECT_ROOT).toBe(project);
@@ -102,6 +105,8 @@ describe("materializeKiroRunProfile", () => {
     expect(profile.mcpServers.fabric.env).not.toHaveProperty(
       "KIRO_FABRIC_ENABLE_SUBAGENTS",
     );
+    expect(JSON.parse(readFileSync(join(lease.home, ".kiro", "settings", "cli.json"), "utf8")))
+      .toEqual({ "chat.disableInheritingDefaultResources": true });
     expect(readFileSync(sentinel).equals(before)).toBe(true);
     lease.cleanup();
     expect(generateKiroProfile({

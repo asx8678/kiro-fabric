@@ -22,8 +22,11 @@ export interface KiroV3SessionParams {
         description: string;
         prompt: string;
         tools: string[];
+        allowedTools: ["@fabric/fabric_exec"];
         includeMcpJson: false;
-        permissions?: KiroProfileDocument["permissions"];
+        includePowers: false;
+        resources: string[];
+        permissions: KiroProfileDocument["permissions"];
       }>;
     };
   };
@@ -62,15 +65,21 @@ export const buildKiroV3SessionParams = (
     throw new Error("Kiro v3 session must inject exactly the Fabric MCP server");
   }
 
+  // Project every security-relevant field unchanged. Dropping includePowers
+  // or the (now always-present) permissions block would leave the ACP session
+  // less restrictive than the installed profile — the wire and the disk must
+  // be provably identical so a broader ambient allow cannot bypass Fabric's
+  // approval gate and Powers stay disabled.
   const customAgent = {
     id: KIRO_V3_AGENT_MODE,
     description: profile.description,
     prompt: profile.prompt,
     tools: [...profile.tools],
-    includeMcpJson: false as const,
-    ...(profile.permissions.rules.length > 0
-      ? { permissions: structuredClone(profile.permissions) }
-      : {}),
+    allowedTools: [...profile.allowedTools] as ["@fabric/fabric_exec"],
+    includeMcpJson: profile.includeMcpJson,
+    includePowers: profile.includePowers,
+    resources: [...profile.resources],
+    permissions: structuredClone(profile.permissions),
   };
   return {
     cwd,

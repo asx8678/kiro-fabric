@@ -56,6 +56,15 @@ export const materializeKiroRunProfile = (
     encoding: "utf8",
     mode: 0o600,
   });
+  // Internal ACP children are hermetic: workspace steering, skills, and
+  // AGENTS.md must not add instructions outside the projected Fabric profile.
+  const settingsDir = join(home, ".kiro", "settings");
+  mkdirSync(settingsDir, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(settingsDir, "cli.json"),
+    `${JSON.stringify({ "chat.disableInheritingDefaultResources": true }, null, 2)}\n`,
+    { encoding: "utf8", mode: 0o600 },
+  );
   return {
     home,
     profilePath,

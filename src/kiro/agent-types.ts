@@ -72,6 +72,15 @@ export interface KiroAgentRunRecord {
   runner: "kiro";
   /** Engine provenance for ACP sessions; v2 session ids must never be loaded here. */
   kiroAgentEngine?: "v3";
+  /**
+   * SHA-256 over the security-relevant session configuration (adapter, CLI
+   * version, agent engine/auth, custom-agent prompt/tools/permissions, MCP
+   * server identity, cwd, model, effort). A saved session is only resumed when
+   * the current configuration reproduces the same digest; any profile or
+   * security change forces a fresh session instead of silently resuming under
+   * a different boundary.
+   */
+  kiroSessionProfileSha256?: string;
   transport: KiroAgentTransport;
   cwd: string;
   model?: string;

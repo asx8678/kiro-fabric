@@ -5,6 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { Value } from "typebox/value";
 import type {
   KiroAgentRunRecord as AgentRunRecord,
@@ -217,6 +218,62 @@ export const buildKiroAcpArguments = (options: {
   ];
 };
 
+/**
+ * SHA-256 over the security-relevant session configuration. Computed before
+ * session/new and persisted in the run record; on resume the current config
+ * must reproduce the same digest or the saved session is rejected and a fresh
+ * session is created instead of silently resuming under a different security
+ * boundary (profile prompt/tools/permissions, MCP server identity, cwd, model,
+ * effort).
+ */
+export const kiroSessionProfileFingerprint = (input: {
+  profile: import("./profile.js").KiroProfileDocument;
+  cwd: string;
+  model?: string;
+  thinking?: string;
+}): string => {
+  const profile = input.profile;
+  const server = profile.mcpServers.fabric;
+  if (!server) {
+    throw new Error("Kiro profile must declare the Fabric MCP server to fingerprint");
+  }
+  const canonical = {
+    adapterId: "private-kas-2.20.1",
+    kiroCliVersion: KIRO_CLI_VERSION,
+    agentEngine: KIRO_AGENT_ENGINE,
+    authMethod: KIRO_ACP_AUTH_METHOD,
+    customAgent: {
+      id: KIRO_V3_AGENT_MODE,
+      promptSha256: createHash("sha256").update(profile.prompt, "utf8").digest("hex"),
+      tools: [...profile.tools],
+      allowedTools: [...profile.allowedTools],
+      includeMcpJson: profile.includeMcpJson,
+      includePowers: profile.includePowers,
+      resources: profile.resources ? [...profile.resources] : undefined,
+      permissions: profile.permissions,
+    },
+    mcpServer: {
+      command: server.command,
+      args: [...server.args],
+      envSha256: createHash("sha256")
+        .update(
+          JSON.stringify(
+            Object.entries(server.env).sort(([a], [b]) => a.localeCompare(b)),
+          ),
+          "utf8",
+        )
+        .digest("hex"),
+      requestTimeout: server.requestTimeout,
+    },
+    session: {
+      cwd: input.cwd,
+      model: input.model?.trim() || undefined,
+      effort: mapKiroEffort(input.thinking),
+    },
+  };
+  return createHash("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
+};
+
 const canonicalPath = (value: string): string => {
   try {
     return fs.realpathSync(value);
@@ -346,35 +403,38 @@ export const assertKiroWorkerLaunch = (
   if (profile.includePowers !== false) {
     throw new KiroInstallError("ownership", "managed Kiro profile must set includePowers false");
   }
-  if ("allowedTools" in profile) {
+  if (
+    !Array.isArray(profile.allowedTools) ||
+    profile.allowedTools.length !== 1 ||
+    profile.allowedTools[0] !== "@fabric/fabric_exec"
+  ) {
     throw new KiroInstallError(
       "ownership",
-      "managed Kiro v3 profile must use permissions instead of allowedTools",
+      "managed Kiro profile allowedTools compatibility mirror must contain only @fabric/fabric_exec",
     );
   }
   const permissions = isRecord(profile.permissions) ? profile.permissions : undefined;
   const rules = permissions?.rules;
-  if (!Array.isArray(rules) || rules.length > 1) {
+  if (!Array.isArray(rules) || rules.length !== 1) {
     throw new KiroInstallError(
       "ownership",
-      "managed Kiro profile permissions must contain zero or one exact Fabric rule",
+      "managed Kiro profile permissions must contain exactly one exact Fabric rule",
     );
   }
-  for (const rule of rules) {
-    if (
-      !isRecord(rule) ||
-      rule.capability !== "mcp" ||
-      rule.effect !== "allow" ||
-      !Array.isArray(rule.match) ||
-      rule.match.length !== 1 ||
-      rule.match[0] !== "fabric/fabric_exec" ||
-      Object.keys(rule).some((key) => !["capability", "match", "effect"].includes(key))
-    ) {
-      throw new KiroInstallError(
-        "ownership",
-        "managed Kiro profile contains a broad or unknown permission rule",
-      );
-    }
+  const rule = rules[0];
+  if (
+    !isRecord(rule) ||
+    rule.capability !== "mcp" ||
+    (rule.effect !== "ask" && rule.effect !== "allow") ||
+    !Array.isArray(rule.match) ||
+    rule.match.length !== 1 ||
+    rule.match[0] !== "fabric/fabric_exec" ||
+    Object.keys(rule).some((key) => !["capability", "match", "effect"].includes(key))
+  ) {
+    throw new KiroInstallError(
+      "ownership",
+      "managed Kiro profile contains a broad or unknown permission rule",
+    );
   }
   const servers = isRecord(profile.mcpServers) ? profile.mcpServers : undefined;
   const fabricServer = servers && isRecord(servers.fabric) ? servers.fabric : undefined;
@@ -385,10 +445,14 @@ export const assertKiroWorkerLaunch = (
       "managed Kiro profile must declare exactly the Fabric MCP server",
     );
   }
-  if ((rules.length === 1) !== (fabricEnv.KIRO_FABRIC_ALLOW_TOOLS === "1")) {
+  // The single rule's effect must match the trusted-tool grant: default is an
+  // explicit "ask" (so a wider allow cannot bypass Fabric's approval gate);
+  // --allow-tools flips only this exact tool's effect to "allow".
+  const expectedEffect = fabricEnv.KIRO_FABRIC_ALLOW_TOOLS === "1" ? "allow" : "ask";
+  if (rule.effect !== expectedEffect) {
     throw new KiroInstallError(
       "ownership",
-      "managed Kiro profile permission rule does not match its trusted-tool grant",
+      `managed Kiro profile must contain one exact Fabric ${expectedEffect} rule`,
     );
   }
   return { projectRoot, executionRoot, cwd, manifest };
@@ -1103,6 +1167,28 @@ export const runKiroWorker = async (
     const requestedSession = options.runnerSessionId
       ? assertRunnerSessionId(options.runnerSessionId)
       : undefined;
+    // Compute the fingerprint of the security config we are about to use. On a
+    // fresh session this is persisted; on resume it must match the digest the
+    // session was created with.
+    const sessionFingerprint = kiroSessionProfileFingerprint({
+      profile: runLease.profile,
+      cwd,
+      ...(options.model !== undefined ? { model: options.model } : {}),
+      ...(options.thinking !== undefined ? { thinking: options.thinking } : {}),
+    });
+    if (requestedSession) {
+      const savedFingerprint = options.kiroSessionProfileSha256?.trim();
+      if (!savedFingerprint) {
+        throw new Error(
+          "Saved Kiro ACP session has no security-profile fingerprint; refusing to resume a session whose profile cannot be verified",
+        );
+      }
+      if (savedFingerprint !== sessionFingerprint) {
+        throw new Error(
+          "The saved Kiro ACP session was created with a different agent profile or security configuration; create a new session",
+        );
+      }
+    }
     const loaded = Boolean(requestedSession);
     if (loaded && capabilities.loadSession !== true) {
       throw new Error("Kiro runner cannot load the saved ACP session: loadSession is not advertised");
@@ -1156,6 +1242,7 @@ export const runKiroWorker = async (
     await setSessionConfig("autopilot", "off");
     replaying = false;
     record.runnerSessionId = sessionId;
+    record.kiroSessionProfileSha256 = sessionFingerprint;
     if (!requestedModel && isRecord(sessionResult) && isRecord(sessionResult.models)) {
       const current = sessionResult.models.currentModelId;
       if (typeof current === "string" && current) record.model = current;

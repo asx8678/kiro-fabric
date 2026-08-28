@@ -322,9 +322,11 @@ describe("Kiro profile generation", () => {
     });
     expect(profile.includeMcpJson).toBe(false);
     expect(profile.tools).toEqual(["@fabric/fabric_exec"]);
-    expect(profile).not.toHaveProperty("allowedTools");
+    expect(profile.allowedTools).toEqual(["@fabric/fabric_exec"]);
     expect(profile.includePowers).toBe(false);
-    expect(profile.permissions).toEqual({ rules: [] });
+    expect(profile.permissions).toEqual({
+      rules: [{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "ask" }],
+    });
     const server = profile.mcpServers.fabric as { command: string; args: string[]; requestTimeout: number };
     expect(server.command).toBe("/usr/bin/node");
     expect(server.args).toEqual(["/dist/kiro/mcp-entry.js"]);

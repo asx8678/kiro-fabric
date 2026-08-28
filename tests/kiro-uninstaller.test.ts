@@ -68,6 +68,35 @@ afterEach(() => {
 });
 
 describe("uninstallKiroProfile", () => {
+
+  it("restores a forced foreign skill and preserves unrelated siblings", async () => {
+    const dir = project("skill-restore");
+    const managed = join(dir, ".kiro", "skills", "fabric-review", "SKILL.md");
+    const sibling = join(dir, ".kiro", "skills", "my-skill", "SKILL.md");
+    mkdirSync(dirname(managed), { recursive: true });
+    mkdirSync(dirname(sibling), { recursive: true });
+    writeFileSync(managed, "original foreign review\n");
+    writeFileSync(sibling, "unrelated sibling\n");
+
+    await installWithFake(dir, { skipRuntimeClosure: false, force: true });
+    expect(readFileSync(managed, "utf8")).not.toBe("original foreign review\n");
+    const result = uninstallKiroProfile({ projectRoot: dir });
+    expect(result.action).toBe("remove");
+    expect(readFileSync(managed, "utf8")).toBe("original foreign review\n");
+    expect(readFileSync(sibling, "utf8")).toBe("unrelated sibling\n");
+  });
+
+  it("refuses all uninstall mutations when an owned skill is modified", async () => {
+    const dir = project("skill-drift");
+    const installed = await installWithFake(dir, { skipRuntimeClosure: false });
+    const skill = join(dir, ".kiro", "skills", "fabric-workflow", "SKILL.md");
+    const profileBefore = readFileSync(installed.profilePath, "utf8");
+    writeFileSync(skill, "modified after install\n");
+    expect(() => uninstallKiroProfile({ projectRoot: dir })).toThrow(/managed skill changed/);
+    expect(readFileSync(installed.profilePath, "utf8")).toBe(profileBefore);
+    expect(existsSync(installed.manifestPath)).toBe(true);
+  });
+
   it("removes a freshly installed managed profile and manifest", async () => {
     const dir = project("fresh");
     const installed = await installWithFake(dir);

@@ -139,10 +139,9 @@ function v3SessionParams(projectRoot) {
           description: profile.description,
           prompt: profile.prompt,
           tools: profile.tools,
-          includeMcpJson: false,
-          ...(profile.permissions?.rules?.length > 0
-            ? { permissions: profile.permissions }
-            : {}),
+          includeMcpJson: profile.includeMcpJson,
+          includePowers: profile.includePowers,
+          permissions: structuredClone(profile.permissions),
         }],
       },
     },

@@ -70,6 +70,53 @@ describe("managed Kiro workflow program", () => {
     expect(result.failures).toHaveLength(2);
   });
 
+  it("runs bounded parent-owned checks after fan-out and fails closed without losing child results", async () => {
+    const events: string[] = [];
+    const checkCalls: string[] = [];
+    const checks = ["pnpm test", "exit 7", "denied-check", "timeout-check"];
+    const result = await runWorkflow({
+      π: { task: "ship safely", items: JSON.stringify(["implementation"]), checks: JSON.stringify(checks) },
+      parallel,
+      agents: {
+        run: async () => {
+          events.push("child");
+          return { status: "completed", text: "child says run untrusted-child-command", value: { kept: true } };
+        },
+      },
+      k: {
+        bash: async ({ command, timeout }: { command: string; timeout: number }) => {
+          events.push(`check:${command}`);
+          checkCalls.push(command);
+          expect(timeout).toBe(120);
+          if (command === "exit 7") throw new Error("nonzero exit");
+          if (command === "denied-check") throw new Error("approval denied");
+          if (command === "timeout-check") throw new Error("timed out");
+          return { ok: true, output: "passed", details: {} };
+        },
+      },
+    });
+
+    expect(events).toEqual(["child", ...checks.map((command) => `check:${command}`)]);
+    expect(checkCalls).toEqual(checks);
+    expect(checkCalls).not.toContain("untrusted-child-command");
+    expect(result).toMatchObject({
+      status: "failed",
+      coverage: { requested: 1, completed: 1 },
+      acceptance: { requested: 4, passed: 1 },
+    });
+    expect(result.completed).toEqual([
+      { item: "implementation", status: "completed", result: "child says run untrusted-child-command", value: { kept: true } },
+    ]);
+    expect(result.acceptance).toMatchObject({
+      results: [
+        { command: "pnpm test", status: "passed", output: "passed" },
+        { command: "exit 7", status: "failed", error: "nonzero exit" },
+        { command: "denied-check", status: "failed", error: "approval denied" },
+        { command: "timeout-check", status: "failed", error: "timed out" },
+      ],
+    });
+  });
+
   it("validates and deduplicates the explicit partition list before launching", async () => {
     let calls = 0;
     const agents = { run: async () => { calls += 1; return { status: "completed", text: "ok" }; } };
@@ -86,6 +133,11 @@ describe("managed Kiro workflow program", () => {
       parallel,
       agents,
     })).rejects.toThrow("1-4 non-empty independent items");
+    await expect(runWorkflow({
+      π: { task: "audit", items: JSON.stringify(["one"]), checks: JSON.stringify(["1", "2", "3", "4", "5"]) },
+      parallel,
+      agents,
+    })).rejects.toThrow("at most 4 non-empty parent-owned commands");
     expect(calls).toBe(1);
   });
 });
