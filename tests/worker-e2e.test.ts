@@ -7,14 +7,13 @@ import { AgentManager } from "../src/agents/manager.js";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { initBudgetLedger, readBudgetLedgerDetailed } from "../src/agents/budget-ledger.js";
 
-// End-to-end coverage for the REAL worker (dist/worker.js) driven through
-// AgentManager + #monitor, with a stub `pi` binary (tests/fixtures/fake-pi.mjs)
-// whose behavior is selected by FAKE_PI_BEHAVIOR. This is the only place the
-// real worker.ts spawn/exit path is exercised; the other suites use a fake
-// worker that writes status directly. Skips when the package is not built.
-const workerPath = path.resolve("dist/worker.js");
+// End-to-end coverage for the real source worker driven through AgentManager +
+// #monitor, with a stub `pi` binary (tests/fixtures/fake-pi.mjs) whose behavior
+// is selected by FAKE_PI_BEHAVIOR. This is the only place the worker.ts
+// spawn/exit path is exercised; the other suites use a fake worker that writes
+// status directly. Node 24 executes the source worker with type stripping.
+const workerPath = path.resolve("src/worker.ts");
 const piBinary = path.resolve("tests/fixtures/fake-pi.mjs");
-const hasWorker = fs.existsSync(workerPath);
 
 // AgentManager depth and budgets are environment-scoped. These E2E cases must
 // always behave like a root Fabric run, regardless of an outer session's
@@ -38,7 +37,7 @@ afterAll(() => {
   }
 });
 
-describe.skipIf(!hasWorker)("AgentManager real worker e2e", () => {
+describe("AgentManager real worker e2e", () => {
   const roots: string[] = [];
   const managers: AgentManager[] = [];
 

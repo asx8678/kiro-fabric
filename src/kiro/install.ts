@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, extname, isAbsolute, join } from "node:path";
+import { basename, extname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { parse as parseYaml } from "yaml";
 
@@ -48,6 +48,7 @@ import {
   type KiroManagedOwnedFile,
 } from "./managed.js";
 import { resolveKiroInstallRoots } from "./home.js";
+import { resolveKiroMcpLaunchEnvironment } from "./mcp-environment.js";
 import {
   generateKiroProfile,
   kiroProfilePath,
@@ -296,6 +297,7 @@ export const planKiroProfileInstall = (
     projectRoot: root,
     mcpEntryPath,
     nodePath,
+    ...(layout === "user" ? { kiroHome: installRoot } : {}),
     ...(options.allowShell ? { allowShell: true } : {}),
     ...(options.enableSubagents ? { enableSubagents: true } : {}),
     ...(options.allowTools ? { allowTools: true } : {}),
@@ -306,12 +308,16 @@ export const planKiroProfileInstall = (
         }
       : {}),
   });
+  const profileEnv = profile.mcpServers.fabric?.env;
+  if (profileEnv?.KIRO_FABRIC_ENFORCE_PROJECT_ROOT === "1") {
+    resolveKiroMcpLaunchEnvironment(profileEnv, root);
+  }
   const profileJson = serializeJson(profile);
   const profileSha256 = sha256Bytes(profileJson);
 
   const collision =
     findNameCollision(paths.agentsDir, profilePath) ??
-    (layout === "user"
+    (layout === "user" && resolve(root) !== resolve(installRoot)
       ? findNameCollision(join(root, ".kiro", "agents"), profilePath)
       : null);
   if (collision) {

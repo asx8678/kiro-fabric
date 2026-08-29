@@ -62,6 +62,7 @@ const USAGE =
     "  --dry-run                 Validate and report without changing files",
     "  --yes                     Suppress confirmation prompts (never implies --force)",
     "  --force                   Install only: back up and replace unknown/modified profile content",
+    "  --allow-tools             Trusted opt-in: auto-approve only fabric/fabric_exec",
     "  --json                    Machine-readable output (one JSON object on stdout)",
     "  -h, --help                Show this help",
     "",
@@ -84,6 +85,7 @@ interface SetupArgs {
   dryRun: boolean;
   yes: boolean;
   force: boolean;
+  allowTools: boolean;
   user: boolean;
   projectRoot?: string;
   kiroHome?: string;
@@ -98,6 +100,7 @@ const baseArgs = (command: SetupCommand): SetupArgs => ({
   dryRun: false,
   yes: false,
   force: false,
+  allowTools: false,
   user: false,
 });
 
@@ -143,6 +146,12 @@ const parseSetupArgs = (argv: string[]): SetupArgs => {
       case "--force":
         if (command !== "install") throw new UsageError("--force is install-only");
         parsed.force = true;
+        break;
+      case "--allow-tools":
+        if (command !== "install" && command !== "update") {
+          throw new UsageError("--allow-tools is install/update-only");
+        }
+        parsed.allowTools = true;
         break;
       case "--project-root":
         if (parsed.projectRoot !== undefined) throw new UsageError("duplicate --project-root");
@@ -393,7 +402,7 @@ const isInteractive = (): boolean =>
   process.stdin.isTTY === true && process.stdout.isTTY === true;
 
 const needsConfirmation = (parsed: SetupArgs): boolean =>
-  !parsed.yes && !parsed.dryRun && isInteractive();
+  !parsed.yes && !parsed.dryRun;
 
 const freshReadlineConfirm: SetupIo["confirm"] = async (prompt) => {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -427,6 +436,7 @@ const buildInstallOptions = (parsed: SetupArgs): KiroInstallOptions => ({
   ...(parsed.kiroHome !== undefined ? { kiroHome: parsed.kiroHome } : {}),
   ...(parsed.kiroBinary !== undefined ? { kiroBinary: parsed.kiroBinary } : {}),
   ...(parsed.force ? { force: true } : {}),
+  ...(parsed.allowTools ? { allowTools: true } : {}),
   // Test/distribution override agreed with tests/kiro-setup.test.ts: pin the
   // MCP entry when default resolution cannot run (see install.ts). Note the
   // deployed runtime closure takes precedence for default installs.
@@ -445,6 +455,13 @@ const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
     return 1;
   }
   if (needsConfirmation(parsed)) {
+    if (!isInteractive()) {
+      process.stderr.write(
+        "kiro-fabric: refusing to " + command +
+          " without a terminal; pass --yes to confirm\n",
+      );
+      return 1;
+    }
     const proceed = await io.confirm(
       "Proceed with " +
         command +
@@ -452,7 +469,12 @@ const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
         roots.layout +
         " scope: " +
         roots.installRoot +
-        ")?",
+        ")" +
+        (parsed.allowTools
+          ? "\n  This auto-approves fabric/fabric_exec without prompting, confined to " +
+            roots.projectRoot
+          : "") +
+        "?",
     );
     if (!proceed) {
       process.stderr.write("kiro-fabric: cancelled\n");
@@ -501,6 +523,12 @@ const buildUninstallOptions = (parsed: SetupArgs): KiroUninstallOptions => ({
 const runUninstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
   const options = buildUninstallOptions(parsed);
   if (needsConfirmation(parsed) && !isUninstallNoop(options)) {
+    if (!isInteractive()) {
+      process.stderr.write(
+        "kiro-fabric: refusing to uninstall without a terminal; pass --yes to confirm\n",
+      );
+      return 1;
+    }
     const roots = resolveRoots(parsed);
     const proceed = await io.confirm(
       "Proceed with uninstall (" +

@@ -24,6 +24,12 @@ describe("Kiro profile prompt contract", () => {
     expect(profile.prompt).not.toMatch(/before .*k\.bash/i);
     expect(profile.prompt).toMatch(/batch only independent/i);
     expect(profile.prompt).toMatch(/narrow ranges|offset\/limit/i);
+    expect(profile.prompt).toMatch(/terse, incomplete, or refers to missing material/i);
+    expect(profile.prompt).toMatch(/recover intent from repository evidence/i);
+    expect(profile.prompt).toMatch(/form and state a conservative working assumption/i);
+    expect(profile.prompt).toMatch(/ask one precise clarifying question only when/i);
+    expect(profile.prompt).toMatch(/do not stop merely because the prompt omitted details/i);
+    expect(profile.prompt).toMatch(/never end with an unfinished sentence, heading, or list/i);
     expect(profile.prompt).toMatch(/stop gathering/i);
     expect(profile.prompt).toMatch(/fail closed/i);
     expect(profile.prompt).toMatch(/subagents are disabled in managed Kiro/i);

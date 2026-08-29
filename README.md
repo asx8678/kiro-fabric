@@ -45,56 +45,57 @@ Use this path to install Fabric as a managed Kiro v3 agent. The commands create 
 
 ### Run the guided installer
 
-For the shortest path, install the package globally and start the setup console:
+The npm package is not yet available from the public registry. Install from a source checkout on Linux or macOS:
+
+```bash
+git clone https://github.com/asx8678/kiro-fabric.git
+cd kiro-fabric
+sh scripts/install-kiro-fabric.sh
+```
+
+If you already have this repository open, only the last command is needed. The friendly bootstrap checks Node.js, asks before installing dependencies or building a missing compiled entry, then installs the profile in user scope under `$KIRO_HOME` or `~/.kiro`. It never creates a project-local profile. The profile keeps Kiro approval prompts enabled unless you explicitly pass `--allow-tools`.
+
+A bare run binds the shared user profile to the canonical source checkout. Set `KIRO_FABRIC_PROJECT_ROOT` or pass `--project-root` to target another workspace. Preview an explicit target before applying it:
+
+```bash
+sh scripts/install-kiro-fabric.sh install \
+  --project-root /absolute/path/to/project --dry-run
+sh scripts/install-kiro-fabric.sh install \
+  --project-root /absolute/path/to/project
+```
+
+The source installer adds `--user` automatically to `install`, `update`, and `uninstall`. It defaults `--project-root` to the canonical checkout (or `KIRO_FABRIC_PROJECT_ROOT`) while preserving an explicit override. `--allow-tools` is never added automatically; omit it on an update to restore the default `ask` rule.
+
+After `kiro-fabric` is published to npm, the equivalent global installation will be:
 
 ```bash
 npm install --global kiro-fabric
 kiro-fabric-setup
 ```
 
-A bare command opens an interactive menu when run in a terminal. For scripts or CI, provide an explicit command:
-
-```bash
-kiro-fabric-setup status
-kiro-fabric-setup doctor
-kiro-fabric-setup install --user --project-root /absolute/path/to/project --dry-run
-kiro-fabric-setup install --user --project-root /absolute/path/to/project
-kiro-fabric-setup launch --project-root /absolute/path/to/project
-```
-
-From a source checkout on Linux or macOS, build first and run the POSIX bootstrap. It does not download code; it checks Node and starts the compiled setup console:
-
-```bash
-pnpm install
-pnpm run build
-sh scripts/install-kiro-fabric.sh
-# Non-interactive example:
-sh scripts/install-kiro-fabric.sh install --user \
-  --project-root /absolute/path/to/project --dry-run
-```
+For scripts or CI, `kiro-fabric-setup` accepts `status`, `doctor`, `install`, `update`, `uninstall`, and `launch` subcommands.
 
 Important:
 
 - Node.js 24+ and an installed, authenticated Kiro CLI 2.20.1 are required.
-- User scope (`--user`) writes under `$KIRO_HOME` or `~/.kiro`; omitting `--user` writes under `<project>/.kiro`.
-- Run `--dry-run` before the real install. Add `--yes` only to suppress confirmation; it never implies `--force`.
+- Source preparation is confirmation-gated. On a terminal the bootstrap asks first; non-interactive preparation requires `--yes`, `KIRO_FABRIC_AUTO_BUILD=1`, or a prebuilt checkout. Set `KIRO_FABRIC_AUTO_BUILD=0` to forbid preparation, `KIRO_FABRIC_REBUILD=1` to explicitly force it, or `NO_COLOR=1` to disable styling.
+- The source installer always writes under `$KIRO_HOME` or `~/.kiro`; it does not support project-local installation.
+- Explicit `--allow-tools` auto-approval applies only to `fabric/fabric_exec`, not every MCP or shell tool. Because Fabric can edit files through this tool, the grant is bound to the canonical project directory used during installation and will refuse launches from another project.
+- Run `--dry-run` before the real install. Non-interactive mutation requires `--yes`; it confirms the operation but never implies `--force`.
 - Avoid transient runners such as `npx`: the profile records an absolute path to the installed MCP runtime.
 - Run `kiro-fabric-setup --help` for every command and option. See the [installer guide](docs/kiro/installer.md) for update, uninstall, backups, and troubleshooting.
 
-### 1. Install the package
+### 1. Install Fabric
 
-Install the package globally so the profile can keep a stable path to its MCP adapter:
+Until the npm package is published, use the source installer shown above. It keeps the checkout as the stable location for the compiled MCP adapter:
 
 ```bash
 node --version
 kiro-cli --version
-npm install --global kiro-fabric
-kiro-fabric --help
+sh scripts/install-kiro-fabric.sh
 ```
 
-Node must report version 24 or newer. Kiro must report version 2.20.1. Install and authenticate Kiro CLI through its official setup before continuing.
-
-If `kiro-fabric` is missing after installation, add npm's global executable directory to your `PATH`, then run the help command again.
+Node must report version 24 or newer. Kiro must report version 2.20.1. Install and authenticate Kiro CLI through its official setup before continuing. Keep the source checkout in place after installation because the generated profile records its compiled MCP path.
 
 ### 2. Run the compatibility preflight
 
@@ -187,7 +188,7 @@ kiro-fabric install kiro --user \
 | --- | --- |
 | `--allow-shell` | Enables `k.bash`. Commands run with your local OS permissions. |
 | `--subagents` | Enables at most four non-recursive Kiro ACP children. Requires `--allow-shell`. |
-| `--allow-tools` | Adds one exact v3 MCP allow rule for `fabric/fabric_exec`. |
+| `--allow-tools` | Explicitly adds one exact v3 MCP allow rule for `fabric/fabric_exec`. |
 
 The example enables all three grants. Omit every flag you do not need. Any selected grant binds the profile to the recorded canonical project path and its filesystem identity. Launching it from another project fails before the MCP runtime starts. Replacing, moving, or symlink-retargeting the project directory also requires a fresh install. Re-run the default install command from step 3 to remove the grants. A user Kiro home contains one managed `kiro-fabric` profile, so installing a trusted profile for another project updates that shared profile.
 
@@ -208,17 +209,23 @@ This writes `.kiro/agents/kiro-fabric.json` plus Fabric's ownership manifest and
 
 ### Install from this repository
 
-Use a local checkout when developing Fabric or when the npm package is unavailable:
+Use a local checkout when developing Fabric or while the npm package is unavailable:
 
 ```bash
 git clone https://github.com/asx8678/kiro-fabric.git
-cd kiro-fabric-v2
-pnpm install
-pnpm run build
+cd kiro-fabric
+sh scripts/install-kiro-fabric.sh
+```
 
-node dist/kiro/cli-entry.js doctor kiro
-node dist/kiro/cli-entry.js install kiro --user \
+When compiled output is missing, the installer asks before preparing dependencies and the build. For an explicit, non-interactive user installation, use `--yes` on the applying command (or prebuild the checkout first):
+
+```bash
+sh scripts/install-kiro-fabric.sh doctor \
   --project-root /absolute/path/to/project
+sh scripts/install-kiro-fabric.sh install --user \
+  --project-root /absolute/path/to/project --dry-run
+sh scripts/install-kiro-fabric.sh install --user \
+  --project-root /absolute/path/to/project --yes
 ```
 
 The generated profile stores the absolute path to this checkout's built MCP entry. Keep the checkout in place, or rebuild and reinstall the profile after moving it.

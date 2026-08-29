@@ -41,8 +41,6 @@ try {
       "--no-audit",
       "--no-fund",
       tarball,
-      "@earendil-works/pi-coding-agent@0.84.2",
-      "@earendil-works/pi-tui@0.84.2",
     ],
     { cwd: consumer, stdio: "inherit" },
   );

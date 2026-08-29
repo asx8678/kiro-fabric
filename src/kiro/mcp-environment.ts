@@ -1,6 +1,7 @@
 import path from "node:path";
-import { lstatSync, realpathSync, statSync } from "node:fs";
+
 import { resolveKiroProjectRoot } from "./managed.js";
+import { verifyCanonicalKiroProjectRootIdentity } from "./project-root-identity.js";
 
 export interface KiroMcpLaunchEnvironment {
   cwd: string;
@@ -55,23 +56,10 @@ export const resolveKiroMcpLaunchEnvironment = (
             "reinstall the profile",
         );
       }
-      const configured = path.resolve(configuredRoot);
-      const lexical = lstatSync(configured);
-      const canonical = realpathSync(configured);
-      if (lexical.isSymbolicLink() || !lexical.isDirectory() || canonical !== configured) {
-        throw new Error(
-          "trusted Kiro project root changed or is now reached through a symlink; " +
-            "reinstall the profile from the canonical path",
-        );
-      }
-      const identity = statSync(canonical, { bigint: true });
-      if (String(identity.dev) !== expectedDev || String(identity.ino) !== expectedIno) {
-        throw new Error(
-          "trusted Kiro project root filesystem identity changed; " +
-            "reinstall the profile from the same canonical project path",
-        );
-      }
-      const root = canonical;
+      const root = verifyCanonicalKiroProjectRootIdentity(configuredRoot, {
+        dev: expectedDev,
+        ino: expectedIno,
+      }).root;
       const relative = path.relative(root, cwd);
       if (
         relative === ".." ||

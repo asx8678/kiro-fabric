@@ -16,7 +16,7 @@ import {
 import { ParticipantDirectory } from "../src/topology/participant-directory.js";
 
 const repoRoot = process.cwd();
-const distWorker = path.resolve("dist/worker.js");
+const kiroWorker = path.resolve("dist/kiro/agent-worker-entry.js");
 const distExtension = path.resolve("dist/index.js");
 const fakeKiroWorker = path.resolve("tests/fixtures/kiro/fake-kiro-worker.mjs");
 const roots: string[] = [];
@@ -201,7 +201,7 @@ const createHarness = async (name: string): Promise<TestHarness> => {
       agents: { ...DEFAULT_FABRIC_CONFIG.agents, timeoutMs: 6_000 },
       mesh: meshConfig,
       retention: DEFAULT_FABRIC_CONFIG.retention,
-      workerPath: distWorker,
+      workerPath: kiroWorker,
       fabricExtensionPath: distExtension,
       piBinary: "pi",
       claudeBinary: "claude",

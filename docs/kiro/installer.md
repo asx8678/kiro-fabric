@@ -269,39 +269,52 @@ npm install --global kiro-fabric
 kiro-fabric-setup
 ```
 
-From a repository checkout, build the compiled entry before starting the same
-console through the Linux/macOS POSIX bootstrap:
+From a repository checkout, run the friendly Linux/macOS POSIX bootstrap. It
+prepares dependencies and compiled artifacts when they are missing, then
+installs the managed profile in user scope:
 
 ```bash
-pnpm install
-pnpm run build
 sh scripts/install-kiro-fabric.sh
 
 # Explicit commands for non-interactive use:
 sh scripts/install-kiro-fabric.sh status
 sh scripts/install-kiro-fabric.sh doctor
-sh scripts/install-kiro-fabric.sh install --user \
+sh scripts/install-kiro-fabric.sh install \
   --project-root /absolute/path/to/project --dry-run
-sh scripts/install-kiro-fabric.sh install --user \
-  --project-root /absolute/path/to/project
+sh scripts/install-kiro-fabric.sh install \
+  --project-root /absolute/path/to/project --yes
 ```
 
-The bootstrap locates `node`, requires major version 24 or newer, and prints
-distribution-specific install guidance (nodejs.org, `apt`, `dnf`, `brew`, `nvm`)
-when Node is missing or old; a missing or old Node exits 1. The bootstrap itself
-performs no network fetch or `.kiro` mutation. It `exec`s
-`node <repo>/dist/kiro/setup-entry.js` with all arguments; the selected setup
-command may then update managed Kiro files.
+The bootstrap presents a styled progress display on a terminal, locates
+`node`, requires major version 24 or newer, and prints distribution-specific
+install guidance when Node is missing or old. If the compiled setup entry is
+missing, it asks before running `pnpm install` and `pnpm run build`; `corepack
+pnpm` is used as a fallback. Non-interactive source preparation requires
+`--yes` on a mutating command or explicit `KIRO_FABRIC_AUTO_BUILD=1`. Set
+`KIRO_FABRIC_AUTO_BUILD=0` to forbid preparation, `KIRO_FABRIC_REBUILD=1` to
+explicitly force it, or `NO_COLOR=1` to disable styling. No dependency or build
+mutation occurs before that consent. After preparation, a bare invocation
+becomes a user install bound to the canonical
+source checkout, or to `KIRO_FABRIC_PROJECT_ROOT` when set. Explicit `install`
+and `update` commands receive `--user` automatically, and `uninstall` receives
+`--user`. Setup commands and `launch` also receive that default project root
+unless `--project-root` was supplied explicitly. Tool auto-approval remains off
+unless `--allow-tools` is supplied explicitly. That exact grant covers only
+`fabric/fabric_exec` and is bound to the canonical project path and filesystem
+identity; a trusted grant may never target the Kiro config home. The source
+bootstrap never creates or manages a project-local profile.
 
-The setup console supports the subcommands `status`, `install`, `update`,
+The underlying setup console supports the subcommands `status`, `install`, `update`,
 `uninstall`, `doctor`, and `launch`, with the flags `--user`,
 `--project-root <dir>`, `--kiro-home <dir>`, `--kiro-binary <path>`,
-`--dry-run`, `--yes`, `--force`, `--json`, and `-h/--help`. A bare invocation
+`--dry-run`, `--yes`, `--force`, `--allow-tools`, `--json`, and `-h/--help`.
+`--allow-tools` is accepted by `install` and `update`. A bare invocation
 shows a numbered menu only when stdin and stdout are terminals; a non-interactive
-run prints usage. Omitting `--user` selects project-local scope rooted at the
+run prints usage. Non-interactive install, update, or non-noop uninstall also
+requires `--yes`. Omitting `--user` selects project-local scope rooted at the
 current directory; `--user` selects `$KIRO_HOME` or `~/.kiro`. `update` requires
-an existing manifest, and the advanced grants `--allow-shell`, `--subagents`, and
-`--allow-tools` default to off. `launch` starts `kiro-cli --v3 --agent
+an existing manifest, and the underlying console's `--allow-tools` grant defaults
+to off. `launch` starts `kiro-cli --v3 --agent
 kiro-fabric` through a direct argv exec in the selected project root. Every
 mutation delegates to the verified install, uninstall, and doctor APIs; the
 console adds no ownership, backup, or symlink logic of its own. Exit codes:

@@ -121,6 +121,28 @@ describe("Kiro managed environment precedence", () => {
     }, nested)).toEqual({ cwd: nested, kind: "managed-main" });
   });
 
+  it("rejects a trusted grant rooted at the Kiro config home", () => {
+    const { project } = dirs();
+    expect(() => generateKiroProfile({
+      projectRoot: project,
+      kiroHome: project,
+      mcpEntryPath: "/tmp/mcp.js",
+      allowTools: true,
+    })).toThrow(/may not be the Kiro home/i);
+  });
+
+  it("reports actionable guidance when a recorded trusted root disappears", () => {
+    const { project, ambient } = dirs();
+    const profile = generateKiroProfile({
+      projectRoot: project,
+      mcpEntryPath: "/tmp/mcp.js",
+      allowTools: true,
+    }).mcpServers.fabric as { env: NodeJS.ProcessEnv };
+    fs.rmSync(project, { recursive: true });
+    expect(() => resolveKiroMcpLaunchEnvironment(profile.env, ambient))
+      .toThrow(/trusted Kiro project root .*unreadable.*reinstall/i);
+  });
+
   it.skipIf(process.platform === "win32")(
     "rejects a trusted root that was replaced or retargeted through a symlink",
     () => {

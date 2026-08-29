@@ -1,22 +1,17 @@
-# Context and memory certification
+# Legacy Pi context and memory certification
 
-The repository provides two evaluation commands:
-
-- `pnpm certify:context` is deterministic, runs offline, and costs nothing.
-- `pnpm benchmark:real-resume` is an opt-in, billable Pi RPC benchmark with a safe skip as its default behavior.
-
-`pnpm test` excludes these commands, which keeps the normal test suite offline and fast.
+These historical Pi evaluation harnesses remain available for source-level regression work, but they are not Kiro package commands and are not part of Kiro release certification. `pnpm test` excludes them, which keeps the normal suite offline and fast.
 
 ## Deterministic certification
 
 Use Node 24 or newer:
 
 ```sh
-pnpm certify:context
-pnpm certify:context -- --json /tmp/kiro-fabric-certification.json
+pnpm run build && node scripts/certify-context.mjs
+pnpm run build && node scripts/certify-context.mjs --json /tmp/kiro-fabric-certification.json
 ```
 
-The package command builds `dist/` first, then runs `scripts/certify-context.mjs`. It prints a human summary followed by the complete JSON report. When any threshold fails, the command exits nonzero.
+The explicit commands build `dist/` first, then run `scripts/certify-context.mjs`. It prints a human summary followed by the complete JSON report. When any threshold fails, the command exits nonzero.
 
 ### Compaction endurance
 
@@ -100,7 +95,7 @@ The RPC reader implements strict LF JSONL framing. It splits only on `\n`, strip
 Without configuration, this command exits zero and reports `SKIP`:
 
 ```sh
-pnpm benchmark:real-resume
+node scripts/benchmark-real-resume.mjs
 ```
 
 A billable run requires all of these gates:
@@ -113,7 +108,7 @@ KIRO_FABRIC_BENCH_KEY_ENV=ANTHROPIC_API_KEY \
 KIRO_FABRIC_BENCH_REPEATS=3 \
 KIRO_FABRIC_BENCH_MAX_USD=5 \
 PI_VCC_EXTENSION=/absolute/path/to/pi-vcc/extension.ts \
-pnpm benchmark:real-resume
+node scripts/benchmark-real-resume.mjs
 ```
 
 `KIRO_FABRIC_BENCH_KEY_ENV` names an already-set credential environment variable. The benchmark checks the observed session cost before each next arm starts. It stops once the run reaches the configured budget. A single in-flight request can still exceed the remaining budget. Treat the maximum as a stop boundary. Hard spending caps live on the provider side.

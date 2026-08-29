@@ -1,11 +1,10 @@
 // Kiro v3 profile generation for the kiro-fabric MCP adapter. Dangerous
 // managed grants are bound to the canonical project's filesystem identity.
 
-import { lstatSync, realpathSync, statSync } from "node:fs";
-import path from "node:path";
-
 import { managedPaths, type KiroManagedLayout } from "./managed.js";
 import { KIRO_PROFILE_REQUEST_TIMEOUT_MS } from "./deadlines.js";
+import { resolveKiroHome } from "./home.js";
+import { resolveCanonicalKiroProjectRootIdentity } from "./project-root-identity.js";
 
 export const KIRO_CLI_VERSION = "2.20.1" as const;
 export const KIRO_AGENT_ENGINE = "v3" as const;
@@ -21,6 +20,8 @@ export interface KiroProfileOptions {
   mcpEntryPath: string;
   /** Absolute node executable; defaults to process.execPath at generation. */
   nodePath?: string;
+  /** Kiro config home; trusted project grants must never target this directory. */
+  kiroHome?: string;
   /** Extra non-Fabric MCP environment. Reserved KIRO_FABRIC_* keys are rejected. */
   extraEnv?: Record<string, string>;
   /** Canonical environment reserved for an isolated internal child profile. */
@@ -99,7 +100,7 @@ const kiroProfilePrompt = (
     ? ""
     : " All memory.* and supported mcp.* calls also return promises; await every one.";
 
-  return `Use only the canonical Kiro Fabric I/O API exposed through the k.* namespace and the π named-strings map. The supported repository I/O calls are k.read, k.readArtifact, k.grep, k.find, and k.ls, which return strings or bounded artifact chunks, plus ${mutationGuidance}${memoryGuidance} π is the lowercase Greek-letter named-strings map. Prefer k.* for all repository work and do not probe or invoke pi.*, tools.fs.*, tools.shell.*, tools.call, tools.search, tools.shell.exec, or alternate I/O namespaces.${mcpGuidance}${agentGuidance} All k.* API calls return promises — always write "await" before ${awaitedCalls}, and never use an un-awaited (thenable) result.${additionalAwaitGuidance}${agentAwaitGuidance} Explore cheaply first: use k.find/k.grep to locate, then k.read only narrow ranges with offset/limit — never re-read a file you already have. Batch only independent calls you already know you need; never one giant program that mixes open-ended discovery with edits. Stop gathering once the evidence answers the question, and return only compact decision-relevant data (paths, symbols, verdicts), not raw dumps. Treat denied, timed-out, cancelled, indeterminate, or otherwise unverified results as failure, fail closed on approval or access uncertainty, and never claim completion without a verified successful tool result.`;
+  return `Use only the canonical Kiro Fabric I/O API exposed through the k.* namespace and the π named-strings map. The supported repository I/O calls are k.read, k.readArtifact, k.grep, k.find, and k.ls, which return strings or bounded artifact chunks, plus ${mutationGuidance}${memoryGuidance} π is the lowercase Greek-letter named-strings map. Prefer k.* for all repository work and do not probe or invoke pi.*, tools.fs.*, tools.shell.*, tools.call, tools.search, tools.shell.exec, or alternate I/O namespaces.${mcpGuidance}${agentGuidance} All k.* API calls return promises — always write "await" before ${awaitedCalls}, and never use an un-awaited (thenable) result.${additionalAwaitGuidance}${agentAwaitGuidance} Explore cheaply first: use k.find/k.grep to locate, then k.read only narrow ranges with offset/limit — never re-read a file you already have. If the user's brief is terse, incomplete, or refers to missing material, recover intent from repository evidence such as the current root, project manifests, README or AGENTS.md files, version-control state, and relevant source symbols. Form and state a conservative working assumption, then continue when the work is reversible and scoped. Ask one precise clarifying question only when repository evidence leaves multiple materially different targets or when proceeding could cause the wrong mutation; do not stop merely because the prompt omitted details that the workspace can answer. Never end with an unfinished sentence, heading, or list, and summarize any discovered candidates in the same response that mentions them. Batch only independent calls you already know you need; never one giant program that mixes open-ended discovery with edits. Stop gathering once the evidence answers the question, and return only compact decision-relevant data (paths, symbols, verdicts), not raw dumps. Treat denied, timed-out, cancelled, indeterminate, or otherwise unverified results as failure, fail closed on approval or access uncertainty, and never claim completion without a verified successful tool result.`;
 };
 
 /**
@@ -138,15 +139,12 @@ export const generateKiroProfile = (
   let confinedProjectRoot: string | undefined;
   let projectIdentity: { dev: string; ino: string } | undefined;
   if (confineManagedGrant) {
-    const configured = path.resolve(options.projectRoot);
-    const lexical = lstatSync(configured);
-    const canonical = realpathSync(configured);
-    if (lexical.isSymbolicLink() || !lexical.isDirectory() || canonical !== configured) {
-      throw new Error("trusted Kiro project root must be a canonical, non-symlink directory");
+    const identity = resolveCanonicalKiroProjectRootIdentity(options.projectRoot);
+    if (identity.root === resolveKiroHome(options.kiroHome)) {
+      throw new Error("trusted Kiro project root may not be the Kiro home directory");
     }
-    const identity = statSync(canonical, { bigint: true });
-    confinedProjectRoot = canonical;
-    projectIdentity = { dev: String(identity.dev), ino: String(identity.ino) };
+    confinedProjectRoot = identity.root;
+    projectIdentity = { dev: identity.dev, ino: identity.ino };
   }
   return {
     name: "kiro-fabric",

@@ -63,6 +63,20 @@ describe("package manifest", () => {
     });
   });
 
+  it("keeps Kiro release consumer installs independent of Pi packages", () => {
+    const root = path.resolve(import.meta.dirname, "..");
+    for (const file of [
+      "certify-release-a.mjs",
+      "certify-release-a-real.mjs",
+      "certify-release-b-real.mjs",
+      "certify-release-d-real.mjs",
+    ]) {
+      const source = fs.readFileSync(path.join(root, "scripts", file), "utf8");
+      expect(source).not.toContain("@earendil-works/pi-coding-agent@");
+      expect(source).not.toContain("@earendil-works/pi-tui@");
+    }
+  });
+
   it("keeps legacy Pi host packages development-only", () => {
     const root = path.resolve(import.meta.dirname, "..");
     const manifest = JSON.parse(

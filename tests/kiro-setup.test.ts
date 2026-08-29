@@ -5,6 +5,7 @@
 // runKiroSetup(argv) mirrors runKiroCli(argv): it resolves to the process exit
 // code and writes output through process.stdout.write / process.stderr.write.
 
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -94,6 +95,201 @@ afterEach(() => {
   }
 });
 
+describe("source installer bootstrap", () => {
+  const installer = join(repoRoot, "scripts", "install-kiro-fabric.sh");
+
+  const runInstaller = (
+    entry: string,
+    args: string[] = [],
+    env: NodeJS.ProcessEnv = {},
+  ) =>
+    spawnSync("sh", [installer, ...args], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        KIRO_FABRIC_SETUP_ENTRY: entry,
+        KIRO_FABRIC_AUTO_BUILD: "0",
+        KIRO_HOME: join(base, "user-kiro"),
+        ...env,
+      },
+    });
+
+  const writeArgRecorder = (): string => {
+    const entry = join(base, "fake-setup.mjs");
+    writeFileSync(
+      entry,
+      'process.stdout.write(JSON.stringify(process.argv.slice(2)) + "\\n");\n',
+    );
+    return entry;
+  };
+
+  itPosix("turns a bare invocation into an approval-gated user install", () => {
+    const run = runInstaller(writeArgRecorder());
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout.trim())).toEqual([
+      "install",
+      "--user",
+      "--project-root",
+      repoRoot,
+    ]);
+  });
+
+  itPosix("forces user scope while preserving only explicit tool approval", () => {
+    const entry = writeArgRecorder();
+    const added = runInstaller(entry, ["install", "--dry-run"]);
+    const preserved = runInstaller(entry, [
+      "update",
+      "--user",
+      "--allow-tools",
+      "--dry-run",
+    ]);
+    const uninstall = runInstaller(entry, ["uninstall", "--dry-run"]);
+    expect(added.status).toBe(0);
+    expect(JSON.parse(added.stdout.trim())).toEqual([
+      "install",
+      "--dry-run",
+      "--user",
+      "--project-root",
+      repoRoot,
+    ]);
+    expect(preserved.status).toBe(0);
+    expect(JSON.parse(preserved.stdout.trim())).toEqual([
+      "update",
+      "--user",
+      "--allow-tools",
+      "--dry-run",
+      "--project-root",
+      repoRoot,
+    ]);
+    expect(uninstall.status).toBe(0);
+    expect(JSON.parse(uninstall.stdout.trim())).toEqual([
+      "uninstall",
+      "--dry-run",
+      "--user",
+      "--project-root",
+      repoRoot,
+    ]);
+  });
+
+  itPosix("defaults sessions to the checkout and preserves an explicit project root", () => {
+    const entry = writeArgRecorder();
+    const launch = runInstaller(entry, ["launch"]);
+    const explicit = runInstaller(entry, ["status", "--json", "--project-root", base]);
+    expect(launch.status).toBe(0);
+    expect(JSON.parse(launch.stdout.trim())).toEqual([
+      "launch",
+      "--project-root",
+      repoRoot,
+    ]);
+    expect(explicit.status).toBe(0);
+    expect(JSON.parse(explicit.stdout.trim())).toEqual([
+      "status",
+      "--json",
+      "--project-root",
+      base,
+    ]);
+    expect(`${launch.stdout}${launch.stderr}${explicit.stdout}${explicit.stderr}`).not.toContain(
+      "\u001b[",
+    );
+  });
+
+  itPosix("accepts a dotless future Node major version", () => {
+    const entry = writeArgRecorder();
+    const bin = project("dotless-node-bin");
+    writeFileSync(
+      join(bin, "node"),
+      [
+        "#!/bin/sh",
+        "if [ \"$1\" = \"--version\" ]; then echo v25; exit 0; fi",
+        "exec \"$REAL_NODE\" \"$@\"",
+      ].join("\n") + "\n",
+      { mode: 0o755 },
+    );
+    const run = spawnSync("sh", [installer, "status", "--json"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        REAL_NODE: process.execPath,
+        KIRO_FABRIC_SETUP_ENTRY: entry,
+        KIRO_FABRIC_AUTO_BUILD: "0",
+      },
+    });
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout.trim())[0]).toBe("status");
+  });
+  itPosix("does not prepare a missing build before non-interactive consent", () => {
+    const missing = join(base, "missing-setup.mjs");
+    const bin = project("unconfirmed-build-bin");
+    const marker = join(base, "unexpected-pnpm-call");
+    writeFileSync(
+      join(bin, "pnpm"),
+      "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$PREPARE_MARKER\"\n",
+      { mode: 0o755 },
+    );
+
+    const run = runInstaller(missing, ["install", "--dry-run"], {
+      KIRO_FABRIC_AUTO_BUILD: "",
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PREPARE_MARKER: marker,
+    });
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toMatch(/source preparation requires consent/i);
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  itPosix("uses --yes as explicit consent for source preparation", () => {
+    const missing = join(base, "approved-setup.mjs");
+    const bin = project("confirmed-build-bin");
+    const marker = join(base, "pnpm-calls");
+    writeFileSync(
+      join(bin, "pnpm"),
+      [
+        "#!/bin/sh",
+        "printf '%s\\n' \"$*\" >> \"$PREPARE_MARKER\"",
+        "if [ \"$1\" = run ] && [ \"$2\" = build ]; then",
+        "  printf '%s\\n' 'process.stdout.write(JSON.stringify(process.argv.slice(2)));' > \"$ENTRY_TARGET\"",
+        "fi",
+      ].join("\n") + "\n",
+      { mode: 0o755 },
+    );
+
+    const run = runInstaller(missing, ["install", "--dry-run", "--yes"], {
+      ENTRY_TARGET: missing,
+      KIRO_FABRIC_AUTO_BUILD: "",
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PREPARE_MARKER: marker,
+    });
+
+    expect(run.status).toBe(0);
+    expect(readFileSync(marker, "utf8")).toBe("install\nrun build\n");
+    expect(JSON.parse(run.stdout.trim())).toEqual([
+      "install",
+      "--dry-run",
+      "--yes",
+      "--user",
+      "--project-root",
+      repoRoot,
+    ]);
+  });
+
+  itPosix("gives an actionable error when automatic builds are disabled", () => {
+    const missing = join(base, "missing-setup.mjs");
+    const run = spawnSync("sh", [installer], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        KIRO_FABRIC_SETUP_ENTRY: missing,
+        KIRO_FABRIC_AUTO_BUILD: "0",
+      },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("setup entry not found");
+    expect(run.stderr).toContain("pnpm install && pnpm run build");
+  });
+});
+
 describe("runKiroSetup usage", () => {
   itPosix("exits 2 with usage guidance for an unknown command", async () => {
     const run = await runSetup(["frobnicate"]);
@@ -163,7 +359,23 @@ describe("runKiroSetup status --json", () => {
 });
 
 describe("runKiroSetup install --user --json", () => {
-  itPosix("installs the user-scope profile into the isolated kiro home", async () => {
+  itPosix("refuses a noninteractive install without --yes", async () => {
+    const root = project("unconfirmed-project");
+    const home = project("unconfirmed-home");
+    const run = await runSetup([
+      "install",
+      "--user",
+      "--project-root",
+      root,
+      "--kiro-home",
+      home,
+    ]);
+    expect(run.code).toBe(1);
+    expect(run.stderr).toMatch(/refusing.*without a terminal.*--yes/i);
+    expect(existsSync(join(home, "agents", "kiro-fabric.json"))).toBe(false);
+  });
+
+  itPosix("installs an exact auto-approved user profile into the isolated Kiro home", async () => {
     const root = project("install-project");
     const home = project("install-home");
     const wrapper = writeFakeKiroWrapper(join(base, "fake-kiro"));
@@ -171,6 +383,8 @@ describe("runKiroSetup install --user --json", () => {
     const run = await runSetup([
       "install",
       "--user",
+      "--allow-tools",
+      "--yes",
       "--json",
       "--project-root",
       root,
@@ -187,10 +401,19 @@ describe("runKiroSetup install --user --json", () => {
     expect(existsSync(join(root, ".kiro"))).toBe(false);
     const profile = JSON.parse(
       readFileSync(join(homeRoot, "agents", "kiro-fabric.json"), "utf8"),
-    ) as { mcpServers: { fabric: { env: Record<string, string> } } };
+    ) as {
+      mcpServers: { fabric: { env: Record<string, string> } };
+      permissions: {
+        rules: Array<{ capability: string; match: string[]; effect: string }>;
+      };
+    };
     expect(profile.mcpServers.fabric.env.KIRO_FABRIC_PROJECT_ROOT).toBe(
       realpathSync(root),
     );
+    expect(profile.mcpServers.fabric.env.KIRO_FABRIC_ALLOW_TOOLS).toBe("1");
+    expect(profile.permissions.rules).toEqual([
+      { capability: "mcp", match: ["fabric/fabric_exec"], effect: "allow" },
+    ]);
   });
 });
 

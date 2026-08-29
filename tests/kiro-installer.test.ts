@@ -222,6 +222,36 @@ describe("planKiroProfileInstall", () => {
     ).toThrow(/already declares or can resolve as name/);
   });
 
+  it("skips the nested workspace probe when user home is also the project root", () => {
+    const home = project("same-user-project-root");
+    mkdirSync(join(home, ".kiro", "agents"), { recursive: true });
+    writeFileSync(
+      join(home, ".kiro", "agents", "other.json"),
+      JSON.stringify({ name: "kiro-fabric" }),
+    );
+    expect(planKiroProfileInstall({
+      scope: "user",
+      projectRoot: home,
+      kiroHome: home,
+      mcpEntryPath: mcpEntry,
+    }).action).toBe("create");
+  });
+
+  it("still detects a workspace collision for a distinct user profile home", () => {
+    const home = project("distinct-user-home");
+    const dir = project("distinct-user-project");
+    mkdirSync(join(dir, ".kiro", "agents"), { recursive: true });
+    writeFileSync(
+      join(dir, ".kiro", "agents", "other.json"),
+      JSON.stringify({ name: "kiro-fabric" }),
+    );
+    expect(() => planKiroProfileInstall({
+      scope: "user",
+      projectRoot: dir,
+      kiroHome: home,
+      mcpEntryPath: mcpEntry,
+    })).toThrow(/already declares or can resolve as name/);
+  });
   it("blocks an unmanaged filename-derived kiro-fabric.json target", () => {
     const dir = project("dup-filename-json");
     mkdirSync(join(dir, ".kiro", "agents"), { recursive: true });

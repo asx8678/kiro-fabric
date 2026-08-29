@@ -1,33 +1,65 @@
 #!/usr/bin/env node
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import {
+  assertPackagePolicy,
+  BUILT_RUNTIME_ARTIFACTS,
+  PACKAGE_BIN_ARTIFACTS,
+  PUBLISHED_DECLARATION_ARTIFACTS,
+  PUBLIC_DECLARATION_ROOTS,
+  REMOVED_BUILD_ARTIFACTS,
+  REPOSITORY_ROOT,
+} from "./package-policy.mjs";
+
+assertPackagePolicy();
+
+const root = REPOSITORY_ROOT;
 const dist = join(root, "dist");
-const stable = [
-  "index.js",
-  "protocol.js",
-  "kernel/index.js",
-  "kiro/index.js",
-  "kiro/mcp-entry.js",
-  "kiro/agent-worker-entry.js",
-  "kiro/cli-entry.js",
-  "verification/index.js",
-];
-const compatibilityFixtures = ["worker.js"];
-const declarations = stable.map((file) => file.replace(/\.js$/, ".d.ts"));
+const fromDist = (file) => file.replace(/^dist\//u, "");
+const stable = BUILT_RUNTIME_ARTIFACTS.map(fromDist);
+const declarations = PUBLISHED_DECLARATION_ARTIFACTS.map(fromDist);
+const declarationRoots = PUBLIC_DECLARATION_ROOTS.map(fromDist);
 const required = [
   ...stable,
-  ...compatibilityFixtures,
   ...stable.map((file) => `${file}.map`),
-  ...compatibilityFixtures.map((file) => `${file}.map`),
   ...declarations,
   ...declarations.map((file) => `${file}.map`),
 ];
 const missing = required.filter((file) => !existsSync(join(dist, file)));
 if (missing.length > 0) throw new Error(`Missing build artifacts:\n${missing.join("\n")}`);
+for (const artifact of REMOVED_BUILD_ARTIFACTS) {
+  const removed = fromDist(artifact);
+  if (existsSync(join(dist, removed))) throw new Error(`Removed legacy artifact still exists: ${removed}`);
+}
+
+const emittedDeclarations = [];
+const declarationDirectories = [dist];
+const SKIPPED_DECLARATION_DIRECTORIES = ["kiro-closure"];
+while (declarationDirectories.length > 0) {
+  const directory = declarationDirectories.pop();
+  if (!directory) continue;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const file = join(directory, entry.name);
+    // The kiro-closure bundle is a self-contained runtime payload with its own
+    // nested private declarations and package.json. It is published under the
+    // `dist/kiro-closure/**/*` glob and is independent of the public entry
+    // declaration allowlist.
+    if (entry.isDirectory() && SKIPPED_DECLARATION_DIRECTORIES.includes(entry.name)) continue;
+    if (entry.isDirectory()) declarationDirectories.push(file);
+    else if (entry.name.endsWith(".d.ts")) emittedDeclarations.push(relative(dist, file));
+  }
+}
+const publishedDeclarationSet = new Set(declarations);
+const unpublishedDeclarations = emittedDeclarations
+  .filter((file) => !publishedDeclarationSet.has(file))
+  .sort();
+if (unpublishedDeclarations.length > 0) {
+  throw new Error(
+    `Emitted declarations are missing from the package allowlist:\n${unpublishedDeclarations.join("\n")}`,
+  );
+}
 
 const chunks = join(dist, "chunks");
 const chunkFiles = existsSync(chunks)
@@ -78,7 +110,7 @@ const declarationTarget = (file, specifier) => {
 
 // Consumers install the Kiro package without Pi. Follow every declaration
 // reachable from a public entry and reject accidental Pi host type leakage.
-const declarationStack = declarations.map((file) => join(dist, file));
+const declarationStack = declarationRoots.map((file) => join(dist, file));
 const declarationVisited = new Set();
 const forbiddenDeclarationImports = [
   "@earendil-works/",
@@ -102,7 +134,8 @@ while (declarationStack.length > 0) {
   }
 }
 
-for (const file of ["kiro/cli-entry.js", "kiro/mcp-entry.js"]) {
+for (const artifact of PACKAGE_BIN_ARTIFACTS) {
+  const file = fromDist(artifact);
   const text = readFileSync(join(dist, file), "utf8");
   if (!text.startsWith("#!/usr/bin/env node")) {
     throw new Error(`missing shebang: ${file}`);

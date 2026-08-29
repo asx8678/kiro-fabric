@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { formatSkillsForPrompt, loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
@@ -120,6 +121,14 @@ describe("managed Kiro skill contract", () => {
     expect(review).toContain("**Inferred**");
     expect(review).toContain("old/new trace only when");
     expect(review).toContain("at most eight numbered steps per side");
+    expect(review).toContain("agents.run({");
+    expect(review).toContain("schema: reviewResultSchema");
+    expect(review).toContain("additionalProperties: false");
+    expect(review).toContain('result.status !== "completed"');
+    expect(review).toContain("result.value");
+    expect(review).toContain("{ concurrency: 2 }");
+    expect(review).toContain("schema-invalid response is a lane");
+    expect(review).toContain("Never fall back to\nunvalidated `result.text`");
 
     const guide = fs.readFileSync("skills/fabric-guide/SKILL.md", "utf8");
     expect(guide).toContain("smallest sufficient path");
@@ -134,7 +143,11 @@ describe("managed Kiro skill contract", () => {
       process.platform === "win32"
         ? ["/d", "/s", "/c", "npm", "pack", "--ignore-scripts", "--dry-run", "--json"]
         : ["pack", "--ignore-scripts", "--dry-run", "--json"],
-      { cwd: process.cwd(), encoding: "utf8" },
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: { ...process.env, npm_config_cache: path.join(os.tmpdir(), "kiro-fabric-npm-cache") },
+      },
     ));
     const entries = Array.isArray(packed) ? packed : Object.values(packed);
     const files = new Set((entries as Array<{ files: Array<{ path: string }> }>)

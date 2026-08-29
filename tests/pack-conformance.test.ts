@@ -2,6 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import {
+  assertPackagePolicy,
+  BUILT_RUNTIME_ARTIFACTS,
+  PACKAGE_FILES,
+  PUBLISHED_DECLARATION_ARTIFACTS,
+} from "../scripts/package-policy.mjs";
+// ^ The `scripts/package-policy.d.mts` sidecar provides static types for the shared policy.
+
 interface PackageManifest {
   files?: string[];
   main?: string;
@@ -22,46 +30,15 @@ const collectStrings = (value: unknown): string[] => {
   return [];
 };
 
-const parseStableAllowlist = (script: string): string[] => {
-  const body = script.match(/const stable = \[(?<body>[\s\S]*?)\];/)?.groups?.body;
-  expect(body, "stable build allowlist should exist").toBeDefined();
-  if (!body) throw new Error("stable build allowlist missing");
-  return [...body.matchAll(/"([^"]+)"/g)].map((entry) => entry[1]!);
-};
-
-const requiredDistPaths = (stable: readonly string[]): string[] => {
-  const declarations = stable.map((file) => file.replace(/\.js$/, ".d.ts"));
-  return [
-    ...stable,
-    ...stable.map((file) => `${file}.map`),
-    ...declarations,
-    ...declarations.map((file) => `${file}.map`),
-    "chunks/*.js",
-    "chunks/*.js.map",
-  ];
-};
-
 describe("pack conformance", () => {
   it("keeps the published manifest scoped to dist/docs/skills and top-level docs", () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.join(root, "package.json"), "utf8"),
     ) as PackageManifest;
 
-    expect(manifest.files).toEqual([
-      "dist/",
-      "!dist/**/*.map",
-      "!dist/worker.js",
-      "skills/",
-      "docs/skills.md",
-      "docs/kiro/installer.md",
-      "docs/kiro/parity-qualification.md",
-      "docs/kiro/capabilities-2.19.1.md",
-      "docs/kiro/capabilities-2.20.1-v3.md",
-      "docs/kiro/release-a.md",
-      "README.md",
-      "LICENSE",
-      "THIRD_PARTY_NOTICES.md",
-    ]);
+    expect(() => assertPackagePolicy()).not.toThrow();
+    expect(manifest.files).toEqual(PACKAGE_FILES);
+    expect(new Set(manifest.files).size).toBe(manifest.files?.length);
 
     for (const file of manifest.files ?? []) {
       const normalized = normalizeRelative(file);
@@ -95,17 +72,24 @@ describe("pack conformance", () => {
     }
   });
 
-  it("keeps the build artifact allowlist free of src/tests/scripts/node_modules payloads", () => {
-    const script = fs.readFileSync(path.join(root, "scripts", "assert-build-artifacts.mjs"), "utf8");
-    const stable = parseStableAllowlist(script);
-    const allowlist = requiredDistPaths(stable);
+  it("keeps the shared build and package policy free of source/test/script/vendor payloads", () => {
+    const allowlist = [
+      ...BUILT_RUNTIME_ARTIFACTS,
+      ...BUILT_RUNTIME_ARTIFACTS.map((file: string) => `${file}.map`),
+      ...PUBLISHED_DECLARATION_ARTIFACTS,
+      ...PUBLISHED_DECLARATION_ARTIFACTS.map((file: string) => `${file}.map`),
+    ];
 
-    expect(stable.length).toBeGreaterThan(0);
-    expect(stable).toContain("protocol.js");
-    expect(stable).toContain("verification/index.js");
+    expect(BUILT_RUNTIME_ARTIFACTS.length).toBeGreaterThan(0);
+    expect(BUILT_RUNTIME_ARTIFACTS).toContain("dist/protocol.js");
+    expect(BUILT_RUNTIME_ARTIFACTS).toContain("dist/kiro/agent-worker-entry.js");
+    expect(BUILT_RUNTIME_ARTIFACTS).toContain("dist/verification/index.js");
     for (const entry of allowlist) {
+      const normalized = normalizeRelative(entry).replace(/^dist\//u, "");
       expect(
-        FORBIDDEN_PREFIXES.some((prefix) => entry === prefix || entry.startsWith(prefix) || entry.includes(`/${prefix}`)),
+        FORBIDDEN_PREFIXES.some((prefix) =>
+          normalized === prefix || normalized.startsWith(prefix) || normalized.includes(`/${prefix}`)
+        ),
         `${entry} must not allow foreign source/test/script/vendor artifacts into dist/`,
       ).toBe(false);
     }

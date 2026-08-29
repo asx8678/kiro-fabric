@@ -105,8 +105,6 @@ try {
       "--no-audit",
       "--no-fund",
       tarball,
-      `@earendil-works/pi-coding-agent@${pkg.devDependencies["@earendil-works/pi-coding-agent"]}`,
-      `@earendil-works/pi-tui@${pkg.devDependencies["@earendil-works/pi-tui"]}`,
     ],
     { cwd: consumer, env: { ...process.env, NODE_PATH: "" }, timeoutMs: 180_000 },
   );

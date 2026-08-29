@@ -11,18 +11,17 @@ import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 // no transport may spawn the worker as `process.execPath worker.js`. We
 // simulate that by pointing process.execPath at a fake "pi binary" and
 // resolving the real Node runtime through KIRO_FABRIC_NODE_BINARY. If a transport
-// ever reverts to spawning process.execPath, the worker (a .js module) never
-// runs and the agent fails — so a green run here proves the fix holds.
-const workerPath = path.resolve("dist/worker.js");
+// ever reverts to spawning process.execPath, the source worker never runs and
+// the agent fails — so a green run here proves the fix holds.
+const workerPath = path.resolve("src/worker.ts");
 const piBinary = path.resolve("tests/fixtures/fake-pi.mjs");
-const hasWorker = fs.existsSync(workerPath);
 
 // A non-node, non-bun path that stands in for the compiled pi executable. The
 // resolver never spawns it (the override below takes precedence); its only job
 // is to force the resolver off the generic-execPath fast path.
 const fakeBundledExecPath = "/usr/local/bin/pi";
 
-describe.skipIf(!hasWorker)("agent worker launch under a bundled pi binary", () => {
+describe("agent worker launch under a bundled pi binary", () => {
   const roots: string[] = [];
   const managers: AgentManager[] = [];
   const originalExecPath = process.execPath;

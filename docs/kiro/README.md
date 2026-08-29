@@ -24,13 +24,21 @@ kiro-fabric-setup install --user --project-root /absolute/path/to/project --dry-
 kiro-fabric-setup install --user --project-root /absolute/path/to/project
 ```
 
-From a Linux or macOS source checkout, run `pnpm install`, then `pnpm run
-build`, then `sh scripts/install-kiro-fabric.sh`. The bootstrap does not fetch
-code and forwards all arguments to the same setup console. Use `--user` for a
-shared profile under `$KIRO_HOME` or `~/.kiro`; omit it for a project-local
-`<project>/.kiro` profile. Always inspect a mutation with `--dry-run` first.
-Do not use a transient package runner because the generated profile stores an
-absolute path to its managed runtime.
+From a Linux or macOS source checkout, run `sh
+scripts/install-kiro-fabric.sh`. The friendly bootstrap checks Node.js, asks
+before preparing dependencies plus compiled artifacts when needed, and installs
+the shared profile under `$KIRO_HOME` or `~/.kiro`. The source installer is
+user-scope only: it adds `--user` automatically to `install`, `update`, and
+`uninstall`. Setup and launch default their project root to the canonical source
+checkout, or `KIRO_FABRIC_PROJECT_ROOT` when set; an explicit `--project-root`
+still overrides the default. Tool auto-approval remains off unless the user
+explicitly passes `--allow-tools`; that exact `fabric/fabric_exec` grant is
+bound to the canonical project root and may never target the Kiro config home.
+Non-interactive source preparation requires `--yes` on a mutating command or
+`KIRO_FABRIC_AUTO_BUILD=1`; set `KIRO_FABRIC_AUTO_BUILD=0` to require a prebuilt
+checkout. Always inspect an explicit mutation with `--dry-run` first. Do not use a
+transient package runner because the generated profile stores an absolute path
+to its managed runtime.
 
 See [installer.md](installer.md) for all commands, update/uninstall behavior,
 backups, ownership rules, troubleshooting, and exit codes.
