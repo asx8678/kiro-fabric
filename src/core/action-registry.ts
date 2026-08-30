@@ -300,16 +300,18 @@ const validationMessage = (
   value: Record<string, unknown>,
 ): string | undefined => {
   try {
-    if (Value.Check(schema, value)) return undefined;
-    const messages = [...Value.Errors(schema, value)]
-      .slice(0, 5)
-      .map((error) => {
-        // Prefix nested failures with their property path.
-        const at = (error as { path?: unknown }).path;
-        return typeof at === "string" && at !== "" && at !== "/"
+    const messages: string[] = [];
+    for (const error of Value.Errors(schema, value)) {
+      // Prefix nested failures with their property path.
+      const at = (error as { path?: unknown }).path;
+      messages.push(
+        typeof at === "string" && at !== "" && at !== "/"
           ? `${at}: ${error.message}`
-          : error.message;
-      });
+          : error.message,
+      );
+      if (messages.length >= 5) break;
+    }
+    if (messages.length === 0) return undefined;
     for (const key of unexpectedKeys(schema, value).slice(0, 5)) {
       messages.push(`/${key}: must not have additional properties`);
     }
