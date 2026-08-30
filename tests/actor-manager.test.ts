@@ -32,6 +32,7 @@ const setup = (
     requirements: readonly FabricCapabilityRequirement[],
     signal: AbortSignal,
   ) => Promise<FabricCapabilityViewLease>,
+  inheritedCapabilityRequirements?: () => readonly FabricCapabilityRequirement[] | undefined,
 ) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-actor-test-"));
   roots.push(root);
@@ -63,6 +64,7 @@ const setup = (
       persistent,
       ...(canManageActor ? { canManageActor } : {}),
       ...(acquireCapabilityView ? { acquireCapabilityView } : {}),
+      ...(inheritedCapabilityRequirements ? { inheritedCapabilityRequirements } : {}),
     },
   );
   actorManagers.push(actors);
@@ -304,6 +306,120 @@ describe("ActorManager", () => {
       ],
       capabilityDigest: "a".repeat(64),
     });
+  });
+
+  it("closes actor escapes by inheriting committed parent views for omitted and empty requirements", async () => {
+    const release = vi.fn(async () => {});
+    const acquire = vi.fn(async (
+      requirements: readonly FabricCapabilityRequirement[],
+    ): Promise<FabricCapabilityViewLease> => {
+      const refs = requirements.map((requirement) =>
+        typeof requirement === "string" ? requirement : requirement.ref
+      );
+      return {
+        satisfied: true,
+        missing: [],
+        optionalMissing: [],
+        view: {
+          id: "inherited-view",
+          digest: "inherited-local",
+          semanticDigest: "c".repeat(64),
+          bindings: Object.fromEntries(refs.map((ref) => [ref, {
+            ref,
+            provider: ref.slice(0, ref.indexOf(".")),
+            providerBindingId: `binding:${ref}`,
+            generation: 1,
+            descriptorHash: `descriptor:${ref}`,
+          }])),
+        },
+        release,
+      };
+    });
+    const { actors, agents } = setup(
+      false,
+      undefined,
+      acquire,
+      () => [{ ref: "demo.echo" }],
+    );
+    const run = vi.spyOn(agents, "run");
+    const omitted = await actors.create({
+      name: "inherited-omitted",
+      instructions: "Retain the parent's exact view.",
+    });
+    const empty = await actors.create({
+      name: "inherited-empty",
+      instructions: "An empty declaration must not erase the parent commitment.",
+      requires: [],
+    });
+
+    await actors.ask(omitted.id, "Inspect inherited authority");
+    await actors.ask(empty.id, "Inspect inherited authority again");
+
+    expect(acquire.mock.calls.map(([requirements]) => requirements)).toEqual([
+      [{ ref: "demo.echo" }],
+      [{ ref: "demo.echo" }],
+    ]);
+    expect(run.mock.calls.map(([request]) => ({
+      requirements: request.capabilityRequirements,
+      digest: request.capabilityDigest,
+    }))).toEqual([
+      { requirements: ["demo.echo"], digest: "c".repeat(64) },
+      { requirements: ["demo.echo"], digest: "c".repeat(64) },
+    ]);
+    expect(release).toHaveBeenCalledTimes(2);
+  });
+
+  it("commits an inherited empty actor view but keeps roots unrestricted and Kiro non-recursive", async () => {
+    const release = vi.fn(async () => {});
+    const acquireEmpty = vi.fn(async (): Promise<FabricCapabilityViewLease> => ({
+      satisfied: true,
+      missing: [],
+      optionalMissing: [],
+      view: {
+        id: "empty-view",
+        digest: "empty-local",
+        semanticDigest: "d".repeat(64),
+        bindings: {},
+      },
+      release,
+    }));
+    const inherited = setup(false, undefined, acquireEmpty, () => []);
+    const inheritedRun = vi.spyOn(inherited.agents, "run");
+    const bounded = await inherited.actors.create({
+      name: "empty-parent",
+      instructions: "Remain empty.",
+    });
+    await inherited.actors.ask(bounded.id, "Do not escape");
+    expect(acquireEmpty).toHaveBeenCalledWith([], expect.any(AbortSignal));
+    expect(inheritedRun.mock.calls[0]?.[0]).toMatchObject({
+      recursive: true,
+      capabilityRequirements: [],
+      capabilityDigest: "d".repeat(64),
+    });
+
+    const acquireRoot = vi.fn();
+    const root = setup(false, undefined, acquireRoot, () => undefined);
+    const rootRun = vi.spyOn(root.agents, "run");
+    const unrestricted = await root.actors.create({
+      name: "unrestricted-root",
+      instructions: "Use the root default.",
+    });
+    await root.actors.ask(unrestricted.id, "Use root defaults");
+    expect(acquireRoot).not.toHaveBeenCalled();
+    expect(rootRun.mock.calls[0]?.[0]).not.toHaveProperty("capabilityRequirements");
+
+    const acquireKiro = vi.fn();
+    const kiro = setup(false, undefined, acquireKiro, () => [{ ref: "demo.echo" }]);
+    const kiroRun = vi.spyOn(kiro.agents, "run");
+    const leaf = await kiro.actors.create({
+      name: "kiro-leaf",
+      instructions: "Stay non-recursive.",
+      runner: "kiro",
+    });
+    await kiro.actors.ask(leaf.id, "Stay a leaf");
+    expect(acquireKiro).not.toHaveBeenCalled();
+    expect(kiroRun.mock.calls[0]?.[0]).toMatchObject({ runner: "kiro", recursive: false });
+    expect(kiroRun.mock.calls[0]?.[0]).not.toHaveProperty("capabilityRequirements");
   });
 
   it("keeps mailbox work queued until required capabilities become available", async () => {

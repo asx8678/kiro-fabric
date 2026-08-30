@@ -306,6 +306,9 @@ export class ActorManager {
         signal: AbortSignal,
       ) => Promise<FabricCapabilityViewLease>)
     | undefined;
+  readonly #inheritedCapabilityRequirements:
+    | (() => readonly FabricCapabilityRequirement[] | undefined)
+    | undefined;
   readonly #locallyCreated = new Set<string>();
   readonly #ceded = new Set<string>();
   readonly #ownership = new Map<string, boolean>();
@@ -325,6 +328,7 @@ export class ActorManager {
   #meshPollScheduled = false;
   #polling = false;
   #closing = false;
+  #started: boolean;
   // Stop-the-world gate armed by haltAll() (ESC): while true, host-event and
   // mesh dispatch are frozen so interrupted actors are not re-armed by the
   // interrupt's own turn_end / agent_settled events. Lifted when the user
@@ -360,6 +364,10 @@ export class ActorManager {
         requirements: readonly FabricCapabilityRequirement[],
         signal: AbortSignal,
       ): Promise<FabricCapabilityViewLease>;
+      /** Parent commitment inherited by recursive Pi actor launches, including an empty view. */
+      inheritedCapabilityRequirements?: () => readonly FabricCapabilityRequirement[] | undefined;
+      /** Hold restored mailbox work until runtime capability validation has completed. */
+      startPaused?: boolean;
     } = {},
   ) {
     this.#actorRoot =
@@ -390,12 +398,23 @@ export class ActorManager {
     }
     this.#retention = options.retention ?? DEFAULT_FABRIC_CONFIG.retention;
     this.#acquireCapabilityView = options.acquireCapabilityView;
+    this.#inheritedCapabilityRequirements = options.inheritedCapabilityRequirements;
+    this.#started = options.startPaused !== true;
     this.#sweepRetainedRuns();
     this.#meshOffset = this.#readMeshCursor() ?? mesh.latestOffset();
     this.#restoreMeshInbox();
     this.#retentionTimer = setInterval(() => this.#sweepRetainedRuns(), RETENTION_SWEEP_INTERVAL_MS);
     this.#retentionTimer.unref();
+    if (this.#started) this.#startMeshMonitor();
+  }
+
+  start(): void {
+    if (this.#started || this.#closing) return;
+    this.#started = true;
     this.#startMeshMonitor();
+    for (const actor of this.#actors.values()) {
+      if (actor.queue.length > 0) this.#ensureDrain(actor);
+    }
   }
 
   subscribe(listener: () => void): () => void {
@@ -1658,6 +1677,7 @@ export class ActorManager {
       actor.draining ||
       actor.status === "stopped" ||
       this.#closing ||
+      !this.#started ||
       !this.#canManage(actor.id)
     ) {
       return;
@@ -1721,9 +1741,18 @@ export class ActorManager {
             deliveryPending = false;
             continue;
           }
-          if (actor.requirements.length > 0) {
-            capabilityLease = await this.#acquireCapabilityView!(
-              actor.requirements,
+          const inheritedRequirements =
+            actor.runner === "pi" && (actor.extensions ?? true)
+              ? this.#inheritedCapabilityRequirements?.()
+              : undefined;
+          const capabilityRequirements =
+            actor.requirements.length > 0 ? actor.requirements : inheritedRequirements;
+          if (capabilityRequirements !== undefined) {
+            if (!this.#acquireCapabilityView) {
+              throw new Error("This Fabric host cannot commit inherited actor capabilities");
+            }
+            capabilityLease = await this.#acquireCapabilityView(
+              capabilityRequirements,
               abortController.signal,
             );
             if (!capabilityLease.satisfied || !capabilityLease.view) {

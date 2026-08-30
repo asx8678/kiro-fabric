@@ -26,6 +26,7 @@ import {
   type FabricProviderComponent,
 } from "./components/provider-component.js";
 import type {
+  FabricCapabilityRequirement,
   FabricComponentDefinition,
   FabricComponentGraph,
   FabricComponentInfo,
@@ -309,6 +310,10 @@ export class FabricRuntimeState {
     context.ui.setStatus("fabric-prewalk", undefined);
     this.activity.reset();
     this.sessionApprovals.approvedRisks.clear();
+    // Parse inherited authority before constructing any runtime participant.
+    // Semantic validation waits only for provider registration below; actors,
+    // lifecycle, residency, and user components remain paused until it passes.
+    const inheritedCommitment = inheritedCapabilityCommitment();
     this.#cwd = context.cwd;
     const projectTrusted = context.isProjectTrusted();
     this.#config = bootstrapConfig ?? loadFabricConfig({
@@ -581,6 +586,13 @@ export class FabricRuntimeState {
       this.#config.mesh.actorScope === "session"
         ? path.join(meshRoot, "actors", sessionId)
         : path.join(meshRoot, "actors");
+    const inheritedActorCapabilityRequirements =
+      (): FabricCapabilityRequirement[] | undefined => {
+        const view = this.#sessionCapabilityLease?.view;
+        return view
+          ? Object.keys(view.bindings).sort().map((ref) => ({ ref }))
+          : undefined;
+      };
     const acquireActorCapabilityView = (
       requirements: Parameters<ActionRegistry["acquireCapabilityView"]>[0],
       signal: AbortSignal,
@@ -635,6 +647,8 @@ export class FabricRuntimeState {
             rootId: mainAgentId,
             retention: this.#config.retention,
             acquireCapabilityView: acquireActorCapabilityView,
+            inheritedCapabilityRequirements: inheritedActorCapabilityRequirements,
+            startPaused: true,
           }
         : {
             persistent: false,
@@ -645,6 +659,8 @@ export class FabricRuntimeState {
             rootId: mainAgentId,
             retention: this.#config.retention,
             acquireCapabilityView: acquireActorCapabilityView,
+            inheritedCapabilityRequirements: inheritedActorCapabilityRequirements,
+            startPaused: true,
           },
     );
     this.#registry.subscribeProviderChanges(() => this.#actors?.retryCapabilityWaiters());
@@ -732,24 +748,6 @@ export class FabricRuntimeState {
         this.#registry!.acquireCapabilityView(requirements, invocation),
     );
     this.#agentsProvider = agentsProvider;
-    this.#control.start((command, from, signal) =>
-      agentsProvider.acceptControl(command, from, signal));
-    try {
-      await this.#participants.start();
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[kiro-fabric] Initial mesh publish failed (${detail}); the participant heartbeat will keep retrying.`,
-      );
-      if (context.hasUI) {
-        context.ui.notify(
-          `Pi Fabric could not reach the mesh (${detail}); retrying in the background.`,
-          "warning",
-        );
-      }
-    }
-    this.#lifecycle.start();
-    this.#residency?.start();
     await installBuiltin(createProviderComponent({
       provider: "agents",
       description: "Agents, actors, lifecycle delivery, and residency control",
@@ -824,13 +822,6 @@ export class FabricRuntimeState {
       register: (provider, options) => this.registerExternal(provider, options),
     };
     this.pi.events.emit(FABRIC_PROVIDER_DISCOVER_EVENT, discovery);
-    const componentDiscovery: FabricComponentDiscovery = {
-      version: 1,
-      register: (component, options) => this.registerExternalComponent(component, options),
-    };
-    this.pi.events.emit(FABRIC_COMPONENT_DISCOVER_EVENT, componentDiscovery);
-    await this.#componentLoader.reconcile(enforceSchema ? [] : this.#config.components);
-    const inheritedCommitment = inheritedCapabilityCommitment();
     if (inheritedCommitment) {
       const lease = await this.#registry.acquireCapabilityView(inheritedCommitment.requirements, {
         cwd: context.cwd,
@@ -855,6 +846,34 @@ export class FabricRuntimeState {
       this.#sessionCapabilityLease = lease;
       this.#execution.setCapabilityView(lease.view);
     }
+
+    // Nothing capable of launching actor work or activating user components
+    // starts until inherited authority has been resolved and digest-validated.
+    this.#actors.start();
+    this.#control.start((command, from, signal) =>
+      agentsProvider.acceptControl(command, from, signal));
+    try {
+      await this.#participants.start();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[kiro-fabric] Initial mesh publish failed (${detail}); the participant heartbeat will keep retrying.`,
+      );
+      if (context.hasUI) {
+        context.ui.notify(
+          `Pi Fabric could not reach the mesh (${detail}); retrying in the background.`,
+          "warning",
+        );
+      }
+    }
+    this.#lifecycle.start();
+    this.#residency?.start();
+    const componentDiscovery: FabricComponentDiscovery = {
+      version: 1,
+      register: (component, options) => this.registerExternalComponent(component, options),
+    };
+    this.pi.events.emit(FABRIC_COMPONENT_DISCOVER_EVENT, componentDiscovery);
+    await this.#componentLoader.reconcile(enforceSchema ? [] : this.#config.components);
   }
 
   async ensure(context: ExtensionContext): Promise<void> {

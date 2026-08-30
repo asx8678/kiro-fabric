@@ -3,9 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import { ActorManager } from "../src/actors/manager.js";
 import { CapturedToolCatalog } from "../src/capture/catalog.js";
 import { normalizeFabricConfig } from "../src/config.js";
 import { FabricRuntimeState } from "../src/fabric-runtime-state.js";
+import { LifecycleBroker } from "../src/lifecycle/broker.js";
+import { ResidencyClient } from "../src/residency/client.js";
 import {
   FABRIC_COMPONENT_DISCOVER_EVENT,
   FABRIC_PROVIDER_DISCOVER_EVENT,
@@ -166,6 +169,94 @@ describe("Fabric runtime provider components", () => {
       );
     } finally {
       await runtime.shutdown();
+      vi.unstubAllEnvs();
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("validates inherited commitment before actors, lifecycle, residency, or user components start", async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-runtime-ordering-"));
+    fs.mkdirSync(path.join(cwd, ".pi"), { recursive: true });
+    vi.stubEnv("PI_CODING_AGENT_DIR", path.join(cwd, "agent"));
+    vi.stubEnv("KIRO_FABRIC_PROJECT_ROOT", cwd);
+    vi.stubEnv("KIRO_FABRIC_CAPABILITY_REQUIREMENTS", "[]");
+    vi.stubEnv("KIRO_FABRIC_CAPABILITY_DIGEST", "f".repeat(64));
+    const actorStart = vi.spyOn(ActorManager.prototype, "start");
+    const lifecycleStart = vi.spyOn(LifecycleBroker.prototype, "start");
+    const residencyStart = vi.spyOn(ResidencyClient.prototype, "start");
+    let componentDiscoverySeen = false;
+    let componentActivated = false;
+    const pi = {
+      events: {
+        emit: vi.fn((event: string, payload: unknown) => {
+          if (event !== FABRIC_COMPONENT_DISCOVER_EVENT) return;
+          componentDiscoverySeen = true;
+          (payload as FabricComponentDiscovery).register({
+            name: "must-not-activate",
+            guarantee: "revertible",
+            activate() {
+              componentActivated = true;
+            },
+          });
+        }),
+      },
+      getThinkingLevel: vi.fn(() => "off"),
+      sendMessage: vi.fn(),
+    } as unknown as ExtensionAPI;
+    const context = {
+      cwd,
+      hasUI: false,
+      isProjectTrusted: () => true,
+      isIdle: () => true,
+      hasPendingMessages: () => false,
+      modelRegistry: {
+        find: vi.fn(),
+        getApiKeyAndHeaders: vi.fn(),
+      },
+      sessionManager: {
+        getSessionId: () => "runtime-ordering-session",
+        getSessionFile: () => undefined,
+        getBranch: () => [],
+        getLeafId: () => undefined,
+      },
+      ui: {
+        setStatus: vi.fn(),
+        notify: vi.fn(),
+      },
+    } as unknown as ExtensionContext;
+    const config = normalizeFabricConfig({
+      fullCodeMode: true,
+      capture: { enabled: true },
+      components: [{ id: "must-not-activate", component: "must-not-activate" }],
+      mcp: { enabled: false, cache: { enabled: false } },
+      mesh: { enabled: true },
+      memory: { enabled: false },
+      agents: { enabled: false },
+      prewalk: { enabled: false, alwaysRearm: false },
+    });
+    const fixture = path.join(cwd, "unused.mjs");
+    fs.writeFileSync(fixture, "export default {};");
+    const runtime = new FabricRuntimeState(pi, new CapturedToolCatalog(), undefined, undefined, {
+      paths: {
+        extension: fixture,
+        worker: fixture,
+        residentHost: fixture,
+        skills: cwd,
+      },
+    });
+
+    try {
+      await expect(runtime.initialize(context, config)).rejects.toThrow(
+        "Fabric capability commitment mismatch",
+      );
+      expect(actorStart).not.toHaveBeenCalled();
+      expect(lifecycleStart).not.toHaveBeenCalled();
+      expect(residencyStart).not.toHaveBeenCalled();
+      expect(componentDiscoverySeen).toBe(false);
+      expect(componentActivated).toBe(false);
+    } finally {
+      await runtime.shutdown();
+      vi.restoreAllMocks();
       vi.unstubAllEnvs();
       fs.rmSync(cwd, { recursive: true, force: true });
     }
