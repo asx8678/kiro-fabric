@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Managed Kiro review
 
-Review a scoped change through two independent read-only lanes:
+Use two independent read-only lanes:
 
 1. Correctness & security: regressions, unsafe boundaries, protocol mistakes,
    failure handling, and missing adversarial coverage.
@@ -14,29 +14,28 @@ Review a scoped change through two independent read-only lanes:
    paths, and misleading contracts.
 
 Before spawning, give both lanes the same concise, risk-first evidence packet:
-the objective; at most 12 changed paths; the highest-risk boundary first; bounded
-relevant diff/source windows; and named deterministic checks. Label every packet
-fact **Observed** when supported directly by a path, line, diff, command, or
-result, and **Inferred** when it is a hypothesis to test. Do not turn child prose
-or an inferred claim into observed evidence.
+objective; 1-12 changed paths; highest-risk boundary first; bounded relevant
+diff/source windows; named deterministic checks. Label facts **Observed** only
+with direct support from a path, line, diff, command, or result; label hypotheses
+to test **Inferred**. Child prose and inferred claims never become observed
+evidence.
 
 State exactly one shared, falsifiable safety invariant for the change. Each lane
-must return one proof grade for that invariant: **proven** (direct deterministic
-evidence covers it), **supported** (bounded evidence supports but does not close
-it), **disproven** (a concrete counterexample), or **unknown**. Include the test
-or observation that could falsify the invariant; confidence alone is not proof.
+returns one proof grade: **proven** for direct deterministic evidence covering
+it, **supported** when bounded evidence supports but does not close it,
+**disproven** for a concrete counterexample, or **unknown**. Name a falsifying
+test or observation; confidence is not proof.
 
-Pass these strings to `fabric_exec`:
+Pass `fabric_exec` these strings:
 
-- `strings.objective`: the review objective.
-- `strings.paths`: a JSON array of 1-12 changed paths.
-- `strings.evidence`: a JSON array of 1-8 bounded facts, each beginning
-  with `Observed:` or `Inferred:`. Include path/line, diff, command, or
-  result citations in Observed facts.
-- `strings.invariant`: the one shared falsifiable safety invariant.
-- `strings.checks`: an optional JSON array of at most six named
-  deterministic checks. These are child review inputs, not parent acceptance
-  commands.
+- `strings.objective`: objective.
+- `strings.paths`: JSON array of 1-12 changed paths.
+- `strings.evidence`: JSON array of 1-8 bounded facts beginning with
+  `Observed:` or `Inferred:`; Observed facts cite a path/line, diff, command, or
+  result.
+- `strings.invariant`: shared invariant.
+- `strings.checks`: optional JSON array of at most six named deterministic
+  checks; child review inputs, never parent acceptance commands.
 
 Run this complete program:
 
@@ -87,86 +86,82 @@ const stringSchema = (maxLength: number): Record<string, unknown> => ({
   maxLength,
 });
 
-const traceStepSchema: Record<string, unknown> = {
+const closedObjectSchema = (
+  required: string[],
+  properties: Record<string, unknown>,
+): Record<string, unknown> => ({
   type: "object",
   additionalProperties: false,
-  required: ["step", "basis", "observation"],
-  properties: {
+  required,
+  properties,
+});
+
+const boundedArraySchema = (
+  maxItems: number,
+  items: Record<string, unknown>,
+  minItems?: number,
+): Record<string, unknown> => ({
+  type: "array",
+  ...(minItems === undefined ? {} : { minItems }),
+  maxItems,
+  items,
+});
+
+const traceStepSchema = closedObjectSchema(
+  ["step", "basis", "observation"],
+  {
     step: { type: "integer", minimum: 1, maximum: 8 },
     basis: { type: "string", enum: ["Observed", "Inferred"] },
     observation: stringSchema(300),
   },
-};
+);
 
-const reviewResultSchema: Record<string, unknown> = {
-  type: "object",
-  additionalProperties: false,
-  required: ["summary", "proof", "coverage", "findings"],
-  properties: {
+const reviewResultSchema = closedObjectSchema(
+  ["summary", "proof", "coverage", "findings"],
+  {
     summary: stringSchema(1_000),
-    proof: {
-      type: "object",
-      additionalProperties: false,
-      required: ["grade", "falsifier", "evidence"],
-      properties: {
+    proof: closedObjectSchema(
+      ["grade", "falsifier", "evidence"],
+      {
         grade: {
           type: "string",
           enum: ["proven", "supported", "disproven", "unknown"],
         },
         falsifier: stringSchema(500),
-        evidence: {
-          type: "array",
-          maxItems: 4,
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: ["kind", "statement"],
-            properties: {
+        evidence: boundedArraySchema(
+          4,
+          closedObjectSchema(
+            ["kind", "statement"],
+            {
               kind: { type: "string", enum: ["Observed", "Inferred"] },
               statement: stringSchema(500),
             },
-          },
-        },
+          ),
+        ),
       },
-    },
-    coverage: {
-      type: "object",
-      additionalProperties: false,
-      required: ["inspectedPaths", "checks", "limitations"],
-      properties: {
-        inspectedPaths: {
-          type: "array",
-          maxItems: 12,
-          items: stringSchema(512),
-        },
-        checks: {
-          type: "array",
-          maxItems: 6,
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: ["command", "status", "evidence"],
-            properties: {
+    ),
+    coverage: closedObjectSchema(
+      ["inspectedPaths", "checks", "limitations"],
+      {
+        inspectedPaths: boundedArraySchema(12, stringSchema(512)),
+        checks: boundedArraySchema(
+          6,
+          closedObjectSchema(
+            ["command", "status", "evidence"],
+            {
               command: stringSchema(500),
               status: { type: "string", enum: ["passed", "failed", "not-run"] },
               evidence: stringSchema(500),
             },
-          },
-        },
-        limitations: {
-          type: "array",
-          maxItems: 4,
-          items: stringSchema(500),
-        },
+          ),
+        ),
+        limitations: boundedArraySchema(4, stringSchema(500)),
       },
-    },
-    findings: {
-      type: "array",
-      maxItems: 4,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: [
+    ),
+    findings: boundedArraySchema(
+      4,
+      closedObjectSchema(
+        [
           "severity",
           "title",
           "path",
@@ -174,7 +169,7 @@ const reviewResultSchema: Record<string, unknown> = {
           "inferredImpact",
           "recommendation",
         ],
-        properties: {
+        {
           severity: {
             type: "string",
             enum: ["critical", "high", "medium", "low"],
@@ -182,41 +177,24 @@ const reviewResultSchema: Record<string, unknown> = {
           title: stringSchema(160),
           path: stringSchema(512),
           line: { type: "integer", minimum: 1 },
-          observedEvidence: {
-            type: "array",
-            minItems: 1,
-            maxItems: 3,
-            items: stringSchema(500),
-          },
+          observedEvidence: boundedArraySchema(3, stringSchema(500), 1),
           inferredImpact: stringSchema(600),
           recommendation: stringSchema(600),
         },
-      },
-    },
-    trace: {
-      type: "object",
-      additionalProperties: false,
-      required: ["findingTitle", "reason", "old", "new", "firstMaterialDivergence"],
-      properties: {
+      ),
+    ),
+    trace: closedObjectSchema(
+      ["findingTitle", "reason", "old", "new", "firstMaterialDivergence"],
+      {
         findingTitle: stringSchema(160),
         reason: stringSchema(500),
-        old: {
-          type: "array",
-          minItems: 1,
-          maxItems: 8,
-          items: traceStepSchema,
-        },
-        new: {
-          type: "array",
-          minItems: 1,
-          maxItems: 8,
-          items: traceStepSchema,
-        },
+        old: boundedArraySchema(8, traceStepSchema, 1),
+        new: boundedArraySchema(8, traceStepSchema, 1),
         firstMaterialDivergence: stringSchema(500),
       },
-    },
+    ),
   },
-};
+);
 
 const boundedText = (value: unknown, label: string, maxLength: number): string => {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -365,24 +343,23 @@ return {
 ```
 
 The fixed schema is the lane boundary. A schema-invalid response is a lane
-failure; preserve the other lane and return `partial`. Never fall back to
+failure. If one lane fails, preserve its completed peer and return `partial`.
+Never fall back to
 unvalidated `result.text`, and never automatically rerun a successful lane.
-A completed lane may still report limitations or an unknown proof grade; preserve
-those gaps instead of promoting the review to a stronger conclusion.
+Any limitations or unknown proof grade from a completed lane remain gaps; never
+strengthen its conclusion.
 
-Request an old/new trace only when a finding depends on changed control flow,
-data flow, authorization, persistence, or failure behavior. In that case bound
-it to at most eight numbered steps per side, mark each step Observed or Inferred,
-and stop at the first material divergence. Otherwise omit the trace.
+Request an old/new trace only when a material finding depends on changed control
+flow, data flow, authorization, persistence, or failure behavior. Bound it to
+at most eight numbered steps per side, mark every step Observed or Inferred, and
+stop at the first material divergence; otherwise omit it.
 
 Reconcile risk-first by concrete path/evidence, deduplicate equivalent findings,
-and keep only material defects. A model finding is advisory; deterministic
+and retain only material defects. A model finding is advisory; deterministic
 builds, tests, protocol checks, and direct reproduction outrank it. Review does
-not authorize code changes on its own. Preserve each lane's proof grade and
-coverage limitations in the final answer.
+not authorize code changes. Preserve each lane's proof grade and coverage gaps.
 
-Return the evidence packet, invariant and proof grade, lane coverage/failures,
-and findings with severity, title, path, optional line, Observed evidence,
-Inferred impact, and recommendation. Include the bounded conditional old/new
-trace only when required above. Use `partial` when one lane fails, and never
-automatically rerun a successful lane.
+Return the evidence packet and invariant; each lane's proof grade, coverage, and
+failures; and findings with severity, title, path, optional line, Observed
+evidence, Inferred impact, and recommendation. Include the bounded conditional
+old/new trace only when required above.

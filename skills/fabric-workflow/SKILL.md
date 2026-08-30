@@ -6,14 +6,13 @@ disable-model-invocation: true
 
 # Bounded Kiro workflow
 
-This skill requires a managed profile installed with `--allow-shell
---subagents`. Pass the complete objective as `strings.task` and a JSON array of
-one to four non-overlapping work items as `strings.items`. Partition file
-ownership before execution; concurrent children must not edit the same path.
+Requires a managed profile installed with `--allow-shell --subagents`. Pass the
+objective as `strings.task` and one to four non-overlapping work items as a JSON
+array in `strings.items`. Assign paths exclusively before execution.
 
-Optionally pass one to four parent-owned acceptance commands as a JSON string
-array in `strings.checks`. They run once, in declaration order, only after child
-fan-out settles. The commands come only from this parent input, never from child
+`strings.checks` may contain up to four parent-owned acceptance commands as a
+JSON string array. They run once, in order, only after child
+fan-out settles. Commands come from this parent input, never from child
 text or values. Each has a fixed 120-second timeout; there are no automatic
 retries. A nonzero exit, denial, timeout, cancellation, confinement, or spawn
 failure fails acceptance closed while preserving every child result.
@@ -28,21 +27,22 @@ type CheckOutcome =
   | { command: string; status: "passed"; output: string }
   | { command: string; status: "failed"; error: string };
 
+const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
+const parseList = (raw: string | undefined, key: "items" | "checks"): string[] => {
+  const parsed: unknown = JSON.parse(raw ?? "[]");
+  if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== "string")) {
+    throw new Error(`strings.${key} must be a JSON array of strings`);
+  }
+  return [...new Set((parsed as string[]).map((value) => value.trim()).filter(Boolean))];
+};
+
 const objective = (π.task ?? "").trim();
 if (!objective) throw new Error("strings.task must contain the objective");
-const parsed: unknown = JSON.parse(π.items ?? "[]");
-if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
-  throw new Error("strings.items must be a JSON array of strings");
-}
-const items = [...new Set(parsed.map((item) => item.trim()).filter(Boolean))];
-if (items.length === 0 || items.length > 4) {
+const items = parseList(π.items, "items");
+if (items.length < 1 || items.length > 4) {
   throw new Error("strings.items must contain 1-4 non-empty independent items");
 }
-const parsedChecks: unknown = JSON.parse(π.checks ?? "[]");
-if (!Array.isArray(parsedChecks) || parsedChecks.some((check) => typeof check !== "string")) {
-  throw new Error("strings.checks must be a JSON array of strings");
-}
-const checks = [...new Set(parsedChecks.map((check) => check.trim()).filter(Boolean))];
+const checks = parseList(π.checks, "checks");
 if (checks.length > 4) {
   throw new Error("strings.checks must contain at most 4 non-empty parent-owned commands");
 }
@@ -60,16 +60,11 @@ const outcomes = await parallel(items, async (item, index): Promise<WorkOutcome>
         constraints: ["Do not modify files owned by another partition"],
       },
     });
-    if (result.status !== "completed") {
-      return { item, status: "failed", error: result.error ?? result.status };
-    }
-    return { item, status: "completed", result: result.text, value: result.value };
+    return result.status === "completed"
+      ? { item, status: "completed", result: result.text, value: result.value }
+      : { item, status: "failed", error: result.error ?? result.status };
   } catch (error) {
-    return {
-      item,
-      status: "failed",
-      error: error instanceof Error ? error.message : String(error),
-    };
+    return { item, status: "failed", error: errorText(error) };
   }
 }, { concurrency: Math.min(4, items.length) });
 
@@ -79,29 +74,16 @@ for (const command of checks) {
     const result = await k.bash({ command, timeout: 120 });
     checkOutcomes.push({ command, status: "passed", output: result.output });
   } catch (error) {
-    checkOutcomes.push({
-      command,
-      status: "failed",
-      error: error instanceof Error ? error.message : String(error),
-    });
+    checkOutcomes.push({ command, status: "failed", error: errorText(error) });
   }
 }
 
-const completed = outcomes.filter(
-  (outcome): outcome is Extract<WorkOutcome, { status: "completed" }> =>
-    outcome.status === "completed",
-);
-const failures = outcomes.filter(
-  (outcome): outcome is Extract<WorkOutcome, { status: "failed" }> =>
-    outcome.status === "failed",
-);
-const checkFailures = checkOutcomes.filter(
-  (outcome): outcome is Extract<CheckOutcome, { status: "failed" }> =>
-    outcome.status === "failed",
-);
-const childStatus = completed.length === 0 ? "failed" : failures.length === 0 ? "success" : "partial";
+const completed = outcomes.filter((outcome) => outcome.status === "completed");
+const failures = outcomes.filter((outcome) => outcome.status === "failed");
+const checkFailures = checkOutcomes.filter((outcome) => outcome.status === "failed");
+const childStatus = !completed.length ? "failed" : failures.length ? "partial" : "success";
 return {
-  status: checkFailures.length > 0 ? "failed" : childStatus,
+  status: checkFailures.length ? "failed" : childStatus,
   coverage: { requested: items.length, completed: completed.length },
   completed,
   failures,
@@ -113,9 +95,7 @@ return {
 };
 ```
 
-The parent remains responsible for reconciling overlapping claims and choosing
-acceptance commands independently of child output. The bounded checks above are
-optional focused or repository-wide oracles. Partial child results remain usable
-when acceptance fails: retry neither checks nor successful partitions
-automatically. Retry only failed items manually when their coverage matters.
-Never trigger an automatic whole-workflow rerun, and never rerun a successful partition.
+The parent reconciles claims and chooses acceptance commands independently of
+child output. Partial results remain usable when acceptance fails. Checks run
+once and are never retried. Retry only failed items manually when coverage
+matters; never trigger an automatic whole-workflow rerun, and never rerun a successful partition.
