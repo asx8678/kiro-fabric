@@ -43,6 +43,8 @@ interface JournalOperation {
   kind: SchemaFileOperation["kind"];
   sourceSha256: string | null;
   resultSha256?: string;
+  /** Same-directory staged result, whose bytes are owned by resultSha256. */
+  temporary?: string;
   /** Same-directory before-file claimed atomically during publication. */
   backup?: string;
 }
@@ -486,6 +488,9 @@ export class SchemaController {
         kind: operation.operation.kind,
         sourceSha256: operation.sourceSha256,
         ...(operation.resultSha256 ? { resultSha256: operation.resultSha256 } : {}),
+        ...(operation.temporary
+          ? { temporary: path.relative(this.cwd, operation.temporary).split(path.sep).join("/") }
+          : {}),
         ...(operation.backup
           ? { backup: path.relative(this.cwd, operation.backup).split(path.sep).join("/") }
           : {}),
@@ -532,6 +537,16 @@ export class SchemaController {
         atomicJsonWrite(journalPath, journal);
       } catch {
         // Recovery cross-checks the authoritative committed workspace record.
+      }
+      const committedCleanupError = this.#cleanupStaged(journal);
+      if (committedCleanupError) {
+        journal.error = `post-commit staging cleanup failed: ${committedCleanupError}`;
+        try {
+          atomicJsonWrite(journalPath, journal);
+        } catch {
+          // The committed workspace record remains authoritative. Suspicious
+          // artifacts stay in place even if this diagnostic write also fails.
+        }
       }
 
       let stateTransition: unknown = null;
@@ -593,8 +608,11 @@ export class SchemaController {
     } catch (error) {
       if (!consumed) {
         if (journal) {
-          journal.status = "rolled_back";
-          journal.error = errorMessage(error);
+          const cleanupError = this.#cleanupStaged(journal);
+          journal.status = cleanupError ? "quarantined" : "rolled_back";
+          journal.error = cleanupError
+            ? `${errorMessage(error)}; cleanup refused: ${cleanupError}`
+            : errorMessage(error);
           try {
             atomicJsonWrite(journalPath, journal);
           } catch {
@@ -610,7 +628,7 @@ export class SchemaController {
       const restoreError = journal?.status === "applying"
         ? this.#rollbackPublished(journal)
         : undefined;
-      const cleanupError = journal ? this.#cleanupStaged(journal.staged ?? []) : undefined;
+      const cleanupError = journal ? this.#cleanupStaged(journal) : undefined;
       const rollbackError = [restoreError, cleanupError].filter(Boolean).join("; ") || undefined;
       const outcome = rollbackError ? "quarantined" : "rolled_back";
       if (journal) {
@@ -633,7 +651,6 @@ export class SchemaController {
         ...(rollbackError ? { rollbackError } : {}),
       };
     } finally {
-      if (journal) this.#cleanupStaged(journal.staged ?? []);
       release();
     }
   }
@@ -1064,8 +1081,13 @@ export class SchemaController {
             const digest = this.#regularFileDigest(claim);
             if (digest === operation.resultSha256) {
               if (image.existed) this.#publishBeforeImage(image);
-              fs.unlinkSync(claim);
-              fsyncDirectory(path.dirname(resolved.absolute));
+              const claimedDigest = this.#regularFileDigest(claim);
+              if (claimedDigest === operation.resultSha256) {
+                fs.unlinkSync(claim);
+                fsyncDirectory(path.dirname(resolved.absolute));
+              } else {
+                errors.push(`${operation.path}: rollback claim contains unexpected concurrent bytes; artifact preserved`);
+              }
               // If content raced into the now-restored/absent name, no later
               // rollback step may erase it; report quarantine instead.
               if (!image.existed && fs.existsSync(resolved.absolute)) {
@@ -1108,15 +1130,33 @@ export class SchemaController {
     return errors.length > 0 ? errors.join("; ") : undefined;
   }
 
-  #cleanupStaged(paths: string[]): string | undefined {
+  #cleanupStaged(journal: TransactionJournal): string | undefined {
     const errors: string[] = [];
-    for (const stagedPath of paths) {
+    const expectedDigests = new Map<string, string>();
+    for (const operation of journal.operations ?? []) {
+      if (operation.temporary && operation.resultSha256) {
+        expectedDigests.set(operation.temporary, operation.resultSha256);
+      }
+      if (operation.backup && operation.sourceSha256) {
+        expectedDigests.set(operation.backup, operation.sourceSha256);
+      }
+    }
+    for (const stagedPath of journal.staged ?? []) {
       try {
         const resolved = resolveWorkspaceFile(this.cwd, stagedPath, { allowAbsent: true });
-        if (resolved.exists) {
-          fs.unlinkSync(resolved.absolute);
-          fsyncDirectory(path.dirname(resolved.absolute));
+        if (!resolved.exists) continue;
+        const expectedDigest = expectedDigests.get(stagedPath);
+        if (!expectedDigest) {
+          errors.push(`${stagedPath}: ownership bytes are unrecorded; artifact preserved`);
+          continue;
         }
+        const actualDigest = this.#regularFileDigest(resolved.absolute);
+        if (actualDigest !== expectedDigest) {
+          errors.push(`${stagedPath}: unexpected concurrent bytes; artifact preserved`);
+          continue;
+        }
+        fs.unlinkSync(resolved.absolute);
+        fsyncDirectory(path.dirname(resolved.absolute));
       } catch (error) {
         errors.push(`${stagedPath}: ${errorMessage(error)}`);
       }
@@ -1201,7 +1241,7 @@ export class SchemaController {
     }
   }
 
-  #acquireCommitLock(): () => void {
+  #tryAcquireCanonicalLock(): (() => void) | undefined {
     fs.mkdirSync(this.#journalRoot, { recursive: true, mode: 0o700 });
     const nonce = randomBytes(16).toString("hex");
     const ownerPath = path.join(this.#journalRoot, `.commit.owner-${nonce}.json`);
@@ -1215,30 +1255,17 @@ export class SchemaController {
     }
     fsyncDirectory(this.#journalRoot);
 
-    const acquire = (): void => {
+    try {
       // The fixed lock appears as one atomic hard link to an already-complete,
       // fsynced owner record. Nobody can observe a partially written owner.
       fs.linkSync(ownerPath, this.#lockPath);
       fsyncDirectory(this.#journalRoot);
-    };
-    try {
-      acquire();
     } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
-        fs.rmSync(ownerPath, { force: true });
-        throw error;
-      }
-      this.#recoverJournals();
-      try {
-        acquire();
-      } catch (retryError) {
-        fs.rmSync(ownerPath, { force: true });
-        if (retryError instanceof Error && "code" in retryError && retryError.code === "EEXIST") {
-          throw new Error("Another Schema transaction is in progress");
-        }
-        throw retryError;
-      }
+      fs.rmSync(ownerPath, { force: true });
+      if (error instanceof Error && "code" in error && error.code === "EEXIST") return undefined;
+      throw error;
     }
+
     let released = false;
     return () => {
       if (released) return;
@@ -1246,49 +1273,133 @@ export class SchemaController {
       try {
         const current = this.#readLockOwner();
         if (current?.nonce === nonce) {
-          const lockStat = fs.statSync(this.#lockPath);
-          const ownerStat = fs.statSync(ownerPath);
-          if (lockStat.dev === ownerStat.dev && lockStat.ino === ownerStat.ino) {
+          const lockStat = fs.lstatSync(this.#lockPath);
+          const ownerStat = fs.lstatSync(ownerPath);
+          if (
+            lockStat.isFile() && !lockStat.isSymbolicLink() &&
+            ownerStat.isFile() && !ownerStat.isSymbolicLink() &&
+            lockStat.dev === ownerStat.dev && lockStat.ino === ownerStat.ino
+          ) {
             fs.unlinkSync(this.#lockPath);
-            fsyncDirectory(this.#journalRoot);
           }
         }
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
       } finally {
         fs.rmSync(ownerPath, { force: true });
+        fsyncDirectory(this.#journalRoot);
       }
     };
   }
 
-  #recoverJournals(): void {
-    fs.mkdirSync(this.#journalRoot, { recursive: true, mode: 0o700 });
-    let recoveryMarker: string | undefined;
-    let recoveredOwner: CommitLockOwner | undefined;
-    try {
-      const owner = this.#readLockOwner();
-      if (!owner) {
-        // Malformed/legacy lock state is never guessed stale. In particular, a
-        // partial file from an older implementation cannot be stolen.
-        if (fs.existsSync(this.#lockPath)) return;
-      } else if (this.#ownerIsAlive(owner)) {
-        return;
-      } else {
-        recoveredOwner = owner;
-        recoveryMarker = path.join(this.#journalRoot, `.commit.recovery-${owner.nonce}`);
-        try {
-          fs.linkSync(this.#lockPath, recoveryMarker);
-        } catch (error) {
-          if (error instanceof Error && "code" in error && error.code === "EEXIST") return;
-          throw error;
-        }
-        const lockStat = fs.statSync(this.#lockPath);
-        const markerStat = fs.statSync(recoveryMarker);
-        if (lockStat.dev !== markerStat.dev || lockStat.ino !== markerStat.ino) return;
-        fs.unlinkSync(this.#lockPath);
-        fsyncDirectory(this.#journalRoot);
-      }
-    } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+  #acquireCommitLock(): () => void {
+    let release = this.#tryAcquireCanonicalLock();
+    if (!release) {
+      // Recovery owns the same canonical exclusion boundary. It either finishes
+      // and releases a stale lock, or leaves a live/foreign lock untouched.
+      if (!this.#recoverJournals()) throw new Error("Another Schema transaction is in progress");
+      release = this.#tryAcquireCanonicalLock();
+      if (!release) throw new Error("Another Schema transaction is in progress");
     }
+    try {
+      // A process may have crashed before this controller was constructed. Scan
+      // while retaining our canonical lock before starting a new transaction.
+      this.#recoverJournalsLocked();
+      return release;
+    } catch (error) {
+      release();
+      throw error;
+    }
+  }
+
+  #recoverJournals(): boolean {
+    fs.mkdirSync(this.#journalRoot, { recursive: true, mode: 0o700 });
+    const release = this.#tryAcquireCanonicalLock();
+    if (release) {
+      try {
+        this.#recoverJournalsLocked();
+        return true;
+      } finally {
+        release();
+      }
+    }
+
+    const owner = this.#readLockOwner();
+    if (!owner || this.#ownerIsAlive(owner)) return false;
+    const ownerPath = path.join(this.#journalRoot, `.commit.owner-${owner.nonce}.json`);
+    let lockStat: fs.Stats;
+    try {
+      lockStat = fs.lstatSync(this.#lockPath);
+      const ownerStat = fs.lstatSync(ownerPath);
+      // Valid-looking bytes are insufficient authority to steal a lock. The
+      // canonical name must still be the hard link to its recorded owner file.
+      if (
+        !lockStat.isFile() || lockStat.isSymbolicLink() ||
+        !ownerStat.isFile() || ownerStat.isSymbolicLink() ||
+        lockStat.dev !== ownerStat.dev || lockStat.ino !== ownerStat.ino
+      ) return false;
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+      throw error;
+    }
+
+    const recoveryMarker = path.join(this.#journalRoot, `.commit.recovery-${owner.nonce}`);
+    try {
+      // This hard link is the atomic stale-recovery claim. Crucially, the fixed
+      // canonical lock remains linked for the complete recovery; no successor
+      // can enter while journals are scanned, rolled back, cleaned, or written.
+      fs.linkSync(this.#lockPath, recoveryMarker);
+      fsyncDirectory(this.#journalRoot);
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "EEXIST") return false;
+      throw error;
+    }
+
+    let claimed = false;
+    try {
+      const currentLock = fs.lstatSync(this.#lockPath);
+      const markerStat = fs.lstatSync(recoveryMarker);
+      const currentOwner = fs.lstatSync(ownerPath);
+      if (
+        currentLock.dev !== lockStat.dev || currentLock.ino !== lockStat.ino ||
+        markerStat.dev !== lockStat.dev || markerStat.ino !== lockStat.ino ||
+        currentOwner.dev !== lockStat.dev || currentOwner.ino !== lockStat.ino
+      ) return false;
+      claimed = true;
+      this.#recoverJournalsLocked();
+      return true;
+    } finally {
+      // Because the canonical name was never removed during recovery, this
+      // conditional release cannot race with and unlink a successor's lock.
+      if (claimed) {
+        try {
+          const current = fs.lstatSync(this.#lockPath);
+          if (current.dev === lockStat.dev && current.ino === lockStat.ino) {
+            fs.unlinkSync(this.#lockPath);
+          }
+        } catch (error) {
+          if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        }
+      }
+      try {
+        const marker = fs.lstatSync(recoveryMarker);
+        if (marker.dev === lockStat.dev && marker.ino === lockStat.ino) fs.unlinkSync(recoveryMarker);
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+      }
+      if (claimed) {
+        try {
+          const currentOwner = fs.lstatSync(ownerPath);
+          if (currentOwner.dev === lockStat.dev && currentOwner.ino === lockStat.ino) fs.unlinkSync(ownerPath);
+        } catch (error) {
+          if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        }
+      }
+      fsyncDirectory(this.#journalRoot);
+    }
+  }
+
+  #recoverJournalsLocked(): void {
     for (const name of fs.readdirSync(this.#journalRoot)) {
       if (!name.endsWith(".json")) continue;
       const filePath = path.join(this.#journalRoot, name);
@@ -1310,7 +1421,7 @@ export class SchemaController {
           workspace?.lastOutcome === "committed" &&
           workspace.lastTransactionId === journal.id
         ) {
-          const cleanupError = this.#cleanupStaged(journal.staged ?? []);
+          const cleanupError = this.#cleanupStaged(journal);
           journal.status = "committed";
           if (cleanupError) journal.error = `post-commit staging cleanup failed: ${cleanupError}`;
           atomicJsonWrite(filePath, journal);
@@ -1319,7 +1430,7 @@ export class SchemaController {
         const restoreError = journal.status === "applying"
           ? this.#rollbackPublished(journal)
           : undefined;
-        const cleanupError = this.#cleanupStaged(journal.staged ?? []);
+        const cleanupError = this.#cleanupStaged(journal);
         const rollbackError = [restoreError, cleanupError].filter(Boolean).join("; ") || undefined;
         journal.status = rollbackError ? "quarantined" : "rolled_back";
         journal.error = rollbackError ? `crash recovery failed: ${rollbackError}` : "recovered incomplete transaction";
@@ -1327,16 +1438,6 @@ export class SchemaController {
       } catch {
         // An unreadable journal is retained for operator quarantine and inspection.
       }
-    }
-    if (recoveryMarker) {
-      fs.rmSync(recoveryMarker, { force: true });
-      if (recoveredOwner) {
-        fs.rmSync(
-          path.join(this.#journalRoot, `.commit.owner-${recoveredOwner.nonce}.json`),
-          { force: true },
-        );
-      }
-      fsyncDirectory(this.#journalRoot);
     }
   }
 }

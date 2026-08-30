@@ -664,6 +664,36 @@ describe("Schema transactions", () => {
     expect(fs.readFileSync(target, "utf8")).toBe("concurrent\n");
   });
 
+  it("preserves a before-file whose ownership bytes changed during quarantined rollback", async () => {
+    const setup = fixture();
+    const target = path.join(setup.cwd, "a.txt");
+    fs.writeFileSync(target, "alpha\n");
+    setup.config.trustedCommands.mutate_before_file = {
+      command: process.execPath,
+      args: [
+        "-e",
+        `const fs=require('node:fs'); const root=${JSON.stringify(setup.cwd)}; const name=fs.readdirSync(root).find((item)=>item.endsWith('.before')); if(!name) process.exit(2); fs.writeFileSync(require('node:path').join(root,name),'investigate\\n'); process.exit(1)`,
+      ],
+      shell: false,
+      timeoutMs: 5_000,
+    };
+    const artifacts = await hypothesisAndCertificate(setup, [{ kind: "file_exists", path: "a.txt" }]);
+    const result = await setup.controller.commit({
+      hypothesisId: artifacts.hypothesisId,
+      certificate: artifacts.certificate,
+      operations: [{ kind: "write", path: "a.txt", content: "fabric\n", expected: { sha256: sha("alpha\n") } }],
+      postconditions: [{ kind: "trusted_command", name: "mutate_before_file" }],
+    }, artifacts.context);
+    expect(result).toMatchObject({
+      outcome: "quarantined",
+      rollbackError: expect.stringContaining("unexpected concurrent bytes; artifact preserved"),
+    });
+    expect(fs.readFileSync(target, "utf8")).toBe("alpha\n");
+    const beforeFile = fs.readdirSync(setup.cwd).find((name) => name.endsWith(".before"));
+    expect(beforeFile).toBeDefined();
+    expect(fs.readFileSync(path.join(setup.cwd, beforeFile!), "utf8")).toBe("investigate\n");
+  });
+
   it("fsyncs a restored file and its parent before the terminal journal status", async () => {
     if (process.platform === "win32") return;
     const setup = fixture();
@@ -733,6 +763,120 @@ describe("Schema transactions", () => {
     expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("alpha\n");
   });
 
+  it("does not steal valid-looking stale lock bytes without the canonical owner inode", () => {
+    const setup = fixture();
+    const journalRoot = path.join(setup.mesh.root, "schema-transactions");
+    const nonce = "b".repeat(32);
+    const ownerPath = path.join(journalRoot, `.commit.owner-${nonce}.json`);
+    const lockPath = path.join(journalRoot, ".commit.lock");
+    const bytes = JSON.stringify({
+      format: 1,
+      nonce,
+      pid: 2_147_483_647,
+      createdAt: Date.now() - 60_000,
+    });
+    fs.writeFileSync(ownerPath, bytes);
+    fs.writeFileSync(lockPath, bytes);
+
+    new SchemaController(setup.cwd, setup.config, setup.mesh, identity, setup.state);
+
+    expect(fs.readFileSync(lockPath, "utf8")).toBe(bytes);
+    expect(fs.readFileSync(ownerPath, "utf8")).toBe(bytes);
+    expect(fs.statSync(lockPath).ino).not.toBe(fs.statSync(ownerPath).ino);
+  });
+
+  it("retains the canonical stale lock through scan, rollback, cleanup, and terminal write", () => {
+    if (process.platform === "win32") return;
+    const setup = fixture();
+    const target = path.join(setup.cwd, "a.txt");
+    fs.writeFileSync(target, "mutated\n");
+    const journalRoot = path.join(setup.mesh.root, "schema-transactions");
+    const journalPath = path.join(journalRoot, "contended-crash.json");
+    const stagedRelative = ".a.txt.schema-contended-0.tmp";
+    const staged = path.join(setup.cwd, stagedRelative);
+    fs.writeFileSync(staged, "mutated\n");
+    fs.writeFileSync(journalPath, JSON.stringify({
+      format: 2,
+      id: "contended-crash",
+      status: "applying",
+      before: [{
+        path: "a.txt",
+        absolute: target,
+        existed: true,
+        content: Buffer.from("original\n").toString("base64"),
+        mode: 0o644,
+      }],
+      staged: [stagedRelative],
+      operations: [{
+        path: "a.txt",
+        kind: "write",
+        sourceSha256: sha("original\n"),
+        resultSha256: sha("mutated\n"),
+        temporary: stagedRelative,
+      }],
+      createdAt: Date.now(),
+    }));
+    const nonce = "c".repeat(32);
+    const ownerPath = path.join(journalRoot, `.commit.owner-${nonce}.json`);
+    const lockPath = path.join(journalRoot, ".commit.lock");
+    fs.writeFileSync(ownerPath, JSON.stringify({
+      format: 1,
+      nonce,
+      pid: 2_147_483_647,
+      createdAt: Date.now() - 60_000,
+    }));
+    fs.linkSync(ownerPath, lockPath);
+    const originalLock = fs.statSync(lockPath);
+    const checkpoints = new Set<string>();
+    let contenderStarted = false;
+    const readFile = fs.readFileSync.bind(fs);
+    const rename = fs.renameSync.bind(fs);
+    const unlink = fs.unlinkSync.bind(fs);
+    const readSpy = vi.spyOn(fs, "readFileSync").mockImplementation(((file, ...args: unknown[]) => {
+      if (file === journalPath) {
+        expect(fs.statSync(lockPath).ino).toBe(originalLock.ino);
+        checkpoints.add("scan");
+      }
+      return (readFile as (...values: unknown[]) => unknown)(file, ...args);
+    }) as typeof fs.readFileSync);
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, destination) => {
+      if (source === target && String(destination).includes(".schema-rollback-")) {
+        expect(fs.statSync(lockPath).ino).toBe(originalLock.ino);
+        checkpoints.add("rollback");
+        if (!contenderStarted) {
+          contenderStarted = true;
+          new SchemaController(setup.cwd, setup.config, setup.mesh, identity, setup.state);
+          expect(fs.statSync(lockPath).ino).toBe(originalLock.ino);
+        }
+      }
+      if (destination === journalPath) {
+        expect(fs.statSync(lockPath).ino).toBe(originalLock.ino);
+        checkpoints.add("terminal");
+      }
+      rename(source, destination);
+    });
+    const unlinkSpy = vi.spyOn(fs, "unlinkSync").mockImplementation((file) => {
+      if (file === staged) {
+        expect(fs.statSync(lockPath).ino).toBe(originalLock.ino);
+        checkpoints.add("cleanup");
+      }
+      unlink(file);
+    });
+    try {
+      new SchemaController(setup.cwd, setup.config, setup.mesh, identity, setup.state);
+    } finally {
+      readSpy.mockRestore();
+      renameSpy.mockRestore();
+      unlinkSpy.mockRestore();
+    }
+    expect([...checkpoints].sort()).toEqual(["cleanup", "rollback", "scan", "terminal"]);
+    expect(contenderStarted).toBe(true);
+    expect(fs.existsSync(lockPath)).toBe(false);
+    expect(fs.readFileSync(target, "utf8")).toBe("original\n");
+    expect(fs.existsSync(staged)).toBe(false);
+    expect(JSON.parse(fs.readFileSync(journalPath, "utf8"))).toMatchObject({ status: "rolled_back" });
+  });
+
   it("recovers a complete nonce-owned stale lock without deleting a successor", () => {
     const setup = fixture();
     const journalRoot = path.join(setup.mesh.root, "schema-transactions");
@@ -756,8 +900,9 @@ describe("Schema transactions", () => {
     const target = path.join(setup.cwd, "a.txt");
     fs.writeFileSync(target, "mutated\n");
     const journalRoot = path.join(setup.mesh.root, "schema-transactions");
-    const staged = path.join(setup.cwd, ".a.txt.schema-crashed-0.tmp");
-    fs.writeFileSync(staged, "staged\n");
+    const stagedRelative = ".a.txt.schema-crashed-0.tmp";
+    const staged = path.join(setup.cwd, stagedRelative);
+    fs.writeFileSync(staged, "mutated\n");
     fs.writeFileSync(
       path.join(journalRoot, "crashed.json"),
       JSON.stringify({
@@ -771,12 +916,13 @@ describe("Schema transactions", () => {
           content: Buffer.from("original\n").toString("base64"),
           mode: 0o644,
         }],
-        staged: [".a.txt.schema-crashed-0.tmp"],
+        staged: [stagedRelative],
         operations: [{
           path: "a.txt",
           kind: "write",
           sourceSha256: sha("original\n"),
           resultSha256: sha("mutated\n"),
+          temporary: stagedRelative,
         }],
         createdAt: Date.now(),
       }),
@@ -789,7 +935,8 @@ describe("Schema transactions", () => {
       error: "recovered incomplete transaction",
     });
 
-    const preparedStage = path.join(setup.cwd, ".prepared.txt.schema-prepared-0.tmp");
+    const preparedRelative = ".prepared.txt.schema-prepared-0.tmp";
+    const preparedStage = path.join(setup.cwd, preparedRelative);
     fs.writeFileSync(preparedStage, "not published\n");
     fs.writeFileSync(
       path.join(journalRoot, "prepared.json"),
@@ -798,7 +945,14 @@ describe("Schema transactions", () => {
         id: "prepared",
         status: "prepared",
         before: [],
-        staged: [".prepared.txt.schema-prepared-0.tmp"],
+        staged: [preparedRelative],
+        operations: [{
+          path: "prepared.txt",
+          kind: "write",
+          sourceSha256: null,
+          resultSha256: sha("not published\n"),
+          temporary: preparedRelative,
+        }],
         createdAt: Date.now(),
       }),
     );
