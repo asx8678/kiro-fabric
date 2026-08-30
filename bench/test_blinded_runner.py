@@ -128,6 +128,7 @@ class BlindedRunnerTest(unittest.TestCase):
 
     def test_real_run_refuses_an_existing_results_directory(self):
         results_root = BENCH / "results"
+        results_root.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="existing-test-", dir=results_root) as directory:
             result_path = Path(directory)
             completed = self.run_runner(
@@ -142,6 +143,32 @@ class BlindedRunnerTest(unittest.TestCase):
             self.assertEqual(completed.returncode, 2)
             self.assertIn("results directory already exists", completed.stderr)
             self.assertEqual(list(result_path.iterdir()), [])
+
+    def test_real_run_fails_closed_when_bwrap_is_unavailable(self):
+        probe = subprocess.run(
+            ["bash", str(BENCH / "launch-candidate.sh"), "--probe"],
+            cwd=ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if probe.returncode == 0:
+            self.skipTest("host bubblewrap isolation is available")
+        run_id = f"isolation-test-{uuid.uuid4().hex}"
+        result_path = BENCH / "results" / run_id
+        with tempfile.TemporaryDirectory() as directory:
+            completed = self.run_runner(
+                "--run-id",
+                run_id,
+                "--tasks",
+                TASK,
+                "--seed",
+                "test-seed",
+                temp_root=Path(directory),
+            )
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("requires working /usr/bin/bwrap isolation", completed.stderr)
+        self.assertFalse(result_path.exists())
 
     def test_mktemp_failure_stops_without_creating_results(self):
         run_id = f"mktemp-test-{uuid.uuid4().hex}"

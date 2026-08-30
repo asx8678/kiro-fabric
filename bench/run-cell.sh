@@ -23,6 +23,7 @@ REPO_ROOT="$(cd "$BENCH/.." && pwd)"
 TASK="$TASK_DIR/task.json"
 PROMPT_FILE="$TASK_DIR/prompt.txt"
 VERIFY_SCRIPT="$TASK_DIR/verify.sh"
+CANDIDATE_LAUNCHER="$BENCH/launch-candidate.sh"
 
 # Validate every local input before checkout setup and, critically, before a Pi
 # process can make a model call. Expected agent/verifier nonzero exits are
@@ -92,6 +93,12 @@ if [[ -n "${BENCH_ARM:-}${BENCH_PAIR:-}${BENCH_CONTROLLER_DIR:-}" ]]; then
     || { echo "blinded pair id does not match cell" >&2; exit 2; }
   [[ -d "$BENCH_CONTROLLER_DIR" ]] \
     || { echo "blinded controller directory does not exist" >&2; exit 2; }
+  [[ -x "$CANDIDATE_LAUNCHER" ]] \
+    || { echo "blinded candidate launcher is unavailable" >&2; exit 2; }
+  # Real blinded cells never degrade to ordinary host execution. Probe the
+  # exact bwrap namespace contract before checkout or a possible model call.
+  "$CANDIDATE_LAUNCHER" --probe \
+    || { echo "blinded candidate isolation is unavailable; refusing to run" >&2; exit 2; }
   BLINDED=1
 fi
 
@@ -102,15 +109,19 @@ WORKDIR="$CELL/workdir"
 RUN_AGENT_DIR="$AGENT_DIR"
 RUN_SESSION_DIR="$CELL/session-store"
 TREATMENT_RESULT=""
+PRIVATE_TELEMETRY=""
 if [[ "$BLINDED" -eq 1 ]]; then
-  # Raw sessions and the per-cell Fabric configuration contain treatment
-  # labels. Keep both under the private controller tree; the shared agent dir
-  # remains treatment-neutral and public sessions are scrubbed below.
+  # Candidate mounts are staged below the neutral public cell so /proc mount
+  # metadata cannot reveal a controller path. Raw sessions move into the
+  # controller tree only after the complete candidate group has drained.
   PRIVATE_CELL="$BENCH_CONTROLLER_DIR/cells/$BENCH_ARM/$SLUG/rep$REP"
-  RUN_AGENT_DIR="$PRIVATE_CELL/agent"
-  RUN_SESSION_DIR="$PRIVATE_CELL/session-store"
+  PRIVATE_SESSION_DIR="$PRIVATE_CELL/session-store"
+  CANDIDATE_STAGE="$CELL/.candidate"
+  RUN_AGENT_DIR="$CANDIDATE_STAGE/credentials"
+  RUN_SESSION_DIR="$CANDIDATE_STAGE/session"
   TREATMENT_RESULT="$PRIVATE_CELL/treatment.json"
-  (umask 077; mkdir -p "$RUN_AGENT_DIR" "$RUN_SESSION_DIR")
+  PRIVATE_TELEMETRY="$PRIVATE_CELL/prewalk-events.jsonl"
+  (umask 077; mkdir -p "$RUN_AGENT_DIR" "$RUN_SESSION_DIR" "$PRIVATE_SESSION_DIR"; : > "$PRIVATE_TELEMETRY")
   for name in auth.json settings.json; do
     [[ ! -f "$AGENT_DIR/$name" ]] || cp "$AGENT_DIR/$name" "$RUN_AGENT_DIR/$name"
   done
@@ -118,7 +129,7 @@ else
   mkdir -p "$RUN_SESSION_DIR"
 fi
 
-if [[ "$LOCAL_FABRIC" -eq 1 ]]; then
+if [[ "$LOCAL_FABRIC" -eq 1 && "$BLINDED" -eq 0 ]]; then
   (umask 077; python3 - "$RUN_AGENT_DIR/fabric.json" "$PREWALK_ACTIVATION" <<'PYCONFIG'
 import json, sys
 json.dump({
@@ -132,6 +143,86 @@ PYCONFIG
   )
 fi
 COMMON_FLAGS=(--print --thinking low --model openai-codex/gpt-5.6-sol --session-dir "$RUN_SESSION_DIR" --no-prompt-templates --no-context-files --no-themes)
+CANDIDATE_EXTENSION="$REPO_ROOT"
+[[ "$CONFIG" != fabric-* || "$LOCAL_FABRIC" -eq 1 ]] || CANDIDATE_EXTENSION="$VENDOR"
+
+# Every untrusted stage and watchdog owns a process group. Keep ids live until
+# cleanup has killed and drained descendants, even when the group leader exits
+# normally before a background child.
+ACTIVE_STAGE_PID=""
+ACTIVE_WATCHDOG_PID=""
+
+signal_group() {
+  local signal="$1" pid="$2"
+  [[ -n "$pid" ]] || return 0
+  kill -"$signal" -- "-$pid" 2>/dev/null || true
+}
+
+wait_for_pid() {
+  local pid="$1"
+  [[ -n "$pid" ]] || return 0
+  wait "$pid" 2>/dev/null || true
+}
+
+group_exists() { kill -0 -- "-$1" 2>/dev/null; }
+
+terminate_and_drain_group() {
+  local pid="$1" attempt
+  [[ -n "$pid" ]] || return 0
+  signal_group TERM "$pid"
+  for ((attempt = 0; attempt < 10; attempt++)); do
+    group_exists "$pid" || return 0
+    sleep 0.02
+  done
+  signal_group KILL "$pid"
+  for ((attempt = 0; attempt < 100; attempt++)); do
+    group_exists "$pid" || return 0
+    sleep 0.02
+  done
+  echo "benchmark process group $pid did not drain" >&2
+  return 1
+}
+
+stop_active_process_trees() {
+  local watchdog="$ACTIVE_WATCHDOG_PID" stage="$ACTIVE_STAGE_PID"
+  terminate_and_drain_group "$watchdog"
+  wait_for_pid "$watchdog"
+  terminate_and_drain_group "$stage"
+  wait_for_pid "$stage"
+  ACTIVE_WATCHDOG_PID=""
+  ACTIVE_STAGE_PID=""
+}
+
+cleanup_process_trees() {
+  stop_active_process_trees
+  if [[ -n "${CANDIDATE_STAGE:-}" && -d "$CANDIDATE_STAGE" ]]; then
+    rm -rf -- "$CANDIDATE_STAGE"
+  fi
+}
+interrupt() {
+  local status="$1"
+  trap - INT TERM
+  exit "$status"
+}
+trap cleanup_process_trees EXIT
+trap 'interrupt 130' INT
+trap 'interrupt 143' TERM
+
+run_grouped_stage() {
+  local timeout="$1" grace="$2" stdout_file="$3" stderr_file="$4"
+  shift 4
+  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+    "$@" >"$stdout_file" 2>"$stderr_file" &
+  ACTIVE_STAGE_PID=$!
+  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+    bash -c 'sleep "$2"; kill -TERM -- "-$1" 2>/dev/null || true; sleep "$3"; kill -KILL -- "-$1" 2>/dev/null || true' \
+    bench-watchdog "$ACTIVE_STAGE_PID" "$timeout" "$grace" &
+  ACTIVE_WATCHDOG_PID=$!
+  local status
+  if wait "$ACTIVE_STAGE_PID"; then status=0; else status=$?; fi
+  stop_active_process_trees
+  return "$status"
+}
 
 # --- fresh checkout at base ref ---
 CACHE="$BENCH/.cache/$(basename "$REPO_URL" .git)"
@@ -154,31 +245,40 @@ cd "$WORKDIR"
 START=$(python3 -c 'import time;print(time.time())')
 PROMPT="$(<"$PROMPT_FILE")"
 if [[ "$CONFIG" == "agentless" ]]; then
-  if "$BENCH/run-agentless.sh" "$WORKDIR" "$PROMPT_FILE" \
+  AGENTLESS_ENV=(env)
+  if [[ "$BLINDED" -eq 1 ]]; then
+    AGENTLESS_ENV+=(
+      "BENCH_CANDIDATE_LAUNCHER=$CANDIDATE_LAUNCHER"
+      "BENCH_CANDIDATE_CONFIG=$CONFIG"
+      "BENCH_CANDIDATE_TELEMETRY=$PRIVATE_TELEMETRY"
+      "BENCH_CANDIDATE_EXTENSION=$CANDIDATE_EXTENSION"
+    )
+  fi
+  if run_grouped_stage "$AGENT_TIMEOUT" 20 \
+    "$CELL/logs/agentless-runner.stdout.txt" "$CELL/logs/agentless-runner.stderr.txt" \
+    "${AGENTLESS_ENV[@]}" "$BENCH/run-agentless.sh" "$WORKDIR" "$PROMPT_FILE" \
     "$RUN_SESSION_DIR" "$CELL/logs" "$CELL/artifacts" "$RUN_AGENT_DIR" "$AGENT_TIMEOUT"; then
     AGENT_EXIT=0
   else
     AGENT_EXIT=$?
   fi
-  echo "$AGENT_EXIT" > "$CELL/agent-exit-code.txt"
 else
-  PI_CODING_AGENT_DIR="$RUN_AGENT_DIR" pi "${COMMON_FLAGS[@]}" "${CFG_FLAGS[@]}" "$PROMPT" \
-    >"$CELL/logs/pi.stdout.txt" 2>"$CELL/logs/pi.stderr.txt" &
-  AGENT_PID=$!
-  python3 -c 'import os, signal, sys, time
-pid, timeout, grace = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
-time.sleep(timeout)
-try: os.kill(pid, signal.SIGTERM)
-except ProcessLookupError: raise SystemExit(0)
-time.sleep(grace)
-try: os.kill(pid, signal.SIGKILL)
-except ProcessLookupError: pass' "$AGENT_PID" "$AGENT_TIMEOUT" 20 &
-  WATCHDOG=$!
-  if wait "$AGENT_PID"; then AGENT_EXIT=0; else AGENT_EXIT=$?; fi
-  kill "$WATCHDOG" 2>/dev/null || true
-  wait "$WATCHDOG" 2>/dev/null || true
-  echo "$AGENT_EXIT" > "$CELL/agent-exit-code.txt"
+  if [[ "$BLINDED" -eq 1 ]]; then
+    AGENT_COMMAND=("$CANDIDATE_LAUNCHER" --run "$WORKDIR" "$RUN_SESSION_DIR" \
+      "$RUN_AGENT_DIR" "$CONFIG" "$PROMPT_FILE" "$PRIVATE_TELEMETRY" \
+      "$CANDIDATE_EXTENSION")
+  else
+    AGENT_COMMAND=(env "PI_CODING_AGENT_DIR=$RUN_AGENT_DIR" pi \
+      "${COMMON_FLAGS[@]}" "${CFG_FLAGS[@]}" "$PROMPT")
+  fi
+  if run_grouped_stage "$AGENT_TIMEOUT" 20 \
+    "$CELL/logs/pi.stdout.txt" "$CELL/logs/pi.stderr.txt" "${AGENT_COMMAND[@]}"; then
+    AGENT_EXIT=0
+  else
+    AGENT_EXIT=$?
+  fi
 fi
+echo "$AGENT_EXIT" > "$CELL/agent-exit-code.txt"
 END=$(python3 -c 'import time;print(time.time())')
 WALL=$(python3 -c "print(round($END - $START, 1))")
 
@@ -232,6 +332,12 @@ PYSESSION
   if [[ -f "$RUN_AGENT_DIR/auth.json" ]]; then
     cp "$RUN_AGENT_DIR/auth.json" "$AGENT_DIR/auth.json"
   fi
+  # The candidate and all descendants are gone. Archive raw neutral sessions
+  # privately, then remove every candidate-visible staging mount before metrics
+  # and verification run in the controller namespace.
+  cp -a "$RUN_SESSION_DIR/." "$PRIVATE_SESSION_DIR/"
+  rm -rf -- "$CANDIDATE_STAGE"
+  RUN_SESSION_DIR="$PRIVATE_SESSION_DIR"
 else
   find "$RUN_SESSION_DIR" -name '*.jsonl' -exec cp {} "$CELL/session/" \; 2>/dev/null || true
 fi
@@ -243,10 +349,10 @@ git -C "$WORKDIR" diff --cached "$BASE_REF" -- . ':(exclude)vendor/**' ':(exclud
 
 # --- metrics from session jsonl ---
 python3 - "$CELL" "$WALL" "$PREWALK_ACTIVATION" "$RUN_SESSION_DIR" \
-  "$BLINDED" "$TREATMENT_RESULT" "$CONFIG" <<'PYEOF'
+  "$BLINDED" "$TREATMENT_RESULT" "$CONFIG" "$PRIVATE_TELEMETRY" <<'PYEOF'
 import json, glob, os, sys
 (cell, wall_raw, prewalk_activation, session_dir, blinded_raw,
- treatment_result, config) = sys.argv[1:]
+ treatment_result, config, private_telemetry) = sys.argv[1:]
 wall = float(wall_raw)
 blinded = blinded_raw == "1"
 arm = os.environ.get("BENCH_ARM", "")  # opaque arm id when blinded
@@ -281,6 +387,24 @@ for f in glob.glob(os.path.join(session_dir, "**", "*.jsonl"), recursive=True):
         for item in msg.get("content", []):
             if isinstance(item, dict) and item.get("type") == "toolCall":
                 tool_calls += 1
+if blinded and private_telemetry:
+    try:
+        event_lines = open(private_telemetry, errors="replace")
+    except OSError:
+        event_lines = ()
+    for line in event_lines:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") != "prewalk-decision":
+            continue
+        data = event.get("data") or {}
+        prewalk_decisions += 1
+        prewalk_eligible += int(data.get("eligible") is True)
+        prewalk_armed += int(data.get("armed") is True)
+        reason = str(data.get("reason") or "unknown")
+        prewalk_reasons[reason] = prewalk_reasons.get(reason, 0) + 1
 # GPT-5.6 Sol recorded rates (from the trajectories issue): $5/M fresh input,
 # $0.50/M cached input, $30/M output. Cached = cacheRead; cacheWrite billed fresh.
 RATES = {"input": 5.0, "cached": 0.50, "output": 30.0}
@@ -332,24 +456,14 @@ PYEOF
 
 # --- verifier ---
 VERIFIER_EXIT=0
-(
-  cd "$WORKDIR"
-  "$VERIFY_SCRIPT" "$WORKDIR" "$CELL/result.json" >"$CELL/logs/verify.stdout.txt" 2>"$CELL/logs/verify.stderr.txt" &
-  VPID=$!
-  python3 -c 'import os, signal, sys, time
-pid, timeout, grace = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
-time.sleep(timeout)
-try: os.kill(pid, signal.SIGTERM)
-except ProcessLookupError: raise SystemExit(0)
-time.sleep(grace)
-try: os.kill(pid, signal.SIGKILL)
-except ProcessLookupError: pass' "$VPID" "$VERIFY_TIMEOUT" 10 &
-  WD=$!
-  if wait "$VPID"; then status=0; else status=$?; fi
-  kill "$WD" 2>/dev/null || true
-  wait "$WD" 2>/dev/null || true
-  exit "$status"
-) || VERIFIER_EXIT=$?
+if run_grouped_stage "$VERIFY_TIMEOUT" 10 \
+  "$CELL/logs/verify.stdout.txt" "$CELL/logs/verify.stderr.txt" \
+  bash -c 'cd "$1" && exec "$2" "$1" "$3"' \
+  bench-verifier "$WORKDIR" "$VERIFY_SCRIPT" "$CELL/result.json"; then
+  VERIFIER_EXIT=0
+else
+  VERIFIER_EXIT=$?
+fi
 echo "$VERIFIER_EXIT" > "$CELL/verifier-exit-code.txt"
 if [[ "$VERIFIER_EXIT" -ne 0 ]]; then
   echo "verifier infrastructure failed for $SLUG (exit $VERIFIER_EXIT)" >&2
@@ -374,6 +488,8 @@ for shared_path in sorted(path for path in agent.rglob("*") if path.is_file()):
         errors.append(f"shared agent directory contains literal activation in {relative}")
 if (cell / "session-store").exists():
     errors.append("raw session-store was published")
+if (cell / ".candidate").exists():
+    errors.append("candidate staging directory was published")
 
 forbidden_result_keys = {
     "prewalk_activation", "prewalk_gate_decisions", "prewalk_gate_eligible",
@@ -420,6 +536,10 @@ if errors:
 PYLEAK
 fi
 
-echo "cell done: $SLUG $CONFIG rep$REP -> $CELL"
+if [[ "$BLINDED" -eq 1 ]]; then
+  echo "cell done: $SLUG arm=$BENCH_ARM rep$REP -> $CELL"
+else
+  echo "cell done: $SLUG $CONFIG rep$REP -> $CELL"
+fi
 cat "$CELL/result.json"
 [[ "$VERIFIER_EXIT" -eq 0 ]]

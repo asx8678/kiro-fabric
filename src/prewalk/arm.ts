@@ -1,4 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+  emitPrivateBenchmarkPrewalkDecision,
+  hasPrivateBenchmarkBoundary,
+} from "../benchmark-boundary.js";
 import type { FabricPrewalkActivation } from "../config.js";
 import type { FabricState } from "../fabric-state.js";
 import {
@@ -49,7 +53,9 @@ export const armFabricPrewalkSession = async (
         details: {
           mode: prewalk.mode,
           model: input.model,
-          ...(input.automatic ? { activation: input.automatic } : {}),
+          ...(input.automatic && !hasPrivateBenchmarkBoundary()
+            ? { activation: input.automatic }
+            : {}),
         },
       },
       { deliverAs: "nextTurn" },
@@ -69,7 +75,10 @@ const recordDecision = (
   decision: FabricPrewalkGateDecision,
   result: { armed: boolean; skipReason?: string },
 ): void => {
-  // Custom entries are durable benchmark telemetry but never enter model context.
+  // Blinded runs use a write-only controller channel so treatment telemetry
+  // never enters the candidate-visible session. Ordinary runs retain durable
+  // custom entries with their historical shape.
+  if (emitPrivateBenchmarkPrewalkDecision(decision, result)) return;
   pi.appendEntry(PREWALK_DECISION_ENTRY_TYPE, {
     ...decision,
     armed: result.armed,

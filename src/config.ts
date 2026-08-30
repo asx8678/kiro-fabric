@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { benchmarkTreatmentDocument } from "./benchmark-boundary.js";
 import { renameAtomic } from "./core/atomic-write.js";
 import {
   DEFAULT_EXECUTOR_SOURCE_BYTES,
@@ -1256,6 +1257,10 @@ const resolveFabricConfig = (
     }
     merged = mergeObjects(merged, plan.document);
   }
+  // A blinded benchmark launcher can supply an in-memory final overlay. The
+  // document never exists in candidate-visible argv, env, or files.
+  const benchmarkTreatment = benchmarkTreatmentDocument();
+  if (benchmarkTreatment) merged = mergeObjects(merged, benchmarkTreatment);
   const inheritedFullCodeMode = process.env.KIRO_FABRIC_FULL_CODE_MODE;
   if (inheritedFullCodeMode === "true" || inheritedFullCodeMode === "false") {
     merged.fullCodeMode = inheritedFullCodeMode === "true";

@@ -138,6 +138,14 @@ fi
 
 [[ ! -e "$RESULTS" && ! -L "$RESULTS" ]] || die "results directory already exists: $RESULTS"
 
+# A real blinded run is confidential only inside the candidate mount/PID/env
+# boundary. Probe before verifier work, result publication, credential reads, or
+# model calls; never silently fall back to host execution.
+[[ -x "$BENCH/launch-candidate.sh" ]] || die "blinded candidate launcher is unavailable"
+if ! "$BENCH/launch-candidate.sh" --probe; then
+  die "real blinded execution requires working /usr/bin/bwrap isolation"
+fi
+
 # Certify the exact local verifier suites before publishing a run directory,
 # reading credentials, or making any model call.
 MUTATION_REPORT_TMP=$(mktemp "${TMPDIR:-/tmp}/kiro-fabric-verifiers.XXXXXX") || exit 1

@@ -18,6 +18,7 @@ import {
 
 const temporaryDirectories: string[] = [];
 const originalCompactionEngineEnv = process.env.KIRO_FABRIC_COMPACTION_ENGINE;
+const benchmarkBoundarySymbol = Symbol.for("kiro-fabric.benchmark-boundary.v1");
 
 const temporaryDirectory = (): string => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-config-"));
@@ -29,6 +30,7 @@ afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     fs.rmSync(directory, { recursive: true, force: true });
   }
+  delete (globalThis as Record<symbol, unknown>)[benchmarkBoundarySymbol];
   if (originalCompactionEngineEnv === undefined) {
     delete process.env.KIRO_FABRIC_COMPACTION_ENGINE;
   } else {
@@ -37,6 +39,19 @@ afterEach(() => {
 });
 
 describe("Fabric configuration", () => {
+  it("applies the in-memory blinded treatment after candidate-visible files", () => {
+    const cwd = temporaryDirectory();
+    const agentDir = temporaryDirectory();
+    fs.writeFileSync(path.join(agentDir, "fabric.json"), JSON.stringify({
+      prewalk: { activation: "always" },
+    }));
+    (globalThis as Record<symbol, unknown>)[benchmarkBoundarySymbol] = {
+      document: { prewalk: { activation: "gated" } },
+      emit: () => undefined,
+    };
+    expect(loadFabricConfig({ cwd, agentDir, projectTrusted: false }).prewalk.activation).toBe("gated");
+  });
+
   it("normalizes declarative component entries", () => {
     expect(DEFAULT_FABRIC_CONFIG.components).toEqual([]);
     const config = normalizeFabricConfig({

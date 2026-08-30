@@ -11,6 +11,11 @@ const ANALYZER = join(ROOT, "bench", "analyze.py");
 const MUTATION_RUNNER = join(ROOT, "bench", "mutation_verifiers.py");
 const BLINDED_RUNNER = join(ROOT, "bench", "run-matrix-blinded.sh");
 const CELL_RUNNER = join(ROOT, "bench", "run-cell.sh");
+const CANDIDATE_LAUNCHER = join(ROOT, "bench", "launch-candidate.sh");
+const BLINDED_ISOLATION_AVAILABLE = spawnSync("bash", [CANDIDATE_LAUNCHER, "--probe"], {
+  cwd: ROOT,
+  stdio: "ignore",
+}).status === 0;
 const temporaryDirectories: string[] = [];
 
 const temporaryDirectory = (): string => {
@@ -26,6 +31,55 @@ const run = (command: string, args: string[], cwd: string, env?: NodeJS.ProcessE
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
+
+const createCellFixture = (root: string, verifier: string) => {
+  const repository = join(root, `process-cell-${process.pid}-${Date.now()}-${Math.random()}.git`);
+  const cache = join(ROOT, "bench", ".cache", repository.split("/").at(-1)!.replace(/\.git$/, ""));
+  temporaryDirectories.push(cache);
+  const task = join(root, "task");
+  const agent = join(root, "agent");
+  const bin = join(root, "bin");
+  const cell = join(root, "cell");
+  mkdirSync(repository);
+  mkdirSync(task);
+  mkdirSync(agent);
+  mkdirSync(bin);
+  writeFileSync(join(repository, "app.txt"), "original\n");
+  run("git", ["init", "-q"], repository);
+  run("git", ["config", "user.email", "test@example.com"], repository);
+  run("git", ["config", "user.name", "Test"], repository);
+  run("git", ["add", "app.txt"], repository);
+  run("git", ["commit", "-qm", "fixture"], repository);
+  const baseRef = run("git", ["rev-parse", "HEAD"], repository).trim();
+  writeFileSync(join(task, "task.json"), JSON.stringify({
+    slug: "process-cleanup",
+    repo: repository,
+    base_ref: baseRef,
+    agent_timeout_s: 30,
+    verify_timeout_s: 30,
+  }));
+  writeFileSync(join(task, "prompt.txt"), "Exercise process cleanup.\n");
+  writeFileSync(join(task, "verify.sh"), verifier);
+  chmodSync(join(task, "verify.sh"), 0o755);
+  return { task, agent, bin, cell };
+};
+
+const processIsAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const waitForFile = async (path: string, timeoutMs = 5_000): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (!existsSync(path) && Date.now() < deadline) {
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 20));
+  }
+  expect(existsSync(path), `timed out waiting for ${path}`).toBe(true);
+};
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
@@ -253,7 +307,36 @@ wait "$child"
     }
   }, 10_000);
 
-  it("keeps blinded selective-prewalk treatment and telemetry controller-only", () => {
+  it("passes treatment and telemetry over the private bootstrap socket", () => {
+    const root = temporaryDirectory();
+    const fixture = join(root, "fixture.mjs");
+    const telemetry = join(root, "telemetry.jsonl");
+    writeFileSync(fixture, `
+import fs from "node:fs";
+const boundary = globalThis[Symbol.for("kiro-fabric.benchmark-boundary.v1")];
+fs.writeFileSync(${JSON.stringify(join(root, "observed.txt"))}, boundary.document.prewalk.activation);
+boundary.emit({type: "prewalk-decision", data: {activation: boundary.document.prewalk.activation}});
+`);
+    const completed = spawnSync("python3", [
+      join(ROOT, "bench", "candidate-channel.py"),
+      telemetry,
+      JSON.stringify({ prewalk: { activation: "gated" } }),
+      "python3",
+      join(ROOT, "bench", "candidate-inner.py"),
+      process.execPath,
+      "--import",
+      join(ROOT, "bench", "candidate-bootstrap.mjs"),
+      fixture,
+    ], { cwd: root, encoding: "utf8", timeout: 5_000 });
+    expect(completed.status, completed.stderr).toBe(0);
+    expect(readFileSync(join(root, "observed.txt"), "utf8")).toBe("gated");
+    expect(JSON.parse(readFileSync(telemetry, "utf8"))).toMatchObject({
+      type: "prewalk-decision",
+      data: { activation: "gated" },
+    });
+  });
+
+  it.runIf(BLINDED_ISOLATION_AVAILABLE)("keeps blinded selective-prewalk treatment and telemetry controller-only", () => {
     const root = temporaryDirectory();
     const repository = join(root, `blinded-cell-${process.pid}-${Date.now()}.git`);
     const cache = join(ROOT, "bench", ".cache", repository.split("/").at(-1)!.replace(/\.git$/, ""));
@@ -262,13 +345,12 @@ wait "$child"
     const sharedAgent = join(root, "shared-agent");
     const controller = join(root, "controller");
     const cell = join(root, "public", "kestrel", "blinded-treatment", "rep0");
-    const bin = join(root, "bin");
-    const applied = join(root, "applied-treatment.txt");
+    const fakePiRoot = join(root, "fake-pi");
     mkdirSync(repository);
     mkdirSync(task);
     mkdirSync(sharedAgent);
     mkdirSync(controller);
-    mkdirSync(bin);
+    mkdirSync(join(fakePiRoot, "dist", "bundle"), { recursive: true });
     writeFileSync(join(repository, "app.txt"), "original\n");
     run("git", ["init", "-q"], repository);
     run("git", ["config", "user.email", "test@example.com"], repository);
@@ -296,26 +378,34 @@ json.dump(value, open(path, "w"))
 PY
 `);
     chmodSync(join(task, "verify.sh"), 0o755);
-    writeFileSync(join(bin, "pi"), `#!/usr/bin/env bash
-set -eu
-python3 - "$PI_CODING_AGENT_DIR/fabric.json" "$FAKE_APPLIED_FILE" <<'PY'
-import json, sys
-value = json.load(open(sys.argv[1]))
-open(sys.argv[2], "w").write(value["prewalk"]["activation"])
-PY
-session=""
-while [[ $# -gt 0 ]]; do
-  if [[ "$1" == "--session-dir" ]]; then session="$2"; shift 2; else shift; fi
-done
-mkdir -p "$session"
-cat > "$session/session.jsonl" <<'JSONL'
-{"type":"custom","customType":"kiro-fabric-prewalk-decision","data":{"activation":"gated","eligible":true,"armed":true,"reason":"multiple-concerns"}}
-{"message":{"role":"custom","customType":"kiro-fabric-prewalk-armed","details":{"activation":"gated"},"content":"neutral prewalk handoff"}}
-{"message":{"role":"assistant","usage":{"input":2,"output":1,"totalTokens":3},"content":[]}}
-JSONL
-printf 'repaired\n' > app.txt
+    writeFileSync(join(fakePiRoot, "package.json"), JSON.stringify({ type: "module" }));
+    writeFileSync(join(fakePiRoot, "dist", "bundle", "cli.js"), `
+import fs from "node:fs";
+const boundary = globalThis[Symbol.for("kiro-fabric.benchmark-boundary.v1")];
+const activation = boundary.document.prewalk.activation;
+fs.writeFileSync("applied-treatment.txt", activation);
+const forbiddenEnv = Object.keys(process.env).filter((key) => key.startsWith("BENCH_") || key.startsWith("FAKE_"));
+const procText = ["/proc/1/cmdline", "/proc/1/environ", "/proc/self/mountinfo"]
+  .map((path) => fs.readFileSync(path, "utf8")).join("\\n");
+fs.writeFileSync("candidate-inspection.json", JSON.stringify({
+  forbiddenEnv,
+  controllerVisible: fs.existsSync("/controller"),
+  controllerMetadataVisible: procText.includes("/controller"),
+  fabricConfigVisible: fs.existsSync("/credentials/fabric.json"),
+}));
+let session = "/session";
+for (let index = 0; index < process.argv.length; index += 1) {
+  if (process.argv[index] === "--session-dir") session = process.argv[index + 1];
+}
+fs.mkdirSync(session, { recursive: true });
+fs.writeFileSync(session + "/session.jsonl", JSON.stringify({
+  message: { role: "assistant", usage: { input: 2, output: 1, totalTokens: 3 }, content: [] },
+}) + "\\n");
+boundary.emit({ type: "prewalk-decision", data: {
+  activation, eligible: true, armed: true, reason: "multiple-concerns",
+} });
+fs.writeFileSync("app.txt", "repaired\\n");
 `);
-    chmodSync(join(bin, "pi"), 0o755);
 
     const completed = spawnSync(
       "bash",
@@ -324,18 +414,24 @@ printf 'repaired\n' > app.txt
         cwd: root,
         env: {
           ...process.env,
-          PATH: `${bin}:${process.env.PATH ?? ""}`,
           BENCH_ARM: "kestrel",
           BENCH_PAIR: "blinded-treatment/rep0",
           BENCH_CONTROLLER_DIR: controller,
-          FAKE_APPLIED_FILE: applied,
+          BENCH_TEST_MODE: "1",
+          BENCH_TEST_PI_ROOT: fakePiRoot,
         },
         encoding: "utf8",
         timeout: 15_000,
       },
     );
     expect(completed.status, completed.stderr).toBe(0);
-    expect(readFileSync(applied, "utf8")).toBe("gated");
+    expect(readFileSync(join(cell, "workdir", "applied-treatment.txt"), "utf8")).toBe("gated");
+    expect(JSON.parse(readFileSync(join(cell, "workdir", "candidate-inspection.json"), "utf8"))).toEqual({
+      forbiddenEnv: [],
+      controllerVisible: false,
+      controllerMetadataVisible: false,
+      fabricConfigVisible: false,
+    });
     expect(existsSync(join(sharedAgent, "fabric.json"))).toBe(false);
     const sharedAgentText = ["auth.json", "settings.json"]
       .map((name) => readFileSync(join(sharedAgent, name), "utf8"))
@@ -354,16 +450,17 @@ printf 'repaired\n' > app.txt
     expect(JSON.parse(resultText)).not.toHaveProperty("prewalk_activation");
 
     const privateCell = join(controller, "cells", "kestrel", "blinded-treatment", "rep0");
-    expect(JSON.parse(readFileSync(join(privateCell, "agent", "fabric.json"), "utf8"))).toMatchObject({
-      prewalk: { activation: "gated" },
-    });
+    expect(existsSync(join(privateCell, "agent", "fabric.json"))).toBe(false);
     expect(JSON.parse(readFileSync(join(privateCell, "treatment.json"), "utf8"))).toMatchObject({
       config: "fabric-local-gated",
       prewalk_activation: "gated",
       prewalk_gate_decisions: 1,
       prewalk_automatic_arms: 1,
     });
-    expect(readFileSync(join(privateCell, "session-store", "session.jsonl"), "utf8")).toContain(
+    expect(readFileSync(join(privateCell, "session-store", "session.jsonl"), "utf8")).not.toContain(
+      "activation",
+    );
+    expect(readFileSync(join(privateCell, "prewalk-events.jsonl"), "utf8")).toContain(
       '"activation":"gated"',
     );
   }, 15_000);
@@ -458,6 +555,110 @@ exit 6
     });
     expect(completed.stderr).toContain("verifier infrastructure failed");
   }, 15_000);
+
+  it("drains agent and verifier orphans after normal stage exits", () => {
+    const root = temporaryDirectory();
+    const fixture = createCellFixture(root, `#!/usr/bin/env bash
+set -eu
+bash -c 'trap "" TERM; exec sleep 1000' &
+printf '%s' "$!" > "$1/verifier-orphan.pid"
+python3 - "$2" <<'PY'
+import json, sys
+value = json.load(open(sys.argv[1]))
+value.update({"reward_binary": 1, "reward_partial": 1, "checks": {"cleanup": 1}})
+json.dump(value, open(sys.argv[1], "w"))
+PY
+exit 0
+`);
+    writeFileSync(join(fixture.bin, "pi"), `#!/usr/bin/env bash
+set -eu
+bash -c 'trap "" TERM; exec sleep 1000' &
+printf '%s' "$!" > agent-orphan.pid
+exit 0
+`);
+    chmodSync(join(fixture.bin, "pi"), 0o755);
+
+    const completed = spawnSync(
+      "bash",
+      [CELL_RUNNER, fixture.task, "baseline", "0", fixture.cell, fixture.agent],
+      {
+        cwd: root,
+        env: { ...process.env, PATH: `${fixture.bin}:${process.env.PATH ?? ""}` },
+        encoding: "utf8",
+        timeout: 15_000,
+      },
+    );
+    expect(completed.status, completed.stderr).toBe(0);
+    for (const name of ["agent-orphan.pid", "verifier-orphan.pid"]) {
+      const pid = Number(readFileSync(join(fixture.cell, "workdir", name), "utf8"));
+      expect(processIsAlive(pid), `${name} survived normal cleanup`).toBe(false);
+    }
+  }, 15_000);
+
+  it.each(["agent", "verifier"] as const)(
+    "drains the %s process group when run-cell receives SIGTERM",
+    async (stage) => {
+      const root = temporaryDirectory();
+      const verifier = stage === "verifier"
+        ? `#!/usr/bin/env bash
+set -u
+printf '%s' "$$" > "$1/verifier-leader.pid"
+trap '' TERM
+bash -c 'trap "" TERM; exec sleep 1000' &
+printf '%s' "$!" > "$1/verifier-child.pid"
+wait
+`
+        : `#!/usr/bin/env bash
+python3 - "$2" <<'PY'
+import json, sys
+value = json.load(open(sys.argv[1]))
+value.update({"reward_binary": 1, "reward_partial": 1, "checks": {"cleanup": 1}})
+json.dump(value, open(sys.argv[1], "w"))
+PY
+`;
+      const fixture = createCellFixture(root, verifier);
+      const fakePi = stage === "agent"
+        ? `#!/usr/bin/env bash
+set -u
+printf '%s' "$$" > agent-leader.pid
+trap '' TERM
+bash -c 'trap "" TERM; exec sleep 1000' &
+printf '%s' "$!" > agent-child.pid
+wait
+`
+        : "#!/usr/bin/env bash\nexit 0\n";
+      writeFileSync(join(fixture.bin, "pi"), fakePi);
+      chmodSync(join(fixture.bin, "pi"), 0o755);
+
+      const runner = spawn(
+        "bash",
+        [CELL_RUNNER, fixture.task, "baseline", "0", fixture.cell, fixture.agent],
+        {
+          cwd: root,
+          env: { ...process.env, PATH: `${fixture.bin}:${process.env.PATH ?? ""}` },
+          stdio: "ignore",
+        },
+      );
+      const leaderFile = join(fixture.cell, "workdir", `${stage}-leader.pid`);
+      const childFile = join(fixture.cell, "workdir", `${stage}-child.pid`);
+      await waitForFile(leaderFile);
+      await waitForFile(childFile);
+      const exitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolvePromise, reject) => {
+        const timer = setTimeout(() => reject(new Error(`run-cell did not exit during ${stage} cleanup`)), 5_000);
+        runner.once("exit", (code, signal) => {
+          clearTimeout(timer);
+          resolvePromise({ code, signal });
+        });
+      });
+      runner.kill("SIGTERM");
+      expect(await exitPromise).toEqual({ code: 143, signal: null });
+      for (const file of [leaderFile, childFile]) {
+        const pid = Number(readFileSync(file, "utf8"));
+        expect(processIsAlive(pid), `${stage} process ${pid} survived signal cleanup`).toBe(false);
+      }
+    },
+    15_000,
+  );
 
   it("previews an agentless matrix without credentials or model calls", () => {
     const runId = `agentless-dry-${process.pid}-${Date.now()}`;

@@ -49,6 +49,46 @@ Configs:
 - `fabric-<version>` — vendored published package (e.g. `kiro-fabric@0.25.6`,
   the version benchmarked in the trajectories repo)
 
+## Blinded-run confidentiality boundary and threat model
+
+A real `run-matrix-blinded.sh` run is fail-closed on Linux bubblewrap. Before
+creating results, reading credentials, or launching a cell, the controller
+probes the fixed `/usr/bin/bwrap` boundary. `run-cell.sh` repeats that probe for
+direct blinded-cell invocations. If user/PID/mount namespace setup is denied,
+the real run stops; there is no unsandboxed fallback. `--dry-run` remains a
+credential-free schedule preview and therefore does not require bubblewrap.
+
+The candidate receives a new PID, mount, IPC, UTS, and environment boundary.
+Its writable view contains only neutral `/workspace`, `/session`, and
+`/credentials` mounts plus private `/tmp` and `/home/candidate`; the prompt is a
+single read-only neutral file. The controller directory, arm map, benchmark
+checkout/scripts, host home, result siblings, and controller environment are
+not mounted or inherited. Read-only system runtime files and a projected built
+extension (`package.json`, `dist`, `skills`, and dependencies) are mounted only
+when required. Network is shared because OAuth-backed model calls require it.
+The isolated PID namespace prevents candidate descendants from reading the
+controller's command lines or environment through `/proc`.
+
+Treatment selection lives in the controller-only `launch-candidate.sh`. It is
+sent to the generic Node bootstrap over stdin, consumed before Pi starts, and
+held as an in-memory final configuration overlay: no treatment label or
+`fabric.json` appears in candidate argv, env, credentials, session, or
+filesystem. Selective-prewalk decisions use a controller write-only descriptor
+instead of Pi session entries, and automatic armed-session details omit the
+activation value. Raw private events and derived treatment telemetry remain
+under `controller/cells/`; public sessions are still scrubbed defensively.
+
+The controller, benchmark checkout, verifier, kernel, bubblewrap binary, Pi and
+extension packages, and credential source are trusted. The task repository and
+candidate/model output are untrusted. This boundary protects treatment
+*metadata* from candidate file, process, and environment inspection and drains
+candidate process trees before trusted verification. It does not claim to hide
+observable treatment behavior (for example, a tool existing or a prewalk
+actually occurring), prevent statistical inference across repeated runs,
+confine network destinations, or protect OAuth credentials from the candidate
+that must use them. A hostile controller/root process or a kernel/bubblewrap
+escape is outside the model.
+
 ## Verifier mutation gate
 
 Before spending a model call or trusting a local score, run every selected task's

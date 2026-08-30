@@ -155,13 +155,23 @@ run_stage() {
 
   # Python is used only as a portable setsid(2) launcher (macOS has no setsid
   # command). The exec keeps $! as both the process and process-group id.
-  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
-    bash -c 'cd "$1" && PI_CODING_AGENT_DIR="$2" pi \
+  if [[ -n "${BENCH_CANDIDATE_LAUNCHER:-}" ]]; then
+    [[ -n "${BENCH_CANDIDATE_CONFIG:-}" && -n "${BENCH_CANDIDATE_TELEMETRY:-}" \
+      && -n "${BENCH_CANDIDATE_EXTENSION:-}" ]] \
+      || { echo "incomplete blinded candidate launcher environment" >&2; return 2; }
+    stage_command=("$BENCH_CANDIDATE_LAUNCHER" --run "$directory" "$SESSION_DIR" \
+      "$AGENT_DIR" "$BENCH_CANDIDATE_CONFIG" "$prompt_file" \
+      "$BENCH_CANDIDATE_TELEMETRY" "$BENCH_CANDIDATE_EXTENSION")
+  else
+    stage_command=(bash -c 'cd "$1" && PI_CODING_AGENT_DIR="$2" pi \
       --print --thinking "$3" --model "$4" \
       --session-dir "$5" --no-prompt-templates --no-context-files \
       --no-themes --no-skills --no-extensions "$(cat "$6")"' \
-    agentless-stage "$directory" "$AGENT_DIR" "$THINKING" "$MODEL" \
-    "$SESSION_DIR" "$prompt_file" >"$stdout_file" 2>"$stderr_file" &
+      agentless-stage "$directory" "$AGENT_DIR" "$THINKING" "$MODEL" \
+      "$SESSION_DIR" "$prompt_file")
+  fi
+  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+    "${stage_command[@]}" >"$stdout_file" 2>"$stderr_file" &
   ACTIVE_STAGE_PID=$!
 
   python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \

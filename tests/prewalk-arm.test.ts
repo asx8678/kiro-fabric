@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { FabricPrewalkActivation, FabricPrewalkMode } from "../src/config.js";
 import type { FabricState } from "../src/fabric-state.js";
@@ -8,6 +8,11 @@ import { PREWALK_ARMED_MESSAGE_TYPE, prewalkArmedPrompt } from "../src/prewalk/h
 import type { FabricThinking } from "../src/thinking.js";
 
 const CWD = "/tmp/fabric-prewalk-arm-test";
+const benchmarkBoundarySymbol = Symbol.for("kiro-fabric.benchmark-boundary.v1");
+
+afterEach(() => {
+  delete (globalThis as Record<symbol, unknown>)[benchmarkBoundarySymbol];
+});
 
 interface Harness {
   state: FabricState;
@@ -183,6 +188,33 @@ describe("autoArmFabricPrewalk", () => {
       "kiro-fabric-prewalk-decision",
       expect.objectContaining({ activation: "gated", eligible: true, armed: true }),
     );
+  });
+
+  it("routes blinded decisions privately and omits activation from the session message", async () => {
+    const emit = vi.fn();
+    (globalThis as Record<symbol, unknown>)[benchmarkBoundarySymbol] = {
+      document: { prewalk: { activation: "gated" } },
+      emit,
+    };
+    const h = makeHarness({
+      alwaysRearm: false,
+      activation: "gated",
+      model: "anthropic/executor",
+    });
+
+    await autoArmFabricPrewalk(
+      h.state,
+      h.context,
+      h.pi,
+      "Implement configuration and API wiring, benchmark telemetry, tests and docs",
+    );
+
+    expect(h.appendEntry).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: "prewalk-decision",
+      data: expect.objectContaining({ activation: "gated", armed: true }),
+    }));
+    expect(h.sendMessage.mock.calls[0]?.[0]?.details).not.toHaveProperty("activation");
   });
 
   it("never clobbers an existing arm", async () => {
