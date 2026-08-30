@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { FabricTraceSafeError } from "../audit/trace.js";
-import { renameAtomic, writeJsonAtomic } from "../core/atomic-write.js";
+import { writeJsonAtomic } from "../core/atomic-write.js";
 import type { FabricSchemaConfig, FabricSchemaTrustedCommand } from "../config.js";
 import type { MeshIdentity, MeshStateEntry, MeshStore } from "../mesh/store.js";
 import type { FabricInvocationContext } from "../protocol.js";
@@ -38,13 +38,23 @@ interface BeforeImage {
   mode?: number;
 }
 
+interface JournalOperation {
+  path: string;
+  kind: SchemaFileOperation["kind"];
+  sourceSha256: string | null;
+  resultSha256?: string;
+  /** Same-directory before-file claimed atomically during publication. */
+  backup?: string;
+}
+
 interface TransactionJournal {
-  format: 1;
+  format: 2;
   id: string;
   status: "prepared" | "applying" | "committed" | "rolled_back" | "quarantined";
   before: BeforeImage[];
-  /** Project-relative same-directory staging files, recorded before creation. */
+  /** Project-relative same-directory stages/backups, recorded before creation. */
   staged?: string[];
+  operations?: JournalOperation[];
   createdAt: number;
   error?: string;
 }
@@ -56,6 +66,14 @@ interface StagedOperation {
   sourceSha256: string | null;
   temporary?: string;
   resultSha256?: string;
+  backup?: string;
+}
+
+interface CommitLockOwner {
+  format: 1;
+  nonce: string;
+  pid: number;
+  createdAt: number;
 }
 
 const hashToken = (token: string): string =>
@@ -67,8 +85,34 @@ const sameBinding = (left: unknown, right: unknown): boolean =>
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+const fsyncFile = (filePath: string): void => {
+  const descriptor = fs.openSync(filePath, "r");
+  try {
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+};
+
+const fsyncDirectory = (directory: string): void => {
+  // Directory fsync is supported by the POSIX filesystems on which the
+  // transaction protocol provides crash durability. Windows can reject
+  // opening directories; publication atomicity still holds there.
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(directory, "r");
+    fs.fsyncSync(descriptor);
+  } catch (error) {
+    if (process.platform !== "win32") throw error;
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+};
+
 const atomicJsonWrite = (filePath: string, value: unknown): void => {
   writeJsonAtomic(filePath, value, { newline: true });
+  fsyncFile(filePath);
+  fsyncDirectory(path.dirname(filePath));
 };
 
 const allowedEnforceRefs = new Set([
@@ -404,12 +448,13 @@ export class SchemaController {
         throw new Error(`Schema transaction exceeds ${this.config.maxBytes} bytes`);
       }
       const stagedPaths = input.operations.flatMap((operation, index) => {
-        if (operation.kind === "delete") return [];
         const resolved = resolveWorkspaceFile(this.cwd, operation.path, { allowAbsent: true });
-        return [this.#stagingPath(resolved, transactionId, index).relative];
+        const paths = [this.#backupPath(resolved, transactionId, index).relative];
+        if (operation.kind !== "delete") paths.push(this.#stagingPath(resolved, transactionId, index).relative);
+        return paths;
       });
       journal = {
-        format: 1,
+        format: 2,
         id: transactionId,
         status: "prepared",
         before,
@@ -436,17 +481,28 @@ export class SchemaController {
       const staged = this.#stageOperations(input.operations, declared, transactionId, context.signal);
       this.#assertCommitActive(context.signal);
       for (const operation of staged) this.#assertSourceUnchanged(operation);
+      journal.operations = staged.map((operation) => ({
+        path: operation.path,
+        kind: operation.operation.kind,
+        sourceSha256: operation.sourceSha256,
+        ...(operation.resultSha256 ? { resultSha256: operation.resultSha256 } : {}),
+        ...(operation.backup
+          ? { backup: path.relative(this.cwd, operation.backup).split(path.sep).join("/") }
+          : {}),
+      }));
       journal.status = "applying";
       atomicJsonWrite(journalPath, journal);
       for (const operation of staged) {
         this.#assertCommitActive(context.signal);
-        // Refuse late source drift immediately before replacing this path.
-        this.#assertSourceUnchanged(operation);
         this.#commitStagedOperation(operation);
       }
       for (const operation of staged) this.#assertStagedResult(operation);
       const applied = snapshotWorkspace(this.cwd, [this.mesh.root]);
-      this.#assertNoOutsideDrift(baseline, applied, new Set(declared.keys()));
+      this.#assertNoOutsideDrift(
+        baseline,
+        applied,
+        new Set([...declared.keys(), ...(journal.staged ?? [])]),
+      );
       const postconditionResults = await this.#verifyEvidence(input.postconditions, context);
       this.#assertCommitActive(context.signal);
       const afterPostconditions = snapshotWorkspace(this.cwd, [this.mesh.root]);
@@ -552,7 +608,7 @@ export class SchemaController {
       // clean its stages: restoring before images here would overwrite the very
       // external source drift that caused refusal.
       const restoreError = journal?.status === "applying"
-        ? this.#restoreBeforeImages(journal.before)
+        ? this.#rollbackPublished(journal)
         : undefined;
       const cleanupError = journal ? this.#cleanupStaged(journal.staged ?? []) : undefined;
       const rollbackError = [restoreError, cleanupError].filter(Boolean).join("; ") || undefined;
@@ -796,6 +852,21 @@ export class SchemaController {
     };
   }
 
+  #backupPath(
+    resolved: ReturnType<typeof resolveWorkspaceFile>,
+    transactionId: string,
+    index: number,
+  ): { absolute: string; relative: string } {
+    const backup = path.join(
+      path.dirname(resolved.absolute),
+      `.${path.basename(resolved.absolute)}.schema-${transactionId}-${index}.before`,
+    );
+    return {
+      absolute: backup,
+      relative: path.relative(this.cwd, backup).split(path.sep).join("/"),
+    };
+  }
+
   #stageOperations(
     operations: SchemaFileOperation[],
     declared: Map<string, ReturnType<typeof resolveWorkspaceFile>>,
@@ -811,7 +882,10 @@ export class SchemaController {
       });
       const declaredPath = declared.get(current.relative);
       if (!declaredPath) throw new Error(`Schema transaction path resolution failed: ${operation.path}`);
-      const sourceSha256 = current.exists ? sha256File(current.absolute) : null;
+      const sourceBytes = current.exists ? fs.readFileSync(current.absolute) : undefined;
+      const sourceSha256 = sourceBytes
+        ? `sha256:${createHash("sha256").update(sourceBytes).digest("hex")}`
+        : null;
       let next: Buffer | undefined;
       if (operation.kind === "write") {
         if ("absent" in operation.expected) {
@@ -825,7 +899,7 @@ export class SchemaController {
           throw new Error(`Schema precondition SHA-256 mismatch: ${operation.path}`);
         }
         if (operation.kind === "edit") {
-          const content = fs.readFileSync(current.absolute, "utf8");
+          const content = sourceBytes!.toString("utf8");
           const first = content.indexOf(operation.oldText);
           if (first < 0 || content.indexOf(operation.oldText, first + operation.oldText.length) >= 0) {
             throw new Error(`Schema edit requires oldText to occur exactly once: ${operation.path}`);
@@ -841,6 +915,9 @@ export class SchemaController {
         path: current.relative,
         absolute: current.absolute,
         sourceSha256,
+        ...(current.exists
+          ? { backup: this.#backupPath(current, transactionId, index).absolute }
+          : {}),
       };
       if (next) {
         const temporary = this.#stagingPath(current, transactionId, index).absolute;
@@ -870,12 +947,39 @@ export class SchemaController {
   }
 
   #commitStagedOperation(staged: StagedOperation): void {
-    if (staged.operation.kind === "delete") {
-      fs.unlinkSync(staged.absolute);
-      return;
+    const parent = path.dirname(staged.absolute);
+    if (staged.sourceSha256 !== null) {
+      if (!staged.backup) throw new Error(`Schema before-file path is missing: ${staged.path}`);
+      // Atomically claim the exact source name first, then hash the claimed
+      // inode. A cooperative writer can no longer be overwritten between the
+      // final hash check and publication.
+      fs.renameSync(staged.absolute, staged.backup);
+      fsyncDirectory(parent);
+      const claimed = sha256File(staged.backup);
+      if (claimed !== staged.sourceSha256) {
+        try {
+          fs.linkSync(staged.backup, staged.absolute);
+          fs.unlinkSync(staged.backup);
+          fsyncFile(staged.absolute);
+          fsyncDirectory(parent);
+        } catch {
+          // The unexpected claimed file remains in its recorded backup path.
+        }
+        throw new Error(`Schema source SHA-256 drift detected while claiming: ${staged.path}`);
+      }
+    } else if (fs.existsSync(staged.absolute)) {
+      throw new Error(`Schema source appeared before commit: ${staged.path}`);
     }
-    if (!staged.temporary) throw new Error(`Schema staging file is missing: ${staged.path}`);
-    renameAtomic(staged.temporary, staged.absolute);
+
+    if (staged.operation.kind !== "delete") {
+      if (!staged.temporary) throw new Error(`Schema staging file is missing: ${staged.path}`);
+      // link(2) is an atomic no-replace publish. Unlike rename-over-target it
+      // cannot erase content that appeared after the source was claimed.
+      fs.linkSync(staged.temporary, staged.absolute);
+      fs.unlinkSync(staged.temporary);
+      fsyncFile(staged.absolute);
+    }
+    fsyncDirectory(parent);
   }
 
   #assertStagedResult(staged: StagedOperation): void {
@@ -906,20 +1010,99 @@ export class SchemaController {
     }
   }
 
-  #restoreBeforeImages(images: BeforeImage[]): string | undefined {
+  #regularFileDigest(filePath: string): string {
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("unexpected non-regular content");
+    return sha256File(filePath);
+  }
+
+  #publishBeforeImage(image: BeforeImage): void {
+    if (!image.existed) return;
+    const parent = path.dirname(image.absolute);
+    const temporary = `${image.absolute}.schema-restore-${randomBytes(8).toString("hex")}.tmp`;
+    let descriptor: number | undefined;
+    try {
+      descriptor = fs.openSync(temporary, "wx", image.mode ?? 0o600);
+      fs.writeFileSync(descriptor, Buffer.from(image.content ?? "", "base64"));
+      if (image.mode !== undefined) fs.fchmodSync(descriptor, image.mode);
+      fs.fsyncSync(descriptor);
+      fs.closeSync(descriptor);
+      descriptor = undefined;
+      fs.linkSync(temporary, image.absolute);
+      fs.unlinkSync(temporary);
+      fsyncFile(image.absolute);
+      fsyncDirectory(parent);
+    } finally {
+      if (descriptor !== undefined) fs.closeSync(descriptor);
+      fs.rmSync(temporary, { force: true });
+    }
+  }
+
+  #restoreClaim(claim: string, target: string): void {
+    fs.linkSync(claim, target);
+    fs.unlinkSync(claim);
+    fsyncFile(target);
+    fsyncDirectory(path.dirname(target));
+  }
+
+  #rollbackPublished(journal: TransactionJournal): string | undefined {
     const errors: string[] = [];
-    for (const image of [...images].reverse()) {
+    const images = new Map(journal.before.map((image) => [image.path, image]));
+    for (const operation of [...(journal.operations ?? [])].reverse()) {
+      const image = images.get(operation.path);
+      if (!image) {
+        errors.push(`${operation.path}: missing before image`);
+        continue;
+      }
+      const claim = `${image.absolute}.schema-rollback-${journal.id}-${randomBytes(4).toString("hex")}`;
       try {
-        const resolved = resolveWorkspaceFile(this.cwd, image.path, { allowAbsent: true });
-        if (!image.existed) {
-          if (resolved.exists) fs.unlinkSync(resolved.absolute);
-        } else {
-          // Recovery may repeat this idempotent before-image write after a crash.
-          fs.writeFileSync(resolved.absolute, Buffer.from(image.content ?? "", "base64"));
-          if (image.mode !== undefined) fs.chmodSync(resolved.absolute, image.mode);
+        const resolved = resolveWorkspaceFile(this.cwd, operation.path, { allowAbsent: true });
+        if (resolved.exists) {
+          if (operation.kind !== "delete" && operation.resultSha256) {
+            fs.renameSync(resolved.absolute, claim);
+            fsyncDirectory(path.dirname(resolved.absolute));
+            const digest = this.#regularFileDigest(claim);
+            if (digest === operation.resultSha256) {
+              if (image.existed) this.#publishBeforeImage(image);
+              fs.unlinkSync(claim);
+              fsyncDirectory(path.dirname(resolved.absolute));
+              // If content raced into the now-restored/absent name, no later
+              // rollback step may erase it; report quarantine instead.
+              if (!image.existed && fs.existsSync(resolved.absolute)) {
+                errors.push(`${operation.path}: unexpected concurrent content appeared during rollback`);
+              }
+              continue;
+            }
+            this.#restoreClaim(claim, resolved.absolute);
+            if (digest !== operation.sourceSha256) {
+              errors.push(`${operation.path}: unexpected concurrent content; rollback refused`);
+            }
+            continue;
+          }
+          const digest = this.#regularFileDigest(resolved.absolute);
+          if (digest !== operation.sourceSha256) {
+            errors.push(`${operation.path}: unexpected concurrent content; rollback refused`);
+          }
+          continue;
+        }
+
+        const backupPath = operation.backup
+          ? resolveWorkspaceFile(this.cwd, operation.backup, { allowAbsent: true })
+          : undefined;
+        if (backupPath?.exists && this.#regularFileDigest(backupPath.absolute) === operation.sourceSha256) {
+          this.#publishBeforeImage(image);
+          continue;
+        }
+        if (operation.sourceSha256 !== null) {
+          errors.push(`${operation.path}: source disappeared without an owned before-file; rollback refused`);
         }
       } catch (error) {
-        errors.push(`${image.path}: ${errorMessage(error)}`);
+        // A failed no-replace restoration deliberately leaves the claimed file
+        // for operator inspection and never overwrites the winner's content.
+        errors.push(`${operation.path}: ${errorMessage(error)}`);
+        if (fs.existsSync(claim) && !fs.existsSync(image.absolute)) {
+          try { this.#restoreClaim(claim, image.absolute); } catch { /* retain claim */ }
+        }
       }
     }
     return errors.length > 0 ? errors.join("; ") : undefined;
@@ -930,7 +1113,10 @@ export class SchemaController {
     for (const stagedPath of paths) {
       try {
         const resolved = resolveWorkspaceFile(this.cwd, stagedPath, { allowAbsent: true });
-        if (resolved.exists) fs.unlinkSync(resolved.absolute);
+        if (resolved.exists) {
+          fs.unlinkSync(resolved.absolute);
+          fsyncDirectory(path.dirname(resolved.absolute));
+        }
       } catch (error) {
         errors.push(`${stagedPath}: ${errorMessage(error)}`);
       }
@@ -990,50 +1176,116 @@ export class SchemaController {
     return this.mesh.publish({ topic: SCHEMA_TOPIC, kind, from: this.identity, data });
   }
 
+  #readLockOwner(filePath = this.#lockPath): CommitLockOwner | undefined {
+    try {
+      const value = JSON.parse(fs.readFileSync(filePath, "utf8")) as Partial<CommitLockOwner>;
+      if (
+        value.format !== 1 ||
+        typeof value.nonce !== "string" ||
+        !/^[a-f0-9]{32}$/.test(value.nonce) ||
+        !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0 ||
+        !Number.isSafeInteger(value.createdAt)
+      ) return undefined;
+      return value as CommitLockOwner;
+    } catch {
+      return undefined;
+    }
+  }
+
+  #ownerIsAlive(owner: CommitLockOwner): boolean {
+    try {
+      process.kill(owner.pid, 0);
+      return true;
+    } catch (error) {
+      return error instanceof Error && "code" in error && error.code === "EPERM";
+    }
+  }
+
   #acquireCommitLock(): () => void {
     fs.mkdirSync(this.#journalRoot, { recursive: true, mode: 0o700 });
+    const nonce = randomBytes(16).toString("hex");
+    const ownerPath = path.join(this.#journalRoot, `.commit.owner-${nonce}.json`);
+    const owner: CommitLockOwner = { format: 1, nonce, pid: process.pid, createdAt: Date.now() };
+    const descriptor = fs.openSync(ownerPath, "wx", 0o600);
+    try {
+      fs.writeFileSync(descriptor, `${JSON.stringify(owner)}\n`);
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    fsyncDirectory(this.#journalRoot);
+
     const acquire = (): void => {
-      const descriptor = fs.openSync(this.#lockPath, "wx", 0o600);
-      try {
-        fs.writeFileSync(descriptor, `${process.pid}\n${Date.now()}\n`);
-        fs.fsyncSync(descriptor);
-      } finally {
-        fs.closeSync(descriptor);
-      }
+      // The fixed lock appears as one atomic hard link to an already-complete,
+      // fsynced owner record. Nobody can observe a partially written owner.
+      fs.linkSync(ownerPath, this.#lockPath);
+      fsyncDirectory(this.#journalRoot);
     };
     try {
       acquire();
     } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
-      // A process may have crashed after this controller was constructed. Re-run
-      // owner/journal recovery instead of leaving the workspace permanently wedged.
+      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
+        fs.rmSync(ownerPath, { force: true });
+        throw error;
+      }
       this.#recoverJournals();
       try {
         acquire();
       } catch (retryError) {
+        fs.rmSync(ownerPath, { force: true });
         if (retryError instanceof Error && "code" in retryError && retryError.code === "EEXIST") {
           throw new Error("Another Schema transaction is in progress");
         }
         throw retryError;
       }
     }
-    return () => fs.rmSync(this.#lockPath, { force: true });
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      try {
+        const current = this.#readLockOwner();
+        if (current?.nonce === nonce) {
+          const lockStat = fs.statSync(this.#lockPath);
+          const ownerStat = fs.statSync(ownerPath);
+          if (lockStat.dev === ownerStat.dev && lockStat.ino === ownerStat.ino) {
+            fs.unlinkSync(this.#lockPath);
+            fsyncDirectory(this.#journalRoot);
+          }
+        }
+      } finally {
+        fs.rmSync(ownerPath, { force: true });
+      }
+    };
   }
 
   #recoverJournals(): void {
     fs.mkdirSync(this.#journalRoot, { recursive: true, mode: 0o700 });
+    let recoveryMarker: string | undefined;
+    let recoveredOwner: CommitLockOwner | undefined;
     try {
-      const [pidText] = fs.readFileSync(this.#lockPath, "utf8").split("\n");
-      const pid = Number(pidText);
-      if (Number.isSafeInteger(pid) && pid > 0) {
+      const owner = this.#readLockOwner();
+      if (!owner) {
+        // Malformed/legacy lock state is never guessed stale. In particular, a
+        // partial file from an older implementation cannot be stolen.
+        if (fs.existsSync(this.#lockPath)) return;
+      } else if (this.#ownerIsAlive(owner)) {
+        return;
+      } else {
+        recoveredOwner = owner;
+        recoveryMarker = path.join(this.#journalRoot, `.commit.recovery-${owner.nonce}`);
         try {
-          process.kill(pid, 0);
-          return;
-        } catch {
-          // The owner is gone; recover its applying journal below.
+          fs.linkSync(this.#lockPath, recoveryMarker);
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "EEXIST") return;
+          throw error;
         }
+        const lockStat = fs.statSync(this.#lockPath);
+        const markerStat = fs.statSync(recoveryMarker);
+        if (lockStat.dev !== markerStat.dev || lockStat.ino !== markerStat.ino) return;
+        fs.unlinkSync(this.#lockPath);
+        fsyncDirectory(this.#journalRoot);
       }
-      fs.rmSync(this.#lockPath, { force: true });
     } catch (error) {
       if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
@@ -1043,10 +1295,16 @@ export class SchemaController {
       try {
         const journal = JSON.parse(fs.readFileSync(filePath, "utf8")) as TransactionJournal;
         if (
-          journal.format !== 1 ||
+          journal.format !== 2 ||
           (journal.status !== "prepared" && journal.status !== "applying") ||
           !Array.isArray(journal.before)
         ) continue;
+        if (journal.status === "applying" && !Array.isArray(journal.operations)) {
+          journal.status = "quarantined";
+          journal.error = "crash recovery refused applying journal without operation ownership records";
+          atomicJsonWrite(filePath, journal);
+          continue;
+        }
         const workspace = this.#workspaceEntry()?.value as SchemaWorkspaceRecord | undefined;
         if (
           workspace?.lastOutcome === "committed" &&
@@ -1059,7 +1317,7 @@ export class SchemaController {
           continue;
         }
         const restoreError = journal.status === "applying"
-          ? this.#restoreBeforeImages(journal.before)
+          ? this.#rollbackPublished(journal)
           : undefined;
         const cleanupError = this.#cleanupStaged(journal.staged ?? []);
         const rollbackError = [restoreError, cleanupError].filter(Boolean).join("; ") || undefined;
@@ -1069,6 +1327,16 @@ export class SchemaController {
       } catch {
         // An unreadable journal is retained for operator quarantine and inspection.
       }
+    }
+    if (recoveryMarker) {
+      fs.rmSync(recoveryMarker, { force: true });
+      if (recoveredOwner) {
+        fs.rmSync(
+          path.join(this.#journalRoot, `.commit.owner-${recoveredOwner.nonce}.json`),
+          { force: true },
+        );
+      }
+      fsyncDirectory(this.#journalRoot);
     }
   }
 }

@@ -470,12 +470,12 @@ describe("Schema transactions", () => {
       { kind: "file_exists", path: "a.txt" },
       { kind: "file_exists", path: "b.txt" },
     ]);
-    const rename = fs.renameSync.bind(fs);
-    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+    const link = fs.linkSync.bind(fs);
+    const linkSpy = vi.spyOn(fs, "linkSync").mockImplementation((source, target) => {
       if (String(source).includes(".b.txt.schema-") && target === path.join(setup.cwd, "b.txt")) {
         throw new Error("injected second publish failure");
       }
-      rename(source, target);
+      link(source, target);
     });
     let result: Record<string, unknown>;
     try {
@@ -492,7 +492,7 @@ describe("Schema transactions", () => {
         artifacts.context,
       );
     } finally {
-      renameSpy.mockRestore();
+      linkSpy.mockRestore();
     }
     expect(result!).toMatchObject({ outcome: "rolled_back", error: "injected second publish failure" });
     expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("alpha\n");
@@ -507,14 +507,14 @@ describe("Schema transactions", () => {
       { kind: "file_exists", path: "a.txt" },
       { kind: "file_exists", path: "b.txt" },
     ]);
-    const fsync = fs.fsyncSync.bind(fs);
-    let fsyncCalls = 0;
-    const fsyncSpy = vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
-      fsync(descriptor);
-      fsyncCalls += 1;
-      // Call one persists the commit lock; call two persists a.txt's stage.
-      // Simulate another process changing that source before publication.
-      if (fsyncCalls === 2) fs.writeFileSync(path.join(setup.cwd, "a.txt"), "external\n");
+    const rename = fs.renameSync.bind(fs);
+    let injected = false;
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+      if (!injected && source === path.join(setup.cwd, "a.txt") && String(target).endsWith(".before")) {
+        injected = true;
+        fs.writeFileSync(source, "external\n");
+      }
+      rename(source, target);
     });
     let result: Record<string, unknown>;
     try {
@@ -531,14 +531,50 @@ describe("Schema transactions", () => {
         artifacts.context,
       );
     } finally {
-      fsyncSpy.mockRestore();
+      renameSpy.mockRestore();
     }
-    expect(result!).toMatchObject({ outcome: "rolled_back", error: expect.stringContaining("source SHA-256 drift") });
+    expect(result!).toMatchObject({
+      outcome: "quarantined",
+      error: expect.stringContaining("source SHA-256 drift"),
+      rollbackError: expect.stringContaining("unexpected concurrent content"),
+    });
     // No Fabric stage was published. The external writer's source remains
     // untouched while the other source retains its original bytes.
     expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("external\n");
     expect(fs.readFileSync(path.join(setup.cwd, "b.txt"), "utf8")).toBe("bravo\n");
     expect(fs.readdirSync(setup.cwd).some((name) => name.includes(".schema-") && name.endsWith(".tmp"))).toBe(false);
+  });
+
+  it("does not overwrite content that appears after Fabric atomically claims a source", async () => {
+    const setup = fixture();
+    const target = path.join(setup.cwd, "a.txt");
+    fs.writeFileSync(target, "alpha\n");
+    const artifacts = await hypothesisAndCertificate(setup, [{ kind: "file_exists", path: "a.txt" }]);
+    const rename = fs.renameSync.bind(fs);
+    let injected = false;
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, destination) => {
+      rename(source, destination);
+      if (!injected && source === target && String(destination).endsWith(".before")) {
+        injected = true;
+        fs.writeFileSync(target, "concurrent\n");
+      }
+    });
+    let result: Record<string, unknown>;
+    try {
+      result = await setup.controller.commit({
+        hypothesisId: artifacts.hypothesisId,
+        certificate: artifacts.certificate,
+        operations: [{ kind: "write", path: "a.txt", content: "fabric\n", expected: { sha256: sha("alpha\n") } }],
+        postconditions: [{ kind: "file_contains", path: "a.txt", literal: "fabric" }],
+      }, artifacts.context);
+    } finally {
+      renameSpy.mockRestore();
+    }
+    expect(result!).toMatchObject({
+      outcome: "quarantined",
+      rollbackError: expect.stringContaining("unexpected concurrent content"),
+    });
+    expect(fs.readFileSync(target, "utf8")).toBe("concurrent\n");
   });
 
   it("refuses external workspace drift during acceptance and restores declared files", async () => {
@@ -604,6 +640,63 @@ describe("Schema transactions", () => {
     expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("alpha\n");
   });
 
+  it("quarantines and preserves regular concurrent content during rollback", async () => {
+    const setup = fixture();
+    const target = path.join(setup.cwd, "a.txt");
+    fs.writeFileSync(target, "alpha\n");
+    setup.config.trustedCommands.concurrent_write = {
+      command: process.execPath,
+      args: ["-e", `require('node:fs').writeFileSync(${JSON.stringify(target)}, 'concurrent\\n'); process.exit(1)`],
+      shell: false,
+      timeoutMs: 5_000,
+    };
+    const artifacts = await hypothesisAndCertificate(setup, [{ kind: "file_exists", path: "a.txt" }]);
+    const result = await setup.controller.commit({
+      hypothesisId: artifacts.hypothesisId,
+      certificate: artifacts.certificate,
+      operations: [{ kind: "write", path: "a.txt", content: "fabric\n", expected: { sha256: sha("alpha\n") } }],
+      postconditions: [{ kind: "trusted_command", name: "concurrent_write" }],
+    }, artifacts.context);
+    expect(result).toMatchObject({
+      outcome: "quarantined",
+      rollbackError: expect.stringContaining("unexpected concurrent content"),
+    });
+    expect(fs.readFileSync(target, "utf8")).toBe("concurrent\n");
+  });
+
+  it("fsyncs a restored file and its parent before the terminal journal status", async () => {
+    if (process.platform === "win32") return;
+    const setup = fixture();
+    const target = path.join(setup.cwd, "a.txt");
+    fs.writeFileSync(target, "alpha\n");
+    const artifacts = await hypothesisAndCertificate(setup, [{ kind: "file_exists", path: "a.txt" }]);
+    const fsync = fs.fsyncSync.bind(fs);
+    const synced: string[] = [];
+    const spy = vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      try { synced.push(fs.readlinkSync(`/proc/self/fd/${descriptor}`)); } catch { synced.push("unknown"); }
+      fsync(descriptor);
+    });
+    try {
+      const result = await setup.controller.commit({
+        hypothesisId: artifacts.hypothesisId,
+        certificate: artifacts.certificate,
+        operations: [{ kind: "write", path: "a.txt", content: "fabric\n", expected: { sha256: sha("alpha\n") } }],
+        postconditions: [{ kind: "file_contains", path: "a.txt", literal: "missing" }],
+      }, artifacts.context);
+      expect(result).toMatchObject({ outcome: "rolled_back" });
+    } finally {
+      spy.mockRestore();
+    }
+    const restored = synced.lastIndexOf(target);
+    const parent = synced.findIndex((entry, index) => index > restored && entry === setup.cwd);
+    const terminalJournal = synced.findIndex(
+      (entry, index) => index > parent && entry.includes("schema-transactions") && entry.endsWith(".json"),
+    );
+    expect(restored).toBeGreaterThanOrEqual(0);
+    expect(parent).toBeGreaterThan(restored);
+    expect(terminalJournal).toBeGreaterThan(parent);
+  });
+
   it("uses CAS so concurrent reuse has at most one committed result", async () => {
     const setup = fixture();
     fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
@@ -624,6 +717,40 @@ describe("Schema transactions", () => {
     expect(committed).toHaveLength(1);
   });
 
+  it("never steals a malformed partially-written legacy lock", async () => {
+    const setup = fixture();
+    fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
+    const artifacts = await hypothesisAndCertificate(setup, [{ kind: "file_exists", path: "a.txt" }]);
+    const lockPath = path.join(setup.mesh.root, "schema-transactions", ".commit.lock");
+    fs.writeFileSync(lockPath, "123\n");
+    await expect(setup.controller.commit({
+      hypothesisId: artifacts.hypothesisId,
+      certificate: artifacts.certificate,
+      operations: [{ kind: "delete", path: "a.txt", expectedSha256: sha("alpha\n") }],
+      postconditions: [{ kind: "file_absent", path: "a.txt" }],
+    }, artifacts.context)).rejects.toThrow("Another Schema transaction is in progress");
+    expect(fs.readFileSync(lockPath, "utf8")).toBe("123\n");
+    expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("alpha\n");
+  });
+
+  it("recovers a complete nonce-owned stale lock without deleting a successor", () => {
+    const setup = fixture();
+    const journalRoot = path.join(setup.mesh.root, "schema-transactions");
+    const nonce = "a".repeat(32);
+    const ownerPath = path.join(journalRoot, `.commit.owner-${nonce}.json`);
+    const lockPath = path.join(journalRoot, ".commit.lock");
+    fs.writeFileSync(ownerPath, JSON.stringify({
+      format: 1,
+      nonce,
+      pid: 2_147_483_647,
+      createdAt: Date.now() - 60_000,
+    }));
+    fs.linkSync(ownerPath, lockPath);
+    new SchemaController(setup.cwd, setup.config, setup.mesh, identity, setup.state);
+    expect(fs.existsSync(lockPath)).toBe(false);
+    expect(fs.existsSync(ownerPath)).toBe(false);
+  });
+
   it("recovers an applying crash journal before accepting new transactions", () => {
     const setup = fixture();
     const target = path.join(setup.cwd, "a.txt");
@@ -634,7 +761,7 @@ describe("Schema transactions", () => {
     fs.writeFileSync(
       path.join(journalRoot, "crashed.json"),
       JSON.stringify({
-        format: 1,
+        format: 2,
         id: "crashed",
         status: "applying",
         before: [{
@@ -645,6 +772,12 @@ describe("Schema transactions", () => {
           mode: 0o644,
         }],
         staged: [".a.txt.schema-crashed-0.tmp"],
+        operations: [{
+          path: "a.txt",
+          kind: "write",
+          sourceSha256: sha("original\n"),
+          resultSha256: sha("mutated\n"),
+        }],
         createdAt: Date.now(),
       }),
     );
@@ -661,7 +794,7 @@ describe("Schema transactions", () => {
     fs.writeFileSync(
       path.join(journalRoot, "prepared.json"),
       JSON.stringify({
-        format: 1,
+        format: 2,
         id: "prepared",
         status: "prepared",
         before: [],
@@ -850,6 +983,10 @@ describe("Schema central gate", () => {
 
     expect(result.success).toBe(true);
     expect(laterResult.success).toBe(true);
+    expect(result.audits[0]?.approval).toMatchObject([
+      { action: "schema.commit", risk: "write", leaseId: expect.any(String) },
+      { action: "schema.commit", risk: "execute", leaseId: expect.any(String) },
+    ]);
     expect(select).toHaveBeenCalledTimes(2);
     const titles = select.mock.calls.map((call) => call[0]);
     expect(titles).toEqual([

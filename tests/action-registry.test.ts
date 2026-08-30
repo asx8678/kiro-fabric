@@ -95,6 +95,53 @@ describe("ActionRegistry", () => {
     ]);
   });
 
+  it("keeps consumed approval proof visible when a later effect guard fails", async () => {
+    let releaseFirst!: () => void;
+    let markStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markStarted = resolve; });
+    const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const guarded = provider();
+    const originalDescribe = guarded.describe.bind(guarded);
+    guarded.describe = async (name, invocationContext) => {
+      const descriptor = await originalDescribe(name, invocationContext);
+      return descriptor ? {
+        ...descriptor,
+        effect: { kind: "emission", ordering: "ordered", resources: ["shared"] },
+      } : undefined;
+    };
+    guarded.invoke = async (_name, args) => {
+      if (args.value === "first") {
+        markStarted();
+        await gate;
+      }
+      return args.value;
+    };
+    const registry = new ActionRegistry();
+    registry.register(guarded);
+    const sessions = new FabricSessionApprovals();
+    const makeContext = (audits: FabricCallAudit[]) => ({
+      ...context,
+      effectPolicy: "strict" as const,
+      approve: async (approvedAction: Parameters<typeof sessions.issueLease>[0], args: Record<string, unknown>) =>
+        sessions.issueLease(approvedAction, args, {}, "allow-once"),
+      audits,
+      maxResultChars: 10_000,
+    });
+    const firstAudits: FabricCallAudit[] = [];
+    const first = registry.invoke("demo.echo", { value: "first" }, makeContext(firstAudits));
+    await firstStarted;
+    const blockedAudits: FabricCallAudit[] = [];
+    await expect(
+      registry.invoke("demo.echo", { value: "second" }, makeContext(blockedAudits)),
+    ).rejects.toThrow("effect conflict");
+    expect(blockedAudits).toMatchObject([{
+      success: false,
+      approval: [{ leaseId: expect.any(String), action: "demo.echo" }],
+    }]);
+    releaseFirst();
+    await first;
+  });
+
   it("describes a bare action name through the unique-name fallback", async () => {
     const registry = new ActionRegistry();
     registry.register(provider());

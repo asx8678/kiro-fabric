@@ -32,6 +32,7 @@ import { schemaValidationMessage } from "../schema-validation.js";
 import { formatFabricEffectConflict } from "./effect-conflict.js";
 import { stableJsonHash } from "./stable-hash.js";
 import {
+  consumeFabricApprovalLeases,
   fabricApprovalArgumentDigest,
   FabricSessionApprovals,
   type FabricApprovalLease,
@@ -880,28 +881,21 @@ export class ActionRegistry {
         context.approvalScope ?? {},
         "explicit-broad",
       );
-      const approvalAudits = (Array.isArray(effectiveGrant) ? effectiveGrant : [effectiveGrant])
-        .map((lease) => lease.consume(action, preparedArgs, context.approvalScope));
+      const approvalAudits = consumeFabricApprovalLeases(
+        Array.isArray(effectiveGrant) ? effectiveGrant : [effectiveGrant],
+        action,
+        preparedArgs,
+        context.approvalScope,
+      );
 
-      failureStage = "invoke";
+      // Publish the audit immediately after consumption. A later guard failure
+      // must not make a successfully consumed composite grant invisible.
       const nestedToolCallId = `${NESTED_TOOL_CALL_ID_PREFIX}${randomUUID()}`;
       const effect = action.effect!;
       const effectConflicts = [...this.#activeEffects.values()].flatMap((active) => {
         const conflict = conflictBetween(effect, active.effect);
         return conflict ? [{ withRef: active.ref, ...conflict }] : [];
       }).slice(0, 32);
-      if (effectConflicts.length > 0 && context.effectPolicy === "strict") {
-        failureStage = "guard";
-        throw new FabricTraceSafeError(
-          `Fabric effect conflict for ${ref}: ${effectConflicts
-            .map((conflict) => formatFabricEffectConflict(
-              conflict.withRef,
-              conflict.resources,
-              conflict.reason,
-            ))
-            .join("; ")}`,
-        );
-      }
       const argsPreview = previewArgs(ref, preparedArgs);
       const activeAudit: FabricCallAudit = {
         ref,
@@ -917,7 +911,6 @@ export class ActionRegistry {
         approval: approvalAudits,
       };
       audit = activeAudit;
-      invocationActive = true;
       context.audits.push(activeAudit);
       context.observeInvocation?.({
         type: "call_start",
@@ -925,6 +918,20 @@ export class ActionRegistry {
         ref,
         args: argsPreview,
       });
+      if (effectConflicts.length > 0 && context.effectPolicy === "strict") {
+        failureStage = "guard";
+        throw new FabricTraceSafeError(
+          `Fabric effect conflict for ${ref}: ${effectConflicts
+            .map((conflict) => formatFabricEffectConflict(
+              conflict.withRef,
+              conflict.resources,
+              conflict.reason,
+            ))
+            .join("; ")}`,
+        );
+      }
+      failureStage = "invoke";
+      invocationActive = true;
       context.update(`Calling ${ref}`);
       this.#activeEffects.set(nestedToolCallId, { ref, effect });
       let providerValue: unknown;
@@ -971,9 +978,12 @@ export class ActionRegistry {
                 context.approvalScope ?? {},
                 "explicit-broad",
               );
-              for (const lease of Array.isArray(reboundGrant) ? reboundGrant : [reboundGrant]) {
-                approvalAudits.push(lease.consume(action, updatedArgs, context.approvalScope));
-              }
+              approvalAudits.push(...consumeFabricApprovalLeases(
+                Array.isArray(reboundGrant) ? reboundGrant : [reboundGrant],
+                action,
+                updatedArgs,
+                context.approvalScope,
+              ));
             }
             const updatedPreview = previewArgs(ref, updatedArgs);
             activeAudit.args = boundedPreviewValue(

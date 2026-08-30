@@ -6,7 +6,11 @@ import {
 } from "../src/core/approval-controller.js";
 import type { FabricAutoApprovalClassifier } from "../src/core/auto-approval-classifier.js";
 import type { ResolvedFabricAction } from "../src/core/action-registry.js";
-import { fabricApprovalScope } from "../src/core/session-approvals.js";
+import {
+  bindFabricApprovalLease,
+  consumeFabricApprovalLeases,
+  fabricApprovalScope,
+} from "../src/core/session-approvals.js";
 
 const action: ResolvedFabricAction = {
   ref: "demo.write",
@@ -288,6 +292,45 @@ describe("ApprovalController", () => {
       Promise.resolve().then(() => lease.consume(action, {})),
     ]);
 
+    expect(settled.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
+    expect(settled.filter((entry) => entry.status === "rejected")).toHaveLength(1);
+  });
+
+  it("validates and consumes a composite grant all-or-none", () => {
+    const session = new FabricSessionApprovals();
+    const args = { path: "original" };
+    const writeAction = { ...action, risk: "write" as const };
+    const executeAction = { ...action, risk: "execute" as const };
+    const write = bindFabricApprovalLease(
+      session.issueLease(writeAction, args, {}, "allow-once"),
+      writeAction,
+    );
+    const execute = bindFabricApprovalLease(
+      session.issueLease(executeAction, { path: "different" }, {}, "allow-once"),
+      executeAction,
+    );
+
+    expect(() => consumeFabricApprovalLeases([write, execute], action, args)).toThrow(
+      "binding does not match",
+    );
+    // Validation did not partially consume the valid first member.
+    expect(write.consume(action, args)).toMatchObject({ risk: "write" });
+    expect(execute.consume(action, { path: "different" })).toMatchObject({ risk: "execute" });
+  });
+
+  it("atomically permits only one concurrent composite consumer", async () => {
+    const session = new FabricSessionApprovals();
+    const writeAction = { ...action, risk: "write" as const };
+    const executeAction = { ...action, risk: "execute" as const };
+    const leases = [writeAction, executeAction].map((approvedAction) =>
+      bindFabricApprovalLease(
+        session.issueLease(approvedAction, {}, {}, "allow-once"),
+        approvedAction,
+      ));
+    const settled = await Promise.allSettled([
+      Promise.resolve().then(() => consumeFabricApprovalLeases(leases, action, {})),
+      Promise.resolve().then(() => consumeFabricApprovalLeases(leases, action, {})),
+    ]);
     expect(settled.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
     expect(settled.filter((entry) => entry.status === "rejected")).toHaveLength(1);
   });

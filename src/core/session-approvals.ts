@@ -66,6 +66,15 @@ export interface FabricApprovalLease {
   ): FabricApprovalLeaseAudit;
 }
 
+interface LeaseHandleRecord {
+  session: FabricSessionApprovals;
+  id: string;
+  /** A composite approval can bind one lease to a stricter synthetic descriptor. */
+  action?: FabricApprovalAction;
+}
+
+const leaseHandles = new WeakMap<FabricApprovalLease, LeaseHandleRecord>();
+
 interface FabricApprovalBinding {
   action: string;
   risk: FabricRisk;
@@ -83,6 +92,14 @@ interface LeaseRecord {
   consumedAt?: number;
 }
 
+interface LeaseCoordinator {
+  now(): number;
+  validate(id: string, candidate: FabricApprovalBinding, now: number): LeaseRecord;
+  consume(id: string, record: LeaseRecord, now: number): FabricApprovalLeaseAudit;
+  burn(id: string, now: number): void;
+}
+
+const leaseCoordinators = new WeakMap<FabricSessionApprovals, LeaseCoordinator>();
 const FABRIC_APPROVAL_LEASE_TTL_MS = 30_000;
 
 const digest = (domain: string, value: unknown): string =>
@@ -150,6 +167,12 @@ export class FabricSessionApprovals {
   constructor(options: { clock?: () => number; leaseTtlMs?: number } = {}) {
     this.#clock = options.clock ?? Date.now;
     this.#leaseTtlMs = Math.max(1, Math.floor(options.leaseTtlMs ?? FABRIC_APPROVAL_LEASE_TTL_MS));
+    leaseCoordinators.set(this, {
+      now: () => this.#clock(),
+      validate: (id, candidate, now) => this.#validateLease(id, candidate, now),
+      consume: (id, record, now) => this.#consumeValidatedLease(id, record, now),
+      burn: (id, now) => this.#burnLease(id, now),
+    });
   }
 
   issueLease(
@@ -168,34 +191,36 @@ export class FabricSessionApprovals {
     };
     this.#leases.set(id, record);
     this.#prune(issuedAt);
-    return {
+    const lease: FabricApprovalLease = {
       id,
       expiresAt: record.expiresAt,
       consume: (candidateAction, candidateArgs, candidateScope = {}) =>
-        this.#consume(id, approvalBinding(candidateAction, candidateArgs, candidateScope)),
+        consumeFabricApprovalLease(lease, candidateAction, candidateArgs, candidateScope),
     };
+    leaseHandles.set(lease, { session: this, id });
+    return lease;
   }
 
-  #consume(id: string, candidate: FabricApprovalBinding): FabricApprovalLeaseAudit {
-    // No await occurs between lookup, validation, and the consumed marker. In the
-    // JS host this is one atomic critical section, so concurrent consumers cannot
-    // both observe an unused lease.
+  #validateLease(id: string, candidate: FabricApprovalBinding, now: number): LeaseRecord {
     const record = this.#leases.get(id);
     if (!record) throw new FabricApprovalLeaseError("Fabric approval lease is unknown or retired");
     if (record.consumedAt !== undefined) {
       throw new FabricApprovalLeaseError("Fabric approval lease has already been consumed");
     }
-    const now = this.#clock();
     if (now >= record.expiresAt) {
-      record.consumedAt = now;
       throw new FabricApprovalLeaseError("Fabric approval lease has expired");
     }
-    // Burn a mismatched lease as well. A failed substitution must not leave an
-    // authorization token available for a corrected replay.
-    record.consumedAt = now;
     if (!sameBinding(record.binding, candidate)) {
       throw new FabricApprovalLeaseError("Fabric approval lease binding does not match this call");
     }
+    return record;
+  }
+
+  #consumeValidatedLease(id: string, record: LeaseRecord, now: number): FabricApprovalLeaseAudit {
+    if (this.#leases.get(id) !== record || record.consumedAt !== undefined) {
+      throw new FabricApprovalLeaseError("Fabric approval lease changed during consumption");
+    }
+    record.consumedAt = now;
     return {
       leaseId: id,
       source: record.source,
@@ -211,6 +236,11 @@ export class FabricSessionApprovals {
       expiresAt: record.expiresAt,
       consumedAt: now,
     };
+  }
+
+  #burnLease(id: string, now: number): void {
+    const record = this.#leases.get(id);
+    if (record && record.consumedAt === undefined) record.consumedAt = now;
   }
 
   #prune(now: number): void {
@@ -238,3 +268,74 @@ export class FabricSessionApprovals {
     }
   }
 }
+
+/** Bind one member of a composite approval to the descriptor actually approved. */
+export const bindFabricApprovalLease = (
+  lease: FabricApprovalLease,
+  action: FabricApprovalAction,
+): FabricApprovalLease => {
+  const handle = leaseHandles.get(lease);
+  if (!handle) throw new FabricApprovalLeaseError("Fabric approval lease cannot be delegated");
+  const bound: FabricApprovalLease = {
+    id: lease.id,
+    expiresAt: lease.expiresAt,
+    consume: (_action, args, scope = {}) =>
+      consumeFabricApprovalLease(bound, action, args, scope),
+  };
+  leaseHandles.set(bound, { ...handle, action });
+  return bound;
+};
+
+const consumeFabricApprovalLease = (
+  lease: FabricApprovalLease,
+  action: FabricApprovalAction,
+  args: Record<string, unknown>,
+  scope: FabricApprovalScope,
+): FabricApprovalLeaseAudit => {
+  try {
+    return consumeFabricApprovalLeases([lease], action, args, scope)[0]!;
+  } catch (error) {
+    // A substituted or expired standalone token is burned. Composite grants
+    // use the exported batch coordinator below and remain all-or-none.
+    const handle = leaseHandles.get(lease);
+    const coordinator = handle ? leaseCoordinators.get(handle.session) : undefined;
+    if (handle && coordinator) coordinator.burn(handle.id, coordinator.now());
+    throw error;
+  }
+};
+
+/**
+ * Validate a composite grant completely, then consume every member in one
+ * synchronous critical section. A bad/expired/replayed member consumes none.
+ */
+export const consumeFabricApprovalLeases = (
+  leases: readonly FabricApprovalLease[],
+  action: FabricApprovalAction,
+  args: Record<string, unknown>,
+  scope: FabricApprovalScope = {},
+): FabricApprovalLeaseAudit[] => {
+  if (leases.length === 0) {
+    throw new FabricApprovalLeaseError("Fabric approval grant contains no leases");
+  }
+  const seen = new Map<FabricSessionApprovals, Set<string>>();
+  const pending = leases.map((lease) => {
+    const handle = leaseHandles.get(lease);
+    if (!handle) throw new FabricApprovalLeaseError("Fabric approval lease is not host-issued");
+    const sessionIds = seen.get(handle.session) ?? new Set<string>();
+    if (sessionIds.has(handle.id)) throw new FabricApprovalLeaseError("Fabric approval grant repeats a lease");
+    sessionIds.add(handle.id);
+    seen.set(handle.session, sessionIds);
+    const coordinator = leaseCoordinators.get(handle.session);
+    if (!coordinator) throw new FabricApprovalLeaseError("Fabric approval lease issuer is unavailable");
+    const candidate = approvalBinding(handle.action ?? action, args, scope);
+    const now = coordinator.now();
+    return {
+      ...handle,
+      coordinator,
+      now,
+      record: coordinator.validate(handle.id, candidate, now),
+    };
+  });
+  return pending.map(({ coordinator, id, record, now }) =>
+    coordinator.consume(id, record, now));
+};

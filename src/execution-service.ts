@@ -31,6 +31,7 @@ import {
   type ResolvedFabricAction,
 } from "./core/action-registry.js";
 import {
+  bindFabricApprovalLease,
   fabricApprovalScope,
   FabricSessionApprovals,
   type FabricApprovalLease,
@@ -530,16 +531,10 @@ export class FabricExecutionService {
               preparedArgs,
               consumedScope,
             );
-            const bind = (
-              lease: FabricApprovalLease,
-              approvedAction: ResolvedFabricAction,
-            ): FabricApprovalLease => ({
-              id: lease.id,
-              expiresAt: lease.expiresAt,
-              consume: (_invokedAction, args, consumedScope) =>
-                lease.consume(approvedAction, args, consumedScope),
-            });
-            return [bind(writeLease, writeAction), bind(executeLease, executeAction)];
+            return [
+              bindFabricApprovalLease(writeLease, writeAction),
+              bindFabricApprovalLease(executeLease, executeAction),
+            ];
           }
           return requestApprovalLease(action, preparedArgs, scope ?? approvalScope);
         },
