@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { sha256Bytes, type KiroManagedLayout } from "./managed.js";
 import { resolveSourcePackageRoot } from "./runtime-closure.js";
 
-const KIRO_MANAGED_SKILL_SOURCE_FILES = [
+const MANAGED_SKILL_FILES = [
   "fabric-exec/SKILL.md",
   "fabric-exec/references/agents.md",
   "fabric-exec/references/mcp.md",
@@ -30,7 +30,7 @@ export const managedKiroSkillSources = (
   layout: KiroManagedLayout,
 ): KiroManagedSkillSource[] => {
   const packageRoot = resolveSourcePackageRoot();
-  return KIRO_MANAGED_SKILL_SOURCE_FILES.map((sourceRelative) => {
+  return MANAGED_SKILL_FILES.map((sourceRelative) => {
     const installedRelative = skillPrefix(layout) + "/" + sourceRelative;
     const bytes = readFileSync(join(packageRoot, "skills", ...sourceRelative.split("/")));
     return {
@@ -57,9 +57,10 @@ export const managedKiroSkillBundleSha256 = (
   return hash.digest("hex");
 };
 
-/** Exact pinned Kiro 2.20.1 skill resource forms for each install layout. */
-export const managedKiroSkillResources = (layout: KiroManagedLayout): string[] => [
-  layout === "project"
-    ? "skill://.kiro/skills/fabric-*/SKILL.md"
-    : "skill:///skills/fabric-*/SKILL.md",
-];
+/** Exact pinned Kiro 2.20.1 skill allow-list; no resource glob can claim siblings. */
+export const managedKiroSkillResources = (layout: KiroManagedLayout): string[] =>
+  ["fabric-exec", "fabric-guide", "fabric-review", "fabric-workflow"].map((name) =>
+    layout === "project"
+      ? `skill://.kiro/skills/${name}/SKILL.md`
+      : `skill:///skills/${name}/SKILL.md`,
+  );

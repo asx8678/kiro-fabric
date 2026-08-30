@@ -1,6 +1,6 @@
 // Setup console for the Kiro integration:
 //
-//   kiro-fabric-setup status | install | update | uninstall | doctor | launch
+//   kiro-fabric-setup status | install | update | repair | uninstall | doctor | launch
 //
 // Bare invocation on a TTY shows a numbered menu; non-interactive bare
 // invocation prints usage. install/update delegate to installKiroProfile,
@@ -49,7 +49,8 @@ const USAGE =
     "Commands:",
     "  status                    Show node, kiro-cli, and per-scope install state",
     "  install                   Install the managed Kiro v3 profile (project scope by default)",
-    "  update                    Update an existing managed installation",
+    "  update                    Update from the current npm/source or installed artifact",
+    "  repair                    Re-attest and restore from the current installed release",
     "  uninstall                 Remove a managed profile or restore the backup",
     "  doctor                    Read-only non-billable health checks",
     "  launch                    Launch kiro-cli with the kiro-fabric agent",
@@ -76,6 +77,7 @@ type SetupCommand =
   | "status"
   | "install"
   | "update"
+  | "repair"
   | "uninstall"
   | "doctor"
   | "launch"
@@ -116,6 +118,7 @@ const parseSetupArgs = (argv: string[]): SetupArgs => {
     command !== "status" &&
     command !== "install" &&
     command !== "update" &&
+    command !== "repair" &&
     command !== "uninstall" &&
     command !== "doctor" &&
     command !== "launch"
@@ -123,7 +126,7 @@ const parseSetupArgs = (argv: string[]): SetupArgs => {
     throw new UsageError("unknown command: " + command);
   }
   const mutating =
-    command === "install" || command === "update" || command === "uninstall";
+    command === "install" || command === "update" || command === "repair" || command === "uninstall";
   const parsed = baseArgs(command);
   for (let i = 0; i < rest.length; i++) {
     const flag = rest[i]!;
@@ -147,12 +150,12 @@ const parseSetupArgs = (argv: string[]): SetupArgs => {
         parsed.yes = true;
         break;
       case "--force":
-        if (command !== "install") throw new UsageError("--force is install-only");
+        if (command !== "install" && command !== "repair") throw new UsageError("--force is install/repair-only");
         parsed.force = true;
         break;
       case "--allow-tools":
-        if (command !== "install" && command !== "update") {
-          throw new UsageError("--allow-tools is install/update-only");
+        if (command !== "install" && command !== "update" && command !== "repair") {
+          throw new UsageError("--allow-tools is install/update/repair-only");
         }
         parsed.allowTools = true;
         break;
@@ -409,12 +412,19 @@ const resolveRoots = (parsed: SetupArgs): KiroInstallRoots =>
     ...(parsed.kiroHome !== undefined ? { kiroHome: parsed.kiroHome } : {}),
   });
 
-const buildInstallOptions = (parsed: SetupArgs): KiroInstallOptions => ({
+const buildInstallOptions = (parsed: SetupArgs): KiroInstallOptions => {
+  const installed = scopeStatusFor(
+    parsed.user ? "user" : "project",
+    parsed.projectRoot,
+    parsed.kiroHome,
+  );
+  const pinnedKiroBinary = parsed.kiroBinary ?? installed.kiroBinaryPath;
+  return {
   ...(parsed.projectRoot !== undefined ? { projectRoot: parsed.projectRoot } : {}),
   ...(parsed.user ? { scope: "user" as const } : {}),
   ...(parsed.kiroHome !== undefined ? { kiroHome: parsed.kiroHome } : {}),
-  ...(parsed.kiroBinary !== undefined ? { kiroBinary: parsed.kiroBinary } : {}),
-  ...(parsed.force ? { force: true } : {}),
+  ...(pinnedKiroBinary !== null && pinnedKiroBinary !== undefined ? { kiroBinary: pinnedKiroBinary } : {}),
+  ...(parsed.force || parsed.command === "repair" ? { force: true } : {}),
   ...(parsed.allowTools ? { allowTools: true } : {}),
   // Test/distribution override agreed with tests/kiro-setup.test.ts: pin the
   // MCP entry when default resolution cannot run (see install.ts). Note the
@@ -422,12 +432,13 @@ const buildInstallOptions = (parsed: SetupArgs): KiroInstallOptions => ({
   ...(process.env.KIRO_FABRIC_MCP_ENTRY
     ? { mcpEntryPath: process.env.KIRO_FABRIC_MCP_ENTRY }
     : {}),
-});
+  };
+};
 
 const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
-  const command = parsed.command === "update" ? "update" : "install";
+  const command = parsed.command === "update" ? "update" : parsed.command === "repair" ? "repair" : "install";
   const roots = resolveRoots(parsed);
-  if (command === "update" && !existsSync(managedManifestPath(roots))) {
+  if ((command === "update" || command === "repair") && !existsSync(managedManifestPath(roots))) {
     process.stderr.write(
       "kiro-fabric: no managed installation to update; run install first\n",
     );
@@ -467,7 +478,7 @@ const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
   if (parsed.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else {
-    const verb = parsed.dryRun ? "planned" : command === "update" ? "updated" : "installed";
+    const verb = parsed.dryRun ? "planned" : command === "update" ? "updated" : command === "repair" ? "repaired" : "installed";
     process.stdout.write(
       verb +
         " (" +
@@ -735,6 +746,7 @@ export const runKiroSetup = async (argv: string[]): Promise<number> => {
         return await runStatus(parsed);
       case "install":
       case "update":
+      case "repair":
         return await runInstall(parsed, io);
       case "uninstall":
         return await runUninstall(parsed, io);

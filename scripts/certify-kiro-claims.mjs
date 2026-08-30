@@ -262,7 +262,7 @@ export const lifecycleClaims = (kiroBinary) => {
       manifest = {};
     }
     const skills = isRecord(manifest.skills) ? manifest.skills : {};
-    const skillAttestation = manifest.format === 2
+    const skillAttestation = (manifest.format === 2 || manifest.format === 3)
       && typeof skills.bundleSha256 === "string"
       && /^[a-f0-9]{64}$/.test(skills.bundleSha256)
       && Array.isArray(skills.files)

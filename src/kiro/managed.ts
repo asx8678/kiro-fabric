@@ -25,7 +25,8 @@ import {
 import { hostname } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-export const KIRO_INSTALL_MANIFEST_FORMAT = 2 as const;
+export const KIRO_INSTALL_MANIFEST_FORMAT = 3 as const;
+const KIRO_PREVIOUS_INSTALL_MANIFEST_FORMAT = 2 as const;
 const KIRO_LEGACY_INSTALL_MANIFEST_FORMAT = 1 as const;
 const MANAGED_OWNER = "kiro-fabric" as const;
 
@@ -39,6 +40,7 @@ const LAYOUT = {
     backupDir: ".kiro/.kiro-fabric/backups",
     lock: ".kiro/.kiro-fabric/operation.lock",
     transaction: ".kiro/.kiro-fabric/transaction.json",
+    manager: ".kiro/.kiro-fabric/bin/kiro-fabric",
     agentsDir: ".kiro/agents",
     skillsDir: ".kiro/skills",
   },
@@ -49,6 +51,7 @@ const LAYOUT = {
     backupDir: ".kiro-fabric/backups",
     lock: ".kiro-fabric/operation.lock",
     transaction: ".kiro-fabric/transaction.json",
+    manager: ".kiro-fabric/bin/kiro-fabric",
     agentsDir: "agents",
     skillsDir: "skills",
   },
@@ -83,6 +86,8 @@ export interface KiroBackupRecord {
 export interface KiroManagedOwnedFile {
   path: string;
   installedSha256: string;
+  /** Required executable permission bits for installed runtime programs. */
+  executableMode?: number;
   backup?: KiroBackupRecord;
 }
 
@@ -93,7 +98,7 @@ export interface KiroRuntimeClosureManifest {
 }
 
 export interface KiroInstallManifest {
-  format: 1 | 2;
+  format: 1 | 2 | 3;
   owner: string;
   packageVersion: string;
   projectRoot: string;
@@ -112,6 +117,10 @@ export interface KiroInstallManifest {
     /** Optional only while reading a pre-v3 manifest for an installer update. */
     agentEngine?: string;
     closure?: KiroRuntimeClosureManifest;
+    /** Self-hosted lifecycle bundle, present in immutable format-3 releases. */
+    managerEntryPath?: string;
+    /** Digest of the attested Node executable copied into the release. */
+    nodeSha256?: string;
   };
   skills?: {
     bundleSha256: string;
@@ -132,6 +141,7 @@ export interface ManagedPaths {
   backupDirRelative: string;
   lock: string;
   transaction: string;
+  manager: string;
   agentsDir: string;
   skillsDir: string;
   runtimeDir: string;
@@ -169,6 +179,7 @@ export const managedPaths = (
     backupDirRelative: spec.backupDir,
     lock: join(root, ...spec.lock.split("/")),
     transaction: join(root, ...spec.transaction.split("/")),
+    manager: join(root, ...spec.manager.split("/")),
     agentsDir: join(root, ...spec.agentsDir.split("/")),
     skillsDir: join(root, ...spec.skillsDir.split("/")),
     runtimeDir: join(root, ...spec.manifestDir.split("/"), "runtime"),
@@ -236,6 +247,7 @@ export const assertManagedTree = (
     paths.runtimeDir,
     paths.lock,
     paths.transaction,
+    paths.manager,
   ]) {
     assertNoSymlinkComponents(root, target);
   }
@@ -291,7 +303,8 @@ const parseOwnedFiles = (
     if (
       entry.path.includes("\\") || entry.path.includes("\0") || isAbsolute(entry.path) ||
       entry.path.split("/").some((part) => part === "" || part === "." || part === "..") ||
-      !entry.path.startsWith(allowedPrefix)
+      !entry.path.startsWith(allowedPrefix) ||
+      (entry.executableMode !== undefined && entry.executableMode !== 0o755)
     ) {
       throw new KiroInstallError("manifest", "install manifest owned file path is unsafe");
     }
@@ -303,6 +316,7 @@ const parseOwnedFiles = (
     return {
       path: entry.path,
       installedSha256: entry.installedSha256,
+      ...(entry.executableMode === 0o755 ? { executableMode: 0o755 } : {}),
       ...(backup ? { backup } : {}),
     };
   });
@@ -338,6 +352,7 @@ export const readManifest = (
   }
   if (
     (parsed.format !== KIRO_LEGACY_INSTALL_MANIFEST_FORMAT &&
+      parsed.format !== KIRO_PREVIOUS_INSTALL_MANIFEST_FORMAT &&
       parsed.format !== KIRO_INSTALL_MANIFEST_FORMAT) ||
     parsed.owner !== MANAGED_OWNER
   ) {
@@ -370,7 +385,10 @@ export const readManifest = (
       (typeof parsed.runtime.kiroBinaryPath !== "string" || !isAbsolute(parsed.runtime.kiroBinaryPath))) ||
     (parsed.runtime.kiroCliVersion !== undefined &&
       typeof parsed.runtime.kiroCliVersion !== "string") ||
-    (parsed.runtime.agentEngine !== undefined && typeof parsed.runtime.agentEngine !== "string")
+    (parsed.runtime.agentEngine !== undefined && typeof parsed.runtime.agentEngine !== "string") ||
+    (parsed.runtime.managerEntryPath !== undefined &&
+      (typeof parsed.runtime.managerEntryPath !== "string" || !isAbsolute(parsed.runtime.managerEntryPath))) ||
+    (parsed.runtime.nodeSha256 !== undefined && !isSha256Hex(parsed.runtime.nodeSha256))
   ) {
     throw new KiroInstallError("manifest", `install manifest Kiro tuple is malformed: ${path}`);
   }
@@ -383,7 +401,7 @@ export const readManifest = (
       : parseBackupRecord(parsed.profile.backup, root, layout);
   let skills: KiroInstallManifest["skills"];
   let closure: KiroRuntimeClosureManifest | undefined;
-  if (parsed.format === KIRO_INSTALL_MANIFEST_FORMAT) {
+  if (parsed.format === KIRO_PREVIOUS_INSTALL_MANIFEST_FORMAT || parsed.format === KIRO_INSTALL_MANIFEST_FORMAT) {
     if (!isRecord(parsed.skills) || !isSha256Hex(parsed.skills.bundleSha256)) {
       throw new KiroInstallError("manifest", "install manifest skill attestation is malformed");
     }
@@ -415,6 +433,21 @@ export const readManifest = (
     if (parsed.runtime.mcpEntryPath !== expectedEntry || !closure.files.some((file) => file.path === runtimeRoot + "/kiro/mcp-entry.js")) {
       throw new KiroInstallError("manifest", "install manifest MCP entry is not bound to its closure");
     }
+    if (parsed.format === KIRO_INSTALL_MANIFEST_FORMAT) {
+      const nodeName = process.platform === "win32" ? "node.exe" : "node";
+      const expectedNode = join(root, ...runtimeRoot.split("/"), "bin", nodeName);
+      const expectedManager = join(root, ...runtimeRoot.split("/"), "kiro", "management-entry.js");
+      const nodeSha256 = parsed.runtime.nodeSha256;
+      if (
+        parsed.runtime.nodePath !== expectedNode ||
+        parsed.runtime.managerEntryPath !== expectedManager ||
+        !isSha256Hex(nodeSha256) ||
+        !closure.files.some((file) => file.path === runtimeRoot + "/bin/" + nodeName && file.installedSha256 === nodeSha256 && file.executableMode === 0o755) ||
+        !closure.files.some((file) => file.path === runtimeRoot + "/kiro/management-entry.js")
+      ) {
+        throw new KiroInstallError("manifest", "install manifest lifecycle runtime is not bound to its release");
+      }
+    }
   }
   return {
     format: parsed.format,
@@ -437,6 +470,12 @@ export const readManifest = (
         : {}),
       ...(typeof parsed.runtime.agentEngine === "string"
         ? { agentEngine: parsed.runtime.agentEngine }
+        : {}),
+      ...(typeof parsed.runtime.managerEntryPath === "string"
+        ? { managerEntryPath: parsed.runtime.managerEntryPath }
+        : {}),
+      ...(typeof parsed.runtime.nodeSha256 === "string"
+        ? { nodeSha256: parsed.runtime.nodeSha256 }
         : {}),
       ...(closure ? { closure } : {}),
     },

@@ -45,6 +45,7 @@ const installWithFake = (root: string, extra: Parameters<typeof installKiroProfi
     projectRoot: root,
     kiroBinary: wrapperPath,
     mcpEntryPath: mcpEntry,
+    runtimeNodeSourcePath: wrapperPath,
     skipRuntimeClosure: true,
     ...extra,
   });

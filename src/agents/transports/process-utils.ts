@@ -84,15 +84,16 @@ const missingRuntimeError = (execPath: string): Error =>
 // Transports launch the worker (a .js module) as `<runtime> worker.js args`.
 // Under the new Bun-compiled pi binary, process.execPath is the pi executable,
 // not node/bun, so it cannot run an arbitrary script. Resolve a real runtime
-// before spawning: reuse process.execPath when it IS node/bun, else fall back
-// to KIRO_FABRIC_NODE_BINARY, then the first node/bun on PATH.
+// before spawning: an explicit KIRO_FABRIC_NODE_BINARY always wins (managed
+// Kiro pins it to the attested installed release), then reuse process.execPath
+// for unmanaged hosts, and only bootstrap-compatible callers may use PATH.
 const resolveScriptRuntimeUncached = async (options: ScriptRuntimeOptions = {}): Promise<string> => {
   const execPath = options.execPath ?? process.execPath;
   const env = options.env ?? process.env;
   const requireNode = options.requireNode === true;
-  if (isGenericRuntime(execPath, requireNode)) return execPath;
   const override = runtimeOverride(env);
   if (override) return override;
+  if (isGenericRuntime(execPath, requireNode)) return execPath;
   for (const candidate of requireNode ? ["node"] : ["node", "bun"]) {
     if (await commandAvailable(candidate)) return candidate;
   }
@@ -122,9 +123,9 @@ export const resolveScriptRuntimeSync = (options: ScriptRuntimeOptions = {}): st
   const execPath = options.execPath ?? process.execPath;
   const env = options.env ?? process.env;
   const requireNode = options.requireNode === true;
-  if (isGenericRuntime(execPath, requireNode)) return execPath;
   const override = runtimeOverride(env);
   if (override) return override;
+  if (isGenericRuntime(execPath, requireNode)) return execPath;
   throw missingRuntimeError(execPath);
 };
 

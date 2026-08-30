@@ -26,8 +26,9 @@ kiro-cli --v3 --agent kiro-fabric
 Node must be version 24 or newer, and Kiro CLI must be exactly 2.20.1. Project
 and user scope are alternatives. A local npm dependency requires
 `npm exec -- kiro-fabric ...`; a source checkout requires `pnpm run build` and
-`node dist/kiro/cli-entry.js ...`. Avoid transient package-runner installs,
-because the generated profile stores an absolute path to the MCP entry.
+`node dist/kiro/cli-entry.js ...`. The bootstrap origin is needed only for
+preflight and initial publication. The generated profile stores only absolute,
+attested paths inside the selected `.kiro` tree.
 
 Dry-run validates the generated profile without writing `.kiro`:
 
@@ -41,8 +42,9 @@ A project install writes only:
 - `<project>/.kiro/.kiro-fabric/install.json`
 - the packaged `fabric-exec`, `fabric-guide`, `fabric-review`, and
   `fabric-workflow` skills under `<project>/.kiro/skills/`
-- an immutable, digest-addressed runtime under
-  `<project>/.kiro/.kiro-fabric/runtime/<digest>/`
+- an immutable, digest-addressed release under
+  `<project>/.kiro/.kiro-fabric/runtime/<digest>/`, including `bin/node`, the
+  MCP and worker entries, exact skill sources, and `kiro/management-entry.js`
 - content-addressed backups under `<project>/.kiro/.kiro-fabric/backups/`
 - a short-lived `<project>/.kiro/.kiro-fabric/operation.lock` during mutation
 
@@ -125,10 +127,21 @@ so replacing or symlink-retargeting that path requires reinstalling the
 profile. Launching from a subdirectory of the unchanged project remains
 supported.
 
+Every Fabric-owned executable executes from the selected `.kiro` tree; this is
+the hermetic Fabric boundary. Format 3 attests every release byte and records executable mode `0755` for the
+installed Node. Publication uses digest-addressed sibling staging, verifies the
+copied bytes and mode, fsyncs staged leaves/directories, and only then atomically
+activates the release. The profile's command and `KIRO_FABRIC_NODE_BINARY` both
+name this installed Node, so Fabric MCP and worker processes never resolve Node
+through the bootstrap `process.execPath` or `PATH` after installation. The one
+execution-origin exception is the external Kiro CLI: its certified canonical
+absolute path is persisted in the profile/manifest and reused by lifecycle and
+workers.
+
 Unknown or user-modified profile or same-name managed-skill content is refused
 unless you pass `--force`, which backs up each existing regular file first.
-Unrelated sibling skills are never claimed. The format-2 manifest records every
-managed skill hash and the exact final runtime file set. Digest directories are
+Unrelated sibling skills are never claimed. Format-2 manifests record the
+pre-vendored runtime; format 3 additionally owns the installed Node and manager. Digest directories are
 immutable: a hash mismatch or extra file is refused instead of recursively
 replaced. Symlinks in managed paths, leaves, or the runtime activation marker are
 always refused.
@@ -202,8 +215,22 @@ kiro-fabric uninstall kiro --user
 ```
 
 If installation used `--kiro-home`, pass the same `--user --kiro-home` values
-to uninstall. Uninstall the managed profile before removing or relocating the
-npm package, Node executable, or source checkout referenced by the profile.
+to uninstall. You may remove the npm package, bootstrap Node, or source checkout after install.
+The immutable release remains self-hosting. Read `runtime.nodePath` and
+`runtime.managerEntryPath` from `install.json`, then invoke:
+
+```bash
+"$INSTALLED_NODE" "$MANAGER_ENTRY" status --user --project-root /canonical/project
+"$INSTALLED_NODE" "$MANAGER_ENTRY" doctor --user --project-root /canonical/project
+"$INSTALLED_NODE" "$MANAGER_ENTRY" launch --project-root /canonical/project
+"$INSTALLED_NODE" "$MANAGER_ENTRY" repair --user --project-root /canonical/project --yes
+"$INSTALLED_NODE" "$MANAGER_ENTRY" update --user --project-root /canonical/project --yes
+"$INSTALLED_NODE" "$MANAGER_ENTRY" uninstall --user --project-root /canonical/project --yes
+```
+
+Pass the original `--kiro-home` where applicable. `repair`/`update` can use the
+current installed release itself as the artifact source; a newer artifact still
+requires running that newer artifact's bootstrap manager.
 
 Uninstall is hash-owned:
 
@@ -211,7 +238,7 @@ Uninstall is hash-owned:
 - Managed profile matching the recorded hash and no user backup → remove the profile.
 - Managed profile or skill with a verified displaced-user backup → restore those exact bytes.
 - Newly created managed skills → remove only their recorded, hash-matching leaves.
-- Runtime closure → remove only the exact attested file set; preserve unrelated siblings.
+- Immutable release (Node included) → remove only the exact attested file set; preserve unrelated siblings.
 - User-modified managed content → refuse before mutation. There is no uninstall `--force`.
 
 Uninstall never runs `kiro-cli` and never requests a model turn. A second
@@ -231,10 +258,12 @@ kiro-fabric doctor kiro --project-root /canonical/project
 kiro-fabric doctor kiro --user --project-root /canonical/project --json
 ```
 
-When invoked through the CLI, doctor first verifies the installed manifest,
+When invoked through the installed management entry, doctor itself and all MCP
+probes execute with the release's attested Node. Doctor first verifies the installed manifest,
 profile hash, every managed skill hash and aggregate digest, the exact runtime
 file set, and the no-follow activation marker. Format-1 manifests are reported
-as legacy and do not claim skill or closure attestation. Checks also cover the
+as legacy and do not claim skill or closure attestation; format 2 is the
+pre-vendored-Node closure and format 3 is the self-hosted immutable release. Checks also cover the
 Node/Kiro tuple, generated profile shape, `kiro-cli agent
 validate` plus a negative control (exit 0 is not trusted), the built MCP
 adapter's `initialize`/`tools/list`, and ACP startup with process-group

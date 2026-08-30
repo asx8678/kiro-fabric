@@ -56,7 +56,7 @@ const spawnCommand = (
   options: { cwd?: string; env?: NodeJS.ProcessEnv },
 ): ChildProcess =>
   NODE_SCRIPT_EXTENSIONS.has(path.extname(command).toLowerCase())
-    ? spawn(process.execPath, [command, ...args], {
+    ? spawn(options.env?.KIRO_FABRIC_NODE_BINARY ?? process.env.KIRO_FABRIC_NODE_BINARY ?? process.execPath, [command, ...args], {
         cwd: options.cwd,
         env: options.env,
         detached: process.platform !== "win32",

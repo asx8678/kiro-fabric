@@ -61,6 +61,7 @@ const installWithFake = (root: string, extra: Parameters<typeof installKiroProfi
     projectRoot: root,
     kiroBinary: wrapperPath,
     mcpEntryPath: mcpEntry,
+    runtimeNodeSourcePath: wrapperPath,
     skipRuntimeClosure: true,
     fabricConfig: structuredClone(DEFAULT_FABRIC_CONFIG),
     ...extra,
@@ -324,7 +325,7 @@ describe("installKiroProfile", () => {
 
 
 
-  it("reads format 1 and upgrades to attested format 2 only on successful install", async () => {
+  it("reads format 1 and upgrades to attested format 3 only on successful install", async () => {
     const dir = project("manifest-upgrade");
     const legacy = await installWithFake(dir);
     expect(JSON.parse(readFileSync(legacy.manifestPath, "utf8")).format).toBe(1);
@@ -335,7 +336,7 @@ describe("installKiroProfile", () => {
     expect(dry.operations.at(-1)?.kind).toBe("manifest");
     expect(JSON.parse(readFileSync(legacy.manifestPath, "utf8")).format).toBe(1);
     await installWithFake(dir, { skipRuntimeClosure: false });
-    expect(JSON.parse(readFileSync(legacy.manifestPath, "utf8")).format).toBe(2);
+    expect(JSON.parse(readFileSync(legacy.manifestPath, "utf8")).format).toBe(3);
   });
 
   it("installs and attests the complete managed skill bundle with the closure", async () => {
@@ -345,7 +346,12 @@ describe("installKiroProfile", () => {
       resources: string[];
       mcpServers: { fabric: { env: Record<string, string> } };
     };
-    expect(profile.resources).toEqual(["skill://.kiro/skills/fabric-*/SKILL.md"]);
+    expect(profile.resources).toEqual([
+      "skill://.kiro/skills/fabric-exec/SKILL.md",
+      "skill://.kiro/skills/fabric-guide/SKILL.md",
+      "skill://.kiro/skills/fabric-review/SKILL.md",
+      "skill://.kiro/skills/fabric-workflow/SKILL.md",
+    ]);
     expect(profile.mcpServers.fabric.env.KIRO_FABRIC_SKILL_BUNDLE_SHA256).toMatch(/^[a-f0-9]{64}$/);
 
     const manifest = JSON.parse(readFileSync(result.manifestPath, "utf8")) as {
@@ -353,7 +359,7 @@ describe("installKiroProfile", () => {
       skills: { bundleSha256: string; files: Array<{ path: string; installedSha256: string }> };
       runtime: { closure: { files: Array<{ path: string; installedSha256: string }> } };
     };
-    expect(manifest.format).toBe(2);
+    expect(manifest.format).toBe(3);
     expect(manifest.skills.files).toHaveLength(6);
     expect(manifest.runtime.closure.files.length).toBeGreaterThan(1);
     for (const file of manifest.skills.files) {
@@ -721,7 +727,12 @@ describe("user-home Kiro install", () => {
       mcpServers: { fabric: { env: { KIRO_FABRIC_PROJECT_ROOT: string } } };
     };
     expect(profile.mcpServers.fabric.env.KIRO_FABRIC_PROJECT_ROOT).toBe(realpathSync(dir));
-    expect(profile.resources).toEqual(["skill:///skills/fabric-*/SKILL.md"]);
+    expect(profile.resources).toEqual([
+      "skill:///skills/fabric-exec/SKILL.md",
+      "skill:///skills/fabric-guide/SKILL.md",
+      "skill:///skills/fabric-review/SKILL.md",
+      "skill:///skills/fabric-workflow/SKILL.md",
+    ]);
     expect(existsSync(join(home, "skills", "fabric-workflow", "SKILL.md"))).toBe(true);
     const manifest = JSON.parse(
       readFileSync(join(home, ".kiro-fabric", "install.json"), "utf8"),

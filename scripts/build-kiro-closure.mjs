@@ -43,6 +43,7 @@ const result = await build({
   entryPoints: [
     "src/kiro/mcp-entry.ts",
     "src/kiro/agent-worker-entry.ts",
+    "src/kiro/management-entry.ts",
   ],
   outdir,
   outbase: "src",
@@ -193,7 +194,9 @@ walk(outdir);
 if (mapCount > 0) throw new Error(`Production closure must not contain source maps (found ${mapCount})`);
 
 // 2. Required entries + metadata present.
-for (const entry of ["mcp-entry.js", "agent-worker-entry.js"]) {
+// The setup entry is the self-hosted management/lifecycle entry in every
+// immutable installed release.
+for (const entry of ["mcp-entry.js", "agent-worker-entry.js", "management-entry.js"]) {
   if (!existsSync(join(outdir, "kiro", entry))) {
     throw new Error(`closure entry missing: kiro/${entry}`);
   }

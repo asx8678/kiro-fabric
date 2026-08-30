@@ -130,6 +130,7 @@ export const runKiroDoctor = async (
     options.checkInstalled || options.projectRoot || options.kiroHome,
   );
   let attestedInstalledMcpEntryPath: string | undefined;
+  let attestedInstalledNodePath: string | undefined;
   const checks: KiroDoctorCheck[] = [];
   let tupleFailed = false;
 
@@ -183,7 +184,7 @@ export const runKiroDoctor = async (
       }
       return manifest.format === 1
         ? "legacy format-1 profile ownership verified"
-        : "format-2 profile and manifest ownership verified";
+        : `format-${manifest.format} profile and manifest ownership verified`;
     });
     const installedManifest: KiroInstallManifest | null = manifestOk
       ? readManifest(roots.installRoot, roots.layout)
@@ -236,7 +237,8 @@ export const runKiroDoctor = async (
         // back to its own package's dist/ entry when the managed release is
         // absent, legacy, or damaged.
         attestedInstalledMcpEntryPath = installedManifest!.runtime.mcpEntryPath;
-        return closure.files.length + " runtime closure files verified";
+        attestedInstalledNodePath = installedManifest!.runtime.nodePath;
+        return closure.files.length + " immutable release files verified";
       });
     }
   }
@@ -259,7 +261,7 @@ export const runKiroDoctor = async (
 
   try {
     await run("tuple", async () => {
-      const node = await assertSupportedNode(process.execPath);
+      const node = await assertSupportedNode(attestedInstalledNodePath ?? process.execPath);
       const kiro = await assertKiroVersion(kiroBinary);
       if (
         managedKiroBinaryPath &&
@@ -279,7 +281,7 @@ export const runKiroDoctor = async (
     const profile = generateKiroProfile({
       projectRoot,
       mcpEntryPath: attestedInstalledMcpEntryPath ?? requestedMcpEntryPath,
-      nodePath: process.execPath,
+      nodePath: attestedInstalledNodePath ?? process.execPath,
       ...(observedKiro
         ? {
             kiroBinaryPath: observedKiro.executablePath,
@@ -354,7 +356,7 @@ export const runKiroDoctor = async (
     } else {
       const mcpEntryPath = attestedInstalledMcpEntryPath ?? requestedMcpEntryPath;
       const mcp = spawnJsonRpcProcess({
-        argv: [process.execPath, mcpEntryPath],
+        argv: [attestedInstalledNodePath ?? process.execPath, mcpEntryPath],
         cwd: projectRoot,
         env: { ...process.env, KIRO_FABRIC_PROJECT_ROOT: projectRoot },
         timeoutMs: 30_000,
@@ -585,7 +587,10 @@ export const runKiroDoctor = async (
     nonBillable: true,
     modelTurnsRequested: 0,
     observed: {
-      node: { path: process.execPath, version: process.versions.node },
+      node: {
+        path: attestedInstalledNodePath ?? process.execPath,
+        version: process.versions.node,
+      },
       kiro: {
         path: observedKiro?.executablePath ?? kiroBinary,
         version: tupleFailed ? null : observedKiro?.version ?? null,

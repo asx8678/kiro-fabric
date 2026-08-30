@@ -95,8 +95,10 @@ export interface KiroInstallOptions {
   projectRoot?: string;
   /** Absolute path to the built MCP entry. Defaults to dist/kiro/mcp-entry.js. */
   mcpEntryPath?: string;
-  /** Node executable embedded in the profile; defaults to process.execPath. */
+  /** Bootstrap Node to certify before mutation; never persisted for format-3 installs. */
   nodePath?: string;
+  /** Injectable Node artifact copied into the release (small fake for unit fixtures). */
+  runtimeNodeSourcePath?: string;
   /** Kiro binary used for --version / agent validate; default "kiro-cli". */
   kiroBinary?: string;
   /** Replace an unknown or user-modified regular profile (backup first). */
@@ -196,7 +198,13 @@ const buildManifest = (
       : {}),
     kiroCliVersion: options.kiroIdentity?.version ?? KIRO_CLI_VERSION,
     agentEngine: KIRO_AGENT_ENGINE,
-    ...(closure ? { closure: closure.attestation } : {}),
+    ...(closure
+      ? {
+          closure: closure.attestation,
+          managerEntryPath: closure.managementEntryPath,
+          nodeSha256: closure.attestation.files.find((file) => file.path.endsWith("/bin/node") || file.path.endsWith("/bin/node.exe"))!.installedSha256,
+        }
+      : {}),
   },
   ...(closure
     ? {
@@ -235,6 +243,8 @@ const manifestIsCurrent = (
   existing.runtime.kiroBinaryPath === desired.runtime.kiroBinaryPath &&
   existing.runtime.kiroCliVersion === desired.runtime.kiroCliVersion &&
   existing.runtime.agentEngine === desired.runtime.agentEngine &&
+  existing.runtime.managerEntryPath === desired.runtime.managerEntryPath &&
+  existing.runtime.nodeSha256 === desired.runtime.nodeSha256 &&
   existing.profile.installedSha256 === desired.profile.installedSha256 &&
   existing.profile.path === desired.profile.path &&
   backupRecordsEqual(existing.profile.backup, desired.profile.backup) &&
@@ -723,7 +733,8 @@ const commitInstall = (plan: KiroInstallPlan): void => {
     }
   }
 
-  // Journal profile, every owned skill leaf, then manifest last. Recovery is
+  // The activation/recovery transaction journal covers profile, every owned
+  // skill leaf, then manifest last. Recovery is
   // idempotent and never exposes a manifest that describes partial skill bytes.
   const currentManifest = readManagedFileNoFollow(plan.installRoot, plan.manifestPath);
   commitManagedFileTransaction(
@@ -784,11 +795,13 @@ export const installKiroProfile = async (
   const roots = resolveKiroInstallRoots(options);
   const closurePlan = options.skipRuntimeClosure
     ? undefined
-    : planRuntimeClosureDeployment(roots.installRoot, roots.layout);
+    : planRuntimeClosureDeployment(roots.installRoot, roots.layout, {
+        nodeSourcePath: options.runtimeNodeSourcePath ?? nodeIdentity.executablePath,
+      });
   const effectiveMcpEntry = closurePlan?.mcpEntryPath ?? options.mcpEntryPath;
   const planOptions: KiroInstallOptions = {
     ...options,
-    nodePath: nodeIdentity.executablePath,
+    nodePath: closurePlan?.runtimeNodePath ?? nodeIdentity.executablePath,
     kiroBinary,
     ...(effectiveMcpEntry ? { mcpEntryPath: effectiveMcpEntry } : {}),
   };
@@ -811,7 +824,9 @@ export const installKiroProfile = async (
     recoverManagedTransaction(planned.installRoot, planned.layout);
     const lockedClosurePlan = options.skipRuntimeClosure
       ? undefined
-      : planRuntimeClosureDeployment(roots.installRoot, roots.layout);
+      : planRuntimeClosureDeployment(roots.installRoot, roots.layout, {
+          nodeSourcePath: options.runtimeNodeSourcePath ?? nodeIdentity.executablePath,
+        });
     if (closurePlan && lockedClosurePlan?.digest !== closurePlan.digest) {
       throw new KiroInstallError(
         "concurrency",
@@ -828,7 +843,7 @@ export const installKiroProfile = async (
     }
     const lockedOptions: KiroInstallOptions = {
       ...options,
-      nodePath: nodeIdentity.executablePath,
+      nodePath: lockedClosurePlan?.runtimeNodePath ?? nodeIdentity.executablePath,
       kiroBinary,
       ...(lockedMcpEntry ? { mcpEntryPath: lockedMcpEntry } : {}),
     };
@@ -848,6 +863,7 @@ export const installKiroProfile = async (
       ? deployRuntimeClosure(roots.installRoot, roots.layout, {
           ...(options.force !== undefined ? { force: options.force } : {}),
           expectedDigest: lockedClosurePlan.digest,
+          nodeSourcePath: options.runtimeNodeSourcePath ?? nodeIdentity.executablePath,
         })
       : undefined;
     if (plan.action !== "noop") commitInstall(plan);

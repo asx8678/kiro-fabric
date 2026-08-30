@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["src/index.ts", "src/protocol.ts", "src/kernel/index.ts", "src/kiro/index.ts", "src/kiro/mcp-entry.ts", "src/kiro/cli-entry.ts", "src/kiro/setup-entry.ts", "src/kiro/agent-worker-entry.ts", "src/worker.ts", "src/verification/index.ts", "tests/**/*.test.ts"],
+  "entry": ["src/index.ts", "src/protocol.ts", "src/kernel/index.ts", "src/kiro/index.ts", "src/kiro/mcp-entry.ts", "src/kiro/cli-entry.ts", "src/kiro/setup-entry.ts", "src/kiro/management-entry.ts", "src/kiro/agent-worker-entry.ts", "src/worker.ts", "src/verification/index.ts", "tests/**/*.test.ts"],
   "project": ["src/**/*.ts"],
   "ignore": ["src/kiro/runtime-closure.ts"]
 }

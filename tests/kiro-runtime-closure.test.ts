@@ -4,6 +4,7 @@
 
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -38,6 +39,7 @@ const closureWorkerEntry = join("kiro", "agent-worker-entry.js");
 let base: string;
 const roots: string[] = [];
 let wrapperPath: string;
+let fakeRuntimePath: string;
 
 const project = (name: string): string => {
   const dir = join(base, name);
@@ -59,6 +61,7 @@ const installWithFake = (
     projectRoot: root,
     kiroBinary: wrapperPath,
     mcpEntryPath: sourceMcpEntry,
+    runtimeNodeSourcePath: fakeRuntimePath,
     ...extra,
   });
 
@@ -72,6 +75,9 @@ beforeEach(() => {
     { mode: 0o755 },
   );
   chmodSync(wrapperPath, 0o755);
+  fakeRuntimePath = join(base, "fake-node-runtime");
+  writeFileSync(fakeRuntimePath, "#!/bin/sh\nexit 97\n", { mode: 0o755 });
+  chmodSync(fakeRuntimePath, 0o755);
 });
 
 afterEach(() => {
@@ -81,9 +87,12 @@ afterEach(() => {
 });
 
 describe("runtime closure deployment", () => {
+  const deploySmall = (root: string, layout: "project" | "user") =>
+    deployRuntimeClosure(root, layout, { nodeSourcePath: fakeRuntimePath });
+
   it("deploys a self-contained runtime closure in project scope", () => {
     const dir = project("closure-project");
-    const closure = deployRuntimeClosure(dir, "project");
+    const closure = deploySmall(dir, "project");
     expect(closure.updated).toBe(true);
     expect(existsSync(closure.mcpEntryPath)).toBe(true);
     // The mcp-entry must be inside the managed tree, not the source checkout
@@ -93,6 +102,15 @@ describe("runtime closure deployment", () => {
     const versionDir = join(runtimeClosurePath(dir, "project"), closure.digest);
     expect(existsSync(join(versionDir, "package.json"))).toBe(true);
     expect(existsSync(join(versionDir, closureWorkerEntry))).toBe(true);
+    expect(existsSync(closure.runtimeNodePath)).toBe(true);
+    expect(existsSync(closure.managementEntryPath)).toBe(true);
+    expect(closure.runtimeNodePath.startsWith(join(dir, ".kiro"))).toBe(true);
+    expect(closure.managementEntryPath.startsWith(join(dir, ".kiro"))).toBe(true);
+    expect(readFileSync(closure.runtimeNodePath)).toEqual(readFileSync(fakeRuntimePath));
+    expect(closure.attestation.files).toContainEqual(expect.objectContaining({
+      path: expect.stringMatching(/\/bin\/node(?:\.exe)?$/),
+      executableMode: 0o755,
+    }));
     expect(existsSync(join(versionDir, ".closure-digest"))).toBe(true);
     expect(existsSync(join(runtimeClosurePath(dir, "project"), ".closure-current"))).toBe(true);
     // Bound phase metrics are present and non-negative
@@ -103,7 +121,7 @@ describe("runtime closure deployment", () => {
 
   it("deploys a self-contained runtime closure in user scope", () => {
     const home = kiroHome();
-    const closure = deployRuntimeClosure(home, "user");
+    const closure = deploySmall(home, "user");
     expect(closure.updated).toBe(true);
     expect(existsSync(closure.mcpEntryPath)).toBe(true);
     expect(closure.mcpEntryPath.startsWith(home)).toBe(true);
@@ -124,15 +142,15 @@ describe("runtime closure deployment", () => {
     const outside = join(dir, "outside-marker");
     writeFileSync(outside, "outside\n");
     symlinkSync(outside, join(runtime, ".closure-current"));
-    expect(() => deployRuntimeClosure(dir, "project")).toThrow(/marker.*regular file|symlink/i);
+    expect(() => deploySmall(dir, "project")).toThrow(/marker.*regular file|symlink/i);
     expect(readFileSync(outside, "utf8")).toBe("outside\n");
   });
 
   it("is idempotent: second deploy without changes returns updated=false", () => {
     const dir = project("idempotent");
-    const first = deployRuntimeClosure(dir, "project");
+    const first = deploySmall(dir, "project");
     expect(first.updated).toBe(true);
-    const second = deployRuntimeClosure(dir, "project");
+    const second = deploySmall(dir, "project");
     expect(second.updated).toBe(false);
     expect(second.mcpEntryPath).toBe(first.mcpEntryPath);
     expect(second.digest).toBe(first.digest);
@@ -140,15 +158,15 @@ describe("runtime closure deployment", () => {
 
   it("force never replaces an immutable digest directory", () => {
     const dir = project("force-redeploy");
-    deployRuntimeClosure(dir, "project");
-    const forced = deployRuntimeClosure(dir, "project", { force: true });
+    deploySmall(dir, "project");
+    const forced = deployRuntimeClosure(dir, "project", { force: true, nodeSourcePath: fakeRuntimePath });
     expect(forced.updated).toBe(false);
     expect(forced.action).toBe("noop");
   });
 
   it("excludes source maps from the deployed closure", () => {
     const dir = project("no-maps");
-    const closure = deployRuntimeClosure(dir, "project");
+    const closure = deploySmall(dir, "project");
     const versionDir = join(runtimeClosurePath(dir, "project"), closure.digest);
     // Walk the deployed tree and assert no .map files exist
     const walk = (d: string): void => {
@@ -171,7 +189,7 @@ describe("runtime closure deployment", () => {
 
   it("removeRuntimeClosure removes the directory", () => {
     const dir = project("remove");
-    deployRuntimeClosure(dir, "project");
+    deploySmall(dir, "project");
     const runtimeDir = runtimeClosurePath(dir, "project");
     expect(existsSync(runtimeDir)).toBe(true);
     const removed = removeRuntimeClosure(dir, "project");
@@ -192,6 +210,7 @@ describe("runtime closure deployment", () => {
     const probe = project("digest-probe");
     const probeClosure = join(probe, "dist", "kiro-closure");
     mkdirSync(join(probeClosure, "kiro"), { recursive: true });
+    cpSync(join(repoRoot, "skills"), join(probe, "skills"), { recursive: true });
     writeFileSync(join(probeClosure, "kiro", "mcp-entry.js"), "const a = 1;\n");
     // compute actually reads from packageRoot param; pass a package-root-like
     // folder that has a version read working.
@@ -216,9 +235,11 @@ describe("installer with runtime closure", () => {
 
     // Read the installed profile
     const profile = JSON.parse(readFileSync(result.profilePath, "utf8")) as {
-      mcpServers: { fabric: { args: string[] } };
+      mcpServers: { fabric: { command: string; args: string[]; env: Record<string, string> } };
     };
     const mcpEntryInProfile = profile.mcpServers.fabric.args[0]!;
+    expect(profile.mcpServers.fabric.command).toBe(result.runtimeClosure?.runtimeNodePath);
+    expect(profile.mcpServers.fabric.env.KIRO_FABRIC_NODE_BINARY).toBe(result.runtimeClosure?.runtimeNodePath);
 
     // Must point inside the Kiro home's managed runtime closure
     const resolvedHome = realpathSync(home);
@@ -291,6 +312,7 @@ describe("installer with runtime closure", () => {
       scope: "user",
       kiroHome: home,
       nodePath: altNode,
+      runtimeNodeSourcePath: altNode,
     });
     expect(updated.action).toBe("update");
 

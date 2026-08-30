@@ -214,17 +214,33 @@ describe("detached installed Kiro runtime", () => {
         format: number;
         runtime: {
           nodePath: string;
+          nodeSha256: string;
           mcpEntryPath: string;
-          closure: { root: string; files: Array<{ path: string; installedSha256: string }> };
+          managerEntryPath: string;
+          closure: { root: string; files: Array<{ path: string; installedSha256: string; executableMode?: number }> };
         };
       };
       const recorded = profile.mcpServers.fabric;
-      expect(manifest.format).toBe(2);
+      expect(manifest.format).toBe(3);
       expect(recorded.command).toBe(manifest.runtime.nodePath);
       expect(recorded.args).toEqual([manifest.runtime.mcpEntryPath]);
       expect(manifest.runtime.mcpEntryPath).toBe(installResult.runtimeClosure?.mcpEntryPath);
       expect(isAbsolute(manifest.runtime.mcpEntryPath)).toBe(true);
-      expect(relative(kiroHome, manifest.runtime.mcpEntryPath)).not.toMatch(/^\.\.(?:[\\/]|$)/);
+      for (const installedPath of [
+        manifest.runtime.nodePath,
+        manifest.runtime.mcpEntryPath,
+        manifest.runtime.managerEntryPath,
+      ]) {
+        expect(isAbsolute(installedPath)).toBe(true);
+        expect(relative(kiroHome, installedPath)).not.toMatch(/^\.\.(?:[\\/]|$)/);
+        expect(installedPath).not.toContain(packageOrigin);
+      }
+      const nodeRelative = relative(kiroHome, manifest.runtime.nodePath).split(sep).join("/");
+      expect(manifest.runtime.closure.files).toContainEqual({
+        path: nodeRelative,
+        installedSha256: manifest.runtime.nodeSha256,
+        executableMode: 0o755,
+      });
       const entryRelative = relative(kiroHome, manifest.runtime.mcpEntryPath).split(sep).join("/");
       expect(manifest.runtime.closure.files).toContainEqual(expect.objectContaining({ path: entryRelative }));
       expect(recorded.args[0]).not.toContain(packageOrigin);
@@ -245,8 +261,39 @@ describe("detached installed Kiro runtime", () => {
       await probeInstalledMcp(profile, projectRoot, hermeticEnv);
       await probeInstalledMcp(profile, projectRoot, hermeticEnv);
 
+      // Fresh manager processes also use only attested release paths. Status
+      // and repair execute after origin removal; repair resolves this installed
+      // release itself as the current artifact and preserves the same digest.
+      const managerArgs = [manifest.runtime.managerEntryPath];
+      const lifecycleBase = ["--user", "--kiro-home", kiroHome, "--project-root", projectRoot];
+      const status = await execFileAsync(manifest.runtime.nodePath, [
+        ...managerArgs,
+        "status",
+        ...lifecycleBase,
+        "--json",
+      ], { cwd: projectRoot, env: hermeticEnv, encoding: "utf8", timeout: 30_000 });
+      expect(JSON.parse(String(status.stdout)).scopes.user.healthy).toBe(true);
+      const repair = await execFileAsync(manifest.runtime.nodePath, [
+        ...managerArgs,
+        "repair",
+        ...lifecycleBase,
+        "--yes",
+        "--json",
+      ], { cwd: projectRoot, env: hermeticEnv, encoding: "utf8", timeout: 90_000 });
+      expect(JSON.parse(String(repair.stdout)).ok).toBe(true);
+
       expect(existsSync(packageOrigin)).toBe(false);
       expect(existsSync(canaryLog) ? readFileSync(canaryLog, "utf8") : "").toBe("");
+
+      const removed = await execFileAsync(manifest.runtime.nodePath, [
+        ...managerArgs,
+        "uninstall",
+        ...lifecycleBase,
+        "--yes",
+        "--json",
+      ], { cwd: projectRoot, env: hermeticEnv, encoding: "utf8", timeout: 30_000 });
+      expect(JSON.parse(String(removed.stdout)).ok).toBe(true);
+      expect(existsSync(manifestPath)).toBe(false);
     },
     120_000,
   );

@@ -142,6 +142,8 @@ export const generateKiroProfile = (
     (options.allowShell === true ||
       options.enableSubagents === true ||
       options.allowTools === true);
+  // `runtimeNode` is the installed release path for every managed format-3 profile.
+  const runtimeNode = options.nodePath ?? process.execPath;
   let confinedProjectRoot: string | undefined;
   let projectIdentity: { dev: string; ino: string } | undefined;
   if (confineManagedGrant) {
@@ -165,7 +167,7 @@ export const generateKiroProfile = (
     resources: internal ? [] : [...(options.resources ?? [])],
     mcpServers: {
       fabric: {
-        command: options.nodePath ?? process.execPath,
+        command: runtimeNode,
         args: [options.mcpEntryPath],
         env: {
           // Non-security extras come first. Canonical managed values are always
@@ -174,6 +176,9 @@ export const generateKiroProfile = (
           KIRO_FABRIC_HOST: "kiro-v3",
           KIRO_FABRIC_PROFILE_KIND: internal ? "internal-child" : "managed-main",
           KIRO_FABRIC_PROJECT_ROOT: confinedProjectRoot ?? options.projectRoot,
+          // Workers and JavaScript ACP children inherit this absolute runtime;
+          // installed profiles never rediscover Node through PATH/process.execPath.
+          KIRO_FABRIC_NODE_BINARY: runtimeNode,
           ...(options.kiroBinaryPath
             ? { [KIRO_BINARY_ENV]: options.kiroBinaryPath }
             : {}),

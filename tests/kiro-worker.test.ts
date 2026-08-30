@@ -102,6 +102,7 @@ const installFake = async (projectRoot: string, wrapper: string) => {
     projectRoot,
     kiroBinary: wrapper,
     mcpEntryPath,
+    runtimeNodeSourcePath: wrapper,
   });
 };
 
@@ -119,6 +120,7 @@ const installUserFake = async (
     scope: "user",
     kiroHome,
     allowTools: true,
+    runtimeNodeSourcePath: wrapper,
   });
 };
 
@@ -143,6 +145,9 @@ const fingerprintFor = (
     tools: [],
     ...(manifest?.runtime.mcpEntryPath
       ? { mcpEntryPath: manifest.runtime.mcpEntryPath }
+      : {}),
+    ...(manifest?.runtime.nodePath
+      ? { nodePath: manifest.runtime.nodePath }
       : {}),
   });
   const fp = kiroSessionProfileFingerprint({
