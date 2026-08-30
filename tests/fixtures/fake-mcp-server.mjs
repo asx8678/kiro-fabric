@@ -7,10 +7,19 @@ const respond = (id, result) => {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
 };
 
+const countEvent = (event) => {
+  if (!process.env.KIRO_FABRIC_MCP_EVENT_FILE) return;
+  fs.appendFileSync(
+    process.env.KIRO_FABRIC_MCP_EVENT_FILE,
+    `${process.env.KIRO_FABRIC_MCP_COUNT_LABEL ?? "server"}:${event}\n`,
+  );
+};
+
 input.on("line", (line) => {
   if (!line.trim()) return;
   const request = JSON.parse(line);
   if (request.method === "initialize") {
+    countEvent("initialize");
     respond(request.id, {
       protocolVersion: request.params.protocolVersion,
       capabilities: { tools: {} },
@@ -19,6 +28,7 @@ input.on("line", (line) => {
     return;
   }
   if (request.method === "tools/list") {
+    countEvent("tools/list");
     if (process.env.KIRO_FABRIC_MCP_COUNT_FILE) {
       fs.appendFileSync(
         process.env.KIRO_FABRIC_MCP_COUNT_FILE,
@@ -64,6 +74,7 @@ input.on("line", (line) => {
     return;
   }
   if (request.method === "tools/call") {
+    countEvent(`tools/call:${request.params.name}`);
     const sendResult = () =>
       respond(request.id, {
         content: [{

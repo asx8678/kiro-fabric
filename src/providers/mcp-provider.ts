@@ -4,6 +4,7 @@ import type {
   ServerDefinition,
   ServerToolInfo,
 } from "mcporter";
+import { FabricTraceSafeError } from "../audit/trace.js";
 import type { FabricMcpConfig } from "../config.js";
 import type {
   FabricActionDescriptor,
@@ -12,6 +13,7 @@ import type {
   FabricProviderListRequest,
 } from "../protocol.js";
 import { sanitizeMcpRefPart } from "../ref-names.js";
+import { validateSchemaValue } from "../schema-validation.js";
 import {
   hashServerDefinition,
   MCP_DESCRIPTOR_CACHE_VERSION,
@@ -357,7 +359,10 @@ export class McpProvider implements FabricProvider {
         typeof args.args === "object" && args.args !== null && !Array.isArray(args.args)
           ? (args.args as Record<string, unknown>)
           : {};
-      return this.#call(server, tool, toolArgs, context.signal, true);
+      return this.#call(server, tool, toolArgs, context.signal, {
+        preferExactRaw: true,
+        validateInputSchema: true,
+      });
     }
     const parsed = this.#parseToolName(actionName);
     if (!parsed) throw new Error(`Invalid MCP action: ${actionName}`);
@@ -435,9 +440,10 @@ export class McpProvider implements FabricProvider {
     toolName: string,
     args: Record<string, unknown>,
     signal?: AbortSignal,
-    preferExactRaw = false,
+    options: { preferExactRaw?: boolean; validateInputSchema?: boolean } = {},
   ): Promise<unknown> {
-    if (!this.#cacheOn) return this.#callLegacy(serverName, toolName, args, signal, preferExactRaw);
+    const preferExactRaw = options.preferExactRaw === true;
+    if (!this.#cacheOn) return this.#callLegacy(serverName, toolName, args, signal, options);
     if (signal?.aborted) throw new Error("MCP call cancelled");
     await this.#hydrate();
     const server = await this.#resolveKnownServer(serverName, preferExactRaw);
@@ -450,6 +456,7 @@ export class McpProvider implements FabricProvider {
     }
     if (signal?.aborted) throw new Error("MCP call cancelled");
     if (!tool) throw new Error(`Unknown MCP tool: ${serverName}.${toolName}`);
+    if (options.validateInputSchema) this.#validateExplicitCallArgs(tool, args);
     try {
       this.#hooks.onToolUse?.(server);
     } catch {
@@ -966,9 +973,10 @@ export class McpProvider implements FabricProvider {
     toolName: string,
     args: Record<string, unknown>,
     signal?: AbortSignal,
-    preferExactRaw = false,
+    options: { preferExactRaw?: boolean; validateInputSchema?: boolean } = {},
   ): Promise<unknown> {
     if (signal?.aborted) throw new Error("MCP call cancelled");
+    const preferExactRaw = options.preferExactRaw === true;
     const runtime = await this.#getRuntime();
     const server = this.#resolveServerName(runtime, serverName, preferExactRaw);
     if (!server) throw new Error(`Unknown MCP server: ${serverName}`);
@@ -981,6 +989,7 @@ export class McpProvider implements FabricProvider {
     );
     if (signal?.aborted) throw new Error("MCP call cancelled");
     if (!tool) throw new Error(`Unknown MCP tool: ${serverName}.${toolName}`);
+    if (options.validateInputSchema) this.#validateExplicitCallArgs(tool, args);
     const operation = runtime.callTool(server, tool.name, {
       args,
       timeoutMs: this.config.callTimeoutMs,
@@ -993,6 +1002,19 @@ export class McpProvider implements FabricProvider {
       this.#toolMetadata.delete(server);
       throw error;
     }
+  }
+
+  #validateExplicitCallArgs(tool: ServerToolInfo, args: Record<string, unknown>): void {
+    const validation = validateSchemaValue(tool.inputSchema, args, {
+      pathPrefix: "/args",
+      includeInstancePath: true,
+    });
+    // MCP schemas are external advisory metadata. If one is missing or cannot
+    // be evaluated locally, preserve the protocol's remote-validation path.
+    if (validation.status !== "invalid") return;
+    throw new FabricTraceSafeError(
+      `Invalid arguments for mcp.call: ${validation.message}`,
+    );
   }
 
   async #listToolsLegacy(

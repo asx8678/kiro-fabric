@@ -2,8 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FabricMcpConfig } from "../src/config.js";
+import { ActionRegistry } from "../src/core/action-registry.js";
 import { McpDescriptorCacheStore } from "../src/providers/mcp-descriptor-cache.js";
 import { McpProvider } from "../src/providers/mcp-provider.js";
 import { loadCachedMcpDescriptors } from "../src/providers/mcp-advisory.js";
@@ -92,6 +93,13 @@ const countLines = (countFile: string): string[] =>
     ? fs.readFileSync(countFile, "utf8").trim().split("\n").filter(Boolean)
     : [];
 
+const registryContext = (approve: (action: unknown, args: Record<string, unknown>) => Promise<void>) => ({
+  ...context,
+  approve,
+  audits: [],
+  maxResultChars: 10_000,
+});
+
 describe("McpProvider", () => {
   it("fails closed when multiple tools share one sanitized alias", async () => {
     const directory = temporaryDirectory();
@@ -171,6 +179,70 @@ describe("McpProvider", () => {
     30_000,
   );
 
+  it("approves before contact and validates explicit call args on cold and warm metadata", async () => {
+    const directory = temporaryDirectory();
+    const countFile = path.join(directory, "tools-list.log");
+    const eventFile = path.join(directory, "events.log");
+    const configPath = writeTwoServerConfig({
+      directory,
+      countFile,
+      testEnv: { KIRO_FABRIC_MCP_EVENT_FILE: eventFile },
+    });
+    const provider = new McpProvider(directory, mcpConfig({ configPath }));
+    const registry = new ActionRegistry();
+    registry.register(provider);
+    try {
+      const deny = vi.fn(async () => {
+        throw new Error("network denied");
+      });
+      await expect(registry.invoke(
+        "mcp.$call",
+        { server: "test", tool: "echo-value", args: { value: "denied" } },
+        registryContext(deny),
+      )).rejects.toThrow("network denied");
+      expect(deny).toHaveBeenCalledOnce();
+      expect(countLines(eventFile)).toEqual([]);
+
+      const approve = vi.fn(async () => {});
+      const secret = "nested-argument-secret";
+      await expect(registry.invoke(
+        "mcp.$call",
+        { server: "test", tool: "echo-value", args: { value: { secret } } },
+        registryContext(approve),
+      )).rejects.toThrow(/Invalid arguments for mcp\.call: \/args\/value:/);
+      expect(approve).toHaveBeenCalledOnce();
+      const coldEvents = countLines(eventFile);
+      expect(coldEvents).toEqual(["test:initialize", "test:tools/list"]);
+      expect(coldEvents.some((event) => event.includes("tools/call"))).toBe(false);
+
+      let warmError = "";
+      try {
+        await registry.invoke(
+          "mcp.$call",
+          { server: "test", tool: "echo-value", args: { value: { secret } } },
+          registryContext(approve),
+        );
+      } catch (error) {
+        warmError = error instanceof Error ? error.message : String(error);
+      }
+      expect(warmError).toMatch(/\/args\/value:/);
+      expect(warmError).not.toContain(secret);
+      expect(countLines(eventFile)).toEqual(coldEvents);
+
+      await expect(registry.invoke(
+        "mcp.$call",
+        { server: "test", tool: "echo-value", args: { value: "valid" } },
+        registryContext(approve),
+      )).resolves.toMatchObject({ text: "echo:valid" });
+      expect(countLines(eventFile).filter((event) => event.includes("tools/list"))).toHaveLength(1);
+      expect(countLines(eventFile).filter((event) => event.includes("tools/call"))).toEqual([
+        "test:tools/call:echo-value",
+      ]);
+    } finally {
+      await registry.close();
+    }
+  });
+
   it("discovers and calls a stdio server through mcporter", async () => {
     const directory = temporaryDirectory();
     const countFile = path.join(directory, "tools-list.log");
@@ -238,6 +310,75 @@ describe("McpProvider", () => {
 });
 
 describe("McpProvider descriptor cache", () => {
+  it("rejects invalid explicit args from a warm disk cache without contacting the server", async () => {
+    const directory = temporaryDirectory();
+    const countFile = path.join(directory, "tools-list.log");
+    const eventFile = path.join(directory, "events.log");
+    const configPath = writeTwoServerConfig({
+      directory,
+      countFile,
+      testEnv: { KIRO_FABRIC_MCP_EVENT_FILE: eventFile },
+    });
+    const cachePath = path.join(directory, "mcp-cache.json");
+    const config = cacheConfig(configPath, { revalidate: "off" });
+
+    const cold = new McpProvider(directory, config, {
+      cache: new McpDescriptorCacheStore(cachePath),
+    });
+    try {
+      await expect(cold.invoke("$call", {
+        server: "test",
+        tool: "echo-value",
+        args: { value: 42 },
+      }, context)).rejects.toThrow(/Invalid arguments for mcp\.call: \/args\/value:/);
+    } finally {
+      await cold.close();
+    }
+    expect(countLines(eventFile)).toEqual(["test:initialize", "test:tools/list"]);
+
+    const warm = new McpProvider(directory, config, {
+      cache: new McpDescriptorCacheStore(cachePath),
+    });
+    try {
+      await expect(warm.invoke("$call", {
+        server: "test",
+        tool: "echo-value",
+        args: { value: 42 },
+      }, context)).rejects.toThrow(/\/args\/value:/);
+      // Resolving the configured definition and cached schema is local: no
+      // process starts and no tools/call reaches the server in session two.
+      expect(countLines(eventFile)).toEqual(["test:initialize", "test:tools/list"]);
+    } finally {
+      await warm.close();
+    }
+
+    // Older or partial cache entries may have no schema. That metadata is
+    // advisory, so preserve the remote server's own validation fallback.
+    const snapshot = JSON.parse(fs.readFileSync(cachePath, "utf8")) as {
+      servers: Record<string, { tools: Array<{ name: string; inputSchema?: unknown }> }>;
+    };
+    const cachedEcho = snapshot.servers.test?.tools.find((tool) => tool.name === "echo-value");
+    expect(cachedEcho).toBeDefined();
+    delete cachedEcho!.inputSchema;
+    fs.writeFileSync(cachePath, JSON.stringify(snapshot));
+
+    const schemaUnavailable = new McpProvider(directory, config, {
+      cache: new McpDescriptorCacheStore(cachePath),
+    });
+    try {
+      await expect(schemaUnavailable.invoke("$call", {
+        server: "test",
+        tool: "echo-value",
+        args: { value: 42 },
+      }, context)).resolves.toMatchObject({ text: "echo:42" });
+      expect(countLines(eventFile).filter((event) => event.includes("tools/call"))).toEqual([
+        "test:tools/call:echo-value",
+      ]);
+    } finally {
+      await schemaUnavailable.close();
+    }
+  });
+
   it("populates once, then serves warm sessions without spawning servers", async () => {
     const directory = temporaryDirectory();
     const countFile = path.join(directory, "tools-list.log");

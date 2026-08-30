@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { Value } from "typebox/value";
 import { runAbortable, settleWithin } from "../async-settlement.js";
 import type {
   FabricCapabilityRequirement,
@@ -29,6 +28,7 @@ import {
   type FabricProviderListRequest,
   type FabricScopedProviderResult,
 } from "../protocol.js";
+import { schemaValidationMessage } from "../schema-validation.js";
 import { formatFabricEffectConflict } from "./effect-conflict.js";
 import { stableJsonHash } from "./stable-hash.js";
 import type { FabricNestedToolResultProxy } from "./tool-result-proxy.js";
@@ -130,7 +130,6 @@ const PREVIEW_ARG_KEYS = 32;
 const PREVIEW_RESULT_CHARS = 16_000;
 const PREVIEW_NESTED_CHARS = 16_000;
 const MAX_AUDIT_VALUE_CHARS = 64_000;
-const MAX_VALIDATION_MESSAGE_CHARS = 2_000;
 
 const truncateString = (value: string, max: number): string =>
   value.length <= max ? value : `${value.slice(0, max)}…`;
@@ -278,50 +277,6 @@ const conflictBetween = (
   if (overlap.length === 0) return undefined;
   if (left.ordering === "commutative" && right.ordering === "commutative") return undefined;
   return { resources: overlap, reason: "shared_resource" };
-};
-
-// TypeBox reports additionalProperties failures against the object root
-// without naming the offending keys; name them so a rejected near-miss call
-// is actionable (e.g. a before/after guess on memory.expand surfaces as
-// "/before: must not have additional properties").
-const unexpectedKeys = (
-  schema: Record<string, unknown>,
-  value: Record<string, unknown>,
-): string[] => {
-  if ((schema as { type?: unknown }).type !== "object") return [];
-  if ((schema as { additionalProperties?: unknown }).additionalProperties !== false) return [];
-  const properties = (schema as { properties?: Record<string, unknown> }).properties;
-  if (!properties) return [];
-  return Object.keys(value).filter((key) => !(key in properties));
-};
-
-const validationMessage = (
-  schema: Record<string, unknown>,
-  value: Record<string, unknown>,
-): string | undefined => {
-  try {
-    const messages: string[] = [];
-    for (const error of Value.Errors(schema, value)) {
-      // Prefix nested failures with their property path.
-      const at = (error as { path?: unknown }).path;
-      messages.push(
-        typeof at === "string" && at !== "" && at !== "/"
-          ? `${at}: ${error.message}`
-          : error.message,
-      );
-      if (messages.length >= 5) break;
-    }
-    if (messages.length === 0) return undefined;
-    for (const key of unexpectedKeys(schema, value).slice(0, 5)) {
-      messages.push(`/${key}: must not have additional properties`);
-    }
-    return truncateString(
-      messages.join("; ") || "Schema validation failed",
-      MAX_VALIDATION_MESSAGE_CHARS,
-    );
-  } catch {
-    return "Schema validator failed";
-  }
 };
 
 export class ActionRegistry {
@@ -816,7 +771,7 @@ export class ActionRegistry {
       if (typeof preparedArgs !== "object" || preparedArgs === null || Array.isArray(preparedArgs)) {
         throw new Error(`Argument preparation for ${ref} did not return an object`);
       }
-      const invalid = validationMessage(action.inputSchema, preparedArgs);
+      const invalid = schemaValidationMessage(action.inputSchema, preparedArgs);
       if (invalid) throw new Error(`Invalid arguments for ${ref}: ${invalid}`);
       const acquired = await runAbortable(context.signal, () =>
         provider.acquire!(actionName, preparedArgs, context),
@@ -893,7 +848,7 @@ export class ActionRegistry {
       traceOperation?.prepared(preparedArgs);
 
       failureStage = "validate";
-      const invalid = validationMessage(action.inputSchema, preparedArgs);
+      const invalid = schemaValidationMessage(action.inputSchema, preparedArgs);
       // TypeBox validator messages describe schema expectations only — they
       // never echo argument values — so they are safe for durable traces.
       if (invalid) throw new FabricTraceSafeError(`Invalid arguments for ${ref}: ${invalid}`);
