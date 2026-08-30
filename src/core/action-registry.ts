@@ -1093,7 +1093,10 @@ export class ActionRegistry {
         left.localeCompare(right),
       )) {
         try {
-          const { binding, provider, actionName } = this.#parseRef(ref);
+          const { binding, provider, actionName, expectedDescriptorHash } = this.#parseRef(
+            ref,
+            context.capabilityView,
+          );
           const release = this.#providerBindings.retain([binding.id]);
           temporaryReleases.push(release);
           const descriptor = await runAbortable(context.signal, () =>
@@ -1101,6 +1104,9 @@ export class ActionRegistry {
           );
           if (!descriptor) throw new FabricResolutionError(`Unknown Fabric action: ${ref}`);
           const action = resolveDescriptor(provider, descriptor);
+          if (expectedDescriptorHash && actionDescriptorHash(action) !== expectedDescriptorHash) {
+            throw new FabricResolutionError(`Fabric capability descriptor changed: ${ref}`);
+          }
           resolved.set(ref, {
             ref,
             provider: provider.name,

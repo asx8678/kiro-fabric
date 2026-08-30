@@ -509,6 +509,28 @@ export class AgentManager {
       throw new Error(`Fabric agent depth limit reached (${this.config.maxDepth})`);
     }
     if (!request.task.trim()) throw new Error("Agent task must not be empty");
+    const hasCapabilityRequirements = request.capabilityRequirements !== undefined;
+    const hasCapabilityDigest = request.capabilityDigest !== undefined;
+    if (hasCapabilityRequirements !== hasCapabilityDigest) {
+      throw new Error(
+        "Agent capability commitment requires both requirements and a canonical digest",
+      );
+    }
+    if (
+      request.capabilityDigest !== undefined &&
+      !/^[a-f0-9]{64}$/.test(request.capabilityDigest)
+    ) {
+      throw new Error("Agent capability digest must be a canonical SHA-256 digest");
+    }
+    if (
+      request.capabilityRequirements &&
+      (request.capabilityRequirements.length > 128 ||
+        request.capabilityRequirements.some(
+          (ref) => !ref || ref.length > 256 || !ref.includes("."),
+        ))
+    ) {
+      throw new Error("Agent capability requirements must be provider.action refs");
+    }
     validateAgentCwdRequest(request);
     // Validate explicit execution targets before any model preparation or budget side effects.
     // With no override this deliberately preserves the manager cwd without canonicalizing it.

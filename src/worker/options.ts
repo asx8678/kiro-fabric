@@ -147,6 +147,12 @@ export const parseWorkerOptions = (
   ) {
     throw new Error("Invalid worker capability requirements");
   }
+  if ((capabilityRequirementsSource !== undefined) !== (capabilityDigest !== undefined)) {
+    throw new Error("Worker capability commitment requires both requirements and digest");
+  }
+  if (capabilityDigest !== undefined && !/^[a-f0-9]{64}$/.test(capabilityDigest)) {
+    throw new Error("Invalid worker capability digest");
+  }
   const meshRoot = optional(args, "mesh-root");
   const projectRoot = optional(args, "project-root");
   const ownerHostId = optional(args, "owner-host-id");

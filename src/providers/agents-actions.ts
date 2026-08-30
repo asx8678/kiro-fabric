@@ -39,6 +39,13 @@ const runProperties = {
   },
   extensions: { type: "boolean" },
   recursive: { type: "boolean" },
+  requires: {
+    type: "array",
+    maxItems: 128,
+    items: { type: "string", maxLength: 256, pattern: "^[^.]+\\..+$" },
+    description:
+      "Exact provider.action capabilities for a recursive Pi child. Omitted inherits a committed parent view; an explicit list may only attenuate it.",
+  },
   cwd: {
     type: "string",
     description: "Filesystem execution directory; relative paths resolve from the parent Fabric agent cwd.",
@@ -128,6 +135,7 @@ const handoffSchema = {
     timeoutMs: runProperties.timeoutMs,
     extensions: runProperties.extensions,
     recursive: runProperties.recursive,
+    requires: runProperties.requires,
     schema: runProperties.schema,
     compact: handoffCompactionSchema,
   },

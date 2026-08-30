@@ -82,6 +82,35 @@ describe("provider binding generations", () => {
     await second.release();
   });
 
+  it("intersects derived capability views with the committed parent view", async () => {
+    const registry = new ActionRegistry();
+    registry.register(provider("parent"));
+    registry.register({ ...provider("extra"), name: "extra" });
+    const parent = await registry.acquireCapabilityView(["demo.echo"], context);
+
+    const inherited = await registry.acquireCapabilityView(["demo.echo"], {
+      ...context,
+      capabilityView: parent.view!,
+    });
+    expect(inherited.satisfied).toBe(true);
+    expect(inherited.view?.semanticDigest).toBe(parent.view?.semanticDigest);
+
+    const expansion = await registry.acquireCapabilityView(["extra.echo"], {
+      ...context,
+      capabilityView: parent.view!,
+    });
+    expect(expansion).toMatchObject({
+      satisfied: false,
+      missing: ["extra.echo"],
+    });
+    expect(expansion.view).toBeUndefined();
+
+    await expansion.release();
+    await inherited.release();
+    await parent.release();
+    await registry.close();
+  });
+
   it("does not close a replaced provider until an in-flight invocation settles", async () => {
     const registry = new ActionRegistry();
     let release!: () => void;
@@ -331,6 +360,13 @@ describe("provider binding generations", () => {
     description = "after";
     await expect(invoke(registry, { ...context, capabilityView: pinned.view! }))
       .rejects.toThrow("Fabric capability descriptor changed: demo.echo");
+    const derived = await registry.acquireCapabilityView(["demo.echo"], {
+      ...context,
+      capabilityView: pinned.view!,
+    });
+    expect(derived).toMatchObject({ satisfied: false, missing: ["demo.echo"] });
+    expect(derived.view).toBeUndefined();
+    await derived.release();
     await pinned.release();
     await registry.close();
   });

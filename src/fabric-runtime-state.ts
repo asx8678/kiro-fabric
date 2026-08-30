@@ -99,9 +99,17 @@ import { RESIDENT_HOST_FORMAT, residentRoot } from "./residency/protocol.js";
 import type { FabricRuntimePaths } from "./runtime-paths.js";
 
 const BACKGROUND_COMPLETION_MAX_CHARS = 8_000;
-const inheritedCapabilityRequirements = (): string[] => {
+export const inheritedCapabilityCommitment = ():
+  | { requirements: string[]; digest: string }
+  | undefined => {
   const source = process.env.KIRO_FABRIC_CAPABILITY_REQUIREMENTS;
-  if (!source) return [];
+  const digest = process.env.KIRO_FABRIC_CAPABILITY_DIGEST;
+  if (source === undefined && digest === undefined) return undefined;
+  if (source === undefined || digest === undefined || !/^[a-f0-9]{64}$/.test(digest)) {
+    throw new Error(
+      "Inherited Fabric capability commitment requires requirements and a canonical digest",
+    );
+  }
   const parsed: unknown = JSON.parse(source);
   if (!Array.isArray(parsed) || parsed.length > 128) {
     throw new Error("KIRO_FABRIC_CAPABILITY_REQUIREMENTS must be an array of at most 128 refs");
@@ -110,7 +118,7 @@ const inheritedCapabilityRequirements = (): string[] => {
   if (refs.length !== parsed.length || refs.some((ref) => ref.length > 256 || !ref.includes("."))) {
     throw new Error("KIRO_FABRIC_CAPABILITY_REQUIREMENTS contains an invalid provider.action ref");
   }
-  return [...new Set(refs)];
+  return { requirements: [...new Set(refs)].sort(), digest };
 };
 
 const escapeXmlText = (value: string): string =>
@@ -583,6 +591,9 @@ export class FabricRuntimeState {
       nestedToolCallId: "fabric-actor-capability",
       extensionContext: context,
       update() {},
+      ...(this.#sessionCapabilityLease?.view
+        ? { capabilityView: this.#sessionCapabilityLease.view }
+        : {}),
     });
     this.#actors = new ActorManager(
       sessionId,
@@ -717,6 +728,8 @@ export class FabricRuntimeState {
       () => this.#config?.ui.showAgentToolPreview ?? true,
       this.#residency,
       false,
+      (requirements, invocation) =>
+        this.#registry!.acquireCapabilityView(requirements, invocation),
     );
     this.#agentsProvider = agentsProvider;
     this.#control.start((command, from, signal) =>
@@ -817,12 +830,9 @@ export class FabricRuntimeState {
     };
     this.pi.events.emit(FABRIC_COMPONENT_DISCOVER_EVENT, componentDiscovery);
     await this.#componentLoader.reconcile(enforceSchema ? [] : this.#config.components);
-    const inheritedRequirements = inheritedCapabilityRequirements();
-    const inheritedDigest = process.env.KIRO_FABRIC_CAPABILITY_DIGEST;
-    const hasInheritedCommit =
-      process.env.KIRO_FABRIC_CAPABILITY_REQUIREMENTS !== undefined && Boolean(inheritedDigest);
-    if (inheritedRequirements.length > 0 || hasInheritedCommit) {
-      const lease = await this.#registry.acquireCapabilityView(inheritedRequirements, {
+    const inheritedCommitment = inheritedCapabilityCommitment();
+    if (inheritedCommitment) {
+      const lease = await this.#registry.acquireCapabilityView(inheritedCommitment.requirements, {
         cwd: context.cwd,
         signal: undefined,
         parentToolCallId: "fabric-capability-commit",
@@ -836,11 +846,10 @@ export class FabricRuntimeState {
           `Required Fabric capabilities are unavailable: ${lease.missing.join(", ")}`,
         );
       }
-      const expectedDigest = inheritedDigest;
-      if (expectedDigest && lease.view.semanticDigest !== expectedDigest) {
+      if (lease.view.semanticDigest !== inheritedCommitment.digest) {
         await lease.release();
         throw new Error(
-          `Fabric capability commitment mismatch: expected ${expectedDigest}, resolved ${lease.view.semanticDigest}`,
+          `Fabric capability commitment mismatch: expected ${inheritedCommitment.digest}, resolved ${lease.view.semanticDigest}`,
         );
       }
       this.#sessionCapabilityLease = lease;

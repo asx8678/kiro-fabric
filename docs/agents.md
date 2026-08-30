@@ -49,6 +49,27 @@ Set `cwd` on `agents.run()` or `agents.spawn()` to choose the leaf child's files
 
 For Pi children, selecting `cwd` neither grants nor requires project trust. Fabric adds no trust gate and passes neither `--approve` nor `--no-approve`; Pi loads `AGENTS.override.md`, `AGENTS.md`, and `CLAUDE.md` under its normal context rules, while protected project resources remain governed by Pi's saved decisions and `defaultProjectTrust`. Each runner keeps its native startup behavior. A generated worktree is evaluated at its own canonical path.
 
+### Monotonic child capabilities
+
+Recursive Pi children can attenuate their Fabric authority with `requires`, an exact list of `provider.action` refs:
+
+```ts
+return agents.run({
+  runner: "pi",
+  recursive: true,
+  task: "Read the shared migration state and report it.",
+  requires: ["state.read"],
+});
+```
+
+The effective child authority is the intersection of the parent's committed capability view, the requested refs, and the runner policy. Only recursive Pi children are policy-eligible for Fabric capabilities. A request outside the parent view is rejected as an expansion; `requires` on a leaf, Claude, Veda, or Kiro child is rejected. Kiro remains non-recursive. `agents.run`, `agents.spawn`, and recursive trajectory `agents.handoff` use the same rule.
+
+Omitting `requires` preserves existing defaults. An unrestricted root launches an unrestricted recursive Pi child. A child of a committed runtime inherits the complete parent view, including an explicitly empty view. Supplying `requires: []` deliberately commits an empty Fabric surface.
+
+Fabric resolves the effective view at invocation and again at a deferred handoff launch. It passes the sorted refs and their canonical semantic SHA-256 digest to the worker. The child resolves the refs before enabling Fabric and keeps that committed provider view for its session. Missing refs, a missing requirements/digest field, descriptor drift, provider replacement that changes the semantic view, or a digest mismatch all fail closed. Live provider additions cannot expand a running child.
+
+This capability view governs Fabric actions available inside recursive `fabric_exec`; it does not widen the child's direct Pi `tools` allowlist, approval policy, depth limit, or filesystem authority.
+
 ### Durable participant residency
 
 `agents.spawn()` and `agents.create()` accept `residency: "session" | "durable"`. The default is `session`. It keeps the usual lifecycle: the current Pi host owns the participant and stops or suspends it when the host shuts down. The model chooses `durable` during execution. Users do not configure it as a setting.
@@ -101,7 +122,7 @@ return "Frontier Fabric invocation completed";
 
 `when` is an optional pure synchronous predicate that runs inside the Fabric guest. It receives immutable `{ calls, count(ref?) }` facts for each successful resolved bridge call that finished earlier in the same `fabric_exec` program. These calls include `pi.*`, `extensions.*`, `mcp.*`, external providers, and computed `tools.call()` refs. `count()` counts all calls. `count("pi.edit")` counts one ref. `count(["pi.edit", "schema.commit"])` counts a set. Fabric records each generic call under its resolved target. Fabric excludes failed calls. A false predicate does not start a child and reports a clear failure. The function never crosses the host bridge. Omit `when` to schedule unconditionally.
 
-In the guest, `agents.handoff()` resolves to `{ scheduled: true, status: "deferred", boundary: "fabric_exec_end" }`. Code later in the same Fabric invocation cannot consume the child output. At the outer boundary, Fabric replaces Main's tool result with the compact completion `{ handedOff, completed, status, agent, implementation, error? }`. The `model` field is required. The target runner is Pi. The `worktree` field is unavailable because the implementation must remain visible in the caller's workspace. You can also set `task`, `name`, `transport`, `thinking`, `tools`, `timeoutMs`, `extensions`, `recursive`, `schema`, and `compact`. Fabric does not switch or rewrite the history of the source session.
+In the guest, `agents.handoff()` resolves to `{ scheduled: true, status: "deferred", boundary: "fabric_exec_end" }`. Code later in the same Fabric invocation cannot consume the child output. At the outer boundary, Fabric replaces Main's tool result with the compact completion `{ handedOff, completed, status, agent, implementation, error? }`. The `model` field is required. The target runner is Pi. The `worktree` field is unavailable because the implementation must remain visible in the caller's workspace. You can also set `task`, `name`, `transport`, `thinking`, `tools`, `timeoutMs`, `extensions`, `recursive`, `requires`, `schema`, and `compact`. Fabric does not switch or rewrite the history of the source session.
 
 **Trajectory compaction.** Set `compact` to give the executor a compacted transcript in place of the full raw branch. A value of `true` applies the default summary. Use `{ instructions?, preserve? }` to add compaction instructions of up to 8K characters and as many as 16 explicit preserve facts of up to 2K characters each. These limits match `compact.request`. Fabric writes the child session with a deterministic Fabric compaction entry before the boundary result. The executor context starts with the projected summary. It then contains the retained tail from the calculated cut point and the outer `fabric_exec` result. The append-only child file keeps the complete raw branch below the compaction marker. Fabric records the outcome under `compaction` in the child's `kiro-fabric-handoff` custom entry. The outcome contains `applied`, sections, tokens, and cut point. If Fabric skips compaction, it gives the skip reason. Omit `compact` to keep the fork verbatim.
 

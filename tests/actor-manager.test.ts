@@ -269,7 +269,7 @@ describe("ActorManager", () => {
       view: {
         id: "view-1",
         digest: "local-digest",
-        semanticDigest: "semantic-digest",
+        semanticDigest: "a".repeat(64),
         bindings: {
           "demo.echo": {
             ref: "demo.echo",
@@ -302,7 +302,7 @@ describe("ActorManager", () => {
         { ref: "demo.echo" },
         { ref: "optional.missing", optional: true },
       ],
-      capabilityDigest: "semantic-digest",
+      capabilityDigest: "a".repeat(64),
     });
   });
 
@@ -317,7 +317,7 @@ describe("ActorManager", () => {
           view: {
             id: "view-ready",
             digest: "local-ready",
-            semanticDigest: "semantic-ready",
+            semanticDigest: "b".repeat(64),
             bindings: {
               "demo.echo": {
                 ref: "demo.echo",
@@ -356,7 +356,7 @@ describe("ActorManager", () => {
     expect(actors.status(actor.id)).toMatchObject({
       status: "idle",
       queued: 0,
-      capabilityDigest: "semantic-ready",
+      capabilityDigest: "b".repeat(64),
     });
     expect(actors.status(actor.id).missingCapabilities).toBeUndefined();
     expect(release).toHaveBeenCalledTimes(2);

@@ -22,7 +22,11 @@ import type {
   FabricParticipantSource,
   FabricPeerInfo,
 } from "../src/topology/types.js";
-import type { FabricInvocationContext } from "../src/protocol.js";
+import type {
+  FabricCommittedCapabilityView,
+  FabricInvocationContext,
+} from "../src/protocol.js";
+import type { FabricCapabilityViewLease } from "../src/core/action-registry.js";
 import { FabricControlPlane } from "../src/topology/control-plane.js";
 import { AgentsProvider, collectAgentToolPreviewNodes } from "../src/providers/agents-provider.js";
 import { snapshotHandoffSession } from "../src/agents/handoff.js";
@@ -57,6 +61,10 @@ const setup = (
   peers: FabricPeerInfo[] = [],
   members: FabricParticipantInfo[] = [],
   control?: FabricControlPlane,
+  acquireCapabilityView?: (
+    requirements: readonly string[],
+    context: FabricInvocationContext,
+  ) => Promise<FabricCapabilityViewLease>,
 ) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-agents-provider-"));
   roots.push(root);
@@ -159,8 +167,12 @@ const setup = (
     participants,
     control,
     lifecycle,
+    undefined,
+    undefined,
+    true,
+    acquireCapabilityView,
   );
-  return { root, actors, globalActors, provider, mainDeliveries };
+  return { root, agents, actors, globalActors, provider, mainDeliveries };
 };
 
 afterEach(async () => {
@@ -177,6 +189,22 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 2_000): Promise<voi
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
 };
+
+const committedView = (
+  refs: readonly string[],
+  semanticDigest = "a".repeat(64),
+): FabricCommittedCapabilityView => ({
+  id: "view",
+  digest: "b".repeat(64),
+  semanticDigest,
+  bindings: Object.fromEntries(refs.map((ref) => [ref, {
+    ref,
+    provider: ref.slice(0, ref.indexOf(".")),
+    providerBindingId: `binding:${ref}`,
+    generation: 1,
+    descriptorHash: "c".repeat(64),
+  }])),
+});
 
 const createRequest = {
   name: "reviewer",
@@ -198,8 +226,204 @@ describe("AgentsProvider runner support", () => {
     const runProperties = (run?.inputSchema as { properties: Record<string, unknown> }).properties;
 
     expect(spawnProperties.residency?.enum).toEqual(["session", "durable"]);
+    expect(spawnProperties).toHaveProperty("requires");
     expect(createProperties.residency?.enum).toEqual(["session", "durable"]);
+    expect(runProperties).toHaveProperty("requires");
     expect(runProperties).not.toHaveProperty("residency");
+  });
+
+  it("attenuates recursive Pi children to the parent/request/policy intersection", async () => {
+    const release = vi.fn(async () => {});
+    const acquire = vi.fn(async (requirements: readonly string[]) => ({
+      satisfied: true,
+      missing: [],
+      optionalMissing: [],
+      view: committedView(requirements, "d".repeat(64)),
+      release,
+    }));
+    const { provider, agents } = setup([], [], undefined, acquire);
+    const spawn = vi.spyOn(agents, "spawn").mockResolvedValue({
+      id: "child",
+      name: "child",
+      status: "running",
+      runner: "pi",
+      transport: "process",
+      cwd: process.cwd(),
+    });
+    vi.spyOn(agents, "detachSignal").mockImplementation(() => {});
+    const parent = committedView(["agents.run", "memory.get", "state.read"]);
+
+    await provider.invoke("spawn", {
+      task: "inspect memory",
+      runner: "pi",
+      recursive: true,
+      requires: ["memory.get"],
+    }, { ...context, capabilityView: parent });
+
+    expect(acquire).toHaveBeenCalledWith(
+      ["memory.get"],
+      expect.objectContaining({ capabilityView: parent }),
+    );
+    expect(spawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capabilityRequirements: ["memory.get"],
+        capabilityDigest: "d".repeat(64),
+      }),
+      context.signal,
+    );
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it("binds recursive handoff capabilities at the deferred invocation boundary", async () => {
+    const release = vi.fn(async () => {});
+    const acquire = vi.fn(async (requirements: readonly string[]) => ({
+      satisfied: true,
+      missing: [],
+      optionalMissing: [],
+      view: committedView(requirements, "9".repeat(64)),
+      release,
+    }));
+    const { provider } = setup([], [], undefined, acquire);
+    let deferred: Record<string, unknown> | undefined;
+    const parent = committedView(["agents.handoff", "state.read"]);
+
+    await provider.invoke("handoff", {
+      model: "provider/model",
+      recursive: true,
+      requires: ["state.read"],
+    }, {
+      ...context,
+      capabilityView: parent,
+      deferHandoff(args) {
+        deferred = args;
+        return { scheduled: true, status: "deferred", boundary: "fabric_exec_end" };
+      },
+    });
+
+    expect(deferred).toMatchObject({
+      __capabilityRequirements: ["state.read"],
+      __capabilityDigest: "9".repeat(64),
+    });
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it("inherits committed parent authority by default and rejects expansion", async () => {
+    const acquire = vi.fn(async (requirements: readonly string[]) => ({
+      satisfied: true,
+      missing: [],
+      optionalMissing: [],
+      view: committedView(requirements, "e".repeat(64)),
+      release: async () => {},
+    }));
+    const { provider, agents } = setup([], [], undefined, acquire);
+    vi.spyOn(agents, "spawn").mockResolvedValue({
+      id: "child",
+      name: "child",
+      status: "running",
+      runner: "pi",
+      transport: "process",
+      cwd: process.cwd(),
+    });
+    vi.spyOn(agents, "detachSignal").mockImplementation(() => {});
+    const parent = committedView(["state.read", "agents.spawn"]);
+
+    await provider.invoke("spawn", {
+      task: "inherit",
+      runner: "pi",
+      recursive: true,
+    }, { ...context, capabilityView: parent });
+    expect(acquire.mock.calls[0]?.[0]).toEqual(["agents.spawn", "state.read"]);
+
+    await expect(provider.invoke("spawn", {
+      task: "expand",
+      runner: "pi",
+      recursive: true,
+      requires: ["state.write"],
+    }, { ...context, capabilityView: parent })).rejects.toThrow(
+      "would expand the parent view: state.write",
+    );
+  });
+
+  it("preserves unrestricted defaults and the non-recursive Kiro policy", async () => {
+    const acquire = vi.fn();
+    const { provider, agents } = setup([], [], undefined, acquire);
+    const spawn = vi.spyOn(agents, "spawn").mockResolvedValue({
+      id: "child",
+      name: "child",
+      status: "running",
+      runner: "pi",
+      transport: "process",
+      cwd: process.cwd(),
+    });
+    vi.spyOn(agents, "detachSignal").mockImplementation(() => {});
+
+    await provider.invoke("spawn", {
+      task: "default",
+      runner: "pi",
+      recursive: true,
+    }, context);
+    expect(acquire).not.toHaveBeenCalled();
+    expect(spawn.mock.calls[0]?.[0]).not.toHaveProperty("capabilityDigest");
+
+    spawn.mockRestore();
+    await expect(provider.invoke("spawn", {
+      task: "not recursive",
+      runner: "kiro",
+      recursive: true,
+    }, context)).rejects.toThrow("Kiro runner does not support recursive Fabric");
+    await expect(provider.invoke("spawn", {
+      task: "leaf cannot gain Fabric",
+      runner: "kiro",
+      requires: [],
+    }, context)).rejects.toThrow("only for recursive Pi children");
+  });
+
+  it("fails closed when a bound child view is missing or changes before launch", async () => {
+    const release = vi.fn(async () => {});
+    const acquire = vi.fn()
+      .mockResolvedValueOnce({
+        satisfied: false,
+        missing: ["memory.get"],
+        optionalMissing: [],
+        release,
+      })
+      .mockResolvedValueOnce({
+        satisfied: true,
+        missing: [],
+        optionalMissing: [],
+        view: committedView(["memory.get"], "f".repeat(64)),
+        release,
+      });
+    const { provider, agents } = setup([], [], undefined, acquire);
+    const spawn = vi.spyOn(agents, "spawn");
+
+    await expect(provider.invoke("spawn", {
+      task: "missing",
+      runner: "pi",
+      recursive: true,
+      requires: ["memory.get"],
+    }, context)).rejects.toThrow("Child capability view is unavailable: memory.get");
+
+    await expect(provider.executeHandoff({
+      model: "provider/model",
+      recursive: true,
+      requires: ["memory.get"],
+      __capabilityRequirements: ["memory.get"],
+      __capabilityDigest: "0".repeat(64),
+    }, context, {
+      sourceSessionId: "source",
+      sourceBranchLeafId: "leaf",
+      outerToolResult: {
+        role: "toolResult",
+        toolCallId: "outer",
+        toolName: "fabric_exec",
+        content: [{ type: "text", text: "done" }],
+        isError: false,
+        timestamp: Date.now(),
+      },
+    })).rejects.toThrow("Child capability view changed");
+    expect(spawn).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledTimes(2);
   });
 
   it("exposes actor activation overrides and scoped binding setters", async () => {

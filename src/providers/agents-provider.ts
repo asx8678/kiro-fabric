@@ -38,6 +38,7 @@ import type {
   FabricProvider,
   FabricProviderListRequest,
 } from "../protocol.js";
+import type { FabricCapabilityViewLease } from "../core/action-registry.js";
 import {
   effectiveAgentTimeoutMs,
   AgentManager,
@@ -138,6 +139,23 @@ const stringArray = (value: unknown): string[] | undefined =>
     ? value.filter((entry): entry is string => typeof entry === "string")
     : undefined;
 
+const capabilityRefs = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const refs = value.map((entry) => typeof entry === "string" ? entry.trim() : "");
+  if (
+    refs.length > 128 ||
+    refs.some((ref) => !ref || ref.length > 256 || !ref.includes("."))
+  ) {
+    throw new Error("Agent capability requirements must be provider.action refs");
+  }
+  return [...new Set(refs)].sort();
+};
+
+export type AcquireAgentCapabilityView = (
+  requirements: readonly string[],
+  context: FabricInvocationContext,
+) => Promise<FabricCapabilityViewLease>;
+
 const actorRunBinding = (args: Record<string, unknown>): FabricActorRunBinding => ({
   ...(typeof args.model === "string" && args.model.trim()
     ? { model: args.model.trim() }
@@ -198,6 +216,9 @@ const runRequest = (
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(typeof args.extensions === "boolean" ? { extensions: args.extensions } : {}),
     ...(typeof args.recursive === "boolean" ? { recursive: args.recursive } : {}),
+    ...(Array.isArray(args.requires)
+      ? { capabilityRequirements: capabilityRefs(args.requires)! }
+      : {}),
     ...(options.allowCwd !== false && typeof args.cwd === "string" ? { cwd: args.cwd } : {}),
     ...(typeof args.worktree === "boolean" ? { worktree: args.worktree } : {}),
     ...(args.residency === "session" || args.residency === "durable"
@@ -603,7 +624,80 @@ export class AgentsProvider implements FabricProvider {
     readonly agentToolPreviewEnabled: () => boolean = () => true,
     readonly residency?: ResidencyClient,
     readonly ownsRuntime = true,
+    readonly acquireAgentCapabilityView?: AcquireAgentCapabilityView,
   ) {}
+
+  async #bindChildCapabilities(
+    request: AgentRunRequest,
+    context: FabricInvocationContext,
+  ): Promise<FabricCapabilityViewLease | undefined> {
+    const runner = request.runner ?? this.manager.config.runner;
+    const recursivePi = runner === "pi" && request.recursive === true;
+    const explicitlyRequested = request.capabilityRequirements !== undefined;
+
+    // The child-capability policy grants Fabric authority only to recursive Pi
+    // children. Leaf runners keep their existing direct tool policy, and Kiro
+    // remains deliberately non-recursive.
+    if (explicitlyRequested && !recursivePi) {
+      throw new Error(
+        "Agent capability requirements are supported only for recursive Pi children",
+      );
+    }
+    if (!recursivePi) return undefined;
+
+    const parentView = context.capabilityView;
+    const parentRefs = parentView ? Object.keys(parentView.bindings).sort() : undefined;
+    const requirements = request.capabilityRequirements ?? parentRefs;
+    // Preserve the unrestricted root default. A committed parent (including
+    // an empty view) is always inherited, while an explicit list attenuates it.
+    if (requirements === undefined) return undefined;
+
+    if (parentView && explicitlyRequested) {
+      const parentAuthority = new Set(parentRefs);
+      const expansion = requirements.filter((ref) => !parentAuthority.has(ref));
+      if (expansion.length > 0) {
+        throw new Error(
+          `Child capability request would expand the parent view: ${expansion.join(", ")}`,
+        );
+      }
+    }
+    if (!this.acquireAgentCapabilityView) {
+      throw new Error("Child capability binding is unavailable; refusing recursive launch");
+    }
+
+    const lease = await this.acquireAgentCapabilityView(requirements, context);
+    if (!lease.satisfied || !lease.view) {
+      await lease.release();
+      throw new Error(
+        `Child capability view is unavailable: ${lease.missing.join(", ") || "<missing view>"}`,
+      );
+    }
+    if (
+      request.capabilityDigest !== undefined &&
+      request.capabilityDigest !== lease.view.semanticDigest
+    ) {
+      await lease.release();
+      throw new Error(
+        `Child capability view changed: expected ${request.capabilityDigest}, resolved ${lease.view.semanticDigest}`,
+      );
+    }
+    request.capabilityRequirements = Object.keys(lease.view.bindings).sort();
+    request.capabilityDigest = lease.view.semanticDigest;
+    return lease;
+  }
+
+  async #spawnWithCapabilityBinding(
+    request: AgentRunRequest,
+    context: FabricInvocationContext,
+    spawn: (request: AgentRunRequest) => Promise<AgentHandleInfo>,
+  ): Promise<AgentHandleInfo> {
+    const lease = await this.#bindChildCapabilities(request, context);
+    try {
+      return await spawn(request);
+    } finally {
+      await lease?.release();
+    }
+  }
 
   async list(
     request: FabricProviderListRequest,
@@ -643,9 +737,30 @@ export class AgentsProvider implements FabricProvider {
         "agents.handoff must be scheduled from inside fabric_exec and completed at its outer result boundary",
       );
     }
-    const handoffArgs = { ...args };
-    delete handoffArgs.cwd;
-    return context.deferHandoff({ ...handoffArgs, model });
+    const bindingRequest = runRequest(
+      { ...args, task: "deferred handoff", runner: "pi", model },
+      context,
+      this.manager,
+      { allowCwd: false },
+    );
+    bindingRequest.runner = "pi";
+    const lease = await this.#bindChildCapabilities(bindingRequest, context);
+    try {
+      const handoffArgs = { ...args };
+      delete handoffArgs.cwd;
+      return context.deferHandoff({
+        ...handoffArgs,
+        model,
+        ...(bindingRequest.capabilityRequirements !== undefined
+          ? { __capabilityRequirements: [...bindingRequest.capabilityRequirements] }
+          : {}),
+        ...(bindingRequest.capabilityDigest
+          ? { __capabilityDigest: bindingRequest.capabilityDigest }
+          : {}),
+      });
+    } finally {
+      await lease?.release();
+    }
   }
 
   async executeHandoff(
@@ -671,6 +786,13 @@ export class AgentsProvider implements FabricProvider {
       { allowCwd: false },
     );
     request.runner = "pi";
+    const committedRequirements = capabilityRefs(args.__capabilityRequirements);
+    if (committedRequirements !== undefined) {
+      request.capabilityRequirements = committedRequirements;
+    }
+    if (typeof args.__capabilityDigest === "string" && args.__capabilityDigest) {
+      request.capabilityDigest = args.__capabilityDigest;
+    }
     request.sessionSeed = sessionSeed;
     const handoffCompaction = checkedHandoffCompaction(args.compact);
     if (handoffCompaction) request.handoffCompact = handoffCompaction;
@@ -679,7 +801,11 @@ export class AgentsProvider implements FabricProvider {
       model,
       sessionSeed.sourceModel,
     );
-    const handle = await this.manager.spawn(request, context.signal);
+    const handle = await this.#spawnWithCapabilityBinding(
+      request,
+      context,
+      (bound) => this.manager.spawn(bound, context.signal),
+    );
     context.activity?.({
       type: "entity",
       id: handle.id,
@@ -711,9 +837,11 @@ export class AgentsProvider implements FabricProvider {
   ): Promise<unknown> {
     switch (actionName) {
       case "run": {
-        const handle = await this.manager.spawn(
-          runRequest(args, context, this.manager),
-          context.signal,
+        const request = runRequest(args, context, this.manager);
+        const handle = await this.#spawnWithCapabilityBinding(
+          request,
+          context,
+          (bound) => this.manager.spawn(bound, context.signal),
         );
         this.participants.scheduleRefresh();
         context.activity?.({
@@ -739,9 +867,13 @@ export class AgentsProvider implements FabricProvider {
         const durableRequest = request.residency === "durable" && request.cwd !== undefined
           ? { ...request, cwd: this.manager.resolveCwd(request.cwd) }
           : request;
-        const handle = durableRequest.residency === "durable"
-          ? await this.#resident().spawnAgent(durableRequest, context.signal)
-          : await this.manager.spawn(durableRequest, context.signal);
+        const handle = await this.#spawnWithCapabilityBinding(
+          durableRequest,
+          context,
+          (bound) => bound.residency === "durable"
+            ? this.#resident().spawnAgent(bound, context.signal)
+            : this.manager.spawn(bound, context.signal),
+        );
         if (request.residency !== "durable") this.manager.detachSignal(handle.id);
         this.participants.scheduleRefresh();
         context.activity?.({

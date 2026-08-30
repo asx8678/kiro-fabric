@@ -54,6 +54,26 @@ describe("parseWorkerOptions", () => {
     );
   });
 
+  it("requires a complete canonical capability commitment", () => {
+    expect(() => parseWorkerOptions(args({
+      "capability-requirements": JSON.stringify(["memory.get"]),
+    }))).toThrow("requires both requirements and digest");
+    expect(() => parseWorkerOptions(args({
+      "capability-digest": "a".repeat(64),
+    }))).toThrow("requires both requirements and digest");
+    expect(() => parseWorkerOptions(args({
+      "capability-requirements": JSON.stringify(["memory.get"]),
+      "capability-digest": "not-canonical",
+    }))).toThrow("Invalid worker capability digest");
+    expect(parseWorkerOptions(args({
+      "capability-requirements": JSON.stringify(["memory.get"]),
+      "capability-digest": "a".repeat(64),
+    }))).toMatchObject({
+      capabilityRequirements: ["memory.get"],
+      capabilityDigest: "a".repeat(64),
+    });
+  });
+
   it("validates semantic context files and fails closed on corrupt input", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-worker-options-context-"));
     try {

@@ -131,6 +131,8 @@ interface FabricAgentRequest {
   timeoutMs?: number;
   extensions?: boolean;
   recursive?: boolean;
+  /** Exact Fabric capabilities for a recursive Pi child; may only attenuate parent authority. */
+  requires?: string[];
   /** Filesystem execution directory; relative paths resolve from the parent agent cwd. */
   cwd?: string;
   worktree?: boolean;
@@ -158,6 +160,8 @@ interface FabricHandoffRequest {
   timeoutMs?: number;
   extensions?: boolean;
   recursive?: boolean;
+  /** Exact Fabric capabilities for a recursive Pi child; may only attenuate parent authority. */
+  requires?: string[];
   schema?: Record<string, unknown>;
   prompt?: string;
   instructions?: string;
@@ -298,6 +302,8 @@ interface FabricAgentHandle {
   thinking?: FabricThinking;
   actorId?: string;
   actorName?: string;
+  capabilityRequirements?: string[];
+  capabilityDigest?: string;
   sessionId?: string;
   runnerSessionId?: string;
   attachCommand?: string;

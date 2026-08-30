@@ -402,11 +402,24 @@ const main = async (): Promise<void> => {
               throw new Error(`Unsupported Fabric agent runner: ${options.runner}`);
             })();
 
+  const childEnvironment: NodeJS.ProcessEnv = { ...process.env };
+  // Capability commitments never flow through ambient inheritance. The
+  // manager must provide the canonical requirements/digest pair for this
+  // exact launch; otherwise preserve the unrestricted root default.
+  delete childEnvironment.KIRO_FABRIC_CAPABILITY_REQUIREMENTS;
+  delete childEnvironment.KIRO_FABRIC_CAPABILITY_DIGEST;
+  if (options.capabilityRequirements !== undefined && options.capabilityDigest) {
+    childEnvironment.KIRO_FABRIC_CAPABILITY_REQUIREMENTS = JSON.stringify(
+      options.capabilityRequirements,
+    );
+    childEnvironment.KIRO_FABRIC_CAPABILITY_DIGEST = options.capabilityDigest;
+  }
+
   const child = spawnCli(childBinary, childArguments, {
     cwd: options.cwd,
     detached: process.platform !== "win32",
     env: {
-      ...process.env,
+      ...childEnvironment,
       KIRO_FABRIC_DEPTH: String(options.depth),
       KIRO_FABRIC_PARENT_RUN: options.id,
       KIRO_FABRIC_AGENT_NAME: options.name,
@@ -415,10 +428,6 @@ const main = async (): Promise<void> => {
       KIRO_FABRIC_FULL_CODE_MODE: String(options.fullCodeMode),
       ...(options.actorId ? { KIRO_FABRIC_ACTOR_ID: options.actorId } : {}),
       ...(options.actorName ? { KIRO_FABRIC_ACTOR_NAME: options.actorName } : {}),
-      KIRO_FABRIC_CAPABILITY_REQUIREMENTS: JSON.stringify(
-        options.capabilityRequirements ?? [],
-      ),
-      KIRO_FABRIC_CAPABILITY_DIGEST: options.capabilityDigest ?? "",
       ...(options.meshRoot ? { KIRO_FABRIC_MESH_ROOT: options.meshRoot } : {}),
       ...(options.projectRoot ? { KIRO_FABRIC_PROJECT_ROOT: options.projectRoot } : {}),
       ...(options.ownerHostId ? { KIRO_FABRIC_OWNER_HOST_ID: options.ownerHostId } : {}),
