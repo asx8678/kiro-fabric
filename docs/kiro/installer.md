@@ -26,9 +26,10 @@ kiro-cli --v3 --agent kiro-fabric
 Node must be version 24 or newer, and Kiro CLI must be exactly 2.20.1. Project
 and user scope are alternatives. A local npm dependency requires
 `npm exec -- kiro-fabric ...`; a source checkout requires `pnpm run build` and
-`node dist/kiro/cli-entry.js ...`. The bootstrap origin is needed only for
-preflight and initial publication. The generated profile stores only absolute,
-attested paths inside the selected `.kiro` tree.
+`node dist/kiro/cli-entry.js ...`. The bootstrap origin is needed for preflight, initial publication, updates, and
+repair of a damaged installed release. The generated profile stores only
+absolute, attested paths inside the selected `.kiro` tree, so normal execution
+and healthy installed-manager lifecycle commands do not need that origin.
 
 Dry-run validates the generated profile without writing `.kiro`:
 
@@ -141,10 +142,13 @@ workers.
 Unknown or user-modified profile or same-name managed-skill content is refused
 unless you pass `--force`, which backs up each existing regular file first.
 Unrelated sibling skills are never claimed. Format-2 manifests record the
-pre-vendored runtime; format 3 additionally owns the installed Node and manager. Digest directories are
-immutable: a hash mismatch or extra file is refused instead of recursively
-replaced. Symlinks in managed paths, leaves, or the runtime activation marker are
-always refused.
+pre-vendored runtime; format 3 additionally owns the installed Node, manager,
+and explicit advanced-grant state. Ordinary install and uninstall refuse a
+digest-directory hash, mode, or file-set mismatch. Setup `update`/`repair`, when
+executed from a trusted current package or source artifact, instead stages the
+expected same-digest release, verifies every byte and executable mode, and
+atomically replaces the damaged directory. Symlinks in managed paths, leaves,
+or the runtime activation marker are always refused.
 
 ## Kiro-only core tool namespace
 
@@ -172,9 +176,10 @@ cut off by the former two-minute boundary. The generated profile also records
 the canonical project root and refuses to start this trusted grant from a cwd
 outside that project. It does **not** add another
 model-visible tool, pass `--trust-all-tools`, or sandbox shell commands:
-approved commands run with the local user's ambient OS permissions. Omit
-`--allow-shell` (and reinstall without it) to restore the configured Fabric
-execute policy; `ask` and `auto` still fail closed because the managed adapter
+approved commands run with the local user's ambient OS permissions. Use setup
+`update --revoke-shell` (which also revokes dependent subagents) or
+`--reset-grants` to restore the configured Fabric execute policy; `ask` and
+`auto` still fail closed because the managed adapter
 has no nested approval bridge. Subagents still require the installed
 `--subagents` flag.
 
@@ -228,9 +233,10 @@ The immutable release remains self-hosting. Read `runtime.nodePath` and
 "$INSTALLED_NODE" "$MANAGER_ENTRY" uninstall --user --project-root /canonical/project --yes
 ```
 
-Pass the original `--kiro-home` where applicable. `repair`/`update` can use the
-current installed release itself as the artifact source; a newer artifact still
-requires running that newer artifact's bootstrap manager.
+Pass the original `--kiro-home` where applicable. A healthy installed release
+can use itself for no-op lifecycle maintenance. To update versions or repair
+runtime tampering, invoke `kiro-fabric-setup` from a trusted current package or
+source artifact; do not execute a damaged installed Node or manager.
 
 Uninstall is hash-owned:
 
@@ -261,7 +267,7 @@ kiro-fabric doctor kiro --user --project-root /canonical/project --json
 When invoked through the installed management entry, doctor itself and all MCP
 probes execute with the release's attested Node. Doctor first verifies the installed manifest,
 profile hash, every managed skill hash and aggregate digest, the exact runtime
-file set, and the no-follow activation marker. Format-1 manifests are reported
+file set, release/manifest identity, executable mode, and the no-follow activation marker. Format-1 manifests are reported
 as legacy and do not claim skill or closure attestation; format 2 is the
 pre-vendored-Node closure and format 3 is the self-hosted immutable release. Checks also cover the
 Node/Kiro tuple, generated profile shape, `kiro-cli agent
@@ -328,29 +334,35 @@ pnpm` is used as a fallback. Non-interactive source preparation requires
 explicitly force it, or `NO_COLOR=1` to disable styling. No dependency or build
 mutation occurs before that consent. After preparation, a bare invocation
 becomes a user install bound to the canonical
-source checkout, or to `KIRO_FABRIC_PROJECT_ROOT` when set. Explicit `install`
-and `update` commands receive `--user` automatically, and `uninstall` receives
-`--user`. Setup commands and `launch` also receive that default project root
-unless `--project-root` was supplied explicitly. Tool auto-approval remains off
-unless `--allow-tools` is supplied explicitly. That exact grant covers only
-`fabric/fabric_exec` and is bound to the canonical project path and filesystem
-identity; a trusted grant may never target the Kiro config home. The source
-bootstrap never creates or manages a project-local profile.
+source checkout, or to `KIRO_FABRIC_PROJECT_ROOT` when set. Explicit `install`, `update`, `repair`, `uninstall`, and `doctor` commands
+receive `--user` automatically. Setup commands and `launch` also receive that default project root
+unless `--project-root` was supplied explicitly. Tool auto-approval remains off on a new install unless `--allow-tools` is
+supplied explicitly. Update and repair preserve existing shell, subagent, and
+tool grants by default. That exact tool grant covers only `fabric/fabric_exec`
+and is bound to the canonical project path and filesystem identity; a trusted
+grant may never target the Kiro config home. The source bootstrap never creates
+or manages a project-local profile.
 
 The underlying setup console supports the subcommands `status`, `install`, `update`,
-`uninstall`, `doctor`, and `launch`, with the flags `--user`,
+`repair`, `uninstall`, `doctor`, and `launch`, with the flags `--user`,
 `--project-root <dir>`, `--kiro-home <dir>`, `--kiro-binary <path>`,
-`--dry-run`, `--yes`, `--force`, `--allow-tools`, `--json`, and `-h/--help`.
-`--allow-tools` is accepted by `install` and `update`. A bare invocation
+`--dry-run`, `--yes`, `--force`, `--allow-shell`, `--subagents`,
+`--allow-tools`, `--revoke-shell`, `--revoke-subagents`, `--revoke-tools`,
+`--reset-grants`, `--json`, and `-h/--help`. Grant-enabling flags are accepted
+by install/update/repair; revoke/reset flags are explicit update/repair changes.
+A bare invocation
 shows a numbered menu only when stdin and stdout are terminals; a non-interactive
-run prints usage. Non-interactive install, update, or non-noop uninstall also
-requires `--yes`. Omitting `--user` selects project-local scope rooted at the
-current directory; `--user` selects `$KIRO_HOME` or `~/.kiro`. `update` requires
-an existing manifest, and the underlying console's `--allow-tools` grant defaults
-to off. `launch` starts `kiro-cli --v3 --agent
+run prints usage. Non-interactive install, update, repair, or non-noop uninstall
+also requires `--yes`. Omitting `--user` selects project-local scope rooted at the
+current directory; `--user` selects `$KIRO_HOME` or `~/.kiro`. Update and repair
+require an existing manifest, preserve grants by default, and return a clear
+before/after grant diff. `launch` starts `kiro-cli --v3 --agent
 kiro-fabric` through a direct argv exec in the selected project root. Every
 mutation delegates to the verified install, uninstall, and doctor APIs; the
-console adds no ownership, backup, or symlink logic of its own. Exit codes:
-`0` success, no-op, or dry-run; `1` failure; `2` usage; `130` interactive
-cancel. `--json` prints one JSON object on stdout, and human-readable errors
-go to stderr.
+console adds no ownership, backup, or symlink logic of its own. Format-3
+activation journals the marker before profile/skills and the manifest last; a
+SIGKILL leaves a durable transaction that the next lifecycle operation
+forward-recovers to one generation before preflight. Exit codes: `0` success,
+no-op, or dry-run; `1` failure; `2` usage; `130` interactive cancel. `--json`
+prints exactly one object on stdout on both success and failure; human-readable
+errors go to stderr only without `--json`.

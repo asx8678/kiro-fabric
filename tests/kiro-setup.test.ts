@@ -156,6 +156,8 @@ describe("source installer bootstrap", () => {
       "--allow-tools",
       "--dry-run",
     ]);
+    const repair = runInstaller(entry, ["repair", "--dry-run"]);
+    const doctor = runInstaller(entry, ["doctor", "--json"]);
     const uninstall = runInstaller(entry, ["uninstall", "--dry-run"]);
     expect(added.status).toBe(0);
     expect(JSON.parse(added.stdout.trim())).toEqual([
@@ -171,6 +173,22 @@ describe("source installer bootstrap", () => {
       "--user",
       "--allow-tools",
       "--dry-run",
+      "--project-root",
+      repoRoot,
+    ]);
+    expect(repair.status).toBe(0);
+    expect(JSON.parse(repair.stdout.trim())).toEqual([
+      "repair",
+      "--dry-run",
+      "--user",
+      "--project-root",
+      repoRoot,
+    ]);
+    expect(doctor.status).toBe(0);
+    expect(JSON.parse(doctor.stdout.trim())).toEqual([
+      "doctor",
+      "--json",
+      "--user",
       "--project-root",
       repoRoot,
     ]);
@@ -310,6 +328,17 @@ describe("runKiroSetup usage", () => {
     expect(`${run.stderr}\n${run.stdout}`).toMatch(/usage/i);
   });
 
+  itPosix("emits exactly one structured object for every --json usage failure", async () => {
+    const run = await runSetup(["frobnicate", "--json"]);
+    expect(run.code).toBe(2);
+    expect(run.stderr).toBe("");
+    expect(parseJsonStdout(run.stdout)).toMatchObject({
+      ok: false,
+      error: { code: "usage", message: expect.stringMatching(/unknown command/) },
+    });
+    expect(run.stdout.trim().split("\n").filter((line) => line.trim() === "{")).toHaveLength(1);
+  });
+
   itPosix("exits 2 for a bare invocation when stdin/stdout are not TTYs", async () => {
     // Vitest pipes stdio, so the numbered interactive menu must not appear.
     const run = await runSetup([]);
@@ -431,7 +460,7 @@ describe("runKiroSetup install --user --json", () => {
 });
 
 describe("runKiroSetup update", () => {
-  itPosix("fails with exit 1 when no managed installation exists", async () => {
+  itPosix("fails with one JSON object when no managed installation exists", async () => {
     const root = project("update-project");
     const home = project("update-home");
     const wrapper = writeFakeKiroWrapper(join(base, "fake-kiro"));
@@ -446,10 +475,51 @@ describe("runKiroSetup update", () => {
       home,
       "--kiro-binary",
       wrapper,
+      "--json",
     ]);
     expect(run.code).toBe(1);
-    expect(run.stderr).toMatch(/no managed installation to update/i);
+    expect(run.stderr).toBe("");
+    expect(parseJsonStdout(run.stdout)).toMatchObject({
+      ok: false,
+      error: { code: "manifest", message: expect.stringMatching(/no managed installation to update/i) },
+    });
   });
+
+  itPosix("preserves advanced grants and reports explicit revoke/reset diffs", async () => {
+    const root = project("grant-update-project");
+    const home = project("grant-update-home");
+    const wrapper = writeFakeKiroWrapper(join(base, "fake-kiro-grants"));
+    vi.stubEnv("KIRO_FABRIC_MCP_ENTRY", mcpEntry);
+    const common = [
+      "--user", "--project-root", root, "--kiro-home", home,
+      "--kiro-binary", wrapper, "--yes", "--json",
+    ];
+    const installed = await runSetup(["install", "--allow-shell", "--allow-tools", ...common]);
+    expect(installed.code).toBe(0);
+    const updated = await runSetup(["update", ...common]);
+    expect(updated.code).toBe(0);
+    expect(parseJsonStdout(updated.stdout).grants).toEqual({
+      before: { allowShell: true, enableSubagents: false, allowTools: true },
+      after: { allowShell: true, enableSubagents: false, allowTools: true },
+      changed: [],
+    });
+
+    const revoked = await runSetup(["repair", "--revoke-tools", ...common]);
+    expect(revoked.code).toBe(0);
+    expect(parseJsonStdout(revoked.stdout).grants).toEqual({
+      before: { allowShell: true, enableSubagents: false, allowTools: true },
+      after: { allowShell: true, enableSubagents: false, allowTools: false },
+      changed: ["allowTools"],
+    });
+
+    const reset = await runSetup(["update", "--reset-grants", ...common]);
+    expect(reset.code).toBe(0);
+    expect(parseJsonStdout(reset.stdout).grants).toEqual({
+      before: { allowShell: true, enableSubagents: false, allowTools: false },
+      after: { allowShell: false, enableSubagents: false, allowTools: false },
+      changed: ["allowShell"],
+    });
+  }, 120_000);
 });
 
 describe("runKiroSetup uninstall --user --json", () => {
@@ -497,9 +567,7 @@ describe("runKiroSetup launch", () => {
     vi.stubEnv("KIRO_HOME", home);
     vi.stubEnv("PATH", bin);
     vi.stubEnv("KIRO_SETUP_LAUNCH_LOG", log);
-    // --json is accepted for a uniform flag surface; the launch contract is
-    // the spawned argv and cwd, which the fake records for assertion.
-    const run = await runSetup(["launch", "--json", "--project-root", root]);
+    const run = await runSetup(["launch", "--project-root", root]);
     expect(run.code).toBe(0);
     const lines = readFileSync(log, "utf8").trim().split("\n");
     expect(lines[0]?.split(/\s+/)).toEqual(["--v3", "--agent", "kiro-fabric"]);

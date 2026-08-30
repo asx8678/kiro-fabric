@@ -3,10 +3,11 @@
 // two independent MCP processes execute the profile-recorded installed entry.
 
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   chmodSync,
   copyFileSync,
-  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -15,13 +16,13 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { build } from "esbuild";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { spawnJsonRpcProcess } from "../src/kiro/supervisor.js";
@@ -117,6 +118,7 @@ describe("detached installed Kiro runtime", () => {
       const root = acceptanceRoot;
       const packageOrigin = join(root, "package-origin");
       const retiredOrigin = join(root, "package-origin.retired");
+      const packDir = join(root, "pack");
       const externalFixtureDir = join(root, "external-kiro-fixture");
       const projectRoot = join(root, "project");
       const isolatedHome = join(root, "home");
@@ -124,44 +126,22 @@ describe("detached installed Kiro runtime", () => {
       const processTmp = join(root, "tmp");
       const canaryBin = join(root, "canary-bin");
       const canaryLog = join(root, "unexpected-path-command.log");
-      for (const dir of [packageOrigin, externalFixtureDir, projectRoot, isolatedHome, kiroHome, processTmp, canaryBin]) {
+      for (const dir of [packDir, externalFixtureDir, projectRoot, isolatedHome, kiroHome, processTmp, canaryBin]) {
         mkdirSync(dir, { recursive: true });
       }
 
-      // This is the package origin the fresh installer child actually imports.
-      // Bundle a test-only installer driver so setup itself has no node_modules
-      // dependency, then seed it with the production closure bytes. It is
-      // independent of the fixture and safe to rename as one direct child of
-      // this suite's bounded temporary root.
-      copyFileSync(join(repoRoot, "package.json"), join(packageOrigin, "package.json"));
-      cpSync(join(repoRoot, "dist", "kiro-closure"), join(packageOrigin, "dist", "kiro-closure"), {
-        recursive: true,
-      });
-      cpSync(join(repoRoot, "skills"), join(packageOrigin, "skills"), { recursive: true });
-      const installDriver = join(packageOrigin, "dist", "kiro", "install-driver.js");
-      await build({
-        stdin: {
-          contents: [
-            'import { installKiroProfile } from "./src/kiro/install.ts";',
-            "const [kiroHome, projectRoot, kiroBinary] = process.argv.slice(2);",
-            "const result = await installKiroProfile({ scope: 'user', kiroHome, projectRoot, kiroBinary });",
-            "process.stdout.write(JSON.stringify(result));",
-          ].join("\n"),
-          resolveDir: repoRoot,
-          sourcefile: "detached-install-driver.ts",
-          loader: "ts",
-        },
-        outfile: installDriver,
-        bundle: true,
-        platform: "node",
-        format: "esm",
-        target: "node24",
-        sourcemap: false,
-        banner: {
-          js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
-        },
-        logLevel: "silent",
-      });
+      // Pack and install exactly the publishable package, then invoke its real
+      // package.json setup bin in a fresh process. No test-only installer bundle
+      // is allowed to stand in for the distributed bootstrap surface.
+      const packed = await execFileAsync("npm", [
+        "pack", "--ignore-scripts", "--pack-destination", packDir,
+      ], { cwd: repoRoot, encoding: "utf8", timeout: 60_000 });
+      const tarball = join(packDir, String(packed.stdout).trim().split(/\r?\n/).at(-1)!);
+      await execFileAsync("npm", [
+        "install", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", packageOrigin, tarball,
+      ], { cwd: root, encoding: "utf8", timeout: 60_000 });
+      const setupBin = join(packageOrigin, "node_modules", ".bin", "kiro-fabric-setup");
+      expect(existsSync(setupBin)).toBe(true);
 
       // Kiro is an explicitly external executable. Keep the fake outside the
       // package origin so retiring Fabric's origin cannot accidentally remove
@@ -200,11 +180,15 @@ describe("detached installed Kiro runtime", () => {
         LC_ALL: "C",
       };
 
+      const lifecycleBase = ["--user", "--kiro-home", kiroHome, "--project-root", projectRoot];
       const installed = await execFileAsync(process.execPath, [
-        installDriver,
-        kiroHome,
-        projectRoot,
+        setupBin,
+        "install",
+        ...lifecycleBase,
+        "--kiro-binary",
         fakeKiro,
+        "--yes",
+        "--json",
       ], {
         cwd: projectRoot,
         env: hermeticEnv,
@@ -257,6 +241,51 @@ describe("detached installed Kiro runtime", () => {
       expect(manifest.runtime.closure.files).toContainEqual(expect.objectContaining({ path: entryRelative }));
       expect(recorded.args[0]).not.toContain(packageOrigin);
 
+      const runBootstrap = async (command: "status" | "repair") => {
+        const result = await execFileAsync(process.execPath, [
+          setupBin,
+          command,
+          ...lifecycleBase,
+          "--kiro-binary",
+          fakeKiro,
+          ...(command === "repair" ? ["--yes"] : []),
+          "--json",
+        ], { cwd: projectRoot, env: hermeticEnv, encoding: "utf8", timeout: 90_000 });
+        return JSON.parse(String(result.stdout)) as Record<string, any>;
+      };
+      const expectDamagedThenRepair = async (mutate: () => void): Promise<void> => {
+        mutate();
+        const damaged = await runBootstrap("status");
+        expect(damaged.scopes.user.healthy).toBe(false);
+        expect(damaged.scopes.user.issue).toEqual(expect.any(String));
+        const repaired = await runBootstrap("repair");
+        expect(repaired.ok).toBe(true);
+        expect((await runBootstrap("status")).scopes.user.healthy).toBe(true);
+      };
+
+      await expectDamagedThenRepair(() => {
+        chmodSync(manifest.runtime.nodePath, 0o755);
+        appendFileSync(manifest.runtime.nodePath, "tamper");
+      });
+      expect(createHash("sha256").update(readFileSync(manifest.runtime.nodePath)).digest("hex"))
+        .toBe(manifest.runtime.nodeSha256);
+
+      const originalManager = readFileSync(manifest.runtime.managerEntryPath);
+      await expectDamagedThenRepair(() => {
+        chmodSync(manifest.runtime.managerEntryPath, 0o644);
+        writeFileSync(manifest.runtime.managerEntryPath, "tampered manager\n");
+      });
+      expect(readFileSync(manifest.runtime.managerEntryPath)).toEqual(originalManager);
+
+      await expectDamagedThenRepair(() => chmodSync(manifest.runtime.nodePath, 0o644));
+      expect(statSync(manifest.runtime.nodePath).mode & 0o777).toBe(0o555);
+
+      await expectDamagedThenRepair(() => {
+        const changed = JSON.parse(readFileSync(manifestPath, "utf8")) as { packageVersion: string };
+        changed.packageVersion = "0.0.0-tampered";
+        writeFileSync(manifestPath, JSON.stringify(changed, null, 2) + "\n");
+      });
+
       // Rename, rather than recursively deleting, exactly the direct temporary
       // origin. The old absolute import/closure source path is now absent while
       // cleanup remains bounded to acceptanceRoot.
@@ -277,7 +306,6 @@ describe("detached installed Kiro runtime", () => {
       // and repair execute after origin removal; repair resolves this installed
       // release itself as the current artifact and preserves the same digest.
       const managerArgs = [manifest.runtime.managerEntryPath];
-      const lifecycleBase = ["--user", "--kiro-home", kiroHome, "--project-root", projectRoot];
       const status = await execFileAsync(manifest.runtime.nodePath, [
         ...managerArgs,
         "status",

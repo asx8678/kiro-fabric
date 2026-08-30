@@ -254,7 +254,7 @@ export interface RuntimeClosureResult {
   /** Whether a new closure version was published (false when already current). */
   updated: boolean;
   /** Exact filesystem operation required for this closure. */
-  action: "publish" | "activate" | "noop";
+  action: "publish" | "repair" | "activate" | "noop";
   /** Exact final published file-set attestation. */
   attestation: KiroRuntimeClosureManifest;
   /** Bounded phase timing and size metrics (PR1). */
@@ -269,6 +269,8 @@ export interface RuntimeClosureDeploymentOptions {
   nodeSourcePath?: string;
   /** Descriptor-bound identity retained from installer staging. */
   nodeAttestation?: ExecutableAttestation;
+  /** Verify and atomically restore a damaged same-digest release from this source artifact. */
+  repairExisting?: boolean;
 }
 
 export const planRuntimeClosureDeployment = (
@@ -301,7 +303,9 @@ export const planRuntimeClosureDeployment = (
   }
   const markerDigest = markerStat ? readFileSync(marker, "utf8").trim() : "";
   const published = existsSync(mcpEntryPath);
-  const runtimeRoot = relative(installRoot, join(runtimeDir, digest)).split(sep).join("/");
+  const versionRoot = join(runtimeDir, digest);
+  const versionStat = lstatOrNull(versionRoot);
+  const runtimeRoot = relative(installRoot, versionRoot).split(sep).join("/");
   const generatedPackage = JSON.stringify({
     name: "kiro-fabric-runtime-closure",
     version: readPackageVersion(),
@@ -326,6 +330,21 @@ export const planRuntimeClosureDeployment = (
     { path: runtimeRoot + "/package.json", installedSha256: sha256Bytes(generatedPackage) },
   );
   attested.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+  const attestation = { digest, root: runtimeRoot, files: attested };
+  let damaged = false;
+  if (versionStat && options.repairExisting) {
+    if (versionStat.isSymbolicLink() || !versionStat.isDirectory()) {
+      throw new KiroInstallError("symlink", "runtime closure version root is not a real directory");
+    }
+    try {
+      verifyRuntimeClosureAttestation(installRoot, attestation);
+    } catch (error) {
+      if (!(error instanceof KiroInstallError) || (error.code !== "ownership" && error.code !== "fs")) {
+        throw error;
+      }
+      damaged = true;
+    }
+  }
   const skillBytes = MANAGED_RELEASE_SKILL_FILES.reduce(
     (total, rel) => total + statSync(join(packageRoot, "skills", ...rel.split("/"))).size,
     0,
@@ -336,9 +355,9 @@ export const planRuntimeClosureDeployment = (
     runtimeNodePath,
     managementEntryPath,
     digest,
-    updated: !published,
-    action: !published ? "publish" : markerDigest === digest ? "noop" : "activate",
-    attestation: { digest, root: runtimeRoot, files: attested },
+    updated: !published || damaged,
+    action: damaged ? "repair" : !published ? "publish" : markerDigest === digest ? "noop" : "activate",
+    attestation,
     metrics: {
       stageMs: 0,
       publishMs: 0,
@@ -366,9 +385,9 @@ const writeClosureMarker = (runtimeDir: string, digest: string): void => {
  *
  * PR1 correctness: publication is content-addressed and non-destructive. Each
  * digest is staged as a sibling then atomically `renameSync`d into
- * `runtime/<digest>/`. The old runtime is NEVER removed before the new one is
- * fully in place, so an interrupted install always leaves either the previous
- * complete runtime or the complete new runtime. Source maps are excluded.
+ * `runtime/<digest>/`. Publication never mutates an existing release. Explicit
+ * trusted repair swaps a damaged same-digest directory only after the staged
+ * replacement attests completely. Source maps are excluded.
  */
 export const deployRuntimeClosure = (
   installRoot: string,
@@ -378,6 +397,8 @@ export const deployRuntimeClosure = (
     expectedDigest?: string;
     nodeSourcePath?: string;
     nodeAttestation?: ExecutableAttestation;
+    /** Restore a damaged release only from this invocation's trusted source. */
+    repairExisting?: boolean;
     /** Installer activation is committed with profile+manifest, not here. */
     activate?: boolean;
   },
@@ -387,6 +408,7 @@ export const deployRuntimeClosure = (
   const planned = planRuntimeClosureDeployment(installRoot, layout, {
     ...(options?.nodeSourcePath ? { nodeSourcePath: options.nodeSourcePath } : {}),
     ...(options?.nodeAttestation ? { nodeAttestation: options.nodeAttestation } : {}),
+    ...(options?.repairExisting ? { repairExisting: true } : {}),
   });
   const digest = planned.digest;
   if (options?.expectedDigest !== undefined && options.expectedDigest !== digest) {
@@ -408,9 +430,10 @@ export const deployRuntimeClosure = (
     bytes: 0,
   };
 
-  // Digest directories are immutable. Re-hash the exact installed tree before
-  // trusting the content-addressed name; --force never recursively replaces it.
-  if (existsSync(versionMcpEntry)) {
+  // Re-hash the exact installed tree before trusting the content-addressed
+  // name. Ordinary publication refuses drift; trusted repair stages a complete
+  // replacement and swaps the directory without mutating leaves in place.
+  if (existsSync(versionMcpEntry) && planned.action !== "repair") {
     verifyRuntimeClosureAttestation(installRoot, planned.attestation);
     const markerNow = lstatOrNull(marker);
     if (markerNow && (markerNow.isSymbolicLink() || !markerNow.isFile())) {
@@ -542,8 +565,38 @@ export const deployRuntimeClosure = (
     // its exact final tree must attest identically and is never replaced.
     const publishStart = Date.now();
     if (existsSync(versionDir)) {
-      rmSync(stagingDir, { recursive: true, force: true });
-      verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+      if (planned.action === "repair") {
+        const damagedDir = join(runtimeDir, `.damaged-${digest}-${process.pid}-${Date.now().toString(36)}`);
+        renameSync(versionDir, damagedDir);
+        try {
+          renameSync(stagingDir, versionDir);
+        } catch (error) {
+          renameSync(damagedDir, versionDir);
+          throw error;
+        }
+        const makeRemovable = (dir: string): void => {
+          const stat = lstatOrNull(dir);
+          if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) {
+            throw new KiroInstallError("symlink", "damaged runtime root is not a real directory");
+          }
+          chmodSync(dir, 0o700);
+          for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
+          }
+        };
+        makeRemovable(damagedDir);
+        rmSync(damagedDir, { recursive: true, force: true });
+      } else {
+        const unsealStaging = (dir: string): void => {
+          chmodSync(dir, 0o700);
+          for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isDirectory()) unsealStaging(join(dir, entry.name));
+          }
+        };
+        unsealStaging(stagingDir);
+        rmSync(stagingDir, { recursive: true, force: true });
+        verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+      }
     } else {
       renameSync(stagingDir, versionDir);
     }
@@ -558,7 +611,7 @@ export const deployRuntimeClosure = (
       managementEntryPath: planned.managementEntryPath,
       digest,
       updated: true,
-      action: "publish",
+      action: planned.action === "repair" ? "repair" : "publish",
       attestation: planned.attestation,
       metrics: metadata,
     };

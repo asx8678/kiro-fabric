@@ -187,6 +187,14 @@ export const runKiroDoctor = async (
         ) {
           throw new Error("managed profile Kiro executable identity does not match manifest");
         }
+        const profileGrants = {
+          allowShell: env?.KIRO_FABRIC_ALLOW_SHELL === "1",
+          enableSubagents: env?.KIRO_FABRIC_ENABLE_SUBAGENTS === "1",
+          allowTools: env?.KIRO_FABRIC_ALLOW_TOOLS === "1",
+        };
+        if (manifest.grants && JSON.stringify(manifest.grants) !== JSON.stringify(profileGrants)) {
+          throw new Error("managed manifest grant state differs from profile");
+        }
       }
       return manifest.format === 1
         ? "legacy format-1 profile ownership verified"
@@ -230,6 +238,16 @@ export const runKiroDoctor = async (
         const closure = installedManifest!.runtime.closure;
         if (!closure) throw new Error("runtime closure attestation is absent");
         verifyRuntimeClosureAttestation(roots.installRoot, closure);
+        const releasePackage = JSON.parse(readFileSync(
+          join(roots.installRoot, ...closure.root.split("/"), "package.json"),
+          "utf8",
+        )) as { version?: unknown; digest?: unknown };
+        if (
+          releasePackage.version !== installedManifest!.packageVersion ||
+          releasePackage.digest !== closure.digest
+        ) {
+          throw new Error("manifest package identity does not match the attested release");
+        }
         const marker = join(runtimeClosurePath(roots.installRoot, roots.layout), ".closure-current");
         const stat = lstatOrNull(marker);
         if (!stat || stat.isSymbolicLink() || !stat.isFile()) {

@@ -45,15 +45,14 @@ Use this path to install Fabric as a managed Kiro v3 agent. The commands create 
 
 ### Run the guided installer
 
-The npm package is not yet available from the public registry. Install from a source checkout on Linux or macOS:
+Install the published package and run its guided setup bin:
 
 ```bash
-git clone https://github.com/asx8678/kiro-fabric.git
-cd kiro-fabric
-sh scripts/install-kiro-fabric.sh
+npm install --global kiro-fabric
+kiro-fabric-setup
 ```
 
-If you already have this repository open, only the last command is needed. The friendly bootstrap checks Node.js, asks before installing dependencies or building a missing compiled entry, then installs the profile in user scope under `$KIRO_HOME` or `~/.kiro`. It never creates a project-local profile. The profile keeps Kiro approval prompts enabled unless you explicitly pass `--allow-tools`.
+For development from a source checkout on Linux or macOS, run `sh scripts/install-kiro-fabric.sh`. The source bootstrap checks Node.js, asks before installing dependencies or building a missing compiled entry, and consistently targets user scope for install, update, repair, uninstall, and doctor. The profile keeps Kiro approval prompts enabled unless you explicitly add a grant.
 
 A bare run binds the shared user profile to the canonical source checkout. Set `KIRO_FABRIC_PROJECT_ROOT` or pass `--project-root` to target another workspace. Preview an explicit target before applying it:
 
@@ -64,16 +63,9 @@ sh scripts/install-kiro-fabric.sh install \
   --project-root /absolute/path/to/project
 ```
 
-The source installer adds `--user` automatically to `install`, `update`, and `uninstall`. It defaults `--project-root` to the canonical checkout (or `KIRO_FABRIC_PROJECT_ROOT`) while preserving an explicit override. `--allow-tools` is never added automatically; omit it on an update to restore the default `ask` rule.
+The source installer adds `--user` automatically to `install`, `update`, `repair`, `uninstall`, and `doctor`. It defaults `--project-root` to the canonical checkout (or `KIRO_FABRIC_PROJECT_ROOT`) while preserving an explicit override. New installs start with grants off; update and repair preserve all existing advanced grants unless an explicit `--revoke-*` or `--reset-grants` option changes them.
 
-After `kiro-fabric` is published to npm, the equivalent global installation will be:
-
-```bash
-npm install --global kiro-fabric
-kiro-fabric-setup
-```
-
-For scripts or CI, `kiro-fabric-setup` accepts `status`, `doctor`, `install`, `update`, `uninstall`, and `launch` subcommands.
+For scripts or CI, `kiro-fabric-setup` accepts `status`, `doctor`, `install`, `update`, `repair`, `uninstall`, and `launch` subcommands.
 
 Important:
 
@@ -87,7 +79,7 @@ Important:
 
 ### 1. Install Fabric
 
-Until the npm package is published, use the source installer shown above. It keeps the checkout as the stable location for the compiled MCP adapter:
+Use the package setup bin shown above, or the source bootstrap when developing this repository:
 
 ```bash
 node --version
@@ -95,7 +87,7 @@ kiro-cli --version
 sh scripts/install-kiro-fabric.sh
 ```
 
-Node must report version 24 or newer. Kiro must report version 2.20.1. Install and authenticate Kiro CLI through its official setup before continuing. Keep the source checkout in place after installation because the generated profile records its compiled MCP path.
+Node must report version 24 or newer. Kiro must report version 2.20.1. Install and authenticate Kiro CLI through its official setup before continuing. The installed format-3 profile records only the vendored Node and release paths under the selected `.kiro` tree; the npm package or source checkout may be retired after installation.
 
 ### 2. Run the compatibility preflight
 
@@ -190,7 +182,7 @@ kiro-fabric install kiro --user \
 | `--subagents` | Enables at most four non-recursive Kiro ACP children. Requires `--allow-shell`. |
 | `--allow-tools` | Explicitly adds one exact v3 MCP allow rule for `fabric/fabric_exec`. |
 
-The example enables all three grants. Omit every flag you do not need. Any selected grant binds the profile to the recorded canonical project path and its filesystem identity. Launching it from another project fails before the MCP runtime starts. Replacing, moving, or symlink-retargeting the project directory also requires a fresh install. Re-run the default install command from step 3 to remove the grants. A user Kiro home contains one managed `kiro-fabric` profile, so installing a trusted profile for another project updates that shared profile.
+The example enables all three grants. Any selected grant binds the profile to the recorded canonical project path and its filesystem identity. Launching it from another project fails before the MCP runtime starts. Replacing, moving, or symlink-retargeting the project directory also requires a fresh install. Setup `update` and `repair` preserve these grants by default and report a before/after diff. Use `--revoke-shell`, `--revoke-subagents`, `--revoke-tools`, or `--reset-grants` to remove them explicitly. A user Kiro home contains one managed `kiro-fabric` profile, so installing a trusted profile for another project updates that shared profile.
 
 Project identity is a launch-time grant check and a boundary for repository file tools. It is not a shell sandbox. `k.bash` runs with the MCP process's ambient OS permissions and can access paths, credentials, processes, and network resources outside the project. Combining `--allow-shell` with `--allow-tools` removes Kiro's outer tool prompt as well.
 
@@ -228,19 +220,19 @@ sh scripts/install-kiro-fabric.sh install --user \
   --project-root /absolute/path/to/project --yes
 ```
 
-The generated profile stores the absolute path to this checkout's built MCP entry. Keep the checkout in place, or rebuild and reinstall the profile after moving it.
+The source checkout is only the trusted bootstrap artifact. Format-3 installation copies the complete runtime, manager, skills, and Node executable into the selected `.kiro` tree.
 
 ### Update or uninstall
 
-Update the package, then repeat the same install command and trusted flags you intend to keep:
+Update the package, then use setup `update`; existing advanced grants are preserved and shown in the JSON/human diff:
 
 ```bash
 npm install --global kiro-fabric@latest
-kiro-fabric doctor kiro
-kiro-fabric install kiro --user --project-root /absolute/path/to/project
+kiro-fabric-setup update --user --project-root /absolute/path/to/project --yes
+kiro-fabric-setup doctor --user --project-root /absolute/path/to/project
 ```
 
-Repeat every trusted flag you intend to keep. The generated profile stores absolute paths to Node and the installed MCP entry, so rerun doctor and install after changing Node installations or moving a local package.
+Use `kiro-fabric-setup repair ... --yes` from a trusted current package/source artifact to restore tampered runtime bytes, the vendored Node, executable mode, manager, skills, and release identity in the manifest. `status` hashes the profile and the rest of the full owned install. A healthy installed manager remains usable after the package origin is removed; if installed runtime bytes are damaged, run repair from the trusted package bootstrap; a damaged manager is untrusted code.
 
 Uninstall the profile before removing its npm package. For user scope:
 
@@ -254,7 +246,7 @@ If installation used a custom Kiro home, add the same `--kiro-home /absolute/pat
 
 ### Troubleshooting
 
-- Run `kiro-fabric doctor kiro --json` first. Exit code `0` means every required check passed; `1` means diagnosis or installation failed; `2` means the CLI arguments were invalid.
+- Run `kiro-fabric-setup status --user --json` and `kiro-fabric-setup doctor --user --json` first. Status verifies the profile, skills, closure file set and hashes, Node mode, activation marker, manager binding, grants, and manifest/release identity. Exit code `0` means every required doctor check passed; `1` means diagnosis or installation failed; `2` means the arguments were invalid. Every setup `--json` failure emits exactly one `{ ok: false, error }` object on stdout.
 - Confirm `node --version` reports Node 24 or newer and `kiro-cli --version` reports 2.20.1.
 - Pass `--kiro-binary /absolute/path/to/kiro-cli` to doctor and install when Kiro is outside `PATH`.
 - If Kiro cannot find the agent, confirm the profile exists at `~/.kiro/agents/kiro-fabric.json` or below the configured `$KIRO_HOME`.

@@ -164,7 +164,7 @@ else
     [ "$ARG" = "--project-root" ] && HAS_PROJECT_ROOT=1
   done
   case $COMMAND in
-    install|update)
+    install|update|repair)
       HAS_USER=0
       for ARG in "$@"; do
         [ "$ARG" = "--user" ] && HAS_USER=1
@@ -180,7 +180,15 @@ else
       [ "$HAS_USER" -eq 1 ] || set -- "$@" --user
       [ "$HAS_PROJECT_ROOT" -eq 1 ] || set -- "$@" --project-root "$DEFAULT_PROJECT_ROOT"
       ;;
-    status|doctor|launch)
+    doctor)
+      HAS_USER=0
+      for ARG in "$@"; do
+        [ "$ARG" = "--user" ] && HAS_USER=1
+      done
+      [ "$HAS_USER" -eq 1 ] || set -- "$@" --user
+      [ "$HAS_PROJECT_ROOT" -eq 1 ] || set -- "$@" --project-root "$DEFAULT_PROJECT_ROOT"
+      ;;
+    status|launch)
       [ "$HAS_PROJECT_ROOT" -eq 1 ] || set -- "$@" --project-root "$DEFAULT_PROJECT_ROOT"
       ;;
   esac

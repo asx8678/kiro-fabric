@@ -97,6 +97,12 @@ export interface KiroRuntimeClosureManifest {
   files: KiroManagedOwnedFile[];
 }
 
+export interface KiroManagedGrants {
+  allowShell: boolean;
+  enableSubagents: boolean;
+  allowTools: boolean;
+}
+
 export interface KiroInstallManifest {
   format: 1 | 2 | 3;
   owner: string;
@@ -130,6 +136,8 @@ export interface KiroInstallManifest {
     bundleSha256: string;
     files: KiroManagedOwnedFile[];
   };
+  /** Explicit advanced-grant state. Optional only for manifests written before this field existed. */
+  grants?: KiroManagedGrants;
   /** Present on user-home installs; omitted for project-scoped manifests. */
   scope?: "user";
 }
@@ -408,6 +416,23 @@ export const readManifest = (
       : parseBackupRecord(parsed.profile.backup, root, layout);
   let skills: KiroInstallManifest["skills"];
   let closure: KiroRuntimeClosureManifest | undefined;
+  let grants: KiroManagedGrants | undefined;
+  if (parsed.grants !== undefined) {
+    if (
+      !isRecord(parsed.grants) ||
+      typeof parsed.grants.allowShell !== "boolean" ||
+      typeof parsed.grants.enableSubagents !== "boolean" ||
+      typeof parsed.grants.allowTools !== "boolean" ||
+      (parsed.grants.enableSubagents && !parsed.grants.allowShell)
+    ) {
+      throw new KiroInstallError("manifest", "install manifest grant state is malformed");
+    }
+    grants = {
+      allowShell: parsed.grants.allowShell,
+      enableSubagents: parsed.grants.enableSubagents,
+      allowTools: parsed.grants.allowTools,
+    };
+  }
   if (parsed.format === KIRO_PREVIOUS_INSTALL_MANIFEST_FORMAT || parsed.format === KIRO_INSTALL_MANIFEST_FORMAT) {
     if (!isRecord(parsed.skills) || !isSha256Hex(parsed.skills.bundleSha256)) {
       throw new KiroInstallError("manifest", "install manifest skill attestation is malformed");
@@ -523,6 +548,7 @@ export const readManifest = (
       ...(generations ? { generations } : {}),
     },
     ...(skills ? { skills } : {}),
+    ...(grants ? { grants } : {}),
     ...(layout === "user" ? { scope: "user" as const } : {}),
   };
 };

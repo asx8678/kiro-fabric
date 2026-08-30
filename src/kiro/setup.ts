@@ -10,8 +10,7 @@
 // Exit codes: 0 success/noop/dry-run · 1 failure · 2 usage · 130 interactive cancel.
 
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 
@@ -29,10 +28,21 @@ import {
 import { resolveKiroInstallRoots, type KiroInstallRoots } from "./home.js";
 import {
   installKiroProfile,
+  readManagedKiroGrants,
   resolveKiroProjectRoot,
   type KiroInstallOptions,
 } from "./install.js";
+import {
+  KiroInstallError,
+  lstatOrNull,
+  readManagedFileNoFollow,
+  readManifest,
+  sha256Bytes,
+  type KiroManagedGrants,
+} from "./managed.js";
 import { kiroProfilePath } from "./profile.js";
+import { runtimeClosurePath, verifyRuntimeClosureAttestation } from "./runtime-closure.js";
+import { managedKiroSkillBundleSha256 } from "./skills.js";
 import {
   planKiroProfileUninstall,
   uninstallKiroProfile,
@@ -51,14 +61,14 @@ const USAGE =
     "Commands:",
     "  status                    Show node, kiro-cli, and per-scope install state",
     "  install                   Install the managed Kiro v3 profile (project scope by default)",
-    "  update                    Update from the current npm/source or installed artifact",
-    "  repair                    Re-attest and restore from the current installed release",
+    "  update                    Update from the current npm/source artifact; preserve grants",
+    "  repair                    Re-attest and restore from the current trusted artifact",
     "  uninstall                 Remove a managed profile or restore the backup",
     "  doctor                    Read-only non-billable health checks",
     "  launch                    Launch kiro-cli with the kiro-fabric agent",
     "",
     "Bare invocation on a TTY shows an interactive menu; otherwise this usage is",
-    "printed. Advanced grants (allow-shell/subagents/allow-tools) default to off.",
+    "printed. New installs default advanced grants off; update/repair preserve them.",
     "",
     "Options:",
     "  --user                    Target the user Kiro home (~/.kiro) instead of <project>/.kiro",
@@ -67,9 +77,15 @@ const USAGE =
     "  --kiro-binary <path>      Kiro CLI binary (default: kiro-cli)",
     "  --dry-run                 Validate and report without changing files",
     "  --yes                     Suppress confirmation prompts (never implies --force)",
-    "  --force                   Install only: back up and replace unknown/modified profile content",
+    "  --force                   Install/repair: back up and replace modified managed content",
+    "  --allow-shell             Trusted opt-in: enable k.bash",
+    "  --subagents               Enable bounded ACP fan-out (requires shell grant)",
     "  --allow-tools             Trusted opt-in: auto-approve only fabric/fabric_exec",
-    "  --json                    Machine-readable output (one JSON object on stdout)",
+    "  --revoke-shell            Revoke shell and dependent subagent grants",
+    "  --revoke-subagents        Revoke only the subagent grant",
+    "  --revoke-tools            Restore the exact Fabric MCP rule to ask",
+    "  --reset-grants            Revoke every advanced grant",
+    "  --json                    Machine-readable output (exactly one object on stdout)",
     "  -h, --help                Show this help",
     "",
     "Exit codes: 0 success · 1 failure · 2 usage · 130 interactive cancel.",
@@ -92,7 +108,13 @@ interface SetupArgs {
   dryRun: boolean;
   yes: boolean;
   force: boolean;
+  allowShell: boolean;
+  enableSubagents: boolean;
   allowTools: boolean;
+  revokeShell: boolean;
+  revokeSubagents: boolean;
+  revokeTools: boolean;
+  resetGrants: boolean;
   user: boolean;
   projectRoot?: string;
   kiroHome?: string;
@@ -107,7 +129,13 @@ const baseArgs = (command: SetupCommand): SetupArgs => ({
   dryRun: false,
   yes: false,
   force: false,
+  allowShell: false,
+  enableSubagents: false,
   allowTools: false,
+  revokeShell: false,
+  revokeSubagents: false,
+  revokeTools: false,
+  resetGrants: false,
   user: false,
 });
 
@@ -141,25 +169,50 @@ const parseSetupArgs = (argv: string[]): SetupArgs => {
     };
     switch (flag) {
       case "--json":
+        if (command === "launch") throw new UsageError("--json is not valid for launch");
         parsed.json = true;
         break;
       case "--dry-run":
-        if (!mutating) throw new UsageError("--dry-run is install/update/uninstall-only");
+        if (!mutating) throw new UsageError("--dry-run is only valid for lifecycle mutations");
         parsed.dryRun = true;
         break;
       case "--yes":
-        if (!mutating) throw new UsageError("--yes is install/update/uninstall-only");
+        if (!mutating) throw new UsageError("--yes is only valid for lifecycle mutations");
         parsed.yes = true;
         break;
       case "--force":
         if (command !== "install" && command !== "repair") throw new UsageError("--force is install/repair-only");
         parsed.force = true;
         break;
+      case "--allow-shell":
+        if (command !== "install" && command !== "update" && command !== "repair") {
+          throw new UsageError("--allow-shell is install/update/repair-only");
+        }
+        parsed.allowShell = true;
+        break;
+      case "--subagents":
+        if (command !== "install" && command !== "update" && command !== "repair") {
+          throw new UsageError("--subagents is install/update/repair-only");
+        }
+        parsed.enableSubagents = true;
+        break;
       case "--allow-tools":
         if (command !== "install" && command !== "update" && command !== "repair") {
           throw new UsageError("--allow-tools is install/update/repair-only");
         }
         parsed.allowTools = true;
+        break;
+      case "--revoke-shell":
+      case "--revoke-subagents":
+      case "--revoke-tools":
+      case "--reset-grants":
+        if (command !== "update" && command !== "repair") {
+          throw new UsageError(flag + " is update/repair-only");
+        }
+        if (flag === "--revoke-shell") parsed.revokeShell = true;
+        if (flag === "--revoke-subagents") parsed.revokeSubagents = true;
+        if (flag === "--revoke-tools") parsed.revokeTools = true;
+        if (flag === "--reset-grants") parsed.resetGrants = true;
         break;
       case "--project-root":
         if (parsed.projectRoot !== undefined) throw new UsageError("duplicate --project-root");
@@ -191,6 +244,12 @@ const parseSetupArgs = (argv: string[]): SetupArgs => {
   if (parsed.kiroHome !== undefined && !parsed.user && command !== "status") {
     throw new UsageError("--kiro-home requires --user");
   }
+  if (parsed.allowShell && parsed.revokeShell) throw new UsageError("--allow-shell conflicts with --revoke-shell");
+  if (parsed.enableSubagents && parsed.revokeSubagents) throw new UsageError("--subagents conflicts with --revoke-subagents");
+  if (parsed.allowTools && parsed.revokeTools) throw new UsageError("--allow-tools conflicts with --revoke-tools");
+  if (parsed.resetGrants && (parsed.allowShell || parsed.enableSubagents || parsed.allowTools)) {
+    throw new UsageError("--reset-grants conflicts with grant-enabling flags");
+  }
   return parsed;
 };
 
@@ -212,6 +271,7 @@ interface KiroScopeStatus {
   packageVersion: string | null;
   path: string | null;
   healthy: boolean;
+  issue: string | null;
   kiroBinaryPath: string | null;
   kiroCliVersion: string | null;
   kiroSha256: string | null;
@@ -222,20 +282,10 @@ const UNAVAILABLE_SCOPE: KiroScopeStatus = {
   packageVersion: null,
   path: null,
   healthy: false,
+  issue: "scope unavailable",
   kiroBinaryPath: null,
   kiroCliVersion: null,
   kiroSha256: null,
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const profileDigest = (profilePath: string): string | null => {
-  try {
-    return createHash("sha256").update(readFileSync(profilePath)).digest("hex");
-  } catch {
-    return null;
-  }
 };
 
 const scopeStatusFor = (
@@ -260,52 +310,117 @@ const scopeStatusFor = (
       packageVersion: null,
       path: manifestPath,
       healthy: false,
+      issue: null,
       kiroBinaryPath: null,
       kiroCliVersion: null,
       kiroSha256: null,
     };
   }
-  let manifest: { packageVersion?: unknown; profile?: unknown; runtime?: unknown };
+  let packageVersion: string | null = null;
+  let kiroBinaryPath: string | null = null;
+  let kiroCliVersion: string | null = null;
+  let kiroSha256: string | null = null;
   try {
-    const raw: unknown = JSON.parse(readFileSync(manifestPath, "utf8"));
-    manifest = isRecord(raw) ? raw : {};
-  } catch {
+    const manifest = readManifest(roots.installRoot, roots.layout);
+    if (!manifest) throw new Error("managed install manifest is absent");
+    packageVersion = manifest.packageVersion;
+    kiroBinaryPath = manifest.runtime.kiroBinaryPath ?? null;
+    kiroCliVersion = manifest.runtime.kiroCliVersion ?? null;
+    kiroSha256 = manifest.runtime.kiroSha256 ?? null;
+    const profile = readManagedFileNoFollow(
+      roots.installRoot,
+      kiroProfilePath(roots.installRoot, roots.layout),
+    );
+    if (!profile || sha256Bytes(profile) !== manifest.profile.installedSha256) {
+      throw new Error("managed profile hash mismatch");
+    }
+    const profileDocument = JSON.parse(profile.toString("utf8")) as {
+      mcpServers?: { fabric?: { env?: Record<string, unknown> } };
+    };
+    const profileEnv = profileDocument.mcpServers?.fabric?.env ?? {};
+    const profileGrants: KiroManagedGrants = {
+      allowShell: profileEnv.KIRO_FABRIC_ALLOW_SHELL === "1",
+      enableSubagents: profileEnv.KIRO_FABRIC_ENABLE_SUBAGENTS === "1",
+      allowTools: profileEnv.KIRO_FABRIC_ALLOW_TOOLS === "1",
+    };
+    if (manifest.grants && JSON.stringify(manifest.grants) !== JSON.stringify(profileGrants)) {
+      throw new Error("manifest grant state differs from the verified profile");
+    }
+    if (manifest.format !== 1) {
+      const records = manifest.skills?.files;
+      if (!records?.length) throw new Error("managed skill attestation is absent");
+      const sources = records.map((record) => {
+        const installedPath = join(roots.installRoot, ...record.path.split("/"));
+        const bytes = readManagedFileNoFollow(roots.installRoot, installedPath);
+        if (!bytes || sha256Bytes(bytes) !== record.installedSha256) {
+          throw new Error("managed skill hash mismatch: " + record.path);
+        }
+        const marker = record.path.indexOf("skills/");
+        return {
+          sourceRelative: record.path.slice(marker + "skills/".length),
+          installedRelative: record.path,
+          installedPath,
+          bytes,
+          sha256: record.installedSha256,
+        };
+      });
+      if (managedKiroSkillBundleSha256(sources) !== manifest.skills!.bundleSha256) {
+        throw new Error("managed skill bundle digest mismatch");
+      }
+      if (!manifest.runtime.closure) throw new Error("runtime closure attestation is absent");
+      const generations = manifest.runtime.generations ?? [manifest.runtime.closure];
+      for (const generation of generations) {
+        verifyRuntimeClosureAttestation(roots.installRoot, generation);
+      }
+      const releasePackagePath = join(
+        roots.installRoot,
+        ...manifest.runtime.closure.root.split("/"),
+        "package.json",
+      );
+      const releasePackageBytes = readManagedFileNoFollow(roots.installRoot, releasePackagePath);
+      if (!releasePackageBytes) throw new Error("attested release package metadata is absent");
+      const releasePackage = JSON.parse(releasePackageBytes.toString("utf8")) as {
+        version?: unknown;
+        digest?: unknown;
+      };
+      if (releasePackage.version !== manifest.packageVersion || releasePackage.digest !== manifest.runtime.closure.digest) {
+        throw new Error("manifest package identity does not match the attested release");
+      }
+      const markerPath = join(runtimeClosurePath(roots.installRoot, roots.layout), ".closure-current");
+      const markerStat = lstatOrNull(markerPath);
+      if (!markerStat || markerStat.isSymbolicLink() || !markerStat.isFile()) {
+        throw new Error("runtime activation marker is missing or invalid");
+      }
+      const markerBytes = readManagedFileNoFollow(roots.installRoot, markerPath);
+      if (!markerBytes || markerBytes.toString("utf8").trim() !== manifest.runtime.closure.digest) {
+        throw new Error("runtime activation marker digest mismatch");
+      }
+      if (manifest.format === 3 && !manifest.grants) {
+        throw new Error("format-3 advanced-grant state is absent; run update or repair");
+      }
+    }
     return {
       installed: true,
-      packageVersion: null,
+      packageVersion,
+      path: manifestPath,
+      healthy: true,
+      issue: null,
+      kiroBinaryPath,
+      kiroCliVersion,
+      kiroSha256,
+    };
+  } catch (error) {
+    return {
+      installed: true,
+      packageVersion,
       path: manifestPath,
       healthy: false,
-      kiroBinaryPath: null,
-      kiroCliVersion: null,
-      kiroSha256: null,
+      issue: error instanceof Error ? error.message : String(error),
+      kiroBinaryPath,
+      kiroCliVersion,
+      kiroSha256,
     };
   }
-  const profile = isRecord(manifest.profile) ? manifest.profile : undefined;
-  const installedSha256 =
-    typeof profile?.installedSha256 === "string" ? profile.installedSha256 : null;
-  const packageVersion =
-    typeof manifest.packageVersion === "string" ? manifest.packageVersion : null;
-  const runtime = isRecord(manifest.runtime) ? manifest.runtime : undefined;
-  const kiroBinaryPath =
-    typeof runtime?.kiroBinaryPath === "string" ? runtime.kiroBinaryPath : null;
-  const kiroCliVersion =
-    typeof runtime?.kiroCliVersion === "string" ? runtime.kiroCliVersion : null;
-  const kiroSha256 =
-    typeof runtime?.kiroSha256 === "string" ? runtime.kiroSha256 : null;
-  let healthy = false;
-  if (installedSha256 !== null) {
-    healthy =
-      profileDigest(kiroProfilePath(roots.installRoot, roots.layout)) === installedSha256;
-  }
-  return {
-    installed: true,
-    packageVersion,
-    path: manifestPath,
-    healthy,
-    kiroBinaryPath,
-    kiroCliVersion,
-    kiroSha256,
-  };
 };
 
 interface SetupStatus {
@@ -360,7 +475,7 @@ const describeScope = (label: string, scope: KiroScopeStatus): string => {
   const where = " (" + scope.path + ")";
   if (!scope.installed) return label + ": not installed" + where;
   const version = scope.packageVersion ?? "unknown version";
-  const health = scope.healthy ? "healthy" : "modified";
+  const health = scope.healthy ? "healthy" : "unhealthy: " + (scope.issue ?? "verification failed");
   return label + ": installed (kiro-fabric " + version + ", " + health + ")" + where;
 };
 
@@ -421,6 +536,37 @@ const resolveRoots = (parsed: SetupArgs): KiroInstallRoots =>
     ...(parsed.kiroHome !== undefined ? { kiroHome: parsed.kiroHome } : {}),
   });
 
+const ZERO_GRANTS: KiroManagedGrants = {
+  allowShell: false,
+  enableSubagents: false,
+  allowTools: false,
+};
+
+const resolveDesiredGrants = (parsed: SetupArgs): KiroManagedGrants => {
+  const updating = parsed.command === "update" || parsed.command === "repair";
+  const previous = updating
+    ? readManagedKiroGrants({
+        ...(parsed.projectRoot !== undefined ? { projectRoot: parsed.projectRoot } : {}),
+        ...(parsed.user ? { scope: "user" as const } : {}),
+        ...(parsed.kiroHome !== undefined ? { kiroHome: parsed.kiroHome } : {}),
+      })
+    : null;
+  const grants = { ...(parsed.resetGrants ? ZERO_GRANTS : previous ?? ZERO_GRANTS) };
+  if (parsed.allowShell) grants.allowShell = true;
+  if (parsed.enableSubagents) grants.enableSubagents = true;
+  if (parsed.allowTools) grants.allowTools = true;
+  if (parsed.revokeShell) {
+    grants.allowShell = false;
+    grants.enableSubagents = false;
+  }
+  if (parsed.revokeSubagents) grants.enableSubagents = false;
+  if (parsed.revokeTools) grants.allowTools = false;
+  if (grants.enableSubagents && !grants.allowShell) {
+    throw new UsageError("the resulting --subagents grant requires --allow-shell");
+  }
+  return grants;
+};
+
 const buildInstallOptions = (parsed: SetupArgs): KiroInstallOptions => {
   const installed = scopeStatusFor(
     parsed.user ? "user" : "project",
@@ -428,60 +574,63 @@ const buildInstallOptions = (parsed: SetupArgs): KiroInstallOptions => {
     parsed.kiroHome,
   );
   const pinnedKiroBinary = parsed.kiroBinary ?? installed.kiroBinaryPath;
+  const grants = resolveDesiredGrants(parsed);
   return {
-  ...(parsed.projectRoot !== undefined ? { projectRoot: parsed.projectRoot } : {}),
-  ...(parsed.user ? { scope: "user" as const } : {}),
-  ...(parsed.kiroHome !== undefined ? { kiroHome: parsed.kiroHome } : {}),
-  ...(pinnedKiroBinary !== null && pinnedKiroBinary !== undefined ? { kiroBinary: pinnedKiroBinary } : {}),
-  ...(parsed.force || parsed.command === "repair" ? { force: true } : {}),
-  ...(parsed.allowTools ? { allowTools: true } : {}),
-  // Test/distribution override agreed with tests/kiro-setup.test.ts: pin the
-  // MCP entry when default resolution cannot run (see install.ts). Note the
-  // deployed runtime closure takes precedence for default installs.
-  ...(process.env.KIRO_FABRIC_MCP_ENTRY
-    ? { mcpEntryPath: process.env.KIRO_FABRIC_MCP_ENTRY }
-    : {}),
+    ...(parsed.projectRoot !== undefined ? { projectRoot: parsed.projectRoot } : {}),
+    ...(parsed.user ? { scope: "user" as const } : {}),
+    ...(parsed.kiroHome !== undefined ? { kiroHome: parsed.kiroHome } : {}),
+    ...(pinnedKiroBinary !== null && pinnedKiroBinary !== undefined ? { kiroBinary: pinnedKiroBinary } : {}),
+    ...(parsed.force || parsed.command === "repair" ? { force: true } : {}),
+    ...(grants.allowShell ? { allowShell: true } : {}),
+    ...(grants.enableSubagents ? { enableSubagents: true } : {}),
+    ...(grants.allowTools ? { allowTools: true } : {}),
+    ...(parsed.command === "update" || parsed.command === "repair" ? { repairRuntime: true } : {}),
+    ...(process.env.KIRO_FABRIC_MCP_ENTRY
+      ? { mcpEntryPath: process.env.KIRO_FABRIC_MCP_ENTRY }
+      : {}),
   };
 };
+
+const renderGrantDiff = (before: KiroManagedGrants | null, after: KiroManagedGrants): string =>
+  (Object.keys(after) as Array<keyof KiroManagedGrants>)
+    .map((key) => `${key}: ${before?.[key] === true ? "on" : "off"} -> ${after[key] ? "on" : "off"}`)
+    .join(", ");
 
 const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
   const command = parsed.command === "update" ? "update" : parsed.command === "repair" ? "repair" : "install";
   const roots = resolveRoots(parsed);
   if ((command === "update" || command === "repair") && !existsSync(managedManifestPath(roots))) {
-    process.stderr.write(
-      "kiro-fabric: no managed installation to update; run install first\n",
-    );
-    return 1;
+    throw new KiroInstallError("manifest", "no managed installation to " + command + "; run install first");
   }
+  const installOptions = buildInstallOptions(parsed);
+  const beforeGrants = command === "install"
+    ? null
+    : readManagedKiroGrants({
+        ...(parsed.projectRoot !== undefined ? { projectRoot: parsed.projectRoot } : {}),
+        ...(parsed.user ? { scope: "user" as const } : {}),
+        ...(parsed.kiroHome !== undefined ? { kiroHome: parsed.kiroHome } : {}),
+      });
+  const afterGrants: KiroManagedGrants = {
+    allowShell: installOptions.allowShell === true,
+    enableSubagents: installOptions.enableSubagents === true,
+    allowTools: installOptions.allowTools === true,
+  };
   if (needsConfirmation(parsed)) {
     if (!isInteractive()) {
-      process.stderr.write(
-        "kiro-fabric: refusing to " + command +
-          " without a terminal; pass --yes to confirm\n",
-      );
-      return 1;
+      throw new Error("refusing to " + command + " without a terminal; pass --yes to confirm");
     }
     const proceed = await io.confirm(
-      "Proceed with " +
-        command +
-        " (" +
-        roots.layout +
-        " scope: " +
-        roots.installRoot +
-        ")" +
-        (parsed.allowTools
-          ? "\n  This auto-approves fabric/fabric_exec without prompting, confined to " +
-            roots.projectRoot
+      "Proceed with " + command + " (" + roots.layout + " scope: " + roots.installRoot + ")" +
+        "\n  grants: " + renderGrantDiff(beforeGrants, afterGrants) +
+        (afterGrants.allowTools
+          ? "\n  fabric/fabric_exec is auto-approved and confined to " + roots.projectRoot
           : "") +
         "?",
     );
-    if (!proceed) {
-      process.stderr.write("kiro-fabric: cancelled\n");
-      return 1;
-    }
+    if (!proceed) throw new Error("cancelled");
   }
   const result = await installKiroProfile({
-    ...buildInstallOptions(parsed),
+    ...installOptions,
     dryRun: parsed.dryRun,
   });
   if (parsed.json) {
@@ -489,15 +638,9 @@ const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
   } else {
     const verb = parsed.dryRun ? "planned" : command === "update" ? "updated" : command === "repair" ? "repaired" : "installed";
     process.stdout.write(
-      verb +
-        " (" +
-        result.action +
-        "): " +
-        result.profilePath +
-        "\n" +
-        "sha256: " +
-        result.profileSha256 +
-        "\n" +
+      verb + " (" + result.action + "): " + result.profilePath + "\n" +
+        "sha256: " + result.profileSha256 + "\n" +
+        "grants: " + renderGrantDiff(result.grants.before, result.grants.after) + "\n" +
         (result.backupPath ? "backup: " + result.backupPath + "\n" : ""),
     );
   }
@@ -523,10 +666,7 @@ const runUninstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => 
   const options = buildUninstallOptions(parsed);
   if (needsConfirmation(parsed) && !isUninstallNoop(options)) {
     if (!isInteractive()) {
-      process.stderr.write(
-        "kiro-fabric: refusing to uninstall without a terminal; pass --yes to confirm\n",
-      );
-      return 1;
+      throw new Error("refusing to uninstall without a terminal; pass --yes to confirm");
     }
     const roots = resolveRoots(parsed);
     const proceed = await io.confirm(
@@ -536,10 +676,7 @@ const runUninstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => 
         roots.installRoot +
         ")?",
     );
-    if (!proceed) {
-      process.stderr.write("kiro-fabric: cancelled\n");
-      return 1;
-    }
+    if (!proceed) throw new Error("cancelled");
   }
   const result = uninstallKiroProfile({ ...options, dryRun: parsed.dryRun });
   if (parsed.json) {
@@ -609,15 +746,11 @@ const runLaunch = async (parsed: SetupArgs): Promise<number> => {
   const requestedBinary = parsed.kiroBinary ?? managedBinaryPath ?? "kiro-cli";
   const identity = await inspectKiroCompatibility(requestedBinary);
   if (!identity.ok || !identity.executablePath) {
-    if (identity.state === "not-found") {
-      process.stderr.write(kiroCliMissingGuidance(requestedBinary));
-    } else {
-      process.stderr.write(
-        "kiro-fabric: refusing to launch incompatible Kiro executable (" +
-          identity.state + "): " + requestedBinary + "\n",
-      );
-    }
-    return 1;
+    throw new Error(
+      identity.state === "not-found"
+        ? kiroCliMissingGuidance(requestedBinary).replace(/^kiro-fabric: /, "").trim()
+        : "refusing to launch incompatible Kiro executable (" + identity.state + "): " + requestedBinary,
+    );
   }
   const attestedIdentity = identity as SupportedKiroIdentity;
   const managedScope = scopes.project.kiroBinaryPath ? scopes.project : scopes.user;
@@ -626,10 +759,7 @@ const runLaunch = async (parsed: SetupArgs): Promise<number> => {
     (identity.executablePath !== managedBinaryPath ||
       !managedScope.kiroSha256 || attestedIdentity.sha256 !== managedScope.kiroSha256)
   ) {
-    process.stderr.write(
-      "kiro-fabric: refusing to launch a Kiro executable that differs from the managed manifest\n",
-    );
-    return 1;
+    throw new Error("refusing to launch a Kiro executable that differs from the managed manifest");
   }
   const binary = identity.executablePath;
   assertSupportedKiroUnchanged(attestedIdentity);
@@ -647,18 +777,20 @@ const runLaunch = async (parsed: SetupArgs): Promise<number> => {
     },
   );
   if ("missing" in outcome) {
-    process.stderr.write(
+    throw new Error(
       outcome.missing
-        ? kiroCliMissingGuidance(binary)
-        : "kiro-fabric: failed to launch " + binary + "\n",
+        ? kiroCliMissingGuidance(binary).replace(/^kiro-fabric: /, "").trim()
+        : "failed to launch " + binary,
     );
-    return 1;
+  }
+  if (outcome.code !== 0 && parsed.json) {
+    throw new Error("kiro-cli exited with code " + outcome.code);
   }
   return outcome.code;
 };
 
 const MENU_TEXT =
-  ["", "Actions:", "  1) install", "  2) update", "  3) uninstall", "  4) doctor", "  5) launch", "  q) quit", ""].join(
+  ["", "Actions:", "  1) install", "  2) update", "  3) repair", "  4) uninstall", "  5) doctor", "  6) launch", "  q) quit", ""].join(
     "\n",
   );
 
@@ -689,7 +821,7 @@ const runMenu = async (parsed: SetupArgs): Promise<number> => {
     for (;;) {
       const status = await collectStatus(parsed);
       process.stdout.write(renderStatus(status) + "\n" + MENU_TEXT);
-      const rawChoice = await rl.question("select [1-5, q]: ").catch(() => null);
+      const rawChoice = await rl.question("select [1-6, q]: ").catch(() => null);
       if (rawChoice === null) return 0;
       const choice = rawChoice.trim().toLowerCase();
       switch (choice) {
@@ -702,12 +834,15 @@ const runMenu = async (parsed: SetupArgs): Promise<number> => {
           await runMenuAction(() => runInstall({ ...parsed, command: "update" }, menuIo));
           break;
         case "3":
-          await runMenuAction(() => runUninstall({ ...parsed, command: "uninstall" }, menuIo));
+          await runMenuAction(() => runInstall({ ...parsed, command: "repair" }, menuIo));
           break;
         case "4":
-          await runMenuAction(() => runDoctor({ ...parsed, command: "doctor" }));
+          await runMenuAction(() => runUninstall({ ...parsed, command: "uninstall" }, menuIo));
           break;
         case "5":
+          await runMenuAction(() => runDoctor({ ...parsed, command: "doctor" }));
+          break;
+        case "6":
           // kiro-cli needs the terminal; drop back to cooked mode while it runs.
           rl.close();
           await runMenuAction(() => runLaunch({ ...parsed, command: "launch" }));
@@ -728,14 +863,30 @@ const runMenu = async (parsed: SetupArgs): Promise<number> => {
   }
 };
 
+const writeSetupFailure = (
+  json: boolean,
+  error: unknown,
+  fallbackCode = "setup",
+): void => {
+  const message = errorMessage(error);
+  if (json) {
+    const code = error instanceof KiroInstallError ? error.code
+      : error instanceof UsageError ? "usage"
+      : fallbackCode;
+    process.stdout.write(JSON.stringify({ ok: false, error: { code, message } }, null, 2) + "\n");
+  } else {
+    process.stderr.write("kiro-fabric: " + message + "\n");
+  }
+};
+
 export const runKiroSetup = async (argv: string[]): Promise<number> => {
+  const jsonRequested = argv.includes("--json");
   let parsed: SetupArgs;
   try {
     parsed = parseSetupArgs(argv);
   } catch (error) {
-    process.stderr.write(
-      "kiro-fabric: " + errorMessage(error) + "\n\n" + USAGE,
-    );
+    writeSetupFailure(jsonRequested, error, "usage");
+    if (!jsonRequested) process.stderr.write("\n" + USAGE);
     return 2;
   }
 
@@ -772,8 +923,8 @@ export const runKiroSetup = async (argv: string[]): Promise<number> => {
         return await runLaunch(parsed);
     }
   } catch (error) {
-    process.stderr.write("kiro-fabric: " + errorMessage(error) + "\n");
-    return 1;
+    writeSetupFailure(parsed.json, error);
+    return error instanceof UsageError ? 2 : 1;
   }
   return 2;
 };

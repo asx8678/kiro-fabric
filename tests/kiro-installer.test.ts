@@ -2,7 +2,9 @@
 // non-billable binary (tests/fixtures/kiro/fake-kiro.mjs) via --kiro-binary.
 
 import {
+  appendFileSync,
   chmodSync,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -32,6 +34,10 @@ import { runKiroCli } from "../src/kiro/cli.js";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { assertSupportedKiro } from "../src/kiro/compatibility.js";
 import { kiroProfilePath } from "../src/kiro/profile.js";
+import {
+  deployRuntimeClosure,
+  planRuntimeClosureDeployment,
+} from "../src/kiro/runtime-closure.js";
 import {
   managedFileTransition,
   managedPaths,
@@ -660,6 +666,80 @@ describe("installKiroProfile", () => {
     expect(JSON.parse(readFileSync(installed.profilePath, "utf8")).mcpServers.fabric.command)
       .toBe(otherNode);
   });
+
+  it("deterministically recovers SIGKILL after format-3 marker activation", async () => {
+    const dir = project("format3-activation-recovery");
+    const first = await installWithFake(dir, {
+      skipRuntimeClosure: false,
+      runtimeNodeSourcePath: process.execPath,
+    });
+    const altRuntime = join(base, "activation-alt-node");
+    copyFileSync(process.execPath, altRuntime);
+    appendFileSync(altRuntime, "\n");
+    chmodSync(altRuntime, 0o755);
+    // The extra byte distinguishes the trusted runtime artifact. Certification
+    // still uses the bootstrap process Node in this test process.
+    const closure = planRuntimeClosureDeployment(dir, "project", { nodeSourcePath: altRuntime });
+    deployRuntimeClosure(dir, "project", {
+      nodeSourcePath: altRuntime,
+      expectedDigest: closure.digest,
+      activate: false,
+    });
+    const identity = await assertSupportedKiro(wrapperPath);
+    const next = planKiroProfileInstall({
+      projectRoot: dir,
+      nodePath: closure.runtimeNodePath,
+      mcpEntryPath: closure.mcpEntryPath,
+      kiroBinary: identity.executablePath,
+    }, { closure, kiroIdentity: identity });
+    const paths = managedPaths(dir, "project");
+    const marker = join(paths.runtimeDir, ".closure-current");
+    const markerBefore = readFileSync(marker);
+    const manifestBefore = readFileSync(first.manifestPath);
+    const transaction: KiroManagedTransaction = {
+      format: 2,
+      owner: "kiro-fabric",
+      operation: "install",
+      layout: "project",
+      root: dir,
+      createdAt: Date.now(),
+      files: [
+        {
+          path: ".kiro/.kiro-fabric/runtime/.closure-current",
+          transition: managedFileTransition(sha256Bytes(markerBefore), closure.digest + "\n"),
+        },
+        {
+          path: ".kiro/agents/kiro-fabric.json",
+          transition: managedFileTransition(first.profileSha256, next.profileJson),
+        },
+        ...next.skills.map((skill) => ({
+          path: skill.installedRelative,
+          transition: managedFileTransition(skill.existingSha256, skill.bytes),
+        })),
+        {
+          path: ".kiro/.kiro-fabric/install.json",
+          transition: managedFileTransition(sha256Bytes(manifestBefore), next.manifestJson),
+        },
+      ],
+    };
+    writeManagedTransactionJournal(dir, "project", transaction);
+    writeAtomic(marker, closure.digest + "\n", 0o600);
+    writeFileSync(paths.lock, JSON.stringify({
+      token: "sigkill-after-activation",
+      pid: 999_999_999,
+      hostname: hostname(),
+    }), { mode: 0o600 });
+
+    const recovered = await installWithFake(dir, {
+      skipRuntimeClosure: false,
+      runtimeNodeSourcePath: altRuntime,
+    });
+    expect(recovered.runtimeClosure?.digest).toBe(closure.digest);
+    expect(readFileSync(marker, "utf8").trim()).toBe(closure.digest);
+    expect(JSON.parse(readFileSync(first.manifestPath, "utf8")).runtime.closure.digest).toBe(closure.digest);
+    expect(JSON.parse(readFileSync(first.profilePath, "utf8")).mcpServers.fabric.command).toBe(closure.runtimeNodePath);
+    expect(existsSync(paths.transaction)).toBe(false);
+  }, 120_000);
 
   it("refuses when an operation lock already exists", async () => {
     const dir = project("locked");

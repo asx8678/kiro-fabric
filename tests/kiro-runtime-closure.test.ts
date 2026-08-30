@@ -13,6 +13,7 @@ import {
   lstatSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -302,7 +303,7 @@ describe("installer with runtime closure", () => {
   });
 
 
-  it("refuses a tampered or expanded digest directory instead of trusting its name", async () => {
+  it("refuses ordinary reinstall but trusted repair atomically restores a tampered release", async () => {
     const dir = project("attestation-tamper");
     const installed = await installWithFake(dir);
     const manifest = JSON.parse(readFileSync(installed.manifestPath, "utf8")) as {
@@ -316,11 +317,23 @@ describe("installer with runtime closure", () => {
     chmodSync(entry, 0o644);
     writeFileSync(entry, changed);
     await expect(installWithFake(dir)).rejects.toThrow(/runtime closure hash mismatch/);
+    const repairedBytes = await installWithFake(dir, { repairRuntime: true });
+    expect(repairedBytes.runtimeClosure?.action).toBe("repair");
+    expect(readFileSync(entry)).toEqual(original);
+    expect(statSync(entry).mode & 0o777).toBe(0o444);
 
-    writeFileSync(entry, original);
+    chmodSync(repairedBytes.runtimeClosure!.runtimeNodePath, 0o644);
+    const repairedMode = await installWithFake(dir, { repairRuntime: true });
+    expect(repairedMode.runtimeClosure?.action).toBe("repair");
+    expect(statSync(repairedMode.runtimeClosure!.runtimeNodePath).mode & 0o777).toBe(0o555);
+
     chmodSync(closureRoot, 0o755);
     writeFileSync(join(closureRoot, "foreign-extra.js"), "foreign\n");
     await expect(installWithFake(dir)).rejects.toThrow(/file set does not match/);
+    const repairedSet = await installWithFake(dir, { repairRuntime: true });
+    expect(repairedSet.runtimeClosure?.action).toBe("repair");
+    expect(existsSync(join(closureRoot, "foreign-extra.js"))).toBe(false);
+    expect(statSync(closureRoot).mode & 0o777).toBe(0o555);
   });
 
   it("refuses uninstall before profile mutation when runtime attestation drifts", async () => {

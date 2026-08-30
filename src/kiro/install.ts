@@ -60,6 +60,7 @@ import {
   type ExecutableAttestation,
   type KiroBackupRecord,
   type KiroInstallManifest,
+  type KiroManagedGrants,
   type KiroManagedLayout,
   type KiroManagedOwnedFile,
 } from "./managed.js";
@@ -72,6 +73,7 @@ import {
 import {
   deployRuntimeClosure,
   planRuntimeClosureDeployment,
+  resolveSourcePackageRoot,
   type RuntimeClosurePlan,
   type RuntimeClosureResult,
   runtimeClosurePath,
@@ -124,6 +126,8 @@ export interface KiroInstallOptions {
   fabricConfig?: FabricConfig;
   /** Trusted-local opt-in: auto-approve the single Fabric tool via an exact v3 MCP rule. */
   allowTools?: boolean;
+  /** Restore a damaged same-digest runtime from this invocation's trusted artifact. */
+  repairRuntime?: boolean;
   /** @internal Legacy test fixture mode; rejected outside Vitest. */
   skipRuntimeClosure?: boolean;
 }
@@ -158,11 +162,16 @@ export interface KiroInstallPlan {
     expectedSha256: string | null;
     nextBytes: string;
   } | null;
+  grants: {
+    before: KiroManagedGrants | null;
+    after: KiroManagedGrants;
+    changed: Array<keyof KiroManagedGrants>;
+  };
 }
 
 interface KiroInstallOperation {
   kind: "runtime" | "profile" | "skill" | "manifest";
-  action: "publish" | "activate" | "create" | "update" | "noop";
+  action: "publish" | "repair" | "activate" | "create" | "update" | "noop";
   path: string;
   sha256?: string;
 }
@@ -179,6 +188,8 @@ export interface KiroInstallResult {
   runtimeClosure?: RuntimeClosureResult;
   /** Ordered exact deployment plan; dry-run and real install share this shape. */
   operations: KiroInstallOperation[];
+  /** Explicit before/after advanced-grant diff. */
+  grants: KiroInstallPlan["grants"];
 }
 
 const buildManifest = (
@@ -192,6 +203,7 @@ const buildManifest = (
   skills: readonly KiroSkillInstallPlan[],
   closure: RuntimeClosurePlan | undefined,
   previous: KiroInstallManifest | null,
+  grants: KiroManagedGrants,
 ): KiroInstallManifest => ({
   format: closure ? KIRO_INSTALL_MANIFEST_FORMAT : 1,
   owner: "kiro-fabric",
@@ -240,6 +252,7 @@ const buildManifest = (
         },
       }
     : {}),
+  grants,
   ...(layout === "user" ? { scope: "user" as const } : {}),
 });
 
@@ -266,6 +279,7 @@ const manifestIsCurrent = (
   existing.runtime.agentEngine === desired.runtime.agentEngine &&
   existing.runtime.managerEntryPath === desired.runtime.managerEntryPath &&
   existing.runtime.nodeSha256 === desired.runtime.nodeSha256 &&
+  JSON.stringify(existing.grants ?? null) === JSON.stringify(desired.grants ?? null) &&
   existing.profile.installedSha256 === desired.profile.installedSha256 &&
   existing.profile.path === desired.profile.path &&
   backupRecordsEqual(existing.profile.backup, desired.profile.backup) &&
@@ -274,6 +288,45 @@ const manifestIsCurrent = (
     JSON.stringify(desired.runtime.closure ?? null) &&
   JSON.stringify(existing.runtime.generations ?? (existing.runtime.closure ? [existing.runtime.closure] : null)) ===
     JSON.stringify(desired.runtime.generations ?? null);
+
+export const readManagedKiroGrants = (
+  options: Pick<KiroInstallOptions, "projectRoot" | "scope" | "kiroHome"> = {},
+): KiroManagedGrants | null => {
+  const roots = resolveKiroInstallRoots(options);
+  const manifest = readManifest(roots.installRoot, roots.layout);
+  if (!manifest) return null;
+  const profile = readManagedFileNoFollow(
+    roots.installRoot,
+    kiroProfilePath(roots.installRoot, roots.layout),
+  );
+  if (!profile || sha256Bytes(profile) !== manifest.profile.installedSha256) {
+    throw new KiroInstallError("ownership", "cannot preserve grants from an unverified managed profile");
+  }
+  try {
+    const document = JSON.parse(profile.toString("utf8")) as {
+      mcpServers?: { fabric?: { env?: Record<string, unknown> } };
+    };
+    const env = document.mcpServers?.fabric?.env ?? {};
+    const grants: KiroManagedGrants = {
+      allowShell: env.KIRO_FABRIC_ALLOW_SHELL === "1",
+      enableSubagents: env.KIRO_FABRIC_ENABLE_SUBAGENTS === "1",
+      allowTools: env.KIRO_FABRIC_ALLOW_TOOLS === "1",
+    };
+    if (grants.enableSubagents && !grants.allowShell) {
+      throw new Error("subagent grant lacks shell grant");
+    }
+    if (manifest.grants && JSON.stringify(manifest.grants) !== JSON.stringify(grants)) {
+      throw new Error("manifest grant state differs from the verified profile");
+    }
+    return grants;
+  } catch (error) {
+    throw new KiroInstallError(
+      "manifest",
+      "cannot recover advanced grants from the managed profile: " +
+        (error instanceof Error ? error.message : String(error)),
+    );
+  }
+};
 
 /** Scan JSON and Markdown agents for any name that can resolve as kiro-fabric. */
 const findNameCollision = (agentsDir: string, ownProfilePath: string): string | null => {
@@ -384,7 +437,11 @@ export const planKiroProfileInstall = (
   const manifest = readManifest(installRoot, layout);
   for (const generation of manifest?.runtime.generations ?? (manifest?.runtime.closure ? [manifest.runtime.closure] : [])) {
     const generationRoot = join(installRoot, ...generation.root.split("/"));
-    if (existsSync(generationRoot)) verifyRuntimeClosureAttestation(installRoot, generation);
+    const repairingPlannedGeneration =
+      options.repairRuntime === true && generation.digest === planning.closure?.digest;
+    if (existsSync(generationRoot) && !repairingPlannedGeneration) {
+      verifyRuntimeClosureAttestation(installRoot, generation);
+    }
   }
   let existingSha256: string | null = null;
   let existingBytes: Buffer | null = null;
@@ -512,6 +569,29 @@ export const planKiroProfileInstall = (
     };
   });
 
+  const grantsAfter: KiroManagedGrants = {
+    allowShell: options.allowShell === true,
+    enableSubagents: options.enableSubagents === true,
+    allowTools: options.allowTools === true,
+  };
+  const inferredBefore: KiroManagedGrants | null = manifest
+    ? manifest.grants ?? (() => {
+        if (!existingBytes || sha256Bytes(existingBytes) !== manifest.profile.installedSha256) return null;
+        try {
+          const document = JSON.parse(existingBytes.toString("utf8")) as {
+            mcpServers?: { fabric?: { env?: Record<string, unknown> } };
+          };
+          const env = document.mcpServers?.fabric?.env ?? {};
+          return {
+            allowShell: env.KIRO_FABRIC_ALLOW_SHELL === "1",
+            enableSubagents: env.KIRO_FABRIC_ENABLE_SUBAGENTS === "1",
+            allowTools: env.KIRO_FABRIC_ALLOW_TOOLS === "1",
+          };
+        } catch {
+          return null;
+        }
+      })()
+    : null;
   const desiredManifest = buildManifest(
     {
       nodePath,
@@ -525,6 +605,7 @@ export const planKiroProfileInstall = (
     skillPlans,
     planning.closure,
     manifest,
+    grantsAfter,
   );
   if (action === "noop" && manifest && !manifestIsCurrent(manifest, desiredManifest)) {
     action = "update";
@@ -564,6 +645,13 @@ export const planKiroProfileInstall = (
     requiresForce,
     skills: skillPlans,
     activation,
+    grants: {
+      before: inferredBefore,
+      after: grantsAfter,
+      changed: (Object.keys(grantsAfter) as Array<keyof KiroManagedGrants>).filter((key) =>
+        inferredBefore ? inferredBefore[key] !== grantsAfter[key] : grantsAfter[key],
+      ),
+    },
   };
 };
 
@@ -707,6 +795,7 @@ const resultFromPlan = (
     profileSha256: plan.profileSha256,
     ...(runtimeClosure ? { runtimeClosure } : {}),
     operations,
+    grants: plan.grants,
   };
 };
 
@@ -864,11 +953,43 @@ export const installKiroProfile = async (
     await assertKiroV3Capabilities(kiroIdentity);
 
     const roots = resolveKiroInstallRoots(options);
+    // A killed activation leaves its fsynced journal behind. Recover it before
+    // reading the manifest/profile so all owned leaves converge together.
+    const recoveryPaths = managedPaths(roots.installRoot, roots.layout);
+    if (existsSync(recoveryPaths.transaction)) {
+      const recoveryLock = acquireOperationLock(roots.installRoot, roots.layout);
+      try {
+        recoverManagedTransaction(roots.installRoot, roots.layout);
+      } finally {
+        recoveryLock.release();
+      }
+    }
+    if (options.repairRuntime) {
+      const existingClosure = readManifest(roots.installRoot, roots.layout)?.runtime.closure;
+      if (existingClosure) {
+        const sourceRoot = resolve(resolveSourcePackageRoot());
+        const installedReleaseRoot = resolve(
+          roots.installRoot,
+          ...existingClosure.root.split("/"),
+        );
+        if (sourceRoot === installedReleaseRoot) {
+          try {
+            verifyRuntimeClosureAttestation(roots.installRoot, existingClosure);
+          } catch {
+            throw new KiroInstallError(
+              "ownership",
+              "installed release is damaged and cannot be its own repair source; run repair from a trusted package or source bootstrap artifact",
+            );
+          }
+        }
+      }
+    }
     const closurePlan = options.skipRuntimeClosure
       ? undefined
       : planRuntimeClosureDeployment(roots.installRoot, roots.layout, {
           nodeSourcePath: stagedNode!.path,
           nodeAttestation: stagedNode!,
+          ...(options.repairRuntime ? { repairExisting: true } : {}),
         });
     const effectiveMcpEntry = closurePlan?.mcpEntryPath ?? options.mcpEntryPath;
     const planOptions: KiroInstallOptions = {
@@ -878,7 +999,7 @@ export const installKiroProfile = async (
       ...(effectiveMcpEntry ? { mcpEntryPath: effectiveMcpEntry } : {}),
     };
     const planned = planKiroProfileInstall(planOptions, {
-      allowMissingMcpEntry: closurePlan?.action === "publish",
+      allowMissingMcpEntry: closurePlan?.action === "publish" || closurePlan?.action === "repair",
       ...(closurePlan ? { closure: closurePlan } : {}),
       kiroIdentity,
     });
@@ -898,6 +1019,7 @@ export const installKiroProfile = async (
         : planRuntimeClosureDeployment(roots.installRoot, roots.layout, {
             nodeSourcePath: stagedNode!.path,
             nodeAttestation: stagedNode!,
+            ...(options.repairRuntime ? { repairExisting: true } : {}),
           });
       if (closurePlan && lockedClosurePlan?.digest !== closurePlan.digest) {
         throw new KiroInstallError("concurrency", "runtime closure changed after preflight");
@@ -920,7 +1042,7 @@ export const installKiroProfile = async (
         ...(lockedMcpEntry ? { mcpEntryPath: lockedMcpEntry } : {}),
       };
       const plan = planKiroProfileInstall(lockedOptions, {
-        allowMissingMcpEntry: lockedClosurePlan?.action === "publish",
+        allowMissingMcpEntry: lockedClosurePlan?.action === "publish" || lockedClosurePlan?.action === "repair",
         ...(lockedClosurePlan ? { closure: lockedClosurePlan } : {}),
         kiroIdentity: lockedKiroIdentity,
       });
@@ -937,6 +1059,7 @@ export const installKiroProfile = async (
             expectedDigest: lockedClosurePlan.digest,
             nodeSourcePath: stagedNode!.path,
             nodeAttestation: stagedNode!,
+            ...(options.repairRuntime ? { repairExisting: true } : {}),
             activate: false,
           })
         : undefined;
