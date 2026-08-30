@@ -38,3 +38,30 @@ export type {
   StateVerificationReportLike,
   VerificationAdapterOptions,
 } from "./adapters.js";
+
+export {
+  defaultSecurityReplayFixtures,
+  materializeSecurityReplaySource,
+  runSecurityReplaySuite,
+  SECURITY_REPLAY_DISCLAIMER,
+  securityReplayReportSchema,
+  validateSecurityReplayReport,
+} from "./security-replay.js";
+
+export type {
+  RunSecurityReplayOptions,
+  SecurityReplayBoundary,
+  SecurityReplayCaseReport,
+  SecurityReplayDriver,
+  SecurityReplayEffect,
+  SecurityReplayEffectDisposition,
+  SecurityReplayEffectObservation,
+  SecurityReplayEffectObserver,
+  SecurityReplayFixture,
+  SecurityReplayInput,
+  SecurityReplayMetrics,
+  SecurityReplayPayload,
+  SecurityReplayReport,
+  SecurityReplayValidationResult,
+  SecurityReplayVariant,
+} from "./security-replay.js";

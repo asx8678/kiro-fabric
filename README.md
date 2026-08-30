@@ -294,6 +294,7 @@ alternatives in the managed profile.
 - [Skills](docs/skills.md). Kiro Fabric keeps a small verification-first skill surface; core guidance is installed by default and specialized profiles remain user-opt-in.
 - [Kiro installer](docs/kiro/installer.md)
 - [Kiro capability qualification](docs/kiro/parity-qualification.md)
+- [Matched tool-result security replay](docs/security-replay.md)
 
 ## Development
 
