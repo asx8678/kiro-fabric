@@ -156,7 +156,9 @@ def main():
     rows = []
     for cell in cells:
         res = load_json(os.path.join(cell["path"], "result.json"))
-        is_fabric = cell["config"] != "baseline"
+        # Agentless is a stock-Pi staged comparator, so its direct read calls
+        # have the same session shape as baseline rather than Fabric traces.
+        is_fabric = cell["config"] == "fabric-local" or cell["config"].startswith("fabric-")
         reads, whole, over50 = read_metrics(cell["path"], is_fabric)
         rows.append({
             **cell,

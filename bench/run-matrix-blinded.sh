@@ -88,7 +88,7 @@ for ((left = 0; left < ${#CONFIG_ARR[@]}; left++)); do
   config="${CONFIG_ARR[$left]}"
   is_safe_name "$config" || die "invalid config name: $config"
   case "$config" in
-    baseline|fabric-local) ;;
+    baseline|agentless|fabric-local) ;;
     fabric-*)
       [[ -d "$BENCH/vendor/$config/node_modules/kiro-fabric" ]] \
         || die "missing vendored extension for config: $config"

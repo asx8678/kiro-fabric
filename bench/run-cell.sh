@@ -4,7 +4,7 @@
 # github.com/Whamp/kiro-fabric-deepswe-trajectories so the same analysis applies.
 #
 # Usage: run-cell.sh <task-dir> <config> <rep> <cell-out-dir> <agent-dir>
-#   config: baseline | fabric-local | fabric-local-{always,gated,disabled} | fabric-0.25.6
+#   config: baseline | agentless | fabric-local | fabric-local-{always,gated,disabled} | fabric-0.25.6
 #   agent-dir: isolated PI_CODING_AGENT_DIR (auth + settings) prepared by run-matrix.sh
 set -u
 
@@ -47,6 +47,14 @@ case "$CONFIG" in
   baseline)
     CFG_FLAGS=(--no-skills --no-extensions)
     ;;
+  agentless)
+    # run-agentless.sh owns the two stock-Pi calls and their fixed bounds.
+    [[ -x "$TASK_DIR/verify.sh" ]] || {
+      echo "agentless config requires executable task verifier: $TASK_DIR/verify.sh" >&2
+      exit 2
+    }
+    CFG_FLAGS=()
+    ;;
   fabric-local|fabric-local-always|fabric-local-gated|fabric-local-disabled)
     CFG_FLAGS=(-e "$REPO_ROOT")
     PREWALK_ACTIVATION=${CONFIG#fabric-local-}
@@ -77,16 +85,23 @@ esac
 cd "$WORKDIR"
 START=$(python3 -c 'import time;print(time.time())')
 PROMPT="$(cat "$TASK_DIR/prompt.txt")"
-(
-  PI_CODING_AGENT_DIR="$AGENT_DIR" pi "${COMMON_FLAGS[@]}" "${CFG_FLAGS[@]}" "$PROMPT" \
-    >"$CELL/logs/pi.stdout.txt" 2>"$CELL/logs/pi.stderr.txt" &
-  AGENT_PID=$!
-  ( sleep "$AGENT_TIMEOUT"; kill -TERM $AGENT_PID 2>/dev/null; sleep 20; kill -KILL $AGENT_PID 2>/dev/null ) &
-  WATCHDOG=$!
-  wait $AGENT_PID; AGENT_EXIT=$?
-  kill $WATCHDOG 2>/dev/null
+if [[ "$CONFIG" == "agentless" ]]; then
+  "$BENCH/run-agentless.sh" "$WORKDIR" "$TASK_DIR/prompt.txt" \
+    "$CELL/session-store" "$CELL/logs" "$CELL/artifacts" "$AGENT_DIR" "$AGENT_TIMEOUT"
+  AGENT_EXIT=$?
   echo "$AGENT_EXIT" > "$CELL/agent-exit-code.txt"
-)
+else
+  (
+    PI_CODING_AGENT_DIR="$AGENT_DIR" pi "${COMMON_FLAGS[@]}" "${CFG_FLAGS[@]}" "$PROMPT" \
+      >"$CELL/logs/pi.stdout.txt" 2>"$CELL/logs/pi.stderr.txt" &
+    AGENT_PID=$!
+    ( sleep "$AGENT_TIMEOUT"; kill -TERM $AGENT_PID 2>/dev/null; sleep 20; kill -KILL $AGENT_PID 2>/dev/null ) &
+    WATCHDOG=$!
+    wait $AGENT_PID; AGENT_EXIT=$?
+    kill $WATCHDOG 2>/dev/null
+    echo "$AGENT_EXIT" > "$CELL/agent-exit-code.txt"
+  )
+fi
 END=$(python3 -c 'import time;print(time.time())')
 WALL=$(python3 -c "print(round($END - $START, 1))")
 

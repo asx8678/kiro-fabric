@@ -35,6 +35,9 @@ Configs:
 
 - `baseline` — clean stock pi: `--no-skills --no-extensions`, isolated
   `PI_CODING_AGENT_DIR` with only the `openai-codex` OAuth entry
+- `agentless` — a deliberately simple stock-Pi comparator with fixed
+  localization, repair, and deterministic task-verification stages (details
+  below)
 - `fabric-local` — this repo (`-e <repo root>), with shipping defaults
 - `fabric-local-disabled`, `fabric-local-gated`, `fabric-local-always` — the
   equal-model selective-prewalk ablation. Each writes an isolated `fabric.json`
