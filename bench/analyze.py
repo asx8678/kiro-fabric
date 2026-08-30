@@ -126,12 +126,19 @@ def summarize(rows):
         "reads": None,
         "whole_file_reads_pct": None,
         "results_over_50kb": None,
+        "prewalk_activation": next((r.get("prewalk_activation") for r in rows if r.get("prewalk_activation")), None),
+        "prewalk_gate_decisions": 0,
+        "prewalk_gate_eligible": 0,
+        "prewalk_automatic_arms": 0,
     }
     reads = sum(r.get("reads", 0) for r in rows)
     whole = sum(r.get("whole_file_reads", 0) for r in rows)
     out["reads"] = reads
     out["whole_file_reads_pct"] = round(100.0 * whole / reads, 1) if reads else None
     out["results_over_50kb"] = sum(r.get("results_over_50kb", 0) for r in rows)
+    out["prewalk_gate_decisions"] = sum(r.get("prewalk_gate_decisions", 0) for r in rows)
+    out["prewalk_gate_eligible"] = sum(r.get("prewalk_gate_eligible", 0) for r in rows)
+    out["prewalk_automatic_arms"] = sum(r.get("prewalk_automatic_arms", 0) for r in rows)
     return out
 
 

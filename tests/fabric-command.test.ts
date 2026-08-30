@@ -177,6 +177,7 @@ describe("/fabric command", () => {
       mode: "in-place",
       sessionId: "session-1",
       task: "Implement the token guard",
+      alwaysRearm: false,
     });
     expect(sendUserMessage).toHaveBeenCalledWith("Implement the token guard");
     expect(sendMessage).toHaveBeenCalledWith(
@@ -246,6 +247,7 @@ describe("/fabric command", () => {
       model: "openai/executor",
       mode: "in-place",
       sessionId: "session-1",
+      alwaysRearm: false,
     });
     expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({

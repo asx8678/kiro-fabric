@@ -44,7 +44,20 @@ describe("PrewalkController", () => {
     expect(controller.status()).not.toHaveProperty("task");
   });
 
-  // Regression: a plan-first turn (reads only) must not burn the arm — the
+  it("consumes a gated automatic arm when its selected task settles read-only", () => {
+    const controller = new PrewalkController();
+    controller.arm({
+      model: "anthropic/executor",
+      sessionId: "session-1",
+      task: "Implement configuration, API, tests and docs",
+      automatic: "gated",
+    });
+
+    expect(controller.settleTask("session-1")).toBe(true);
+    expect(controller.status()).toEqual({ state: "idle" });
+  });
+
+  // Regression: a plan-first turn (reads only) must not burn an explicit arm — the
   // next matching mutation boundary still claims the handoff.
   it("claims a mutation that lands after earlier read-only settles", () => {
     const controller = new PrewalkController();

@@ -262,6 +262,15 @@ describe("FabricState lazy bootstrap", () => {
     await prewalkState.bootstrap(prewalkContext);
     expect(prewalkState.shouldEagerlyActivate(prewalkContext)).toBe(true);
 
+    const gatedCwd = project({
+      prewalk: { alwaysRearm: false, activation: "gated" },
+      mesh: { enabled: false },
+    });
+    const gatedState = createState(runtimeHarness().loader);
+    const gatedContext = contextAt(gatedCwd);
+    await gatedState.bootstrap(gatedContext);
+    expect(gatedState.shouldEagerlyActivate(gatedContext)).toBe(true);
+
     const actorCwd = project({ prewalk: { alwaysRearm: false }, mesh: { enabled: true } });
     const actorDirectory = path.join(actorCwd, ".pi", "fabric", "mesh", "actors");
     const registryPath = path.join(actorDirectory, "actors.json");

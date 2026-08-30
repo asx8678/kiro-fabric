@@ -148,18 +148,21 @@ describe("Fabric configuration", () => {
     ).toEqual({
       mode: "in-place",
       model: "anthropic/executor",
+      activation: "disabled",
       alwaysRearm: false,
       compactOnReturn: true,
       detectShellWrites: true,
     });
     expect(normalizeFabricConfig({ prewalk: { model: "   " } }).prewalk).toEqual({
       mode: "in-place",
+      activation: "disabled",
       alwaysRearm: false,
       compactOnReturn: true,
       detectShellWrites: true,
     });
     expect(normalizeFabricConfig({ prewalk: { alwaysRearm: true } }).prewalk).toEqual({
       mode: "in-place",
+      activation: "disabled",
       alwaysRearm: true,
       compactOnReturn: true,
       detectShellWrites: true,
@@ -170,6 +173,9 @@ describe("Fabric configuration", () => {
     expect(normalizeFabricConfig({ prewalk: { mode: "child" } }).prewalk.mode).toBe(
       "in-place",
     );
+    expect(normalizeFabricConfig({ prewalk: { activation: "always" } }).prewalk.activation).toBe("always");
+    expect(normalizeFabricConfig({ prewalk: { activation: "gated" } }).prewalk.activation).toBe("gated");
+    expect(normalizeFabricConfig({ prewalk: { activation: "sometimes" } }).prewalk.activation).toBe("disabled");
   });
 
   it("keeps a valid prewalk thinking level and drops invalid or empty ones", () => {
@@ -700,6 +706,7 @@ describe("Fabric configuration", () => {
     saveFabricConfig(location, { prewalk: { model: "" } });
     expect(loadFabricConfig(location).prewalk).toEqual({
       mode: "in-place",
+      activation: "disabled",
       alwaysRearm: false,
       compactOnReturn: true,
       detectShellWrites: true,

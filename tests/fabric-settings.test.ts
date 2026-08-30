@@ -678,7 +678,7 @@ describe("FabricSettingsComponent", () => {
   it("exposes a dedicated prewalk executor model picker", () => {
     const config = {
       ...DEFAULT_FABRIC_CONFIG,
-      prewalk: { mode: "in-place" as const, model: "anthropic/claude-sonnet-4-5", alwaysRearm: false, compactOnReturn: true, detectShellWrites: true },
+      prewalk: { mode: "in-place" as const, model: "anthropic/claude-sonnet-4-5", activation: "disabled" as const, alwaysRearm: false, compactOnReturn: true, detectShellWrites: true },
     };
     const items = buildFabricSettingsItems(theme, config, () => {}, {
       keepVisibleCandidates: ["fabric_exec"],
@@ -689,7 +689,7 @@ describe("FabricSettingsComponent", () => {
 
     expect(lines).toContain("Mode");
     expect(lines).toContain("in-place");
-    expect(lines).toContain("Always re-arm");
+    expect(lines).toContain("Automatic activation");
     expect(lines).toContain("Executor model ›");
     expect(lines).toContain("anthropic/claude-sonnet-4-5");
   });
@@ -1060,10 +1060,11 @@ describe("FabricSettingsComponent", () => {
         reloadConfig: vi.fn(() => {
           const saved = JSON.parse(
             fs.readFileSync(path.join(cwd, ".pi", "fabric.json"), "utf8"),
-          ) as { prewalk?: { mode?: "in-place" | "trajectory"; model?: string; alwaysRearm?: boolean; compactOnReturn?: boolean; detectShellWrites?: boolean } };
+          ) as { prewalk?: { mode?: "in-place" | "trajectory"; model?: string; activation?: "always" | "gated" | "disabled"; alwaysRearm?: boolean; compactOnReturn?: boolean; detectShellWrites?: boolean } };
           config.prewalk = {
             mode: saved.prewalk?.mode ?? "in-place",
             ...(saved.prewalk?.model ? { model: saved.prewalk.model } : {}),
+            activation: saved.prewalk?.activation ?? "disabled",
             alwaysRearm: saved.prewalk?.alwaysRearm === true,
             compactOnReturn: saved.prewalk?.compactOnReturn !== false,
             detectShellWrites: saved.prewalk?.detectShellWrites !== false,

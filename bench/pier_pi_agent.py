@@ -24,6 +24,7 @@ class PiCodingAgent(BaseInstalledAgent):
         fabric_package_path: str | None = None,
         thinking_level: str = "low",
         pi_version: str = "0.83.0",
+        prewalk_activation: str = "disabled",
         **kwargs: Any,
     ) -> None:
         self._pi_agent_dir = Path(pi_agent_dir).resolve()
@@ -32,6 +33,9 @@ class PiCodingAgent(BaseInstalledAgent):
         )
         self._thinking_level = thinking_level
         self._pi_version = pi_version
+        if prewalk_activation not in {"always", "gated", "disabled"}:
+            raise ValueError("prewalk_activation must be always, gated, or disabled")
+        self._prewalk_activation = prewalk_activation
         self._session_logs_dir: Path | None = None
         if not (self._pi_agent_dir / "auth.json").is_file():
             raise ValueError(f"Pi auth.json not found under {self._pi_agent_dir}")
@@ -88,6 +92,22 @@ class PiCodingAgent(BaseInstalledAgent):
     async def setup(self, environment: BaseEnvironment) -> None:
         await super().setup(environment)
         await environment.upload_dir(self._pi_agent_dir, "/tmp/pi-agent")
+        if self._fabric_package_path:
+            fabric_config = json.dumps({
+                "prewalk": {
+                    "activation": self._prewalk_activation,
+                    "model": self.model_name,
+                    "mode": "in-place",
+                }
+            })
+            await self.exec_as_root(
+                environment,
+                command=(
+                    "printf '%s\\n' "
+                    + shlex.quote(fabric_config)
+                    + " > /tmp/pi-agent/fabric.json"
+                ),
+            )
         ownership = ""
         if environment.default_user is not None:
             user = shlex.quote(str(environment.default_user))
@@ -190,6 +210,11 @@ class PiCodingAgent(BaseInstalledAgent):
             "bounded_reads": metrics["bounded_reads"],
             "results_over_50kb": metrics["results_over_50kb"],
             "fabric_enabled": self._fabric_package_path is not None,
+            "prewalk_activation": self._prewalk_activation,
+            "prewalk_gate_decisions": metrics["prewalk_gate_decisions"],
+            "prewalk_gate_eligible": metrics["prewalk_gate_eligible"],
+            "prewalk_automatic_arms": metrics["prewalk_automatic_arms"],
+            "prewalk_gate_reasons": metrics["prewalk_gate_reasons"],
         }
 
 
@@ -214,6 +239,10 @@ def collect_pi_session_metrics(session_dir: Path) -> dict[str, Any]:
     bounded_reads = 0
     results_over_50kb = 0
     nested_calls_by_ref: dict[str, int] = {}
+    prewalk_gate_decisions = 0
+    prewalk_gate_eligible = 0
+    prewalk_automatic_arms = 0
+    prewalk_gate_reasons: dict[str, int] = {}
 
     for session_path in sorted(session_dir.rglob("*.jsonl")):
         for raw_line in session_path.read_text(errors="replace").splitlines():
@@ -223,6 +252,16 @@ def collect_pi_session_metrics(session_dir: Path) -> dict[str, Any]:
                 continue
             if record.get("type") == "compaction":
                 summarization_count += 1
+            if (
+                record.get("type") == "custom"
+                and record.get("customType") == "kiro-fabric-prewalk-decision"
+            ):
+                data = record.get("data") or {}
+                prewalk_gate_decisions += 1
+                prewalk_gate_eligible += int(data.get("eligible") is True)
+                prewalk_automatic_arms += int(data.get("armed") is True)
+                reason = str(data.get("reason") or "unknown")
+                prewalk_gate_reasons[reason] = prewalk_gate_reasons.get(reason, 0) + 1
             message = record.get("message")
             if not isinstance(message, dict):
                 continue
@@ -315,4 +354,8 @@ def collect_pi_session_metrics(session_dir: Path) -> dict[str, Any]:
         "whole_file_reads": whole_file_reads,
         "bounded_reads": bounded_reads,
         "results_over_50kb": results_over_50kb,
+        "prewalk_gate_decisions": prewalk_gate_decisions,
+        "prewalk_gate_eligible": prewalk_gate_eligible,
+        "prewalk_automatic_arms": prewalk_automatic_arms,
+        "prewalk_gate_reasons": dict(sorted(prewalk_gate_reasons.items())),
     }

@@ -63,6 +63,16 @@ class PiSessionMetricsTest(unittest.TestCase):
                         },
                     },
                 },
+                {
+                    "type": "custom",
+                    "customType": "kiro-fabric-prewalk-decision",
+                    "data": {
+                        "activation": "gated",
+                        "eligible": True,
+                        "armed": True,
+                        "reason": "multiple-concerns",
+                    },
+                },
                 {"type": "compaction"},
             ]
             session.write_text("".join(json.dumps(row) + "\n" for row in records))
@@ -90,6 +100,10 @@ class PiSessionMetricsTest(unittest.TestCase):
         self.assertEqual(metrics["bounded_reads"], 1)
         self.assertEqual(metrics["results_over_50kb"], 1)
         self.assertEqual(metrics["summarization_count"], 1)
+        self.assertEqual(metrics["prewalk_gate_decisions"], 1)
+        self.assertEqual(metrics["prewalk_gate_eligible"], 1)
+        self.assertEqual(metrics["prewalk_automatic_arms"], 1)
+        self.assertEqual(metrics["prewalk_gate_reasons"], {"multiple-concerns": 1})
 
 
 if __name__ == "__main__":

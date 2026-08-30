@@ -35,7 +35,11 @@ Configs:
 
 - `baseline` — clean stock pi: `--no-skills --no-extensions`, isolated
   `PI_CODING_AGENT_DIR` with only the `openai-codex` OAuth entry
-- `fabric-local` — this repo (`-e <repo root>`), what ships right now
+- `fabric-local` — this repo (`-e <repo root>), with shipping defaults
+- `fabric-local-disabled`, `fabric-local-gated`, `fabric-local-always` — the
+  equal-model selective-prewalk ablation. Each writes an isolated `fabric.json`
+  with the named `prewalk.activation` and records decisions, eligible decisions,
+  automatic arms, and reason counts alongside the existing token/read metrics.
 - `fabric-<version>` — vendored published package (e.g. `kiro-fabric@0.25.6`,
   the version benchmarked in the trajectories repo)
 
@@ -95,6 +99,7 @@ has its own equivalent gate. Keep sibling checkouts of
 
     PIER_ENVIRONMENT=modal ./run-deepswe-pier.sh bandit-interprocedural-taint-checks baseline
     PIER_ENVIRONMENT=modal ./run-deepswe-pier.sh bandit-interprocedural-taint-checks fabric-local
+    PIER_ENVIRONMENT=modal ./run-deepswe-pier.sh bandit-interprocedural-taint-checks fabric-gated
 
 The matrix runner pins either the original reporter subset or a smaller adversarial cross-language canary, expands independent attempts through Pier, and gives both configurations deterministic resumable job names. Previewing is free; matrices over 24 paid cells require an explicit confirmation.
 
@@ -113,7 +118,9 @@ OAuth/settings directory, and packs the current Fabric checkout for local runs.
 Pier results land under `results/pier/`. In addition to verifier reward, the
 trial metadata records fresh/cached/combined and peak context tokens, outer and nested
 call mix, failures, same-file edit fragmentation, compactions, bounded versus
-whole-file reads, model-visible result volume, and results over 50 KB. Pass additional `pier run` flags after the config, such as timeout multipliers or dataset sampling flags. For the launcher's standard repetition and concurrency controls, use `PIER_N_ATTEMPTS` and `PIER_N_CONCURRENT`. Modal is recommended on ARM hosts because the official images are amd64. Set `KIRO_FABRIC_PACKAGE` to reuse one already-certified tarball across tasks. Run OAuth-backed cells serially.
+whole-file reads, model-visible result volume, results over 50 KB, and selective-prewalk
+activation/decision/arm counts. Use `fabric-disabled`, `fabric-gated`, and
+`fabric-always` with the same package and task matrix for the ablation. Pass additional `pier run` flags after the config, such as timeout multipliers or dataset sampling flags. For the launcher's standard repetition and concurrency controls, use `PIER_N_ATTEMPTS` and `PIER_N_CONCURRENT`. Modal is recommended on ARM hosts because the official images are amd64. Set `KIRO_FABRIC_PACKAGE` to reuse one already-certified tarball across tasks. Run OAuth-backed cells serially.
 
 Notes:
 

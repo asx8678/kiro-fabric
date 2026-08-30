@@ -14,6 +14,7 @@ import type { FabricComponentGraph } from "./components/types.js";
 import { loadFabricConfig, type FabricConfig, type FabricResultFormat } from "./config.js";
 import { FabricSessionApprovals } from "./core/approval-controller.js";
 import { PrewalkController } from "./prewalk/controller.js";
+import { effectiveFabricPrewalkActivation } from "./prewalk/gate.js";
 import { PrewalkDriftTracker } from "./prewalk/fs-drift.js";
 import type { PendingFabricHandoff } from "./prewalk/handoff.js";
 import type { AgentToolResultMessage } from "./agents/types.js";
@@ -201,7 +202,7 @@ export class FabricState {
       process.env.KIRO_FABRIC_CAPABILITY_REQUIREMENTS !== undefined &&
       Boolean(process.env.KIRO_FABRIC_CAPABILITY_DIGEST)
     ) return true;
-    if (this.config.prewalk.alwaysRearm) return true;
+    if (effectiveFabricPrewalkActivation(this.config.prewalk) !== "disabled") return true;
     if (this.config.components.some((component) => component.disabled !== true)) return true;
     if (!context.isProjectTrusted() || !this.config.mesh.enabled || this.config.schema.mode === "enforce") {
       return false;

@@ -55,6 +55,7 @@
     "dist/core/outcome-gate.d.ts",
     "dist/core/session-approvals.d.ts",
     "dist/runtime/source-limit.d.ts",
+    "dist/prewalk/gate.d.ts",
     "dist/ui/code-preview.d.ts",
     "dist/kernel/index.d.ts",
     "dist/kernel/fabric-exec-contract.d.ts",

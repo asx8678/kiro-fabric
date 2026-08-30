@@ -48,6 +48,7 @@ export type FabricUiWidgetMode = "auto" | "always" | "hidden";
 type FabricToolDisplayMode = "full" | "compact";
 export type FabricResultFormat = "auto" | "yaml" | "json" | "text";
 export type FabricPrewalkMode = "in-place" | "trajectory";
+export type FabricPrewalkActivation = "always" | "gated" | "disabled";
 export type FabricExecutorRuntime = "quickjs" | "node-process";
 export type FabricConfigScope = "global" | "project";
 type FabricCompactionEngine = "pi" | "fabric";
@@ -119,6 +120,9 @@ interface FabricVedaRunnerConfig {
 interface FabricPrewalkConfig {
   mode: FabricPrewalkMode;
   model?: string;
+  /** Automatic task selection. Disabled preserves the historical opt-in default. */
+  activation: FabricPrewalkActivation;
+  /** @deprecated Compatibility alias. true has the same precedence as activation=always. */
   alwaysRearm: boolean;
   // Compact with the configured engine just before restoring Main's boundary
   // model after an in-place continuation settles.
@@ -329,6 +333,7 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
   },
   prewalk: {
     mode: "in-place",
+    activation: "disabled",
     alwaysRearm: false,
     compactOnReturn: true,
     detectShellWrites: true,
@@ -518,6 +523,12 @@ const prewalkModeValue = (
   fallback: FabricPrewalkMode,
 ): FabricPrewalkMode =>
   value === "in-place" || value === "trajectory" ? value : fallback;
+
+const prewalkActivationValue = (
+  value: unknown,
+  fallback: FabricPrewalkActivation,
+): FabricPrewalkActivation =>
+  value === "always" || value === "gated" || value === "disabled" ? value : fallback;
 
 const transportValue = (
   value: unknown,
@@ -792,6 +803,10 @@ export const normalizeFabricConfig = (input: Record<string, unknown>): FabricCon
       mode: prewalkModeValue(prewalk.mode, DEFAULT_FABRIC_CONFIG.prewalk.mode),
       ...(prewalkModel ? { model: prewalkModel } : {}),
       ...(prewalkThinking ? { thinking: prewalkThinking } : {}),
+      activation: prewalkActivationValue(
+        prewalk.activation,
+        DEFAULT_FABRIC_CONFIG.prewalk.activation,
+      ),
       alwaysRearm: booleanValue(
         prewalk.alwaysRearm,
         DEFAULT_FABRIC_CONFIG.prewalk.alwaysRearm,

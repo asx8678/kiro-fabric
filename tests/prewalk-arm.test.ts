@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { FabricPrewalkMode } from "../src/config.js";
+import type { FabricPrewalkActivation, FabricPrewalkMode } from "../src/config.js";
 import type { FabricState } from "../src/fabric-state.js";
 import { armFabricPrewalkSession, autoArmFabricPrewalk } from "../src/prewalk/arm.js";
 import { PrewalkController } from "../src/prewalk/controller.js";
@@ -17,11 +17,13 @@ interface Harness {
   captureBaseline: ReturnType<typeof vi.fn>;
   sendMessage: ReturnType<typeof vi.fn>;
   setStatus: ReturnType<typeof vi.fn>;
+  appendEntry: ReturnType<typeof vi.fn>;
 }
 
 const makeHarness = (
   input: {
     alwaysRearm?: boolean;
+    activation?: FabricPrewalkActivation;
     mode?: FabricPrewalkMode;
     model?: string;
     thinking?: FabricThinking;
@@ -36,6 +38,7 @@ const makeHarness = (
   const captureBaseline = vi.fn(async () => {});
   const sendMessage = vi.fn();
   const setStatus = vi.fn();
+  const appendEntry = vi.fn();
   const branch = input.branch ?? [];
   const state = {
     config: {
@@ -46,6 +49,7 @@ const makeHarness = (
         mode: input.mode ?? "in-place",
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
+        activation: input.activation ?? "disabled",
         alwaysRearm: input.alwaysRearm ?? true,
         detectShellWrites: input.detectShellWrites ?? true,
       },
@@ -62,8 +66,8 @@ const makeHarness = (
     },
     ui: { setStatus, notify: vi.fn() },
   } as unknown as ExtensionContext;
-  const pi = { sendMessage } as unknown as ExtensionAPI;
-  return { state, context, pi, prewalk, captureBaseline, sendMessage, setStatus };
+  const pi = { sendMessage, appendEntry } as unknown as ExtensionAPI;
+  return { state, context, pi, prewalk, captureBaseline, sendMessage, setStatus, appendEntry };
 };
 
 describe("armFabricPrewalkSession", () => {
@@ -143,14 +147,42 @@ describe("autoArmFabricPrewalk", () => {
     expect(h.sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it("stays silent when always re-arm is off", async () => {
-    const h = makeHarness({ alwaysRearm: false, model: "anthropic/executor" });
+  it("stays silent when automatic activation is disabled", async () => {
+    const h = makeHarness({ alwaysRearm: false, activation: "disabled", model: "anthropic/executor" });
 
     const skip = await autoArmFabricPrewalk(h.state, h.context, h.pi);
 
     expect(skip).toBeUndefined();
     expect(h.prewalk.status().state).toBe("idle");
     expect(h.sendMessage).not.toHaveBeenCalled();
+    expect(h.appendEntry).not.toHaveBeenCalled();
+  });
+
+  it("applies the conservative gate only when a task is available", async () => {
+    const h = makeHarness({
+      alwaysRearm: false,
+      activation: "gated",
+      model: "anthropic/executor",
+    });
+
+    await autoArmFabricPrewalk(h.state, h.context, h.pi);
+    expect(h.prewalk.status().state).toBe("idle");
+
+    await autoArmFabricPrewalk(
+      h.state,
+      h.context,
+      h.pi,
+      "Implement configuration and API wiring, benchmark telemetry, tests and docs",
+    );
+    expect(h.prewalk.status()).toMatchObject({
+      state: "armed",
+      automatic: "gated",
+      alwaysRearm: false,
+    });
+    expect(h.appendEntry).toHaveBeenLastCalledWith(
+      "kiro-fabric-prewalk-decision",
+      expect.objectContaining({ activation: "gated", eligible: true, armed: true }),
+    );
   });
 
   it("never clobbers an existing arm", async () => {

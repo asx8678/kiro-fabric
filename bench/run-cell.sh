@@ -4,7 +4,7 @@
 # github.com/Whamp/kiro-fabric-deepswe-trajectories so the same analysis applies.
 #
 # Usage: run-cell.sh <task-dir> <config> <rep> <cell-out-dir> <agent-dir>
-#   config: baseline | fabric-local | fabric-0.25.6
+#   config: baseline | fabric-local | fabric-local-{always,gated,disabled} | fabric-0.25.6
 #   agent-dir: isolated PI_CODING_AGENT_DIR (auth + settings) prepared by run-matrix.sh
 set -u
 
@@ -42,12 +42,25 @@ git -C "$WORKDIR" checkout --quiet "$BASE_REF"
 
 # --- config flags ---
 COMMON_FLAGS=(--print --thinking low --model openai-codex/gpt-5.6-sol --session-dir "$CELL/session-store" --no-prompt-templates --no-context-files --no-themes)
+PREWALK_ACTIVATION="disabled"
 case "$CONFIG" in
   baseline)
     CFG_FLAGS=(--no-skills --no-extensions)
     ;;
-  fabric-local)
+  fabric-local|fabric-local-always|fabric-local-gated|fabric-local-disabled)
     CFG_FLAGS=(-e "$REPO_ROOT")
+    PREWALK_ACTIVATION=${CONFIG#fabric-local-}
+    [[ "$CONFIG" == "fabric-local" ]] && PREWALK_ACTIVATION="disabled"
+    python3 - "$AGENT_DIR/fabric.json" "$PREWALK_ACTIVATION" <<'PYCONFIG'
+import json, sys
+json.dump({
+    "prewalk": {
+        "activation": sys.argv[2],
+        "model": "openai-codex/gpt-5.6-sol",
+        "mode": "in-place",
+    }
+}, open(sys.argv[1], "w"), indent=2)
+PYCONFIG
     ;;
   fabric-*)
     VENDOR="$BENCH/vendor/$CONFIG/node_modules/kiro-fabric"
@@ -86,20 +99,29 @@ git -C "$WORKDIR" diff --cached "$BASE_REF" -- . ':(exclude)vendor/**' ':(exclud
 (git -C "$WORKDIR" ls-files --cached -- 'vendor/*' '*/node_modules/*' | sed -e 's/.*/[vendored dependency paths omitted from patch]/' | head -1 >> "$CELL/artifacts/model.patch" 2>/dev/null) || true
 
 # --- metrics from session jsonl ---
-python3 - "$CELL" "$WALL" <<'PYEOF'
+python3 - "$CELL" "$WALL" "$PREWALK_ACTIVATION" <<'PYEOF'
 import json, glob, os, sys
-cell, wall = sys.argv[1], float(sys.argv[2])
+cell, wall, prewalk_activation = sys.argv[1], float(sys.argv[2]), sys.argv[3]
 arm = os.environ.get("BENCH_ARM", "")  # opaque arm id when blinded
 pair = os.environ.get("BENCH_PAIR", "")
 turns = 0; tool_calls = 0
 tot = {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "totalTokens": 0}
 cost_seen = 0.0
+prewalk_decisions = 0; prewalk_eligible = 0; prewalk_armed = 0
+prewalk_reasons = {}
 for f in glob.glob(os.path.join(cell, "session", "*.jsonl")):
     for line in open(f, errors="replace"):
         try:
             rec = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if rec.get("type") == "custom" and rec.get("customType") == "kiro-fabric-prewalk-decision":
+            data = rec.get("data") or {}
+            prewalk_decisions += 1
+            prewalk_eligible += int(data.get("eligible") is True)
+            prewalk_armed += int(data.get("armed") is True)
+            reason = str(data.get("reason") or "unknown")
+            prewalk_reasons[reason] = prewalk_reasons.get(reason, 0) + 1
         msg = rec.get("message", {})
         if msg.get("role") != "assistant":
             continue
@@ -134,6 +156,11 @@ result = {
     "turns": turns,
     "tool_calls": tool_calls,
     "patch_bytes": patch_bytes,
+    "prewalk_activation": prewalk_activation,
+    "prewalk_gate_decisions": prewalk_decisions,
+    "prewalk_gate_eligible": prewalk_eligible,
+    "prewalk_automatic_arms": prewalk_armed,
+    "prewalk_gate_reasons": dict(sorted(prewalk_reasons.items())),
 }
 json.dump(result, open(os.path.join(cell, "result.json"), "w"), indent=2)
 PYEOF

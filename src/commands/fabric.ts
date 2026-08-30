@@ -4,6 +4,7 @@ import type { CapturedToolCatalog } from "../capture/catalog.js";
 import type { FabricActorHostEvent } from "../actors/types.js";
 import type { FabricState } from "../fabric-state.js";
 import { armFabricPrewalkSession } from "../prewalk/arm.js";
+import { effectiveFabricPrewalkActivation } from "../prewalk/gate.js";
 import { truncateMiddle } from "../util.js";
 import type { FabricUiController } from "../ui/controller.js";
 import fs from "node:fs";
@@ -288,10 +289,11 @@ export function registerFabricCommand(pi: ExtensionAPI, deps: FabricCommandDeps)
           state.config.prewalk.mode === "in-place"
             ? "Main will continue in place"
             : "the trajectory will move to a visible child executor";
+        const alwaysActive = effectiveFabricPrewalkActivation(state.config.prewalk) === "always";
         context.ui.notify(
           task
-            ? `Fabric prewalk armed for the next matching Fabric boundary; ${modeLabel} with ${model}${state.config.prewalk.alwaysRearm ? "; always re-arm enabled" : ""}`
-            : `Fabric prewalk armed for the next task; ${modeLabel} with ${model}${state.config.prewalk.alwaysRearm ? "; always re-arm enabled" : ""}`,
+            ? `Fabric prewalk armed for the next matching Fabric boundary; ${modeLabel} with ${model}${alwaysActive ? "; always activation enabled" : ""}`
+            : `Fabric prewalk armed for the next task; ${modeLabel} with ${model}${alwaysActive ? "; always activation enabled" : ""}`,
           "info",
         );
         if (task) pi.sendUserMessage(task);
@@ -673,7 +675,7 @@ export function registerFabricCommand(pi: ExtensionAPI, deps: FabricCommandDeps)
           (() => {
             const prewalk = state.prewalk.status();
             return prewalk.state === "idle"
-              ? `prewalk: idle · ${config.prewalk.mode} · model ${config.prewalk.model || "Ask each time"} · auto-arm & re-arm ${config.prewalk.alwaysRearm ? "on" : "off"}`
+              ? `prewalk: idle · ${config.prewalk.mode} · model ${config.prewalk.model || "Ask each time"} · activation ${effectiveFabricPrewalkActivation(config.prewalk)}`
               : `prewalk: ${prewalk.state} · ${prewalk.mode} → ${prewalk.model}${prewalk.alwaysRearm ? " · always re-arm" : ""}`;
           })(),
           config.fullCodeMode && config.capture.enabled

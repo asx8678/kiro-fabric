@@ -342,8 +342,10 @@ const summaryFor = (id: string, config: FabricConfig): string => {
       return config.approvals.execute;
     case "mcp":
       return config.mcp.enabled ? "enabled" : "disabled";
-    case "prewalk":
-      return `${config.prewalk.mode} · ${config.prewalk.model || PREWALK_MODEL_UNSET_LABEL}${config.prewalk.thinking ? ` · ${thinkingLabel(config.prewalk.thinking)}` : ""}${config.prewalk.alwaysRearm ? " · repeat" : ""}`;
+    case "prewalk": {
+      const activation = config.prewalk.alwaysRearm ? "always" : config.prewalk.activation;
+      return `${config.prewalk.mode} · ${config.prewalk.model || PREWALK_MODEL_UNSET_LABEL}${config.prewalk.thinking ? ` · ${thinkingLabel(config.prewalk.thinking)}` : ""}${activation === "disabled" ? "" : ` · ${activation}`}`;
+    }
     case "agents":
       return `${config.agents.runner}/${config.agents.transport}`;
     case "capture":
@@ -1168,13 +1170,13 @@ export const buildFabricSettingsItems = (
             values: PREWALK_MODES,
           }),
           setting(
-            "prewalk.alwaysRearm",
-            "Always re-arm",
-            config.prewalk.alwaysRearm ? "true" : "false",
+            "prewalk.activation",
+            "Automatic activation",
+            config.prewalk.alwaysRearm ? "always" : config.prewalk.activation,
             {
               description:
-                "Arm prewalk automatically at every session start and again after each completed handoff until /fabric prewalk --off cancels it for the session. Auto-arm needs prewalk.model (provider/model). Read-only turns never disarm prewalk.",
-              values: BOOLEANS,
+                "Always arms at session start and repeats. Gated arms only tasks with explicit mutation intent plus conservative breadth signals. Disabled keeps prewalk manual. Automatic modes need prewalk.model (provider/model).",
+              values: ["always", "gated", "disabled"],
             },
           ),
           setting(
@@ -1860,7 +1862,9 @@ export async function openFabricSettings(
   const apply = (id: string, value: unknown): void => {
     const partial = id === COMPACTION_THRESHOLD_SETTING_ID && activeModelKey
       ? compactionThresholdPartial(activeModelKey, value as CompactionThresholdSelection)
-      : buildPartial(id, value);
+      : id === "prewalk.activation"
+        ? { prewalk: { activation: value, alwaysRearm: false } }
+        : buildPartial(id, value);
     try {
       saveFabricConfig(
         { cwd: context.cwd, agentDir, projectTrusted, scope: saveScope },

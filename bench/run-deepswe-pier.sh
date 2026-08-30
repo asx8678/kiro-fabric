@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
-  echo "usage: $0 <task-slug|task-path|dataset-path> <baseline|fabric-local> [pier run args...]" >&2
+  echo "usage: $0 <task-slug|task-path|dataset-path> <baseline|fabric-local|fabric-{always,gated,disabled}> [pier run args...]" >&2
   exit 2
 fi
 
@@ -71,10 +71,14 @@ PY
 chmod 600 "$AGENT_DIR"/*.json
 
 FABRIC_ARGS=()
+PREWALK_ACTIVATION=disabled
 case "$CONFIG" in
   baseline)
     ;;
-  fabric-local)
+  fabric-local|fabric-always|fabric-gated|fabric-disabled)
+    if [[ "$CONFIG" == fabric-* && "$CONFIG" != "fabric-local" ]]; then
+      PREWALK_ACTIVATION=${CONFIG#fabric-}
+    fi
     if [[ -n "${KIRO_FABRIC_PACKAGE:-}" ]]; then
       FABRIC_PACKAGE=$(cd "$(dirname "$KIRO_FABRIC_PACKAGE")" && pwd)/$(basename "$KIRO_FABRIC_PACKAGE")
       if [[ ! -f "$FABRIC_PACKAGE" ]]; then
@@ -91,7 +95,10 @@ case "$CONFIG" in
       PACKAGES=("$ARTIFACT_DIR"/kiro-fabric-*.tgz)
       FABRIC_PACKAGE=${PACKAGES[0]}
     fi
-    FABRIC_ARGS=(--agent-kwarg "fabric_package_path=$FABRIC_PACKAGE")
+    FABRIC_ARGS=(
+      --agent-kwarg "fabric_package_path=$FABRIC_PACKAGE"
+      --agent-kwarg "prewalk_activation=$PREWALK_ACTIVATION"
+    )
     ;;
   *)
     echo "unknown config: $CONFIG" >&2

@@ -1,4 +1,4 @@
-import type { FabricPrewalkMode } from "../config.js";
+import type { FabricPrewalkActivation, FabricPrewalkMode } from "../config.js";
 import type { FabricCallAudit } from "../core/action-registry.js";
 import { isFabricThinking, type FabricThinking } from "../thinking.js";
 
@@ -19,6 +19,7 @@ interface FabricPrewalkArm {
   sessionId: string;
   armedAt: number;
   alwaysRearm: boolean;
+  automatic?: Exclude<FabricPrewalkActivation, "disabled">;
   task?: string;
   thinking?: FabricThinking;
 }
@@ -64,6 +65,7 @@ export class PrewalkController {
     sessionId: string;
     task?: string;
     alwaysRearm?: boolean;
+    automatic?: Exclude<FabricPrewalkActivation, "disabled">;
     thinking?: FabricThinking;
   }): FabricPrewalkStatus {
     const model = input.model.trim();
@@ -80,6 +82,7 @@ export class PrewalkController {
       sessionId: input.sessionId,
       armedAt: Date.now(),
       alwaysRearm: input.alwaysRearm === true,
+      ...(input.automatic ? { automatic: input.automatic } : {}),
       ...(task ? { task } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
     };
@@ -182,6 +185,13 @@ export class PrewalkController {
       return false;
     }
     const armed = this.#status;
+    // A gated automatic arm belongs only to the task that passed the gate.
+    // If that task settles without a mutation, do not let a later unrelated
+    // task consume the stale arm. Explicit/manual arms retain legacy behavior.
+    if (armed.automatic === "gated") {
+      this.cancel();
+      return true;
+    }
     if (armed.task !== undefined) {
       this.#status = {
         state: "armed",
@@ -190,6 +200,7 @@ export class PrewalkController {
         sessionId: armed.sessionId,
         armedAt: armed.armedAt,
         alwaysRearm: armed.alwaysRearm,
+        ...(armed.automatic ? { automatic: armed.automatic } : {}),
         ...(armed.thinking ? { thinking: armed.thinking } : {}),
       };
     }
@@ -209,6 +220,7 @@ export class PrewalkController {
       sessionId: this.#status.sessionId,
       armedAt: Date.now(),
       alwaysRearm: true,
+      ...(this.#status.automatic ? { automatic: this.#status.automatic } : {}),
       ...(this.#status.thinking ? { thinking: this.#status.thinking } : {}),
     };
     return this.status();
@@ -258,6 +270,7 @@ export class PrewalkController {
       sessionId: armed.sessionId,
       armedAt: armed.armedAt,
       alwaysRearm: armed.alwaysRearm,
+      ...(armed.automatic ? { automatic: armed.automatic } : {}),
       ...(armed.task ? { task: armed.task } : {}),
       ...(armed.thinking ? { thinking: armed.thinking } : {}),
     };

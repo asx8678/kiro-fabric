@@ -68,7 +68,7 @@ Treat `node-process` as an explicit escape hatch for trusted code. It offers no 
   },
   "prewalk": {
     "mode": "in-place",
-    "alwaysRearm": false,
+    "activation": "disabled",
     "detectShellWrites": true
   },
   "agents": {
@@ -155,7 +155,7 @@ Unknown definitions stay visible as waiting. They do not fail the Fabric runtime
     "mode": "in-place",
     "model": "anthropic/claude-haiku-4-5",
     "thinking": "high",
-    "alwaysRearm": true,
+    "activation": "gated",
     "compactOnReturn": true
   }
 }
@@ -163,7 +163,15 @@ Unknown definitions stay visible as waiting. They do not fail the Fabric runtime
 
 `prewalk.thinking` sets the optional reasoning effort for the trajectory child executor. Its values are `off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`, clamped to each model's supported levels. When you leave it unset, the executor inherits `agents.thinking`. In-place mode keeps Main's session level.
 
-`prewalk.alwaysRearm` defaults to `false`. When enabled, prewalk returns to an armed, taskless state after each completed handoff (in-place return or trajectory completion). Every session then starts armed automatically, non-interactively from `prewalk.model`, and `/fabric reload` re-arms as well. `/fabric prewalk --off` cancels the armed state until the next session start or reload. Turns that settle without a handoff never disarm prewalk, regardless of this setting. The settings UI labels an unset model **Ask each time**. Non-interactive sessions must configure a model. In-place mode does not require child agents. Trajectory mode requires `agents.enabled`. It shows child spawn, progress, nested tools, metrics, and completion in Main's Fabric activity UI.
+`prewalk.activation` controls automatic selection and defaults to `"disabled"`, preserving the opt-in behavior of `/fabric prewalk`:
+
+- `"always"` arms at session start/reload and after every completed handoff.
+- `"gated"` evaluates each final task prompt and arms only when a deterministic conservative gate sees explicit mutation intent plus either broad-change language, at least three delivery concerns (API/configuration/tests/docs/telemetry/benchmark/security), or two named files. Questions, missing task text, narrow one-line/single-file work, and uncertain cases stay off. A gated arm is consumed if its selected task settles without mutation, so it cannot leak to a later task.
+- `"disabled"` performs no automatic selection; explicit `/fabric prewalk` remains available.
+
+`"gated"` evaluations and `"always"` activation attempts are stored as non-model `kiro-fabric-prewalk-decision` custom entries containing the mode, reason, stable signal names, task character count, and whether an arm occurred. Task text is not copied into telemetry. The default disabled path writes no entry. Automatic modes require `prewalk.model`. In-place mode does not require child agents; trajectory mode requires `agents.enabled`.
+
+`prewalk.alwaysRearm` is retained as a compatibility alias. When true it takes precedence and behaves as `activation: "always"`; changing **Automatic activation** in settings clears the legacy flag. `/fabric prewalk --off` cancels the current arm until the next eligible automatic boundary. The settings UI labels an unset model **Ask each time**.
 
 `prewalk.detectShellWrites` defaults to `true`. When armed, a `fabric_exec` boundary that ran a successful `pi.bash` without an audited `pi.edit` / `pi.write` / `schema.commit` claims the handoff if file size or mtime stats drifted from the arm-time baseline. This routes shell heredocs and formatter binaries to the executor as well. The report's `trigger.files` lists the bounded drifted paths. Set it to `false` to accept audited mutations only.
 
