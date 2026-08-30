@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 const ROOT = resolve(import.meta.dirname, "..");
 const RUNNER = join(ROOT, "bench", "run-agentless.sh");
 const ANALYZER = join(ROOT, "bench", "analyze.py");
+const MUTATION_RUNNER = join(ROOT, "bench", "mutation_verifiers.py");
 const BLINDED_RUNNER = join(ROOT, "bench", "run-matrix-blinded.sh");
 const temporaryDirectories: string[] = [];
 
@@ -136,7 +137,8 @@ fi
 
   it("counts agentless direct reads through the existing baseline metrics", () => {
     const runDirectory = temporaryDirectory();
-    const cell = join(runDirectory, "agentless", "task", "rep0");
+    const task = "superjson-error-stack-serialization";
+    const cell = join(runDirectory, "agentless", task, "rep0");
     mkdirSync(join(cell, "session"), { recursive: true });
     writeFileSync(
       join(cell, "result.json"),
@@ -152,6 +154,13 @@ fi
       })}\n`,
     );
 
+    run("python3", [
+      MUTATION_RUNNER,
+      "--tasks",
+      task,
+      "--report",
+      join(runDirectory, "verifier-mutation-report.json"),
+    ], ROOT);
     run("python3", [ANALYZER, runDirectory], ROOT);
     const summary = JSON.parse(readFileSync(join(runDirectory, "analysis-summary.json"), "utf8"));
     expect(summary.per_config.agentless.reads).toBe(1);
