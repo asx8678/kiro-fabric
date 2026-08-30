@@ -7,74 +7,40 @@ Kiro Fabric is an additive **Kiro Power**, an installable Kiro IDE add-on for co
 > **Release status:** the Power is source-installable for local Kiro IDE testing. Public GitHub import waits for publication of exact `kiro-fabric@0.63.0` and clean-machine certification. Kiro CLI v3 Power support and real-client elicitation are separate certification gates.
 
 ```text
-+----------------------------- KIRO IDE -----------------------------+
-|                                                                    |
-|  NATIVE KIRO                         KIRO FABRIC POWER              |
-|  read · edit · shell · web           info · workspace · exec       |
-|        |                                      |                    |
-|        +--------- ordinary work               v                    |
-|                                      checked TypeScript            |
-|                                      +------+-------+------+        |
-|                                      | flow | state | MCP  |        |
-|                                      +------+-------+------+        |
-|                                                                    |
-+--------------------------------------------------------------------+
++----------------------------------------+
+| KIRO IDE                               |
+|                                        |
+| native tools -> ordinary work          |
+|                                        |
+| Fabric Power -> coordinated workflows  |
+|       |                                |
+| checked TypeScript                     |
+|       |                                |
+| memory | bound state | configured MCP  |
++----------------------------------------+
 ```
 
-## What is Kiro Fabric?
+## When to use Fabric
 
-Kiro Fabric adds one checked workflow lane to an ordinary Kiro session. Use native Kiro tools for a single read, grep, edit, shell command, web lookup, code-intelligence query, or simple native subagent. Use Fabric when several operations need programmatic coordination or compact aggregation.
+Use native Kiro tools for one read, edit, shell command, web lookup, code search, or simple subagent. Use Fabric when a workflow needs parallel tasks, branches, loops, retained memory, workspace-bound state, or several configured MCP services.
+
+Fabric adds checked composition, `Promise.all` fan-out, and deterministic result assembly. Power ACP agents are unavailable pending separate runtime qualification.
 
 The Power exposes exactly three MCP tools:
 
 | Tool | Purpose |
 |---|---|
-| `fabric_info` | Report bounded runtime, workspace, ACP, and durability status. |
-| `fabric_workspace` | Inspect or select validated client roots; manual attachment is approve-once. |
-| `fabric_exec` | Type-check and execute a TypeScript workflow through the Fabric runtime. |
+| `fabric_info` | Show runtime, workspace, ACP, and durability status. |
+| `fabric_workspace` | Inspect or select validated roots; manual attachment needs one-time approval. |
+| `fabric_exec` | Type-check and run a TypeScript workflow. |
 
-Power deliberately does not expose `k.*` and cannot call backward into outer Kiro native tools.
-
-## What does it do?
-
-Fabric gives a model normal programming constructs around mounted capabilities:
-
-- **Checked composition:** variables, functions, conditions, loops, and typed results.
-- **Controlled fan-out:** `Promise.all` for independent work, followed by deterministic aggregation.
-- **Workflow state:** Power-scoped memory before binding and isolated workspace state after binding.
-- **MCP federation:** call configured Fabric MCP servers from one checked program.
-- **Bounded orchestration:** Kiro ACP agents are currently unavailable in Power pending separate runtime qualification; their absence does not break the base Power.
-
-Illustrative workflow using a configured MCP review server:
-
-```ts
-const areas = ["security", "tests", "architecture"];
-const reviews = await Promise.all(
-  areas.map((area) =>
-    mcp.call({ server: "review", tool: "inspect", args: { area } }),
-  ),
-);
-return Object.fromEntries(areas.map((area, index) => [area, reviews[index]]));
-```
-
-Do not invoke Fabric for one simple file or shell operation. That remains native Kiro work.
+Power does not expose `k.*` and cannot call backward into outer Kiro native tools. Do not invoke Fabric for one simple file or shell operation.
 
 ## How it works
 
 An ordinary Kiro session keeps native read, edit, shell, code, web, subagents, other Powers, and MCP integrations. Fabric adds concise orchestration skills and one MCP server beside them. `fabric_exec` validates TypeScript, then normally runs it in QuickJS. Effects cross the host boundary and follow the configured approval policy, deadlines, cancellation, output bounds, and provider capability view. `node-process`, external MCP servers, and Strict shell execution use host privileges; they are trusted execution, not sandboxes.
 
 Workspace identity never comes from process CWD. The server validates MCP client roots, auto-binds one safe root, requires selection for multiple roots, and uses elicitation for approve-once manual attachment. Missing, ambiguous, changed, unsafe, declined, or unsupported attachment paths fail closed.
-
-## Why use it?
-
-Use Fabric when TypeScript makes the workflow smaller and clearer than repeated tool calls:
-
-1. independent reviews need parallel execution and one aggregate result;
-2. a workflow needs branching, loops, or reusable data flow;
-3. facts must be retained in Fabric memory or workspace state;
-4. several configured MCP services must be composed consistently.
-
-The benefit is not “more tools.” It is a checked control plane around the tools already appropriate for orchestration.
 
 ## Install locally in Kiro IDE
 
