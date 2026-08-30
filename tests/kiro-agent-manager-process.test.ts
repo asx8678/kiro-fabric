@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -132,6 +132,26 @@ describe("KiroAgentManager process runtime", () => {
     expect(Date.now() - startedStopping).toBeGreaterThanOrEqual(100);
     expect(processIsAlive(pid)).toBe(false);
     expect(() => instance.steer(handle.id, "too late")).toThrow(/already finished/);
+  });
+
+  it("never invokes ambient ps helpers while controlling managed Kiro workers", async () => {
+    if (process.platform !== "linux") return;
+    const { instance, root, runRoot } = manager();
+    const bin = join(root, "hostile-path");
+    const marker = join(root, "ambient-ps-invoked");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "ps"), `#!/bin/sh\nprintf invoked > ${JSON.stringify(marker)}\nexit 1\n`, { mode: 0o755 });
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${bin}:${previousPath ?? ""}`;
+    try {
+      const handle = await instance.spawn({ task: "HANG", tools: [] });
+      await waitForFile(join(runRoot, handle.id, "events.jsonl"));
+      await instance.stop(handle.id);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+    expect(existsSync(marker)).toBe(false);
   });
 
   it("rejects queued launches when close begins and never starts another worker", async () => {

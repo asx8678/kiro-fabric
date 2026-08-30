@@ -20,7 +20,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { installKiroProfile, KiroInstallError } from "../src/kiro/install.js";
+import { KiroInstallError } from "../src/kiro/install.js";
+import { installKiroProfile } from "../src/kiro/install-test-helper.js";
 import { kiroProfilePath } from "../src/kiro/profile.js";
 import {
   planKiroProfileUninstall,

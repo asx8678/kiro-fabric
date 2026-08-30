@@ -65,6 +65,7 @@ import {
   type KiroManagedOwnedFile,
 } from "./managed.js";
 import { resolveKiroInstallRoots } from "./home.js";
+import { currentKiroInstallTestOverrides } from "./install-test-seam.js";
 import { resolveKiroMcpLaunchEnvironment } from "./mcp-environment.js";
 import {
   generateKiroProfile,
@@ -108,8 +109,6 @@ export interface KiroInstallOptions {
   mcpEntryPath?: string;
   /** Bootstrap Node to certify before mutation; never persisted for format-3 installs. */
   nodePath?: string;
-  /** @internal Test-only Node artifact override; rejected outside Vitest. */
-  runtimeNodeSourcePath?: string;
   /** Kiro binary used for --version / agent validate; default "kiro-cli". */
   kiroBinary?: string;
   /** Replace an unknown or user-modified regular profile (backup first). */
@@ -128,8 +127,6 @@ export interface KiroInstallOptions {
   allowTools?: boolean;
   /** Restore a damaged same-digest runtime from this invocation's trusted artifact. */
   repairRuntime?: boolean;
-  /** @internal Legacy test fixture mode; rejected outside Vitest. */
-  skipRuntimeClosure?: boolean;
 }
 
 interface KiroSkillInstallPlan extends KiroManagedSkillSource {
@@ -219,7 +216,8 @@ const buildManifest = (
     mcpEntryPath: options.mcpEntryPath,
     ...(options.kiroIdentity
       ? {
-          kiroBinaryPath: options.kiroIdentity.executablePath,
+          kiroBinaryPath: closure?.runtimeKiroPath ?? options.kiroIdentity.sourcePath,
+          kiroSourcePath: options.kiroIdentity.sourcePath,
           kiroSha256: options.kiroIdentity.sha256,
         }
       : {}),
@@ -274,6 +272,7 @@ const manifestIsCurrent = (
   existing.runtime.nodePath === desired.runtime.nodePath &&
   existing.runtime.mcpEntryPath === desired.runtime.mcpEntryPath &&
   existing.runtime.kiroBinaryPath === desired.runtime.kiroBinaryPath &&
+  existing.runtime.kiroSourcePath === desired.runtime.kiroSourcePath &&
   existing.runtime.kiroCliVersion === desired.runtime.kiroCliVersion &&
   existing.runtime.kiroSha256 === desired.runtime.kiroSha256 &&
   existing.runtime.agentEngine === desired.runtime.agentEngine &&
@@ -400,7 +399,7 @@ export const planKiroProfileInstall = (
     ...(layout === "user" ? { kiroHome: installRoot } : {}),
     ...(planning.kiroIdentity
       ? {
-          kiroBinaryPath: planning.kiroIdentity.executablePath,
+          kiroBinaryPath: planning.closure?.runtimeKiroPath ?? planning.kiroIdentity.sourcePath,
           kiroCliVersion: planning.kiroIdentity.version,
           kiroSha256: planning.kiroIdentity.sha256,
         }
@@ -659,16 +658,16 @@ const runKiro = async (
   kiro: string | SupportedKiroIdentity,
   args: string[],
 ): Promise<{ stdout: string; stderr: string }> => {
-  const kiroBinary = typeof kiro === "string" ? kiro : kiro.executablePath;
-  const attestation = typeof kiro === "string" ? attestExecutable(kiroBinary) : kiro;
+  const staged = typeof kiro === "string" ? await assertSupportedKiro(kiro) : undefined;
+  const identity: SupportedKiroIdentity = typeof kiro === "string" ? staged! : kiro;
   try {
-    assertExecutableAttestation(attestation);
-    const { stdout, stderr } = await execFileAsync(kiroBinary, args, {
+    assertExecutableAttestation(identity);
+    const { stdout, stderr } = await execFileAsync(identity.executablePath, args, {
       timeout: 20_000,
       maxBuffer: 1024 * 1024,
       encoding: "utf8",
     });
-    assertExecutableAttestation(attestation);
+    assertExecutableAttestation(identity);
     return { stdout: String(stdout), stderr: String(stderr) };
   } catch (error) {
     const err = error as { stdout?: string; stderr?: string; message?: string };
@@ -677,6 +676,8 @@ const runKiro = async (
       "kiro-validate",
       `kiro-cli ${args.join(" ")} failed${detail ? `: ${detail.slice(0, 2000)}` : `: ${err.message ?? String(error)}`}`,
     );
+  } finally {
+    staged?.dispose();
   }
 };
 
@@ -908,13 +909,9 @@ const commitInstall = (plan: KiroInstallPlan): void => {
 export const installKiroProfile = async (
   options: KiroInstallOptions & { dryRun?: boolean } = {},
 ): Promise<KiroInstallResult> => {
-  const testInternal = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
-  if ((options.skipRuntimeClosure || options.runtimeNodeSourcePath) && !testInternal) {
-    throw new KiroInstallError(
-      "fs",
-      "skipRuntimeClosure and runtimeNodeSourcePath are test-internal and refused in production",
-    );
-  }
+  const testOverrides = currentKiroInstallTestOverrides();
+  const skipRuntimeClosure = testOverrides?.skipRuntimeClosure === true;
+  const runtimeNodeSourcePath = testOverrides?.runtimeNodeSourcePath;
   if (options.enableSubagents === true) {
     const fabricConfig = options.fabricConfig ?? inspectFabricConfig({
       cwd: options.projectRoot ?? process.cwd(),
@@ -926,10 +923,11 @@ export const installKiroProfile = async (
 
   let stagedNodeDir: string | undefined;
   let stagedNode: ExecutableAttestation | undefined;
+  let kiroIdentity: SupportedKiroIdentity | undefined;
   try {
-    if (!options.skipRuntimeClosure) {
+    if (!skipRuntimeClosure) {
       stagedNodeDir = mkdtempSync(join(tmpdir(), "kiro-fabric-node-stage-"));
-      const source = attestExecutable(options.runtimeNodeSourcePath ?? options.nodePath ?? process.execPath);
+      const source = attestExecutable(runtimeNodeSourcePath ?? options.nodePath ?? process.execPath);
       stagedNode = copyAttestedExecutable(source, join(stagedNodeDir, process.platform === "win32" ? "node.exe" : "node"));
     }
 
@@ -939,7 +937,7 @@ export const installKiroProfile = async (
       // and copied. Unit fixtures may inject a deliberately tiny non-Node
       // runtime, so only that test-internal path probes the requested bootstrap.
       nodeIdentity = await assertSupportedNode(
-        options.runtimeNodeSourcePath ? options.nodePath ?? process.execPath : stagedNode?.path ?? options.nodePath ?? process.execPath,
+        runtimeNodeSourcePath ? options.nodePath ?? process.execPath : stagedNode?.path ?? options.nodePath ?? process.execPath,
       );
     } catch (error) {
       throw new KiroInstallError(
@@ -948,7 +946,7 @@ export const installKiroProfile = async (
       );
     }
     const requestedKiroBinary = options.kiroBinary ?? "kiro-cli";
-    const kiroIdentity = await assertKiroVersion(requestedKiroBinary);
+    kiroIdentity = await assertKiroVersion(requestedKiroBinary);
     const kiroBinary = kiroIdentity.executablePath;
     await assertKiroV3Capabilities(kiroIdentity);
 
@@ -984,11 +982,12 @@ export const installKiroProfile = async (
         }
       }
     }
-    const closurePlan = options.skipRuntimeClosure
+    const closurePlan = skipRuntimeClosure
       ? undefined
       : planRuntimeClosureDeployment(roots.installRoot, roots.layout, {
           nodeSourcePath: stagedNode!.path,
           nodeAttestation: stagedNode!,
+          kiroAttestation: kiroIdentity,
           ...(options.repairRuntime ? { repairExisting: true } : {}),
         });
     const effectiveMcpEntry = closurePlan?.mcpEntryPath ?? options.mcpEntryPath;
@@ -1014,27 +1013,20 @@ export const installKiroProfile = async (
       recoverManagedTransaction(planned.installRoot, planned.layout);
       if (stagedNode) assertExecutableAttestation(stagedNode);
       assertSupportedKiroUnchanged(kiroIdentity);
-      const lockedClosurePlan = options.skipRuntimeClosure
+      const lockedClosurePlan = skipRuntimeClosure
         ? undefined
         : planRuntimeClosureDeployment(roots.installRoot, roots.layout, {
             nodeSourcePath: stagedNode!.path,
             nodeAttestation: stagedNode!,
+            kiroAttestation: kiroIdentity,
             ...(options.repairRuntime ? { repairExisting: true } : {}),
           });
       if (closurePlan && lockedClosurePlan?.digest !== closurePlan.digest) {
         throw new KiroInstallError("concurrency", "runtime closure changed after preflight");
       }
       const lockedMcpEntry = lockedClosurePlan?.mcpEntryPath ?? options.mcpEntryPath;
-      const lockedKiroIdentity = await assertKiroVersion(kiroBinary);
-      if (
-        lockedKiroIdentity.executablePath !== kiroIdentity.executablePath ||
-        lockedKiroIdentity.version !== kiroIdentity.version ||
-        lockedKiroIdentity.sha256 !== kiroIdentity.sha256 ||
-        lockedKiroIdentity.dev !== kiroIdentity.dev ||
-        lockedKiroIdentity.ino !== kiroIdentity.ino
-      ) {
-        throw new KiroInstallError("concurrency", "Kiro executable identity changed after preflight");
-      }
+      assertSupportedKiroUnchanged(kiroIdentity);
+      const lockedKiroIdentity = kiroIdentity;
       const lockedOptions: KiroInstallOptions = {
         ...options,
         nodePath: lockedClosurePlan?.runtimeNodePath ?? nodeIdentity.executablePath,
@@ -1059,6 +1051,7 @@ export const installKiroProfile = async (
             expectedDigest: lockedClosurePlan.digest,
             nodeSourcePath: stagedNode!.path,
             nodeAttestation: stagedNode!,
+            kiroAttestation: lockedKiroIdentity,
             ...(options.repairRuntime ? { repairExisting: true } : {}),
             activate: false,
           })
@@ -1074,6 +1067,7 @@ export const installKiroProfile = async (
       lock.release();
     }
   } finally {
+    kiroIdentity?.dispose();
     if (stagedNodeDir) rmSync(stagedNodeDir, { recursive: true, force: true });
   }
 };

@@ -59,8 +59,8 @@ that reused the PID. Other platforms retain the lock on ambiguous liveness.
 - `<kiro-home>/agents/kiro-fabric.json`
 - `<kiro-home>/.kiro-fabric/install.json`
 - the same four managed skills under `<kiro-home>/skills/`
-- the attested runtime, backups, and operation lock under
-  `<kiro-home>/.kiro-fabric/`
+- the attested runtime (vendored Node plus an immutable Kiro execution copy),
+  backups, and operation lock under `<kiro-home>/.kiro-fabric/`
 
 For managed interactive sessions, Fabric confines filesystem tools to the
 canonical directory where `kiro-cli chat` was launched. This lets one global
@@ -233,10 +233,17 @@ The immutable release remains self-hosting. Read `runtime.nodePath` and
 "$INSTALLED_NODE" "$MANAGER_ENTRY" uninstall --user --project-root /canonical/project --yes
 ```
 
-Pass the original `--kiro-home` where applicable. A healthy installed release
-can use itself for no-op lifecycle maintenance. To update versions or repair
-runtime tampering, invoke `kiro-fabric-setup` from a trusted current package or
-source artifact; do not execute a damaged installed Node or manager.
+Pass the original `--kiro-home` where applicable. `--kiro-binary` names an
+**external source** only during install/update preflight. Fabric copies the exact
+descriptor-attested bytes into the immutable release, records the source as
+`runtime.kiroSourcePath`, and records the only managed execution path as
+`runtime.kiroBinaryPath`. Version, capability, validation, doctor, worker, and
+interactive launch processes execute a private read-only stage or that installed
+copy—never the replaceable external path. A healthy installed release can use
+its installed copy as the source for no-op lifecycle maintenance. To update
+versions or repair runtime tampering, invoke `kiro-fabric-setup` from a trusted
+current package or source artifact; do not execute a damaged installed Node,
+Kiro artifact, or manager.
 
 Uninstall is hash-owned:
 
@@ -244,7 +251,7 @@ Uninstall is hash-owned:
 - Managed profile matching the recorded hash and no user backup → remove the profile.
 - Managed profile or skill with a verified displaced-user backup → restore those exact bytes.
 - Newly created managed skills → remove only their recorded, hash-matching leaves.
-- Immutable release (Node included) → remove only the exact attested file set; preserve unrelated siblings.
+- Immutable release (Node and Kiro included) → atomically quarantine each exact attested generation under its descriptor-anchored runtime parent, then remove only that quarantined file set; preserve unrelated or raced replacements.
 - User-modified managed content → refuse before mutation. There is no uninstall `--force`.
 
 Uninstall never runs `kiro-cli` and never requests a model turn. A second
@@ -356,13 +363,17 @@ run prints usage. Non-interactive install, update, repair, or non-noop uninstall
 also requires `--yes`. Omitting `--user` selects project-local scope rooted at the
 current directory; `--user` selects `$KIRO_HOME` or `~/.kiro`. Update and repair
 require an existing manifest, preserve grants by default, and return a clear
-before/after grant diff. `launch` starts `kiro-cli --v3 --agent
-kiro-fabric` through a direct argv exec in the selected project root. Every
+before/after grant diff. `launch` requires the selected scope to be fully installed and healthy, refuses
+an unhealthy project installation instead of falling back to user scope, and
+starts the installed immutable Kiro artifact with `--v3 --agent kiro-fabric` in
+the selected project root. Every
 mutation delegates to the verified install, uninstall, and doctor APIs; the
 console adds no ownership, backup, or symlink logic of its own. Format-3
 activation journals the marker before profile/skills and the manifest last; a
 SIGKILL leaves a durable transaction that the next lifecycle operation
 forward-recovers to one generation before preflight. Exit codes: `0` success,
 no-op, or dry-run; `1` failure; `2` usage; `130` interactive cancel. `--json`
-prints exactly one object on stdout on both success and failure; human-readable
-errors go to stderr only without `--json`.
+prints exactly one object on stdout on both success and failure. Setup usage and
+lifecycle failures use `{ ok: false, error }`; doctor diagnosis failures retain
+the stable `kiro-fabric.kiro-doctor` report envelope with `ok: false` and failed
+checks. Human-readable errors go to stderr only without `--json`.

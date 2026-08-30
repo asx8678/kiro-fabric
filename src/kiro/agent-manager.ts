@@ -260,7 +260,12 @@ export class KiroAgentManager {
         ...(schemaFile ? ["--schema-file", schemaFile] : []),
       ];
 
-      const processHandle = await spawnDetached(this.#workerPath, workerArguments, agentCwd);
+      const processHandle = await spawnDetached(
+        this.#workerPath,
+        workerArguments,
+        agentCwd,
+        { ambientHelpers: false },
+      );
       const transport: AgentTransportHandle = {
         kind: "process",
         sessionId: String(processHandle.pid),

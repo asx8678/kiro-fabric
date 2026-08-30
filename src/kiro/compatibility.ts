@@ -4,12 +4,22 @@
 // assertion, not as a loose semver search.
 
 import { execFile } from "node:child_process";
-import { accessSync, constants, realpathSync, statSync } from "node:fs";
-import { delimiter, isAbsolute, resolve } from "node:path";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
   assertExecutableAttestation,
   attestExecutable,
+  copyAttestedExecutable,
   type ExecutableAttestation,
 } from "./managed.js";
 import {
@@ -56,9 +66,14 @@ export interface KiroCompatibilityReport {
 
 export interface SupportedKiroIdentity extends KiroCompatibilityReport, ExecutableAttestation {
   state: "ok";
+  /** Private read-only artifact used for every Kiro execution in this process. */
   executablePath: string;
+  /** Canonical external/installed source whose exact bytes were staged. */
+  sourcePath: string;
   version: typeof KIRO_CLI_VERSION;
   ok: true;
+  /** Remove the private artifact after the complete operation finishes. */
+  dispose(): void;
 }
 
 export type NodeCompatibilityState =
@@ -174,45 +189,94 @@ const failedProbeState = (error: unknown): "timeout" | "exec-failure" => {
     : "exec-failure";
 };
 
-export const inspectKiroCompatibility = async (
-  requestedPath = "kiro-cli",
-): Promise<KiroCompatibilityReport> => {
+const stageKiroExecutable = (
+  requestedPath: string,
+): { resolvedPath: string; attestation: ExecutableAttestation; root: string; dispose(): void } |
+  { error: "not-found" | "not-executable" } => {
   const resolved = resolveCanonicalExecutable(requestedPath);
-  if ("error" in resolved) {
+  if ("error" in resolved) return resolved;
+  const source = attestExecutable(resolved.path);
+  const root = mkdtempSync(join(tmpdir(), "kiro-fabric-kiro-stage-"));
+  const stagedPath = join(root, process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli");
+  try {
+    const attestation = copyAttestedExecutable(source, stagedPath, 0o500);
+    // The directory is searchable but not writable while any child can execute
+    // the staged inode. Later source-path replacement cannot affect these bytes.
+    if (process.platform !== "win32") chmodSync(root, 0o500);
+    let disposed = false;
     return {
-      state: resolved.error,
-      requestedPath,
-      executablePath: null,
-      version: null,
-      output: "",
-      ok: false,
+      resolvedPath: source.path,
+      attestation,
+      root,
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        try { if (process.platform !== "win32") chmodSync(root, 0o700); } catch { /* absent */ }
+        rmSync(root, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    rmSync(root, { recursive: true, force: true });
+    throw error;
+  }
+};
+
+const probeStagedKiro = async (
+  requestedPath: string,
+): Promise<{ report: KiroCompatibilityReport; staged?: Exclude<ReturnType<typeof stageKiroExecutable>, { error: string }> }> => {
+  const staged = stageKiroExecutable(requestedPath);
+  if ("error" in staged) {
+    return {
+      report: {
+        state: staged.error,
+        requestedPath,
+        executablePath: null,
+        version: null,
+        output: "",
+        ok: false,
+      },
     };
   }
   try {
-    const attestation = attestExecutable(resolved.path);
-    assertExecutableAttestation(attestation);
-    const { stdout, stderr } = await execFileAsync(resolved.path, ["--version"], {
+    assertExecutableAttestation(staged.attestation);
+    const { stdout, stderr } = await execFileAsync(staged.attestation.path, ["--version"], {
       timeout: PROBE_TIMEOUT_MS,
       maxBuffer: 64 * 1024,
       encoding: "utf8",
     });
-    assertExecutableAttestation(attestation);
-    const classified = classifyKiroVersionOutput(
-      `${String(stdout)}\n${String(stderr)}`,
-      requestedPath,
-      resolved.path,
-    );
-    return classified.ok ? { ...classified, ...attestation, executablePath: resolved.path } : classified;
+    assertExecutableAttestation(staged.attestation);
+    return {
+      report: classifyKiroVersionOutput(
+        `${String(stdout)}\n${String(stderr)}`,
+        requestedPath,
+        staged.resolvedPath,
+      ),
+      staged,
+    };
   } catch (error) {
     const detail = error as { stdout?: string; stderr?: string };
     return {
-      state: failedProbeState(error),
-      requestedPath,
-      executablePath: resolved.path,
-      version: null,
-      output: `${detail.stdout ?? ""}\n${detail.stderr ?? ""}`.trim(),
-      ok: false,
+      report: {
+        state: failedProbeState(error),
+        requestedPath,
+        executablePath: staged.resolvedPath,
+        version: null,
+        output: `${detail.stdout ?? ""}\n${detail.stderr ?? ""}`.trim(),
+        ok: false,
+      },
+      staged,
     };
+  }
+};
+
+export const inspectKiroCompatibility = async (
+  requestedPath = "kiro-cli",
+): Promise<KiroCompatibilityReport> => {
+  const probed = await probeStagedKiro(requestedPath);
+  try {
+    return probed.report;
+  } finally {
+    probed.staged?.dispose();
   }
 };
 
@@ -236,9 +300,22 @@ const describeKiroCompatibilityFailure = (report: KiroCompatibilityReport): stri
 export const assertSupportedKiro = async (
   requestedPath = "kiro-cli",
 ): Promise<SupportedKiroIdentity> => {
-  const report = await inspectKiroCompatibility(requestedPath);
-  if (!report.ok) throw new Error(describeKiroCompatibilityFailure(report));
-  return report as SupportedKiroIdentity;
+  const probed = await probeStagedKiro(requestedPath);
+  if (!probed.report.ok || !probed.staged) {
+    probed.staged?.dispose();
+    throw new Error(describeKiroCompatibilityFailure(probed.report));
+  }
+  const staged = probed.staged;
+  return {
+    ...probed.report,
+    ...staged.attestation,
+    state: "ok",
+    ok: true,
+    version: KIRO_CLI_VERSION,
+    executablePath: staged.attestation.path,
+    sourcePath: staged.resolvedPath,
+    dispose: staged.dispose,
+  };
 };
 
 /** Revalidate path, inode, size, and digest immediately before a Kiro spawn. */

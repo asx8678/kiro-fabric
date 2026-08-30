@@ -24,11 +24,12 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  installKiroProfile,
+  installKiroProfile as installKiroProfileProduction,
   KiroInstallError,
   planKiroProfileInstall,
   resolveKiroProjectRoot,
 } from "../src/kiro/install.js";
+import { installKiroProfile } from "../src/kiro/install-test-helper.js";
 import { uninstallKiroProfile } from "../src/kiro/uninstall.js";
 import { runKiroCli } from "../src/kiro/cli.js";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
@@ -452,14 +453,21 @@ describe("installKiroProfile", () => {
     expect(snapshot(dir)).toEqual(beforeTree);
   });
 
-  it("rejects test-only closure bypasses in production", async () => {
+  it("cannot enable a runtime bypass through public options or spoofed environment", async () => {
+    const dir = project("production-bypass");
     const previousVitest = process.env.VITEST;
     const previousNodeEnv = process.env.NODE_ENV;
-    process.env.VITEST = "false";
-    process.env.NODE_ENV = "production";
+    process.env.VITEST = "true";
+    process.env.NODE_ENV = "test";
     try {
-      await expect(installWithFake(project("production-bypass")))
-        .rejects.toThrow(/test-internal.*production/);
+      const result = await installKiroProfileProduction({
+        projectRoot: dir,
+        kiroBinary: wrapperPath,
+        runtimeNodeSourcePath: wrapperPath,
+        skipRuntimeClosure: true,
+      } as Parameters<typeof installKiroProfileProduction>[0] & Record<string, unknown>);
+      expect(result.runtimeClosure).toBeDefined();
+      expect(JSON.parse(readFileSync(result.manifestPath, "utf8")).format).toBe(3);
     } finally {
       if (previousVitest === undefined) delete process.env.VITEST;
       else process.env.VITEST = previousVitest;
@@ -484,7 +492,7 @@ describe("installKiroProfile", () => {
       "",
     ].join("\n"), { mode: 0o755 });
     await expect(installWithFake(dir, { kiroBinary: changing }))
-      .rejects.toThrow(/changed|probe failed|attestation/i);
+      .rejects.toThrow(/changed|probe failed|attestation|wrong product|permission denied/i);
     expect(existsSync(join(dir, ".kiro"))).toBe(false);
   });
 
@@ -679,13 +687,17 @@ describe("installKiroProfile", () => {
     chmodSync(altRuntime, 0o755);
     // The extra byte distinguishes the trusted runtime artifact. Certification
     // still uses the bootstrap process Node in this test process.
-    const closure = planRuntimeClosureDeployment(dir, "project", { nodeSourcePath: altRuntime });
+    const identity = await assertSupportedKiro(wrapperPath);
+    const closure = planRuntimeClosureDeployment(dir, "project", {
+      nodeSourcePath: altRuntime,
+      kiroAttestation: identity,
+    });
     deployRuntimeClosure(dir, "project", {
       nodeSourcePath: altRuntime,
+      kiroAttestation: identity,
       expectedDigest: closure.digest,
       activate: false,
     });
-    const identity = await assertSupportedKiro(wrapperPath);
     const next = planKiroProfileInstall({
       projectRoot: dir,
       nodePath: closure.runtimeNodePath,
@@ -739,6 +751,7 @@ describe("installKiroProfile", () => {
     expect(JSON.parse(readFileSync(first.manifestPath, "utf8")).runtime.closure.digest).toBe(closure.digest);
     expect(JSON.parse(readFileSync(first.profilePath, "utf8")).mcpServers.fabric.command).toBe(closure.runtimeNodePath);
     expect(existsSync(paths.transaction)).toBe(false);
+    identity.dispose();
   }, 120_000);
 
   it("refuses when an operation lock already exists", async () => {

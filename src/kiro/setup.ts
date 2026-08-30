@@ -16,14 +16,15 @@ import { createInterface } from "node:readline/promises";
 
 import { runKiroDoctor } from "./doctor.js";
 import {
+  assertSupportedKiro,
   assertSupportedKiroUnchanged,
   inspectKiroCompatibility,
   inspectNodeCompatibility,
   KIRO_CLI_VERSION,
   MIN_NODE_MAJOR,
+  sameExecutableIdentity,
   type KiroCompatibilityReport,
   type NodeCompatibilityReport,
-  type SupportedKiroIdentity,
 } from "./compatibility.js";
 import { resolveKiroInstallRoots, type KiroInstallRoots } from "./home.js";
 import {
@@ -33,10 +34,13 @@ import {
   type KiroInstallOptions,
 } from "./install.js";
 import {
+  acquireOperationLock,
   KiroInstallError,
   lstatOrNull,
+  managedPaths,
   readManagedFileNoFollow,
   readManifest,
+  recoverManagedTransaction,
   sha256Bytes,
   type KiroManagedGrants,
 } from "./managed.js";
@@ -599,6 +603,19 @@ const renderGrantDiff = (before: KiroManagedGrants | null, after: KiroManagedGra
 const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
   const command = parsed.command === "update" ? "update" : parsed.command === "repair" ? "repair" : "install";
   const roots = resolveRoots(parsed);
+  if (command === "update" || command === "repair") {
+    const transaction = managedPaths(roots.installRoot, roots.layout).transaction;
+    if (existsSync(transaction)) {
+      const recoveryLock = acquireOperationLock(roots.installRoot, roots.layout);
+      try {
+        // Grant preservation must observe the converged profile+manifest pair,
+        // never pre-recovery bytes from an interrupted activation.
+        recoverManagedTransaction(roots.installRoot, roots.layout);
+      } finally {
+        recoveryLock.release();
+      }
+    }
+  }
   if ((command === "update" || command === "repair") && !existsSync(managedManifestPath(roots))) {
     throw new KiroInstallError("manifest", "no managed installation to " + command + "; run install first");
   }
@@ -728,65 +745,54 @@ const SIGNAL_EXIT_CODES: Record<string, number> = {
   SIGQUIT: 131,
 };
 
-const kiroCliMissingGuidance = (binary: string): string =>
-  "kiro-fabric: " +
-    binary +
-    " not found on PATH\n" +
-    "install the Kiro CLI, then verify it with: " +
-    binary +
-    " --version\n";
-
 const runLaunch = async (parsed: SetupArgs): Promise<number> => {
   const projectRoot = resolveKiroProjectRoot(parsed.projectRoot);
   const scopes = {
     project: scopeStatusFor("project", parsed.projectRoot, parsed.kiroHome),
     user: scopeStatusFor("user", parsed.projectRoot, parsed.kiroHome),
   };
-  const managedBinaryPath = scopes.project.kiroBinaryPath ?? scopes.user.kiroBinaryPath;
-  const requestedBinary = parsed.kiroBinary ?? managedBinaryPath ?? "kiro-cli";
-  const identity = await inspectKiroCompatibility(requestedBinary);
-  if (!identity.ok || !identity.executablePath) {
+  // An installed project scope always wins, including when unhealthy. Never
+  // silently fall back to a broader user profile after project ownership fails.
+  const selected = scopes.project.installed ? scopes.project : scopes.user;
+  const selectedLabel = scopes.project.installed ? "project" : "user";
+  if (!selected.installed) {
+    throw new Error("refusing to launch: no managed Kiro installation is selected");
+  }
+  if (!selected.healthy || !selected.kiroBinaryPath || !selected.kiroSha256) {
     throw new Error(
-      identity.state === "not-found"
-        ? kiroCliMissingGuidance(requestedBinary).replace(/^kiro-fabric: /, "").trim()
-        : "refusing to launch incompatible Kiro executable (" + identity.state + "): " + requestedBinary,
+      `refusing to launch: selected ${selectedLabel} installation is unhealthy` +
+        (selected.issue ? `: ${selected.issue}` : ""),
     );
   }
-  const attestedIdentity = identity as SupportedKiroIdentity;
-  const managedScope = scopes.project.kiroBinaryPath ? scopes.project : scopes.user;
-  if (
-    managedBinaryPath &&
-    (identity.executablePath !== managedBinaryPath ||
-      !managedScope.kiroSha256 || attestedIdentity.sha256 !== managedScope.kiroSha256)
-  ) {
-    throw new Error("refusing to launch a Kiro executable that differs from the managed manifest");
+  if (parsed.kiroBinary && !sameExecutableIdentity(parsed.kiroBinary, selected.kiroBinaryPath)) {
+    throw new Error("refusing to launch a Kiro executable that differs from the selected managed artifact");
   }
-  const binary = identity.executablePath;
-  assertSupportedKiroUnchanged(attestedIdentity);
-  const child = spawn(binary, LAUNCH_ARGS, { stdio: "inherit", cwd: projectRoot });
-  const outcome = await new Promise<{ code: number } | { missing: boolean }>(
-    (resolvePromise) => {
-      child.once("error", (error: NodeJS.ErrnoException) => {
-        resolvePromise({ missing: error.code === "ENOENT" });
-      });
-      child.once("close", (code, signal) => {
-        resolvePromise({
-          code: signal !== null ? SIGNAL_EXIT_CODES[signal] ?? 128 : code ?? 1,
+  const identity = await assertSupportedKiro(selected.kiroBinaryPath);
+  try {
+    if (identity.sourcePath !== selected.kiroBinaryPath || identity.sha256 !== selected.kiroSha256) {
+      throw new Error("refusing to launch a Kiro executable that differs from the managed manifest");
+    }
+    assertSupportedKiroUnchanged(identity);
+    const child = spawn(identity.executablePath, LAUNCH_ARGS, { stdio: "inherit", cwd: projectRoot });
+    const outcome = await new Promise<{ code: number } | { missing: boolean }>(
+      (resolvePromise) => {
+        child.once("error", (error: NodeJS.ErrnoException) => {
+          resolvePromise({ missing: error.code === "ENOENT" });
         });
-      });
-    },
-  );
-  if ("missing" in outcome) {
-    throw new Error(
-      outcome.missing
-        ? kiroCliMissingGuidance(binary).replace(/^kiro-fabric: /, "").trim()
-        : "failed to launch " + binary,
+        child.once("close", (code, signal) => {
+          resolvePromise({
+            code: signal !== null ? SIGNAL_EXIT_CODES[signal] ?? 128 : code ?? 1,
+          });
+        });
+      },
     );
+    if ("missing" in outcome) {
+      throw new Error(outcome.missing ? "managed Kiro execution artifact disappeared" : "failed to launch managed Kiro");
+    }
+    return outcome.code;
+  } finally {
+    identity.dispose();
   }
-  if (outcome.code !== 0 && parsed.json) {
-    throw new Error("kiro-cli exited with code " + outcome.code);
-  }
-  return outcome.code;
 };
 
 const MENU_TEXT =

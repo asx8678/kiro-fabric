@@ -287,16 +287,16 @@ export const runKiroDoctor = async (
     await run("tuple", async () => {
       const node = await assertSupportedNode(attestedInstalledNodePath ?? process.execPath);
       const kiro = await assertKiroVersion(kiroBinary);
+      observedKiro = kiro;
       if (
         managedKiroBinaryPath &&
-        (!sameExecutableIdentity(kiro.executablePath, managedKiroBinaryPath) ||
+        (!sameExecutableIdentity(kiro.sourcePath, managedKiroBinaryPath) ||
           kiro.version !== KIRO_CLI_VERSION || kiro.sha256 !== managedKiroSha256)
       ) {
         throw new Error("selected Kiro executable does not match the managed manifest identity");
       }
       await assertKiroV3Capabilities(kiro);
       kiroBinary = kiro.executablePath;
-      observedKiro = kiro;
       return `Node ${node.version} + kiro-cli ${kiro.version} / ${KIRO_AGENT_ENGINE} / auth ${KIRO_ACP_AUTH_METHOD}`;
     }).then((ok) => {
       tupleFailed = !ok;
@@ -603,6 +603,7 @@ export const runKiroDoctor = async (
       }
     }
   } finally {
+    observedKiro?.dispose();
     await rm(workspace, { recursive: true, force: true });
   }
 
@@ -622,7 +623,7 @@ export const runKiroDoctor = async (
         version: process.versions.node,
       },
       kiro: {
-        path: observedKiro?.executablePath ?? kiroBinary,
+        path: observedKiro?.sourcePath ?? kiroBinary,
         version: tupleFailed ? null : observedKiro?.version ?? null,
       },
       agentEngine: KIRO_AGENT_ENGINE,

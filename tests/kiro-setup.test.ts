@@ -24,6 +24,11 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { runKiroSetup } from "../src/kiro/setup.js";
+import {
+  managedFileTransition,
+  sha256Bytes,
+  writeManagedTransactionJournal,
+} from "../src/kiro/managed.js";
 
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const fakeKiro = join(repoRoot, "tests", "fixtures", "kiro", "fake-kiro.mjs");
@@ -520,6 +525,50 @@ describe("runKiroSetup update", () => {
       changed: ["allowShell"],
     });
   }, 120_000);
+
+  itPosix("recovers an interrupted transaction under lock before preserving grants", async () => {
+    const root = project("grant-recovery-project");
+    const home = project("grant-recovery-home");
+    const wrapper = writeFakeKiroWrapper(join(base, "fake-kiro-grant-recovery"));
+    const common = [
+      "--user", "--project-root", root, "--kiro-home", home,
+      "--kiro-binary", wrapper, "--yes", "--json",
+    ];
+    expect((await runSetup(["install", ...common])).code).toBe(0);
+
+    const canonicalHome = realpathSync(home);
+    const profilePath = join(canonicalHome, "agents", "kiro-fabric.json");
+    const manifestPath = join(canonicalHome, ".kiro-fabric", "install.json");
+    const profileBefore = readFileSync(profilePath);
+    const manifestBefore = readFileSync(manifestPath);
+    const profile = JSON.parse(profileBefore.toString("utf8"));
+    profile.mcpServers.fabric.env.KIRO_FABRIC_ALLOW_SHELL = "1";
+    const profileAfter = JSON.stringify(profile, null, 2) + "\n";
+    const manifest = JSON.parse(manifestBefore.toString("utf8"));
+    manifest.profile.installedSha256 = sha256Bytes(profileAfter);
+    manifest.grants = { allowShell: true, enableSubagents: false, allowTools: false };
+    const manifestAfter = JSON.stringify(manifest, null, 2) + "\n";
+    writeManagedTransactionJournal(canonicalHome, "user", {
+      format: 2,
+      owner: "kiro-fabric",
+      operation: "install",
+      layout: "user",
+      root: canonicalHome,
+      createdAt: Date.now(),
+      files: [
+        { path: "agents/kiro-fabric.json", transition: managedFileTransition(sha256Bytes(profileBefore), profileAfter) },
+        { path: ".kiro-fabric/install.json", transition: managedFileTransition(sha256Bytes(manifestBefore), manifestAfter) },
+      ],
+    });
+
+    const updated = await runSetup(["update", ...common]);
+    expect(updated.code).toBe(0);
+    expect(parseJsonStdout(updated.stdout).grants).toMatchObject({
+      before: { allowShell: true, enableSubagents: false, allowTools: false },
+      after: { allowShell: true, enableSubagents: false, allowTools: false },
+    });
+    expect(existsSync(join(canonicalHome, ".kiro-fabric", "transaction.json"))).toBe(false);
+  }, 120_000);
 });
 
 describe("runKiroSetup uninstall --user --json", () => {
@@ -555,10 +604,10 @@ describe("runKiroSetup launch", () => {
       [
         "#!/bin/sh",
         'if [ "$1" = "--version" ]; then echo "kiro-cli 2.20.1"; exit 0; fi',
-        'if [ "$1" != "--version" ]; then',
-        '  printf "%s\\n" "$*" >> "$KIRO_SETUP_LAUNCH_LOG"',
-        '  pwd >> "$KIRO_SETUP_LAUNCH_LOG"',
-        "fi",
+        'if [ "$1" = "acp" ] && [ "$2" = "--help" ]; then echo "--agent-engine v3 --auth-method cli"; exit 0; fi',
+        'if [ "$1" = "agent" ] && [ "$2" = "validate" ]; then exit 0; fi',
+        'printf "%s\\n" "$*" >> "$KIRO_SETUP_LAUNCH_LOG"',
+        'pwd >> "$KIRO_SETUP_LAUNCH_LOG"',
         "exit 0",
       ].join("\n") + "\n",
       { mode: 0o755 },
@@ -567,12 +616,35 @@ describe("runKiroSetup launch", () => {
     vi.stubEnv("KIRO_HOME", home);
     vi.stubEnv("PATH", bin);
     vi.stubEnv("KIRO_SETUP_LAUNCH_LOG", log);
+    const installed = await runSetup([
+      "install", "--yes", "--project-root", root,
+      "--kiro-binary", join(bin, "kiro-cli"), "--json",
+    ]);
+    expect(installed.code).toBe(0);
     const run = await runSetup(["launch", "--project-root", root]);
     expect(run.code).toBe(0);
     const lines = readFileSync(log, "utf8").trim().split("\n");
     expect(lines[0]?.split(/\s+/)).toEqual(["--v3", "--agent", "kiro-fabric"]);
     expect(lines[1]).toBe(realpathSync(root));
   });
+
+  itPosix("refuses an unhealthy project install instead of falling back to a healthy user install", async () => {
+    const root = project("launch-unhealthy-project");
+    const home = project("launch-healthy-user-home");
+    const wrapper = writeFakeKiroWrapper(join(base, "fake-kiro-launch-fallback"));
+    const installed = await runSetup([
+      "install", "--user", "--yes", "--json", "--project-root", root,
+      "--kiro-home", home, "--kiro-binary", wrapper,
+    ]);
+    expect(installed.code).toBe(0);
+    const projectManifest = join(root, ".kiro", ".kiro-fabric", "install.json");
+    mkdirSync(join(root, ".kiro", ".kiro-fabric"), { recursive: true });
+    writeFileSync(projectManifest, "{ malformed\n", { mode: 0o600 });
+
+    const run = await runSetup(["launch", "--project-root", root]);
+    expect(run.code).toBe(1);
+    expect(run.stderr).toMatch(/selected project installation is unhealthy/i);
+  }, 120_000);
 
   // The timeout detection class and the interactive-cancel exit 130 path are
   // not asserted here: the former is too slow for a unit suite, the latter

@@ -116,8 +116,10 @@ export interface KiroInstallManifest {
   runtime: {
     nodePath: string;
     mcpEntryPath: string;
-    /** Canonical executable selected and certified before installation. */
+    /** Immutable installed Kiro artifact used for every managed execution. */
     kiroBinaryPath?: string;
+    /** Canonical external Kiro source whose bytes were copied into the release. */
+    kiroSourcePath?: string;
     /** Optional only while reading a pre-v3 manifest for an installer update. */
     kiroCliVersion?: string;
     /** SHA-256 of the exact Kiro executable certified by installer preflight. */
@@ -397,6 +399,8 @@ export const readManifest = (
   if (
     (parsed.runtime.kiroBinaryPath !== undefined &&
       (typeof parsed.runtime.kiroBinaryPath !== "string" || !isAbsolute(parsed.runtime.kiroBinaryPath))) ||
+    (parsed.runtime.kiroSourcePath !== undefined &&
+      (typeof parsed.runtime.kiroSourcePath !== "string" || !isAbsolute(parsed.runtime.kiroSourcePath))) ||
     (parsed.runtime.kiroCliVersion !== undefined &&
       typeof parsed.runtime.kiroCliVersion !== "string") ||
     (parsed.runtime.kiroSha256 !== undefined && !isSha256Hex(parsed.runtime.kiroSha256)) ||
@@ -468,15 +472,21 @@ export const readManifest = (
     if (parsed.format === KIRO_INSTALL_MANIFEST_FORMAT) {
       const nodeName = process.platform === "win32" ? "node.exe" : "node";
       const expectedNode = join(root, ...runtimeRoot.split("/"), "bin", nodeName);
+      const kiroName = process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli";
+      const expectedKiro = join(root, ...runtimeRoot.split("/"), "bin", kiroName);
       const expectedManager = join(root, ...runtimeRoot.split("/"), "kiro", "management-entry.js");
       const nodeSha256 = parsed.runtime.nodeSha256;
+      const kiroSha256 = parsed.runtime.kiroSha256;
       if (
         parsed.runtime.nodePath !== expectedNode ||
+        parsed.runtime.kiroBinaryPath !== expectedKiro ||
+        typeof parsed.runtime.kiroSourcePath !== "string" ||
         parsed.runtime.managerEntryPath !== expectedManager ||
         !isSha256Hex(nodeSha256) ||
         !closure.files.some((file) => file.path === runtimeRoot + "/bin/" + nodeName && file.installedSha256 === nodeSha256 && (file.executableMode === 0o555 || file.executableMode === 0o755)) ||
-        !closure.files.some((file) => file.path === runtimeRoot + "/kiro/management-entry.js") ||
-        !isSha256Hex(parsed.runtime.kiroSha256)
+        !isSha256Hex(kiroSha256) ||
+        !closure.files.some((file) => file.path === runtimeRoot + "/bin/" + kiroName && file.installedSha256 === kiroSha256 && file.executableMode === 0o555) ||
+        !closure.files.some((file) => file.path === runtimeRoot + "/kiro/management-entry.js")
       ) {
         throw new KiroInstallError("manifest", "install manifest lifecycle runtime is not bound to its release");
       }
@@ -528,6 +538,9 @@ export const readManifest = (
       mcpEntryPath: parsed.runtime.mcpEntryPath,
       ...(typeof parsed.runtime.kiroBinaryPath === "string"
         ? { kiroBinaryPath: parsed.runtime.kiroBinaryPath }
+        : {}),
+      ...(typeof parsed.runtime.kiroSourcePath === "string"
+        ? { kiroSourcePath: parsed.runtime.kiroSourcePath }
         : {}),
       ...(typeof parsed.runtime.kiroCliVersion === "string"
         ? { kiroCliVersion: parsed.runtime.kiroCliVersion }
@@ -710,7 +723,7 @@ const openContainedNoFollow = (
   }
 };
 
-const withContainedParent = <T>(
+export const withContainedParent = <T>(
   root: string,
   target: string,
   operation: (parentPath: string, leaf: string) => T,

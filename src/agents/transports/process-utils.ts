@@ -148,6 +148,7 @@ export const spawnDetached = async (
   workerPath: string,
   workerArguments: string[],
   cwd: string,
+  options: { ambientHelpers?: boolean } = {},
 ): Promise<{ pid: number; stop(): Promise<void>; isAlive(): Promise<boolean> }> => {
   const runtime = await resolveScriptRuntime();
   const child = spawn(runtime, [workerPath, ...workerArguments], {
@@ -157,7 +158,9 @@ export const spawnDetached = async (
   });
   if (!child.pid) throw new Error("Failed to launch Fabric worker process");
   const pid = child.pid;
-  const tree = createProcessTreeController(pid);
+  const tree = createProcessTreeController(pid, {
+    ambientHelpers: options.ambientHelpers !== false,
+  });
   child.unref();
   return {
     pid,

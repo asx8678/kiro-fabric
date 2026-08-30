@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   mkdtempSync,
@@ -59,11 +60,36 @@ describe("central Kiro/Node compatibility policy", () => {
     const alias = join(root, "kiro-cli");
     symlinkSync(target, alias);
 
-    await expect(assertSupportedKiro(alias)).resolves.toMatchObject({
-      state: "ok",
-      executablePath: target,
-      version: KIRO_CLI_VERSION,
-    });
+    const identity = await assertSupportedKiro(alias);
+    try {
+      expect(identity).toMatchObject({
+        state: "ok",
+        sourcePath: target,
+        executablePath: expect.stringContaining("kiro-fabric-kiro-stage-"),
+        version: KIRO_CLI_VERSION,
+      });
+      expect(identity.executablePath).not.toBe(target);
+    } finally {
+      identity.dispose();
+    }
+  });
+
+  it("executes staged attested bytes after the external source path is replaced", async () => {
+    const root = scratch();
+    const source = join(root, "kiro-cli");
+    writeFileSync(source, [
+      "#!/bin/sh",
+      'if [ "$1" = "--version" ]; then echo "kiro-cli 2.20.1"; else echo original; fi',
+      "",
+    ].join("\n"), { mode: 0o755 });
+    const identity = await assertSupportedKiro(source);
+    try {
+      writeFileSync(source, "#!/bin/sh\necho replacement\n", { mode: 0o755 });
+      expect(execFileSync(identity.executablePath, ["proof"], { encoding: "utf8" }).trim())
+        .toBe("original");
+    } finally {
+      identity.dispose();
+    }
   });
 
   it("rejects wrong-product and uncertified-newer executables", async () => {

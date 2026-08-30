@@ -4,7 +4,7 @@
 // npm installation path. The closure is built by scripts/build-kiro-closure.mjs
 // and bundles all runtime dependencies inline (zero node_modules needed).
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   chmodSync,
   closeSync,
@@ -35,11 +35,13 @@ import {
   lstatOrNull,
   readPackageVersion,
   sha256Bytes,
+  withContainedParent,
   writeAtomic,
   type ExecutableAttestation,
   type KiroManagedLayout,
   type KiroRuntimeClosureManifest,
 } from "./managed.js";
+import { runBeforeRuntimeQuarantineForTest } from "./runtime-closure-test-seam.js";
 
 /**
  * Relative path within the managed tree where the runtime closure is deployed.
@@ -247,6 +249,8 @@ export interface RuntimeClosureResult {
   mcpEntryPath: string;
   /** Attested Node copied into this immutable release. */
   runtimeNodePath: string;
+  /** Installed Kiro execution artifact copied from the private staged inode. */
+  runtimeKiroPath: string;
   /** Self-hosted lifecycle entry executed by runtimeNodePath. */
   managementEntryPath: string;
   /** The content digest of the deployed closure. */
@@ -269,6 +273,8 @@ export interface RuntimeClosureDeploymentOptions {
   nodeSourcePath?: string;
   /** Descriptor-bound identity retained from installer staging. */
   nodeAttestation?: ExecutableAttestation;
+  /** Private staged Kiro artifact; production installer always supplies this. */
+  kiroAttestation?: ExecutableAttestation;
   /** Verify and atomically restore a damaged same-digest release from this source artifact. */
   repairExisting?: boolean;
 }
@@ -289,12 +295,17 @@ export const planRuntimeClosureDeployment = (
   digestHash.update(computeRuntimeClosureDigest(packageRoot));
   digestHash.update("\0node\0");
   digestHash.update(nodeAttestation.sha256);
+  const kiroAttestation = options.kiroAttestation ?? nodeAttestation;
+  assertExecutableAttestation(kiroAttestation);
+  digestHash.update("\0kiro\0");
+  digestHash.update(kiroAttestation.sha256);
   const digest = digestHash.digest("hex");
   const sourceDir = closureSourceDirectory(packageRoot);
   const sourceFiles = closureFileList(sourceDir);
   const runtimeDir = runtimeClosurePath(installRoot, layout);
   const mcpEntryPath = join(runtimeDir, digest, "kiro", "mcp-entry.js");
   const runtimeNodePath = join(runtimeDir, digest, "bin", nodeExecutableName());
+  const runtimeKiroPath = join(runtimeDir, digest, "bin", process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli");
   const managementEntryPath = join(runtimeDir, digest, "kiro", "management-entry.js");
   const marker = join(runtimeDir, ".closure-current");
   const markerStat = lstatOrNull(marker);
@@ -310,7 +321,7 @@ export const planRuntimeClosureDeployment = (
     name: "kiro-fabric-runtime-closure",
     version: readPackageVersion(),
     digest,
-    fileCount: sourceFiles.length + MANAGED_RELEASE_SKILL_FILES.length + 1,
+    fileCount: sourceFiles.length + MANAGED_RELEASE_SKILL_FILES.length + 2,
   }) + "\n";
   const attested: KiroRuntimeClosureManifest["files"] = sourceFiles
     .filter((rel) => rel !== "package.json")
@@ -327,6 +338,7 @@ export const planRuntimeClosureDeployment = (
   attested.push(
     { path: runtimeRoot + "/.closure-digest", installedSha256: sha256Bytes(digest + "\n") },
     { path: runtimeRoot + "/bin/" + nodeExecutableName(), installedSha256: nodeAttestation.sha256, executableMode: 0o555 },
+    { path: runtimeRoot + "/bin/" + (process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli"), installedSha256: kiroAttestation.sha256, executableMode: 0o555 },
     { path: runtimeRoot + "/package.json", installedSha256: sha256Bytes(generatedPackage) },
   );
   attested.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
@@ -353,6 +365,7 @@ export const planRuntimeClosureDeployment = (
     runtimeDir,
     mcpEntryPath,
     runtimeNodePath,
+    runtimeKiroPath,
     managementEntryPath,
     digest,
     updated: !published || damaged,
@@ -362,10 +375,10 @@ export const planRuntimeClosureDeployment = (
       stageMs: 0,
       publishMs: 0,
       totalMs: 0,
-      fileCount: sourceFiles.length + MANAGED_RELEASE_SKILL_FILES.length + 1,
+      fileCount: sourceFiles.length + MANAGED_RELEASE_SKILL_FILES.length + 2,
       bytes: sourceFiles.reduce(
         (total, rel) => total + statSync(join(sourceDir, ...rel.split("/"))).size,
-        nodeAttestation.size + skillBytes,
+        nodeAttestation.size + kiroAttestation.size + skillBytes,
       ),
     },
   };
@@ -397,6 +410,7 @@ export const deployRuntimeClosure = (
     expectedDigest?: string;
     nodeSourcePath?: string;
     nodeAttestation?: ExecutableAttestation;
+    kiroAttestation?: ExecutableAttestation;
     /** Restore a damaged release only from this invocation's trusted source. */
     repairExisting?: boolean;
     /** Installer activation is committed with profile+manifest, not here. */
@@ -408,6 +422,7 @@ export const deployRuntimeClosure = (
   const planned = planRuntimeClosureDeployment(installRoot, layout, {
     ...(options?.nodeSourcePath ? { nodeSourcePath: options.nodeSourcePath } : {}),
     ...(options?.nodeAttestation ? { nodeAttestation: options.nodeAttestation } : {}),
+    ...(options?.kiroAttestation ? { kiroAttestation: options.kiroAttestation } : {}),
     ...(options?.repairExisting ? { repairExisting: true } : {}),
   });
   const digest = planned.digest;
@@ -446,6 +461,7 @@ export const deployRuntimeClosure = (
       runtimeDir,
       mcpEntryPath: versionMcpEntry,
       runtimeNodePath: planned.runtimeNodePath,
+      runtimeKiroPath: planned.runtimeKiroPath,
       managementEntryPath: planned.managementEntryPath,
       digest,
       updated: false,
@@ -505,6 +521,11 @@ export const deployRuntimeClosure = (
     copyAttestedExecutable(nodeSource, stagedNode, 0o555);
     bytes += nodeSource.size;
     fileCount += 1;
+    const stagedKiro = join(stagingDir, "bin", process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli");
+    const kiroSource = options?.kiroAttestation ?? nodeSource;
+    copyAttestedExecutable(kiroSource, stagedKiro, 0o555);
+    bytes += kiroSource.size;
+    fileCount += 1;
     metadata.fileCount = fileCount;
     metadata.bytes = bytes;
 
@@ -555,7 +576,7 @@ export const deployRuntimeClosure = (
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const full = join(dir, entry.name);
         if (entry.isDirectory()) seal(full);
-        else chmodSync(full, full === stagedNode ? 0o555 : 0o444);
+        else chmodSync(full, full === stagedNode || full === stagedKiro ? 0o555 : 0o444);
       }
       chmodSync(dir, 0o555);
     };
@@ -608,6 +629,7 @@ export const deployRuntimeClosure = (
       runtimeDir,
       mcpEntryPath: versionMcpEntry,
       runtimeNodePath: planned.runtimeNodePath,
+      runtimeKiroPath: planned.runtimeKiroPath,
       managementEntryPath: planned.managementEntryPath,
       digest,
       updated: true,
@@ -658,23 +680,22 @@ const publishedClosureFileList = (root: string): string[] => {
   return files.sort();
 };
 
-export const verifyRuntimeClosureAttestation = (
-  installRoot: string,
+const verifyRuntimeClosureAtRoot = (
   closure: KiroRuntimeClosureManifest,
+  root: string,
 ): void => {
-  const root = join(installRoot, ...closure.root.split("/"));
-  assertNoSymlinkComponents(installRoot, root);
   const rootStat = lstatOrNull(root);
   if (!rootStat || rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
     throw new KiroInstallError("ownership", "installed runtime closure root is missing or invalid: " + root);
   }
-  const actual = publishedClosureFileList(root).map((rel) => closure.root + "/" + rel);
-  const expected = closure.files.map((file) => file.path);
+  const actual = publishedClosureFileList(root);
+  const expected = closure.files.map((file) => file.path.slice(closure.root.length + 1));
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new KiroInstallError("ownership", "installed runtime closure file set does not match manifest");
   }
   for (const file of closure.files) {
-    const path = join(installRoot, ...file.path.split("/"));
+    const relativePath = file.path.slice(closure.root.length + 1);
+    const path = join(root, ...relativePath.split("/"));
     const bytes = readFileSync(path);
     if (sha256Bytes(bytes) !== file.installedSha256) {
       throw new KiroInstallError("ownership", "installed runtime closure hash mismatch: " + file.path);
@@ -696,6 +717,15 @@ export const verifyRuntimeClosureAttestation = (
   verifyDirectories(root);
 };
 
+export const verifyRuntimeClosureAttestation = (
+  installRoot: string,
+  closure: KiroRuntimeClosureManifest,
+): void => {
+  const root = join(installRoot, ...closure.root.split("/"));
+  assertNoSymlinkComponents(installRoot, root);
+  verifyRuntimeClosureAtRoot(closure, root);
+};
+
 export const removeAttestedRuntimeClosure = (
   installRoot: string,
   layout: KiroManagedLayout,
@@ -703,27 +733,37 @@ export const removeAttestedRuntimeClosure = (
 ): boolean => {
   const root = join(installRoot, ...closure.root.split("/"));
   if (!existsSync(root)) return false;
-  verifyRuntimeClosureAttestation(installRoot, closure);
-  const unsealDirectories = (dir: string): void => {
-    chmodSync(dir, 0o700);
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory()) unsealDirectories(join(dir, entry.name));
-    }
-  };
-  unsealDirectories(root);
-  for (const file of [...closure.files].sort((left, right) => right.path.length - left.path.length)) {
-    unlinkSync(join(installRoot, ...file.path.split("/")));
-  }
-  const removeEmpty = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory()) removeEmpty(join(dir, entry.name));
-    }
-    if (readdirSync(dir).length === 0) rmdirSync(dir);
-  };
-  removeEmpty(root);
   const runtimeDir = runtimeClosurePath(installRoot, layout);
-  if (existsSync(runtimeDir) && readdirSync(runtimeDir).length === 0) rmdirSync(runtimeDir);
-  return true;
+  if (dirname(root) !== runtimeDir) {
+    throw new KiroInstallError("ownership", "runtime generation root is outside its descriptor-anchored parent");
+  }
+  return withContainedParent(installRoot, root, (parent, leaf) => {
+    const source = join(parent, leaf);
+    const quarantineLeaf = `.quarantine-${closure.digest}-${process.pid}-${randomBytes(6).toString("hex")}`;
+    const quarantine = join(parent, quarantineLeaf);
+    runBeforeRuntimeQuarantineForTest("generation", source);
+    renameSync(source, quarantine);
+    try {
+      // Verification happens only after atomic detachment from the attacker-
+      // addressable generation name. Therefore the exact tree verified here is
+      // the exact tree made writable and recursively deleted below.
+      verifyRuntimeClosureAtRoot(closure, quarantine);
+      const unsealDirectories = (dir: string): void => {
+        chmodSync(dir, 0o700);
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isDirectory()) unsealDirectories(join(dir, entry.name));
+        }
+      };
+      unsealDirectories(quarantine);
+      rmSync(quarantine, { recursive: true, force: false });
+      return true;
+    } catch (error) {
+      // Preserve unverified bytes. Restore the public name only when no racer
+      // occupied it; otherwise leave the uniquely named quarantine for review.
+      if (existsSync(quarantine) && !existsSync(source)) renameSync(quarantine, source);
+      throw error;
+    }
+  });
 };
 
 /**
@@ -738,13 +778,28 @@ export const removeRuntimeActivationMarker = (
   const marker = join(runtimeDir, ".closure-current");
   const markerStat = lstatOrNull(marker);
   if (!markerStat) return false;
-  if (markerStat.isSymbolicLink() || !markerStat.isFile()) {
-    throw new KiroInstallError("symlink", "runtime closure marker is invalid");
-  }
-  if (readFileSync(marker, "utf8").trim() !== expectedDigest) {
-    throw new KiroInstallError("ownership", "runtime closure marker changed during cleanup");
-  }
-  unlinkSync(marker);
+  withContainedParent(installRoot, marker, (parent, leaf) => {
+    const source = join(parent, leaf);
+    const quarantine = join(
+      parent,
+      `.quarantine-marker-${expectedDigest}-${process.pid}-${randomBytes(6).toString("hex")}`,
+    );
+    runBeforeRuntimeQuarantineForTest("marker", source);
+    renameSync(source, quarantine);
+    try {
+      const quarantinedStat = lstatOrNull(quarantine);
+      if (!quarantinedStat || quarantinedStat.isSymbolicLink() || !quarantinedStat.isFile()) {
+        throw new KiroInstallError("symlink", "runtime closure marker is invalid");
+      }
+      if (readFileSync(quarantine, "utf8").trim() !== expectedDigest) {
+        throw new KiroInstallError("ownership", "runtime closure marker changed during cleanup");
+      }
+      unlinkSync(quarantine);
+    } catch (error) {
+      if (existsSync(quarantine) && !existsSync(source)) renameSync(quarantine, source);
+      throw error;
+    }
+  });
   if (existsSync(runtimeDir) && readdirSync(runtimeDir).length === 0) rmdirSync(runtimeDir);
   return true;
 };

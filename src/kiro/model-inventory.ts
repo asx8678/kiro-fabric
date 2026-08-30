@@ -154,10 +154,14 @@ export const listKiroModels = (
         [...KIRO_MODEL_LIST_ARGUMENTS],
         { timeout: PROBE_TIMEOUT_MS, env: { ...process.env, NO_COLOR: "1", TERM: "dumb" } },
         (error, stdout, stderr) => {
-          const parsed = error
-            ? []
-            : parseKiroModelList(`${stdout}\n${stderr}`.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, ""));
-          resolve(parsed.length > 0 ? parsed : [{ ...AUTO_MODEL }]);
+          try {
+            const parsed = error
+              ? []
+              : parseKiroModelList(`${stdout}\n${stderr}`.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, ""));
+            resolve(parsed.length > 0 ? parsed : [{ ...AUTO_MODEL }]);
+          } finally {
+            identity.dispose();
+          }
         },
       );
     }))

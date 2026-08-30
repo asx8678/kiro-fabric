@@ -12,6 +12,7 @@ import {
   readdirSync,
   lstatSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -22,17 +23,20 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { installKiroProfile } from "../src/kiro/install.js";
+import { installKiroProfile } from "../src/kiro/install-test-helper.js";
 import { uninstallKiroProfile } from "../src/kiro/uninstall.js";
 import {
   runtimeClosurePath,
   runtimeClosureMcpEntry,
   deployRuntimeClosure,
+  removeAttestedRuntimeClosure,
+  removeRuntimeActivationMarker,
   removeRuntimeClosure,
   computeRuntimeClosureDigest,
   planRuntimeClosureDeployment,
 } from "../src/kiro/runtime-closure.js";
 import { attestExecutable, managedPaths } from "../src/kiro/managed.js";
+import { withRuntimeQuarantineRaceForTest } from "../src/kiro/runtime-closure-test-seam.js";
 
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const fakeKiro = join(repoRoot, "tests", "fixtures", "kiro", "fake-kiro.mjs");
@@ -103,6 +107,42 @@ afterEach(() => {
 describe("runtime closure deployment", () => {
   const deploySmall = (root: string, layout: "project" | "user") =>
     deployRuntimeClosure(root, layout, { nodeSourcePath: fakeRuntimePath });
+
+  it("quarantines a generation before verification and never deletes a raced replacement", () => {
+    const dir = project("generation-quarantine-race");
+    const closure = deploySmall(dir, "project");
+    const generation = join(runtimeClosurePath(dir, "project"), closure.digest);
+    const parked = generation + ".attested-parked";
+    const sentinel = join(generation, "must-survive");
+
+    expect(() => withRuntimeQuarantineRaceForTest((kind, source) => {
+      if (kind !== "generation") return;
+      renameSync(source, parked);
+      mkdirSync(source);
+      writeFileSync(sentinel, "unattested replacement\n");
+    }, () => removeAttestedRuntimeClosure(dir, "project", closure.attestation)))
+      .toThrow(/file set does not match manifest/);
+
+    expect(readFileSync(sentinel, "utf8")).toBe("unattested replacement\n");
+    expect(existsSync(parked)).toBe(true);
+  });
+
+  it("quarantines the activation marker and preserves raced bytes on mismatch", () => {
+    const dir = project("marker-quarantine-race");
+    const closure = deploySmall(dir, "project");
+    const marker = join(runtimeClosurePath(dir, "project"), ".closure-current");
+    const parked = marker + ".attested-parked";
+
+    expect(() => withRuntimeQuarantineRaceForTest((kind, source) => {
+      if (kind !== "marker") return;
+      renameSync(source, parked);
+      writeFileSync(source, "0".repeat(64) + "\n", { mode: 0o600 });
+    }, () => removeRuntimeActivationMarker(dir, "project", closure.digest)))
+      .toThrow(/marker changed during cleanup/);
+
+    expect(readFileSync(marker, "utf8")).toBe("0".repeat(64) + "\n");
+    expect(readFileSync(parked, "utf8")).toBe(closure.digest + "\n");
+  });
 
   it("deploys a self-contained runtime closure in project scope", () => {
     const dir = project("closure-project");

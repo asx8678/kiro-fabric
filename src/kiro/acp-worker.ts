@@ -374,10 +374,16 @@ export const assertKiroWorkerLaunch = (
       `managed Kiro profile targets an incompatible runtime tuple; reinstall for kiro-cli ${KIRO_CLI_VERSION} / ${KIRO_AGENT_ENGINE}`,
     );
   }
-  if (!sameExecutableIdentity(options.kiroBinary, manifest.runtime.kiroBinaryPath)) {
+  const selectedInstalledArtifact = sameExecutableIdentity(
+    options.kiroBinary,
+    manifest.runtime.kiroBinaryPath,
+  );
+  const selectedRecordedSource = manifest.runtime.kiroSourcePath !== undefined &&
+    sameExecutableIdentity(options.kiroBinary, manifest.runtime.kiroSourcePath);
+  if (!selectedInstalledArtifact && !selectedRecordedSource) {
     throw new KiroInstallError(
       "ownership",
-      "Kiro worker executable does not match the canonical path in the managed manifest",
+      "Kiro worker selector matches neither the installed execution artifact nor its recorded external source",
     );
   }
   if (attestExecutable(manifest.runtime.kiroBinaryPath).sha256 !== manifest.runtime.kiroSha256) {

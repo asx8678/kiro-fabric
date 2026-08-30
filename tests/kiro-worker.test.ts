@@ -27,7 +27,7 @@ import {
   writeRunRecord,
 } from "../src/worker/run-record.js";
 import { parseWorkerOptions } from "../src/worker/options.js";
-import { installKiroProfile } from "../src/kiro/install.js";
+import { installKiroProfile } from "../src/kiro/install-test-helper.js";
 import { sha256Bytes } from "../src/kiro/managed.js";
 import {
   assertKiroWorkerLaunch,

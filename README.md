@@ -246,7 +246,7 @@ If installation used a custom Kiro home, add the same `--kiro-home /absolute/pat
 
 ### Troubleshooting
 
-- Run `kiro-fabric-setup status --user --json` and `kiro-fabric-setup doctor --user --json` first. Status verifies the profile, skills, closure file set and hashes, Node mode, activation marker, manager binding, grants, and manifest/release identity. Exit code `0` means every required doctor check passed; `1` means diagnosis or installation failed; `2` means the arguments were invalid. Every setup `--json` failure emits exactly one `{ ok: false, error }` object on stdout.
+- Run `kiro-fabric-setup status --user --json` and `kiro-fabric-setup doctor --user --json` first. Status verifies the profile, skills, closure file set and hashes, installed Node executable hash and mode, installed Kiro artifact, activation marker, manager binding, grants, and manifest/release identity. Exit code `0` means every required doctor check passed; `1` means diagnosis or installation failed; `2` means the arguments were invalid. Setup usage and lifecycle failures emit exactly one `{ ok: false, error }` object on stdout with `--json`; doctor always emits its `kiro-fabric.kiro-doctor` report envelope, with `ok: false` and failed checks when diagnosis fails.
 - Confirm `node --version` reports Node 24 or newer and `kiro-cli --version` reports 2.20.1.
 - Pass `--kiro-binary /absolute/path/to/kiro-cli` to doctor and install when Kiro is outside `PATH`.
 - If Kiro cannot find the agent, confirm the profile exists at `~/.kiro/agents/kiro-fabric.json` or below the configured `$KIRO_HOME`.
