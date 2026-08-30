@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { FabricTraceSafeError } from "../audit/trace.js";
-import { writeJsonAtomic } from "../core/atomic-write.js";
+import { renameAtomic, writeJsonAtomic } from "../core/atomic-write.js";
 import type { FabricSchemaConfig, FabricSchemaTrustedCommand } from "../config.js";
 import type { MeshIdentity, MeshStateEntry, MeshStore } from "../mesh/store.js";
 import type { FabricInvocationContext } from "../protocol.js";
@@ -43,8 +43,19 @@ interface TransactionJournal {
   id: string;
   status: "prepared" | "applying" | "committed" | "rolled_back" | "quarantined";
   before: BeforeImage[];
+  /** Project-relative same-directory staging files, recorded before creation. */
+  staged?: string[];
   createdAt: number;
   error?: string;
+}
+
+interface StagedOperation {
+  operation: SchemaFileOperation;
+  path: string;
+  absolute: string;
+  sourceSha256: string | null;
+  temporary?: string;
+  resultSha256?: string;
 }
 
 const hashToken = (token: string): string =>
@@ -364,6 +375,9 @@ export class SchemaController {
         const resolved = resolveWorkspaceFile(this.cwd, operationPath(operation), {
           allowAbsent: true,
         });
+        if (declared.has(resolved.relative)) {
+          throw new Error(`Schema transaction declares a path more than once: ${resolved.relative}`);
+        }
         declared.set(resolved.relative, resolved);
         if (operation.kind === "write") payloadBytes += Buffer.byteLength(operation.content);
         if (operation.kind === "edit") payloadBytes += Buffer.byteLength(operation.newText);
@@ -389,9 +403,24 @@ export class SchemaController {
       if (payloadBytes + beforeBytes > this.config.maxBytes) {
         throw new Error(`Schema transaction exceeds ${this.config.maxBytes} bytes`);
       }
-      journal = { format: 1, id: transactionId, status: "prepared", before, createdAt: Date.now() };
+      const stagedPaths = input.operations.flatMap((operation, index) => {
+        if (operation.kind === "delete") return [];
+        const resolved = resolveWorkspaceFile(this.cwd, operation.path, { allowAbsent: true });
+        return [this.#stagingPath(resolved, transactionId, index).relative];
+      });
+      journal = {
+        format: 1,
+        id: transactionId,
+        status: "prepared",
+        before,
+        staged: stagedPaths,
+        createdAt: Date.now(),
+      };
+      // The journal names every possible staging file before one is created.
+      // Recovery can therefore clean a crash at any point in preparation.
       atomicJsonWrite(journalPath, journal);
 
+      this.#assertCommitActive(context.signal);
       await this.mesh.put({
         key: certificateEntry.key,
         value: { ...certificate, status: "consumed", consumedAt: Date.now() },
@@ -399,17 +428,27 @@ export class SchemaController {
         identity: this.identity,
       });
       consumed = true;
-      journal.status = "applying";
-      atomicJsonWrite(journalPath, journal);
       const afterConsume = snapshotWorkspace(this.cwd, [this.mesh.root]);
       if (afterConsume.fingerprint !== certificate.fingerprint) {
         throw new Error("Schema workspace drifted while consuming the certificate");
       }
 
-      for (const operation of input.operations) this.#applyOperation(operation);
+      const staged = this.#stageOperations(input.operations, declared, transactionId, context.signal);
+      this.#assertCommitActive(context.signal);
+      for (const operation of staged) this.#assertSourceUnchanged(operation);
+      journal.status = "applying";
+      atomicJsonWrite(journalPath, journal);
+      for (const operation of staged) {
+        this.#assertCommitActive(context.signal);
+        // Refuse late source drift immediately before replacing this path.
+        this.#assertSourceUnchanged(operation);
+        this.#commitStagedOperation(operation);
+      }
+      for (const operation of staged) this.#assertStagedResult(operation);
       const applied = snapshotWorkspace(this.cwd, [this.mesh.root]);
       this.#assertNoOutsideDrift(baseline, applied, new Set(declared.keys()));
       const postconditionResults = await this.#verifyEvidence(input.postconditions, context);
+      this.#assertCommitActive(context.signal);
       const afterPostconditions = snapshotWorkspace(this.cwd, [this.mesh.root]);
       if (applied.fingerprint !== afterPostconditions.fingerprint) {
         throw new Error("Schema workspace changed while postconditions ran");
@@ -496,9 +535,27 @@ export class SchemaController {
         stateTransition,
       };
     } catch (error) {
-      if (!consumed) throw error;
+      if (!consumed) {
+        if (journal) {
+          journal.status = "rolled_back";
+          journal.error = errorMessage(error);
+          try {
+            atomicJsonWrite(journalPath, journal);
+          } catch {
+            // No workspace mutation occurred; a prepared journal is recoverable.
+          }
+        }
+        throw error;
+      }
       if (committed) throw error;
-      const rollbackError = journal ? this.#restoreBeforeImages(journal.before) : undefined;
+      // A prepared transaction has not published any workspace operation. Only
+      // clean its stages: restoring before images here would overwrite the very
+      // external source drift that caused refusal.
+      const restoreError = journal?.status === "applying"
+        ? this.#restoreBeforeImages(journal.before)
+        : undefined;
+      const cleanupError = journal ? this.#cleanupStaged(journal.staged ?? []) : undefined;
+      const rollbackError = [restoreError, cleanupError].filter(Boolean).join("; ") || undefined;
       const outcome = rollbackError ? "quarantined" : "rolled_back";
       if (journal) {
         journal.status = outcome;
@@ -520,6 +577,7 @@ export class SchemaController {
         ...(rollbackError ? { rollbackError } : {}),
       };
     } finally {
+      if (journal) this.#cleanupStaged(journal.staged ?? []);
       release();
     }
   }
@@ -723,32 +781,116 @@ export class SchemaController {
     });
   }
 
-  #applyOperation(operation: SchemaFileOperation): void {
-    const resolved = resolveWorkspaceFile(this.cwd, operation.path, { allowAbsent: operation.kind === "write" });
-    if (operation.kind === "write") {
-      if ("absent" in operation.expected) {
-        if (resolved.exists) throw new Error(`Schema precondition failed; expected absent: ${operation.path}`);
-      } else {
-        if (!resolved.exists || sha256File(resolved.absolute) !== operation.expected.sha256) {
+  #stagingPath(
+    resolved: ReturnType<typeof resolveWorkspaceFile>,
+    transactionId: string,
+    index: number,
+  ): { absolute: string; relative: string } {
+    const temporary = path.join(
+      path.dirname(resolved.absolute),
+      `.${path.basename(resolved.absolute)}.schema-${transactionId}-${index}.tmp`,
+    );
+    return {
+      absolute: temporary,
+      relative: path.relative(this.cwd, temporary).split(path.sep).join("/"),
+    };
+  }
+
+  #stageOperations(
+    operations: SchemaFileOperation[],
+    declared: Map<string, ReturnType<typeof resolveWorkspaceFile>>,
+    transactionId: string,
+    signal?: AbortSignal,
+  ): StagedOperation[] {
+    const staged: StagedOperation[] = [];
+    for (let index = 0; index < operations.length; index++) {
+      this.#assertCommitActive(signal);
+      const operation = operations[index]!;
+      const current = resolveWorkspaceFile(this.cwd, operation.path, {
+        allowAbsent: operation.kind === "write",
+      });
+      const declaredPath = declared.get(current.relative);
+      if (!declaredPath) throw new Error(`Schema transaction path resolution failed: ${operation.path}`);
+      const sourceSha256 = current.exists ? sha256File(current.absolute) : null;
+      let next: Buffer | undefined;
+      if (operation.kind === "write") {
+        if ("absent" in operation.expected) {
+          if (current.exists) throw new Error(`Schema precondition failed; expected absent: ${operation.path}`);
+        } else if (sourceSha256 !== operation.expected.sha256) {
           throw new Error(`Schema precondition SHA-256 mismatch: ${operation.path}`);
         }
+        next = Buffer.from(operation.content, "utf8");
+      } else {
+        if (sourceSha256 !== operation.expectedSha256) {
+          throw new Error(`Schema precondition SHA-256 mismatch: ${operation.path}`);
+        }
+        if (operation.kind === "edit") {
+          const content = fs.readFileSync(current.absolute, "utf8");
+          const first = content.indexOf(operation.oldText);
+          if (first < 0 || content.indexOf(operation.oldText, first + operation.oldText.length) >= 0) {
+            throw new Error(`Schema edit requires oldText to occur exactly once: ${operation.path}`);
+          }
+          next = Buffer.from(
+            `${content.slice(0, first)}${operation.newText}${content.slice(first + operation.oldText.length)}`,
+            "utf8",
+          );
+        }
       }
-      fs.writeFileSync(resolved.absolute, operation.content, "utf8");
+      const item: StagedOperation = {
+        operation,
+        path: current.relative,
+        absolute: current.absolute,
+        sourceSha256,
+      };
+      if (next) {
+        const temporary = this.#stagingPath(current, transactionId, index).absolute;
+        const mode = current.exists ? fs.statSync(current.absolute).mode & 0o777 : 0o600;
+        let descriptor: number | undefined;
+        try {
+          descriptor = fs.openSync(temporary, "wx", mode);
+          fs.writeFileSync(descriptor, next);
+          fs.fsyncSync(descriptor);
+        } finally {
+          if (descriptor !== undefined) fs.closeSync(descriptor);
+        }
+        item.temporary = temporary;
+        item.resultSha256 = `sha256:${createHash("sha256").update(next).digest("hex")}`;
+      }
+      staged.push(item);
+    }
+    return staged;
+  }
+
+  #assertSourceUnchanged(staged: StagedOperation): void {
+    const current = resolveWorkspaceFile(this.cwd, staged.path, { allowAbsent: true });
+    const actual = current.exists ? sha256File(current.absolute) : null;
+    if (actual !== staged.sourceSha256) {
+      throw new Error(`Schema source SHA-256 drift detected before commit: ${staged.path}`);
+    }
+  }
+
+  #commitStagedOperation(staged: StagedOperation): void {
+    if (staged.operation.kind === "delete") {
+      fs.unlinkSync(staged.absolute);
       return;
     }
-    if (sha256File(resolved.absolute) !== operation.expectedSha256) {
-      throw new Error(`Schema precondition SHA-256 mismatch: ${operation.path}`);
-    }
-    if (operation.kind === "delete") {
-      fs.unlinkSync(resolved.absolute);
+    if (!staged.temporary) throw new Error(`Schema staging file is missing: ${staged.path}`);
+    renameAtomic(staged.temporary, staged.absolute);
+  }
+
+  #assertStagedResult(staged: StagedOperation): void {
+    const current = resolveWorkspaceFile(this.cwd, staged.path, { allowAbsent: true });
+    if (staged.operation.kind === "delete") {
+      if (current.exists) throw new Error(`Schema staged delete did not commit: ${staged.path}`);
       return;
     }
-    const content = fs.readFileSync(resolved.absolute, "utf8");
-    const first = content.indexOf(operation.oldText);
-    if (first < 0 || content.indexOf(operation.oldText, first + operation.oldText.length) >= 0) {
-      throw new Error(`Schema edit requires oldText to occur exactly once: ${operation.path}`);
+    if (!current.exists || sha256File(current.absolute) !== staged.resultSha256) {
+      throw new Error(`Schema staged write did not commit atomically: ${staged.path}`);
     }
-    fs.writeFileSync(resolved.absolute, `${content.slice(0, first)}${operation.newText}${content.slice(first + operation.oldText.length)}`, "utf8");
+  }
+
+  #assertCommitActive(signal?: AbortSignal): void {
+    if (signal?.aborted) throw new Error("Schema commit cancelled");
   }
 
   #assertNoOutsideDrift(before: WorkspaceSnapshot, after: WorkspaceSnapshot, declared: Set<string>): void {
@@ -772,6 +914,7 @@ export class SchemaController {
         if (!image.existed) {
           if (resolved.exists) fs.unlinkSync(resolved.absolute);
         } else {
+          // Recovery may repeat this idempotent before-image write after a crash.
           fs.writeFileSync(resolved.absolute, Buffer.from(image.content ?? "", "base64"));
           if (image.mode !== undefined) fs.chmodSync(resolved.absolute, image.mode);
         }
@@ -780,6 +923,19 @@ export class SchemaController {
       }
     }
     return errors.length > 0 ? errors.join("; ") : undefined;
+  }
+
+  #cleanupStaged(paths: string[]): string | undefined {
+    const errors: string[] = [];
+    for (const stagedPath of paths) {
+      try {
+        const resolved = resolveWorkspaceFile(this.cwd, stagedPath, { allowAbsent: true });
+        if (resolved.exists) fs.unlinkSync(resolved.absolute);
+      } catch (error) {
+        errors.push(`${stagedPath}: ${errorMessage(error)}`);
+      }
+    }
+    return errors.length > 0 ? `staging cleanup failed: ${errors.join("; ")}` : undefined;
   }
 
   async #recordFailedOutcome(
@@ -836,15 +992,30 @@ export class SchemaController {
 
   #acquireCommitLock(): () => void {
     fs.mkdirSync(this.#journalRoot, { recursive: true, mode: 0o700 });
-    try {
+    const acquire = (): void => {
       const descriptor = fs.openSync(this.#lockPath, "wx", 0o600);
-      fs.writeFileSync(descriptor, `${process.pid}\n${Date.now()}\n`);
-      fs.closeSync(descriptor);
-    } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "EEXIST") {
-        throw new Error("Another Schema transaction is in progress");
+      try {
+        fs.writeFileSync(descriptor, `${process.pid}\n${Date.now()}\n`);
+        fs.fsyncSync(descriptor);
+      } finally {
+        fs.closeSync(descriptor);
       }
-      throw error;
+    };
+    try {
+      acquire();
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+      // A process may have crashed after this controller was constructed. Re-run
+      // owner/journal recovery instead of leaving the workspace permanently wedged.
+      this.#recoverJournals();
+      try {
+        acquire();
+      } catch (retryError) {
+        if (retryError instanceof Error && "code" in retryError && retryError.code === "EEXIST") {
+          throw new Error("Another Schema transaction is in progress");
+        }
+        throw retryError;
+      }
     }
     return () => fs.rmSync(this.#lockPath, { force: true });
   }
@@ -871,17 +1042,27 @@ export class SchemaController {
       const filePath = path.join(this.#journalRoot, name);
       try {
         const journal = JSON.parse(fs.readFileSync(filePath, "utf8")) as TransactionJournal;
-        if (journal.format !== 1 || journal.status !== "applying" || !Array.isArray(journal.before)) continue;
+        if (
+          journal.format !== 1 ||
+          (journal.status !== "prepared" && journal.status !== "applying") ||
+          !Array.isArray(journal.before)
+        ) continue;
         const workspace = this.#workspaceEntry()?.value as SchemaWorkspaceRecord | undefined;
         if (
           workspace?.lastOutcome === "committed" &&
           workspace.lastTransactionId === journal.id
         ) {
+          const cleanupError = this.#cleanupStaged(journal.staged ?? []);
           journal.status = "committed";
+          if (cleanupError) journal.error = `post-commit staging cleanup failed: ${cleanupError}`;
           atomicJsonWrite(filePath, journal);
           continue;
         }
-        const rollbackError = this.#restoreBeforeImages(journal.before);
+        const restoreError = journal.status === "applying"
+          ? this.#restoreBeforeImages(journal.before)
+          : undefined;
+        const cleanupError = this.#cleanupStaged(journal.staged ?? []);
+        const rollbackError = [restoreError, cleanupError].filter(Boolean).join("; ") || undefined;
         journal.status = rollbackError ? "quarantined" : "rolled_back";
         journal.error = rollbackError ? `crash recovery failed: ${rollbackError}` : "recovered incomplete transaction";
         atomicJsonWrite(filePath, journal);

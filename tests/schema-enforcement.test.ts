@@ -441,7 +441,7 @@ describe("Schema transactions", () => {
     expect(setup.controller.status()).toMatchObject({ lastOutcome: "quarantined" });
   });
 
-  it("restores all declared paths when a postcondition fails", async () => {
+  it("rolls back every staged path when acceptance postconditions fail", async () => {
     const setup = fixture();
     fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
     const artifacts = await hypothesisAndCertificate(setup, [{ kind: "file_exists", path: "a.txt" }]);
@@ -460,6 +460,148 @@ describe("Schema transactions", () => {
     expect(result).toMatchObject({ outcome: "rolled_back" });
     expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("alpha\n");
     expect(fs.existsSync(path.join(setup.cwd, "new.txt"))).toBe(false);
+  });
+
+  it("rolls back an earlier atomic write when a later staged write cannot publish", async () => {
+    const setup = fixture();
+    fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
+    fs.writeFileSync(path.join(setup.cwd, "b.txt"), "bravo\n");
+    const artifacts = await hypothesisAndCertificate(setup, [
+      { kind: "file_exists", path: "a.txt" },
+      { kind: "file_exists", path: "b.txt" },
+    ]);
+    const rename = fs.renameSync.bind(fs);
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+      if (String(source).includes(".b.txt.schema-") && target === path.join(setup.cwd, "b.txt")) {
+        throw new Error("injected second publish failure");
+      }
+      rename(source, target);
+    });
+    let result: Record<string, unknown>;
+    try {
+      result = await setup.controller.commit(
+        {
+          hypothesisId: artifacts.hypothesisId,
+          certificate: artifacts.certificate,
+          operations: [
+            { kind: "write", path: "a.txt", content: "after-a\n", expected: { sha256: sha("alpha\n") } },
+            { kind: "write", path: "b.txt", content: "after-b\n", expected: { sha256: sha("bravo\n") } },
+          ],
+          postconditions: [{ kind: "file_contains", path: "b.txt", literal: "after-b" }],
+        },
+        artifacts.context,
+      );
+    } finally {
+      renameSpy.mockRestore();
+    }
+    expect(result!).toMatchObject({ outcome: "rolled_back", error: "injected second publish failure" });
+    expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("alpha\n");
+    expect(fs.readFileSync(path.join(setup.cwd, "b.txt"), "utf8")).toBe("bravo\n");
+  });
+
+  it("does not publish staged writes when a source hash drifts", async () => {
+    const setup = fixture();
+    fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
+    fs.writeFileSync(path.join(setup.cwd, "b.txt"), "bravo\n");
+    const artifacts = await hypothesisAndCertificate(setup, [
+      { kind: "file_exists", path: "a.txt" },
+      { kind: "file_exists", path: "b.txt" },
+    ]);
+    const fsync = fs.fsyncSync.bind(fs);
+    let fsyncCalls = 0;
+    const fsyncSpy = vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      fsync(descriptor);
+      fsyncCalls += 1;
+      // Call one persists the commit lock; call two persists a.txt's stage.
+      // Simulate another process changing that source before publication.
+      if (fsyncCalls === 2) fs.writeFileSync(path.join(setup.cwd, "a.txt"), "external\n");
+    });
+    let result: Record<string, unknown>;
+    try {
+      result = await setup.controller.commit(
+        {
+          hypothesisId: artifacts.hypothesisId,
+          certificate: artifacts.certificate,
+          operations: [
+            { kind: "write", path: "a.txt", content: "after\n", expected: { sha256: sha("alpha\n") } },
+            { kind: "write", path: "b.txt", content: "after\n", expected: { sha256: sha("bravo\n") } },
+          ],
+          postconditions: [{ kind: "file_contains", path: "a.txt", literal: "after" }],
+        },
+        artifacts.context,
+      );
+    } finally {
+      fsyncSpy.mockRestore();
+    }
+    expect(result!).toMatchObject({ outcome: "rolled_back", error: expect.stringContaining("source SHA-256 drift") });
+    // No Fabric stage was published. The external writer's source remains
+    // untouched while the other source retains its original bytes.
+    expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("external\n");
+    expect(fs.readFileSync(path.join(setup.cwd, "b.txt"), "utf8")).toBe("bravo\n");
+    expect(fs.readdirSync(setup.cwd).some((name) => name.includes(".schema-") && name.endsWith(".tmp"))).toBe(false);
+  });
+
+  it("refuses external workspace drift during acceptance and restores declared files", async () => {
+    const setup = fixture();
+    fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
+    fs.writeFileSync(path.join(setup.cwd, "external.txt"), "before\n");
+    setup.config.trustedCommands.external_drift = {
+      command: process.execPath,
+      args: ["-e", `require('node:fs').writeFileSync(${JSON.stringify(path.join(setup.cwd, "external.txt"))}, 'external\\n')`],
+      shell: false,
+      timeoutMs: 5_000,
+    };
+    const artifacts = await hypothesisAndCertificate(setup, [{ kind: "file_exists", path: "a.txt" }]);
+    const result = await setup.controller.commit(
+      {
+        hypothesisId: artifacts.hypothesisId,
+        certificate: artifacts.certificate,
+        operations: [
+          { kind: "edit", path: "a.txt", oldText: "alpha", newText: "beta", expectedSha256: sha("alpha\n") },
+        ],
+        postconditions: [{ kind: "trusted_command", name: "external_drift" }],
+      },
+      artifacts.context,
+    );
+    expect(result).toMatchObject({ outcome: "rolled_back", error: "Schema workspace changed while postconditions ran" });
+    expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("alpha\n");
+    expect(fs.readFileSync(path.join(setup.cwd, "external.txt"), "utf8")).toBe("external\n");
+  });
+
+  it("rolls back staged changes when commit acceptance is cancelled", async () => {
+    const setup = fixture();
+    fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
+    setup.config.trustedCommands.wait_for_cancel = {
+      command: process.execPath,
+      args: ["-e", "setInterval(() => {}, 1000)"],
+      shell: false,
+      timeoutMs: 10_000,
+    };
+    const controller = new AbortController();
+    const context = invocation(setup.cwd, "cancel-commit", controller.signal);
+    const artifacts = await hypothesisAndCertificate(
+      setup,
+      [{ kind: "file_exists", path: "a.txt" }],
+      context.parentToolCallId,
+    );
+    const cancellation = setTimeout(() => controller.abort(), 50);
+    try {
+      const result = await setup.controller.commit(
+        {
+          hypothesisId: artifacts.hypothesisId,
+          certificate: artifacts.certificate,
+          operations: [
+            { kind: "edit", path: "a.txt", oldText: "alpha", newText: "beta", expectedSha256: sha("alpha\n") },
+          ],
+          postconditions: [{ kind: "trusted_command", name: "wait_for_cancel" }],
+        },
+        context,
+      );
+      expect(result).toMatchObject({ outcome: "rolled_back", error: "Schema commit cancelled" });
+    } finally {
+      clearTimeout(cancellation);
+    }
+    expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("alpha\n");
   });
 
   it("uses CAS so concurrent reuse has at most one committed result", async () => {
@@ -487,6 +629,8 @@ describe("Schema transactions", () => {
     const target = path.join(setup.cwd, "a.txt");
     fs.writeFileSync(target, "mutated\n");
     const journalRoot = path.join(setup.mesh.root, "schema-transactions");
+    const staged = path.join(setup.cwd, ".a.txt.schema-crashed-0.tmp");
+    fs.writeFileSync(staged, "staged\n");
     fs.writeFileSync(
       path.join(journalRoot, "crashed.json"),
       JSON.stringify({
@@ -500,12 +644,34 @@ describe("Schema transactions", () => {
           content: Buffer.from("original\n").toString("base64"),
           mode: 0o644,
         }],
+        staged: [".a.txt.schema-crashed-0.tmp"],
         createdAt: Date.now(),
       }),
     );
     new SchemaController(setup.cwd, setup.config, setup.mesh, identity, setup.state);
     expect(fs.readFileSync(target, "utf8")).toBe("original\n");
+    expect(fs.existsSync(staged)).toBe(false);
     expect(JSON.parse(fs.readFileSync(path.join(journalRoot, "crashed.json"), "utf8"))).toMatchObject({
+      status: "rolled_back",
+      error: "recovered incomplete transaction",
+    });
+
+    const preparedStage = path.join(setup.cwd, ".prepared.txt.schema-prepared-0.tmp");
+    fs.writeFileSync(preparedStage, "not published\n");
+    fs.writeFileSync(
+      path.join(journalRoot, "prepared.json"),
+      JSON.stringify({
+        format: 1,
+        id: "prepared",
+        status: "prepared",
+        before: [],
+        staged: [".prepared.txt.schema-prepared-0.tmp"],
+        createdAt: Date.now(),
+      }),
+    );
+    new SchemaController(setup.cwd, setup.config, setup.mesh, identity, setup.state);
+    expect(fs.existsSync(preparedStage)).toBe(false);
+    expect(JSON.parse(fs.readFileSync(path.join(journalRoot, "prepared.json"), "utf8"))).toMatchObject({
       status: "rolled_back",
       error: "recovered incomplete transaction",
     });
