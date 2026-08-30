@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -127,6 +127,27 @@ describe("runtime closure deployment", () => {
     expect(existsSync(parked)).toBe(true);
   });
 
+  it("detects a generation replacement after verification and deletes neither inode", () => {
+    const dir = project("generation-post-verify-race");
+    const closure = deploySmall(dir, "project");
+    let replacementSentinel = "";
+    let parked = "";
+
+    expect(() => withRuntimeQuarantineRaceForTest((kind, source) => {
+      if (kind !== "generation-post-verify") return;
+      const actual = join(realpathSync(dirname(source)), basename(source));
+      parked = actual + ".verified-parked";
+      renameSync(actual, parked);
+      mkdirSync(actual);
+      replacementSentinel = join(actual, "must-survive");
+      writeFileSync(replacementSentinel, "post-verification replacement\n");
+    }, () => removeAttestedRuntimeClosure(dir, "project", closure.attestation)))
+      .toThrow(/replaced after verification/);
+
+    expect(readFileSync(replacementSentinel, "utf8")).toBe("post-verification replacement\n");
+    expect(existsSync(parked)).toBe(true);
+  });
+
   it("quarantines the activation marker and preserves raced bytes on mismatch", () => {
     const dir = project("marker-quarantine-race");
     const closure = deploySmall(dir, "project");
@@ -141,6 +162,26 @@ describe("runtime closure deployment", () => {
       .toThrow(/marker changed during cleanup/);
 
     expect(readFileSync(marker, "utf8")).toBe("0".repeat(64) + "\n");
+    expect(readFileSync(parked, "utf8")).toBe(closure.digest + "\n");
+  });
+
+  it("detects activation-marker replacement after verification", () => {
+    const dir = project("marker-post-verify-race");
+    const closure = deploySmall(dir, "project");
+    let parked = "";
+    let replacement = "";
+
+    expect(() => withRuntimeQuarantineRaceForTest((kind, source) => {
+      if (kind !== "marker-post-verify") return;
+      const actual = join(realpathSync(dirname(source)), basename(source));
+      parked = actual + ".verified-parked";
+      renameSync(actual, parked);
+      replacement = actual;
+      writeFileSync(replacement, "replacement\n", { mode: 0o600 });
+    }, () => removeRuntimeActivationMarker(dir, "project", closure.digest)))
+      .toThrow(/replaced after verification/);
+
+    expect(readFileSync(replacement, "utf8")).toBe("replacement\n");
     expect(readFileSync(parked, "utf8")).toBe(closure.digest + "\n");
   });
 

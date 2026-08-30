@@ -1,6 +1,10 @@
 // Deterministic filesystem-race seam. Not exported by the package.
 
-export type RuntimeClosureQuarantineKind = "generation" | "marker";
+export type RuntimeClosureQuarantineKind =
+  | "generation"
+  | "generation-post-verify"
+  | "marker"
+  | "marker-post-verify";
 
 type BeforeQuarantine = (kind: RuntimeClosureQuarantineKind, source: string) => void;
 let beforeQuarantine: BeforeQuarantine | undefined;

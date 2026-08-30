@@ -10,8 +10,8 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
-import { runKiroDoctor } from "../src/kiro/doctor.js";
-import { installKiroProfile } from "../src/kiro/install.js";
+import { runKiroDoctor } from "../src/kiro/doctor-test-helper.js";
+import { installKiroProfile } from "../src/kiro/install-test-helper.js";
 import { KIRO_CLI_VERSION } from "../src/kiro/profile.js";
 
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");

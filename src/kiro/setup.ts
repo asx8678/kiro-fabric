@@ -331,6 +331,11 @@ const scopeStatusFor = (
     kiroBinaryPath = manifest.runtime.kiroBinaryPath ?? null;
     kiroCliVersion = manifest.runtime.kiroCliVersion ?? null;
     kiroSha256 = manifest.runtime.kiroSha256 ?? null;
+    if (manifest.format !== 3) {
+      throw new Error(
+        `legacy format-${manifest.format} installation is not launchable or doctorable; run kiro-fabric-setup update (or repair from a trusted current package) to create a fully attested format-3 release`,
+      );
+    }
     const profile = readManagedFileNoFollow(
       roots.installRoot,
       kiroProfilePath(roots.installRoot, roots.layout),
@@ -350,7 +355,7 @@ const scopeStatusFor = (
     if (manifest.grants && JSON.stringify(manifest.grants) !== JSON.stringify(profileGrants)) {
       throw new Error("manifest grant state differs from the verified profile");
     }
-    if (manifest.format !== 1) {
+    {
       const records = manifest.skills?.files;
       if (!records?.length) throw new Error("managed skill attestation is absent");
       const sources = records.map((record) => {
@@ -372,7 +377,8 @@ const scopeStatusFor = (
         throw new Error("managed skill bundle digest mismatch");
       }
       if (!manifest.runtime.closure) throw new Error("runtime closure attestation is absent");
-      const generations = manifest.runtime.generations ?? [manifest.runtime.closure];
+      const generations = manifest.runtime.generations;
+      if (!generations?.length) throw new Error("format-3 runtime generation lineage is absent; run update or repair");
       for (const generation of generations) {
         verifyRuntimeClosureAttestation(roots.installRoot, generation);
       }
@@ -399,7 +405,7 @@ const scopeStatusFor = (
       if (!markerBytes || markerBytes.toString("utf8").trim() !== manifest.runtime.closure.digest) {
         throw new Error("runtime activation marker digest mismatch");
       }
-      if (manifest.format === 3 && !manifest.grants) {
+      if (!manifest.grants) {
         throw new Error("format-3 advanced-grant state is absent; run update or repair");
       }
     }
@@ -471,6 +477,8 @@ const describeKiroCli = (kiro: KiroCliStatus): string => {
       return kiro.version + " (newer but uncertified; requires " + KIRO_CLI_VERSION + ")";
     case "not-executable":
       return "not an executable regular file";
+    case "unsupported-launcher":
+      return "unsupported launcher (require native executable or complete attested closure)";
   }
 };
 

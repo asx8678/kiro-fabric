@@ -14,7 +14,7 @@ import {
   residentRoot,
   type ResidentHostConfig,
 } from "../src/residency/protocol.js";
-import { installKiroProfile } from "../src/kiro/install.js";
+import { installKiroProfile } from "../src/kiro/install-test-helper.js";
 import { makeTreeRemovable } from "./helpers/removable-tree.js";
 
 const repoRoot = process.cwd();

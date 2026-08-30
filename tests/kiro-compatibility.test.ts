@@ -17,6 +17,7 @@ import {
   inspectKiroCompatibility,
   KIRO_CLI_VERSION,
 } from "../src/kiro/compatibility.js";
+import { withPrivateKiroLauncherFixtures } from "../src/kiro/compatibility-test-seam.js";
 
 const roots: string[] = [];
 const scratch = (): string => {
@@ -60,7 +61,7 @@ describe("central Kiro/Node compatibility policy", () => {
     const alias = join(root, "kiro-cli");
     symlinkSync(target, alias);
 
-    const identity = await assertSupportedKiro(alias);
+    const identity = await withPrivateKiroLauncherFixtures([target], () => assertSupportedKiro(alias));
     try {
       expect(identity).toMatchObject({
         state: "ok",
@@ -82,7 +83,7 @@ describe("central Kiro/Node compatibility policy", () => {
       'if [ "$1" = "--version" ]; then echo "kiro-cli 2.20.1"; else echo original; fi',
       "",
     ].join("\n"), { mode: 0o755 });
-    const identity = await assertSupportedKiro(source);
+    const identity = await withPrivateKiroLauncherFixtures([source], () => assertSupportedKiro(source));
     try {
       writeFileSync(source, "#!/bin/sh\necho replacement\n", { mode: 0o755 });
       expect(execFileSync(identity.executablePath, ["proof"], { encoding: "utf8" }).trim())
@@ -97,12 +98,21 @@ describe("central Kiro/Node compatibility policy", () => {
     const wrong = executable(root, "wrong", `other-cli ${KIRO_CLI_VERSION}`);
     const newer = executable(root, "newer", "kiro-cli 2.21.0");
 
-    await expect(assertSupportedKiro(wrong)).rejects.toThrow(/wrong product/i);
-    await expect(assertSupportedKiro(newer)).rejects.toThrow(/uncertified newer/i);
-    await expect(inspectKiroCompatibility(newer)).resolves.toMatchObject({
-      state: "newer",
-      executablePath: newer,
-      ok: false,
+    await withPrivateKiroLauncherFixtures([wrong], async () => {
+      await expect(assertSupportedKiro(wrong)).rejects.toThrow(/wrong product/i);
     });
+    await withPrivateKiroLauncherFixtures([newer], async () => {
+      await expect(assertSupportedKiro(newer)).rejects.toThrow(/uncertified newer/i);
+      await expect(inspectKiroCompatibility(newer)).resolves.toMatchObject({
+        state: "newer",
+        executablePath: newer,
+        ok: false,
+      });
+    });
+  });
+
+  it("rejects a shebang launcher on the production compatibility path", async () => {
+    const launcher = executable(scratch(), "kiro-script", `kiro-cli ${KIRO_CLI_VERSION}`);
+    await expect(assertSupportedKiro(launcher)).rejects.toThrow(/unsupported Kiro launcher artifact/i);
   });
 });

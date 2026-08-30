@@ -8,10 +8,13 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   chmodSync,
   closeSync,
+  constants,
   copyFileSync,
   cpSync,
   existsSync,
+  fstatSync,
   fsyncSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -726,6 +729,100 @@ export const verifyRuntimeClosureAttestation = (
   verifyRuntimeClosureAtRoot(closure, root);
 };
 
+interface HeldPathIdentity {
+  path: string;
+  descriptor: number;
+  dev: bigint | number;
+  ino: bigint | number;
+  file: boolean;
+}
+
+const sameHeldIdentity = (held: HeldPathIdentity, path: string): boolean => {
+  try {
+    const pathStat = lstatSync(path, { bigint: true });
+    const openStat = fstatSync(held.descriptor, { bigint: true });
+    return !pathStat.isSymbolicLink() && openStat.dev === held.dev && openStat.ino === held.ino &&
+      pathStat.dev === held.dev && pathStat.ino === held.ino;
+  } catch {
+    return false;
+  }
+};
+
+const assertPrivateOwnedDirectory = (path: string, label: string, exactMode?: number): void => {
+  if ((process.platform !== "linux" && process.platform !== "darwin") || !process.geteuid) {
+    throw new KiroInstallError(
+      "ownership",
+      "safe attested quarantine deletion is unavailable on this platform; refusing cleanup",
+    );
+  }
+  // A Linux descriptor-relative /proc path is a magic link, so stat (not
+  // lstat) intentionally checks the held directory it names.
+  const stat = label === "runtime" ? statSync(path) : lstatSync(path);
+  if (!stat.isDirectory() || (label !== "runtime" && stat.isSymbolicLink()) ||
+      stat.uid !== process.geteuid() || (stat.mode & 0o077) !== 0 ||
+      (exactMode !== undefined && (stat.mode & 0o777) !== exactMode)) {
+    throw new KiroInstallError("ownership", `${label} directory is not private and owned by the effective user`);
+  }
+};
+
+const holdClosureIdentity = (
+  closure: KiroRuntimeClosureManifest,
+  root: string,
+): HeldPathIdentity[] => {
+  const held: HeldPathIdentity[] = [];
+  const hold = (path: string, file: boolean): HeldPathIdentity => {
+    const descriptor = openSync(
+      path,
+      constants.O_RDONLY | (file ? 0 : constants.O_DIRECTORY) | (constants.O_NOFOLLOW ?? 0),
+    );
+    const stat = fstatSync(descriptor, { bigint: true });
+    const identity = { path, descriptor, dev: stat.dev, ino: stat.ino, file };
+    if (!sameHeldIdentity(identity, path) || (file ? !stat.isFile() : !stat.isDirectory())) {
+      closeSync(descriptor);
+      throw new KiroInstallError("concurrency", "quarantined runtime identity changed while opening: " + path);
+    }
+    held.push(identity);
+    return identity;
+  };
+  try {
+    hold(root, false);
+    const directories = new Set<string>([root]);
+    for (const record of closure.files) {
+      const relativePath = record.path.slice(closure.root.length + 1);
+      const path = join(root, ...relativePath.split("/"));
+      let cursor = dirname(path);
+      while (cursor !== root) {
+        directories.add(cursor);
+        cursor = dirname(cursor);
+      }
+      const identity = hold(path, true);
+      const bytes = readFileSync(identity.descriptor);
+      if (sha256Bytes(bytes) !== record.installedSha256) {
+        throw new KiroInstallError("ownership", "quarantined runtime hash changed: " + record.path);
+      }
+    }
+    for (const directory of [...directories].sort((a, b) => a.length - b.length)) {
+      if (directory !== root) hold(directory, false);
+    }
+    return held;
+  } catch (error) {
+    for (const identity of held.reverse()) closeSync(identity.descriptor);
+    throw error;
+  }
+};
+
+const assertHeldIdentities = (held: HeldPathIdentity[]): void => {
+  for (const identity of held) {
+    if (!sameHeldIdentity(identity, identity.path)) {
+      throw new KiroInstallError("concurrency", "quarantined runtime was replaced after verification: " + identity.path);
+    }
+  }
+};
+
+const closeHeldIdentities = (held: HeldPathIdentity[]): void => {
+  for (const identity of held.reverse()) closeSync(identity.descriptor);
+};
+
 export const removeAttestedRuntimeClosure = (
   installRoot: string,
   layout: KiroManagedLayout,
@@ -739,36 +836,49 @@ export const removeAttestedRuntimeClosure = (
   }
   return withContainedParent(installRoot, root, (parent, leaf) => {
     const source = join(parent, leaf);
-    const quarantineLeaf = `.quarantine-${closure.digest}-${process.pid}-${randomBytes(6).toString("hex")}`;
-    const quarantine = join(parent, quarantineLeaf);
+    const quarantinedRoot = join(parent, `.quarantine-generation-${process.pid}-${randomBytes(8).toString("hex")}`);
+    assertPrivateOwnedDirectory(parent, "runtime");
+    let held: HeldPathIdentity[] = [];
+    let deletionStarted = false;
     runBeforeRuntimeQuarantineForTest("generation", source);
-    renameSync(source, quarantine);
+    renameSync(source, quarantinedRoot);
     try {
-      // Verification happens only after atomic detachment from the attacker-
-      // addressable generation name. Therefore the exact tree verified here is
-      // the exact tree made writable and recursively deleted below.
-      verifyRuntimeClosureAtRoot(closure, quarantine);
+      verifyRuntimeClosureAtRoot(closure, quarantinedRoot);
+      chmodSync(quarantinedRoot, 0o700);
+      assertPrivateOwnedDirectory(quarantinedRoot, "quarantine", 0o700);
+      held = holdClosureIdentity(closure, quarantinedRoot);
+      runBeforeRuntimeQuarantineForTest("generation-post-verify", quarantinedRoot);
+      assertHeldIdentities(held);
       const unsealDirectories = (dir: string): void => {
         chmodSync(dir, 0o700);
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
           if (entry.isDirectory()) unsealDirectories(join(dir, entry.name));
         }
       };
-      unsealDirectories(quarantine);
-      rmSync(quarantine, { recursive: true, force: false });
+      deletionStarted = true;
+      unsealDirectories(quarantinedRoot);
+      assertHeldIdentities(held);
+      rmSync(quarantinedRoot, { recursive: true, force: false });
+      for (const identity of held) {
+        if (fstatSync(identity.descriptor).nlink !== 0) {
+          throw new KiroInstallError("concurrency", "verified runtime inode survived quarantine deletion");
+        }
+      }
       return true;
     } catch (error) {
-      // Preserve unverified bytes. Restore the public name only when no racer
-      // occupied it; otherwise leave the uniquely named quarantine for review.
-      if (existsSync(quarantine) && !existsSync(source)) renameSync(quarantine, source);
+      const rootIdentity = held.find((identity) => identity.path === quarantinedRoot);
+      if (!deletionStarted && (!rootIdentity || sameHeldIdentity(rootIdentity, quarantinedRoot)) &&
+          existsSync(quarantinedRoot) && !existsSync(source)) {
+        chmodSync(quarantinedRoot, 0o555);
+        renameSync(quarantinedRoot, source);
+      }
       throw error;
+    } finally {
+      closeHeldIdentities(held);
     }
   });
 };
 
-/**
- * Legacy recursive removal for format-1 manifests only.
- */
 export const removeRuntimeActivationMarker = (
   installRoot: string,
   layout: KiroManagedLayout,
@@ -780,24 +890,37 @@ export const removeRuntimeActivationMarker = (
   if (!markerStat) return false;
   withContainedParent(installRoot, marker, (parent, leaf) => {
     const source = join(parent, leaf);
-    const quarantine = join(
-      parent,
-      `.quarantine-marker-${expectedDigest}-${process.pid}-${randomBytes(6).toString("hex")}`,
-    );
+    const quarantinedMarker = join(parent, `.quarantine-marker-${process.pid}-${randomBytes(8).toString("hex")}`);
+    assertPrivateOwnedDirectory(parent, "runtime");
+    let held: HeldPathIdentity | undefined;
     runBeforeRuntimeQuarantineForTest("marker", source);
-    renameSync(source, quarantine);
+    renameSync(source, quarantinedMarker);
     try {
-      const quarantinedStat = lstatOrNull(quarantine);
-      if (!quarantinedStat || quarantinedStat.isSymbolicLink() || !quarantinedStat.isFile()) {
+      const descriptor = openSync(quarantinedMarker, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+      const stat = fstatSync(descriptor, { bigint: true });
+      held = { path: quarantinedMarker, descriptor, dev: stat.dev, ino: stat.ino, file: true };
+      if (!stat.isFile() || !sameHeldIdentity(held, quarantinedMarker)) {
         throw new KiroInstallError("symlink", "runtime closure marker is invalid");
       }
-      if (readFileSync(quarantine, "utf8").trim() !== expectedDigest) {
+      if (readFileSync(descriptor, "utf8").trim() !== expectedDigest) {
         throw new KiroInstallError("ownership", "runtime closure marker changed during cleanup");
       }
-      unlinkSync(quarantine);
+      runBeforeRuntimeQuarantineForTest("marker-post-verify", quarantinedMarker);
+      if (!sameHeldIdentity(held, quarantinedMarker)) {
+        throw new KiroInstallError("concurrency", "runtime closure marker was replaced after verification");
+      }
+      unlinkSync(quarantinedMarker);
+      if (fstatSync(descriptor).nlink !== 0) {
+        throw new KiroInstallError("concurrency", "verified activation marker inode survived deletion");
+      }
     } catch (error) {
-      if (existsSync(quarantine) && !existsSync(source)) renameSync(quarantine, source);
+      if ((!held || sameHeldIdentity(held, quarantinedMarker)) &&
+          existsSync(quarantinedMarker) && !existsSync(source)) {
+        renameSync(quarantinedMarker, source);
+      }
       throw error;
+    } finally {
+      if (held) closeSync(held.descriptor);
     }
   });
   if (existsSync(runtimeDir) && readdirSync(runtimeDir).length === 0) rmdirSync(runtimeDir);

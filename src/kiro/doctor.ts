@@ -166,6 +166,12 @@ export const runKiroDoctor = async (
     const manifestOk = await run("install.manifest", async () => {
       const manifest = readManifest(roots.installRoot, roots.layout);
       if (!manifest) throw new Error("managed install manifest is absent");
+      if (manifest.format !== 3) {
+        throw new Error(
+          `legacy format-${manifest.format} installation cannot be checked as installed; run kiro-fabric-setup update (or repair from a trusted current package) to create a fully attested format-3 release`,
+        );
+      }
+      if (!manifest.grants) throw new Error("format-3 advanced-grant attestation is absent; run update or repair");
       const profile = readManagedFileNoFollow(roots.installRoot, paths.profile);
       if (!profile) throw new Error("managed installed profile is absent");
       if (sha256Bytes(profile) !== manifest.profile.installedSha256) {
@@ -196,9 +202,7 @@ export const runKiroDoctor = async (
           throw new Error("managed manifest grant state differs from profile");
         }
       }
-      return manifest.format === 1
-        ? "legacy format-1 profile ownership verified"
-        : `format-${manifest.format} profile and manifest ownership verified`;
+      return "format-3 profile and manifest ownership verified";
     });
     const installedManifest: KiroInstallManifest | null = manifestOk
       ? readManifest(roots.installRoot, roots.layout)
@@ -206,9 +210,6 @@ export const runKiroDoctor = async (
     if (!manifestOk || !installedManifest) {
       skip("install.skills", "dependency_failed");
       skip("install.runtime-closure", "dependency_failed");
-    } else if (installedManifest.format === 1) {
-      skip("install.skills", "legacy format-1 manifest has no skill attestation");
-      skip("install.runtime-closure", "legacy format-1 manifest has no closure attestation");
     } else {
       await run("install.skills", async () => {
         const records = installedManifest!.skills?.files;
@@ -237,7 +238,11 @@ export const runKiroDoctor = async (
       await run("install.runtime-closure", async () => {
         const closure = installedManifest!.runtime.closure;
         if (!closure) throw new Error("runtime closure attestation is absent");
-        verifyRuntimeClosureAttestation(roots.installRoot, closure);
+        const generations = installedManifest!.runtime.generations;
+        if (!generations?.length) throw new Error("runtime generation attestation is absent");
+        for (const generation of generations) {
+          verifyRuntimeClosureAttestation(roots.installRoot, generation);
+        }
         const releasePackage = JSON.parse(readFileSync(
           join(roots.installRoot, ...closure.root.split("/"), "package.json"),
           "utf8",
@@ -285,6 +290,9 @@ export const runKiroDoctor = async (
 
   try {
     await run("tuple", async () => {
+      if (checkingInstalled && (!attestedInstalledNodePath || !attestedInstalledMcpEntryPath || !managedKiroBinaryPath)) {
+        throw new Error("installed format-3 runtime is not fully attested; run update or repair before doctor");
+      }
       const node = await assertSupportedNode(attestedInstalledNodePath ?? process.execPath);
       const kiro = await assertKiroVersion(kiroBinary);
       observedKiro = kiro;

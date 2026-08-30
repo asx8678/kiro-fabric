@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { runKiroSetup } from "../src/kiro/setup.js";
+import { withPrivateKiroLauncherFixtures } from "../src/kiro/compatibility-test-seam.js";
 import {
   managedFileTransition,
   sha256Bytes,
@@ -59,7 +60,24 @@ const runSetup = async (argv: string[]): Promise<SetupRun> => {
       return true;
     }) as typeof process.stderr.write);
   try {
-    const code = await runKiroSetup(argv);
+    const fixtures: string[] = [];
+    const visit = (directory: string): void => {
+      if (!existsSync(directory)) return;
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) visit(path);
+        else if (entry.isFile()) {
+          try {
+            if (readFileSync(path).subarray(0, 2).toString() === "#!") fixtures.push(path);
+          } catch { /* sealed or concurrently absent fixture */ }
+        }
+      }
+    };
+    if (typeof base === "string") visit(base);
+    const invoke = () => runKiroSetup(argv);
+    const code = fixtures.length > 0
+      ? await withPrivateKiroLauncherFixtures(fixtures, invoke)
+      : await invoke();
     return { code, stdout: out.join(""), stderr: err.join("") };
   } finally {
     outSpy.mockRestore();
@@ -627,6 +645,29 @@ describe("runKiroSetup launch", () => {
     expect(lines[0]?.split(/\s+/)).toEqual(["--v3", "--agent", "kiro-fabric"]);
     expect(lines[1]).toBe(realpathSync(root));
   });
+
+  itPosix("rejects legacy managed launch and installed doctor with update guidance", async () => {
+    const root = project("legacy-managed-selection");
+    const wrapper = writeFakeKiroWrapper(join(base, "fake-kiro-legacy-selection"));
+    const installed = await runSetup([
+      "install", "--yes", "--json", "--project-root", root, "--kiro-binary", wrapper,
+    ]);
+    expect(installed.code).toBe(0);
+    const manifestPath = join(root, ".kiro", ".kiro-fabric", "install.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.format = 2;
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", { mode: 0o600 });
+
+    const launch = await runSetup(["launch", "--project-root", root]);
+    expect(launch.code).toBe(1);
+    expect(launch.stderr).toMatch(/legacy format-2.*update.*repair/i);
+
+    const doctor = await runSetup(["doctor", "--project-root", root, "--json"]);
+    expect(doctor.code).toBe(1);
+    const report = parseJsonStdout(doctor.stdout) as { checks: Array<{ id: string; message: string }> };
+    expect(report.checks.find((check) => check.id === "install.manifest")?.message)
+      .toMatch(/legacy format-2.*update.*repair/i);
+  }, 120_000);
 
   itPosix("refuses an unhealthy project install instead of falling back to a healthy user install", async () => {
     const root = project("launch-unhealthy-project");

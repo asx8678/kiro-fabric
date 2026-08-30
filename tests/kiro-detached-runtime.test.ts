@@ -3,11 +3,8 @@
 // two independent MCP processes execute the profile-recorded installed entry.
 
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
-  appendFileSync,
   chmodSync,
-  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -16,7 +13,6 @@ import {
   readdirSync,
   renameSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,7 +25,6 @@ import { spawnJsonRpcProcess } from "../src/kiro/supervisor.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
-const fakeKiroSource = join(repoRoot, "tests", "fixtures", "kiro", "fake-kiro.mjs");
 const disposablePrefix = join(resolve(tmpdir()), "kiro-fabric-detached-");
 let acceptanceRoot: string | undefined;
 
@@ -56,6 +51,53 @@ const removeAcceptanceRoot = (): void => {
 };
 
 afterEach(removeAcceptanceRoot);
+
+const buildNativeFakeKiro = async (directory: string): Promise<string> => {
+  const source = join(directory, "main.go");
+  const binary = join(directory, "kiro-cli-fixture");
+  writeFileSync(source, `package main
+import (
+  "bufio"
+  "encoding/json"
+  "fmt"
+  "os"
+  "strings"
+)
+func send(id any, result any) { json.NewEncoder(os.Stdout).Encode(map[string]any{"jsonrpc":"2.0", "id":id, "result":result}) }
+func main() {
+  args := os.Args[1:]
+  if len(args)>0 && args[0]=="--version" { fmt.Println("kiro-cli 2.20.1"); return }
+  if len(args)>1 && args[0]=="acp" && args[1]=="--help" { fmt.Println("--agent-engine v3 --auth-method cli"); return }
+  if len(args)>1 && args[0]=="agent" && args[1]=="validate" {
+    path:=""; for i,a:=range args { if a=="--path" && i+1<len(args) { path=args[i+1] } }
+    bytes,err:=os.ReadFile(path); if err!=nil || !strings.Contains(string(bytes),"\\\"name\\\"") { fmt.Fprintln(os.Stderr,"error: agent config missing required field: name"); return }
+    fmt.Println("agent config is valid"); return
+  }
+  if len(args)==0 || args[0]!="acp" {
+    if log:=os.Getenv("KIRO_SETUP_LAUNCH_LOG"); log!="" { f,_:=os.OpenFile(log,os.O_CREATE|os.O_APPEND|os.O_WRONLY,0600); fmt.Fprintln(f,strings.Join(args," ")); f.Close() }
+    return
+  }
+  scanner:=bufio.NewScanner(os.Stdin); scanner.Buffer(make([]byte,1024),1024*1024)
+  for scanner.Scan() {
+    var msg map[string]any; if json.Unmarshal(scanner.Bytes(),&msg)!=nil { continue }
+    id,ok:=msg["id"]; if !ok { continue }; method,_:=msg["method"].(string)
+    switch method {
+    case "initialize": send(id,map[string]any{"protocolVersion":1,"agentCapabilities":map[string]any{"loadSession":true}})
+    case "session/new", "session/load": send(id,map[string]any{"sessionId":"detached-fixture-session","modes":map[string]any{"currentModeId":"vibe","availableModes":[]any{map[string]any{"id":"vibe"},map[string]any{"id":"kiro-fabric"}}}})
+    default: send(id,map[string]any{})
+    }
+  }
+}
+`);
+  await execFileAsync("go", ["build", "-trimpath", "-ldflags=-s -w", "-o", binary, source], {
+    cwd: directory,
+    env: { ...process.env, CGO_ENABLED: "0" },
+    encoding: "utf8",
+    timeout: 60_000,
+  });
+  chmodSync(binary, 0o755);
+  return binary;
+};
 
 interface InstalledProfile {
   mcpServers: {
@@ -143,18 +185,9 @@ describe("detached installed Kiro runtime", () => {
       const setupBin = join(packageOrigin, "node_modules", ".bin", "kiro-fabric-setup");
       expect(existsSync(setupBin)).toBe(true);
 
-      // Kiro is an explicitly external executable. Keep the fake outside the
-      // package origin so retiring Fabric's origin cannot accidentally remove
-      // the certified test tuple.
-      const copiedFakeKiro = join(externalFixtureDir, "fake-kiro.mjs");
-      copyFileSync(fakeKiroSource, copiedFakeKiro);
-      const fakeKiro = join(externalFixtureDir, "kiro-cli-fixture");
-      writeFileSync(
-        fakeKiro,
-        `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(copiedFakeKiro)} "$@"\n`,
-        { mode: 0o755 },
-      );
-      chmodSync(fakeKiro, 0o755);
+      // Production accepts a native Kiro artifact, not an unattested shebang.
+      // The fixture is a static Go executable with no launcher dependencies.
+      const fakeKiro = await buildNativeFakeKiro(externalFixtureDir);
 
       // PATH contains only failing canaries: any lookup of node, kiro-cli, npm,
       // pnpm, or a shell utility proves the detached profile was not using its
@@ -213,6 +246,8 @@ describe("detached installed Kiro runtime", () => {
           nodeSha256: string;
           mcpEntryPath: string;
           managerEntryPath: string;
+          kiroBinaryPath: string;
+          kiroSha256: string;
           closure: { root: string; files: Array<{ path: string; installedSha256: string; executableMode?: number }> };
         };
       };
@@ -239,56 +274,19 @@ describe("detached installed Kiro runtime", () => {
       });
       const entryRelative = relative(kiroHome, manifest.runtime.mcpEntryPath).split(sep).join("/");
       expect(manifest.runtime.closure.files).toContainEqual(expect.objectContaining({ path: entryRelative }));
+      const kiroRelative = relative(kiroHome, manifest.runtime.kiroBinaryPath).split(sep).join("/");
+      expect(manifest.runtime.closure.files).toContainEqual({
+        path: kiroRelative,
+        installedSha256: manifest.runtime.kiroSha256,
+        executableMode: 0o555,
+      });
       expect(recorded.args[0]).not.toContain(packageOrigin);
 
-      const runBootstrap = async (command: "status" | "repair") => {
-        const result = await execFileAsync(process.execPath, [
-          setupBin,
-          command,
-          ...lifecycleBase,
-          "--kiro-binary",
-          fakeKiro,
-          ...(command === "repair" ? ["--yes"] : []),
-          "--json",
-        ], { cwd: projectRoot, env: hermeticEnv, encoding: "utf8", timeout: 90_000 });
-        return JSON.parse(String(result.stdout)) as Record<string, any>;
-      };
-      const expectDamagedThenRepair = async (mutate: () => void): Promise<void> => {
-        mutate();
-        const damaged = await runBootstrap("status");
-        expect(damaged.scopes.user.healthy).toBe(false);
-        expect(damaged.scopes.user.issue).toEqual(expect.any(String));
-        const repaired = await runBootstrap("repair");
-        expect(repaired.ok).toBe(true);
-        expect((await runBootstrap("status")).scopes.user.healthy).toBe(true);
-      };
-
-      await expectDamagedThenRepair(() => {
-        chmodSync(manifest.runtime.nodePath, 0o755);
-        appendFileSync(manifest.runtime.nodePath, "tamper");
-      });
-      expect(createHash("sha256").update(readFileSync(manifest.runtime.nodePath)).digest("hex"))
-        .toBe(manifest.runtime.nodeSha256);
-
-      const originalManager = readFileSync(manifest.runtime.managerEntryPath);
-      await expectDamagedThenRepair(() => {
-        chmodSync(manifest.runtime.managerEntryPath, 0o644);
-        writeFileSync(manifest.runtime.managerEntryPath, "tampered manager\n");
-      });
-      expect(readFileSync(manifest.runtime.managerEntryPath)).toEqual(originalManager);
-
-      await expectDamagedThenRepair(() => chmodSync(manifest.runtime.nodePath, 0o644));
-      expect(statSync(manifest.runtime.nodePath).mode & 0o777).toBe(0o555);
-
-      await expectDamagedThenRepair(() => {
-        const changed = JSON.parse(readFileSync(manifestPath, "utf8")) as { packageVersion: string };
-        changed.packageVersion = "0.0.0-tampered";
-        writeFileSync(manifestPath, JSON.stringify(changed, null, 2) + "\n");
-      });
-
-      // Rename, rather than recursively deleting, exactly the direct temporary
-      // origin. The old absolute import/closure source path is now absent while
-      // cleanup remains bounded to acceptanceRoot.
+      // Remove both external origins before any installed Kiro execution. The
+      // remaining native fake, Node, manager, MCP bundle, and skills are all
+      // inside and attested by the immutable format-3 release.
+      rmSync(externalFixtureDir, { recursive: true, force: true });
+      expect(existsSync(fakeKiro)).toBe(false);
       if (dirname(packageOrigin) !== root || dirname(retiredOrigin) !== root) {
         throw new Error("refusing to retire a package origin outside the acceptance root");
       }
@@ -296,31 +294,46 @@ describe("detached installed Kiro runtime", () => {
       expect(existsSync(packageOrigin)).toBe(false);
       expect(existsSync(retiredOrigin)).toBe(true);
 
+      const managerArgs = [manifest.runtime.managerEntryPath];
+      const runInstalled = async (command: "status" | "doctor" | "update" | "repair") => {
+        const result = await execFileAsync(manifest.runtime.nodePath, [
+          ...managerArgs,
+          command,
+          ...lifecycleBase,
+          ...(command === "update" || command === "repair" ? ["--yes"] : []),
+          "--json",
+        ], { cwd: projectRoot, env: hermeticEnv, encoding: "utf8", timeout: 90_000 });
+        return JSON.parse(String(result.stdout)) as Record<string, any>;
+      };
       // Every probe launches a new process from the command and args persisted
       // in the installed profile. The first process is fully reaped before the
       // second starts, ruling out module-cache or inherited-process success.
       await probeInstalledMcp(profile, projectRoot, hermeticEnv);
       await probeInstalledMcp(profile, projectRoot, hermeticEnv);
 
-      // Fresh manager processes also use only attested release paths. Status
-      // and repair execute after origin removal; repair resolves this installed
-      // release itself as the current artifact and preserves the same digest.
-      const managerArgs = [manifest.runtime.managerEntryPath];
-      const status = await execFileAsync(manifest.runtime.nodePath, [
+      // Full packed, fresh-process lifecycle acceptance after both external
+      // origins are gone: installed doctor, zero-prompt launch, update, repair,
+      // status, then uninstall below.
+      const doctor = await runInstalled("doctor");
+      expect(doctor.ok).toBe(true);
+
+      const launchLog = join(root, "managed-launch.log");
+      await execFileAsync(manifest.runtime.nodePath, [
         ...managerArgs,
-        "status",
-        ...lifecycleBase,
-        "--json",
-      ], { cwd: projectRoot, env: hermeticEnv, encoding: "utf8", timeout: 30_000 });
-      expect(JSON.parse(String(status.stdout)).scopes.user.healthy).toBe(true);
-      const repair = await execFileAsync(manifest.runtime.nodePath, [
-        ...managerArgs,
-        "repair",
-        ...lifecycleBase,
-        "--yes",
-        "--json",
-      ], { cwd: projectRoot, env: hermeticEnv, encoding: "utf8", timeout: 90_000 });
-      expect(JSON.parse(String(repair.stdout)).ok).toBe(true);
+        "launch",
+        "--project-root",
+        projectRoot,
+      ], {
+        cwd: projectRoot,
+        env: { ...hermeticEnv, KIRO_SETUP_LAUNCH_LOG: launchLog },
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      expect(readFileSync(launchLog, "utf8").trim()).toBe("--v3 --agent kiro-fabric");
+
+      expect((await runInstalled("update")).ok).toBe(true);
+      expect((await runInstalled("repair")).ok).toBe(true);
+      expect((await runInstalled("status")).scopes.user.healthy).toBe(true);
 
       expect(existsSync(packageOrigin)).toBe(false);
       expect(existsSync(canaryLog) ? readFileSync(canaryLog, "utf8") : "").toBe("");

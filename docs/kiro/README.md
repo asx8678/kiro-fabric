@@ -6,7 +6,9 @@ integration workspaces.
 ## Start here: run the installer
 
 Requirements: Node.js 24 or newer and an installed, authenticated Kiro CLI
-2.20.1.
+2.20.1 native executable (ELF/Mach-O/PE as applicable). Unsupported shebang
+wrappers are rejected unless a future launcher supplies a complete attested
+dependency closure.
 
 After installing the npm package globally, launch the guided setup console:
 
@@ -37,8 +39,9 @@ bound to the canonical project root and may never target the Kiro config home.
 Non-interactive source preparation requires `--yes` on a mutating command or
 `KIRO_FABRIC_AUTO_BUILD=1`; set `KIRO_FABRIC_AUTO_BUILD=0` to require a prebuilt
 checkout. Always inspect an explicit mutation with `--dry-run` first. Do not use a
-transient package runner because the generated profile stores an absolute path
-to its managed runtime.
+transient package runner because the generated profile stores absolute paths
+to its format-3 managed runtime. Installed doctor and managed launch require
+that fully attested format; legacy formats fail with update/repair guidance.
 
 See [installer.md](installer.md) for all commands, update/uninstall behavior,
 backups, ownership rules, troubleshooting, and exit codes.

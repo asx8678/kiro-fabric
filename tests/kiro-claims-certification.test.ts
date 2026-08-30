@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error The executable certification harness is dependency-free JavaScript.
 import { claimsFromDoctorReport, lifecycleClaims, main } from "../scripts/certify-kiro-claims.mjs";
+import { buildNativeKiroFixture } from "./helpers/native-kiro-fixture.js";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
@@ -71,14 +72,7 @@ describe("Kiro claims certification aggregation", () => {
 
   it("executes managed install, closure, ownership, sibling, and idempotency probes", () => {
     const directory = mkdtempSync(join(tmpdir(), "kiro-claims-harness-test-"));
-    const wrapper = join(directory, "fake-kiro");
-    const fixture = join(root, "tests", "fixtures", "kiro", "fake-kiro.mjs");
-    writeFileSync(
-      wrapper,
-      `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)} "$@"\n`,
-      { mode: 0o755 },
-    );
-    chmodSync(wrapper, 0o755);
+    const wrapper = buildNativeKiroFixture(directory);
     try {
       const claims = lifecycleClaims(wrapper);
       expect(claims.map((claim: { id: string }) => claim.id)).toEqual([

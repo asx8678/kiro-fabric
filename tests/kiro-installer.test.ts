@@ -34,11 +34,13 @@ import { uninstallKiroProfile } from "../src/kiro/uninstall.js";
 import { runKiroCli } from "../src/kiro/cli.js";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { assertSupportedKiro } from "../src/kiro/compatibility.js";
+import { withPrivateKiroLauncherFixtures } from "../src/kiro/compatibility-test-seam.js";
 import { kiroProfilePath } from "../src/kiro/profile.js";
 import {
   deployRuntimeClosure,
   planRuntimeClosureDeployment,
 } from "../src/kiro/runtime-closure.js";
+import { buildNativeKiroFixture } from "./helpers/native-kiro-fixture.js";
 import {
   managedFileTransition,
   managedPaths,
@@ -460,12 +462,14 @@ describe("installKiroProfile", () => {
     process.env.VITEST = "true";
     process.env.NODE_ENV = "test";
     try {
-      const result = await installKiroProfileProduction({
-        projectRoot: dir,
-        kiroBinary: wrapperPath,
-        runtimeNodeSourcePath: wrapperPath,
-        skipRuntimeClosure: true,
-      } as Parameters<typeof installKiroProfileProduction>[0] & Record<string, unknown>);
+      const result = await withPrivateKiroLauncherFixtures([wrapperPath], () =>
+        installKiroProfileProduction({
+          projectRoot: dir,
+          kiroBinary: wrapperPath,
+          runtimeNodeSourcePath: wrapperPath,
+          skipRuntimeClosure: true,
+        } as Parameters<typeof installKiroProfileProduction>[0] & Record<string, unknown>),
+      );
       expect(result.runtimeClosure).toBeDefined();
       expect(JSON.parse(readFileSync(result.manifestPath, "utf8")).format).toBe(3);
     } finally {
@@ -641,7 +645,10 @@ describe("installKiroProfile", () => {
       projectRoot: dir,
       mcpEntryPath: mcpEntry,
       nodePath: otherNode,
-    }, { kiroIdentity: await assertSupportedKiro(wrapperPath) });
+    }, { kiroIdentity: await withPrivateKiroLauncherFixtures(
+      [wrapperPath],
+      () => assertSupportedKiro(wrapperPath),
+    ) });
     const paths = managedPaths(next.installRoot, next.layout);
     const transaction: KiroManagedTransaction = {
       format: 1,
@@ -687,7 +694,10 @@ describe("installKiroProfile", () => {
     chmodSync(altRuntime, 0o755);
     // The extra byte distinguishes the trusted runtime artifact. Certification
     // still uses the bootstrap process Node in this test process.
-    const identity = await assertSupportedKiro(wrapperPath);
+    const identity = await withPrivateKiroLauncherFixtures(
+      [wrapperPath],
+      () => assertSupportedKiro(wrapperPath),
+    );
     const closure = planRuntimeClosureDeployment(dir, "project", {
       nodeSourcePath: altRuntime,
       kiroAttestation: identity,
@@ -798,6 +808,10 @@ describe("installKiroProfile", () => {
 describe("management CLI", () => {
   const cliEntry = join(repoRoot, "dist", "kiro", "cli-entry.js");
 
+  beforeEach(() => {
+    wrapperPath = buildNativeKiroFixture(base);
+  });
+
   it("rejects unknown commands with usage exit 2", async () => {
     await expect(
       execFileAsync(process.execPath, [cliEntry, "frobnicate", "kiro"]),
@@ -836,7 +850,7 @@ describe("management CLI", () => {
       "--kiro-binary", wrapperPath, "--json",
     ]);
     expect(JSON.parse(second.stdout).action).toBe("noop");
-  });
+  }, 30_000);
 
   it("installs --allow-shell and --subagents as explicit managed settings", async () => {
     const dir = project("cli-allow-shell");

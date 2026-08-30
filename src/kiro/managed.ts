@@ -483,7 +483,7 @@ export const readManifest = (
         typeof parsed.runtime.kiroSourcePath !== "string" ||
         parsed.runtime.managerEntryPath !== expectedManager ||
         !isSha256Hex(nodeSha256) ||
-        !closure.files.some((file) => file.path === runtimeRoot + "/bin/" + nodeName && file.installedSha256 === nodeSha256 && (file.executableMode === 0o555 || file.executableMode === 0o755)) ||
+        !closure.files.some((file) => file.path === runtimeRoot + "/bin/" + nodeName && file.installedSha256 === nodeSha256 && file.executableMode === 0o555) ||
         !isSha256Hex(kiroSha256) ||
         !closure.files.some((file) => file.path === runtimeRoot + "/bin/" + kiroName && file.installedSha256 === kiroSha256 && file.executableMode === 0o555) ||
         !closure.files.some((file) => file.path === runtimeRoot + "/kiro/management-entry.js")
@@ -496,9 +496,10 @@ export const readManifest = (
   if (closure) {
     const rawGenerations = parsed.runtime.generations;
     if (rawGenerations === undefined) {
-      // Early format-3 manifests predate generation lineage. Treat their one
-      // attested closure as the complete owned set so repair can migrate it.
-      generations = [closure];
+      // Format 2 predates generation lineage. A format-3 reader preserves a
+      // missing lineage as incomplete so launch/installed doctor fail closed;
+      // update or trusted repair can migrate it.
+      generations = parsed.format === KIRO_PREVIOUS_INSTALL_MANIFEST_FORMAT ? [closure] : undefined;
     } else if (!Array.isArray(rawGenerations) || rawGenerations.length === 0) {
       throw new KiroInstallError("manifest", "install manifest runtime generations are malformed");
     } else {

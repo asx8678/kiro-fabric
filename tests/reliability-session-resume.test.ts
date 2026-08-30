@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
-import { installKiroProfile } from "../src/kiro/install.js";
+import { installKiroProfile } from "../src/kiro/install-test-helper.js";
 import type { FabricMainAgentDeliveryRequest, FabricMainAgentTarget } from "../src/main-agent.js";
 import { MeshStore, type MeshIdentity } from "../src/mesh/store.js";
 import { ResidentHost } from "../src/residency/host.js";

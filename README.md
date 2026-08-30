@@ -37,7 +37,7 @@ fabric_exec({ code })
 ## Requirements
 
 - Node.js 24 or newer
-- Kiro CLI exactly 2.20.1 with agent engine v3 for the managed Kiro integration
+- Kiro CLI exactly 2.20.1 with agent engine v3, supplied as a native executable artifact (ELF/Mach-O/PE as applicable), for the managed Kiro integration
 
 ## Kiro CLI quickstart
 
@@ -87,7 +87,7 @@ kiro-cli --version
 sh scripts/install-kiro-fabric.sh
 ```
 
-Node must report version 24 or newer. Kiro must report version 2.20.1. Install and authenticate Kiro CLI through its official setup before continuing. The installed format-3 profile records only the vendored Node and release paths under the selected `.kiro` tree; the npm package or source checkout may be retired after installation.
+Node must report version 24 or newer. Kiro must report version 2.20.1. Install and authenticate Kiro CLI through its official setup before continuing. Plain shebang wrappers are rejected because they do not attest their interpreter/script dependency closure. The installed format-3 profile records the vendored Node, copied Kiro artifact, and release paths under the selected `.kiro` tree (both executables are `0555`); the external Kiro source, npm package, or source checkout may be retired after installation.
 
 ### 2. Run the compatibility preflight
 
@@ -220,7 +220,7 @@ sh scripts/install-kiro-fabric.sh install --user \
   --project-root /absolute/path/to/project --yes
 ```
 
-The source checkout is only the trusted bootstrap artifact. Format-3 installation copies the complete runtime, manager, skills, and Node executable into the selected `.kiro` tree.
+The source checkout and external Kiro path are preflight sources only. Format-3 installation copies the complete runtime, manager, skills, Node executable, and Kiro executable artifact into the selected `.kiro` tree.
 
 ### Update or uninstall
 

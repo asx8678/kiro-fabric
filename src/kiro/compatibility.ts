@@ -9,6 +9,7 @@ import {
   chmodSync,
   constants,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   statSync,
@@ -27,6 +28,7 @@ import {
   KIRO_AGENT_ENGINE,
   KIRO_CLI_VERSION,
 } from "./profile.js";
+import { isPrivateKiroLauncherFixture } from "./compatibility-test-seam.js";
 
 export { KIRO_ACP_AUTH_METHOD, KIRO_AGENT_ENGINE, KIRO_CLI_VERSION } from "./profile.js";
 
@@ -46,6 +48,7 @@ export type KiroCompatibilityState =
   | "ok"
   | "not-found"
   | "not-executable"
+  | "unsupported-launcher"
   | "exec-failure"
   | "timeout"
   | "unparsable"
@@ -189,13 +192,34 @@ const failedProbeState = (error: unknown): "timeout" | "exec-failure" => {
     : "exec-failure";
 };
 
+const hasNativeExecutableFormat = (path: string): boolean => {
+  const header = readFileSync(path).subarray(0, 4);
+  if (header.length < 4) return false;
+  if (process.platform === "linux") {
+    return header.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])); // ELF
+  }
+  if (process.platform === "darwin") {
+    const magic = header.readUInt32BE(0);
+    return magic === 0xfeedface || magic === 0xfeedfacf ||
+      magic === 0xcefaedfe || magic === 0xcffaedfe ||
+      magic === 0xcafebabe || magic === 0xcafebabf ||
+      magic === 0xbebafeca || magic === 0xbfbafeca; // Mach-O/fat
+  }
+  if (process.platform === "win32") return header[0] === 0x4d && header[1] === 0x5a; // PE/COFF
+  return false;
+};
+
 const stageKiroExecutable = (
   requestedPath: string,
 ): { resolvedPath: string; attestation: ExecutableAttestation; root: string; dispose(): void } |
-  { error: "not-found" | "not-executable" } => {
+  { error: "not-found" | "not-executable" | "unsupported-launcher" } => {
   const resolved = resolveCanonicalExecutable(requestedPath);
   if ("error" in resolved) return resolved;
   const source = attestExecutable(resolved.path);
+  if (!hasNativeExecutableFormat(source.path) &&
+      !isPrivateKiroLauncherFixture(source.path, source.sha256)) {
+    return { error: "unsupported-launcher" };
+  }
   const root = mkdtempSync(join(tmpdir(), "kiro-fabric-kiro-stage-"));
   const stagedPath = join(root, process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli");
   try {
@@ -286,6 +310,7 @@ const describeKiroCompatibilityFailure = (report: KiroCompatibilityReport): stri
     case "ok": return "supported";
     case "not-found": return `Kiro CLI executable not found: ${report.requestedPath}`;
     case "not-executable": return `Kiro CLI path is not an executable regular file: ${report.requestedPath}`;
+    case "unsupported-launcher": return `unsupported Kiro launcher artifact: ${report.requestedPath}; require a native ELF/Mach-O/PE executable or a complete attested launcher dependency closure`;
     case "timeout": return `Kiro CLI version probe timed out: ${report.requestedPath}`;
     case "exec-failure": return `Kiro CLI version probe failed: ${report.requestedPath}`;
     case "unparsable": return `unparsable kiro-cli version output ${JSON.stringify(observed)}`;

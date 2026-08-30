@@ -16,7 +16,7 @@ import {
   residentRoot,
   type ResidentHostConfig,
 } from "../src/residency/protocol.js";
-import { installKiroProfile } from "../src/kiro/install.js";
+import { installKiroProfile } from "../src/kiro/install-test-helper.js";
 import { FabricControlPlane } from "../src/topology/control-plane.js";
 import { ParticipantDirectory } from "../src/topology/participant-directory.js";
 import { makeTreeRemovable } from "./helpers/removable-tree.js";

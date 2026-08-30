@@ -7,6 +7,7 @@ import {
   withKiroInstallTestOverrides,
   type KiroInstallTestOverrides,
 } from "./install-test-seam.js";
+import { withPrivateKiroLauncherFixtures } from "./compatibility-test-seam.js";
 
 export type KiroTestInstallOptions = KiroInstallOptions & KiroInstallTestOverrides & {
   dryRun?: boolean;
@@ -17,11 +18,15 @@ export const installKiroProfile = async (
   options: KiroTestInstallOptions = {},
 ): Promise<KiroInstallResult> => {
   const { runtimeNodeSourcePath, skipRuntimeClosure, ...production } = options;
-  return withKiroInstallTestOverrides(
+  const fixture = production.kiroBinary;
+  const operation = () => withKiroInstallTestOverrides(
     {
       ...(runtimeNodeSourcePath ? { runtimeNodeSourcePath } : {}),
       ...(skipRuntimeClosure !== undefined ? { skipRuntimeClosure } : {}),
     },
     () => installKiroProfileProduction(production),
   );
+  return fixture
+    ? withPrivateKiroLauncherFixtures([fixture], operation)
+    : operation();
 };

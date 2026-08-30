@@ -44,8 +44,9 @@ A project install writes only:
 - the packaged `fabric-exec`, `fabric-guide`, `fabric-review`, and
   `fabric-workflow` skills under `<project>/.kiro/skills/`
 - an immutable, digest-addressed release under
-  `<project>/.kiro/.kiro-fabric/runtime/<digest>/`, including `bin/node`, the
-  MCP and worker entries, exact skill sources, and `kiro/management-entry.js`
+  `<project>/.kiro/.kiro-fabric/runtime/<digest>/`, including `bin/node`,
+  `bin/kiro-cli`, the MCP and worker entries, exact skill sources, and
+  `kiro/management-entry.js`
 - content-addressed backups under `<project>/.kiro/.kiro-fabric/backups/`
 - a short-lived `<project>/.kiro/.kiro-fabric/operation.lock` during mutation
 
@@ -128,22 +129,24 @@ so replacing or symlink-retargeting that path requires reinstalling the
 profile. Launching from a subdirectory of the unchanged project remains
 supported.
 
-Every Fabric-owned executable executes from the selected `.kiro` tree; this is
-the hermetic Fabric boundary. Format 3 attests every release byte and records executable mode `0755` for the
-installed Node. Publication uses digest-addressed sibling staging, verifies the
-copied bytes and mode, fsyncs staged leaves/directories, and only then atomically
-activates the release. The profile's command and `KIRO_FABRIC_NODE_BINARY` both
-name this installed Node, so Fabric MCP and worker processes never resolve Node
-through the bootstrap `process.execPath` or `PATH` after installation. The one
-execution-origin exception is the external Kiro CLI: its certified canonical
-absolute path is persisted in the profile/manifest and reused by lifecycle and
-workers.
+Every managed executable runs from the selected `.kiro` tree; this is the
+hermetic installed boundary. Format 3 attests every release byte and records
+mode `0555` for both installed Node and installed Kiro. Publication uses
+digest-addressed sibling staging, verifies copied bytes and modes, fsyncs staged
+leaves/directories, and only then atomically activates the release. The profile,
+workers, doctor, and launch use these installed paths; they never execute the
+replaceable external Kiro source or resolve Node through bootstrap
+`process.execPath`/`PATH` after installation.
 
 Unknown or user-modified profile or same-name managed-skill content is refused
 unless you pass `--force`, which backs up each existing regular file first.
-Unrelated sibling skills are never claimed. Format-2 manifests record the
-pre-vendored runtime; format 3 additionally owns the installed Node, manager,
-and explicit advanced-grant state. Ordinary install and uninstall refuse a
+Unrelated sibling skills are never claimed. Formats 1 and 2 are legacy read and
+migration inputs only. Managed launch and installed doctor require a fully
+verified format-3 manifest, profile, skills, all runtime generations, installed
+Node/Kiro artifacts, activation marker, manager, and grant state. A legacy
+selection fails with an actionable instruction to run `update` (or `repair`
+from a trusted current package); it never falls back to ambient Kiro or another
+scope. Ordinary install and uninstall refuse a
 digest-directory hash, mode, or file-set mismatch. Setup `update`/`repair`, when
 executed from a trusted current package or source artifact, instead stages the
 expected same-digest release, verifies every byte and executable mode, and
@@ -234,12 +237,16 @@ The immutable release remains self-hosting. Read `runtime.nodePath` and
 ```
 
 Pass the original `--kiro-home` where applicable. `--kiro-binary` names an
-**external source** only during install/update preflight. Fabric copies the exact
-descriptor-attested bytes into the immutable release, records the source as
+**external source artifact** only during install/update preflight. Production
+accepts a native executable artifact (ELF on Linux, Mach-O on macOS, PE/COFF on
+Windows), or in future a launcher only when its complete interpreter/script
+closure is explicitly staged and attested. An ordinary shebang wrapper is not a
+complete artifact and is rejected. Fabric copies the exact descriptor-attested
+native bytes into the immutable release, records the external provenance as
 `runtime.kiroSourcePath`, and records the only managed execution path as
 `runtime.kiroBinaryPath`. Version, capability, validation, doctor, worker, and
-interactive launch processes execute a private read-only stage or that installed
-copy—never the replaceable external path. A healthy installed release can use
+interactive launch processes execute a private read-only preflight stage or that
+installed copy—never the replaceable external path. A healthy installed release can use
 its installed copy as the source for no-op lifecycle maintenance. To update
 versions or repair runtime tampering, invoke `kiro-fabric-setup` from a trusted
 current package or source artifact; do not execute a damaged installed Node,
@@ -251,8 +258,16 @@ Uninstall is hash-owned:
 - Managed profile matching the recorded hash and no user backup → remove the profile.
 - Managed profile or skill with a verified displaced-user backup → restore those exact bytes.
 - Newly created managed skills → remove only their recorded, hash-matching leaves.
-- Immutable release (Node and Kiro included) → atomically quarantine each exact attested generation under its descriptor-anchored runtime parent, then remove only that quarantined file set; preserve unrelated or raced replacements.
+- Immutable release (Node and Kiro included) → atomically move each generation into a random owner-only (`0700`) quarantine, verify it there, hold directory/file descriptors and compare inode identities through deletion, and preserve unrelated or raced replacements. Unsupported cleanup platforms fail closed. Linux traversal remains descriptor-anchored through `/proc/self/fd`; macOS uses the private owner boundary plus held identity checks.
 - User-modified managed content → refuse before mutation. There is no uninstall `--force`.
+
+The quarantine boundary protects against other UIDs and accidental/path races.
+Pure Node cannot make an owner-writable Unix directory hostile to another
+process already running as the same UID: that process can chmod or rename names
+between a final inode comparison and a pathname removal. Held descriptors,
+post-verification comparisons, private random names, and link-count checks make
+such interference detectable but cannot provide a kernel-enforced same-UID
+security boundary. Treat malicious same-UID code as inside the installer TCB.
 
 Uninstall never runs `kiro-cli` and never requests a model turn. A second
 uninstall is an idempotent no-op. Unrelated sibling profiles and orphaned
@@ -273,10 +288,11 @@ kiro-fabric doctor kiro --user --project-root /canonical/project --json
 
 When invoked through the installed management entry, doctor itself and all MCP
 probes execute with the release's attested Node. Doctor first verifies the installed manifest,
-profile hash, every managed skill hash and aggregate digest, the exact runtime
-file set, release/manifest identity, executable mode, and the no-follow activation marker. Format-1 manifests are reported
-as legacy and do not claim skill or closure attestation; format 2 is the
-pre-vendored-Node closure and format 3 is the self-hosted immutable release. Checks also cover the
+profile hash, every managed skill hash and aggregate digest, every owned runtime
+generation, release/manifest identity, exact `0555` executable modes, and the
+no-follow activation marker. Only format 3 qualifies as an installed doctor
+target. Formats 1 and 2 fail with update/repair guidance and no installed MCP or
+Kiro probe is substituted from the invoking package or ambient PATH. Checks also cover the
 Node/Kiro tuple, generated profile shape, `kiro-cli agent
 validate` plus a negative control (exit 0 is not trusted), the built MCP
 adapter's `initialize`/`tools/list`, and ACP startup with process-group
