@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+import copy
 import json
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from mutation_verifiers import MutationSuiteError, task_fingerprint, validate_report
+from mutation_verifiers import MutationSuiteError, run_mutation_suite, validate_report
 
 
 BENCH = Path(__file__).resolve().parent
@@ -50,6 +51,7 @@ class MutationVerifierTest(unittest.TestCase):
             (task / "mutants.json").write_text(json.dumps({
                 "schema_version": 1,
                 "fixture": "mutants/fixture",
+                "expected_checks": ["invalid_input"],
                 "mutants": [{
                     "id": "accept-invalid",
                     "description": "Accepts invalid input.",
@@ -83,27 +85,41 @@ JSON
             with self.assertRaisesRegex(MutationSuiteError, "untrusted"):
                 validate_report(report, bench, ["weak"])
 
-    def test_changed_suite_invalidates_a_previously_trusted_report(self):
+    def test_report_validation_requires_exact_unique_sets_and_summary(self):
+        slug = "scc-bounded-memory-spilling"
+        payload = run_mutation_suite(BENCH, [slug])
+        self.assertTrue(payload["trusted"])
+        mutations = {
+            "task slug": lambda value: value["tasks"].append(copy.deepcopy(value["tasks"][0])),
+            "mutant set": lambda value: value["tasks"][0]["mutants"].pop(),
+            "check set": lambda value: value["tasks"][0]["mutants"][0]["checks"].pop("build"),
+            "expected check set": lambda value: value["tasks"][0]["mutants"][0]["expected_failed_checks"].append("build"),
+            "summary totals": lambda value: value["summary"].update({"mutants": 999}),
+        }
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory) / "report.json"
-            task = BENCH / "tasks" / "scc-bounded-memory-spilling"
-            payload = {
-                "schema_version": 1,
-                "kind": "benchmark-verifier-mutation-report",
-                "trusted": True,
-                "tasks": [{
-                    "slug": task.name,
-                    "trusted": True,
-                    "fingerprint": task_fingerprint(task),
-                    "mutants": [{"id": "tested", "status": "rejected", "reward_binary": 0}],
-                }],
-            }
             report.write_text(json.dumps(payload))
-            validate_report(report, BENCH, [task.name])
+            validate_report(report, BENCH, [slug])
+            for expected, mutate in mutations.items():
+                with self.subTest(expected=expected):
+                    tampered = copy.deepcopy(payload)
+                    mutate(tampered)
+                    report.write_text(json.dumps(tampered))
+                    with self.assertRaisesRegex(MutationSuiteError, expected):
+                        validate_report(report, BENCH, [slug])
+
+    def test_changed_suite_invalidates_a_previously_trusted_report(self):
+        slug = "scc-bounded-memory-spilling"
+        payload = run_mutation_suite(BENCH, [slug])
+        self.assertTrue(payload["trusted"])
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            report.write_text(json.dumps(payload))
+            validate_report(report, BENCH, [slug])
             payload["tasks"][0]["fingerprint"] = "sha256:" + "0" * 64
             report.write_text(json.dumps(payload))
             with self.assertRaisesRegex(MutationSuiteError, "stale"):
-                validate_report(report, BENCH, [task.name])
+                validate_report(report, BENCH, [slug])
 
 
 if __name__ == "__main__":

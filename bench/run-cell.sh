@@ -6,8 +6,12 @@
 # Usage: run-cell.sh <task-dir> <config> <rep> <cell-out-dir> <agent-dir>
 #   config: baseline | agentless | fabric-local | fabric-local-{always,gated,disabled} | fabric-0.25.6
 #   agent-dir: isolated PI_CODING_AGENT_DIR (auth + settings) prepared by run-matrix.sh
-set -u
+set -euo pipefail
 
+[[ $# -eq 5 ]] || {
+  echo "usage: run-cell.sh <task-dir> <config> <rep> <cell-out-dir> <agent-dir>" >&2
+  exit 2
+}
 TASK_DIR="$1"
 CONFIG="$2"
 REP="$3"
@@ -17,30 +21,40 @@ AGENT_DIR="$5"
 BENCH="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$BENCH/.." && pwd)"
 TASK="$TASK_DIR/task.json"
+PROMPT_FILE="$TASK_DIR/prompt.txt"
+VERIFY_SCRIPT="$TASK_DIR/verify.sh"
 
-SLUG=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['slug'])" "$TASK")
-REPO_URL=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['repo'])" "$TASK")
-BASE_REF=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['base_ref'])" "$TASK")
-AGENT_TIMEOUT=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['agent_timeout_s'])" "$TASK")
-VERIFY_TIMEOUT=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['verify_timeout_s'])" "$TASK")
+# Validate every local input before checkout setup and, critically, before a Pi
+# process can make a model call. Expected agent/verifier nonzero exits are
+# captured explicitly below rather than weakening fail-fast setup semantics.
+TASK_VALUES=$(python3 - "$TASK" <<'PYTASK'
+import json, pathlib, re, sys
+path = pathlib.Path(sys.argv[1])
+try:
+    value = json.loads(path.read_text())
+except (OSError, json.JSONDecodeError) as error:
+    raise SystemExit(f"invalid task configuration: {error}")
+required = ("slug", "repo", "base_ref", "agent_timeout_s", "verify_timeout_s")
+if not isinstance(value, dict) or any(name not in value for name in required):
+    raise SystemExit("invalid task configuration: missing required fields")
+slug, repo, base_ref = (value[name] for name in required[:3])
+agent_timeout, verify_timeout = (value[name] for name in required[3:])
+if not isinstance(slug, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", slug):
+    raise SystemExit("invalid task configuration: invalid slug")
+if not all(isinstance(item, str) and item and "\t" not in item and "\n" not in item for item in (repo, base_ref)):
+    raise SystemExit("invalid task configuration: invalid repo/base_ref")
+if any(isinstance(item, bool) or not isinstance(item, int) or item < 1 for item in (agent_timeout, verify_timeout)):
+    raise SystemExit("invalid task configuration: timeouts must be positive integers")
+print("\t".join((slug, repo, base_ref, str(agent_timeout), str(verify_timeout))))
+PYTASK
+) || exit 2
+IFS=$'\t' read -r SLUG REPO_URL BASE_REF AGENT_TIMEOUT VERIFY_TIMEOUT <<< "$TASK_VALUES"
+[[ -r "$PROMPT_FILE" ]] || { echo "task is missing readable prompt: $PROMPT_FILE" >&2; exit 2; }
+[[ -x "$VERIFY_SCRIPT" ]] || { echo "task requires executable verifier: $VERIFY_SCRIPT" >&2; exit 2; }
+[[ -d "$AGENT_DIR" ]] || { echo "agent directory does not exist: $AGENT_DIR" >&2; exit 2; }
+[[ "$REP" =~ ^[0-9]+$ ]] || { echo "rep must be a non-negative integer" >&2; exit 2; }
 
-mkdir -p "$CELL/session-store" "$CELL/session" "$CELL/logs" "$CELL/artifacts"
-WORKDIR="$CELL/workdir"
-
-# --- fresh checkout at base ref ---
-CACHE="$BENCH/.cache/$(basename "$REPO_URL" .git)"
-if [[ ! -d "$CACHE/.git" ]]; then
-  git clone "$REPO_URL" "$CACHE" >/dev/null 2>&1
-fi
-git -C "$CACHE" fetch --quiet origin >/dev/null 2>&1 || true
-git clone --quiet "$CACHE" "$WORKDIR"
-# pin the task's base state: local main/master == base ref so agents that
-# "branch from main" (per DeepSWE prompts) start from the right tree
-git -C "$WORKDIR" branch -f master "$BASE_REF" 2>/dev/null || true
-git -C "$WORKDIR" branch -f main "$BASE_REF" 2>/dev/null || true
-git -C "$WORKDIR" checkout --quiet "$BASE_REF"
-
-# --- config flags ---
+# --- config flags (also validated before any model call) ---
 COMMON_FLAGS=(--print --thinking low --model openai-codex/gpt-5.6-sol --session-dir "$CELL/session-store" --no-prompt-templates --no-context-files --no-themes)
 PREWALK_ACTIVATION="disabled"
 case "$CONFIG" in
@@ -49,10 +63,6 @@ case "$CONFIG" in
     ;;
   agentless)
     # run-agentless.sh owns the two stock-Pi calls and their fixed bounds.
-    [[ -x "$TASK_DIR/verify.sh" ]] || {
-      echo "agentless config requires executable task verifier: $TASK_DIR/verify.sh" >&2
-      exit 2
-    }
     CFG_FLAGS=()
     ;;
   fabric-local|fabric-local-always|fabric-local-gated|fabric-local-disabled)
@@ -81,26 +91,55 @@ PYCONFIG
   *) echo "unknown config: $CONFIG" >&2; exit 2 ;;
 esac
 
+mkdir -p "$CELL/session-store" "$CELL/session" "$CELL/logs" "$CELL/artifacts"
+WORKDIR="$CELL/workdir"
+[[ ! -e "$WORKDIR" ]] || { echo "cell workdir already exists: $WORKDIR" >&2; exit 2; }
+
+# --- fresh checkout at base ref ---
+CACHE="$BENCH/.cache/$(basename "$REPO_URL" .git)"
+if [[ ! -d "$CACHE/.git" ]]; then
+  git clone "$REPO_URL" "$CACHE" >/dev/null 2>&1
+fi
+# A disconnected cache is usable at its already-certified base ref.
+if ! git -C "$CACHE" fetch --quiet origin >/dev/null 2>&1; then
+  echo "warning: cache fetch failed; using existing cache" >&2
+fi
+git clone --quiet "$CACHE" "$WORKDIR"
+# pin the task's base state: local main/master == base ref so agents that
+# "branch from main" (per DeepSWE prompts) start from the right tree
+if ! git -C "$WORKDIR" branch -f master "$BASE_REF" 2>/dev/null; then :; fi
+if ! git -C "$WORKDIR" branch -f main "$BASE_REF" 2>/dev/null; then :; fi
+git -C "$WORKDIR" checkout --quiet "$BASE_REF"
+
 # --- agent run with watchdog timeout (macOS lacks GNU timeout) ---
 cd "$WORKDIR"
 START=$(python3 -c 'import time;print(time.time())')
-PROMPT="$(cat "$TASK_DIR/prompt.txt")"
+PROMPT="$(<"$PROMPT_FILE")"
 if [[ "$CONFIG" == "agentless" ]]; then
-  "$BENCH/run-agentless.sh" "$WORKDIR" "$TASK_DIR/prompt.txt" \
-    "$CELL/session-store" "$CELL/logs" "$CELL/artifacts" "$AGENT_DIR" "$AGENT_TIMEOUT"
-  AGENT_EXIT=$?
+  if "$BENCH/run-agentless.sh" "$WORKDIR" "$PROMPT_FILE" \
+    "$CELL/session-store" "$CELL/logs" "$CELL/artifacts" "$AGENT_DIR" "$AGENT_TIMEOUT"; then
+    AGENT_EXIT=0
+  else
+    AGENT_EXIT=$?
+  fi
   echo "$AGENT_EXIT" > "$CELL/agent-exit-code.txt"
 else
-  (
-    PI_CODING_AGENT_DIR="$AGENT_DIR" pi "${COMMON_FLAGS[@]}" "${CFG_FLAGS[@]}" "$PROMPT" \
-      >"$CELL/logs/pi.stdout.txt" 2>"$CELL/logs/pi.stderr.txt" &
-    AGENT_PID=$!
-    ( sleep "$AGENT_TIMEOUT"; kill -TERM $AGENT_PID 2>/dev/null; sleep 20; kill -KILL $AGENT_PID 2>/dev/null ) &
-    WATCHDOG=$!
-    wait $AGENT_PID; AGENT_EXIT=$?
-    kill $WATCHDOG 2>/dev/null
-    echo "$AGENT_EXIT" > "$CELL/agent-exit-code.txt"
-  )
+  PI_CODING_AGENT_DIR="$AGENT_DIR" pi "${COMMON_FLAGS[@]}" "${CFG_FLAGS[@]}" "$PROMPT" \
+    >"$CELL/logs/pi.stdout.txt" 2>"$CELL/logs/pi.stderr.txt" &
+  AGENT_PID=$!
+  python3 -c 'import os, signal, sys, time
+pid, timeout, grace = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+time.sleep(timeout)
+try: os.kill(pid, signal.SIGTERM)
+except ProcessLookupError: raise SystemExit(0)
+time.sleep(grace)
+try: os.kill(pid, signal.SIGKILL)
+except ProcessLookupError: pass' "$AGENT_PID" "$AGENT_TIMEOUT" 20 &
+  WATCHDOG=$!
+  if wait "$AGENT_PID"; then AGENT_EXIT=0; else AGENT_EXIT=$?; fi
+  kill "$WATCHDOG" 2>/dev/null || true
+  wait "$WATCHDOG" 2>/dev/null || true
+  echo "$AGENT_EXIT" > "$CELL/agent-exit-code.txt"
 fi
 END=$(python3 -c 'import time;print(time.time())')
 WALL=$(python3 -c "print(round($END - $START, 1))")
@@ -181,17 +220,29 @@ json.dump(result, open(os.path.join(cell, "result.json"), "w"), indent=2)
 PYEOF
 
 # --- verifier ---
-if [[ -x "$TASK_DIR/verify.sh" ]]; then
-  (
-    cd "$WORKDIR"
-    ( "$TASK_DIR/verify.sh" "$WORKDIR" "$CELL/result.json" >"$CELL/logs/verify.stdout.txt" 2>"$CELL/logs/verify.stderr.txt" &
-      VPID=$!
-      ( sleep "$VERIFY_TIMEOUT"; kill -TERM $VPID 2>/dev/null; sleep 10; kill -KILL $VPID 2>/dev/null ) &
-      WD=$!
-      wait $VPID 2>/dev/null
-      kill $WD 2>/dev/null
-    )
-  )
+VERIFIER_EXIT=0
+(
+  cd "$WORKDIR"
+  "$VERIFY_SCRIPT" "$WORKDIR" "$CELL/result.json" >"$CELL/logs/verify.stdout.txt" 2>"$CELL/logs/verify.stderr.txt" &
+  VPID=$!
+  python3 -c 'import os, signal, sys, time
+pid, timeout, grace = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+time.sleep(timeout)
+try: os.kill(pid, signal.SIGTERM)
+except ProcessLookupError: raise SystemExit(0)
+time.sleep(grace)
+try: os.kill(pid, signal.SIGKILL)
+except ProcessLookupError: pass' "$VPID" "$VERIFY_TIMEOUT" 10 &
+  WD=$!
+  if wait "$VPID"; then status=0; else status=$?; fi
+  kill "$WD" 2>/dev/null || true
+  wait "$WD" 2>/dev/null || true
+  exit "$status"
+) || VERIFIER_EXIT=$?
+echo "$VERIFIER_EXIT" > "$CELL/verifier-exit-code.txt"
+if [[ "$VERIFIER_EXIT" -ne 0 ]]; then
+  echo "verifier infrastructure failed for $SLUG (exit $VERIFIER_EXIT)" >&2
 fi
 echo "cell done: $SLUG $CONFIG rep$REP -> $CELL"
 cat "$CELL/result.json"
+[[ "$VERIFIER_EXIT" -eq 0 ]]

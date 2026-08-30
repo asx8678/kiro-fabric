@@ -75,10 +75,13 @@ report. The mutation runner uses only local fixtures and build/test tools; it
 makes no agent or model calls. A blinded `--dry-run` remains a zero-side-effect
 schedule preview and creates no results to trust, so it does not run the gate.
 
-To add a task, provide a near-conforming fixture and `mutants.json`. Each mutant
-uses exact, single-match source edits and declares `expected_failed_checks`.
-Keep each mutant focused on one acceptance violation. Never weaken the
-non-targeted-check rule merely to make a mutant pass.
+To add a task, provide a near-conforming fixture and `mutants.json`. The
+manifest declares the verifier's complete, duplicate-free `expected_checks`
+set; each mutant uses exact, single-match source edits and declares its targeted
+`expected_failed_checks`. Trusted report validation requires exact task, mutant,
+and check sets plus recomputed summary totals. Keep each mutant focused on one
+acceptance violation. Never weaken the non-targeted-check rule merely to make a
+mutant pass.
 
 ## Run
 

@@ -105,6 +105,83 @@ const createState = (loader: never): FabricState => new FabricState(
 );
 
 describe("FabricState lazy bootstrap", () => {
+  it("auto-arms always mode on session start/reload and gated mode before agent start", async () => {
+    const handlers = new Map<string, (event: { prompt?: string }, context: ExtensionContext) => Promise<void>>();
+    const pi = {
+      on: vi.fn((event: string, handler: (event: { prompt?: string }, context: ExtensionContext) => Promise<void>) => {
+        handlers.set(event, handler);
+      }),
+      sendMessage: vi.fn(),
+      appendEntry: vi.fn(),
+    } as unknown as ExtensionAPI;
+    const harness = runtimeHarness();
+    const cwd = project({
+      fullCodeMode: true,
+      schema: { mode: "assist" },
+      agents: { enabled: true },
+      mesh: { enabled: false },
+      prewalk: {
+        activation: "always",
+        alwaysRearm: false,
+        model: "anthropic/executor",
+        mode: "in-place",
+        detectShellWrites: false,
+      },
+    });
+    const context = {
+      ...contextAt(cwd),
+      hasUI: true,
+      sessionManager: {
+        getSessionId: () => "session-lifecycle",
+        getBranch: () => [],
+      },
+      ui: { setStatus: vi.fn(), notify: vi.fn() },
+    } as unknown as ExtensionContext;
+    const state = new FabricState(pi, new CapturedToolCatalog(), undefined, undefined, {
+      runtimeLoader: harness.loader,
+    });
+
+    await handlers.get("session_start")?.({}, context);
+    expect(state.prewalk.status()).toMatchObject({
+      state: "armed",
+      automatic: "always",
+      model: "anthropic/executor",
+    });
+
+    state.prewalk.cancel();
+    await state.initialize(context);
+    expect(state.prewalk.status()).toMatchObject({ state: "armed", automatic: "always" });
+
+    fs.writeFileSync(path.join(cwd, ".pi", "fabric.json"), JSON.stringify({
+      fullCodeMode: true,
+      schema: { mode: "assist" },
+      agents: { enabled: true },
+      mesh: { enabled: false },
+      prewalk: {
+        activation: "gated",
+        alwaysRearm: false,
+        model: "anthropic/executor",
+        mode: "in-place",
+        detectShellWrites: false,
+      },
+    }));
+    await state.initialize(context);
+    expect(state.prewalk.status().state).toBe("idle");
+    await handlers.get("before_agent_start")?.(
+      { prompt: "Implement integration across parser configuration and tests." },
+      context,
+    );
+    expect(state.prewalk.status()).toMatchObject({
+      state: "armed",
+      automatic: "gated",
+      task: "Implement integration across parser configuration and tests.",
+    });
+    expect(pi.appendEntry).toHaveBeenCalledWith(
+      "kiro-fabric-prewalk-decision",
+      expect.objectContaining({ activation: "gated", eligible: true, armed: true }),
+    );
+  });
+
   it("loads normalized turn policy without importing or constructing the runtime", async () => {
     const cwd = project({
       fullCodeMode: false,

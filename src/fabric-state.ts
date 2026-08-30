@@ -14,6 +14,7 @@ import type { FabricComponentGraph } from "./components/types.js";
 import { loadFabricConfig, type FabricConfig, type FabricResultFormat } from "./config.js";
 import { FabricSessionApprovals } from "./core/approval-controller.js";
 import { PrewalkController } from "./prewalk/controller.js";
+import { autoArmFabricPrewalk } from "./prewalk/arm.js";
 import { effectiveFabricPrewalkActivation } from "./prewalk/gate.js";
 import { PrewalkDriftTracker } from "./prewalk/fs-drift.js";
 import type { PendingFabricHandoff } from "./prewalk/handoff.js";
@@ -56,6 +57,13 @@ export interface FabricStateOptions {
 type ActivationHook = (context: ExtensionContext) => void | Promise<void>;
 type ActivationFailureHook = () => void | Promise<void>;
 
+interface FabricPrewalkLifecycleApi {
+  on(
+    event: "session_start" | "before_agent_start",
+    handler: (event: { prompt?: string }, context: ExtensionContext) => void | Promise<void>,
+  ): void;
+}
+
 export class FabricState {
   #runtime: FabricRuntimeState | undefined;
   #activatingRuntime: FabricRuntimeState | undefined;
@@ -69,6 +77,7 @@ export class FabricState {
   #activationFailureHook: ActivationFailureHook | undefined;
   #bootstrapMcpDescriptors: FabricActionDescriptor[] = [];
   #liveMcpSliceObserved = false;
+  #prewalkAutoArmNoticeShown = false;
   readonly #externalProviders = new Map<string, FabricProvider>();
   readonly #externalComponents = new Map<string, FabricComponentDefinition>();
   readonly #onCapturedToolUse: ((entry: CapturedToolEntry) => void) | undefined;
@@ -90,6 +99,25 @@ export class FabricState {
     this.#onCapturedToolUse = onCapturedToolUse;
     this.#mcpHooks = mcpHooks;
     this.#options = options;
+
+    // Keep automatic prewalk attached to the state owner rather than a helper
+    // that callers can forget to register. Session startup/reload evaluates
+    // always mode without a task; gated mode evaluates the final expanded
+    // prompt immediately before the agent starts.
+    const lifecycle = pi as unknown as Partial<FabricPrewalkLifecycleApi>;
+    if (typeof lifecycle.on === "function") {
+      lifecycle.on("session_start", async (_event, context) => {
+        await this.bootstrap(context);
+        if (this.shouldEagerlyActivate(context)) await this.ensure(context);
+        await this.autoArmPrewalk(context);
+      });
+      lifecycle.on("before_agent_start", async (event, context) => {
+        if (!this.bootstrapped) await this.bootstrap(context);
+        if (effectiveFabricPrewalkActivation(this.config.prewalk) !== "gated") return;
+        await this.ensure(context);
+        await this.autoArmPrewalk(context, event.prompt ?? "");
+      });
+    }
   }
 
   get initialized(): boolean {
@@ -188,8 +216,19 @@ export class FabricState {
         agentDir: resolveAgentDir(),
         projectTrusted: context.isProjectTrusted(),
       });
+      this.prewalk.cancel();
+      this.prewalkDrift.clear();
+      context.ui.setStatus("fabric-prewalk", undefined);
     }
     await this.#activate(context, true);
+    await this.autoArmPrewalk(context);
+  }
+
+  async autoArmPrewalk(context: ExtensionContext, task?: string): Promise<void> {
+    const skipReason = await autoArmFabricPrewalk(this, context, this.pi, task);
+    if (!skipReason || this.#prewalkAutoArmNoticeShown || !context.hasUI) return;
+    this.#prewalkAutoArmNoticeShown = true;
+    context.ui.notify(skipReason, "warning");
   }
 
   async ensure(context: ExtensionContext): Promise<void> {
@@ -327,6 +366,7 @@ export class FabricState {
         this.#everActivated = false;
         this.#bootstrapMcpDescriptors = [];
         this.#liveMcpSliceObserved = false;
+        this.#prewalkAutoArmNoticeShown = false;
         this.activity.reset();
         this.prewalk.cancel();
         this.prewalkDrift.clear();

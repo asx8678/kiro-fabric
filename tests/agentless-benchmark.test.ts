@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -10,6 +10,7 @@ const RUNNER = join(ROOT, "bench", "run-agentless.sh");
 const ANALYZER = join(ROOT, "bench", "analyze.py");
 const MUTATION_RUNNER = join(ROOT, "bench", "mutation_verifiers.py");
 const BLINDED_RUNNER = join(ROOT, "bench", "run-matrix-blinded.sh");
+const CELL_RUNNER = join(ROOT, "bench", "run-cell.sh");
 const temporaryDirectories: string[] = [];
 
 const temporaryDirectory = (): string => {
@@ -109,6 +110,180 @@ fi
     ]);
     expect(stages.stages[0].timeout_s + stages.stages[1].timeout_s).toBe(301);
   });
+
+  it("kills and waits for an active Pi process tree when interrupted", async () => {
+    const root = temporaryDirectory();
+    const workdir = join(root, "workdir");
+    const bin = join(root, "bin");
+    const sessions = join(root, "sessions");
+    const logs = join(root, "logs");
+    const artifacts = join(root, "artifacts");
+    const agent = join(root, "agent");
+    const prompt = join(root, "prompt.txt");
+    const piPidFile = join(root, "pi.pid");
+    const childPidFile = join(root, "pi-child.pid");
+    mkdirSync(workdir);
+    mkdirSync(bin);
+    mkdirSync(agent);
+    writeFileSync(join(workdir, "app.txt"), "original\n");
+    writeFileSync(prompt, "Repair app.txt.\n");
+    run("git", ["init", "-q"], workdir);
+    run("git", ["config", "user.email", "test@example.com"], workdir);
+    run("git", ["config", "user.name", "Test"], workdir);
+    run("git", ["add", "app.txt"], workdir);
+    run("git", ["commit", "-qm", "fixture"], workdir);
+
+    const fakePi = join(bin, "pi");
+    writeFileSync(
+      fakePi,
+      `#!/usr/bin/env bash
+set -u
+printf '%s' "$$" > "$FAKE_PI_PID_FILE"
+trap '' TERM
+sleep 1000 &
+child=$!
+printf '%s' "$child" > "$FAKE_PI_CHILD_PID_FILE"
+wait "$child"
+`,
+    );
+    chmodSync(fakePi, 0o755);
+
+    const runner = spawn(
+      "bash",
+      [RUNNER, workdir, prompt, sessions, logs, artifacts, agent, "301"],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          FAKE_PI_PID_FILE: piPidFile,
+          FAKE_PI_CHILD_PID_FILE: childPidFile,
+        },
+        stdio: "ignore",
+      },
+    );
+    const deadline = Date.now() + 5_000;
+    while ((!existsSync(piPidFile) || !existsSync(childPidFile)) && Date.now() < deadline) {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 20));
+    }
+    expect(existsSync(piPidFile)).toBe(true);
+    expect(existsSync(childPidFile)).toBe(true);
+    const exitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolvePromise, reject) => {
+      const timer = setTimeout(() => reject(new Error("agentless runner did not exit after SIGTERM")), 5_000);
+      runner.once("exit", (code, signal) => {
+        clearTimeout(timer);
+        resolvePromise({ code, signal });
+      });
+    });
+    runner.kill("SIGTERM");
+    const exit = await exitPromise;
+    expect(exit).toEqual({ code: 143, signal: null });
+
+    for (const file of [piPidFile, childPidFile]) {
+      const pid = Number(readFileSync(file, "utf8"));
+      let alive = true;
+      for (let attempt = 0; attempt < 50 && alive; attempt += 1) {
+        try {
+          process.kill(pid, 0);
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, 20));
+        } catch {
+          alive = false;
+        }
+      }
+      expect(alive, `process ${pid} from ${file} survived cleanup`).toBe(false);
+    }
+  }, 10_000);
+
+  it("fails malformed cell setup before Pi can make a model call", () => {
+    const root = temporaryDirectory();
+    const task = join(root, "task");
+    const agent = join(root, "agent");
+    const bin = join(root, "bin");
+    const marker = join(root, "pi-called");
+    mkdirSync(task);
+    mkdirSync(agent);
+    mkdirSync(bin);
+    writeFileSync(join(task, "task.json"), JSON.stringify({ slug: "broken" }));
+    writeFileSync(join(task, "prompt.txt"), "Do not run.\n");
+    writeFileSync(join(task, "verify.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    chmodSync(join(task, "verify.sh"), 0o755);
+    writeFileSync(join(bin, "pi"), `#!/usr/bin/env bash\ntouch ${JSON.stringify(marker)}\n`);
+    chmodSync(join(bin, "pi"), 0o755);
+
+    const completed = spawnSync(
+      "bash",
+      [CELL_RUNNER, task, "baseline", "0", join(root, "cell"), agent],
+      {
+        cwd: root,
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
+        encoding: "utf8",
+      },
+    );
+    expect(completed.status).toBe(2);
+    expect(completed.stderr).toContain("invalid task configuration");
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it("records expected agent failure and surfaces verifier infrastructure failure", () => {
+    const root = temporaryDirectory();
+    const repository = join(root, `run-cell-${process.pid}-${Date.now()}.git`);
+    const cache = join(ROOT, "bench", ".cache", repository.split("/").at(-1)!.replace(/\.git$/, ""));
+    temporaryDirectories.push(cache);
+    const task = join(root, "task");
+    const agent = join(root, "agent");
+    const bin = join(root, "bin");
+    mkdirSync(repository);
+    mkdirSync(task);
+    mkdirSync(agent);
+    mkdirSync(bin);
+    writeFileSync(join(repository, "app.txt"), "original\n");
+    run("git", ["init", "-q"], repository);
+    run("git", ["config", "user.email", "test@example.com"], repository);
+    run("git", ["config", "user.name", "Test"], repository);
+    run("git", ["add", "app.txt"], repository);
+    run("git", ["commit", "-qm", "fixture"], repository);
+    const baseRef = run("git", ["rev-parse", "HEAD"], repository).trim();
+    writeFileSync(join(task, "task.json"), JSON.stringify({
+      slug: "expected-failures",
+      repo: repository,
+      base_ref: baseRef,
+      agent_timeout_s: 5,
+      verify_timeout_s: 5,
+    }));
+    writeFileSync(join(task, "prompt.txt"), "Attempt repair.\n");
+    writeFileSync(join(task, "verify.sh"), `#!/usr/bin/env bash
+python3 - "$2" <<'PY'
+import json, sys
+value = json.load(open(sys.argv[1]))
+value.update({"reward_binary": 0, "reward_partial": 0, "checks": {"infra": 0}})
+json.dump(value, open(sys.argv[1], "w"))
+PY
+exit 6
+`);
+    chmodSync(join(task, "verify.sh"), 0o755);
+    writeFileSync(join(bin, "pi"), "#!/usr/bin/env bash\nexit 7\n");
+    chmodSync(join(bin, "pi"), 0o755);
+    const cell = join(root, "cell");
+
+    const completed = spawnSync(
+      "bash",
+      [CELL_RUNNER, task, "baseline", "0", cell, agent],
+      {
+        cwd: root,
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
+        encoding: "utf8",
+        timeout: 15_000,
+      },
+    );
+    expect(completed.status).toBe(1);
+    expect(readFileSync(join(cell, "agent-exit-code.txt"), "utf8").trim()).toBe("7");
+    expect(readFileSync(join(cell, "verifier-exit-code.txt"), "utf8").trim()).toBe("6");
+    expect(JSON.parse(readFileSync(join(cell, "result.json"), "utf8"))).toMatchObject({
+      reward_binary: 0,
+      checks: { infra: 0 },
+    });
+    expect(completed.stderr).toContain("verifier infrastructure failed");
+  }, 15_000);
 
   it("previews an agentless matrix without credentials or model calls", () => {
     const runId = `agentless-dry-${process.pid}-${Date.now()}`;

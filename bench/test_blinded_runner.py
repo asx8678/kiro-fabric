@@ -50,6 +50,25 @@ class BlindedRunnerTest(unittest.TestCase):
             self.assertEqual(list(temp_root.iterdir()), [])
         self.assertFalse(result_path.exists())
 
+    def test_selective_prewalk_configs_are_valid_in_dry_runs(self):
+        for config in ("fabric-local-always", "fabric-local-gated", "fabric-local-disabled"):
+            with self.subTest(config=config), tempfile.TemporaryDirectory() as directory:
+                completed = self.run_runner(
+                    "--dry-run",
+                    "--run-id",
+                    f"selective-{config}-{uuid.uuid4().hex}",
+                    "--tasks",
+                    TASK,
+                    "--configs",
+                    f"baseline,{config}",
+                    "--seed",
+                    "selective-test",
+                    temp_root=Path(directory),
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(completed.stdout.count("arm="), 2)
+                self.assertEqual(list(Path(directory).iterdir()), [])
+
     def test_path_traversal_run_id_is_rejected_without_writes(self):
         escaped_name = f"blinded-escape-{uuid.uuid4().hex}"
         escaped_path = ROOT / escaped_name

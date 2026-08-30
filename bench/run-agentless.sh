@@ -7,8 +7,12 @@
 #
 # Usage: run-agentless.sh <workdir> <task-prompt> <session-dir> <logs-dir>
 #                          <artifacts-dir> <agent-dir> <total-timeout-s>
-set -u
+set -euo pipefail
 
+[[ $# -eq 7 ]] || {
+  echo "usage: run-agentless.sh <workdir> <task-prompt> <session-dir> <logs-dir> <artifacts-dir> <agent-dir> <total-timeout-s>" >&2
+  exit 2
+}
 WORKDIR="$1"
 TASK_PROMPT="$2"
 SESSION_DIR="$3"
@@ -52,14 +56,57 @@ read -r LOCALIZATION_TIMEOUT REPAIR_TIMEOUT MAX_LOCALIZATION_BYTES MODEL THINKIN
 
 mkdir -p "$SESSION_DIR" "$LOGS_DIR" "$ARTIFACTS_DIR"
 LOCALIZE_WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/kiro-fabric-agentless.XXXXXX") || exit 2
+ACTIVE_STAGE_PID=""
+ACTIVE_WATCHDOG_PID=""
+
+signal_group() {
+  local signal="$1"
+  local pid="$2"
+  [[ -n "$pid" ]] || return 0
+  kill -"$signal" -- "-$pid" 2>/dev/null || true
+}
+
+wait_for_pid() {
+  local pid="$1"
+  [[ -n "$pid" ]] || return 0
+  wait "$pid" 2>/dev/null || true
+}
+
+stop_active_process_trees() {
+  local stage="$ACTIVE_STAGE_PID"
+  local watchdog="$ACTIVE_WATCHDOG_PID"
+  # Stop the watchdog first so it cannot race cleanup, then stop the complete
+  # stage process group (Pi and every child it started). Every background root
+  # is launched in its own session/process group below.
+  signal_group TERM "$watchdog"
+  signal_group TERM "$stage"
+  sleep 0.2
+  signal_group KILL "$watchdog"
+  signal_group KILL "$stage"
+  wait_for_pid "$watchdog"
+  wait_for_pid "$stage"
+  ACTIVE_WATCHDOG_PID=""
+  ACTIVE_STAGE_PID=""
+}
+
 cleanup() {
+  stop_active_process_trees
   rm -rf -- "$LOCALIZE_WORKDIR"
 }
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
-git clone --quiet --no-hardlinks "$WORKDIR" "$LOCALIZE_WORKDIR" || exit 2
+interrupt() {
+  local status="$1"
+  trap - INT TERM
+  cleanup
+  trap - EXIT
+  exit "$status"
+}
+
+trap cleanup EXIT
+trap 'interrupt 130' INT
+trap 'interrupt 143' TERM
+
+git clone --quiet --no-hardlinks "$WORKDIR" "$LOCALIZE_WORKDIR"
 
 LOCALIZATION_PROMPT="$ARTIFACTS_DIR/localization-prompt.txt"
 REPAIR_PROMPT="$ARTIFACTS_DIR/repair-prompt.txt"
@@ -85,39 +132,37 @@ run_stage() {
   local stdout_file="$LOGS_DIR/$stage.stdout.txt"
   local stderr_file="$LOGS_DIR/$stage.stderr.txt"
 
-  (
-    cd "$directory" || exit 2
-    PI_CODING_AGENT_DIR="$AGENT_DIR" pi \
-      --print --thinking "$THINKING" --model "$MODEL" \
-      --session-dir "$SESSION_DIR" --no-prompt-templates --no-context-files \
-      --no-themes --no-skills --no-extensions "$(cat "$prompt_file")"
-  ) >"$stdout_file" 2>"$stderr_file" &
-  local stage_pid=$!
-  (
-    sleeper=""
-    trap '[[ -z "$sleeper" ]] || kill "$sleeper" 2>/dev/null; exit 0' TERM
-    sleep "$timeout" &
-    sleeper=$!
-    wait "$sleeper" 2>/dev/null
-    sleeper=""
-    kill -TERM "$stage_pid" 2>/dev/null
-    sleep 20 &
-    sleeper=$!
-    wait "$sleeper" 2>/dev/null
-    sleeper=""
-    kill -KILL "$stage_pid" 2>/dev/null
-  ) &
-  local watchdog=$!
-  wait "$stage_pid"
-  local status=$?
-  kill "$watchdog" 2>/dev/null
-  wait "$watchdog" 2>/dev/null
+  # Python is used only as a portable setsid(2) launcher (macOS has no setsid
+  # command). The exec keeps $! as both the process and process-group id.
+  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+    bash -c 'cd "$1" && PI_CODING_AGENT_DIR="$2" pi \
+      --print --thinking "$3" --model "$4" \
+      --session-dir "$5" --no-prompt-templates --no-context-files \
+      --no-themes --no-skills --no-extensions "$(cat "$6")"' \
+    agentless-stage "$directory" "$AGENT_DIR" "$THINKING" "$MODEL" \
+    "$SESSION_DIR" "$prompt_file" >"$stdout_file" 2>"$stderr_file" &
+  ACTIVE_STAGE_PID=$!
+
+  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+    bash -c 'sleep "$2"; kill -TERM -- "-$1" 2>/dev/null || true; sleep 20; kill -KILL -- "-$1" 2>/dev/null || true' \
+    agentless-watchdog "$ACTIVE_STAGE_PID" "$timeout" &
+  ACTIVE_WATCHDOG_PID=$!
+
+  local status
+  if wait "$ACTIVE_STAGE_PID"; then status=0; else status=$?; fi
+  signal_group TERM "$ACTIVE_WATCHDOG_PID"
+  wait_for_pid "$ACTIVE_WATCHDOG_PID"
+  ACTIVE_STAGE_PID=""
+  ACTIVE_WATCHDOG_PID=""
   return "$status"
 }
 
 stage_start=$(python3 -c 'import time; print(time.monotonic())')
-run_stage localization "$LOCALIZE_WORKDIR" "$LOCALIZATION_PROMPT" "$LOCALIZATION_TIMEOUT"
-LOCALIZATION_EXIT=$?
+if run_stage localization "$LOCALIZE_WORKDIR" "$LOCALIZATION_PROMPT" "$LOCALIZATION_TIMEOUT"; then
+  LOCALIZATION_EXIT=0
+else
+  LOCALIZATION_EXIT=$?
+fi
 stage_end=$(python3 -c 'import time; print(time.monotonic())')
 LOCALIZATION_WALL=$(python3 -c "print(round($stage_end - $stage_start, 3))")
 
@@ -156,8 +201,11 @@ EOF
 } > "$REPAIR_PROMPT"
 
 stage_start=$(python3 -c 'import time; print(time.monotonic())')
-run_stage repair "$WORKDIR" "$REPAIR_PROMPT" "$REPAIR_TIMEOUT"
-REPAIR_EXIT=$?
+if run_stage repair "$WORKDIR" "$REPAIR_PROMPT" "$REPAIR_TIMEOUT"; then
+  REPAIR_EXIT=0
+else
+  REPAIR_EXIT=$?
+fi
 stage_end=$(python3 -c 'import time; print(time.monotonic())')
 REPAIR_WALL=$(python3 -c "print(round($stage_end - $stage_start, 3))")
 

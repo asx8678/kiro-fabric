@@ -21,9 +21,18 @@ class MutationSuiteError(ValueError):
     """A mutation suite or attestation is malformed."""
 
 
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise MutationSuiteError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+
 def _load_object(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(), object_pairs_hook=_unique_object)
     except (OSError, json.JSONDecodeError) as error:
         raise MutationSuiteError(f"cannot read JSON {path}: {error}") from error
     if not isinstance(value, dict):
@@ -66,6 +75,13 @@ def _suite(task_dir: Path) -> tuple[dict[str, Any], Path, list[dict[str, Any]]]:
     fixture = task_dir / _safe_relative(manifest.get("fixture"), "fixture")
     if not fixture.is_dir() or fixture.is_symlink():
         raise MutationSuiteError(f"mutation fixture is not a real directory: {fixture}")
+    expected_checks = manifest.get("expected_checks")
+    if not isinstance(expected_checks, list) or not expected_checks or not all(
+        isinstance(name, str) and name for name in expected_checks
+    ):
+        raise MutationSuiteError(f"mutation suite has no expected_checks: {manifest_path}")
+    if len(set(expected_checks)) != len(expected_checks):
+        raise MutationSuiteError(f"mutation suite repeats an expected check: {manifest_path}")
     mutants = manifest.get("mutants")
     if not isinstance(mutants, list) or not mutants:
         raise MutationSuiteError(f"mutation suite has no mutants: {manifest_path}")
@@ -93,6 +109,11 @@ def _suite(task_dir: Path) -> tuple[dict[str, Any], Path, list[dict[str, Any]]]:
             raise MutationSuiteError(f"mutant {mutant_id} needs expected_failed_checks")
         if len(set(expected)) != len(expected):
             raise MutationSuiteError(f"mutant {mutant_id} repeats an expected check")
+        unknown_checks = sorted(set(expected) - set(expected_checks))
+        if unknown_checks:
+            raise MutationSuiteError(
+                f"mutant {mutant_id} names unknown expected checks: {', '.join(unknown_checks)}"
+            )
         if not isinstance(edits, list) or not edits:
             raise MutationSuiteError(f"mutant {mutant_id} has no deterministic edits")
         normalized.append(mutant)
@@ -126,7 +147,13 @@ def _clip(value: str) -> str:
     return value if len(value) <= MAX_LOG_CHARS else value[-MAX_LOG_CHARS:]
 
 
-def _run_mutant(task_dir: Path, fixture: Path, mutant: dict[str, Any], timeout: int) -> dict[str, Any]:
+def _run_mutant(
+    task_dir: Path,
+    fixture: Path,
+    mutant: dict[str, Any],
+    timeout: int,
+    expected_checks: list[str],
+) -> dict[str, Any]:
     record: dict[str, Any] = {
         "id": mutant["id"],
         "description": mutant["description"],
@@ -165,6 +192,11 @@ def _run_mutant(task_dir: Path, fixture: Path, mutant: dict[str, Any], timeout: 
             ):
                 record["reason"] = "verifier result has an invalid reward/check shape"
                 return record
+            if set(checks) != set(expected_checks):
+                record["reason"] = "verifier result has an unexpected check set"
+                record["missing_checks"] = sorted(set(expected_checks) - set(checks))
+                record["extra_checks"] = sorted(set(checks) - set(expected_checks))
+                return record
             if reward == 1:
                 record["status"] = "accepted"
                 record["reason"] = "verifier accepted an acceptance-violating mutant"
@@ -201,10 +233,17 @@ def run_mutation_suite(bench_root: Path, task_slugs: list[str]) -> dict[str, Any
             timeout = task_config.get("verify_timeout_s", 300)
             if type(timeout) is not int or timeout <= 0:
                 raise MutationSuiteError(f"invalid verify_timeout_s for {slug}")
-            _, fixture, mutants = _suite(task_dir)
+            manifest, fixture, mutants = _suite(task_dir)
             task_report["fingerprint"] = task_fingerprint(task_dir)
             task_report["mutants"] = [
-                _run_mutant(task_dir, fixture, mutant, timeout) for mutant in mutants
+                _run_mutant(
+                    task_dir,
+                    fixture,
+                    mutant,
+                    timeout,
+                    manifest["expected_checks"],
+                )
+                for mutant in mutants
             ]
             task_report["trusted"] = all(
                 mutant["status"] == "rejected" for mutant in task_report["mutants"]
@@ -239,28 +278,85 @@ def validate_report(report_path: Path, bench_root: Path, task_slugs: list[str]) 
     ):
         raise MutationSuiteError(f"untrusted verifier mutation report: {report_path}")
     reports = report.get("tasks")
-    if not isinstance(reports, list):
+    if not isinstance(reports, list) or not all(isinstance(task, dict) for task in reports):
         raise MutationSuiteError(f"invalid task list in verifier mutation report: {report_path}")
-    by_slug = {
-        task.get("slug"): task
-        for task in reports
-        if isinstance(task, dict) and isinstance(task.get("slug"), str)
-    }
+    report_slugs = [task.get("slug") for task in reports]
+    if not all(isinstance(slug, str) and slug for slug in report_slugs):
+        raise MutationSuiteError(f"invalid task slug in verifier mutation report: {report_path}")
+    if len(set(report_slugs)) != len(report_slugs):
+        raise MutationSuiteError(f"duplicate task slug in verifier mutation report: {report_path}")
+    if set(report_slugs) != set(task_slugs) or len(report_slugs) != len(task_slugs):
+        raise MutationSuiteError(f"report task set does not exactly match requested tasks: {report_path}")
+
+    by_slug = {task["slug"]: task for task in reports}
+    total = rejected = accepted = invalid = 0
     for slug in task_slugs:
-        task = by_slug.get(slug)
-        if not isinstance(task, dict) or task.get("trusted") is not True:
+        task = by_slug[slug]
+        if task.get("trusted") is not True:
             raise MutationSuiteError(f"report does not trust verifier for task: {slug}")
+        task_dir = bench_root / "tasks" / slug
+        manifest, _, suite_mutants = _suite(task_dir)
+        expected_by_id = {mutant["id"]: mutant for mutant in suite_mutants}
         mutants = task.get("mutants")
-        if not isinstance(mutants, list) or not mutants or any(
-            not isinstance(mutant, dict)
-            or mutant.get("status") != "rejected"
-            or mutant.get("reward_binary") != 0
-            for mutant in mutants
+        if not isinstance(mutants, list) or not mutants or not all(
+            isinstance(mutant, dict) for mutant in mutants
         ):
-            raise MutationSuiteError(f"report has untrusted mutant records for task: {slug}")
-        current = task_fingerprint(bench_root / "tasks" / slug)
+            raise MutationSuiteError(f"report has invalid mutant records for task: {slug}")
+        mutant_ids = [mutant.get("id") for mutant in mutants]
+        if not all(isinstance(mutant_id, str) and mutant_id for mutant_id in mutant_ids):
+            raise MutationSuiteError(f"report has an invalid mutant id for task: {slug}")
+        if len(set(mutant_ids)) != len(mutant_ids):
+            raise MutationSuiteError(f"report repeats a mutant id for task: {slug}")
+        if set(mutant_ids) != set(expected_by_id) or len(mutant_ids) != len(expected_by_id):
+            raise MutationSuiteError(f"report mutant set does not exactly match suite for task: {slug}")
+
+        for mutant in mutants:
+            expected = expected_by_id[mutant["id"]]
+            targeted = mutant.get("expected_failed_checks")
+            if (
+                not isinstance(targeted, list)
+                or not all(isinstance(name, str) and name for name in targeted)
+                or len(set(targeted)) != len(targeted)
+                or set(targeted) != set(expected["expected_failed_checks"])
+                or len(targeted) != len(expected["expected_failed_checks"])
+            ):
+                raise MutationSuiteError(
+                    f"report expected check set does not match suite for mutant: {slug}/{mutant['id']}"
+                )
+            checks = mutant.get("checks")
+            if (
+                not isinstance(checks, dict)
+                or set(checks) != set(manifest["expected_checks"])
+                or not all(isinstance(name, str) and name and _binary(value) for name, value in checks.items())
+            ):
+                raise MutationSuiteError(
+                    f"report check set is invalid for mutant: {slug}/{mutant['id']}"
+                )
+            failed_checks = {name for name, value in checks.items() if value == 0}
+            if failed_checks != set(targeted):
+                raise MutationSuiteError(
+                    f"report failed check set is not exact for mutant: {slug}/{mutant['id']}"
+                )
+            if mutant.get("status") != "rejected" or mutant.get("reward_binary") != 0:
+                raise MutationSuiteError(f"report has untrusted mutant record: {slug}/{mutant['id']}")
+            total += 1
+            rejected += mutant["status"] == "rejected"
+            accepted += mutant["status"] == "accepted"
+            invalid += mutant["status"] not in ("rejected", "accepted")
+
+        current = task_fingerprint(task_dir)
         if task.get("fingerprint") != current:
             raise MutationSuiteError(f"stale verifier mutation report for task: {slug}")
+
+    expected_summary = {
+        "tasks": len(reports),
+        "mutants": total,
+        "rejected": rejected,
+        "accepted": accepted,
+        "invalid": invalid,
+    }
+    if report.get("summary") != expected_summary:
+        raise MutationSuiteError(f"verifier mutation report summary totals are invalid: {report_path}")
 
 
 def _task_slugs(bench_root: Path, value: str | None) -> list[str]:
