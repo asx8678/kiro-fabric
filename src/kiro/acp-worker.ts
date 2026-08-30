@@ -25,6 +25,7 @@ import {
 } from "./compatibility.js";
 import {
   assertManagedTree,
+  attestExecutable,
   KiroInstallError,
   readManifest,
   readPackageVersion,
@@ -364,6 +365,7 @@ export const assertKiroWorkerLaunch = (
   }
   if (
     !manifest.runtime.kiroBinaryPath ||
+    !manifest.runtime.kiroSha256 ||
     manifest.runtime.kiroCliVersion !== KIRO_CLI_VERSION ||
     manifest.runtime.agentEngine !== KIRO_AGENT_ENGINE
   ) {
@@ -377,6 +379,9 @@ export const assertKiroWorkerLaunch = (
       "ownership",
       "Kiro worker executable does not match the canonical path in the managed manifest",
     );
+  }
+  if (attestExecutable(manifest.runtime.kiroBinaryPath).sha256 !== manifest.runtime.kiroSha256) {
+    throw new KiroInstallError("ownership", "Kiro worker executable digest does not match the managed manifest");
   }
   const stat = fs.lstatSync(profilePath);
   if (stat.isSymbolicLink() || !stat.isFile()) {
@@ -1133,6 +1138,9 @@ export const runKiroWorker = async (
       ...(durableProfileHome ? { home: durableProfileHome } : {}),
     });
     log({ type: "agent_start", runner: "kiro", name: options.name });
+    if (attestExecutable(options.kiroBinary).sha256 !== manifest.runtime.kiroSha256) {
+      throw new KiroInstallError("concurrency", "Kiro executable changed immediately before ACP spawn");
+    }
     acp = spawnAcpProcess({
       argv: [options.kiroBinary, ...buildKiroAcpArguments(options)],
       cwd,

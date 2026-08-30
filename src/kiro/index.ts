@@ -12,6 +12,7 @@ export {
 export {
   MIN_NODE_MAJOR,
   KIRO_BINARY_ENV,
+  KIRO_SHA256_ENV,
   KIRO_VERSION_ENV,
   assertSupportedKiro,
   assertSupportedNode,

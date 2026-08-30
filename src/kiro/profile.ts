@@ -11,6 +11,7 @@ export const KIRO_ACP_AUTH_METHOD = "cli" as const;
 
 const KIRO_BINARY_ENV = "KIRO_FABRIC_KIRO_BINARY";
 const KIRO_VERSION_ENV = "KIRO_FABRIC_KIRO_VERSION";
+const KIRO_SHA256_ENV = "KIRO_FABRIC_KIRO_SHA256";
 
 /** Covers the trusted-shell verification window plus adapter overhead. */
 const KIRO_MCP_REQUEST_TIMEOUT_MS = KIRO_PROFILE_REQUEST_TIMEOUT_MS;
@@ -28,6 +29,8 @@ export interface KiroProfileOptions {
   kiroBinaryPath?: string;
   /** Exact version observed from that executable during preflight. */
   kiroCliVersion?: string;
+  /** Digest revalidated before every managed Kiro spawn. */
+  kiroSha256?: string;
   /** Extra non-Fabric MCP environment. Reserved KIRO_FABRIC_* keys are rejected. */
   extraEnv?: Record<string, string>;
   /** Canonical environment reserved for an isolated internal child profile. */
@@ -184,6 +187,9 @@ export const generateKiroProfile = (
             : {}),
           ...(options.kiroCliVersion
             ? { [KIRO_VERSION_ENV]: options.kiroCliVersion }
+            : {}),
+          ...(options.kiroSha256
+            ? { [KIRO_SHA256_ENV]: options.kiroSha256 }
             : {}),
           ...(confineManagedGrant
             ? {

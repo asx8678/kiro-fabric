@@ -8,9 +8,11 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -38,6 +40,16 @@ const removeAcceptanceRoot = (): void => {
   if (!target.startsWith(disposablePrefix) || dirname(target) !== resolve(tmpdir())) {
     throw new Error(`refusing unbounded detached-test cleanup: ${target}`);
   }
+  const makeRemovable = (dir: string): void => {
+    if (!existsSync(dir)) return;
+    const stat = lstatSync(dir);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+    chmodSync(dir, 0o700);
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
+    }
+  };
+  makeRemovable(target);
   rmSync(target, { recursive: true, force: true });
   acceptanceRoot = undefined;
 };
@@ -239,7 +251,7 @@ describe("detached installed Kiro runtime", () => {
       expect(manifest.runtime.closure.files).toContainEqual({
         path: nodeRelative,
         installedSha256: manifest.runtime.nodeSha256,
-        executableMode: 0o755,
+        executableMode: 0o555,
       });
       const entryRelative = relative(kiroHome, manifest.runtime.mcpEntryPath).split(sep).join("/");
       expect(manifest.runtime.closure.files).toContainEqual(expect.objectContaining({ path: entryRelative }));

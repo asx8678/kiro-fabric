@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
 
 export const IS_JOB_OBJECT_AVAILABLE = process.platform === "win32";
 
@@ -68,9 +69,37 @@ const readPosixProcessTable = (): PosixProcessEntry[] | null => {
   }
 };
 
-const readPosixProcessTree = (pid: number): { pgid: number; members: number[] } | null => {
-  const entries = readPosixProcessTable();
-  if (!entries) return null;
+const readLinuxProcessTable = (): PosixProcessEntry[] | null => {
+  if (runtimePlatform() !== "linux") return null;
+  try {
+    const entries: PosixProcessEntry[] = [];
+    for (const name of readdirSync("/proc")) {
+      if (!/^\d+$/u.test(name)) continue;
+      try {
+        const stat = readFileSync(`/proc/${name}/stat`, "utf8");
+        const close = stat.lastIndexOf(") ");
+        if (close < 0) continue;
+        const fields = stat.slice(close + 2).trim().split(/\s+/u);
+        const pid = Number(name);
+        const ppid = Number(fields[1]);
+        const pgid = Number(fields[2]);
+        if (Number.isSafeInteger(pid) && Number.isSafeInteger(ppid) && Number.isSafeInteger(pgid)) {
+          entries.push({ pid, ppid, pgid });
+        }
+      } catch {
+        // Process exited between /proc enumeration and stat read.
+      }
+    }
+    return entries;
+  } catch {
+    return null;
+  }
+};
+
+const processTreeFromEntries = (
+  entries: PosixProcessEntry[],
+  pid: number,
+): { pgid: number; members: number[] } | null => {
   const root = entries.find((entry) => entry.pid === pid);
   if (!root) return null;
   const children = new Map<number, number[]>();
@@ -87,12 +116,20 @@ const readPosixProcessTree = (pid: number): { pgid: number; members: number[] } 
     tree.add(current);
     for (const child of children.get(current) ?? []) queue.push(child);
   }
-  // Include the original process group as well as ancestry descendants. The
-  // ancestry walk catches grandchildren that called setsid()/escaped the group.
   for (const entry of entries) {
     if (entry.pgid === root.pgid) tree.add(entry.pid);
   }
   return { pgid: root.pgid, members: [...tree].sort((left, right) => left - right) };
+};
+
+const readPosixProcessTree = (pid: number): { pgid: number; members: number[] } | null => {
+  const entries = readPosixProcessTable();
+  return entries ? processTreeFromEntries(entries, pid) : null;
+};
+
+const readKernelProcessTree = (pid: number): { pgid: number; members: number[] } | null => {
+  const entries = readLinuxProcessTable();
+  return entries ? processTreeFromEntries(entries, pid) : null;
 };
 
 const parseWindowsProcessTree = (
@@ -256,19 +293,40 @@ export interface ProcessTreeController {
   terminate(graceMs?: number, killMs?: number): Promise<{ escalated: boolean }>;
 }
 
+export interface ProcessTreeControllerOptions {
+  /** Disable ps/PowerShell/taskkill PATH helpers; use only kernel PID/group signals. */
+  ambientHelpers?: boolean;
+}
+
 /** One lifecycle abstraction used by Kiro ACP and probe children. */
-export const createProcessTreeController = (pid: number): ProcessTreeController => {
+export const createProcessTreeController = (
+  pid: number,
+  options: ProcessTreeControllerOptions = {},
+): ProcessTreeController => {
+  const ambientHelpers = options.ambientHelpers !== false;
   const tracked = new Set<number>([pid]);
   let termination: Promise<{ escalated: boolean }> | undefined;
   const refresh = (): void => {
-    for (const member of descendantPids(pid)) tracked.add(member);
+    const members = ambientHelpers
+      ? descendantPids(pid)
+      : readKernelProcessTree(pid)?.members ?? [];
+    for (const member of members) tracked.add(member);
   };
   const gone = (): boolean =>
     [...tracked].every((member) => !processIsAlive(member)) &&
     (runtimePlatform() === "win32" || !posixGroupIsAlive(pid));
   const signal = async (value: NodeJS.Signals): Promise<void> => {
     refresh();
-    await killDescendantTree(pid, value);
+    if (!ambientHelpers) {
+      if (runtimePlatform() === "win32") killPid(pid, value);
+      else {
+        const tree = readKernelProcessTree(pid);
+        killPosixGroup(tree?.pgid ?? pid, value);
+        for (const member of [...(tree?.members ?? [pid])].reverse()) killPid(member, value);
+      }
+    } else {
+      await killDescendantTree(pid, value);
+    }
     // The parent can race by spawning just before it receives the signal.
     refresh();
     for (const member of [...tracked].reverse()) killPid(member, value);

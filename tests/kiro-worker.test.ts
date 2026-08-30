@@ -3,9 +3,11 @@ import {
   appendFileSync,
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   statSync,
@@ -55,8 +57,19 @@ const fakeKiro = join(repoRoot, "tests", "fixtures", "kiro", "fake-kiro-worker.m
 const poisonPi = join(repoRoot, "tests", "fixtures", "missing-pi-binary");
 const roots: string[] = [];
 
+const makeRemovable = (dir: string): void => {
+  if (!existsSync(dir)) return;
+  const stat = lstatSync(dir);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+  chmodSync(dir, 0o700);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
+  }
+};
+
 afterEach(() => {
   for (const root of roots.splice(0)) {
+    makeRemovable(root);
     rmSync(root, { recursive: true, force: true });
   }
 });

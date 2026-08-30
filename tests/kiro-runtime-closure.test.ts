@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  lstatSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -28,8 +29,9 @@ import {
   deployRuntimeClosure,
   removeRuntimeClosure,
   computeRuntimeClosureDigest,
+  planRuntimeClosureDeployment,
 } from "../src/kiro/runtime-closure.js";
-import { managedPaths } from "../src/kiro/managed.js";
+import { attestExecutable, managedPaths } from "../src/kiro/managed.js";
 
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const fakeKiro = join(repoRoot, "tests", "fixtures", "kiro", "fake-kiro.mjs");
@@ -51,6 +53,16 @@ const kiroHome = (): string => {
   const dir = join(base, "kiro-home");
   mkdirSync(dir, { recursive: true });
   return dir;
+};
+
+const makeRemovable = (dir: string): void => {
+  if (!existsSync(dir)) return;
+  const stat = lstatSync(dir);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+  chmodSync(dir, 0o700);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
+  }
 };
 
 const installWithFake = (
@@ -82,6 +94,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) {
+    makeRemovable(root);
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -109,10 +122,13 @@ describe("runtime closure deployment", () => {
     expect(readFileSync(closure.runtimeNodePath)).toEqual(readFileSync(fakeRuntimePath));
     expect(closure.attestation.files).toContainEqual(expect.objectContaining({
       path: expect.stringMatching(/\/bin\/node(?:\.exe)?$/),
-      executableMode: 0o755,
+      executableMode: 0o555,
     }));
     expect(existsSync(join(versionDir, ".closure-digest"))).toBe(true);
     expect(existsSync(join(runtimeClosurePath(dir, "project"), ".closure-current"))).toBe(true);
+    expect(lstatSync(versionDir).mode & 0o777).toBe(0o555);
+    expect(lstatSync(closure.mcpEntryPath).mode & 0o777).toBe(0o444);
+    expect(lstatSync(closure.runtimeNodePath).mode & 0o777).toBe(0o555);
     // Bound phase metrics are present and non-negative
     expect(closure.metrics.totalMs).toBeGreaterThanOrEqual(0);
     expect(closure.metrics.fileCount).toBeGreaterThan(0);
@@ -144,6 +160,24 @@ describe("runtime closure deployment", () => {
     symlinkSync(outside, join(runtime, ".closure-current"));
     expect(() => deploySmall(dir, "project")).toThrow(/marker.*regular file|symlink/i);
     expect(readFileSync(outside, "utf8")).toBe("outside\n");
+  });
+
+  it("rejects a Node inode replacement after planning instead of copying new bytes", () => {
+    const dir = project("node-race");
+    const attestation = attestExecutable(fakeRuntimePath);
+    const plan = planRuntimeClosureDeployment(dir, "project", {
+      nodeSourcePath: fakeRuntimePath,
+      nodeAttestation: attestation,
+    });
+    rmSync(fakeRuntimePath);
+    writeFileSync(fakeRuntimePath, "#!/bin/sh\nexit 42\n", { mode: 0o755 });
+    chmodSync(fakeRuntimePath, 0o755);
+    expect(() => deployRuntimeClosure(dir, "project", {
+      expectedDigest: plan.digest,
+      nodeSourcePath: fakeRuntimePath,
+      nodeAttestation: attestation,
+    })).toThrow(/executable changed|attestation|concurrency/i);
+    expect(existsSync(join(runtimeClosurePath(dir, "project"), plan.digest))).toBe(false);
   });
 
   it("is idempotent: second deploy without changes returns updated=false", () => {
@@ -279,10 +313,12 @@ describe("installer with runtime closure", () => {
     const original = readFileSync(entry);
     const changed = Buffer.from(original);
     changed[0] = changed[0] === 0x20 ? 0x21 : 0x20;
+    chmodSync(entry, 0o644);
     writeFileSync(entry, changed);
     await expect(installWithFake(dir)).rejects.toThrow(/runtime closure hash mismatch/);
 
     writeFileSync(entry, original);
+    chmodSync(closureRoot, 0o755);
     writeFileSync(join(closureRoot, "foreign-extra.js"), "foreign\n");
     await expect(installWithFake(dir)).rejects.toThrow(/file set does not match/);
   });
@@ -294,6 +330,7 @@ describe("installer with runtime closure", () => {
       runtime: { closure: { root: string } };
     };
     const entry = join(dir, ...manifest.runtime.closure.root.split("/"), "kiro", "mcp-entry.js");
+    chmodSync(entry, 0o644);
     writeFileSync(entry, "tampered runtime\n");
     expect(() => uninstallKiroProfile({ projectRoot: dir })).toThrow(/runtime closure hash mismatch/);
     expect(existsSync(installed.profilePath)).toBe(true);
@@ -355,6 +392,31 @@ describe("uninstaller removes runtime closure", () => {
     expect(existsSync(runtimeDir)).toBe(false);
   });
 
+  it("tracks and removes every owned generation before removing the manifest", async () => {
+    const home = kiroHome();
+    const dir = project("uninstall-generations");
+    const first = await installWithFake(dir, { scope: "user", kiroHome: home });
+    const secondNode = join(base, "second-runtime");
+    writeFileSync(secondNode, "#!/bin/sh\nexit 43\n", { mode: 0o755 });
+    chmodSync(secondNode, 0o755);
+    const second = await installWithFake(dir, {
+      scope: "user",
+      kiroHome: home,
+      runtimeNodeSourcePath: secondNode,
+    });
+    const manifest = JSON.parse(readFileSync(second.manifestPath, "utf8")) as {
+      runtime: { generations: Array<{ digest: string; root: string }> };
+    };
+    expect(manifest.runtime.generations).toHaveLength(2);
+    const ownedRoots = manifest.runtime.generations.map((generation) =>
+      join(realpathSync(home), ...generation.root.split("/")),
+    );
+    expect(ownedRoots).toContain(dirname(dirname(first.runtimeClosure!.mcpEntryPath)));
+    uninstallKiroProfile({ projectRoot: dir, scope: "user", kiroHome: home });
+    for (const owned of ownedRoots) expect(existsSync(owned)).toBe(false);
+    expect(existsSync(second.manifestPath)).toBe(false);
+  });
+
   it("uninstall is safe when runtime closure was already removed", async () => {
     const home = kiroHome();
     const dir = project("uninstall-no-closure");
@@ -362,6 +424,7 @@ describe("uninstaller removes runtime closure", () => {
 
     // Manually remove the runtime before uninstalling
     const runtimeDir = runtimeClosurePath(home, "user");
+    makeRemovable(runtimeDir);
     rmSync(runtimeDir, { recursive: true, force: true });
 
     const result = uninstallKiroProfile({ projectRoot: dir, scope: "user", kiroHome: home });

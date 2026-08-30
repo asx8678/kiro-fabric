@@ -3,7 +3,7 @@
 // test here is non-billable: the fake records outbound methods and the
 // doctor asserts session/prompt was never sent.
 
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,7 +36,18 @@ beforeEach(() => {
   );
 });
 
+const makeRemovable = (dir: string): void => {
+  if (!existsSync(dir)) return;
+  const stat = lstatSync(dir);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+  chmodSync(dir, 0o700);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
+  }
+};
+
 afterEach(() => {
+  makeRemovable(base);
   rmSync(base, { recursive: true, force: true });
 });
 
@@ -95,10 +106,14 @@ describe("runKiroDoctor", () => {
     const manifest = JSON.parse(
       readFileSync(join(projectRoot, ".kiro", ".kiro-fabric", "install.json"), "utf8"),
     ) as { runtime: { closure: { root: string } } };
-    writeFileSync(
-      join(projectRoot, ...manifest.runtime.closure.root.split("/"), "kiro", "mcp-entry.js"),
-      "tampered runtime\n",
+    const runtimeEntry = join(
+      projectRoot,
+      ...manifest.runtime.closure.root.split("/"),
+      "kiro",
+      "mcp-entry.js",
     );
+    chmodSync(runtimeEntry, 0o644);
+    writeFileSync(runtimeEntry, "tampered runtime\n");
     const damagedRuntime = await runDoctor({
       kiroBinary: wrapperPath,
       mcpEntryPath: mcpEntry,

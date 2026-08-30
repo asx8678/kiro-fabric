@@ -8,6 +8,11 @@ import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { delimiter, isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
+  assertExecutableAttestation,
+  attestExecutable,
+  type ExecutableAttestation,
+} from "./managed.js";
+import {
   KIRO_ACP_AUTH_METHOD,
   KIRO_AGENT_ENGINE,
   KIRO_CLI_VERSION,
@@ -20,6 +25,7 @@ const execFileAsync = promisify(execFile);
 export const MIN_NODE_MAJOR = 24 as const;
 export const KIRO_BINARY_ENV = "KIRO_FABRIC_KIRO_BINARY" as const;
 export const KIRO_VERSION_ENV = "KIRO_FABRIC_KIRO_VERSION" as const;
+export const KIRO_SHA256_ENV = "KIRO_FABRIC_KIRO_SHA256" as const;
 
 const PROBE_TIMEOUT_MS = 10_000;
 const VERSION_TOKEN = /\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?/g;
@@ -48,7 +54,7 @@ export interface KiroCompatibilityReport {
   ok: boolean;
 }
 
-export interface SupportedKiroIdentity extends KiroCompatibilityReport {
+export interface SupportedKiroIdentity extends KiroCompatibilityReport, ExecutableAttestation {
   state: "ok";
   executablePath: string;
   version: typeof KIRO_CLI_VERSION;
@@ -183,16 +189,20 @@ export const inspectKiroCompatibility = async (
     };
   }
   try {
+    const attestation = attestExecutable(resolved.path);
+    assertExecutableAttestation(attestation);
     const { stdout, stderr } = await execFileAsync(resolved.path, ["--version"], {
       timeout: PROBE_TIMEOUT_MS,
       maxBuffer: 64 * 1024,
       encoding: "utf8",
     });
-    return classifyKiroVersionOutput(
+    assertExecutableAttestation(attestation);
+    const classified = classifyKiroVersionOutput(
       `${String(stdout)}\n${String(stderr)}`,
       requestedPath,
       resolved.path,
     );
+    return classified.ok ? { ...classified, ...attestation, executablePath: resolved.path } : classified;
   } catch (error) {
     const detail = error as { stdout?: string; stderr?: string };
     return {
@@ -229,6 +239,11 @@ export const assertSupportedKiro = async (
   const report = await inspectKiroCompatibility(requestedPath);
   if (!report.ok) throw new Error(describeKiroCompatibilityFailure(report));
   return report as SupportedKiroIdentity;
+};
+
+/** Revalidate path, inode, size, and digest immediately before a Kiro spawn. */
+export const assertSupportedKiroUnchanged = (identity: SupportedKiroIdentity): void => {
+  assertExecutableAttestation(identity);
 };
 
 export const classifyNodeVersion = (

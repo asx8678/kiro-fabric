@@ -4,9 +4,11 @@
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -40,6 +42,16 @@ const project = (name: string): string => {
   return dir;
 };
 
+const makeRemovable = (dir: string): void => {
+  if (!existsSync(dir)) return;
+  const stat = lstatSync(dir);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+  chmodSync(dir, 0o700);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
+  }
+};
+
 const installWithFake = (root: string, extra: Parameters<typeof installKiroProfile>[0] = {}) =>
   installKiroProfile({
     projectRoot: root,
@@ -64,6 +76,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) {
+    makeRemovable(root);
     rmSync(root, { recursive: true, force: true });
   }
 });

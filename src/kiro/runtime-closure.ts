@@ -26,13 +26,17 @@ import {
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 import {
+  assertExecutableAttestation,
   assertNoSymlinkComponents,
+  attestExecutable,
+  copyAttestedExecutable,
   ensureManagedDirectory,
   KiroInstallError,
   lstatOrNull,
   readPackageVersion,
   sha256Bytes,
   writeAtomic,
+  type ExecutableAttestation,
   type KiroManagedLayout,
   type KiroRuntimeClosureManifest,
 } from "./managed.js";
@@ -92,17 +96,32 @@ export const resolveSourcePackageRoot = (): string => {
   // detached self-hosted manager. An installed release is itself a complete
   // update/repair artifact; no npm/source origin is required.
   const candidates = [
-    resolve(import.meta.dirname, "..", ".."),
     resolve(import.meta.dirname, ".."),
+    resolve(import.meta.dirname, "..", ".."),
   ];
-  for (const candidate of candidates) {
+  for (const [index, candidate] of candidates.entries()) {
+    const packagePath = join(candidate, "package.json");
+    if (!existsSync(packagePath)) continue;
     const packaged = join(candidate, "dist", "kiro-closure", "kiro", "mcp-entry.js");
     const installed = join(candidate, "kiro", "mcp-entry.js");
+    let pkg: { name?: string; digest?: string };
+    try {
+      pkg = JSON.parse(readFileSync(packagePath, "utf8")) as typeof pkg;
+    } catch {
+      throw new KiroInstallError("ownership", "immediate Fabric artifact metadata is malformed");
+    }
+    if (pkg.name === "kiro-fabric-runtime-closure") {
+      const marker = readFileSync(join(candidate, ".closure-digest"), "utf8").trim();
+      if (pkg.digest !== marker || !/^[0-9a-f]{64}$/.test(marker) || !existsSync(installed)) {
+        throw new KiroInstallError("ownership", "installed artifact metadata is not bound to its immediate release");
+      }
+      return candidate;
+    }
     if (
-      existsSync(join(candidate, "package.json")) &&
-      (existsSync(packaged) || existsSync(installed)) &&
-      existsSync(join(candidate, "skills"))
+      index === 1 && pkg.name === "kiro-fabric" &&
+      existsSync(packaged) && existsSync(join(candidate, "skills"))
     ) return candidate;
+    throw new KiroInstallError("ownership", "unexpected immediate Fabric artifact metadata");
   }
   throw new KiroInstallError(
     "fs",
@@ -248,6 +267,8 @@ export type RuntimeClosurePlan = RuntimeClosureResult;
 export interface RuntimeClosureDeploymentOptions {
   /** Injectable runtime artifact for unit fixtures; production uses the certified bootstrap Node. */
   nodeSourcePath?: string;
+  /** Descriptor-bound identity retained from installer staging. */
+  nodeAttestation?: ExecutableAttestation;
 }
 
 export const planRuntimeClosureDeployment = (
@@ -257,10 +278,15 @@ export const planRuntimeClosureDeployment = (
 ): RuntimeClosurePlan => {
   const packageRoot = resolveSourcePackageRoot();
   const nodeSourcePath = options.nodeSourcePath ?? process.execPath;
+  const nodeAttestation = options.nodeAttestation ?? attestExecutable(nodeSourcePath);
+  if (nodeAttestation.path !== resolve(nodeSourcePath)) {
+    throw new KiroInstallError("concurrency", "staged Node path does not match its attestation");
+  }
+  assertExecutableAttestation(nodeAttestation);
   const digestHash = createHash("sha256");
   digestHash.update(computeRuntimeClosureDigest(packageRoot));
   digestHash.update("\0node\0");
-  digestHash.update(readFileSync(nodeSourcePath));
+  digestHash.update(nodeAttestation.sha256);
   const digest = digestHash.digest("hex");
   const sourceDir = closureSourceDirectory(packageRoot);
   const sourceFiles = closureFileList(sourceDir);
@@ -296,7 +322,7 @@ export const planRuntimeClosureDeployment = (
   }
   attested.push(
     { path: runtimeRoot + "/.closure-digest", installedSha256: sha256Bytes(digest + "\n") },
-    { path: runtimeRoot + "/bin/" + nodeExecutableName(), installedSha256: sha256Bytes(readFileSync(nodeSourcePath)), executableMode: 0o755 },
+    { path: runtimeRoot + "/bin/" + nodeExecutableName(), installedSha256: nodeAttestation.sha256, executableMode: 0o555 },
     { path: runtimeRoot + "/package.json", installedSha256: sha256Bytes(generatedPackage) },
   );
   attested.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
@@ -320,7 +346,7 @@ export const planRuntimeClosureDeployment = (
       fileCount: sourceFiles.length + MANAGED_RELEASE_SKILL_FILES.length + 1,
       bytes: sourceFiles.reduce(
         (total, rel) => total + statSync(join(sourceDir, ...rel.split("/"))).size,
-        statSync(nodeSourcePath).size + skillBytes,
+        nodeAttestation.size + skillBytes,
       ),
     },
   };
@@ -347,12 +373,20 @@ const writeClosureMarker = (runtimeDir: string, digest: string): void => {
 export const deployRuntimeClosure = (
   installRoot: string,
   layout: KiroManagedLayout,
-  options?: { force?: boolean; expectedDigest?: string; nodeSourcePath?: string },
+  options?: {
+    force?: boolean;
+    expectedDigest?: string;
+    nodeSourcePath?: string;
+    nodeAttestation?: ExecutableAttestation;
+    /** Installer activation is committed with profile+manifest, not here. */
+    activate?: boolean;
+  },
 ): RuntimeClosureResult => {
   const startWall = Date.now();
   const packageRoot = resolveSourcePackageRoot();
   const planned = planRuntimeClosureDeployment(installRoot, layout, {
     ...(options?.nodeSourcePath ? { nodeSourcePath: options.nodeSourcePath } : {}),
+    ...(options?.nodeAttestation ? { nodeAttestation: options.nodeAttestation } : {}),
   });
   const digest = planned.digest;
   if (options?.expectedDigest !== undefined && options.expectedDigest !== digest) {
@@ -383,7 +417,7 @@ export const deployRuntimeClosure = (
       throw new KiroInstallError("symlink", "runtime closure marker is not a regular file");
     }
     const markerDigest = markerNow ? readFileSync(marker, "utf8").trim() : "";
-    if (markerDigest !== digest) writeClosureMarker(runtimeDir, digest);
+    if (markerDigest !== digest && options?.activate !== false) writeClosureMarker(runtimeDir, digest);
     metadata.totalMs = Date.now() - startWall;
     return {
       runtimeDir,
@@ -444,9 +478,9 @@ export const deployRuntimeClosure = (
     }
     const stagedNode = join(stagingDir, "bin", nodeExecutableName());
     mkdirSync(dirname(stagedNode), { recursive: true, mode: 0o700 });
-    copyFileSync(options?.nodeSourcePath ?? process.execPath, stagedNode);
-    chmodSync(stagedNode, 0o755);
-    bytes += statSync(stagedNode).size;
+    const nodeSource = options?.nodeAttestation ?? attestExecutable(options?.nodeSourcePath ?? process.execPath);
+    copyAttestedExecutable(nodeSource, stagedNode, 0o555);
+    bytes += nodeSource.size;
     fileCount += 1;
     metadata.fileCount = fileCount;
     metadata.bytes = bytes;
@@ -491,6 +525,19 @@ export const deployRuntimeClosure = (
     syncDirs(stagingDir);
     metadata.stageMs = Date.now() - stageStart;
 
+    // Seal every release leaf and directory before publication. This keeps
+    // normal Fabric workspace operations from mutating runtime bytes and makes
+    // accidental writes fail even when they bypass the higher-level guard.
+    const seal = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) seal(full);
+        else chmodSync(full, full === stagedNode ? 0o555 : 0o444);
+      }
+      chmodSync(dir, 0o555);
+    };
+    seal(stagingDir);
+
     // Atomic immutable publish. A racing publisher may win before this point;
     // its exact final tree must attest identically and is never replaced.
     const publishStart = Date.now();
@@ -500,7 +547,7 @@ export const deployRuntimeClosure = (
     } else {
       renameSync(stagingDir, versionDir);
     }
-    writeClosureMarker(runtimeDir, digest);
+    if (options?.activate !== false) writeClosureMarker(runtimeDir, digest);
     metadata.publishMs = Date.now() - publishStart;
     metadata.totalMs = Date.now() - startWall;
 
@@ -516,8 +563,18 @@ export const deployRuntimeClosure = (
       metrics: metadata,
     };
   } catch (error) {
-    // Clean up staging on failure. The prior runtime is left intact.
+    // Clean up staging on failure. The prior runtime is left intact. A failure
+    // after sealing must first restore directory owner-write permissions.
     try {
+      const unseal = (dir: string): void => {
+        const stat = lstatOrNull(dir);
+        if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) return;
+        chmodSync(dir, 0o700);
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isDirectory()) unseal(join(dir, entry.name));
+        }
+      };
+      unseal(stagingDir);
       rmSync(stagingDir, { recursive: true, force: true });
     } catch {
       // best effort
@@ -569,10 +626,21 @@ export const verifyRuntimeClosureAttestation = (
     if (sha256Bytes(bytes) !== file.installedSha256) {
       throw new KiroInstallError("ownership", "installed runtime closure hash mismatch: " + file.path);
     }
-    if (file.executableMode !== undefined && (statSync(path).mode & 0o777) !== file.executableMode) {
-      throw new KiroInstallError("ownership", "installed runtime executable mode mismatch: " + file.path);
+    const mode = statSync(path).mode & 0o777;
+    const expectedMode = file.executableMode ?? 0o444;
+    if (mode !== expectedMode) {
+      throw new KiroInstallError("ownership", "installed runtime release mode mismatch: " + file.path);
     }
   }
+  const verifyDirectories = (dir: string): void => {
+    if ((statSync(dir).mode & 0o777) !== 0o555) {
+      throw new KiroInstallError("ownership", "installed runtime directory is not sealed read-only: " + dir);
+    }
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) verifyDirectories(join(dir, entry.name));
+    }
+  };
+  verifyDirectories(root);
 };
 
 export const removeAttestedRuntimeClosure = (
@@ -583,6 +651,13 @@ export const removeAttestedRuntimeClosure = (
   const root = join(installRoot, ...closure.root.split("/"));
   if (!existsSync(root)) return false;
   verifyRuntimeClosureAttestation(installRoot, closure);
+  const unsealDirectories = (dir: string): void => {
+    chmodSync(dir, 0o700);
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) unsealDirectories(join(dir, entry.name));
+    }
+  };
+  unsealDirectories(root);
   for (const file of [...closure.files].sort((left, right) => right.path.length - left.path.length)) {
     unlinkSync(join(installRoot, ...file.path.split("/")));
   }
@@ -594,14 +669,6 @@ export const removeAttestedRuntimeClosure = (
   };
   removeEmpty(root);
   const runtimeDir = runtimeClosurePath(installRoot, layout);
-  const marker = join(runtimeDir, ".closure-current");
-  const markerStat = lstatOrNull(marker);
-  if (markerStat) {
-    if (markerStat.isSymbolicLink() || !markerStat.isFile()) {
-      throw new KiroInstallError("symlink", "runtime closure marker is invalid");
-    }
-    if (readFileSync(marker, "utf8").trim() === closure.digest) unlinkSync(marker);
-  }
   if (existsSync(runtimeDir) && readdirSync(runtimeDir).length === 0) rmdirSync(runtimeDir);
   return true;
 };
@@ -609,12 +676,43 @@ export const removeAttestedRuntimeClosure = (
 /**
  * Legacy recursive removal for format-1 manifests only.
  */
+export const removeRuntimeActivationMarker = (
+  installRoot: string,
+  layout: KiroManagedLayout,
+  expectedDigest: string,
+): boolean => {
+  const runtimeDir = runtimeClosurePath(installRoot, layout);
+  const marker = join(runtimeDir, ".closure-current");
+  const markerStat = lstatOrNull(marker);
+  if (!markerStat) return false;
+  if (markerStat.isSymbolicLink() || !markerStat.isFile()) {
+    throw new KiroInstallError("symlink", "runtime closure marker is invalid");
+  }
+  if (readFileSync(marker, "utf8").trim() !== expectedDigest) {
+    throw new KiroInstallError("ownership", "runtime closure marker changed during cleanup");
+  }
+  unlinkSync(marker);
+  if (existsSync(runtimeDir) && readdirSync(runtimeDir).length === 0) rmdirSync(runtimeDir);
+  return true;
+};
+
 export const removeRuntimeClosure = (
   installRoot: string,
   layout: KiroManagedLayout,
 ): boolean => {
   const runtimeDir = runtimeClosurePath(installRoot, layout);
   if (!existsSync(runtimeDir)) return false;
+  const makeRemovable = (dir: string): void => {
+    const stat = lstatOrNull(dir);
+    if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new KiroInstallError("symlink", "legacy runtime root is not a real directory");
+    }
+    chmodSync(dir, 0o700);
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
+    }
+  };
+  makeRemovable(runtimeDir);
   rmSync(runtimeDir, { recursive: true, force: true });
   return true;
 };

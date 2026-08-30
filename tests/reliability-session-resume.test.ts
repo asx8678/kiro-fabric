@@ -14,6 +14,7 @@ import {
   type ResidentHostConfig,
 } from "../src/residency/protocol.js";
 import { ParticipantDirectory } from "../src/topology/participant-directory.js";
+import { makeTreeRemovable } from "./helpers/removable-tree.js";
 
 const repoRoot = process.cwd();
 const kiroWorker = path.resolve("dist/kiro/agent-worker-entry.js");
@@ -215,7 +216,10 @@ afterEach(async () => {
   delete process.env.FAKE_KIRO_WORKER_SCENARIO;
   delete process.env.FAKE_KIRO_WORKER_LOG;
   delete process.env.KIRO_FABRIC_KIRO_IDLE_MS;
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) {
+    makeTreeRemovable(root);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 describe("durable kiro session resume reliability", () => {

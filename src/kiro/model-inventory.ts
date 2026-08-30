@@ -3,7 +3,7 @@
 // when the probe fails. Non-billable: this never sends a prompt.
 
 import { execFile } from "node:child_process";
-import { assertSupportedKiro } from "./compatibility.js";
+import { assertSupportedKiro, assertSupportedKiroUnchanged } from "./compatibility.js";
 
 export interface KiroModelEntry {
   runner: "kiro";
@@ -148,6 +148,7 @@ export const listKiroModels = (
   if (active) return active;
   const probe = assertSupportedKiro(binary)
     .then((identity) => new Promise<KiroModelEntry[]>((resolve) => {
+      assertSupportedKiroUnchanged(identity);
       execFile(
         identity.executablePath,
         [...KIRO_MODEL_LIST_ARGUMENTS],

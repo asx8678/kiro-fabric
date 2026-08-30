@@ -17,12 +17,14 @@ import { createInterface } from "node:readline/promises";
 
 import { runKiroDoctor } from "./doctor.js";
 import {
+  assertSupportedKiroUnchanged,
   inspectKiroCompatibility,
   inspectNodeCompatibility,
   KIRO_CLI_VERSION,
   MIN_NODE_MAJOR,
   type KiroCompatibilityReport,
   type NodeCompatibilityReport,
+  type SupportedKiroIdentity,
 } from "./compatibility.js";
 import { resolveKiroInstallRoots, type KiroInstallRoots } from "./home.js";
 import {
@@ -212,6 +214,7 @@ interface KiroScopeStatus {
   healthy: boolean;
   kiroBinaryPath: string | null;
   kiroCliVersion: string | null;
+  kiroSha256: string | null;
 }
 
 const UNAVAILABLE_SCOPE: KiroScopeStatus = {
@@ -221,6 +224,7 @@ const UNAVAILABLE_SCOPE: KiroScopeStatus = {
   healthy: false,
   kiroBinaryPath: null,
   kiroCliVersion: null,
+  kiroSha256: null,
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -258,6 +262,7 @@ const scopeStatusFor = (
       healthy: false,
       kiroBinaryPath: null,
       kiroCliVersion: null,
+      kiroSha256: null,
     };
   }
   let manifest: { packageVersion?: unknown; profile?: unknown; runtime?: unknown };
@@ -272,6 +277,7 @@ const scopeStatusFor = (
       healthy: false,
       kiroBinaryPath: null,
       kiroCliVersion: null,
+      kiroSha256: null,
     };
   }
   const profile = isRecord(manifest.profile) ? manifest.profile : undefined;
@@ -284,6 +290,8 @@ const scopeStatusFor = (
     typeof runtime?.kiroBinaryPath === "string" ? runtime.kiroBinaryPath : null;
   const kiroCliVersion =
     typeof runtime?.kiroCliVersion === "string" ? runtime.kiroCliVersion : null;
+  const kiroSha256 =
+    typeof runtime?.kiroSha256 === "string" ? runtime.kiroSha256 : null;
   let healthy = false;
   if (installedSha256 !== null) {
     healthy =
@@ -296,6 +304,7 @@ const scopeStatusFor = (
     healthy,
     kiroBinaryPath,
     kiroCliVersion,
+    kiroSha256,
   };
 };
 
@@ -610,13 +619,20 @@ const runLaunch = async (parsed: SetupArgs): Promise<number> => {
     }
     return 1;
   }
-  if (managedBinaryPath && identity.executablePath !== managedBinaryPath) {
+  const attestedIdentity = identity as SupportedKiroIdentity;
+  const managedScope = scopes.project.kiroBinaryPath ? scopes.project : scopes.user;
+  if (
+    managedBinaryPath &&
+    (identity.executablePath !== managedBinaryPath ||
+      !managedScope.kiroSha256 || attestedIdentity.sha256 !== managedScope.kiroSha256)
+  ) {
     process.stderr.write(
       "kiro-fabric: refusing to launch a Kiro executable that differs from the managed manifest\n",
     );
     return 1;
   }
   const binary = identity.executablePath;
+  assertSupportedKiroUnchanged(attestedIdentity);
   const child = spawn(binary, LAUNCH_ARGS, { stdio: "inherit", cwd: projectRoot });
   const outcome = await new Promise<{ code: number } | { missing: boolean }>(
     (resolvePromise) => {

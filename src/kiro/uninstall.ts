@@ -29,6 +29,7 @@ import {
 import { resolveKiroInstallRoots } from "./home.js";
 import {
   removeAttestedRuntimeClosure,
+  removeRuntimeActivationMarker,
   runtimeClosurePath,
   verifyRuntimeClosureAttestation,
 } from "./runtime-closure.js";
@@ -147,18 +148,24 @@ export const planKiroProfileUninstall = (
     return { record, path, currentSha256, nextBytes, needsMutation };
   });
   if (manifest.runtime.closure) {
-    const closureRoot = join(installRoot, ...manifest.runtime.closure.root.split("/"));
-    if (existsSync(closureRoot)) {
-      verifyRuntimeClosureAttestation(installRoot, manifest.runtime.closure);
-      const marker = join(runtimeClosurePath(installRoot, layout), ".closure-current");
-      const markerStat = lstatOrNull(marker);
-      if (
-        !markerStat || markerStat.isSymbolicLink() || !markerStat.isFile() ||
-        readFileSync(marker, "utf8").trim() !== manifest.runtime.closure.digest
-      ) {
-        throw new KiroInstallError("ownership", "runtime closure marker does not match manifest");
-      }
-    } else ownershipWarnings.push("recorded runtime closure is already absent");
+    const generations = manifest.runtime.generations ?? [manifest.runtime.closure];
+    for (const generation of generations) {
+      const generationRoot = join(installRoot, ...generation.root.split("/"));
+      if (existsSync(generationRoot)) verifyRuntimeClosureAttestation(installRoot, generation);
+      else ownershipWarnings.push("recorded runtime generation is already absent: " + generation.digest);
+    }
+    const activeRoot = join(installRoot, ...manifest.runtime.closure.root.split("/"));
+    const marker = join(runtimeClosurePath(installRoot, layout), ".closure-current");
+    const markerStat = lstatOrNull(marker);
+    if (markerStat && (
+      markerStat.isSymbolicLink() || !markerStat.isFile() ||
+      readFileSync(marker, "utf8").trim() !== manifest.runtime.closure.digest
+    )) {
+      throw new KiroInstallError("ownership", "runtime closure marker does not match manifest");
+    }
+    if (existsSync(activeRoot) && !markerStat) {
+      throw new KiroInstallError("ownership", "runtime closure marker does not match manifest");
+    }
   }
   const ownedState = { warnings: ownershipWarnings, skills, manifest };
 
@@ -307,6 +314,22 @@ const commitUninstall = (plan: KiroUninstallPlan): string[] => {
       throw new KiroInstallError("concurrency", "managed skill changed while uninstalling: " + skill.path);
     }
   }
+  // Runtime ownership is the durable tombstone. Remove every recorded
+  // generation and its activation marker before the transaction drops the
+  // manifest; a crash leaves the manifest recoverable and a retry continues
+  // from any generations already absent. Cleanup errors are fatal.
+  if (plan.manifest?.runtime.closure) {
+    const generations = plan.manifest.runtime.generations ?? [plan.manifest.runtime.closure];
+    for (const generation of generations) {
+      removeAttestedRuntimeClosure(plan.installRoot, plan.layout, generation);
+    }
+    removeRuntimeActivationMarker(
+      plan.installRoot,
+      plan.layout,
+      plan.manifest.runtime.closure.digest,
+    );
+  }
+
   const currentManifest = readManagedFileNoFollow(plan.installRoot, plan.manifestPath);
   commitManagedFileTransaction(
     plan.installRoot,
@@ -335,34 +358,20 @@ const commitUninstall = (plan: KiroUninstallPlan): string[] => {
   fsyncDirectory(paths.manifestDir);
 
   if (plan.backupPath) {
-    try {
-      const stat = lstatOrNull(plan.backupPath);
-      if (stat?.isFile() && !stat.isSymbolicLink()) unlinkSync(plan.backupPath);
-    } catch (error) {
-      warnings.push(`could not remove backup ${plan.backupPath}: ${(error as Error).message}`);
-    }
+    const stat = lstatOrNull(plan.backupPath);
+    if (stat?.isFile() && !stat.isSymbolicLink()) unlinkSync(plan.backupPath);
   }
 
   for (const skill of plan.skills) {
     if (skill.record.backup) {
-      try {
-        const backupPath = backupAbs(plan.installRoot, skill.record.backup);
-        const stat = lstatOrNull(backupPath);
-        if (stat?.isFile() && !stat.isSymbolicLink()) unlinkSync(backupPath);
-      } catch (error) {
-        warnings.push("could not remove skill backup: " + (error as Error).message);
-      }
+      const backupPath = backupAbs(plan.installRoot, skill.record.backup);
+      const stat = lstatOrNull(backupPath);
+      if (stat?.isFile() && !stat.isSymbolicLink()) unlinkSync(backupPath);
     }
   }
 
-  try {
-    if (plan.manifest?.runtime.closure) {
-      removeAttestedRuntimeClosure(plan.installRoot, plan.layout, plan.manifest.runtime.closure);
-    } else if (plan.manifest?.format === 1) {
-      warnings.push("legacy format-1 manifest has no runtime ownership proof; runtime left untouched");
-    }
-  } catch (error) {
-    warnings.push(`could not remove runtime closure: ${(error as Error).message}`);
+  if (plan.manifest?.format === 1) {
+    warnings.push("legacy format-1 manifest has no runtime ownership proof; runtime left untouched");
   }
 
   const skillDirs = [...new Set(plan.skills.map((skill) => dirname(skill.path)))].sort(

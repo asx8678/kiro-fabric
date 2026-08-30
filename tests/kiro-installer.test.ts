@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { hostname, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -56,6 +56,16 @@ const project = (name: string): string => {
   return dir;
 };
 
+const makeRemovable = (dir: string): void => {
+  if (!existsSync(dir)) return;
+  const stat = lstatSync(dir);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+  chmodSync(dir, 0o700);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
+  }
+};
+
 const installWithFake = (root: string, extra: Parameters<typeof installKiroProfile>[0] = {}) =>
   installKiroProfile({
     projectRoot: root,
@@ -82,6 +92,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) {
+    makeRemovable(root);
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -315,11 +326,13 @@ describe("installKiroProfile", () => {
     expect(manifest.runtime.mcpEntryPath).toBe(mcpEntry);
     expect(manifest.runtime.kiroBinaryPath).toBe(realpathSync(wrapperPath));
     expect(manifest.runtime.kiroCliVersion).toBe("2.20.1");
+    expect(manifest.runtime.kiroSha256).toBe(sha256Bytes(readFileSync(wrapperPath)));
     expect(manifest.runtime.agentEngine).toBe("v3");
     const profile = JSON.parse(readFileSync(result.profilePath, "utf8"));
     expect(profile.mcpServers.fabric.env).toMatchObject({
       KIRO_FABRIC_KIRO_BINARY: realpathSync(wrapperPath),
       KIRO_FABRIC_KIRO_VERSION: "2.20.1",
+      KIRO_FABRIC_KIRO_SHA256: manifest.runtime.kiroSha256,
     });
   });
 
@@ -433,6 +446,42 @@ describe("installKiroProfile", () => {
     expect(snapshot(dir)).toEqual(beforeTree);
   });
 
+  it("rejects test-only closure bypasses in production", async () => {
+    const previousVitest = process.env.VITEST;
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.VITEST = "false";
+    process.env.NODE_ENV = "production";
+    try {
+      await expect(installWithFake(project("production-bypass")))
+        .rejects.toThrow(/test-internal.*production/);
+    } finally {
+      if (previousVitest === undefined) delete process.env.VITEST;
+      else process.env.VITEST = previousVitest;
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it("rejects a Kiro inode that replaces itself during attestation", async () => {
+    const dir = project("kiro-self-replace");
+    const changing = join(base, "changing-kiro");
+    writeFileSync(changing, [
+      "#!/bin/sh",
+      "if [ \"$1\" = \"--version\" ]; then",
+      "  printf 'kiro-cli 2.20.1\\n'",
+      "  rm \"$0\"",
+      "  printf '#!/bin/sh\\nexit 99\\n' > \"$0\"",
+      "  chmod 755 \"$0\"",
+      "  exit 0",
+      "fi",
+      "exit 0",
+      "",
+    ].join("\n"), { mode: 0o755 });
+    await expect(installWithFake(dir, { kiroBinary: changing }))
+      .rejects.toThrow(/changed|probe failed|attestation/i);
+    expect(existsSync(join(dir, ".kiro"))).toBe(false);
+  });
+
   it("rejects an unsupported Kiro version before writing anything", async () => {
     await expect(installWithFake(project("okversion"))).resolves.toBeDefined();
     const badWrapper = join(base, "fake-kiro-old");
@@ -525,6 +574,47 @@ describe("installKiroProfile", () => {
     const manifest = JSON.parse(readFileSync(updated.manifestPath, "utf8"));
     expect(manifest.profile.backup.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(readFileSync(first.backupPath!, "utf8")).toBe(original);
+  });
+
+  it("recovers an interrupted activation marker before accepting its generation", async () => {
+    const dir = project("activation-transaction-recovery");
+    const installed = await installWithFake(dir, { skipRuntimeClosure: false });
+    const paths = managedPaths(realpathSync(dir));
+    const manifestBytes = readFileSync(installed.manifestPath);
+    const profileBytes = readFileSync(installed.profilePath);
+    const manifest = JSON.parse(manifestBytes.toString("utf8")) as {
+      runtime: { closure: { digest: string } };
+    };
+    const marker = join(paths.runtimeDir, ".closure-current");
+    const stale = "0".repeat(64) + "\n";
+    writeAtomic(marker, stale, 0o600);
+    const rel = (path: string): string => relative(realpathSync(dir), path).split(sep).join("/");
+    writeManagedTransactionJournal(realpathSync(dir), "project", {
+      format: 2,
+      owner: "kiro-fabric",
+      operation: "install",
+      layout: "project",
+      root: realpathSync(dir),
+      createdAt: Date.now(),
+      files: [
+        {
+          path: rel(marker),
+          transition: managedFileTransition(sha256Bytes(stale), manifest.runtime.closure.digest + "\n"),
+        },
+        {
+          path: rel(installed.profilePath),
+          transition: managedFileTransition(sha256Bytes(profileBytes), profileBytes),
+        },
+        {
+          path: rel(installed.manifestPath),
+          transition: managedFileTransition(sha256Bytes(manifestBytes), manifestBytes),
+        },
+      ],
+    });
+
+    await expect(installWithFake(dir, { skipRuntimeClosure: false })).resolves.toMatchObject({ ok: true });
+    expect(readFileSync(marker, "utf8")).toBe(manifest.runtime.closure.digest + "\n");
+    expect(existsSync(paths.transaction)).toBe(false);
   });
 
   it("recovers an interrupted profile-before-manifest transaction", async () => {

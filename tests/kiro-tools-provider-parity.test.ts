@@ -92,6 +92,22 @@ describe("host-neutral Kiro tools provider", () => {
     )).rejects.toThrow("failed-output\n\nCommand exited with code 7");
   });
 
+  it("never traverses or mutates a protected managed release", async () => {
+    const cwd = root();
+    const release = path.join(cwd, ".kiro", ".kiro-fabric", "runtime", "digest");
+    fs.mkdirSync(release, { recursive: true });
+    fs.writeFileSync(path.join(release, "runtime.js"), "attested\n");
+    const provider = new KiroToolsProvider(cwd, { protectedRoots: [release] });
+    const ctx = context(cwd);
+
+    await expect(provider.invoke("read", { path: path.join(release, "runtime.js") }, ctx))
+      .rejects.toThrow(/managed immutable runtime/);
+    await expect(provider.invoke("write", { path: path.join(release, "runtime.js"), content: "changed" }, ctx))
+      .rejects.toThrow(/managed immutable runtime/);
+    await expect(provider.invoke("find", { path: ".", pattern: "**/*.js" }, ctx)).resolves.toBe("");
+    expect(fs.readFileSync(path.join(release, "runtime.js"), "utf8")).toBe("attested\n");
+  });
+
   it("confines every filesystem operation, including missing write targets", async () => {
     const cwd = root();
     const outside = root();

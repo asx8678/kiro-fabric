@@ -9,9 +9,11 @@ import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -83,6 +85,16 @@ const writeFakeKiroWrapper = (path: string): string => {
   return path;
 };
 
+const makeRemovable = (dir: string): void => {
+  if (!existsSync(dir)) return;
+  const stat = lstatSync(dir);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+  chmodSync(dir, 0o700);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
+  }
+};
+
 beforeEach(() => {
   base = mkdtempSync(join(tmpdir(), "kiro-fabric-setup-test-"));
   roots.push(base);
@@ -91,6 +103,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   for (const root of roots.splice(0)) {
+    makeRemovable(root);
     rmSync(root, { recursive: true, force: true });
   }
 });

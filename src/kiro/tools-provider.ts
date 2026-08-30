@@ -145,6 +145,8 @@ interface WalkState {
 
 export interface KiroToolsProviderOptions {
   readArtifact?: (args: { id: string; offset?: number; limit?: number }) => unknown | Promise<unknown>;
+  /** Immutable managed release roots that workspace tools must never traverse. */
+  protectedRoots?: readonly string[];
 }
 
 export class KiroToolsProvider implements FabricProvider {
@@ -153,11 +155,26 @@ export class KiroToolsProvider implements FabricProvider {
   readonly #cwd: string;
   readonly #guard: ProjectRootGuard;
   readonly #readArtifact: KiroToolsProviderOptions["readArtifact"];
+  readonly #protectedRoots: string[];
 
   constructor(cwd: string, options: KiroToolsProviderOptions = {}) {
     this.#guard = new ProjectRootGuard(cwd);
     this.#cwd = this.#guard.canonicalRoot;
     this.#readArtifact = options.readArtifact;
+    this.#protectedRoots = (options.protectedRoots ?? []).map((root) => path.resolve(root));
+  }
+
+  #isProtected(target: string): boolean {
+    const resolved = path.resolve(target);
+    return this.#protectedRoots.some((root) =>
+      resolved === root || resolved.startsWith(root + path.sep),
+    );
+  }
+
+  #assertNotProtected(target: string, action: string): void {
+    if (this.#isProtected(target)) {
+      throw new Error(`${action} refuses access to the managed immutable runtime`);
+    }
   }
 
   async list(request: FabricProviderListRequest, context: FabricInvocationContext): Promise<FabricActionDescriptor[]> {
@@ -187,7 +204,8 @@ export class KiroToolsProvider implements FabricProvider {
     if (!TOOL_NAMES.includes(actionName as ToolName)) return args;
     if (actionName === "bash") return args;
     const target = actionName === "grep" || actionName === "find" || actionName === "ls" ? (args.path ?? ".") : args.path;
-    this.#guard.assertPath(target, `k.${actionName}`);
+    const resolved = this.#guard.assertPath(target, `k.${actionName}`);
+    this.#assertNotProtected(resolved, `k.${actionName}`);
     return args;
   }
 
@@ -204,6 +222,7 @@ export class KiroToolsProvider implements FabricProvider {
     if (name === "bash") return this.#bash(args, context);
     const requested = name === "grep" || name === "find" || name === "ls" ? (args.path ?? ".") : args.path;
     const target = this.#guard.assertPath(requested, `k.${name}`);
+    this.#assertNotProtected(target, `k.${name}`);
     throwIfAborted(context.signal);
     if (name === "read") return this.#read(target, args, context);
     if (name === "write") return this.#write(target, args, context);
@@ -338,7 +357,9 @@ export class KiroToolsProvider implements FabricProvider {
   async #ls(target: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<string> {
     const entries = await runAbortable(context.signal, () => fs.readdir(target, { withFileTypes: true }));
     const limit = Math.min(positiveInteger(args.limit, 500, 1), 500);
-    const text = entries.sort((left, right) => left.name.localeCompare(right.name))
+    const text = entries
+      .filter((entry) => !this.#isProtected(path.join(target, entry.name)))
+      .sort((left, right) => left.name.localeCompare(right.name))
       .slice(0, limit)
       .map((entry) => entry.name + (entry.isDirectory() ? "/" : ""))
       .join("\n");
@@ -407,6 +428,7 @@ export class KiroToolsProvider implements FabricProvider {
       throwIfAborted(signal);
       if (entry.name === ".git" || entry.name === "node_modules") continue;
       const full = path.join(root, entry.name);
+      if (this.#isProtected(full)) continue;
       if (entry.isDirectory()) {
         if (!this.#isIgnored(full, true, frames)) yield* this.#walk(full, signal, state, frames, depth + 1);
         continue;
@@ -484,7 +506,10 @@ export class KiroToolsProvider implements FabricProvider {
     let result: { output: string; code: number | null; totalBytes: number };
     try {
       result = await new Promise((resolve, reject) => {
-        const child = spawn("bash", ["-c", command], {
+        const shell = process.platform === "win32"
+          ? "C:\\Program Files\\Git\\bin\\bash.exe"
+          : "/bin/bash";
+        const child = spawn(shell, ["-c", command], {
           cwd: this.#cwd,
           env: process.env,
           stdio: ["ignore", "pipe", "pipe"],
@@ -494,7 +519,7 @@ export class KiroToolsProvider implements FabricProvider {
           reject(new Error("k.bash failed to launch bash"));
           return;
         }
-        const tree = createProcessTreeController(child.pid);
+        const tree = createProcessTreeController(child.pid, { ambientHelpers: false });
         let tail = Buffer.alloc(0);
         let totalBytes = 0;
         let writeChain: Promise<void> = Promise.resolve();

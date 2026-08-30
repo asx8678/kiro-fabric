@@ -56,7 +56,7 @@ export const spawnJsonRpcProcess = (options: SupervisedProcessOptions) => {
         : `failed to spawn ${options.argv[0]}`,
     );
   }
-  const processTree = createProcessTreeController(pid);
+  const processTree = createProcessTreeController(pid, { ambientHelpers: false });
 
   const outboundMethods: string[] = [];
   const pending = new Map<number, PendingCall>();

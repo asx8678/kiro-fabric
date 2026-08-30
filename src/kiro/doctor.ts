@@ -24,6 +24,7 @@ import {
   KIRO_AGENT_ENGINE,
   KIRO_BINARY_ENV,
   KIRO_CLI_VERSION,
+  KIRO_SHA256_ENV,
   KIRO_VERSION_ENV,
   sameExecutableIdentity,
   type SupportedKiroIdentity,
@@ -36,6 +37,7 @@ import {
   validateKiroProfile,
 } from "./install.js";
 import {
+  attestExecutable,
   lstatOrNull,
   readPackageVersion,
   managedPaths,
@@ -124,6 +126,7 @@ export const runKiroDoctor = async (
 ): Promise<KiroDoctorReport> => {
   let kiroBinary = options.kiroBinary ?? "kiro-cli";
   let managedKiroBinaryPath: string | undefined;
+  let managedKiroSha256: string | undefined;
   let observedKiro: SupportedKiroIdentity | undefined;
   const requestedMcpEntryPath = options.mcpEntryPath ?? defaultMcpEntry();
   const checkingInstalled = Boolean(
@@ -170,6 +173,8 @@ export const runKiroDoctor = async (
       }
       if (manifest.runtime.kiroBinaryPath) {
         managedKiroBinaryPath = manifest.runtime.kiroBinaryPath;
+        managedKiroSha256 = manifest.runtime.kiroSha256;
+        if (!managedKiroSha256) throw new Error("managed manifest has no Kiro executable digest");
         if (options.kiroBinary === undefined) kiroBinary = managedKiroBinaryPath;
         const document = JSON.parse(profile.toString("utf8")) as {
           mcpServers?: { fabric?: { env?: Record<string, unknown> } };
@@ -177,7 +182,8 @@ export const runKiroDoctor = async (
         const env = document.mcpServers?.fabric?.env;
         if (
           env?.[KIRO_BINARY_ENV] !== manifest.runtime.kiroBinaryPath ||
-          env?.[KIRO_VERSION_ENV] !== manifest.runtime.kiroCliVersion
+          env?.[KIRO_VERSION_ENV] !== manifest.runtime.kiroCliVersion ||
+          env?.[KIRO_SHA256_ENV] !== manifest.runtime.kiroSha256
         ) {
           throw new Error("managed profile Kiro executable identity does not match manifest");
         }
@@ -266,11 +272,11 @@ export const runKiroDoctor = async (
       if (
         managedKiroBinaryPath &&
         (!sameExecutableIdentity(kiro.executablePath, managedKiroBinaryPath) ||
-          kiro.version !== KIRO_CLI_VERSION)
+          kiro.version !== KIRO_CLI_VERSION || kiro.sha256 !== managedKiroSha256)
       ) {
         throw new Error("selected Kiro executable does not match the managed manifest identity");
       }
-      await assertKiroV3Capabilities(kiro.executablePath);
+      await assertKiroV3Capabilities(kiro);
       kiroBinary = kiro.executablePath;
       observedKiro = kiro;
       return `Node ${node.version} + kiro-cli ${kiro.version} / ${KIRO_AGENT_ENGINE} / auth ${KIRO_ACP_AUTH_METHOD}`;
@@ -286,6 +292,7 @@ export const runKiroDoctor = async (
         ? {
             kiroBinaryPath: observedKiro.executablePath,
             kiroCliVersion: observedKiro.version,
+            kiroSha256: observedKiro.sha256,
           }
         : {}),
     });
@@ -323,7 +330,7 @@ export const runKiroDoctor = async (
     let profileValid = false;
     if (!tupleFailed && shapeOk) {
       profileValid = await run("profile.validate", async () => {
-        await validateKiroProfile(profileJson, kiroBinary);
+        await validateKiroProfile(profileJson, observedKiro!);
         return "kiro-cli agent validate clean";
       });
       await run("profile.negative-control", async () => {
@@ -331,7 +338,7 @@ export const runKiroDoctor = async (
         delete invalid.name;
         let diagnosed = false;
         try {
-          await validateKiroProfile(JSON.stringify(invalid, null, 2) + "\n", kiroBinary);
+          await validateKiroProfile(JSON.stringify(invalid, null, 2) + "\n", observedKiro!);
         } catch {
           diagnosed = true;
         }
@@ -453,12 +460,17 @@ export const runKiroDoctor = async (
         "--auth-method",
         KIRO_ACP_AUTH_METHOD,
       ];
-      const spawnDoctorAcp = () => spawnJsonRpcProcess({
-        argv: acpArgv,
-        cwd: projectRoot,
-        env: { ...process.env, KIRO_HOME: doctorKiroHome },
-        timeoutMs: 60_000,
-      });
+      const spawnDoctorAcp = () => {
+        if (observedKiro && attestExecutable(observedKiro.executablePath).sha256 !== observedKiro.sha256) {
+          throw new Error("Kiro executable changed immediately before doctor ACP spawn");
+        }
+        return spawnJsonRpcProcess({
+          argv: acpArgv,
+          cwd: projectRoot,
+          env: { ...process.env, KIRO_HOME: doctorKiroHome },
+          timeoutMs: 60_000,
+        });
+      };
       const initializeAcp = async (
         acp: ReturnType<typeof spawnJsonRpcProcess>,
       ): Promise<void> => {

@@ -245,9 +245,14 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
 
   const registry = new ActionRegistry();
   const artifacts = createKiroArtifactStore();
+  const managedNode = process.env.KIRO_FABRIC_NODE_BINARY;
+  const protectedRelease = managedNode && path.isAbsolute(managedNode)
+    ? path.dirname(path.dirname(managedNode))
+    : undefined;
   registry.register(
     new KiroToolsProvider(options.cwd, {
       readArtifact: ({ id, offset, limit }) => artifacts.read(id, offset, limit),
+      ...(protectedRelease ? { protectedRoots: [protectedRelease] } : {}),
     }),
   );
   // Main gets an on-demand MCP facade: configured servers are never contacted

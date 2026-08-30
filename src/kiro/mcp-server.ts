@@ -10,9 +10,7 @@
 // - diagnostics go to stderr only; stdout carries protocol frames exclusively.
 
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -30,11 +28,15 @@ import { KIRO_MCP_CALL_TIMEOUT_MS } from "./deadlines.js";
 import { prepareKiroRuntime, type KiroRuntime } from "./runtime.js";
 import { projectFabricExecutionText } from "./projection.js";
 import { normalizeRunDisplay } from "../run-display.js";
+import { readPackageVersion } from "./managed.js";
 
 const TOOL_NAME = "fabric_exec";
 
 const TOOL_DESCRIPTION =
   "Execute type-checked TypeScript through Fabric's configured executor for coding tools, MCP, Fabric providers, and discovery.";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 export interface KiroMcpServerOptions {
   cwd: string;
@@ -47,30 +49,6 @@ export interface KiroMcpServerOptions {
   version?: string;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const readPackageVersion = (): string => {
-  let cursor = dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 6; i++) {
-    const candidate = join(cursor, "package.json");
-    if (existsSync(candidate)) {
-      try {
-        const pkg = JSON.parse(readFileSync(candidate, "utf8")) as {
-          name?: string;
-          version?: string;
-        };
-        if (pkg.name === "kiro-fabric" && pkg.version) return pkg.version;
-      } catch {
-        // keep walking
-      }
-    }
-    const parent = dirname(cursor);
-    if (parent === cursor) break;
-    cursor = parent;
-  }
-  return "0.0.0";
-};
 
 export const createKiroMcpServer = async (
   options: KiroMcpServerOptions,
