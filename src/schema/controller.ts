@@ -4,6 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { FabricTraceSafeError } from "../audit/trace.js";
 import { writeJsonAtomic } from "../core/atomic-write.js";
+import {
+  processInstanceIdentity,
+  processInstanceIsAlive,
+} from "../core/process-instance.js";
 import type { FabricSchemaConfig, FabricSchemaTrustedCommand } from "../config.js";
 import type { MeshIdentity, MeshStateEntry, MeshStore } from "../mesh/store.js";
 import type { FabricInvocationContext } from "../protocol.js";
@@ -47,16 +51,21 @@ interface JournalOperation {
   temporary?: string;
   /** Same-directory before-file claimed atomically during publication. */
   backup?: string;
+  /** Deterministic claim used while conditionally removing a published result. */
+  rollbackClaim?: string;
+  /** Deterministic, source-digest-owned staging file used to restore a before image. */
+  restoreTemporary?: string;
+  restoreSha256?: string;
 }
 
 interface TransactionJournal {
-  format: 2;
+  format: 3;
   id: string;
   status: "prepared" | "applying" | "committed" | "rolled_back" | "quarantined";
   before: BeforeImage[];
   /** Project-relative same-directory stages/backups, recorded before creation. */
-  staged?: string[];
-  operations?: JournalOperation[];
+  staged: string[];
+  operations: JournalOperation[];
   createdAt: number;
   error?: string;
 }
@@ -69,13 +78,18 @@ interface StagedOperation {
   temporary?: string;
   resultSha256?: string;
   backup?: string;
+  rollbackClaim?: string;
+  restoreTemporary?: string;
+  restoreSha256?: string;
 }
 
 interface CommitLockOwner {
-  format: 1;
+  format: 1 | 2;
   nonce: string;
   pid: number;
   createdAt: number;
+  bootId?: string;
+  processStart?: string;
 }
 
 const hashToken = (token: string): string =>
@@ -449,22 +463,55 @@ export class SchemaController {
       if (payloadBytes + beforeBytes > this.config.maxBytes) {
         throw new Error(`Schema transaction exceeds ${this.config.maxBytes} bytes`);
       }
-      const stagedPaths = input.operations.flatMap((operation, index) => {
-        const resolved = resolveWorkspaceFile(this.cwd, operation.path, { allowAbsent: true });
-        const paths = [this.#backupPath(resolved, transactionId, index).relative];
-        if (operation.kind !== "delete") paths.push(this.#stagingPath(resolved, transactionId, index).relative);
-        return paths;
-      });
+      const staged = this.#planOperations(
+        input.operations,
+        declared,
+        transactionId,
+        context.signal,
+      );
+      for (let index = 0; index < staged.length; index++) {
+        const image = before[index]!;
+        const sourceDigest = image.existed
+          ? `sha256:${createHash("sha256").update(Buffer.from(image.content!, "base64")).digest("hex")}`
+          : null;
+        if (sourceDigest !== staged[index]!.sourceSha256) {
+          throw new Error(`Schema workspace drifted while preparing before image: ${image.path}`);
+        }
+      }
+      const relative = (absolute: string): string =>
+        path.relative(this.cwd, absolute).split(path.sep).join("/");
+      const journalOperations: JournalOperation[] = staged.map((operation) => ({
+        path: operation.path,
+        kind: operation.operation.kind,
+        sourceSha256: operation.sourceSha256,
+        ...(operation.resultSha256 ? { resultSha256: operation.resultSha256 } : {}),
+        ...(operation.temporary ? { temporary: relative(operation.temporary) } : {}),
+        ...(operation.backup ? { backup: relative(operation.backup) } : {}),
+        ...(operation.rollbackClaim ? { rollbackClaim: relative(operation.rollbackClaim) } : {}),
+        ...(operation.restoreTemporary
+          ? {
+              restoreTemporary: relative(operation.restoreTemporary),
+              restoreSha256: operation.restoreSha256,
+            }
+          : {}),
+      }));
+      const stagedPaths = journalOperations.flatMap((operation) => [
+        operation.temporary,
+        operation.backup,
+        operation.rollbackClaim,
+        operation.restoreTemporary,
+      ].filter((value): value is string => value !== undefined));
       journal = {
-        format: 2,
+        format: 3,
         id: transactionId,
         status: "prepared",
         before,
         staged: stagedPaths,
+        operations: journalOperations,
         createdAt: Date.now(),
       };
-      // The journal names every possible staging file before one is created.
-      // Recovery can therefore clean a crash at any point in preparation.
+      // Every possible result, before-file, rollback claim, and restore stage,
+      // together with its ownership digest, is durable before one is created.
       atomicJsonWrite(journalPath, journal);
 
       this.#assertCommitActive(context.signal);
@@ -480,21 +527,9 @@ export class SchemaController {
         throw new Error("Schema workspace drifted while consuming the certificate");
       }
 
-      const staged = this.#stageOperations(input.operations, declared, transactionId, context.signal);
+      this.#writeStagedResults(staged, context.signal);
       this.#assertCommitActive(context.signal);
       for (const operation of staged) this.#assertSourceUnchanged(operation);
-      journal.operations = staged.map((operation) => ({
-        path: operation.path,
-        kind: operation.operation.kind,
-        sourceSha256: operation.sourceSha256,
-        ...(operation.resultSha256 ? { resultSha256: operation.resultSha256 } : {}),
-        ...(operation.temporary
-          ? { temporary: path.relative(this.cwd, operation.temporary).split(path.sep).join("/") }
-          : {}),
-        ...(operation.backup
-          ? { backup: path.relative(this.cwd, operation.backup).split(path.sep).join("/") }
-          : {}),
-      }));
       journal.status = "applying";
       atomicJsonWrite(journalPath, journal);
       for (const operation of staged) {
@@ -540,7 +575,8 @@ export class SchemaController {
       }
       const committedCleanupError = this.#cleanupStaged(journal);
       if (committedCleanupError) {
-        journal.error = `post-commit staging cleanup failed: ${committedCleanupError}`;
+        journal.status = "quarantined";
+        journal.error = `committed workspace staging cleanup failed: ${committedCleanupError}`;
         try {
           atomicJsonWrite(journalPath, journal);
         } catch {
@@ -884,7 +920,34 @@ export class SchemaController {
     };
   }
 
-  #stageOperations(
+  #rollbackClaimPath(
+    resolved: ReturnType<typeof resolveWorkspaceFile>,
+    transactionId: string,
+    index: number,
+  ): { absolute: string; relative: string } {
+    const claim = path.join(
+      path.dirname(resolved.absolute),
+      `.${path.basename(resolved.absolute)}.schema-${transactionId}-${index}.rollback`,
+    );
+    return {
+      absolute: claim,
+      relative: path.relative(this.cwd, claim).split(path.sep).join("/"),
+    };
+  }
+
+  #restorePath(
+    resolved: ReturnType<typeof resolveWorkspaceFile>,
+    transactionId: string,
+    index: number,
+  ): { absolute: string; relative: string } {
+    const temporary = `${resolved.absolute}.schema-${transactionId}-${index}.restore.tmp`;
+    return {
+      absolute: temporary,
+      relative: path.relative(this.cwd, temporary).split(path.sep).join("/"),
+    };
+  }
+
+  #planOperations(
     operations: SchemaFileOperation[],
     declared: Map<string, ReturnType<typeof resolveWorkspaceFile>>,
     transactionId: string,
@@ -905,27 +968,16 @@ export class SchemaController {
         : null;
       let next: Buffer | undefined;
       if (operation.kind === "write") {
-        if ("absent" in operation.expected) {
-          if (current.exists) throw new Error(`Schema precondition failed; expected absent: ${operation.path}`);
-        } else if (sourceSha256 !== operation.expected.sha256) {
-          throw new Error(`Schema precondition SHA-256 mismatch: ${operation.path}`);
-        }
         next = Buffer.from(operation.content, "utf8");
-      } else {
-        if (sourceSha256 !== operation.expectedSha256) {
-          throw new Error(`Schema precondition SHA-256 mismatch: ${operation.path}`);
-        }
-        if (operation.kind === "edit") {
-          const content = sourceBytes!.toString("utf8");
-          const first = content.indexOf(operation.oldText);
-          if (first < 0 || content.indexOf(operation.oldText, first + operation.oldText.length) >= 0) {
-            throw new Error(`Schema edit requires oldText to occur exactly once: ${operation.path}`);
-          }
-          next = Buffer.from(
-            `${content.slice(0, first)}${operation.newText}${content.slice(first + operation.oldText.length)}`,
-            "utf8",
-          );
-        }
+      } else if (operation.kind === "edit") {
+        const content = sourceBytes!.toString("utf8");
+        const first = content.indexOf(operation.oldText);
+        next = first >= 0 && content.indexOf(operation.oldText, first + operation.oldText.length) < 0
+          ? Buffer.from(
+              `${content.slice(0, first)}${operation.newText}${content.slice(first + operation.oldText.length)}`,
+              "utf8",
+            )
+          : sourceBytes;
       }
       const item: StagedOperation = {
         operation,
@@ -933,26 +985,68 @@ export class SchemaController {
         absolute: current.absolute,
         sourceSha256,
         ...(current.exists
-          ? { backup: this.#backupPath(current, transactionId, index).absolute }
+          ? {
+              backup: this.#backupPath(current, transactionId, index).absolute,
+              restoreTemporary: this.#restorePath(current, transactionId, index).absolute,
+              restoreSha256: sourceSha256!,
+            }
+          : {}),
+        ...(next
+          ? {
+              temporary: this.#stagingPath(current, transactionId, index).absolute,
+              resultSha256: `sha256:${createHash("sha256").update(next).digest("hex")}`,
+              rollbackClaim: this.#rollbackClaimPath(current, transactionId, index).absolute,
+            }
           : {}),
       };
-      if (next) {
-        const temporary = this.#stagingPath(current, transactionId, index).absolute;
-        const mode = current.exists ? fs.statSync(current.absolute).mode & 0o777 : 0o600;
-        let descriptor: number | undefined;
-        try {
-          descriptor = fs.openSync(temporary, "wx", mode);
-          fs.writeFileSync(descriptor, next);
-          fs.fsyncSync(descriptor);
-        } finally {
-          if (descriptor !== undefined) fs.closeSync(descriptor);
-        }
-        item.temporary = temporary;
-        item.resultSha256 = `sha256:${createHash("sha256").update(next).digest("hex")}`;
-      }
       staged.push(item);
     }
     return staged;
+  }
+
+  #writeStagedResults(staged: StagedOperation[], signal?: AbortSignal): void {
+    for (const item of staged) {
+      this.#assertCommitActive(signal);
+      const operation = item.operation;
+      if (operation.kind === "write") {
+        if ("absent" in operation.expected) {
+          if (item.sourceSha256 !== null) {
+            throw new Error(`Schema precondition failed; expected absent: ${operation.path}`);
+          }
+        } else if (item.sourceSha256 !== operation.expected.sha256) {
+          throw new Error(`Schema precondition SHA-256 mismatch: ${operation.path}`);
+        }
+      } else if (item.sourceSha256 !== operation.expectedSha256) {
+        throw new Error(`Schema precondition SHA-256 mismatch: ${operation.path}`);
+      }
+      if (!item.temporary || operation.kind === "delete") continue;
+      const next = operation.kind === "write"
+        ? Buffer.from(operation.content, "utf8")
+        : (() => {
+            const source = fs.readFileSync(item.absolute, "utf8");
+            const first = source.indexOf(operation.oldText);
+            if (first < 0 || source.indexOf(operation.oldText, first + operation.oldText.length) >= 0) {
+              throw new Error(`Schema edit requires oldText to occur exactly once: ${operation.path}`);
+            }
+            return Buffer.from(
+              `${source.slice(0, first)}${operation.newText}${source.slice(first + operation.oldText.length)}`,
+              "utf8",
+            );
+          })();
+      if (`sha256:${createHash("sha256").update(next).digest("hex")}` !== item.resultSha256) {
+        throw new Error(`Schema source changed while staging: ${item.path}`);
+      }
+      const mode = item.sourceSha256 !== null ? fs.statSync(item.absolute).mode & 0o777 : 0o600;
+      let descriptor: number | undefined;
+      try {
+        descriptor = fs.openSync(item.temporary, "wx", mode);
+        fs.writeFileSync(descriptor, next);
+        fs.fsyncSync(descriptor);
+      } finally {
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+      }
+      fsyncDirectory(path.dirname(item.temporary));
+    }
   }
 
   #assertSourceUnchanged(staged: StagedOperation): void {
@@ -1033,26 +1127,40 @@ export class SchemaController {
     return sha256File(filePath);
   }
 
-  #publishBeforeImage(image: BeforeImage): void {
+  #publishBeforeImage(image: BeforeImage, operation: JournalOperation): void {
     if (!image.existed) return;
-    const parent = path.dirname(image.absolute);
-    const temporary = `${image.absolute}.schema-restore-${randomBytes(8).toString("hex")}.tmp`;
-    let descriptor: number | undefined;
-    try {
-      descriptor = fs.openSync(temporary, "wx", image.mode ?? 0o600);
-      fs.writeFileSync(descriptor, Buffer.from(image.content ?? "", "base64"));
-      if (image.mode !== undefined) fs.fchmodSync(descriptor, image.mode);
-      fs.fsyncSync(descriptor);
-      fs.closeSync(descriptor);
-      descriptor = undefined;
-      fs.linkSync(temporary, image.absolute);
-      fs.unlinkSync(temporary);
-      fsyncFile(image.absolute);
-      fsyncDirectory(parent);
-    } finally {
-      if (descriptor !== undefined) fs.closeSync(descriptor);
-      fs.rmSync(temporary, { force: true });
+    if (!operation.restoreTemporary || !operation.restoreSha256) {
+      throw new Error("restore staging ownership is missing");
     }
+    const temporary = resolveWorkspaceFile(this.cwd, operation.restoreTemporary, {
+      allowAbsent: true,
+    }).absolute;
+    const parent = path.dirname(image.absolute);
+    const bytes = Buffer.from(image.content ?? "", "base64");
+    const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+    if (digest !== operation.restoreSha256 || digest !== operation.sourceSha256) {
+      throw new Error("before-image restore digest is malformed");
+    }
+    if (fs.existsSync(temporary)) {
+      if (this.#regularFileDigest(temporary) !== digest) {
+        throw new Error("restore staging contains unexpected concurrent bytes");
+      }
+    } else {
+      let descriptor: number | undefined;
+      try {
+        descriptor = fs.openSync(temporary, "wx", image.mode ?? 0o600);
+        fs.writeFileSync(descriptor, bytes);
+        if (image.mode !== undefined) fs.fchmodSync(descriptor, image.mode);
+        fs.fsyncSync(descriptor);
+      } finally {
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+      }
+      fsyncDirectory(parent);
+    }
+    fs.linkSync(temporary, image.absolute);
+    fs.unlinkSync(temporary);
+    fsyncFile(image.absolute);
+    fsyncDirectory(parent);
   }
 
   #restoreClaim(claim: string, target: string): void {
@@ -1065,64 +1173,73 @@ export class SchemaController {
   #rollbackPublished(journal: TransactionJournal): string | undefined {
     const errors: string[] = [];
     const images = new Map(journal.before.map((image) => [image.path, image]));
-    for (const operation of [...(journal.operations ?? [])].reverse()) {
+    for (const operation of [...journal.operations].reverse()) {
       const image = images.get(operation.path);
       if (!image) {
         errors.push(`${operation.path}: missing before image`);
         continue;
       }
-      const claim = `${image.absolute}.schema-rollback-${journal.id}-${randomBytes(4).toString("hex")}`;
+      const claim = operation.rollbackClaim
+        ? resolveWorkspaceFile(this.cwd, operation.rollbackClaim, { allowAbsent: true }).absolute
+        : undefined;
       try {
         const resolved = resolveWorkspaceFile(this.cwd, operation.path, { allowAbsent: true });
         if (resolved.exists) {
-          if (operation.kind !== "delete" && operation.resultSha256) {
+          const currentDigest = this.#regularFileDigest(resolved.absolute);
+          if (image.existed && currentDigest === operation.sourceSha256) {
+            // Recovery may resume after the restore link was published but
+            // before its claim or restore stage was cleaned.
+            continue;
+          }
+          if (operation.kind !== "delete" && operation.resultSha256 && claim) {
+            if (fs.existsSync(claim)) {
+              errors.push(`${operation.path}: rollback claim already exists beside destination; artifacts preserved`);
+              continue;
+            }
             fs.renameSync(resolved.absolute, claim);
             fsyncDirectory(path.dirname(resolved.absolute));
             const digest = this.#regularFileDigest(claim);
             if (digest === operation.resultSha256) {
-              if (image.existed) this.#publishBeforeImage(image);
-              const claimedDigest = this.#regularFileDigest(claim);
-              if (claimedDigest === operation.resultSha256) {
-                fs.unlinkSync(claim);
-                fsyncDirectory(path.dirname(resolved.absolute));
-              } else {
-                errors.push(`${operation.path}: rollback claim contains unexpected concurrent bytes; artifact preserved`);
-              }
-              // If content raced into the now-restored/absent name, no later
-              // rollback step may erase it; report quarantine instead.
+              if (image.existed) this.#publishBeforeImage(image, operation);
               if (!image.existed && fs.existsSync(resolved.absolute)) {
                 errors.push(`${operation.path}: unexpected concurrent content appeared during rollback`);
               }
               continue;
             }
             this.#restoreClaim(claim, resolved.absolute);
-            if (digest !== operation.sourceSha256) {
-              errors.push(`${operation.path}: unexpected concurrent content; rollback refused`);
-            }
+            errors.push(`${operation.path}: unexpected concurrent content; rollback refused`);
             continue;
           }
-          const digest = this.#regularFileDigest(resolved.absolute);
-          if (digest !== operation.sourceSha256) {
+          if (currentDigest !== operation.sourceSha256) {
             errors.push(`${operation.path}: unexpected concurrent content; rollback refused`);
           }
           continue;
         }
 
+        if (claim && fs.existsSync(claim)) {
+          const claimedDigest = this.#regularFileDigest(claim);
+          if (claimedDigest !== operation.resultSha256) {
+            errors.push(`${operation.path}: rollback claim contains unexpected concurrent bytes; artifact preserved`);
+            continue;
+          }
+          if (image.existed) this.#publishBeforeImage(image, operation);
+          continue;
+        }
         const backupPath = operation.backup
           ? resolveWorkspaceFile(this.cwd, operation.backup, { allowAbsent: true })
           : undefined;
         if (backupPath?.exists && this.#regularFileDigest(backupPath.absolute) === operation.sourceSha256) {
-          this.#publishBeforeImage(image);
+          this.#publishBeforeImage(image, operation);
           continue;
         }
         if (operation.sourceSha256 !== null) {
           errors.push(`${operation.path}: source disappeared without an owned before-file; rollback refused`);
         }
       } catch (error) {
-        // A failed no-replace restoration deliberately leaves the claimed file
-        // for operator inspection and never overwrites the winner's content.
+        // A failed no-replace restoration deliberately leaves every recorded
+        // artifact for operator inspection and never overwrites the winner.
         errors.push(`${operation.path}: ${errorMessage(error)}`);
-        if (fs.existsSync(claim) && !fs.existsSync(image.absolute)) {
+        if (claim && fs.existsSync(claim) && !fs.existsSync(image.absolute)) {
           try { this.#restoreClaim(claim, image.absolute); } catch { /* retain claim */ }
         }
       }
@@ -1139,6 +1256,12 @@ export class SchemaController {
       }
       if (operation.backup && operation.sourceSha256) {
         expectedDigests.set(operation.backup, operation.sourceSha256);
+      }
+      if (operation.rollbackClaim && operation.resultSha256) {
+        expectedDigests.set(operation.rollbackClaim, operation.resultSha256);
+      }
+      if (operation.restoreTemporary && operation.restoreSha256) {
+        expectedDigests.set(operation.restoreTemporary, operation.restoreSha256);
       }
     }
     for (const stagedPath of journal.staged ?? []) {
@@ -1220,11 +1343,13 @@ export class SchemaController {
     try {
       const value = JSON.parse(fs.readFileSync(filePath, "utf8")) as Partial<CommitLockOwner>;
       if (
-        value.format !== 1 ||
+        (value.format !== 1 && value.format !== 2) ||
         typeof value.nonce !== "string" ||
         !/^[a-f0-9]{32}$/.test(value.nonce) ||
         !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0 ||
-        !Number.isSafeInteger(value.createdAt)
+        !Number.isSafeInteger(value.createdAt) ||
+        (value.bootId !== undefined && typeof value.bootId !== "string") ||
+        (value.processStart !== undefined && typeof value.processStart !== "string")
       ) return undefined;
       return value as CommitLockOwner;
     } catch {
@@ -1233,19 +1358,19 @@ export class SchemaController {
   }
 
   #ownerIsAlive(owner: CommitLockOwner): boolean {
-    try {
-      process.kill(owner.pid, 0);
-      return true;
-    } catch (error) {
-      return error instanceof Error && "code" in error && error.code === "EPERM";
-    }
+    return processInstanceIsAlive(owner);
   }
 
   #tryAcquireCanonicalLock(): (() => void) | undefined {
     fs.mkdirSync(this.#journalRoot, { recursive: true, mode: 0o700 });
     const nonce = randomBytes(16).toString("hex");
     const ownerPath = path.join(this.#journalRoot, `.commit.owner-${nonce}.json`);
-    const owner: CommitLockOwner = { format: 1, nonce, pid: process.pid, createdAt: Date.now() };
+    const owner: CommitLockOwner = {
+      format: 2,
+      nonce,
+      createdAt: Date.now(),
+      ...processInstanceIdentity(),
+    };
     const descriptor = fs.openSync(ownerPath, "wx", 0o600);
     try {
       fs.writeFileSync(descriptor, `${JSON.stringify(owner)}\n`);
@@ -1399,44 +1524,173 @@ export class SchemaController {
     }
   }
 
-  #recoverJournalsLocked(): void {
-    for (const name of fs.readdirSync(this.#journalRoot)) {
-      if (!name.endsWith(".json")) continue;
-      const filePath = path.join(this.#journalRoot, name);
-      try {
-        const journal = JSON.parse(fs.readFileSync(filePath, "utf8")) as TransactionJournal;
+  #readRecoveryJournal(filePath: string, name: string): TransactionJournal | undefined {
+    let value: unknown;
+    try {
+      value = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch (error) {
+      throw new Error(`Schema transaction recovery blocked by malformed journal ${name}: ${errorMessage(error)}`);
+    }
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new Error(`Schema transaction recovery blocked by malformed journal ${name}`);
+    }
+    const candidate = value as Record<string, unknown>;
+    const status = candidate.status;
+    const terminal = status === "committed" || status === "rolled_back";
+    // Resolved journals from the previous protocol are retained for audit but
+    // never used to claim or remove artifacts under the stricter protocol.
+    if (candidate.format === 2 && terminal) return undefined;
+    if (candidate.format !== 3) {
+      throw new Error(`Schema transaction recovery blocked by unsupported journal ${name}`);
+    }
+    if (
+      typeof candidate.id !== "string" ||
+      !/^[a-zA-Z0-9-]{1,128}$/u.test(candidate.id) ||
+      name !== `${candidate.id}.json` ||
+      !["prepared", "applying", "committed", "rolled_back", "quarantined"].includes(String(status)) ||
+      !Number.isSafeInteger(candidate.createdAt) ||
+      !Array.isArray(candidate.before) ||
+      !Array.isArray(candidate.operations) ||
+      !Array.isArray(candidate.staged)
+    ) {
+      throw new Error(`Schema transaction recovery blocked by malformed journal ${name}`);
+    }
+    if (status === "quarantined") {
+      throw new Error(`Schema transaction recovery blocked by unresolved quarantined journal ${name}`);
+    }
+    const journal = candidate as unknown as TransactionJournal;
+    if (terminal) {
+      const artifactsAbsent = journal.staged.every((artifact) => {
         if (
-          journal.format !== 2 ||
-          (journal.status !== "prepared" && journal.status !== "applying") ||
-          !Array.isArray(journal.before)
-        ) continue;
-        if (journal.status === "applying" && !Array.isArray(journal.operations)) {
-          journal.status = "quarantined";
-          journal.error = "crash recovery refused applying journal without operation ownership records";
-          atomicJsonWrite(filePath, journal);
-          continue;
+          typeof artifact !== "string" ||
+          path.isAbsolute(artifact) ||
+          artifact.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
+        ) return false;
+        try {
+          fs.lstatSync(path.join(this.cwd, ...artifact.split("/")));
+          return false;
+        } catch (error) {
+          return error instanceof Error && "code" in error && error.code === "ENOENT";
         }
-        const workspace = this.#workspaceEntry()?.value as SchemaWorkspaceRecord | undefined;
+      });
+      if (artifactsAbsent) return undefined;
+    }
+    const shaPattern = /^sha256:[a-f0-9]{64}$/u;
+    const images = new Map<string, BeforeImage>();
+    for (const raw of journal.before) {
+      if (
+        typeof raw !== "object" || raw === null ||
+        typeof raw.path !== "string" || typeof raw.absolute !== "string" ||
+        typeof raw.existed !== "boolean" || images.has(raw.path)
+      ) throw new Error(`Schema transaction recovery blocked by malformed before image in ${name}`);
+      const resolved = resolveWorkspaceFile(this.cwd, raw.path, { allowAbsent: true });
+      if (resolved.absolute !== raw.absolute) {
+        throw new Error(`Schema transaction recovery blocked by foreign before image in ${name}`);
+      }
+      if (raw.existed) {
         if (
-          workspace?.lastOutcome === "committed" &&
-          workspace.lastTransactionId === journal.id
+          typeof raw.content !== "string" ||
+          Buffer.from(raw.content, "base64").toString("base64") !== raw.content ||
+          !Number.isInteger(raw.mode) || Number(raw.mode) < 0 || Number(raw.mode) > 0o777
         ) {
-          const cleanupError = this.#cleanupStaged(journal);
-          journal.status = "committed";
-          if (cleanupError) journal.error = `post-commit staging cleanup failed: ${cleanupError}`;
-          atomicJsonWrite(filePath, journal);
-          continue;
+          throw new Error(`Schema transaction recovery blocked by malformed before image in ${name}`);
         }
-        const restoreError = journal.status === "applying"
-          ? this.#rollbackPublished(journal)
-          : undefined;
+      } else if (raw.content !== undefined || raw.mode !== undefined) {
+        throw new Error(`Schema transaction recovery blocked by malformed absent image in ${name}`);
+      }
+      images.set(raw.path, raw);
+    }
+    const expectedArtifacts = new Set<string>();
+    const operationPaths = new Set<string>();
+    for (let index = 0; index < journal.operations.length; index++) {
+      const operation = journal.operations[index]!;
+      if (
+        typeof operation !== "object" || operation === null ||
+        typeof operation.path !== "string" || operationPaths.has(operation.path) ||
+        !["write", "edit", "delete"].includes(operation.kind) ||
+        !(operation.sourceSha256 === null || shaPattern.test(operation.sourceSha256))
+      ) throw new Error(`Schema transaction recovery blocked by malformed operation in ${name}`);
+      operationPaths.add(operation.path);
+      const image = images.get(operation.path);
+      if (!image || image.existed !== (operation.sourceSha256 !== null)) {
+        throw new Error(`Schema transaction recovery blocked by mismatched before image in ${name}`);
+      }
+      if (image.existed) {
+        const bytes = Buffer.from(image.content ?? "", "base64");
+        const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+        if (digest !== operation.sourceSha256) {
+          throw new Error(`Schema transaction recovery blocked by corrupt before image in ${name}`);
+        }
+      }
+      const resolved = resolveWorkspaceFile(this.cwd, operation.path, { allowAbsent: true });
+      const expectedBackup = image.existed ? this.#backupPath(resolved, journal.id, index).relative : undefined;
+      const expectedRestore = image.existed ? this.#restorePath(resolved, journal.id, index).relative : undefined;
+      const hasResult = operation.kind !== "delete";
+      const expectedTemporary = hasResult ? this.#stagingPath(resolved, journal.id, index).relative : undefined;
+      const expectedClaim = hasResult ? this.#rollbackClaimPath(resolved, journal.id, index).relative : undefined;
+      if (
+        operation.backup !== expectedBackup ||
+        operation.restoreTemporary !== expectedRestore ||
+        operation.restoreSha256 !== (image.existed ? operation.sourceSha256 : undefined) ||
+        operation.temporary !== expectedTemporary ||
+        operation.rollbackClaim !== expectedClaim ||
+        (hasResult ? !operation.resultSha256 || !shaPattern.test(operation.resultSha256) : operation.resultSha256 !== undefined)
+      ) throw new Error(`Schema transaction recovery blocked by malformed artifact ownership in ${name}`);
+      for (const artifact of [expectedBackup, expectedRestore, expectedTemporary, expectedClaim]) {
+        if (artifact) expectedArtifacts.add(artifact);
+      }
+    }
+    if (images.size !== operationPaths.size) {
+      throw new Error(`Schema transaction recovery blocked by unmatched before image in ${name}`);
+    }
+    const staged = new Set(journal.staged);
+    if (
+      staged.size !== journal.staged.length ||
+      staged.size !== expectedArtifacts.size ||
+      [...staged].some((artifact) => typeof artifact !== "string" || !expectedArtifacts.has(artifact))
+    ) throw new Error(`Schema transaction recovery blocked by malformed artifact list in ${name}`);
+    return journal;
+  }
+
+  #recoverJournalsLocked(): void {
+    for (const name of fs.readdirSync(this.#journalRoot).sort()) {
+      if (name.startsWith(".") || !name.endsWith(".json")) continue;
+      const filePath = path.join(this.#journalRoot, name);
+      const journal = this.#readRecoveryJournal(filePath, name);
+      if (!journal) continue;
+      if (journal.status === "committed" || journal.status === "rolled_back") {
         const cleanupError = this.#cleanupStaged(journal);
-        const rollbackError = [restoreError, cleanupError].filter(Boolean).join("; ") || undefined;
-        journal.status = rollbackError ? "quarantined" : "rolled_back";
-        journal.error = rollbackError ? `crash recovery failed: ${rollbackError}` : "recovered incomplete transaction";
+        if (!cleanupError) continue;
+        journal.status = "quarantined";
+        journal.error = `terminal staging cleanup failed: ${cleanupError}`;
         atomicJsonWrite(filePath, journal);
-      } catch {
-        // An unreadable journal is retained for operator quarantine and inspection.
+        throw new Error(`Schema transaction recovery blocked by unrestorable journal ${name}: ${cleanupError}`);
+      }
+      const workspace = this.#workspaceEntry()?.value as SchemaWorkspaceRecord | undefined;
+      if (
+        workspace?.lastOutcome === "committed" &&
+        workspace.lastTransactionId === journal.id
+      ) {
+        const cleanupError = this.#cleanupStaged(journal);
+        journal.status = cleanupError ? "quarantined" : "committed";
+        if (cleanupError) journal.error = `committed workspace staging cleanup failed: ${cleanupError}`;
+        else delete journal.error;
+        atomicJsonWrite(filePath, journal);
+        if (cleanupError) {
+          throw new Error(`Schema transaction recovery blocked by unrestorable journal ${name}: ${cleanupError}`);
+        }
+        continue;
+      }
+      const restoreError = journal.status === "applying"
+        ? this.#rollbackPublished(journal)
+        : undefined;
+      const cleanupError = this.#cleanupStaged(journal);
+      const rollbackError = [restoreError, cleanupError].filter(Boolean).join("; ") || undefined;
+      journal.status = rollbackError ? "quarantined" : "rolled_back";
+      journal.error = rollbackError ? `crash recovery failed: ${rollbackError}` : "recovered incomplete transaction";
+      atomicJsonWrite(filePath, journal);
+      if (rollbackError) {
+        throw new Error(`Schema transaction recovery blocked by unrestorable journal ${name}: ${rollbackError}`);
       }
     }
   }

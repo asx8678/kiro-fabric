@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { writeFileAtomic } from "../core/atomic-write.js";
+import { fsyncDirectory, writeFileAtomic } from "../core/atomic-write.js";
+import {
+  processInstanceIdentity,
+  processInstanceIsAlive,
+  type ProcessInstanceIdentity,
+} from "../core/process-instance.js";
 import { readJsonlPage } from "../log-tail.js";
 
 export interface MeshIdentity {
@@ -85,13 +90,36 @@ const errorCode = (error: unknown): string | undefined =>
     ? error.code
     : undefined;
 
-const processAlive = (pid: number): boolean => {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+interface MeshLockOwner extends ProcessInstanceIdentity {
+  format: 2;
+  token: string;
+  createdAt: number;
+}
+
+const serializeLockOwner = (owner: MeshLockOwner): string => `${JSON.stringify(owner)}\n`;
+
+const parseLockOwner = (serialized: string): MeshLockOwner | undefined => {
   try {
-    process.kill(pid, 0);
-    return true;
+    const value = JSON.parse(serialized) as Partial<MeshLockOwner>;
+    if (
+      value.format !== 2 ||
+      typeof value.token !== "string" || !value.token ||
+      !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0 ||
+      !Number.isSafeInteger(value.createdAt) ||
+      (value.bootId !== undefined && typeof value.bootId !== "string") ||
+      (value.processStart !== undefined && typeof value.processStart !== "string")
+    ) return undefined;
+    return value as MeshLockOwner;
   } catch {
-    return false;
+    // Legacy owners remain readable for safe upgrades. They have PID-only
+    // liveness, so a live/reused PID is conservatively retained.
+    const [token, pidText, createdText, ...extra] = serialized.trim().split("\n");
+    const pid = Number(pidText);
+    const createdAt = Number(createdText);
+    if (!token || extra.length > 0 || !Number.isSafeInteger(pid) || pid <= 0 || !Number.isFinite(createdAt)) {
+      return undefined;
+    }
+    return { format: 2, token, pid, createdAt };
   }
 };
 
@@ -298,7 +326,15 @@ export class MeshStore {
       if (Buffer.byteLength(buffer, "utf8") > this.maxEventBytes * events.length) {
         throw new Error(`Mesh batch exceeds ${this.maxEventBytes} bytes per event`);
       }
-      fs.appendFileSync(this.#eventsPath, buffer, { encoding: "utf8", mode: 0o600 });
+      let descriptor: number | undefined;
+      try {
+        descriptor = fs.openSync(this.#eventsPath, "a", 0o600);
+        fs.writeFileSync(descriptor, buffer);
+        fs.fsyncSync(descriptor);
+      } finally {
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+      }
+      fsyncDirectory(this.root);
       atomicWrite(this.#counterPath, events[events.length - 1]!.sequence);
       this.#compactEventLog();
       return events.map((event) => jsonClone(event));
@@ -381,6 +417,7 @@ export class MeshStore {
     } finally {
       if (descriptor !== undefined) fs.closeSync(descriptor);
     }
+    if (this.#readGeneration() !== generation) return this.latestOffset();
     return this.#encodeCursor(generation, completeOffset);
   }
 
@@ -399,6 +436,7 @@ export class MeshStore {
         if (previousByte[0] !== 0x0a) position = 0;
       }
       if (position >= size) {
+        if (this.#readGeneration() !== generation) return this.tail(cursor, limit);
         return { events: [], nextOffset: this.#encodeCursor(generation, position) };
       }
       const chunkBytes = Math.min(
@@ -423,12 +461,14 @@ export class MeshStore {
         }
         if (events.length >= boundedLimit) break;
       }
+      if (this.#readGeneration() !== generation) return this.tail(cursor, limit);
       return {
         events: events.map((event) => jsonClone(event)),
         nextOffset: this.#encodeCursor(generation, position + consumed),
       };
     } catch (error) {
       if (errorCode(error) === "ENOENT") {
+        if (this.#readGeneration() !== generation) return this.tail(cursor, limit);
         return { events: [], nextOffset: this.#encodeCursor(generation, 0) };
       }
       throw error;
@@ -689,13 +729,17 @@ export class MeshStore {
     const deadline = Date.now() + this.#lockTimeoutMs;
     const token = randomUUID();
     const ownerPath = path.join(this.#lockPath, "owner");
+    const owner: MeshLockOwner = {
+      format: 2,
+      token,
+      createdAt: Date.now(),
+      ...processInstanceIdentity(),
+    };
+    const ownerBytes = serializeLockOwner(owner);
     while (true) {
       try {
         fs.mkdirSync(this.#lockPath, { mode: 0o700 });
-        fs.writeFileSync(ownerPath, `${token}\n${process.pid}\n${Date.now()}\n`, {
-          encoding: "utf8",
-          mode: 0o600,
-        });
+        fs.writeFileSync(ownerPath, ownerBytes, { encoding: "utf8", mode: 0o600, flag: "wx" });
         break;
       } catch (error) {
         if (errorCode(error) !== "EEXIST") throw error;
@@ -708,8 +752,8 @@ export class MeshStore {
       return operation();
     } finally {
       try {
-        const owner = fs.readFileSync(ownerPath, "utf8");
-        if (owner.startsWith(`${token}\n`)) {
+        const current = parseLockOwner(fs.readFileSync(ownerPath, "utf8"));
+        if (current?.token === token) {
           fs.rmSync(this.#lockPath, { recursive: true, force: true });
         }
       } catch {
@@ -738,10 +782,9 @@ export class MeshStore {
       }
     }
     if (owner !== undefined) {
-      const [, pidText, createdText] = owner.trim().split("\n");
-      const createdAt = Number(createdText);
-      if (Number.isFinite(createdAt) && Date.now() - createdAt <= this.#staleLockMs) return false;
-      if (processAlive(Number(pidText))) return false;
+      const parsed = parseLockOwner(owner);
+      if (parsed && Date.now() - parsed.createdAt <= this.#staleLockMs) return false;
+      if (parsed && processInstanceIsAlive(parsed)) return false;
       try {
         if (fs.readFileSync(ownerPath, "utf8") !== owner) return false;
         fs.rmSync(this.#lockPath, { recursive: true, force: true });
@@ -806,15 +849,11 @@ export class MeshStore {
       const retained = captured.subarray(retainedStart);
       fs.closeSync(descriptor);
       descriptor = undefined;
-      const temporaryPath =
-        this.#eventsPath + "." + process.pid + "." + randomUUID() + ".tmp";
-      try {
-        fs.writeFileSync(temporaryPath, retained, { mode: 0o600 });
-        fs.renameSync(temporaryPath, this.#eventsPath);
-      } finally {
-        try { fs.rmSync(temporaryPath, { force: true }); } catch {}
-      }
+      // Advance the generation first. A crash before event-log publication can
+      // cause duplicate replay, while the opposite order could make a stale
+      // cursor silently skip retained events.
       atomicWrite(this.#generationPath, this.#readGeneration() + 1);
+      writeFileAtomic(this.#eventsPath, retained);
     } catch (error) {
       if (errorCode(error) !== "ENOENT") throw error;
     } finally {
@@ -836,6 +875,7 @@ export class MeshStore {
       fs.readSync(descriptor, tail, 0, readBytes, size - readBytes);
       const newline = tail.lastIndexOf(0x0a);
       fs.ftruncateSync(descriptor, newline >= 0 ? size - readBytes + newline + 1 : 0);
+      fs.fsyncSync(descriptor);
     } catch (error) {
       if (errorCode(error) !== "ENOENT") throw error;
     } finally {

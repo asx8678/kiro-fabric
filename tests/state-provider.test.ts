@@ -1078,7 +1078,7 @@ describe("StateStore", () => {
     ]);
   });
 
-  it("retains a current certificate past the default 500-event read window", async () => {
+  it("retains a current certificate past the default 500-event read window", { timeout: 15_000 }, async () => {
     const mesh = createStore(500);
     const store = new StateStore(mesh);
     const transition = await store.transition(

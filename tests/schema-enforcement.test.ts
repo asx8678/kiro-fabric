@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CapturedToolCatalog } from "../src/capture/catalog.js";
 import { DEFAULT_FABRIC_CONFIG, type FabricSchemaMode } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
+import { processInstanceIdentity } from "../src/core/process-instance.js";
 import { FabricExecutionService } from "../src/execution-service.js";
 import { createPiExecutionHost } from "../src/fabric-exec-tool.js";
 import { FabricSessionApprovals } from "../src/core/approval-controller.js";
@@ -727,6 +728,45 @@ describe("Schema transactions", () => {
     expect(terminalJournal).toBeGreaterThan(parent);
   });
 
+  it("durably predeclares rollback claims and restore stages before creating result stages", async () => {
+    const setup = fixture();
+    fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
+    const artifacts = await hypothesisAndCertificate(setup, [{ kind: "file_exists", path: "a.txt" }]);
+    const open = fs.openSync.bind(fs);
+    let prepared: Record<string, unknown> | undefined;
+    const spy = vi.spyOn(fs, "openSync").mockImplementation(((file, ...args: unknown[]) => {
+      const fileName = String(file);
+      if (fileName.includes(".a.txt.schema-") && fileName.endsWith(".tmp")) {
+        const journalRoot = path.join(setup.mesh.root, "schema-transactions");
+        const journalName = fs.readdirSync(journalRoot).find((name) => !name.startsWith(".") && name.endsWith(".json"));
+        if (journalName) prepared = JSON.parse(fs.readFileSync(path.join(journalRoot, journalName), "utf8"));
+      }
+      return (open as (...values: unknown[]) => number)(file, ...args);
+    }) as typeof fs.openSync);
+    try {
+      await setup.controller.commit({
+        hypothesisId: artifacts.hypothesisId,
+        certificate: artifacts.certificate,
+        operations: [{ kind: "write", path: "a.txt", content: "beta\n", expected: { sha256: sha("alpha\n") } }],
+        postconditions: [{ kind: "file_contains", path: "a.txt", literal: "beta" }],
+      }, artifacts.context);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(prepared).toMatchObject({
+      format: 3,
+      status: "prepared",
+      operations: [{
+        sourceSha256: sha("alpha\n"),
+        resultSha256: sha("beta\n"),
+        backup: expect.stringMatching(/\.before$/),
+        rollbackClaim: expect.stringMatching(/\.rollback$/),
+        restoreTemporary: expect.stringMatching(/\.restore\.tmp$/),
+        restoreSha256: sha("alpha\n"),
+      }],
+    });
+  });
+
   it("uses CAS so concurrent reuse has at most one committed result", async () => {
     const setup = fixture();
     fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
@@ -792,11 +832,14 @@ describe("Schema transactions", () => {
     fs.writeFileSync(target, "mutated\n");
     const journalRoot = path.join(setup.mesh.root, "schema-transactions");
     const journalPath = path.join(journalRoot, "contended-crash.json");
-    const stagedRelative = ".a.txt.schema-contended-0.tmp";
+    const stagedRelative = ".a.txt.schema-contended-crash-0.tmp";
+    const backupRelative = ".a.txt.schema-contended-crash-0.before";
+    const claimRelative = ".a.txt.schema-contended-crash-0.rollback";
+    const restoreRelative = "a.txt.schema-contended-crash-0.restore.tmp";
     const staged = path.join(setup.cwd, stagedRelative);
     fs.writeFileSync(staged, "mutated\n");
     fs.writeFileSync(journalPath, JSON.stringify({
-      format: 2,
+      format: 3,
       id: "contended-crash",
       status: "applying",
       before: [{
@@ -806,13 +849,17 @@ describe("Schema transactions", () => {
         content: Buffer.from("original\n").toString("base64"),
         mode: 0o644,
       }],
-      staged: [stagedRelative],
+      staged: [stagedRelative, backupRelative, claimRelative, restoreRelative],
       operations: [{
         path: "a.txt",
         kind: "write",
         sourceSha256: sha("original\n"),
         resultSha256: sha("mutated\n"),
         temporary: stagedRelative,
+        backup: backupRelative,
+        rollbackClaim: claimRelative,
+        restoreTemporary: restoreRelative,
+        restoreSha256: sha("original\n"),
       }],
       createdAt: Date.now(),
     }));
@@ -840,7 +887,7 @@ describe("Schema transactions", () => {
       return (readFile as (...values: unknown[]) => unknown)(file, ...args);
     }) as typeof fs.readFileSync);
     const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, destination) => {
-      if (source === target && String(destination).includes(".schema-rollback-")) {
+      if (source === target && destination === path.join(setup.cwd, claimRelative)) {
         expect(fs.statSync(lockPath).ino).toBe(originalLock.ino);
         checkpoints.add("rollback");
         if (!contenderStarted) {
@@ -877,6 +924,29 @@ describe("Schema transactions", () => {
     expect(JSON.parse(fs.readFileSync(journalPath, "utf8"))).toMatchObject({ status: "rolled_back" });
   });
 
+  it("recovers a canonical stale lock whose PID was reused by a newer Linux process", () => {
+    if (process.platform !== "linux") return;
+    const setup = fixture();
+    const journalRoot = path.join(setup.mesh.root, "schema-transactions");
+    const nonce = "d".repeat(32);
+    const ownerPath = path.join(journalRoot, `.commit.owner-${nonce}.json`);
+    const lockPath = path.join(journalRoot, ".commit.lock");
+    const instance = processInstanceIdentity();
+    fs.writeFileSync(ownerPath, JSON.stringify({
+      format: 2,
+      nonce,
+      pid: process.pid,
+      createdAt: Date.now() - 60_000,
+      bootId: instance.bootId,
+      processStart: `${instance.processStart}-older`,
+    }));
+    fs.linkSync(ownerPath, lockPath);
+
+    new SchemaController(setup.cwd, setup.config, setup.mesh, identity, setup.state);
+    expect(fs.existsSync(lockPath)).toBe(false);
+    expect(fs.existsSync(ownerPath)).toBe(false);
+  });
+
   it("recovers a complete nonce-owned stale lock without deleting a successor", () => {
     const setup = fixture();
     const journalRoot = path.join(setup.mesh.root, "schema-transactions");
@@ -906,7 +976,7 @@ describe("Schema transactions", () => {
     fs.writeFileSync(
       path.join(journalRoot, "crashed.json"),
       JSON.stringify({
-        format: 2,
+        format: 3,
         id: "crashed",
         status: "applying",
         before: [{
@@ -916,13 +986,22 @@ describe("Schema transactions", () => {
           content: Buffer.from("original\n").toString("base64"),
           mode: 0o644,
         }],
-        staged: [stagedRelative],
+        staged: [
+          stagedRelative,
+          ".a.txt.schema-crashed-0.before",
+          ".a.txt.schema-crashed-0.rollback",
+          "a.txt.schema-crashed-0.restore.tmp",
+        ],
         operations: [{
           path: "a.txt",
           kind: "write",
           sourceSha256: sha("original\n"),
           resultSha256: sha("mutated\n"),
           temporary: stagedRelative,
+          backup: ".a.txt.schema-crashed-0.before",
+          rollbackClaim: ".a.txt.schema-crashed-0.rollback",
+          restoreTemporary: "a.txt.schema-crashed-0.restore.tmp",
+          restoreSha256: sha("original\n"),
         }],
         createdAt: Date.now(),
       }),
@@ -941,17 +1020,22 @@ describe("Schema transactions", () => {
     fs.writeFileSync(
       path.join(journalRoot, "prepared.json"),
       JSON.stringify({
-        format: 2,
+        format: 3,
         id: "prepared",
         status: "prepared",
-        before: [],
-        staged: [preparedRelative],
+        before: [{
+          path: "prepared.txt",
+          absolute: path.join(setup.cwd, "prepared.txt"),
+          existed: false,
+        }],
+        staged: [preparedRelative, ".prepared.txt.schema-prepared-0.rollback"],
         operations: [{
           path: "prepared.txt",
           kind: "write",
           sourceSha256: null,
           resultSha256: sha("not published\n"),
           temporary: preparedRelative,
+          rollbackClaim: ".prepared.txt.schema-prepared-0.rollback",
         }],
         createdAt: Date.now(),
       }),
@@ -962,6 +1046,118 @@ describe("Schema transactions", () => {
       status: "rolled_back",
       error: "recovered incomplete transaction",
     });
+  });
+
+  it("resumes a crash after restore publication and cleans every predeclared artifact", () => {
+    const setup = fixture();
+    const target = path.join(setup.cwd, "a.txt");
+    fs.writeFileSync(target, "original\n");
+    const journalRoot = path.join(setup.mesh.root, "schema-transactions");
+    const id = "restore-crash";
+    const temporary = `.a.txt.schema-${id}-0.tmp`;
+    const backup = `.a.txt.schema-${id}-0.before`;
+    const claim = `.a.txt.schema-${id}-0.rollback`;
+    const restore = `a.txt.schema-${id}-0.restore.tmp`;
+    fs.writeFileSync(path.join(setup.cwd, backup), "original\n");
+    fs.writeFileSync(path.join(setup.cwd, claim), "mutated\n");
+    fs.writeFileSync(path.join(setup.cwd, restore), "original\n");
+    fs.writeFileSync(path.join(journalRoot, `${id}.json`), JSON.stringify({
+      format: 3,
+      id,
+      status: "applying",
+      before: [{
+        path: "a.txt",
+        absolute: target,
+        existed: true,
+        content: Buffer.from("original\n").toString("base64"),
+        mode: 0o644,
+      }],
+      staged: [temporary, backup, claim, restore],
+      operations: [{
+        path: "a.txt",
+        kind: "write",
+        sourceSha256: sha("original\n"),
+        resultSha256: sha("mutated\n"),
+        temporary,
+        backup,
+        rollbackClaim: claim,
+        restoreTemporary: restore,
+        restoreSha256: sha("original\n"),
+      }],
+      createdAt: Date.now(),
+    }));
+
+    new SchemaController(setup.cwd, setup.config, setup.mesh, identity, setup.state);
+    expect(fs.readFileSync(target, "utf8")).toBe("original\n");
+    for (const artifact of [temporary, backup, claim, restore]) {
+      expect(fs.existsSync(path.join(setup.cwd, artifact))).toBe(false);
+    }
+    expect(JSON.parse(fs.readFileSync(path.join(journalRoot, `${id}.json`), "utf8")))
+      .toMatchObject({ status: "rolled_back" });
+  });
+
+  it("blocks new transactions on malformed and unresolved recovery journals", async () => {
+    const setup = fixture();
+    fs.writeFileSync(path.join(setup.cwd, "a.txt"), "alpha\n");
+    const artifacts = await hypothesisAndCertificate(setup, [{ kind: "file_exists", path: "a.txt" }]);
+    const journalRoot = path.join(setup.mesh.root, "schema-transactions");
+    const malformed = path.join(journalRoot, "malformed.json");
+    fs.writeFileSync(malformed, "{partial");
+    await expect(setup.controller.commit({
+      hypothesisId: artifacts.hypothesisId,
+      certificate: artifacts.certificate,
+      operations: [{ kind: "delete", path: "a.txt", expectedSha256: sha("alpha\n") }],
+      postconditions: [{ kind: "file_absent", path: "a.txt" }],
+    }, artifacts.context)).rejects.toThrow("recovery blocked by malformed journal");
+    expect(fs.readFileSync(path.join(setup.cwd, "a.txt"), "utf8")).toBe("alpha\n");
+    fs.unlinkSync(malformed);
+
+    fs.writeFileSync(path.join(journalRoot, "quarantine.json"), JSON.stringify({
+      format: 3,
+      id: "quarantine",
+      status: "quarantined",
+      before: [],
+      staged: [],
+      operations: [],
+      createdAt: Date.now(),
+    }));
+    await expect(setup.controller.commit({
+      hypothesisId: artifacts.hypothesisId,
+      certificate: artifacts.certificate,
+      operations: [{ kind: "delete", path: "a.txt", expectedSha256: sha("alpha\n") }],
+      postconditions: [{ kind: "file_absent", path: "a.txt" }],
+    }, artifacts.context)).rejects.toThrow("unresolved quarantined journal");
+  });
+
+  it("quarantines and blocks an unrestorable prepared journal", () => {
+    const setup = fixture();
+    const journalRoot = path.join(setup.mesh.root, "schema-transactions");
+    const id = "unrestorable";
+    const temporary = `.new.txt.schema-${id}-0.tmp`;
+    const claim = `.new.txt.schema-${id}-0.rollback`;
+    fs.writeFileSync(path.join(setup.cwd, temporary), "foreign\n");
+    const journalPath = path.join(journalRoot, `${id}.json`);
+    fs.writeFileSync(journalPath, JSON.stringify({
+      format: 3,
+      id,
+      status: "prepared",
+      before: [{ path: "new.txt", absolute: path.join(setup.cwd, "new.txt"), existed: false }],
+      staged: [temporary, claim],
+      operations: [{
+        path: "new.txt",
+        kind: "write",
+        sourceSha256: null,
+        resultSha256: sha("owned\n"),
+        temporary,
+        rollbackClaim: claim,
+      }],
+      createdAt: Date.now(),
+    }));
+
+    expect(() => new SchemaController(setup.cwd, setup.config, setup.mesh, identity, setup.state))
+      .toThrow("recovery blocked by unrestorable journal");
+    expect(JSON.parse(fs.readFileSync(journalPath, "utf8"))).toMatchObject({ status: "quarantined" });
+    expect(fs.readFileSync(path.join(setup.cwd, temporary), "utf8")).toBe("foreign\n");
   });
 
   it("abandons unclosed artifacts automatically when Fabric runtime execution ends", async () => {

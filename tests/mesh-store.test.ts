@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MeshStore,
   type MeshIdentity,
   type MeshStateEntry,
   type MeshStoreOptions,
 } from "../src/mesh/store.js";
+import { processInstanceIdentity } from "../src/core/process-instance.js";
 
 const roots: string[] = [];
 const identity: MeshIdentity = {
@@ -28,6 +29,32 @@ afterEach(() => {
 });
 
 describe("MeshStore", () => {
+  it("fsyncs mesh data and atomic temporary files before parent publication", async () => {
+    if (process.platform === "win32") return;
+    const store = createStore();
+    const fsync = fs.fsyncSync.bind(fs);
+    const synced: string[] = [];
+    const spy = vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      try { synced.push(fs.readlinkSync(`/proc/self/fd/${descriptor}`)); } catch { synced.push("unknown"); }
+      fsync(descriptor);
+    });
+    try {
+      await store.put({ key: "durable/value", value: true, identity });
+      await store.publish({ topic: "team.auth", from: identity, text: "durable" });
+    } finally {
+      spy.mockRestore();
+    }
+    const stateTemp = synced.findIndex((entry) => entry.includes("state.json.") && entry.endsWith(".tmp"));
+    const stateParent = synced.findIndex((entry, index) => index > stateTemp && entry === store.root);
+    const eventFile = synced.findIndex((entry) => entry.endsWith("events.jsonl"));
+    const counterTemp = synced.findIndex((entry, index) =>
+      index > eventFile && entry.includes("sequence.") && entry.endsWith(".tmp"));
+    expect(stateTemp).toBeGreaterThanOrEqual(0);
+    expect(stateParent).toBeGreaterThan(stateTemp);
+    expect(eventFile).toBeGreaterThan(stateParent);
+    expect(counterTemp).toBeGreaterThan(eventFile);
+  });
+
   it("publishes durable ordered events and reads from a cursor", async () => {
     const store = createStore();
     const initialOffset = store.latestOffset();
@@ -193,6 +220,45 @@ describe("MeshStore", () => {
     expect(tail.nextOffset).toBe(store.latestOffset());
   });
 
+  it("advances cursor generation before compaction publication so crashes replay instead of skip", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-mesh-compaction-crash-"));
+    roots.push(root);
+    const store = new MeshStore(root, 512, 100, {
+      maxEventLogBytes: 900,
+      retainedEventLogBytes: 300,
+    });
+    await store.publish({ topic: "team.auth", from: identity, text: "first" });
+    const cursor = store.latestOffset();
+    const rename = fs.renameSync.bind(fs);
+    let crashed = false;
+    const spy = vi.spyOn(fs, "renameSync").mockImplementation((source, destination) => {
+      if (!crashed && destination === path.join(root, "events.jsonl")) {
+        crashed = true;
+        throw new Error("injected compaction crash");
+      }
+      rename(source, destination);
+    });
+    try {
+      for (let index = 0; index < 20 && !crashed; index++) {
+        try {
+          await store.publish({
+            topic: "team.auth",
+            from: identity,
+            text: `event-${index}-${"x".repeat(120)}`,
+          });
+        } catch (error) {
+          expect(error).toMatchObject({ message: "injected compaction crash" });
+        }
+      }
+    } finally {
+      spy.mockRestore();
+    }
+    expect(crashed).toBe(true);
+    expect(JSON.parse(fs.readFileSync(path.join(root, "generation"), "utf8"))).toBeGreaterThan(0);
+    // The old-generation cursor resets against the still-complete old log.
+    expect(store.tail(cursor, 100).events[0]?.text).toBe("first");
+  });
+
   it("caps deleted-key version tombstones", async () => {
     const meshRoot = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-mesh-state-"));
     roots.push(meshRoot);
@@ -229,6 +295,25 @@ describe("MeshStore lock recovery", () => {
     const event = await store.publish({ topic: "team.auth", from: identity, text: "recovered" });
 
     expect(event.sequence).toBe(1);
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  it("sweeps a stale lock whose live PID belongs to another Linux process instance", async () => {
+    if (process.platform !== "linux") return;
+    const store = createStore();
+    const instance = processInstanceIdentity();
+    expect(instance.bootId).toBeDefined();
+    expect(instance.processStart).toBeDefined();
+    const lockPath = holdLock(store, `${JSON.stringify({
+      format: 2,
+      token: "reused",
+      pid: process.pid,
+      createdAt: Date.now() - 60_000,
+      bootId: instance.bootId,
+      processStart: `${instance.processStart}-older`,
+    })}\n`);
+
+    await store.publish({ topic: "team.auth", from: identity, text: "recovered" });
     expect(fs.existsSync(lockPath)).toBe(false);
   });
 

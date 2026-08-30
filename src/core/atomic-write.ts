@@ -57,23 +57,42 @@ export const renameAtomic = (
   }
 };
 
+export const fsyncDirectory = (directory: string): void => {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(directory, "r");
+    fs.fsyncSync(descriptor);
+  } catch (error) {
+    // Windows does not provide a portable directory-fsync surface. The file
+    // itself is still fsynced before publication there.
+    if (process.platform !== "win32") throw error;
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+};
+
 export const writeFileAtomic = (
   filePath: string,
-  contents: string,
+  contents: string | Uint8Array,
   options?: AtomicWriteOptions,
 ): void => {
-  fs.mkdirSync(path.dirname(filePath), {
+  const directory = path.dirname(filePath);
+  fs.mkdirSync(directory, {
     recursive: true,
     mode: options?.dirMode ?? 0o700,
   });
   const temporary = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  let descriptor: number | undefined;
   try {
-    fs.writeFileSync(temporary, contents, {
-      encoding: "utf8",
-      mode: options?.mode ?? 0o600,
-    });
+    descriptor = fs.openSync(temporary, "wx", options?.mode ?? 0o600);
+    fs.writeFileSync(descriptor, contents);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
     renameAtomic(temporary, filePath, options);
+    fsyncDirectory(directory);
   } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
     // No-op right after a successful rename; removes the temp on failure.
     fs.rmSync(temporary, { force: true });
   }

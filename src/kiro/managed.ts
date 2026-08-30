@@ -4,6 +4,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
+import { processInstanceIdentity } from "../core/process-instance.js";
 import {
   closeSync,
   constants,
@@ -829,6 +830,7 @@ export const acquireOperationLock = (
           hostname?: unknown;
           token?: unknown;
           processStart?: unknown;
+          bootId?: unknown;
         };
         if (
           Number.isSafeInteger(owner.pid) &&
@@ -839,10 +841,17 @@ export const acquireOperationLock = (
           try {
             process.kill(owner.pid as number, 0);
             const currentStart = processStartFingerprint(owner.pid as number);
+            const currentInstance = processInstanceIdentity(owner.pid as number);
             if (
-              typeof owner.processStart === "string" &&
-              currentStart !== undefined &&
-              currentStart !== owner.processStart
+              (
+                typeof owner.bootId === "string" &&
+                currentInstance.bootId !== undefined &&
+                currentInstance.bootId !== owner.bootId
+              ) || (
+                typeof owner.processStart === "string" &&
+                currentStart !== undefined &&
+                currentStart !== owner.processStart
+              )
             ) {
               // PID exists but belongs to a newer process instance.
               stale = true;
@@ -874,10 +883,12 @@ export const acquireOperationLock = (
   }
   const token = randomBytes(16).toString("hex");
   const processStart = processStartFingerprint(process.pid);
+  const instance = processInstanceIdentity();
   const body = serializeJson({
     token,
     pid: process.pid,
     hostname: hostname(),
+    ...(instance.bootId ? { bootId: instance.bootId } : {}),
     ...(processStart ? { processStart } : {}),
   });
   try {

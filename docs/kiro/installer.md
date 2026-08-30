@@ -46,6 +46,10 @@ A project install writes only:
 - content-addressed backups under `<project>/.kiro/.kiro-fabric/backups/`
 - a short-lived `<project>/.kiro/.kiro-fabric/operation.lock` during mutation
 
+On Linux the operation-lock owner records the boot ID and `/proc` process start
+time as well as its PID. This distinguishes a crashed owner from a newer process
+that reused the PID. Other platforms retain the lock on ambiguous liveness.
+
 `--user` instead writes the same managed files under the Kiro home
 (`$KIRO_HOME` or `~/.kiro`):
 

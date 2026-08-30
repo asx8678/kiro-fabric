@@ -116,6 +116,18 @@ const retainedRunnerSessionId = (actorRoot: string, actorId: string, runId?: str
   }
 };
 
+const runFinished = (actorRoot: string, actorId: string, runId?: string): boolean => {
+  if (!runId) return false;
+  try {
+    const record = JSON.parse(
+      fs.readFileSync(path.join(actorRoot, actorId, "runs", runId, "status.json"), "utf8"),
+    ) as { finishedAt?: unknown };
+    return typeof record.finishedAt === "number";
+  } catch {
+    return false;
+  }
+};
+
 const mainTarget = (
   identity: MeshIdentity,
   deliveries: FabricMainAgentDeliveryRequest[],
@@ -486,12 +498,16 @@ describe("durable kiro actor crash/restart rehearsal", () => {
       expect(firstReply.text).toContain("epoch one");
       await waitFor(() => firstHost.actors.status(actor.id).status === "idle");
       await waitFor(() => typeof actorRegistryEntry(harness.config.actorRoot, actor.id)?.lastRunId === "string");
+      const firstRunId = actorRegistryEntry(harness.config.actorRoot, actor.id)?.lastRunId;
       const persistedSessionId = retainedRunnerSessionId(
         harness.config.actorRoot,
         actor.id,
-        actorRegistryEntry(harness.config.actorRoot, actor.id)?.lastRunId,
+        firstRunId,
       );
       expect(persistedSessionId).toMatch(/^fake-acp-session-/);
+      // Actor status becomes idle when the turn finishes; wait separately for
+      // the resident worker to reap its ACP transport and release the run lease.
+      await waitFor(() => runFinished(harness.config.actorRoot, actor.id, firstRunId));
 
       const ownerClaimKey = residentOwnerClaimKey(harness.config.rootId);
       const currentClaim = harness.mesh.get(ownerClaimKey);
@@ -527,9 +543,15 @@ describe("durable kiro actor crash/restart rehearsal", () => {
       fs.rmSync(path.join(harness.config.residencyRoot, "host.lock"), { force: true });
       process.env.FAKE_KIRO_WORKER_SCENARIO = "resident-load";
       process.env.FAKE_KIRO_WORKER_LOG = secondLog;
+      // Recovery starts the resident worker before the remote command arrives;
+      // allow for the durable mesh publication path during that handoff.
+      process.env.KIRO_FABRIC_KIRO_IDLE_MS = "3000";
 
       const restartedHost = new ResidentHost(harness.config);
       await restartedHost.start();
+      // start() publishes ownership before every durable actor transport has
+      // completed restoration; do not race the first remote delivery with it.
+      await delay(500);
       try {
         const resumed = await requester.requestResult<{ id: string; text: string }>(
           residentHostId(harness.config.rootId),
