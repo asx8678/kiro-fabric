@@ -71,7 +71,11 @@ describe("spike-kiro harness guards", () => {
   }, TEST_TIMEOUT);
 
   it("rejects a Kiro version mismatch before running any probe", () => {
-    const result = runSpike(["handshake"], { KIRO_EXPECT_VERSION: "0.0.0-does-not-exist" });
+    const result = runSpike(["handshake"], {
+      KIRO_BINARY: process.execPath,
+      KIRO_BINARY_ARGS: fakeKiro,
+      KIRO_EXPECT_VERSION: "0.0.0-does-not-exist",
+    });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/version mismatch/);
   }, TEST_TIMEOUT);

@@ -105,6 +105,8 @@ export interface KiroInstallManifest {
   runtime: {
     nodePath: string;
     mcpEntryPath: string;
+    /** Canonical executable selected and certified before installation. */
+    kiroBinaryPath?: string;
     /** Optional only while reading a pre-v3 manifest for an installer update. */
     kiroCliVersion?: string;
     /** Optional only while reading a pre-v3 manifest for an installer update. */
@@ -364,6 +366,8 @@ export const readManifest = (
     throw new KiroInstallError("manifest", `install manifest runtime paths are malformed: ${path}`);
   }
   if (
+    (parsed.runtime.kiroBinaryPath !== undefined &&
+      (typeof parsed.runtime.kiroBinaryPath !== "string" || !isAbsolute(parsed.runtime.kiroBinaryPath))) ||
     (parsed.runtime.kiroCliVersion !== undefined &&
       typeof parsed.runtime.kiroCliVersion !== "string") ||
     (parsed.runtime.agentEngine !== undefined && typeof parsed.runtime.agentEngine !== "string")
@@ -425,6 +429,9 @@ export const readManifest = (
     runtime: {
       nodePath: parsed.runtime.nodePath,
       mcpEntryPath: parsed.runtime.mcpEntryPath,
+      ...(typeof parsed.runtime.kiroBinaryPath === "string"
+        ? { kiroBinaryPath: parsed.runtime.kiroBinaryPath }
+        : {}),
       ...(typeof parsed.runtime.kiroCliVersion === "string"
         ? { kiroCliVersion: parsed.runtime.kiroCliVersion }
         : {}),

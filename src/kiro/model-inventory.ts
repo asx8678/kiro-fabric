@@ -3,6 +3,7 @@
 // when the probe fails. Non-billable: this never sends a prompt.
 
 import { execFile } from "node:child_process";
+import { assertSupportedKiro } from "./compatibility.js";
 
 export interface KiroModelEntry {
   runner: "kiro";
@@ -145,21 +146,25 @@ export const listKiroModels = (
   if (cached && !refresh) return Promise.resolve(cached.entries);
   const active = inFlight.get(binary);
   if (active) return active;
-  const probe = new Promise<KiroModelEntry[]>((resolve) => {
-    execFile(
-      binary,
-      [...KIRO_MODEL_LIST_ARGUMENTS],
-      { timeout: PROBE_TIMEOUT_MS, env: { ...process.env, NO_COLOR: "1", TERM: "dumb" } },
-      (error, stdout, stderr) => {
-        const parsed = error
-          ? []
-          : parseKiroModelList(`${stdout}\n${stderr}`.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, ""));
-        const entries = parsed.length > 0 ? parsed : [{ ...AUTO_MODEL }];
-        cache.set(binary, { entries, probedAt: Date.now() });
-        resolve(entries);
-      },
-    );
-  });
+  const probe = assertSupportedKiro(binary)
+    .then((identity) => new Promise<KiroModelEntry[]>((resolve) => {
+      execFile(
+        identity.executablePath,
+        [...KIRO_MODEL_LIST_ARGUMENTS],
+        { timeout: PROBE_TIMEOUT_MS, env: { ...process.env, NO_COLOR: "1", TERM: "dumb" } },
+        (error, stdout, stderr) => {
+          const parsed = error
+            ? []
+            : parseKiroModelList(`${stdout}\n${stderr}`.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, ""));
+          resolve(parsed.length > 0 ? parsed : [{ ...AUTO_MODEL }]);
+        },
+      );
+    }))
+    .catch(() => [{ ...AUTO_MODEL }])
+    .then((entries) => {
+      cache.set(binary, { entries, probedAt: Date.now() });
+      return entries;
+    });
   inFlight.set(binary, probe);
   void probe.finally(() => {
     if (inFlight.get(binary) === probe) inFlight.delete(binary);

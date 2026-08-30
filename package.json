@@ -62,6 +62,7 @@
     "dist/kiro/agent-worker-options.d.ts",
     "dist/kiro/artifacts.d.ts",
     "dist/kiro/claims.d.ts",
+    "dist/kiro/compatibility.d.ts",
     "dist/kiro/diagnostics.d.ts",
     "dist/kiro/doctor.d.ts",
     "dist/kiro/handoff.d.ts",

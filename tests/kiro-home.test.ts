@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -24,7 +24,7 @@ describe("resolveKiroHome", () => {
     const previous = process.env.KIRO_HOME;
     delete process.env.KIRO_HOME;
     try {
-      expect(resolveKiroHome()).toBe(realpathSync(join(homedir(), ".kiro")));
+      expect(resolveKiroHome()).toBe(resolve(homedir(), ".kiro"));
     } finally {
       if (previous === undefined) delete process.env.KIRO_HOME;
       else process.env.KIRO_HOME = previous;

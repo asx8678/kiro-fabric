@@ -9,31 +9,34 @@
 //
 // Exit codes: 0 success/noop/dry-run · 1 failure · 2 usage · 130 interactive cancel.
 
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { promisify } from "node:util";
 
 import { runKiroDoctor } from "./doctor.js";
+import {
+  inspectKiroCompatibility,
+  inspectNodeCompatibility,
+  KIRO_CLI_VERSION,
+  MIN_NODE_MAJOR,
+  type KiroCompatibilityReport,
+  type NodeCompatibilityReport,
+} from "./compatibility.js";
 import { resolveKiroInstallRoots, type KiroInstallRoots } from "./home.js";
 import {
   installKiroProfile,
   resolveKiroProjectRoot,
   type KiroInstallOptions,
 } from "./install.js";
-import { KIRO_CLI_VERSION, kiroProfilePath } from "./profile.js";
+import { kiroProfilePath } from "./profile.js";
 import {
   planKiroProfileUninstall,
   uninstallKiroProfile,
   type KiroUninstallOptions,
 } from "./uninstall.js";
 
-const execFileAsync = promisify(execFile);
-
-const MIN_NODE_MAJOR = 24;
-const KIRO_CLI_VERSION_TIMEOUT_MS = 10_000;
 const LAUNCH_ARGS = ["--v3", "--agent", "kiro-fabric"] as const;
 
 const USAGE =
@@ -186,76 +189,8 @@ const parseSetupArgs = (argv: string[]): SetupArgs => {
   return parsed;
 };
 
-interface NodeStatus {
-  version: string;
-  ok: boolean;
-}
-
-const detectNodeStatus = (nodeVersion: string): NodeStatus => {
-  const major = Number.parseInt(nodeVersion.split(".")[0] ?? "", 10);
-  return {
-    version: nodeVersion,
-    ok: Number.isInteger(major) && major >= MIN_NODE_MAJOR,
-  };
-};
-
-type KiroCliState =
-  | "ok"
-  | "not-found"
-  | "exec-failure"
-  | "timeout"
-  | "unparsable"
-  | "multiple-versions"
-  | "unsupported";
-
-interface KiroCliStatus {
-  state: KiroCliState;
-  version: string | null;
-}
-
-const VERSION_TOKEN = /\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/g;
-
-const versionParts = (version: string): [number, number, number] => {
-  const [base = ""] = version.split(/[-+]/);
-  const part = (raw: string | undefined): number => {
-    const parsed = Number.parseInt(raw ?? "", 10);
-    return Number.isInteger(parsed) ? parsed : 0;
-  };
-  const [rawMajor, rawMinor, rawPatch] = base.split(".");
-  return [part(rawMajor), part(rawMinor), part(rawPatch)];
-};
-
-const compareKiroVersion = (version: string): number => {
-  const [major, minor, patch] = versionParts(version);
-  const [pinMajor, pinMinor, pinPatch] = versionParts(KIRO_CLI_VERSION);
-  if (major !== pinMajor) return major - pinMajor;
-  if (minor !== pinMinor) return minor - pinMinor;
-  return patch - pinPatch;
-};
-
-const classifyKiroVersionOutput = (output: string): KiroCliStatus => {
-  const tokens = [...new Set(output.match(VERSION_TOKEN) ?? [])];
-  if (tokens.length === 0) return { state: "unparsable", version: null };
-  if (tokens.length > 1) return { state: "multiple-versions", version: null };
-  const version = tokens[0]!;
-  return compareKiroVersion(version) >= 0
-    ? { state: "ok", version }
-    : { state: "unsupported", version };
-};
-
-const detectKiroCli = async (binary = "kiro-cli"): Promise<KiroCliStatus> => {
-  try {
-    const { stdout } = await execFileAsync(binary, ["--version"], {
-      timeout: KIRO_CLI_VERSION_TIMEOUT_MS,
-    });
-    return classifyKiroVersionOutput(stdout);
-  } catch (error) {
-    const failure = error as NodeJS.ErrnoException & { killed?: boolean };
-    if (failure.code === "ENOENT") return { state: "not-found", version: null };
-    if (failure.killed === true) return { state: "timeout", version: null };
-    return { state: "exec-failure", version: null };
-  }
-};
+type NodeStatus = NodeCompatibilityReport;
+type KiroCliStatus = KiroCompatibilityReport;
 
 type KiroLayout = KiroInstallRoots["layout"];
 
@@ -272,6 +207,8 @@ interface KiroScopeStatus {
   packageVersion: string | null;
   path: string | null;
   healthy: boolean;
+  kiroBinaryPath: string | null;
+  kiroCliVersion: string | null;
 }
 
 const UNAVAILABLE_SCOPE: KiroScopeStatus = {
@@ -279,6 +216,8 @@ const UNAVAILABLE_SCOPE: KiroScopeStatus = {
   packageVersion: null,
   path: null,
   healthy: false,
+  kiroBinaryPath: null,
+  kiroCliVersion: null,
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -309,26 +248,52 @@ const scopeStatusFor = (
   }
   const manifestPath = managedManifestPath(roots);
   if (!existsSync(manifestPath)) {
-    return { installed: false, packageVersion: null, path: manifestPath, healthy: false };
+    return {
+      installed: false,
+      packageVersion: null,
+      path: manifestPath,
+      healthy: false,
+      kiroBinaryPath: null,
+      kiroCliVersion: null,
+    };
   }
-  let manifest: { packageVersion?: unknown; profile?: unknown };
+  let manifest: { packageVersion?: unknown; profile?: unknown; runtime?: unknown };
   try {
     const raw: unknown = JSON.parse(readFileSync(manifestPath, "utf8"));
     manifest = isRecord(raw) ? raw : {};
   } catch {
-    return { installed: true, packageVersion: null, path: manifestPath, healthy: false };
+    return {
+      installed: true,
+      packageVersion: null,
+      path: manifestPath,
+      healthy: false,
+      kiroBinaryPath: null,
+      kiroCliVersion: null,
+    };
   }
   const profile = isRecord(manifest.profile) ? manifest.profile : undefined;
   const installedSha256 =
     typeof profile?.installedSha256 === "string" ? profile.installedSha256 : null;
   const packageVersion =
     typeof manifest.packageVersion === "string" ? manifest.packageVersion : null;
+  const runtime = isRecord(manifest.runtime) ? manifest.runtime : undefined;
+  const kiroBinaryPath =
+    typeof runtime?.kiroBinaryPath === "string" ? runtime.kiroBinaryPath : null;
+  const kiroCliVersion =
+    typeof runtime?.kiroCliVersion === "string" ? runtime.kiroCliVersion : null;
   let healthy = false;
   if (installedSha256 !== null) {
     healthy =
       profileDigest(kiroProfilePath(roots.installRoot, roots.layout)) === installedSha256;
   }
-  return { installed: true, packageVersion, path: manifestPath, healthy };
+  return {
+    installed: true,
+    packageVersion,
+    path: manifestPath,
+    healthy,
+    kiroBinaryPath,
+    kiroCliVersion,
+  };
 };
 
 interface SetupStatus {
@@ -337,14 +302,19 @@ interface SetupStatus {
   scopes: { user: KiroScopeStatus; project: KiroScopeStatus };
 }
 
-const collectStatus = async (parsed: SetupArgs): Promise<SetupStatus> => ({
-  node: detectNodeStatus(process.versions.node),
-  kiro: await detectKiroCli(parsed.kiroBinary),
-  scopes: {
+const collectStatus = async (parsed: SetupArgs): Promise<SetupStatus> => {
+  const scopes = {
     user: scopeStatusFor("user", parsed.projectRoot, parsed.kiroHome),
     project: scopeStatusFor("project", parsed.projectRoot, parsed.kiroHome),
-  },
-});
+  };
+  const binary = parsed.kiroBinary ?? scopes.project.kiroBinaryPath ??
+    scopes.user.kiroBinaryPath ?? "kiro-cli";
+  const [node, kiro] = await Promise.all([
+    inspectNodeCompatibility(process.execPath),
+    inspectKiroCompatibility(binary),
+  ]);
+  return { node, kiro, scopes };
+};
 
 const describeKiroCli = (kiro: KiroCliStatus): string => {
   switch (kiro.state) {
@@ -358,10 +328,18 @@ const describeKiroCli = (kiro: KiroCliStatus): string => {
       return "version check timed out";
     case "unparsable":
       return "unparsable version output";
-    case "multiple-versions":
-      return "multiple version tokens in version output";
-    case "unsupported":
+    case "ambiguous":
+      return "ambiguous version output";
+    case "wrong-product":
+      return "wrong product identity";
+    case "prerelease":
+      return kiro.version + " (prerelease is not certified)";
+    case "older":
       return kiro.version + " (unsupported; requires " + KIRO_CLI_VERSION + ")";
+    case "newer":
+      return kiro.version + " (newer but uncertified; requires " + KIRO_CLI_VERSION + ")";
+    case "not-executable":
+      return "not an executable regular file";
   }
 };
 
@@ -376,8 +354,9 @@ const describeScope = (label: string, scope: KiroScopeStatus): string => {
 
 const renderStatus = (status: SetupStatus): string => {
   const node = status.node.ok
-    ? status.node.version + " (ok)"
-    : status.node.version + " (unsupported; requires >= " + MIN_NODE_MAJOR + ")";
+    ? status.node.version + " (ok; " + status.node.executablePath + ")"
+    : (status.node.version ?? status.node.state) +
+      " (unsupported; requires stable >= " + MIN_NODE_MAJOR + ")";
   return [
     "node: " + node,
     "kiro-cli: " + describeKiroCli(status.kiro),
@@ -602,11 +581,31 @@ const kiroCliMissingGuidance = (binary: string): string =>
 
 const runLaunch = async (parsed: SetupArgs): Promise<number> => {
   const projectRoot = resolveKiroProjectRoot(parsed.projectRoot);
-  const binary = parsed.kiroBinary ?? "kiro-cli";
-  if ((await detectKiroCli(binary)).state === "not-found") {
-    process.stderr.write(kiroCliMissingGuidance(binary));
+  const scopes = {
+    project: scopeStatusFor("project", parsed.projectRoot, parsed.kiroHome),
+    user: scopeStatusFor("user", parsed.projectRoot, parsed.kiroHome),
+  };
+  const managedBinaryPath = scopes.project.kiroBinaryPath ?? scopes.user.kiroBinaryPath;
+  const requestedBinary = parsed.kiroBinary ?? managedBinaryPath ?? "kiro-cli";
+  const identity = await inspectKiroCompatibility(requestedBinary);
+  if (!identity.ok || !identity.executablePath) {
+    if (identity.state === "not-found") {
+      process.stderr.write(kiroCliMissingGuidance(requestedBinary));
+    } else {
+      process.stderr.write(
+        "kiro-fabric: refusing to launch incompatible Kiro executable (" +
+          identity.state + "): " + requestedBinary + "\n",
+      );
+    }
     return 1;
   }
+  if (managedBinaryPath && identity.executablePath !== managedBinaryPath) {
+    process.stderr.write(
+      "kiro-fabric: refusing to launch a Kiro executable that differs from the managed manifest\n",
+    );
+    return 1;
+  }
+  const binary = identity.executablePath;
   const child = spawn(binary, LAUNCH_ARGS, { stdio: "inherit", cwd: projectRoot });
   const outcome = await new Promise<{ code: number } | { missing: boolean }>(
     (resolvePromise) => {

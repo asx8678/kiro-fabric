@@ -145,7 +145,7 @@ describe("uninstallKiroProfile", () => {
     writeFileSync(kiroProfilePath(dir), original);
     await installWithFake(dir, { force: true });
     const otherNode = join(base, "node-alt");
-    writeFileSync(otherNode, "", { mode: 0o755 });
+    writeFileSync(otherNode, `#!/bin/sh\necho v${process.versions.node}\n`, { mode: 0o755 });
     await installWithFake(dir, { nodePath: otherNode });
     const result = uninstallKiroProfile({ projectRoot: dir });
     expect(result.action).toBe("restore");
@@ -156,7 +156,7 @@ describe("uninstallKiroProfile", () => {
     const dir = project("update-remove");
     await installWithFake(dir);
     const otherNode = join(base, "node-alt-2");
-    writeFileSync(otherNode, "", { mode: 0o755 });
+    writeFileSync(otherNode, `#!/bin/sh\necho v${process.versions.node}\n`, { mode: 0o755 });
     await installWithFake(dir, { nodePath: otherNode });
     const result = uninstallKiroProfile({ projectRoot: dir });
     expect(result.action).toBe("remove");

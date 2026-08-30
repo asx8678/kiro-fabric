@@ -21,7 +21,8 @@ import {
   KIRO_ACP_AUTH_METHOD,
   KIRO_AGENT_ENGINE,
   KIRO_CLI_VERSION,
-} from "./profile.js";
+  sameExecutableIdentity,
+} from "./compatibility.js";
 import {
   assertManagedTree,
   KiroInstallError,
@@ -362,12 +363,19 @@ export const assertKiroWorkerLaunch = (
     );
   }
   if (
+    !manifest.runtime.kiroBinaryPath ||
     manifest.runtime.kiroCliVersion !== KIRO_CLI_VERSION ||
     manifest.runtime.agentEngine !== KIRO_AGENT_ENGINE
   ) {
     throw new KiroInstallError(
       "ownership",
       `managed Kiro profile targets an incompatible runtime tuple; reinstall for kiro-cli ${KIRO_CLI_VERSION} / ${KIRO_AGENT_ENGINE}`,
+    );
+  }
+  if (!sameExecutableIdentity(options.kiroBinary, manifest.runtime.kiroBinaryPath)) {
+    throw new KiroInstallError(
+      "ownership",
+      "Kiro worker executable does not match the canonical path in the managed manifest",
     );
   }
   const stat = fs.lstatSync(profilePath);
@@ -1098,6 +1106,11 @@ export const runKiroWorker = async (
 
   try {
     const { projectRoot, executionRoot, cwd, manifest } = assertKiroWorkerLaunch(options);
+    // assertKiroWorkerLaunch binds this child to the canonical executable path
+    // and certified version persisted by installer preflight. Do not run an
+    // extra child here: the first invocation must receive the attenuated ACP
+    // environment below, never the worker's ambient environment.
+    options.kiroBinary = manifest.runtime.kiroBinaryPath!;
     const childTools = parseKiroChildTools(options.tools);
     const durableProfileHome =
       options.actorId && options.sessionFile

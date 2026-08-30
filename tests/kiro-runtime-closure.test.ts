@@ -286,7 +286,7 @@ describe("installer with runtime closure", () => {
 
     // Reinstall with a different node path to trigger an update
     const altNode = join(base, "alt-node");
-    writeFileSync(altNode, "", { mode: 0o755 });
+    writeFileSync(altNode, `#!/bin/sh\necho v${process.versions.node}\n`, { mode: 0o755 });
     const updated = await installWithFake(dir, {
       scope: "user",
       kiroHome: home,

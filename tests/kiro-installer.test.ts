@@ -30,6 +30,7 @@ import {
 import { uninstallKiroProfile } from "../src/kiro/uninstall.js";
 import { runKiroCli } from "../src/kiro/cli.js";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
+import { assertSupportedKiro } from "../src/kiro/compatibility.js";
 import { kiroProfilePath } from "../src/kiro/profile.js";
 import {
   managedFileTransition,
@@ -311,8 +312,14 @@ describe("installKiroProfile", () => {
     expect(manifest.profile.installedSha256).toBe(result.profileSha256);
     expect(manifest.projectRoot).toBe(realpathSync(dir));
     expect(manifest.runtime.mcpEntryPath).toBe(mcpEntry);
+    expect(manifest.runtime.kiroBinaryPath).toBe(realpathSync(wrapperPath));
     expect(manifest.runtime.kiroCliVersion).toBe("2.20.1");
     expect(manifest.runtime.agentEngine).toBe("v3");
+    const profile = JSON.parse(readFileSync(result.profilePath, "utf8"));
+    expect(profile.mcpServers.fabric.env).toMatchObject({
+      KIRO_FABRIC_KIRO_BINARY: realpathSync(wrapperPath),
+      KIRO_FABRIC_KIRO_VERSION: "2.20.1",
+    });
   });
 
 
@@ -437,6 +444,24 @@ describe("installKiroProfile", () => {
     expect(existsSync(join(base, "badversion2", ".kiro"))).toBe(false);
   });
 
+  it.each([
+    ["wrong product", "other-cli 2.20.1", /wrong product/i],
+    ["ambiguous", "kiro-cli 2.20.1 node 24.0.0", /ambiguous/i],
+    ["prerelease", "kiro-cli 2.20.1-beta.1", /prerelease/i],
+    ["uncertified newer", "kiro-cli 2.21.0", /uncertified newer/i],
+  ])("rejects %s version identity before mutation", async (name, output, error) => {
+    const dir = project(`strict-${name.replace(/\s+/g, "-")}`);
+    const binary = join(base, `fake-kiro-${name.replace(/\s+/g, "-")}`);
+    writeFileSync(binary, `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(output)}\n`, {
+      mode: 0o755,
+    });
+    await expect(installWithFake(dir, {
+      kiroBinary: binary,
+      skipRuntimeClosure: false,
+    })).rejects.toThrow(error);
+    expect(existsSync(join(dir, ".kiro"))).toBe(false);
+  });
+
   it("fails on validator error diagnostics even when exit code is 0", async () => {
     const dir = project("invalid");
     // The fake validator exits 0 with an error diagnostic for a name-less
@@ -462,7 +487,7 @@ describe("installKiroProfile", () => {
     const first = await installWithFake(dir);
     // Simulate a managed update by installing with a different node path.
     const otherNode = join(base, "node-alt");
-    writeFileSync(otherNode, "", { mode: 0o755 });
+    writeFileSync(otherNode, `#!/bin/sh\necho v${process.versions.node}\n`, { mode: 0o755 });
     const updated = await installWithFake(dir, { nodePath: otherNode });
     expect(["update", "noop"]).toContain(updated.action);
     const profile = JSON.parse(readFileSync(first.profilePath, "utf8"));
@@ -487,7 +512,7 @@ describe("installKiroProfile", () => {
     expect(first.backupPath).not.toBeNull();
     expect(readFileSync(first.backupPath!, "utf8")).toBe(original);
     const otherNode = join(base, "node-lineage");
-    writeFileSync(otherNode, "", { mode: 0o755 });
+    writeFileSync(otherNode, `#!/bin/sh\necho v${process.versions.node}\n`, { mode: 0o755 });
     const updated = await installWithFake(dir, { nodePath: otherNode });
     expect(updated.action).toBe("update");
     expect(updated.backupPath).toBe(first.backupPath);
@@ -501,12 +526,12 @@ describe("installKiroProfile", () => {
     const installed = await installWithFake(dir);
     const previousManifest = readFileSync(installed.manifestPath);
     const otherNode = join(base, "node-transaction");
-    writeFileSync(otherNode, "", { mode: 0o755 });
+    writeFileSync(otherNode, `#!/bin/sh\necho v${process.versions.node}\n`, { mode: 0o755 });
     const next = planKiroProfileInstall({
       projectRoot: dir,
       mcpEntryPath: mcpEntry,
       nodePath: otherNode,
-    });
+    }, { kiroIdentity: await assertSupportedKiro(wrapperPath) });
     const paths = managedPaths(next.installRoot, next.layout);
     const transaction: KiroManagedTransaction = {
       format: 1,

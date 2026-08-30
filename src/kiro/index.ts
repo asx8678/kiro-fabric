@@ -10,6 +10,25 @@ export {
   type KiroProfileOptions,
 } from "./profile.js";
 export {
+  MIN_NODE_MAJOR,
+  KIRO_BINARY_ENV,
+  KIRO_VERSION_ENV,
+  assertSupportedKiro,
+  assertSupportedNode,
+  classifyKiroVersionOutput,
+  classifyNodeVersion,
+  inspectKiroCompatibility,
+  inspectNodeCompatibility,
+  resolveCanonicalExecutable,
+  sameExecutableIdentity,
+  type KiroCompatibilityReport,
+  type KiroCompatibilityState,
+  type NodeCompatibilityReport,
+  type NodeCompatibilityState,
+  type SupportedKiroIdentity,
+  type SupportedNodeIdentity,
+} from "./compatibility.js";
+export {
   assertKiroV3AgentModeAvailable,
   buildKiroV3SessionParams,
   KIRO_V3_AGENT_MODE,

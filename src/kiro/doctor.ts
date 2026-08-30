@@ -19,11 +19,16 @@ import { resolveAgentDir } from "../core/agent-dir.js";
 import { fabricExecInputSchemaJson } from "../kernel/fabric-exec-contract.js";
 import { assertKiroAccountingCompatible } from "./accounting-compatibility.js";
 import {
-  generateKiroProfile,
+  assertSupportedNode,
   KIRO_ACP_AUTH_METHOD,
   KIRO_AGENT_ENGINE,
+  KIRO_BINARY_ENV,
   KIRO_CLI_VERSION,
-} from "./profile.js";
+  KIRO_VERSION_ENV,
+  sameExecutableIdentity,
+  type SupportedKiroIdentity,
+} from "./compatibility.js";
+import { generateKiroProfile } from "./profile.js";
 import { spawnJsonRpcProcess } from "./supervisor.js";
 import {
   assertKiroV3Capabilities,
@@ -117,7 +122,9 @@ const deepEqual = (a: unknown, b: unknown): boolean => {
 export const runKiroDoctor = async (
   options: KiroDoctorOptions = {},
 ): Promise<KiroDoctorReport> => {
-  const kiroBinary = options.kiroBinary ?? "kiro-cli";
+  let kiroBinary = options.kiroBinary ?? "kiro-cli";
+  let managedKiroBinaryPath: string | undefined;
+  let observedKiro: SupportedKiroIdentity | undefined;
   const mcpEntryPath =
     options.mcpEntryPath ?? defaultMcpEntry();
   const checks: KiroDoctorCheck[] = [];
@@ -156,6 +163,20 @@ export const runKiroDoctor = async (
       if (!profile) throw new Error("managed installed profile is absent");
       if (sha256Bytes(profile) !== manifest.profile.installedSha256) {
         throw new Error("managed installed profile hash mismatch");
+      }
+      if (manifest.runtime.kiroBinaryPath) {
+        managedKiroBinaryPath = manifest.runtime.kiroBinaryPath;
+        if (options.kiroBinary === undefined) kiroBinary = managedKiroBinaryPath;
+        const document = JSON.parse(profile.toString("utf8")) as {
+          mcpServers?: { fabric?: { env?: Record<string, unknown> } };
+        };
+        const env = document.mcpServers?.fabric?.env;
+        if (
+          env?.[KIRO_BINARY_ENV] !== manifest.runtime.kiroBinaryPath ||
+          env?.[KIRO_VERSION_ENV] !== manifest.runtime.kiroCliVersion
+        ) {
+          throw new Error("managed profile Kiro executable identity does not match manifest");
+        }
       }
       return manifest.format === 1
         ? "legacy format-1 profile ownership verified"
@@ -229,14 +250,20 @@ export const runKiroDoctor = async (
   await mkdir(projectRoot, { recursive: true });
 
   try {
-    const nodeOk = process.versions.node.split(".").map(Number)[0]! >= 24;
     await run("tuple", async () => {
-      if (!nodeOk) {
-        throw new Error(`Node ${process.versions.node} is unsupported; need >=24`);
+      const node = await assertSupportedNode(process.execPath);
+      const kiro = await assertKiroVersion(kiroBinary);
+      if (
+        managedKiroBinaryPath &&
+        (!sameExecutableIdentity(kiro.executablePath, managedKiroBinaryPath) ||
+          kiro.version !== KIRO_CLI_VERSION)
+      ) {
+        throw new Error("selected Kiro executable does not match the managed manifest identity");
       }
-      await assertKiroVersion(kiroBinary);
-      await assertKiroV3Capabilities(kiroBinary);
-      return `Node ${process.versions.node} + kiro-cli ${KIRO_CLI_VERSION} / ${KIRO_AGENT_ENGINE} / auth ${KIRO_ACP_AUTH_METHOD}`;
+      await assertKiroV3Capabilities(kiro.executablePath);
+      kiroBinary = kiro.executablePath;
+      observedKiro = kiro;
+      return `Node ${node.version} + kiro-cli ${kiro.version} / ${KIRO_AGENT_ENGINE} / auth ${KIRO_ACP_AUTH_METHOD}`;
     }).then((ok) => {
       tupleFailed = !ok;
     });
@@ -245,6 +272,12 @@ export const runKiroDoctor = async (
       projectRoot,
       mcpEntryPath,
       nodePath: process.execPath,
+      ...(observedKiro
+        ? {
+            kiroBinaryPath: observedKiro.executablePath,
+            kiroCliVersion: observedKiro.version,
+          }
+        : {}),
     });
     const profileJson = JSON.stringify(profile, null, 2) + "\n";
 
@@ -531,7 +564,10 @@ export const runKiroDoctor = async (
     modelTurnsRequested: 0,
     observed: {
       node: { path: process.execPath, version: process.versions.node },
-      kiro: { path: kiroBinary, version: tupleFailed ? null : KIRO_CLI_VERSION },
+      kiro: {
+        path: observedKiro?.executablePath ?? kiroBinary,
+        version: tupleFailed ? null : observedKiro?.version ?? null,
+      },
       agentEngine: KIRO_AGENT_ENGINE,
       authMethod: KIRO_ACP_AUTH_METHOD,
       platform: process.platform,

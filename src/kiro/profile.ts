@@ -5,10 +5,12 @@ import { managedPaths, type KiroManagedLayout } from "./managed.js";
 import { KIRO_PROFILE_REQUEST_TIMEOUT_MS } from "./deadlines.js";
 import { resolveKiroHome } from "./home.js";
 import { resolveCanonicalKiroProjectRootIdentity } from "./project-root-identity.js";
-
 export const KIRO_CLI_VERSION = "2.20.1" as const;
 export const KIRO_AGENT_ENGINE = "v3" as const;
 export const KIRO_ACP_AUTH_METHOD = "cli" as const;
+
+const KIRO_BINARY_ENV = "KIRO_FABRIC_KIRO_BINARY";
+const KIRO_VERSION_ENV = "KIRO_FABRIC_KIRO_VERSION";
 
 /** Covers the trusted-shell verification window plus adapter overhead. */
 const KIRO_MCP_REQUEST_TIMEOUT_MS = KIRO_PROFILE_REQUEST_TIMEOUT_MS;
@@ -22,6 +24,10 @@ export interface KiroProfileOptions {
   nodePath?: string;
   /** Kiro config home; trusted project grants must never target this directory. */
   kiroHome?: string;
+  /** Canonical, preflight-certified Kiro executable identity. */
+  kiroBinaryPath?: string;
+  /** Exact version observed from that executable during preflight. */
+  kiroCliVersion?: string;
   /** Extra non-Fabric MCP environment. Reserved KIRO_FABRIC_* keys are rejected. */
   extraEnv?: Record<string, string>;
   /** Canonical environment reserved for an isolated internal child profile. */
@@ -168,6 +174,12 @@ export const generateKiroProfile = (
           KIRO_FABRIC_HOST: "kiro-v3",
           KIRO_FABRIC_PROFILE_KIND: internal ? "internal-child" : "managed-main",
           KIRO_FABRIC_PROJECT_ROOT: confinedProjectRoot ?? options.projectRoot,
+          ...(options.kiroBinaryPath
+            ? { [KIRO_BINARY_ENV]: options.kiroBinaryPath }
+            : {}),
+          ...(options.kiroCliVersion
+            ? { [KIRO_VERSION_ENV]: options.kiroCliVersion }
+            : {}),
           ...(confineManagedGrant
             ? {
                 KIRO_FABRIC_ENFORCE_PROJECT_ROOT: "1",

@@ -471,6 +471,7 @@ describe("runKiroSetup launch", () => {
       join(bin, "kiro-cli"),
       [
         "#!/bin/sh",
+        'if [ "$1" = "--version" ]; then echo "kiro-cli 2.20.1"; exit 0; fi',
         'if [ "$1" != "--version" ]; then',
         '  printf "%s\\n" "$*" >> "$KIRO_SETUP_LAUNCH_LOG"',
         '  pwd >> "$KIRO_SETUP_LAUNCH_LOG"',
