@@ -326,7 +326,7 @@ describe("runtime closure deployment", () => {
     const probe = project("digest-probe");
     const probeClosure = join(probe, "dist", "kiro-closure");
     mkdirSync(join(probeClosure, "kiro"), { recursive: true });
-    cpSync(join(repoRoot, "skills"), join(probe, "skills"), { recursive: true });
+    cpSync(join(repoRoot, "strict", "skills"), join(probe, "strict", "skills"), { recursive: true });
     writeFileSync(join(probeClosure, "kiro", "mcp-entry.js"), "const a = 1;\n");
     // compute actually reads from packageRoot param; pass a package-root-like
     // folder that has a version read working.

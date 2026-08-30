@@ -1,0 +1,117 @@
+import { createHash } from "node:crypto";
+import { realpathSync, statSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+export type KiroPowerWorkspaceRequest =
+  | { action: "status" }
+  | { action: "list" }
+  | { action: "select"; rootId: string }
+  | { action: "attach"; path: string }
+  | { action: "detach" };
+
+export interface KiroPowerElicitor {
+  approveWorkspace(canonicalPath: string, signal?: AbortSignal): Promise<boolean>;
+}
+
+interface Candidate { id: string; root: string; name: string; dev: bigint; ino: bigint }
+interface Binding extends Candidate { source: "client-roots" | "manual" }
+
+const idFor = (root: string): string => createHash("sha256")
+  .update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
+
+export class KiroPowerWorkspaceBinding {
+  readonly #pluginRoot: string;
+  readonly #pluginData: string;
+  readonly #elicitor: KiroPowerElicitor | undefined;
+  #candidates: Candidate[] = [];
+  #binding: Binding | undefined;
+
+  constructor(options: { pluginRoot: string; pluginData: string; elicitor?: KiroPowerElicitor }) {
+    this.#pluginRoot = options.pluginRoot;
+    this.#pluginData = options.pluginData;
+    this.#elicitor = options.elicitor;
+  }
+
+  #canonical(candidate: string): Candidate {
+    if (!path.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
+    const root = realpathSync(path.resolve(candidate));
+    const stats = statSync(root, { bigint: true });
+    if (!stats.isDirectory()) throw new Error("workspace root must be an existing directory");
+    const unsafe = [path.parse(root).root, this.#pluginRoot, this.#pluginData, path.join(os.homedir(), ".kiro")];
+    if (unsafe.includes(root)) throw new Error("workspace root is too broad or reserved");
+    for (const reserved of [this.#pluginRoot, this.#pluginData]) {
+      const rootInsideReserved = path.relative(reserved, root);
+      const reservedInsideRoot = path.relative(root, reserved);
+      const isContained = (relative: string): boolean =>
+        relative === "" ||
+        (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+      if (isContained(rootInsideReserved) || isContained(reservedInsideRoot)) {
+        throw new Error("workspace root and plugin storage must not contain one another");
+      }
+    }
+    return { id: idFor(root), root, name: path.basename(root) || "workspace", dev: stats.dev, ino: stats.ino };
+  }
+
+  updateClientRoots(roots: readonly { uri: string; name?: string | undefined }[]): void {
+    const candidates: Candidate[] = [];
+    for (const item of roots) {
+      try {
+        if (!item.uri.startsWith("file:")) continue;
+        const candidate = this.#canonical(fileURLToPath(item.uri));
+        candidates.push({ ...candidate, name: (item.name?.trim() || candidate.name).slice(0, 120) });
+      } catch { /* invalid roots are unavailable, never broadened */ }
+    }
+    this.#candidates = [...new Map(candidates.map((entry) => [entry.id, entry])).values()];
+    if (this.#binding?.source === "client-roots" && !this.#candidates.some((entry) => entry.id === this.#binding!.id)) {
+      this.#binding = undefined;
+    }
+    if (!this.#binding && this.#candidates.length === 1) this.#binding = { ...this.#candidates[0]!, source: "client-roots" };
+  }
+
+  boundRoot(): string | undefined {
+    const binding = this.#binding;
+    if (!binding) return undefined;
+    try {
+      const current = this.#canonical(binding.root);
+      if (current.dev !== binding.dev || current.ino !== binding.ino) throw new Error("identity changed");
+      return binding.root;
+    } catch {
+      this.#binding = undefined;
+      return undefined;
+    }
+  }
+
+  status() {
+    const root = this.boundRoot();
+    return root
+      ? { status: "bound" as const, rootId: this.#binding!.id, name: this.#binding!.name, source: this.#binding!.source, capabilities: ["checked-execution", "memory", "state", "mcp-federation"] }
+      : { status: "unbound" as const, requiresSelection: this.#candidates.length > 1, capabilities: ["checked-execution"] };
+  }
+
+  list() { return { ...this.status(), roots: this.#candidates.map(({ id, name }) => ({ rootId: id, name })) }; }
+
+  async handle(request: KiroPowerWorkspaceRequest, signal?: AbortSignal) {
+    switch (request.action) {
+      case "status": return this.status();
+      case "list": return this.list();
+      case "detach": this.#binding = undefined; return this.status();
+      case "select": {
+        const candidate = this.#candidates.find((entry) => entry.id === request.rootId);
+        if (!candidate) throw new Error("unknown workspace rootId; call fabric_workspace list first");
+        this.#binding = { ...candidate, source: "client-roots" };
+        return this.status();
+      }
+      case "attach": {
+        const candidate = this.#canonical(request.path);
+        if (!this.#elicitor) throw new Error("manual workspace attachment requires MCP elicitation support");
+        if (signal?.aborted || !(await this.#elicitor.approveWorkspace(candidate.root, signal)) || signal?.aborted) {
+          throw new Error("manual workspace attachment was not approved");
+        }
+        this.#binding = { ...candidate, source: "manual" };
+        return this.status();
+      }
+    }
+  }
+}

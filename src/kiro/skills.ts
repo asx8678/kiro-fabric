@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { sha256Bytes, type KiroManagedLayout } from "./managed.js";
@@ -32,7 +32,10 @@ export const managedKiroSkillSources = (
   const packageRoot = resolveSourcePackageRoot();
   return MANAGED_SKILL_FILES.map((sourceRelative) => {
     const installedRelative = skillPrefix(layout) + "/" + sourceRelative;
-    const bytes = readFileSync(join(packageRoot, "skills", ...sourceRelative.split("/")));
+    const strictSource = join(packageRoot, "strict", "skills", ...sourceRelative.split("/"));
+    const bytes = readFileSync(existsSync(strictSource)
+      ? strictSource
+      : join(packageRoot, "skills", ...sourceRelative.split("/")));
     return {
       sourceRelative,
       installedRelative,

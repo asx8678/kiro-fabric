@@ -1,13 +1,27 @@
 import path from "node:path";
 
 import { resolveKiroProjectRoot } from "./managed.js";
+import { parseKiroIntegrationMode } from "./integration-mode.js";
+import { resolveKiroPowerLaunchContext, type KiroPowerLaunchContext } from "./power/launch-context.js";
 import { verifyCanonicalKiroProjectRootIdentity } from "./project-root-identity.js";
 
-export interface KiroMcpLaunchEnvironment {
+interface KiroStrictLaunchContext {
+  mode: "strict";
+  kind: "managed-main";
   cwd: string;
-  toolsEnv?: string;
-  kind: "managed-main" | "internal-child";
 }
+
+interface KiroInternalChildLaunchContext {
+  mode: "internal-child";
+  kind: "internal-child";
+  cwd: string;
+  toolsEnv: string;
+}
+
+export type KiroMcpLaunchEnvironment =
+  | KiroStrictLaunchContext
+  | KiroPowerLaunchContext
+  | KiroInternalChildLaunchContext;
 
 /**
  * Resolve only profile-owned Kiro launch variables. A managed-main session
@@ -23,7 +37,22 @@ export const resolveKiroMcpLaunchEnvironment = (
   env: NodeJS.ProcessEnv = process.env,
   processCwd = process.cwd(),
 ): KiroMcpLaunchEnvironment => {
-  if (env.KIRO_FABRIC_PROFILE_KIND !== "internal-child") {
+  const explicitIntegration = env.KIRO_FABRIC_INTEGRATION;
+  if (explicitIntegration !== undefined) {
+    const mode = parseKiroIntegrationMode(explicitIntegration, "KIRO_FABRIC_INTEGRATION");
+    if (mode === "power") return resolveKiroPowerLaunchContext(env);
+    if (mode === "internal-child" && env.KIRO_FABRIC_PROFILE_KIND !== "internal-child") {
+      throw new Error("internal-child integration requires the isolated internal-child profile");
+    }
+    if (mode === "strict" && env.KIRO_FABRIC_PROFILE_KIND === "internal-child") {
+      throw new Error("strict integration cannot launch an internal-child profile");
+    }
+  }
+  const profileKind = env.KIRO_FABRIC_PROFILE_KIND;
+  if (profileKind !== undefined && profileKind !== "managed-main" && profileKind !== "strict" && profileKind !== "internal-child") {
+    throw new Error(`unknown KIRO_FABRIC_PROFILE_KIND ${JSON.stringify(profileKind)}`);
+  }
+  if (profileKind !== "internal-child") {
     // Prefer the launch directory: kiro-cli spawns the MCP child from the
     // user's current working directory. If that directory disappeared before
     // MCP startup, retain the managed install root as a compatibility fallback.
@@ -75,7 +104,7 @@ export const resolveKiroMcpLaunchEnvironment = (
         );
       }
     }
-    return { cwd, kind: "managed-main" };
+    return { mode: "strict", cwd, kind: "managed-main" };
   }
   const childCwd = env.KIRO_FABRIC_CWD;
   const toolsEnv = env.KIRO_FABRIC_KIRO_TOOLS;
@@ -85,5 +114,5 @@ export const resolveKiroMcpLaunchEnvironment = (
   // The worker validates whether this cwd belongs to the project or its
   // explicitly selected worktree before generating the internal profile.
   const cwd = resolveKiroProjectRoot(childCwd);
-  return { cwd, toolsEnv, kind: "internal-child" };
+  return { mode: "internal-child", cwd, toolsEnv, kind: "internal-child" };
 };

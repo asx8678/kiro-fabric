@@ -176,9 +176,14 @@ describe("detached installed Kiro runtime", () => {
       // package.json setup bin in a fresh process. No test-only installer bundle
       // is allowed to stand in for the distributed bootstrap surface.
       const packed = await execFileAsync("npm", [
-        "pack", "--ignore-scripts", "--pack-destination", packDir,
+        "pack", "--ignore-scripts", "--json", "--pack-destination", packDir,
       ], { cwd: repoRoot, encoding: "utf8", timeout: 60_000 });
-      const tarball = join(packDir, String(packed.stdout).trim().split(/\r?\n/).at(-1)!);
+      const packReport = JSON.parse(String(packed.stdout)) as Array<{ filename?: unknown }>;
+      const filename = packReport[0]?.filename;
+      if (typeof filename !== "string" || !filename.endsWith(".tgz")) {
+        throw new Error(`nested npm pack returned no tarball filename: ${String(packed.stdout).slice(0, 500)}`);
+      }
+      const tarball = join(packDir, filename);
       await execFileAsync("npm", [
         "install", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", packageOrigin, tarball,
       ], { cwd: root, encoding: "utf8", timeout: 60_000 });

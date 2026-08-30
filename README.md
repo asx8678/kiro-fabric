@@ -6,9 +6,9 @@
 [![checks](https://img.shields.io/github/actions/workflow/status/asx8678/kiro-fabric/test.yml?branch=main&label=checks)](https://github.com/asx8678/kiro-fabric/actions/workflows/test.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Fabric replaces a long list of model-facing tools with one programmable tool: `fabric_exec`. The model writes a small TypeScript program, Fabric checks it, executes it in QuickJS by default, and routes every effect through a host capability boundary.
+The default Kiro integration is an additive **Kiro Power**. Ordinary Kiro keeps its native read, edit, shell, code-intelligence, web, and subagent tools; Fabric adds checked TypeScript composition, state, MCP federation, and bounded orchestration through `fabric_exec` when a workflow benefits from programming.
 
-That one program can read and change a confined repository, call configured MCP servers, use project-scoped memory, optionally fan bounded work out to Kiro ACP children, and return only the result that matters.
+The existing managed custom-agent integration remains supported as **Strict mode**. Strict intentionally replaces the model-facing tool set with exactly `@fabric/fabric_exec` and confines all effects behind Fabric.
 
 ```text
 model
@@ -37,9 +37,22 @@ fabric_exec({ code })
 ## Requirements
 
 - Node.js 24 or newer
-- Kiro CLI exactly 2.20.1 with agent engine v3, supplied as a native executable artifact (ELF/Mach-O/PE as applicable), for the managed Kiro integration
+- Kiro IDE for the initial Power release target
+- Kiro CLI exactly 2.20.1 with agent engine v3 only for Strict mode and optional certified ACP children
 
-## Kiro CLI quickstart
+## Kiro Power quickstart (additive default)
+
+From a source checkout, generate a self-contained local Power and import the printed folder in Kiro IDE:
+
+```bash
+pnpm power:dev
+```
+
+The generated `.tmp/kiro-fabric-power/` package contains `plugin.json`, `mcp.json`, Power skills, and its local runtime closure. It never uses an absolute checkout path. The checked-in release manifest uses the exact npm version, so GitHub import is supported only after that exact version is published and clean-machine certified. See [the Power guide](docs/kiro/power.md).
+
+Power mode never installs or selects a custom agent. It starts unbound, discovers validated MCP client roots when available, and otherwise requires approve-once elicitation for manual workspace attachment. Run `kiro-fabric doctor power` for non-billable base diagnostics.
+
+## Strict mode (managed custom agent)
 
 Use this path to install Fabric as a managed Kiro v3 agent. The commands create a profile named `kiro-fabric`; they do not change Kiro's default agent.
 

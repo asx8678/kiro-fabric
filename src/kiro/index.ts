@@ -1,6 +1,22 @@
 // Kiro public surface: profile generation + runtime/server constructors.
 
 export {
+  KIRO_INTEGRATION_MODES,
+  integrationModeFromProfileKind,
+  isKiroIntegrationMode,
+  parseKiroIntegrationMode,
+  type KiroIntegrationMode,
+} from "./integration-mode.js";
+export {
+  resolveKiroPowerLaunchContext,
+  type KiroPowerLaunchContext,
+} from "./power/launch-context.js";
+export { prepareKiroPowerDataPaths, prepareKiroPowerProjectPaths, kiroPowerWorkspaceId } from "./power/data-paths.js";
+export { KiroPowerWorkspaceBinding, type KiroPowerWorkspaceRequest } from "./power/workspace-binding.js";
+export { KiroPowerApprover, type KiroPowerElicitationAdapter } from "./power/approver.js";
+export { runKiroPowerDoctor, type KiroPowerDoctorReport } from "./power/diagnostics.js";
+
+export {
   KIRO_ACP_AUTH_METHOD,
   KIRO_AGENT_ENGINE,
   KIRO_CLI_VERSION,

@@ -19,7 +19,9 @@ const USAGE = `kiro-fabric — Kiro integration management
 Usage:
   kiro-fabric install kiro [options]     Install the managed Kiro v3 profile
   kiro-fabric uninstall kiro [options]   Remove a managed profile or restore the backup
-  kiro-fabric doctor kiro [options]      Read-only non-billable health checks
+  kiro-fabric doctor kiro [options]      Read-only non-billable Strict health checks
+  kiro-fabric doctor power [options]     Read-only non-billable Power package checks
+  kiro-fabric mcp --integration <mode>   Start the protocol-clean MCP server
 
 Install options:
   --project-root <dir>   Install identity/fallback root (default: cwd; never walks up)
@@ -156,6 +158,35 @@ const parseArgs = (argv: string[]): ParsedArgs => {
 };
 
 export const runKiroCli = async (argv: string[]): Promise<number> => {
+  if (argv[0] === "mcp") {
+    if (argv.length !== 3 || argv[1] !== "--integration") {
+      process.stderr.write("kiro-fabric: mcp requires --integration power|strict|internal-child\n");
+      return 2;
+    }
+    try {
+      const { parseKiroIntegrationMode } = await import("./integration-mode.js");
+      const mode = parseKiroIntegrationMode(argv[2], "--integration");
+      process.env.KIRO_FABRIC_INTEGRATION = mode;
+      const { startKiroMcpServer } = await import("./mcp-entry.js");
+      await startKiroMcpServer();
+      return 0;
+    } catch (error) {
+      process.stderr.write(`kiro-fabric: ${(error as Error).message}\n`);
+      return 1;
+    }
+  }
+  if (argv[0] === "doctor" && argv[1] === "power") {
+    const rest = argv.slice(2);
+    if (rest.some((value) => value !== "--json")) {
+      process.stderr.write("kiro-fabric: doctor power accepts only --json\n");
+      return 2;
+    }
+    const { runKiroPowerDoctor } = await import("./power/diagnostics.js");
+    const report = await runKiroPowerDoctor();
+    if (rest.includes("--json")) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+    else for (const check of report.checks) process.stdout.write(`${check.status === "pass" ? "ok" : check.status.toUpperCase()} ${check.id} — ${check.message}\n`);
+    return report.ok ? 0 : 1;
+  }
   let parsed: ParsedArgs;
   try {
     parsed = parseArgs(argv);

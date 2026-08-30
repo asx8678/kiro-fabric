@@ -148,6 +148,11 @@ const MANAGED_RELEASE_SKILL_FILES = [
   "fabric-workflow/SKILL.md",
 ] as const;
 
+const managedReleaseSkillPath = (packageRoot: string, relativePath: string): string => {
+  const strictPath = join(packageRoot, "strict", "skills", ...relativePath.split("/"));
+  return existsSync(strictPath) ? strictPath : join(packageRoot, "skills", ...relativePath.split("/"));
+};
+
 const nodeExecutableName = (): string => process.platform === "win32" ? "node.exe" : "node";
 
 /**
@@ -226,7 +231,7 @@ export const computeRuntimeClosureDigest = (packageRoot: string): string => {
   }
   for (const rel of MANAGED_RELEASE_SKILL_FILES) {
     hash.update("skills/" + rel + "\0");
-    hash.update(readFileSync(join(packageRoot, "skills", ...rel.split("/"))));
+    hash.update(readFileSync(managedReleaseSkillPath(packageRoot, rel)));
     hash.update("\0");
   }
   return hash.digest("hex");
@@ -335,7 +340,7 @@ export const planRuntimeClosureDeployment = (
   for (const rel of MANAGED_RELEASE_SKILL_FILES) {
     attested.push({
       path: runtimeRoot + "/skills/" + rel,
-      installedSha256: sha256Bytes(readFileSync(join(packageRoot, "skills", ...rel.split("/")))),
+      installedSha256: sha256Bytes(readFileSync(managedReleaseSkillPath(packageRoot, rel))),
     });
   }
   attested.push(
@@ -361,7 +366,7 @@ export const planRuntimeClosureDeployment = (
     }
   }
   const skillBytes = MANAGED_RELEASE_SKILL_FILES.reduce(
-    (total, rel) => total + statSync(join(packageRoot, "skills", ...rel.split("/"))).size,
+    (total, rel) => total + statSync(managedReleaseSkillPath(packageRoot, rel)).size,
     0,
   );
   return {
@@ -514,7 +519,7 @@ export const deployRuntimeClosure = (
     for (const rel of MANAGED_RELEASE_SKILL_FILES) {
       const target = join(stagingDir, "skills", ...rel.split("/"));
       mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
-      copyFileSync(join(packageRoot, "skills", ...rel.split("/")), target);
+      copyFileSync(managedReleaseSkillPath(packageRoot, rel), target);
       bytes += statSync(target).size;
       fileCount += 1;
     }

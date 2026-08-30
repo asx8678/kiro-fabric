@@ -3,7 +3,14 @@
 This directory preserves the planning and implementation evidence from the Kiro
 integration workspaces.
 
-## Start here: run the installer
+## Start here: choose an integration
+
+The additive default is [Kiro Fabric Power](power.md). Run `pnpm power:dev` in a
+source checkout and import the generated local folder in Kiro IDE. Public GitHub
+import remains gated on publication of the exact npm version referenced by
+`mcp.json`.
+
+The managed custom-agent integration below is **Strict mode**.
 
 Requirements: Node.js 24 or newer and an installed, authenticated Kiro CLI
 2.20.1 native executable (ELF/Mach-O/PE as applicable). Unsupported shebang
@@ -50,7 +57,8 @@ backups, ownership rules, troubleshooting, and exit codes.
 
 | Document | Role | Status |
 |---|---|---|
-| [capabilities-2.20.1-v3.md](capabilities-2.20.1-v3.md) | Current Kiro 2.20.1/v3 contract, feature review, migration decisions, and efficient-use guidance | Authenticated non-billable gates passed; model-turn gate pending |
+| [power.md](power.md) | Additive Agent Plugins 1.0.0 Power, local import, workspace/security/lifecycle limits | Deterministic local implementation; real IDE gates listed |
+| [capabilities-2.20.1-v3.md](capabilities-2.20.1-v3.md) | Current Strict Kiro 2.20.1/v3 contract, feature review, migration decisions, and efficient-use guidance | Authenticated non-billable gates passed; model-turn gate pending |
 | [baseline.md](baseline.md) | Implementation notebook, verification results, and PR-by-PR notes | Best record of work actually completed |
 | [capabilities-2.19.1.md](capabilities-2.19.1.md) | Results of the Kiro 2.19.1 capability spike and resulting fail-closed decisions | Implemented evidence |
 | [installer.md](installer.md) | Install, doctor, and uninstall behavior | Current v3 user documentation |

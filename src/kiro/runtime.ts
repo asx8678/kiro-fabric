@@ -3,6 +3,7 @@
 // No Pi host packages are imported here beyond the structural core-tools provider,
 // exposed to Kiro as k.read/k.write/... without a live extension runner.
 
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { ActionRegistry } from "../core/action-registry.js";
 import type {
@@ -19,6 +20,9 @@ import { KiroToolsProvider } from "./tools-provider.js";
 import { createKiroAgentsProvider } from "./agents-host.js";
 import { KiroMcpProvider } from "./mcp-provider.js";
 import { KiroMemoryProvider } from "./memory-provider.js";
+import { MeshStore } from "../mesh/store.js";
+import { StateProvider } from "../providers/state-provider.js";
+import { KiroPowerFabricApprover, type KiroPowerApprover } from "./power/approver.js";
 import { createKiroArtifactStore, type KiroArtifactStore } from "./artifacts.js";
 import {
   FabricDenyApprovalFallback,
@@ -32,6 +36,7 @@ import {
 import { KIRO_EXECUTION_TIMEOUT_MS } from "./deadlines.js";
 import { assertKiroAccountingCompatible } from "./accounting-compatibility.js";
 import type { KiroProjectionExecutionResult } from "./projection.js";
+import type { KiroIntegrationMode } from "./integration-mode.js";
 
 export interface KiroCapabilityLease extends FabricCapabilityResolution {
   release(): Promise<void>;
@@ -78,6 +83,8 @@ export interface KiroExecutionService {
 
 export interface KiroRuntimeOptions {
   cwd: string;
+  /** Explicit host boundary. Omitted only for backwards-compatible Strict callers. */
+  integration?: KiroIntegrationMode;
   /**
    * Trusted-local opt-in: allow execute-risk actions (e.g. `k.bash`) to run
    * without approval. Defaults to false; the managed profile enables it only
@@ -104,6 +111,10 @@ export interface KiroRuntimeOptions {
   agentAvailableModelIds?: readonly string[];
   /** Persistent Kiro memory root override (tests/embedded hosts). */
   memoryRoot?: string;
+  /** Power-only state root. Omitted while no source workspace is bound. */
+  stateRoot?: string;
+  /** Power-only standards-based approve-once elicitation bridge. */
+  powerApprover?: KiroPowerApprover;
   /**
    * When provided (including `[]`), commit a capability view so only those
    * portable `k.*` tools are discoverable or callable. Omitted means Kiro Main
@@ -245,16 +256,24 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
 
   const registry = new ActionRegistry();
   const artifacts = createKiroArtifactStore();
+  const power = options.integration === "power";
   const managedNode = process.env.KIRO_FABRIC_NODE_BINARY;
   const protectedRelease = managedNode && path.isAbsolute(managedNode)
     ? path.dirname(path.dirname(managedNode))
     : undefined;
-  registry.register(
-    new KiroToolsProvider(options.cwd, {
-      readArtifact: ({ id, offset, limit }) => artifacts.read(id, offset, limit),
-      ...(protectedRelease ? { protectedRoots: [protectedRelease] } : {}),
-    }),
-  );
+  if (!power) {
+    registry.register(
+      new KiroToolsProvider(options.cwd, {
+        readArtifact: ({ id, offset, limit }) => artifacts.read(id, offset, limit),
+        ...(protectedRelease ? { protectedRoots: [protectedRelease] } : {}),
+      }),
+    );
+  } else {
+    registry.markUnavailable(
+      "k",
+      "Power mode intentionally uses Kiro native tools for ordinary repository and shell operations",
+    );
+  }
   // Main gets an on-demand MCP facade: configured servers are never contacted
   // during discovery/type checking, and the statically described mcp.call is
   // approval-gated before the shared provider performs tool discovery.
@@ -303,13 +322,33 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
       "agents",
       options.tools !== undefined
         ? "recursive subagents are unavailable inside scoped Kiro ACP children"
-        : "managed Kiro subagents require the trusted --allow-shell --subagents opt-in",
+        : power
+          ? "Kiro ACP agents are unavailable until the certified CLI capability probe succeeds"
+          : "managed Kiro subagents require the trusted --allow-shell --subagents opt-in",
+    );
+  }
+  if (power && options.stateRoot) {
+    const mesh = new MeshStore(
+      options.stateRoot,
+      config.mesh.maxEventBytes,
+      config.mesh.maxReadEvents,
+    );
+    registry.register(new StateProvider(mesh, {
+      id: createHash("sha256").update(options.stateRoot).digest("hex").slice(0, 24),
+      name: "kiro-power",
+      kind: "main",
+    }));
+  } else {
+    registry.markUnavailable(
+      "state",
+      power
+        ? "Power-scoped state is unavailable until a workspace is bound"
+        : "state.* requires the managed project mesh lifecycle",
     );
   }
   for (const [provider, reason] of [
     ["extensions", "captured Pi extension tools require a live Pi extension host"],
-    ["mesh", "managed Kiro does not own a project mesh lifecycle"],
-    ["state", "state.* requires the managed project mesh lifecycle"],
+    ["mesh", power ? "Power v1 does not expose a durable mesh lifecycle" : "managed Kiro does not own a project mesh lifecycle"],
     ["schema", "schema transactions require Pi-owned workspace and mesh authorization"],
     ["components", "component supervision requires the Pi host lifecycle"],
     ["compact", "Kiro CLI exposes no safe host context-compaction commit boundary"],
@@ -330,10 +369,15 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
     agentBackedOrchestration: false,
     // No model registry in the Kiro host.
     createApprover() {
+      if (power && options.powerApprover) {
+        return new KiroPowerFabricApprover(config.approvals, options.powerApprover, options.cwd);
+      }
       return new FabricDenyApprovalFallback(
         config.approvals,
         sessionApprovals.approvedRisks as never,
-        KIRO_UNAVAILABLE_REASON,
+        power
+          ? "the MCP client does not advertise standards-based elicitation"
+          : KIRO_UNAVAILABLE_REASON,
       );
     },
   };

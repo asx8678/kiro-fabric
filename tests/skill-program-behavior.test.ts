@@ -9,7 +9,7 @@ type AsyncFunctionConstructor = new (...args: string[]) => AsyncCallable;
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as AsyncFunctionConstructor;
 
 const skillProgram = (name: "fabric-workflow" | "fabric-review"): string => {
-  const markdown = fs.readFileSync(`skills/${name}/SKILL.md`, "utf8")
+  const markdown = fs.readFileSync(`strict/skills/${name}/SKILL.md`, "utf8")
     .replace(/\r\n?/g, "\n");
   const match = markdown.match(/```ts\n([\s\S]*?)\n```/);
   if (!match) throw new Error(name + " has no TypeScript program");

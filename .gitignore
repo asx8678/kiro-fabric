@@ -2,6 +2,7 @@ node_modules/
 .pnpm-store/
 dist/
 coverage/
+.tmp/kiro-fabric-power/
 .pi/fabric-runs/
 .pi/fabric/mesh/
 .pi/*

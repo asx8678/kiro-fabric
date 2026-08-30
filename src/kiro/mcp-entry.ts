@@ -5,36 +5,37 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+export const startKiroMcpServer = async (): Promise<{ close(): Promise<void> }> => {
+  const { createKiroMcpServer } = await import("./mcp-server.js");
+  const { resolveKiroMcpLaunchEnvironment } = await import("./mcp-environment.js");
+  const { parseKiroChildToolsEnv } = await import("./run-scope.js");
+  const launch = resolveKiroMcpLaunchEnvironment();
+  const server = await createKiroMcpServer(launch.mode === "power"
+    ? { integration: "power", pluginRoot: launch.pluginRoot, pluginData: launch.pluginData }
+    : {
+        integration: launch.mode,
+        cwd: launch.cwd,
+        ...(launch.mode === "internal-child" ? { tools: parseKiroChildToolsEnv(launch.toolsEnv) } : {}),
+        ...(launch.mode === "strict" && /^1$/i.test(process.env.KIRO_FABRIC_ENABLE_SUBAGENTS ?? "") ? { enableSubagents: true } : {}),
+      });
+  let closing = false;
+  const shutdown = async () => {
+    if (closing) return;
+    closing = true;
+    try { await server.close(); } finally { process.exit(0); }
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+  process.stdin.on("end", () => void shutdown());
+  return server;
+};
+
 const invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : "";
 const selfPath = fileURLToPath(import.meta.url);
 if (invokedPath === selfPath || invokedPath === realpathSync(selfPath)) {
   const launchError = await (async (): Promise<Error | null> => {
     try {
-      const { createKiroMcpServer } = await import("./mcp-server.js");
-      const { resolveKiroMcpLaunchEnvironment } = await import("./mcp-environment.js");
-      const { parseKiroChildToolsEnv } = await import("./run-scope.js");
-      const launch = resolveKiroMcpLaunchEnvironment();
-      const server = await createKiroMcpServer({
-        cwd: launch.cwd,
-        ...(launch.toolsEnv === undefined
-          ? {}
-          : { tools: parseKiroChildToolsEnv(launch.toolsEnv) }),
-        ...(launch.kind === "managed-main" &&
-        /^1$/i.test(process.env.KIRO_FABRIC_ENABLE_SUBAGENTS ?? "")
-          ? { enableSubagents: true }
-          : {}),
-      });
-
-      const shutdown = async () => {
-        try {
-          await server.close();
-        } finally {
-          process.exit(0);
-        }
-      };
-      process.on("SIGINT", shutdown);
-      process.on("SIGTERM", shutdown);
-      process.stdin.on("end", () => void shutdown());
+      await startKiroMcpServer();
       return null;
     } catch (error) {
       return error instanceof Error ? error : new Error(String(error));

@@ -78,7 +78,7 @@ describe("Kiro managed environment precedence", () => {
       KIRO_FABRIC_PROJECT_ROOT: project,
       KIRO_FABRIC_CWD: child,
       KIRO_FABRIC_KIRO_TOOLS: '["bash"]',
-    }, ambient)).toEqual({ cwd: fs.realpathSync(ambient), kind: "managed-main" });
+    }, ambient)).toEqual({ mode: "strict", cwd: fs.realpathSync(ambient), kind: "managed-main" });
 
     expect(resolveKiroMcpLaunchEnvironment({
       KIRO_FABRIC_PROFILE_KIND: "internal-child",
@@ -86,6 +86,7 @@ describe("Kiro managed environment precedence", () => {
       KIRO_FABRIC_CWD: child,
       KIRO_FABRIC_KIRO_TOOLS: '["read"]',
     }, ambient)).toEqual({
+      mode: "internal-child",
       cwd: child,
       kind: "internal-child",
       toolsEnv: '["read"]',
@@ -118,7 +119,7 @@ describe("Kiro managed environment precedence", () => {
       KIRO_FABRIC_PROJECT_ROOT: project,
       KIRO_FABRIC_ALLOW_SHELL: "1",
       ...identityEnv,
-    }, nested)).toEqual({ cwd: nested, kind: "managed-main" });
+    }, nested)).toEqual({ mode: "strict", cwd: nested, kind: "managed-main" });
   });
 
   it("rejects a trusted grant rooted at the Kiro config home", () => {
@@ -188,6 +189,6 @@ describe("Kiro managed environment precedence", () => {
     expect(resolveKiroMcpLaunchEnvironment({
       KIRO_FABRIC_PROFILE_KIND: "managed-main",
       KIRO_FABRIC_PROJECT_ROOT: project,
-    }, ambient)).toEqual({ cwd: project, kind: "managed-main" });
+    }, ambient)).toEqual({ mode: "strict", cwd: project, kind: "managed-main" });
   });
 });
