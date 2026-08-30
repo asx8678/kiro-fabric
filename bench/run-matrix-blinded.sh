@@ -50,6 +50,14 @@ done
 [[ -n "$SEED" ]] || die "--seed is required"
 is_safe_name "$RUN_ID" || die "invalid --run-id (use 1-128 letters, digits, '.', '_' or '-')"
 
+[[ "$REPS" =~ ^[1-9][0-9]*$ ]] || die "reps must be a positive integer"
+if [[ -n "$TASKS" && ( "$TASKS" == ,* || "$TASKS" == *, || "$TASKS" == *,,* ) ]]; then
+  die "task and config names must be non-empty portable names"
+fi
+if [[ "$CONFIGS" == ,* || "$CONFIGS" == *, || "$CONFIGS" == *,,* ]]; then
+  die "task and config names must be non-empty portable names"
+fi
+
 if [[ -z "$TASKS" ]]; then
   TASK_ARR=()
   for task_dir in "$BENCH"/tasks/*; do
@@ -65,14 +73,19 @@ fi
 # Validate task paths before creating a result directory or reading auth. The
 # protocol validator repeats the identifier checks and catches empty trailing
 # fields and duplicates before it writes either manifest.
-for task in "${TASK_ARR[@]}"; do
+for ((left = 0; left < ${#TASK_ARR[@]}; left++)); do
+  task="${TASK_ARR[$left]}"
   is_safe_name "$task" || die "invalid task name: $task"
   [[ -f "$BENCH/tasks/$task/task.json" ]] || die "unknown task: $task"
   [[ -f "$BENCH/tasks/$task/prompt.txt" ]] || die "task is missing prompt.txt: $task"
+  for ((right = left + 1; right < ${#TASK_ARR[@]}; right++)); do
+    [[ "$task" != "${TASK_ARR[$right]}" ]] || die "duplicate tasks are not allowed"
+  done
 done
 
 IFS=',' read -r -a CONFIG_ARR <<< "$CONFIGS"
-for config in "${CONFIG_ARR[@]}"; do
+for ((left = 0; left < ${#CONFIG_ARR[@]}; left++)); do
+  config="${CONFIG_ARR[$left]}"
   is_safe_name "$config" || die "invalid config name: $config"
   case "$config" in
     baseline|fabric-local) ;;
@@ -82,6 +95,9 @@ for config in "${CONFIG_ARR[@]}"; do
       ;;
     *) die "unknown config: $config" ;;
   esac
+  for ((right = left + 1; right < ${#CONFIG_ARR[@]}; right++)); do
+    [[ "$config" != "${CONFIG_ARR[$right]}" ]] || die "duplicate configs are not allowed"
+  done
 done
 
 RESULTS="$BENCH/results/$RUN_ID"
@@ -122,6 +138,16 @@ fi
 
 [[ ! -e "$RESULTS" && ! -L "$RESULTS" ]] || die "results directory already exists: $RESULTS"
 
+# Certify the exact local verifier suites before publishing a run directory,
+# reading credentials, or making any model call.
+MUTATION_REPORT_TMP=$(mktemp "${TMPDIR:-/tmp}/kiro-fabric-verifiers.XXXXXX") || exit 1
+cleanup_mutation_report() { rm -f -- "$MUTATION_REPORT_TMP"; }
+trap cleanup_mutation_report EXIT
+if ! python3 "$BENCH/mutation_verifiers.py" --tasks "$TASKS" --report "$MUTATION_REPORT_TMP"; then
+  echo "benchmark aborted: a verifier accepted a mutant or its mutation suite was invalid" >&2
+  exit 1
+fi
+
 # Generate and validate the schedule before reading credentials. The generator
 # stages both manifests and publishes the run directory only after both writes
 # succeed.
@@ -129,6 +155,7 @@ if ! ARM_PAIRS=$(python3 "$ROOT/scripts/gen-blinded-schedule.py" \
   "$RESULTS" "$MANIFEST" "$TASKS" "$CONFIGS" "$REPS" "$SEED"); then
   exit 2
 fi
+cp "$MUTATION_REPORT_TMP" "$RESULTS/controller/verifier-mutation-report.json"
 
 AGENT_DIR="$RESULTS/agent"
 mkdir -p "$AGENT_DIR"

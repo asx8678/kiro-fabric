@@ -17,6 +17,9 @@ import os
 import statistics
 import sys
 from collections import Counter
+from pathlib import Path
+
+from mutation_verifiers import MutationSuiteError, validate_report
 
 
 def load_json(path):
@@ -135,6 +138,14 @@ def summarize(rows):
 def main():
     run_dir = sys.argv[1]
     cells = collect(run_dir)
+    tasks = sorted({cell["task"] for cell in cells})
+    report_path = Path(run_dir) / "verifier-mutation-report.json"
+    try:
+        if not tasks:
+            raise MutationSuiteError("run has no benchmark cells")
+        validate_report(report_path, Path(__file__).resolve().parent, tasks)
+    except MutationSuiteError as error:
+        raise SystemExit(f"refusing to trust benchmark results: {error}") from error
     rows = []
     for cell in cells:
         res = load_json(os.path.join(cell["path"], "result.json"))

@@ -24,8 +24,11 @@ Per (task, config, rep) cell:
     tasks/<slug>/task.json   repo URL, base ref (extracted from archived sessions), timeouts
     tasks/<slug>/prompt.txt  verbatim DeepSWE user prompt from the archived cell
     tasks/<slug>/verify.sh   acceptance probes -> reward_binary/reward_partial
+    tasks/<slug>/mutants.json deterministic acceptance-violating verifier mutations
+    tasks/<slug>/mutants/fixture near-conforming, local implementation mutated by the suite
+    mutation_verifiers.py    non-model mutation runner and fingerprinted JSON report
     run-cell.sh              one cell: checkout at base ref -> agent -> verifier
-    run-matrix.sh            isolated agent dir, vendoring, task x config x rep loop, analysis
+    run-matrix.sh            verifier gate, isolated agent dir, task x config x rep loop, analysis
     analyze.py               paired summary (solves, McNemar, token deltas, read pathology)
 
 Configs:
@@ -36,6 +39,40 @@ Configs:
 - `fabric-<version>` — vendored published package (e.g. `kiro-fabric@0.25.6`,
   the version benchmarked in the trajectories repo)
 
+## Verifier mutation gate
+
+Before spending a model call or trusting a local score, run every selected task's
+verifier against deterministic, acceptance-violating implementations:
+
+    python3 mutation_verifiers.py \
+      --tasks scc-bounded-memory-spilling,superjson-error-stack-serialization \
+      --report /tmp/verifier-mutation-report.json
+
+From the repository root, `pnpm run bench:verify-verifiers` runs all local task
+suites and writes the ignored report under `bench/.artifacts/`.
+
+A mutant is valid only when its named acceptance check fails and every
+non-targeted check passes. The command exits nonzero if a verifier accepts a
+mutant, a mutant causes collateral failures, verifier output is malformed, a
+fixture cannot be prepared, or a verifier times out. The JSON report records
+checks and bounded verifier logs. Its task fingerprint covers the prompt,
+verifier, probe, manifest, edits, and fixture, so changing any suite input makes
+the report stale.
+
+`run-matrix.sh` and real (non-dry-run) `run-matrix-blinded.sh` run this gate
+before credentials are read or cells are launched. They abort closed on any
+failure and preserve the trusted report as
+`results/<run-id>/verifier-mutation-report.json` (or under `controller/` for a
+blinded run). `analyze.py` refuses local results without a current trusted
+report. The mutation runner uses only local fixtures and build/test tools; it
+makes no agent or model calls. A blinded `--dry-run` remains a zero-side-effect
+schedule preview and creates no results to trust, so it does not run the gate.
+
+To add a task, provide a near-conforming fixture and `mutants.json`. Each mutant
+uses exact, single-match source edits and declares `expected_failed_checks`.
+Keep each mutant focused on one acceptance violation. Never weaken the
+non-targeted-check rule merely to make a mutant pass.
+
 ## Run
 
     ./run-matrix.sh --tasks scc-bounded-memory-spilling \
@@ -43,12 +80,16 @@ Configs:
       --vendor kiro-fabric@0.25.6 --run-id myrun
 
 Results land in `results/<run-id>/<config>/<task>/rep<N>/` in the same layout
-as the trajectories repo; `analysis-summary.json` is written next to them.
+as the trajectories repo; `analysis-summary.json` and the verifier mutation
+report are written next to them.
 
 ## Official DeepSWE tasks through Pier
 
 `run-deepswe-pier.sh` runs the same paired Pi configurations in the official
-Harbor task images and separate verifier environment. Keep sibling checkouts of
+Harbor task images and separate verifier environment. Those external Pier
+verifiers are not attested by the local mutation suites; Pier rewards must not
+be described as mutation-certified unless the corresponding upstream verifier
+has its own equivalent gate. Keep sibling checkouts of
 `datacurve-ai/deep-swe` and `datacurve-ai/pier`, Docker running, and the
 `openai-codex` OAuth entry available in `~/.pi/agent/auth.json`.
 

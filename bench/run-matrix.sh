@@ -26,6 +26,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# --- blinded cell runs (V4): delegate to the opaque-arm paired harness ---
+if [[ -n "$SEED" ]]; then
+  exec "$BENCH/run-matrix-blinded.sh" --run-id "$RUN_ID" --tasks "$TASKS" --configs "$CONFIGS" --reps "$REPS" --seed "$SEED"
+fi
+
+# --- task list and non-model verifier mutation gate ---
+if [[ -z "$TASKS" ]]; then
+  TASKS=$(find "$BENCH/tasks" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | paste -sd, -)
+fi
+MUTATION_REPORT_TMP=$(mktemp "${TMPDIR:-/tmp}/kiro-fabric-verifiers.XXXXXX") || exit 1
+cleanup_mutation_report() { rm -f -- "$MUTATION_REPORT_TMP"; }
+trap cleanup_mutation_report EXIT
+if ! python3 "$BENCH/mutation_verifiers.py" --tasks "$TASKS" --report "$MUTATION_REPORT_TMP"; then
+  echo "benchmark aborted: a verifier accepted a mutant or its mutation suite was invalid" >&2
+  exit 1
+fi
+
 # --- vendored config (e.g. kiro-fabric@0.25.6 = the version from the DeepSWE issue) ---
 if [[ -n "$VENDOR_PKG" ]]; then
   NAME="fabric-${VENDOR_PKG#*@}"
@@ -37,14 +54,10 @@ if [[ -n "$VENDOR_PKG" ]]; then
   echo "vendored $VENDOR_PKG at $DEST/node_modules/kiro-fabric"
 fi
 
-# --- blinded cell runs (V4): delegate to the opaque-arm paired harness ---
-if [[ -n "$SEED" ]]; then
-  exec "$BENCH/run-matrix-blinded.sh" --run-id "$RUN_ID" --tasks "$TASKS" --configs "$CONFIGS" --reps "$REPS" --seed "$SEED"
-fi
-
 # --- isolated agent dir: copy ONLY the openai-codex auth entry ---
 AGENT_DIR="$BENCH/results/$RUN_ID/agent"
 mkdir -p "$AGENT_DIR"
+cp "$MUTATION_REPORT_TMP" "$BENCH/results/$RUN_ID/verifier-mutation-report.json"
 python3 - "$AGENT_DIR" <<'PYEOF'
 import json, os, sys
 dst = sys.argv[1]
@@ -60,11 +73,6 @@ json.dump({"defaultModel": "gpt-5.6-sol", "defaultProvider": "openai-codex",
           open(os.path.join(dst, "settings.json"), "w"), indent=2)
 print("agent dir prepared with providers:", list(out))
 PYEOF
-
-# --- task list ---
-if [[ -z "$TASKS" ]]; then
-  TASKS=$(ls "$BENCH/tasks" | paste -sd, -)
-fi
 
 MANIFEST="$BENCH/results/$RUN_ID/manifest.json"
 echo "{\"run_id\": \"$RUN_ID\", \"tasks\": \"$TASKS\", \"configs\": \"$CONFIGS\", \"reps\": $REPS}" > "$MANIFEST"

