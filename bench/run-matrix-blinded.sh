@@ -217,7 +217,7 @@ for row in "${SCHEDULE_ROWS[@]}"; do
   fi
   cell_image="$RESULTS/$arm/$tag/rep$rep"
   echo "=== $tag / rep$rep / arm=$arm ==="
-  if ! BENCH_ARM="$arm" BENCH_PAIR="$tag/rep$rep" \
+  if ! BENCH_ARM="$arm" BENCH_PAIR="$tag/rep$rep" BENCH_CONTROLLER_DIR="$RESULTS/controller" \
     "$BENCH/run-cell.sh" "$BENCH/tasks/$tag" "$cfg" "$rep" "$cell_image" "$AGENT_DIR"; then
     echo "CELL FAILED: $tag arm=$arm rep$rep" >&2
     RUN_FAILED=1

@@ -40,9 +40,12 @@ Configs:
   below)
 - `fabric-local` — this repo (`-e <repo root>), with shipping defaults
 - `fabric-local-disabled`, `fabric-local-gated`, `fabric-local-always` — the
-  equal-model selective-prewalk ablation. Each writes an isolated `fabric.json`
-  with the named `prewalk.activation` and records decisions, eligible decisions,
-  automatic arms, and reason counts alongside the existing token/read metrics.
+  equal-model selective-prewalk ablation. In blinded runs, each cell's treatment
+  config, raw activation entries, and activation metrics stay under the private
+  `controller/cells/` tree. The shared agent directory, public `result.json`,
+  and published session copy remain treatment-neutral; `analyze.py` deblinds
+  from the private arm map and writes its treatment-named summary under
+  `controller/`. Unblinded runs continue to record activation metrics directly.
 - `fabric-<version>` — vendored published package (e.g. `kiro-fabric@0.25.6`,
   the version benchmarked in the trajectories repo)
 

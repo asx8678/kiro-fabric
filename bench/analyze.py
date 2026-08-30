@@ -82,14 +82,33 @@ def read_metrics(cell, is_fabric):
     return reads, whole, over50
 
 
-def collect(run_dir):
+def private_arm_mapping(run_dir):
+    """Return arm -> treatment for an explicitly deblinded private run."""
+    manifest_path = Path(run_dir) / "controller" / "arm-map.json"
+    if not manifest_path.is_file():
+        return {}
+    manifest = load_json(manifest_path)
+    mapping = {}
+    for pair in manifest.get("pairs", []):
+        for config, arm in (pair.get("arms") or {}).items():
+            previous = mapping.setdefault(arm, config)
+            if previous != config:
+                raise SystemExit(f"inconsistent private arm mapping for {arm}")
+    if not mapping:
+        raise SystemExit("private arm map contains no treatments")
+    return mapping
+
+
+def collect(run_dir, arm_mapping=None):
+    arm_mapping = arm_mapping or {}
     cells = []
     for result in glob.glob(os.path.join(run_dir, "*", "*", "rep*", "result.json")):
         cell = os.path.dirname(result)
         rel = os.path.relpath(cell, run_dir)
-        config, task, rep = rel.split(os.sep)
+        arm, task, rep = rel.split(os.sep)
         cells.append({
-            "config": config,
+            "config": arm_mapping.get(arm, arm),
+            "arm": arm,
             "task": task,
             "rep": rep,
             "path": cell,
@@ -144,9 +163,10 @@ def summarize(rows):
 
 def main():
     run_dir = sys.argv[1]
-    cells = collect(run_dir)
+    arm_mapping = private_arm_mapping(run_dir)
+    cells = collect(run_dir, arm_mapping)
     tasks = sorted({cell["task"] for cell in cells})
-    report_path = Path(run_dir) / "verifier-mutation-report.json"
+    report_path = Path(run_dir) / ("controller/verifier-mutation-report.json" if arm_mapping else "verifier-mutation-report.json")
     try:
         if not tasks:
             raise MutationSuiteError("run has no benchmark cells")
@@ -156,6 +176,16 @@ def main():
     rows = []
     for cell in cells:
         res = load_json(os.path.join(cell["path"], "result.json"))
+        if arm_mapping:
+            private_result = Path(run_dir) / "controller" / "cells" / cell["arm"] / cell["task"] / cell["rep"] / "treatment.json"
+            treatment = load_json(private_result)
+            if treatment.get("config") != cell["config"]:
+                raise SystemExit(f"missing or mismatched private treatment telemetry: {private_result}")
+            res.update({
+                key: value
+                for key, value in treatment.items()
+                if key.startswith("prewalk_")
+            })
         # Agentless is a stock-Pi staged comparator, so its direct read calls
         # have the same session shape as baseline rather than Fabric traces.
         is_fabric = cell["config"] == "fabric-local" or cell["config"].startswith("fabric-")
@@ -206,7 +236,8 @@ def main():
                 "median_token_delta": statistics.median(tok_delta) if tok_delta else None,
                 "mean_token_delta": round(statistics.mean(tok_delta)) if tok_delta else None,
             }
-    out_path = os.path.join(run_dir, "analysis-summary.json")
+    # A deblinded summary names treatments and is therefore controller-only.
+    out_path = os.path.join(run_dir, "controller" if arm_mapping else "", "analysis-summary.json")
     with open(out_path, "w") as fh:
         json.dump(summary, fh, indent=2)
     print(json.dumps(summary, indent=2))

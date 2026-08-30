@@ -72,18 +72,39 @@ wait_for_pid() {
   wait "$pid" 2>/dev/null || true
 }
 
+group_exists() {
+  local pid="$1"
+  kill -0 -- "-$pid" 2>/dev/null
+}
+
+terminate_and_drain_group() {
+  local pid="$1"
+  local attempt
+  [[ -n "$pid" ]] || return 0
+  signal_group TERM "$pid"
+  for ((attempt = 0; attempt < 10; attempt++)); do
+    group_exists "$pid" || return 0
+    sleep 0.02
+  done
+  signal_group KILL "$pid"
+  for ((attempt = 0; attempt < 100; attempt++)); do
+    group_exists "$pid" || return 0
+    sleep 0.02
+  done
+  echo "agentless process group $pid did not drain" >&2
+  return 1
+}
+
 stop_active_process_trees() {
   local stage="$ACTIVE_STAGE_PID"
   local watchdog="$ACTIVE_WATCHDOG_PID"
-  # Stop the watchdog first so it cannot race cleanup, then stop the complete
-  # stage process group (Pi and every child it started). Every background root
-  # is launched in its own session/process group below.
-  signal_group TERM "$watchdog"
-  signal_group TERM "$stage"
-  sleep 0.2
-  signal_group KILL "$watchdog"
-  signal_group KILL "$stage"
+  # Stop the watchdog first so it cannot race cleanup, then terminate and
+  # drain the complete stage group (Pi and every child it started). Active ids
+  # remain set until both groups are gone, including after an ordinary wait
+  # where the Pi leader exited before one of its background children.
+  terminate_and_drain_group "$watchdog"
   wait_for_pid "$watchdog"
+  terminate_and_drain_group "$stage"
   wait_for_pid "$stage"
   ACTIVE_WATCHDOG_PID=""
   ACTIVE_STAGE_PID=""
@@ -150,10 +171,10 @@ run_stage() {
 
   local status
   if wait "$ACTIVE_STAGE_PID"; then status=0; else status=$?; fi
-  signal_group TERM "$ACTIVE_WATCHDOG_PID"
-  wait_for_pid "$ACTIVE_WATCHDOG_PID"
-  ACTIVE_STAGE_PID=""
-  ACTIVE_WATCHDOG_PID=""
+  # A successful wait only reaps the session leader. Pi may have exited after
+  # starting a background child, so always terminate and drain both groups
+  # before clearing ACTIVE_STAGE_PID.
+  stop_active_process_trees
   return "$status"
 }
 
