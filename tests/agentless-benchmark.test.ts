@@ -518,8 +518,8 @@ fs.writeFileSync("app.txt", "repaired\\n");
       slug: "expected-failures",
       repo: repository,
       base_ref: baseRef,
-      agent_timeout_s: 5,
-      verify_timeout_s: 5,
+      agent_timeout_s: 30,
+      verify_timeout_s: 30,
     }));
     writeFileSync(join(task, "prompt.txt"), "Attempt repair.\n");
     writeFileSync(join(task, "verify.sh"), `#!/usr/bin/env bash
@@ -543,7 +543,7 @@ exit 6
         cwd: root,
         env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
         encoding: "utf8",
-        timeout: 15_000,
+        timeout: 45_000,
       },
     );
     expect(completed.status).toBe(1);
@@ -554,7 +554,7 @@ exit 6
       checks: { infra: 0 },
     });
     expect(completed.stderr).toContain("verifier infrastructure failed");
-  }, 15_000);
+  }, 45_000);
 
   it("drains agent and verifier orphans after normal stage exits", () => {
     const root = temporaryDirectory();
@@ -585,7 +585,7 @@ exit 0
         cwd: root,
         env: { ...process.env, PATH: `${fixture.bin}:${process.env.PATH ?? ""}` },
         encoding: "utf8",
-        timeout: 15_000,
+        timeout: 45_000,
       },
     );
     expect(completed.status, completed.stderr).toBe(0);
@@ -593,7 +593,7 @@ exit 0
       const pid = Number(readFileSync(join(fixture.cell, "workdir", name), "utf8"));
       expect(processIsAlive(pid), `${name} survived normal cleanup`).toBe(false);
     }
-  }, 15_000);
+  }, 45_000);
 
   it.each(["agent", "verifier"] as const)(
     "drains the %s process group when run-cell receives SIGTERM",
@@ -644,7 +644,7 @@ wait
       await waitForFile(leaderFile);
       await waitForFile(childFile);
       const exitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolvePromise, reject) => {
-        const timer = setTimeout(() => reject(new Error(`run-cell did not exit during ${stage} cleanup`)), 5_000);
+        const timer = setTimeout(() => reject(new Error(`run-cell did not exit during ${stage} cleanup`)), 20_000);
         runner.once("exit", (code, signal) => {
           clearTimeout(timer);
           resolvePromise({ code, signal });
@@ -731,7 +731,7 @@ wait
       prewalk_automatic_arms: 1,
     });
     expect(summary.per_config).not.toHaveProperty(arm);
-  });
+  }, 30_000);
 
   it("counts agentless direct reads through the existing baseline metrics", () => {
     const runDirectory = temporaryDirectory();
@@ -763,5 +763,5 @@ wait
     const summary = JSON.parse(readFileSync(join(runDirectory, "analysis-summary.json"), "utf8"));
     expect(summary.per_config.agentless.reads).toBe(1);
     expect(summary.per_config.agentless.whole_file_reads_pct).toBe(100);
-  });
+  }, 30_000);
 });

@@ -66,7 +66,7 @@ const createDirectory = (
   const hostId = identity.kind === "main" ? identity.id : "runtime:" + identity.sessionId;
   const directory = new ParticipantDirectory(
     new MeshStore(meshRoot, 64 * 1024, 1_000),
-    { enabled: true, hostId, rootId, identity, heartbeatMs: 100, leaseMs: 300 },
+    { enabled: true, hostId, rootId, identity, heartbeatMs: 250, leaseMs: 3_000 },
   );
   directory.registerSource(source);
   directories.push(directory);
@@ -378,10 +378,10 @@ describe("ParticipantDirectory", () => {
       timeout: 5_000,
       interval: 50,
     });
-    expect(directory.list({ scope: "project" }, Date.now() + 1_000)).toEqual([]);
+    expect(directory.list({ scope: "project" }, Date.now() + 10_000)).toEqual([]);
     const stale = directory.list(
       { scope: "project", includeStale: true },
-      Date.now() + 1_000,
+      Date.now() + 10_000,
     );
     expect(stale).toHaveLength(2);
     expect(stale.every((participant) => participant.stale)).toBe(true);
