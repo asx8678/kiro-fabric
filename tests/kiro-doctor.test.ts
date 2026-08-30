@@ -3,7 +3,7 @@
 // test here is non-billable: the fake records outbound methods and the
 // doctor asserts session/prompt was never sent.
 
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -69,6 +69,13 @@ describe("runKiroDoctor", () => {
     expect(check(pristine, "install.manifest")?.status).toBe("pass");
     expect(check(pristine, "install.skills")?.status).toBe("pass");
     expect(check(pristine, "install.runtime-closure")?.status).toBe("pass");
+    const installedProfile = JSON.parse(
+      readFileSync(join(projectRoot, ".kiro", "agents", "kiro-fabric.json"), "utf8"),
+    ) as { mcpServers: { fabric: { args: string[] } } };
+    const installedMcpEntry = installedProfile.mcpServers.fabric.args[0]!;
+    expect(installedMcpEntry).not.toBe(mcpEntry);
+    expect(check(pristine, "mcp.initialize")?.message).toContain(installedMcpEntry);
+    expect(check(pristine, "mcp.initialize")?.message).not.toContain(mcpEntry);
 
     writeFileSync(
       join(projectRoot, ".kiro", "skills", "fabric-review", "SKILL.md"),
@@ -84,6 +91,27 @@ describe("runKiroDoctor", () => {
     expect(check(tampered, "install.skills")?.status).toBe("fail");
     expect(check(tampered, "install.skills")?.message).toMatch(/hash mismatch/);
     expect(check(tampered, "install.runtime-closure")?.status).toBe("pass");
+
+    const manifest = JSON.parse(
+      readFileSync(join(projectRoot, ".kiro", ".kiro-fabric", "install.json"), "utf8"),
+    ) as { runtime: { closure: { root: string } } };
+    writeFileSync(
+      join(projectRoot, ...manifest.runtime.closure.root.split("/"), "kiro", "mcp-entry.js"),
+      "tampered runtime\n",
+    );
+    const damagedRuntime = await runDoctor({
+      kiroBinary: wrapperPath,
+      mcpEntryPath: mcpEntry,
+      checkInstalled: true,
+      projectRoot,
+      fabricConfig: structuredClone(DEFAULT_FABRIC_CONFIG),
+    });
+    expect(check(damagedRuntime, "install.runtime-closure")?.status).toBe("fail");
+    expect(check(damagedRuntime, "mcp.initialize")).toMatchObject({
+      status: "skipped",
+      message: "installed_runtime_unattested",
+    });
+    expect(check(damagedRuntime, "acp.initialize")?.status).toBe("skipped");
   }, 30_000);
 
   it("passes all checks against the supported fake tuple", async () => {

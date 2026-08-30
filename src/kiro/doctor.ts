@@ -125,8 +125,11 @@ export const runKiroDoctor = async (
   let kiroBinary = options.kiroBinary ?? "kiro-cli";
   let managedKiroBinaryPath: string | undefined;
   let observedKiro: SupportedKiroIdentity | undefined;
-  const mcpEntryPath =
-    options.mcpEntryPath ?? defaultMcpEntry();
+  const requestedMcpEntryPath = options.mcpEntryPath ?? defaultMcpEntry();
+  const checkingInstalled = Boolean(
+    options.checkInstalled || options.projectRoot || options.kiroHome,
+  );
+  let attestedInstalledMcpEntryPath: string | undefined;
   const checks: KiroDoctorCheck[] = [];
   let tupleFailed = false;
 
@@ -153,7 +156,7 @@ export const runKiroDoctor = async (
     checks.push({ id, status: "skipped", durationMs: 0, message });
   };
 
-  if (options.checkInstalled || options.projectRoot || options.kiroHome) {
+  if (checkingInstalled) {
     const roots = resolveKiroInstallRoots(options);
     const paths = managedPaths(roots.installRoot, roots.layout);
     const manifestOk = await run("install.manifest", async () => {
@@ -228,6 +231,11 @@ export const runKiroDoctor = async (
         if (readFileSync(marker, "utf8").trim() !== closure.digest) {
           throw new Error("runtime closure marker digest mismatch");
         }
+        // Select the MCP executable only after the exact closure file set and
+        // every recorded hash have passed. Installed doctor must never fall
+        // back to its own package's dist/ entry when the managed release is
+        // absent, legacy, or damaged.
+        attestedInstalledMcpEntryPath = installedManifest!.runtime.mcpEntryPath;
         return closure.files.length + " runtime closure files verified";
       });
     }
@@ -270,7 +278,7 @@ export const runKiroDoctor = async (
 
     const profile = generateKiroProfile({
       projectRoot,
-      mcpEntryPath,
+      mcpEntryPath: attestedInstalledMcpEntryPath ?? requestedMcpEntryPath,
       nodePath: process.execPath,
       ...(observedKiro
         ? {
@@ -335,80 +343,94 @@ export const runKiroDoctor = async (
       skip("profile.negative-control", "dependency_failed");
     }
 
-    // --- actual built MCP adapter over stdio ---
-    const mcp = spawnJsonRpcProcess({
-      argv: [process.execPath, mcpEntryPath],
-      cwd: projectRoot,
-      env: { ...process.env, KIRO_FABRIC_PROJECT_ROOT: projectRoot },
-      timeoutMs: 30_000,
-    });
-    let mcpOk = true;
-    mcpOk =
-      (await run("mcp.initialize", async () => {
-        const result = (await mcp.call<Record<string, unknown>>("initialize", {
-          protocolVersion: "2025-11-25",
-          capabilities: {},
-          clientInfo: { name: "kiro-fabric-doctor", version: "1" },
-        })) as Record<string, unknown>;
-        const serverInfo = result.serverInfo as { name?: string } | undefined;
-        if (serverInfo?.name !== "kiro-fabric") {
-          throw new Error(`unexpected serverInfo: ${JSON.stringify(serverInfo)}`);
-        }
-        if (!isRecord(result.capabilities) || !("tools" in result.capabilities)) {
-          throw new Error("tools capability missing");
-        }
-        mcp.notify("notifications/initialized", {});
-        return "initialize negotiated";
-      })) && mcpOk;
-
-    if (mcpOk) {
-      await run("mcp.tools-list", async () => {
-        const result = (await mcp.call<{ tools?: unknown[] }>("tools/list", {}));
-        const tools = result.tools ?? [];
-        if (tools.length !== 1) throw new Error(`expected exactly one tool, got ${tools.length}`);
-        const tool = tools[0] as { name?: string; inputSchema?: unknown };
-        if (tool.name !== "fabric_exec") throw new Error(`unexpected tool ${String(tool.name)}`);
-        if (!deepEqual(tool.inputSchema, fabricExecInputSchemaJson())) {
-          throw new Error("inputSchema differs from the kernel golden schema");
-        }
-        return "exactly fabric_exec with the golden schema";
-      }).then((ok) => {
-        mcpOk = ok;
-      });
-    } else {
+    // --- actual built/installed MCP adapter over stdio ---
+    // An installed check is useful only if it exercises the release the
+    // manifest attests. Never substitute the doctor's repository/global dist.
+    if (checkingInstalled && !attestedInstalledMcpEntryPath) {
+      skip("mcp.initialize", "installed_runtime_unattested");
       skip("mcp.tools-list", "dependency_failed");
-    }
-
-    if (mcpOk) {
-      await run("mcp.fabric-exec", async () => {
-        const result = await mcp.call<{
-          content?: Array<{ type?: unknown; text?: unknown }>;
-          isError?: unknown;
-        }>("tools/call", {
-          name: "fabric_exec",
-          arguments: { code: "return 1 + 2;" },
-        });
-        const text = result.content?.find((entry) => entry.type === "text")?.text;
-        if (result.isError === true || text !== "3") {
-          throw new Error(`fabric_exec deterministic probe failed: ${JSON.stringify(result).slice(0, 500)}`);
-        }
-        return "fabric_exec returned the deterministic result 3";
-      });
-    } else {
       skip("mcp.fabric-exec", "dependency_failed");
-    }
+      skip("mcp.shutdown", "dependency_failed");
+    } else {
+      const mcpEntryPath = attestedInstalledMcpEntryPath ?? requestedMcpEntryPath;
+      const mcp = spawnJsonRpcProcess({
+        argv: [process.execPath, mcpEntryPath],
+        cwd: projectRoot,
+        env: { ...process.env, KIRO_FABRIC_PROJECT_ROOT: projectRoot },
+        timeoutMs: 30_000,
+      });
+      let mcpOk = true;
+      mcpOk =
+        (await run("mcp.initialize", async () => {
+          const result = (await mcp.call<Record<string, unknown>>("initialize", {
+            protocolVersion: "2025-11-25",
+            capabilities: {},
+            clientInfo: { name: "kiro-fabric-doctor", version: "1" },
+          })) as Record<string, unknown>;
+          const serverInfo = result.serverInfo as { name?: string } | undefined;
+          if (serverInfo?.name !== "kiro-fabric") {
+            throw new Error(`unexpected serverInfo: ${JSON.stringify(serverInfo)}`);
+          }
+          if (!isRecord(result.capabilities) || !("tools" in result.capabilities)) {
+            throw new Error("tools capability missing");
+          }
+          mcp.notify("notifications/initialized", {});
+          return `initialize negotiated via ${mcpEntryPath}`;
+        })) && mcpOk;
 
-    await run("mcp.shutdown", async () => {
-      const { escalated } = await mcp.terminate();
-      if (escalated) throw new Error("MCP server ignored SIGTERM; SIGKILL required");
-      return "process group reaped";
-    });
+      if (mcpOk) {
+        await run("mcp.tools-list", async () => {
+          const result = (await mcp.call<{ tools?: unknown[] }>("tools/list", {}));
+          const tools = result.tools ?? [];
+          if (tools.length !== 1) throw new Error(`expected exactly one tool, got ${tools.length}`);
+          const tool = tools[0] as { name?: string; inputSchema?: unknown };
+          if (tool.name !== "fabric_exec") throw new Error(`unexpected tool ${String(tool.name)}`);
+          if (!deepEqual(tool.inputSchema, fabricExecInputSchemaJson())) {
+            throw new Error("inputSchema differs from the kernel golden schema");
+          }
+          return "exactly fabric_exec with the golden schema";
+        }).then((ok) => {
+          mcpOk = ok;
+        });
+      } else {
+        skip("mcp.tools-list", "dependency_failed");
+      }
+
+      if (mcpOk) {
+        await run("mcp.fabric-exec", async () => {
+          const result = await mcp.call<{
+            content?: Array<{ type?: unknown; text?: unknown }>;
+            isError?: unknown;
+          }>("tools/call", {
+            name: "fabric_exec",
+            arguments: { code: "return 1 + 2;" },
+          });
+          const text = result.content?.find((entry) => entry.type === "text")?.text;
+          if (result.isError === true || text !== "3") {
+            throw new Error(`fabric_exec deterministic probe failed: ${JSON.stringify(result).slice(0, 500)}`);
+          }
+          return "fabric_exec returned the deterministic result 3";
+        });
+      } else {
+        skip("mcp.fabric-exec", "dependency_failed");
+      }
+
+      await run("mcp.shutdown", async () => {
+        const { escalated } = await mcp.terminate();
+        if (escalated) throw new Error("MCP server ignored SIGTERM; SIGKILL required");
+        return "process group reaped";
+      });
+    }
 
     // --- real ACP startup, v3 binding, and cross-process reload; zero prompts ---
     // Only meaningful when the Kiro tuple and profile validation already
     // passed; otherwise skip the whole ACP group instead of waiting out a
     // 60s timeout against a binary that cannot serve ACP.
-    if (tupleFailed || !profileValid) {
+    if (
+      tupleFailed ||
+      !profileValid ||
+      (checkingInstalled && !attestedInstalledMcpEntryPath)
+    ) {
       skip("acp.initialize", "dependency_failed");
       skip("acp.session-new", "dependency_failed");
       skip("acp.no-prompt", "dependency_failed");

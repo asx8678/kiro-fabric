@@ -9,6 +9,7 @@ export const PROCESS_LIFECYCLE_TEST_FILES = [
   "tests/bundled-binary-spawn.test.ts",
   "tests/kiro-agent-manager-process.test.ts",
   "tests/kiro-agents-runtime.test.ts",
+  "tests/kiro-detached-runtime.test.ts",
   "tests/kiro-process-lifecycle.test.ts",
   "tests/kiro-worker.test.ts",
   "tests/localterm-transport.test.ts",
