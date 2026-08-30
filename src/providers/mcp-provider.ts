@@ -200,6 +200,10 @@ export class McpProvider implements FabricProvider {
     string,
     { expiresAt: number; promise: Promise<ServerToolInfo[]> }
   >();
+  // Completed legacy listings only. Direct mcp.<server>.<tool> resolution must
+  // never turn a cache miss into server contact before the registry can gate
+  // the call; cold callers use the statically described mcp.call facade.
+  readonly #legacyToolSnapshots = new Map<string, ServerToolInfo[]>();
 
   readonly #store: McpDescriptorCacheStore | undefined;
   readonly #hooks: McpProviderHooks;
@@ -278,13 +282,11 @@ export class McpProvider implements FabricProvider {
     await this.#hydrate();
     const server = await this.#resolveKnownServer(parsed.server);
     if (!server) return undefined;
-    let entry = this.#servers.get(server);
-    let tool = entry ? this.#resolveTool(entry.tools, parsed.tool) : undefined;
-    if (!tool) {
-      entry = await this.#fetchServerTools(server).catch(() => undefined);
-      tool = entry ? this.#resolveTool(entry.tools, parsed.tool) : undefined;
-    }
-    if (entry?.stale) this.#scheduleRevalidate([server]);
+    const entry = this.#servers.get(server);
+    const tool = entry ? this.#resolveTool(entry.tools, parsed.tool) : undefined;
+    // Descriptor resolution is deliberately cache-only. In particular, a
+    // cold dynamic ref cannot spawn or connect to an attacker-selected server
+    // while ActionRegistry is still resolving the action before approval.
     return tool ? this.#toolDescriptor(server, tool) : undefined;
   }
 
@@ -362,6 +364,7 @@ export class McpProvider implements FabricProvider {
       return this.#call(server, tool, toolArgs, context.signal, {
         preferExactRaw: true,
         validateInputSchema: true,
+        allowDiscovery: true,
       });
     }
     const parsed = this.#parseToolName(actionName);
@@ -440,7 +443,11 @@ export class McpProvider implements FabricProvider {
     toolName: string,
     args: Record<string, unknown>,
     signal?: AbortSignal,
-    options: { preferExactRaw?: boolean; validateInputSchema?: boolean } = {},
+    options: {
+      preferExactRaw?: boolean;
+      validateInputSchema?: boolean;
+      allowDiscovery?: boolean;
+    } = {},
   ): Promise<unknown> {
     const preferExactRaw = options.preferExactRaw === true;
     if (!this.#cacheOn) return this.#callLegacy(serverName, toolName, args, signal, options);
@@ -450,7 +457,7 @@ export class McpProvider implements FabricProvider {
     if (!server) throw new Error(`Unknown MCP server: ${serverName}`);
     let entry = this.#servers.get(server);
     let tool = entry ? this.#resolveTool(entry.tools, toolName, preferExactRaw) : undefined;
-    if (!tool) {
+    if (!tool && options.allowDiscovery) {
       entry = await this.#fetchServerTools(server).catch(() => undefined);
       tool = entry ? this.#resolveTool(entry.tools, toolName, preferExactRaw) : undefined;
     }
@@ -825,6 +832,7 @@ export class McpProvider implements FabricProvider {
     this.#runtime = undefined;
     this.#runtimeCreation = undefined;
     this.#toolMetadata.clear();
+    this.#legacyToolSnapshots.clear();
     await Promise.allSettled([
       runtime?.close() ?? Promise.resolve(),
       creation?.then(() => undefined, () => undefined) ?? Promise.resolve(),
@@ -964,7 +972,9 @@ export class McpProvider implements FabricProvider {
     const runtime = await this.#getRuntime();
     const server = this.#resolveServerName(runtime, parsed.server);
     if (!server) return undefined;
-    const tool = await this.#findToolLegacy(runtime, server, parsed.tool, _context.signal);
+    const tools = this.#legacyToolSnapshots.get(server);
+    if (!tools) return undefined;
+    const tool = this.#resolveTool(tools, parsed.tool);
     return tool ? this.#toolDescriptor(server, tool) : undefined;
   }
 
@@ -973,20 +983,20 @@ export class McpProvider implements FabricProvider {
     toolName: string,
     args: Record<string, unknown>,
     signal?: AbortSignal,
-    options: { preferExactRaw?: boolean; validateInputSchema?: boolean } = {},
+    options: {
+      preferExactRaw?: boolean;
+      validateInputSchema?: boolean;
+      allowDiscovery?: boolean;
+    } = {},
   ): Promise<unknown> {
     if (signal?.aborted) throw new Error("MCP call cancelled");
     const preferExactRaw = options.preferExactRaw === true;
     const runtime = await this.#getRuntime();
     const server = this.#resolveServerName(runtime, serverName, preferExactRaw);
     if (!server) throw new Error(`Unknown MCP server: ${serverName}`);
-    const tool = await this.#findToolLegacy(
-      runtime,
-      server,
-      toolName,
-      signal,
-      preferExactRaw,
-    );
+    const tool = options.allowDiscovery
+      ? await this.#findToolLegacy(runtime, server, toolName, signal, preferExactRaw)
+      : this.#resolveTool(this.#legacyToolSnapshots.get(server) ?? [], toolName, preferExactRaw);
     if (signal?.aborted) throw new Error("MCP call cancelled");
     if (!tool) throw new Error(`Unknown MCP tool: ${serverName}.${toolName}`);
     if (options.validateInputSchema) this.#validateExplicitCallArgs(tool, args);
@@ -1000,6 +1010,7 @@ export class McpProvider implements FabricProvider {
       return normalizeMcpResult(result);
     } catch (error) {
       this.#toolMetadata.delete(server);
+      this.#legacyToolSnapshots.delete(server);
       throw error;
     }
   }
@@ -1038,7 +1049,9 @@ export class McpProvider implements FabricProvider {
     const entry = { expiresAt: Date.now() + TOOL_METADATA_TTL_MS, promise };
     this.#toolMetadata.set(server, entry);
     try {
-      return await this.#withAbort(promise, signal, () => runtime.close(server));
+      const tools = await this.#withAbort(promise, signal, () => runtime.close(server));
+      this.#legacyToolSnapshots.set(server, tools);
+      return tools;
     } catch (error) {
       if (this.#toolMetadata.get(server) === entry) this.#toolMetadata.delete(server);
       throw error;

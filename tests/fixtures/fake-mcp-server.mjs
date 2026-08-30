@@ -7,6 +7,21 @@ const respond = (id, result) => {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
 };
 
+const rejectInvalidArguments = (id) => {
+  process.stdout.write(`${JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    error: { code: -32602, message: "Invalid tool arguments" },
+  })}\n`);
+};
+
+const hasExactStringArgument = (value, key) =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.keys(value).length === 1 &&
+  typeof value[key] === "string";
+
 const countEvent = (event) => {
   if (!process.env.KIRO_FABRIC_MCP_EVENT_FILE) return;
   fs.appendFileSync(
@@ -75,6 +90,14 @@ input.on("line", (line) => {
   }
   if (request.method === "tools/call") {
     countEvent(`tools/call:${request.params.name}`);
+    const argumentKey = request.params.name === "get-model-schema" ? "endpoint_id" : "value";
+    if (
+      !["echo-value", "echo_value", "get-model-schema"].includes(request.params.name) ||
+      !hasExactStringArgument(request.params.arguments, argumentKey)
+    ) {
+      rejectInvalidArguments(request.id);
+      return;
+    }
     const sendResult = () =>
       respond(request.id, {
         content: [{

@@ -301,12 +301,17 @@ describe("ActionRegistry prepare before validate", () => {
     expect(result).toEqual({ session: "s1" });
   });
 
-  it("names the offending property path for unrepairable keys", async () => {
+  it("redacts caller-owned property names for unrepairable keys", async () => {
     const registry = new ActionRegistry();
     registry.register(probeProvider());
-    await expect(
-      registry.invoke("probe.pick", { session: "s1", before: 8 }, registryContext()),
-    ).rejects.toThrow(/probe\.pick[\s\S]*\/before/);
+    let message = "";
+    try {
+      await registry.invoke("probe.pick", { session: "s1", before: 8 }, registryContext());
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toMatch(/probe\.pick[\s\S]*\/<property>/);
+    expect(message).not.toContain("before");
   });
 
   it("still enforces required canonical keys after repair", async () => {

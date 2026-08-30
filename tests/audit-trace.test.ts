@@ -575,7 +575,7 @@ return true;
       stage: "validate",
       // TypeBox messages describe only schema expectations and never echo
       // argument values, so they are safe to surface.
-      expectedError: "Call failed during validate: Invalid arguments for demo.echo: must be string",
+      expectedError: "Call failed during validate: Invalid arguments for demo.echo: /value: must be string",
     },
     {
       name: "provider invocation",
@@ -831,6 +831,55 @@ return true;
     expect(JSON.stringify(createFabricPersistedExecutionDetails(result))).not.toContain(
       "arg-value-secret",
     );
+  });
+
+  it("redacts root and nested caller-owned property names from trace-safe schema paths", async () => {
+    const secretDescriptor = {
+      ...descriptor,
+      inputSchema: {
+        type: "object",
+        properties: {
+          nested: {
+            type: "object",
+            patternProperties: { "^nested-": { type: "string" } },
+            additionalProperties: false,
+          },
+        },
+        patternProperties: { "^root-": { type: "string" } },
+        additionalProperties: false,
+      },
+    };
+    const provider = demoProvider({
+      async describe(name) {
+        return name === "echo" ? secretDescriptor : undefined;
+      },
+    });
+    const { service, host } = serviceFor(provider);
+    const cases = [
+      {
+        secret: "root-attacker-secret-key",
+        code: `const key = "root-attacker-secret-key"; return tools.call({ ref: "demo.echo", args: { nested: {}, [key]: 42 } });`,
+      },
+      {
+        secret: "nested-attacker-secret-key",
+        code: `const key = "nested-attacker-secret-key"; return tools.call({ ref: "demo.echo", args: { nested: { [key]: 42 } } });`,
+      },
+    ];
+
+    for (const entry of cases) {
+      const result = await execute(service, host, entry.code);
+      expect(result.success).toBe(false);
+      expect(result.trace.operations[0]).toMatchObject({
+        outcome: "failed",
+        failureStage: "validate",
+      });
+      expect(result.trace.operations[0]?.error).toContain("/<property>");
+      expect(result.error).not.toContain(entry.secret);
+      expect(JSON.stringify(result.trace)).not.toContain(entry.secret);
+      expect(JSON.stringify(createFabricPersistedExecutionDetails(result))).not.toContain(
+        entry.secret,
+      );
+    }
   });
 
   it("preserves repeated phase occurrences", async () => {

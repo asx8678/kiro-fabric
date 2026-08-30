@@ -196,6 +196,16 @@ describe("McpProvider", () => {
         throw new Error("network denied");
       });
       await expect(registry.invoke(
+        "mcp.test.echo_value",
+        { value: "denied direct" },
+        registryContext(deny),
+      )).rejects.toThrow("Unknown Fabric action: mcp.test.echo_value");
+      // Cold dynamic resolution is cache-only and fails before approval rather
+      // than starting a server to discover the requested descriptor.
+      expect(deny).not.toHaveBeenCalled();
+      expect(countLines(eventFile)).toEqual([]);
+
+      await expect(registry.invoke(
         "mcp.$call",
         { server: "test", tool: "echo-value", args: { value: "denied" } },
         registryContext(deny),
@@ -261,6 +271,7 @@ describe("McpProvider", () => {
       await expect(provider.invoke("test.echo_value", { value: "again" }, context)).resolves.toMatchObject({
         text: "echo:again",
       });
+      await provider.list({ namespace: "fal-ai" }, context);
       const modelSchema = await provider.describe("fal_ai.get_model_schema", context);
       expect(modelSchema?.name).toBe("fal-ai.get-model-schema");
       await expect(
@@ -294,9 +305,11 @@ describe("McpProvider", () => {
           context,
         ),
       ).resolves.toEqual({ registered: "dynamic-server" });
-      await expect(
-        provider.invoke("dynamic_server.echo_value", { value: "dynamic" }, context),
-      ).resolves.toMatchObject({ text: "echo:dynamic" });
+      await expect(provider.invoke("$call", {
+        server: "dynamic-server",
+        tool: "echo-value",
+        args: { value: "dynamic" },
+      }, context)).resolves.toMatchObject({ text: "echo:dynamic" });
       expect(countLines(countFile).sort()).toEqual([
         "dynamic-server",
         "fal-ai",
@@ -310,6 +323,48 @@ describe("McpProvider", () => {
 });
 
 describe("McpProvider descriptor cache", () => {
+  it("fails closed on a cold direct ref and preserves approval-before-contact for the facade", async () => {
+    const directory = temporaryDirectory();
+    const countFile = path.join(directory, "tools-list.log");
+    const eventFile = path.join(directory, "events.log");
+    const configPath = writeTwoServerConfig({
+      directory,
+      countFile,
+      testEnv: { KIRO_FABRIC_MCP_EVENT_FILE: eventFile },
+    });
+    const provider = new McpProvider(
+      directory,
+      cacheConfig(configPath, { revalidate: "off" }),
+      { cache: new McpDescriptorCacheStore(path.join(directory, "mcp-cache.json")) },
+    );
+    const registry = new ActionRegistry();
+    registry.register(provider);
+    const deny = vi.fn(async () => {
+      throw new Error("network denied");
+    });
+    try {
+      await expect(registry.invoke(
+        "mcp.test.echo_value",
+        { value: "cold direct" },
+        registryContext(deny),
+      )).rejects.toThrow("Unknown Fabric action: mcp.test.echo_value");
+      expect(deny).not.toHaveBeenCalled();
+      expect(countLines(eventFile)).toEqual([]);
+      expect(countLines(countFile)).toEqual([]);
+
+      await expect(registry.invoke(
+        "mcp.$call",
+        { server: "test", tool: "echo-value", args: { value: "denied facade" } },
+        registryContext(deny),
+      )).rejects.toThrow("network denied");
+      expect(deny).toHaveBeenCalledOnce();
+      expect(countLines(eventFile)).toEqual([]);
+      expect(countLines(countFile)).toEqual([]);
+    } finally {
+      await registry.close();
+    }
+  });
+
   it("rejects invalid explicit args from a warm disk cache without contacting the server", async () => {
     const directory = temporaryDirectory();
     const countFile = path.join(directory, "tools-list.log");
@@ -353,7 +408,8 @@ describe("McpProvider descriptor cache", () => {
     }
 
     // Older or partial cache entries may have no schema. That metadata is
-    // advisory, so preserve the remote server's own validation fallback.
+    // advisory, so defer to the remote server, which must still reject the
+    // invalid arguments.
     const snapshot = JSON.parse(fs.readFileSync(cachePath, "utf8")) as {
       servers: Record<string, { tools: Array<{ name: string; inputSchema?: unknown }> }>;
     };
@@ -370,7 +426,7 @@ describe("McpProvider descriptor cache", () => {
         server: "test",
         tool: "echo-value",
         args: { value: 42 },
-      }, context)).resolves.toMatchObject({ text: "echo:42" });
+      }, context)).rejects.toThrow("Invalid tool arguments");
       expect(countLines(eventFile).filter((event) => event.includes("tools/call"))).toEqual([
         "test:tools/call:echo-value",
       ]);
@@ -689,10 +745,13 @@ describe("McpProvider descriptor cache", () => {
       // First contact rode the pooled connection into one background relist.
       expect(countLines(countFile).sort()).toEqual(["fal-ai", "test", "test"]);
 
-      // Unknown tools get one forced live relist before the error surfaces.
-      await expect(second.invoke("test.nope", {}, context)).rejects.toThrow(
-        "Unknown MCP tool",
-      );
+      // The explicit facade may force one approved live relist before an
+      // unknown-tool error; direct cache misses stay inert.
+      await expect(second.invoke("$call", {
+        server: "test",
+        tool: "nope",
+        args: {},
+      }, context)).rejects.toThrow("Unknown MCP tool");
       expect(countLines(countFile).sort()).toEqual(["fal-ai", "test", "test", "test"]);
     } finally {
       await second.close();
