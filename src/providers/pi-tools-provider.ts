@@ -437,7 +437,7 @@ export class PiToolsProvider implements FabricProvider {
         toolCallId,
         input: args,
       }));
-      context.updateArguments?.(args);
+      await context.updateArguments?.(args);
       if (preflight?.block) {
         throw new Error(preflight.reason || `${this.#toolLabel(name)} was blocked`);
       }

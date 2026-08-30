@@ -11,6 +11,7 @@ import {
   FabricSessionApprovals,
   type FabricAutoApprovalAudit,
 } from "./approval-controller.js";
+import { fabricApprovalScope } from "./session-approvals.js";
 import {
   FabricAutoApprovalClassifier,
   type FabricAutoApprovalDecision,
@@ -72,7 +73,12 @@ export class FabricDirectToolApproval {
         if (decision) this.#pendingUsage.set(event.toolCallId, decision.usage);
       },
     );
-    await controller.approve(action, isRecord(event.input) ? event.input : {});
+    const args = isRecord(event.input) ? event.input : {};
+    const scope = fabricApprovalScope({ project: context.cwd });
+    const lease = await controller.approve(action, args, scope);
+    // Direct tools have no second host bridge: before_tool_call is the final
+    // boundary immediately preceding Pi's invocation, so consume here.
+    lease.consume(action, args, scope);
   }
 
   takeUsage(toolCallId: string): Usage | undefined {

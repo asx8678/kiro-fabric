@@ -214,7 +214,7 @@ export interface FabricInvocationContext {
   attachMedia?(blocks: FabricMediaBlock[], note?: string): void;
   // Providers call this after mutable tool_call middleware has run so live and
   // durable audit surfaces reflect the arguments actually passed to the tool.
-  updateArguments?(args: Record<string, unknown>): void;
+  updateArguments?(args: Record<string, unknown>): void | Promise<void>;
   // Ephemeral renderer-only metadata. It is exposed to live Fabric previews but
   // never projected into the durable execution trace.
   attachPreview?(preview: unknown): void;

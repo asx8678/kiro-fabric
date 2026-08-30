@@ -6,7 +6,11 @@
 // nested Fabric approval decisions to the MCP client.
 
 import type { FabricActionDescriptor, FabricRisk } from "../protocol.js";
-import type { FabricAutoApprovalAudit } from "../core/session-approvals.js";
+import {
+  type FabricApprovalLease,
+  type FabricApprovalScope,
+  type FabricAutoApprovalAudit,
+} from "../core/session-approvals.js";
 
 export interface FabricResolvedAction extends FabricActionDescriptor {
   ref: string;
@@ -49,9 +53,15 @@ export interface FabricHostApprover {
   /**
    * Gate an action. Must throw to deny. Implementations must fail closed:
    * when approval is unavailable (no UI, no elicitation), `ask` and `auto`
-   * policies must throw a stable diagnostic rather than auto-allow.
+   * policies must throw a stable diagnostic rather than auto-allow. Legacy
+   * explicit broad-grant hosts may resolve void; the execution service wraps
+   * that decision in a bound single-use lease before returning it downstream.
    */
-  approve(action: FabricResolvedAction, args: Record<string, unknown>): Promise<void>;
+  approve(
+    action: FabricResolvedAction,
+    args: Record<string, unknown>,
+    scope?: FabricApprovalScope,
+  ): Promise<FabricApprovalLease | void>;
 }
 
 export interface FabricExecutionHost {
@@ -111,9 +121,18 @@ export class FabricDenyApprovalFallback implements FabricHostApprover {
     readonly unavailableReason: string,
   ) {}
 
-  async approve(action: FabricResolvedAction): Promise<void> {
+  async approve(
+    action: FabricResolvedAction,
+    args: Record<string, unknown> = {},
+    scope: FabricApprovalScope = {},
+  ): Promise<void> {
     const mode = this.config[action.risk];
+    // Preserve the public fallback's historical explicit-broad-grant contract.
+    // ActionRegistry converts this successful void into a bound call lease at
+    // the final invocation boundary.
     if (mode === "allow" || this.sessionApprovals.has(action.risk)) return;
+    void args;
+    void scope;
     throw new Error(
       `${action.ref} requires ${action.risk} approval, but ${this.unavailableReason}`,
     );

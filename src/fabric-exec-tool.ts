@@ -161,7 +161,7 @@ export const createPiExecutionHost = (
       classifier ?? new FabricAutoApprovalClassifier(),
       recordAutoDecision,
     );
-    return { approve: (action, args) => controller.approve(action, args) };
+    return { approve: (action, args, scope) => controller.approve(action, args, scope) };
   },
 });
 

@@ -31,6 +31,13 @@ import {
 import { schemaValidationMessage } from "../schema-validation.js";
 import { formatFabricEffectConflict } from "./effect-conflict.js";
 import { stableJsonHash } from "./stable-hash.js";
+import {
+  fabricApprovalArgumentDigest,
+  FabricSessionApprovals,
+  type FabricApprovalLease,
+  type FabricApprovalLeaseAudit,
+  type FabricApprovalScope,
+} from "./session-approvals.js";
 import type { FabricNestedToolResultProxy } from "./tool-result-proxy.js";
 import {
   FabricProviderBindings,
@@ -66,6 +73,8 @@ export interface FabricCallAudit {
   mediaNote?: string;
   preview?: unknown;
   effectConflicts?: FabricEffectConflict[];
+  /** Hash-only proof that the approval was bound and consumed for this call. */
+  approval?: FabricApprovalLeaseAudit[];
 }
 
 export type FabricRegistryActivityEvent =
@@ -103,7 +112,9 @@ export interface FabricRegistryInvocationContext extends FabricInvocationContext
   approve(
     action: ResolvedFabricAction,
     args: Record<string, unknown>,
-  ): Promise<void>;
+    scope?: FabricApprovalScope,
+  ): Promise<FabricApprovalLease | readonly FabricApprovalLease[] | void>;
+  approvalScope?: FabricApprovalScope;
   audits: FabricCallAudit[];
   maxResultChars: number;
   trace?: FabricExecutionTraceRecorder;
@@ -281,6 +292,10 @@ const conflictBetween = (
 
 export class ActionRegistry {
   readonly #providerBindings = new FabricProviderBindings();
+  // Compatibility for internal/external invocation contexts that explicitly
+  // grant the call by returning void. They still receive a bound, single-use
+  // lease at the registry boundary rather than bypassing lease consumption.
+  readonly #compatibilityApprovalLeases = new FabricSessionApprovals();
   readonly #activeEffects = new Map<string, { ref: string; effect: FabricActionEffect }>();
   readonly #unavailable = new Map<string, string>();
 
@@ -854,7 +869,19 @@ export class ActionRegistry {
       if (invalid) throw new FabricTraceSafeError(`Invalid arguments for ${ref}: ${invalid}`);
 
       failureStage = "approve";
-      await runAbortable(context.signal, () => context.approve(action, preparedArgs));
+      const requestApproval = (candidateArgs: Record<string, unknown>) =>
+        context.approvalScope === undefined
+          ? context.approve(action, candidateArgs)
+          : context.approve(action, candidateArgs, context.approvalScope);
+      const granted = await runAbortable(context.signal, () => requestApproval(preparedArgs));
+      const effectiveGrant = granted ?? this.#compatibilityApprovalLeases.issueLease(
+        action,
+        preparedArgs,
+        context.approvalScope ?? {},
+        "explicit-broad",
+      );
+      const approvalAudits = (Array.isArray(effectiveGrant) ? effectiveGrant : [effectiveGrant])
+        .map((lease) => lease.consume(action, preparedArgs, context.approvalScope));
 
       failureStage = "invoke";
       const nestedToolCallId = `${NESTED_TOOL_CALL_ID_PREFIX}${randomUUID()}`;
@@ -887,6 +914,7 @@ export class ActionRegistry {
           MAX_AUDIT_VALUE_CHARS,
         ) as Record<string, unknown>,
         ...(effectConflicts.length > 0 ? { effectConflicts } : {}),
+        approval: approvalAudits,
       };
       audit = activeAudit;
       invocationActive = true;
@@ -929,8 +957,24 @@ export class ActionRegistry {
             for (const block of blocks) activeAudit.media.push(block);
             if (note) activeAudit.mediaNote = note;
           },
-          updateArguments(updatedArgs) {
+          updateArguments: async (updatedArgs) => {
             if (!invocationActive) return;
+            const updatedDigest = fabricApprovalArgumentDigest(updatedArgs);
+            if (approvalAudits.every((approved) => approved.argumentDigest !== updatedDigest)) {
+              // Native tool_call middleware is allowed to rewrite arguments. It
+              // cannot inherit the preflight lease: obtain and consume a fresh
+              // binding before the native tool executes.
+              const rebound = await requestApproval(updatedArgs);
+              const reboundGrant = rebound ?? this.#compatibilityApprovalLeases.issueLease(
+                action,
+                updatedArgs,
+                context.approvalScope ?? {},
+                "explicit-broad",
+              );
+              for (const lease of Array.isArray(reboundGrant) ? reboundGrant : [reboundGrant]) {
+                approvalAudits.push(lease.consume(action, updatedArgs, context.approvalScope));
+              }
+            }
             const updatedPreview = previewArgs(ref, updatedArgs);
             activeAudit.args = boundedPreviewValue(
               updatedPreview,

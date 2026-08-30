@@ -1,5 +1,9 @@
 import type { FabricMcpConfig } from "../config.js";
 import type {
+  FabricApprovalLease,
+  FabricApprovalScope,
+} from "../core/session-approvals.js";
+import type {
   FabricActionDescriptor,
   FabricInvocationContext,
   FabricProvider,
@@ -104,23 +108,24 @@ export class KiroMcpProvider implements FabricProvider {
           approve?: (
             action: FabricActionDescriptor & { ref: string; provider: string },
             approvedArgs: Record<string, unknown>,
-          ) => Promise<void>;
+            scope?: FabricApprovalScope,
+          ) => Promise<FabricApprovalLease>;
+          approvalScope?: FabricApprovalScope;
         };
         if (!approval.approve) {
           throw new Error("stdio MCP execution approval is unavailable; refusing to start server");
         }
-        await approval.approve(
-          {
-            name: "$stdio",
-            ref: "mcp.$stdio",
-            provider: "mcp",
-            description: "Start a configured stdio MCP server executable",
-            inputSchema: descriptors[1]!.inputSchema,
-            risk: "execute",
-            namespace: "management",
-          },
-          args,
-        );
+        const stdioAction = {
+          name: "$stdio",
+          ref: "mcp.$stdio",
+          provider: "mcp",
+          description: "Start a configured stdio MCP server executable",
+          inputSchema: descriptors[1]!.inputSchema,
+          risk: "execute",
+          namespace: "management",
+        } as const;
+        const lease = await approval.approve(stdioAction, args, approval.approvalScope);
+        lease.consume(stdioAction, args, approval.approvalScope);
       }
     }
     return this.#delegate.invoke(actionName, args, context);

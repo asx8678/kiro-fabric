@@ -6,6 +6,7 @@ import {
 } from "../src/core/approval-controller.js";
 import type { FabricAutoApprovalClassifier } from "../src/core/auto-approval-classifier.js";
 import type { ResolvedFabricAction } from "../src/core/action-registry.js";
+import { fabricApprovalScope } from "../src/core/session-approvals.js";
 
 const action: ResolvedFabricAction = {
   ref: "demo.write",
@@ -214,6 +215,97 @@ describe("ApprovalController", () => {
     ]);
 
     expect(custom).toHaveBeenCalledOnce();
+  });
+
+  it("binds a one-time lease to descriptor, arguments, plan, and project", async () => {
+    const controller = new ApprovalController(
+      policies,
+      tuiContext(vi.fn(async () => "allow-once")),
+    );
+    const args = { path: "private.txt", token: "do-not-audit" };
+    const scope = fabricApprovalScope({
+      plan: "await pi.write({ path: 'private.txt' })",
+      project: "/secret/project",
+    });
+    const lease = await controller.approve(action, args, scope);
+    const audit = lease.consume(action, args, scope);
+
+    expect(audit.source).toBe("allow-once");
+    expect(audit.action).toBe(action.ref);
+    expect(audit.descriptorDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(audit.argumentDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(audit.planDigest).toBe(scope.planDigest);
+    expect(audit.projectDigest).toBe(scope.projectDigest);
+    expect(JSON.stringify(audit)).not.toContain("do-not-audit");
+    expect(JSON.stringify(audit)).not.toContain("/secret/project");
+    expect(JSON.stringify(audit)).not.toContain("pi.write");
+  });
+
+  it.each([
+    ["arguments", action, { path: "changed" }, fabricApprovalScope({ plan: "p", project: "/a" })],
+    ["descriptor", { ...action, description: "Changed after approval" }, { path: "original" }, fabricApprovalScope({ plan: "p", project: "/a" })],
+    ["plan", action, { path: "original" }, fabricApprovalScope({ plan: "other", project: "/a" })],
+    ["project", action, { path: "original" }, fabricApprovalScope({ plan: "p", project: "/b" })],
+  ])("rejects and burns a lease with mismatched %s binding", async (_kind, candidateAction, candidateArgs, candidateScope) => {
+    const controller = new ApprovalController(
+      policies,
+      tuiContext(vi.fn(async () => "allow-once")),
+    );
+    const expectedScope = fabricApprovalScope({ plan: "p", project: "/a" });
+    const lease = await controller.approve(action, { path: "original" }, expectedScope);
+
+    expect(() => lease.consume(candidateAction, candidateArgs, candidateScope)).toThrow(
+      "binding does not match",
+    );
+    expect(() => lease.consume(action, { path: "original" }, expectedScope)).toThrow(
+      "already been consumed",
+    );
+  });
+
+  it("expires leases before side effects can use them", async () => {
+    let now = 1_000;
+    const session = new FabricSessionApprovals({ clock: () => now, leaseTtlMs: 50 });
+    const controller = new ApprovalController(
+      policies,
+      tuiContext(vi.fn(async () => "allow-once")),
+      session,
+    );
+    const lease = await controller.approve(action, {});
+    now = 1_051;
+
+    expect(() => lease.consume(action, {})).toThrow("has expired");
+    expect(() => lease.consume(action, {})).toThrow("already been consumed");
+  });
+
+  it("atomically permits only one concurrent consumer", async () => {
+    const controller = new ApprovalController(
+      policies,
+      tuiContext(vi.fn(async () => "allow-once")),
+    );
+    const lease = await controller.approve(action, {});
+    const settled = await Promise.allSettled([
+      Promise.resolve().then(() => lease.consume(action, {})),
+      Promise.resolve().then(() => lease.consume(action, {})),
+    ]);
+
+    expect(settled.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
+    expect(settled.filter((entry) => entry.status === "rejected")).toHaveLength(1);
+  });
+
+  it("keeps explicit broad session grants while issuing distinct bound leases", async () => {
+    const custom = vi.fn(async () => "allow-session");
+    const session = new FabricSessionApprovals();
+    const controller = new ApprovalController(policies, tuiContext(custom), session);
+    const firstArgs = { path: "first" };
+    const secondArgs = { path: "second" };
+
+    const first = await controller.approve(action, firstArgs);
+    const second = await controller.approve(action, secondArgs);
+
+    expect(custom).toHaveBeenCalledOnce();
+    expect(first.id).not.toBe(second.id);
+    expect(first.consume(action, firstArgs).source).toBe("session");
+    expect(second.consume(action, secondArgs).source).toBe("session");
   });
 
   it("denies actions blocked by policy without prompting", async () => {

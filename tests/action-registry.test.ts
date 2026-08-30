@@ -4,6 +4,7 @@ import {
   ActionRegistry,
   type FabricCallAudit,
 } from "../src/core/action-registry.js";
+import { FabricSessionApprovals, fabricApprovalScope } from "../src/core/session-approvals.js";
 import type {
   FabricInvocationContext,
   FabricProvider,
@@ -60,10 +61,15 @@ describe("ActionRegistry", () => {
     expect((await registry.search("echo", context))[0]?.ref).toBe("demo.echo");
     expect((await registry.describe("demo.echo", context)).risk).toBe("read");
 
-    const approve = vi.fn(async () => {});
+    const leases = new FabricSessionApprovals();
+    const approvalScope = fabricApprovalScope({ plan: "return demo.echo", project: context.cwd });
+    const approve = vi.fn(async (action, args, scope) =>
+      leases.issueLease(action, args, scope ?? {}, "allow-once"),
+    );
     const audits: FabricCallAudit[] = [];
     const result = await registry.invoke("demo.echo", { value: "hello" }, {
       ...context,
+      approvalScope,
       approve,
       audits,
       maxResultChars: 10_000,
@@ -77,6 +83,14 @@ describe("ActionRegistry", () => {
         tool: "echo",
         args: { value: "hello" },
         success: true,
+        approval: [{
+          source: "allow-once",
+          action: "demo.echo",
+          argumentDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+          descriptorDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+          planDigest: approvalScope.planDigest,
+          projectDigest: approvalScope.projectDigest,
+        }],
       },
     ]);
   });
@@ -171,6 +185,52 @@ describe("ActionRegistry", () => {
     const drifted = await registry.catalog(context);
     expect(drifted.root.descriptorHash).not.toBe(originalHash);
     expect(drifted.providers[0]!.actions[0]!.ref).toBe("storage.inspect");
+  });
+
+  it("does not invoke a provider when the returned lease is bound to different arguments", async () => {
+    const invoke = vi.fn(async () => "unsafe");
+    const registry = new ActionRegistry();
+    registry.register({ ...provider(), invoke });
+    const leases = new FabricSessionApprovals();
+
+    await expect(registry.invoke("demo.echo", { value: "requested" }, {
+      ...context,
+      approve: async (resolved, _args, scope) =>
+        leases.issueLease(resolved, { value: "substituted" }, scope ?? {}, "allow-once"),
+      audits: [],
+      maxResultChars: 10_000,
+    })).rejects.toThrow("binding does not match");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("requires a newly argument-bound lease after provider preflight rewrites", async () => {
+    const registry = new ActionRegistry();
+    registry.register({
+      ...provider(),
+      async invoke(_name, _args, invocationContext) {
+        const rewritten = { value: "rewritten" };
+        await invocationContext.updateArguments?.(rewritten);
+        return rewritten.value;
+      },
+    });
+    const leases = new FabricSessionApprovals();
+    const approve = vi.fn(async (resolved, args, scope) =>
+      leases.issueLease(resolved, args, scope ?? {}, "allow-once"),
+    );
+    const audits: FabricCallAudit[] = [];
+
+    await expect(registry.invoke("demo.echo", { value: "original" }, {
+      ...context,
+      approve,
+      audits,
+      maxResultChars: 10_000,
+    })).resolves.toBe("rewritten");
+
+    expect(approve).toHaveBeenCalledTimes(2);
+    expect(audits[0]?.approval).toHaveLength(2);
+    expect(audits[0]?.approval?.[0]?.argumentDigest)
+      .not.toBe(audits[0]?.approval?.[1]?.argumentDigest);
+    expect(audits[0]?.args).toEqual({ value: "rewritten" });
   });
 
   it("emits structured invocation activity without exposing another model tool", async () => {

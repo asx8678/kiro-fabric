@@ -28,9 +28,12 @@ import {
   ActionRegistry,
   type FabricCallAudit,
   type FabricRegistryActivityEvent,
+  type ResolvedFabricAction,
 } from "./core/action-registry.js";
 import {
+  fabricApprovalScope,
   FabricSessionApprovals,
+  type FabricApprovalLease,
   type FabricAutoApprovalAudit,
 } from "./core/session-approvals.js";
 import type { FabricAutoApprovalClassifier } from "./core/auto-approval-classifier.js";
@@ -283,6 +286,19 @@ export class FabricExecutionService {
     const approval = options.host.createApprover(recordAutoDecision, (usage) => {
       classifierUsages.push(usage);
     });
+    // Bind every per-call lease to this exact checked program and project. Only
+    // these digests cross the approval/audit boundary; source and cwd do not.
+    const approvalScope = fabricApprovalScope({
+      plan: options.code,
+      project: options.host.cwd,
+    });
+    const requestApprovalLease = async (
+      action: ResolvedFabricAction,
+      args: Record<string, unknown>,
+      scope = approvalScope,
+    ): Promise<FabricApprovalLease> =>
+      (await approval.approve(action, args, scope)) ??
+      this.sessionApprovals.issueLease(action, args, scope, "explicit-broad");
     const audits: FabricCallAudit[] = [];
     const phases: string[] = [];
     const workflowSpans = new Map<
@@ -385,6 +401,7 @@ export class FabricExecutionService {
       extensionContext: options.host.payload as import("@earendil-works/pi-coding-agent").ExtensionContext,
       update,
       ...(this.#capabilityView ? { capabilityView: this.#capabilityView } : {}),
+      approvalScope,
     };
     // Start known orchestration programs with the longer deadline. Calls
     // reached through generic or computed refs are classified again at the
@@ -498,13 +515,33 @@ export class FabricExecutionService {
                 this.authorizer!.authorize(action.ref, options.parentToolCallId),
             }
           : {}),
-        approve: async (action, preparedArgs) => {
+        approve: async (action, preparedArgs, scope) => {
           if (action.ref === "schema.commit") {
-            await approval.approve({ ...action, risk: "write" }, preparedArgs);
-            await approval.approve({ ...action, risk: "execute" }, preparedArgs);
-            return;
+            const writeAction = { ...action, risk: "write" as const };
+            const executeAction = { ...action, risk: "execute" as const };
+            const consumedScope = scope ?? approvalScope;
+            const writeLease = await requestApprovalLease(
+              writeAction,
+              preparedArgs,
+              consumedScope,
+            );
+            const executeLease = await requestApprovalLease(
+              executeAction,
+              preparedArgs,
+              consumedScope,
+            );
+            const bind = (
+              lease: FabricApprovalLease,
+              approvedAction: ResolvedFabricAction,
+            ): FabricApprovalLease => ({
+              id: lease.id,
+              expiresAt: lease.expiresAt,
+              consume: (_invokedAction, args, consumedScope) =>
+                lease.consume(approvedAction, args, consumedScope),
+            });
+            return [bind(writeLease, writeAction), bind(executeLease, executeAction)];
           }
-          await approval.approve(action, preparedArgs);
+          return requestApprovalLease(action, preparedArgs, scope ?? approvalScope);
         },
         audits,
         maxResultChars: this.config.executor.maxNestedResultChars,

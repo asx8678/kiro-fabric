@@ -44,9 +44,19 @@ const sessionLabel = (risk: FabricRisk): string =>
   `Allow ${risk} access for this session`;
 
 export { FabricSessionApprovals } from "./session-approvals.js";
-export type { FabricAutoApprovalAudit } from "./session-approvals.js";
-import { FabricSessionApprovals } from "./session-approvals.js";
-import type { FabricAutoApprovalAudit } from "./session-approvals.js";
+export type {
+  FabricApprovalLease,
+  FabricApprovalScope,
+  FabricAutoApprovalAudit,
+} from "./session-approvals.js";
+import {
+  fabricApprovalScope,
+  FabricSessionApprovals,
+  type FabricApprovalLease,
+  type FabricApprovalLeaseSource,
+  type FabricApprovalScope,
+  type FabricAutoApprovalAudit,
+} from "./session-approvals.js";
 
 export class ApprovalController {
   readonly #inheritedRisks = new Set<FabricRisk>(inheritedRisks());
@@ -65,23 +75,24 @@ export class ApprovalController {
   async approve(
     action: ResolvedFabricAction,
     args: Record<string, unknown> = {},
-  ): Promise<void> {
+    scope: FabricApprovalScope = {},
+  ): Promise<FabricApprovalLease> {
+    const effectiveScope = scope.projectDigest || typeof this.context.cwd !== "string"
+      ? scope
+      : { ...scope, ...fabricApprovalScope({ project: this.context.cwd }) };
+    const issue = (source: FabricApprovalLeaseSource): FabricApprovalLease =>
+      this.sessionApprovals.issueLease(action, args, effectiveScope, source);
     const mode = this.config[action.risk];
-    if (
-      mode === "allow" ||
-      this.#inheritedRisks.has(action.risk) ||
-      this.sessionApprovals.approvedRisks.has(action.risk)
-    ) return;
+    if (mode === "allow") return issue("policy");
+    if (this.#inheritedRisks.has(action.risk)) return issue("inherited");
+    if (this.sessionApprovals.approvedRisks.has(action.risk)) return issue("session");
     if (mode === "deny") {
       throw new FabricTraceSafeError(`${action.ref} is denied by the Fabric ${action.risk} policy`);
     }
 
-    await this.sessionApprovals.serialize(async () => {
-      if (this.sessionApprovals.approvedRisks.has(action.risk)) return;
-      if (mode !== "auto") {
-        await this.#requestApproval(action);
-        return;
-      }
+    return this.sessionApprovals.serialize(async () => {
+      if (this.sessionApprovals.approvedRisks.has(action.risk)) return issue("session");
+      if (mode !== "auto") return issue(await this.#requestApproval(action));
 
       let decision: FabricAutoApprovalDecision;
       try {
@@ -101,11 +112,10 @@ export class ApprovalController {
           error: message,
           at: Date.now(),
         });
-        await this.#requestApproval(
+        return issue(await this.#requestApproval(
           action,
           `Auto mode could not determine safety: ${message}`,
-        );
-        return;
+        ));
       }
       this.onAutoDecision?.({
         action: action.ref,
@@ -115,18 +125,18 @@ export class ApprovalController {
         model: decision.model,
         at: Date.now(),
       }, decision);
-      if (decision.decision === "allow") return;
-      await this.#requestApproval(
+      if (decision.decision === "allow") return issue("auto");
+      return issue(await this.#requestApproval(
         action,
         `Auto mode escalated (${decision.model}): ${decision.reason}`,
-      );
+      ));
     });
   }
 
   async #requestApproval(
     action: ResolvedFabricAction,
     escalationReason?: string,
-  ): Promise<void> {
+  ): Promise<"allow-once" | "session"> {
     if (!this.context.hasUI) {
       throw new FabricTraceSafeError(`${action.ref} requires approval, but no interactive UI is available`);
     }
@@ -149,9 +159,10 @@ export class ApprovalController {
         `Allowed ${action.risk} access for this Pi session`,
         "info",
       );
-      return;
+      return "session";
     }
     this.context.ui.notify(`Allowed once: ${action.ref}`, "info");
+    return "allow-once";
   }
 
   async #requestDialogApproval(
