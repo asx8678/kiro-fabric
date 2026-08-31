@@ -21926,9 +21926,9 @@ var fabricExecTitleHintCached = (code) => {
 // src/execution-service.ts
 var runtimeDependencies;
 var loadRuntimeDependencies = () => runtimeDependencies ??= Promise.all([
-  import("./quickjs-runtime-CBBIHTP6.js"),
-  import("./node-process-runtime-AKJWGM3L.js"),
-  import("./type-checker-E2M6CUBX.js"),
+  import("./quickjs-runtime-PPKPDEBZ.js"),
+  import("./node-process-runtime-3TVSCQCC.js"),
+  import("./type-checker-ZXL6HVHN.js"),
   import("./guest-types-6A5BKABT.js"),
   import("./dynamic-guest-types-YIYN3HDU.js"),
   import("./core-override-guest-types-75J6JNIH.js")

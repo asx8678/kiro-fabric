@@ -12,7 +12,7 @@ import {
   typeCheckFabricCode,
   typeCheckFabricCodeInWorker,
   wrapFabricGuestCode
-} from "./chunk-S3FSRH3K.js";
+} from "./chunk-MMKAFZEV.js";
 import "./chunk-GX475RD4.js";
 export {
   DEFAULT_COMPILER_TIMEOUT_MS,

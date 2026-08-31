@@ -12,7 +12,7 @@ import {
   createGuestStackMap,
   guestSetupForCoreToolNamespace,
   remapGuestErrorText
-} from "./chunk-ZW27TB6Y.js";
+} from "./chunk-3CTLDJEX.js";
 import {
   runAbortable,
   settleWithin
@@ -25,7 +25,7 @@ import {
 import "./chunk-SXRQQ7MG.js";
 import {
   transpileFabricCodeWithSourceMap
-} from "./chunk-S3FSRH3K.js";
+} from "./chunk-MMKAFZEV.js";
 import "./chunk-P6PCWHKI.js";
 import "./chunk-Z3MYUJJ2.js";
 import "./chunk-MPF465HQ.js";

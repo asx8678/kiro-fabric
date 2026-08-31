@@ -6,15 +6,17 @@ globalThis.__dirname = __kfDirname(globalThis.__filename);
 const require = __kfCreateRequire(import.meta.url);
 
 import {
-  effectiveFabricSourceLimit,
-  fabricSourceLimitError,
-  fabricTranspiledLimitError,
   runAbortable,
   settleWithin
-} from "./chunk-7PM3D3KB.js";
+} from "./chunk-SY6LZTI3.js";
+import {
+  effectiveFabricSourceLimit,
+  fabricSourceLimitError,
+  fabricTranspiledLimitError
+} from "./chunk-PGDCKPF6.js";
 import {
   transpileFabricCodeWithSourceMap
-} from "./chunk-S3FSRH3K.js";
+} from "./chunk-MMKAFZEV.js";
 
 // node_modules/.pnpm/@jitl+quickjs-singlefile-mjs-release-sync@0.32.0/node_modules/@jitl/quickjs-singlefile-mjs-release-sync/dist/index.mjs
 var variant = { type: "sync", importFFI: () => import("./ffi-OJPXGYPQ.js").then((mod) => mod.QuickJSFFI), importModuleLoader: () => import("./emscripten-module-Q67P5WYC-BGOVPOTY.js").then((mod) => mod.default) };

@@ -12,7 +12,7 @@ import {
   createGuestStackMap,
   guestSetupForCoreToolNamespace,
   remapGuestErrorText
-} from "./chunk-AL2EEPXL.js";
+} from "./chunk-2BL5QOED.js";
 import {
   effectiveFabricSourceLimit,
   fabricSourceLimitError,
@@ -25,7 +25,7 @@ import "./chunk-Z3MYUJJ2.js";
 import "./chunk-MPF465HQ.js";
 import {
   transpileFabricCodeWithSourceMap
-} from "./chunk-S3FSRH3K.js";
+} from "./chunk-MMKAFZEV.js";
 import "./chunk-GX475RD4.js";
 
 // src/runtime/node-process-runtime.ts

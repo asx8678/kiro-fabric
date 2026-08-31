@@ -17859,10 +17859,10 @@ ${lanes.join("\n")}
       function isCommonJSContainingModuleKind(kind) {
         return kind === 1 || 100 <= kind && kind <= 199;
       }
-      function isEffectiveExternalModule(node, compilerOptions2) {
-        return isExternalModule(node) || isCommonJSContainingModuleKind(getEmitModuleKind(compilerOptions2)) && !!node.commonJsModuleIndicator;
+      function isEffectiveExternalModule(node, compilerOptions) {
+        return isExternalModule(node) || isCommonJSContainingModuleKind(getEmitModuleKind(compilerOptions)) && !!node.commonJsModuleIndicator;
       }
-      function isEffectiveStrictModeSourceFile(node, compilerOptions2) {
+      function isEffectiveStrictModeSourceFile(node, compilerOptions) {
         switch (node.scriptKind) {
           case 1:
           case 3:
@@ -17875,13 +17875,13 @@ ${lanes.join("\n")}
         if (node.isDeclarationFile) {
           return false;
         }
-        if (getAlwaysStrict(compilerOptions2)) {
+        if (getAlwaysStrict(compilerOptions)) {
           return true;
         }
         if (startsWithUseStrict(node.statements)) {
           return true;
         }
-        if (isExternalModule(node) || getIsolatedModules(compilerOptions2)) {
+        if (isExternalModule(node) || getIsolatedModules(compilerOptions)) {
           return true;
         }
         return false;
@@ -19439,8 +19439,8 @@ ${lanes.join("\n")}
             return void 0;
         }
       }
-      function shouldRewriteModuleSpecifier(specifier, compilerOptions2) {
-        return !!compilerOptions2.rewriteRelativeImportExtensions && pathIsRelative(specifier) && !isDeclarationFileName(specifier) && hasTSFileExtension(specifier);
+      function shouldRewriteModuleSpecifier(specifier, compilerOptions) {
+        return !!compilerOptions.rewriteRelativeImportExtensions && pathIsRelative(specifier) && !isDeclarationFileName(specifier) && hasTSFileExtension(specifier);
       }
       function getExternalModuleName(node) {
         switch (node.kind) {
@@ -20881,10 +20881,10 @@ ${lanes.join("\n")}
         return referencePath ? ensurePathIsNonModuleName(extensionless) : extensionless;
       }
       function getOwnEmitOutputFilePath(fileName, host, extension) {
-        const compilerOptions2 = host.getCompilerOptions();
+        const compilerOptions = host.getCompilerOptions();
         let emitOutputFilePathWithoutExtension;
-        if (compilerOptions2.outDir) {
-          emitOutputFilePathWithoutExtension = removeFileExtension(getSourceFilePathInNewDir(fileName, host, compilerOptions2.outDir));
+        if (compilerOptions.outDir) {
+          emitOutputFilePathWithoutExtension = removeFileExtension(getSourceFilePathInNewDir(fileName, host, compilerOptions.outDir));
         } else {
           emitOutputFilePathWithoutExtension = removeFileExtension(fileName);
         }
@@ -22556,24 +22556,24 @@ ${lanes.join("\n")}
       var _computedOptions = createComputedCompilerOptions({
         allowImportingTsExtensions: {
           dependencies: ["rewriteRelativeImportExtensions"],
-          computeValue: (compilerOptions2) => {
-            return !!(compilerOptions2.allowImportingTsExtensions || compilerOptions2.rewriteRelativeImportExtensions);
+          computeValue: (compilerOptions) => {
+            return !!(compilerOptions.allowImportingTsExtensions || compilerOptions.rewriteRelativeImportExtensions);
           }
         },
         target: {
           dependencies: [],
-          computeValue: (compilerOptions2) => {
-            const target = compilerOptions2.target === 0 ? void 0 : compilerOptions2.target;
+          computeValue: (compilerOptions) => {
+            const target = compilerOptions.target === 0 ? void 0 : compilerOptions.target;
             return target ?? 12;
           }
         },
         module: {
           dependencies: ["target"],
-          computeValue: (compilerOptions2) => {
-            if (typeof compilerOptions2.module === "number") {
-              return compilerOptions2.module;
+          computeValue: (compilerOptions) => {
+            if (typeof compilerOptions.module === "number") {
+              return compilerOptions.module;
             }
-            const target = _computedOptions.target.computeValue(compilerOptions2);
+            const target = _computedOptions.target.computeValue(compilerOptions);
             if (target === 99) {
               return 99;
             }
@@ -22591,11 +22591,11 @@ ${lanes.join("\n")}
         },
         moduleResolution: {
           dependencies: ["module", "target"],
-          computeValue: (compilerOptions2) => {
-            if (compilerOptions2.moduleResolution !== void 0) {
-              return compilerOptions2.moduleResolution;
+          computeValue: (compilerOptions) => {
+            if (compilerOptions.moduleResolution !== void 0) {
+              return compilerOptions.moduleResolution;
             }
-            const moduleKind = _computedOptions.module.computeValue(compilerOptions2);
+            const moduleKind = _computedOptions.module.computeValue(compilerOptions);
             switch (moduleKind) {
               case 0:
               case 2:
@@ -22613,47 +22613,47 @@ ${lanes.join("\n")}
         },
         moduleDetection: {
           dependencies: ["module", "target"],
-          computeValue: (compilerOptions2) => {
-            if (compilerOptions2.moduleDetection !== void 0) {
-              return compilerOptions2.moduleDetection;
+          computeValue: (compilerOptions) => {
+            if (compilerOptions.moduleDetection !== void 0) {
+              return compilerOptions.moduleDetection;
             }
-            const moduleKind = _computedOptions.module.computeValue(compilerOptions2);
+            const moduleKind = _computedOptions.module.computeValue(compilerOptions);
             return 100 <= moduleKind && moduleKind <= 199 ? 3 : 2;
           }
         },
         isolatedModules: {
           dependencies: ["verbatimModuleSyntax"],
-          computeValue: (compilerOptions2) => {
-            return !!(compilerOptions2.isolatedModules || compilerOptions2.verbatimModuleSyntax);
+          computeValue: (compilerOptions) => {
+            return !!(compilerOptions.isolatedModules || compilerOptions.verbatimModuleSyntax);
           }
         },
         esModuleInterop: {
           dependencies: [],
-          computeValue: (compilerOptions2) => {
-            if (compilerOptions2.esModuleInterop !== void 0) {
-              return compilerOptions2.esModuleInterop;
+          computeValue: (compilerOptions) => {
+            if (compilerOptions.esModuleInterop !== void 0) {
+              return compilerOptions.esModuleInterop;
             }
             return true;
           }
         },
         allowSyntheticDefaultImports: {
           dependencies: [],
-          computeValue: (compilerOptions2) => {
-            if (compilerOptions2.allowSyntheticDefaultImports !== void 0) {
-              return compilerOptions2.allowSyntheticDefaultImports;
+          computeValue: (compilerOptions) => {
+            if (compilerOptions.allowSyntheticDefaultImports !== void 0) {
+              return compilerOptions.allowSyntheticDefaultImports;
             }
             return true;
           }
         },
         resolvePackageJsonExports: {
           dependencies: ["moduleResolution", "module", "target"],
-          computeValue: (compilerOptions2) => {
-            const moduleResolution = _computedOptions.moduleResolution.computeValue(compilerOptions2);
+          computeValue: (compilerOptions) => {
+            const moduleResolution = _computedOptions.moduleResolution.computeValue(compilerOptions);
             if (!moduleResolutionSupportsPackageJsonExportsAndImports(moduleResolution)) {
               return false;
             }
-            if (compilerOptions2.resolvePackageJsonExports !== void 0) {
-              return compilerOptions2.resolvePackageJsonExports;
+            if (compilerOptions.resolvePackageJsonExports !== void 0) {
+              return compilerOptions.resolvePackageJsonExports;
             }
             switch (moduleResolution) {
               case 3:
@@ -22666,13 +22666,13 @@ ${lanes.join("\n")}
         },
         resolvePackageJsonImports: {
           dependencies: ["moduleResolution", "resolvePackageJsonExports", "module", "target"],
-          computeValue: (compilerOptions2) => {
-            const moduleResolution = _computedOptions.moduleResolution.computeValue(compilerOptions2);
+          computeValue: (compilerOptions) => {
+            const moduleResolution = _computedOptions.moduleResolution.computeValue(compilerOptions);
             if (!moduleResolutionSupportsPackageJsonExportsAndImports(moduleResolution)) {
               return false;
             }
-            if (compilerOptions2.resolvePackageJsonImports !== void 0) {
-              return compilerOptions2.resolvePackageJsonImports;
+            if (compilerOptions.resolvePackageJsonImports !== void 0) {
+              return compilerOptions.resolvePackageJsonImports;
             }
             switch (moduleResolution) {
               case 3:
@@ -22685,11 +22685,11 @@ ${lanes.join("\n")}
         },
         resolveJsonModule: {
           dependencies: ["moduleResolution", "module", "target"],
-          computeValue: (compilerOptions2) => {
-            if (compilerOptions2.resolveJsonModule !== void 0) {
-              return compilerOptions2.resolveJsonModule;
+          computeValue: (compilerOptions) => {
+            if (compilerOptions.resolveJsonModule !== void 0) {
+              return compilerOptions.resolveJsonModule;
             }
-            switch (_computedOptions.module.computeValue(compilerOptions2)) {
+            switch (_computedOptions.module.computeValue(compilerOptions)) {
               // TODO in 6.0: uncomment
               // case ModuleKind.Node16:
               // case ModuleKind.Node18:
@@ -22697,98 +22697,98 @@ ${lanes.join("\n")}
               case 199:
                 return true;
             }
-            return _computedOptions.moduleResolution.computeValue(compilerOptions2) === 100;
+            return _computedOptions.moduleResolution.computeValue(compilerOptions) === 100;
           }
         },
         declaration: {
           dependencies: ["composite"],
-          computeValue: (compilerOptions2) => {
-            return !!(compilerOptions2.declaration || compilerOptions2.composite);
+          computeValue: (compilerOptions) => {
+            return !!(compilerOptions.declaration || compilerOptions.composite);
           }
         },
         preserveConstEnums: {
           dependencies: ["isolatedModules", "verbatimModuleSyntax"],
-          computeValue: (compilerOptions2) => {
-            return !!(compilerOptions2.preserveConstEnums || _computedOptions.isolatedModules.computeValue(compilerOptions2));
+          computeValue: (compilerOptions) => {
+            return !!(compilerOptions.preserveConstEnums || _computedOptions.isolatedModules.computeValue(compilerOptions));
           }
         },
         incremental: {
           dependencies: ["composite"],
-          computeValue: (compilerOptions2) => {
-            return !!(compilerOptions2.incremental || compilerOptions2.composite);
+          computeValue: (compilerOptions) => {
+            return !!(compilerOptions.incremental || compilerOptions.composite);
           }
         },
         declarationMap: {
           dependencies: ["declaration", "composite"],
-          computeValue: (compilerOptions2) => {
-            return !!(compilerOptions2.declarationMap && _computedOptions.declaration.computeValue(compilerOptions2));
+          computeValue: (compilerOptions) => {
+            return !!(compilerOptions.declarationMap && _computedOptions.declaration.computeValue(compilerOptions));
           }
         },
         allowJs: {
           dependencies: ["checkJs"],
-          computeValue: (compilerOptions2) => {
-            return compilerOptions2.allowJs === void 0 ? !!compilerOptions2.checkJs : compilerOptions2.allowJs;
+          computeValue: (compilerOptions) => {
+            return compilerOptions.allowJs === void 0 ? !!compilerOptions.checkJs : compilerOptions.allowJs;
           }
         },
         useDefineForClassFields: {
           dependencies: ["target", "module"],
-          computeValue: (compilerOptions2) => {
-            return compilerOptions2.useDefineForClassFields === void 0 ? _computedOptions.target.computeValue(compilerOptions2) >= 9 : compilerOptions2.useDefineForClassFields;
+          computeValue: (compilerOptions) => {
+            return compilerOptions.useDefineForClassFields === void 0 ? _computedOptions.target.computeValue(compilerOptions) >= 9 : compilerOptions.useDefineForClassFields;
           }
         },
         noImplicitAny: {
           dependencies: ["strict"],
-          computeValue: (compilerOptions2) => {
-            return getStrictOptionValue(compilerOptions2, "noImplicitAny");
+          computeValue: (compilerOptions) => {
+            return getStrictOptionValue(compilerOptions, "noImplicitAny");
           }
         },
         noImplicitThis: {
           dependencies: ["strict"],
-          computeValue: (compilerOptions2) => {
-            return getStrictOptionValue(compilerOptions2, "noImplicitThis");
+          computeValue: (compilerOptions) => {
+            return getStrictOptionValue(compilerOptions, "noImplicitThis");
           }
         },
         strictNullChecks: {
           dependencies: ["strict"],
-          computeValue: (compilerOptions2) => {
-            return getStrictOptionValue(compilerOptions2, "strictNullChecks");
+          computeValue: (compilerOptions) => {
+            return getStrictOptionValue(compilerOptions, "strictNullChecks");
           }
         },
         strictFunctionTypes: {
           dependencies: ["strict"],
-          computeValue: (compilerOptions2) => {
-            return getStrictOptionValue(compilerOptions2, "strictFunctionTypes");
+          computeValue: (compilerOptions) => {
+            return getStrictOptionValue(compilerOptions, "strictFunctionTypes");
           }
         },
         strictBindCallApply: {
           dependencies: ["strict"],
-          computeValue: (compilerOptions2) => {
-            return getStrictOptionValue(compilerOptions2, "strictBindCallApply");
+          computeValue: (compilerOptions) => {
+            return getStrictOptionValue(compilerOptions, "strictBindCallApply");
           }
         },
         strictPropertyInitialization: {
           dependencies: ["strict"],
-          computeValue: (compilerOptions2) => {
-            return getStrictOptionValue(compilerOptions2, "strictPropertyInitialization");
+          computeValue: (compilerOptions) => {
+            return getStrictOptionValue(compilerOptions, "strictPropertyInitialization");
           }
         },
         strictBuiltinIteratorReturn: {
           dependencies: ["strict"],
-          computeValue: (compilerOptions2) => {
-            return getStrictOptionValue(compilerOptions2, "strictBuiltinIteratorReturn");
+          computeValue: (compilerOptions) => {
+            return getStrictOptionValue(compilerOptions, "strictBuiltinIteratorReturn");
           }
         },
         // Previously a strict-mode flag, but no longer.
         alwaysStrict: {
           dependencies: [],
-          computeValue: (compilerOptions2) => {
-            return compilerOptions2.alwaysStrict !== false;
+          computeValue: (compilerOptions) => {
+            return compilerOptions.alwaysStrict !== false;
           }
         },
         useUnknownInCatchVariables: {
           dependencies: ["strict"],
-          computeValue: (compilerOptions2) => {
-            return getStrictOptionValue(compilerOptions2, "useUnknownInCatchVariables");
+          computeValue: (compilerOptions) => {
+            return getStrictOptionValue(compilerOptions, "useUnknownInCatchVariables");
           }
         }
       });
@@ -22829,14 +22829,14 @@ ${lanes.join("\n")}
       function moduleSupportsImportAttributes(moduleKind) {
         return 101 <= moduleKind && moduleKind <= 199 || moduleKind === 200 || moduleKind === 99;
       }
-      function getStrictOptionValue(compilerOptions2, flag) {
-        return compilerOptions2[flag] === void 0 ? compilerOptions2.strict !== false : !!compilerOptions2[flag];
+      function getStrictOptionValue(compilerOptions, flag) {
+        return compilerOptions[flag] === void 0 ? compilerOptions.strict !== false : !!compilerOptions[flag];
       }
       function getNameOfScriptTarget(scriptTarget) {
         return forEachEntry(targetOptionDeclaration.type, (value, key) => value === scriptTarget ? key : void 0);
       }
-      function getEmitStandardClassFields(compilerOptions2) {
-        return compilerOptions2.useDefineForClassFields !== false && getEmitScriptTarget(compilerOptions2) >= 9;
+      function getEmitStandardClassFields(compilerOptions) {
+        return compilerOptions.useDefineForClassFields !== false && getEmitScriptTarget(compilerOptions) >= 9;
       }
       function compilerOptionsAffectSemanticDiagnostics(newOptions, oldOptions) {
         return optionsHaveChanges(oldOptions, newOptions, semanticDiagnosticsOptionDeclarations);
@@ -22854,7 +22854,7 @@ ${lanes.join("\n")}
         const jsx = options.jsx;
         return jsx === 2 || jsx === 4 || jsx === 5;
       }
-      function getJSXImplicitImportBase(compilerOptions2, file) {
+      function getJSXImplicitImportBase(compilerOptions, file) {
         const jsxImportSourcePragmas = file == null ? void 0 : file.pragmas.get("jsximportsource");
         const jsxImportSourcePragma = isArray(jsxImportSourcePragmas) ? jsxImportSourcePragmas[jsxImportSourcePragmas.length - 1] : jsxImportSourcePragmas;
         const jsxRuntimePragmas = file == null ? void 0 : file.pragmas.get("jsxruntime");
@@ -22862,7 +22862,7 @@ ${lanes.join("\n")}
         if ((jsxRuntimePragma == null ? void 0 : jsxRuntimePragma.arguments.factory) === "classic") {
           return void 0;
         }
-        return compilerOptions2.jsx === 4 || compilerOptions2.jsx === 5 || compilerOptions2.jsxImportSource || jsxImportSourcePragma || (jsxRuntimePragma == null ? void 0 : jsxRuntimePragma.arguments.factory) === "automatic" ? (jsxImportSourcePragma == null ? void 0 : jsxImportSourcePragma.arguments.factory) || compilerOptions2.jsxImportSource || "react" : void 0;
+        return compilerOptions.jsx === 4 || compilerOptions.jsx === 5 || compilerOptions.jsxImportSource || jsxImportSourcePragma || (jsxRuntimePragma == null ? void 0 : jsxRuntimePragma.arguments.factory) === "automatic" ? (jsxImportSourcePragma == null ? void 0 : jsxImportSourcePragma.arguments.factory) || compilerOptions.jsxImportSource || "react" : void 0;
       }
       function getJSXRuntimeImport(base, options) {
         return base ? `${base}/${options.jsx === 5 ? "jsx-dev-runtime" : "jsx-runtime"}` : void 0;
@@ -23316,11 +23316,11 @@ ${lanes.join("\n")}
       function usesExtensionsOnImports({ imports }, hasExtension2 = or(hasJSFileExtension, hasTSFileExtension)) {
         return firstDefined(imports, ({ text }) => pathIsRelative(text) && !fileExtensionIsOneOf(text, extensionsNotSupportingExtensionlessResolution) ? hasExtension2(text) : void 0) || false;
       }
-      function getModuleSpecifierEndingPreference(preference, resolutionMode, compilerOptions2, sourceFile) {
-        const moduleResolution = getEmitModuleResolutionKind(compilerOptions2);
+      function getModuleSpecifierEndingPreference(preference, resolutionMode, compilerOptions, sourceFile) {
+        const moduleResolution = getEmitModuleResolutionKind(compilerOptions);
         const moduleResolutionIsNodeNext = 3 <= moduleResolution && moduleResolution <= 99;
         if (preference === "js" || resolutionMode === 99 && moduleResolutionIsNodeNext) {
-          if (!shouldAllowImportingTsExtension(compilerOptions2)) {
+          if (!shouldAllowImportingTsExtension(compilerOptions)) {
             return 2;
           }
           return inferPreference() !== 2 ? 3 : 2;
@@ -23331,7 +23331,7 @@ ${lanes.join("\n")}
         if (preference === "index") {
           return 1;
         }
-        if (!shouldAllowImportingTsExtension(compilerOptions2)) {
+        if (!shouldAllowImportingTsExtension(compilerOptions)) {
           return sourceFile && usesExtensionsOnImports(sourceFile) ? 2 : 0;
         }
         return inferPreference();
@@ -23340,7 +23340,7 @@ ${lanes.join("\n")}
           const specifiers = (sourceFile == null ? void 0 : sourceFile.imports.length) ? sourceFile.imports : sourceFile && isSourceFileJS(sourceFile) ? getRequiresAtTopOfFile(sourceFile).map((r) => r.arguments[0]) : emptyArray;
           for (const specifier of specifiers) {
             if (pathIsRelative(specifier.text)) {
-              if (moduleResolutionIsNodeNext && resolutionMode === 1 && getModeForUsageLocation(sourceFile, specifier, compilerOptions2) === 99) {
+              if (moduleResolutionIsNodeNext && resolutionMode === 1 && getModeForUsageLocation(sourceFile, specifier, compilerOptions) === 99) {
                 continue;
               }
               if (fileExtensionIsOneOf(specifier.text, extensionsNotSupportingExtensionlessResolution)) {
@@ -23378,10 +23378,10 @@ ${lanes.join("\n")}
         }
         return requires || emptyArray;
       }
-      function isSupportedSourceFileName(fileName, compilerOptions2, extraFileExtensions) {
+      function isSupportedSourceFileName(fileName, compilerOptions, extraFileExtensions) {
         if (!fileName) return false;
-        const supportedExtensions = getSupportedExtensions(compilerOptions2, extraFileExtensions);
-        for (const extension of flatten(getSupportedExtensionsWithJsonIfResolveJsonModule(compilerOptions2, supportedExtensions))) {
+        const supportedExtensions = getSupportedExtensions(compilerOptions, extraFileExtensions);
+        for (const extension of flatten(getSupportedExtensionsWithJsonIfResolveJsonModule(compilerOptions, supportedExtensions))) {
           if (fileExtensionIs(fileName, extension)) {
             return true;
           }
@@ -23494,8 +23494,8 @@ ${lanes.join("\n")}
       function tryGetExtensionFromPath2(path2) {
         return find(extensionsToRemove, (e) => fileExtensionIs(path2, e));
       }
-      function isCheckJsEnabledForFile(sourceFile, compilerOptions2) {
-        return sourceFile.checkJsDirective ? sourceFile.checkJsDirective.enabled : compilerOptions2.checkJs;
+      function isCheckJsEnabledForFile(sourceFile, compilerOptions) {
+        return sourceFile.checkJsDirective ? sourceFile.checkJsDirective.enabled : compilerOptions.checkJs;
       }
       var emptyFileSystemEntries = {
         files: emptyArray,
@@ -24309,7 +24309,7 @@ ${lanes.join("\n")}
         }
       }
       function createNameResolver({
-        compilerOptions: compilerOptions2,
+        compilerOptions,
         requireSymbol,
         argumentsSymbol,
         error: error2,
@@ -24322,8 +24322,8 @@ ${lanes.join("\n")}
         onFailedToResolveSymbol = returnUndefined,
         onSuccessfullyResolvedSymbol = returnUndefined
       }) {
-        var isolatedModulesLikeFlagName = compilerOptions2.verbatimModuleSyntax ? "verbatimModuleSyntax" : "isolatedModules";
-        var emitStandardClassFields = getEmitStandardClassFields(compilerOptions2);
+        var isolatedModulesLikeFlagName = compilerOptions.verbatimModuleSyntax ? "verbatimModuleSyntax" : "isolatedModules";
+        var emitStandardClassFields = getEmitStandardClassFields(compilerOptions);
         var emptySymbols = createSymbolTable();
         return resolveNameHelper;
         function resolveNameHelper(location, nameArg, meaning, nameNotFoundMessage, isUse, excludeGlobals) {
@@ -24423,7 +24423,7 @@ ${lanes.join("\n")}
                     meaning & 8
                     /* EnumMember */
                   )) {
-                    if (nameNotFoundMessage && getIsolatedModules(compilerOptions2) && !(location.flags & 33554432) && getSourceFileOfNode(location) !== getSourceFileOfNode(result.valueDeclaration)) {
+                    if (nameNotFoundMessage && getIsolatedModules(compilerOptions) && !(location.flags & 33554432) && getSourceFileOfNode(location) !== getSourceFileOfNode(result.valueDeclaration)) {
                       error2(
                         originalLocation,
                         Diagnostics.Cannot_access_0_from_another_file_without_qualification_when_1_is_enabled_Use_2_instead,
@@ -24521,7 +24521,7 @@ ${lanes.join("\n")}
                   }
                   break;
                 case 220:
-                  if (getEmitScriptTarget(compilerOptions2) >= 2) {
+                  if (getEmitScriptTarget(compilerOptions) >= 2) {
                     break;
                   }
                 // falls through
@@ -24638,7 +24638,7 @@ ${lanes.join("\n")}
           return result;
         }
         function useOuterVariableScopeInParameter(result, location, lastLocation) {
-          const target = getEmitScriptTarget(compilerOptions2);
+          const target = getEmitScriptTarget(compilerOptions);
           const functionLocation = location;
           if (isParameter(lastLocation) && functionLocation.body && result.valueDeclaration && result.valueDeclaration.pos >= functionLocation.body.pos && result.valueDeclaration.end <= functionLocation.body.end) {
             if (target >= 2) {
@@ -33431,10 +33431,10 @@ ${lanes.join("\n")}
         const emitNode = parseNode && parseNode.emitNode;
         return !!emitNode && (!!emitNode.externalHelpersModuleName || !!emitNode.externalHelpers);
       }
-      function createExternalHelpersImportDeclarationIfNeeded(nodeFactory, helperFactory, sourceFile, compilerOptions2, hasExportStarsToExportValues, hasImportStar, hasImportDefault) {
-        if (compilerOptions2.importHelpers && isEffectiveExternalModule(sourceFile, compilerOptions2)) {
-          const moduleKind = getEmitModuleKind(compilerOptions2);
-          const impliedModuleKind = getImpliedNodeFormatForEmitWorker(sourceFile, compilerOptions2);
+      function createExternalHelpersImportDeclarationIfNeeded(nodeFactory, helperFactory, sourceFile, compilerOptions, hasExportStarsToExportValues, hasImportStar, hasImportDefault) {
+        if (compilerOptions.importHelpers && isEffectiveExternalModule(sourceFile, compilerOptions)) {
+          const moduleKind = getEmitModuleKind(compilerOptions);
+          const impliedModuleKind = getImpliedNodeFormatForEmitWorker(sourceFile, compilerOptions);
           const helpers = getImportedHelpers(sourceFile);
           if (impliedModuleKind !== 1 && (moduleKind >= 5 && moduleKind <= 99 || impliedModuleKind === 99 || impliedModuleKind === void 0 && moduleKind === 200)) {
             if (helpers) {
@@ -33487,7 +33487,7 @@ ${lanes.join("\n")}
               }
             }
           } else {
-            const externalHelpersModuleName = getOrCreateExternalHelpersModuleNameIfNeeded(nodeFactory, sourceFile, compilerOptions2, helpers, hasExportStarsToExportValues, hasImportStar || hasImportDefault);
+            const externalHelpersModuleName = getOrCreateExternalHelpersModuleNameIfNeeded(nodeFactory, sourceFile, compilerOptions, helpers, hasExportStarsToExportValues, hasImportStar || hasImportDefault);
             if (externalHelpersModuleName) {
               const externalHelpersImportDeclaration = nodeFactory.createImportEqualsDeclaration(
                 /*modifiers*/
@@ -33510,12 +33510,12 @@ ${lanes.join("\n")}
       function getImportedHelpers(sourceFile) {
         return filter(getEmitHelpers(sourceFile), (helper) => !helper.scoped);
       }
-      function getOrCreateExternalHelpersModuleNameIfNeeded(factory2, node, compilerOptions2, helpers, hasExportStarsToExportValues, hasImportStarOrImportDefault) {
+      function getOrCreateExternalHelpersModuleNameIfNeeded(factory2, node, compilerOptions, helpers, hasExportStarsToExportValues, hasImportStarOrImportDefault) {
         const externalHelpersModuleName = getExternalHelpersModuleName(node);
         if (externalHelpersModuleName) {
           return externalHelpersModuleName;
         }
-        const create = some(helpers) || (hasExportStarsToExportValues || getESModuleInterop(compilerOptions2) && hasImportStarOrImportDefault) && getEmitModuleFormatOfFileWorker(node, compilerOptions2) < 4;
+        const create = some(helpers) || (hasExportStarsToExportValues || getESModuleInterop(compilerOptions) && hasImportStarOrImportDefault) && getEmitModuleFormatOfFileWorker(node, compilerOptions) < 4;
         if (create) {
           const parseNode = getOriginalNode(node, isSourceFile);
           const emitNode = getOrCreateEmitNode(parseNode);
@@ -33539,10 +33539,10 @@ ${lanes.join("\n")}
         }
         return void 0;
       }
-      function getExternalModuleNameLiteral(factory2, importNode, sourceFile, host, resolver, compilerOptions2) {
+      function getExternalModuleNameLiteral(factory2, importNode, sourceFile, host, resolver, compilerOptions) {
         const moduleName = getExternalModuleName(importNode);
         if (moduleName && isStringLiteral(moduleName)) {
-          return tryGetModuleNameFromDeclaration(importNode, host, factory2, resolver, compilerOptions2) || tryRenameExternalModule(factory2, moduleName, sourceFile) || factory2.cloneNode(moduleName);
+          return tryGetModuleNameFromDeclaration(importNode, host, factory2, resolver, compilerOptions) || tryRenameExternalModule(factory2, moduleName, sourceFile) || factory2.cloneNode(moduleName);
         }
         return void 0;
       }
@@ -33562,8 +33562,8 @@ ${lanes.join("\n")}
         }
         return void 0;
       }
-      function tryGetModuleNameFromDeclaration(declaration, host, factory2, resolver, compilerOptions2) {
-        return tryGetModuleNameFromFile(factory2, resolver.getExternalModuleFileFromDeclaration(declaration), host, compilerOptions2);
+      function tryGetModuleNameFromDeclaration(declaration, host, factory2, resolver, compilerOptions) {
+        return tryGetModuleNameFromFile(factory2, resolver.getExternalModuleFileFromDeclaration(declaration), host, compilerOptions);
       }
       function getInitializerOfBindingOrAssignmentElement(bindingElement) {
         if (isDeclarationBindingElement(bindingElement)) {
@@ -47335,8 +47335,8 @@ ${lanes.join("\n")}
       function trace(host, message, ...args) {
         host.trace(formatMessage(message, ...args));
       }
-      function isTraceEnabled(compilerOptions2, host) {
-        return !!compilerOptions2.traceResolution && host.trace !== void 0;
+      function isTraceEnabled(compilerOptions, host) {
+        return !!compilerOptions.traceResolution && host.trace !== void 0;
       }
       function withPackageId(packageInfo, r, state) {
         let packageId;
@@ -48186,8 +48186,8 @@ ${lanes.join("\n")}
       function getOptionsForLibraryResolution(options) {
         return { moduleResolution: 2, traceResolution: options.traceResolution };
       }
-      function resolveLibrary(libraryName, resolveFrom, compilerOptions2, host, cache) {
-        return resolveModuleName(libraryName, resolveFrom, getOptionsForLibraryResolution(compilerOptions2), host, cache);
+      function resolveLibrary(libraryName, resolveFrom, compilerOptions, host, cache) {
+        return resolveModuleName(libraryName, resolveFrom, getOptionsForLibraryResolution(compilerOptions), host, cache);
       }
       function resolveModuleNameFromCache(moduleName, containingFile, cache, mode) {
         const containingDirectory = getDirectoryPath(containingFile);
@@ -48199,10 +48199,10 @@ ${lanes.join("\n")}
           void 0
         );
       }
-      function resolveModuleName(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, resolutionMode) {
-        const traceEnabled = isTraceEnabled(compilerOptions2, host);
+      function resolveModuleName(moduleName, containingFile, compilerOptions, host, cache, redirectedReference, resolutionMode) {
+        const traceEnabled = isTraceEnabled(compilerOptions, host);
         if (redirectedReference) {
-          compilerOptions2 = redirectedReference.commandLine.options;
+          compilerOptions = redirectedReference.commandLine.options;
         }
         if (traceEnabled) {
           trace(host, Diagnostics.Resolving_module_0_from_1, moduleName, containingFile);
@@ -48217,9 +48217,9 @@ ${lanes.join("\n")}
             trace(host, Diagnostics.Resolution_for_module_0_was_found_in_cache_from_location_1, moduleName, containingDirectory);
           }
         } else {
-          let moduleResolution = compilerOptions2.moduleResolution;
+          let moduleResolution = compilerOptions.moduleResolution;
           if (moduleResolution === void 0) {
-            moduleResolution = getEmitModuleResolutionKind(compilerOptions2);
+            moduleResolution = getEmitModuleResolutionKind(compilerOptions);
             if (traceEnabled) {
               trace(host, Diagnostics.Module_resolution_kind_is_not_specified_using_0, ModuleResolutionKind[moduleResolution]);
             }
@@ -48230,19 +48230,19 @@ ${lanes.join("\n")}
           }
           switch (moduleResolution) {
             case 3:
-              result = node16ModuleNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, resolutionMode);
+              result = node16ModuleNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference, resolutionMode);
               break;
             case 99:
-              result = nodeNextModuleNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, resolutionMode);
+              result = nodeNextModuleNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference, resolutionMode);
               break;
             case 2:
-              result = nodeModuleNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, resolutionMode ? getConditions(compilerOptions2, resolutionMode) : void 0);
+              result = nodeModuleNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference, resolutionMode ? getConditions(compilerOptions, resolutionMode) : void 0);
               break;
             case 1:
-              result = classicNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference);
+              result = classicNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference);
               break;
             case 100:
-              result = bundlerModuleNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, resolutionMode ? getConditions(compilerOptions2, resolutionMode) : void 0);
+              result = bundlerModuleNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference, resolutionMode ? getConditions(compilerOptions, resolutionMode) : void 0);
               break;
             default:
               return Debug.fail(`Unexpected moduleResolution: ${moduleResolution}`);
@@ -48397,42 +48397,42 @@ ${lanes.join("\n")}
         NodeResolutionFeatures2[NodeResolutionFeatures2["EsmMode"] = 32] = "EsmMode";
         return NodeResolutionFeatures2;
       })(NodeResolutionFeatures || {});
-      function node16ModuleNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, resolutionMode) {
+      function node16ModuleNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference, resolutionMode) {
         return nodeNextModuleNameResolverWorker(
           30,
           moduleName,
           containingFile,
-          compilerOptions2,
+          compilerOptions,
           host,
           cache,
           redirectedReference,
           resolutionMode
         );
       }
-      function nodeNextModuleNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, resolutionMode) {
+      function nodeNextModuleNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference, resolutionMode) {
         return nodeNextModuleNameResolverWorker(
           94,
           moduleName,
           containingFile,
-          compilerOptions2,
+          compilerOptions,
           host,
           cache,
           redirectedReference,
           resolutionMode
         );
       }
-      function nodeNextModuleNameResolverWorker(features, moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, resolutionMode, conditions) {
+      function nodeNextModuleNameResolverWorker(features, moduleName, containingFile, compilerOptions, host, cache, redirectedReference, resolutionMode, conditions) {
         const containingDirectory = getDirectoryPath(containingFile);
         const esmMode = resolutionMode === 99 ? 32 : 0;
-        let extensions = compilerOptions2.noDtsResolution ? 3 : 1 | 2 | 4;
-        if (getResolveJsonModule(compilerOptions2)) {
+        let extensions = compilerOptions.noDtsResolution ? 3 : 1 | 2 | 4;
+        if (getResolveJsonModule(compilerOptions)) {
           extensions |= 8;
         }
         return nodeModuleNameResolverWorker(
           features | esmMode,
           moduleName,
           containingDirectory,
-          compilerOptions2,
+          compilerOptions,
           host,
           cache,
           extensions,
@@ -48460,17 +48460,17 @@ ${lanes.join("\n")}
           void 0
         );
       }
-      function bundlerModuleNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, conditions) {
+      function bundlerModuleNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference, conditions) {
         const containingDirectory = getDirectoryPath(containingFile);
-        let extensions = compilerOptions2.noDtsResolution ? 3 : 1 | 2 | 4;
-        if (getResolveJsonModule(compilerOptions2)) {
+        let extensions = compilerOptions.noDtsResolution ? 3 : 1 | 2 | 4;
+        if (getResolveJsonModule(compilerOptions)) {
           extensions |= 8;
         }
         return nodeModuleNameResolverWorker(
-          getNodeResolutionFeatures(compilerOptions2),
+          getNodeResolutionFeatures(compilerOptions),
           moduleName,
           containingDirectory,
-          compilerOptions2,
+          compilerOptions,
           host,
           cache,
           extensions,
@@ -48480,17 +48480,17 @@ ${lanes.join("\n")}
           conditions
         );
       }
-      function nodeModuleNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference, conditions, isConfigLookup) {
+      function nodeModuleNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference, conditions, isConfigLookup) {
         let extensions;
         if (isConfigLookup) {
           extensions = 8;
-        } else if (compilerOptions2.noDtsResolution) {
+        } else if (compilerOptions.noDtsResolution) {
           extensions = 3;
-          if (getResolveJsonModule(compilerOptions2)) extensions |= 8;
+          if (getResolveJsonModule(compilerOptions)) extensions |= 8;
         } else {
-          extensions = getResolveJsonModule(compilerOptions2) ? 1 | 2 | 4 | 8 : 1 | 2 | 4;
+          extensions = getResolveJsonModule(compilerOptions) ? 1 | 2 | 4 | 8 : 1 | 2 | 4;
         }
-        return nodeModuleNameResolverWorker(conditions ? 94 : 0, moduleName, getDirectoryPath(containingFile), compilerOptions2, host, cache, extensions, !!isConfigLookup, redirectedReference, conditions);
+        return nodeModuleNameResolverWorker(conditions ? 94 : 0, moduleName, getDirectoryPath(containingFile), compilerOptions, host, cache, extensions, !!isConfigLookup, redirectedReference, conditions);
       }
       function nodeNextJsonConfigResolver(moduleName, containingFile, host) {
         return nodeModuleNameResolverWorker(
@@ -48513,20 +48513,20 @@ ${lanes.join("\n")}
           void 0
         );
       }
-      function nodeModuleNameResolverWorker(features, moduleName, containingDirectory, compilerOptions2, host, cache, extensions, isConfigLookup, redirectedReference, conditions) {
+      function nodeModuleNameResolverWorker(features, moduleName, containingDirectory, compilerOptions, host, cache, extensions, isConfigLookup, redirectedReference, conditions) {
         var _a, _b, _c, _d, _e;
-        const traceEnabled = isTraceEnabled(compilerOptions2, host);
+        const traceEnabled = isTraceEnabled(compilerOptions, host);
         const failedLookupLocations = [];
         const affectingLocations = [];
-        const moduleResolution = getEmitModuleResolutionKind(compilerOptions2);
+        const moduleResolution = getEmitModuleResolutionKind(compilerOptions);
         conditions ?? (conditions = getConditions(
-          compilerOptions2,
+          compilerOptions,
           moduleResolution === 100 || moduleResolution === 2 ? void 0 : features & 32 ? 99 : 1
           /* CommonJS */
         ));
         const diagnostics = [];
         const state = {
-          compilerOptions: compilerOptions2,
+          compilerOptions,
           host,
           traceEnabled,
           failedLookupLocations,
@@ -49884,14 +49884,14 @@ ${lanes.join("\n")}
           };
         }
       }
-      function classicNameResolver(moduleName, containingFile, compilerOptions2, host, cache, redirectedReference) {
-        const traceEnabled = isTraceEnabled(compilerOptions2, host);
+      function classicNameResolver(moduleName, containingFile, compilerOptions, host, cache, redirectedReference) {
+        const traceEnabled = isTraceEnabled(compilerOptions, host);
         const failedLookupLocations = [];
         const affectingLocations = [];
         const containingDirectory = getDirectoryPath(containingFile);
         const diagnostics = [];
         const state = {
-          compilerOptions: compilerOptions2,
+          compilerOptions,
           host,
           traceEnabled,
           failedLookupLocations,
@@ -49908,7 +49908,7 @@ ${lanes.join("\n")}
         const resolved = tryResolve(
           1 | 4
           /* Declaration */
-        ) || tryResolve(2 | (compilerOptions2.resolveJsonModule ? 8 : 0));
+        ) || tryResolve(2 | (compilerOptions.resolveJsonModule ? 8 : 0));
         return createResolvedModuleWithFailedLookupLocationsHandlingSymlink(
           moduleName,
           resolved && resolved.value,
@@ -49992,11 +49992,11 @@ ${lanes.join("\n")}
           if (resolved) return toSearchResult(resolved);
         }
       }
-      function shouldAllowImportingTsExtension(compilerOptions2, fromFileName) {
-        return getAllowImportingTsExtensions(compilerOptions2) || !!fromFileName && isDeclarationFileName(fromFileName);
+      function shouldAllowImportingTsExtension(compilerOptions, fromFileName) {
+        return getAllowImportingTsExtensions(compilerOptions) || !!fromFileName && isDeclarationFileName(fromFileName);
       }
-      function loadModuleFromGlobalCache(moduleName, projectName, compilerOptions2, host, globalCache, packageJsonInfoCache) {
-        const traceEnabled = isTraceEnabled(compilerOptions2, host);
+      function loadModuleFromGlobalCache(moduleName, projectName, compilerOptions, host, globalCache, packageJsonInfoCache) {
+        const traceEnabled = isTraceEnabled(compilerOptions, host);
         if (traceEnabled) {
           trace(host, Diagnostics.Auto_discovery_for_typings_is_enabled_in_project_0_Running_extra_resolution_pass_for_module_1_using_cache_location_2, projectName, moduleName, globalCache);
         }
@@ -50004,7 +50004,7 @@ ${lanes.join("\n")}
         const affectingLocations = [];
         const diagnostics = [];
         const state = {
-          compilerOptions: compilerOptions2,
+          compilerOptions,
           host,
           traceEnabled,
           failedLookupLocations,
@@ -53546,17 +53546,17 @@ ${lanes.join("\n")}
         RelativePreference2[RelativePreference2["ExternalNonRelative"] = 3] = "ExternalNonRelative";
         return RelativePreference2;
       })(RelativePreference || {});
-      function getModuleSpecifierPreferences({ importModuleSpecifierPreference, importModuleSpecifierEnding, autoImportSpecifierExcludeRegexes }, host, compilerOptions2, importingSourceFile, oldImportSpecifier) {
+      function getModuleSpecifierPreferences({ importModuleSpecifierPreference, importModuleSpecifierEnding, autoImportSpecifierExcludeRegexes }, host, compilerOptions, importingSourceFile, oldImportSpecifier) {
         const filePreferredEnding = getPreferredEnding();
         return {
           excludeRegexes: autoImportSpecifierExcludeRegexes,
           relativePreference: oldImportSpecifier !== void 0 ? isExternalModuleNameRelative(oldImportSpecifier) ? 0 : 1 : importModuleSpecifierPreference === "relative" ? 0 : importModuleSpecifierPreference === "non-relative" ? 1 : importModuleSpecifierPreference === "project-relative" ? 3 : 2,
           getAllowedEndingsInPreferredOrder: (syntaxImpliedNodeFormat) => {
-            const impliedNodeFormat = getDefaultResolutionModeForFile(importingSourceFile, host, compilerOptions2);
+            const impliedNodeFormat = getDefaultResolutionModeForFile(importingSourceFile, host, compilerOptions);
             const preferredEnding = syntaxImpliedNodeFormat !== impliedNodeFormat ? getPreferredEnding(syntaxImpliedNodeFormat) : filePreferredEnding;
-            const moduleResolution = getEmitModuleResolutionKind(compilerOptions2);
+            const moduleResolution = getEmitModuleResolutionKind(compilerOptions);
             if ((syntaxImpliedNodeFormat ?? impliedNodeFormat) === 99 && 3 <= moduleResolution && moduleResolution <= 99) {
-              if (shouldAllowImportingTsExtension(compilerOptions2, importingSourceFile.fileName)) {
+              if (shouldAllowImportingTsExtension(compilerOptions, importingSourceFile.fileName)) {
                 return [
                   3,
                   2
@@ -53568,7 +53568,7 @@ ${lanes.join("\n")}
                 /* JsExtension */
               ];
             }
-            if (getEmitModuleResolutionKind(compilerOptions2) === 1) {
+            if (getEmitModuleResolutionKind(compilerOptions) === 1) {
               return preferredEnding === 2 ? [
                 2,
                 1
@@ -53579,7 +53579,7 @@ ${lanes.join("\n")}
                 /* JsExtension */
               ];
             }
-            const allowImportingTsExtension = shouldAllowImportingTsExtension(compilerOptions2, importingSourceFile.fileName);
+            const allowImportingTsExtension = shouldAllowImportingTsExtension(compilerOptions, importingSourceFile.fileName);
             switch (preferredEnding) {
               case 2:
                 return allowImportingTsExtension ? [
@@ -53640,49 +53640,49 @@ ${lanes.join("\n")}
           }
           return getModuleSpecifierEndingPreference(
             importModuleSpecifierEnding,
-            resolutionMode ?? getDefaultResolutionModeForFile(importingSourceFile, host, compilerOptions2),
-            compilerOptions2,
+            resolutionMode ?? getDefaultResolutionModeForFile(importingSourceFile, host, compilerOptions),
+            compilerOptions,
             isFullSourceFile(importingSourceFile) ? importingSourceFile : void 0
           );
         }
       }
-      function updateModuleSpecifier(compilerOptions2, importingSourceFile, importingSourceFileName, toFileName2, host, oldImportSpecifier, options = {}) {
-        const res = getModuleSpecifierWorker(compilerOptions2, importingSourceFile, importingSourceFileName, toFileName2, host, getModuleSpecifierPreferences({}, host, compilerOptions2, importingSourceFile, oldImportSpecifier), {}, options);
+      function updateModuleSpecifier(compilerOptions, importingSourceFile, importingSourceFileName, toFileName2, host, oldImportSpecifier, options = {}) {
+        const res = getModuleSpecifierWorker(compilerOptions, importingSourceFile, importingSourceFileName, toFileName2, host, getModuleSpecifierPreferences({}, host, compilerOptions, importingSourceFile, oldImportSpecifier), {}, options);
         if (res === oldImportSpecifier) return void 0;
         return res;
       }
-      function getModuleSpecifier(compilerOptions2, importingSourceFile, importingSourceFileName, toFileName2, host, options = {}) {
-        return getModuleSpecifierWorker(compilerOptions2, importingSourceFile, importingSourceFileName, toFileName2, host, getModuleSpecifierPreferences({}, host, compilerOptions2, importingSourceFile), {}, options);
+      function getModuleSpecifier(compilerOptions, importingSourceFile, importingSourceFileName, toFileName2, host, options = {}) {
+        return getModuleSpecifierWorker(compilerOptions, importingSourceFile, importingSourceFileName, toFileName2, host, getModuleSpecifierPreferences({}, host, compilerOptions, importingSourceFile), {}, options);
       }
-      function getNodeModulesPackageName(compilerOptions2, importingSourceFile, nodeModulesFileName, host, preferences, options = {}) {
+      function getNodeModulesPackageName(compilerOptions, importingSourceFile, nodeModulesFileName, host, preferences, options = {}) {
         const info = getInfo(importingSourceFile.fileName, host);
-        const modulePaths = getAllModulePaths(info, nodeModulesFileName, host, preferences, compilerOptions2, options);
+        const modulePaths = getAllModulePaths(info, nodeModulesFileName, host, preferences, compilerOptions, options);
         return firstDefined(modulePaths, (modulePath) => tryGetModuleNameAsNodeModule(
           modulePath,
           info,
           importingSourceFile,
           host,
-          compilerOptions2,
+          compilerOptions,
           preferences,
           /*packageNameOnly*/
           true,
           options.overrideImportMode
         ));
       }
-      function getModuleSpecifierWorker(compilerOptions2, importingSourceFile, importingSourceFileName, toFileName2, host, preferences, userPreferences, options = {}) {
+      function getModuleSpecifierWorker(compilerOptions, importingSourceFile, importingSourceFileName, toFileName2, host, preferences, userPreferences, options = {}) {
         const info = getInfo(importingSourceFileName, host);
-        const modulePaths = getAllModulePaths(info, toFileName2, host, userPreferences, compilerOptions2, options);
+        const modulePaths = getAllModulePaths(info, toFileName2, host, userPreferences, compilerOptions, options);
         return firstDefined(modulePaths, (modulePath) => tryGetModuleNameAsNodeModule(
           modulePath,
           info,
           importingSourceFile,
           host,
-          compilerOptions2,
+          compilerOptions,
           userPreferences,
           /*packageNameOnly*/
           void 0,
           options.overrideImportMode
-        )) || getLocalModuleSpecifier(toFileName2, info, compilerOptions2, host, options.overrideImportMode || getDefaultResolutionModeForFile(importingSourceFile, host, compilerOptions2), preferences);
+        )) || getLocalModuleSpecifier(toFileName2, info, compilerOptions, host, options.overrideImportMode || getDefaultResolutionModeForFile(importingSourceFile, host, compilerOptions), preferences);
       }
       function tryGetModuleSpecifiersFromCache(moduleSymbol, importingSourceFile, host, userPreferences, options = {}) {
         const result = tryGetModuleSpecifiersFromCacheWorker(
@@ -53704,11 +53704,11 @@ ${lanes.join("\n")}
         const cached = cache == null ? void 0 : cache.get(importingSourceFile.path, moduleSourceFile.path, userPreferences, options);
         return [cached == null ? void 0 : cached.kind, cached == null ? void 0 : cached.moduleSpecifiers, moduleSourceFile, cached == null ? void 0 : cached.modulePaths, cache];
       }
-      function getModuleSpecifiers(moduleSymbol, checker, compilerOptions2, importingSourceFile, host, userPreferences, options = {}) {
+      function getModuleSpecifiers(moduleSymbol, checker, compilerOptions, importingSourceFile, host, userPreferences, options = {}) {
         return getModuleSpecifiersWithCacheInfo(
           moduleSymbol,
           checker,
-          compilerOptions2,
+          compilerOptions,
           importingSourceFile,
           host,
           userPreferences,
@@ -53717,7 +53717,7 @@ ${lanes.join("\n")}
           false
         ).moduleSpecifiers;
       }
-      function getModuleSpecifiersWithCacheInfo(moduleSymbol, checker, compilerOptions2, importingSourceFile, host, userPreferences, options = {}, forAutoImport) {
+      function getModuleSpecifiersWithCacheInfo(moduleSymbol, checker, compilerOptions, importingSourceFile, host, userPreferences, options = {}, forAutoImport) {
         let computedWithoutCache = false;
         const ambient = tryGetModuleNameFromAmbientModule(moduleSymbol, checker);
         if (ambient) {
@@ -53737,10 +53737,10 @@ ${lanes.join("\n")}
         if (specifiers) return { kind, moduleSpecifiers: specifiers, computedWithoutCache };
         if (!moduleSourceFile) return { kind: void 0, moduleSpecifiers: emptyArray, computedWithoutCache };
         computedWithoutCache = true;
-        modulePaths || (modulePaths = getAllModulePathsWorker(getInfo(importingSourceFile.fileName, host), moduleSourceFile.originalFileName, host, compilerOptions2, options));
+        modulePaths || (modulePaths = getAllModulePathsWorker(getInfo(importingSourceFile.fileName, host), moduleSourceFile.originalFileName, host, compilerOptions, options));
         const result = computeModuleSpecifiers(
           modulePaths,
-          compilerOptions2,
+          compilerOptions,
           importingSourceFile,
           host,
           userPreferences,
@@ -53750,21 +53750,21 @@ ${lanes.join("\n")}
         cache == null ? void 0 : cache.set(importingSourceFile.path, moduleSourceFile.path, userPreferences, options, result.kind, modulePaths, result.moduleSpecifiers);
         return result;
       }
-      function getLocalModuleSpecifierBetweenFileNames(importingFile, targetFileName, compilerOptions2, host, preferences, options = {}) {
+      function getLocalModuleSpecifierBetweenFileNames(importingFile, targetFileName, compilerOptions, host, preferences, options = {}) {
         const info = getInfo(importingFile.fileName, host);
         const importMode = options.overrideImportMode ?? importingFile.impliedNodeFormat;
         return getLocalModuleSpecifier(
           targetFileName,
           info,
-          compilerOptions2,
+          compilerOptions,
           host,
           importMode,
-          getModuleSpecifierPreferences(preferences, host, compilerOptions2, importingFile)
+          getModuleSpecifierPreferences(preferences, host, compilerOptions, importingFile)
         );
       }
-      function computeModuleSpecifiers(modulePaths, compilerOptions2, importingSourceFile, host, userPreferences, options = {}, forAutoImport) {
+      function computeModuleSpecifiers(modulePaths, compilerOptions, importingSourceFile, host, userPreferences, options = {}, forAutoImport) {
         const info = getInfo(importingSourceFile.fileName, host);
-        const preferences = getModuleSpecifierPreferences(userPreferences, host, compilerOptions2, importingSourceFile);
+        const preferences = getModuleSpecifierPreferences(userPreferences, host, compilerOptions, importingSourceFile);
         const existingSpecifier = isFullSourceFile(importingSourceFile) && forEach(modulePaths, (modulePath) => forEach(
           host.getFileIncludeReasons().get(toPath(modulePath.path, host.getCurrentDirectory(), info.getCanonicalFileName)),
           (reason) => {
@@ -53792,7 +53792,7 @@ ${lanes.join("\n")}
             info,
             importingSourceFile,
             host,
-            compilerOptions2,
+            compilerOptions,
             userPreferences,
             /*packageNameOnly*/
             void 0,
@@ -53807,7 +53807,7 @@ ${lanes.join("\n")}
           const local = getLocalModuleSpecifier(
             modulePath.path,
             info,
-            compilerOptions2,
+            compilerOptions,
             host,
             options.overrideImportMode || importingSourceFile.impliedNodeFormat,
             preferences,
@@ -53848,18 +53848,18 @@ ${lanes.join("\n")}
           canonicalSourceDirectory: getCanonicalFileName(sourceDirectory)
         };
       }
-      function getLocalModuleSpecifier(moduleFileName, info, compilerOptions2, host, importMode, { getAllowedEndingsInPreferredOrder: getAllowedEndingsInPrefererredOrder, relativePreference, excludeRegexes }, pathsOnly) {
-        const { baseUrl, paths, rootDirs } = compilerOptions2;
+      function getLocalModuleSpecifier(moduleFileName, info, compilerOptions, host, importMode, { getAllowedEndingsInPreferredOrder: getAllowedEndingsInPrefererredOrder, relativePreference, excludeRegexes }, pathsOnly) {
+        const { baseUrl, paths, rootDirs } = compilerOptions;
         if (pathsOnly && !paths) {
           return void 0;
         }
         const { sourceDirectory, canonicalSourceDirectory, getCanonicalFileName } = info;
         const allowedEndings = getAllowedEndingsInPrefererredOrder(importMode);
-        const relativePath = rootDirs && tryGetModuleNameFromRootDirs(rootDirs, moduleFileName, sourceDirectory, getCanonicalFileName, allowedEndings, compilerOptions2) || processEnding(ensurePathIsNonModuleName(getRelativePathFromDirectory(sourceDirectory, moduleFileName, getCanonicalFileName)), allowedEndings, compilerOptions2);
-        if (!baseUrl && !paths && !getResolvePackageJsonImports(compilerOptions2) || relativePreference === 0) {
+        const relativePath = rootDirs && tryGetModuleNameFromRootDirs(rootDirs, moduleFileName, sourceDirectory, getCanonicalFileName, allowedEndings, compilerOptions) || processEnding(ensurePathIsNonModuleName(getRelativePathFromDirectory(sourceDirectory, moduleFileName, getCanonicalFileName)), allowedEndings, compilerOptions);
+        if (!baseUrl && !paths && !getResolvePackageJsonImports(compilerOptions) || relativePreference === 0) {
           return pathsOnly ? void 0 : relativePath;
         }
-        const baseDirectory = getNormalizedAbsolutePath(getPathsBasePath(compilerOptions2, host) || baseUrl, host.getCurrentDirectory());
+        const baseDirectory = getNormalizedAbsolutePath(getPathsBasePath(compilerOptions, host) || baseUrl, host.getCurrentDirectory());
         const relativeToBaseUrl = getRelativePathIfInSameVolume(moduleFileName, baseDirectory, getCanonicalFileName);
         if (!relativeToBaseUrl) {
           return pathsOnly ? void 0 : relativePath;
@@ -53867,16 +53867,16 @@ ${lanes.join("\n")}
         const fromPackageJsonImports = pathsOnly ? void 0 : tryGetModuleNameFromPackageJsonImports(
           moduleFileName,
           sourceDirectory,
-          compilerOptions2,
+          compilerOptions,
           host,
           importMode,
           prefersTsExtension(allowedEndings)
         );
-        const fromPaths = pathsOnly || fromPackageJsonImports === void 0 ? paths && tryGetModuleNameFromPaths(relativeToBaseUrl, paths, allowedEndings, baseDirectory, getCanonicalFileName, host, compilerOptions2) : void 0;
+        const fromPaths = pathsOnly || fromPackageJsonImports === void 0 ? paths && tryGetModuleNameFromPaths(relativeToBaseUrl, paths, allowedEndings, baseDirectory, getCanonicalFileName, host, compilerOptions) : void 0;
         if (pathsOnly) {
           return fromPaths;
         }
-        const maybeNonRelative = fromPackageJsonImports ?? (fromPaths === void 0 && baseUrl !== void 0 ? processEnding(relativeToBaseUrl, allowedEndings, compilerOptions2) : fromPaths);
+        const maybeNonRelative = fromPackageJsonImports ?? (fromPaths === void 0 && baseUrl !== void 0 ? processEnding(relativeToBaseUrl, allowedEndings, compilerOptions) : fromPaths);
         if (!maybeNonRelative) {
           return relativePath;
         }
@@ -53892,7 +53892,7 @@ ${lanes.join("\n")}
           return maybeNonRelative;
         }
         if (relativePreference === 3 && !pathIsRelative(maybeNonRelative)) {
-          const projectDirectory = compilerOptions2.configFilePath ? toPath(getDirectoryPath(compilerOptions2.configFilePath), host.getCurrentDirectory(), info.getCanonicalFileName) : info.getCanonicalFileName(host.getCurrentDirectory());
+          const projectDirectory = compilerOptions.configFilePath ? toPath(getDirectoryPath(compilerOptions.configFilePath), host.getCurrentDirectory(), info.getCanonicalFileName) : info.getCanonicalFileName(host.getCurrentDirectory());
           const modulePath = toPath(moduleFileName, projectDirectory, getCanonicalFileName);
           const sourceIsInternal = startsWith(canonicalSourceDirectory, projectDirectory);
           const targetIsInternal = startsWith(modulePath, projectDirectory);
@@ -53975,7 +53975,7 @@ ${lanes.join("\n")}
         );
         return result || (preferSymlinks ? forEach(targets, (p) => shouldFilterIgnoredPaths && containsIgnoredPath(p) ? void 0 : cb(p, p === referenceRedirect)) : void 0);
       }
-      function getAllModulePaths(info, importedFileName, host, preferences, compilerOptions2, options = {}) {
+      function getAllModulePaths(info, importedFileName, host, preferences, compilerOptions, options = {}) {
         var _a;
         const importingFilePath = toPath(info.importingSourceFileName, host.getCurrentDirectory(), hostGetCanonicalFileName(host));
         const importedFilePath = toPath(importedFileName, host.getCurrentDirectory(), hostGetCanonicalFileName(host));
@@ -53984,7 +53984,7 @@ ${lanes.join("\n")}
           const cached = cache.get(importingFilePath, importedFilePath, preferences, options);
           if (cached == null ? void 0 : cached.modulePaths) return cached.modulePaths;
         }
-        const modulePaths = getAllModulePathsWorker(info, importedFileName, host, compilerOptions2, options);
+        const modulePaths = getAllModulePathsWorker(info, importedFileName, host, compilerOptions, options);
         if (cache) {
           cache.setModulePaths(importingFilePath, importedFilePath, preferences, options, modulePaths);
         }
@@ -54001,7 +54001,7 @@ ${lanes.join("\n")}
         }
         return result;
       }
-      function getAllModulePathsWorker(info, importedFileName, host, compilerOptions2, options) {
+      function getAllModulePathsWorker(info, importedFileName, host, compilerOptions, options) {
         var _a, _b;
         const cache = (_a = host.getModuleResolutionCache) == null ? void 0 : _a.call(host);
         const links = (_b = host.getSymlinkCache) == null ? void 0 : _b.call(host);
@@ -54015,7 +54015,7 @@ ${lanes.join("\n")}
               const resolved = resolveModuleName(
                 depName,
                 combinePaths(packageJson.packageDirectory, "package.json"),
-                compilerOptions2,
+                compilerOptions,
                 host,
                 cache,
                 /*redirectedReference*/
@@ -54101,7 +54101,7 @@ ${lanes.join("\n")}
           return ambientModuleDeclare.name.text;
         }
       }
-      function tryGetModuleNameFromPaths(relativeToBaseUrl, paths, allowedEndings, baseDirectory, getCanonicalFileName, host, compilerOptions2) {
+      function tryGetModuleNameFromPaths(relativeToBaseUrl, paths, allowedEndings, baseDirectory, getCanonicalFileName, host, compilerOptions) {
         for (const key in paths) {
           for (const patternText2 of paths[key]) {
             const normalized = normalizePath(patternText2);
@@ -54109,7 +54109,7 @@ ${lanes.join("\n")}
             const indexOfStar = pattern.indexOf("*");
             const candidates = allowedEndings.map((ending) => ({
               ending,
-              value: processEnding(relativeToBaseUrl, [ending], compilerOptions2)
+              value: processEnding(relativeToBaseUrl, [ending], compilerOptions)
             }));
             if (tryGetExtensionFromPath2(pattern)) {
               candidates.push({ ending: void 0, value: relativeToBaseUrl });
@@ -54131,7 +54131,7 @@ ${lanes.join("\n")}
           }
         }
         function validateEnding({ ending, value }) {
-          return ending !== 0 || value === processEnding(relativeToBaseUrl, [ending], compilerOptions2, host);
+          return ending !== 0 || value === processEnding(relativeToBaseUrl, [ending], compilerOptions, host);
         }
       }
       function tryGetModuleNameFromExportsOrImports(options, host, targetFilePath, packageDirectory, packageName, exports2, conditions, mode, isImports, preferTsExtension) {
@@ -54333,7 +54333,7 @@ ${lanes.join("\n")}
           );
         })) == null ? void 0 : _c.moduleFileToTry;
       }
-      function tryGetModuleNameFromRootDirs(rootDirs, moduleFileName, sourceDirectory, getCanonicalFileName, allowedEndings, compilerOptions2) {
+      function tryGetModuleNameFromRootDirs(rootDirs, moduleFileName, sourceDirectory, getCanonicalFileName, allowedEndings, compilerOptions) {
         const normalizedTargetPaths = getPathsRelativeToRootDirs(moduleFileName, rootDirs, getCanonicalFileName);
         if (normalizedTargetPaths === void 0) {
           return void 0;
@@ -54346,7 +54346,7 @@ ${lanes.join("\n")}
         if (!shortest) {
           return void 0;
         }
-        return processEnding(shortest, allowedEndings, compilerOptions2);
+        return processEnding(shortest, allowedEndings, compilerOptions);
       }
       function tryGetModuleNameAsNodeModule({ path: path2, isRedirect }, { getCanonicalFileName, canonicalSourceDirectory }, importingSourceFile, host, options, userPreferences, packageNameOnly, overrideMode) {
         if (!host.fileExists || !host.readFile) {
@@ -54612,8 +54612,8 @@ ${lanes.join("\n")}
       function isPathRelativeToParent(path2) {
         return startsWith(path2, "..");
       }
-      function getDefaultResolutionModeForFile(file, host, compilerOptions2) {
-        return isFullSourceFile(file) ? host.getDefaultResolutionModeForFile(file) : getDefaultResolutionModeForFileWorker(file, compilerOptions2);
+      function getDefaultResolutionModeForFile(file, host, compilerOptions) {
+        return isFullSourceFile(file) ? host.getDefaultResolutionModeForFile(file) : getDefaultResolutionModeForFileWorker(file, compilerOptions);
       }
       function prefersTsExtension(allowedEndings) {
         const tsPriority = allowedEndings.indexOf(
@@ -54812,29 +54812,29 @@ ${lanes.join("\n")}
           1
           /* Covariant */
         ];
-        var compilerOptions2 = host.getCompilerOptions();
-        var languageVersion = getEmitScriptTarget(compilerOptions2);
-        var moduleKind = getEmitModuleKind(compilerOptions2);
-        var legacyDecorators = !!compilerOptions2.experimentalDecorators;
-        var useDefineForClassFields = getUseDefineForClassFields(compilerOptions2);
-        var emitStandardClassFields = getEmitStandardClassFields(compilerOptions2);
-        var allowSyntheticDefaultImports = getAllowSyntheticDefaultImports(compilerOptions2);
-        var strictNullChecks = getStrictOptionValue(compilerOptions2, "strictNullChecks");
-        var strictFunctionTypes = getStrictOptionValue(compilerOptions2, "strictFunctionTypes");
-        var strictBindCallApply = getStrictOptionValue(compilerOptions2, "strictBindCallApply");
-        var strictPropertyInitialization = getStrictOptionValue(compilerOptions2, "strictPropertyInitialization");
-        var strictBuiltinIteratorReturn = getStrictOptionValue(compilerOptions2, "strictBuiltinIteratorReturn");
-        var noImplicitAny = getStrictOptionValue(compilerOptions2, "noImplicitAny");
-        var noImplicitThis = getStrictOptionValue(compilerOptions2, "noImplicitThis");
-        var useUnknownInCatchVariables = getStrictOptionValue(compilerOptions2, "useUnknownInCatchVariables");
-        var exactOptionalPropertyTypes = compilerOptions2.exactOptionalPropertyTypes;
-        var noUncheckedSideEffectImports = compilerOptions2.noUncheckedSideEffectImports !== false;
-        var stableTypeOrdering = !!compilerOptions2.stableTypeOrdering;
+        var compilerOptions = host.getCompilerOptions();
+        var languageVersion = getEmitScriptTarget(compilerOptions);
+        var moduleKind = getEmitModuleKind(compilerOptions);
+        var legacyDecorators = !!compilerOptions.experimentalDecorators;
+        var useDefineForClassFields = getUseDefineForClassFields(compilerOptions);
+        var emitStandardClassFields = getEmitStandardClassFields(compilerOptions);
+        var allowSyntheticDefaultImports = getAllowSyntheticDefaultImports(compilerOptions);
+        var strictNullChecks = getStrictOptionValue(compilerOptions, "strictNullChecks");
+        var strictFunctionTypes = getStrictOptionValue(compilerOptions, "strictFunctionTypes");
+        var strictBindCallApply = getStrictOptionValue(compilerOptions, "strictBindCallApply");
+        var strictPropertyInitialization = getStrictOptionValue(compilerOptions, "strictPropertyInitialization");
+        var strictBuiltinIteratorReturn = getStrictOptionValue(compilerOptions, "strictBuiltinIteratorReturn");
+        var noImplicitAny = getStrictOptionValue(compilerOptions, "noImplicitAny");
+        var noImplicitThis = getStrictOptionValue(compilerOptions, "noImplicitThis");
+        var useUnknownInCatchVariables = getStrictOptionValue(compilerOptions, "useUnknownInCatchVariables");
+        var exactOptionalPropertyTypes = compilerOptions.exactOptionalPropertyTypes;
+        var noUncheckedSideEffectImports = compilerOptions.noUncheckedSideEffectImports !== false;
+        var stableTypeOrdering = !!compilerOptions.stableTypeOrdering;
         var fileIndexMap = stableTypeOrdering ? new Map(host.getSourceFiles().map((file, i) => [file, i])) : void 0;
         var checkBinaryExpression = createCheckBinaryExpression();
         var emitResolver = createResolver();
         var nodeBuilder = createNodeBuilder();
-        var syntacticNodeBuilder = createSyntacticTypeNodeBuilder(compilerOptions2, nodeBuilder.syntacticBuilderResolver);
+        var syntacticNodeBuilder = createSyntacticTypeNodeBuilder(compilerOptions, nodeBuilder.syntacticBuilderResolver);
         var evaluate = createEvaluator({
           evaluateElementAccessExpression,
           evaluateEntityNameExpression
@@ -54853,15 +54853,15 @@ ${lanes.join("\n")}
         globals.set(globalThisSymbol.escapedName, globalThisSymbol);
         var argumentsSymbol = createSymbol(4, "arguments");
         var requireSymbol = createSymbol(4, "require");
-        var isolatedModulesLikeFlagName = compilerOptions2.verbatimModuleSyntax ? "verbatimModuleSyntax" : "isolatedModules";
-        var canCollectSymbolAliasAccessabilityData = !compilerOptions2.verbatimModuleSyntax;
+        var isolatedModulesLikeFlagName = compilerOptions.verbatimModuleSyntax ? "verbatimModuleSyntax" : "isolatedModules";
+        var canCollectSymbolAliasAccessabilityData = !compilerOptions.verbatimModuleSyntax;
         var apparentArgumentCount;
         var lastGetCombinedNodeFlagsNode;
         var lastGetCombinedNodeFlagsResult = 0;
         var lastGetCombinedModifierFlagsNode;
         var lastGetCombinedModifierFlagsResult = 0;
         var resolveName = createNameResolver({
-          compilerOptions: compilerOptions2,
+          compilerOptions,
           requireSymbol,
           argumentsSymbol,
           globals,
@@ -54875,7 +54875,7 @@ ${lanes.join("\n")}
           onSuccessfullyResolvedSymbol
         });
         var resolveNameForSymbolSuggestion = createNameResolver({
-          compilerOptions: compilerOptions2,
+          compilerOptions,
           requireSymbol,
           argumentsSymbol,
           globals,
@@ -55232,7 +55232,7 @@ ${lanes.join("\n")}
           },
           getSuggestionDiagnostics: (fileIn, ct) => {
             const file = getParseTreeNode(fileIn, isSourceFile) || Debug.fail("Could not determine parsed source file.");
-            if (skipTypeChecking(file, compilerOptions2, host)) {
+            if (skipTypeChecking(file, compilerOptions, host)) {
               return emptyArray;
             }
             let diagnostics2;
@@ -55849,7 +55849,7 @@ ${lanes.join("\n")}
           [".mjs", ".mjs"],
           [".js", ".js"],
           [".cjs", ".cjs"],
-          [".tsx", compilerOptions2.jsx === 1 ? ".jsx" : ".js"],
+          [".tsx", compilerOptions.jsx === 1 ? ".jsx" : ".js"],
           [".jsx", ".jsx"],
           [".json", ".json"]
         ];
@@ -55909,14 +55909,14 @@ ${lanes.join("\n")}
           }
           if (!_jsxNamespace) {
             _jsxNamespace = "React";
-            if (compilerOptions2.jsxFactory) {
-              _jsxFactoryEntity = parseIsolatedEntityName(compilerOptions2.jsxFactory, languageVersion);
+            if (compilerOptions.jsxFactory) {
+              _jsxFactoryEntity = parseIsolatedEntityName(compilerOptions.jsxFactory, languageVersion);
               visitNode(_jsxFactoryEntity, markAsSynthetic);
               if (_jsxFactoryEntity) {
                 _jsxNamespace = getFirstIdentifier(_jsxFactoryEntity).escapedText;
               }
-            } else if (compilerOptions2.reactNamespace) {
-              _jsxNamespace = escapeLeadingUnderscores(compilerOptions2.reactNamespace);
+            } else if (compilerOptions.reactNamespace) {
+              _jsxNamespace = escapeLeadingUnderscores(compilerOptions.reactNamespace);
             }
           }
           if (!_jsxFactoryEntity) {
@@ -56155,8 +56155,8 @@ ${lanes.join("\n")}
             const message = isEitherEnum ? Diagnostics.Enum_declarations_can_only_merge_with_namespace_or_other_enum_declarations : isEitherBlockScoped ? Diagnostics.Cannot_redeclare_block_scoped_variable_0 : Diagnostics.Duplicate_identifier_0;
             const sourceSymbolFile = source2.declarations && getSourceFileOfNode(source2.declarations[0]);
             const targetSymbolFile = target2.declarations && getSourceFileOfNode(target2.declarations[0]);
-            const isSourcePlainJs = isPlainJsFile(sourceSymbolFile, compilerOptions2.checkJs);
-            const isTargetPlainJs = isPlainJsFile(targetSymbolFile, compilerOptions2.checkJs);
+            const isSourcePlainJs = isPlainJsFile(sourceSymbolFile, compilerOptions.checkJs);
+            const isTargetPlainJs = isPlainJsFile(targetSymbolFile, compilerOptions.checkJs);
             const symbolName2 = symbolToString(source2);
             if (sourceSymbolFile && targetSymbolFile && amalgamatedDuplicates && !isEitherEnum && sourceSymbolFile !== targetSymbolFile) {
               const firstFile = comparePaths(sourceSymbolFile.path, targetSymbolFile.path) === -1 ? sourceSymbolFile : targetSymbolFile;
@@ -56350,7 +56350,7 @@ ${lanes.join("\n")}
           const useFile = getSourceFileOfNode(usage);
           const declContainer = getEnclosingBlockScopeContainer(declaration);
           if (declarationFile !== useFile) {
-            if (moduleKind && (declarationFile.externalModuleIndicator || useFile.externalModuleIndicator) || !compilerOptions2.outFile || isInTypeQuery(usage) || declaration.flags & 33554432) {
+            if (moduleKind && (declarationFile.externalModuleIndicator || useFile.externalModuleIndicator) || !compilerOptions.outFile || isInTypeQuery(usage) || declaration.flags & 33554432) {
               return true;
             }
             if (isUsedInFunctionOrInstanceProperty(usage, declaration)) {
@@ -56593,7 +56593,7 @@ ${lanes.join("\n")}
             if (isInExternalModule && (meaning & 111551) === 111551 && !(errorLocation.flags & 16777216)) {
               const merged = getMergedSymbol(result);
               if (length(merged.declarations) && every(merged.declarations, (d) => isNamespaceExportDeclaration(d) || isSourceFile(d) && !!d.symbol.globalExports)) {
-                errorOrSuggestion(!compilerOptions2.allowUmdGlobalAccess, errorLocation, Diagnostics._0_refers_to_a_UMD_global_but_the_current_file_is_a_module_Consider_adding_an_import_instead, unescapeLeadingUnderscores(name));
+                errorOrSuggestion(!compilerOptions.allowUmdGlobalAccess, errorLocation, Diagnostics._0_refers_to_a_UMD_global_but_the_current_file_is_a_module_Consider_adding_an_import_instead, unescapeLeadingUnderscores(name));
               }
             }
             if (associatedDeclarationForContainingInitializerOrBindingName && !withinDeferredContext && (meaning & 111551) === 111551) {
@@ -56621,7 +56621,7 @@ ${lanes.join("\n")}
                 );
               }
             }
-            if (compilerOptions2.isolatedModules && result && isInExternalModule && (meaning & 111551) === 111551) {
+            if (compilerOptions.isolatedModules && result && isInExternalModule && (meaning & 111551) === 111551) {
               const isGlobal = getSymbol2(globals, name, meaning) === result;
               const nonValueSymbol = isGlobal && isSourceFile(lastLocation) && lastLocation.locals && getSymbol2(
                 lastLocation.locals,
@@ -56905,7 +56905,7 @@ ${lanes.join("\n")}
               diagnosticMessage = error2(errorLocation, Diagnostics.Enum_0_used_before_its_declaration, declarationName);
             } else {
               Debug.assert(!!(result.flags & 128));
-              if (getIsolatedModules(compilerOptions2)) {
+              if (getIsolatedModules(compilerOptions)) {
                 diagnosticMessage = error2(errorLocation, Diagnostics.Enum_0_used_before_its_declaration, declarationName);
               }
             }
@@ -57110,7 +57110,7 @@ ${lanes.join("\n")}
           if (isShorthandAmbientModuleSymbol(moduleSymbol)) {
             exportDefaultSymbol = moduleSymbol;
           } else if (file && specifier && 102 <= moduleKind && moduleKind <= 199 && getEmitSyntaxForModuleSpecifierExpression(specifier) === 1 && host.getImpliedNodeFormatForEmit(file) === 99 && (exportModuleDotExportsSymbol = resolveExportByName(moduleSymbol, "module.exports", node, dontResolveAlias))) {
-            if (!getESModuleInterop(compilerOptions2)) {
+            if (!getESModuleInterop(compilerOptions)) {
               error2(node.name, Diagnostics.Module_0_can_only_be_default_imported_using_the_1_flag, symbolToString(moduleSymbol), "esModuleInterop");
               return void 0;
             }
@@ -57408,14 +57408,14 @@ ${lanes.join("\n")}
         }
         function reportInvalidImportEqualsExportMember(node, name, declarationName, moduleName) {
           if (moduleKind >= 5) {
-            const message = getESModuleInterop(compilerOptions2) ? Diagnostics._0_can_only_be_imported_by_using_a_default_import : Diagnostics._0_can_only_be_imported_by_turning_on_the_esModuleInterop_flag_and_using_a_default_import;
+            const message = getESModuleInterop(compilerOptions) ? Diagnostics._0_can_only_be_imported_by_using_a_default_import : Diagnostics._0_can_only_be_imported_by_turning_on_the_esModuleInterop_flag_and_using_a_default_import;
             error2(name, message, declarationName);
           } else {
             if (isInJSFile(node)) {
-              const message = getESModuleInterop(compilerOptions2) ? Diagnostics._0_can_only_be_imported_by_using_a_require_call_or_by_using_a_default_import : Diagnostics._0_can_only_be_imported_by_using_a_require_call_or_by_turning_on_the_esModuleInterop_flag_and_using_a_default_import;
+              const message = getESModuleInterop(compilerOptions) ? Diagnostics._0_can_only_be_imported_by_using_a_require_call_or_by_using_a_default_import : Diagnostics._0_can_only_be_imported_by_using_a_require_call_or_by_turning_on_the_esModuleInterop_flag_and_using_a_default_import;
               error2(name, message, declarationName);
             } else {
-              const message = getESModuleInterop(compilerOptions2) ? Diagnostics._0_can_only_be_imported_by_using_import_1_require_2_or_a_default_import : Diagnostics._0_can_only_be_imported_by_using_import_1_require_2_or_by_turning_on_the_esModuleInterop_flag_and_using_a_default_import;
+              const message = getESModuleInterop(compilerOptions) ? Diagnostics._0_can_only_be_imported_by_using_import_1_require_2_or_a_default_import : Diagnostics._0_can_only_be_imported_by_using_import_1_require_2_or_by_turning_on_the_esModuleInterop_flag_and_using_a_default_import;
               error2(name, message, declarationName, declarationName, moduleName);
             }
           }
@@ -57798,7 +57798,7 @@ ${lanes.join("\n")}
             } else if (namespace === unknownSymbol) {
               return namespace;
             }
-            if (namespace.valueDeclaration && isInJSFile(namespace.valueDeclaration) && getEmitModuleResolutionKind(compilerOptions2) !== 100 && isVariableDeclaration(namespace.valueDeclaration) && namespace.valueDeclaration.initializer && isCommonJsRequire(namespace.valueDeclaration.initializer)) {
+            if (namespace.valueDeclaration && isInJSFile(namespace.valueDeclaration) && getEmitModuleResolutionKind(compilerOptions) !== 100 && isVariableDeclaration(namespace.valueDeclaration) && namespace.valueDeclaration.initializer && isCommonJsRequire(namespace.valueDeclaration.initializer)) {
               const moduleName = namespace.valueDeclaration.initializer.arguments[0];
               const moduleSym = resolveExternalModuleName(moduleName, moduleName);
               if (moduleSym) {
@@ -57939,7 +57939,7 @@ ${lanes.join("\n")}
           }
         }
         function resolveExternalModuleName(location, moduleReferenceExpression, ignoreErrors, errorMessage) {
-          const isClassic = getEmitModuleResolutionKind(compilerOptions2) === 1;
+          const isClassic = getEmitModuleResolutionKind(compilerOptions) === 1;
           errorMessage ?? (errorMessage = getCannotResolveModuleNameErrorForSpecificModule(moduleReferenceExpression) ?? (isClassic ? Diagnostics.Cannot_find_module_0_Did_you_mean_to_set_the_moduleResolution_option_to_nodenext_or_to_add_aliases_to_the_paths_option : Diagnostics.Cannot_find_module_0_or_its_corresponding_type_declarations));
           return resolveExternalModuleNameWorker(location, moduleReferenceExpression, ignoreErrors ? void 0 : errorMessage, ignoreErrors);
         }
@@ -57964,9 +57964,9 @@ ${lanes.join("\n")}
           const currentSourceFile = getSourceFileOfNode(location);
           const contextSpecifier = isStringLiteralLike(location) ? location : ((_a = isModuleDeclaration(location) ? location : location.parent && isModuleDeclaration(location.parent) && location.parent.name === location ? location.parent : void 0) == null ? void 0 : _a.name) || ((_b = isLiteralImportTypeNode(location) ? location : void 0) == null ? void 0 : _b.argument.literal) || isVariableDeclarationInitializedToBareOrAccessedRequire(location) && getModuleSpecifierOfBareOrAccessedRequire(location) || ((_c = findAncestor(location, isImportCall)) == null ? void 0 : _c.arguments[0]) || ((_d = findAncestor(location, or(isImportDeclaration, isJSDocImportTag, isExportDeclaration))) == null ? void 0 : _d.moduleSpecifier) || ((_e = findAncestor(location, isExternalModuleImportEqualsDeclaration)) == null ? void 0 : _e.moduleReference.expression);
           const mode = contextSpecifier && isStringLiteralLike(contextSpecifier) ? host.getModeForUsageLocation(currentSourceFile, contextSpecifier) : host.getDefaultResolutionModeForFile(currentSourceFile);
-          const moduleResolutionKind = getEmitModuleResolutionKind(compilerOptions2);
+          const moduleResolutionKind = getEmitModuleResolutionKind(compilerOptions);
           const resolvedModule = (_f = host.getResolvedModule(currentSourceFile, moduleReference, mode)) == null ? void 0 : _f.resolvedModule;
-          const resolutionDiagnostic = errorNode && resolvedModule && getResolutionDiagnostic(compilerOptions2, resolvedModule, currentSourceFile);
+          const resolutionDiagnostic = errorNode && resolvedModule && getResolutionDiagnostic(compilerOptions, resolvedModule, currentSourceFile);
           const sourceFile = resolvedModule && (!resolutionDiagnostic || resolutionDiagnostic === Diagnostics.Module_0_was_resolved_to_1_but_jsx_is_not_set) && host.getSourceFile(resolvedModule.resolvedFileName);
           if (sourceFile) {
             if (resolutionDiagnostic) {
@@ -57981,14 +57981,14 @@ ${lanes.join("\n")}
                   getSuggestedImportSource(Debug.checkDefined(tryExtractTSExtension(moduleReference)))
                 );
               }
-            } else if (resolvedModule.resolvedUsingTsExtension && !shouldAllowImportingTsExtension(compilerOptions2, currentSourceFile.fileName)) {
+            } else if (resolvedModule.resolvedUsingTsExtension && !shouldAllowImportingTsExtension(compilerOptions, currentSourceFile.fileName)) {
               const importOrExport = ((_h = findAncestor(location, isImportDeclaration)) == null ? void 0 : _h.importClause) || findAncestor(location, or(isImportEqualsDeclaration, isExportDeclaration));
               if (errorNode && !((importOrExport == null ? void 0 : importOrExport.isTypeOnly) || findAncestor(location, isImportTypeNode))) {
                 const tsExtension = Debug.checkDefined(tryExtractTSExtension(moduleReference));
                 error2(errorNode, Diagnostics.An_import_path_can_only_end_with_a_0_extension_when_allowImportingTsExtensions_is_enabled, tsExtension);
               }
-            } else if (compilerOptions2.rewriteRelativeImportExtensions && !(location.flags & 33554432) && !isDeclarationFileName(moduleReference) && !isLiteralImportTypeNode(location) && !isPartOfTypeOnlyImportOrExportDeclaration(location)) {
-              const shouldRewrite = shouldRewriteModuleSpecifier(moduleReference, compilerOptions2);
+            } else if (compilerOptions.rewriteRelativeImportExtensions && !(location.flags & 33554432) && !isDeclarationFileName(moduleReference) && !isLiteralImportTypeNode(location) && !isPartOfTypeOnlyImportOrExportDeclaration(location)) {
+              const shouldRewrite = shouldRewriteModuleSpecifier(moduleReference, compilerOptions);
               if (!resolvedModule.resolvedUsingTsExtension && shouldRewrite) {
                 error2(
                   errorNode,
@@ -58008,7 +58008,7 @@ ${lanes.join("\n")}
                   const ownRootDir = host.getCommonSourceDirectory();
                   const otherRootDir = getCommonSourceDirectoryOfConfig(redirect.commandLine, ignoreCase);
                   const rootDirPath = getRelativePathFromDirectory(ownRootDir, otherRootDir, ignoreCase);
-                  const outDirPath = getRelativePathFromDirectory(compilerOptions2.outDir || ownRootDir, redirect.commandLine.options.outDir || otherRootDir, ignoreCase);
+                  const outDirPath = getRelativePathFromDirectory(compilerOptions.outDir || ownRootDir, redirect.commandLine.options.outDir || otherRootDir, ignoreCase);
                   if (rootDirPath !== outDirPath) {
                     error2(
                       errorNode,
@@ -58101,11 +58101,11 @@ ${lanes.join("\n")}
             } else {
               const isExtensionlessRelativePathImport = pathIsRelative(moduleReference) && !hasExtension(moduleReference);
               const resolutionIsNode16OrNext = moduleResolutionKind === 3 || moduleResolutionKind === 99;
-              if (!getResolveJsonModule(compilerOptions2) && fileExtensionIs(
+              if (!getResolveJsonModule(compilerOptions) && fileExtensionIs(
                 moduleReference,
                 ".json"
                 /* Json */
-              ) && moduleResolutionKind !== 1 && hasJsonModuleEmitEnabled(compilerOptions2)) {
+              ) && moduleResolutionKind !== 1 && hasJsonModuleEmitEnabled(compilerOptions)) {
                 error2(errorNode, Diagnostics.Cannot_find_module_0_Consider_using_resolveJsonModule_to_import_module_with_json_extension, moduleReference);
               } else if (mode === 99 && resolutionIsNode16OrNext && isExtensionlessRelativePathImport) {
                 const absoluteRef = getNormalizedAbsolutePath(moduleReference, getDirectoryPath(currentSourceFile.path));
@@ -58134,7 +58134,7 @@ ${lanes.join("\n")}
           function getSuggestedImportSource(tsExtension) {
             const importSourceWithoutExtension = removeExtension(moduleReference, tsExtension);
             if (emitModuleKindIsNonNodeESM(moduleKind) || mode === 99) {
-              const preferTs = isDeclarationFileName(moduleReference) && shouldAllowImportingTsExtension(compilerOptions2);
+              const preferTs = isDeclarationFileName(moduleReference) && shouldAllowImportingTsExtension(compilerOptions);
               const ext = tsExtension === ".mts" || tsExtension === ".d.mts" ? preferTs ? ".mts" : ".mjs" : tsExtension === ".cts" || tsExtension === ".d.mts" ? preferTs ? ".cts" : ".cjs" : preferTs ? ".ts" : ".js";
               return importSourceWithoutExtension + ext;
             }
@@ -58224,13 +58224,13 @@ ${lanes.join("\n")}
                 if (!suppressInteropError && !(symbol.flags & (1536 | 3))) {
                   error2(referencingLocation, Diagnostics.This_module_can_only_be_referenced_with_ECMAScript_imports_Slashexports_by_turning_on_the_0_flag_and_referencing_its_default_export, "esModuleInterop");
                 }
-                if (getESModuleInterop(compilerOptions2) && hasSignatures(type)) {
+                if (getESModuleInterop(compilerOptions) && hasSignatures(type)) {
                   return cloneTypeAsModuleType(exportModuleDotExportsSymbol, type, referenceParent);
                 }
                 return exportModuleDotExportsSymbol;
               }
               const isEsmCjsRef = targetFile && isESMFormatImportImportingCommonjsFormatFile(usageMode, host.getImpliedNodeFormatForEmit(targetFile));
-              if (getESModuleInterop(compilerOptions2) || isEsmCjsRef) {
+              if (getESModuleInterop(compilerOptions) || isEsmCjsRef) {
                 if (hasSignatures(type) || getPropertyOfType(
                   type,
                   "default",
@@ -59274,7 +59274,7 @@ ${lanes.join("\n")}
           }
         }
         function typeToString(type, enclosingDeclaration, flags = 1048576 | 16384, writer = createTextWriter(""), maximumLength, verbosityLevel, out) {
-          const noTruncation = !maximumLength && compilerOptions2.noErrorTruncation || flags & 1;
+          const noTruncation = !maximumLength && compilerOptions.noErrorTruncation || flags & 1;
           const typeNode = nodeBuilder.typeToTypeNode(
             type,
             enclosingDeclaration,
@@ -59787,7 +59787,7 @@ ${lanes.join("\n")}
               inferTypeParameters: void 0,
               approximateLength: 0,
               trackedSymbols: void 0,
-              bundled: !!compilerOptions2.outFile && !!enclosingDeclaration && isExternalOrCommonJsModule(getSourceFileOfNode(enclosingDeclaration)),
+              bundled: !!compilerOptions.outFile && !!enclosingDeclaration && isExternalOrCommonJsModule(getSourceFileOfNode(enclosingDeclaration)),
               truncating: false,
               usedSymbolNames: void 0,
               remappedSymbolNames: void 0,
@@ -61885,9 +61885,9 @@ ${lanes.join("\n")}
             const links = getSymbolLinks(symbol);
             let specifier = links.specifierCache && links.specifierCache.get(cacheKey);
             if (!specifier) {
-              const isBundle2 = !!compilerOptions2.outFile;
+              const isBundle2 = !!compilerOptions.outFile;
               const { moduleResolverHost } = context.tracker;
-              const specifierCompilerOptions = isBundle2 ? { ...compilerOptions2, baseUrl: moduleResolverHost.getCommonSourceDirectory() } : compilerOptions2;
+              const specifierCompilerOptions = isBundle2 ? { ...compilerOptions, baseUrl: moduleResolverHost.getCommonSourceDirectory() } : compilerOptions;
               specifier = first(getModuleSpecifiers(
                 symbol,
                 checker,
@@ -61919,7 +61919,7 @@ ${lanes.join("\n")}
               const targetFile = getSourceFileOfModule(chain[0]);
               let specifier;
               let attributes;
-              if (getEmitModuleResolutionKind(compilerOptions2) === 3 || getEmitModuleResolutionKind(compilerOptions2) === 99) {
+              if (getEmitModuleResolutionKind(compilerOptions) === 3 || getEmitModuleResolutionKind(compilerOptions) === 99) {
                 if ((targetFile == null ? void 0 : targetFile.impliedNodeFormat) === 99 && targetFile.impliedNodeFormat !== (contextFile == null ? void 0 : contextFile.impliedNodeFormat)) {
                   specifier = getSpecifierForModuleSymbol(
                     chain[0],
@@ -61940,9 +61940,9 @@ ${lanes.join("\n")}
               if (!specifier) {
                 specifier = getSpecifierForModuleSymbol(chain[0], context);
               }
-              if (!(context.flags & 67108864) && getEmitModuleResolutionKind(compilerOptions2) !== 1 && specifier.includes("/node_modules/")) {
+              if (!(context.flags & 67108864) && getEmitModuleResolutionKind(compilerOptions) !== 1 && specifier.includes("/node_modules/")) {
                 const oldSpecifier = specifier;
-                if (getEmitModuleResolutionKind(compilerOptions2) === 3 || getEmitModuleResolutionKind(compilerOptions2) === 99) {
+                if (getEmitModuleResolutionKind(compilerOptions) === 3 || getEmitModuleResolutionKind(compilerOptions) === 99) {
                   const swappedMode = (contextFile == null ? void 0 : contextFile.impliedNodeFormat) === 99 ? 1 : 99;
                   specifier = getSpecifierForModuleSymbol(chain[0], context, swappedMode);
                   if (specifier.includes("/node_modules/")) {
@@ -62244,20 +62244,20 @@ ${lanes.join("\n")}
               return fromNameType;
             }
             const rawName = unescapeLeadingUnderscores(symbol.escapedName);
-            return createPropertyNameNodeForIdentifierOrLiteral(rawName, getEmitScriptTarget(compilerOptions2), singleQuote, stringNamed, isMethod);
+            return createPropertyNameNodeForIdentifierOrLiteral(rawName, getEmitScriptTarget(compilerOptions), singleQuote, stringNamed, isMethod);
           }
           function getPropertyNameNodeForSymbolFromNameType(symbol, context, singleQuote, stringNamed, isMethod) {
             const nameType = getSymbolLinks(symbol).nameType;
             if (nameType) {
               if (nameType.flags & 3072) {
                 const name = "" + nameType.value;
-                if (!isIdentifierText(name, getEmitScriptTarget(compilerOptions2)) && (stringNamed || !isNumericLiteralName(name))) {
+                if (!isIdentifierText(name, getEmitScriptTarget(compilerOptions)) && (stringNamed || !isNumericLiteralName(name))) {
                   return factory.createStringLiteral(name, !!singleQuote);
                 }
                 if (isNumericLiteralName(name) && startsWith(name, "-")) {
                   return factory.createComputedPropertyName(factory.createPrefixUnaryExpression(41, factory.createNumericLiteral(-name)));
                 }
-                return createPropertyNameNodeForIdentifierOrLiteral(name, getEmitScriptTarget(compilerOptions2), singleQuote, stringNamed, isMethod);
+                return createPropertyNameNodeForIdentifierOrLiteral(name, getEmitScriptTarget(compilerOptions), singleQuote, stringNamed, isMethod);
               }
               if (nameType.flags & 16384) {
                 return factory.createComputedPropertyName(symbolToExpression(
@@ -64537,7 +64537,7 @@ ${lanes.join("\n")}
           if (nameType) {
             if (nameType.flags & 3072) {
               const name = "" + nameType.value;
-              if (!isIdentifierText(name, getEmitScriptTarget(compilerOptions2)) && !isNumericLiteralName(name)) {
+              if (!isIdentifierText(name, getEmitScriptTarget(compilerOptions)) && !isNumericLiteralName(name)) {
                 return `"${escapeString(
                   name,
                   34
@@ -72029,7 +72029,7 @@ ${lanes.join("\n")}
           )) {
             indexType = stringType;
           }
-          if (compilerOptions2.noUncheckedIndexedAccess && accessFlags & 32) accessFlags |= 1;
+          if (compilerOptions.noUncheckedIndexedAccess && accessFlags & 32) accessFlags |= 1;
           if (isGenericIndexType(indexType) || (accessNode && accessNode.kind !== 200 ? isGenericTupleType(objectType) && !indexTypeLessThan(indexType, getTotalFixedElementCount(objectType.target)) : isGenericObjectType(objectType) && !(isTupleType(objectType) && indexTypeLessThan(indexType, getTotalFixedElementCount(objectType.target))) || isGenericReducibleType(objectType))) {
             if (objectType.flags & 3) {
               return objectType;
@@ -74529,7 +74529,7 @@ ${lanes.join("\n")}
                   const str = "" + args[0];
                   if (path2.length === 0) {
                     path2 = `${str}`;
-                  } else if (isIdentifierText(str, getEmitScriptTarget(compilerOptions2))) {
+                  } else if (isIdentifierText(str, getEmitScriptTarget(compilerOptions))) {
                     path2 = `${path2}.${str}`;
                   } else if (str[0] === "[" && str[str.length - 1] === "]") {
                     path2 = `${path2}${str}`;
@@ -77436,7 +77436,7 @@ ${lanes.join("\n")}
             return propType;
           }
           if (everyType(type, isTupleType)) {
-            return getTupleElementTypeOutOfStartCount(type, index, compilerOptions2.noUncheckedIndexedAccess ? undefinedType : void 0);
+            return getTupleElementTypeOutOfStartCount(type, index, compilerOptions.noUncheckedIndexedAccess ? undefinedType : void 0);
           }
           return void 0;
         }
@@ -77817,7 +77817,7 @@ ${lanes.join("\n")}
         }
         function reportImplicitAny(declaration, type, wideningKind) {
           const typeAsString = typeToString(getWidenedType(type));
-          if (isInJSFile(declaration) && !isCheckJsEnabledForFile(getSourceFileOfNode(declaration), compilerOptions2)) {
+          if (isInJSFile(declaration) && !isCheckJsEnabledForFile(getSourceFileOfNode(declaration), compilerOptions)) {
             return;
           }
           let diagnostic;
@@ -79146,21 +79146,21 @@ ${lanes.join("\n")}
             case "console":
               return Diagnostics.Cannot_find_name_0_Do_you_need_to_change_your_target_library_Try_changing_the_lib_compiler_option_to_include_dom;
             case "$":
-              return usesWildcardTypes(compilerOptions2) ? Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_jQuery_Try_npm_i_save_dev_types_Slashjquery : Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_jQuery_Try_npm_i_save_dev_types_Slashjquery_and_then_add_jquery_to_the_types_field_in_your_tsconfig;
+              return usesWildcardTypes(compilerOptions) ? Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_jQuery_Try_npm_i_save_dev_types_Slashjquery : Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_jQuery_Try_npm_i_save_dev_types_Slashjquery_and_then_add_jquery_to_the_types_field_in_your_tsconfig;
             case "beforeEach":
             case "describe":
             case "suite":
             case "it":
             case "test":
-              return usesWildcardTypes(compilerOptions2) ? Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_a_test_runner_Try_npm_i_save_dev_types_Slashjest_or_npm_i_save_dev_types_Slashmocha : Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_a_test_runner_Try_npm_i_save_dev_types_Slashjest_or_npm_i_save_dev_types_Slashmocha_and_then_add_jest_or_mocha_to_the_types_field_in_your_tsconfig;
+              return usesWildcardTypes(compilerOptions) ? Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_a_test_runner_Try_npm_i_save_dev_types_Slashjest_or_npm_i_save_dev_types_Slashmocha : Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_a_test_runner_Try_npm_i_save_dev_types_Slashjest_or_npm_i_save_dev_types_Slashmocha_and_then_add_jest_or_mocha_to_the_types_field_in_your_tsconfig;
             case "process":
             case "require":
             case "Buffer":
             case "module":
             case "NodeJS":
-              return usesWildcardTypes(compilerOptions2) ? Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_node_Try_npm_i_save_dev_types_Slashnode : Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_node_Try_npm_i_save_dev_types_Slashnode_and_then_add_node_to_the_types_field_in_your_tsconfig;
+              return usesWildcardTypes(compilerOptions) ? Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_node_Try_npm_i_save_dev_types_Slashnode : Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_node_Try_npm_i_save_dev_types_Slashnode_and_then_add_node_to_the_types_field_in_your_tsconfig;
             case "Bun":
-              return usesWildcardTypes(compilerOptions2) ? Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_Bun_Try_npm_i_save_dev_types_Slashbun : Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_Bun_Try_npm_i_save_dev_types_Slashbun_and_then_add_bun_to_the_types_field_in_your_tsconfig;
+              return usesWildcardTypes(compilerOptions) ? Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_Bun_Try_npm_i_save_dev_types_Slashbun : Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_Bun_Try_npm_i_save_dev_types_Slashbun_and_then_add_bun_to_the_types_field_in_your_tsconfig;
             case "Map":
             case "Set":
             case "Promise":
@@ -79196,7 +79196,7 @@ ${lanes.join("\n")}
         function getCannotResolveModuleNameErrorForSpecificModule(moduleName) {
           if (moduleName.kind === 11) {
             if (nodeCoreModules.has(moduleName.text)) {
-              if (usesWildcardTypes(compilerOptions2)) {
+              if (usesWildcardTypes(compilerOptions)) {
                 return Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_node_Try_npm_i_save_dev_types_Slashnode;
               } else {
                 return Diagnostics.Cannot_find_name_0_Do_you_need_to_install_type_definitions_for_node_Try_npm_i_save_dev_types_Slashnode_and_then_add_node_to_the_types_field_in_your_tsconfig;
@@ -79664,7 +79664,7 @@ ${lanes.join("\n")}
         }
         function includeUndefinedInIndexSignature(type) {
           if (!type) return type;
-          return compilerOptions2.noUncheckedIndexedAccess ? getUnionType([type, missingType]) : type;
+          return compilerOptions.noUncheckedIndexedAccess ? getUnionType([type, missingType]) : type;
         }
         function getTypeOfDestructuredSpreadExpression(type) {
           return createArrayType(checkIteratedTypeOrElementType(
@@ -81783,7 +81783,7 @@ ${lanes.join("\n")}
               if (isFunctionLikeDeclaration(location) || isMethodSignature(location)) {
                 markAsyncFunctionAliasReferenced(location);
               }
-              if (!compilerOptions2.emitDecoratorMetadata) {
+              if (!compilerOptions.emitDecoratorMetadata) {
                 return;
               }
               if (!canHaveDecorators(location) || !hasDecorators(location) || !location.modifiers || !nodeCanBeDecorated(legacyDecorators, location, location.parent, location.parent.parent)) {
@@ -81810,7 +81810,7 @@ ${lanes.join("\n")}
           if (!parentSymbol || parentSymbol === unknownSymbol) {
             return;
           }
-          if (getIsolatedModules(compilerOptions2) || shouldPreserveConstEnums(compilerOptions2) && isExportOrExportExpression(location)) {
+          if (getIsolatedModules(compilerOptions) || shouldPreserveConstEnums(compilerOptions) && isExportOrExportExpression(location)) {
             markAliasReferenced(parentSymbol, location);
             return;
           }
@@ -81851,10 +81851,10 @@ ${lanes.join("\n")}
         }
         function markJsxAliasReferenced(node) {
           if (!getJsxNamespaceContainerForImplicitImport(node)) {
-            const jsxFactoryRefErr = diagnostics && compilerOptions2.jsx === 2 ? Diagnostics.This_JSX_tag_requires_0_to_be_in_scope_but_it_could_not_be_found : void 0;
+            const jsxFactoryRefErr = diagnostics && compilerOptions.jsx === 2 ? Diagnostics.This_JSX_tag_requires_0_to_be_in_scope_but_it_could_not_be_found : void 0;
             const jsxFactoryNamespace = getJsxNamespace(node);
             const jsxFactoryLocation = isJsxOpeningLikeElement(node) ? node.tagName : node;
-            const shouldFactoryRefErr = compilerOptions2.jsx !== 1 && compilerOptions2.jsx !== 3;
+            const shouldFactoryRefErr = compilerOptions.jsx !== 1 && compilerOptions.jsx !== 3;
             let jsxFactorySym;
             if (!(isJsxOpeningFragment(node) && jsxFactoryNamespace === "null")) {
               jsxFactorySym = resolveName(
@@ -81934,7 +81934,7 @@ ${lanes.join("\n")}
           }
         }
         function markDecoratorAliasReferenced(node) {
-          if (compilerOptions2.emitDecoratorMetadata) {
+          if (compilerOptions.emitDecoratorMetadata) {
             const firstDecorator = find(node.modifiers, isDecorator);
             if (!firstDecorator) {
               return;
@@ -81995,7 +81995,7 @@ ${lanes.join("\n")}
               /*excludeTypeOnlyMeanings*/
               true
             ) & (111551 | 1048576)) {
-              if (getIsolatedModules(compilerOptions2) || shouldPreserveConstEnums(compilerOptions2) && isExportOrExportExpression(location) || !isConstEnumOrConstEnumOnlyModule(getExportSymbolOfValueSymbolIfExported(target))) {
+              if (getIsolatedModules(compilerOptions) || shouldPreserveConstEnums(compilerOptions) && isExportOrExportExpression(location) || !isConstEnumOrConstEnumOnlyModule(getExportSymbolOfValueSymbolIfExported(target))) {
                 markAliasSymbolAsReferenced(symbol);
               }
             }
@@ -82046,7 +82046,7 @@ ${lanes.join("\n")}
           if (rootSymbol && rootSymbol.flags & 2097152) {
             if (canCollectSymbolAliasAccessabilityData && symbolIsValue(rootSymbol) && !isConstEnumOrConstEnumOnlyModule(resolveAlias(rootSymbol)) && !getTypeOnlyAliasDeclaration(rootSymbol)) {
               markAliasSymbolAsReferenced(rootSymbol);
-            } else if (forDecoratorMetadata && getIsolatedModules(compilerOptions2) && getEmitModuleKind(compilerOptions2) >= 5 && !symbolIsValue(rootSymbol) && !some(rootSymbol.declarations, isTypeOnlyImportOrExportDeclaration)) {
+            } else if (forDecoratorMetadata && getIsolatedModules(compilerOptions) && getEmitModuleKind(compilerOptions) >= 5 && !symbolIsValue(rootSymbol) && !some(rootSymbol.declarations, isTypeOnlyImportOrExportDeclaration)) {
               const diag2 = error2(typeName, Diagnostics.A_type_referenced_in_a_decorated_signature_must_be_imported_with_import_type_or_a_namespace_import_when_isolatedModules_and_emitDecoratorMetadata_are_enabled);
               const aliasDeclaration = find(rootSymbol.declarations || emptyArray, isAliasSymbolDeclaration);
               if (aliasDeclaration) {
@@ -83874,7 +83874,7 @@ ${lanes.join("\n")}
           }
         }
         function getIntersectedSignatures(signatures) {
-          return getStrictOptionValue(compilerOptions2, "noImplicitAny") ? reduceLeft(
+          return getStrictOptionValue(compilerOptions, "noImplicitAny") ? reduceLeft(
             signatures,
             (left, right) => left === right || !left ? left : compareTypeParametersIdentical(left.typeParameters, right.typeParameters) ? combineSignaturesOfIntersectionMembers(left, right) : void 0
           ) : void 0;
@@ -84088,7 +84088,7 @@ ${lanes.join("\n")}
           if (languageVersion < LanguageFeatureMinimumTarget.SpreadElements) {
             checkExternalEmitHelpers(
               node,
-              compilerOptions2.downlevelIteration ? 1536 : 1024
+              compilerOptions.downlevelIteration ? 1536 : 1024
               /* SpreadArray */
             );
           }
@@ -84126,7 +84126,7 @@ ${lanes.join("\n")}
               if (languageVersion < LanguageFeatureMinimumTarget.SpreadElements) {
                 checkExternalEmitHelpers(
                   e,
-                  compilerOptions2.downlevelIteration ? 1536 : 1024
+                  compilerOptions.downlevelIteration ? 1536 : 1024
                   /* SpreadArray */
                 );
               }
@@ -84531,10 +84531,10 @@ ${lanes.join("\n")}
         function checkJsxFragment(node) {
           checkJsxOpeningLikeElementOrOpeningFragment(node.openingFragment);
           const nodeSourceFile = getSourceFileOfNode(node);
-          if (getJSXTransformEnabled(compilerOptions2) && (compilerOptions2.jsxFactory || nodeSourceFile.pragmas.has("jsx")) && !compilerOptions2.jsxFragmentFactory && !nodeSourceFile.pragmas.has("jsxfrag")) {
+          if (getJSXTransformEnabled(compilerOptions) && (compilerOptions.jsxFactory || nodeSourceFile.pragmas.has("jsx")) && !compilerOptions.jsxFragmentFactory && !nodeSourceFile.pragmas.has("jsxfrag")) {
             error2(
               node,
-              compilerOptions2.jsxFactory ? Diagnostics.The_jsxFragmentFactory_compiler_option_must_be_provided_to_use_JSX_fragments_with_the_jsxFactory_compiler_option : Diagnostics.An_jsxFrag_pragma_is_required_when_using_an_jsx_pragma_with_JSX_fragments
+              compilerOptions.jsxFactory ? Diagnostics.The_jsxFragmentFactory_compiler_option_must_be_provided_to_use_JSX_fragments_with_the_jsxFactory_compiler_option : Diagnostics.An_jsxFrag_pragma_is_required_when_using_an_jsx_pragma_with_JSX_fragments
             );
           }
           checkJsxChildren(node);
@@ -84792,11 +84792,11 @@ ${lanes.join("\n")}
           if (links && links.jsxImplicitImportContainer) {
             return links.jsxImplicitImportContainer;
           }
-          const runtimeImportSpecifier = getJSXRuntimeImport(getJSXImplicitImportBase(compilerOptions2, file), compilerOptions2);
+          const runtimeImportSpecifier = getJSXRuntimeImport(getJSXImplicitImportBase(compilerOptions, file), compilerOptions);
           if (!runtimeImportSpecifier) {
             return void 0;
           }
-          const isClassic = getEmitModuleResolutionKind(compilerOptions2) === 1;
+          const isClassic = getEmitModuleResolutionKind(compilerOptions) === 1;
           const errorMessage = isClassic ? Diagnostics.Cannot_find_module_0_Did_you_mean_to_set_the_moduleResolution_option_to_nodenext_or_to_add_aliases_to_the_paths_option : Diagnostics.This_JSX_tag_requires_the_module_path_0_to_exist_but_none_could_be_found_Make_sure_you_have_types_for_the_appropriate_package_installed;
           const specifier = getJSXRuntimeImportSpecifier(file, runtimeImportSpecifier);
           const mod = resolveExternalModule(specifier || location, runtimeImportSpecifier, errorMessage, location);
@@ -84894,7 +84894,7 @@ ${lanes.join("\n")}
           return getNameFromJsxElementAttributesContainer(JsxNames.ElementAttributesPropertyNameContainer, jsxNamespace);
         }
         function getJsxElementChildrenPropertyName(jsxNamespace) {
-          if (compilerOptions2.jsx === 4 || compilerOptions2.jsx === 5) {
+          if (compilerOptions.jsx === 4 || compilerOptions.jsx === 5) {
             return "children";
           }
           return getNameFromJsxElementAttributesContainer(JsxNames.ElementChildrenAttributeNameContainer, jsxNamespace);
@@ -85036,7 +85036,7 @@ ${lanes.join("\n")}
           return intrinsics ? getPropertiesOfType(intrinsics) : emptyArray;
         }
         function checkJsxPreconditions(errorNode) {
-          if ((compilerOptions2.jsx || 0) === 0) {
+          if ((compilerOptions.jsx || 0) === 0) {
             error2(errorNode, Diagnostics.Cannot_use_JSX_unless_the_jsx_flag_is_provided);
           }
           if (getJsxElementTypeAt(errorNode) === void 0) {
@@ -85499,7 +85499,7 @@ ${lanes.join("\n")}
                 return errorType;
               }
               const containingClass = getContainingClassExcludingClassDecorators(right);
-              if (containingClass && isPlainJsFile(getSourceFileOfNode(containingClass), compilerOptions2.checkJs)) {
+              if (containingClass && isPlainJsFile(getSourceFileOfNode(containingClass), compilerOptions.checkJs)) {
                 grammarErrorOnNode(right, Diagnostics.Private_field_0_must_be_declared_in_an_enclosing_class, idText(right));
               }
             } else {
@@ -85562,10 +85562,10 @@ ${lanes.join("\n")}
               error2(node, Diagnostics.Index_signature_in_type_0_only_permits_reading, typeToString(apparentType));
             }
             propType = indexInfo.type;
-            if (compilerOptions2.noUncheckedIndexedAccess && getAssignmentTargetKind(node) !== 1) {
+            if (compilerOptions.noUncheckedIndexedAccess && getAssignmentTargetKind(node) !== 1) {
               propType = getUnionType([propType, missingType]);
             }
-            if (compilerOptions2.noPropertyAccessFromIndexSignature && isPropertyAccessExpression(node)) {
+            if (compilerOptions.noPropertyAccessFromIndexSignature && isPropertyAccessExpression(node)) {
               error2(right, Diagnostics.Property_0_comes_from_an_index_signature_so_it_must_be_accessed_with_0, unescapeLeadingUnderscores(right.escapedText));
             }
             if (indexInfo.declaration && isDeprecatedDeclaration2(indexInfo.declaration)) {
@@ -85592,7 +85592,7 @@ ${lanes.join("\n")}
           var _a;
           const file = getSourceFileOfNode(node);
           if (file) {
-            if (compilerOptions2.checkJs === void 0 && file.checkJsDirective === void 0 && (file.scriptKind === 1 || file.scriptKind === 2)) {
+            if (compilerOptions.checkJs === void 0 && file.checkJsDirective === void 0 && (file.scriptKind === 1 || file.scriptKind === 2)) {
               const declarationFile = forEach(suggestion == null ? void 0 : suggestion.declarations, getSourceFileOfNode);
               const suggestionHasNoExtendsOrDecorators = !(suggestion == null ? void 0 : suggestion.valueDeclaration) || !isClassLike(suggestion.valueDeclaration) || ((_a = suggestion.valueDeclaration.heritageClauses) == null ? void 0 : _a.length) || classOrConstructorParameterIsDecorated(
                 /*useLegacyDecorators*/
@@ -85735,7 +85735,7 @@ ${lanes.join("\n")}
           addErrorOrSuggestion(!isUncheckedJS || errorInfo.code !== Diagnostics.Property_0_may_not_exist_on_type_1_Did_you_mean_2.code, resultDiagnostic);
         }
         function containerSeemsToBeEmptyDomElement(containingType) {
-          return compilerOptions2.lib && !compilerOptions2.lib.includes("lib.dom.d.ts") && everyContainedType(containingType, (type) => type.symbol && /^(?:EventTarget|Node|(?:HTML[a-zA-Z]*)?Element)$/.test(unescapeLeadingUnderscores(type.symbol.escapedName))) && isEmptyObjectType(containingType);
+          return compilerOptions.lib && !compilerOptions.lib.includes("lib.dom.d.ts") && everyContainedType(containingType, (type) => type.symbol && /^(?:EventTarget|Node|(?:HTML[a-zA-Z]*)?Element)$/.test(unescapeLeadingUnderscores(type.symbol.escapedName))) && isEmptyObjectType(containingType);
         }
         function typeHasStaticProperty(propName, containingType) {
           const prop = containingType.symbol && getPropertyOfType(getTypeOfSymbol(containingType.symbol), propName);
@@ -86714,7 +86714,7 @@ ${lanes.join("\n")}
           return Debug.fail();
         }
         function getDecoratorArgumentCount(node, signature) {
-          return compilerOptions2.experimentalDecorators ? getLegacyDecoratorArgumentCount(node, signature) : (
+          return compilerOptions.experimentalDecorators ? getLegacyDecoratorArgumentCount(node, signature) : (
             // Allow the runtime to oversupply arguments to an ES decorator as long as there's at least one parameter.
             Math.min(Math.max(getParameterCount(signature), 1), 2)
           );
@@ -87838,9 +87838,9 @@ ${lanes.join("\n")}
           const sourceFileLinks = getNodeLinks(getSourceFileOfNode(node));
           if (sourceFileLinks.jsxFragmentType !== void 0) return sourceFileLinks.jsxFragmentType;
           const jsxFragmentFactoryName = getJsxNamespace(node);
-          const shouldResolveFactoryReference = (compilerOptions2.jsx === 2 || compilerOptions2.jsxFragmentFactory !== void 0) && jsxFragmentFactoryName !== "null";
+          const shouldResolveFactoryReference = (compilerOptions.jsx === 2 || compilerOptions.jsxFragmentFactory !== void 0) && jsxFragmentFactoryName !== "null";
           if (!shouldResolveFactoryReference) return sourceFileLinks.jsxFragmentType = anyType;
-          const shouldModuleRefErr = compilerOptions2.jsx !== 1 && compilerOptions2.jsx !== 3;
+          const shouldModuleRefErr = compilerOptions.jsx !== 1 && compilerOptions.jsx !== 3;
           const jsxFactoryRefErr = diagnostics ? Diagnostics.Using_JSX_fragments_requires_fragment_factory_0_to_be_in_scope_but_it_could_not_be_found : void 0;
           const jsxFactorySymbol = getJsxNamespaceContainerForImplicitImport(node) ?? resolveName(
             node,
@@ -88239,7 +88239,7 @@ ${lanes.join("\n")}
                 /* Undefined */
               ), node.arguments[1]);
             }
-            if (compilerOptions2.ignoreDeprecations !== "6.0" && isObjectLiteralExpression(node.arguments[1])) {
+            if (compilerOptions.ignoreDeprecations !== "6.0" && isObjectLiteralExpression(node.arguments[1])) {
               for (const prop of node.arguments[1].properties) {
                 if (isPropertyAssignment(prop) && isIdentifier(prop.name) && prop.name.escapedText === "assert") {
                   grammarErrorOnNode(prop.name, Diagnostics.Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert);
@@ -88384,7 +88384,7 @@ ${lanes.join("\n")}
             ])) {
               grammarErrorOnNode(node, Diagnostics.This_syntax_is_reserved_in_files_with_the_mts_or_cts_extension_Use_an_as_expression_instead);
             }
-            if (compilerOptions2.erasableSyntaxOnly) {
+            if (compilerOptions.erasableSyntaxOnly) {
               const start = skipTrivia(file.text, node.pos);
               const end = node.expression.pos;
               diagnostics.add(createFileDiagnostic(file, start, end - start, Diagnostics.This_syntax_is_not_allowed_when_erasableSyntaxOnly_is_enabled));
@@ -89676,7 +89676,7 @@ ${lanes.join("\n")}
               error2(errorNode, Diagnostics.A_function_whose_declared_type_is_neither_undefined_void_nor_any_must_return_a_value);
             } else if (type && strictNullChecks && !isTypeAssignableTo(undefinedType, type)) {
               error2(errorNode, Diagnostics.Function_lacks_ending_return_statement_and_return_type_does_not_include_undefined);
-            } else if (compilerOptions2.noImplicitReturns) {
+            } else if (compilerOptions.noImplicitReturns) {
               if (!type) {
                 if (!hasExplicitReturn) {
                   return;
@@ -89944,7 +89944,7 @@ ${lanes.join("\n")}
               const sourceFile = getSourceFileOfNode(node);
               if (!hasParseDiagnostics(sourceFile)) {
                 let span;
-                if (!isEffectiveExternalModule(sourceFile, compilerOptions2)) {
+                if (!isEffectiveExternalModule(sourceFile, compilerOptions)) {
                   span ?? (span = getSpanOfTokenAtPosition(sourceFile, node.pos));
                   const message = isAwaitExpression(node) ? Diagnostics.await_expressions_are_only_allowed_at_the_top_level_of_a_file_when_that_file_is_a_module_but_this_file_has_no_imports_or_exports_Consider_adding_an_empty_export_to_make_this_file_a_module : Diagnostics.await_using_statements_are_only_allowed_at_the_top_level_of_a_file_when_that_file_is_a_module_but_this_file_has_no_imports_or_exports_Consider_adding_an_empty_export_to_make_this_file_a_module;
                   const diagnostic = createFileDiagnostic(sourceFile, span.start, span.length, message);
@@ -90307,7 +90307,7 @@ ${lanes.join("\n")}
         }
         function checkArrayLiteralAssignment(node, sourceType, checkMode) {
           const elements = node.elements;
-          if (languageVersion < LanguageFeatureMinimumTarget.DestructuringAssignment && compilerOptions2.downlevelIteration) {
+          if (languageVersion < LanguageFeatureMinimumTarget.DestructuringAssignment && compilerOptions.downlevelIteration) {
             checkExternalEmitHelpers(
               node,
               512
@@ -90315,7 +90315,7 @@ ${lanes.join("\n")}
             );
           }
           const possiblyOutOfBoundsType = checkIteratedTypeOrElementType(65 | 128, sourceType, undefinedType, node) || errorType;
-          let inBoundsType = compilerOptions2.noUncheckedIndexedAccess ? void 0 : possiblyOutOfBoundsType;
+          let inBoundsType = compilerOptions.noUncheckedIndexedAccess ? void 0 : possiblyOutOfBoundsType;
           for (let i = 0; i < elements.length; i++) {
             let type = possiblyOutOfBoundsType;
             if (node.elements[i].kind === 231) {
@@ -90987,7 +90987,7 @@ ${lanes.join("\n")}
                 return rightType;
               }
             case 28:
-              if (!compilerOptions2.allowUnreachableCode && isSideEffectFree(left) && !isIndirectCall(left.parent)) {
+              if (!compilerOptions.allowUnreachableCode && isSideEffectFree(left) && !isIndirectCall(left.parent)) {
                 const sf = getSourceFileOfNode(left);
                 const sourceText = sf.text;
                 const start = skipTrivia(sourceText, left.pos);
@@ -91221,7 +91221,7 @@ ${lanes.join("\n")}
                 /* AsyncDelegatorIncludes */
               );
             }
-            if (!isAsync && languageVersion < LanguageFeatureMinimumTarget.Generators && compilerOptions2.downlevelIteration) {
+            if (!isAsync && languageVersion < LanguageFeatureMinimumTarget.Generators && compilerOptions.downlevelIteration) {
               checkExternalEmitHelpers(
                 node,
                 256
@@ -91838,7 +91838,7 @@ ${lanes.join("\n")}
           if (!ok) {
             error2(node, Diagnostics.const_enums_can_only_be_used_in_property_or_index_access_expressions_or_the_right_hand_side_of_an_import_declaration_or_export_assignment_or_type_query);
           }
-          if (compilerOptions2.isolatedModules || compilerOptions2.verbatimModuleSyntax && ok && !resolveName(
+          if (compilerOptions.isolatedModules || compilerOptions.verbatimModuleSyntax && ok && !resolveName(
             node,
             getFirstIdentifier(node),
             2097152,
@@ -92036,7 +92036,7 @@ ${lanes.join("\n")}
             31
             /* ParameterPropertyModifier */
           )) {
-            if (compilerOptions2.erasableSyntaxOnly) {
+            if (compilerOptions.erasableSyntaxOnly) {
               error2(node, Diagnostics.This_syntax_is_not_allowed_when_erasableSyntaxOnly_is_enabled);
             }
             if (!(func.kind === 177 && nodeIsPresent(func.body))) {
@@ -92909,7 +92909,7 @@ ${lanes.join("\n")}
         function checkImportType(node) {
           checkSourceElement(node.argument);
           if (node.attributes) {
-            if (node.attributes.token !== 118 && compilerOptions2.ignoreDeprecations !== "6.0") {
+            if (node.attributes.token !== 118 && compilerOptions.ignoreDeprecations !== "6.0") {
               grammarErrorOnFirstToken(node.attributes, Diagnostics.Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert);
             }
             getResolutionModeOverride(node.attributes, grammarErrorOnNode);
@@ -94494,7 +94494,7 @@ ${lanes.join("\n")}
             }
           }
           if (isBindingPattern(node.name)) {
-            if (node.name.kind === 208 && languageVersion < LanguageFeatureMinimumTarget.BindingPatterns && compilerOptions2.downlevelIteration) {
+            if (node.name.kind === 208 && languageVersion < LanguageFeatureMinimumTarget.BindingPatterns && compilerOptions.downlevelIteration) {
               checkExternalEmitHelpers(
                 node,
                 512
@@ -94886,7 +94886,7 @@ ${lanes.join("\n")}
                 );
               }
             }
-          } else if (compilerOptions2.downlevelIteration && languageVersion < LanguageFeatureMinimumTarget.ForOf) {
+          } else if (compilerOptions.downlevelIteration && languageVersion < LanguageFeatureMinimumTarget.ForOf) {
             checkExternalEmitHelpers(
               node,
               256
@@ -94983,8 +94983,8 @@ ${lanes.join("\n")}
             false
           ) !== emptyGenericType;
           const uplevelIteration = languageVersion >= 2 && iterableExists;
-          const downlevelIteration = !uplevelIteration && compilerOptions2.downlevelIteration;
-          const possibleOutOfBounds = compilerOptions2.noUncheckedIndexedAccess && !!(use & 128);
+          const downlevelIteration = !uplevelIteration && compilerOptions.downlevelIteration;
+          const possibleOutOfBounds = compilerOptions.noUncheckedIndexedAccess && !!(use & 128);
           if (uplevelIteration || downlevelIteration || allowAsyncIterables) {
             const iterationTypes = getIterationTypesOfIterable(inputType, use, uplevelIteration ? errorNode : void 0);
             if (checkAssignability) {
@@ -95037,7 +95037,7 @@ ${lanes.join("\n")}
           }
           const arrayElementType = getIndexTypeOfType(arrayType, numberType);
           if (hasStringConstituent && arrayElementType) {
-            if (arrayElementType.flags & 12583968 && !compilerOptions2.noUncheckedIndexedAccess) {
+            if (arrayElementType.flags & 12583968 && !compilerOptions.noUncheckedIndexedAccess) {
               return stringType;
             }
             return getUnionType(
@@ -95641,7 +95641,7 @@ ${lanes.join("\n")}
               const unwrappedReturnType = unwrapReturnType(returnType, getFunctionFlags(container)) ?? returnType;
               checkReturnExpression(container, unwrappedReturnType, node, node.expression, exprType);
             }
-          } else if (container.kind !== 177 && compilerOptions2.noImplicitReturns && !isUnwrappedReturnTypeUndefinedVoidOrAny(container, returnType)) {
+          } else if (container.kind !== 177 && compilerOptions.noImplicitReturns && !isUnwrappedReturnTypeUndefinedVoidOrAny(container, returnType)) {
             error2(node, Diagnostics.Not_all_code_paths_return_a_value);
           }
         }
@@ -95716,7 +95716,7 @@ ${lanes.join("\n")}
               addLazyDiagnostic(createLazyCaseClauseDiagnostics(clause));
             }
             forEach(clause.statements, checkSourceElement);
-            if (compilerOptions2.noFallthroughCasesInSwitch && clause.fallthroughFlowNode && isReachableFlowNode(clause.fallthroughFlowNode)) {
+            if (compilerOptions.noFallthroughCasesInSwitch && clause.fallthroughFlowNode && isReachableFlowNode(clause.fallthroughFlowNode)) {
               error2(clause, Diagnostics.Fallthrough_case_in_switch);
             }
             function createLazyCaseClauseDiagnostics(clause2) {
@@ -95751,8 +95751,8 @@ ${lanes.join("\n")}
               return false;
             });
           }
-          if (node.label.flags & 1073741824 && compilerOptions2.allowUnusedLabels !== true) {
-            errorOrSuggestion(compilerOptions2.allowUnusedLabels === false, node.label, Diagnostics.Unused_label);
+          if (node.label.flags & 1073741824 && compilerOptions.allowUnusedLabels !== true) {
+            errorOrSuggestion(compilerOptions.allowUnusedLabels === false, node.label, Diagnostics.Unused_label);
           }
           checkSourceElement(node.statement);
         }
@@ -96311,7 +96311,7 @@ ${lanes.join("\n")}
             );
             return 2;
           }
-          if (baseWithThis && (memberHasOverrideModifier || compilerOptions2.noImplicitOverride)) {
+          if (baseWithThis && (memberHasOverrideModifier || compilerOptions.noImplicitOverride)) {
             const thisType = memberIsStatic ? staticType : typeWithThis;
             const baseType = memberIsStatic ? baseStaticType : baseWithThis;
             const prop = getPropertyOfType(thisType, member.escapedName);
@@ -96332,7 +96332,7 @@ ${lanes.join("\n")}
                 );
               }
               return 2;
-            } else if (prop && (baseProp == null ? void 0 : baseProp.declarations) && compilerOptions2.noImplicitOverride && !nodeInAmbientContext) {
+            } else if (prop && (baseProp == null ? void 0 : baseProp.declarations) && compilerOptions.noImplicitOverride && !nodeInAmbientContext) {
               const baseHasAbstract = some(baseProp.declarations, hasAbstractModifier);
               if (memberHasOverrideModifier) {
                 return 0;
@@ -96775,7 +96775,7 @@ ${lanes.join("\n")}
               void 0
             );
           }
-          if (getIsolatedModules(compilerOptions2) && (previous == null ? void 0 : previous.initializer)) {
+          if (getIsolatedModules(compilerOptions) && (previous == null ? void 0 : previous.initializer)) {
             const prevValue = getEnumMemberValue(previous);
             if (!(typeof prevValue.value === "number" && !prevValue.resolvedOtherFiles)) {
               error2(
@@ -96796,7 +96796,7 @@ ${lanes.join("\n")}
                 initializer,
                 isNaN(result.value) ? Diagnostics.const_enum_member_initializer_was_evaluated_to_disallowed_value_NaN : Diagnostics.const_enum_member_initializer_was_evaluated_to_a_non_finite_value
               );
-            } else if (getIsolatedModules(compilerOptions2) && typeof result.value === "string" && !result.isSyntacticallyString) {
+            } else if (getIsolatedModules(compilerOptions) && typeof result.value === "string" && !result.isSyntacticallyString) {
               error2(
                 initializer,
                 Diagnostics._0_has_a_string_type_but_must_have_syntactically_recognizable_string_syntax_when_isolatedModules_is_enabled,
@@ -96929,7 +96929,7 @@ ${lanes.join("\n")}
           checkCollisionsForDeclarationName(node, node.name);
           checkExportsOnMergedDeclarations(node);
           node.members.forEach(checkSourceElement);
-          if (compilerOptions2.erasableSyntaxOnly && !(node.flags & 33554432)) {
+          if (compilerOptions.erasableSyntaxOnly && !(node.flags & 33554432)) {
             error2(node, Diagnostics.This_syntax_is_not_allowed_when_erasableSyntaxOnly_is_enabled);
           }
           computeEnumMemberValues(node);
@@ -97027,11 +97027,11 @@ ${lanes.join("\n")}
             }
             checkExportsOnMergedDeclarations(node);
             const symbol = getSymbolOfDeclaration(node);
-            if (symbol.flags & 512 && !inAmbientContext && isInstantiatedModule(node, shouldPreserveConstEnums(compilerOptions2))) {
-              if (compilerOptions2.erasableSyntaxOnly) {
+            if (symbol.flags & 512 && !inAmbientContext && isInstantiatedModule(node, shouldPreserveConstEnums(compilerOptions))) {
+              if (compilerOptions.erasableSyntaxOnly) {
                 error2(node.name, Diagnostics.This_syntax_is_not_allowed_when_erasableSyntaxOnly_is_enabled);
               }
-              if (getIsolatedModules(compilerOptions2) && !getSourceFileOfNode(node).externalModuleIndicator) {
+              if (getIsolatedModules(compilerOptions) && !getSourceFileOfNode(node).externalModuleIndicator) {
                 error2(node.name, Diagnostics.Namespaces_are_not_allowed_in_global_script_files_when_0_is_enabled_If_this_file_is_not_intended_to_be_a_global_script_set_moduleDetection_to_force_or_add_an_empty_export_statement, isolatedModulesLikeFlagName);
               }
               if (((_a = symbol.declarations) == null ? void 0 : _a.length) > 1) {
@@ -97052,7 +97052,7 @@ ${lanes.join("\n")}
                   getNodeLinks(node).flags |= 2048;
                 }
               }
-              if (compilerOptions2.verbatimModuleSyntax && node.parent.kind === 308 && host.getEmitModuleFormatOfFile(node.parent) === 1) {
+              if (compilerOptions.verbatimModuleSyntax && node.parent.kind === 308 && host.getEmitModuleFormatOfFile(node.parent) === 1) {
                 const exportModifier = (_b = node.modifiers) == null ? void 0 : _b.find(
                   (m) => m.kind === 95
                   /* ExportKeyword */
@@ -97241,7 +97241,7 @@ ${lanes.join("\n")}
               const message = node.kind === 282 ? Diagnostics.Export_declaration_conflicts_with_exported_declaration_of_0 : Diagnostics.Import_declaration_conflicts_with_local_declaration_of_0;
               error2(node, message, symbolToString(symbol));
             } else if (node.kind !== 282) {
-              const appearsValueyToTranspiler = compilerOptions2.isolatedModules && !findAncestor(node, isTypeOnlyImportOrExportDeclaration);
+              const appearsValueyToTranspiler = compilerOptions.isolatedModules && !findAncestor(node, isTypeOnlyImportOrExportDeclaration);
               if (appearsValueyToTranspiler && symbol.flags & (111551 | 1048576)) {
                 error2(
                   node,
@@ -97251,7 +97251,7 @@ ${lanes.join("\n")}
                 );
               }
             }
-            if (getIsolatedModules(compilerOptions2) && !isTypeOnlyImportOrExportDeclaration(node) && !(node.flags & 33554432)) {
+            if (getIsolatedModules(compilerOptions) && !isTypeOnlyImportOrExportDeclaration(node) && !(node.flags & 33554432)) {
               const typeOnlyAlias = getTypeOnlyAliasDeclaration(symbol);
               const isType = !(targetFlags & 111551);
               if (isType || typeOnlyAlias) {
@@ -97259,9 +97259,9 @@ ${lanes.join("\n")}
                   case 274:
                   case 277:
                   case 272: {
-                    if (compilerOptions2.verbatimModuleSyntax) {
+                    if (compilerOptions.verbatimModuleSyntax) {
                       Debug.assertIsDefined(node.name, "An ImportClause with a symbol should have a name");
-                      const message = compilerOptions2.verbatimModuleSyntax && isInternalModuleImportEqualsDeclaration(node) ? Diagnostics.An_import_alias_cannot_resolve_to_a_type_or_type_only_declaration_when_verbatimModuleSyntax_is_enabled : isType ? Diagnostics._0_is_a_type_and_must_be_imported_using_a_type_only_import_when_verbatimModuleSyntax_is_enabled : Diagnostics._0_resolves_to_a_type_only_declaration_and_must_be_imported_using_a_type_only_import_when_verbatimModuleSyntax_is_enabled;
+                      const message = compilerOptions.verbatimModuleSyntax && isInternalModuleImportEqualsDeclaration(node) ? Diagnostics.An_import_alias_cannot_resolve_to_a_type_or_type_only_declaration_when_verbatimModuleSyntax_is_enabled : isType ? Diagnostics._0_is_a_type_and_must_be_imported_using_a_type_only_import_when_verbatimModuleSyntax_is_enabled : Diagnostics._0_resolves_to_a_type_only_declaration_and_must_be_imported_using_a_type_only_import_when_verbatimModuleSyntax_is_enabled;
                       const name = moduleExportNameTextUnescaped(node.kind === 277 ? node.propertyName || node.name : node.name);
                       addTypeOnlyDeclarationRelatedInfo(
                         error2(node, message, name),
@@ -97279,7 +97279,7 @@ ${lanes.join("\n")}
                     break;
                   }
                   case 282: {
-                    if (compilerOptions2.verbatimModuleSyntax || getSourceFileOfNode(typeOnlyAlias) !== getSourceFileOfNode(node)) {
+                    if (compilerOptions.verbatimModuleSyntax || getSourceFileOfNode(typeOnlyAlias) !== getSourceFileOfNode(node)) {
                       const name = moduleExportNameTextUnescaped(node.propertyName || node.name);
                       const diagnostic = isType ? error2(node, Diagnostics.Re_exporting_a_type_when_0_is_enabled_requires_using_export_type, isolatedModulesLikeFlagName) : error2(node, Diagnostics._0_resolves_to_a_type_only_declaration_and_must_be_re_exported_using_a_type_only_re_export_when_1_is_enabled, name, isolatedModulesLikeFlagName);
                       addTypeOnlyDeclarationRelatedInfo(diagnostic, isType ? void 0 : typeOnlyAlias, name);
@@ -97288,12 +97288,12 @@ ${lanes.join("\n")}
                   }
                 }
               }
-              if (compilerOptions2.verbatimModuleSyntax && node.kind !== 272 && !isInJSFile(node) && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) === 1) {
+              if (compilerOptions.verbatimModuleSyntax && node.kind !== 272 && !isInJSFile(node) && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) === 1) {
                 error2(node, getVerbatimModuleSyntaxErrorMessage(node));
               } else if (moduleKind === 200 && node.kind !== 272 && node.kind !== 261 && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) === 1) {
                 error2(node, Diagnostics.ECMAScript_module_syntax_is_not_allowed_in_a_CommonJS_module_when_module_is_set_to_preserve);
               }
-              if (compilerOptions2.verbatimModuleSyntax && !isTypeOnlyImportOrExportDeclaration(node) && !(node.flags & 33554432) && targetFlags & 128) {
+              if (compilerOptions.verbatimModuleSyntax && !isTypeOnlyImportOrExportDeclaration(node) && !(node.flags & 33554432) && targetFlags & 128) {
                 const constEnumDeclaration = target.valueDeclaration;
                 const redirect = (_e = host.getRedirectFromOutput(getSourceFileOfNode(constEnumDeclaration).resolvedPath)) == null ? void 0 : _e.resolvedRef;
                 if (constEnumDeclaration.flags & 33554432 && (!redirect || !shouldPreserveConstEnums(redirect.commandLine.options))) {
@@ -97339,7 +97339,7 @@ ${lanes.join("\n")}
           checkAliasSymbol(node);
           if (node.kind === 277) {
             checkModuleExportName(node.propertyName);
-            if (moduleExportNameIsDefault(node.propertyName || node.name) && getESModuleInterop(compilerOptions2) && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) < 4) {
+            if (moduleExportNameIsDefault(node.propertyName || node.name) && getESModuleInterop(compilerOptions) && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) < 4) {
               checkExternalEmitHelpers(
                 node,
                 131072
@@ -97378,7 +97378,7 @@ ${lanes.join("\n")}
             if (102 <= moduleKind && moduleKind <= 199 && !isImportAttributes2) {
               return grammarErrorOnFirstToken(node, Diagnostics.Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert);
             }
-            if (!isImportAttributes2 && compilerOptions2.ignoreDeprecations !== "6.0") {
+            if (!isImportAttributes2 && compilerOptions.ignoreDeprecations !== "6.0") {
               grammarErrorOnFirstToken(node, Diagnostics.Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert);
             }
             if (declaration.moduleSpecifier && getEmitSyntaxForModuleSpecifierExpression(declaration.moduleSpecifier) === 1) {
@@ -97416,7 +97416,7 @@ ${lanes.join("\n")}
               if (importClause.namedBindings) {
                 if (importClause.namedBindings.kind === 275) {
                   checkImportBinding(importClause.namedBindings);
-                  if (host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) < 4 && getESModuleInterop(compilerOptions2)) {
+                  if (host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) < 4 && getESModuleInterop(compilerOptions)) {
                     checkExternalEmitHelpers(
                       node,
                       65536
@@ -97456,7 +97456,7 @@ ${lanes.join("\n")}
             return;
           }
           checkGrammarModifiers(node);
-          if (compilerOptions2.erasableSyntaxOnly && !(node.flags & 33554432)) {
+          if (compilerOptions.erasableSyntaxOnly && !(node.flags & 33554432)) {
             error2(node, Diagnostics.This_syntax_is_not_allowed_when_erasableSyntaxOnly_is_enabled);
           }
           if (isInternalModuleImportEqualsDeclaration(node) || checkExternalImportOrExportDeclaration(node)) {
@@ -97520,7 +97520,7 @@ ${lanes.join("\n")}
               }
               if (host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) < 4) {
                 if (node.exportClause) {
-                  if (getESModuleInterop(compilerOptions2)) {
+                  if (getESModuleInterop(compilerOptions)) {
                     checkExternalEmitHelpers(
                       node,
                       65536
@@ -97558,7 +97558,7 @@ ${lanes.join("\n")}
           const hasModuleSpecifier = node.parent.parent.moduleSpecifier !== void 0;
           checkModuleExportName(node.propertyName, hasModuleSpecifier);
           checkModuleExportName(node.name);
-          if (getEmitDeclarations(compilerOptions2)) {
+          if (getEmitDeclarations(compilerOptions)) {
             collectLinkedAliases(
               node.propertyName || node.name,
               /*setVisibility*/
@@ -97589,7 +97589,7 @@ ${lanes.join("\n")}
               );
             }
           } else {
-            if (getESModuleInterop(compilerOptions2) && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) < 4 && moduleExportNameIsDefault(node.propertyName || node.name)) {
+            if (getESModuleInterop(compilerOptions) && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) < 4 && moduleExportNameIsDefault(node.propertyName || node.name)) {
               checkExternalEmitHelpers(
                 node,
                 131072
@@ -97603,7 +97603,7 @@ ${lanes.join("\n")}
           if (checkGrammarModuleElementContext(node, illegalContextMessage)) {
             return;
           }
-          if (compilerOptions2.erasableSyntaxOnly && node.isExportEquals && !(node.flags & 33554432)) {
+          if (compilerOptions.erasableSyntaxOnly && node.isExportEquals && !(node.flags & 33554432)) {
             error2(node, Diagnostics.This_syntax_is_not_allowed_when_erasableSyntaxOnly_is_enabled);
           }
           const container = node.parent.kind === 308 ? node.parent : node.parent.parent;
@@ -97622,7 +97622,7 @@ ${lanes.join("\n")}
           if (typeAnnotationNode) {
             checkTypeAssignableTo(checkExpressionCached(node.expression), getTypeFromTypeNode(typeAnnotationNode), node.expression);
           }
-          const isIllegalExportDefaultInCJS = !node.isExportEquals && !(node.flags & 33554432) && compilerOptions2.verbatimModuleSyntax && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) === 1;
+          const isIllegalExportDefaultInCJS = !node.isExportEquals && !(node.flags & 33554432) && compilerOptions.verbatimModuleSyntax && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) === 1;
           if (node.expression.kind === 80) {
             const id = node.expression;
             const sym = getExportSymbolOfValueSymbolIfExported(resolveEntityName(
@@ -97647,21 +97647,21 @@ ${lanes.join("\n")}
               );
               if (getSymbolFlags(sym) & 111551) {
                 checkExpressionCached(id);
-                if (!isIllegalExportDefaultInCJS && !(node.flags & 33554432) && compilerOptions2.verbatimModuleSyntax && typeOnlyDeclaration) {
+                if (!isIllegalExportDefaultInCJS && !(node.flags & 33554432) && compilerOptions.verbatimModuleSyntax && typeOnlyDeclaration) {
                   error2(
                     id,
                     node.isExportEquals ? Diagnostics.An_export_declaration_must_reference_a_real_value_when_verbatimModuleSyntax_is_enabled_but_0_resolves_to_a_type_only_declaration : Diagnostics.An_export_default_must_reference_a_real_value_when_verbatimModuleSyntax_is_enabled_but_0_resolves_to_a_type_only_declaration,
                     idText(id)
                   );
                 }
-              } else if (!isIllegalExportDefaultInCJS && !(node.flags & 33554432) && compilerOptions2.verbatimModuleSyntax) {
+              } else if (!isIllegalExportDefaultInCJS && !(node.flags & 33554432) && compilerOptions.verbatimModuleSyntax) {
                 error2(
                   id,
                   node.isExportEquals ? Diagnostics.An_export_declaration_must_reference_a_value_when_verbatimModuleSyntax_is_enabled_but_0_only_refers_to_a_type : Diagnostics.An_export_default_must_reference_a_value_when_verbatimModuleSyntax_is_enabled_but_0_only_refers_to_a_type,
                   idText(id)
                 );
               }
-              if (!isIllegalExportDefaultInCJS && !(node.flags & 33554432) && getIsolatedModules(compilerOptions2) && !(sym.flags & 111551)) {
+              if (!isIllegalExportDefaultInCJS && !(node.flags & 33554432) && getIsolatedModules(compilerOptions) && !(sym.flags & 111551)) {
                 const nonLocalMeanings = getSymbolFlags(
                   sym,
                   /*excludeTypeOnlyMeanings*/
@@ -97692,7 +97692,7 @@ ${lanes.join("\n")}
             } else {
               checkExpressionCached(id);
             }
-            if (getEmitDeclarations(compilerOptions2)) {
+            if (getEmitDeclarations(compilerOptions)) {
               collectLinkedAliases(
                 id,
                 /*setVisibility*/
@@ -97797,7 +97797,7 @@ ${lanes.join("\n")}
                 cancellationToken.throwIfCancellationRequested();
             }
           }
-          if (compilerOptions2.allowUnreachableCode !== true && !withinUnreachableCode) {
+          if (compilerOptions.allowUnreachableCode !== true && !withinUnreachableCode) {
             if (checkSourceElementUnreachable(node)) {
               withinUnreachableCode = true;
             }
@@ -98020,16 +98020,16 @@ ${lanes.join("\n")}
             }
           }
           const start = getTokenPosOfNode(startNode2, sourceFile);
-          addErrorOrSuggestion(compilerOptions2.allowUnreachableCode === false, createFileDiagnostic(sourceFile, start, endNode2.end - start, Diagnostics.Unreachable_code_detected));
+          addErrorOrSuggestion(compilerOptions.allowUnreachableCode === false, createFileDiagnostic(sourceFile, start, endNode2.end - start, Diagnostics.Unreachable_code_detected));
           return true;
         }
         function isSourceElementUnreachable(node) {
           if (node.flags & 1073741824) {
             switch (node.kind) {
               case 267:
-                return !isEnumConst(node) || shouldPreserveConstEnums(compilerOptions2);
+                return !isEnumConst(node) || shouldPreserveConstEnums(compilerOptions);
               case 268:
-                return isInstantiatedModule(node, shouldPreserveConstEnums(compilerOptions2));
+                return isInstantiatedModule(node, shouldPreserveConstEnums(compilerOptions));
               default:
                 return true;
             }
@@ -98211,9 +98211,9 @@ ${lanes.join("\n")}
           }
           switch (kind) {
             case 0:
-              return !!compilerOptions2.noUnusedLocals;
+              return !!compilerOptions.noUnusedLocals;
             case 1:
-              return !!compilerOptions2.noUnusedParameters;
+              return !!compilerOptions.noUnusedParameters;
             default:
               return Debug.assertNever(kind);
           }
@@ -98224,7 +98224,7 @@ ${lanes.join("\n")}
         function checkSourceFileWorker(node) {
           const links = getNodeLinks(node);
           if (!(links.flags & 1)) {
-            if (skipTypeChecking(node, compilerOptions2, host)) {
+            if (skipTypeChecking(node, compilerOptions, host)) {
               return;
             }
             checkGrammarSourceFile(node);
@@ -98247,7 +98247,7 @@ ${lanes.join("\n")}
               registerForUnusedIdentifiersCheck(node);
             }
             addLazyDiagnostic(() => {
-              if (!node.isDeclarationFile && (compilerOptions2.noUnusedLocals || compilerOptions2.noUnusedParameters)) {
+              if (!node.isDeclarationFile && (compilerOptions.noUnusedLocals || compilerOptions.noUnusedParameters)) {
                 checkUnusedIdentifiers(getPotentiallyUnusedIdentifiers(node), (containingNode, kind, diag2) => {
                   if (!containsParseError(containingNode) && unusedIsError(kind, !!(containingNode.flags & 33554432))) {
                     diagnostics.add(diag2);
@@ -98283,7 +98283,7 @@ ${lanes.join("\n")}
         function checkSourceFileNodesWorker(file, nodes) {
           const links = getNodeLinks(file);
           if (!(links.flags & 1)) {
-            if (skipTypeChecking(file, compilerOptions2, host)) {
+            if (skipTypeChecking(file, compilerOptions, host)) {
               return;
             }
             checkGrammarSourceFile(file);
@@ -99327,7 +99327,7 @@ ${lanes.join("\n")}
             excludeTypeOnlyValues,
             /*excludeLocalMeanings*/
             true
-          ) & 111551) && (shouldPreserveConstEnums(compilerOptions2) || !isConstEnumOrConstEnumOnlyModule(target));
+          ) & 111551) && (shouldPreserveConstEnums(compilerOptions) || !isConstEnumOrConstEnumOnlyModule(target));
         }
         function isConstEnumOrConstEnumOnlyModule(s) {
           return isConstEnumSymbol(s) || !!s.constEnumOnlyModule;
@@ -99341,7 +99341,7 @@ ${lanes.join("\n")}
               return true;
             }
             const target = getSymbolLinks(symbol).aliasTarget;
-            if (target && getEffectiveModifierFlags(node) & 32 && getSymbolFlags(target) & 111551 && (shouldPreserveConstEnums(compilerOptions2) || !isConstEnumOrConstEnumOnlyModule(target))) {
+            if (target && getEffectiveModifierFlags(node) & 32 && getSymbolFlags(target) & 111551 && (shouldPreserveConstEnums(compilerOptions) || !isConstEnumOrConstEnumOnlyModule(target))) {
               return true;
             }
           }
@@ -99435,7 +99435,7 @@ ${lanes.join("\n")}
           return !!(getNodeCheckFlags(node) & flag);
         }
         function calculateNodeCheckFlagWorker(node, flag) {
-          if (!compilerOptions2.noCheck && canIncludeBindAndCheckDiagnostics(getSourceFileOfNode(node), compilerOptions2)) {
+          if (!compilerOptions.noCheck && canIncludeBindAndCheckDiagnostics(getSourceFileOfNode(node), compilerOptions)) {
             return;
           }
           const links = getNodeLinks(node);
@@ -99876,8 +99876,8 @@ ${lanes.join("\n")}
               }
             }
           }
-          if (compilerOptions2.jsxFragmentFactory) {
-            return parseIsolatedEntityName(compilerOptions2.jsxFragmentFactory, languageVersion);
+          if (compilerOptions.jsxFragmentFactory) {
+            return parseIsolatedEntityName(compilerOptions.jsxFragmentFactory, languageVersion);
           }
         }
         function getNonlocalEffectiveTypeAnnotationNode(node) {
@@ -100107,7 +100107,7 @@ ${lanes.join("\n")}
         }
         function initializeTypeChecker() {
           for (const file of host.getSourceFiles()) {
-            bindSourceFile(file, compilerOptions2);
+            bindSourceFile(file, compilerOptions);
           }
           amalgamatedDuplicates = /* @__PURE__ */ new Map();
           let augmentations;
@@ -100281,9 +100281,9 @@ ${lanes.join("\n")}
           amalgamatedDuplicates = void 0;
         }
         function checkExternalEmitHelpers(location, helpers) {
-          if (compilerOptions2.importHelpers) {
+          if (compilerOptions.importHelpers) {
             const sourceFile = getSourceFileOfNode(location);
-            if (isEffectiveExternalModule(sourceFile, compilerOptions2) && !(location.flags & 33554432)) {
+            if (isEffectiveExternalModule(sourceFile, compilerOptions) && !(location.flags & 33554432)) {
               const helpersModule = resolveHelpersModule(sourceFile, location);
               if (helpersModule !== unknownSymbol) {
                 const links = getSymbolLinks(helpersModule);
@@ -100554,7 +100554,7 @@ ${lanes.join("\n")}
                   flags |= 8;
                   break;
                 case 95:
-                  if (compilerOptions2.verbatimModuleSyntax && !(node.flags & 33554432) && node.kind !== 266 && node.kind !== 265 && // ModuleDeclaration needs to be checked that it is uninstantiated later
+                  if (compilerOptions.verbatimModuleSyntax && !(node.flags & 33554432) && node.kind !== 266 && node.kind !== 265 && // ModuleDeclaration needs to be checked that it is uninstantiated later
                   node.kind !== 268 && node.parent.kind === 308 && host.getEmitModuleFormatOfFile(getSourceFileOfNode(node)) === 1) {
                     return grammarErrorOnNode(modifier, Diagnostics.A_top_level_export_modifier_cannot_be_used_on_value_declarations_in_a_CommonJS_module_when_verbatimModuleSyntax_is_enabled);
                   }
@@ -101164,7 +101164,7 @@ ${lanes.join("\n")}
           if (isPropertyAccessExpression(node) && isJsxNamespacedName(node.expression)) {
             return grammarErrorOnNode(node.expression, Diagnostics.JSX_property_access_expressions_cannot_include_JSX_namespace_names);
           }
-          if (isJsxNamespacedName(node) && getJSXTransformEnabled(compilerOptions2) && !isIntrinsicJsxName(node.namespace.escapedText)) {
+          if (isJsxNamespacedName(node) && getJSXTransformEnabled(compilerOptions) && !isIntrinsicJsxName(node.namespace.escapedText)) {
             return grammarErrorOnNode(node, Diagnostics.React_components_cannot_include_JSX_namespace_names);
           }
         }
@@ -101182,7 +101182,7 @@ ${lanes.join("\n")}
               const sourceFile = getSourceFileOfNode(forInOrOfStatement);
               if (isInTopLevelContext(forInOrOfStatement)) {
                 if (!hasParseDiagnostics(sourceFile)) {
-                  if (!isEffectiveExternalModule(sourceFile, compilerOptions2)) {
+                  if (!isEffectiveExternalModule(sourceFile, compilerOptions)) {
                     diagnostics.add(createDiagnosticForNode(forInOrOfStatement.awaitModifier, Diagnostics.for_await_loops_are_only_allowed_at_the_top_level_of_a_file_when_that_file_is_a_module_but_this_file_has_no_imports_or_exports_Consider_adding_an_empty_export_to_make_this_file_a_module));
                   }
                   switch (moduleKind) {
@@ -101867,7 +101867,7 @@ ${lanes.join("\n")}
           });
         }
         function checkGrammarImportCallExpression(node) {
-          if (compilerOptions2.verbatimModuleSyntax && moduleKind === 1) {
+          if (compilerOptions.verbatimModuleSyntax && moduleKind === 1) {
             return grammarErrorOnNode(node, getVerbatimModuleSyntaxErrorMessage(node));
           }
           if (node.expression.kind === 237) {
@@ -102004,7 +102004,7 @@ ${lanes.join("\n")}
           return blockScopeKind === 2 || blockScopeKind === 4 || blockScopeKind === 6;
         }
         function getJSXRuntimeImportSpecifier(file, specifierText) {
-          const jsxImportIndex = compilerOptions2.importHelpers ? 1 : 0;
+          const jsxImportIndex = compilerOptions.importHelpers ? 1 : 0;
           const specifier = file == null ? void 0 : file.imports[jsxImportIndex];
           if (specifier) {
             Debug.assert(nodeIsSynthesized(specifier) && specifier.text === specifierText, `Expected sourceFile.imports[${jsxImportIndex}] to be the synthesized JSX runtime import`);
@@ -102012,7 +102012,7 @@ ${lanes.join("\n")}
           return specifier;
         }
         function getImportHelpersImportSpecifier(file) {
-          Debug.assert(compilerOptions2.importHelpers, "Expected importHelpers to be enabled");
+          Debug.assert(compilerOptions.importHelpers, "Expected importHelpers to be enabled");
           const specifier = file.imports[0];
           Debug.assert(specifier && nodeIsSynthesized(specifier) && specifier.text === "tslib", `Expected sourceFile.imports[0] to be the synthesized tslib import`);
           return specifier;
@@ -104810,7 +104810,7 @@ ${lanes.join("\n")}
       }
       function collectExternalModuleInfo(context, sourceFile) {
         const resolver = context.getEmitResolver();
-        const compilerOptions2 = context.getCompilerOptions();
+        const compilerOptions = context.getCompilerOptions();
         const externalImports = [];
         const exportSpecifiers = new IdentifierNameMultiMap();
         const exportedBindings = [];
@@ -104924,7 +104924,7 @@ ${lanes.join("\n")}
               break;
           }
         }
-        const externalHelpersImportDeclaration = createExternalHelpersImportDeclarationIfNeeded(context.factory, context.getEmitHelperFactory(), sourceFile, compilerOptions2, hasExportStarsToExportValues, hasImportStar, hasImportDefault);
+        const externalHelpersImportDeclaration = createExternalHelpersImportDeclarationIfNeeded(context.factory, context.getEmitHelperFactory(), sourceFile, compilerOptions, hasExportStarsToExportValues, hasImportStar, hasImportDefault);
         if (externalHelpersImportDeclaration) {
           externalImports.unshift(externalHelpersImportDeclaration);
         }
@@ -105291,11 +105291,11 @@ ${lanes.join("\n")}
       function isSimpleParameterList(nodes) {
         return every(nodes, isSimpleParameter);
       }
-      function rewriteModuleSpecifier(node, compilerOptions2) {
-        if (!node || !isStringLiteral(node) || !shouldRewriteModuleSpecifier(node.text, compilerOptions2)) {
+      function rewriteModuleSpecifier(node, compilerOptions) {
+        if (!node || !isStringLiteral(node) || !shouldRewriteModuleSpecifier(node.text, compilerOptions)) {
           return node;
         }
-        const updatedText = changeExtension(node.text, getOutputExtension(node.text, compilerOptions2));
+        const updatedText = changeExtension(node.text, getOutputExtension(node.text, compilerOptions));
         return updatedText !== node.text ? setOriginalNode(setTextRange(factory.createStringLiteral(updatedText, node.singleQuote), node), node) : node;
       }
       var FlattenLevel = /* @__PURE__ */ ((FlattenLevel2) => {
@@ -106099,11 +106099,11 @@ ${lanes.join("\n")}
           hoistVariableDeclaration
         } = context;
         const resolver = context.getEmitResolver();
-        const compilerOptions2 = context.getCompilerOptions();
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
-        const moduleKind = getEmitModuleKind(compilerOptions2);
-        const legacyDecorators = !!compilerOptions2.experimentalDecorators;
-        const typeSerializer = compilerOptions2.emitDecoratorMetadata ? createRuntimeTypeSerializer(context) : void 0;
+        const compilerOptions = context.getCompilerOptions();
+        const languageVersion = getEmitScriptTarget(compilerOptions);
+        const moduleKind = getEmitModuleKind(compilerOptions);
+        const legacyDecorators = !!compilerOptions.experimentalDecorators;
+        const typeSerializer = compilerOptions.emitDecoratorMetadata ? createRuntimeTypeSerializer(context) : void 0;
         const previousOnEmitNode = context.onEmitNode;
         const previousOnSubstituteNode = context.onSubstituteNode;
         context.onEmitNode = onEmitNode;
@@ -106466,7 +106466,7 @@ ${lanes.join("\n")}
           }
         }
         function visitSourceFile(node) {
-          const alwaysStrict = getAlwaysStrict(compilerOptions2) && !(isExternalModule(node) && moduleKind >= 5) && !isJsonSourceFile(node);
+          const alwaysStrict = getAlwaysStrict(compilerOptions) && !(isExternalModule(node) && moduleKind >= 5) && !isJsonSourceFile(node);
           return factory2.updateSourceFile(
             node,
             visitLexicalEnvironment(
@@ -107305,7 +107305,7 @@ ${lanes.join("\n")}
           );
         }
         function shouldEmitEnumDeclaration(node) {
-          return !isEnumConst(node) || shouldPreserveConstEnums(compilerOptions2);
+          return !isEnumConst(node) || shouldPreserveConstEnums(compilerOptions);
         }
         function visitEnumDeclaration(node) {
           if (!shouldEmitEnumDeclaration(node)) {
@@ -107457,7 +107457,7 @@ ${lanes.join("\n")}
           if (!node) {
             return true;
           }
-          return isInstantiatedModule(node, shouldPreserveConstEnums(compilerOptions2));
+          return isInstantiatedModule(node, shouldPreserveConstEnums(compilerOptions));
         }
         function recordEmittedDeclarationInScope(node) {
           if (!currentScopeFirstDeclarationsOfName) {
@@ -107686,7 +107686,7 @@ ${lanes.join("\n")}
           if (node.kind === 275) {
             return shouldEmitAliasDeclaration(node) ? node : void 0;
           } else {
-            const allowEmpty = compilerOptions2.verbatimModuleSyntax;
+            const allowEmpty = compilerOptions.verbatimModuleSyntax;
             const elements = visitNodes2(node.elements, visitImportSpecifier, isImportSpecifier);
             return allowEmpty || some(elements) ? factory2.updateNamedImports(node, elements) : void 0;
           }
@@ -107695,7 +107695,7 @@ ${lanes.join("\n")}
           return !node.isTypeOnly && shouldEmitAliasDeclaration(node) ? node : void 0;
         }
         function visitExportAssignment(node) {
-          return compilerOptions2.verbatimModuleSyntax || resolver.isValueAliasDeclaration(node) ? visitEachChild(node, visitor, context) : void 0;
+          return compilerOptions.verbatimModuleSyntax || resolver.isValueAliasDeclaration(node) ? visitEachChild(node, visitor, context) : void 0;
         }
         function visitExportDeclaration(node) {
           if (node.isTypeOnly) {
@@ -107711,7 +107711,7 @@ ${lanes.join("\n")}
               node.attributes
             );
           }
-          const allowEmpty = !!compilerOptions2.verbatimModuleSyntax;
+          const allowEmpty = !!compilerOptions.verbatimModuleSyntax;
           const exportClause = visitNode(
             node.exportClause,
             (bindings) => visitNamedExportBindings(bindings, allowEmpty),
@@ -107738,7 +107738,7 @@ ${lanes.join("\n")}
           return isNamespaceExport(node) ? visitNamespaceExports(node) : visitNamedExports(node, allowEmpty);
         }
         function visitExportSpecifier(node) {
-          return !node.isTypeOnly && (compilerOptions2.verbatimModuleSyntax || resolver.isValueAliasDeclaration(node)) ? node : void 0;
+          return !node.isTypeOnly && (compilerOptions.verbatimModuleSyntax || resolver.isValueAliasDeclaration(node)) ? node : void 0;
         }
         function shouldEmitImportEqualsDeclaration(node) {
           return shouldEmitAliasDeclaration(node) || !isExternalModule(currentSourceFile) && resolver.isTopLevelValueImportEqualsWithEntityName(node);
@@ -108002,7 +108002,7 @@ ${lanes.join("\n")}
           if (constantValue !== void 0) {
             setConstantValue(node, constantValue);
             const substitute = typeof constantValue === "string" ? factory2.createStringLiteral(constantValue) : constantValue < 0 ? factory2.createPrefixUnaryExpression(41, factory2.createNumericLiteral(-constantValue)) : factory2.createNumericLiteral(constantValue);
-            if (!compilerOptions2.removeComments) {
+            if (!compilerOptions.removeComments) {
               const originalNode = getOriginalNode(node, isAccessExpression);
               addSyntheticTrailingComment(substitute, 3, ` ${safeMultiLineComment(getTextOfNode(originalNode))} `);
             }
@@ -108011,13 +108011,13 @@ ${lanes.join("\n")}
           return node;
         }
         function tryGetConstEnumValue(node) {
-          if (getIsolatedModules(compilerOptions2)) {
+          if (getIsolatedModules(compilerOptions)) {
             return void 0;
           }
           return isPropertyAccessExpression(node) || isElementAccessExpression(node) ? resolver.getConstantValue(node) : void 0;
         }
         function shouldEmitAliasDeclaration(node) {
-          return compilerOptions2.verbatimModuleSyntax || isInJSFile(node) || resolver.isReferencedAliasDeclaration(node);
+          return compilerOptions.verbatimModuleSyntax || isInJSFile(node) || resolver.isReferencedAliasDeclaration(node);
         }
       }
       function transformClassFields(context) {
@@ -108031,10 +108031,10 @@ ${lanes.join("\n")}
           addBlockScopedVariable
         } = context;
         const resolver = context.getEmitResolver();
-        const compilerOptions2 = context.getCompilerOptions();
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
-        const useDefineForClassFields = getUseDefineForClassFields(compilerOptions2);
-        const legacyDecorators = !!compilerOptions2.experimentalDecorators;
+        const compilerOptions = context.getCompilerOptions();
+        const languageVersion = getEmitScriptTarget(compilerOptions);
+        const useDefineForClassFields = getUseDefineForClassFields(compilerOptions);
+        const legacyDecorators = !!compilerOptions.experimentalDecorators;
         const shouldTransformInitializersUsingSet = !useDefineForClassFields;
         const shouldTransformInitializersUsingDefine = useDefineForClassFields && languageVersion < 9;
         const shouldTransformInitializers = shouldTransformInitializersUsingSet || shouldTransformInitializersUsingDefine;
@@ -110369,9 +110369,9 @@ ${lanes.join("\n")}
           hoistVariableDeclaration
         } = context;
         const resolver = context.getEmitResolver();
-        const compilerOptions2 = context.getCompilerOptions();
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
-        const strictNullChecks = getStrictOptionValue(compilerOptions2, "strictNullChecks");
+        const compilerOptions = context.getCompilerOptions();
+        const languageVersion = getEmitScriptTarget(compilerOptions);
+        const strictNullChecks = getStrictOptionValue(compilerOptions, "strictNullChecks");
         let currentLexicalScope;
         let currentNameScope;
         return {
@@ -110741,8 +110741,8 @@ ${lanes.join("\n")}
           hoistVariableDeclaration
         } = context;
         const resolver = context.getEmitResolver();
-        const compilerOptions2 = context.getCompilerOptions();
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
+        const compilerOptions = context.getCompilerOptions();
+        const languageVersion = getEmitScriptTarget(compilerOptions);
         const previousOnSubstituteNode = context.onSubstituteNode;
         context.onSubstituteNode = onSubstituteNode;
         let classAliases;
@@ -113294,8 +113294,8 @@ ${lanes.join("\n")}
           hoistVariableDeclaration
         } = context;
         const resolver = context.getEmitResolver();
-        const compilerOptions2 = context.getCompilerOptions();
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
+        const compilerOptions = context.getCompilerOptions();
+        const languageVersion = getEmitScriptTarget(compilerOptions);
         let enabledSubstitutions = 0;
         let enclosingSuperContainerFlags = 0;
         let enclosingFunctionParameterNames;
@@ -113314,7 +113314,7 @@ ${lanes.join("\n")}
             return node;
           }
           setContextFlag(1, false);
-          setContextFlag(2, !isEffectiveStrictModeSourceFile(node, compilerOptions2));
+          setContextFlag(2, !isEffectiveStrictModeSourceFile(node, compilerOptions));
           const visited = visitEachChild(node, visitor, context);
           addEmitHelpers(visited, context.readEmitHelpers());
           return visited;
@@ -114279,8 +114279,8 @@ ${lanes.join("\n")}
           hoistVariableDeclaration
         } = context;
         const resolver = context.getEmitResolver();
-        const compilerOptions2 = context.getCompilerOptions();
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
+        const compilerOptions = context.getCompilerOptions();
+        const languageVersion = getEmitScriptTarget(compilerOptions);
         const previousOnEmitNode = context.onEmitNode;
         context.onEmitNode = onEmitNode;
         const previousOnSubstituteNode = context.onSubstituteNode;
@@ -114629,7 +114629,7 @@ ${lanes.join("\n")}
         function visitSourceFile(node) {
           const ancestorFacts = enterSubtree(
             2,
-            isEffectiveStrictModeSourceFile(node, compilerOptions2) ? 0 : 1
+            isEffectiveStrictModeSourceFile(node, compilerOptions) ? 0 : 1
             /* SourceFileIncludes */
           );
           exportedVariableStatement = false;
@@ -116630,7 +116630,7 @@ ${lanes.join("\n")}
           factory: factory2,
           getEmitHelperFactory: emitHelpers
         } = context;
-        const compilerOptions2 = context.getCompilerOptions();
+        const compilerOptions = context.getCompilerOptions();
         let currentSourceFile;
         let currentFileState;
         return chainBundle(context, transformSourceFile);
@@ -116654,7 +116654,7 @@ ${lanes.join("\n")}
           return currentFileState.filenameDeclaration.name;
         }
         function getJsxFactoryCalleePrimitive(isStaticChildren) {
-          return compilerOptions2.jsx === 5 ? "jsxDEV" : isStaticChildren ? "jsxs" : "jsx";
+          return compilerOptions.jsx === 5 ? "jsxDEV" : isStaticChildren ? "jsxs" : "jsx";
         }
         function getJsxFactoryCallee(isStaticChildren) {
           const type = getJsxFactoryCalleePrimitive(isStaticChildren);
@@ -116665,7 +116665,7 @@ ${lanes.join("\n")}
         }
         function getImplicitImportForName(name) {
           var _a, _b;
-          const importSource = name === "createElement" ? currentFileState.importSpecifier : getJSXRuntimeImport(currentFileState.importSpecifier, compilerOptions2);
+          const importSource = name === "createElement" ? currentFileState.importSpecifier : getJSXRuntimeImport(currentFileState.importSpecifier, compilerOptions);
           const existing = (_b = (_a = currentFileState.utilizedImplicitRuntimeImports) == null ? void 0 : _a.get(importSource)) == null ? void 0 : _b.get(name);
           if (existing) {
             return existing.name;
@@ -116699,7 +116699,7 @@ ${lanes.join("\n")}
           }
           currentSourceFile = node;
           currentFileState = {};
-          currentFileState.importSpecifier = getJSXImplicitImportBase(compilerOptions2, node);
+          currentFileState.importSpecifier = getJSXImplicitImportBase(compilerOptions, node);
           let visited = visitEachChild(node, visitor, context);
           addEmitHelpers(visited, context.readEmitHelpers());
           let statements = visited.statements;
@@ -116929,7 +116929,7 @@ ${lanes.join("\n")}
           if (keyAttr) {
             args.push(transformJsxAttributeInitializer(keyAttr.initializer));
           }
-          if (compilerOptions2.jsx === 5) {
+          if (compilerOptions.jsx === 5) {
             const originalFile = getOriginalNode(currentSourceFile);
             if (originalFile && isSourceFile(originalFile)) {
               if (keyAttr === void 0) {
@@ -116966,7 +116966,7 @@ ${lanes.join("\n")}
           const callee = currentFileState.importSpecifier === void 0 ? createJsxFactoryExpression(
             factory2,
             context.getEmitResolver().getJsxFactoryEntity(currentSourceFile),
-            compilerOptions2.reactNamespace,
+            compilerOptions.reactNamespace,
             // TODO: GH#18217
             node
           ) : getImplicitImportForName("createElement");
@@ -117006,7 +117006,7 @@ ${lanes.join("\n")}
             factory2,
             context.getEmitResolver().getJsxFactoryEntity(currentSourceFile),
             context.getEmitResolver().getJsxFragmentFactoryEntity(currentSourceFile),
-            compilerOptions2.reactNamespace,
+            compilerOptions.reactNamespace,
             // TODO: GH#18217
             mapDefined(children, transformJsxChildToExpression),
             node,
@@ -117024,7 +117024,7 @@ ${lanes.join("\n")}
           return factory2.createSpreadAssignment(Debug.checkDefined(visitNode(node.expression, visitor, isExpression)));
         }
         function transformJsxAttributesToObjectProps(attrs, children) {
-          const target = getEmitScriptTarget(compilerOptions2);
+          const target = getEmitScriptTarget(compilerOptions);
           return target && target >= 5 ? factory2.createObjectLiteralExpression(transformJsxAttributesToProps(attrs, children)) : transformJsxAttributesToExpression(attrs, children);
         }
         function transformJsxAttributesToProps(attrs, children) {
@@ -117541,7 +117541,7 @@ ${lanes.join("\n")}
           endLexicalEnvironment,
           hoistVariableDeclaration
         } = context;
-        const compilerOptions2 = context.getCompilerOptions();
+        const compilerOptions = context.getCompilerOptions();
         const resolver = context.getEmitResolver();
         const previousOnSubstituteNode = context.onSubstituteNode;
         const previousOnEmitNode = context.onEmitNode;
@@ -119642,7 +119642,7 @@ ${lanes.join("\n")}
             5376,
             node,
             outermostLabeledStatement,
-            compilerOptions2.downlevelIteration ? convertForOfStatementForIterable : convertForOfStatementForArray
+            compilerOptions.downlevelIteration ? convertForOfStatementForIterable : convertForOfStatementForArray
           );
         }
         function convertForOfStatementHead(node, boundValue, convertedLoopBodyStatements) {
@@ -121002,7 +121002,7 @@ ${lanes.join("\n")}
           );
           if (segments.length === 1) {
             const firstSegment = segments[0];
-            if (isArgumentList && !compilerOptions2.downlevelIteration || isPackedArrayLiteral(firstSegment.expression) || isCallToHelper(firstSegment.expression, "___spreadArray")) {
+            if (isArgumentList && !compilerOptions.downlevelIteration || isPackedArrayLiteral(firstSegment.expression) || isCallToHelper(firstSegment.expression, "___spreadArray")) {
               return firstSegment.expression;
             }
           }
@@ -121031,7 +121031,7 @@ ${lanes.join("\n")}
           Debug.assert(expression);
           const isCallToReadHelper = isCallToHelper(expression, "___read");
           let kind = isCallToReadHelper || isPackedArrayLiteral(expression) ? 2 : 1;
-          if (compilerOptions2.downlevelIteration && kind === 1 && !isArrayLiteralExpression(expression) && !isCallToReadHelper) {
+          if (compilerOptions.downlevelIteration && kind === 1 && !isArrayLiteralExpression(expression) && !isCallToReadHelper) {
             expression = emitHelpers().createReadHelper(
               expression,
               /*count*/
@@ -121307,8 +121307,8 @@ ${lanes.join("\n")}
           hoistFunctionDeclaration,
           hoistVariableDeclaration
         } = context;
-        const compilerOptions2 = context.getCompilerOptions();
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
+        const compilerOptions = context.getCompilerOptions();
+        const languageVersion = getEmitScriptTarget(compilerOptions);
         const resolver = context.getEmitResolver();
         const previousOnSubstituteNode = context.onSubstituteNode;
         context.onSubstituteNode = onSubstituteNode;
@@ -123366,11 +123366,11 @@ ${lanes.join("\n")}
           endLexicalEnvironment,
           hoistVariableDeclaration
         } = context;
-        const compilerOptions2 = context.getCompilerOptions();
+        const compilerOptions = context.getCompilerOptions();
         const resolver = context.getEmitResolver();
         const host = context.getEmitHost();
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
-        const moduleKind = getEmitModuleKind(compilerOptions2);
+        const languageVersion = getEmitScriptTarget(compilerOptions);
+        const moduleKind = getEmitModuleKind(compilerOptions);
         const previousOnSubstituteNode = context.onSubstituteNode;
         const previousOnEmitNode = context.onEmitNode;
         context.onSubstituteNode = onSubstituteNode;
@@ -123407,13 +123407,13 @@ ${lanes.join("\n")}
         let needUMDDynamicImportHelper;
         return chainBundle(context, transformSourceFile);
         function transformSourceFile(node) {
-          if (node.isDeclarationFile || !(isEffectiveExternalModule(node, compilerOptions2) || node.transformFlags & 8388608 || isJsonSourceFile(node) && hasJsonModuleEmitEnabled(compilerOptions2) && compilerOptions2.outFile)) {
+          if (node.isDeclarationFile || !(isEffectiveExternalModule(node, compilerOptions) || node.transformFlags & 8388608 || isJsonSourceFile(node) && hasJsonModuleEmitEnabled(compilerOptions) && compilerOptions.outFile)) {
             return node;
           }
           currentSourceFile = node;
           currentModuleInfo = collectExternalModuleInfo(context, node);
           moduleInfoMap[getOriginalNodeId(node)] = currentModuleInfo;
-          if (compilerOptions2.rewriteRelativeImportExtensions) {
+          if (compilerOptions.rewriteRelativeImportExtensions) {
             forEachDynamicImportOrRequireCall(
               node,
               /*includeTypeSpaceImports*/
@@ -123421,7 +123421,7 @@ ${lanes.join("\n")}
               /*requireStringLiteralLikeArgument*/
               false,
               (node2) => {
-                if (!isStringLiteralLike(node2.arguments[0]) || shouldRewriteModuleSpecifier(node2.arguments[0].text, compilerOptions2)) {
+                if (!isStringLiteralLike(node2.arguments[0]) || shouldRewriteModuleSpecifier(node2.arguments[0].text, compilerOptions)) {
                   importsAndRequiresToRewriteOrShim = append(importsAndRequiresToRewriteOrShim, node2);
                 }
               }
@@ -123446,7 +123446,7 @@ ${lanes.join("\n")}
         function transformCommonJSModule(node) {
           startLexicalEnvironment();
           const statements = [];
-          const ensureUseStrict = getAlwaysStrict(compilerOptions2) || isExternalModule(currentSourceFile);
+          const ensureUseStrict = getAlwaysStrict(compilerOptions) || isExternalModule(currentSourceFile);
           const statementOffset = factory2.copyPrologue(node.statements, statements, ensureUseStrict && !isJsonSourceFile(node), topLevelVisitor);
           if (shouldEmitUnderscoreUnderscoreESModule()) {
             append(statements, createUnderscoreUnderscoreESModule());
@@ -123483,7 +123483,7 @@ ${lanes.join("\n")}
         }
         function transformAMDModule(node) {
           const define = factory2.createIdentifier("define");
-          const moduleName = tryGetModuleNameFromFile(factory2, node, host, compilerOptions2);
+          const moduleName = tryGetModuleNameFromFile(factory2, node, host, compilerOptions);
           const jsonSourceFile = isJsonSourceFile(node) && node;
           const { aliasedModuleNames, unaliasedModuleNames, importAliasNames } = collectAsynchronousDependencies(
             node,
@@ -123563,7 +123563,7 @@ ${lanes.join("\n")}
             /*includeNonAmdDependencies*/
             false
           );
-          const moduleName = tryGetModuleNameFromFile(factory2, node, host, compilerOptions2);
+          const moduleName = tryGetModuleNameFromFile(factory2, node, host, compilerOptions);
           const umdHeader = factory2.createFunctionExpression(
             /*modifiers*/
             void 0,
@@ -123738,7 +123738,7 @@ ${lanes.join("\n")}
             }
           }
           for (const importNode of currentModuleInfo.externalImports) {
-            const externalModuleName = getExternalModuleNameLiteral(factory2, importNode, currentSourceFile, host, resolver, compilerOptions2);
+            const externalModuleName = getExternalModuleNameLiteral(factory2, importNode, currentSourceFile, host, resolver, compilerOptions);
             const importAliasName = getLocalNameForExternalImport(factory2, importNode, currentSourceFile);
             if (externalModuleName) {
               if (includeNonAmdDependencies && importAliasName) {
@@ -123763,7 +123763,7 @@ ${lanes.join("\n")}
           return { aliasedModuleNames, unaliasedModuleNames, importAliasNames };
         }
         function getAMDImportExpressionForImport(node) {
-          if (isImportEqualsDeclaration(node) || isExportDeclaration(node) || !getExternalModuleNameLiteral(factory2, node, currentSourceFile, host, resolver, compilerOptions2)) {
+          if (isImportEqualsDeclaration(node) || isExportDeclaration(node) || !getExternalModuleNameLiteral(factory2, node, currentSourceFile, host, resolver, compilerOptions)) {
             return void 0;
           }
           const name = getLocalNameForExternalImport(factory2, node, currentSourceFile);
@@ -124235,7 +124235,7 @@ ${lanes.join("\n")}
             void 0,
             visitNodes2(node.arguments, (arg) => {
               if (arg === node.arguments[0]) {
-                return isStringLiteralLike(arg) ? rewriteModuleSpecifier(arg, compilerOptions2) : emitHelpers().createRewriteRelativeImportExtensionsHelper(arg);
+                return isStringLiteralLike(arg) ? rewriteModuleSpecifier(arg, compilerOptions) : emitHelpers().createRewriteRelativeImportExtensionsHelper(arg);
               }
               return visitor(arg);
             }, isExpression)
@@ -124245,11 +124245,11 @@ ${lanes.join("\n")}
           if (moduleKind === 0 && languageVersion >= 7) {
             return visitEachChild(node, visitor, context);
           }
-          const externalModuleName = getExternalModuleNameLiteral(factory2, node, currentSourceFile, host, resolver, compilerOptions2);
+          const externalModuleName = getExternalModuleNameLiteral(factory2, node, currentSourceFile, host, resolver, compilerOptions);
           const firstArgument = visitNode(firstOrUndefined(node.arguments), visitor, isExpression);
-          const argument = externalModuleName && (!firstArgument || !isStringLiteral(firstArgument) || firstArgument.text !== externalModuleName.text) ? externalModuleName : firstArgument && rewriteOrShim ? isStringLiteral(firstArgument) ? rewriteModuleSpecifier(firstArgument, compilerOptions2) : emitHelpers().createRewriteRelativeImportExtensionsHelper(firstArgument) : firstArgument;
+          const argument = externalModuleName && (!firstArgument || !isStringLiteral(firstArgument) || firstArgument.text !== externalModuleName.text) ? externalModuleName : firstArgument && rewriteOrShim ? isStringLiteral(firstArgument) ? rewriteModuleSpecifier(firstArgument, compilerOptions) : emitHelpers().createRewriteRelativeImportExtensionsHelper(firstArgument) : firstArgument;
           const containsLexicalThis = !!(node.transformFlags & 16384);
-          switch (compilerOptions2.module) {
+          switch (compilerOptions.module) {
             case 2:
               return createImportCallExpressionAMD(argument, containsLexicalThis);
             case 3:
@@ -124376,7 +124376,7 @@ ${lanes.join("\n")}
             void 0,
             [func]
           );
-          if (getESModuleInterop(compilerOptions2)) {
+          if (getESModuleInterop(compilerOptions)) {
             return factory2.createCallExpression(
               factory2.createPropertyAccessExpression(promise, factory2.createIdentifier("then")),
               /*typeArguments*/
@@ -124412,7 +124412,7 @@ ${lanes.join("\n")}
             void 0,
             needSyncEval ? [factory2.createIdentifier("s")] : arg ? [arg] : []
           );
-          if (getESModuleInterop(compilerOptions2)) {
+          if (getESModuleInterop(compilerOptions)) {
             requireCall = emitHelpers().createImportStarHelper(requireCall);
           }
           const parameters = needSyncEval ? [
@@ -124466,7 +124466,7 @@ ${lanes.join("\n")}
           return downleveledImport;
         }
         function getHelperExpressionForExport(node, innerExpr) {
-          if (!getESModuleInterop(compilerOptions2) || getInternalEmitFlags(node) & 2) {
+          if (!getESModuleInterop(compilerOptions) || getInternalEmitFlags(node) & 2) {
             return innerExpr;
           }
           if (getExportNeedsImportStarHelper(node)) {
@@ -124475,7 +124475,7 @@ ${lanes.join("\n")}
           return innerExpr;
         }
         function getHelperExpressionForImport(node, innerExpr) {
-          if (!getESModuleInterop(compilerOptions2) || getInternalEmitFlags(node) & 2) {
+          if (!getESModuleInterop(compilerOptions) || getInternalEmitFlags(node) & 2) {
             return innerExpr;
           }
           if (getImportNeedsImportStarHelper(node)) {
@@ -124585,10 +124585,10 @@ ${lanes.join("\n")}
           return singleOrMany(statements);
         }
         function createRequireCall2(importNode) {
-          const moduleName = getExternalModuleNameLiteral(factory2, importNode, currentSourceFile, host, resolver, compilerOptions2);
+          const moduleName = getExternalModuleNameLiteral(factory2, importNode, currentSourceFile, host, resolver, compilerOptions);
           const args = [];
           if (moduleName) {
-            args.push(rewriteModuleSpecifier(moduleName, compilerOptions2));
+            args.push(rewriteModuleSpecifier(moduleName, compilerOptions));
           }
           return factory2.createCallExpression(
             factory2.createIdentifier("require"),
@@ -124709,7 +124709,7 @@ ${lanes.join("\n")}
             }
             for (const specifier of node.exportClause.elements) {
               const specifierName = specifier.propertyName || specifier.name;
-              const exportNeedsImportDefault = !!getESModuleInterop(compilerOptions2) && !(getInternalEmitFlags(node) & 2) && moduleExportNameIsDefault(specifierName);
+              const exportNeedsImportDefault = !!getESModuleInterop(compilerOptions) && !(getInternalEmitFlags(node) & 2) && moduleExportNameIsDefault(specifierName);
               const target = exportNeedsImportDefault ? emitHelpers().createImportDefaultHelper(generatedName) : generatedName;
               const exportedValue = specifierName.kind === 11 ? factory2.createElementAccessExpression(target, specifierName) : factory2.createPropertyAccessExpression(target, specifierName);
               statements.push(
@@ -125397,7 +125397,7 @@ ${lanes.join("\n")}
           endLexicalEnvironment,
           hoistVariableDeclaration
         } = context;
-        const compilerOptions2 = context.getCompilerOptions();
+        const compilerOptions = context.getCompilerOptions();
         const resolver = context.getEmitResolver();
         const host = context.getEmitHost();
         const previousOnSubstituteNode = context.onSubstituteNode;
@@ -125437,7 +125437,7 @@ ${lanes.join("\n")}
         let noSubstitution;
         return chainBundle(context, transformSourceFile);
         function transformSourceFile(node) {
-          if (node.isDeclarationFile || !(isEffectiveExternalModule(node, compilerOptions2) || node.transformFlags & 8388608)) {
+          if (node.isDeclarationFile || !(isEffectiveExternalModule(node, compilerOptions) || node.transformFlags & 8388608)) {
             return node;
           }
           const id = getOriginalNodeId(node);
@@ -125478,7 +125478,7 @@ ${lanes.join("\n")}
             void 0,
             moduleBodyBlock
           );
-          const moduleName = tryGetModuleNameFromFile(factory2, node, host, compilerOptions2);
+          const moduleName = tryGetModuleNameFromFile(factory2, node, host, compilerOptions);
           const dependencies = factory2.createArrayLiteralExpression(map(dependencyGroups, (dependencyGroup) => dependencyGroup.name));
           const updated = setEmitFlags(
             factory2.updateSourceFile(
@@ -125500,7 +125500,7 @@ ${lanes.join("\n")}
             2048
             /* NoTrailingComments */
           );
-          if (!compilerOptions2.outFile) {
+          if (!compilerOptions.outFile) {
             moveEmitHelpers(updated, moduleBodyBlock, (helper) => !helper.scoped);
           }
           if (noSubstitution) {
@@ -125519,7 +125519,7 @@ ${lanes.join("\n")}
           const groupIndices = /* @__PURE__ */ new Map();
           const dependencyGroups = [];
           for (const externalImport of externalImports) {
-            const externalModuleName = getExternalModuleNameLiteral(factory2, externalImport, currentSourceFile, host, resolver, compilerOptions2);
+            const externalModuleName = getExternalModuleNameLiteral(factory2, externalImport, currentSourceFile, host, resolver, compilerOptions);
             if (externalModuleName) {
               const text = externalModuleName.text;
               const groupIndex = groupIndices.get(text);
@@ -125539,7 +125539,7 @@ ${lanes.join("\n")}
         function createSystemModuleBody(node, dependencyGroups) {
           const statements = [];
           startLexicalEnvironment();
-          const ensureUseStrict = getAlwaysStrict(compilerOptions2) || isExternalModule(currentSourceFile);
+          const ensureUseStrict = getAlwaysStrict(compilerOptions) || isExternalModule(currentSourceFile);
           const statementOffset = factory2.copyPrologue(node.statements, statements, ensureUseStrict, topLevelVisitor);
           statements.push(
             factory2.createVariableStatement(
@@ -126485,7 +126485,7 @@ ${lanes.join("\n")}
           return factory2.updatePartiallyEmittedExpression(node, visitNode(node.expression, valueIsDiscarded ? discardedValueVisitor : visitor, isExpression));
         }
         function visitImportCallExpression(node) {
-          const externalModuleName = getExternalModuleNameLiteral(factory2, node, currentSourceFile, host, resolver, compilerOptions2);
+          const externalModuleName = getExternalModuleNameLiteral(factory2, node, currentSourceFile, host, resolver, compilerOptions);
           const firstArgument = visitNode(firstOrUndefined(node.arguments), visitor, isExpression);
           const argument = externalModuleName && (!firstArgument || !isStringLiteral(firstArgument) || firstArgument.text !== externalModuleName.text) ? externalModuleName : firstArgument;
           return factory2.createCallExpression(
@@ -126766,8 +126766,8 @@ ${lanes.join("\n")}
         } = context;
         const host = context.getEmitHost();
         const resolver = context.getEmitResolver();
-        const compilerOptions2 = context.getCompilerOptions();
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
+        const compilerOptions = context.getCompilerOptions();
+        const languageVersion = getEmitScriptTarget(compilerOptions);
         const previousOnEmitNode = context.onEmitNode;
         const previousOnSubstituteNode = context.onSubstituteNode;
         context.onEmitNode = onEmitNode;
@@ -126790,10 +126790,10 @@ ${lanes.join("\n")}
           if (node.isDeclarationFile) {
             return node;
           }
-          if (isExternalModule(node) || getIsolatedModules(compilerOptions2)) {
+          if (isExternalModule(node) || getIsolatedModules(compilerOptions)) {
             currentSourceFile = node;
             importRequireStatements = void 0;
-            if (compilerOptions2.rewriteRelativeImportExtensions && (currentSourceFile.flags & 4194304 || isInJSFile(node))) {
+            if (compilerOptions.rewriteRelativeImportExtensions && (currentSourceFile.flags & 4194304 || isInJSFile(node))) {
               forEachDynamicImportOrRequireCall(
                 node,
                 /*includeTypeSpaceImports*/
@@ -126801,7 +126801,7 @@ ${lanes.join("\n")}
                 /*requireStringLiteralLikeArgument*/
                 false,
                 (node2) => {
-                  if (!isStringLiteralLike(node2.arguments[0]) || shouldRewriteModuleSpecifier(node2.arguments[0].text, compilerOptions2)) {
+                  if (!isStringLiteralLike(node2.arguments[0]) || shouldRewriteModuleSpecifier(node2.arguments[0].text, compilerOptions)) {
                     importsAndRequiresToRewriteOrShim = append(importsAndRequiresToRewriteOrShim, node2);
                   }
                 }
@@ -126816,7 +126816,7 @@ ${lanes.join("\n")}
                 setTextRange(factory2.createNodeArray(insertStatementsAfterCustomPrologue(result.statements.slice(), importRequireStatements)), result.statements)
               );
             }
-            if (!isExternalModule(node) || getEmitModuleKind(compilerOptions2) === 200 || some(result.statements, isExternalModuleIndicator)) {
+            if (!isExternalModule(node) || getEmitModuleKind(compilerOptions) === 200 || some(result.statements, isExternalModuleIndicator)) {
               return result;
             }
             return factory2.updateSourceFile(
@@ -126827,7 +126827,7 @@ ${lanes.join("\n")}
           return node;
         }
         function updateExternalModule(node) {
-          const externalHelpersImportDeclaration = createExternalHelpersImportDeclarationIfNeeded(factory2, emitHelpers(), node, compilerOptions2);
+          const externalHelpersImportDeclaration = createExternalHelpersImportDeclarationIfNeeded(factory2, emitHelpers(), node, compilerOptions);
           if (externalHelpersImportDeclaration) {
             const statements = [];
             const statementOffset = factory2.copyPrologue(node.statements, statements);
@@ -126844,7 +126844,7 @@ ${lanes.join("\n")}
         function visitor(node) {
           switch (node.kind) {
             case 272:
-              return getEmitModuleKind(compilerOptions2) >= 100 ? visitImportEqualsDeclaration(node) : void 0;
+              return getEmitModuleKind(compilerOptions) >= 100 ? visitImportEqualsDeclaration(node) : void 0;
             case 278:
               return visitExportAssignment(node);
             case 279:
@@ -126865,10 +126865,10 @@ ${lanes.join("\n")}
           return node;
         }
         function visitImportDeclaration(node) {
-          if (!compilerOptions2.rewriteRelativeImportExtensions) {
+          if (!compilerOptions.rewriteRelativeImportExtensions) {
             return node;
           }
-          const updatedModuleSpecifier = rewriteModuleSpecifier(node.moduleSpecifier, compilerOptions2);
+          const updatedModuleSpecifier = rewriteModuleSpecifier(node.moduleSpecifier, compilerOptions);
           if (updatedModuleSpecifier === node.moduleSpecifier) {
             return node;
           }
@@ -126886,18 +126886,18 @@ ${lanes.join("\n")}
             node.expression,
             node.typeArguments,
             [
-              isStringLiteralLike(node.arguments[0]) ? rewriteModuleSpecifier(node.arguments[0], compilerOptions2) : emitHelpers().createRewriteRelativeImportExtensionsHelper(node.arguments[0]),
+              isStringLiteralLike(node.arguments[0]) ? rewriteModuleSpecifier(node.arguments[0], compilerOptions) : emitHelpers().createRewriteRelativeImportExtensionsHelper(node.arguments[0]),
               ...node.arguments.slice(1)
             ]
           );
         }
         function createRequireCall2(importNode) {
-          const moduleName = getExternalModuleNameLiteral(factory2, importNode, Debug.checkDefined(currentSourceFile), host, resolver, compilerOptions2);
+          const moduleName = getExternalModuleNameLiteral(factory2, importNode, Debug.checkDefined(currentSourceFile), host, resolver, compilerOptions);
           const args = [];
           if (moduleName) {
-            args.push(rewriteModuleSpecifier(moduleName, compilerOptions2));
+            args.push(rewriteModuleSpecifier(moduleName, compilerOptions));
           }
-          if (getEmitModuleKind(compilerOptions2) === 200) {
+          if (getEmitModuleKind(compilerOptions) === 200) {
             return factory2.createCallExpression(
               factory2.createIdentifier("require"),
               /*typeArguments*/
@@ -127034,7 +127034,7 @@ ${lanes.join("\n")}
         }
         function visitExportAssignment(node) {
           if (node.isExportEquals) {
-            if (getEmitModuleKind(compilerOptions2) === 200) {
+            if (getEmitModuleKind(compilerOptions) === 200) {
               const statement = setOriginalNode(
                 factory2.createExpressionStatement(
                   factory2.createAssignment(
@@ -127054,8 +127054,8 @@ ${lanes.join("\n")}
           return node;
         }
         function visitExportDeclaration(node) {
-          const updatedModuleSpecifier = rewriteModuleSpecifier(node.moduleSpecifier, compilerOptions2);
-          if (compilerOptions2.module !== void 0 && compilerOptions2.module > 5 || !node.exportClause || !isNamespaceExport(node.exportClause) || !node.moduleSpecifier) {
+          const updatedModuleSpecifier = rewriteModuleSpecifier(node.moduleSpecifier, compilerOptions);
+          if (compilerOptions.module !== void 0 && compilerOptions.module > 5 || !node.exportClause || !isNamespaceExport(node.exportClause) || !node.moduleSpecifier) {
             return !node.moduleSpecifier || updatedModuleSpecifier === node.moduleSpecifier ? node : factory2.updateExportDeclaration(
               node,
               node.modifiers,
@@ -127100,7 +127100,7 @@ ${lanes.join("\n")}
         }
         function onEmitNode(hint, node, emitCallback) {
           if (isSourceFile(node)) {
-            if ((isExternalModule(node) || getIsolatedModules(compilerOptions2)) && compilerOptions2.importHelpers) {
+            if ((isExternalModule(node) || getIsolatedModules(compilerOptions)) && compilerOptions.importHelpers) {
               helperNameSubstitutions = /* @__PURE__ */ new Map();
             }
             currentSourceFile = node;
@@ -127759,13 +127759,13 @@ ${lanes.join("\n")}
         }
       }
       function getDeclarationDiagnostics(host, resolver, file) {
-        const compilerOptions2 = host.getCompilerOptions();
+        const compilerOptions = host.getCompilerOptions();
         const files = filter(getSourceFilesToEmit(host, file), isSourceFileNotJson);
         return contains(files, file) ? transformNodes(
           resolver,
           host,
           factory,
-          compilerOptions2,
+          compilerOptions,
           [file],
           [transformDeclarations],
           /*allowDtsFiles*/
@@ -129521,30 +129521,30 @@ ${lanes.join("\n")}
         }
       }
       var noTransformers = { scriptTransformers: emptyArray, declarationTransformers: emptyArray };
-      function getTransformers(compilerOptions2, customTransformers, emitOnly) {
+      function getTransformers(compilerOptions, customTransformers, emitOnly) {
         return {
-          scriptTransformers: getScriptTransformers(compilerOptions2, customTransformers, emitOnly),
+          scriptTransformers: getScriptTransformers(compilerOptions, customTransformers, emitOnly),
           declarationTransformers: getDeclarationTransformers(customTransformers)
         };
       }
-      function getScriptTransformers(compilerOptions2, customTransformers, emitOnly) {
+      function getScriptTransformers(compilerOptions, customTransformers, emitOnly) {
         if (emitOnly) return emptyArray;
-        const languageVersion = getEmitScriptTarget(compilerOptions2);
-        const moduleKind = getEmitModuleKind(compilerOptions2);
-        const useDefineForClassFields = getUseDefineForClassFields(compilerOptions2);
+        const languageVersion = getEmitScriptTarget(compilerOptions);
+        const moduleKind = getEmitModuleKind(compilerOptions);
+        const useDefineForClassFields = getUseDefineForClassFields(compilerOptions);
         const transformers = [];
         addRange(transformers, customTransformers && map(customTransformers.before, wrapScriptTransformerFactory));
         transformers.push(transformTypeScript);
-        if (compilerOptions2.experimentalDecorators) {
+        if (compilerOptions.experimentalDecorators) {
           transformers.push(transformLegacyDecorators);
         }
-        if (getJSXTransformEnabled(compilerOptions2)) {
+        if (getJSXTransformEnabled(compilerOptions)) {
           transformers.push(transformJsx);
         }
         if (languageVersion < 99) {
           transformers.push(transformESNext);
         }
-        if (!compilerOptions2.experimentalDecorators && (languageVersion < 99 || !useDefineForClassFields)) {
+        if (!compilerOptions.experimentalDecorators && (languageVersion < 99 || !useDefineForClassFields)) {
           transformers.push(transformESDecorators);
         }
         transformers.push(transformClassFields);
@@ -130216,11 +130216,11 @@ ${lanes.join("\n")}
         return !!forceDtsEmit && !!emitOnly;
       }
       function emitFiles(resolver, host, targetSourceFile, { scriptTransformers, declarationTransformers }, emitOnly, onlyBuildInfo, forceDtsEmit, skipBuildInfo) {
-        var compilerOptions2 = host.getCompilerOptions();
-        var sourceMapDataList = compilerOptions2.sourceMap || compilerOptions2.inlineSourceMap || getAreDeclarationMapsEnabled(compilerOptions2) ? [] : void 0;
-        var emittedFilesList = compilerOptions2.listEmittedFiles ? [] : void 0;
+        var compilerOptions = host.getCompilerOptions();
+        var sourceMapDataList = compilerOptions.sourceMap || compilerOptions.inlineSourceMap || getAreDeclarationMapsEnabled(compilerOptions) ? [] : void 0;
+        var emittedFilesList = compilerOptions.listEmittedFiles ? [] : void 0;
         var emitterDiagnostics = createDiagnosticCollection();
-        var newLine = getNewLineCharacter(compilerOptions2);
+        var newLine = getNewLineCharacter(compilerOptions);
         var writer = createTextWriter(newLine);
         var { enter, exit } = createTimer("printTime", "beforePrint", "afterPrint");
         var emitSkipped = false;
@@ -130276,36 +130276,36 @@ ${lanes.join("\n")}
           if (!sourceFileOrBundle || emitOnly || !jsFilePath) {
             return;
           }
-          if (host.isEmitBlocked(jsFilePath) || compilerOptions2.noEmit) {
+          if (host.isEmitBlocked(jsFilePath) || compilerOptions.noEmit) {
             emitSkipped = true;
             return;
           }
           (isSourceFile(sourceFileOrBundle) ? [sourceFileOrBundle] : filter(sourceFileOrBundle.sourceFiles, isSourceFileNotJson)).forEach(
             (sourceFile) => {
-              if (compilerOptions2.noCheck || !canIncludeBindAndCheckDiagnostics(sourceFile, compilerOptions2)) markLinkedReferences(sourceFile);
+              if (compilerOptions.noCheck || !canIncludeBindAndCheckDiagnostics(sourceFile, compilerOptions)) markLinkedReferences(sourceFile);
             }
           );
           const transform2 = transformNodes(
             resolver,
             host,
             factory,
-            compilerOptions2,
+            compilerOptions,
             [sourceFileOrBundle],
             scriptTransformers,
             /*allowDtsFiles*/
             false
           );
           const printerOptions = {
-            removeComments: compilerOptions2.removeComments,
-            newLine: compilerOptions2.newLine,
-            noEmitHelpers: compilerOptions2.noEmitHelpers,
-            module: getEmitModuleKind(compilerOptions2),
-            moduleResolution: getEmitModuleResolutionKind(compilerOptions2),
-            target: getEmitScriptTarget(compilerOptions2),
-            sourceMap: compilerOptions2.sourceMap,
-            inlineSourceMap: compilerOptions2.inlineSourceMap,
-            inlineSources: compilerOptions2.inlineSources,
-            extendedDiagnostics: compilerOptions2.extendedDiagnostics
+            removeComments: compilerOptions.removeComments,
+            newLine: compilerOptions.newLine,
+            noEmitHelpers: compilerOptions.noEmitHelpers,
+            module: getEmitModuleKind(compilerOptions),
+            moduleResolution: getEmitModuleResolutionKind(compilerOptions),
+            target: getEmitScriptTarget(compilerOptions),
+            sourceMap: compilerOptions.sourceMap,
+            inlineSourceMap: compilerOptions.inlineSourceMap,
+            inlineSources: compilerOptions.inlineSources,
+            extendedDiagnostics: compilerOptions.extendedDiagnostics
           };
           const printer = createPrinter(printerOptions, {
             // resolver hooks
@@ -130316,7 +130316,7 @@ ${lanes.join("\n")}
             substituteNode: transform2.substituteNode
           });
           Debug.assert(transform2.transformed.length === 1, "Should only see one output from the transform");
-          printSourceFileOrBundle(jsFilePath, sourceMapFilePath, transform2, printer, compilerOptions2);
+          printSourceFileOrBundle(jsFilePath, sourceMapFilePath, transform2, printer, compilerOptions);
           transform2.dispose();
           if (emittedFilesList) {
             emittedFilesList.push(jsFilePath);
@@ -130328,14 +130328,14 @@ ${lanes.join("\n")}
         function emitDeclarationFileOrBundle(sourceFileOrBundle, declarationFilePath, declarationMapPath) {
           if (!sourceFileOrBundle || emitOnly === 0) return;
           if (!declarationFilePath) {
-            if (emitOnly || compilerOptions2.emitDeclarationOnly) emitSkipped = true;
+            if (emitOnly || compilerOptions.emitDeclarationOnly) emitSkipped = true;
             return;
           }
           const sourceFiles = isSourceFile(sourceFileOrBundle) ? [sourceFileOrBundle] : sourceFileOrBundle.sourceFiles;
           const filesForEmit = forceDtsEmit ? sourceFiles : filter(sourceFiles, isSourceFileNotJson);
-          const inputListOrBundle = compilerOptions2.outFile ? [factory.createBundle(filesForEmit)] : filesForEmit;
+          const inputListOrBundle = compilerOptions.outFile ? [factory.createBundle(filesForEmit)] : filesForEmit;
           filesForEmit.forEach((sourceFile) => {
-            if (emitOnly && !getEmitDeclarations(compilerOptions2) || compilerOptions2.noCheck || emitResolverSkipsTypeChecking(emitOnly, forceDtsEmit) || !canIncludeBindAndCheckDiagnostics(sourceFile, compilerOptions2)) {
+            if (emitOnly && !getEmitDeclarations(compilerOptions) || compilerOptions.noCheck || emitResolverSkipsTypeChecking(emitOnly, forceDtsEmit) || !canIncludeBindAndCheckDiagnostics(sourceFile, compilerOptions)) {
               collectLinkedAliases(sourceFile);
             }
           });
@@ -130343,7 +130343,7 @@ ${lanes.join("\n")}
             resolver,
             host,
             factory,
-            compilerOptions2,
+            compilerOptions,
             inputListOrBundle,
             declarationTransformers,
             /*allowDtsFiles*/
@@ -130354,20 +130354,20 @@ ${lanes.join("\n")}
               emitterDiagnostics.add(diagnostic);
             }
           }
-          const declBlocked = !!declarationTransform.diagnostics && !!declarationTransform.diagnostics.length || !!host.isEmitBlocked(declarationFilePath) || !!compilerOptions2.noEmit;
+          const declBlocked = !!declarationTransform.diagnostics && !!declarationTransform.diagnostics.length || !!host.isEmitBlocked(declarationFilePath) || !!compilerOptions.noEmit;
           emitSkipped = emitSkipped || declBlocked;
           if (!declBlocked || forceDtsEmit) {
             Debug.assert(declarationTransform.transformed.length === 1, "Should only see one output from the decl transform");
             const printerOptions = {
-              removeComments: compilerOptions2.removeComments,
-              newLine: compilerOptions2.newLine,
+              removeComments: compilerOptions.removeComments,
+              newLine: compilerOptions.newLine,
               noEmitHelpers: true,
-              module: compilerOptions2.module,
-              moduleResolution: compilerOptions2.moduleResolution,
-              target: compilerOptions2.target,
-              sourceMap: emitOnly !== 2 && compilerOptions2.declarationMap,
-              inlineSourceMap: compilerOptions2.inlineSourceMap,
-              extendedDiagnostics: compilerOptions2.extendedDiagnostics,
+              module: compilerOptions.module,
+              moduleResolution: compilerOptions.moduleResolution,
+              target: compilerOptions.target,
+              sourceMap: emitOnly !== 2 && compilerOptions.declarationMap,
+              inlineSourceMap: compilerOptions.inlineSourceMap,
+              extendedDiagnostics: compilerOptions.extendedDiagnostics,
               onlyPrintJsDocStyle: true,
               omitBraceSourceMapPositions: true
             };
@@ -130386,9 +130386,9 @@ ${lanes.join("\n")}
               declarationPrinter,
               {
                 sourceMap: printerOptions.sourceMap,
-                sourceRoot: compilerOptions2.sourceRoot,
-                mapRoot: compilerOptions2.mapRoot,
-                extendedDiagnostics: compilerOptions2.extendedDiagnostics
+                sourceRoot: compilerOptions.sourceRoot,
+                mapRoot: compilerOptions.mapRoot,
+                extendedDiagnostics: compilerOptions.extendedDiagnostics
                 // Explicitly do not passthru either `inline` option
               }
             );
@@ -130486,7 +130486,7 @@ ${lanes.join("\n")}
           }
           const text = writer.getText();
           const data = { sourceMapUrlPos, diagnostics: transform2.diagnostics };
-          writeFile(host, emitterDiagnostics, jsFilePath, text, !!compilerOptions2.emitBOM, sourceFiles, data);
+          writeFile(host, emitterDiagnostics, jsFilePath, text, !!compilerOptions.emitBOM, sourceFiles, data);
           writer.clear();
           return !data.skippedDtsWrite;
         }
@@ -136235,8 +136235,8 @@ ${lanes.join("\n")}
       function getModeForFileReference(ref, containingFileMode) {
         return (isString(ref) ? containingFileMode : ref.resolutionMode) || containingFileMode;
       }
-      function getModeForResolutionAtIndex(file, index, compilerOptions2) {
-        return getModeForUsageLocationWorker(file, getModuleNameStringLiteralAt(file, index), compilerOptions2);
+      function getModeForResolutionAtIndex(file, index, compilerOptions) {
+        return getModeForUsageLocationWorker(file, getModuleNameStringLiteralAt(file, index), compilerOptions);
       }
       function isExclusivelyTypeOnlyImportOrExport(decl) {
         var _a;
@@ -136248,10 +136248,10 @@ ${lanes.join("\n")}
         }
         return false;
       }
-      function getModeForUsageLocation(file, usage, compilerOptions2) {
-        return getModeForUsageLocationWorker(file, usage, compilerOptions2);
+      function getModeForUsageLocation(file, usage, compilerOptions) {
+        return getModeForUsageLocationWorker(file, usage, compilerOptions);
       }
-      function getModeForUsageLocationWorker(file, usage, compilerOptions2) {
+      function getModeForUsageLocationWorker(file, usage, compilerOptions) {
         if (isImportDeclaration(usage.parent) || isExportDeclaration(usage.parent) || isJSDocImportTag(usage.parent)) {
           const isTypeOnly = isExclusivelyTypeOnlyImportOrExport(usage.parent);
           if (isTypeOnly) {
@@ -136267,13 +136267,13 @@ ${lanes.join("\n")}
             return override;
           }
         }
-        if (compilerOptions2 && importSyntaxAffectsModuleResolution(compilerOptions2)) {
-          return getEmitSyntaxForUsageLocationWorker(file, usage, compilerOptions2);
+        if (compilerOptions && importSyntaxAffectsModuleResolution(compilerOptions)) {
+          return getEmitSyntaxForUsageLocationWorker(file, usage, compilerOptions);
         }
       }
-      function getEmitSyntaxForUsageLocationWorker(file, usage, compilerOptions2) {
+      function getEmitSyntaxForUsageLocationWorker(file, usage, compilerOptions) {
         var _a;
-        if (!compilerOptions2) {
+        if (!compilerOptions) {
           return void 0;
         }
         const exprParentParent = (_a = walkUpParenthesizedExpressions(usage.parent)) == null ? void 0 : _a.parent;
@@ -136285,9 +136285,9 @@ ${lanes.join("\n")}
           return 1;
         }
         if (isImportCall(walkUpParenthesizedExpressions(usage.parent))) {
-          return shouldTransformImportCallWorker(file, compilerOptions2) ? 1 : 99;
+          return shouldTransformImportCallWorker(file, compilerOptions) ? 1 : 99;
         }
-        const fileEmitMode = getEmitModuleFormatOfFileWorker(file, compilerOptions2);
+        const fileEmitMode = getEmitModuleFormatOfFileWorker(file, compilerOptions);
         return fileEmitMode === 1 ? 1 : emitModuleKindIsNonNodeESM(fileEmitMode) || fileEmitMode === 200 ? 99 : void 0;
       }
       function getResolutionModeOverride(node, grammarErrorOnNode) {
@@ -136324,7 +136324,7 @@ ${lanes.join("\n")}
       }
       var moduleResolutionNameAndModeGetter = {
         getName: getModuleResolutionName,
-        getMode: (entry, file, compilerOptions2) => getModeForUsageLocation(file, entry, compilerOptions2)
+        getMode: (entry, file, compilerOptions) => getModeForUsageLocation(file, entry, compilerOptions)
       };
       function createModuleResolutionLoader(containingFile, redirectedReference, options, host, cache) {
         return {
@@ -136345,7 +136345,7 @@ ${lanes.join("\n")}
       }
       var typeReferenceResolutionNameAndModeGetter = {
         getName: getTypeReferenceResolutionName,
-        getMode: (entry, file, compilerOptions2) => getModeForFileReference(entry, file && getDefaultResolutionModeForFileWorker(file, compilerOptions2))
+        getMode: (entry, file, compilerOptions) => getModeForFileReference(entry, file && getDefaultResolutionModeForFileWorker(file, compilerOptions))
       };
       function createTypeReferenceResolutionLoader(containingFile, redirectedReference, options, host, cache) {
         return {
@@ -140365,8 +140365,8 @@ ${lanes.join("\n")}
         }
         BuilderState2.updateShapeSignature = updateShapeSignature;
         function getAllDependencies(state, programOfThisState, sourceFile) {
-          const compilerOptions2 = programOfThisState.getCompilerOptions();
-          if (compilerOptions2.outFile) {
+          const compilerOptions = programOfThisState.getCompilerOptions();
+          if (compilerOptions.outFile) {
             return getAllFileNames(state, programOfThisState);
           }
           if (!state.referencedMap || isFileAffectingGlobalScope(sourceFile)) {
@@ -140439,8 +140439,8 @@ ${lanes.join("\n")}
         }
         BuilderState2.getAllFilesExcludingDefaultLibraryFile = getAllFilesExcludingDefaultLibraryFile;
         function getFilesAffectedByUpdatedShapeWhenNonModuleEmit(state, programOfThisState, sourceFileWithUpdatedShape) {
-          const compilerOptions2 = programOfThisState.getCompilerOptions();
-          if (compilerOptions2 && compilerOptions2.outFile) {
+          const compilerOptions = programOfThisState.getCompilerOptions();
+          if (compilerOptions && compilerOptions.outFile) {
             return [sourceFileWithUpdatedShape];
           }
           return getAllFilesExcludingDefaultLibraryFile(state, programOfThisState, sourceFileWithUpdatedShape);
@@ -140449,8 +140449,8 @@ ${lanes.join("\n")}
           if (isFileAffectingGlobalScope(sourceFileWithUpdatedShape)) {
             return getAllFilesExcludingDefaultLibraryFile(state, programOfThisState, sourceFileWithUpdatedShape);
           }
-          const compilerOptions2 = programOfThisState.getCompilerOptions();
-          if (compilerOptions2 && (getIsolatedModules(compilerOptions2) || compilerOptions2.outFile)) {
+          const compilerOptions = programOfThisState.getCompilerOptions();
+          if (compilerOptions && (getIsolatedModules(compilerOptions) || compilerOptions.outFile)) {
             return [sourceFileWithUpdatedShape];
           }
           const seenFileNamesMap = /* @__PURE__ */ new Map();
@@ -140524,20 +140524,20 @@ ${lanes.join("\n")}
           false
         );
         state.program = newProgram;
-        const compilerOptions2 = newProgram.getCompilerOptions();
-        state.compilerOptions = compilerOptions2;
-        const outFilePath = compilerOptions2.outFile;
+        const compilerOptions = newProgram.getCompilerOptions();
+        state.compilerOptions = compilerOptions;
+        const outFilePath = compilerOptions.outFile;
         state.semanticDiagnosticsPerFile = /* @__PURE__ */ new Map();
-        if (outFilePath && compilerOptions2.composite && (oldState == null ? void 0 : oldState.outSignature) && outFilePath === oldState.compilerOptions.outFile) {
-          state.outSignature = oldState.outSignature && getEmitSignatureFromOldSignature(compilerOptions2, oldState.compilerOptions, oldState.outSignature);
+        if (outFilePath && compilerOptions.composite && (oldState == null ? void 0 : oldState.outSignature) && outFilePath === oldState.compilerOptions.outFile) {
+          state.outSignature = oldState.outSignature && getEmitSignatureFromOldSignature(compilerOptions, oldState.compilerOptions, oldState.outSignature);
         }
         state.changedFilesSet = /* @__PURE__ */ new Set();
-        state.latestChangedDtsFile = compilerOptions2.composite ? oldState == null ? void 0 : oldState.latestChangedDtsFile : void 0;
+        state.latestChangedDtsFile = compilerOptions.composite ? oldState == null ? void 0 : oldState.latestChangedDtsFile : void 0;
         state.checkPending = state.compilerOptions.noCheck ? true : void 0;
         const useOldState = BuilderState.canReuseOldState(state.referencedMap, oldState);
         const oldCompilerOptions = useOldState ? oldState.compilerOptions : void 0;
-        let canCopySemanticDiagnostics = useOldState && !compilerOptionsAffectSemanticDiagnostics(compilerOptions2, oldCompilerOptions);
-        const canCopyEmitSignatures = compilerOptions2.composite && (oldState == null ? void 0 : oldState.emitSignatures) && !outFilePath && !compilerOptionsAffectDeclarationPath(compilerOptions2, oldState.compilerOptions);
+        let canCopySemanticDiagnostics = useOldState && !compilerOptionsAffectSemanticDiagnostics(compilerOptions, oldCompilerOptions);
+        const canCopyEmitSignatures = compilerOptions.composite && (oldState == null ? void 0 : oldState.emitSignatures) && !outFilePath && !compilerOptionsAffectDeclarationPath(compilerOptions, oldState.compilerOptions);
         let canCopyEmitDiagnostics = true;
         if (useOldState) {
           (_a = oldState.changedFilesSet) == null ? void 0 : _a.forEach((value) => state.changedFilesSet.add(value));
@@ -140552,12 +140552,12 @@ ${lanes.join("\n")}
           }
           state.hasErrorsFromOldState = oldState.hasErrors;
         } else {
-          state.buildInfoEmitPending = isIncrementalCompilation(compilerOptions2);
+          state.buildInfoEmitPending = isIncrementalCompilation(compilerOptions);
         }
         const referencedMap = state.referencedMap;
         const oldReferencedMap = useOldState ? oldState.referencedMap : void 0;
-        const copyDeclarationFileDiagnostics = canCopySemanticDiagnostics && !compilerOptions2.skipLibCheck === !oldCompilerOptions.skipLibCheck;
-        const copyLibFileDiagnostics = copyDeclarationFileDiagnostics && !compilerOptions2.skipDefaultLibCheck === !oldCompilerOptions.skipDefaultLibCheck;
+        const copyDeclarationFileDiagnostics = canCopySemanticDiagnostics && !compilerOptions.skipLibCheck === !oldCompilerOptions.skipLibCheck;
+        const copyLibFileDiagnostics = copyDeclarationFileDiagnostics && !compilerOptions.skipDefaultLibCheck === !oldCompilerOptions.skipDefaultLibCheck;
         state.fileInfos.forEach((info, sourceFilePath) => {
           var _a2;
           let oldInfo;
@@ -140594,7 +140594,7 @@ ${lanes.join("\n")}
           if (canCopyEmitSignatures) {
             const oldEmitSignature = oldState.emitSignatures.get(sourceFilePath);
             if (oldEmitSignature) {
-              (state.emitSignatures ?? (state.emitSignatures = /* @__PURE__ */ new Map())).set(sourceFilePath, getEmitSignatureFromOldSignature(compilerOptions2, oldState.compilerOptions, oldEmitSignature));
+              (state.emitSignatures ?? (state.emitSignatures = /* @__PURE__ */ new Map())).set(sourceFilePath, getEmitSignatureFromOldSignature(compilerOptions, oldState.compilerOptions, oldEmitSignature));
             }
           }
         });
@@ -140611,7 +140611,7 @@ ${lanes.join("\n")}
             void 0
           ).forEach((file) => addFileToChangeSet(file.resolvedPath));
         } else if (oldCompilerOptions) {
-          const pendingEmitKind = compilerOptionsAffectEmit(compilerOptions2, oldCompilerOptions) ? getBuilderFileEmit(compilerOptions2) : getPendingEmitKind(compilerOptions2, oldCompilerOptions);
+          const pendingEmitKind = compilerOptionsAffectEmit(compilerOptions, oldCompilerOptions) ? getBuilderFileEmit(compilerOptions) : getPendingEmitKind(compilerOptions, oldCompilerOptions);
           if (pendingEmitKind !== 0) {
             if (!outFilePath) {
               newProgram.getSourceFiles().forEach((f) => {
@@ -140754,8 +140754,8 @@ ${lanes.join("\n")}
           if (nextKey.done) {
             return void 0;
           }
-          const compilerOptions2 = state.program.getCompilerOptions();
-          if (compilerOptions2.outFile) return state.program;
+          const compilerOptions = state.program.getCompilerOptions();
+          if (compilerOptions.outFile) return state.program;
           state.affectedFiles = BuilderState.getFilesAffectedByWithOldState(
             state,
             state.program,
@@ -142238,9 +142238,9 @@ ${lanes.join("\n")}
           )
         };
       }
-      function resolveModuleNameUsingGlobalCache(resolutionHost, moduleResolutionCache, moduleName, containingFile, compilerOptions2, redirectedReference, mode) {
+      function resolveModuleNameUsingGlobalCache(resolutionHost, moduleResolutionCache, moduleName, containingFile, compilerOptions, redirectedReference, mode) {
         const host = getModuleResolutionHost(resolutionHost);
-        const primaryResult = resolveModuleName(moduleName, containingFile, compilerOptions2, host, moduleResolutionCache, redirectedReference, mode);
+        const primaryResult = resolveModuleName(moduleName, containingFile, compilerOptions, host, moduleResolutionCache, redirectedReference, mode);
         if (!resolutionHost.getGlobalTypingsCacheLocation) {
           return primaryResult;
         }
@@ -142249,7 +142249,7 @@ ${lanes.join("\n")}
           const { resolvedModule, failedLookupLocations, affectingLocations, resolutionDiagnostics } = loadModuleFromGlobalCache(
             Debug.checkDefined(resolutionHost.globalCacheResolutionModuleName)(moduleName),
             resolutionHost.projectName,
-            compilerOptions2,
+            compilerOptions,
             host,
             globalCache,
             moduleResolutionCache
@@ -143800,8 +143800,8 @@ ${lanes.join("\n")}
         const result = createProgramHost(system, createProgram2);
         copyProperties(result, createWatchHost(system, reportWatchStatus2));
         result.afterProgramCreate = (builderProgram) => {
-          const compilerOptions2 = builderProgram.getCompilerOptions();
-          const newLine = getNewLineCharacter(compilerOptions2);
+          const compilerOptions = builderProgram.getCompilerOptions();
+          const newLine = getNewLineCharacter(compilerOptions);
           emitFilesAndReportErrors(
             builderProgram,
             reportDiagnostic,
@@ -143809,7 +143809,7 @@ ${lanes.join("\n")}
             (errorCount) => result.onWatchStatusChange(
               createCompilerDiagnostic(getWatchErrorSummaryDiagnosticMessage(errorCount), errorCount),
               newLine,
-              compilerOptions2,
+              compilerOptions,
               errorCount
             )
           );
@@ -143872,12 +143872,12 @@ ${lanes.join("\n")}
         if (input.afterProgramEmitAndDiagnostics) input.afterProgramEmitAndDiagnostics(builderProgram);
         return exitStatus;
       }
-      function readBuilderProgram(compilerOptions2, host) {
-        const buildInfoPath = getTsBuildInfoEmitOutputFilePath(compilerOptions2);
+      function readBuilderProgram(compilerOptions, host) {
+        const buildInfoPath = getTsBuildInfoEmitOutputFilePath(compilerOptions);
         if (!buildInfoPath) return void 0;
         let buildInfo;
         if (host.getBuildInfo) {
-          buildInfo = host.getBuildInfo(buildInfoPath, compilerOptions2.configFilePath);
+          buildInfo = host.getBuildInfo(buildInfoPath, compilerOptions.configFilePath);
         } else {
           const content = host.readFile(buildInfoPath);
           if (!content) return void 0;
@@ -143955,7 +143955,7 @@ ${lanes.join("\n")}
         const useCaseSensitiveFileNames2 = host.useCaseSensitiveFileNames();
         const currentDirectory = host.getCurrentDirectory();
         const { configFileName, optionsToExtend: optionsToExtendForConfigFile = {}, watchOptionsToExtend, extraFileExtensions, createProgram: createProgram2 } = host;
-        let { rootFiles: rootFileNames, options: compilerOptions2, watchOptions, projectReferences } = host;
+        let { rootFiles: rootFileNames, options: compilerOptions, watchOptions, projectReferences } = host;
         let wildcardDirectories;
         let configFileParsingDiagnostics;
         let canConfigFileJsonReportNoInputFiles = false;
@@ -143975,16 +143975,16 @@ ${lanes.join("\n")}
           parseConfigFile2();
           newLine = updateNewLine();
         }
-        Debug.assert(compilerOptions2);
+        Debug.assert(compilerOptions);
         Debug.assert(rootFileNames);
-        const { watchFile: watchFile2, watchDirectory, writeLog } = createWatchFactory(host, compilerOptions2);
+        const { watchFile: watchFile2, watchDirectory, writeLog } = createWatchFactory(host, compilerOptions);
         const getCanonicalFileName = createGetCanonicalFileName(useCaseSensitiveFileNames2);
         writeLog(`Current directory: ${currentDirectory} CaseSensitiveFileNames: ${useCaseSensitiveFileNames2}`);
         let configFileWatcher;
         if (configFileName) {
           configFileWatcher = watchFile2(configFileName, scheduleProgramReload, 2e3, watchOptions, WatchType.ConfigFile);
         }
-        const compilerHost = createCompilerHostFromProgramHost(host, () => compilerOptions2, directoryStructureHost);
+        const compilerHost = createCompilerHostFromProgramHost(host, () => compilerOptions, directoryStructureHost);
         setGetSourceFileAsHashVersioned(compilerHost);
         const getNewSourceFile = compilerHost.getSourceFile;
         compilerHost.getSourceFile = (fileName, ...args) => getVersionedSourceFileByPath(fileName, toPath3(fileName), ...args);
@@ -143994,7 +143994,7 @@ ${lanes.join("\n")}
         compilerHost.onReleaseOldSourceFile = onReleaseOldSourceFile;
         compilerHost.onReleaseParsedCommandLine = onReleaseParsedCommandLine;
         compilerHost.toPath = toPath3;
-        compilerHost.getCompilationSettings = () => compilerOptions2;
+        compilerHost.getCompilationSettings = () => compilerOptions;
         compilerHost.useSourceOfProjectReferenceRedirect = maybeBind(host, host.useSourceOfProjectReferenceRedirect);
         compilerHost.preferNonRecursiveWatch = host.preferNonRecursiveWatch;
         compilerHost.watchDirectoryOfFailedLookupLocation = (dir, cb, flags) => watchDirectory(dir, cb, flags, watchOptions, WatchType.FailedLookupLocations);
@@ -144029,7 +144029,7 @@ ${lanes.join("\n")}
         const userProvidedResolution = !!host.resolveModuleNameLiterals || !!host.resolveTypeReferenceDirectiveReferences || !!host.resolveModuleNames || !!host.resolveTypeReferenceDirectives;
         const customHasInvalidatedResolutions = userProvidedResolution ? maybeBind(host, host.hasInvalidatedResolutions) || returnTrue : returnFalse;
         const customHasInvalidLibResolutions = host.resolveLibrary ? maybeBind(host, host.hasInvalidatedLibResolutions) || returnTrue : returnFalse;
-        builderProgram = readBuilderProgram(compilerOptions2, compilerHost);
+        builderProgram = readBuilderProgram(compilerOptions, compilerHost);
         synchronizeProgram();
         return configFileName ? { getCurrentProgram: getCurrentBuilderProgram, getProgram: updateProgram, close, getResolutionCache } : { getCurrentProgram: getCurrentBuilderProgram, getProgram: updateProgram, updateRootFileNames, close, getResolutionCache };
         function close() {
@@ -144082,13 +144082,13 @@ ${lanes.join("\n")}
         }
         function synchronizeProgram() {
           writeLog(`Synchronizing program`);
-          Debug.assert(compilerOptions2);
+          Debug.assert(compilerOptions);
           Debug.assert(rootFileNames);
           clearInvalidateResolutionsOfFailedLookupLocations();
           const program = getCurrentBuilderProgram();
           if (hasChangedCompilerOptions) {
             newLine = updateNewLine();
-            if (program && changesAffectModuleResolution(program.getCompilerOptions(), compilerOptions2)) {
+            if (program && changesAffectModuleResolution(program.getCompilerOptions(), compilerOptions)) {
               resolutionCache.onChangesAffectModuleResolution();
             }
           }
@@ -144101,7 +144101,7 @@ ${lanes.join("\n")}
             originalWriteFile,
             readFileWithCache
           } = changeCompilerHostLikeToUseCache(compilerHost, toPath3);
-          if (isProgramUptoDate(getCurrentProgram(), rootFileNames, compilerOptions2, (path2) => getSourceVersion(path2, readFileWithCache), (fileName) => compilerHost.fileExists(fileName), hasInvalidatedResolutions, hasInvalidatedLibResolutions, hasChangedAutomaticTypeDirectiveNames, getParsedCommandLine, projectReferences)) {
+          if (isProgramUptoDate(getCurrentProgram(), rootFileNames, compilerOptions, (path2) => getSourceVersion(path2, readFileWithCache), (fileName) => compilerHost.fileExists(fileName), hasInvalidatedResolutions, hasInvalidatedLibResolutions, hasChangedAutomaticTypeDirectiveNames, getParsedCommandLine, projectReferences)) {
             if (hasChangedConfigFileParsingErrors) {
               if (reportFileChangeDetectedOnCreateProgram) {
                 reportWatchDiagnostic(Diagnostics.File_change_detected_Starting_incremental_compilation);
@@ -144136,7 +144136,7 @@ ${lanes.join("\n")}
           staleWatches == null ? void 0 : staleWatches.forEach((configFile, configPath) => {
             if (!configPath) {
               watchConfigFileWildCardDirectories();
-              if (configFileName) updateExtendedConfigFilesWatches(toPath3(configFileName), compilerOptions2, watchOptions, WatchType.ExtendedConfigFile);
+              if (configFileName) updateExtendedConfigFilesWatches(toPath3(configFileName), compilerOptions, watchOptions, WatchType.ExtendedConfigFile);
             } else {
               const config = parsedConfigs == null ? void 0 : parsedConfigs.get(configPath);
               if (config) watchReferencedProject(configFile, configPath, config);
@@ -144148,7 +144148,7 @@ ${lanes.join("\n")}
         function createNewProgram(hasInvalidatedResolutions, hasInvalidatedLibResolutions) {
           writeLog("CreatingProgramWith::");
           writeLog(`  roots: ${JSON.stringify(rootFileNames)}`);
-          writeLog(`  options: ${JSON.stringify(compilerOptions2)}`);
+          writeLog(`  options: ${JSON.stringify(compilerOptions)}`);
           if (projectReferences) writeLog(`  projectReferences: ${JSON.stringify(projectReferences)}`);
           const needsUpdateInTypeRootWatch = hasChangedCompilerOptions || !getCurrentProgram();
           hasChangedCompilerOptions = false;
@@ -144158,7 +144158,7 @@ ${lanes.join("\n")}
           compilerHost.hasInvalidatedLibResolutions = hasInvalidatedLibResolutions;
           compilerHost.hasChangedAutomaticTypeDirectiveNames = hasChangedAutomaticTypeDirectiveNames;
           const oldProgram = getCurrentProgram();
-          builderProgram = createProgram2(rootFileNames, compilerOptions2, compilerHost, builderProgram, configFileParsingDiagnostics, projectReferences);
+          builderProgram = createProgram2(rootFileNames, compilerOptions, compilerHost, builderProgram, configFileParsingDiagnostics, projectReferences);
           resolutionCache.finishCachingPerDirectoryResolution(builderProgram.getProgram(), oldProgram);
           updateMissingFilePathsWatch(
             builderProgram.getProgram(),
@@ -144183,7 +144183,7 @@ ${lanes.join("\n")}
           scheduleProgramUpdate();
         }
         function updateNewLine() {
-          return getNewLineCharacter(compilerOptions2 || optionsToExtendForConfigFile);
+          return getNewLineCharacter(compilerOptions || optionsToExtendForConfigFile);
         }
         function toPath3(fileName) {
           return toPath(fileName, currentDirectory, getCanonicalFileName);
@@ -144269,7 +144269,7 @@ ${lanes.join("\n")}
         }
         function reportWatchDiagnostic(message) {
           if (host.onWatchStatusChange) {
-            host.onWatchStatusChange(createCompilerDiagnostic(message), newLine, compilerOptions2 || optionsToExtendForConfigFile);
+            host.onWatchStatusChange(createCompilerDiagnostic(message), newLine, compilerOptions || optionsToExtendForConfigFile);
           }
         }
         function hasChangedAutomaticTypeDirectiveNames() {
@@ -144331,14 +144331,14 @@ ${lanes.join("\n")}
         }
         function reloadFileNamesFromConfigFile() {
           writeLog("Reloading new file names and options");
-          Debug.assert(compilerOptions2);
+          Debug.assert(compilerOptions);
           Debug.assert(configFileName);
           updateLevel = 0;
-          rootFileNames = getFileNamesFromConfigSpecs(compilerOptions2.configFile.configFileSpecs, getNormalizedAbsolutePath(getDirectoryPath(configFileName), currentDirectory), compilerOptions2, parseConfigFileHost, extraFileExtensions);
+          rootFileNames = getFileNamesFromConfigSpecs(compilerOptions.configFile.configFileSpecs, getNormalizedAbsolutePath(getDirectoryPath(configFileName), currentDirectory), compilerOptions, parseConfigFileHost, extraFileExtensions);
           if (updateErrorForNoInputFiles(
             rootFileNames,
             getNormalizedAbsolutePath(configFileName, currentDirectory),
-            compilerOptions2.configFile.configFileSpecs,
+            compilerOptions.configFile.configFileSpecs,
             configFileParsingDiagnostics,
             canConfigFileJsonReportNoInputFiles
           )) {
@@ -144373,7 +144373,7 @@ ${lanes.join("\n")}
         }
         function setConfigFileParsingResult(configFileParseResult) {
           rootFileNames = configFileParseResult.fileNames;
-          compilerOptions2 = configFileParseResult.options;
+          compilerOptions = configFileParseResult.options;
           watchOptions = configFileParseResult.watchOptions;
           projectReferences = configFileParseResult.projectReferences;
           wildcardDirectories = configFileParseResult.wildcardDirectories;
@@ -144388,11 +144388,11 @@ ${lanes.join("\n")}
             if (!config.updateLevel) return config.parsedCommandLine;
             if (config.parsedCommandLine && config.updateLevel === 1 && !host.getParsedCommandLine) {
               writeLog("Reloading new file names and options");
-              Debug.assert(compilerOptions2);
+              Debug.assert(compilerOptions);
               const fileNames = getFileNamesFromConfigSpecs(
                 config.parsedCommandLine.options.configFile.configFileSpecs,
                 getNormalizedAbsolutePath(getDirectoryPath(configFileName2), currentDirectory),
-                compilerOptions2,
+                compilerOptions,
                 parseConfigFileHost
               );
               config.parsedCommandLine = { ...config.parsedCommandLine, fileNames };
@@ -144482,7 +144482,7 @@ ${lanes.join("\n")}
             directory,
             (fileOrDirectory) => {
               Debug.assert(configFileName);
-              Debug.assert(compilerOptions2);
+              Debug.assert(compilerOptions);
               const fileOrDirectoryPath = toPath3(fileOrDirectory);
               if (cachedDirectoryStructureHost) {
                 cachedDirectoryStructureHost.addOrDeleteFileOrDirectory(fileOrDirectory, fileOrDirectoryPath);
@@ -144494,7 +144494,7 @@ ${lanes.join("\n")}
                 fileOrDirectoryPath,
                 configFileName,
                 extraFileExtensions,
-                options: compilerOptions2,
+                options: compilerOptions,
                 program: getCurrentBuilderProgram() || rootFileNames,
                 currentDirectory,
                 useCaseSensitiveFileNames: useCaseSensitiveFileNames2,
@@ -146798,12 +146798,12 @@ ${lanes.join("\n")}
           output.push("  " + getDiagnosticText(desc) + sys2.newLine + sys2.newLine);
         }
       }
-      function printAllHelp(sys2, compilerOptions2, buildOptions, watchOptions) {
+      function printAllHelp(sys2, compilerOptions, buildOptions, watchOptions) {
         let output = [...getHeader(sys2, `${getDiagnosticText(Diagnostics.tsc_Colon_The_TypeScript_Compiler)} - ${getDiagnosticText(Diagnostics.Version_0, version)}`)];
         output = [...output, ...generateSectionOptionsOutput(
           sys2,
           getDiagnosticText(Diagnostics.ALL_COMPILER_OPTIONS),
-          compilerOptions2,
+          compilerOptions,
           /*subCategory*/
           true,
           /*beforeOptionsDescription*/
@@ -147421,18 +147421,18 @@ ${lanes.join("\n")}
           return name.replace("SolutionBuilder::", "");
         }
       }
-      function canReportDiagnostics(system, compilerOptions2) {
-        return system === sys && (compilerOptions2.diagnostics || compilerOptions2.extendedDiagnostics);
+      function canReportDiagnostics(system, compilerOptions) {
+        return system === sys && (compilerOptions.diagnostics || compilerOptions.extendedDiagnostics);
       }
-      function canTrace(system, compilerOptions2) {
-        return system === sys && compilerOptions2.generateTrace;
+      function canTrace(system, compilerOptions) {
+        return system === sys && compilerOptions.generateTrace;
       }
-      function enableStatisticsAndTracing(system, compilerOptions2, isBuildMode) {
-        if (canReportDiagnostics(system, compilerOptions2)) {
+      function enableStatisticsAndTracing(system, compilerOptions, isBuildMode) {
+        if (canReportDiagnostics(system, compilerOptions)) {
           enable(system);
         }
-        if (canTrace(system, compilerOptions2)) {
-          startTracing(isBuildMode ? "build" : "project", compilerOptions2.generateTrace, compilerOptions2.configFilePath);
+        if (canTrace(system, compilerOptions)) {
+          startTracing(isBuildMode ? "build" : "project", compilerOptions.generateTrace, compilerOptions.configFilePath);
         }
       }
       function isSolutionMarkOrMeasure(name) {
@@ -147440,17 +147440,17 @@ ${lanes.join("\n")}
       }
       function reportStatistics(sys2, program, solutionPerformance) {
         var _a;
-        const compilerOptions2 = program.getCompilerOptions();
-        if (canTrace(sys2, compilerOptions2)) {
+        const compilerOptions = program.getCompilerOptions();
+        if (canTrace(sys2, compilerOptions)) {
           (_a = tracing) == null ? void 0 : _a.stopTracing();
         }
         let statistics;
-        if (canReportDiagnostics(sys2, compilerOptions2)) {
+        if (canReportDiagnostics(sys2, compilerOptions)) {
           statistics = [];
           const memoryUsed = sys2.getMemoryUsage ? sys2.getMemoryUsage() : -1;
           reportCountStatistic("Files", program.getSourceFiles().length);
           const lineCounts = countLines(program);
-          if (compilerOptions2.extendedDiagnostics) {
+          if (compilerOptions.extendedDiagnostics) {
             for (const [key, value] of lineCounts.entries()) {
               reportCountStatistic("Lines of " + key, value);
             }
@@ -147478,7 +147478,7 @@ ${lanes.join("\n")}
           const bindTime = isPerformanceEnabled ? getDuration("Bind") : 0;
           const checkTime = isPerformanceEnabled ? getDuration("Check") : 0;
           const emitTime = isPerformanceEnabled ? getDuration("Emit") : 0;
-          if (compilerOptions2.extendedDiagnostics) {
+          if (compilerOptions.extendedDiagnostics) {
             const caches = program.getRelationCacheSizes();
             reportCountStatistic("Assignability cache size", caches.assignable);
             reportCountStatistic("Identity cache size", caches.identity);
@@ -148978,7 +148978,7 @@ ${lanes.join("\n")}
         }
         return void 0;
       }
-      function discoverTypings(host, log, fileNames, projectRootPath, safeList, packageNameToTypingLocation, typeAcquisition, unresolvedImports, typesRegistry, compilerOptions2) {
+      function discoverTypings(host, log, fileNames, projectRootPath, safeList, packageNameToTypingLocation, typeAcquisition, unresolvedImports, typesRegistry, compilerOptions) {
         if (!typeAcquisition || !typeAcquisition.enable) {
           return { cachedTypingPaths: [], newTypingNames: [], filesToWatch: [] };
         }
@@ -148992,7 +148992,7 @@ ${lanes.join("\n")}
         const filesToWatch = [];
         if (typeAcquisition.include) addInferredTypings(typeAcquisition.include, "Explicitly included types");
         const exclude = typeAcquisition.exclude || [];
-        if (!compilerOptions2.types || usesWildcardTypes(compilerOptions2)) {
+        if (!compilerOptions.types || usesWildcardTypes(compilerOptions)) {
           const possibleSearchDirs = new Set(fileNames.map(getDirectoryPath));
           possibleSearchDirs.add(projectRootPath);
           possibleSearchDirs.forEach((searchDir) => {
@@ -150983,8 +150983,8 @@ ${lanes.join("\n")}
       function programContainsEsModules(program) {
         return program.getSourceFiles().some((s) => !s.isDeclarationFile && !program.isSourceFileFromExternalLibrary(s) && !!s.externalModuleIndicator);
       }
-      function compilerOptionsIndicateEsModules(compilerOptions2) {
-        return !!compilerOptions2.module || getEmitScriptTarget(compilerOptions2) >= 2 || !!compilerOptions2.noEmit;
+      function compilerOptionsIndicateEsModules(compilerOptions) {
+        return !!compilerOptions.module || getEmitScriptTarget(compilerOptions) >= 2 || !!compilerOptions.noEmit;
       }
       function createModuleSpecifierResolutionHost(program, host) {
         return {
@@ -152336,23 +152336,23 @@ ${lanes.join("\n")}
         if (!hasJSFileExtension(fileName)) {
           return false;
         }
-        const compilerOptions2 = typeof file === "string" ? program.getCompilerOptions() : program.getCompilerOptionsForFile(file);
-        const moduleKind = getEmitModuleKind(compilerOptions2);
+        const compilerOptions = typeof file === "string" ? program.getCompilerOptions() : program.getCompilerOptionsForFile(file);
+        const moduleKind = getEmitModuleKind(compilerOptions);
         const sourceFileLike = typeof file === "string" ? {
           fileName: file,
-          impliedNodeFormat: getImpliedNodeFormatForFile(toPath(file, host.getCurrentDirectory(), hostGetCanonicalFileName(host)), (_a = program.getPackageJsonInfoCache) == null ? void 0 : _a.call(program), host, compilerOptions2)
+          impliedNodeFormat: getImpliedNodeFormatForFile(toPath(file, host.getCurrentDirectory(), hostGetCanonicalFileName(host)), (_a = program.getPackageJsonInfoCache) == null ? void 0 : _a.call(program), host, compilerOptions)
         } : file;
-        const impliedNodeFormat = getImpliedNodeFormatForEmitWorker(sourceFileLike, compilerOptions2);
+        const impliedNodeFormat = getImpliedNodeFormatForEmitWorker(sourceFileLike, compilerOptions);
         if (impliedNodeFormat === 99) {
           return false;
         }
         if (impliedNodeFormat === 1) {
           return true;
         }
-        if (compilerOptions2.verbatimModuleSyntax && moduleKind === 1) {
+        if (compilerOptions.verbatimModuleSyntax && moduleKind === 1) {
           return true;
         }
-        if (compilerOptions2.verbatimModuleSyntax && emitModuleKindIsNonNodeESM(moduleKind)) {
+        if (compilerOptions.verbatimModuleSyntax && emitModuleKindIsNonNodeESM(moduleKind)) {
           return false;
         }
         if (typeof file === "object") {
@@ -155936,8 +155936,8 @@ interface Symbol {
         if (outputText === void 0) return Debug.fail("Output generation failed");
         return { outputText, diagnostics, sourceMapText };
       }
-      function transpile(input, compilerOptions2, fileName, diagnostics, moduleName) {
-        const output = transpileModule(input, { compilerOptions: compilerOptions2, fileName, reportDiagnostics: !!diagnostics, moduleName });
+      function transpile(input, compilerOptions, fileName, diagnostics, moduleName) {
+        const output = transpileModule(input, { compilerOptions, fileName, reportDiagnostics: !!diagnostics, moduleName });
         addRange(diagnostics, output.diagnostics);
         return output.outputText;
       }
@@ -164957,9 +164957,9 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         throw new Error("getDefaultLibFilePath is only supported when consumed as a node module. ");
       }
       setObjectAllocator(getServicesObjectAllocator());
-      function transform(source, transformers, compilerOptions2) {
+      function transform(source, transformers, compilerOptions) {
         const diagnostics = [];
-        compilerOptions2 = fixupCompilerOptions(compilerOptions2, diagnostics);
+        compilerOptions = fixupCompilerOptions(compilerOptions, diagnostics);
         const nodes = isArray(source) ? source : [source];
         const result = transformNodes(
           /*resolver*/
@@ -164967,7 +164967,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           /*host*/
           void 0,
           factory,
-          compilerOptions2,
+          compilerOptions,
           nodes,
           transformers,
           /*allowDtsFiles*/
@@ -166984,7 +166984,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         fixIds: [fixId10],
         getAllCodeActions: (context) => codeFixAll(context, errorCodes11, (changes, err) => doChange9(changes, err.file, err.start, context.program.getTypeChecker(), context.preferences, context.program.getCompilerOptions()))
       });
-      function doChange9(changes, sourceFile, position, checker, preferences, compilerOptions2) {
+      function doChange9(changes, sourceFile, position, checker, preferences, compilerOptions) {
         const ctorSymbol = checker.getSymbolAtLocation(getTokenAtPosition(sourceFile, position));
         if (!ctorSymbol || !ctorSymbol.valueDeclaration || !(ctorSymbol.flags & (16 | 3))) {
           return void 0;
@@ -167097,7 +167097,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             }
             if (isAccessExpression(memberDeclaration) && (isFunctionExpression(assignmentExpr) || isArrowFunction(assignmentExpr))) {
               const quotePreference = getQuotePreference(sourceFile, preferences);
-              const name = tryGetPropertyName(memberDeclaration, compilerOptions2, quotePreference);
+              const name = tryGetPropertyName(memberDeclaration, compilerOptions, quotePreference);
               if (name) {
                 createFunctionLikeExpressionMember(members, assignmentExpr, name);
               }
@@ -167258,7 +167258,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         if (isIdentifier(x.name) && x.name.text === "constructor") return true;
         return false;
       }
-      function tryGetPropertyName(node, compilerOptions2, quotePreference) {
+      function tryGetPropertyName(node, compilerOptions, quotePreference) {
         if (isPropertyAccessExpression(node)) {
           return node.name;
         }
@@ -167267,7 +167267,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           return propName;
         }
         if (isStringLiteralLike(propName)) {
-          return isIdentifierText(propName.text, getEmitScriptTarget(compilerOptions2)) ? factory.createIdentifier(propName.text) : isNoSubstitutionTemplateLiteral(propName) ? factory.createStringLiteral(
+          return isIdentifierText(propName.text, getEmitScriptTarget(compilerOptions)) ? factory.createIdentifier(propName.text) : isNoSubstitutionTemplateLiteral(propName) ? factory.createStringLiteral(
             propName.text,
             quotePreference === 0
             /* Single */
@@ -169224,7 +169224,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         );
       }
       function createImportAdderWorker(sourceFile, program, useAutoImportProvider, preferences, host, cancellationToken) {
-        const compilerOptions2 = program.getCompilerOptions();
+        const compilerOptions = program.getCompilerOptions();
         const addToNamespace = [];
         const importType = [];
         const addToExisting = /* @__PURE__ */ new Map();
@@ -169248,7 +169248,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         function addImportFromExportedSymbol(exportedSymbol, isValidTypeOnlyUseSite, referenceImport) {
           var _a, _b;
           const moduleSymbol = Debug.checkDefined(exportedSymbol.parent, "Expected exported symbol to have module symbol as parent");
-          const symbolName2 = getNameForExportedSymbol(exportedSymbol, getEmitScriptTarget(compilerOptions2));
+          const symbolName2 = getNameForExportedSymbol(exportedSymbol, getEmitScriptTarget(compilerOptions));
           const checker = program.getTypeChecker();
           const symbol = checker.getMergedSymbol(skipAlias(exportedSymbol, checker));
           const exportInfo = getAllExportInfoForSymbol(
@@ -169306,7 +169306,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           const moduleSpecifierResult = ts_moduleSpecifiers_exports.getModuleSpecifiersWithCacheInfo(
             moduleSymbol,
             checker,
-            compilerOptions2,
+            compilerOptions,
             sourceFile,
             moduleSpecifierResolutionHost,
             preferences,
@@ -169324,7 +169324,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             void 0,
             symbolAlias.flags,
             program.getTypeChecker(),
-            compilerOptions2
+            compilerOptions
           );
           addAsTypeOnly = addAsTypeOnly === 1 && isTypeOnlyImportDeclaration(referenceImport) ? 2 : 1;
           const importKind = isImportDeclaration(referenceImport) ? isDefaultImport(referenceImport) ? 1 : 2 : isImportSpecifier(referenceImport) ? 0 : isImportClause(referenceImport) && !!referenceImport.name ? 1 : 2;
@@ -169395,7 +169395,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             const moduleSpecifier = ts_moduleSpecifiers_exports.getLocalModuleSpecifierBetweenFileNames(
               sourceFile,
               exportingFileName,
-              compilerOptions2,
+              compilerOptions,
               createModuleSpecifierResolutionHost(program, host),
               preferences
             );
@@ -169408,7 +169408,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
               void 0,
               exportedMeanings,
               program.getTypeChecker(),
-              compilerOptions2
+              compilerOptions
             );
             const fix = {
               kind: 3,
@@ -169469,7 +169469,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
                   entry.namedImports.set(symbolName2, [reduceAddAsTypeOnlyValues(prevValue, addAsTypeOnly), propertyName]);
                   break;
                 case 3:
-                  if (compilerOptions2.verbatimModuleSyntax) {
+                  if (compilerOptions.verbatimModuleSyntax) {
                     const prevValue2 = (entry.namedImports || (entry.namedImports = /* @__PURE__ */ new Map())).get(symbolName2);
                     entry.namedImports.set(symbolName2, [reduceAddAsTypeOnlyValues(prevValue2, addAsTypeOnly), propertyName]);
                   } else {
@@ -169640,7 +169640,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
               defaultImport,
               namedImports && arrayFrom(namedImports.entries(), ([name, [addAsTypeOnly, propertyName]]) => ({ addAsTypeOnly, propertyName, name })),
               namespaceLikeImport,
-              compilerOptions2,
+              compilerOptions,
               preferences
             );
             newDeclarations = combine(newDeclarations, declarations);
@@ -169786,8 +169786,8 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         };
       }
       function getPromoteTypeOnlyCompletionAction(sourceFile, symbolToken, program, host, formatContext, preferences) {
-        const compilerOptions2 = program.getCompilerOptions();
-        const symbolName2 = single(getSymbolNamesToImport(sourceFile, program.getTypeChecker(), symbolToken, compilerOptions2));
+        const compilerOptions = program.getCompilerOptions();
+        const symbolName2 = single(getSymbolNamesToImport(sourceFile, program.getTypeChecker(), symbolToken, compilerOptions));
         const fix = getTypeOnlyPromotionFix(sourceFile, symbolToken, symbolName2, program);
         const includeSymbolNameInDescription = symbolName2 !== symbolToken.text;
         return fix && codeFixActionToCodeAction(codeActionForFix(
@@ -169904,16 +169904,16 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             return Debug.assertNever(declaration);
         }
       }
-      function getAddAsTypeOnly(isValidTypeOnlyUseSite, isForNewImportDeclaration, symbol, targetFlags, checker, compilerOptions2) {
+      function getAddAsTypeOnly(isValidTypeOnlyUseSite, isForNewImportDeclaration, symbol, targetFlags, checker, compilerOptions) {
         if (!isValidTypeOnlyUseSite) {
           return 4;
         }
-        if (symbol && compilerOptions2.verbatimModuleSyntax && (!(targetFlags & 111551) || !!checker.getTypeOnlyAliasDeclaration(symbol))) {
+        if (symbol && compilerOptions.verbatimModuleSyntax && (!(targetFlags & 111551) || !!checker.getTypeOnlyAliasDeclaration(symbol))) {
           return 2;
         }
         return 1;
       }
-      function tryAddToExistingImport(existingImports, isValidTypeOnlyUseSite, checker, compilerOptions2) {
+      function tryAddToExistingImport(existingImports, isValidTypeOnlyUseSite, checker, compilerOptions) {
         let best;
         for (const existingImport of existingImports) {
           const fix = getAddToExistingImportFix(existingImport);
@@ -169955,7 +169955,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             symbol,
             targetFlags,
             checker,
-            compilerOptions2
+            compilerOptions
           );
           if (importKind === 1 && (name || // Cannot add a default import to a declaration that already has one
           addAsTypeOnly === 2 && namedBindings)) {
@@ -170007,9 +170007,9 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         }
         if (sourceFile.commonJsModuleIndicator && !sourceFile.externalModuleIndicator) return true;
         if (sourceFile.externalModuleIndicator && !sourceFile.commonJsModuleIndicator) return false;
-        const compilerOptions2 = program.getCompilerOptions();
-        if (compilerOptions2.configFile) {
-          return getEmitModuleKind(compilerOptions2) < 5;
+        const compilerOptions = program.getCompilerOptions();
+        if (compilerOptions.configFile) {
+          return getEmitModuleKind(compilerOptions) < 5;
         }
         if (getImpliedNodeFormatForEmit(sourceFile, program) === 1) return true;
         if (getImpliedNodeFormatForEmit(sourceFile, program) === 99) return false;
@@ -170025,15 +170025,15 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
       }
       function getNewImportFixes(program, sourceFile, usagePosition, isValidTypeOnlyUseSite, useRequire, exportInfo, host, preferences, fromCacheOnly) {
         const isJs = hasJSFileExtension(sourceFile.fileName);
-        const compilerOptions2 = program.getCompilerOptions();
+        const compilerOptions = program.getCompilerOptions();
         const moduleSpecifierResolutionHost = createModuleSpecifierResolutionHost(program, host);
         const getChecker = createGetChecker(program, host);
-        const moduleResolution = getEmitModuleResolutionKind(compilerOptions2);
+        const moduleResolution = getEmitModuleResolutionKind(compilerOptions);
         const rejectNodeModulesRelativePaths = moduleResolutionUsesNodeModules(moduleResolution);
         const getModuleSpecifiers2 = fromCacheOnly ? (exportInfo2) => ts_moduleSpecifiers_exports.tryGetModuleSpecifiersFromCache(exportInfo2.moduleSymbol, sourceFile, moduleSpecifierResolutionHost, preferences) : (exportInfo2, checker) => ts_moduleSpecifiers_exports.getModuleSpecifiersWithCacheInfo(
           exportInfo2.moduleSymbol,
           checker,
-          compilerOptions2,
+          compilerOptions,
           sourceFile,
           moduleSpecifierResolutionHost,
           preferences,
@@ -170054,7 +170054,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             exportInfo2.symbol,
             exportInfo2.targetFlags,
             checker,
-            compilerOptions2
+            compilerOptions
           );
           computedWithoutCacheCount += computedWithoutCache ? 1 : 0;
           return mapDefined(moduleSpecifiers2, (moduleSpecifier) => {
@@ -170070,11 +170070,11 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
               const exportEquals = checker.resolveExternalModuleSymbol(exportInfo2.moduleSymbol);
               let namespacePrefix;
               if (exportEquals !== exportInfo2.moduleSymbol) {
-                namespacePrefix = forEachNameOfDefaultExport(exportEquals, checker, getEmitScriptTarget(compilerOptions2), identity);
+                namespacePrefix = forEachNameOfDefaultExport(exportEquals, checker, getEmitScriptTarget(compilerOptions), identity);
               }
               namespacePrefix || (namespacePrefix = moduleSymbolToValidIdentifier(
                 exportInfo2.moduleSymbol,
-                getEmitScriptTarget(compilerOptions2),
+                getEmitScriptTarget(compilerOptions),
                 /*forceCapitalize*/
                 false
               ));
@@ -170099,7 +170099,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         const existingDeclaration = firstDefined(existingImports, (info) => newImportInfoFromExistingSpecifier(info, isValidTypeOnlyUseSite, useRequire, program.getTypeChecker(), program.getCompilerOptions()));
         return existingDeclaration ? { fixes: [existingDeclaration] } : getNewImportFixes(program, sourceFile, usagePosition, isValidTypeOnlyUseSite, useRequire, exportInfos, host, preferences, fromCacheOnly);
       }
-      function newImportInfoFromExistingSpecifier({ declaration, importKind, symbol, targetFlags }, isValidTypeOnlyUseSite, useRequire, checker, compilerOptions2) {
+      function newImportInfoFromExistingSpecifier({ declaration, importKind, symbol, targetFlags }, isValidTypeOnlyUseSite, useRequire, checker, compilerOptions) {
         var _a;
         const moduleSpecifier = (_a = tryGetModuleSpecifierFromDeclaration(declaration)) == null ? void 0 : _a.text;
         if (moduleSpecifier) {
@@ -170110,7 +170110,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             symbol,
             targetFlags,
             checker,
-            compilerOptions2
+            compilerOptions
           );
           return { kind: 3, moduleSpecifierKind: void 0, moduleSpecifier, importKind, addAsTypeOnly, useRequire };
         }
@@ -170294,8 +170294,8 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
       }
       function getFixesInfoForNonUMDImport({ sourceFile, program, cancellationToken, host, preferences }, symbolToken, useAutoImportProvider) {
         const checker = program.getTypeChecker();
-        const compilerOptions2 = program.getCompilerOptions();
-        return flatMap(getSymbolNamesToImport(sourceFile, checker, symbolToken, compilerOptions2), (symbolName2) => {
+        const compilerOptions = program.getCompilerOptions();
+        return flatMap(getSymbolNamesToImport(sourceFile, checker, symbolToken, compilerOptions), (symbolName2) => {
           if (symbolName2 === "default") {
             return void 0;
           }
@@ -170322,9 +170322,9 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         if (!typeOnlyAliasDeclaration || getSourceFileOfNode(typeOnlyAliasDeclaration) !== sourceFile) return void 0;
         return { kind: 4, typeOnlyAliasDeclaration };
       }
-      function getSymbolNamesToImport(sourceFile, checker, symbolToken, compilerOptions2) {
+      function getSymbolNamesToImport(sourceFile, checker, symbolToken, compilerOptions) {
         const parent2 = symbolToken.parent;
-        if ((isJsxOpeningLikeElement(parent2) || isJsxClosingElement(parent2)) && parent2.tagName === symbolToken && jsxModeNeedsExplicitImport(compilerOptions2.jsx)) {
+        if ((isJsxOpeningLikeElement(parent2) || isJsxClosingElement(parent2)) && parent2.tagName === symbolToken && jsxModeNeedsExplicitImport(compilerOptions.jsx)) {
           const jsxNamespace = checker.getJsxNamespace(sourceFile);
           if (needsJsxNamespaceFix(jsxNamespace, symbolToken, checker)) {
             const needsComponentNameFix = !isIntrinsicJsxName(symbolToken.text) && !checker.resolveName(
@@ -170368,9 +170368,9 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         forEachExternalModuleToImportFrom(program, host, preferences, useAutoImportProvider, (moduleSymbol, sourceFile, program2, isFromPackageJson) => {
           const checker = program2.getTypeChecker();
           cancellationToken.throwIfCancellationRequested();
-          const compilerOptions2 = program2.getCompilerOptions();
+          const compilerOptions = program2.getCompilerOptions();
           const defaultInfo = getDefaultLikeExportInfo(moduleSymbol, checker);
-          if (defaultInfo && symbolFlagsHaveMeaning(checker.getSymbolFlags(defaultInfo.symbol), currentTokenMeaning) && forEachNameOfDefaultExport(defaultInfo.symbol, checker, getEmitScriptTarget(compilerOptions2), (name, capitalizedName) => (isJsxTagName ? capitalizedName ?? name : name) === symbolName2)) {
+          if (defaultInfo && symbolFlagsHaveMeaning(checker.getSymbolFlags(defaultInfo.symbol), currentTokenMeaning) && forEachNameOfDefaultExport(defaultInfo.symbol, checker, getEmitScriptTarget(compilerOptions), (name, capitalizedName) => (isJsxTagName ? capitalizedName ?? name : name) === symbolName2)) {
             addSymbol(moduleSymbol, sourceFile, defaultInfo.symbol, defaultInfo.exportKind, program2, isFromPackageJson);
           }
           const exportSymbolWithIdenticalName = checker.tryGetMemberInModuleExportsAndProperties(symbolName2, moduleSymbol);
@@ -170380,10 +170380,10 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         });
         return originalSymbolToExportInfos;
       }
-      function getExportEqualsImportKind(importingFile, compilerOptions2, forceImportKeyword) {
-        const allowSyntheticDefaults = getAllowSyntheticDefaultImports(compilerOptions2);
+      function getExportEqualsImportKind(importingFile, compilerOptions, forceImportKeyword) {
+        const allowSyntheticDefaults = getAllowSyntheticDefaultImports(compilerOptions);
         const isJS = hasJSFileExtension(importingFile.fileName);
-        if (!isJS && getEmitModuleKind(compilerOptions2) >= 5) {
+        if (!isJS && getEmitModuleKind(compilerOptions) >= 5) {
           return allowSyntheticDefaults ? 1 : 2;
         }
         if (isJS) {
@@ -170468,8 +170468,8 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         return promotedDeclaration.kind === 272 ? ((_b = tryCast((_a = tryCast(promotedDeclaration.moduleReference, isExternalModuleReference)) == null ? void 0 : _a.expression, isStringLiteralLike)) == null ? void 0 : _b.text) || promotedDeclaration.moduleReference.getText() : cast(promotedDeclaration.parent.moduleSpecifier, isStringLiteral).text;
       }
       function promoteFromTypeOnly(changes, aliasDeclaration, program, sourceFile, preferences) {
-        const compilerOptions2 = program.getCompilerOptions();
-        const convertExistingToTypeOnly = compilerOptions2.verbatimModuleSyntax;
+        const compilerOptions = program.getCompilerOptions();
+        const convertExistingToTypeOnly = compilerOptions.verbatimModuleSyntax;
         switch (aliasDeclaration.kind) {
           case 277:
             if (aliasDeclaration.isTypeOnly) {
@@ -170511,11 +170511,11 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         function promoteImportClause(importClause) {
           var _a;
           changes.delete(sourceFile, getTypeKeywordOfTypeOnlyImport(importClause, sourceFile));
-          if (!compilerOptions2.allowImportingTsExtensions) {
+          if (!compilerOptions.allowImportingTsExtensions) {
             const moduleSpecifier = tryGetModuleSpecifierFromDeclaration(importClause.parent);
             const resolvedModule = moduleSpecifier && ((_a = program.getResolvedModuleFromModuleSpecifier(moduleSpecifier, sourceFile)) == null ? void 0 : _a.resolvedModule);
             if (resolvedModule == null ? void 0 : resolvedModule.resolvedUsingTsExtension) {
-              const changedExtension = changeAnyExtension(moduleSpecifier.text, getOutputExtension(moduleSpecifier.text, compilerOptions2));
+              const changedExtension = changeAnyExtension(moduleSpecifier.text, getOutputExtension(moduleSpecifier.text, compilerOptions));
               changes.replaceNode(sourceFile, moduleSpecifier, factory.createStringLiteral(changedExtension));
             }
           }
@@ -170669,11 +170669,11 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
       function shouldUseTypeOnly(info, preferences) {
         return needsTypeOnly(info) || !!preferences.preferTypeOnlyAutoImports && info.addAsTypeOnly !== 4;
       }
-      function getNewImports(moduleSpecifier, quotePreference, defaultImport, namedImports, namespaceLikeImport, compilerOptions2, preferences) {
+      function getNewImports(moduleSpecifier, quotePreference, defaultImport, namedImports, namespaceLikeImport, compilerOptions, preferences) {
         const quotedModuleSpecifier = makeStringLiteral(moduleSpecifier, quotePreference);
         let statements;
         if (defaultImport !== void 0 || (namedImports == null ? void 0 : namedImports.length)) {
-          const topLevelTypeOnly = (!defaultImport || needsTypeOnly(defaultImport)) && every(namedImports, needsTypeOnly) || (compilerOptions2.verbatimModuleSyntax || preferences.preferTypeOnlyAutoImports) && (defaultImport == null ? void 0 : defaultImport.addAsTypeOnly) !== 4 && !some(
+          const topLevelTypeOnly = (!defaultImport || needsTypeOnly(defaultImport)) && every(namedImports, needsTypeOnly) || (compilerOptions.verbatimModuleSyntax || preferences.preferTypeOnlyAutoImports) && (defaultImport == null ? void 0 : defaultImport.addAsTypeOnly) !== 4 && !some(
             namedImports,
             (i) => i.addAsTypeOnly === 4
             /* NotAllowed */
@@ -172932,13 +172932,13 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           Diagnostics.Top_level_for_await_loops_are_only_allowed_when_the_module_option_is_set_to_es2022_esnext_system_node16_node18_node20_nodenext_or_preserve_and_the_target_option_is_set_to_es2017_or_higher.code
         ],
         getCodeActions: function getCodeActionsToFixModuleAndTarget(context) {
-          const compilerOptions2 = context.program.getCompilerOptions();
-          const { configFile } = compilerOptions2;
+          const compilerOptions = context.program.getCompilerOptions();
+          const { configFile } = compilerOptions;
           if (configFile === void 0) {
             return void 0;
           }
           const codeFixes = [];
-          const moduleKind = getEmitModuleKind(compilerOptions2);
+          const moduleKind = getEmitModuleKind(compilerOptions);
           const moduleOutOfRange = moduleKind >= 5 && moduleKind < 99;
           if (moduleOutOfRange) {
             const changes = ts_textChanges_exports.ChangeTracker.with(context, (changes2) => {
@@ -172946,7 +172946,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             });
             codeFixes.push(createCodeFixActionWithoutFixAll("fixModuleOption", changes, [Diagnostics.Set_the_module_option_in_your_configuration_file_to_0, "esnext"]));
           }
-          const target = getEmitScriptTarget(compilerOptions2);
+          const target = getEmitScriptTarget(compilerOptions);
           const targetOutOfRange = target < 4 || target > 99;
           if (targetOutOfRange) {
             const changes = ts_textChanges_exports.ChangeTracker.with(context, (tracker) => {
@@ -176763,14 +176763,14 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           );
           return;
         }
-        const compilerOptions2 = compilerOptionsProperty.initializer;
-        if (!isObjectLiteralExpression(compilerOptions2)) {
+        const compilerOptions = compilerOptionsProperty.initializer;
+        if (!isObjectLiteralExpression(compilerOptions)) {
           return;
         }
         for (const [optionName, optionValue] of options) {
-          const optionProperty = findJsonProperty(compilerOptions2, optionName);
+          const optionProperty = findJsonProperty(compilerOptions, optionName);
           if (optionProperty === void 0) {
-            changeTracker.insertNodeAtObjectStart(configFile, compilerOptions2, createJsonPropertyAssignment(optionName, optionValue));
+            changeTracker.insertNodeAtObjectStart(configFile, compilerOptions, createJsonPropertyAssignment(optionName, optionValue));
           } else {
             changeTracker.replaceNode(configFile, optionProperty.initializer, optionValue);
           }
@@ -178050,7 +178050,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           }
           return void 0;
         }
-        const compilerOptions2 = program.getCompilerOptions();
+        const compilerOptions = program.getCompilerOptions();
         const checker = program.getTypeChecker();
         const incompleteCompletionsCache = preferences.allowIncompleteCompletions ? (_a = host.getIncompleteCompletionsCache) == null ? void 0 : _a.call(host) : void 0;
         if (incompleteCompletionsCache && completionKind === 3 && previousToken && isIdentifier(previousToken)) {
@@ -178061,7 +178061,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         } else {
           incompleteCompletionsCache == null ? void 0 : incompleteCompletionsCache.clear();
         }
-        const stringCompletions = ts_Completions_StringCompletions_exports.getStringLiteralCompletions(sourceFile, position, previousToken, compilerOptions2, host, program, log, preferences, includeSymbol);
+        const stringCompletions = ts_Completions_StringCompletions_exports.getStringLiteralCompletions(sourceFile, position, previousToken, compilerOptions, host, program, log, preferences, includeSymbol);
         if (stringCompletions) {
           return stringCompletions;
         }
@@ -178072,7 +178072,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           program,
           log,
           sourceFile,
-          compilerOptions2,
+          compilerOptions,
           position,
           preferences,
           /*detailsEntryId*/
@@ -178086,7 +178086,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         }
         switch (completionData.kind) {
           case 0:
-            const response = completionInfoFromData(sourceFile, host, program, compilerOptions2, log, completionData, preferences, formatContext, position, includeSymbol);
+            const response = completionInfoFromData(sourceFile, host, program, compilerOptions, log, completionData, preferences, formatContext, position, includeSymbol);
             if (response == null ? void 0 : response.isIncomplete) {
               incompleteCompletionsCache == null ? void 0 : incompleteCompletionsCache.set(response);
             }
@@ -178098,7 +178098,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
                 sourceFile,
                 position,
                 checker,
-                compilerOptions2,
+                compilerOptions,
                 preferences,
                 /*tagNameOnly*/
                 true
@@ -178111,7 +178111,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
                 sourceFile,
                 position,
                 checker,
-                compilerOptions2,
+                compilerOptions,
                 preferences,
                 /*tagNameOnly*/
                 false
@@ -178508,7 +178508,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
       function getOptionalReplacementSpan(location) {
         return (location == null ? void 0 : location.kind) === 80 ? createTextSpanFromNode(location) : void 0;
       }
-      function completionInfoFromData(sourceFile, host, program, compilerOptions2, log, completionData, preferences, formatContext, position, includeSymbol) {
+      function completionInfoFromData(sourceFile, host, program, compilerOptions, log, completionData, preferences, formatContext, position, includeSymbol) {
         const {
           symbols,
           contextToken,
@@ -178556,7 +178556,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           });
         }
         const entries = createSortedArray();
-        const isChecked = isCheckedFile(sourceFile, compilerOptions2);
+        const isChecked = isCheckedFile(sourceFile, compilerOptions);
         if (isChecked && !isNewIdentifierLocation && (!symbols || symbols.length === 0) && keywordFilters === 0) {
           return void 0;
         }
@@ -178571,11 +178571,11 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           sourceFile,
           host,
           program,
-          getEmitScriptTarget(compilerOptions2),
+          getEmitScriptTarget(compilerOptions),
           log,
           completionKind,
           preferences,
-          compilerOptions2,
+          compilerOptions,
           formatContext,
           isTypeOnlyLocation,
           propertyAccessToConvert,
@@ -178633,11 +178633,11 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           );
         }
         if (!isChecked) {
-          getJSCompletionEntries(sourceFile, location.pos, uniqueNames, getEmitScriptTarget(compilerOptions2), entries);
+          getJSCompletionEntries(sourceFile, location.pos, uniqueNames, getEmitScriptTarget(compilerOptions), entries);
         }
         let caseBlock;
         if (preferences.includeCompletionsWithInsertText && contextToken && !isRightOfOpenTag && !isRightOfDotOrQuestionDot && (caseBlock = findAncestor(contextToken, isCaseBlock))) {
-          const cases = getExhaustiveCaseSnippets(caseBlock, sourceFile, preferences, compilerOptions2, host, program, formatContext);
+          const cases = getExhaustiveCaseSnippets(caseBlock, sourceFile, preferences, compilerOptions, host, program, formatContext);
           if (cases) {
             entries.push(cases.entry);
           }
@@ -178653,8 +178653,8 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           defaultCommitCharacters: defaultCommitCharacters ?? getDefaultCommitCharacters(isNewIdentifierLocation)
         };
       }
-      function isCheckedFile(sourceFile, compilerOptions2) {
-        return !isSourceFileJS(sourceFile) || !!isCheckJsEnabledForFile(sourceFile, compilerOptions2);
+      function isCheckedFile(sourceFile, compilerOptions) {
+        return !isSourceFileJS(sourceFile) || !!isCheckJsEnabledForFile(sourceFile, compilerOptions);
       }
       function getExhaustiveCaseSnippets(caseBlock, sourceFile, preferences, options, host, program, formatContext) {
         const clauses = caseBlock.clauses;
@@ -179584,7 +179584,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           return "TypeOnlyAlias/";
         }
       }
-      function getCompletionEntriesFromSymbols(symbols, entries, replacementToken, contextToken, location, position, sourceFile, host, program, target, log, kind, preferences, compilerOptions2, formatContext, isTypeOnlyLocation, propertyAccessToConvert, jsxIdentifierExpected, isJsxInitializer, importStatementCompletion, recommendedCompletion, symbolToOriginInfoMap, symbolToSortTextMap, isJsxIdentifierExpected, isRightOfOpenTag, includeSymbol = false) {
+      function getCompletionEntriesFromSymbols(symbols, entries, replacementToken, contextToken, location, position, sourceFile, host, program, target, log, kind, preferences, compilerOptions, formatContext, isTypeOnlyLocation, propertyAccessToConvert, jsxIdentifierExpected, isJsxInitializer, importStatementCompletion, recommendedCompletion, symbolToOriginInfoMap, symbolToSortTextMap, isJsxIdentifierExpected, isRightOfOpenTag, includeSymbol = false) {
         const start = timestamp();
         const closestSymbolDeclaration = getClosestSymbolDeclaration(contextToken, location);
         const useSemicolons = probablyUsesSemicolons(sourceFile);
@@ -179621,7 +179621,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             isJsxInitializer,
             importStatementCompletion,
             useSemicolons,
-            compilerOptions2,
+            compilerOptions,
             preferences,
             kind,
             formatContext,
@@ -179683,7 +179683,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             }
           }
           const symbolOrigin = skipAlias(symbol, typeChecker);
-          if (!!sourceFile.externalModuleIndicator && !compilerOptions2.allowUmdGlobalAccess && symbolToSortTextMap2[getSymbolId(symbol)] === SortText.GlobalsOrKeywords && (symbolToSortTextMap2[getSymbolId(symbolOrigin)] === SortText.AutoImportSuggestions || symbolToSortTextMap2[getSymbolId(symbolOrigin)] === SortText.LocationPriority)) {
+          if (!!sourceFile.externalModuleIndicator && !compilerOptions.allowUmdGlobalAccess && symbolToSortTextMap2[getSymbolId(symbol)] === SortText.GlobalsOrKeywords && (symbolToSortTextMap2[getSymbolId(symbolOrigin)] === SortText.AutoImportSuggestions || symbolToSortTextMap2[getSymbolId(symbolOrigin)] === SortText.LocationPriority)) {
             return false;
           }
           allFlags |= getCombinedLocalAndExportSymbolFlags(symbolOrigin);
@@ -179760,12 +179760,12 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             };
           }
         }
-        const compilerOptions2 = program.getCompilerOptions();
+        const compilerOptions = program.getCompilerOptions();
         const completionData = getCompletionData(
           program,
           log,
           sourceFile,
-          compilerOptions2,
+          compilerOptions,
           position,
           { includeCompletionsForModuleExports: true, includeCompletionsWithInsertText: true },
           entryId,
@@ -179784,13 +179784,13 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         if (literal !== void 0) return { type: "literal", literal };
         return firstDefined(symbols, (symbol, index) => {
           const origin = symbolToOriginInfoMap[index];
-          const info = getCompletionEntryDisplayNameForSymbol(symbol, getEmitScriptTarget(compilerOptions2), origin, completionKind, completionData.isJsxIdentifierExpected);
+          const info = getCompletionEntryDisplayNameForSymbol(symbol, getEmitScriptTarget(compilerOptions), origin, completionKind, completionData.isJsxIdentifierExpected);
           return info && info.name === entryId.name && (entryId.source === "ClassMemberSnippet/" && symbol.flags & 106500 || entryId.source === "ObjectLiteralMethodSnippet/" && symbol.flags & (4 | 8192) || getSourceFromOrigin(origin) === entryId.source || entryId.source === "ObjectLiteralMemberWithComma/") ? { type: "symbol", symbol, location, origin, contextToken, previousToken, isJsxInitializer, isTypeOnlyLocation } : void 0;
         }) || { type: "none" };
       }
       function getCompletionEntryDetails(program, log, sourceFile, position, entryId, host, formatContext, preferences, cancellationToken) {
         const typeChecker = program.getTypeChecker();
-        const compilerOptions2 = program.getCompilerOptions();
+        const compilerOptions = program.getCompilerOptions();
         const { name, source, data } = entryId;
         const { previousToken, contextToken } = getRelevantTokens(position, sourceFile);
         if (isInString(sourceFile, position, previousToken)) {
@@ -179820,7 +179820,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           }
           case "symbol": {
             const { symbol, location, contextToken: contextToken2, origin, previousToken: previousToken2 } = symbolCompletion;
-            const { codeActions, sourceDisplay } = getCompletionEntryCodeActionsAndSourceDisplay(name, location, contextToken2, origin, symbol, program, host, compilerOptions2, sourceFile, position, previousToken2, formatContext, preferences, data, source, cancellationToken);
+            const { codeActions, sourceDisplay } = getCompletionEntryCodeActionsAndSourceDisplay(name, location, contextToken2, origin, symbol, program, host, compilerOptions, sourceFile, position, previousToken2, formatContext, preferences, data, source, cancellationToken);
             const symbolName2 = originIsComputedPropertyName(origin) ? origin.symbolName : symbol.name;
             return createCompletionDetailsForSymbol(symbol, symbolName2, typeChecker, sourceFile, location, cancellationToken, codeActions, sourceDisplay);
           }
@@ -179899,7 +179899,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
       function createCompletionDetails(name, kindModifiers, kind, displayParts, documentation, tags, codeActions, source) {
         return { name, kindModifiers, kind, displayParts, documentation, tags, codeActions, source, sourceDisplay: source };
       }
-      function getCompletionEntryCodeActionsAndSourceDisplay(name, location, contextToken, origin, symbol, program, host, compilerOptions2, sourceFile, position, previousToken, formatContext, preferences, data, source, cancellationToken) {
+      function getCompletionEntryCodeActionsAndSourceDisplay(name, location, contextToken, origin, symbol, program, host, compilerOptions, sourceFile, position, previousToken, formatContext, preferences, data, source, cancellationToken) {
         if (data == null ? void 0 : data.moduleSpecifier) {
           if (previousToken && getImportStatementCompletionInfo(contextToken || previousToken, sourceFile).replacementSpan) {
             return { codeActions: void 0, sourceDisplay: [textPart(data.moduleSpecifier)] };
@@ -179909,7 +179909,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           const { importAdder, eraseRange } = getEntryForMemberCompletion(
             host,
             program,
-            compilerOptions2,
+            compilerOptions,
             preferences,
             name,
             symbol,
@@ -180064,9 +180064,9 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           /* SourceFile */
         ));
       }
-      function getCompletionData(program, log, sourceFile, compilerOptions2, position, preferences, detailsEntryId, host, formatContext, cancellationToken) {
+      function getCompletionData(program, log, sourceFile, compilerOptions, position, preferences, detailsEntryId, host, formatContext, cancellationToken) {
         const typeChecker = program.getTypeChecker();
-        const inCheckedFile = isCheckedFile(sourceFile, compilerOptions2);
+        const inCheckedFile = isCheckedFile(sourceFile, compilerOptions);
         let start = timestamp();
         let currentToken = getTokenAtPosition(sourceFile, position);
         log("getCompletionData: Get current token: " + (timestamp() - start));
@@ -180793,7 +180793,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             }
             const displayName = getCompletionEntryDisplayNameForSymbol(
               member,
-              getEmitScriptTarget(compilerOptions2),
+              getEmitScriptTarget(compilerOptions),
               /*origin*/
               void 0,
               0,
@@ -180810,7 +180810,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
               enclosingDeclaration,
               program,
               host,
-              compilerOptions2,
+              compilerOptions,
               preferences,
               formatContext
             );
@@ -181456,7 +181456,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             const symbol = symbols[i];
             const symbolId = getSymbolId(symbol);
             const origin = symbolToOriginInfoMap == null ? void 0 : symbolToOriginInfoMap[i];
-            const target = getEmitScriptTarget(compilerOptions2);
+            const target = getEmitScriptTarget(compilerOptions);
             const displayName = getCompletionEntryDisplayNameForSymbol(
               symbol,
               target,
@@ -182563,15 +182563,15 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         const mode = isStringLiteralLike(node) ? program.getModeForUsageLocation(sourceFile, node) : void 0;
         const scriptPath = sourceFile.path;
         const scriptDirectory = getDirectoryPath(scriptPath);
-        const compilerOptions2 = program.getCompilerOptions();
+        const compilerOptions = program.getCompilerOptions();
         const typeChecker = program.getTypeChecker();
         const moduleSpecifierResolutionHost = createModuleSpecifierResolutionHost(program, host);
-        const extensionOptions = getExtensionOptions(compilerOptions2, 1, sourceFile, typeChecker, preferences, mode);
-        return isPathRelativeToScript(literalValue) || !compilerOptions2.baseUrl && !compilerOptions2.paths && (isRootedDiskPath(literalValue) || isUrl(literalValue)) ? getCompletionEntriesForRelativeModules(literalValue, scriptDirectory, program, host, moduleSpecifierResolutionHost, scriptPath, extensionOptions) : getCompletionEntriesForNonRelativeModules(literalValue, scriptDirectory, mode, program, host, moduleSpecifierResolutionHost, extensionOptions);
+        const extensionOptions = getExtensionOptions(compilerOptions, 1, sourceFile, typeChecker, preferences, mode);
+        return isPathRelativeToScript(literalValue) || !compilerOptions.baseUrl && !compilerOptions.paths && (isRootedDiskPath(literalValue) || isUrl(literalValue)) ? getCompletionEntriesForRelativeModules(literalValue, scriptDirectory, program, host, moduleSpecifierResolutionHost, scriptPath, extensionOptions) : getCompletionEntriesForNonRelativeModules(literalValue, scriptDirectory, mode, program, host, moduleSpecifierResolutionHost, extensionOptions);
       }
-      function getExtensionOptions(compilerOptions2, referenceKind, importingSourceFile, typeChecker, preferences, resolutionMode) {
+      function getExtensionOptions(compilerOptions, referenceKind, importingSourceFile, typeChecker, preferences, resolutionMode) {
         return {
-          extensionsToSearch: flatten(getSupportedExtensionsForModuleResolution(compilerOptions2, typeChecker)),
+          extensionsToSearch: flatten(getSupportedExtensionsForModuleResolution(compilerOptions, typeChecker)),
           referenceKind,
           importingSourceFile,
           endingPreference: preferences == null ? void 0 : preferences.importModuleSpecifierEnding,
@@ -182579,10 +182579,10 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         };
       }
       function getCompletionEntriesForRelativeModules(literalValue, scriptDirectory, program, host, moduleSpecifierResolutionHost, scriptPath, extensionOptions) {
-        const compilerOptions2 = program.getCompilerOptions();
-        if (compilerOptions2.rootDirs) {
+        const compilerOptions = program.getCompilerOptions();
+        if (compilerOptions.rootDirs) {
           return getCompletionEntriesForDirectoryFragmentWithRootDirs(
-            compilerOptions2.rootDirs,
+            compilerOptions.rootDirs,
             literalValue,
             scriptDirectory,
             extensionOptions,
@@ -182605,15 +182605,15 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           ).values());
         }
       }
-      function getSupportedExtensionsForModuleResolution(compilerOptions2, typeChecker) {
+      function getSupportedExtensionsForModuleResolution(compilerOptions, typeChecker) {
         const ambientModulesExtensions = !typeChecker ? [] : mapDefined(typeChecker.getAmbientModules(), (module22) => {
           const name = module22.name.slice(1, -1);
           if (!name.startsWith("*.") || name.includes("/")) return;
           return name.slice(1);
         });
-        const extensions = [...getSupportedExtensions(compilerOptions2), ambientModulesExtensions];
-        const moduleResolution = getEmitModuleResolutionKind(compilerOptions2);
-        return moduleResolutionUsesNodeModules(moduleResolution) ? getSupportedExtensionsWithJsonIfResolveJsonModule(compilerOptions2, extensions) : extensions;
+        const extensions = [...getSupportedExtensions(compilerOptions), ambientModulesExtensions];
+        const moduleResolution = getEmitModuleResolutionKind(compilerOptions);
+        return moduleResolutionUsesNodeModules(moduleResolution) ? getSupportedExtensionsWithJsonIfResolveJsonModule(compilerOptions, extensions) : extensions;
       }
       function getBaseDirectoriesFromRootDirs(rootDirs, basePath, scriptDirectory, ignoreCase) {
         rootDirs = rootDirs.map((rootDirectory) => ensureTrailingDirectorySeparator(normalizePath(isRootedDiskPath(rootDirectory) ? rootDirectory : combinePaths(basePath, rootDirectory))));
@@ -182625,8 +182625,8 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         );
       }
       function getCompletionEntriesForDirectoryFragmentWithRootDirs(rootDirs, fragment, scriptDirectory, extensionOptions, program, host, moduleSpecifierResolutionHost, exclude) {
-        const compilerOptions2 = program.getCompilerOptions();
-        const basePath = compilerOptions2.project || host.getCurrentDirectory();
+        const compilerOptions = program.getCompilerOptions();
+        const basePath = compilerOptions.project || host.getCurrentDirectory();
         const ignoreCase = !(host.useCaseSensitiveFileNames && host.useCaseSensitiveFileNames());
         const baseDirectories = getBaseDirectoriesFromRootDirs(rootDirs, basePath, scriptDirectory, ignoreCase);
         return deduplicate(
@@ -182809,10 +182809,10 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
       }
       function getCompletionEntriesForNonRelativeModules(fragment, scriptPath, mode, program, host, moduleSpecifierResolutionHost, extensionOptions) {
         const typeChecker = program.getTypeChecker();
-        const compilerOptions2 = program.getCompilerOptions();
-        const { baseUrl, paths } = compilerOptions2;
+        const compilerOptions = program.getCompilerOptions();
+        const { baseUrl, paths } = compilerOptions;
         const result = createNameAndKindSet();
-        const moduleResolution = getEmitModuleResolutionKind(compilerOptions2);
+        const moduleResolution = getEmitModuleResolutionKind(compilerOptions);
         if (baseUrl) {
           const absolute = normalizePath(combinePaths(host.getCurrentDirectory(), baseUrl));
           getCompletionEntriesForDirectoryFragment(
@@ -182830,7 +182830,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           );
         }
         if (paths) {
-          const absolute = getPathsBasePath(compilerOptions2, host);
+          const absolute = getPathsBasePath(compilerOptions, host);
           addCompletionEntriesFromPaths(result, fragment, absolute, extensionOptions, program, host, moduleSpecifierResolutionHost, paths);
         }
         const fragmentDirectory = getFragmentDirectory(fragment);
@@ -182860,8 +182860,8 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             }
           }
           if (!foundGlobal) {
-            const resolvePackageJsonExports = getResolvePackageJsonExports(compilerOptions2);
-            const resolvePackageJsonImports = getResolvePackageJsonImports(compilerOptions2);
+            const resolvePackageJsonExports = getResolvePackageJsonExports(compilerOptions);
+            const resolvePackageJsonImports = getResolvePackageJsonImports(compilerOptions);
             let seenPackageScope = false;
             const importsLookup = (directory) => {
               if (resolvePackageJsonImports && !seenPackageScope) {
@@ -182947,7 +182947,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             return lookupTable !== void 0;
           }
           const keys = getOwnKeys(lookupTable);
-          const conditions = getConditions(compilerOptions2, mode);
+          const conditions = getConditions(compilerOptions, mode);
           addCompletionEntriesFromPathsOrExportsOrImports(
             result,
             isExports,
@@ -183110,7 +183110,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         return nonRelativeModuleNames;
       }
       function getTripleSlashReferenceCompletion(sourceFile, position, program, host, moduleSpecifierResolutionHost) {
-        const compilerOptions2 = program.getCompilerOptions();
+        const compilerOptions = program.getCompilerOptions();
         const token = getTokenAtPosition(sourceFile, position);
         const commentRanges = getLeadingCommentRanges(sourceFile.text, token.pos);
         const range = commentRanges && find(commentRanges, (commentRange) => position >= commentRange.pos && position <= commentRange.end);
@@ -183127,14 +183127,14 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         const names = kind === "path" ? getCompletionEntriesForDirectoryFragment(
           toComplete,
           scriptPath,
-          getExtensionOptions(compilerOptions2, 0, sourceFile),
+          getExtensionOptions(compilerOptions, 0, sourceFile),
           program,
           host,
           moduleSpecifierResolutionHost,
           /*moduleSpecifierIsRelative*/
           true,
           sourceFile.path
-        ) : kind === "types" ? getCompletionEntriesFromTypings(program, host, moduleSpecifierResolutionHost, scriptPath, getFragmentDirectory(toComplete), getExtensionOptions(compilerOptions2, 1, sourceFile)) : Debug.fail();
+        ) : kind === "types" ? getCompletionEntriesFromTypings(program, host, moduleSpecifierResolutionHost, scriptPath, getFragmentDirectory(toComplete), getExtensionOptions(compilerOptions, 1, sourceFile)) : Debug.fail();
         return addReplacementSpans(toComplete, range.pos + prefix.length, arrayFrom(names.values()));
       }
       function getCompletionEntriesFromTypings(program, host, moduleSpecifierResolutionHost, scriptPath, fragmentDirectory, extensionOptions, result = createNameAndKindSet()) {
@@ -186424,7 +186424,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
       function provideInlayHints(context) {
         const { file, program, span, cancellationToken, preferences } = context;
         const sourceFileText = file.text;
-        const compilerOptions2 = program.getCompilerOptions();
+        const compilerOptions = program.getCompilerOptions();
         const quotePreference = getQuotePreference(file, preferences);
         const checker = program.getTypeChecker();
         const result = [];
@@ -186595,7 +186595,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           return false;
         }
         function leadingCommentsContainsParameterName(node, name) {
-          if (!isIdentifierText(name, getEmitScriptTarget(compilerOptions2), getLanguageVariant(file.scriptKind))) {
+          if (!isIdentifierText(name, getEmitScriptTarget(compilerOptions), getLanguageVariant(file.scriptKind))) {
             return false;
           }
           const ranges = getLeadingCommentRanges(sourceFileText, node.pos);
@@ -188034,7 +188034,7 @@ ${content}
       }
       function removeUnusedImports(oldImports, sourceFile, program) {
         const typeChecker = program.getTypeChecker();
-        const compilerOptions2 = program.getCompilerOptions();
+        const compilerOptions = program.getCompilerOptions();
         const jsxNamespace = typeChecker.getJsxNamespace(sourceFile);
         const jsxFragmentFactory = typeChecker.getJsxFragmentFactory(sourceFile);
         const jsxElementsPresent = !!(sourceFile.transformFlags & 2);
@@ -188080,7 +188080,7 @@ ${content}
         }
         return usedImports;
         function isDeclarationUsed(identifier) {
-          return jsxElementsPresent && (identifier.text === jsxNamespace || jsxFragmentFactory && identifier.text === jsxFragmentFactory) && jsxModeNeedsExplicitImport(compilerOptions2.jsx) || ts_FindAllReferences_exports.Core.isSymbolReferencedInFile(identifier, typeChecker, sourceFile);
+          return jsxElementsPresent && (identifier.text === jsxNamespace || jsxFragmentFactory && identifier.text === jsxFragmentFactory) && jsxModeNeedsExplicitImport(compilerOptions.jsx) || ts_FindAllReferences_exports.Core.isSymbolReferencedInFile(identifier, typeChecker, sourceFile);
         }
       }
       function getExternalModuleName2(specifier) {
@@ -200154,10 +200154,10 @@ ${options.prefix}` : "\n" : options.prefix
       }
       var Project2 = class _Project {
         /** @internal */
-        constructor(projectName, projectKind, projectService, hasExplicitListOfFiles, lastFileExceededProgramSize, compilerOptions2, compileOnSaveEnabled, watchOptions, directoryStructureHost, currentDirectory) {
+        constructor(projectName, projectKind, projectService, hasExplicitListOfFiles, lastFileExceededProgramSize, compilerOptions, compileOnSaveEnabled, watchOptions, directoryStructureHost, currentDirectory) {
           this.projectKind = projectKind;
           this.projectService = projectService;
-          this.compilerOptions = compilerOptions2;
+          this.compilerOptions = compilerOptions;
           this.compileOnSaveEnabled = compileOnSaveEnabled;
           this.watchOptions = watchOptions;
           this.rootFilesMap = /* @__PURE__ */ new Map();
@@ -201009,9 +201009,9 @@ ${options.prefix}` : "\n" : options.prefix
           }
         }
         /** @internal */
-        updateTypingFiles(compilerOptions2, typeAcquisition, unresolvedImports, newTypings) {
+        updateTypingFiles(compilerOptions, typeAcquisition, unresolvedImports, newTypings) {
           this.typingsCache = {
-            compilerOptions: compilerOptions2,
+            compilerOptions,
             typeAcquisition,
             unresolvedImports
           };
@@ -201459,15 +201459,15 @@ ${options.prefix}` : "\n" : options.prefix
             false
           );
         }
-        setCompilerOptions(compilerOptions2) {
+        setCompilerOptions(compilerOptions) {
           var _a;
-          if (compilerOptions2) {
-            compilerOptions2.allowNonTsExtensions = true;
+          if (compilerOptions) {
+            compilerOptions.allowNonTsExtensions = true;
             const oldOptions = this.compilerOptions;
-            this.compilerOptions = compilerOptions2;
+            this.compilerOptions = compilerOptions;
             this.setInternalCompilerOptionsForEmittingJsFiles();
             (_a = this.noDtsResolutionProject) == null ? void 0 : _a.setCompilerOptions(this.getCompilerOptionsForNoDtsResolutionProject());
-            if (changesAffectModuleResolution(oldOptions, compilerOptions2)) {
+            if (changesAffectModuleResolution(oldOptions, compilerOptions)) {
               this.cachedUnresolvedImportsPerFile.clear();
               this.lastCachedUnresolvedImportsList = void 0;
               this.resolutionCache.onChangesAffectModuleResolution();
@@ -201835,7 +201835,7 @@ ${options.prefix}` : "\n" : options.prefix
       }
       var InferredProject2 = class extends Project2 {
         /** @internal */
-        constructor(projectService, compilerOptions2, watchOptions, projectRootPath, currentDirectory, typeAcquisition) {
+        constructor(projectService, compilerOptions, watchOptions, projectRootPath, currentDirectory, typeAcquisition) {
           super(
             projectService.newInferredProjectName(),
             0,
@@ -201844,7 +201844,7 @@ ${options.prefix}` : "\n" : options.prefix
             false,
             /*lastFileExceededProgramSize*/
             void 0,
-            compilerOptions2,
+            compilerOptions,
             /*compileOnSaveEnabled*/
             false,
             watchOptions,
@@ -201953,7 +201953,7 @@ ${options.prefix}` : "\n" : options.prefix
       };
       var _AutoImportProviderProject = class _AutoImportProviderProject2 extends Project2 {
         /** @internal */
-        constructor(hostProject, initialRootNames, compilerOptions2) {
+        constructor(hostProject, initialRootNames, compilerOptions) {
           super(
             hostProject.projectService.newAutoImportProviderProjectName(),
             3,
@@ -201962,7 +201962,7 @@ ${options.prefix}` : "\n" : options.prefix
             false,
             /*lastFileExceededProgramSize*/
             void 0,
-            compilerOptions2,
+            compilerOptions,
             /*compileOnSaveEnabled*/
             false,
             hostProject.getWatchOptions(),
@@ -201975,7 +201975,7 @@ ${options.prefix}` : "\n" : options.prefix
           this.getParsedCommandLine = maybeBind(this.hostProject, this.hostProject.getParsedCommandLine);
         }
         /** @internal */
-        static getRootFileNames(dependencySelection, hostProject, host, compilerOptions2) {
+        static getRootFileNames(dependencySelection, hostProject, host, compilerOptions) {
           var _a, _b;
           if (!dependencySelection) {
             return emptyArray;
@@ -202004,7 +202004,7 @@ ${options.prefix}` : "\n" : options.prefix
               const packageJson = resolvePackageNameToPackageJson(
                 name,
                 hostProject.currentDirectory,
-                compilerOptions2,
+                compilerOptions,
                 host,
                 program.getModuleResolutionCache()
               );
@@ -202020,7 +202020,7 @@ ${options.prefix}` : "\n" : options.prefix
                   const typesPackageJson = resolvePackageNameToPackageJson(
                     `@types/${name}`,
                     directory,
-                    compilerOptions2,
+                    compilerOptions,
                     host,
                     program.getModuleResolutionCache()
                   );
@@ -202032,7 +202032,7 @@ ${options.prefix}` : "\n" : options.prefix
                 }
               });
               if (done) continue;
-              if (packageJson && compilerOptions2.allowJs && compilerOptions2.maxNodeModuleJsDepth) {
+              if (packageJson && compilerOptions.allowJs && compilerOptions.maxNodeModuleJsDepth) {
                 const entrypoints = getRootNamesFromPackageJson(
                   packageJson,
                   program,
@@ -202094,7 +202094,7 @@ ${options.prefix}` : "\n" : options.prefix
             var _a2;
             const entrypoints = getEntrypointsFromPackageJsonInfo(
               packageJson,
-              compilerOptions2,
+              compilerOptions,
               host,
               program2.getModuleResolutionCache(),
               resolveJs
@@ -202126,15 +202126,15 @@ ${options.prefix}` : "\n" : options.prefix
           if (dependencySelection === 0) {
             return void 0;
           }
-          const compilerOptions2 = {
+          const compilerOptions = {
             ...hostProject.getCompilerOptions(),
             ...this.compilerOptionsOverrides
           };
-          const rootNames = this.getRootFileNames(dependencySelection, hostProject, host, compilerOptions2);
+          const rootNames = this.getRootFileNames(dependencySelection, hostProject, host, compilerOptions);
           if (!rootNames.length) {
             return void 0;
           }
-          return new _AutoImportProviderProject2(hostProject, rootNames, compilerOptions2);
+          return new _AutoImportProviderProject2(hostProject, rootNames, compilerOptions);
         }
         /** @internal */
         isEmpty() {
@@ -202424,7 +202424,7 @@ ${options.prefix}` : "\n" : options.prefix
       };
       var ExternalProject = class extends Project2 {
         /** @internal */
-        constructor(externalProjectName, projectService, compilerOptions2, lastFileExceededProgramSize, compileOnSaveEnabled, projectFilePath, watchOptions) {
+        constructor(externalProjectName, projectService, compilerOptions, lastFileExceededProgramSize, compileOnSaveEnabled, projectFilePath, watchOptions) {
           super(
             externalProjectName,
             2,
@@ -202432,7 +202432,7 @@ ${options.prefix}` : "\n" : options.prefix
             /*hasExplicitListOfFiles*/
             true,
             lastFileExceededProgramSize,
-            compilerOptions2,
+            compilerOptions,
             compileOnSaveEnabled,
             watchOptions,
             projectService.host,
@@ -203313,27 +203313,27 @@ ${options.prefix}` : "\n" : options.prefix
         }
         setCompilerOptionsForInferredProjects(projectCompilerOptions, projectRootPath) {
           Debug.assert(projectRootPath === void 0 || this.useInferredProjectPerProjectRoot, "Setting compiler options per project root path is only supported when useInferredProjectPerProjectRoot is enabled");
-          const compilerOptions2 = convertCompilerOptions(projectCompilerOptions);
+          const compilerOptions = convertCompilerOptions(projectCompilerOptions);
           const watchOptions = convertWatchOptions(projectCompilerOptions, projectRootPath);
           const typeAcquisition = convertTypeAcquisition(projectCompilerOptions);
-          compilerOptions2.allowNonTsExtensions = true;
+          compilerOptions.allowNonTsExtensions = true;
           const canonicalProjectRootPath = projectRootPath && this.toCanonicalFileName(projectRootPath);
           if (canonicalProjectRootPath) {
-            this.compilerOptionsForInferredProjectsPerProjectRoot.set(canonicalProjectRootPath, compilerOptions2);
+            this.compilerOptionsForInferredProjectsPerProjectRoot.set(canonicalProjectRootPath, compilerOptions);
             this.watchOptionsForInferredProjectsPerProjectRoot.set(canonicalProjectRootPath, watchOptions || false);
             this.typeAcquisitionForInferredProjectsPerProjectRoot.set(canonicalProjectRootPath, typeAcquisition);
           } else {
-            this.compilerOptionsForInferredProjects = compilerOptions2;
+            this.compilerOptionsForInferredProjects = compilerOptions;
             this.watchOptionsForInferredProjects = watchOptions;
             this.typeAcquisitionForInferredProjects = typeAcquisition;
           }
           for (const project of this.inferredProjects) {
             if (canonicalProjectRootPath ? project.projectRootPath === canonicalProjectRootPath : !project.projectRootPath || !this.compilerOptionsForInferredProjectsPerProjectRoot.has(project.projectRootPath)) {
-              project.setCompilerOptions(compilerOptions2);
+              project.setCompilerOptions(compilerOptions);
               project.setTypeAcquisition(typeAcquisition);
               project.setWatchOptions(watchOptions == null ? void 0 : watchOptions.watchOptions);
               project.setProjectErrors(watchOptions == null ? void 0 : watchOptions.errors);
-              project.compileOnSaveEnabled = compilerOptions2.compileOnSave;
+              project.compileOnSaveEnabled = compilerOptions.compileOnSave;
               project.markAsDirty();
               this.delayUpdateProjectGraph(project);
             }
@@ -204119,14 +204119,14 @@ ${options.prefix}` : "\n" : options.prefix
           this.projectToSizeMap.set(name, totalNonTsFileSize);
         }
         createExternalProject(projectFileName, files, options, typeAcquisition, excludedFiles) {
-          const compilerOptions2 = convertCompilerOptions(options);
+          const compilerOptions = convertCompilerOptions(options);
           const watchOptionsAndErrors = convertWatchOptions(options, getDirectoryPath(normalizeSlashes(projectFileName)));
           const project = new ExternalProject(
             projectFileName,
             this,
-            compilerOptions2,
+            compilerOptions,
             /*lastFileExceededProgramSize*/
-            this.getFilenameForExceededTotalSizeLimitForNonTsFiles(projectFileName, compilerOptions2, files, externalFilePropertyReader),
+            this.getFilenameForExceededTotalSizeLimitForNonTsFiles(projectFileName, compilerOptions, files, externalFilePropertyReader),
             options.compileOnSave === void 0 ? true : options.compileOnSave,
             /*projectFilePath*/
             void 0,
@@ -204237,7 +204237,7 @@ ${options.prefix}` : "\n" : options.prefix
           );
           const parsedCommandLine = configFileExistenceInfo.config.parsedCommandLine;
           Debug.assert(!!parsedCommandLine.fileNames);
-          const compilerOptions2 = parsedCommandLine.options;
+          const compilerOptions = parsedCommandLine.options;
           if (!project.projectOptions) {
             project.projectOptions = {
               configHasExtendsProperty: parsedCommandLine.raw.extends !== void 0,
@@ -204249,22 +204249,22 @@ ${options.prefix}` : "\n" : options.prefix
           project.parsedCommandLine = parsedCommandLine;
           project.setProjectErrors(parsedCommandLine.options.configFile.parseDiagnostics);
           project.updateReferences(parsedCommandLine.projectReferences);
-          const lastFileExceededProgramSize = this.getFilenameForExceededTotalSizeLimitForNonTsFiles(project.canonicalConfigFilePath, compilerOptions2, parsedCommandLine.fileNames, fileNamePropertyReader);
+          const lastFileExceededProgramSize = this.getFilenameForExceededTotalSizeLimitForNonTsFiles(project.canonicalConfigFilePath, compilerOptions, parsedCommandLine.fileNames, fileNamePropertyReader);
           if (lastFileExceededProgramSize) {
             project.disableLanguageService(lastFileExceededProgramSize);
             this.configFileExistenceInfoCache.forEach((_configFileExistenceInfo, canonicalConfigFilePath) => this.stopWatchingWildCards(canonicalConfigFilePath, project));
           } else {
-            project.setCompilerOptions(compilerOptions2);
+            project.setCompilerOptions(compilerOptions);
             project.setWatchOptions(parsedCommandLine.watchOptions);
             project.enableLanguageService();
             this.watchWildcards(configFilename, configFileExistenceInfo, project);
           }
-          project.enablePluginsWithOptions(compilerOptions2);
+          project.enablePluginsWithOptions(compilerOptions);
           const filesToAdd = parsedCommandLine.fileNames.concat(project.getExternalFiles(
             2
             /* Full */
           ));
-          this.updateRootAndOptionsOfNonInferredProject(project, filesToAdd, fileNamePropertyReader, compilerOptions2, parsedCommandLine.typeAcquisition, parsedCommandLine.compileOnSave, parsedCommandLine.watchOptions);
+          this.updateRootAndOptionsOfNonInferredProject(project, filesToAdd, fileNamePropertyReader, compilerOptions, parsedCommandLine.typeAcquisition, parsedCommandLine.compileOnSave, parsedCommandLine.watchOptions);
           (_b = tracing) == null ? void 0 : _b.pop();
         }
         /** @internal */
@@ -204647,7 +204647,7 @@ ${options.prefix}` : "\n" : options.prefix
           );
         }
         createInferredProject(currentDirectory, isSingleInferredProject, projectRootPath) {
-          const compilerOptions2 = projectRootPath && this.compilerOptionsForInferredProjectsPerProjectRoot.get(projectRootPath) || this.compilerOptionsForInferredProjects;
+          const compilerOptions = projectRootPath && this.compilerOptionsForInferredProjectsPerProjectRoot.get(projectRootPath) || this.compilerOptionsForInferredProjects;
           let watchOptionsAndErrors;
           let typeAcquisition;
           if (projectRootPath) {
@@ -204663,7 +204663,7 @@ ${options.prefix}` : "\n" : options.prefix
           watchOptionsAndErrors = watchOptionsAndErrors || void 0;
           const project = new InferredProject2(
             this,
-            compilerOptions2,
+            compilerOptions,
             watchOptionsAndErrors == null ? void 0 : watchOptionsAndErrors.watchOptions,
             projectRootPath,
             currentDirectory,
@@ -206165,16 +206165,16 @@ Dynamic files must always be opened with service's current directory or service 
             rootFiles = (excludeResult == null ? void 0 : excludeResult.rootFiles) ?? rootFiles;
             if (existingExternalProject) {
               existingExternalProject.excludedFiles = excludedFiles;
-              const compilerOptions2 = convertCompilerOptions(proj.options);
+              const compilerOptions = convertCompilerOptions(proj.options);
               const watchOptionsAndErrors = convertWatchOptions(proj.options, existingExternalProject.getCurrentDirectory());
-              const lastFileExceededProgramSize = this.getFilenameForExceededTotalSizeLimitForNonTsFiles(proj.projectFileName, compilerOptions2, rootFiles, externalFilePropertyReader);
+              const lastFileExceededProgramSize = this.getFilenameForExceededTotalSizeLimitForNonTsFiles(proj.projectFileName, compilerOptions, rootFiles, externalFilePropertyReader);
               if (lastFileExceededProgramSize) {
                 existingExternalProject.disableLanguageService(lastFileExceededProgramSize);
               } else {
                 existingExternalProject.enableLanguageService();
               }
               existingExternalProject.setProjectErrors(watchOptionsAndErrors == null ? void 0 : watchOptionsAndErrors.errors);
-              this.updateRootAndOptionsOfNonInferredProject(existingExternalProject, rootFiles, externalFilePropertyReader, compilerOptions2, typeAcquisition, proj.options.compileOnSave, watchOptionsAndErrors == null ? void 0 : watchOptionsAndErrors.watchOptions);
+              this.updateRootAndOptionsOfNonInferredProject(existingExternalProject, rootFiles, externalFilePropertyReader, compilerOptions, typeAcquisition, proj.options.compileOnSave, watchOptionsAndErrors == null ? void 0 : watchOptionsAndErrors.watchOptions);
               existingExternalProject.updateGraph();
             } else {
               const project = this.createExternalProject(proj.projectFileName, rootFiles, proj.options, typeAcquisition, excludedFiles);
@@ -208779,8 +208779,8 @@ Project '${project.projectName}' (${ProjectKind[project.projectKind]}) ${counter
             if (nodeModulesPathParts && fileName.lastIndexOf(nodeModulesPathPart) === nodeModulesPathParts.topLevelNodeModulesIndex) {
               const packageDirectory = fileName.substring(0, nodeModulesPathParts.packageRootIndex);
               const packageJsonCache = (_a2 = project.getModuleResolutionCache()) == null ? void 0 : _a2.getPackageJsonInfoCache();
-              const compilerOptions2 = project.getCompilationSettings();
-              const packageJson = getPackageScopeForPath(getNormalizedAbsolutePath(packageDirectory, project.getCurrentDirectory()), getTemporaryModuleResolutionState(packageJsonCache, project, compilerOptions2));
+              const compilerOptions = project.getCompilationSettings();
+              const packageJson = getPackageScopeForPath(getNormalizedAbsolutePath(packageDirectory, project.getCurrentDirectory()), getTemporaryModuleResolutionState(packageJsonCache, project, compilerOptions));
               if (!packageJson) return void 0;
               const entrypoints = getEntrypointsFromPackageJsonInfo(
                 packageJson,
@@ -211551,24 +211551,17 @@ var DEFAULT_COMPILER_TIMEOUT_MS = 1e4;
 var MAX_COMPILER_DIAGNOSTICS = 50;
 var MAX_DIAGNOSTIC_MESSAGE_CHARS = 4096;
 var COMPILER_MEMORY_MB = 128;
-var compilerOptions = {
+var relaxedCompilerOptions = {
   target: import_typescript.default.ScriptTarget.ES2022,
   module: import_typescript.default.ModuleKind.ESNext,
   moduleResolution: import_typescript.default.ModuleResolutionKind.NodeNext,
   strict: false,
-  noImplicitAny: false,
-  strictNullChecks: false,
-  strictFunctionTypes: false,
-  strictBindCallApply: false,
-  alwaysStrict: false,
-  strictPropertyInitialization: false,
-  noImplicitThis: false,
-  useUnknownInCatchVariables: false,
   noEmit: false,
   sourceMap: true,
   skipLibCheck: true,
   lib: ["lib.es2022.d.ts"]
 };
+var compilerOptionsFor = (mode) => mode === "strict" ? { ...relaxedCompilerOptions, strict: true } : relaxedCompilerOptions;
 var TYPE_CORRECTNESS_CODES = /* @__PURE__ */ new Set([
   2339,
   2551,
@@ -211641,7 +211634,7 @@ var FabricTypeChecker = class {
   }
   #guestFile;
   #declarationFile;
-  #baseHost = import_typescript.default.createCompilerHost(compilerOptions, true);
+  #baseHost = import_typescript.default.createCompilerHost(relaxedCompilerOptions, true);
   #stableFiles = /* @__PURE__ */ new Map();
   #declarationSource;
   #host;
@@ -211649,6 +211642,7 @@ var FabricTypeChecker = class {
   #sourceFile;
   #program;
   check(code, mode) {
+    const compilerOptions = compilerOptionsFor(mode);
     this.#sourceText = wrapFabricGuestCode(code);
     this.#sourceFile = import_typescript.default.createSourceFile(
       this.#guestFile,
