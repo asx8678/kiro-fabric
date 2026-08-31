@@ -283,6 +283,7 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
     registry.register(
       new KiroToolsProvider(options.cwd, {
         readArtifact: ({ id, offset, limit }) => artifacts.read(id, offset, limit),
+        writeArtifact: (content) => artifacts.write(content),
         ...(protectedRelease ? { protectedRoots: [protectedRelease] } : {}),
       }),
     );

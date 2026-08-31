@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import { throwIfAborted } from "../async-settlement.js";
 
 export interface RegexLimits {
   maxPatternBytes: number;
@@ -35,6 +36,110 @@ parentPort.on("message", ({ pattern, flags, haystacks }) => {
 });
 `;
 
+const workerError = (error: unknown): RegexExecutionResult => ({
+  complete: false,
+  matched: [],
+  error: {
+    code: "regex_worker_error",
+    message: error instanceof Error ? error.message : String(error),
+  },
+});
+
+/**
+ * One disposable worker with one aggregate deadline. Callers that scan several
+ * batches can reuse it without multiplying worker startup cost or timeout.
+ */
+export class BoundedRegexWorkerSession {
+  readonly #worker: Worker;
+  readonly #pattern: string;
+  readonly #flags: string;
+  readonly #timeoutMs: number;
+  readonly #deadline: number;
+  #closed = false;
+  #workerFailure: unknown;
+
+  constructor(pattern: string, limits: RegexLimits, flags = "iu") {
+    const patternBytes = Buffer.byteLength(pattern, "utf8");
+    if (patternBytes > limits.maxPatternBytes) {
+      throw new RangeError(`Regex pattern is ${patternBytes} bytes; limit is ${limits.maxPatternBytes}.`);
+    }
+    this.#pattern = pattern;
+    this.#flags = flags;
+    this.#timeoutMs = limits.timeoutMs;
+    this.#deadline = performance.now() + limits.timeoutMs;
+    this.#worker = new Worker(WORKER_SOURCE, {
+      eval: true,
+      resourceLimits: { maxOldGenerationSizeMb: 16, maxYoungGenerationSizeMb: 4 },
+    });
+    // Keep an error listener installed even between batches so a worker failure
+    // can never become an uncaught process-level event.
+    this.#worker.on("error", (error: unknown) => { this.#workerFailure = error; });
+  }
+
+  async execute(haystacks: string[], signal?: AbortSignal): Promise<RegexExecutionResult> {
+    throwIfAborted(signal);
+    if (this.#closed) return workerError(new Error("Regex worker session is closed."));
+    if (this.#workerFailure) return workerError(this.#workerFailure);
+    const remaining = this.#deadline - performance.now();
+    if (remaining <= 0) return this.#timeoutResult();
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (result: RegexExecutionResult): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        this.#worker.removeListener("message", onMessage);
+        this.#worker.removeListener("error", onError);
+        resolve(result);
+      };
+      const onAbort = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        this.#worker.removeListener("message", onMessage);
+        this.#worker.removeListener("error", onError);
+        reject(signal?.reason instanceof Error ? signal.reason : new Error("Operation aborted"));
+      };
+      const onMessage = (message: unknown): void => {
+        const record = message as { matched?: unknown; error?: RegexExecutionError };
+        if (record.error) {
+          finish({ complete: false, matched: [], error: record.error });
+        } else if (Array.isArray(record.matched) && record.matched.every((value) => Number.isInteger(value))) {
+          finish({ complete: true, matched: record.matched as number[] });
+        } else {
+          finish(workerError(new Error("Regex worker returned an invalid result.")));
+        }
+      };
+      const onError = (error: unknown): void => finish(workerError(error));
+      const timer = setTimeout(() => finish(this.#timeoutResult()), remaining);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.#worker.once("message", onMessage);
+      this.#worker.once("error", onError);
+      this.#worker.postMessage({ pattern: this.#pattern, flags: this.#flags, haystacks });
+    });
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) return;
+    this.#closed = true;
+    await this.#worker.terminate();
+  }
+
+  #timeoutResult(): RegexExecutionResult {
+    return {
+      complete: false,
+      matched: [],
+      error: {
+        code: "regex_timeout",
+        message: `Regex execution exceeded ${this.#timeoutMs} ms.`,
+      },
+    };
+  }
+}
+
 /** Execute untrusted regex in a disposable worker that can be forcibly terminated. */
 export const executeBoundedRegex = async (
   pattern: string,
@@ -54,68 +159,15 @@ export const executeBoundedRegex = async (
     };
   }
 
-  return new Promise((resolve) => {
-    let worker: Worker;
-    try {
-      worker = new Worker(WORKER_SOURCE, {
-        eval: true,
-        resourceLimits: { maxOldGenerationSizeMb: 16, maxYoungGenerationSizeMb: 4 },
-      });
-    } catch (error) {
-      resolve({
-        complete: false,
-        matched: [],
-        error: {
-          code: "regex_worker_error",
-          message: error instanceof Error ? error.message : String(error),
-        },
-      });
-      return;
-    }
-    let settled = false;
-    const finish = (result: RegexExecutionResult): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      void worker.terminate();
-      resolve(result);
-    };
-    const timer = setTimeout(() => {
-      finish({
-        complete: false,
-        matched: [],
-        error: {
-          code: "regex_timeout",
-          message: `Regex execution exceeded ${limits.timeoutMs} ms.`,
-        },
-      });
-    }, limits.timeoutMs);
-    worker.once("message", (message: unknown) => {
-      const record = message as { matched?: unknown; error?: RegexExecutionError };
-      if (record.error) {
-        finish({ complete: false, matched: [], error: record.error });
-        return;
-      }
-      if (Array.isArray(record.matched) && record.matched.every((value) => Number.isInteger(value))) {
-        finish({ complete: true, matched: record.matched as number[] });
-        return;
-      }
-      finish({
-        complete: false,
-        matched: [],
-        error: { code: "regex_worker_error", message: "Regex worker returned an invalid result." },
-      });
-    });
-    worker.once("error", (error: unknown) => {
-      finish({
-        complete: false,
-        matched: [],
-        error: {
-          code: "regex_worker_error",
-          message: error instanceof Error ? error.message : String(error),
-        },
-      });
-    });
-    worker.postMessage({ pattern, flags, haystacks });
-  });
+  let session: BoundedRegexWorkerSession;
+  try {
+    session = new BoundedRegexWorkerSession(pattern, limits, flags);
+  } catch (error) {
+    return workerError(error);
+  }
+  try {
+    return await session.execute(haystacks);
+  } finally {
+    await session.close();
+  }
 };

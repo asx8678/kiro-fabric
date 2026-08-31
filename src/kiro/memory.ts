@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { throwIfAborted } from "../async-settlement.js";
 
 const DEFAULT_MAX_NAMESPACE_ENTRIES = 128;
 const DEFAULT_MAX_NAMESPACE_BYTES = 256 * 1024;
@@ -43,7 +44,7 @@ export interface KiroMemoryEntry<T extends JsonValue = JsonValue> {
 
 export interface KiroMemoryBinding<T extends JsonValue = JsonValue> {
   get(key: string): Promise<KiroMemoryEntry<T> | null>;
-  set(key: string, value: T): Promise<KiroMemoryEntry<T>>;
+  set(key: string, value: T, signal?: AbortSignal): Promise<KiroMemoryEntry<T>>;
   list(): Promise<KiroMemoryEntry<T>[]>;
   /**
    * Bounded, ranked retrieval: substring match over key plus serialized
@@ -120,11 +121,13 @@ const processIsAlive = (pid: number): boolean => {
 const withNamespaceMutationLock = async <T>(
   namespaceRoot: string,
   operation: () => T | Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> => {
   const lockPath = path.join(namespaceRoot, MUTATION_LOCK);
   const deadline = Date.now() + MUTATION_LOCK_TIMEOUT_MS;
   let identity: { dev: number; ino: number } | undefined;
   while (!identity) {
+    throwIfAborted(signal);
     try {
       fs.mkdirSync(lockPath, { mode: 0o700 });
       const stat = fs.lstatSync(lockPath);
@@ -193,6 +196,9 @@ const withNamespaceMutationLock = async <T>(
     }
   }
   try {
+    // Cancellation while queued must be observed after ownership is acquired
+    // and immediately before the mutation is allowed to commit.
+    throwIfAborted(signal);
     return await operation();
   } finally {
     try {
@@ -537,7 +543,7 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
       return entry;
     },
 
-    async set(key: string, value: T): Promise<KiroMemoryEntry<T>> {
+    async set(key: string, value: T, signal?: AbortSignal): Promise<KiroMemoryEntry<T>> {
       return withNamespaceMutationLock(namespaceRoot, () => {
         const normalizedKey = assertMemoryToken(key, "key");
         const filePath = resolveEntryPath(normalizedKey);
@@ -581,9 +587,10 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
         });
         entry.bytes = utf8Bytes(content);
         assertEntryFits(namespaceRoot, entry, filePath);
+        throwIfAborted(signal);
         writeJsonAtomic(filePath, content);
         return entry;
-      });
+      }, signal);
     },
 
     async list(): Promise<KiroMemoryEntry<T>[]> {

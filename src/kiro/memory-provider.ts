@@ -147,7 +147,7 @@ export class KiroMemoryProvider implements FabricProvider {
       }
       case "set": {
         const key = boundedString(args.key, "memory.set key", MAX_KEY_CHARS);
-        operation = this.#memory().set(key, args.value as KiroMemoryJsonValue);
+        operation = this.#memory().set(key, args.value as KiroMemoryJsonValue, context.signal);
         break;
       }
       case "search": {

@@ -9,7 +9,7 @@ import { minimatch } from "minimatch";
 import { runAbortable, throwIfAborted } from "../async-settlement.js";
 import { writeFileAtomic } from "../core/atomic-write.js";
 import { expandSkillDirMarkersForRead } from "../core/skill-dir.js";
-import { executeBoundedRegex } from "../memory/regex.js";
+import { BoundedRegexWorkerSession } from "../memory/regex.js";
 import { ProjectRootGuard } from "../providers/project-root-guard.js";
 import { MAX_WRITE_DIFF_BYTES, writeContentForPreview } from "../providers/write-diff-limits.js";
 import type {
@@ -200,6 +200,9 @@ interface WalkState {
 
 export interface KiroToolsProviderOptions {
   readArtifact?: (args: { id: string; offset?: number; limit?: number }) => unknown | Promise<unknown>;
+  writeArtifact?: (content: string) => string | Promise<string>;
+  /** Override the PATH-resolved Bash executable (primarily for managed hosts and tests). */
+  bashPath?: string;
   /** Immutable managed release roots that workspace tools must never traverse. */
   protectedRoots?: readonly string[];
 }
@@ -210,12 +213,16 @@ export class KiroToolsProvider implements FabricProvider {
   readonly #cwd: string;
   readonly #guard: ProjectRootGuard;
   readonly #readArtifact: KiroToolsProviderOptions["readArtifact"];
+  readonly #writeArtifact: KiroToolsProviderOptions["writeArtifact"];
+  readonly #bashPath: string;
   readonly #protectedRoots: string[];
 
   constructor(cwd: string, options: KiroToolsProviderOptions = {}) {
     this.#guard = new ProjectRootGuard(cwd);
     this.#cwd = this.#guard.canonicalRoot;
     this.#readArtifact = options.readArtifact;
+    this.#writeArtifact = options.writeArtifact;
+    this.#bashPath = options.bashPath ?? process.env.KIRO_FABRIC_BASH ?? "bash";
     this.#protectedRoots = (options.protectedRoots ?? []).map((root) => path.resolve(root));
   }
 
@@ -530,49 +537,54 @@ export class KiroToolsProvider implements FabricProvider {
     let outputBytes = 0;
     let matches = 0;
     const files = stat.isDirectory() ? this.#walk(target, context.signal) : (async function* () { yield target; })();
-    fileLoop: for await (const file of files) {
-      throwIfAborted(context.signal);
-      const relative = stat.isDirectory() ? normalizeRelative(target, file) : path.basename(file);
-      if (glob && !matchesGlob(relative, glob)) continue;
-      let source: string;
-      try {
-        const fileStat = await fs.stat(file);
-        if (!fileStat.isFile() || fileStat.size > MAX_SEARCH_FILE_BYTES) continue;
-        source = await fs.readFile(file, "utf8");
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-        throw error;
-      }
-      if (source.includes("\0")) continue;
-      const lines = source.split("\n");
-      let matchedLines: Set<number> | undefined;
-      if (!literal) {
-        const result = await executeBoundedRegex(pattern, lines, {
-          maxPatternBytes: MAX_SEARCH_PATTERN_BYTES,
-          timeoutMs: GREP_REGEX_TIMEOUT_MS,
-        }, args.ignoreCase === true ? "iu" : "u");
+    const regexSession = literal ? undefined : new BoundedRegexWorkerSession(pattern, {
+      maxPatternBytes: MAX_SEARCH_PATTERN_BYTES,
+      timeoutMs: GREP_REGEX_TIMEOUT_MS,
+    }, args.ignoreCase === true ? "iu" : "u");
+    try {
+      fileLoop: for await (const file of files) {
         throwIfAborted(context.signal);
-        if (!result.complete) throw new Error(`k.grep ${result.error.message}`);
-        matchedLines = new Set(result.matched);
-      }
-      const literalNeedle = args.ignoreCase === true ? pattern.toLowerCase() : pattern;
-      for (let line = 0; line < lines.length && matches < limit; line += 1) {
-        const matched = literal
-          ? (args.ignoreCase === true ? lines[line]!.toLowerCase() : lines[line]!).includes(literalNeedle)
-          : matchedLines!.has(line);
-        if (!matched) continue;
-        matches += 1;
-        for (let shown = Math.max(0, line - contextLines); shown <= Math.min(lines.length - 1, line + contextLines); shown += 1) {
-          const rendered = `${relative}:${shown + 1}:${lines[shown]!.slice(0, 500)}`;
-          const nextBytes = byteLength(rendered) + (output.length === 0 ? 0 : 1);
-          if (outputBytes + nextBytes > MAX_BYTES) break fileLoop;
-          output.push(rendered);
-          outputBytes += nextBytes;
+        const relative = stat.isDirectory() ? normalizeRelative(target, file) : path.basename(file);
+        if (glob && !matchesGlob(relative, glob)) continue;
+        let source: string;
+        try {
+          const fileStat = await fs.stat(file);
+          if (!fileStat.isFile() || fileStat.size > MAX_SEARCH_FILE_BYTES) continue;
+          source = await fs.readFile(file, "utf8");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw error;
         }
+        if (source.includes("\0")) continue;
+        const lines = source.split("\n");
+        let matchedLines: Set<number> | undefined;
+        if (regexSession) {
+          const result = await regexSession.execute(lines, context.signal);
+          throwIfAborted(context.signal);
+          if (!result.complete) throw new Error(`k.grep ${result.error.message}`);
+          matchedLines = new Set(result.matched);
+        }
+        const literalNeedle = args.ignoreCase === true ? pattern.toLowerCase() : pattern;
+        for (let line = 0; line < lines.length && matches < limit; line += 1) {
+          const matched = literal
+            ? (args.ignoreCase === true ? lines[line]!.toLowerCase() : lines[line]!).includes(literalNeedle)
+            : matchedLines!.has(line);
+          if (!matched) continue;
+          matches += 1;
+          for (let shown = Math.max(0, line - contextLines); shown <= Math.min(lines.length - 1, line + contextLines); shown += 1) {
+            const rendered = `${relative}:${shown + 1}:${lines[shown]!.slice(0, 500)}`;
+            const nextBytes = byteLength(rendered) + (output.length === 0 ? 0 : 1);
+            if (outputBytes + nextBytes > MAX_BYTES) break fileLoop;
+            output.push(rendered);
+            outputBytes += nextBytes;
+          }
+        }
+        if (matches >= limit) break;
       }
-      if (matches >= limit) break;
+      return output.join("\n");
+    } finally {
+      await regexSession?.close();
     }
-    return output.join("\n");
   }
 
   async #bash(args: Record<string, unknown>, context: FabricInvocationContext): Promise<unknown> {
@@ -583,19 +595,20 @@ export class KiroToolsProvider implements FabricProvider {
     let result: { output: string; fullOutput: Buffer; spooled: boolean; code: number | null; totalBytes: number; terminationError?: Error };
     try {
       result = await new Promise((resolve, reject) => {
-        const shell = process.platform === "win32"
-          ? "C:\\Program Files\\Git\\bin\\bash.exe"
-          : "/bin/bash";
-        const child = spawn(shell, ["-c", command], {
+        const child = spawn(this.#bashPath, ["-c", command], {
           cwd: this.#cwd,
           env: process.env,
           stdio: ["ignore", "pipe", "pipe"],
           detached: process.platform !== "win32",
         });
-        if (!child.pid) {
-          reject(new Error("k.bash failed to launch bash"));
-          return;
-        }
+        const launchError = (error: Error): void => {
+          reject(new Error(`k.bash failed to launch ${JSON.stringify(this.#bashPath)}: ${error.message}`));
+        };
+        // A failed spawn has no pid and emits error asynchronously. Install the
+        // handler before inspecting pid so that failure cannot escape uncaught.
+        child.once("error", launchError);
+        if (!child.pid) return;
+        child.removeListener("error", launchError);
         const tree = createProcessTreeController(child.pid, { ambientHelpers: false });
         let tail = Buffer.alloc(0);
         const capturedChunks: Buffer[] = [];
@@ -687,15 +700,24 @@ export class KiroToolsProvider implements FabricProvider {
     const byLines = truncateLines(result.output, MAX_READ_LINES, true);
     const bounded = truncateBytes(byLines.text, true);
     const truncated = result.totalBytes > byteLength(result.output) || byLines.truncated || bounded.truncated;
-    let details: Record<string, unknown> | null = null;
-    if (truncated) {
-      if (!result.spooled) {
-        await fs.writeFile(fullOutputPath, result.fullOutput, { flag: "wx", mode: 0o600 });
+    let artifactId: string | undefined;
+    try {
+      if (truncated && this.#writeArtifact) {
+        const fullOutput = result.spooled
+          ? await fs.readFile(fullOutputPath, "utf8")
+          : result.fullOutput.toString("utf8");
+        artifactId = await this.#writeArtifact(fullOutput);
       }
-      details = { fullOutputPath, truncation: { truncated: true } };
+    } finally {
+      // Spools are implementation details only. Session artifacts own any
+      // retained output and are closed by the runtime lifecycle.
+      await fs.rm(fullOutputPath, { force: true });
     }
-    const fullOutputHint = truncated
-      ? `\n[Full output saved to ${fullOutputPath}; inspect it with k.bash({ command: ${JSON.stringify(`tail -n 2000 -- ${JSON.stringify(fullOutputPath)}`)} })]`
+    const details: Record<string, unknown> | null = truncated
+      ? { ...(artifactId ? { artifactId } : {}), truncation: { truncated: true } }
+      : null;
+    const fullOutputHint = artifactId
+      ? `\n[Full output available as artifact ${artifactId}; inspect it with k.readArtifact({ id: ${JSON.stringify(artifactId)} })]`
       : "";
     if (result.terminationError) {
       const partial = bounded.text ? `${bounded.text}\n\n` : "";
