@@ -1,4 +1,5 @@
 import path from "node:path";
+import { Worker } from "node:worker_threads";
 import ts from "typescript";
 
 export interface FabricTypeError {
@@ -12,6 +13,28 @@ export interface FabricTypeCheckResult {
   javascript?: string;
   sourceMap?: string;
 }
+
+/**
+ * `strict` reports all semantic diagnostics. `schema-relaxed` leaves argument
+ * value/shape correctness to the runtime schema validator, while still
+ * rejecting syntax errors, missing names, and other non-schema failures.
+ */
+export type FabricCompilerCheckingMode = "strict" | "schema-relaxed";
+
+export interface FabricCompilerRequest {
+  code: string;
+  declarations: string;
+  mode: FabricCompilerCheckingMode;
+}
+
+export type FabricCompilerWorkerResponse =
+  | { ok: true; result: FabricTypeCheckResult }
+  | { ok: false; error: string };
+
+export const DEFAULT_COMPILER_TIMEOUT_MS = 10_000;
+const MAX_COMPILER_DIAGNOSTICS = 50;
+const MAX_DIAGNOSTIC_MESSAGE_CHARS = 4_096;
+const COMPILER_MEMORY_MB = 128;
 
 const compilerOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2022,
@@ -111,7 +134,7 @@ class FabricTypeChecker {
     };
   }
 
-  check(code: string): FabricTypeCheckResult {
+  check(code: string, mode: FabricCompilerCheckingMode): FabricTypeCheckResult {
     this.#sourceText = wrapFabricGuestCode(code);
     this.#sourceFile = ts.createSourceFile(
       this.#guestFile,
@@ -130,10 +153,13 @@ class FabricTypeChecker {
       ...program.getSyntacticDiagnostics(this.#sourceFile),
       ...program
         .getSemanticDiagnostics(this.#sourceFile)
-        .filter((diagnostic) => !TYPE_CORRECTNESS_CODES.has(diagnostic.code)),
-    ];
+        .filter((diagnostic) => mode === "strict" || !TYPE_CORRECTNESS_CODES.has(diagnostic.code)),
+    ].slice(0, MAX_COMPILER_DIAGNOSTICS);
     const errors = diagnostics.map((diagnostic) => {
-      const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+      const flattened = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+      const message = flattened.length > MAX_DIAGNOSTIC_MESSAGE_CHARS
+        ? `${flattened.slice(0, MAX_DIAGNOSTIC_MESSAGE_CHARS)}…[truncated]`
+        : flattened;
       if (!diagnostic.file || diagnostic.start === undefined) {
         return { line: 0, column: 0, message };
       }
@@ -202,4 +228,63 @@ export const transpileFabricCodeWithSourceMap = (code: string): FabricTranspileR
 export const typeCheckFabricCode = (
   code: string,
   declarations: string,
-): FabricTypeCheckResult => checkerFor(declarations).check(code);
+  mode: FabricCompilerCheckingMode = "schema-relaxed",
+): FabricTypeCheckResult => checkerFor(declarations).check(code, mode);
+
+export interface FabricCompilerWorkerOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  workerUrl?: URL;
+}
+
+/** Runs the compiler outside the host event loop. A worker is never reused:
+ * timed-out, aborted, failed, or oversized work therefore cannot poison a
+ * later compilation cache. The worker-local checker cache dies on exit. */
+export const typeCheckFabricCodeInWorker = (
+  request: FabricCompilerRequest,
+  options: FabricCompilerWorkerOptions = {},
+): Promise<FabricTypeCheckResult> => new Promise((resolve, reject) => {
+  if (options.signal?.aborted) {
+    reject(options.signal.reason ?? new Error("Fabric compiler aborted"));
+    return;
+  }
+  const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? DEFAULT_COMPILER_TIMEOUT_MS, 60_000));
+  // Vitest/dev imports this source module directly, while the worker must use
+  // the same compiled artifact that production ships (Node cannot resolve the
+  // source's `.js` specifiers inside a raw TypeScript worker).
+  const defaultWorkerUrl = import.meta.url.endsWith(".ts")
+    ? new URL("../../dist/runtime/compiler-worker-entry.js", import.meta.url)
+    : new URL("../runtime/compiler-worker-entry.js", import.meta.url);
+  const worker = new Worker(
+    options.workerUrl ?? defaultWorkerUrl,
+    { resourceLimits: { maxOldGenerationSizeMb: COMPILER_MEMORY_MB, stackSizeMb: 4 } },
+  );
+  let settled = false;
+  const finish = (error?: Error, result?: FabricTypeCheckResult): void => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", onAbort);
+    void worker.terminate();
+    if (error) reject(error);
+    else resolve(result!);
+  };
+  const onAbort = (): void => finish(new Error("Fabric compiler aborted"));
+  const timer = setTimeout(
+    () => finish(new Error(`Fabric compiler timed out after ${timeoutMs}ms`)),
+    timeoutMs,
+  );
+  timer.unref();
+  options.signal?.addEventListener("abort", onAbort, { once: true });
+  worker.once("message", (response: FabricCompilerWorkerResponse) => {
+    if (response.ok) finish(undefined, response.result);
+    else finish(new Error(`Fabric compiler failed: ${response.error}`));
+  });
+  worker.once("error", (error: unknown) => finish(new Error(
+    `Fabric compiler worker failed: ${error instanceof Error ? error.message : String(error)}`,
+  )));
+  worker.once("exit", (code) => {
+    if (!settled) finish(new Error(`Fabric compiler worker exited before replying (${code})`));
+  });
+  worker.postMessage(request);
+});

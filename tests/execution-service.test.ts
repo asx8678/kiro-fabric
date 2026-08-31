@@ -1040,7 +1040,7 @@ describe("FabricExecutionService dynamic guest typing", () => {
     expect(result.typeErrors).toBeUndefined();
     expect(result.success).toBe(false);
     expect(result.error).toContain("Invalid arguments for mcp.github.get_repo");
-    expect(result.trace.operations[0]).toMatchObject({
+    expect(result.trace.operations.find((operation) => operation.ref === "mcp.github.get_repo")).toMatchObject({
       outcome: "failed",
       failureStage: "validate",
     });
@@ -1066,7 +1066,7 @@ describe("FabricExecutionService dynamic guest typing", () => {
     expect(result.typeErrors).toBeUndefined();
     expect(result.success).toBe(false);
     expect(result.error).toContain("Invalid arguments for mcp.github.get_repo");
-    expect(result.trace.operations[0]).toMatchObject({
+    expect(result.trace.operations.find((operation) => operation.ref === "mcp.github.get_repo")).toMatchObject({
       outcome: "failed",
       failureStage: "validate",
     });

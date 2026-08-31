@@ -3,6 +3,7 @@ import { GUEST_TYPE_DECLARATIONS, guestTypeDeclarations } from "../src/runtime/g
 import {
   normalizeTypeScriptPath,
   typeCheckFabricCode,
+  typeCheckFabricCodeInWorker,
 } from "../src/runtime/type-checker.js";
 
 describe("Fabric guest type checker", () => {
@@ -284,6 +285,47 @@ return out;
       GUEST_TYPE_DECLARATIONS,
     );
     expect(result.errors).toEqual([]);
+  });
+
+  it("makes strict versus runtime-schema-relaxed checking explicit", () => {
+    const code = 'await pi.read({ path: 42 }); return "never";';
+    expect(typeCheckFabricCode(code, GUEST_TYPE_DECLARATIONS, "schema-relaxed").errors).toEqual([]);
+    expect(typeCheckFabricCode(code, GUEST_TYPE_DECLARATIONS, "strict").errors)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ message: expect.stringMatching(/number/) })]));
+  });
+
+  it("runs checking in a bounded worker", async () => {
+    const result = await typeCheckFabricCodeInWorker({
+      code: 'return "ok";',
+      declarations: GUEST_TYPE_DECLARATIONS,
+      mode: "strict",
+    }, {
+      workerUrl: new URL("../dist/runtime/compiler-worker-entry.js", import.meta.url),
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.javascript).toContain("__kiroFabricMain");
+  });
+
+  it("terminates compiler workers on timeout, abort, and worker failure", async () => {
+    const hangingWorker = new URL("data:text/javascript," + encodeURIComponent("setInterval(() => {}, 1000)"));
+    await expect(typeCheckFabricCodeInWorker(
+      { code: "", declarations: "", mode: "strict" },
+      { timeoutMs: 10, workerUrl: hangingWorker },
+    )).rejects.toThrow(/timed out/);
+
+    const controller = new AbortController();
+    const pending = typeCheckFabricCodeInWorker(
+      { code: "", declarations: "", mode: "strict" },
+      { signal: controller.signal, workerUrl: hangingWorker },
+    );
+    controller.abort();
+    await expect(pending).rejects.toThrow(/aborted/);
+
+    const brokenWorker = new URL("data:text/javascript," + encodeURIComponent("throw new Error('boom')"));
+    await expect(typeCheckFabricCodeInWorker(
+      { code: "", declarations: "", mode: "strict" },
+      { workerUrl: brokenWorker },
+    )).rejects.toThrow(/worker failed.*boom/i);
   });
 
   it("reports user-facing line numbers for functional errors", () => {

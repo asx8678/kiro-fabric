@@ -57,7 +57,7 @@ let runtimeDependencies:
   | Promise<{
       QuickJsRuntime: typeof import("./runtime/quickjs-runtime.js").QuickJsRuntime;
       NodeProcessRuntime: typeof import("./runtime/node-process-runtime.js").NodeProcessRuntime;
-      typeCheckFabricCode: typeof import("./runtime/type-checker.js").typeCheckFabricCode;
+      typeCheckFabricCodeInWorker: typeof import("./runtime/type-checker.js").typeCheckFabricCodeInWorker;
       guestTypeDeclarations: typeof import("./runtime/guest-types.js").guestTypeDeclarations;
       buildDynamicGuestDeclarations: typeof import("./runtime/dynamic-guest-types.js").buildDynamicGuestDeclarations;
       buildCoreOverrideGuestDeclarations: typeof import("./runtime/core-override-guest-types.js").buildCoreOverrideGuestDeclarations;
@@ -75,7 +75,7 @@ const loadRuntimeDependencies = () =>
   ]).then(([quickjs, nodeProcess, checker, guest, dynamicGuest, coreOverrides]) => ({
     QuickJsRuntime: quickjs.QuickJsRuntime,
     NodeProcessRuntime: nodeProcess.NodeProcessRuntime,
-    typeCheckFabricCode: checker.typeCheckFabricCode,
+    typeCheckFabricCodeInWorker: checker.typeCheckFabricCodeInWorker,
     guestTypeDeclarations: guest.guestTypeDeclarations,
     buildDynamicGuestDeclarations: dynamicGuest.buildDynamicGuestDeclarations,
     buildCoreOverrideGuestDeclarations: coreOverrides.buildCoreOverrideGuestDeclarations,
@@ -236,17 +236,46 @@ export class FabricExecutionService {
             })) ?? [],
           )
         : undefined;
-    const checked = dependencies.typeCheckFabricCode(
-      options.code,
-      dependencies.guestTypeDeclarations(effectiveFullCodeMode, {
-        excludeGlobals: [...unavailable.keys()],
-        dynamic: dependencies.buildDynamicGuestDeclarations(guestTypeSources),
-        ...(coreOverrideDeclarations ? { coreOverrides: coreOverrideDeclarations } : {}),
-        coreToolNamespace,
-        agentBackedOrchestration:
-          options.host.agentBackedOrchestration !== false,
-      }),
-    );
+    // Fabric actions are runtime-schema validated, so execution deliberately
+    // uses schema-relaxed checking rather than claiming full TypeScript
+    // strictness. The public compiler API also exposes honest strict mode.
+    const compilerMode = "schema-relaxed" as const;
+    let checked;
+    try {
+      checked = await dependencies.typeCheckFabricCodeInWorker({
+        code: options.code,
+        declarations: dependencies.guestTypeDeclarations(effectiveFullCodeMode, {
+          excludeGlobals: [...unavailable.keys()],
+          dynamic: dependencies.buildDynamicGuestDeclarations(guestTypeSources),
+          ...(coreOverrideDeclarations ? { coreOverrides: coreOverrideDeclarations } : {}),
+          coreToolNamespace,
+          agentBackedOrchestration:
+            options.host.agentBackedOrchestration !== false,
+        }),
+        mode: compilerMode,
+      }, {
+        ...(options.signal ? { signal: options.signal } : {}),
+        timeoutMs: 10_000,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const outcome = options.signal?.aborted
+        ? "aborted"
+        : message.includes("timed out") ? "timed_out" : "failed";
+      const compilerTrace = traceRecorder.issueCall("fabric.compiler.check", { mode: compilerMode });
+      compilerTrace.fail("invoke", undefined, outcome);
+      this.activity?.finish(options.parentToolCallId, false, message);
+      return {
+        success: false,
+        value: undefined,
+        logs: [],
+        audits: [],
+        phases: [],
+        trace: traceRecorder.seal(outcome, [], message),
+        elapsedMs: performance.now() - startedAt,
+        error: message,
+      };
+    }
     if (checked.errors.length > 0) {
       for (const error of checked.errors) {
         const missing = /^Cannot find name '([^']+)'/.exec(error.message);

@@ -342,7 +342,7 @@ return true;
       controller.signal,
     );
     expect(abortedResult.trace.operations[0]).toMatchObject({
-      ref: "fabric.discovery.list",
+      ref: "fabric.compiler.check",
       outcome: "aborted",
       failureStage: "invoke",
     });
@@ -533,8 +533,7 @@ return true;
     setTimeout(() => controller.abort(new Error("abort-secret")), 30);
     const abortedResult = await execute(aborted.service, aborted.host, code, controller.signal);
     expect(abortedResult.trace.operations.map(({ ref, outcome }) => ({ ref, outcome }))).toEqual([
-      { ref: "fabric.workflow.parallel", outcome: "aborted" },
-      { ref: "demo.echo", outcome: "aborted" },
+      { ref: "fabric.compiler.check", outcome: "aborted" },
     ]);
     expect(JSON.stringify([
       createFabricPersistedExecutionDetails(timedResult).trace,

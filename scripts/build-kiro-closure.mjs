@@ -54,6 +54,7 @@ const result = await build({
     "src/kiro/mcp-entry.ts",
     "src/kiro/agent-worker-entry.ts",
     "src/kiro/management-entry.ts",
+    "src/runtime/compiler-worker-entry.ts",
   ],
   outdir,
   outbase: "src",
@@ -213,7 +214,7 @@ console.log(
 // Power v1 ships only the MCP entry and its reachable graph. Strict-mode
 // management and ACP worker entrypoints remain in dist/kiro-closure.
 const powerResult = await build({
-  entryPoints: ["src/kiro/mcp-entry.ts"],
+  entryPoints: ["src/kiro/mcp-entry.ts", "src/runtime/compiler-worker-entry.ts"],
   outdir: powerOutdir,
   outbase: "src",
   entryNames: "[dir]/[name]",

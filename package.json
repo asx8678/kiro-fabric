@@ -39,6 +39,7 @@
     "dist/kiro/index.js",
     "dist/kiro/mcp-entry.js",
     "dist/kiro/agent-worker-entry.js",
+    "dist/runtime/compiler-worker-entry.js",
     "dist/kiro/cli-entry.js",
     "dist/kiro/setup-entry.js",
     "dist/verification/index.js",

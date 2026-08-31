@@ -36,6 +36,7 @@ export const PUBLIC_ENTRYPOINTS = [
   { source: "src/kiro/index.ts", runtime: "dist/kiro/index.js", declaration: "dist/kiro/index.d.ts", exported: true },
   { source: "src/kiro/mcp-entry.ts", runtime: "dist/kiro/mcp-entry.js", exported: true },
   { source: "src/kiro/agent-worker-entry.ts", runtime: "dist/kiro/agent-worker-entry.js", exported: false },
+  { source: "src/runtime/compiler-worker-entry.ts", runtime: "dist/runtime/compiler-worker-entry.js", exported: false },
   { source: "src/kiro/cli-entry.ts", runtime: "dist/kiro/cli-entry.js", exported: true },
   { source: "src/kiro/setup-entry.ts", runtime: "dist/kiro/setup-entry.js", exported: true },
   { source: "src/verification/index.ts", runtime: "dist/verification/index.js", declaration: "dist/verification/index.d.ts", exported: true },
