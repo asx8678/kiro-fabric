@@ -3,7 +3,22 @@ import { lstatSync, realpathSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Type } from "typebox";
 import type { KiroPowerWorkspaceIdentity } from "./data-paths.js";
+
+export const kiroPowerWorkspaceRequestSchema = Type.Union([
+  Type.Object({ action: Type.Literal("status") }, { additionalProperties: false }),
+  Type.Object({ action: Type.Literal("list") }, { additionalProperties: false }),
+  Type.Object({
+    action: Type.Literal("select"),
+    rootId: Type.String({ minLength: 1, maxLength: 64 }),
+  }, { additionalProperties: false }),
+  Type.Object({
+    action: Type.Literal("attach"),
+    path: Type.String({ minLength: 1, maxLength: 4096 }),
+  }, { additionalProperties: false }),
+  Type.Object({ action: Type.Literal("detach") }, { additionalProperties: false }),
+]);
 
 export type KiroPowerWorkspaceRequest =
   | { action: "status" }
@@ -18,6 +33,10 @@ export interface KiroPowerElicitor {
 
 interface Candidate { id: string; root: string; name: string; dev: bigint; ino: bigint }
 interface Binding extends Candidate { source: "client-roots" | "manual" }
+export type KiroPowerWorkspaceMutation =
+  | { action: "select"; rootId: string }
+  | { action: "attach"; root: string }
+  | { action: "detach" };
 
 export interface KiroPowerBoundWorkspace extends KiroPowerWorkspaceIdentity {
   rootId: string;
@@ -124,37 +143,53 @@ export class KiroPowerWorkspaceBinding {
   status() {
     const workspace = this.boundWorkspace();
     return workspace
-      ? { status: "bound" as const, rootId: workspace.rootId, name: workspace.name, source: workspace.source, capabilities: ["checked-execution", "overflow-artifacts", "memory", "state"] }
-      : { status: "unbound" as const, requiresSelection: this.#candidates.length > 1, capabilities: ["checked-execution", "overflow-artifacts"] };
+      ? { status: "bound" as const, rootId: workspace.rootId, name: workspace.name, source: workspace.source }
+      : { status: "unbound" as const, requiresSelection: this.#candidates.length > 1 };
   }
 
   list() { return { ...this.status(), roots: this.#candidates.map(({ id, name }) => ({ rootId: id, name })) }; }
 
-  async handle(request: KiroPowerWorkspaceRequest, signal?: AbortSignal) {
-    switch (request.action) {
-      case "status": return this.status();
-      case "list": return this.list();
-      case "detach":
-        this.#binding = undefined;
-        this.#initialAutoBindAllowed = false;
-        return this.status();
-      case "select": {
-        const candidate = this.#candidates.find((entry) => entry.id === request.rootId);
-        if (!candidate) throw new Error("unknown workspace rootId; call fabric_workspace list first");
-        this.#binding = { ...candidate, source: "client-roots" };
-        this.#initialAutoBindAllowed = false;
-        return this.status();
+  async prepareMutation(
+    request: Extract<KiroPowerWorkspaceRequest, { action: "select" | "attach" | "detach" }>,
+    signal?: AbortSignal,
+  ): Promise<KiroPowerWorkspaceMutation> {
+    if (request.action === "detach") return request;
+    if (request.action === "select") {
+      if (!this.#candidates.some((entry) => entry.id === request.rootId)) {
+        throw new Error("unknown workspace rootId; call fabric_workspace list first");
       }
-      case "attach": {
-        const candidate = this.#canonical(request.path);
-        if (!this.#elicitor) throw new Error("manual workspace attachment requires MCP elicitation support");
-        if (signal?.aborted || !(await this.#elicitor.approveWorkspace(candidate.root, signal)) || signal?.aborted) {
-          throw new Error("manual workspace attachment was not approved");
-        }
-        this.#binding = { ...candidate, source: "manual" };
-        this.#initialAutoBindAllowed = false;
-        return this.status();
-      }
+      return request;
     }
+    const candidate = this.#canonical(request.path);
+    if (!this.#elicitor) throw new Error("manual workspace attachment requires MCP elicitation support");
+    if (signal?.aborted || !(await this.#elicitor.approveWorkspace(candidate.root, signal)) || signal?.aborted) {
+      throw new Error("manual workspace attachment was not approved");
+    }
+    return { action: "attach", root: candidate.root };
+  }
+
+  commitMutation(mutation: KiroPowerWorkspaceMutation): ReturnType<KiroPowerWorkspaceBinding["status"]> {
+    if (mutation.action === "detach") {
+      this.#binding = undefined;
+    } else if (mutation.action === "select") {
+      const candidate = this.#candidates.find((entry) => entry.id === mutation.rootId);
+      if (!candidate) throw new Error("workspace root selection changed while the request was pending; list and retry");
+      const current = this.#canonical(candidate.root);
+      if (current.dev !== candidate.dev || current.ino !== candidate.ino) {
+        throw new Error("workspace root identity changed while the request was pending; list and retry");
+      }
+      this.#binding = { ...candidate, source: "client-roots" };
+    } else {
+      const candidate = this.#canonical(mutation.root);
+      this.#binding = { ...candidate, source: "manual" };
+    }
+    this.#initialAutoBindAllowed = false;
+    return this.status();
+  }
+
+  async handle(request: KiroPowerWorkspaceRequest, signal?: AbortSignal) {
+    if (request.action === "status") return this.status();
+    if (request.action === "list") return this.list();
+    return this.commitMutation(await this.prepareMutation(request, signal));
   }
 }

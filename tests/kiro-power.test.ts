@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { Value } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { boundModelOutput } from "../src/output-budget.js";
@@ -11,7 +12,7 @@ import { supportsKiroPowerElicitation } from "../src/kiro/mcp-server.js";
 import { KiroPowerApprover, KiroPowerFabricApprover, type KiroPowerElicitationAdapter } from "../src/kiro/power/approver.js";
 import { runKiroPowerDoctor } from "../src/kiro/power/diagnostics.js";
 import { kiroPowerWorkspaceId, prepareKiroPowerDataPaths, prepareKiroPowerProjectPaths, type KiroPowerWorkspaceIdentity } from "../src/kiro/power/data-paths.js";
-import { KiroPowerWorkspaceBinding } from "../src/kiro/power/workspace-binding.js";
+import { KiroPowerWorkspaceBinding, kiroPowerWorkspaceRequestSchema } from "../src/kiro/power/workspace-binding.js";
 import { createKiroRuntime } from "../src/kiro/runtime.js";
 
 const roots: string[] = [];
@@ -178,6 +179,50 @@ describe("Kiro Power security boundaries", () => {
     const binding = new KiroPowerWorkspaceBinding({ pluginRoot, pluginData });
     await expect(binding.handle({ action: "attach", path: workspace })).rejects.toThrow("elicitation");
     await expect(binding.handle({ action: "attach", path: root })).rejects.toThrow("must not contain one another");
+  });
+
+  it("uses the advertised workspace schema as the closed runtime contract", () => {
+    expect(Value.Check(kiroPowerWorkspaceRequestSchema, { action: "select", rootId: "a" })).toBe(true);
+    expect(Value.Check(kiroPowerWorkspaceRequestSchema, { action: "select", rootId: "" })).toBe(false);
+    expect(Value.Check(kiroPowerWorkspaceRequestSchema, { action: "status", path: "/leak" })).toBe(false);
+    expect(Value.Check(kiroPowerWorkspaceRequestSchema, { action: "other" })).toBe(false);
+  });
+
+  it("prepares approval without mutating and revalidates selection at commit", async () => {
+    const root = temp(); const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data"); const a = path.join(root, "a"); const b = path.join(root, "b");
+    for (const dir of [pluginRoot, pluginData, a, b]) fs.mkdirSync(dir);
+    let release!: (approved: boolean) => void;
+    const approval = new Promise<boolean>((resolve) => { release = resolve; });
+    const binding = new KiroPowerWorkspaceBinding({
+      pluginRoot,
+      pluginData,
+      elicitor: { approveWorkspace: () => approval },
+    });
+    binding.updateClientRoots([{ uri: pathToFileURL(a).href }]);
+    const pending = binding.prepareMutation({ action: "attach", path: b });
+    expect(binding.boundRoot()).toBe(a);
+    release(false);
+    await expect(pending).rejects.toThrow("not approved");
+    expect(binding.boundRoot()).toBe(a);
+
+    const selected = binding.list().roots[0]!;
+    const prepared = await binding.prepareMutation({ action: "select", rootId: selected.rootId });
+    binding.updateClientRoots([]);
+    await expect(Promise.resolve().then(() => binding.commitMutation(prepared))).rejects.toThrow("changed");
+  });
+
+  it("treats an attachment to the current identity as a stable no-op", async () => {
+    const root = temp(); const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data"); const workspace = path.join(root, "workspace");
+    for (const dir of [pluginRoot, pluginData, workspace]) fs.mkdirSync(dir);
+    const binding = new KiroPowerWorkspaceBinding({ pluginRoot, pluginData, elicitor: { approveWorkspace: async () => true } });
+    binding.updateClientRoots([{ uri: pathToFileURL(workspace).href }]);
+    const before = binding.boundWorkspace();
+    binding.commitMutation(await binding.prepareMutation({ action: "attach", path: workspace }));
+    expect(binding.boundWorkspace()).toMatchObject({
+      canonicalPath: before!.canonicalPath,
+      deviceId: before!.deviceId,
+      fileId: before!.fileId,
+    });
   });
 
   it("approval accepts only explicit approve-once and redacts common credential forms", async () => {

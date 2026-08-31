@@ -33,6 +33,7 @@ import {
 } from "./power/workspace-context.js";
 import {
   KiroPowerWorkspaceBinding,
+  kiroPowerWorkspaceRequestSchema,
   type KiroPowerBoundWorkspace,
   type KiroPowerWorkspaceRequest,
 } from "./power/workspace-binding.js";
@@ -66,41 +67,31 @@ export interface KiroMcpServerOptions {
   workspaceContext?: WorkspaceContextProvider;
 }
 
-const workspaceSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["action"],
-  properties: {
-    action: { type: "string", enum: ["status", "list", "select", "attach", "detach"] },
-    rootId: { type: "string", minLength: 1, maxLength: 64 },
-    path: { type: "string", minLength: 1, maxLength: 4096 },
-  },
-} as const;
+const boundedText = (value: unknown, fallback: string, maximum = 500): string => {
+  const text = value instanceof Error ? value.message : typeof value === "string" ? value : fallback;
+  return text.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, maximum) || fallback;
+};
+
+const publicToolError = (code: string, error: unknown, issues?: readonly unknown[]) => ({
+  content: [{
+    type: "text" as const,
+    text: JSON.stringify({
+      error: {
+        code,
+        message: boundedText(error, "The request failed"),
+        ...(issues?.length ? { issues: issues.slice(0, 8).map((issue) => boundedText(issue, "invalid value", 200)) } : {}),
+      },
+    }),
+  }],
+  isError: true as const,
+});
 
 const workspaceRequest = (value: unknown): KiroPowerWorkspaceRequest => {
-  if (!isRecord(value) || typeof value.action !== "string") {
-    throw new Error("fabric_workspace requires a closed action request");
-  }
-  const keys = Object.keys(value);
-  switch (value.action) {
-    case "status":
-    case "list":
-    case "detach":
-      if (keys.length !== 1) throw new Error(`${value.action} accepts no other fields`);
-      return { action: value.action };
-    case "select":
-      if (keys.length !== 2 || typeof value.rootId !== "string") {
-        throw new Error("select requires only rootId");
-      }
-      return { action: "select", rootId: value.rootId };
-    case "attach":
-      if (keys.length !== 2 || typeof value.path !== "string") {
-        throw new Error("attach requires only path");
-      }
-      return { action: "attach", path: value.path };
-    default:
-      throw new Error("unknown fabric_workspace action");
-  }
+  if (Value.Check(kiroPowerWorkspaceRequestSchema, value)) return value as KiroPowerWorkspaceRequest;
+  const issues = [...Value.Errors(kiroPowerWorkspaceRequestSchema, value)].map((error, index) =>
+    `constraint ${index + 1}: ${error.message}`,
+  );
+  throw Object.assign(new Error("Invalid fabric_workspace arguments"), { issues });
 };
 
 interface ActiveExecution {
@@ -281,25 +272,49 @@ export const createKiroMcpServer = async (
       return { current, execution };
     });
 
+  const registryCapabilities = (current: KiroRuntime): string[] => {
+    const providers = new Set(current.registry.providers().map((provider) => provider.name));
+    return [
+      "checked-execution",
+      ...(providers.has("artifacts") ? ["overflow-artifacts"] : []),
+      ...(providers.has("memory") ? ["memory"] : []),
+      ...(providers.has("state") ? ["state"] : []),
+      ...(providers.has("mcp") ? ["mcp-federation"] : []),
+    ];
+  };
+  const reportWorkspace = async (result: unknown): Promise<unknown> => ({
+    ...(result as object),
+    capabilities: registryCapabilities(await getRuntime()),
+  });
+
   const handleWorkspace = async (
     request: KiroPowerWorkspaceRequest,
     signal: AbortSignal,
-  ): Promise<unknown> => runLifecycle(async () => {
-    if (closing) throw new Error("MCP server is shutting down");
-    const mutating = request.action === "select" ||
-      request.action === "attach" ||
-      request.action === "detach";
+  ): Promise<unknown> => {
+    if (request.action === "status") return reportWorkspace(binding!.status());
+    if (request.action === "list") return reportWorkspace(binding!.list());
     if (request.action === "select" && clientWorkspaceTemporarilyUnavailable()) {
       throw new Error("workspace roots are temporarily unverifiable; retry after the client recovers");
     }
-    const previous = identityKey(binding!.boundWorkspace());
-    if (mutating) {
-      await drainActive(new Error("Power workspace binding changed"));
-    }
-    const result = await binding!.handle(request, signal);
-    if (previous !== identityKey(binding!.boundWorkspace())) await closeRuntime();
-    return result;
-  });
+    // Validation, canonicalization, and potentially slow user elicitation happen
+    // before entering the lifecycle queue, while the current workspace remains usable.
+    const mutation = await binding!.prepareMutation(request, signal);
+    const result = await runLifecycle(async () => {
+      if (closing) throw new Error("MCP server is shutting down");
+      if (request.action === "select" && clientWorkspaceTemporarilyUnavailable()) {
+        throw new Error("workspace roots are temporarily unverifiable; retry after the client recovers");
+      }
+      const previous = identityKey(binding!.boundWorkspace());
+      const committed = binding!.commitMutation(mutation);
+      const changed = previous !== identityKey(binding!.boundWorkspace());
+      if (changed) {
+        await drainActive(new Error("Power workspace binding changed"));
+        await closeRuntime();
+      }
+      return committed;
+    });
+    return reportWorkspace(result);
+  };
 
   if (integration === "power") {
     server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
@@ -338,7 +353,7 @@ export const createKiroMcpServer = async (
         {
           name: "fabric_workspace",
           description: "Inspect or explicitly bind the Power to one validated workspace. Manual paths require approve-once MCP elicitation.",
-          inputSchema: workspaceSchema,
+          inputSchema: kiroPowerWorkspaceRequestSchema as never,
           annotations: {
             readOnlyHint: false,
             destructiveHint: false,
@@ -363,14 +378,7 @@ export const createKiroMcpServer = async (
       }
       const status = binding!.status();
       const current = await getRuntime();
-      const providers = new Set(current.registry.providers().map((provider) => provider.name));
-      const capabilities = [
-        "checked-execution",
-        ...(providers.has("artifacts") ? ["overflow-artifacts"] : []),
-        ...(providers.has("memory") ? ["memory"] : []),
-        ...(providers.has("state") ? ["state"] : []),
-        ...(providers.has("mcp") ? ["mcp-federation"] : []),
-      ];
+      const capabilities = registryCapabilities(current);
       return {
         content: [{
           type: "text" as const,
@@ -405,13 +413,8 @@ export const createKiroMcpServer = async (
           content: [{ type: "text" as const, text: JSON.stringify(result) }],
         };
       } catch (error) {
-        return {
-          content: [{
-            type: "text" as const,
-            text: `Workspace binding failed: ${(error as Error).message}`,
-          }],
-          isError: true,
-        };
+        const issues = isRecord(error) && Array.isArray(error.issues) ? error.issues : undefined;
+        return publicToolError("workspace_request_failed", error, issues);
       }
     }
     if (name !== "fabric_exec") {
@@ -421,13 +424,7 @@ export const createKiroMcpServer = async (
       };
     }
     if (integration === "power" && clientWorkspaceTemporarilyUnavailable()) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: "Fabric adapter error: workspace roots are temporarily unverifiable; retry after the client recovers",
-        }],
-        isError: true,
-      };
+      return publicToolError("workspace_unavailable", "workspace roots are temporarily unverifiable; retry after the client recovers");
     }
     const prepared = prepareFabricExecArguments(request.params.arguments ?? {});
     if (!isRecord(prepared) || !Value.Check(fabricExecInputSchema, prepared)) {
@@ -483,13 +480,7 @@ export const createKiroMcpServer = async (
         ...(projected.isError ? { isError: true } : {}),
       };
     } catch (error) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Fabric adapter error: ${(error as Error).message}`,
-        }],
-        isError: true,
-      };
+      return publicToolError("adapter_error", error);
     } finally {
       clearTimeout(timer);
       if (execution) {
