@@ -2637,7 +2637,8 @@ var uninstallKiroProfile = (options = {}) => {
 };
 
 // src/kiro/setup.ts
-var LAUNCH_ARGS = ["--v3", "--agent", "kiro-fabric"];
+var STRICT_LAUNCH_ARGS = ["--v3", "--agent", "kiro-fabric"];
+var POWER_LAUNCH_ARGS = ["--v3"];
 var USAGE = [
   "kiro-fabric-setup \u2014 install and maintain the managed Kiro v3 profile",
   "",
@@ -2651,7 +2652,8 @@ var USAGE = [
   "  repair                    Re-attest and restore from the current trusted artifact",
   "  uninstall                 Remove a managed profile or restore the backup",
   "  doctor                    Read-only non-billable health checks",
-  "  launch                    Launch kiro-cli with the kiro-fabric agent",
+  "  launch                    Launch kiro-cli with the strict kiro-fabric agent",
+  "  launch-power              Launch kiro-cli --v3 with IDE-installed Powers enabled",
   "",
   "Bare invocation on a TTY shows an interactive menu; otherwise this usage is",
   "printed. New installs default advanced grants off; update/repair preserve them.",
@@ -2701,7 +2703,7 @@ var parseSetupArgs = (argv) => {
   const [head, ...rest] = argv;
   if (head === "-h" || head === "--help" || head === "help") return baseArgs("help");
   const command = head;
-  if (command !== "status" && command !== "install" && command !== "update" && command !== "repair" && command !== "uninstall" && command !== "doctor" && command !== "launch") {
+  if (command !== "status" && command !== "install" && command !== "update" && command !== "repair" && command !== "uninstall" && command !== "doctor" && command !== "launch" && command !== "launch-power") {
     throw new UsageError("unknown command: " + command);
   }
   const mutating = command === "install" || command === "update" || command === "repair" || command === "uninstall";
@@ -2717,7 +2719,9 @@ var parseSetupArgs = (argv) => {
     };
     switch (flag) {
       case "--json":
-        if (command === "launch") throw new UsageError("--json is not valid for launch");
+        if (command === "launch" || command === "launch-power") {
+          throw new UsageError("--json is not valid for launch commands");
+        }
         parsed.json = true;
         break;
       case "--dry-run":
@@ -2767,11 +2771,15 @@ var parseSetupArgs = (argv) => {
         parsed.projectRoot = value();
         break;
       case "--user":
-        if (command === "launch") throw new UsageError("--user is not valid for launch");
+        if (command === "launch" || command === "launch-power") {
+          throw new UsageError("--user is not valid for launch commands");
+        }
         parsed.user = true;
         break;
       case "--kiro-home":
-        if (command === "launch") throw new UsageError("--kiro-home is not valid for launch");
+        if (command === "launch" || command === "launch-power") {
+          throw new UsageError("--kiro-home is not valid for launch commands");
+        }
         if (parsed.kiroHome !== void 0) throw new UsageError("duplicate --kiro-home");
         parsed.kiroHome = value();
         break;
@@ -3217,6 +3225,63 @@ var SIGNAL_EXIT_CODES = {
   SIGHUP: 129,
   SIGQUIT: 131
 };
+var superviseKiro = async (executablePath, args, projectRoot) => {
+  const child = spawn2(executablePath, args, {
+    stdio: "inherit",
+    cwd: projectRoot,
+    detached: process.platform !== "win32"
+  });
+  const processTree = child.pid ? createProcessTreeController(child.pid, { ambientHelpers: false }) : void 0;
+  let interruptedCode;
+  let escalation;
+  const forward = (signal, code) => {
+    interruptedCode ??= code;
+    if (!processTree || processTree.gone()) return;
+    if (escalation) {
+      if (!processTree.gone()) void processTree.terminate(0, 2e3);
+      return;
+    }
+    escalation = processTree.signal(signal).then(async () => {
+      if (processTree.gone()) return;
+      await new Promise((resolve4) => setTimeout(resolve4, 3e3));
+      if (!processTree.gone()) await processTree.terminate(0, 2e3);
+    }).catch(() => {
+    });
+  };
+  const onSighup = () => forward("SIGHUP", 129);
+  const onSigint = () => forward("SIGINT", 130);
+  const onSigterm = () => forward("SIGTERM", 143);
+  const onSigquit = () => forward("SIGQUIT", 131);
+  process.on("SIGHUP", onSighup);
+  process.on("SIGINT", onSigint);
+  process.on("SIGTERM", onSigterm);
+  process.on("SIGQUIT", onSigquit);
+  const outcome = await new Promise(
+    (resolvePromise) => {
+      child.once("error", (error) => {
+        resolvePromise({ missing: error.code === "ENOENT" });
+      });
+      child.once("close", (code, signal) => {
+        resolvePromise({
+          code: interruptedCode ?? (signal !== null ? SIGNAL_EXIT_CODES[signal] ?? 128 : code ?? 1)
+        });
+      });
+    }
+  ).finally(async () => {
+    process.removeListener("SIGHUP", onSighup);
+    process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigterm);
+    process.removeListener("SIGQUIT", onSigquit);
+    if (interruptedCode !== void 0 && processTree && !processTree.gone()) {
+      await processTree.terminate(0, 2e3);
+    }
+    await escalation;
+  });
+  if ("missing" in outcome) {
+    throw new Error(outcome.missing ? "Kiro execution artifact disappeared" : "failed to launch Kiro");
+  }
+  return outcome.code;
+};
 var runLaunch = async (parsed) => {
   const projectRoot = resolveKiroProjectRoot(parsed.projectRoot);
   const scopes = {
@@ -3242,61 +3307,17 @@ var runLaunch = async (parsed) => {
       throw new Error("refusing to launch a Kiro executable that differs from the managed manifest");
     }
     assertSupportedKiroUnchanged(identity);
-    const child = spawn2(identity.executablePath, LAUNCH_ARGS, {
-      stdio: "inherit",
-      cwd: projectRoot,
-      detached: process.platform !== "win32"
-    });
-    const processTree = child.pid ? createProcessTreeController(child.pid, { ambientHelpers: false }) : void 0;
-    let interruptedCode;
-    let escalation;
-    const forward = (signal, code) => {
-      interruptedCode ??= code;
-      if (!processTree || processTree.gone()) return;
-      if (escalation) {
-        if (!processTree.gone()) void processTree.terminate(0, 2e3);
-        return;
-      }
-      escalation = processTree.signal(signal).then(async () => {
-        if (processTree.gone()) return;
-        await new Promise((resolve4) => setTimeout(resolve4, 3e3));
-        if (!processTree.gone()) await processTree.terminate(0, 2e3);
-      }).catch(() => {
-      });
-    };
-    const onSighup = () => forward("SIGHUP", 129);
-    const onSigint = () => forward("SIGINT", 130);
-    const onSigterm = () => forward("SIGTERM", 143);
-    const onSigquit = () => forward("SIGQUIT", 131);
-    process.on("SIGHUP", onSighup);
-    process.on("SIGINT", onSigint);
-    process.on("SIGTERM", onSigterm);
-    process.on("SIGQUIT", onSigquit);
-    const outcome = await new Promise(
-      (resolvePromise) => {
-        child.once("error", (error) => {
-          resolvePromise({ missing: error.code === "ENOENT" });
-        });
-        child.once("close", (code, signal) => {
-          resolvePromise({
-            code: interruptedCode ?? (signal !== null ? SIGNAL_EXIT_CODES[signal] ?? 128 : code ?? 1)
-          });
-        });
-      }
-    ).finally(async () => {
-      process.removeListener("SIGHUP", onSighup);
-      process.removeListener("SIGINT", onSigint);
-      process.removeListener("SIGTERM", onSigterm);
-      process.removeListener("SIGQUIT", onSigquit);
-      if (interruptedCode !== void 0 && processTree && !processTree.gone()) {
-        await processTree.terminate(0, 2e3);
-      }
-      await escalation;
-    });
-    if ("missing" in outcome) {
-      throw new Error(outcome.missing ? "managed Kiro execution artifact disappeared" : "failed to launch managed Kiro");
-    }
-    return outcome.code;
+    return await superviseKiro(identity.executablePath, STRICT_LAUNCH_ARGS, projectRoot);
+  } finally {
+    identity.dispose();
+  }
+};
+var runLaunchPower = async (parsed) => {
+  const projectRoot = resolveKiroProjectRoot(parsed.projectRoot);
+  const identity = await assertSupportedKiro(parsed.kiroBinary ?? "kiro-cli");
+  try {
+    assertSupportedKiroUnchanged(identity);
+    return await superviseKiro(identity.executablePath, POWER_LAUNCH_ARGS, projectRoot);
   } finally {
     identity.dispose();
   }
@@ -3438,6 +3459,8 @@ var runKiroSetup = async (argv) => {
         return await runDoctor(parsed);
       case "launch":
         return await runLaunch(parsed);
+      case "launch-power":
+        return await runLaunchPower(parsed);
     }
   } catch (error) {
     writeSetupFailure(parsed.json, error);

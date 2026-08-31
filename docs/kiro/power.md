@@ -2,7 +2,7 @@
 
 ## Overview
 
-Kiro Fabric Power is the additive integration and initial IDE target. It uses
+Kiro Fabric Power is the additive integration for Kiro IDE and Kiro CLI v3. It uses
 the Agent Plugins 1.0.0 package root (`plugin.json`, `mcp.json`, and immediate
 `skills/*/SKILL.md` children) and exposes `fabric_info`, `fabric_workspace`, and
 `fabric_exec`. It does not install or select a custom Kiro agent, so ordinary
@@ -27,6 +27,19 @@ IDE. The generated package contains a relative local runtime closure and no
 checkout-specific absolute path. Re-running the command replaces it
 deterministically. `kiro-fabric doctor power --json` is read-only,
 non-billable, and sends no model prompt.
+
+Kiro CLI v3 automatically detects Powers installed through Kiro IDE. After the
+one-time IDE import, launch the additive Power session from the target project:
+
+```bash
+kiro-fabric-setup launch-power --project-root /absolute/path/to/project
+```
+
+The command validates Kiro CLI 2.20.1 and supervises `kiro-cli --v3`. Running
+`kiro-cli --v3` directly is equivalent. Kiro currently exposes no CLI-only
+custom-Power importer, so the IDE installation remains required. Do not pass
+`--agent kiro-fabric`; that is the separate Strict integration and deliberately
+sets `includePowers: false`.
 
 ## GitHub installation
 

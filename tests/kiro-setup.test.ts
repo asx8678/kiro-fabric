@@ -652,6 +652,34 @@ describe("runKiroSetup uninstall --user --json", () => {
 });
 
 describe("runKiroSetup launch", () => {
+  itPosix("launches the additive IDE-installed Power in a default v3 session", async () => {
+    const root = project("launch-power-project");
+    const log = join(base, "launch-power-args.txt");
+    const binary = join(base, "kiro-cli-power");
+    writeFileSync(
+      binary,
+      [
+        "#!/bin/sh",
+        'if [ "$1" = "--version" ]; then echo "kiro-cli 2.20.1"; exit 0; fi',
+        'if [ "$1" = "acp" ] && [ "$2" = "--help" ]; then echo "--agent-engine v3 --auth-method cli"; exit 0; fi',
+        'printf "%s\\n" "$*" >> "$KIRO_SETUP_LAUNCH_LOG"',
+        'pwd >> "$KIRO_SETUP_LAUNCH_LOG"',
+        "exit 0",
+      ].join("\n") + "\n",
+      { mode: 0o755 },
+    );
+    vi.stubEnv("KIRO_SETUP_LAUNCH_LOG", log);
+
+    const run = await runSetup([
+      "launch-power", "--project-root", root, "--kiro-binary", binary,
+    ]);
+
+    expect(run.code).toBe(0);
+    const lines = readFileSync(log, "utf8").trim().split("\n");
+    expect(lines[0]).toBe("--v3");
+    expect(lines[1]).toBe(realpathSync(root));
+  });
+
   itPosix("spawns kiro-cli with the v3 agent argv and the project cwd", async () => {
     const root = project("launch-project");
     const home = project("launch-home");

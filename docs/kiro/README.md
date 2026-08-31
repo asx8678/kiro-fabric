@@ -6,8 +6,10 @@ integration workspaces.
 ## Start here: choose an integration
 
 The additive default is [Kiro Fabric Power](power.md). Run `pnpm power:dev` in a
-source checkout and import the generated local folder in Kiro IDE. Public GitHub
-imports launch the checked-in runtime closure without activation-time package
+source checkout and import the generated local folder in Kiro IDE. Kiro CLI v3
+automatically picks up that IDE-installed Power; launch it with
+`kiro-fabric-setup launch-power --project-root /absolute/project` or directly
+with `kiro-cli --v3`. Public GitHub imports launch the checked-in runtime closure without activation-time package
 resolution and remain gated by Power certification plus a clean-machine client
 qualification.
 

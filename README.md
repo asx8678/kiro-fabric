@@ -12,7 +12,9 @@ federation.
 connect tools and services.
 
 > **Current release status:** local source installation is supported for Kiro
-> IDE testing. Direct GitHub Power import uses the checked-in MCP-only closure
+> IDE and Kiro CLI v3 testing. CLI v3 auto-detects Powers installed through the
+> IDE; Kiro does not currently provide a separate CLI-only custom-Power importer.
+> Direct GitHub Power import uses the checked-in MCP-only closure
 > and remains blocked until an immutable signed release has reproducible-build,
 > SBOM, artifact-attestation, and clean-machine Kiro qualification evidence.
 > Power ACP agents have a separate certification gate and remain unavailable.
@@ -23,7 +25,7 @@ Choose one integration:
 
 | You want | Install | Recommended for |
 |---|---|---|
-| Fabric beside Kiro's existing read, edit, shell, web, and subagent tools | [Kiro Power](#install-the-kiro-power-recommended) | Most Kiro IDE users |
+| Fabric beside Kiro's existing read, edit, shell, web, and subagent tools | [Kiro Power](#install-the-kiro-power-recommended) | Most Kiro IDE and CLI v3 users |
 | One managed Kiro CLI profile with a narrow audited tool boundary | [Strict mode](#install-strict-mode-advanced) | Advanced and controlled environments |
 
 Start with the **Kiro Power** if you are unsure.
@@ -72,7 +74,8 @@ native tools. Keep ordinary file, shell, web, and native-subagent work in Kiro.
 
 Install these first:
 
-- [Kiro IDE](https://kiro.dev/)
+- [Kiro IDE](https://kiro.dev/) (required to install a local custom Power)
+- `kiro-cli 2.20.1` when using the Power from CLI v3
 - [Node.js](https://nodejs.org/) 24 or newer
 - Git
 - pnpm 11.20.0
@@ -127,9 +130,27 @@ not select the repository root.
 
 No global npm installation is needed for this local Power path.
 
+### 4. Use the installed Power from Kiro CLI v3
+
+Kiro CLI v3 automatically picks up Powers installed through Kiro IDE. From the
+project you want to work on, run:
+
+```bash
+kiro-fabric-setup launch-power --project-root /absolute/path/to/project
+```
+
+This validates the supported Kiro CLI and launches `kiro-cli --v3` without
+selecting Fabric's separate Strict-mode agent. It is equivalent to running
+`kiro-cli --v3` directly after installation. Do not add
+`--agent kiro-fabric`: that selects Strict mode, whose profile intentionally
+disables ambient Powers.
+
+Kiro currently has no separate CLI-only importer for a local custom Power, so
+the one-time IDE import above is required.
+
 ## Verify the Power installation
 
-Open a project in Kiro and paste this prompt into chat:
+Open a project in Kiro IDE or launch a Kiro CLI v3 session and paste this prompt into chat:
 
 ```text
 Use the Kiro Fabric Power. Run fabric_info and explain the integration,

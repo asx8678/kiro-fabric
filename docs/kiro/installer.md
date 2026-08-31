@@ -1,5 +1,22 @@
 # Kiro installer, doctor, and uninstall
 
+## Launch the additive Power in Kiro CLI v3
+
+After importing the generated Kiro Fabric Power through Kiro IDE, CLI v3
+automatically detects it. Launch from the target workspace with:
+
+```bash
+kiro-fabric-setup launch-power --project-root /absolute/path/to/project
+```
+
+This starts `kiro-cli --v3` and does not require a managed Strict installation.
+Use `--kiro-binary <path>` when `kiro-cli` is not on `PATH`. Kiro currently has
+no CLI-only custom-Power importer, so installing the local Power still requires
+Kiro IDE once. The existing `launch` command below is different: it selects the
+managed Strict agent, whose isolated profile intentionally disables Powers.
+
+## Strict managed integration
+
 Experimental managed integration for **Kiro CLI 2.20.1** / agent engine **v3**.
 Project-scoped install does not walk up to a Git root. Pass `--user` to write
 the agent profile into the user Kiro home (`$KIRO_HOME` or `~/.kiro`, which is
