@@ -225,9 +225,17 @@ describe("Kiro Power security boundaries", () => {
     fs.renameSync(workspace, `${workspace}.approved`);
     fs.mkdirSync(workspace);
     release(true);
-    const mutation = await pending;
-    expect(() => binding.commitMutation(mutation)).toThrow(/identity changed after approval/i);
+    await expect(pending).rejects.toThrow(/identity changed during approval/i);
     expect(binding.status().status).toBe("unbound");
+  });
+
+  it("rejects a root changed after approval even when dev/inode still match", async () => {
+    const root = temp(); const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data"); const workspace = path.join(root, "workspace");
+    for (const dir of [pluginRoot, pluginData, workspace]) fs.mkdirSync(dir);
+    const binding = new KiroPowerWorkspaceBinding({ pluginRoot, pluginData, elicitor: { approveWorkspace: async () => true } });
+    const mutation = await binding.prepareMutation({ action: "attach", path: workspace });
+    fs.writeFileSync(path.join(workspace, "changed-during-commit"), "x");
+    expect(() => binding.commitMutation(mutation)).toThrow(/identity changed after approval/i);
   });
 
   it("does not detach as a side effect of observing an unavailable bound workspace", async () => {
@@ -237,6 +245,9 @@ describe("Kiro Power security boundaries", () => {
     binding.updateClientRoots([{ uri: pathToFileURL(workspace).href }]);
     fs.renameSync(workspace, `${workspace}.temporarily-moved`);
     expect(binding.boundWorkspace()).toBeUndefined();
+    binding.updateClientRoots([{ uri: pathToFileURL(workspace).href }]);
+    expect(binding.bindingSource()).toBe("client-roots");
+    expect(binding.workspaceObservation().status).toBe("temporarily-unavailable");
     fs.renameSync(`${workspace}.temporarily-moved`, workspace);
     expect(binding.boundWorkspace()?.canonicalPath).toBe(workspace);
   });
@@ -294,7 +305,82 @@ describe("Kiro Power security boundaries", () => {
     await expect(approver.approveOnce({
       risk: "write", provider: "x", action: "y", summary: "z", signal: controller.signal,
     })).rejects.toThrow("caller cancelled");
+
+    let observedSignal: AbortSignal | undefined;
+    const pendingApprover = new KiroPowerFabricApprover(
+      { read: "ask", write: "deny", execute: "deny", network: "deny", agent: "deny" } as never,
+      new KiroPowerApprover({
+        supported: () => true,
+        request: async ({ signal }) => {
+          observedSignal = signal;
+          await new Promise<void>((_resolve, reject) => signal?.addEventListener("abort", () => reject(signal.reason), { once: true }));
+          return { action: "cancel" };
+        },
+      }),
+      temp(),
+    );
+    const active = new AbortController();
+    const pending = pendingApprover.approve(
+      { ref: "fixture.read", provider: "fixture", name: "read", risk: "read" } as never,
+      {},
+      {},
+      active.signal,
+    );
+    await vi.waitFor(() => expect(observedSignal).toBe(active.signal));
+    active.abort(new Error("execution cancelled"));
+    await expect(pending).rejects.toThrow("execution cancelled");
   });
+
+  it("propagates execution cancellation into an in-flight elicitation", async () => {
+    const config = structuredClone(DEFAULT_FABRIC_CONFIG);
+    config.approvals.read = "ask";
+    let elicitationSignal: AbortSignal | undefined;
+    const invoked = vi.fn();
+    const runtime = createKiroRuntime({
+      cwd: temp(),
+      integration: "power",
+      config,
+      powerMcpConfigPath: powerMcpConfig(),
+      powerApprover: new KiroPowerApprover({
+        supported: () => true,
+        request: async ({ signal }) => {
+          elicitationSignal = signal;
+          await new Promise<void>((_resolve, reject) => signal?.addEventListener("abort", () => reject(signal.reason), { once: true }));
+          return { action: "cancel" };
+        },
+      }),
+      registerProviders(registry) {
+        registry.register({
+          name: "fixture",
+          description: "fixture",
+          async list() { return [{ name: "read", description: "read", inputSchema: { type: "object", properties: {} }, risk: "read" as const }]; },
+          async describe() { return { name: "read", description: "read", inputSchema: { type: "object", properties: {} }, risk: "read" as const }; },
+          async invoke() { invoked(); return "unsafe"; },
+        });
+      },
+    });
+    const controller = new AbortController();
+    try {
+      const execution = runtime.service.execute({
+        code: 'return await tools.call({ ref: "fixture.read", args: {} });',
+        signal: controller.signal,
+        parentToolCallId: "cancel-elicitation",
+        host: runtime.host,
+        onPartial() {},
+      });
+      await vi.waitFor(
+        () => expect(elicitationSignal).toBe(controller.signal),
+        { timeout: 10_000 },
+      );
+      controller.abort(new Error("caller cancelled execution"));
+      const result = await execution;
+      expect(result.success).toBe(false);
+      expect(invoked).not.toHaveBeenCalled();
+      expect(elicitationSignal?.aborted).toBe(true);
+    } finally {
+      await runtime.close();
+    }
+  }, 20_000);
 
   it("shows the exact workspace as dot and recognizes standard form elicitation", async () => {
     const cwd = temp(); let message = "";
@@ -312,7 +398,7 @@ describe("Kiro Power security boundaries", () => {
     const cwd = temp(); process.env.KIRO_FABRIC_ALLOW_SHELL = "1";
     const runtime = createKiroRuntime({ cwd, integration: "power", config: structuredClone(DEFAULT_FABRIC_CONFIG), powerMcpConfigPath: powerMcpConfig() });
     try {
-      expect(runtime.service.config.approvals.execute).not.toBe("allow");
+      expect(runtime.service.config.approvals.execute).toBe("ask");
       expect(runtime.service.config.approvals.network).toBe("ask");
       expect(runtime.service.config.mcp.configPath).toBeDefined();
     } finally { await runtime.close(); }
@@ -341,6 +427,51 @@ describe("Kiro Power security boundaries", () => {
     await runKiroPowerDoctor();
     expect(fs.readFileSync(configPath)).toEqual(before);
   }, 20_000);
+
+  it("elicits both network and execute authorization before Power starts a stdio MCP server", async () => {
+    const cwd = temp();
+    const countFile = path.join(cwd, "mcp-count.log");
+    const configPath = path.join(cwd, "mcporter.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      mcpServers: {
+        test: {
+          command: process.execPath,
+          args: [path.resolve("tests/fixtures/fake-mcp-server.mjs")],
+          env: { KIRO_FABRIC_MCP_COUNT_FILE: countFile, KIRO_FABRIC_MCP_COUNT_LABEL: "power" },
+        },
+      },
+      imports: [],
+    }));
+    const risks: string[] = [];
+    const powerApprover = new KiroPowerApprover({
+      supported: () => true,
+      request: async ({ message }) => {
+        risks.push(/Risk: ([^\n]+)/.exec(message)?.[1] ?? "unknown");
+        return { action: "accept", approved: true };
+      },
+    });
+    const runtime = createKiroRuntime({
+      cwd,
+      integration: "power",
+      config: structuredClone(DEFAULT_FABRIC_CONFIG),
+      powerMcpConfigPath: configPath,
+      powerApprover,
+    });
+    try {
+      const result = await runtime.service.execute({
+        code: 'return await mcp.call({ server: "test", tool: "echo-value", args: { value: "approved" } });',
+        signal: undefined,
+        parentToolCallId: "power-stdio-approval",
+        host: runtime.host,
+        onPartial() {},
+      });
+      expect(result).toMatchObject({ success: true, value: { text: "echo:approved" } });
+      expect(risks).toEqual(["network", "execute"]);
+      expect(fs.readFileSync(countFile, "utf8").trim()).toBe("power");
+    } finally {
+      await runtime.close();
+    }
+  });
 
   it("preserves overflow output behind the Power-safe artifacts API", async () => {
     const root = temp();

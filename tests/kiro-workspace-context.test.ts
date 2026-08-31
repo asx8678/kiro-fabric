@@ -40,14 +40,35 @@ describe("CachedWorkspaceContextProvider", () => {
     const forcedRefresh = provider.current({ force: true });
     release([{ uri: "file:///old-workspace" }]);
 
-    await expect(oldRefresh).resolves.toMatchObject({ roots: [{ uri: "file:///old-workspace" }] });
+    await expect(oldRefresh).resolves.toMatchObject({
+      revision: 1,
+      roots: [{ uri: "file:///new-workspace" }],
+    });
     await expect(forcedRefresh).resolves.toMatchObject({
-      revision: 2,
+      revision: 1,
       roots: [{ uri: "file:///new-workspace" }],
     });
     expect(load).toHaveBeenCalledTimes(2);
     await provider.current();
     expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not publish a stale observation superseded by invalidation", async () => {
+    let release!: (roots: readonly KiroWorkspaceRoot[]) => void;
+    const provider = new CachedWorkspaceContextProvider({
+      supported: () => true,
+      load: vi.fn()
+        .mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }))
+        .mockResolvedValueOnce([{ uri: "file:///fresh" }]),
+    });
+    const observed: string[][] = [];
+    provider.subscribe((snapshot) => observed.push(snapshot.roots.map((root) => root.uri)));
+    const pending = provider.current();
+    provider.invalidate();
+    release([{ uri: "file:///stale" }]);
+
+    await expect(pending).resolves.toMatchObject({ roots: [{ uri: "file:///fresh" }] });
+    expect(observed).toEqual([["file:///fresh"]]);
   });
 
   it("distinguishes explicit empty roots from transient failure", async () => {

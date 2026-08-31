@@ -38,7 +38,7 @@ import {
   type KiroPowerWorkspaceRequest,
 } from "./power/workspace-binding.js";
 import { projectFabricExecutionText } from "./projection.js";
-import { prepareKiroRuntime, type KiroRuntime } from "./runtime.js";
+import { prepareKiroRuntime, type KiroRuntime, type KiroRuntimeOptions } from "./runtime.js";
 
 const STRICT_DESCRIPTION =
   "Execute type-checked TypeScript through Fabric's configured executor for coding tools, MCP, Fabric providers, and discovery.";
@@ -60,6 +60,8 @@ export interface KiroMcpServerOptions {
   pluginRoot?: string;
   pluginData?: string;
   runtime?: KiroRuntime;
+  /** Test/embedded-host runtime factory. */
+  prepareRuntime?: (options: KiroRuntimeOptions) => Promise<KiroRuntime>;
   tools?: readonly string[];
   enableSubagents?: boolean;
   version?: string;
@@ -96,6 +98,7 @@ const workspaceRequest = (value: unknown): KiroPowerWorkspaceRequest => {
 
 interface ActiveExecution {
   controller: AbortController;
+  runtime: KiroRuntime;
   settled: Promise<void>;
   settle(): void;
 }
@@ -137,28 +140,46 @@ export const createKiroMcpServer = async (
     lifecycleTail = result.then(() => undefined, () => undefined);
     return result;
   };
-  const drainActive = async (reason: Error): Promise<void> => {
-    const executions = [...active];
+  const drainExecutions = async (
+    executions: readonly ActiveExecution[],
+    reason: Error,
+  ): Promise<boolean> => {
     for (const execution of executions) execution.controller.abort(reason);
-    if (executions.length === 0) return;
+    if (executions.length === 0) return true;
     let timer: NodeJS.Timeout | undefined;
+    let drained = false;
     try {
       await Promise.race([
-        Promise.allSettled(executions.map((execution) => execution.settled)),
+        Promise.allSettled(executions.map((execution) => execution.settled)).then(() => { drained = true; }),
         new Promise<void>((resolve) => {
           timer = setTimeout(resolve, KIRO_MCP_DRAIN_TIMEOUT_MS);
           timer.unref?.();
         }),
       ]);
+      return drained;
     } finally {
       if (timer) clearTimeout(timer);
     }
   };
-  const closeRuntime = async (): Promise<void> => {
+  const drainActive = (reason: Error): Promise<boolean> =>
+    drainExecutions([...active], reason);
+  const closeRuntime = async (reason: Error, knownDrained?: boolean): Promise<void> => {
     const current = runtime;
     runtime = undefined;
     runtimeIdentity = "";
-    await current?.close();
+    if (!current) return;
+    const executions = [...active].filter((execution) => execution.runtime === current);
+    const drained = knownDrained ?? await drainExecutions(executions, reason);
+    if (drained || executions.length === 0) {
+      await current.close();
+      return;
+    }
+    // A bounded drain must not close provider/process resources underneath an
+    // abort-insensitive stale execution. Retire the runtime and close it only
+    // after every execution that leased it has actually settled.
+    void Promise.allSettled(executions.map((execution) => execution.settled))
+      .then(() => current.close())
+      .catch(() => {});
   };
 
   const powerApprover = integration === "power" ? new KiroPowerApprover({
@@ -207,10 +228,6 @@ export const createKiroMcpServer = async (
     : undefined;
   let workspaceSnapshot: KiroWorkspaceSnapshot | undefined;
 
-  const identityKey = (workspace: KiroPowerBoundWorkspace | undefined): string => workspace
-    ? `${workspace.canonicalPath}\0${workspace.deviceId}\0${workspace.fileId}`
-    : "<unbound>";
-
   const syncWorkspaceContext = async (force = false): Promise<KiroWorkspaceSnapshot | undefined> => {
     if (!binding || !workspaceContext) return undefined;
     const snapshot = await workspaceContext.current({ force });
@@ -218,11 +235,10 @@ export const createKiroMcpServer = async (
       if (closing) return;
       workspaceSnapshot = snapshot;
       if (snapshot.status === "temporarily-unavailable") return;
-      const previous = identityKey(binding.boundWorkspace());
+      const previous = binding.bindingIdentity();
       binding.updateClientRoots(snapshot.roots);
-      if (previous !== identityKey(binding.boundWorkspace())) {
-        await drainActive(new Error("MCP workspace roots changed"));
-        await closeRuntime();
+      if (previous !== binding.bindingIdentity()) {
+        await closeRuntime(new Error("MCP workspace roots changed"));
       }
     });
     return snapshot;
@@ -230,13 +246,14 @@ export const createKiroMcpServer = async (
 
   const clientWorkspaceTemporarilyUnavailable = (): boolean =>
     workspaceSnapshot?.status === "temporarily-unavailable" &&
-    binding?.boundWorkspace()?.source === "client-roots";
+    binding?.bindingSource() === "client-roots";
 
   const createRuntime = async (
     powerWorkspace?: KiroPowerBoundWorkspace,
   ): Promise<KiroRuntime> => {
+    const prepareRuntime = options.prepareRuntime ?? prepareKiroRuntime;
     if (integration !== "power") {
-      return prepareKiroRuntime({
+      return prepareRuntime({
         cwd: options.cwd!,
         integration,
         ...(options.tools ? { tools: options.tools } : {}),
@@ -246,7 +263,7 @@ export const createKiroMcpServer = async (
     const project = powerWorkspace
       ? prepareKiroPowerProjectPaths(data!.projects, powerWorkspace)
       : undefined;
-    return prepareKiroRuntime({
+    return prepareRuntime({
       cwd: powerWorkspace?.canonicalPath ?? data!.root,
       integration: "power",
       agentDir: data!.config,
@@ -257,12 +274,16 @@ export const createKiroMcpServer = async (
   };
 
   const runtimeForCurrentIdentity = async (): Promise<KiroRuntime> => {
-    const powerWorkspace = integration === "power" ? binding!.boundWorkspace() : undefined;
+    const observation = integration === "power" ? binding!.workspaceObservation() : undefined;
+    if (observation?.status === "temporarily-unavailable") {
+      throw new Error("bound workspace is temporarily unverifiable; retry after local filesystem access recovers");
+    }
+    const powerWorkspace = observation?.status === "verified" ? observation.workspace : undefined;
     const identity = integration === "power"
-      ? identityKey(powerWorkspace)
+      ? binding!.bindingIdentity()
       : options.cwd!;
     if (runtime && runtimeIdentity === identity) return runtime;
-    await closeRuntime();
+    await closeRuntime(new Error("MCP runtime identity changed"));
     runtime = await createRuntime(powerWorkspace);
     runtimeIdentity = identity;
     return runtime;
@@ -281,7 +302,7 @@ export const createKiroMcpServer = async (
       const current = await runtimeForCurrentIdentity();
       let settle!: () => void;
       const settled = new Promise<void>((resolve) => { settle = resolve; });
-      const execution = { controller, settled, settle };
+      const execution = { controller, runtime: current, settled, settle };
       active.add(execution);
       return { current, execution };
     });
@@ -297,13 +318,14 @@ export const createKiroMcpServer = async (
     ];
   };
   const reportWorkspace = (result: unknown): unknown => {
-    const identity = identityKey(binding!.boundWorkspace());
+    const identity = binding!.bindingIdentity();
+    const verified = binding!.workspaceObservation().status === "verified";
     return {
       ...(result as object),
       // Read-only status/list must not initialize a heavyweight runtime. Only
       // report capabilities that have actually been observed for this exact
       // binding; fabric_info is the explicit runtime probe.
-      ...(runtime && runtimeIdentity === identity
+      ...(verified && runtime && runtimeIdentity === identity
         ? { capabilities: registryCapabilities(runtime) }
         : {}),
     };
@@ -326,12 +348,11 @@ export const createKiroMcpServer = async (
       if (request.action === "select" && clientWorkspaceTemporarilyUnavailable()) {
         throw new Error("workspace roots are temporarily unverifiable; retry after the client recovers");
       }
-      const previous = identityKey(binding!.boundWorkspace());
+      const previous = binding!.bindingIdentity();
       const committed = binding!.commitMutation(mutation);
-      const changed = previous !== identityKey(binding!.boundWorkspace());
+      const changed = previous !== binding!.bindingIdentity();
       if (changed) {
-        await drainActive(new Error("Power workspace binding changed"));
-        await closeRuntime();
+        await closeRuntime(new Error("Power workspace binding changed"));
       }
       return committed;
     });
@@ -522,8 +543,9 @@ export const createKiroMcpServer = async (
         try {
           await runLifecycle(async () => {
             closing = true;
-            await drainActive(new Error("Power MCP server shutting down"));
-            await closeRuntime();
+            const reason = new Error("Power MCP server shutting down");
+            const drained = await drainActive(reason);
+            await closeRuntime(reason, drained);
           });
         } finally {
           await server.close();

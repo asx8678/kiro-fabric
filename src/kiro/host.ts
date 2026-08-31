@@ -61,6 +61,7 @@ export interface FabricHostApprover {
     action: FabricResolvedAction,
     args: Record<string, unknown>,
     scope?: FabricApprovalScope,
+    signal?: AbortSignal,
   ): Promise<FabricApprovalLease | void>;
 }
 
@@ -125,6 +126,7 @@ export class FabricDenyApprovalFallback implements FabricHostApprover {
     action: FabricResolvedAction,
     args: Record<string, unknown> = {},
     scope: FabricApprovalScope = {},
+    signal?: AbortSignal,
   ): Promise<void> {
     const mode = this.config[action.risk];
     // Preserve the public fallback's historical explicit-broad-grant contract.
@@ -133,6 +135,7 @@ export class FabricDenyApprovalFallback implements FabricHostApprover {
     if (mode === "allow" || this.sessionApprovals.has(action.risk)) return;
     void args;
     void scope;
+    signal?.throwIfAborted();
     throw new Error(
       `${action.ref} requires ${action.risk} approval, but ${this.unavailableReason}`,
     );

@@ -256,7 +256,7 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
       : base.agents,
     approvals: {
       ...base.approvals,
-      execute: allowExecute ? "allow" : "deny",
+      execute: allowExecute ? "allow" : power ? "ask" : "deny",
       network: power ? "ask" : base.approvals.network,
     },
     mcp: {

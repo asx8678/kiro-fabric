@@ -31,12 +31,17 @@ export interface KiroPowerElicitor {
   approveWorkspace(canonicalPath: string, signal?: AbortSignal): Promise<boolean>;
 }
 
-interface Candidate { id: string; root: string; name: string; dev: bigint; ino: bigint }
+interface Candidate { id: string; root: string; name: string; dev: bigint; ino: bigint; ctimeNs: bigint }
 interface Binding extends Candidate { source: "client-roots" | "manual" }
 export type KiroPowerWorkspaceMutation =
   | { action: "select"; rootId: string }
-  | { action: "attach"; root: string; dev: bigint; ino: bigint }
+  | { action: "attach"; root: string; dev: bigint; ino: bigint; ctimeNs: bigint }
   | { action: "detach" };
+
+export type KiroPowerWorkspaceObservation =
+  | { status: "verified"; workspace: KiroPowerBoundWorkspace }
+  | { status: "unbound" }
+  | { status: "temporarily-unavailable" };
 
 export interface KiroPowerBoundWorkspace extends KiroPowerWorkspaceIdentity {
   rootId: string;
@@ -92,22 +97,36 @@ export class KiroPowerWorkspaceBinding {
         throw new Error("workspace root and plugin storage must not contain one another");
       }
     }
-    return { id: idFor(root), root, name: path.basename(root) || "workspace", dev: stats.dev, ino: stats.ino };
+    return {
+      id: idFor(root),
+      root,
+      name: path.basename(root) || "workspace",
+      dev: stats.dev,
+      ino: stats.ino,
+      ctimeNs: stats.ctimeNs,
+    };
   }
 
   updateClientRoots(roots: readonly { uri: string; name?: string | undefined }[]): void {
     const candidates: Candidate[] = [];
+    const advertisedPaths = new Set<string>();
     for (const item of roots) {
       try {
         if (!item.uri.startsWith("file:")) continue;
-        const candidate = this.#canonical(fileURLToPath(item.uri));
+        const advertised = path.resolve(fileURLToPath(item.uri));
+        advertisedPaths.add(advertised);
+        const candidate = this.#canonical(advertised);
         candidates.push({ ...candidate, name: (item.name?.trim() || candidate.name).slice(0, 120) });
       } catch { /* invalid roots are unavailable, never broadened */ }
     }
     this.#candidates = [...new Map(candidates.map((entry) => [entry.id, entry])).values()];
     if (this.#binding?.source === "client-roots") {
       const current = this.#candidates.find((entry) => entry.id === this.#binding!.id);
-      if (!current || current.dev !== this.#binding.dev || current.ino !== this.#binding.ino) {
+      // An advertised path that cannot currently be inspected is not evidence
+      // that the client removed it. Retain the binding but fail closed through
+      // workspaceObservation() until local verification recovers.
+      const transient = advertisedPaths.has(this.#binding.root) && !current;
+      if (!transient && (!current || current.dev !== this.#binding.dev || current.ino !== this.#binding.ino)) {
         this.#binding = undefined;
         this.#initialAutoBindAllowed = false;
       }
@@ -119,26 +138,45 @@ export class KiroPowerWorkspaceBinding {
     }
   }
 
-  boundWorkspace(): KiroPowerBoundWorkspace | undefined {
+  bindingIdentity(): string {
     const binding = this.#binding;
-    if (!binding) return undefined;
+    return binding ? `${binding.root}\0${binding.dev}\0${binding.ino}` : "<unbound>";
+  }
+
+  bindingSource(): Binding["source"] | undefined {
+    return this.#binding?.source;
+  }
+
+  workspaceObservation(): KiroPowerWorkspaceObservation {
+    const binding = this.#binding;
+    if (!binding) return { status: "unbound" };
     try {
       const current = this.#canonical(binding.root);
-      if (current.dev !== binding.dev || current.ino !== binding.ino) throw new Error("identity changed");
+      if (current.dev !== binding.dev || current.ino !== binding.ino) {
+        return { status: "temporarily-unavailable" };
+      }
       return {
-        schemaVersion: 1,
-        canonicalPath: binding.root,
-        deviceId: binding.dev.toString(),
-        fileId: binding.ino.toString(),
-        rootId: binding.id,
-        name: binding.name,
-        source: binding.source,
+        status: "verified",
+        workspace: {
+          schemaVersion: 1,
+          canonicalPath: binding.root,
+          deviceId: binding.dev.toString(),
+          fileId: binding.ino.toString(),
+          rootId: binding.id,
+          name: binding.name,
+          source: binding.source,
+        },
       };
     } catch {
       // Observation is deliberately non-destructive. A transient filesystem
       // failure must not turn status/list into an implicit detach operation.
-      return undefined;
+      return { status: "temporarily-unavailable" };
     }
+  }
+
+  boundWorkspace(): KiroPowerBoundWorkspace | undefined {
+    const observation = this.workspaceObservation();
+    return observation.status === "verified" ? observation.workspace : undefined;
   }
 
   boundRoot(): string | undefined {
@@ -174,7 +212,23 @@ export class KiroPowerWorkspaceBinding {
     // Bind approval to the exact filesystem object that was presented. The
     // pathname alone is insufficient because it can be replaced while the
     // elicitation dialog is open.
-    return { action: "attach", root: candidate.root, dev: candidate.dev, ino: candidate.ino };
+    const approvedIdentity = statSync(candidate.root, { bigint: true });
+    if (
+      approvedIdentity.dev !== candidate.dev || approvedIdentity.ino !== candidate.ino ||
+      approvedIdentity.ctimeNs !== candidate.ctimeNs
+    ) {
+      throw new Error("workspace root identity changed during approval; attach and approve again");
+    }
+    // ctime cannot be restored by an unprivileged pathname swap. Carry it to
+    // commit so an inode deleted and recycled after approval cannot satisfy a
+    // dev/inode-only comparison.
+    return {
+      action: "attach",
+      root: candidate.root,
+      dev: candidate.dev,
+      ino: candidate.ino,
+      ctimeNs: candidate.ctimeNs,
+    };
   }
 
   commitMutation(mutation: KiroPowerWorkspaceMutation): ReturnType<KiroPowerWorkspaceBinding["status"]> {
@@ -190,7 +244,11 @@ export class KiroPowerWorkspaceBinding {
       this.#binding = { ...candidate, source: "client-roots" };
     } else {
       const candidate = this.#canonical(mutation.root);
-      if (candidate.dev !== mutation.dev || candidate.ino !== mutation.ino) {
+      const approvedIdentity = statSync(candidate.root, { bigint: true });
+      if (
+        candidate.dev !== mutation.dev || candidate.ino !== mutation.ino ||
+        approvedIdentity.ctimeNs !== mutation.ctimeNs
+      ) {
         throw new Error("workspace root identity changed after approval; attach and approve again");
       }
       this.#binding = { ...candidate, source: "manual" };

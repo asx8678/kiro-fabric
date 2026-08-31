@@ -4,8 +4,11 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { KIRO_MCP_DRAIN_TIMEOUT_MS } from "./deadlines.js";
 
-const SHUTDOWN_GRACE_MS = 5_000;
+// Leave a bounded margin for runtime/provider and transport closure after the
+// server's own stale-execution drain budget expires.
+const SHUTDOWN_GRACE_MS = KIRO_MCP_DRAIN_TIMEOUT_MS + 2_000;
 
 export const startKiroMcpServer = async (): Promise<{ close(): Promise<void> }> => {
   const { createKiroMcpServer } = await import("./mcp-server.js");

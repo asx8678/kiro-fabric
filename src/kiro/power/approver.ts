@@ -103,6 +103,7 @@ export class KiroPowerFabricApprover implements FabricHostApprover {
     action: FabricResolvedAction,
     args: Record<string, unknown>,
     scope: FabricApprovalScope = {},
+    signal?: AbortSignal,
   ): Promise<void> {
     const mode = this.config[action.risk];
     if (mode === "allow") return;
@@ -112,6 +113,7 @@ export class KiroPowerFabricApprover implements FabricHostApprover {
       provider: action.provider,
       action: action.name,
       summary: `${summarizeArguments(args, this.cwd)}${scope.projectDigest ? "\nWorkspace-bound request" : ""}`,
+      ...(signal ? { signal } : {}),
     });
     if (!approved) throw new Error(`${action.ref} approval was denied or unavailable`);
   }

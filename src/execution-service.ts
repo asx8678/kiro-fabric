@@ -327,7 +327,7 @@ export class FabricExecutionService {
       args: Record<string, unknown>,
       scope = approvalScope,
     ): Promise<FabricApprovalLease> =>
-      (await approval.approve(action, args, scope)) ??
+      (await approval.approve(action, args, scope, options.signal)) ??
       this.sessionApprovals.issueLease(action, args, scope, "explicit-broad");
     const audits: FabricCallAudit[] = [];
     const phases: string[] = [];

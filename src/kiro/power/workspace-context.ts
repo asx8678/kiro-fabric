@@ -40,7 +40,6 @@ export class CachedWorkspaceContextProvider implements WorkspaceContextProvider 
   #snapshot: KiroWorkspaceSnapshot | undefined;
   #stale = true;
   #refresh: Promise<KiroWorkspaceSnapshot> | undefined;
-  #refreshGeneration = -1;
   #invalidationGeneration = 0;
   #revision = 0;
 
@@ -71,47 +70,42 @@ export class CachedWorkspaceContextProvider implements WorkspaceContextProvider 
     ) {
       return this.#snapshot;
     }
-    if (this.#refresh) {
-      if (!options.force || this.#refreshGeneration === this.#invalidationGeneration) {
-        return this.#refresh;
+    if (this.#refresh) return this.#refresh;
+
+    // One refresh owns all invalidations that arrive while it is in flight.
+    // Superseded observations are neither published nor returned: consumers
+    // and subscribers only see a snapshot from the newest generation.
+    this.#refresh = (async () => {
+      while (true) {
+        const generation = this.#invalidationGeneration;
+        const snapshot = await this.#load(this.#now());
+        if (generation !== this.#invalidationGeneration) continue;
+        snapshot.revision = ++this.#revision;
+        this.#stale = snapshot.status === "temporarily-unavailable";
+        this.#publish(snapshot);
+        return snapshot;
       }
-      // A roots-changed notification arrived during discovery. Serialize a
-      // second load after the old one so its late result cannot consume the
-      // invalidation or overwrite fresher roots.
-      return this.#refresh.then(() => this.current({ force: true }));
-    }
-    const generation = this.#invalidationGeneration;
-    this.#refreshGeneration = generation;
-    this.#refresh = this.#load(now, generation).finally(() => { this.#refresh = undefined; });
+    })().finally(() => { this.#refresh = undefined; });
     return this.#refresh;
   }
 
-  async #load(observedAt: number, generation: number): Promise<KiroWorkspaceSnapshot> {
+  async #load(observedAt: number): Promise<KiroWorkspaceSnapshot> {
     try {
       const roots = this.#source.supported() ? [...await this.#source.load()] : [];
-      const snapshot: KiroWorkspaceSnapshot = {
-        revision: ++this.#revision,
+      return {
+        revision: 0,
         status: roots.length === 0 ? "explicitly-empty" : "verified",
         roots,
         observedAt,
       };
-      this.#stale = generation !== this.#invalidationGeneration;
-      this.#publish(snapshot);
-      return snapshot;
     } catch (error) {
-      const previousRoots = this.#snapshot?.roots ?? [];
-      const snapshot: KiroWorkspaceSnapshot = {
-        revision: ++this.#revision,
+      return {
+        revision: 0,
         status: "temporarily-unavailable",
-        roots: previousRoots,
+        roots: this.#snapshot?.roots ?? [],
         observedAt,
         error: error instanceof Error ? error.message : String(error),
       };
-      // Keep retrying on the next request rather than caching a transport
-      // failure for the full healthy-snapshot TTL.
-      this.#stale = true;
-      this.#publish(snapshot);
-      return snapshot;
     }
   }
 
