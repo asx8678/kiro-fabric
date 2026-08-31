@@ -301,6 +301,7 @@ describe("source installer bootstrap", () => {
       join(bin, "pnpm"),
       [
         "#!/bin/sh",
+        "if [ \"$1\" = --version ]; then printf '%s\\n' '11.20.0'; exit 0; fi",
         "printf '%s\\n' \"$*\" >> \"$PREPARE_MARKER\"",
         "if [ \"$1\" = run ] && [ \"$2\" = build ]; then",
         "  printf '%s\\n' 'process.stdout.write(JSON.stringify(process.argv.slice(2)));' > \"$ENTRY_TARGET\"",
@@ -317,7 +318,7 @@ describe("source installer bootstrap", () => {
     });
 
     expect(run.status).toBe(0);
-    expect(readFileSync(marker, "utf8")).toBe("install\nrun build\n");
+    expect(readFileSync(marker, "utf8")).toBe("install --frozen-lockfile\nrun build\n");
     expect(JSON.parse(run.stdout.trim())).toEqual([
       "install",
       "--dry-run",
@@ -326,6 +327,27 @@ describe("source installer bootstrap", () => {
       "--project-root",
       repoRoot,
     ]);
+  });
+
+  itPosix("rejects an unpinned pnpm before installing dependencies", () => {
+    const missing = join(base, "missing-setup.mjs");
+    const bin = project("wrong-pnpm-bin");
+    const marker = join(base, "pnpm-calls");
+    writeFileSync(
+      join(bin, "pnpm"),
+      "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 10.0.0; else printf '%s\\n' \"$*\" >> \"$PREPARE_MARKER\"; fi\n",
+      { mode: 0o755 },
+    );
+
+    const run = runInstaller(missing, ["install", "--dry-run", "--yes"], {
+      KIRO_FABRIC_AUTO_BUILD: "",
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      PREPARE_MARKER: marker,
+    });
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("requires pnpm 11.20.0");
+    expect(existsSync(marker)).toBe(false);
   });
 
   itPosix("gives an actionable error when automatic builds are disabled", () => {

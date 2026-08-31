@@ -357,8 +357,9 @@ sh scripts/install-kiro-fabric.sh install \
 The bootstrap presents a styled progress display on a terminal, locates
 `node`, requires major version 24 or newer, and prints distribution-specific
 install guidance when Node is missing or old. If the compiled setup entry is
-missing, it asks before running `pnpm install` and `pnpm run build`; `corepack
-pnpm` is used as a fallback. Non-interactive source preparation requires
+missing, it asks before running `pnpm install --frozen-lockfile` and
+`pnpm run build`. Source preparation requires the repository package manager,
+`pnpm 11.20.0`; `corepack pnpm@11.20.0` is used as a fallback. Non-interactive source preparation requires
 `--yes` on a mutating command or explicit `KIRO_FABRIC_AUTO_BUILD=1`. Set
 `KIRO_FABRIC_AUTO_BUILD=0` to forbid preparation, `KIRO_FABRIC_REBUILD=1` to
 explicitly force it, or `NO_COLOR=1` to disable styling. No dependency or build

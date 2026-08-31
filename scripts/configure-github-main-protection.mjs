@@ -33,7 +33,7 @@ await api("/branches/main/protection", {
     enforce_admins: true,
     required_pull_request_reviews: {
       dismiss_stale_reviews: true,
-      require_code_owner_reviews: false,
+      require_code_owner_reviews: true,
       required_approving_review_count: 1,
       require_last_push_approval: true,
     },
@@ -48,4 +48,4 @@ await api("/branches/main/protection", {
   }),
 });
 await api("/branches/main/protection/required_signatures", { method: "POST" });
-process.stdout.write(`Protected ${repository}:main with required cross-platform and reproducibility checks\n`);
+process.stdout.write(`Protected ${repository}:main with required CI jobs and code-owner review\n`);

@@ -69,6 +69,15 @@ describe("Fabric configuration migrations", () => {
     ).toThrow(/malformed agents section/);
   });
 
+  it.each(["__proto__", "prototype", "constructor"])(
+    "rejects the forbidden key %s recursively before migration",
+    (key) => {
+      const input = JSON.parse(`{"agents":{"claude":{"${key}":{"polluted":true}}}}`);
+      expect(() => migrateFabricConfigDocument(input)).toThrow(new RegExp(`forbidden key.*${key}`));
+      expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
+    },
+  );
+
   it("rejects invalid and legacy keys in current documents", () => {
     expect(() => migrateFabricConfigDocument({ configVersion: -1 })).toThrow(/non-negative integer/);
     expect(() =>
@@ -191,6 +200,31 @@ describe("Fabric configuration migrations", () => {
     expect(JSON.parse(fs.readFileSync(paths.projectPath, "utf8"))).toMatchObject({
       agents: { maxConcurrent: 7 },
     });
+  });
+
+  it("rejects forbidden keys in persisted files and save overlays without rewriting", () => {
+    const paths = fixture();
+    const malicious = '{"configVersion":4,"memory":{"constructor":{"prototype":{"polluted":true}}}}';
+    fs.writeFileSync(paths.globalPath, malicious);
+    expect(() => loadFabricConfig({ cwd: paths.cwd, agentDir: paths.agentDir, projectTrusted: false }))
+      .toThrow(/forbidden key.*constructor/);
+    expect(fs.readFileSync(paths.globalPath, "utf8")).toBe(malicious);
+
+    const partial = JSON.parse('{"ui":{"__proto__":{"polluted":true}}}');
+    expect(() => saveFabricConfig(
+      { cwd: paths.cwd, agentDir: paths.agentDir, projectTrusted: true },
+      partial,
+    )).toThrow(/forbidden key.*__proto__/);
+    expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
+  });
+
+  it("uses null-prototype objects for migration merges", () => {
+    const result = migrateFabricConfigDocument({
+      subagents: { claude: { model: "old" } },
+      agents: { claude: { binary: "claude" } },
+    });
+    expect(Object.getPrototypeOf(result.document)).toBeNull();
+    expect(Object.getPrototypeOf(result.document.agents)).toBeNull();
   });
 
   it("rejects obsolete or caller-controlled migration metadata on save", () => {

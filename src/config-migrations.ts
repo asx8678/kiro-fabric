@@ -1,4 +1,10 @@
 import { isFabricAgentRunner } from "./agents/runners.js";
+import {
+  assertSafeConfigDocument,
+  isConfigObject,
+  safeConfigClone,
+  safeConfigMerge,
+} from "./config-object.js";
 
 export const CURRENT_FABRIC_CONFIG_VERSION = 4;
 
@@ -17,27 +23,14 @@ interface FabricConfigMigration {
   migrate(document: Readonly<Record<string, unknown>>): Record<string, unknown>;
 }
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const mergeObjects = (
-  base: Record<string, unknown>,
-  override: Record<string, unknown>,
-): Record<string, unknown> => {
-  const merged = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    const current = merged[key];
-    merged[key] = isObject(current) && isObject(value) ? mergeObjects(current, value) : value;
-  }
-  return merged;
-};
+const isObject = isConfigObject;
 
 const migrations: readonly FabricConfigMigration[] = [
   {
     from: 0,
     to: 1,
     migrate(document) {
-      const migrated = { ...document };
+      const migrated = safeConfigClone(document) as Record<string, unknown>;
       const legacy = migrated.subagents;
       const canonical = migrated.agents;
       if (legacy !== undefined) {
@@ -47,7 +40,7 @@ const migrations: readonly FabricConfigMigration[] = [
           );
         }
         migrated.agents = isObject(legacy) && isObject(canonical)
-          ? mergeObjects(legacy, canonical)
+          ? safeConfigMerge(legacy, canonical)
           : canonical ?? legacy;
       }
       delete migrated.subagents;
@@ -58,10 +51,10 @@ const migrations: readonly FabricConfigMigration[] = [
     from: 1,
     to: 2,
     migrate(document) {
-      const migrated = { ...document };
+      const migrated = safeConfigClone(document) as Record<string, unknown>;
       const ui = migrated.ui;
       if (isObject(ui) && Object.hasOwn(ui, "showNestedToolCalls")) {
-        const renamed = { ...ui };
+        const renamed = safeConfigClone(ui) as Record<string, unknown>;
         if (!Object.hasOwn(renamed, "showAgentToolPreview")) {
           renamed.showAgentToolPreview = renamed.showNestedToolCalls;
         }
@@ -75,10 +68,10 @@ const migrations: readonly FabricConfigMigration[] = [
     from: 2,
     to: 3,
     migrate(document) {
-      const migrated = { ...document };
+      const migrated = safeConfigClone(document) as Record<string, unknown>;
       const ui = migrated.ui;
       if (isObject(ui) && Object.hasOwn(ui, "nestedToolDebounceMs")) {
-        const renamed = { ...ui };
+        const renamed = safeConfigClone(ui) as Record<string, unknown>;
         if (!Object.hasOwn(renamed, "updateDebounceMs")) {
           renamed.updateDebounceMs = renamed.nestedToolDebounceMs;
         }
@@ -92,7 +85,7 @@ const migrations: readonly FabricConfigMigration[] = [
     from: 3,
     to: 4,
     migrate(document) {
-      return { ...document };
+      return safeConfigClone(document) as Record<string, unknown>;
     },
   },
 ];
@@ -117,9 +110,10 @@ const configVersion = (document: Readonly<Record<string, unknown>>): number => {
 export const migrateFabricConfigDocument = (
   input: Readonly<Record<string, unknown>>,
 ): FabricConfigMigrationResult => {
+  assertSafeConfigDocument(input);
   const fromVersion = configVersion(input);
   let version = fromVersion;
-  let document = structuredClone(input) as Record<string, unknown>;
+  let document = safeConfigClone(input) as Record<string, unknown>;
   const appliedVersions: number[] = [];
 
   if (fromVersion > CURRENT_FABRIC_CONFIG_VERSION) {

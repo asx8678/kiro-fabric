@@ -1,0 +1,6 @@
+# Security-sensitive runtime, release, and repository policy require owner review.
+* @asx8678
+/.github/ @asx8678
+/scripts/ @asx8678
+/src/ @asx8678
+/SECURITY.md @asx8678

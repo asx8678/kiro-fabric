@@ -5,10 +5,12 @@ release authorization.
 
 ## Automated source gates
 
-`.github/workflows/ci.yml` runs Node 24 on Linux, macOS, and Windows. The Linux
-reproducibility job rebuilds both runtime closures, synchronizes manifests,
-runs protocol certification, and requires `git diff --exit-code` for every
-checked-in generated artifact.
+`.github/workflows/ci.yml` runs Node 24 on Linux, macOS, and Windows. Branch
+protection requires these exact job names: `check (ubuntu-latest, Node 24)`,
+`check (macos-latest, Node 24)`, `check (windows-latest, Node 24)`, and
+`reproducible Power closure`. The reproducibility job rebuilds both runtime
+closures, synchronizes manifests, runs protocol certification, and requires
+`git diff --exit-code` for every checked-in generated artifact.
 
 Run the same gate locally before committing:
 
@@ -29,9 +31,9 @@ permission:
 GH_TOKEN=... GITHUB_REPOSITORY=asx8678/kiro-fabric pnpm run github:protect-main
 ```
 
-The script protects `main`, requires the three Node 24 OS checks plus the
-reproducibility check, enforces signed commits, blocks force pushes/deletion,
-and requires review for future changes. Verify the resulting GitHub ruleset in
+The `github:protect-main` script protects `main`, requires the four CI jobs
+named above, enforces signed commits, blocks force pushes/deletion, and requires
+both an approving review and CODEOWNER review for future changes. Verify the resulting GitHub ruleset in
 the repository settings; absence of that server-side policy is a release
 blocker.
 
@@ -51,6 +53,12 @@ The workflow aggregates all three platforms into
 failed evidence cannot be promoted to a pass.
 
 ## Tagged releases
+
+A maintainer updates the version and changelog on a reviewed branch, runs
+`pnpm run check`, merges only after all required CI jobs pass, then creates and
+pushes a signed `v<package-version>` tag from that exact `main` commit. The
+`Release` workflow is the only supported publication path; do not publish
+artifacts manually or from a branch.
 
 `.github/workflows/release.yml` requires:
 

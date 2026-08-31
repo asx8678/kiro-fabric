@@ -17,6 +17,7 @@ import {
   CURRENT_FABRIC_CONFIG_VERSION,
   migrateFabricConfigDocument,
 } from "./config-migrations.js";
+import { assertSafeConfigDocument, safeConfigMerge } from "./config-object.js";
 
 export type { FabricAgentRunner } from "./agents/runners.js";
 export {
@@ -458,6 +459,7 @@ const readJsonObjectFile = (filePath: string): JsonObjectFile | undefined => {
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       throw new Error("configuration root must be an object");
     }
+    assertSafeConfigDocument(parsed);
     return { document: parsed as Record<string, unknown>, source };
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
@@ -469,31 +471,7 @@ const readJsonObjectFile = (filePath: string): JsonObjectFile | undefined => {
 const readJsonObject = (filePath: string): Record<string, unknown> | undefined =>
   readJsonObjectFile(filePath)?.document;
 
-const mergeObjects = (
-  base: Record<string, unknown>,
-  override: Record<string, unknown>,
-): Record<string, unknown> => {
-  const merged = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    const baseValue = merged[key];
-    if (
-      typeof baseValue === "object" &&
-      baseValue !== null &&
-      !Array.isArray(baseValue) &&
-      typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value)
-    ) {
-      merged[key] = mergeObjects(
-        baseValue as Record<string, unknown>,
-        value as Record<string, unknown>,
-      );
-    } else {
-      merged[key] = value;
-    }
-  }
-  return merged;
-};
+const mergeObjects = safeConfigMerge;
 
 const approvalMode = (value: unknown, fallback: FabricApprovalMode): FabricApprovalMode =>
   value === "allow" || value === "ask" || value === "auto" || value === "deny"
@@ -1320,6 +1298,7 @@ export const saveFabricConfig = (
   const targetPath = scope === "project"
     ? path.join(options.cwd, ".pi", "fabric.json")
     : path.join(options.agentDir, "fabric.json");
+  assertSafeConfigDocument(partial);
   if (Object.hasOwn(partial, "configVersion") || Object.hasOwn(partial, "subagents")) {
     throw new Error("Fabric configuration updates must use the current schema");
   }

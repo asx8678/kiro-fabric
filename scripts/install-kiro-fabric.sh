@@ -96,14 +96,21 @@ done
 ROOT=$(CDPATH= cd -- "$(dirname -- "$SELF")/.." 2>/dev/null && pwd -P) || fail "cannot resolve repository root from: $SELF"
 ENTRY=${KIRO_FABRIC_SETUP_ENTRY:-$ROOT/dist/kiro/setup-entry.js}
 
+PNPM_VERSION=11.20.0
 run_pnpm() {
   if command -v pnpm >/dev/null 2>&1; then
     pnpm "$@"
   elif command -v corepack >/dev/null 2>&1; then
-    corepack pnpm "$@"
+    corepack pnpm@"$PNPM_VERSION" "$@"
   else
-    fail 'pnpm was not found. Install it with: npm install --global pnpm'
+    fail "pnpm $PNPM_VERSION was not found. Install it with: npm install --global pnpm@$PNPM_VERSION"
   fi
+}
+
+require_pinned_pnpm() {
+  FOUND_PNPM_VERSION=$(run_pnpm --version) || fail "could not run pnpm $PNPM_VERSION"
+  [ "$FOUND_PNPM_VERSION" = "$PNPM_VERSION" ] ||
+    fail "source preparation requires pnpm $PNPM_VERSION (found $FOUND_PNPM_VERSION)"
 }
 
 confirm_source_preparation() {
@@ -135,8 +142,9 @@ if [ "$NEEDS_BUILD" -eq 1 ]; then
   fi
 
   warn 'compiled installer is missing; preparing this source checkout now'
+  require_pinned_pnpm
   step 'Installing project dependencies'
-  (cd "$ROOT" && run_pnpm install)
+  (cd "$ROOT" && run_pnpm install --frozen-lockfile)
   ok 'Dependencies ready'
   step 'Building Kiro Fabric'
   (cd "$ROOT" && run_pnpm run build)
