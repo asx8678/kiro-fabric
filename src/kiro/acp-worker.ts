@@ -336,9 +336,9 @@ export const assertKiroWorkerLaunch = (
         `Kiro runner cwd must equal or stay within the worktree root (${executionRoot}); received ${options.cwd}`,
       );
     }
-  } else if (cwd !== projectRoot) {
+  } else if (!isPathWithinOrEqual(projectRoot, cwd)) {
     throw new Error(
-      `Kiro runner cwd must equal the managed project root (${projectRoot}); received ${options.cwd}`,
+      `Kiro runner cwd must stay within the managed project root (${projectRoot}); received ${options.cwd}`,
     );
   }
   const projectManifest = readManifest(projectRoot);
@@ -858,7 +858,10 @@ export const runKiroWorker = async (
   };
 
   const failClosed = (status: AgentRunStatus, error: string): void => {
-    if (terminalStatus) return;
+    // Preserve the first cancellation/failure diagnostic, but never let a
+    // provisional successful prompt response outrank a later protocol or
+    // permission violation observed before process settlement.
+    if (terminalStatus && terminalStatus !== "completed") return;
     terminalStatus = status;
     terminalError = error.slice(0, MAX_RUN_ERROR_CHARS);
     frozen = true;
@@ -1384,7 +1387,12 @@ export const runKiroWorker = async (
       };
       syncResidentQueue();
       while (!terminalStatus && !frozen) {
-        const commands = readKiroSteerCommands(options.steerFile, steerState);
+        // Do not read another bounded steer-file page while messages from the
+        // current page remain queued. Otherwise one-at-a-time mode can append
+        // 255 messages per turn and grow pendingMessages without bound.
+        const commands = steerQueue.length === 0 && followQueue.length === 0
+          ? readKiroSteerCommands(options.steerFile, steerState)
+          : [];
         let sawNewPrompt = false;
         for (const command of commands) {
           if (command.type === "steer" && typeof command.message === "string") {
@@ -1434,6 +1442,9 @@ export const runKiroWorker = async (
                 // earlier failure can therefore never discard later items.
                 nextQueue.shift();
                 delivered = true;
+                // Idle grace begins after work finishes, not when it starts;
+                // a long ACP turn must not consume the resident idle window.
+                idleStartedAt = Date.now();
               }
             } finally {
               activeResidentMessage = undefined;

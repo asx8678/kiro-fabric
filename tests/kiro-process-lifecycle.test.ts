@@ -42,6 +42,18 @@ const invalidJsonRpcChild = (): string => {
   return script;
 };
 
+const stderrExitChild = (): string => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-stderr-rpc-"));
+  roots.push(root);
+  const script = path.join(root, "child.mjs");
+  fs.writeFileSync(script, [
+    'process.stderr.write("specific probe startup failure\\n");',
+    'process.stdin.resume();',
+    'setTimeout(() => process.exit(9), 20);',
+  ].join("\n"));
+  return script;
+};
+
 const malformedChild = (stubborn = false, detachedDescendant = true) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-protocol-child-"));
   roots.push(root);
@@ -136,6 +148,20 @@ describe("Kiro process lifecycle", () => {
       await expect(doctor.call("test", {})).rejects.toThrow("must include exactly one");
     } finally {
       await doctor.terminate(100, 500);
+    }
+  });
+
+  it("includes bounded stderr diagnostics when a supervisor child exits pending", async () => {
+    const processHandle = spawnJsonRpcProcess({
+      argv: [stderrExitChild()],
+      timeoutMs: 5_000,
+    });
+    try {
+      await expect(processHandle.call("probe/test", {})).rejects.toThrow(
+        /specific probe startup failure/,
+      );
+    } finally {
+      await processHandle.terminate(100, 500);
     }
   });
 

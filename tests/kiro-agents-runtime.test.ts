@@ -250,6 +250,54 @@ describe("managed Kiro ACP agents", () => {
     }
   });
 
+  it("does not probe the model list on the first run when inventory is unknown", async () => {
+    const { project, runRoot } = fixture();
+    const runtime = createKiroRuntime({
+      cwd: project,
+      allowExecute: true,
+      enableSubagents: true,
+      agentWorkerPath: fakeWorker,
+      agentRunRoot: runRoot,
+      // Discovery would fail if the first run tried to execute this sentinel.
+      kiroBinary: "kiro-cli-model-probe-must-not-run",
+    });
+    try {
+      const run = await execute(
+        runtime,
+        'return await agents.run({ task: "Implement a parser and add unit tests", tools: [] });',
+      );
+      expect(run.success).toBe(true);
+      expect(run.value).not.toHaveProperty("model");
+      expect(run.value).not.toHaveProperty("thinking");
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  it("allows an explicit child cwd inside the managed project", async () => {
+    const { project, runRoot } = fixture();
+    mkdirSync(join(project, "packages"), { recursive: true });
+    const runtime = createKiroRuntime({
+      cwd: project,
+      allowExecute: true,
+      enableSubagents: true,
+      agentWorkerPath: fakeWorker,
+      agentRunRoot: runRoot,
+      kiroBinary: "kiro-cli-test-sentinel",
+      agentAvailableModelIds: routedModelIds,
+    });
+    try {
+      const run = await execute(
+        runtime,
+        'return await agents.run({ task: "Work in package", cwd: "packages", tools: [] });',
+      );
+      expect(run.success).toBe(true);
+      expect(run.value).toMatchObject({ cwd: realpathSync(join(project, "packages")) });
+    } finally {
+      await runtime.close();
+    }
+  });
+
   it("falls back to true Kiro auto when a preferred route is not advertised", async () => {
     const { project, runRoot } = fixture();
     const runtime = createKiroRuntime({

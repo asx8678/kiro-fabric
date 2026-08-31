@@ -64,9 +64,9 @@ const stringArray = (value: unknown, label: string): string[] | undefined => {
 
 const isWithinOrEqual = (root: string, candidate: string): boolean => {
   const child = relative(root, candidate);
-  if (child === "" || child === ".") return true;
-  if (isAbsolute(child)) return false;
-  return child.split(sep).filter(Boolean)[0] !== "..";
+  return child === "" || child === "." || (
+    !isAbsolute(child) && !child.startsWith(`..${sep}`) && child !== ".."
+  );
 };
 
 const progressLabel = (status: ReturnType<KiroAgentManager["status"]>): string => {
@@ -189,9 +189,9 @@ export class KiroAgentsProvider implements FabricProvider {
     let cwd: string | undefined;
     if (typeof args.cwd === "string") {
       cwd = this.manager.resolveCwd(args.cwd);
-      if (!isWithinOrEqual(this.manager.cwd, cwd) || cwd !== this.manager.cwd) {
+      if (!isWithinOrEqual(this.manager.cwd, cwd)) {
         throw new Error(
-          "Managed Kiro ACP children must use the directory where kiro-cli was launched",
+          "Managed Kiro ACP child cwd must stay within the directory where kiro-cli was launched",
         );
       }
     }
@@ -205,11 +205,13 @@ export class KiroAgentsProvider implements FabricProvider {
     // both model and effort selection entirely so Kiro picks by task;
     // explicit thinking always overrides a routed default.
     const route = requestedModel ? undefined : resolveKiroTaskRoute(task);
-    const routedModelAvailable = !route?.model || new Set(
-      this.availableModelIds ??
-        (await this.#models(false) as Array<{ id?: unknown }>).flatMap((entry) =>
-          typeof entry.id === "string" ? [entry.id] : []),
-    ).has(route.model);
+    // Model discovery is an explicit agents.models operation. Do not add a
+    // version/model-list subprocess to the first agent launch merely to apply
+    // an optional route; without a known inventory, defer model and effort to
+    // Kiro's native auto selection.
+    const routedModelAvailable = !route?.model || (
+      this.availableModelIds !== undefined && new Set(this.availableModelIds).has(route.model)
+    );
     const useKiroAuto = explicitlyAuto || !routedModelAvailable;
     const model = useKiroAuto ? undefined : requestedModel || route?.model;
     const thinking = explicitThinking ?? (useKiroAuto ? undefined : route?.thinking);

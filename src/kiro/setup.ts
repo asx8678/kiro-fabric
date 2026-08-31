@@ -796,15 +796,20 @@ const runLaunch = async (parsed: SetupArgs): Promise<number> => {
     let escalation: Promise<unknown> | undefined;
     const forward = (signal: NodeJS.Signals, code: number): void => {
       interruptedCode ??= code;
-      if (!processTree) return;
+      if (!processTree || processTree.gone()) return;
       if (escalation) {
-        void processTree.terminate(0, 2_000);
+        // A repeated signal requests escalation, but do not signal a process
+        // group that completed between the two setup lifecycle events.
+        if (!processTree.gone()) void processTree.terminate(0, 2_000);
         return;
       }
       escalation = processTree.signal(signal).then(async () => {
         if (processTree.gone()) return;
         await new Promise((resolve) => setTimeout(resolve, 3_000));
         if (!processTree.gone()) await processTree.terminate(0, 2_000);
+      }).catch(() => {
+        // The child close/error outcome remains authoritative; forwarding is
+        // best-effort and must not create an unhandled setup rejection.
       });
     };
     const onSighup = (): void => forward("SIGHUP", 129);

@@ -88,6 +88,7 @@ if (scenario === "malformed") {
   const resident =
     scenario === "resident" ||
     scenario === "resident-load" ||
+    scenario === "resident-slow" ||
     scenario === "resident-refuse-second";
   const loadSession =
     scenario === "load" || scenario === "load-no-id" || scenario === "resident-load";
@@ -604,6 +605,10 @@ if (scenario === "malformed") {
       }
       if (scenario === "bad-stop") {
         send({ jsonrpc: "2.0", id: msg.id, result: { stopReason: "explode" } });
+        return;
+      }
+      if (scenario === "resident-slow" && (promptCounts.get(sessionId) ?? 0) > 1) {
+        setTimeout(() => send({ jsonrpc: "2.0", id: msg.id, result: { stopReason: "end_turn" } }), 250);
         return;
       }
       send({ jsonrpc: "2.0", id: msg.id, result: { stopReason: "end_turn" } });

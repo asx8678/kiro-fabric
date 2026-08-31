@@ -1031,6 +1031,70 @@ describe("runKiroWorker resident session", () => {
     }
   });
 
+  it("starts idle grace after a slow resident turn completes", async () => {
+    const root = tempRoot("kiro-fabric-kiro-resident-slow-idle-");
+    const wrapper = writeWrapper(root);
+    await installFake(root, wrapper);
+    const steerFile = join(root, "run", "steer.jsonl");
+    mkdirSync(join(root, "run"), { recursive: true });
+    writeFileSync(steerFile, "", { encoding: "utf8", mode: 0o600 });
+    process.env.FAKE_KIRO_WORKER_SCENARIO = "resident-slow";
+    process.env.KIRO_FABRIC_KIRO_IDLE_MS = "120";
+    try {
+      const run = runKiroWorker(workerOptions(root, wrapper, { steerFile }), helpers);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const started = Date.now();
+      appendFileSync(steerFile, `${JSON.stringify({ type: "steer", message: "slow turn" })}\n`);
+      const record = await run;
+      expect(record.status).toBe("completed");
+      expect(record.turns).toBe(2);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(330);
+    } finally {
+      delete process.env.FAKE_KIRO_WORKER_SCENARIO;
+      delete process.env.KIRO_FABRIC_KIRO_IDLE_MS;
+    }
+  });
+
+  it("bounds in-memory resident queues while draining a large steer file", async () => {
+    const root = tempRoot("kiro-fabric-kiro-resident-bounded-");
+    const wrapper = writeWrapper(root);
+    await installFake(root, wrapper);
+    const steerFile = join(root, "run", "steer.jsonl");
+    mkdirSync(join(root, "run"), { recursive: true });
+    writeFileSync(
+      steerFile,
+      Array.from({ length: 300 }, (_, index) =>
+        JSON.stringify({ type: "steer", message: `queued-${index}` })
+      ).join("\n") + "\n",
+    );
+    process.env.FAKE_KIRO_WORKER_SCENARIO = "resident";
+    process.env.KIRO_FABRIC_KIRO_IDLE_MS = "20";
+    let maxPending = 0;
+    const boundedHelpers: KiroWorkerRecordHelpers = {
+      ...helpers,
+      updateRunRecord(filePath, record) {
+        maxPending = Math.max(
+          maxPending,
+          (record.pendingMessages?.steering.length ?? 0) +
+            (record.pendingMessages?.followUp.length ?? 0),
+        );
+        updateRunRecord(filePath, record as never);
+      },
+    };
+    try {
+      const record = await runKiroWorker(
+        workerOptions(root, wrapper, { steerFile, timeoutMs: 10_000 }),
+        boundedHelpers,
+      );
+      expect(record.status).toBe("completed");
+      expect(record.turns).toBe(301);
+      expect(maxPending).toBeLessThanOrEqual(256);
+    } finally {
+      delete process.env.FAKE_KIRO_WORKER_SCENARIO;
+      delete process.env.KIRO_FABRIC_KIRO_IDLE_MS;
+    }
+  });
+
   it("resumes a resident session via session/load", async () => {
     const root = tempRoot("kiro-fabric-kiro-resident-load-");
     const wrapper = writeWrapper(root);

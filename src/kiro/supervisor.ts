@@ -4,10 +4,21 @@
 // poll group disappearance. Protocol history and stderr are bounded.
 
 import { spawn, type ChildProcess } from "node:child_process";
+import path from "node:path";
+import { resolveScriptRuntimeSync } from "../agents/transports/process-utils.js";
 import { createProcessTreeController } from "../worker/process-tree.js";
 import { formatJsonRpcError, parseJsonRpcFrame } from "./json-rpc-frame.js";
 
 const STDERR_LIMIT = 4096;
+const NODE_SCRIPT_EXTENSIONS = new Set([".js", ".cjs", ".mjs", ".ts", ".cts", ".mts"]);
+
+const scriptRuntime = (env?: NodeJS.ProcessEnv): string => {
+  try {
+    return resolveScriptRuntimeSync({ env: { ...process.env, ...env }, requireNode: true });
+  } catch {
+    return "node";
+  }
+};
 
 export interface SupervisedProcessOptions {
   argv: string[];
@@ -35,12 +46,18 @@ interface PendingCall {
  * recorded so callers can prove no billable method (session/prompt) was sent.
  */
 export const spawnJsonRpcProcess = (options: SupervisedProcessOptions) => {
-  const child: ChildProcess = spawn(options.argv[0]!, options.argv.slice(1), {
-    cwd: options.cwd,
-    env: options.env,
-    detached: process.platform !== "win32",
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const command = options.argv[0]!;
+  const script = NODE_SCRIPT_EXTENSIONS.has(path.extname(command).toLowerCase());
+  const child: ChildProcess = spawn(
+    script ? scriptRuntime(options.env) : command,
+    script ? [command, ...options.argv.slice(1)] : options.argv.slice(1),
+    {
+      cwd: options.cwd,
+      env: options.env,
+      detached: process.platform !== "win32",
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
   // Attach an error handler before reading `pid`: a missing binary fails with
   // asynchronous ENOENT and `pid === undefined`, so the event must be captured
   // before it can escape as an uncaught ChildProcess "error".
@@ -68,6 +85,9 @@ export const spawnJsonRpcProcess = (options: SupervisedProcessOptions) => {
   let closeError: Error | null = null;
   let terminatePromise: Promise<{ escalated: boolean }> | undefined;
 
+  const withStderr = (message: string): string =>
+    stderrTail.trim() ? `${message}; stderr: ${stderrTail.trim()}` : message;
+
   const rejectAll = (error: Error): void => {
     closeError = error;
     for (const call of pending.values()) call.reject(error);
@@ -83,9 +103,9 @@ export const spawnJsonRpcProcess = (options: SupervisedProcessOptions) => {
   };
 
   const timer = setTimeout(() => {
-    fail(new ProbeError(
+    fail(new ProbeError(withStderr(
       `probe timed out after ${options.timeoutMs}ms: ${options.argv.join(" ")}`,
-    ));
+    )));
   }, options.timeoutMs);
   timer.unref?.();
 
@@ -129,7 +149,7 @@ export const spawnJsonRpcProcess = (options: SupervisedProcessOptions) => {
   });
   child.on("close", () => {
     if (!closed && !fatal && pending.size > 0) {
-      fail(new ProbeError("probe child exited while requests were pending"));
+      fail(new ProbeError(withStderr("probe child exited while requests were pending")));
     }
   });
 
@@ -156,19 +176,38 @@ export const spawnJsonRpcProcess = (options: SupervisedProcessOptions) => {
     const frame = JSON.stringify({ jsonrpc: "2.0", id, method, params });
     return new Promise<T>((resolvePromise, rejectPromise) => {
       pending.set(id, { resolve: resolvePromise as (value: unknown) => void, reject: rejectPromise, method });
-      child.stdin!.write(frame + "\n", (error) => {
-        if (error) {
-          pending.delete(id);
-          rejectPromise(new ProbeError(`failed writing ${method}: ${error.message}`));
-        }
-      });
+      try {
+        child.stdin!.write(frame + "\n", (error) => {
+          if (error) {
+            pending.delete(id);
+            const failure = new ProbeError(withStderr(`failed writing ${method}: ${error.message}`));
+            rejectPromise(failure);
+            fail(failure);
+          }
+        });
+      } catch (error) {
+        pending.delete(id);
+        const failure = new ProbeError(withStderr(
+          `failed writing ${method}: ${error instanceof Error ? error.message : String(error)}`,
+        ));
+        rejectPromise(failure);
+        fail(failure);
+      }
     });
   };
 
   const notify = (method: string, params: unknown): void => {
     if (closed || fatal) return;
     outboundMethods.push(method);
-    child.stdin!.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
+    try {
+      child.stdin!.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n", (error) => {
+        if (error) fail(new ProbeError(withStderr(`failed writing ${method}: ${error.message}`)));
+      });
+    } catch (error) {
+      fail(new ProbeError(withStderr(
+        `failed writing ${method}: ${error instanceof Error ? error.message : String(error)}`,
+      )));
+    }
   };
 
   return {

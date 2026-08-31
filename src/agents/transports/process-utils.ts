@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { createProcessTreeController } from "../../worker/process-tree.js";
 
@@ -148,14 +149,28 @@ export const spawnDetached = async (
   workerPath: string,
   workerArguments: string[],
   cwd: string,
-  options: { ambientHelpers?: boolean } = {},
+  options: { ambientHelpers?: boolean; stdoutPath?: string; stderrPath?: string } = {},
 ): Promise<{ pid: number; stop(): Promise<void>; isAlive(): Promise<boolean> }> => {
   const runtime = await resolveScriptRuntime();
-  const child = spawn(runtime, [workerPath, ...workerArguments], {
-    cwd,
-    detached: process.platform !== "win32",
-    stdio: "ignore",
-  });
+  let stdout: number | undefined;
+  let stderr: number | undefined;
+  let child;
+  try {
+    stdout = options.stdoutPath === undefined
+      ? undefined
+      : fs.openSync(options.stdoutPath, "a", 0o600);
+    stderr = options.stderrPath === undefined
+      ? undefined
+      : fs.openSync(options.stderrPath, "a", 0o600);
+    child = spawn(runtime, [workerPath, ...workerArguments], {
+      cwd,
+      detached: process.platform !== "win32",
+      stdio: ["ignore", stdout ?? "ignore", stderr ?? "ignore"],
+    });
+  } finally {
+    if (stdout !== undefined) fs.closeSync(stdout);
+    if (stderr !== undefined) fs.closeSync(stderr);
+  }
   if (!child.pid) throw new Error("Failed to launch Fabric worker process");
   const pid = child.pid;
   const tree = createProcessTreeController(pid, {

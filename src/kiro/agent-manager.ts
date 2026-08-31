@@ -24,6 +24,7 @@ const TRANSPORT_EXIT_GRACE_MS = 1_000;
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 24 * 3_600_000;
 const MAX_NAME_LENGTH = 60;
+export const MAX_KIRO_STEER_FILE_BYTES = 4 * 1024 * 1024;
 const terminalStatuses = new Set(["completed", "failed", "stopped", "timed_out"]);
 
 export interface KiroAgentManagerOptions {
@@ -51,6 +52,7 @@ interface ManagedKiroAgent {
   residency: "one-shot" | "resident";
   abortSignal: AbortSignal | undefined;
   abortHandler: (() => void) | undefined;
+  stopRequested: boolean;
 }
 
 const delay = (milliseconds: number): Promise<void> =>
@@ -173,8 +175,13 @@ export class KiroAgentManager {
         this.#waiters.push(wake);
         signal?.addEventListener("abort", abort, { once: true });
       });
-      if (this.#closing) throw new Error("Kiro agent manager is closing");
-      if (signal?.aborted) throw new Error("Agent launch aborted");
+      if (this.#closing || signal?.aborted) {
+        // The release that selected this waiter made capacity available. If the
+        // selected launch can no longer use it, hand that capacity to the next
+        // waiter instead of leaving the lane idle indefinitely.
+        this.#waiters.shift()?.();
+        throw new Error(this.#closing ? "Kiro agent manager is closing" : "Agent launch aborted");
+      }
     }
     if (this.#closing) throw new Error("Kiro agent manager is closing");
     this.#active += 1;
@@ -222,6 +229,8 @@ export class KiroAgentManager {
       const taskFile = path.join(runDirectory, "task.txt");
       const statusFile = path.join(runDirectory, "status.json");
       const logFile = path.join(runDirectory, "events.jsonl");
+      const stdoutFile = path.join(runDirectory, "worker.stdout.log");
+      const stderrFile = path.join(runDirectory, "worker.stderr.log");
       const steerFile = path.join(runDirectory, "steer.jsonl");
       const schemaFile = request.schema ? path.join(runDirectory, "schema.json") : undefined;
       const contextFile = request.kiroContext ? path.join(runDirectory, "kiro-context.json") : undefined;
@@ -264,7 +273,7 @@ export class KiroAgentManager {
         this.#workerPath,
         workerArguments,
         agentCwd,
-        { ambientHelpers: false },
+        { ambientHelpers: false, stdoutPath: stdoutFile, stderrPath: stderrFile },
       );
       const transport: AgentTransportHandle = {
         kind: "process",
@@ -281,7 +290,7 @@ export class KiroAgentManager {
       const managed: ManagedKiroAgent = {
         id, name, task: request.task, cwd: agentCwd, runDirectory, statusFile,
         transport, result, resolve: resolveResult, release, settled: false,
-        residency, abortSignal: signal, abortHandler: undefined,
+        residency, abortSignal: signal, abortHandler: undefined, stopRequested: false,
         ...(request.model ? { model: request.model } : {}),
         ...(thinking ? { thinking } : {}),
       };
@@ -291,7 +300,17 @@ export class KiroAgentManager {
       }
       this.#runs.set(id, managed);
       launchDirectory = undefined;
-      void this.#monitor(managed, timeoutMs);
+      void this.#monitor(managed, timeoutMs).catch((error: unknown) => {
+        if (managed.settled || managed.stopRequested) return;
+        const reason = error instanceof Error ? error.message : String(error);
+        const failed = this.#failure(
+          managed,
+          "failed",
+          `Agent monitor failed: ${reason}${this.#workerDiagnostic(managed)}`,
+        );
+        try { writeRecord(managed.statusFile, failed); } catch { /* run directory may be unavailable */ }
+        this.#settle(managed, failed);
+      });
       return this.#handle(managed, "running");
     } catch (error) {
       if (launchDirectory) fs.rmSync(launchDirectory, { recursive: true, force: true });
@@ -348,12 +367,29 @@ export class KiroAgentManager {
       this.#settle(managed, result);
       return result;
     }
-    await managed.transport.stop();
+    // This synchronous ownership marker linearizes stop against the detached
+    // monitor. Once set, only stop may classify the run's terminal outcome.
+    managed.stopRequested = true;
+    try {
+      await managed.transport.stop();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const stopped = this.#failure(
+        managed,
+        "stopped",
+        `Agent stopped; transport cleanup failed: ${reason}${this.#workerDiagnostic(managed)}`,
+      );
+      try { writeRecord(managed.statusFile, stopped); } catch { /* preserve waiter settlement */ }
+      this.#settle(managed, stopped);
+      return stopped;
+    }
     const terminal = readRecord(managed.statusFile);
-    const result = terminal && terminalStatuses.has(terminal.status)
+    const result = terminal?.status === "stopped"
       ? this.#metadata(terminal, managed) as AgentRunResult
-      : this.#failure(managed, "stopped", "Agent stopped");
-    if (!terminal || !terminalStatuses.has(terminal.status)) writeRecord(managed.statusFile, result);
+      : this.#failure(managed, "stopped", `Agent stopped${this.#workerDiagnostic(managed)}`);
+    if (terminal?.status !== "stopped") {
+      try { writeRecord(managed.statusFile, result); } catch { /* preserve waiter settlement */ }
+    }
     this.#settle(managed, result);
     return result;
   }
@@ -413,7 +449,15 @@ export class KiroAgentManager {
     if (bytes > MAX_AGENT_STEER_LINE_BYTES) {
       throw new Error(`Fabric agent steering command is too large (${bytes} bytes; maximum ${MAX_AGENT_STEER_LINE_BYTES})`);
     }
-    fs.appendFileSync(path.join(managed.runDirectory, "steer.jsonl"), line, { encoding: "utf8", mode: 0o600 });
+    const steerFile = path.join(managed.runDirectory, "steer.jsonl");
+    let queuedBytes = 0;
+    try { queuedBytes = fs.statSync(steerFile).size; } catch { /* first command */ }
+    if (queuedBytes + bytes > MAX_KIRO_STEER_FILE_BYTES) {
+      throw new Error(
+        `Fabric agent steering queue is full (${queuedBytes} bytes; maximum ${MAX_KIRO_STEER_FILE_BYTES})`,
+      );
+    }
+    fs.appendFileSync(steerFile, line, { encoding: "utf8", mode: 0o600 });
     return { queued: true, messageId };
   }
 
@@ -457,6 +501,16 @@ export class KiroAgentManager {
       ...(managed.model && !record.model ? { model: managed.model } : {}),
       ...(managed.thinking && !record.thinking ? { thinking: managed.thinking } : {}),
     };
+  }
+
+  #workerDiagnostic(managed: ManagedKiroAgent): string {
+    const stderrFile = path.join(managed.runDirectory, "worker.stderr.log");
+    try {
+      const bytes = fs.statSync(stderrFile).size;
+      return bytes > 0 ? `; worker stderr captured (${bytes} bytes) at ${stderrFile}` : "";
+    } catch {
+      return "";
+    }
   }
 
   #failure(
@@ -505,7 +559,7 @@ export class KiroAgentManager {
   async #monitor(managed: ManagedKiroAgent, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs + TRANSPORT_EXIT_GRACE_MS;
     let deadSince: number | undefined;
-    while (!managed.settled) {
+    while (!managed.settled && !managed.stopRequested) {
       const record = readRecord(managed.statusFile);
       if (record) managed.latestRecord = record;
       if (record && terminalStatuses.has(record.status)) {
@@ -514,16 +568,22 @@ export class KiroAgentManager {
       }
       if (Date.now() >= deadline) {
         await managed.transport.stop();
+        if (managed.stopRequested || managed.settled) return;
         const timedOut = this.#failure(managed, "timed_out", `Agent timed out after ${timeoutMs}ms`);
         writeRecord(managed.statusFile, timedOut);
         this.#settle(managed, timedOut);
         return;
       }
       const alive = await managed.transport.isAlive();
+      if (managed.stopRequested || managed.settled) return;
       if (!alive) {
         deadSince ??= Date.now();
         if (Date.now() - deadSince >= TRANSPORT_EXIT_GRACE_MS) {
-          const failed = this.#failure(managed, "failed", "Agent transport exited without a result");
+          const failed = this.#failure(
+            managed,
+            "failed",
+            `Agent transport exited without a result${this.#workerDiagnostic(managed)}`,
+          );
           writeRecord(managed.statusFile, failed);
           this.#settle(managed, failed);
           return;

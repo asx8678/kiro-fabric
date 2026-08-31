@@ -5,10 +5,21 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { createProcessTreeController } from "../worker/process-tree.js";
+import { resolveScriptRuntimeSync } from "../agents/transports/process-utils.js";
 import { formatJsonRpcError, parseJsonRpcFrame } from "./json-rpc-frame.js";
 
 const NODE_SCRIPT_EXTENSIONS = new Set([".js", ".cjs", ".mjs", ".ts", ".cts", ".mts"]);
 const DEFAULT_MAX_FRAME_BYTES = 4 * 1024 * 1024;
+
+const scriptRuntime = (env?: NodeJS.ProcessEnv): string => {
+  try {
+    return resolveScriptRuntimeSync({ env: { ...process.env, ...env }, requireNode: true });
+  } catch {
+    // Synchronous process clients cannot probe PATH. Let spawn resolve the
+    // generic Node command and report ENOENT through its controlled error path.
+    return "node";
+  }
+};
 
 export class AcpProcessError extends Error {
   constructor(message: string) {
@@ -56,7 +67,7 @@ const spawnCommand = (
   options: { cwd?: string; env?: NodeJS.ProcessEnv },
 ): ChildProcess =>
   NODE_SCRIPT_EXTENSIONS.has(path.extname(command).toLowerCase())
-    ? spawn(options.env?.KIRO_FABRIC_NODE_BINARY ?? process.env.KIRO_FABRIC_NODE_BINARY ?? process.execPath, [command, ...args], {
+    ? spawn(scriptRuntime(options.env), [command, ...args], {
         cwd: options.cwd,
         env: options.env,
         detached: process.platform !== "win32",
@@ -105,6 +116,9 @@ export const spawnAcpProcess = (options: AcpProcessOptions) => {
   let lastEscalated = false;
   let fatal = false;
   let terminatePromise: Promise<{ escalated: boolean }> | undefined;
+
+  const withStderrDiagnostic = (message: string): string =>
+    stderrBytes > 0 ? `${message}; ACP child stderr redacted (${stderrBytes} bytes)` : message;
 
   const rejectAll = (error: Error): void => {
     closeError = error;
@@ -211,7 +225,7 @@ export const spawnAcpProcess = (options: AcpProcessOptions) => {
   child.on("close", () => {
     if (closed || fatal) return;
     if (pending.size > 0) {
-      fail(new AcpProcessError("ACP process exited while requests were pending"));
+      fail(new AcpProcessError(withStderrDiagnostic("ACP process exited while requests were pending")));
     }
   });
 
@@ -241,11 +255,19 @@ export const spawnAcpProcess = (options: AcpProcessOptions) => {
     if (closed || fatal) {
       throw closeError ?? new AcpProcessError("ACP process is closed");
     }
-    child.stdin!.write(`${JSON.stringify(frame)}\n`, (error) => {
-      if (error) {
-        fail(new AcpProcessError(`failed writing ACP frame: ${error.message}`));
-      }
-    });
+    try {
+      child.stdin!.write(`${JSON.stringify(frame)}\n`, (error) => {
+        if (error) {
+          fail(new AcpProcessError(withStderrDiagnostic(`failed writing ACP frame: ${error.message}`)));
+        }
+      });
+    } catch (error) {
+      const failure = new AcpProcessError(withStderrDiagnostic(
+        `failed writing ACP frame: ${error instanceof Error ? error.message : String(error)}`,
+      ));
+      fail(failure);
+      throw failure;
+    }
   };
 
   const call = <T>(method: string, params: unknown): Promise<T> => {
@@ -274,8 +296,8 @@ export const spawnAcpProcess = (options: AcpProcessOptions) => {
     outboundMethods.push(method);
     try {
       writeFrame({ jsonrpc: "2.0", method, params });
-    } catch {
-      // shutdown already in progress
+    } catch (error) {
+      fail(error instanceof Error ? error : new AcpProcessError(String(error)));
     }
   };
 
@@ -283,8 +305,8 @@ export const spawnAcpProcess = (options: AcpProcessOptions) => {
     if (closed || fatal) return;
     try {
       writeFrame({ jsonrpc: "2.0", id, result });
-    } catch {
-      // shutdown already in progress
+    } catch (error) {
+      fail(error instanceof Error ? error : new AcpProcessError(String(error)));
     }
   };
 
@@ -292,8 +314,8 @@ export const spawnAcpProcess = (options: AcpProcessOptions) => {
     if (closed || fatal) return;
     try {
       writeFrame({ jsonrpc: "2.0", id, error: { code, message } });
-    } catch {
-      // shutdown already in progress
+    } catch (error) {
+      fail(error instanceof Error ? error : new AcpProcessError(String(error)));
     }
   };
 

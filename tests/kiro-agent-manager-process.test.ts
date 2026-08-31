@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { processIsAlive } from "../src/agents/transports/process-utils.js";
-import { KiroAgentManager } from "../src/kiro/agent-manager.js";
+import {
+  KiroAgentManager,
+  MAX_KIRO_STEER_FILE_BYTES,
+} from "../src/kiro/agent-manager.js";
 
 const managers: KiroAgentManager[] = [];
 const waitForFile = async (file: string): Promise<void> => {
@@ -37,8 +40,22 @@ if (task === "HANG") {
     setTimeout(() => process.exit(0), 150);
   });
 }
+if (task === "COMPLETE_ON_TERM") {
+  process.on("SIGTERM", () => {
+    const completed = {
+      format: 2, id, name, task, status: "completed", runner: "kiro",
+      transport: "process", cwd, startedAt: now, updatedAt: Date.now(),
+      finishedAt: Date.now(), turns: 1, toolCalls: 0, text: "too late",
+      usage: { availability: "unavailable", reason: "runner-does-not-report", input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
+    };
+    fs.writeFileSync(statusFile, JSON.stringify(completed));
+    process.exit(0);
+  });
+}
 fs.writeFileSync(logFile, JSON.stringify({ type: "worker.started", task }) + "\n");
-if (task === "HANG") {
+if (task === "CRASH") {
+  process.stderr.write("fixture worker failed before status\n", () => process.exit(7));
+} else if (task === "HANG" || task === "COMPLETE_ON_TERM") {
   setInterval(() => {}, 1000);
 } else {
   const record = {
@@ -124,6 +141,12 @@ describe("KiroAgentManager process runtime", () => {
     expect(commands[0]?.id).toBe(steer.messageId);
     expect(commands[1]?.id).toBe(followUp.messageId);
 
+    writeFileSync(
+      join(runRoot, handle.id, "steer.jsonl"),
+      "x".repeat(MAX_KIRO_STEER_FILE_BYTES),
+    );
+    expect(() => instance.steer(handle.id, "queue overflow")).toThrow(/queue is full/);
+
     await waitForFile(join(runRoot, handle.id, "events.jsonl"));
     const pid = Number(handle.sessionId);
     const startedStopping = Date.now();
@@ -132,6 +155,27 @@ describe("KiroAgentManager process runtime", () => {
     expect(Date.now() - startedStopping).toBeGreaterThanOrEqual(100);
     expect(processIsAlive(pid)).toBe(false);
     expect(() => instance.steer(handle.id, "too late")).toThrow(/already finished/);
+  });
+
+  it("settles detached monitor failures and retains bounded worker diagnostics", async () => {
+    const { instance, runRoot } = manager();
+    const result = await instance.run({ task: "CRASH", tools: [] });
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toMatch(/transport exited without a result/);
+    expect(result.error).toMatch(/worker stderr captured/);
+    expect(readFileSync(join(runRoot, result.id, "worker.stderr.log"), "utf8"))
+      .toContain("fixture worker failed before status");
+  });
+
+  it("lets an explicit stop own terminal classification against the monitor", async () => {
+    const { instance, runRoot } = manager();
+    const handle = await instance.spawn({ task: "COMPLETE_ON_TERM", tools: [] });
+    await waitForFile(join(runRoot, handle.id, "events.jsonl"));
+
+    const result = await instance.stop(handle.id);
+    expect(result.status).toBe("stopped");
+    expect(instance.status(handle.id)).toMatchObject({ status: "stopped" });
   });
 
   it("never invokes ambient ps helpers while controlling managed Kiro workers", async () => {
@@ -152,6 +196,27 @@ describe("KiroAgentManager process runtime", () => {
       else process.env.PATH = previousPath;
     }
     expect(existsSync(marker)).toBe(false);
+  });
+
+  it("hands a released slot onward when the selected waiter aborts", async () => {
+    const { instance } = manager({ maxConcurrent: 1 });
+    const first = await instance.spawn({ task: "HANG", tools: [] });
+    let selected = false;
+    const selectedAbort = {
+      get aborted() { return selected; },
+      addEventListener() {},
+      removeEventListener() { selected = true; },
+    } as unknown as AbortSignal;
+    const aborted = instance.spawn({ task: "must-abort", tools: [] }, selectedAbort);
+    const next = instance.run({ task: "must-run", tools: [] });
+
+    await instance.stop(first.id);
+    await expect(aborted).rejects.toThrow(/launch aborted/);
+    const result = await Promise.race([
+      next,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("slot was lost")), 2_000)),
+    ]);
+    expect(result.status).toBe("completed");
   });
 
   it("rejects queued launches when close begins and never starts another worker", async () => {
