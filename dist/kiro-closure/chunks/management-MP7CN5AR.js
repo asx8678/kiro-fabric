@@ -11,10 +11,10 @@ import {
   inspectFabricConfig,
   require_dist,
   resolveAgentDir
-} from "./chunk-6GR27BT7.js";
+} from "./chunk-Z5TQWEW6.js";
 import {
   resolveKiroMcpLaunchEnvironment
-} from "./chunk-VGY2FX2U.js";
+} from "./chunk-HQ66VDCC.js";
 import "./chunk-PGDCKPF6.js";
 import "./chunk-D27TRCNO.js";
 import {
@@ -41,7 +41,7 @@ import {
   kiroProfilePath,
   resolveKiroInstallRoots,
   sameExecutableIdentity
-} from "./chunk-UMXA4XWU.js";
+} from "./chunk-DTWQSS3Y.js";
 import {
   KIRO_INSTALL_MANIFEST_FORMAT,
   KiroInstallError,
@@ -60,6 +60,7 @@ import {
   lstatOrNull,
   managedFileTransition,
   managedPaths,
+  probeManagedTransactionRecovery,
   readManagedFileNoFollow,
   readManifest,
   readPackageVersion,
@@ -71,11 +72,12 @@ import {
   withContainedParent,
   writeAtomic,
   writeExclusive
-} from "./chunk-G3LPLMI7.js";
+} from "./chunk-MI2H25H6.js";
 import {
   createProcessTreeController,
   resolveScriptRuntimeSync
-} from "./chunk-SSHRMRMV.js";
+} from "./chunk-27626ACZ.js";
+import "./chunk-OZKYNYCD.js";
 import {
   __toESM
 } from "./chunk-GX475RD4.js";
@@ -532,6 +534,74 @@ var planRuntimeClosureDeployment = (installRoot, layout, options = {}) => {
     }
   };
 };
+var ensurePrivateRuntimeDirectory = (runtimeDir) => {
+  ensureManagedDirectory(runtimeDir);
+  const stat = lstatSync(runtimeDir);
+  if (process.geteuid && stat.uid !== process.geteuid()) {
+    throw new KiroInstallError("ownership", "managed runtime directory is not owned by the effective user");
+  }
+  if ((stat.mode & 511) !== 448) chmodSync(runtimeDir, 448);
+  fsyncDirectory(dirname(runtimeDir));
+};
+var repairJournalPath = (runtimeDir, digest) => join(runtimeDir, `.repair-${digest}.json`);
+var damagedGenerationPath = (runtimeDir, digest) => join(runtimeDir, `.damaged-${digest}`);
+var serializeRepairJournal = (closure) => JSON.stringify({ format: 1, digest: closure.digest, root: closure.root }, null, 2) + "\n";
+var runtimeClosureRepairJournalPath = (installRoot, layout, digest) => repairJournalPath(runtimeClosurePath(installRoot, layout), digest);
+var hasPendingRuntimeClosureRepair = (installRoot, layout, digest) => existsSync(runtimeClosureRepairJournalPath(installRoot, layout, digest));
+var makeRuntimeTreeRemovable = (dir) => {
+  const stat = lstatOrNull(dir);
+  if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new KiroInstallError("symlink", "damaged runtime root is not a real directory");
+  }
+  chmodSync(dir, 448);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeRuntimeTreeRemovable(join(dir, entry.name));
+  }
+};
+var recoverRuntimeClosureRepair = (installRoot, layout, closure) => {
+  const runtimeDir = runtimeDirectoryForClosure(installRoot, layout, closure);
+  const journal = repairJournalPath(runtimeDir, closure.digest);
+  const journalStat = lstatOrNull(journal);
+  if (!journalStat) return false;
+  if (journalStat.isSymbolicLink() || !journalStat.isFile()) {
+    throw new KiroInstallError("symlink", "runtime repair journal is not a regular file");
+  }
+  let record;
+  try {
+    record = JSON.parse(readFileSync(journal, "utf8"));
+  } catch {
+    throw new KiroInstallError("manifest", "runtime repair journal is malformed");
+  }
+  if (typeof record !== "object" || record === null || Array.isArray(record) || record.format !== 1 || record.digest !== closure.digest || record.root !== closure.root) {
+    throw new KiroInstallError("manifest", "runtime repair journal does not match the closure");
+  }
+  ensurePrivateRuntimeDirectory(runtimeDir);
+  const versionDir = join(runtimeDir, closure.digest);
+  const damagedDir = damagedGenerationPath(runtimeDir, closure.digest);
+  const versionExists = existsSync(versionDir);
+  const damagedExists = existsSync(damagedDir);
+  if (!versionExists && damagedExists) {
+    renameSync(damagedDir, versionDir);
+    fsyncDirectory(runtimeDir);
+  } else if (versionExists) {
+    if (damagedExists) {
+      verifyRuntimeClosureAttestation(installRoot, closure);
+      makeRuntimeTreeRemovable(damagedDir);
+      rmSync(damagedDir, { recursive: true, force: false });
+      fsyncDirectory(runtimeDir);
+    } else {
+      try {
+        verifyRuntimeClosureAttestation(installRoot, closure);
+      } catch {
+      }
+    }
+  } else {
+    throw new KiroInstallError("fs", "runtime repair lost both the original and replacement generation");
+  }
+  unlinkSync(journal);
+  fsyncDirectory(runtimeDir);
+  return true;
+};
 var writeClosureMarker = (runtimeDir, digest) => {
   const marker = join(runtimeDir, ".closure-current");
   const markerStat = lstatOrNull(marker);
@@ -575,6 +645,7 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
     bytes: 0
   };
   if (existsSync(versionMcpEntry) && planned.action !== "repair") {
+    ensurePrivateRuntimeDirectory(runtimeDir);
     verifyRuntimeClosureAttestation(installRoot, planned.attestation);
     const markerNow = lstatOrNull(marker);
     if (markerNow && (markerNow.isSymbolicLink() || !markerNow.isFile())) {
@@ -596,7 +667,7 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
       metrics: { ...metadata, fileCount: planned.metrics.fileCount, bytes: planned.metrics.bytes }
     };
   }
-  ensureManagedDirectory(runtimeDir);
+  ensurePrivateRuntimeDirectory(runtimeDir);
   assertNoSymlinkComponents(installRoot, versionDir);
   const closureSource = closureSourceDirectory(packageRoot);
   if (!existsSync(join(closureSource, "kiro", "mcp-entry.js"))) {
@@ -690,26 +761,23 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
     const publishStart = Date.now();
     if (existsSync(versionDir)) {
       if (planned.action === "repair") {
-        const damagedDir = join(runtimeDir, `.damaged-${digest}-${process.pid}-${Date.now().toString(36)}`);
-        renameSync(versionDir, damagedDir);
-        try {
-          renameSync(stagingDir, versionDir);
-        } catch (error) {
-          renameSync(damagedDir, versionDir);
-          throw error;
+        const damagedDir = damagedGenerationPath(runtimeDir, digest);
+        const journal = repairJournalPath(runtimeDir, digest);
+        if (existsSync(damagedDir) || existsSync(journal)) {
+          throw new KiroInstallError("concurrency", "a same-digest runtime repair is already pending recovery");
         }
-        const makeRemovable = (dir) => {
-          const stat = lstatOrNull(dir);
-          if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) {
-            throw new KiroInstallError("symlink", "damaged runtime root is not a real directory");
-          }
-          chmodSync(dir, 448);
-          for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
-          }
-        };
-        makeRemovable(damagedDir);
-        rmSync(damagedDir, { recursive: true, force: true });
+        writeAtomic(journal, serializeRepairJournal(planned.attestation), 384);
+        fsyncDirectory(runtimeDir);
+        renameSync(versionDir, damagedDir);
+        fsyncDirectory(runtimeDir);
+        renameSync(stagingDir, versionDir);
+        fsyncDirectory(runtimeDir);
+        verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+        makeRuntimeTreeRemovable(damagedDir);
+        rmSync(damagedDir, { recursive: true, force: false });
+        fsyncDirectory(runtimeDir);
+        unlinkSync(journal);
+        fsyncDirectory(runtimeDir);
       } else {
         const unsealStaging = (dir) => {
           chmodSync(dir, 448);
@@ -740,6 +808,12 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
       metrics: metadata
     };
   } catch (error) {
+    try {
+      if (hasPendingRuntimeClosureRepair(installRoot, layout, digest)) {
+        recoverRuntimeClosureRepair(installRoot, layout, planned.attestation);
+      }
+    } catch {
+    }
     try {
       const unseal = (dir) => {
         const stat = lstatOrNull(dir);
@@ -1048,10 +1122,12 @@ var buildManifest = (options, projectRoot, layout, profileDigest, backup, skills
     agentEngine: KIRO_AGENT_ENGINE,
     ...closure ? {
       closure: closure.attestation,
-      generations: [...new Map([
-        ...(previous?.runtime.generations ?? (previous?.runtime.closure ? [previous.runtime.closure] : [])).map((generation) => [generation.root, generation]),
-        [closure.attestation.root, closure.attestation]
-      ]).values()].sort((left, right) => left.digest.localeCompare(right.digest) || left.root.localeCompare(right.root)),
+      // Keep launch/status verification and eventual uninstall bounded:
+      // current plus the immediately preceding active generation only.
+      generations: [
+        closure.attestation,
+        ...previous?.runtime.closure && previous.runtime.closure.root !== closure.attestation.root ? [previous.runtime.closure] : []
+      ],
       managerEntryPath: closure.managementEntryPath,
       nodeSha256: closure.attestation.files.find((file) => file.path.endsWith("/bin/node") || file.path.endsWith("/bin/node.exe")).installedSha256
     } : {}
@@ -1185,11 +1261,12 @@ var planKiroProfileInstall = (options = {}, planning = {}) => {
     );
   }
   const manifest = readManifest(installRoot, layout);
-  for (const generation of manifest?.runtime.generations ?? (manifest?.runtime.closure ? [manifest.runtime.closure] : [])) {
-    const generationRoot = join3(installRoot, ...generation.root.split("/"));
-    const repairingPlannedGeneration = options.repairRuntime === true && generation.digest === planning.closure?.digest;
+  const activeGeneration = manifest?.runtime.closure;
+  if (activeGeneration) {
+    const generationRoot = join3(installRoot, ...activeGeneration.root.split("/"));
+    const repairingPlannedGeneration = options.repairRuntime === true && activeGeneration.digest === planning.closure?.digest;
     if (existsSync3(generationRoot) && !repairingPlannedGeneration) {
-      verifyRuntimeClosureAttestation(installRoot, generation);
+      verifyRuntimeClosureAttestation(installRoot, activeGeneration);
     }
   }
   let existingSha256 = null;
@@ -1492,6 +1569,17 @@ var resultFromPlan = (plan, dryRun, runtimeClosure) => {
     grants: plan.grants
   };
 };
+var cleanupSupersededRuntimeGenerations = (plan) => {
+  const previous = readManifest(plan.installRoot, plan.layout);
+  if (!previous?.runtime.closure) return;
+  const desired = JSON.parse(plan.manifestJson);
+  const retained = new Set((desired.runtime.generations ?? []).map((generation) => generation.root));
+  for (const generation of previous.runtime.generations ?? [previous.runtime.closure]) {
+    if (generation.root !== previous.runtime.closure.root && !retained.has(generation.root)) {
+      removeAttestedRuntimeClosure(plan.installRoot, plan.layout, generation);
+    }
+  }
+};
 var commitInstall = (plan) => {
   if (plan.action === "blocked") {
     throw new KiroInstallError("collision", plan.blockedReason ?? "profile collision");
@@ -1628,6 +1716,13 @@ var installKiroProfile = async (options = {}) => {
     const roots = resolveKiroInstallRoots(options);
     const recoveryPaths = managedPaths(roots.installRoot, roots.layout);
     if (existsSync3(recoveryPaths.transaction)) {
+      if (options.dryRun) {
+        probeManagedTransactionRecovery(roots.installRoot, roots.layout);
+        throw new KiroInstallError(
+          "concurrency",
+          "a recoverable lifecycle transaction is pending; dry-run left it unchanged"
+        );
+      }
       const recoveryLock = acquireOperationLock(roots.installRoot, roots.layout);
       try {
         recoverManagedTransaction(roots.installRoot, roots.layout);
@@ -1661,6 +1756,12 @@ var installKiroProfile = async (options = {}) => {
       kiroAttestation: kiroIdentity,
       ...options.repairRuntime ? { repairExisting: true } : {}
     });
+    if (options.dryRun && closurePlan && hasPendingRuntimeClosureRepair(roots.installRoot, roots.layout, closurePlan.digest)) {
+      throw new KiroInstallError(
+        "concurrency",
+        "a recoverable runtime repair is pending; dry-run left it unchanged"
+      );
+    }
     const effectiveMcpEntry = closurePlan?.mcpEntryPath ?? options.mcpEntryPath;
     const planOptions = {
       ...options,
@@ -1681,6 +1782,7 @@ var installKiroProfile = async (options = {}) => {
     const lock = acquireOperationLock(planned.installRoot, planned.layout);
     try {
       recoverManagedTransaction(planned.installRoot, planned.layout);
+      if (closurePlan) recoverRuntimeClosureRepair(roots.installRoot, roots.layout, closurePlan.attestation);
       if (stagedNode) assertExecutableAttestation(stagedNode);
       assertSupportedKiroUnchanged(kiroIdentity);
       const lockedClosurePlan = skipRuntimeClosure ? void 0 : planRuntimeClosureDeployment(roots.installRoot, roots.layout, {
@@ -1723,7 +1825,10 @@ var installKiroProfile = async (options = {}) => {
       }) : void 0;
       const activationCurrent = plan.activation ? readManagedFileNoFollow(plan.installRoot, plan.activation.path) : null;
       const activationNeeded = plan.activation !== null && sha256Bytes(plan.activation.nextBytes) !== (activationCurrent === null ? null : sha256Bytes(activationCurrent));
-      if (plan.action !== "noop" || activationNeeded) commitInstall(plan);
+      if (plan.action !== "noop" || activationNeeded) {
+        cleanupSupersededRuntimeGenerations(plan);
+        commitInstall(plan);
+      }
       return resultFromPlan(plan, false, closureResult);
     } finally {
       lock.release();
@@ -2794,9 +2899,10 @@ var scopeStatusFor = (scope, projectRoot, kiroHome) => {
       if (!manifest.runtime.closure) throw new Error("runtime closure attestation is absent");
       const generations = manifest.runtime.generations;
       if (!generations?.length) throw new Error("format-3 runtime generation lineage is absent; run update or repair");
-      for (const generation of generations) {
-        verifyRuntimeClosureAttestation(roots.installRoot, generation);
+      if (!generations.some((generation) => generation.root === manifest.runtime.closure.root)) {
+        throw new Error("active runtime generation is absent from lineage");
       }
+      verifyRuntimeClosureAttestation(roots.installRoot, manifest.runtime.closure);
       const releasePackagePath = join6(
         roots.installRoot,
         ...manifest.runtime.closure.root.split("/"),
@@ -2983,15 +3089,31 @@ var renderGrantDiff = (before, after) => Object.keys(after).map((key) => `${key}
 var runInstall = async (parsed, io) => {
   const command = parsed.command === "update" ? "update" : parsed.command === "repair" ? "repair" : "install";
   const roots = resolveRoots(parsed);
-  if (command === "update" || command === "repair") {
-    const transaction = managedPaths(roots.installRoot, roots.layout).transaction;
-    if (existsSync6(transaction)) {
-      const recoveryLock = acquireOperationLock(roots.installRoot, roots.layout);
-      try {
-        recoverManagedTransaction(roots.installRoot, roots.layout);
-      } finally {
-        recoveryLock.release();
+  const transaction = managedPaths(roots.installRoot, roots.layout).transaction;
+  const pendingRecovery = existsSync6(transaction);
+  let confirmed = false;
+  if (pendingRecovery) {
+    probeManagedTransactionRecovery(roots.installRoot, roots.layout);
+    if (parsed.dryRun) {
+      throw new KiroInstallError(
+        "concurrency",
+        "a recoverable lifecycle transaction is pending; dry-run left it unchanged"
+      );
+    }
+    if (needsConfirmation(parsed)) {
+      if (!isInteractive()) {
+        throw new Error("refusing to recover and " + command + " without a terminal; pass --yes to confirm");
       }
+      if (!await io.confirm(
+        "Recover the interrupted lifecycle transaction, then proceed with " + command + " (" + roots.layout + " scope: " + roots.installRoot + ")?"
+      )) throw new InteractiveCancelError("cancelled");
+      confirmed = true;
+    }
+    const recoveryLock = acquireOperationLock(roots.installRoot, roots.layout);
+    try {
+      recoverManagedTransaction(roots.installRoot, roots.layout);
+    } finally {
+      recoveryLock.release();
     }
   }
   if ((command === "update" || command === "repair") && !existsSync6(managedManifestPath(roots))) {
@@ -3008,7 +3130,7 @@ var runInstall = async (parsed, io) => {
     enableSubagents: installOptions.enableSubagents === true,
     allowTools: installOptions.allowTools === true
   };
-  if (needsConfirmation(parsed)) {
+  if (needsConfirmation(parsed) && !confirmed) {
     if (!isInteractive()) {
       throw new Error("refusing to " + command + " without a terminal; pass --yes to confirm");
     }
@@ -3184,9 +3306,10 @@ var MENU_TEXT = ["", "Actions:", "  1) install", "  2) update", "  3) repair", "
 );
 var runMenuAction = async (action) => {
   try {
-    await action();
+    return await action();
   } catch (error) {
     process.stderr.write("kiro-fabric: " + errorMessage(error) + "\n");
+    return 1;
   }
 };
 var runMenu = async (parsed) => {
@@ -3214,21 +3337,31 @@ var runMenu = async (parsed) => {
       switch (choice) {
         case "":
           continue;
-        case "1":
-          await runMenuAction(() => runInstall({ ...parsed, command: "install" }, menuIo));
+        case "1": {
+          const code = await runMenuAction(() => runInstall({ ...parsed, command: "install" }, menuIo));
+          if (code !== 0) return code;
           break;
-        case "2":
-          await runMenuAction(() => runInstall({ ...parsed, command: "update" }, menuIo));
+        }
+        case "2": {
+          const code = await runMenuAction(() => runInstall({ ...parsed, command: "update" }, menuIo));
+          if (code !== 0) return code;
           break;
-        case "3":
-          await runMenuAction(() => runInstall({ ...parsed, command: "repair" }, menuIo));
+        }
+        case "3": {
+          const code = await runMenuAction(() => runInstall({ ...parsed, command: "repair" }, menuIo));
+          if (code !== 0) return code;
           break;
-        case "4":
-          await runMenuAction(() => runUninstall({ ...parsed, command: "uninstall" }, menuIo));
+        }
+        case "4": {
+          const code = await runMenuAction(() => runUninstall({ ...parsed, command: "uninstall" }, menuIo));
+          if (code !== 0) return code;
           break;
-        case "5":
-          await runMenuAction(() => runDoctor({ ...parsed, command: "doctor" }));
+        }
+        case "5": {
+          const code = await runMenuAction(() => runDoctor({ ...parsed, command: "doctor" }));
+          if (code !== 0) return code;
           break;
+        }
         case "6":
           rl.close();
           process.removeListener("SIGINT", cancel);
@@ -3243,7 +3376,7 @@ var runMenu = async (parsed) => {
             rl = createInterface({ input: process.stdin, output: process.stdout });
             rl.on("SIGINT", cancel);
           }
-          if (launchCode !== void 0 && launchCode >= 128) return launchCode;
+          if (launchCode !== void 0 && launchCode !== 0) return launchCode;
           break;
         case "q":
         case "quit":

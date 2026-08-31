@@ -50,7 +50,7 @@ import {
   resolveAgentDir,
   typebox_exports,
   writeFileAtomic
-} from "./chunk-6GR27BT7.js";
+} from "./chunk-Z5TQWEW6.js";
 import {
   runAbortable,
   settleWithin,
@@ -70,29 +70,31 @@ import {
   MAX_AGENT_STEER_LINE_BYTES,
   normalizeKiroSemanticContext,
   value_exports
-} from "./chunk-ELJJP3DS.js";
+} from "./chunk-3TZX7VW7.js";
 import {
-  KIRO_EXECUTION_TIMEOUT_MS,
-  KIRO_MCP_CALL_TIMEOUT_MS,
-  KIRO_MCP_DRAIN_TIMEOUT_MS,
   assertSupportedKiro,
   assertSupportedKiroUnchanged
-} from "./chunk-UMXA4XWU.js";
+} from "./chunk-DTWQSS3Y.js";
 import {
   processInstanceIdentity,
   processInstanceIsAlive,
   readPackageVersion,
   resolveKiroProjectRoot,
   sha256Bytes
-} from "./chunk-G3LPLMI7.js";
+} from "./chunk-MI2H25H6.js";
 import {
   createProcessTreeController,
   spawnDetached
-} from "./chunk-SSHRMRMV.js";
+} from "./chunk-27626ACZ.js";
 import {
   kiroChildToolRefs,
   parseKiroChildTools
 } from "./chunk-PL2W3NQY.js";
+import {
+  KIRO_EXECUTION_TIMEOUT_MS,
+  KIRO_MCP_CALL_TIMEOUT_MS,
+  KIRO_MCP_DRAIN_TIMEOUT_MS
+} from "./chunk-OZKYNYCD.js";
 import {
   __commonJS,
   __toESM
@@ -1276,7 +1278,7 @@ var KiroPowerFabricApprover = class {
     this.elicitation = elicitation;
     this.cwd = cwd;
   }
-  async approve(action, args, scope = {}) {
+  async approve(action, args, scope = {}, signal) {
     const mode = this.config[action.risk];
     if (mode === "allow") return;
     if (mode === "deny") throw new Error(`${action.ref} is denied by Fabric policy`);
@@ -1284,7 +1286,8 @@ var KiroPowerFabricApprover = class {
       risk: action.risk,
       provider: action.provider,
       action: action.name,
-      summary: `${summarizeArguments(args, this.cwd)}${scope.projectDigest ? "\nWorkspace-bound request" : ""}`
+      summary: `${summarizeArguments(args, this.cwd)}${scope.projectDigest ? "\nWorkspace-bound request" : ""}`,
+      ...signal ? { signal } : {}
     });
     if (!approved) throw new Error(`${action.ref} approval was denied or unavailable`);
   }
@@ -1409,7 +1412,6 @@ var CachedWorkspaceContextProvider = class {
   #snapshot;
   #stale = true;
   #refresh;
-  #refreshGeneration = -1;
   #invalidationGeneration = 0;
   #revision = 0;
   constructor(source, options = {}) {
@@ -1432,43 +1434,39 @@ var CachedWorkspaceContextProvider = class {
     if (!options.force && !this.#stale && this.#snapshot && now - this.#snapshot.observedAt < this.#ttlMs) {
       return this.#snapshot;
     }
-    if (this.#refresh) {
-      if (!options.force || this.#refreshGeneration === this.#invalidationGeneration) {
-        return this.#refresh;
+    if (this.#refresh) return this.#refresh;
+    this.#refresh = (async () => {
+      while (true) {
+        const generation = this.#invalidationGeneration;
+        const snapshot2 = await this.#load(this.#now());
+        if (generation !== this.#invalidationGeneration) continue;
+        snapshot2.revision = ++this.#revision;
+        this.#stale = snapshot2.status === "temporarily-unavailable";
+        this.#publish(snapshot2);
+        return snapshot2;
       }
-      return this.#refresh.then(() => this.current({ force: true }));
-    }
-    const generation = this.#invalidationGeneration;
-    this.#refreshGeneration = generation;
-    this.#refresh = this.#load(now, generation).finally(() => {
+    })().finally(() => {
       this.#refresh = void 0;
     });
     return this.#refresh;
   }
-  async #load(observedAt, generation) {
+  async #load(observedAt) {
     try {
       const roots = this.#source.supported() ? [...await this.#source.load()] : [];
-      const snapshot2 = {
-        revision: ++this.#revision,
+      return {
+        revision: 0,
         status: roots.length === 0 ? "explicitly-empty" : "verified",
         roots,
         observedAt
       };
-      this.#stale = generation !== this.#invalidationGeneration;
-      this.#publish(snapshot2);
-      return snapshot2;
     } catch (error) {
-      const previousRoots = this.#snapshot?.roots ?? [];
-      const snapshot2 = {
-        revision: ++this.#revision,
+      return {
+        revision: 0,
         status: "temporarily-unavailable",
-        roots: previousRoots,
+        roots: this.#snapshot?.roots ?? [],
         observedAt,
         error: error instanceof Error ? error.message : String(error)
       };
-      this.#stale = true;
-      this.#publish(snapshot2);
-      return snapshot2;
     }
   }
   #publish(snapshot2) {
@@ -1542,14 +1540,24 @@ var KiroPowerWorkspaceBinding = class {
         throw new Error("workspace root and plugin storage must not contain one another");
       }
     }
-    return { id: idFor(root), root, name: path3.basename(root) || "workspace", dev: stats.dev, ino: stats.ino };
+    return {
+      id: idFor(root),
+      root,
+      name: path3.basename(root) || "workspace",
+      dev: stats.dev,
+      ino: stats.ino,
+      ctimeNs: stats.ctimeNs
+    };
   }
   updateClientRoots(roots) {
     const candidates = [];
+    const advertisedPaths = /* @__PURE__ */ new Set();
     for (const item of roots) {
       try {
         if (!item.uri.startsWith("file:")) continue;
-        const candidate = this.#canonical(fileURLToPath(item.uri));
+        const advertised = path3.resolve(fileURLToPath(item.uri));
+        advertisedPaths.add(advertised);
+        const candidate = this.#canonical(advertised);
         candidates.push({ ...candidate, name: (item.name?.trim() || candidate.name).slice(0, 120) });
       } catch {
       }
@@ -1557,7 +1565,8 @@ var KiroPowerWorkspaceBinding = class {
     this.#candidates = [...new Map(candidates.map((entry) => [entry.id, entry])).values()];
     if (this.#binding?.source === "client-roots") {
       const current = this.#candidates.find((entry) => entry.id === this.#binding.id);
-      if (!current || current.dev !== this.#binding.dev || current.ino !== this.#binding.ino) {
+      const transient = advertisedPaths.has(this.#binding.root) && !current;
+      if (!transient && (!current || current.dev !== this.#binding.dev || current.ino !== this.#binding.ino)) {
         this.#binding = void 0;
         this.#initialAutoBindAllowed = false;
       }
@@ -1568,24 +1577,40 @@ var KiroPowerWorkspaceBinding = class {
       this.#initialAutoBindAllowed = false;
     }
   }
-  boundWorkspace() {
+  bindingIdentity() {
     const binding = this.#binding;
-    if (!binding) return void 0;
+    return binding ? `${binding.root}\0${binding.dev}\0${binding.ino}` : "<unbound>";
+  }
+  bindingSource() {
+    return this.#binding?.source;
+  }
+  workspaceObservation() {
+    const binding = this.#binding;
+    if (!binding) return { status: "unbound" };
     try {
       const current = this.#canonical(binding.root);
-      if (current.dev !== binding.dev || current.ino !== binding.ino) throw new Error("identity changed");
+      if (current.dev !== binding.dev || current.ino !== binding.ino) {
+        return { status: "temporarily-unavailable" };
+      }
       return {
-        schemaVersion: 1,
-        canonicalPath: binding.root,
-        deviceId: binding.dev.toString(),
-        fileId: binding.ino.toString(),
-        rootId: binding.id,
-        name: binding.name,
-        source: binding.source
+        status: "verified",
+        workspace: {
+          schemaVersion: 1,
+          canonicalPath: binding.root,
+          deviceId: binding.dev.toString(),
+          fileId: binding.ino.toString(),
+          rootId: binding.id,
+          name: binding.name,
+          source: binding.source
+        }
       };
     } catch {
-      return void 0;
+      return { status: "temporarily-unavailable" };
     }
+  }
+  boundWorkspace() {
+    const observation = this.workspaceObservation();
+    return observation.status === "verified" ? observation.workspace : void 0;
   }
   boundRoot() {
     return this.boundWorkspace()?.canonicalPath;
@@ -1611,7 +1636,17 @@ var KiroPowerWorkspaceBinding = class {
     const approved = await this.#elicitor.approveWorkspace(candidate.root, signal);
     signal?.throwIfAborted();
     if (!approved) throw new Error("manual workspace attachment was not approved");
-    return { action: "attach", root: candidate.root, dev: candidate.dev, ino: candidate.ino };
+    const approvedIdentity = statSync(candidate.root, { bigint: true });
+    if (approvedIdentity.dev !== candidate.dev || approvedIdentity.ino !== candidate.ino || approvedIdentity.ctimeNs !== candidate.ctimeNs) {
+      throw new Error("workspace root identity changed during approval; attach and approve again");
+    }
+    return {
+      action: "attach",
+      root: candidate.root,
+      dev: candidate.dev,
+      ino: candidate.ino,
+      ctimeNs: candidate.ctimeNs
+    };
   }
   commitMutation(mutation) {
     if (mutation.action === "detach") {
@@ -1626,7 +1661,8 @@ var KiroPowerWorkspaceBinding = class {
       this.#binding = { ...candidate, source: "client-roots" };
     } else {
       const candidate = this.#canonical(mutation.root);
-      if (candidate.dev !== mutation.dev || candidate.ino !== mutation.ino) {
+      const approvedIdentity = statSync(candidate.root, { bigint: true });
+      if (candidate.dev !== mutation.dev || candidate.ino !== mutation.ino || approvedIdentity.ctimeNs !== mutation.ctimeNs) {
         throw new Error("workspace root identity changed after approval; attach and approve again");
       }
       this.#binding = { ...candidate, source: "manual" };
@@ -5009,7 +5045,7 @@ var fabricExecTitleHintCached = (code) => {
 var runtimeDependencies;
 var loadRuntimeDependencies = () => runtimeDependencies ??= Promise.all([
   import("./quickjs-runtime-EOQFTCVR.js"),
-  import("./node-process-runtime-CD7Q635E.js"),
+  import("./node-process-runtime-7H7INE4M.js"),
   import("./type-checker-ZXL6HVHN.js"),
   import("./guest-types-6A5BKABT.js"),
   import("./dynamic-guest-types-YIYN3HDU.js"),
@@ -5183,7 +5219,7 @@ var FabricExecutionService = class {
       plan: options.code,
       project: options.host.cwd
     });
-    const requestApprovalLease = async (action, args, scope = approvalScope) => await approval.approve(action, args, scope) ?? this.sessionApprovals.issueLease(action, args, scope, "explicit-broad");
+    const requestApprovalLease = async (action, args, scope = approvalScope) => await approval.approve(action, args, scope, options.signal) ?? this.sessionApprovals.issueLease(action, args, scope, "explicit-broad");
     const audits = [];
     const phases = [];
     const workflowSpans = /* @__PURE__ */ new Map();
@@ -7516,82 +7552,98 @@ parentPort.on("message", ({ pattern, flags, haystacks }) => {
   }
 });
 `;
-var executeBoundedRegex = async (pattern, haystacks, limits, flags = "iu") => {
-  const patternBytes = Buffer.byteLength(pattern, "utf8");
-  if (patternBytes > limits.maxPatternBytes) {
+var workerError = (error) => ({
+  complete: false,
+  matched: [],
+  error: {
+    code: "regex_worker_error",
+    message: error instanceof Error ? error.message : String(error)
+  }
+});
+var BoundedRegexWorkerSession = class {
+  #worker;
+  #pattern;
+  #flags;
+  #timeoutMs;
+  #deadline;
+  #closed = false;
+  #workerFailure;
+  constructor(pattern, limits, flags = "iu") {
+    const patternBytes = Buffer.byteLength(pattern, "utf8");
+    if (patternBytes > limits.maxPatternBytes) {
+      throw new RangeError(`Regex pattern is ${patternBytes} bytes; limit is ${limits.maxPatternBytes}.`);
+    }
+    this.#pattern = pattern;
+    this.#flags = flags;
+    this.#timeoutMs = limits.timeoutMs;
+    this.#deadline = performance.now() + limits.timeoutMs;
+    this.#worker = new Worker(WORKER_SOURCE, {
+      eval: true,
+      resourceLimits: { maxOldGenerationSizeMb: 16, maxYoungGenerationSizeMb: 4 }
+    });
+    this.#worker.on("error", (error) => {
+      this.#workerFailure = error;
+    });
+  }
+  async execute(haystacks, signal) {
+    throwIfAborted(signal);
+    if (this.#closed) return workerError(new Error("Regex worker session is closed."));
+    if (this.#workerFailure) return workerError(this.#workerFailure);
+    const remaining = this.#deadline - performance.now();
+    if (remaining <= 0) return this.#timeoutResult();
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        this.#worker.removeListener("message", onMessage);
+        this.#worker.removeListener("error", onError);
+        resolve(result);
+      };
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        this.#worker.removeListener("message", onMessage);
+        this.#worker.removeListener("error", onError);
+        reject(signal?.reason instanceof Error ? signal.reason : new Error("Operation aborted"));
+      };
+      const onMessage = (message) => {
+        const record = message;
+        if (record.error) {
+          finish({ complete: false, matched: [], error: record.error });
+        } else if (Array.isArray(record.matched) && record.matched.every((value) => Number.isInteger(value))) {
+          finish({ complete: true, matched: record.matched });
+        } else {
+          finish(workerError(new Error("Regex worker returned an invalid result.")));
+        }
+      };
+      const onError = (error) => finish(workerError(error));
+      const timer = setTimeout(() => finish(this.#timeoutResult()), remaining);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.#worker.once("message", onMessage);
+      this.#worker.once("error", onError);
+      this.#worker.postMessage({ pattern: this.#pattern, flags: this.#flags, haystacks });
+    });
+  }
+  async close() {
+    if (this.#closed) return;
+    this.#closed = true;
+    await this.#worker.terminate();
+  }
+  #timeoutResult() {
     return {
       complete: false,
       matched: [],
       error: {
-        code: "regex_pattern_too_large",
-        message: `Regex pattern is ${patternBytes} bytes; limit is ${limits.maxPatternBytes}.`
+        code: "regex_timeout",
+        message: `Regex execution exceeded ${this.#timeoutMs} ms.`
       }
     };
   }
-  return new Promise((resolve) => {
-    let worker;
-    try {
-      worker = new Worker(WORKER_SOURCE, {
-        eval: true,
-        resourceLimits: { maxOldGenerationSizeMb: 16, maxYoungGenerationSizeMb: 4 }
-      });
-    } catch (error) {
-      resolve({
-        complete: false,
-        matched: [],
-        error: {
-          code: "regex_worker_error",
-          message: error instanceof Error ? error.message : String(error)
-        }
-      });
-      return;
-    }
-    let settled = false;
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      void worker.terminate();
-      resolve(result);
-    };
-    const timer = setTimeout(() => {
-      finish({
-        complete: false,
-        matched: [],
-        error: {
-          code: "regex_timeout",
-          message: `Regex execution exceeded ${limits.timeoutMs} ms.`
-        }
-      });
-    }, limits.timeoutMs);
-    worker.once("message", (message) => {
-      const record = message;
-      if (record.error) {
-        finish({ complete: false, matched: [], error: record.error });
-        return;
-      }
-      if (Array.isArray(record.matched) && record.matched.every((value) => Number.isInteger(value))) {
-        finish({ complete: true, matched: record.matched });
-        return;
-      }
-      finish({
-        complete: false,
-        matched: [],
-        error: { code: "regex_worker_error", message: "Regex worker returned an invalid result." }
-      });
-    });
-    worker.once("error", (error) => {
-      finish({
-        complete: false,
-        matched: [],
-        error: {
-          code: "regex_worker_error",
-          message: error instanceof Error ? error.message : String(error)
-        }
-      });
-    });
-    worker.postMessage({ pattern, flags, haystacks });
-  });
 };
 
 // src/providers/project-root-guard.ts
@@ -7868,11 +7920,15 @@ var KiroToolsProvider = class {
   #cwd;
   #guard;
   #readArtifact;
+  #writeArtifact;
+  #bashPath;
   #protectedRoots;
   constructor(cwd, options = {}) {
     this.#guard = new ProjectRootGuard(cwd);
     this.#cwd = this.#guard.canonicalRoot;
     this.#readArtifact = options.readArtifact;
+    this.#writeArtifact = options.writeArtifact;
+    this.#bashPath = options.bashPath ?? process.env.KIRO_FABRIC_BASH ?? "bash";
     this.#protectedRoots = (options.protectedRoots ?? []).map((root) => path7.resolve(root));
   }
   #isProtected(target) {
@@ -8175,47 +8231,52 @@ var KiroToolsProvider = class {
     const files = stat.isDirectory() ? this.#walk(target, context.signal) : (async function* () {
       yield target;
     })();
-    fileLoop: for await (const file of files) {
-      throwIfAborted(context.signal);
-      const relative2 = stat.isDirectory() ? normalizeRelative(target, file) : path7.basename(file);
-      if (glob && !matchesGlob(relative2, glob)) continue;
-      let source;
-      try {
-        const fileStat = await fs2.stat(file);
-        if (!fileStat.isFile() || fileStat.size > MAX_SEARCH_FILE_BYTES) continue;
-        source = await fs2.readFile(file, "utf8");
-      } catch (error) {
-        if (error.code === "ENOENT") continue;
-        throw error;
-      }
-      if (source.includes("\0")) continue;
-      const lines = source.split("\n");
-      let matchedLines;
-      if (!literal) {
-        const result = await executeBoundedRegex(pattern, lines, {
-          maxPatternBytes: MAX_SEARCH_PATTERN_BYTES,
-          timeoutMs: GREP_REGEX_TIMEOUT_MS
-        }, args.ignoreCase === true ? "iu" : "u");
+    const regexSession = literal ? void 0 : new BoundedRegexWorkerSession(pattern, {
+      maxPatternBytes: MAX_SEARCH_PATTERN_BYTES,
+      timeoutMs: GREP_REGEX_TIMEOUT_MS
+    }, args.ignoreCase === true ? "iu" : "u");
+    try {
+      fileLoop: for await (const file of files) {
         throwIfAborted(context.signal);
-        if (!result.complete) throw new Error(`k.grep ${result.error.message}`);
-        matchedLines = new Set(result.matched);
-      }
-      const literalNeedle = args.ignoreCase === true ? pattern.toLowerCase() : pattern;
-      for (let line = 0; line < lines.length && matches < limit; line += 1) {
-        const matched = literal ? (args.ignoreCase === true ? lines[line].toLowerCase() : lines[line]).includes(literalNeedle) : matchedLines.has(line);
-        if (!matched) continue;
-        matches += 1;
-        for (let shown = Math.max(0, line - contextLines); shown <= Math.min(lines.length - 1, line + contextLines); shown += 1) {
-          const rendered = `${relative2}:${shown + 1}:${lines[shown].slice(0, 500)}`;
-          const nextBytes = byteLength2(rendered) + (output.length === 0 ? 0 : 1);
-          if (outputBytes + nextBytes > MAX_BYTES) break fileLoop;
-          output.push(rendered);
-          outputBytes += nextBytes;
+        const relative2 = stat.isDirectory() ? normalizeRelative(target, file) : path7.basename(file);
+        if (glob && !matchesGlob(relative2, glob)) continue;
+        let source;
+        try {
+          const fileStat = await fs2.stat(file);
+          if (!fileStat.isFile() || fileStat.size > MAX_SEARCH_FILE_BYTES) continue;
+          source = await fs2.readFile(file, "utf8");
+        } catch (error) {
+          if (error.code === "ENOENT") continue;
+          throw error;
         }
+        if (source.includes("\0")) continue;
+        const lines = source.split("\n");
+        let matchedLines;
+        if (regexSession) {
+          const result = await regexSession.execute(lines, context.signal);
+          throwIfAborted(context.signal);
+          if (!result.complete) throw new Error(`k.grep ${result.error.message}`);
+          matchedLines = new Set(result.matched);
+        }
+        const literalNeedle = args.ignoreCase === true ? pattern.toLowerCase() : pattern;
+        for (let line = 0; line < lines.length && matches < limit; line += 1) {
+          const matched = literal ? (args.ignoreCase === true ? lines[line].toLowerCase() : lines[line]).includes(literalNeedle) : matchedLines.has(line);
+          if (!matched) continue;
+          matches += 1;
+          for (let shown = Math.max(0, line - contextLines); shown <= Math.min(lines.length - 1, line + contextLines); shown += 1) {
+            const rendered = `${relative2}:${shown + 1}:${lines[shown].slice(0, 500)}`;
+            const nextBytes = byteLength2(rendered) + (output.length === 0 ? 0 : 1);
+            if (outputBytes + nextBytes > MAX_BYTES) break fileLoop;
+            output.push(rendered);
+            outputBytes += nextBytes;
+          }
+        }
+        if (matches >= limit) break;
       }
-      if (matches >= limit) break;
+      return output.join("\n");
+    } finally {
+      await regexSession?.close();
     }
-    return output.join("\n");
   }
   async #bash(args, context) {
     const command = stringArg(args, "command");
@@ -8225,17 +8286,18 @@ var KiroToolsProvider = class {
     let result;
     try {
       result = await new Promise((resolve, reject) => {
-        const shell = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "/bin/bash";
-        const child = spawn(shell, ["-c", command], {
+        const child = spawn(this.#bashPath, ["-c", command], {
           cwd: this.#cwd,
           env: process.env,
           stdio: ["ignore", "pipe", "pipe"],
           detached: process.platform !== "win32"
         });
-        if (!child.pid) {
-          reject(new Error("k.bash failed to launch bash"));
-          return;
-        }
+        const launchError = (error) => {
+          reject(new Error(`k.bash failed to launch ${JSON.stringify(this.#bashPath)}: ${error.message}`));
+        };
+        child.once("error", launchError);
+        if (!child.pid) return;
+        child.removeListener("error", launchError);
         const tree = createProcessTreeController(child.pid, { ambientHelpers: false });
         let tail = Buffer.alloc(0);
         const capturedChunks = [];
@@ -8327,15 +8389,18 @@ var KiroToolsProvider = class {
     const byLines = truncateLines(result.output, MAX_READ_LINES, true);
     const bounded2 = truncateBytes(byLines.text, true);
     const truncated = result.totalBytes > byteLength2(result.output) || byLines.truncated || bounded2.truncated;
-    let details = null;
-    if (truncated) {
-      if (!result.spooled) {
-        await fs2.writeFile(fullOutputPath, result.fullOutput, { flag: "wx", mode: 384 });
+    let artifactId;
+    try {
+      if (truncated && this.#writeArtifact) {
+        const fullOutput = result.spooled ? await fs2.readFile(fullOutputPath, "utf8") : result.fullOutput.toString("utf8");
+        artifactId = await this.#writeArtifact(fullOutput);
       }
-      details = { fullOutputPath, truncation: { truncated: true } };
+    } finally {
+      await fs2.rm(fullOutputPath, { force: true });
     }
-    const fullOutputHint = truncated ? `
-[Full output saved to ${fullOutputPath}; inspect it with k.bash({ command: ${JSON.stringify(`tail -n 2000 -- ${JSON.stringify(fullOutputPath)}`)} })]` : "";
+    const details = truncated ? { ...artifactId ? { artifactId } : {}, truncation: { truncated: true } } : null;
+    const fullOutputHint = artifactId ? `
+[Full output available as artifact ${artifactId}; inspect it with k.readArtifact({ id: ${JSON.stringify(artifactId)} })]` : "";
     if (result.terminationError) {
       const partial = bounded2.text ? `${bounded2.text}
 
@@ -8750,9 +8815,29 @@ var KiroAgentManager = class {
   }
   async stop(id) {
     const managed = this.#require(id);
-    if (managed.settled) return this.wait(id);
+    if (managed.settled) {
+      if (await managed.transport.isAlive()) await managed.transport.stop();
+      return this.wait(id);
+    }
     const existing = readRecord(managed.statusFile);
     if (existing && terminalStatuses.has(existing.status)) {
+      managed.stopRequested = true;
+      try {
+        if (await managed.transport.isAlive()) await managed.transport.stop();
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const failed = this.#failure(
+          managed,
+          "failed",
+          `Agent reached ${existing.status}, but transport cleanup failed: ${reason}${this.#workerDiagnostic(managed)}`
+        );
+        try {
+          writeRecord(managed.statusFile, failed);
+        } catch {
+        }
+        this.#settle(managed, failed);
+        return failed;
+      }
       const result2 = this.#metadata(existing, managed);
       this.#settle(managed, result2);
       return result2;
@@ -8851,8 +8936,8 @@ var KiroAgentManager = class {
   async close() {
     this.#closing = true;
     while (this.#waiters.length > 0) this.#waiters.shift()?.();
-    const running = [...this.#runs.values()].filter((run) => !run.settled);
-    await Promise.allSettled(running.map((run) => this.stop(run.id)));
+    const runs = [...this.#runs.values()];
+    await Promise.allSettled(runs.map((run) => this.stop(run.id)));
     if (this.#managedTempRoot || !this.config.retainRuns) {
       fs4.rmSync(this.#runRoot, { recursive: true, force: true });
     }
@@ -8932,6 +9017,13 @@ var KiroAgentManager = class {
     managed.resolve = void 0;
     managed.result = void 0;
   }
+  async #reapTerminalTransport(managed) {
+    if (await managed.transport.isAlive()) await managed.transport.stop();
+    if (managed.stopRequested || managed.settled) return;
+    if (await managed.transport.isAlive()) {
+      throw new Error("transport remained alive after bounded cleanup");
+    }
+  }
   async #monitor(managed, timeoutMs) {
     const deadline = Date.now() + timeoutMs + TRANSPORT_EXIT_GRACE_MS;
     let deadSince;
@@ -8939,6 +9031,8 @@ var KiroAgentManager = class {
       const record = readRecord(managed.statusFile);
       if (record) managed.latestRecord = record;
       if (record && terminalStatuses.has(record.status)) {
+        await this.#reapTerminalTransport(managed);
+        if (managed.stopRequested || managed.settled) return;
         this.#settle(managed, this.#metadata(record, managed));
         return;
       }
@@ -10794,11 +10888,12 @@ var processIsAlive = (pid) => {
     return errorCode(error) === "EPERM";
   }
 };
-var withNamespaceMutationLock = async (namespaceRoot, operation) => {
+var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
   const lockPath = path12.join(namespaceRoot, MUTATION_LOCK);
   const deadline = Date.now() + MUTATION_LOCK_TIMEOUT_MS;
   let identity;
   while (!identity) {
+    throwIfAborted(signal);
     try {
       fs6.mkdirSync(lockPath, { mode: 448 });
       const stat = fs6.lstatSync(lockPath);
@@ -10866,6 +10961,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation) => {
     }
   }
   try {
+    throwIfAborted(signal);
     return await operation();
   } finally {
     try {
@@ -11159,7 +11255,7 @@ var openKiroMemory = (namespace, root) => {
       }
       return entry;
     },
-    async set(key, value) {
+    async set(key, value, signal) {
       return withNamespaceMutationLock(namespaceRoot, () => {
         const normalizedKey2 = assertMemoryToken(key, "key");
         const filePath = resolveEntryPath(normalizedKey2);
@@ -11203,9 +11299,10 @@ var openKiroMemory = (namespace, root) => {
         });
         entry.bytes = utf8Bytes(content);
         assertEntryFits(namespaceRoot, entry, filePath);
+        throwIfAborted(signal);
         writeJsonAtomic(filePath, content);
         return entry;
-      });
+      }, signal);
     },
     async list() {
       const entries = collectNamespaceEntries(namespaceRoot).filter((entry) => entry.namespace === memoryNamespace).sort((left, right) => left.key.localeCompare(right.key));
@@ -11342,7 +11439,7 @@ var KiroMemoryProvider = class {
       }
       case "set": {
         const key = boundedString(args.key, "memory.set key", MAX_KEY_CHARS);
-        operation = this.#memory().set(key, args.value);
+        operation = this.#memory().set(key, args.value, context.signal);
         break;
       }
       case "search": {
@@ -14145,11 +14242,12 @@ var FabricDenyApprovalFallback = class {
     this.sessionApprovals = sessionApprovals;
     this.unavailableReason = unavailableReason;
   }
-  async approve(action, args = {}, scope = {}) {
+  async approve(action, args = {}, scope = {}, signal) {
     const mode = this.config[action.risk];
     if (mode === "allow" || this.sessionApprovals.has(action.risk)) return;
     void args;
     void scope;
+    signal?.throwIfAborted();
     throw new Error(
       `${action.ref} requires ${action.risk} approval, but ${this.unavailableReason}`
     );
@@ -14241,7 +14339,7 @@ var createKiroRuntime = (options) => {
     } : base.agents,
     approvals: {
       ...base.approvals,
-      execute: allowExecute ? "allow" : "deny",
+      execute: allowExecute ? "allow" : power ? "ask" : "deny",
       network: power ? "ask" : base.approvals.network
     },
     mcp: {
@@ -14263,6 +14361,7 @@ var createKiroRuntime = (options) => {
     registry.register(
       new KiroToolsProvider(options.cwd, {
         readArtifact: ({ id, offset, limit }) => artifacts.read(id, offset, limit),
+        writeArtifact: (content) => artifacts.write(content),
         ...protectedRelease ? { protectedRoots: [protectedRelease] } : {}
       })
     );
@@ -14432,28 +14531,40 @@ var createKiroMcpServer = async (options) => {
     lifecycleTail = result.then(() => void 0, () => void 0);
     return result;
   };
-  const drainActive = async (reason) => {
-    const executions = [...active];
+  const drainExecutions = async (executions, reason) => {
     for (const execution of executions) execution.controller.abort(reason);
-    if (executions.length === 0) return;
+    if (executions.length === 0) return true;
     let timer;
+    let drained = false;
     try {
       await Promise.race([
-        Promise.allSettled(executions.map((execution) => execution.settled)),
+        Promise.allSettled(executions.map((execution) => execution.settled)).then(() => {
+          drained = true;
+        }),
         new Promise((resolve) => {
           timer = setTimeout(resolve, KIRO_MCP_DRAIN_TIMEOUT_MS);
           timer.unref?.();
         })
       ]);
+      return drained;
     } finally {
       if (timer) clearTimeout(timer);
     }
   };
-  const closeRuntime = async () => {
+  const drainActive = (reason) => drainExecutions([...active], reason);
+  const closeRuntime = async (reason, knownDrained) => {
     const current = runtime;
     runtime = void 0;
     runtimeIdentity = "";
-    await current?.close();
+    if (!current) return;
+    const executions = [...active].filter((execution) => execution.runtime === current);
+    const drained = knownDrained ?? await drainExecutions(executions, reason);
+    if (drained || executions.length === 0) {
+      await current.close();
+      return;
+    }
+    void Promise.allSettled(executions.map((execution) => execution.settled)).then(() => current.close()).catch(() => {
+    });
   };
   const powerApprover = integration === "power" ? new KiroPowerApprover({
     supported: () => supportsKiroPowerElicitation(server.getClientCapabilities()),
@@ -14496,7 +14607,6 @@ var createKiroMcpServer = async (options) => {
     load: async () => (await server.listRoots(void 0, { timeout: 2e3 })).roots
   }) : void 0;
   let workspaceSnapshot;
-  const identityKey = (workspace) => workspace ? `${workspace.canonicalPath}\0${workspace.deviceId}\0${workspace.fileId}` : "<unbound>";
   const syncWorkspaceContext = async (force = false) => {
     if (!binding || !workspaceContext) return void 0;
     const snapshot2 = await workspaceContext.current({ force });
@@ -14504,19 +14614,19 @@ var createKiroMcpServer = async (options) => {
       if (closing) return;
       workspaceSnapshot = snapshot2;
       if (snapshot2.status === "temporarily-unavailable") return;
-      const previous = identityKey(binding.boundWorkspace());
+      const previous = binding.bindingIdentity();
       binding.updateClientRoots(snapshot2.roots);
-      if (previous !== identityKey(binding.boundWorkspace())) {
-        await drainActive(new Error("MCP workspace roots changed"));
-        await closeRuntime();
+      if (previous !== binding.bindingIdentity()) {
+        await closeRuntime(new Error("MCP workspace roots changed"));
       }
     });
     return snapshot2;
   };
-  const clientWorkspaceTemporarilyUnavailable = () => workspaceSnapshot?.status === "temporarily-unavailable" && binding?.boundWorkspace()?.source === "client-roots";
+  const clientWorkspaceTemporarilyUnavailable = () => workspaceSnapshot?.status === "temporarily-unavailable" && binding?.bindingSource() === "client-roots";
   const createRuntime = async (powerWorkspace) => {
+    const prepareRuntime = options.prepareRuntime ?? prepareKiroRuntime;
     if (integration !== "power") {
-      return prepareKiroRuntime({
+      return prepareRuntime({
         cwd: options.cwd,
         integration,
         ...options.tools ? { tools: options.tools } : {},
@@ -14524,7 +14634,7 @@ var createKiroMcpServer = async (options) => {
       });
     }
     const project = powerWorkspace ? prepareKiroPowerProjectPaths(data.projects, powerWorkspace) : void 0;
-    return prepareKiroRuntime({
+    return prepareRuntime({
       cwd: powerWorkspace?.canonicalPath ?? data.root,
       integration: "power",
       agentDir: data.config,
@@ -14534,10 +14644,14 @@ var createKiroMcpServer = async (options) => {
     });
   };
   const runtimeForCurrentIdentity = async () => {
-    const powerWorkspace = integration === "power" ? binding.boundWorkspace() : void 0;
-    const identity = integration === "power" ? identityKey(powerWorkspace) : options.cwd;
+    const observation = integration === "power" ? binding.workspaceObservation() : void 0;
+    if (observation?.status === "temporarily-unavailable") {
+      throw new Error("bound workspace is temporarily unverifiable; retry after local filesystem access recovers");
+    }
+    const powerWorkspace = observation?.status === "verified" ? observation.workspace : void 0;
+    const identity = integration === "power" ? binding.bindingIdentity() : options.cwd;
     if (runtime && runtimeIdentity === identity) return runtime;
-    await closeRuntime();
+    await closeRuntime(new Error("MCP runtime identity changed"));
     runtime = await createRuntime(powerWorkspace);
     runtimeIdentity = identity;
     return runtime;
@@ -14553,7 +14667,7 @@ var createKiroMcpServer = async (options) => {
     const settled = new Promise((resolve) => {
       settle = resolve;
     });
-    const execution = { controller, settled, settle };
+    const execution = { controller, runtime: current, settled, settle };
     active.add(execution);
     return { current, execution };
   });
@@ -14568,13 +14682,14 @@ var createKiroMcpServer = async (options) => {
     ];
   };
   const reportWorkspace = (result) => {
-    const identity = identityKey(binding.boundWorkspace());
+    const identity = binding.bindingIdentity();
+    const verified = binding.workspaceObservation().status === "verified";
     return {
       ...result,
       // Read-only status/list must not initialize a heavyweight runtime. Only
       // report capabilities that have actually been observed for this exact
       // binding; fabric_info is the explicit runtime probe.
-      ...runtime && runtimeIdentity === identity ? { capabilities: registryCapabilities(runtime) } : {}
+      ...verified && runtime && runtimeIdentity === identity ? { capabilities: registryCapabilities(runtime) } : {}
     };
   };
   const handleWorkspace = async (request, signal) => {
@@ -14589,12 +14704,11 @@ var createKiroMcpServer = async (options) => {
       if (request.action === "select" && clientWorkspaceTemporarilyUnavailable()) {
         throw new Error("workspace roots are temporarily unverifiable; retry after the client recovers");
       }
-      const previous = identityKey(binding.boundWorkspace());
+      const previous = binding.bindingIdentity();
       const committed = binding.commitMutation(mutation);
-      const changed = previous !== identityKey(binding.boundWorkspace());
+      const changed = previous !== binding.bindingIdentity();
       if (changed) {
-        await drainActive(new Error("Power workspace binding changed"));
-        await closeRuntime();
+        await closeRuntime(new Error("Power workspace binding changed"));
       }
       return committed;
     });
@@ -14774,8 +14888,9 @@ var createKiroMcpServer = async (options) => {
         try {
           await runLifecycle(async () => {
             closing = true;
-            await drainActive(new Error("Power MCP server shutting down"));
-            await closeRuntime();
+            const reason = new Error("Power MCP server shutting down");
+            const drained = await drainActive(reason);
+            await closeRuntime(reason, drained);
           });
         } finally {
           await server.close();

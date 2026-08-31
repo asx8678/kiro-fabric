@@ -9,12 +9,12 @@ const require = __kfCreateRequire(import.meta.url);
 // src/agents/transports/process-utils.ts
 import { execFile, spawn as spawn2 } from "node:child_process";
 import fs from "node:fs";
-import path from "node:path";
+import path2 from "node:path";
 
 // src/worker/process-tree.ts
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
-var IS_JOB_OBJECT_AVAILABLE = process.platform === "win32";
+import path from "node:path";
 var TEST_PLATFORM_ENV = "KIRO_FABRIC_TEST_PLATFORM";
 var TEST_PS_FAILURE_ENV = "KIRO_FABRIC_TEST_PS_FAILURE";
 var runtimePlatform = () => process.env[TEST_PLATFORM_ENV] ?? process.platform;
@@ -174,9 +174,14 @@ var killPosixGroup = (pgid, signal) => {
   } catch {
   }
 };
-var killWindowsTree = async (pid) => {
+var confinedWindowsTaskkill = () => {
+  const configuredRoot = process.env.SystemRoot ?? process.env.windir;
+  const systemRoot = configuredRoot && path.win32.isAbsolute(configuredRoot) ? configuredRoot : "C:\\Windows";
+  return path.win32.join(systemRoot, "System32", "taskkill.exe");
+};
+var killWindowsTree = async (pid, confined = false) => {
   await new Promise((resolve) => {
-    const treeKillCommand = ["task", "kill"].join("");
+    const treeKillCommand = confined ? confinedWindowsTaskkill() : ["task", "kill"].join("");
     const killer = spawn(treeKillCommand, ["/pid", String(pid), "/T", "/F"], {
       stdio: "ignore",
       windowsHide: true
@@ -196,8 +201,10 @@ var killWindowsTree = async (pid) => {
     }, 2e3);
     timeout.unref?.();
     killer.once("error", () => {
-      for (const childPid of descendantPids(pid).filter((value) => value !== pid)) {
-        killPid(childPid, "SIGKILL");
+      if (!confined) {
+        for (const childPid of descendantPids(pid).filter((value) => value !== pid)) {
+          killPid(childPid, "SIGKILL");
+        }
       }
       killPid(pid, "SIGKILL");
       finish();
@@ -243,7 +250,7 @@ var createProcessTreeController = (pid, options = {}) => {
   const signal = async (value) => {
     refresh();
     if (!ambientHelpers) {
-      if (runtimePlatform() === "win32") killPid(pid, value);
+      if (runtimePlatform() === "win32") await killWindowsTree(pid, true);
       else {
         const tree = readKernelProcessTree(pid);
         killPosixGroup(tree?.pgid ?? pid, value);
@@ -317,7 +324,7 @@ var runtimeOverride = (env) => {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 };
 var isGenericRuntime = (execPath, requireNode) => {
-  const name = path.basename(execPath).toLowerCase();
+  const name = path2.basename(execPath).toLowerCase();
   return GENERIC_RUNTIME.test(name) && (!requireNode || name.startsWith("node"));
 };
 var missingRuntimeError = (execPath) => new Error(
@@ -354,7 +361,7 @@ var resolveScriptRuntimeSync = (options = {}) => {
   throw missingRuntimeError(execPath);
 };
 var spawnDetached = async (workerPath, workerArguments, cwd, options = {}) => {
-  const runtime = await resolveScriptRuntime();
+  const runtime = await resolveScriptRuntime(options.runtime);
   let stdout;
   let stderr;
   let child;
@@ -370,7 +377,21 @@ var spawnDetached = async (workerPath, workerArguments, cwd, options = {}) => {
     if (stdout !== void 0) fs.closeSync(stdout);
     if (stderr !== void 0) fs.closeSync(stderr);
   }
-  if (!child.pid) throw new Error("Failed to launch Fabric worker process");
+  await new Promise((resolve, reject) => {
+    const onSpawn = () => {
+      child.off("error", onError);
+      resolve();
+    };
+    const onError = (error) => {
+      child.off("spawn", onSpawn);
+      reject(new Error(`Failed to launch Fabric worker process (${runtime}): ${error.message}`, {
+        cause: error
+      }));
+    };
+    child.once("spawn", onSpawn);
+    child.once("error", onError);
+  });
+  if (!child.pid) throw new Error(`Failed to launch Fabric worker process (${runtime}): missing pid`);
   const pid = child.pid;
   const tree = createProcessTreeController(pid, {
     ambientHelpers: options.ambientHelpers !== false

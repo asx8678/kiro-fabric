@@ -12,7 +12,7 @@ import {
   parseKiroAgentWorkerOptions,
   readSteerLines,
   value_exports
-} from "../chunks/chunk-ELJJP3DS.js";
+} from "../chunks/chunk-3TZX7VW7.js";
 import {
   KIRO_V3_AGENT_MODE,
   assertKiroV3AgentModeAvailable,
@@ -27,7 +27,7 @@ import {
   generateKiroProfile,
   resolveKiroHome,
   sameExecutableIdentity
-} from "../chunks/chunk-UMXA4XWU.js";
+} from "../chunks/chunk-DTWQSS3Y.js";
 import {
   KiroInstallError,
   assertManagedTree,
@@ -37,16 +37,17 @@ import {
   readPackageVersion,
   resolveKiroProjectRoot,
   sha256Bytes
-} from "../chunks/chunk-G3LPLMI7.js";
+} from "../chunks/chunk-MI2H25H6.js";
 import {
   createProcessTreeController,
   resolveScriptRuntimeSync
-} from "../chunks/chunk-SSHRMRMV.js";
+} from "../chunks/chunk-27626ACZ.js";
 import {
   assertRunnerSessionId,
   parseKiroChildTools,
   serializeKiroChildTools
 } from "../chunks/chunk-PL2W3NQY.js";
+import "../chunks/chunk-OZKYNYCD.js";
 import "../chunks/chunk-GX475RD4.js";
 
 // src/kiro/agent-worker-entry.ts

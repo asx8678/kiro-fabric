@@ -644,7 +644,7 @@ var copyAttestedExecutable = (source, target, mode = 493) => {
   chmodSync(target, mode);
   return attestExecutable(target);
 };
-var applyManagedTransition = (root, target, transition) => {
+var inspectManagedTransition = (root, target, transition) => {
   if (transition.expectedSha256 !== null && !isSha256Hex(transition.expectedSha256) || transition.nextSha256 !== null && !isSha256Hex(transition.nextSha256) || transition.nextBase64 === null !== (transition.nextSha256 === null)) {
     throw new KiroInstallError("manifest", "managed transaction file state is malformed");
   }
@@ -654,17 +654,21 @@ var applyManagedTransition = (root, target, transition) => {
   }
   const current = readManagedFileNoFollow(root, target);
   const currentHash = current === null ? null : sha256Bytes(current);
-  if (currentHash === transition.nextSha256) return;
-  if (currentHash !== transition.expectedSha256) {
+  if (currentHash !== transition.nextSha256 && currentHash !== transition.expectedSha256) {
     throw new KiroInstallError(
       "concurrency",
       `managed file changed during transaction: ${target}`
     );
   }
+  return { currentHash, nextBytes };
+};
+var applyManagedTransition = (root, target, transition) => {
+  const { currentHash, nextBytes } = inspectManagedTransition(root, target, transition);
+  if (currentHash === transition.nextSha256) return;
   assertNoSymlinkComponents(root, target);
   if (nextBytes !== null) ensureManagedDirectory(dirname(target));
   if (nextBytes === null) {
-    if (current !== null) unlinkManagedNoFollow(root, target);
+    if (currentHash !== null) unlinkManagedNoFollow(root, target);
   } else {
     writeManagedAtomic(root, target, nextBytes, 384);
   }
@@ -727,17 +731,37 @@ var writeManagedTransactionJournal = (root, layout, transaction) => {
   writeManagedAtomic(root, paths.transaction, serializeJson(transaction), 384);
   fsyncDirectory(paths.manifestDir);
 };
-var recoverManagedTransaction = (root, layout = "project") => {
+var readManagedTransaction = (root, layout) => {
   const paths = managedPaths(root, layout);
   const bytes = readManagedFileNoFollow(root, paths.transaction);
-  if (bytes === null) return false;
+  if (bytes === null) return null;
   let value;
   try {
     value = JSON.parse(bytes.toString("utf8"));
   } catch {
     throw new KiroInstallError("manifest", `transaction journal is malformed: ${paths.transaction}`);
   }
-  const transaction = parseManagedTransaction(value, root, layout);
+  return parseManagedTransaction(value, root, layout);
+};
+var probeManagedTransactionRecovery = (root, layout = "project") => {
+  const paths = managedPaths(root, layout);
+  const transaction = readManagedTransaction(root, layout);
+  if (!transaction) return false;
+  if (transaction.format === 1) {
+    inspectManagedTransition(root, paths.profile, transaction.profile);
+    inspectManagedTransition(root, paths.manifest, transaction.manifest);
+  } else {
+    for (const file of transaction.files) {
+      const rel = transactionRelativePath(root, layout, file.path);
+      inspectManagedTransition(root, join(root, ...rel.split("/")), file.transition);
+    }
+  }
+  return true;
+};
+var recoverManagedTransaction = (root, layout = "project") => {
+  const paths = managedPaths(root, layout);
+  const transaction = readManagedTransaction(root, layout);
+  if (!transaction) return false;
   if (transaction.format === 1) {
     applyManagedTransition(root, paths.profile, transaction.profile);
     applyManagedTransition(root, paths.manifest, transaction.manifest);
@@ -976,6 +1000,7 @@ export {
   attestExecutable,
   assertExecutableAttestation,
   copyAttestedExecutable,
+  probeManagedTransactionRecovery,
   recoverManagedTransaction,
   commitManagedFileTransaction,
   fsyncDirectory,

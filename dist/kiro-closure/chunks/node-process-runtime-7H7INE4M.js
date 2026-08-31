@@ -21,7 +21,7 @@ import {
 } from "./chunk-PGDCKPF6.js";
 import {
   resolveScriptRuntimeSync
-} from "./chunk-SSHRMRMV.js";
+} from "./chunk-27626ACZ.js";
 import {
   transpileFabricCodeWithSourceMap
 } from "./chunk-MMKAFZEV.js";

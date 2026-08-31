@@ -14,16 +14,13 @@ import {
   managedPaths,
   resolveCanonicalKiroProjectRootIdentity,
   resolveKiroProjectRoot
-} from "./chunk-G3LPLMI7.js";
+} from "./chunk-MI2H25H6.js";
+import {
+  KIRO_PROFILE_REQUEST_TIMEOUT_MS
+} from "./chunk-OZKYNYCD.js";
 import {
   __export
 } from "./chunk-GX475RD4.js";
-
-// src/kiro/deadlines.ts
-var KIRO_EXECUTION_TIMEOUT_MS = 9e5;
-var KIRO_MCP_CALL_TIMEOUT_MS = 93e4;
-var KIRO_MCP_DRAIN_TIMEOUT_MS = 5e3;
-var KIRO_PROFILE_REQUEST_TIMEOUT_MS = 96e4;
 
 // src/kiro/home.ts
 import { homedir } from "node:os";
@@ -5105,9 +5102,6 @@ export {
   Module,
   Priority,
   Script2 as Script,
-  KIRO_EXECUTION_TIMEOUT_MS,
-  KIRO_MCP_CALL_TIMEOUT_MS,
-  KIRO_MCP_DRAIN_TIMEOUT_MS,
   resolveKiroHome,
   resolveKiroInstallRoots,
   KIRO_CLI_VERSION,

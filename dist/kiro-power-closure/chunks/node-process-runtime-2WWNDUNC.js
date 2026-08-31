@@ -7,7 +7,7 @@ const require = __kfCreateRequire(import.meta.url);
 
 import {
   resolveScriptRuntimeSync
-} from "./chunk-SSHRMRMV.js";
+} from "./chunk-27626ACZ.js";
 import {
   createGuestStackMap,
   guestSetupForCoreToolNamespace,

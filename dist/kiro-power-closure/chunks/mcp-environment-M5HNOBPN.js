@@ -8,7 +8,7 @@ const require = __kfCreateRequire(import.meta.url);
 import {
   resolveKiroProjectRoot,
   verifyCanonicalKiroProjectRootIdentity
-} from "./chunk-PJTPG7SK.js";
+} from "./chunk-VXC54T6R.js";
 import "./chunk-GX475RD4.js";
 
 // src/kiro/mcp-environment.ts

@@ -6,15 +6,18 @@ globalThis.__filename = __kfFileURLToPath(import.meta.url);
 globalThis.__dirname = __kfDirname(globalThis.__filename);
 const require = __kfCreateRequire(import.meta.url);
 
+import {
+  KIRO_MCP_DRAIN_TIMEOUT_MS
+} from "../chunks/chunk-OZKYNYCD.js";
 import "../chunks/chunk-GX475RD4.js";
 
 // src/kiro/mcp-entry.ts
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-var SHUTDOWN_GRACE_MS = 5e3;
+var SHUTDOWN_GRACE_MS = KIRO_MCP_DRAIN_TIMEOUT_MS + 2e3;
 var startKiroMcpServer = async () => {
-  const { createKiroMcpServer } = await import("../chunks/mcp-server-C3UFSN34.js");
-  const { resolveKiroMcpLaunchEnvironment } = await import("../chunks/mcp-environment-ODI5PAPL.js");
+  const { createKiroMcpServer } = await import("../chunks/mcp-server-BVQSUB5S.js");
+  const { resolveKiroMcpLaunchEnvironment } = await import("../chunks/mcp-environment-U5BIXPFZ.js");
   const { parseKiroChildToolsEnv } = await import("../chunks/run-scope-2AOED3QV.js");
   const launch = resolveKiroMcpLaunchEnvironment();
   return createKiroMcpServer(launch.mode === "power" ? {

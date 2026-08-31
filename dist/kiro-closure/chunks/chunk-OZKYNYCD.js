@@ -5,11 +5,16 @@ globalThis.__filename = __kfFileURLToPath(import.meta.url);
 globalThis.__dirname = __kfDirname(globalThis.__filename);
 const require = __kfCreateRequire(import.meta.url);
 
-import {
-  resolveKiroMcpLaunchEnvironment
-} from "./chunk-VGY2FX2U.js";
-import "./chunk-G3LPLMI7.js";
-import "./chunk-GX475RD4.js";
+
+// src/kiro/deadlines.ts
+var KIRO_EXECUTION_TIMEOUT_MS = 9e5;
+var KIRO_MCP_CALL_TIMEOUT_MS = 93e4;
+var KIRO_MCP_DRAIN_TIMEOUT_MS = 5e3;
+var KIRO_PROFILE_REQUEST_TIMEOUT_MS = 96e4;
+
 export {
-  resolveKiroMcpLaunchEnvironment
+  KIRO_EXECUTION_TIMEOUT_MS,
+  KIRO_MCP_CALL_TIMEOUT_MS,
+  KIRO_MCP_DRAIN_TIMEOUT_MS,
+  KIRO_PROFILE_REQUEST_TIMEOUT_MS
 };
