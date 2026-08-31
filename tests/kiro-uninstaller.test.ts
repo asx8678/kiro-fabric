@@ -132,6 +132,17 @@ describe("uninstallKiroProfile", () => {
     expect(second.changed).toBe(false);
   });
 
+  it("cleans empty managed directories even when uninstall is otherwise a no-op", () => {
+    const dir = project("noop-empty-directories");
+    mkdirSync(join(dir, ".kiro", "agents"), { recursive: true });
+    mkdirSync(join(dir, ".kiro", ".kiro-fabric", "backups"), { recursive: true });
+    mkdirSync(join(dir, ".fabric", "runtime"), { recursive: true });
+    const result = uninstallKiroProfile({ projectRoot: dir });
+    expect(result).toMatchObject({ action: "noop", changed: false });
+    expect(existsSync(join(dir, ".kiro"))).toBe(false);
+    expect(existsSync(join(dir, ".fabric"))).toBe(false);
+  });
+
   it("does not touch an independent profile when no manifest exists", () => {
     const dir = project("independent");
     mkdirSync(dirname(kiroProfilePath(dir)), { recursive: true });

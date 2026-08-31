@@ -134,6 +134,7 @@ export const runKiroDoctor = async (
   );
   let attestedInstalledMcpEntryPath: string | undefined;
   let attestedInstalledNodePath: string | undefined;
+  let observedNodeVersion = process.versions.node;
   const checks: KiroDoctorCheck[] = [];
   let tupleFailed = false;
 
@@ -286,14 +287,15 @@ export const runKiroDoctor = async (
 
   const workspace = await mkdtemp(join(tmpdir(), "kiro-fabric-kiro-doctor-"));
   const projectRoot = join(workspace, "project");
-  await mkdir(projectRoot, { recursive: true });
 
   try {
+    await mkdir(projectRoot, { recursive: true });
     await run("tuple", async () => {
       if (checkingInstalled && (!attestedInstalledNodePath || !attestedInstalledMcpEntryPath || !managedKiroBinaryPath)) {
         throw new Error("installed format-3 runtime is not fully attested; run update or repair before doctor");
       }
       const node = await assertSupportedNode(attestedInstalledNodePath ?? process.execPath);
+      observedNodeVersion = node.version;
       const kiro = await assertKiroVersion(kiroBinary);
       observedKiro = kiro;
       if (
@@ -628,7 +630,7 @@ export const runKiroDoctor = async (
     observed: {
       node: {
         path: attestedInstalledNodePath ?? process.execPath,
-        version: process.versions.node,
+        version: observedNodeVersion,
       },
       kiro: {
         path: observedKiro?.sourcePath ?? kiroBinary,

@@ -671,11 +671,20 @@ const runKiro = async (
     assertExecutableAttestation(identity);
     return { stdout: String(stdout), stderr: String(stderr) };
   } catch (error) {
-    const err = error as { stdout?: string; stderr?: string; message?: string };
+    const err = error as {
+      stdout?: string;
+      stderr?: string;
+      message?: string;
+      code?: string;
+      killed?: boolean;
+      signal?: string;
+    };
     const detail = `${err.stdout ?? ""}\n${err.stderr ?? ""}`.trim();
+    const timedOut = err.killed === true || err.code === "ETIMEDOUT" || err.signal === "SIGTERM";
     throw new KiroInstallError(
       "kiro-validate",
-      `kiro-cli ${args.join(" ")} failed${detail ? `: ${detail.slice(0, 2000)}` : `: ${err.message ?? String(error)}`}`,
+      `kiro-cli ${args.join(" ")} ${timedOut ? "timed out" : "failed"}` +
+        (detail ? `: ${detail.slice(0, 2000)}` : `: ${err.message ?? String(error)}`),
     );
   } finally {
     staged?.dispose();
@@ -715,7 +724,10 @@ export const assertKiroV3Capabilities = async (
   }
 };
 
-const ERROR_DIAGNOSTIC = /\b(error|invalid|missing|failed)\b/i;
+// Kiro 2.20.1 emits diagnostics as line-oriented severity records while also
+// returning status 0. Match a diagnostic prefix, not free-standing words in a
+// success summary (for example, "0 failed").
+const ERROR_DIAGNOSTIC = /^\s*(?:error|fatal|invalid)\s*[:\[]/imu;
 
 /**
  * Validate a profile document with `kiro-cli agent validate`. Kiro 2.20.1

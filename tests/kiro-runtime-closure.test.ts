@@ -113,7 +113,10 @@ afterEach(() => {
 
 describe("runtime closure deployment", () => {
   const deploySmall = (root: string, layout: "project" | "user") =>
-    deployRuntimeClosure(root, layout, { nodeSourcePath: fakeRuntimePath });
+    deployRuntimeClosure(root, layout, {
+      nodeSourcePath: fakeRuntimePath,
+      kiroAttestation: attestExecutable(fakeRuntimePath),
+    });
 
   it("quarantines a generation before verification and never deletes a raced replacement", () => {
     const dir = project("generation-quarantine-race");
@@ -251,12 +254,22 @@ describe("runtime closure deployment", () => {
     expect(readFileSync(outside, "utf8")).toBe("outside\n");
   });
 
+  it("requires a distinct Kiro executable attestation", () => {
+    const dir = project("missing-kiro-attestation");
+    expect(() => planRuntimeClosureDeployment(dir, "project", {
+      nodeSourcePath: fakeRuntimePath,
+      nodeAttestation: attestExecutable(fakeRuntimePath),
+    })).toThrow(/separately attested Kiro executable/);
+    expect(existsSync(runtimeClosurePath(dir, "project"))).toBe(false);
+  });
+
   it("rejects a Node inode replacement after planning instead of copying new bytes", () => {
     const dir = project("node-race");
     const attestation = attestExecutable(fakeRuntimePath);
     const plan = planRuntimeClosureDeployment(dir, "project", {
       nodeSourcePath: fakeRuntimePath,
       nodeAttestation: attestation,
+      kiroAttestation: attestation,
     });
     rmSync(fakeRuntimePath);
     writeFileSync(fakeRuntimePath, "#!/bin/sh\nexit 42\n", { mode: 0o755 });
@@ -265,6 +278,7 @@ describe("runtime closure deployment", () => {
       expectedDigest: plan.digest,
       nodeSourcePath: fakeRuntimePath,
       nodeAttestation: attestation,
+      kiroAttestation: attestation,
     })).toThrow(/executable changed|attestation|concurrency/i);
     expect(existsSync(join(runtimeClosurePath(dir, "project"), plan.digest))).toBe(false);
   });
@@ -282,7 +296,11 @@ describe("runtime closure deployment", () => {
   it("force never replaces an immutable digest directory", () => {
     const dir = project("force-redeploy");
     deploySmall(dir, "project");
-    const forced = deployRuntimeClosure(dir, "project", { force: true, nodeSourcePath: fakeRuntimePath });
+    const forced = deployRuntimeClosure(dir, "project", {
+      force: true,
+      nodeSourcePath: fakeRuntimePath,
+      kiroAttestation: attestExecutable(fakeRuntimePath),
+    });
     expect(forced.updated).toBe(false);
     expect(forced.action).toBe("noop");
   });

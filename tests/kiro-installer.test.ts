@@ -566,6 +566,20 @@ describe("installKiroProfile", () => {
     expect(existsSync(join(dir, ".kiro"))).toBe(false);
   });
 
+  it("does not mistake a successful validation summary for an error diagnostic", async () => {
+    const dir = project("validator-success-summary");
+    const validator = join(base, "fake-kiro-success-summary");
+    writeFileSync(
+      validator,
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "kiro-cli 2.20.1"; exit 0; fi\nif [ "$1" = "acp" ] && [ "$2" = "--help" ]; then echo "--agent-engine v3 --auth-method cli"; exit 0; fi\necho "validation complete: 0 failed"\nexit 0\n`,
+      { mode: 0o755 },
+    );
+    await expect(installWithFake(dir, {
+      kiroBinary: validator,
+      skipRuntimeClosure: false,
+    })).resolves.toMatchObject({ ok: true });
+  });
+
   it("performs a safe managed update without --force", async () => {
     const dir = project("update");
     const first = await installWithFake(dir);

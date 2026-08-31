@@ -709,7 +709,16 @@ describe("runKiroSetup launch", () => {
     expect(run.stderr).toMatch(/selected project installation is unhealthy/i);
   }, 120_000);
 
-  // The timeout detection class and the interactive-cancel exit 130 path are
-  // not asserted here: the former is too slow for a unit suite, the latter
-  // requires a real interactive TTY session.
+  it("rejects contradictory grant changes during argument parsing", async () => {
+    const subagents = await runSetup(["update", "--subagents", "--revoke-shell", "--yes"]);
+    expect(subagents.code).toBe(2);
+    expect(subagents.stderr).toContain("--subagents conflicts with --revoke-shell");
+
+    const reset = await runSetup(["repair", "--reset-grants", "--revoke-tools", "--yes"]);
+    expect(reset.code).toBe(2);
+    expect(reset.stderr).toContain("--reset-grants conflicts with other grant-changing flags");
+  });
+
+  // Timeout detection and real TTY SIGINT cancellation require process-level
+  // fixtures; direct confirmation cancellation is covered by the exit-code path.
 });

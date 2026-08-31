@@ -318,7 +318,13 @@ export const planRuntimeClosureDeployment = (
   digestHash.update(computeRuntimeClosureDigest(packageRoot));
   digestHash.update("\0node\0");
   digestHash.update(nodeAttestation.sha256);
-  const kiroAttestation = options.kiroAttestation ?? nodeAttestation;
+  const kiroAttestation = options.kiroAttestation;
+  if (!kiroAttestation) {
+    throw new KiroInstallError(
+      "kiro-version",
+      "runtime closure deployment requires a separately attested Kiro executable",
+    );
+  }
   assertExecutableAttestation(kiroAttestation);
   digestHash.update("\0kiro\0");
   digestHash.update(kiroAttestation.sha256);
@@ -442,10 +448,17 @@ export const deployRuntimeClosure = (
 ): RuntimeClosureResult => {
   const startWall = Date.now();
   const packageRoot = resolveSourcePackageRoot();
+  const kiroAttestation = options?.kiroAttestation;
+  if (!kiroAttestation) {
+    throw new KiroInstallError(
+      "kiro-version",
+      "runtime closure deployment requires a separately attested Kiro executable",
+    );
+  }
   const planned = planRuntimeClosureDeployment(installRoot, layout, {
     ...(options?.nodeSourcePath ? { nodeSourcePath: options.nodeSourcePath } : {}),
     ...(options?.nodeAttestation ? { nodeAttestation: options.nodeAttestation } : {}),
-    ...(options?.kiroAttestation ? { kiroAttestation: options.kiroAttestation } : {}),
+    kiroAttestation,
     ...(options?.repairExisting ? { repairExisting: true } : {}),
   });
   const digest = planned.digest;
@@ -545,7 +558,7 @@ export const deployRuntimeClosure = (
     bytes += nodeSource.size;
     fileCount += 1;
     const stagedKiro = join(stagingDir, "bin", process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli");
-    const kiroSource = options?.kiroAttestation ?? nodeSource;
+    const kiroSource = kiroAttestation;
     copyAttestedExecutable(kiroSource, stagedKiro, 0o555);
     bytes += kiroSource.size;
     fileCount += 1;

@@ -6,14 +6,8 @@
 //
 // Exit codes: 0 success · 1 diagnosis/install/uninstall failure · 2 usage error.
 
-import {
-  installKiroProfile,
-  KiroInstallError,
-  type KiroInstallOptions,
-} from "./install.js";
-import { runKiroDoctor } from "./doctor.js";
-import { readPackageVersion } from "./managed.js";
-import { uninstallKiroProfile } from "./uninstall.js";
+import type { KiroInstallOptions } from "./install.js";
+import { KiroInstallError, readPackageVersion } from "./managed.js";
 
 const USAGE = `kiro-fabric — Kiro integration management
 
@@ -211,6 +205,7 @@ const runKiroCliUnsafe = async (argv: string[]): Promise<number> => {
     if (parsed.kiroHome && !parsed.user) {
       throw new UsageError("--kiro-home requires --user");
     }
+    const { runKiroDoctor } = await import("./doctor.js");
     const report = await runKiroDoctor({
       checkInstalled: true,
       ...(parsed.projectRoot ? { projectRoot: parsed.projectRoot } : {}),
@@ -237,6 +232,7 @@ const runKiroCliUnsafe = async (argv: string[]): Promise<number> => {
   }
 
   if (parsed.command === "uninstall") {
+      const { uninstallKiroProfile } = await import("./uninstall.js");
       const result = uninstallKiroProfile({
         ...(parsed.projectRoot ? { projectRoot: parsed.projectRoot } : {}),
         ...(parsed.user ? { scope: "user" } : {}),
@@ -265,6 +261,7 @@ const runKiroCliUnsafe = async (argv: string[]): Promise<number> => {
       ...(parsed.enableSubagents ? { enableSubagents: true } : {}),
       ...(parsed.allowTools ? { allowTools: true } : {}),
     };
+    const { installKiroProfile } = await import("./install.js");
     const result = await installKiroProfile({ ...options, dryRun: parsed.dryRun });
     if (parsed.json) {
       process.stdout.write(JSON.stringify(result, null, 2) + "\n");

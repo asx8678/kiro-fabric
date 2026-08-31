@@ -441,6 +441,7 @@ export const uninstallKiroProfile = (
     !planned.needsManifestRemoval &&
     !existsSync(managedPaths(planned.installRoot, planned.layout).transaction)
   ) {
+    cleanupEmptyManagedDirs(planned.installRoot, planned.layout);
     return resultFromPlan(planned, false);
   }
 

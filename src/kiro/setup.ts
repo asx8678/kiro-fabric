@@ -128,6 +128,7 @@ interface SetupArgs {
 }
 
 class UsageError extends Error {}
+class InteractiveCancelError extends Error {}
 
 const baseArgs = (command: SetupCommand): SetupArgs => ({
   command,
@@ -253,8 +254,14 @@ const parseSetupArgs = (argv: string[]): SetupArgs => {
   if (parsed.allowShell && parsed.revokeShell) throw new UsageError("--allow-shell conflicts with --revoke-shell");
   if (parsed.enableSubagents && parsed.revokeSubagents) throw new UsageError("--subagents conflicts with --revoke-subagents");
   if (parsed.allowTools && parsed.revokeTools) throw new UsageError("--allow-tools conflicts with --revoke-tools");
-  if (parsed.resetGrants && (parsed.allowShell || parsed.enableSubagents || parsed.allowTools)) {
-    throw new UsageError("--reset-grants conflicts with grant-enabling flags");
+  if (parsed.enableSubagents && parsed.revokeShell) {
+    throw new UsageError("--subagents conflicts with --revoke-shell");
+  }
+  if (parsed.resetGrants && (
+    parsed.allowShell || parsed.enableSubagents || parsed.allowTools ||
+    parsed.revokeShell || parsed.revokeSubagents || parsed.revokeTools
+  )) {
+    throw new UsageError("--reset-grants conflicts with other grant-changing flags");
   }
   return parsed;
 };
@@ -582,18 +589,22 @@ const resolveDesiredGrants = (parsed: SetupArgs): KiroManagedGrants => {
 };
 
 const buildInstallOptions = (parsed: SetupArgs): KiroInstallOptions => {
-  const installed = scopeStatusFor(
-    parsed.user ? "user" : "project",
-    parsed.projectRoot,
-    parsed.kiroHome,
-  );
-  const pinnedKiroBinary = parsed.kiroBinary ?? installed.kiroBinaryPath;
+  // Install itself re-attests every owned byte. Only read the manifest tuple
+  // needed to preserve the selected Kiro source here; running the full status
+  // verifier first duplicated closure hashing and made no-op updates needlessly
+  // pay for two complete installed-tree scans.
+  let installedKiroBinary: string | undefined;
+  if (parsed.kiroBinary === undefined) {
+    const roots = resolveRoots(parsed);
+    installedKiroBinary = readManifest(roots.installRoot, roots.layout)?.runtime.kiroBinaryPath;
+  }
+  const pinnedKiroBinary = parsed.kiroBinary ?? installedKiroBinary;
   const grants = resolveDesiredGrants(parsed);
   return {
     ...(parsed.projectRoot !== undefined ? { projectRoot: parsed.projectRoot } : {}),
     ...(parsed.user ? { scope: "user" as const } : {}),
     ...(parsed.kiroHome !== undefined ? { kiroHome: parsed.kiroHome } : {}),
-    ...(pinnedKiroBinary !== null && pinnedKiroBinary !== undefined ? { kiroBinary: pinnedKiroBinary } : {}),
+    ...(pinnedKiroBinary !== undefined ? { kiroBinary: pinnedKiroBinary } : {}),
     ...(parsed.force || parsed.command === "repair" ? { force: true } : {}),
     ...(grants.allowShell ? { allowShell: true } : {}),
     ...(grants.enableSubagents ? { enableSubagents: true } : {}),
@@ -655,7 +666,7 @@ const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
           : "") +
         "?",
     );
-    if (!proceed) throw new Error("cancelled");
+    if (!proceed) throw new InteractiveCancelError("cancelled");
   }
   const result = await installKiroProfile({
     ...installOptions,
@@ -704,7 +715,7 @@ const runUninstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => 
         roots.installRoot +
         ")?",
     );
-    if (!proceed) throw new Error("cancelled");
+    if (!proceed) throw new InteractiveCancelError("cancelled");
   }
   const result = uninstallKiroProfile({ ...options, dryRun: parsed.dryRun });
   if (parsed.json) {
@@ -815,9 +826,11 @@ const runLaunch = async (parsed: SetupArgs): Promise<number> => {
     const onSighup = (): void => forward("SIGHUP", 129);
     const onSigint = (): void => forward("SIGINT", 130);
     const onSigterm = (): void => forward("SIGTERM", 143);
+    const onSigquit = (): void => forward("SIGQUIT", 131);
     process.on("SIGHUP", onSighup);
     process.on("SIGINT", onSigint);
     process.on("SIGTERM", onSigterm);
+    process.on("SIGQUIT", onSigquit);
     const outcome = await new Promise<{ code: number } | { missing: boolean }>(
       (resolvePromise) => {
         child.once("error", (error: NodeJS.ErrnoException) => {
@@ -834,6 +847,7 @@ const runLaunch = async (parsed: SetupArgs): Promise<number> => {
       process.removeListener("SIGHUP", onSighup);
       process.removeListener("SIGINT", onSigint);
       process.removeListener("SIGTERM", onSigterm);
+      process.removeListener("SIGQUIT", onSigquit);
       if (interruptedCode !== undefined && processTree && !processTree.gone()) {
         await processTree.terminate(0, 2_000);
       }
@@ -993,7 +1007,9 @@ export const runKiroSetup = async (argv: string[]): Promise<number> => {
     }
   } catch (error) {
     writeSetupFailure(parsed.json, error);
-    return error instanceof UsageError ? 2 : 1;
+    return error instanceof UsageError ? 2
+      : error instanceof InteractiveCancelError ? 130
+      : 1;
   }
   return 2;
 };
