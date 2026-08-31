@@ -24,7 +24,7 @@ export const runKiroPowerDoctor = async (): Promise<KiroPowerDoctorReport> => {
   };
   await run("power.node", () => {
     if (Number(process.versions.node.split(".")[0]) < 24) throw new Error("Node 24 or newer is required");
-    return `Node ${process.version}`;
+    return `Node ${process.version} at ${process.execPath}`;
   });
   const root = resolveSourcePackageRoot();
   await run("power.launcher", () => {
@@ -32,11 +32,11 @@ export const runKiroPowerDoctor = async (): Promise<KiroPowerDoctorReport> => {
       mcpServers?: { fabric?: { command?: unknown; args?: unknown } };
     };
     const server = mcp.mcpServers?.fabric;
-    const expected = "${PLUGIN_ROOT}/dist/kiro-closure/kiro/mcp-entry.js";
+    const expected = "${PLUGIN_ROOT}/dist/kiro-power-closure/kiro/mcp-entry.js";
     if (server?.command !== "node" || !Array.isArray(server.args) || server.args[0] !== expected) {
       throw new Error("release manifest does not launch the bundled runtime closure");
     }
-    if (!existsSync(path.join(root, "dist", "kiro-closure", "kiro", "mcp-entry.js"))) {
+    if (!existsSync(path.join(root, "dist", "kiro-power-closure", "kiro", "mcp-entry.js"))) {
       throw new Error("bundled Power runtime closure is absent");
     }
     return "bundled runtime closure available without activation-time download";
@@ -71,7 +71,6 @@ export const runKiroPowerDoctor = async (): Promise<KiroPowerDoctorReport> => {
         integration: "power",
         config,
         powerMcpConfigPath: powerData!.mcpConfig,
-        memoryRoot: path.join(pluginData, "memory"),
       });
       try {
         const result = await runtime.service.execute({ code: "return 'ok'", signal: undefined, parentToolCallId: "doctor:power", host: runtime.host, onPartial() {} });

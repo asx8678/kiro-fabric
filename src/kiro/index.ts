@@ -11,8 +11,25 @@ export {
   resolveKiroPowerLaunchContext,
   type KiroPowerLaunchContext,
 } from "./power/launch-context.js";
-export { prepareKiroPowerDataPaths, prepareKiroPowerProjectPaths, kiroPowerWorkspaceId } from "./power/data-paths.js";
-export { KiroPowerWorkspaceBinding, type KiroPowerWorkspaceRequest } from "./power/workspace-binding.js";
+export {
+  prepareKiroPowerDataPaths,
+  prepareKiroPowerProjectPaths,
+  kiroPowerWorkspaceId,
+  type KiroPowerWorkspaceIdentity,
+} from "./power/data-paths.js";
+export {
+  CachedWorkspaceContextProvider,
+  type KiroWorkspaceContextStatus,
+  type KiroWorkspaceRoot,
+  type KiroWorkspaceSnapshot,
+  type WorkspaceContextProvider,
+  type WorkspaceContextSource,
+} from "./power/workspace-context.js";
+export {
+  KiroPowerWorkspaceBinding,
+  type KiroPowerBoundWorkspace,
+  type KiroPowerWorkspaceRequest,
+} from "./power/workspace-binding.js";
 export { KiroPowerApprover, type KiroPowerElicitationAdapter } from "./power/approver.js";
 export { runKiroPowerDoctor, type KiroPowerDoctorReport } from "./power/diagnostics.js";
 

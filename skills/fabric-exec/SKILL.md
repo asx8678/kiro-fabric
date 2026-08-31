@@ -5,6 +5,14 @@ description: Exact checked-TypeScript reference for Kiro Fabric Power workflows,
 
 # fabric_exec in Kiro Fabric Power
 
+## Runtime preflight
+
+The Power requires Node.js 24 or newer on the executable search path inherited
+by Kiro. If the MCP server does not start, use Kiro's native shell to run
+`node --version` and `command -v node` (or `where.exe node` on Windows), then
+run `kiro-fabric doctor power --json`. Do not download or execute an unpinned
+runtime as a workaround; install a supported Node 24 release and restart Kiro.
+
 Each call executes a type-checked TypeScript function body in QuickJS by
 default. Top-level `await` and `return` are supported; only the returned value
 reaches Kiro. Named strings are available as `π.key`.

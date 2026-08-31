@@ -7,7 +7,7 @@ rmSync(root, { recursive: true, force: true });
 mkdirSync(root, { recursive: true, mode: 0o700 });
 for (const file of ["plugin.json", "package.json"]) cpSync(file, path.join(root, file));
 cpSync("skills", path.join(root, "skills"), { recursive: true });
-cpSync("dist/kiro-closure", path.join(root, "runtime"), { recursive: true });
+cpSync("dist/kiro-power-closure", path.join(root, "runtime"), { recursive: true });
 const mcp = {
   $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   mcpServers: { fabric: {

@@ -12,9 +12,10 @@ federation.
 connect tools and services.
 
 > **Current release status:** local source installation is supported for Kiro
-> IDE testing. Direct GitHub Power import waits for publication and clean-machine
-> certification of exact package `kiro-fabric@0.63.0`. Kiro CLI v3 Power support
-> and Power ACP agents have separate certification gates.
+> IDE testing. Direct GitHub Power import uses the checked-in MCP-only closure
+> and remains blocked until an immutable signed release has reproducible-build,
+> SBOM, artifact-attestation, and clean-machine Kiro qualification evidence.
+> Power ACP agents have a separate certification gate and remain unavailable.
 
 ## Start here
 
@@ -270,7 +271,8 @@ Overflow artifacts are process-local and expire with the Power process.
 - One safe root can bind automatically. Several roots require an explicit
   selection.
 - Manual attachment is canonicalized and requires one-time approval.
-- Fabric memory and state use workspace-isolated storage.
+- Fabric memory and state are unavailable until binding and then use storage
+  keyed by the canonical path plus filesystem identity.
 - Approval messages redact common credential and token fields.
 - Power `fabric_exec` programs do not receive Kiro's native `k.*` filesystem or
   shell tools.
@@ -420,7 +422,7 @@ Important paths:
 - `docs/kiro/power.md`: complete Power behavior and limits
 - `docs/kiro/installer.md`: complete Strict installation and lifecycle guide
 
-Documentation: [Power guide](docs/kiro/power.md) · [Strict installer](docs/kiro/installer.md) · [Kiro records](docs/kiro/README.md) · [Security](docs/security-replay.md)
+Documentation: [Power guide](docs/kiro/power.md) · [Release governance](docs/kiro/release-governance.md) · [Strict installer](docs/kiro/installer.md) · [Kiro records](docs/kiro/README.md) · [Security](docs/security-replay.md)
 
 MIT licensed. See [LICENSE](LICENSE) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

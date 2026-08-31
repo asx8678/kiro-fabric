@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 // @ts-expect-error Certification helpers are dependency-free JavaScript used directly by Node.
 import { evaluateCertification } from "../scripts/certification/context-lib.mjs";
 // @ts-expect-error Readiness report constants are dependency-free JavaScript used directly by Node.
-import { REQUIRED_KIRO_CLAIM_IDS } from "../scripts/certification/readiness-reports.mjs";
+import { POWER_REAL_CHECKS, REQUIRED_KIRO_CLAIM_IDS } from "../scripts/certification/readiness-reports.mjs";
 
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const script = path.join(root, "scripts", "refresh-kiro-readiness.mjs");
@@ -168,6 +168,22 @@ const powerReport = (identity: unknown) => ({
   finishedAt: new Date().toISOString(),
 });
 
+const powerRealReport = (identity: unknown) => ({
+  kind: "kiro-fabric.power-real-qualification",
+  schemaVersion: 1,
+  identity,
+  ok: true,
+  package: `kiro-fabric@${packageVersion}`,
+  platforms: ["linux", "darwin", "win32"].map((osName) => ({
+    os: osName,
+    arch: "x64",
+    nodeVersion: "24.0.0",
+    kiroVersion: "3.0.0",
+    checks: POWER_REAL_CHECKS.map((id: string) => ({ id, status: "pass", evidence: "driver artifact" })),
+  })),
+  finishedAt: new Date().toISOString(),
+});
+
 const reportEntry = (report: any, id: string) => report.currentEvidence.reports.find(
   (entry: { id: string }) => entry.id === id,
 );
@@ -210,15 +226,18 @@ describe("Kiro readiness generator", () => {
     const claims = writeReport(claimsReport(identity));
     const release = writeReport(releaseReport(identity));
     const power = writeReport(powerReport(identity));
+    const powerReal = writeReport(powerRealReport(identity));
     const { report, status } = run([
       "--check",
       "--context-report", context,
       "--claims-report", claims,
       "--release-report", release,
       "--power-report", power,
+      "--power-real-report", powerReal,
     ]);
     expect(status).toBe(0);
     expect(report.currentEvidence.reports.map((entry: { verdict: string }) => entry.verdict)).toEqual([
+      "verified",
       "verified",
       "verified",
       "verified",

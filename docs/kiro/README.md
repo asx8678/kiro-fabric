@@ -59,6 +59,7 @@ backups, ownership rules, troubleshooting, and exit codes.
 | Document | Role | Status |
 |---|---|---|
 | [power.md](power.md) | Additive Agent Plugins 1.0.0 Power, local import, workspace/security/lifecycle limits | Deterministic local implementation; real IDE gates listed |
+| [release-governance.md](release-governance.md) | Protected CI, reproducibility, real-client qualification, signed release and SBOM policy | Required public-release process |
 | [capabilities-2.20.1-v3.md](capabilities-2.20.1-v3.md) | Current Strict Kiro 2.20.1/v3 contract, feature review, migration decisions, and efficient-use guidance | Authenticated non-billable gates passed; model-turn gate pending |
 | [baseline.md](baseline.md) | Implementation notebook, verification results, and PR-by-PR notes | Best record of work actually completed |
 | [capabilities-2.19.1.md](capabilities-2.19.1.md) | Results of the Kiro 2.19.1 capability spike and resulting fail-closed decisions | Implemented evidence |

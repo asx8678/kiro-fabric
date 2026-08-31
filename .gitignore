@@ -3,6 +3,8 @@ node_modules/
 dist/*
 !dist/kiro-closure/
 !dist/kiro-closure/**
+!dist/kiro-power-closure/
+!dist/kiro-power-closure/**
 coverage/
 .tmp/kiro-fabric-power/
 .pi/fabric-runs/

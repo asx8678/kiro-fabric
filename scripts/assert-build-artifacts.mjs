@@ -36,7 +36,7 @@ for (const artifact of REMOVED_BUILD_ARTIFACTS) {
 
 const emittedDeclarations = [];
 const declarationDirectories = [dist];
-const SKIPPED_DECLARATION_DIRECTORIES = ["kiro-closure"];
+const SKIPPED_DECLARATION_DIRECTORIES = ["kiro-closure", "kiro-power-closure"];
 while (declarationDirectories.length > 0) {
   const directory = declarationDirectories.pop();
   if (!directory) continue;

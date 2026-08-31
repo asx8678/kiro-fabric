@@ -31,7 +31,7 @@ non-billable, and sends no model prompt.
 ## GitHub installation
 
 The repository root is a valid package layout. Release `mcp.json` launches the
-checked-in `dist/kiro-closure` directly, so Power activation performs no npm
+checked-in MCP-only `dist/kiro-power-closure` directly, so Power activation performs no npm
 resolution, package download, or lifecycle-script execution. A release remains
 blocked until `pnpm check` has rebuilt and certified that closure and a
 clean-machine Kiro CLI v3 import/activation/deactivation gate has passed.
@@ -46,25 +46,32 @@ prefix.
 
 ## Workspace binding
 
-Power process CWD is plugin storage, never source-workspace identity. Discovery
-order is MCP `roots/list`, then explicit `fabric_workspace` selection. One
-validated client root may bind automatically; multiple roots require selection.
+Power process CWD is plugin storage, never source-workspace identity. A cached
+workspace-context adapter loads MCP roots after initialization, refreshes on
+`roots/list_changed`, and distinguishes an explicit empty result from a
+transient client failure. A transient failure preserves the last binding but
+denies new client-root-scoped execution until identity can be verified again.
+One validated client root may bind automatically; multiple roots require selection.
 Manual `attach` canonicalizes the path and requires approve-once MCP form
 elicitation displaying that path. Missing/unsupported elicitation, unsafe broad
 roots, filesystem root, Kiro home, plugin root/data, symlinks, deleted roots,
 or changed filesystem identity fail closed. Manual attachments are not
 persisted across MCP sessions.
 
-Before binding, only checked pure execution and safe Power-scoped capabilities
-are usable. Power mode intentionally does not mount `k.*`; native Kiro owns
+Before binding, only checked pure execution and process-local overflow artifacts
+are usable. Project memory and state are not mounted until a workspace is
+bound. Power mode intentionally does not mount `k.*`; native Kiro owns
 normal repository operations. Truncated results remain process-local and can be
 read in a later call through `tools.call` with the returned `artifacts.read` ID.
 
 ## Data and security
 
 Package assets are immutable. Mutable directories are mode `0700` beneath
-`${PLUGIN_DATA}/fabric`; workspace directories use a stable SHA-256 identity
-rather than raw paths. Power configuration is loaded only from
+`${PLUGIN_DATA}/fabric`; workspace directories use a versioned SHA-256 over the
+canonical path plus filesystem device/file identity. Each directory contains a
+private identity manifest that must match before prior memory or state is
+opened, so deleting and recreating a path cannot inherit the previous project.
+Power configuration is loaded only from
 `${PLUGIN_DATA}/fabric/config`; ambient Pi, Mcporter, workspace MCP
 configuration, and Strict-only grants are ignored. Network federation always
 requires approve-once elicitation and fails closed when elicitation is absent. Paths, environment values, credentials, ACP payloads, and private
@@ -92,7 +99,9 @@ claimed. A cancelled or indeterminate effect is never reported as successful.
 
 ## Troubleshooting, update, and uninstall
 
-Use Kiro MCP logs plus `kiro-fabric doctor power --json`. Verify Node 24+,
+Use Kiro MCP logs plus `kiro-fabric doctor power --json`. Node.js 24 or newer
+must be discoverable on the executable path inherited by Kiro; the doctor
+reports the exact running Node path. Verify Node 24+,
 `PLUGIN_ROOT`, writable `PLUGIN_DATA`, manifest/version synchronization, and
 workspace status. Updating a local Power means regenerate and re-import it;
 public updates are client-managed after publication. Disable/remove the Power
@@ -108,3 +117,7 @@ kiro-cli --v3 --agent kiro-fabric
 
 Strict keeps its exact one-tool permissions, project-identity binding,
 installer/doctor/update/uninstall semantics, and certified ACP resume behavior.
+
+Public releases additionally require the protected cross-platform,
+reproducibility, real-client, signed-tag, SBOM, and artifact-attestation gates
+in [release-governance.md](release-governance.md).

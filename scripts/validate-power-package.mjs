@@ -47,7 +47,7 @@ export const validatePowerPackage = (root) => {
   if (fabric?.command !== "node") fail("fabric MCP must use the bundled Node runtime closure");
   const launcher = fabric.args?.[0];
   const allowedLaunchers = [
-    "${PLUGIN_ROOT}/dist/kiro-closure/kiro/mcp-entry.js",
+    "${PLUGIN_ROOT}/dist/kiro-power-closure/kiro/mcp-entry.js",
     "${PLUGIN_ROOT}/runtime/kiro/mcp-entry.js",
   ];
   if (!allowedLaunchers.includes(launcher)) fail("fabric MCP launcher is not a bundled closure entry");

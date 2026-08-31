@@ -5,7 +5,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "${PLUGIN_ROOT}/dist/kiro-closure/kiro/mcp-entry.js"
+        "${PLUGIN_ROOT}/dist/kiro-power-closure/kiro/mcp-entry.js"
       ],
       "cwd": "${PLUGIN_ROOT}",
       "env": {

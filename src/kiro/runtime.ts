@@ -307,7 +307,10 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
         : "MCP federation is unavailable inside scoped Kiro ACP children",
     );
   }
-  if (options.tools === undefined && config.memory.enabled) {
+  const memoryAvailable = options.tools === undefined &&
+    config.memory.enabled &&
+    (!power || options.memoryRoot !== undefined);
+  if (memoryAvailable) {
     registry.register(new KiroMemoryProvider({
       cwd: options.cwd,
       root: options.memoryRoot ?? path.join(resolveAgentDir(), "fabric", "kiro-memory"),
@@ -315,9 +318,11 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   } else {
     registry.markUnavailable(
       "memory",
-      options.tools === undefined
-        ? "disabled by Fabric configuration"
-        : "persistent memory is unavailable inside scoped Kiro ACP children",
+      power && options.memoryRoot === undefined
+        ? "Power-scoped memory is unavailable until a workspace is bound"
+        : options.tools === undefined
+          ? "disabled by Fabric configuration"
+          : "persistent memory is unavailable inside scoped Kiro ACP children",
     );
   }
   // Main may opt into a small verification-capable fan-out. Internal child

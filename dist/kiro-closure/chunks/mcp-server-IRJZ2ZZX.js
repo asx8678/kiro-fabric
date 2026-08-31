@@ -557,7 +557,7 @@ var require_ignore = __commonJS({
 
 // src/kiro/mcp-server.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync as readFileSync2 } from "node:fs";
 import path19 from "node:path";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
@@ -1289,8 +1289,9 @@ var KiroPowerFabricApprover = class {
 
 // src/kiro/power/data-paths.ts
 import { createHash } from "node:crypto";
-import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import path2 from "node:path";
+var WORKSPACE_IDENTITY_FILE = "workspace-identity.json";
 var privateDirectory = (directory, boundary) => {
   const root = path2.resolve(boundary);
   const rootStats = lstatSync(root);
@@ -1351,17 +1352,121 @@ var prepareKiroPowerDataPaths = (pluginData) => {
     daemon: privateDirectory(path2.join(root, "daemon"), root)
   };
 };
-var kiroPowerWorkspaceId = (canonicalRoot) => createHash("sha256").update("kiro-fabric-power-workspace-v1\0").update(canonicalRoot).digest("hex");
-var prepareKiroPowerProjectPaths = (projects, canonicalRoot) => {
-  const root = privateDirectory(path2.join(projects, kiroPowerWorkspaceId(canonicalRoot)), projects);
+var kiroPowerWorkspaceId = (identity) => createHash("sha256").update("kiro-fabric-power-workspace-v2\0").update(identity.canonicalPath).update("\0").update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
+var prepareWorkspaceIdentity = (root, identity) => {
+  const target = path2.join(root, WORKSPACE_IDENTITY_FILE);
+  const serialized = `${JSON.stringify(identity, null, 2)}
+`;
+  try {
+    const descriptor = openSync(target, "wx", 384);
+    try {
+      writeFileSync(descriptor, serialized);
+    } finally {
+      closeSync(descriptor);
+    }
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+  }
+  const stats = lstatSync(target);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
+    throw new Error(`Power workspace identity is a symlink, hardlink, or non-file: ${target}`);
+  }
+  chmodSync(target, 384);
+  let persisted;
+  try {
+    persisted = JSON.parse(readFileSync(target, "utf8"));
+  } catch {
+    throw new Error(`Power workspace identity is malformed: ${target}`);
+  }
+  if (typeof persisted !== "object" || persisted === null || Array.isArray(persisted) || persisted.schemaVersion !== identity.schemaVersion || persisted.canonicalPath !== identity.canonicalPath || persisted.deviceId !== identity.deviceId || persisted.fileId !== identity.fileId) {
+    throw new Error(`Power workspace identity does not match the current filesystem object: ${target}`);
+  }
+  return target;
+};
+var prepareKiroPowerProjectPaths = (projects, identity) => {
+  const root = privateDirectory(path2.join(projects, kiroPowerWorkspaceId(identity)), projects);
+  const identityFile = prepareWorkspaceIdentity(root, identity);
   return {
     root,
+    identityFile,
     memory: privateDirectory(path2.join(root, "memory"), root),
     state: privateDirectory(path2.join(root, "state"), root),
     runs: privateDirectory(path2.join(root, "runs"), root),
     artifacts: privateDirectory(path2.join(root, "artifacts"), root),
     logs: privateDirectory(path2.join(root, "logs"), root)
   };
+};
+
+// src/kiro/power/workspace-context.ts
+var CachedWorkspaceContextProvider = class {
+  #source;
+  #ttlMs;
+  #now;
+  #listeners = /* @__PURE__ */ new Set();
+  #snapshot;
+  #stale = true;
+  #refresh;
+  #revision = 0;
+  constructor(source, options = {}) {
+    this.#source = source;
+    this.#ttlMs = options.ttlMs ?? 3e4;
+    this.#now = options.now ?? Date.now;
+  }
+  invalidate() {
+    this.#stale = true;
+  }
+  subscribe(listener) {
+    this.#listeners.add(listener);
+    return { dispose: () => {
+      this.#listeners.delete(listener);
+    } };
+  }
+  async current(options = {}) {
+    const now = this.#now();
+    if (!options.force && !this.#stale && this.#snapshot && now - this.#snapshot.observedAt < this.#ttlMs) {
+      return this.#snapshot;
+    }
+    if (this.#refresh) return this.#refresh;
+    this.#refresh = this.#load(now).finally(() => {
+      this.#refresh = void 0;
+    });
+    return this.#refresh;
+  }
+  async #load(observedAt) {
+    try {
+      const roots = this.#source.supported() ? [...await this.#source.load()] : [];
+      const snapshot2 = {
+        revision: ++this.#revision,
+        status: roots.length === 0 ? "explicitly-empty" : "verified",
+        roots,
+        observedAt
+      };
+      this.#stale = false;
+      this.#publish(snapshot2);
+      return snapshot2;
+    } catch (error) {
+      const previousRoots = this.#snapshot?.roots ?? [];
+      const snapshot2 = {
+        revision: ++this.#revision,
+        status: "temporarily-unavailable",
+        roots: previousRoots,
+        observedAt,
+        error: error instanceof Error ? error.message : String(error)
+      };
+      this.#stale = true;
+      this.#publish(snapshot2);
+      return snapshot2;
+    }
+  }
+  #publish(snapshot2) {
+    this.#snapshot = snapshot2;
+    for (const listener of this.#listeners) {
+      try {
+        listener(snapshot2);
+      } catch {
+      }
+    }
+  }
 };
 
 // src/kiro/power/workspace-binding.ts
@@ -1432,22 +1537,33 @@ var KiroPowerWorkspaceBinding = class {
       this.#initialAutoBindAllowed = false;
     }
   }
-  boundRoot() {
+  boundWorkspace() {
     const binding = this.#binding;
     if (!binding) return void 0;
     try {
       const current = this.#canonical(binding.root);
       if (current.dev !== binding.dev || current.ino !== binding.ino) throw new Error("identity changed");
-      return binding.root;
+      return {
+        schemaVersion: 1,
+        canonicalPath: binding.root,
+        deviceId: binding.dev.toString(),
+        fileId: binding.ino.toString(),
+        rootId: binding.id,
+        name: binding.name,
+        source: binding.source
+      };
     } catch {
       this.#binding = void 0;
       this.#initialAutoBindAllowed = false;
       return void 0;
     }
   }
+  boundRoot() {
+    return this.boundWorkspace()?.canonicalPath;
+  }
   status() {
-    const root = this.boundRoot();
-    return root ? { status: "bound", rootId: this.#binding.id, name: this.#binding.name, source: this.#binding.source, capabilities: ["checked-execution", "overflow-artifacts", "state"] } : { status: "unbound", requiresSelection: this.#candidates.length > 1, capabilities: ["checked-execution", "overflow-artifacts"] };
+    const workspace = this.boundWorkspace();
+    return workspace ? { status: "bound", rootId: workspace.rootId, name: workspace.name, source: workspace.source, capabilities: ["checked-execution", "overflow-artifacts", "memory", "state"] } : { status: "unbound", requiresSelection: this.#candidates.length > 1, capabilities: ["checked-execution", "overflow-artifacts"] };
   }
   list() {
     return { ...this.status(), roots: this.#candidates.map(({ id, name }) => ({ rootId: id, name })) };
@@ -13764,7 +13880,8 @@ var createKiroRuntime = (options) => {
       options.tools === void 0 ? "disabled by Fabric configuration" : "MCP federation is unavailable inside scoped Kiro ACP children"
     );
   }
-  if (options.tools === void 0 && config.memory.enabled) {
+  const memoryAvailable = options.tools === void 0 && config.memory.enabled && (!power || options.memoryRoot !== void 0);
+  if (memoryAvailable) {
     registry.register(new KiroMemoryProvider({
       cwd: options.cwd,
       root: options.memoryRoot ?? path18.join(resolveAgentDir(), "fabric", "kiro-memory")
@@ -13772,7 +13889,7 @@ var createKiroRuntime = (options) => {
   } else {
     registry.markUnavailable(
       "memory",
-      options.tools === void 0 ? "disabled by Fabric configuration" : "persistent memory is unavailable inside scoped Kiro ACP children"
+      power && options.memoryRoot === void 0 ? "Power-scoped memory is unavailable until a workspace is bound" : options.tools === void 0 ? "disabled by Fabric configuration" : "persistent memory is unavailable inside scoped Kiro ACP children"
     );
   }
   if (options.enableSubagents === true && options.tools === void 0 && config.agents.enabled) {
@@ -13908,7 +14025,7 @@ var createKiroMcpServer = async (options) => {
   if (integration === "power" && (!options.pluginRoot || !options.pluginData)) {
     throw new Error("power MCP launch requires PLUGIN_ROOT and PLUGIN_DATA");
   }
-  const version = options.version ?? (integration === "power" ? String(JSON.parse(readFileSync(path19.join(options.pluginRoot, "package.json"), "utf8")).version) : readPackageVersion());
+  const version = options.version ?? (integration === "power" ? String(JSON.parse(readFileSync2(path19.join(options.pluginRoot, "package.json"), "utf8")).version) : readPackageVersion());
   const server = new Server(
     { name: "kiro-fabric", version },
     { capabilities: { tools: {} } }
@@ -13968,28 +14085,32 @@ var createKiroMcpServer = async (options) => {
       })
     }
   }) : void 0;
-  const refreshRoots = async () => {
-    if (!binding) return;
+  const workspaceContext = integration === "power" ? options.workspaceContext ?? new CachedWorkspaceContextProvider({
+    supported: () => {
+      const capabilities = server.getClientCapabilities();
+      return capabilities?.roots !== void 0;
+    },
+    load: async () => (await server.listRoots(void 0, { timeout: 2e3 })).roots
+  }) : void 0;
+  let workspaceSnapshot;
+  const identityKey = (workspace) => workspace ? `${workspace.canonicalPath}\0${workspace.deviceId}\0${workspace.fileId}` : "<unbound>";
+  const syncWorkspaceContext = async (force = false) => {
+    if (!binding || !workspaceContext) return void 0;
+    const snapshot2 = await workspaceContext.current({ force });
     await runLifecycle(async () => {
       if (closing) return;
-      const previous = binding.boundRoot();
-      const capabilities = server.getClientCapabilities();
-      if (!capabilities?.roots) {
-        binding.updateClientRoots([]);
-      } else {
-        try {
-          const result = await server.listRoots(void 0, { timeout: 2e3 });
-          binding.updateClientRoots(result.roots);
-        } catch {
-          binding.updateClientRoots([]);
-        }
-      }
-      if (previous !== binding.boundRoot()) {
+      workspaceSnapshot = snapshot2;
+      if (snapshot2.status === "temporarily-unavailable") return;
+      const previous = identityKey(binding.boundWorkspace());
+      binding.updateClientRoots(snapshot2.roots);
+      if (previous !== identityKey(binding.boundWorkspace())) {
         await drainActive(new Error("MCP workspace roots changed"));
         await closeRuntime();
       }
     });
+    return snapshot2;
   };
+  const clientWorkspaceTemporarilyUnavailable = () => workspaceSnapshot?.status === "temporarily-unavailable" && binding?.boundWorkspace()?.source === "client-roots";
   const createRuntime = async () => {
     if (integration !== "power") {
       return prepareKiroRuntime({
@@ -13999,20 +14120,19 @@ var createKiroMcpServer = async (options) => {
         ...options.enableSubagents ? { enableSubagents: true } : {}
       });
     }
-    const bound = binding.boundRoot();
+    const bound = binding.boundWorkspace();
     const project = bound ? prepareKiroPowerProjectPaths(data.projects, bound) : void 0;
     return prepareKiroRuntime({
-      cwd: bound ?? data.root,
+      cwd: bound?.canonicalPath ?? data.root,
       integration: "power",
       agentDir: data.config,
       powerMcpConfigPath: data.mcpConfig,
-      memoryRoot: project?.memory ?? path19.join(data.root, "global", "memory"),
-      ...project ? { stateRoot: project.state } : {},
+      ...project ? { memoryRoot: project.memory, stateRoot: project.state } : {},
       powerApprover
     });
   };
   const runtimeForCurrentIdentity = async () => {
-    const identity = integration === "power" ? binding.boundRoot() ?? "<unbound>" : options.cwd;
+    const identity = integration === "power" ? identityKey(binding.boundWorkspace()) : options.cwd;
     if (runtime && runtimeIdentity === identity) return runtime;
     await closeRuntime();
     runtime = await createRuntime();
@@ -14037,19 +14157,25 @@ var createKiroMcpServer = async (options) => {
   const handleWorkspace = async (request, signal) => runLifecycle(async () => {
     if (closing) throw new Error("MCP server is shutting down");
     const mutating = request.action === "select" || request.action === "attach" || request.action === "detach";
-    const previous = binding.boundRoot();
+    if (request.action === "select" && clientWorkspaceTemporarilyUnavailable()) {
+      throw new Error("workspace roots are temporarily unverifiable; retry after the client recovers");
+    }
+    const previous = identityKey(binding.boundWorkspace());
     if (mutating) {
       await drainActive(new Error("Power workspace binding changed"));
     }
     const result = await binding.handle(request, signal);
-    if (previous !== binding.boundRoot()) await closeRuntime();
+    if (previous !== identityKey(binding.boundWorkspace())) await closeRuntime();
     return result;
   });
   if (integration === "power") {
-    server.setNotificationHandler(RootsListChangedNotificationSchema, refreshRoots);
+    server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
+      workspaceContext.invalidate();
+      await syncWorkspaceContext(true);
+    });
   }
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    if (integration === "power") await refreshRoots();
+    if (integration === "power") await syncWorkspaceContext();
     const exec = {
       name: "fabric_exec",
       description: integration === "power" ? POWER_DESCRIPTION : STRICT_DESCRIPTION,
@@ -14091,7 +14217,7 @@ var createKiroMcpServer = async (options) => {
     };
   });
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-    if (integration === "power") await refreshRoots();
+    if (integration === "power") await syncWorkspaceContext();
     const name = request.params.name;
     if (integration === "power" && name === "fabric_info") {
       if (Object.keys(request.params.arguments ?? {}).length) {
@@ -14117,7 +14243,14 @@ var createKiroMcpServer = async (options) => {
             integration: "power",
             version,
             runtime: { quickjs: "available" },
-            workspace: { ...status, capabilities },
+            workspace: {
+              ...status,
+              capabilities,
+              context: {
+                status: workspaceSnapshot?.status ?? "temporarily-unavailable",
+                revision: workspaceSnapshot?.revision ?? 0
+              }
+            },
             kiroAcp: {
               status: "unavailable",
               agents: false,
@@ -14149,6 +14282,15 @@ var createKiroMcpServer = async (options) => {
     if (name !== "fabric_exec") {
       return {
         content: [{ type: "text", text: `Unknown tool: ${String(name)}` }],
+        isError: true
+      };
+    }
+    if (integration === "power" && clientWorkspaceTemporarilyUnavailable()) {
+      return {
+        content: [{
+          type: "text",
+          text: "Fabric adapter error: workspace roots are temporarily unverifiable; retry after the client recovers"
+        }],
         isError: true
       };
     }

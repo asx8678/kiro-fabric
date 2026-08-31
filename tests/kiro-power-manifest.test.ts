@@ -13,7 +13,7 @@ describe("Agent Plugins 1.0.0 package", () => {
     expect(mcp.mcpServers.fabric).toMatchObject({
       type: "stdio",
       command: "node",
-      args: ["${PLUGIN_ROOT}/dist/kiro-closure/kiro/mcp-entry.js"],
+      args: ["${PLUGIN_ROOT}/dist/kiro-power-closure/kiro/mcp-entry.js"],
       cwd: "${PLUGIN_ROOT}",
       env: { KIRO_FABRIC_INTEGRATION: "power" },
     });

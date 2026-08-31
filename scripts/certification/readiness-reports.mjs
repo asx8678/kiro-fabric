@@ -8,6 +8,8 @@ export const RELEASE_A_CERTIFICATION_KIND = "kiro-fabric.release-a-certification
 export const RELEASE_A_CERTIFICATION_SCHEMA_VERSION = 1;
 export const POWER_CERTIFICATION_KIND = "kiro-fabric.power-certification";
 export const POWER_CERTIFICATION_SCHEMA_VERSION = 1;
+export const POWER_REAL_QUALIFICATION_KIND = "kiro-fabric.power-real-qualification";
+export const POWER_REAL_QUALIFICATION_SCHEMA_VERSION = 1;
 
 const CONTEXT_CHECK_IDS = Object.freeze([
   "context.cycles",
@@ -67,6 +69,25 @@ const POWER_CHECKS = Object.freeze([
   "artifact-recovery",
   "shutdown",
   "immutability",
+]);
+export const POWER_REAL_CHECKS = Object.freeze([
+  "import.folder",
+  "import.github",
+  "activation.keywords",
+  "environment.plugin-paths",
+  "tools.exact-surface",
+  "execution.checked",
+  "elicitation.approve",
+  "elicitation.decline",
+  "elicitation.dismiss",
+  "elicitation.timeout",
+  "workspace.single-root",
+  "workspace.multi-root",
+  "workspace.root-replacement",
+  "lifecycle.deactivate-active-call",
+  "lifecycle.reactivate-persistence",
+  "lifecycle.update",
+  "lifecycle.uninstall",
 ]);
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const hasExactIds = (values, required) => values.length === required.length
@@ -169,6 +190,36 @@ export const validatePowerCertification = (report, expectedPackage) => {
     || report.execution !== "checked" || report.artifactRecovery !== "lossless"
     || report.acpAgents !== false) {
     return invalid("Power certification evidence contradicts the required surface");
+  }
+  return valid(true);
+};
+
+export const validatePowerRealQualification = (report, expectedPackage) => {
+  const envelopeError = validateEnvelope(
+    report,
+    POWER_REAL_QUALIFICATION_KIND,
+    POWER_REAL_QUALIFICATION_SCHEMA_VERSION,
+  );
+  if (envelopeError) return invalid(envelopeError);
+  if (report.ok !== true || report.package !== expectedPackage
+    || !Array.isArray(report.platforms) || !validFinishedAt(report.finishedAt)) {
+    return invalid("real Power qualification metadata is invalid");
+  }
+  const requiredPlatforms = ["linux", "darwin", "win32"];
+  if (!hasExactIds(report.platforms.map((entry) => isRecord(entry) ? entry.os : undefined), requiredPlatforms)) {
+    return invalid("real Power qualification must contain Linux, macOS, and Windows evidence");
+  }
+  for (const platform of report.platforms) {
+    if (!isRecord(platform) || typeof platform.arch !== "string"
+      || typeof platform.nodeVersion !== "string" || typeof platform.kiroVersion !== "string"
+      || !Array.isArray(platform.checks)
+      || !hasExactIds(platform.checks.map((check) => isRecord(check) ? check.id : undefined), POWER_REAL_CHECKS)) {
+      return invalid(`real Power qualification for ${String(platform?.os)} is incomplete`);
+    }
+    if (platform.checks.some((check) => !isRecord(check) || check.status !== "pass"
+      || typeof check.evidence !== "string" || check.evidence.length === 0)) {
+      return invalid(`real Power qualification for ${platform.os} contains a non-pass check`);
+    }
   }
   return valid(true);
 };

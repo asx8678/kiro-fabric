@@ -19,9 +19,11 @@ import {
 import { join, resolve } from "node:path";
 
 const outdir = resolve("dist/kiro-closure");
+const powerOutdir = resolve("dist/kiro-power-closure");
 
 // Clean first
 rmSync(outdir, { recursive: true, force: true });
+rmSync(powerOutdir, { recursive: true, force: true });
 
 // Node built-in modules that must stay external
 const nodeBuiltins = [
@@ -38,6 +40,14 @@ const external = [
   ...nodeBuiltins.map(m => `node:${m}`),
   ...nodeBuiltins,
 ];
+
+const closureBanner = `import { createRequire as __kfCreateRequire } from "node:module";
+import { fileURLToPath as __kfFileURLToPath } from "node:url";
+import { dirname as __kfDirname } from "node:path";
+globalThis.__filename = __kfFileURLToPath(import.meta.url);
+globalThis.__dirname = __kfDirname(globalThis.__filename);
+const require = __kfCreateRequire(import.meta.url);
+`;
 
 const result = await build({
   entryPoints: [
@@ -62,15 +72,7 @@ const result = await build({
   external,
   // Supply CommonJS compatibility globals per output chunk without lexical
   // declarations, so bundled modules with their own definitions do not collide.
-  banner: {
-    js: `import { createRequire as __kfCreateRequire } from "node:module";
-import { fileURLToPath as __kfFileURLToPath } from "node:url";
-import { dirname as __kfDirname } from "node:path";
-globalThis.__filename = __kfFileURLToPath(import.meta.url);
-globalThis.__dirname = __kfDirname(globalThis.__filename);
-const require = __kfCreateRequire(import.meta.url);
-`,
-  },
+  banner: { js: closureBanner },
 });
 
 // Keep the deployable Kiro graph independent from the generic Pi agent stack.
@@ -129,13 +131,10 @@ if (forbiddenPackages.length > 0) {
 
 // ---- Ship the TypeScript default lib chain the guest type-checker needs ----
 // esbuild bundles the TypeScript compiler into a chunk, but its lib/*.d.ts
-// files are read from disk at runtime by path. Without the ES lib chain the
-// QuickJS guest type-check cannot resolve Promise/reference typings. Copy the
-// transitive lib.es2022 reference set into the chunks directory (next to the
-// bundled TypeScript chunk) so `getDefaultLibFilePath` resolves offline.
-{
+// files are read from disk at runtime by path.
+const copyTypeScriptLibraries = (targetOutdir) => {
   const tsLibDir = join(resolve("."), "node_modules", "typescript", "lib");
-  const chunksDir = join(outdir, "chunks");
+  const chunksDir = join(targetOutdir, "chunks");
   const libSet = new Set();
   const queue = ["lib.es2022.d.ts"];
   while (queue.length) {
@@ -152,25 +151,21 @@ if (forbiddenPackages.length > 0) {
     }
   }
   mkdirSync(chunksDir, { recursive: true });
-  for (const name of libSet) {
-    copyFileSync(join(tsLibDir, name), join(chunksDir, name));
-  }
-}
+  for (const name of libSet) copyFileSync(join(tsLibDir, name), join(chunksDir, name));
+};
 
-// Write a minimal package.json for the closure
-writeFileSync(
-  join(outdir, "package.json"),
+const writeClosurePackage = (targetOutdir, name) => writeFileSync(
+  join(targetOutdir, "package.json"),
   JSON.stringify(
-    {
-      name: "kiro-fabric-runtime",
-      version: "0.0.0-closure",
-      type: "module",
-      private: true,
-    },
+    { name, version: "0.0.0-closure", type: "module", private: true },
     null,
     2,
   ) + "\n",
 );
+
+copyTypeScriptLibraries(outdir);
+writeClosurePackage(outdir, "kiro-fabric-runtime");
+
 
 // ---- PR1: production closure correctness assertions ----
 // 1. No source maps in the production closure.
@@ -214,3 +209,48 @@ console.log(
   `Closure built: ${Object.keys(result.metafile.outputs).length} output files; ` +
   `${jsFileCount} js files, ${(jsBytes / 1024).toFixed(0)} KiB JS, no source maps`,
 );
+
+// Power v1 ships only the MCP entry and its reachable graph. Strict-mode
+// management and ACP worker entrypoints remain in dist/kiro-closure.
+const powerResult = await build({
+  entryPoints: ["src/kiro/mcp-entry.ts"],
+  outdir: powerOutdir,
+  outbase: "src",
+  entryNames: "[dir]/[name]",
+  chunkNames: "chunks/[name]-[hash]",
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node24",
+  splitting: true,
+  sourcemap: false,
+  metafile: true,
+  logLevel: "info",
+  external,
+  banner: { js: closureBanner },
+});
+const powerInputs = Object.keys(powerResult.metafile.inputs).map((input) => input.replaceAll("\\", "/"));
+const forbiddenPowerInputs = powerInputs.filter((input) =>
+  input === "src/kiro/agent-worker-entry.ts" ||
+  input === "src/kiro/management-entry.ts" ||
+  input === "src/kiro/acp-worker.ts" ||
+  input.startsWith("src/residency/") ||
+  input.startsWith("src/actors/"),
+);
+if (forbiddenPowerInputs.length > 0) {
+  throw new Error(`Power closure includes unavailable worker/management inputs:\n${forbiddenPowerInputs.join("\n")}`);
+}
+copyTypeScriptLibraries(powerOutdir);
+writeClosurePackage(powerOutdir, "kiro-fabric-power-runtime");
+for (const entry of ["agent-worker-entry.js", "management-entry.js"]) {
+  if (existsSync(join(powerOutdir, "kiro", entry))) {
+    throw new Error(`Power closure must not contain kiro/${entry}`);
+  }
+}
+if (!existsSync(join(powerOutdir, "kiro", "mcp-entry.js"))) {
+  throw new Error("Power closure entry missing: kiro/mcp-entry.js");
+}
+if (existsSync(join(powerOutdir, "node_modules"))) {
+  throw new Error("Power closure must not bundle a node_modules directory");
+}
+console.log(`Power closure built: ${Object.keys(powerResult.metafile.outputs).length} output files; MCP-only entry graph`);

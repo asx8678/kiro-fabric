@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export interface KiroPowerDataPaths {
@@ -11,6 +11,15 @@ export interface KiroPowerDataPaths {
   projects: string;
   daemon: string;
 }
+
+export interface KiroPowerWorkspaceIdentity {
+  schemaVersion: 1;
+  canonicalPath: string;
+  deviceId: string;
+  fileId: string;
+}
+
+const WORKSPACE_IDENTITY_FILE = "workspace-identity.json";
 
 const privateDirectory = (directory: string, boundary: string): string => {
   const root = path.resolve(boundary);
@@ -74,13 +83,64 @@ export const prepareKiroPowerDataPaths = (pluginData: string): KiroPowerDataPath
   };
 };
 
-export const kiroPowerWorkspaceId = (canonicalRoot: string): string =>
-  createHash("sha256").update("kiro-fabric-power-workspace-v1\0").update(canonicalRoot).digest("hex");
+export const kiroPowerWorkspaceId = (identity: KiroPowerWorkspaceIdentity): string =>
+  createHash("sha256")
+    .update("kiro-fabric-power-workspace-v2\0")
+    .update(identity.canonicalPath)
+    .update("\0")
+    .update(identity.deviceId)
+    .update("\0")
+    .update(identity.fileId)
+    .digest("hex");
 
-export const prepareKiroPowerProjectPaths = (projects: string, canonicalRoot: string) => {
-  const root = privateDirectory(path.join(projects, kiroPowerWorkspaceId(canonicalRoot)), projects);
+const prepareWorkspaceIdentity = (
+  root: string,
+  identity: KiroPowerWorkspaceIdentity,
+): string => {
+  const target = path.join(root, WORKSPACE_IDENTITY_FILE);
+  const serialized = `${JSON.stringify(identity, null, 2)}\n`;
+  try {
+    const descriptor = openSync(target, "wx", 0o600);
+    try {
+      writeFileSync(descriptor, serialized);
+    } finally {
+      closeSync(descriptor);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  const stats = lstatSync(target);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
+    throw new Error(`Power workspace identity is a symlink, hardlink, or non-file: ${target}`);
+  }
+  chmodSync(target, 0o600);
+  let persisted: unknown;
+  try {
+    persisted = JSON.parse(readFileSync(target, "utf8"));
+  } catch {
+    throw new Error(`Power workspace identity is malformed: ${target}`);
+  }
+  if (
+    typeof persisted !== "object" || persisted === null || Array.isArray(persisted) ||
+    (persisted as KiroPowerWorkspaceIdentity).schemaVersion !== identity.schemaVersion ||
+    (persisted as KiroPowerWorkspaceIdentity).canonicalPath !== identity.canonicalPath ||
+    (persisted as KiroPowerWorkspaceIdentity).deviceId !== identity.deviceId ||
+    (persisted as KiroPowerWorkspaceIdentity).fileId !== identity.fileId
+  ) {
+    throw new Error(`Power workspace identity does not match the current filesystem object: ${target}`);
+  }
+  return target;
+};
+
+export const prepareKiroPowerProjectPaths = (
+  projects: string,
+  identity: KiroPowerWorkspaceIdentity,
+) => {
+  const root = privateDirectory(path.join(projects, kiroPowerWorkspaceId(identity)), projects);
+  const identityFile = prepareWorkspaceIdentity(root, identity);
   return {
     root,
+    identityFile,
     memory: privateDirectory(path.join(root, "memory"), root),
     state: privateDirectory(path.join(root, "state"), root),
     runs: privateDirectory(path.join(root, "runs"), root),

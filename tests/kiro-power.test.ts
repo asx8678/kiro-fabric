@@ -10,7 +10,7 @@ import { resolveKiroMcpLaunchEnvironment } from "../src/kiro/mcp-environment.js"
 import { supportsKiroPowerElicitation } from "../src/kiro/mcp-server.js";
 import { KiroPowerApprover, KiroPowerFabricApprover, type KiroPowerElicitationAdapter } from "../src/kiro/power/approver.js";
 import { runKiroPowerDoctor } from "../src/kiro/power/diagnostics.js";
-import { kiroPowerWorkspaceId, prepareKiroPowerDataPaths, prepareKiroPowerProjectPaths } from "../src/kiro/power/data-paths.js";
+import { kiroPowerWorkspaceId, prepareKiroPowerDataPaths, prepareKiroPowerProjectPaths, type KiroPowerWorkspaceIdentity } from "../src/kiro/power/data-paths.js";
 import { KiroPowerWorkspaceBinding } from "../src/kiro/power/workspace-binding.js";
 import { createKiroRuntime } from "../src/kiro/runtime.js";
 
@@ -20,6 +20,15 @@ const powerMcpConfig = (): string => {
   const file = path.join(temp(), "mcporter.json");
   fs.writeFileSync(file, JSON.stringify({ mcpServers: {}, imports: [] }), { mode: 0o600 });
   return file;
+};
+const workspaceIdentity = (root: string): KiroPowerWorkspaceIdentity => {
+  const stats = fs.statSync(root, { bigint: true });
+  return {
+    schemaVersion: 1,
+    canonicalPath: fs.realpathSync(root),
+    deviceId: stats.dev.toString(),
+    fileId: stats.ino.toString(),
+  };
 };
 afterEach(() => {
   vi.restoreAllMocks();
@@ -49,14 +58,63 @@ describe("Kiro Power security boundaries", () => {
     expect(fs.statSync(data.root).mode & 0o777).toBe(0o700);
     expect(fs.statSync(data.mcpConfig).mode & 0o777).toBe(0o600);
     expect(JSON.parse(fs.readFileSync(data.mcpConfig, "utf8"))).toEqual({ mcpServers: {}, imports: [] });
-    expect(kiroPowerWorkspaceId("/a")).toBe(kiroPowerWorkspaceId("/a"));
-    expect(kiroPowerWorkspaceId("/a")).not.toBe(kiroPowerWorkspaceId("/b"));
-    expect(prepareKiroPowerProjectPaths(data.projects, "/a").root).not.toBe(prepareKiroPowerProjectPaths(data.projects, "/b").root);
+    const workspaceA = path.join(root, "workspace-a");
+    const workspaceB = path.join(root, "workspace-b");
+    fs.mkdirSync(workspaceA);
+    fs.mkdirSync(workspaceB);
+    const identityA = workspaceIdentity(workspaceA);
+    const identityB = workspaceIdentity(workspaceB);
+    expect(kiroPowerWorkspaceId(identityA)).toBe(kiroPowerWorkspaceId(identityA));
+    expect(kiroPowerWorkspaceId(identityA)).not.toBe(kiroPowerWorkspaceId(identityB));
+    const projectA = prepareKiroPowerProjectPaths(data.projects, identityA);
+    expect(projectA.root).not.toBe(prepareKiroPowerProjectPaths(data.projects, identityB).root);
+    expect(JSON.parse(fs.readFileSync(projectA.identityFile, "utf8"))).toEqual(identityA);
+    expect(fs.statSync(projectA.identityFile).mode & 0o777).toBe(0o600);
 
     const unsafe = temp(); const fabric = path.join(unsafe, "fabric"); const outside = path.join(unsafe, "outside");
     fs.mkdirSync(fabric); fs.mkdirSync(outside); fs.symlinkSync(outside, path.join(fabric, "global"), "dir");
     expect(() => prepareKiroPowerDataPaths(unsafe)).toThrow(/symlink|contain|private/i);
     expect(fs.existsSync(path.join(outside, "cache"))).toBe(false);
+  });
+
+  it("does not reuse project data when a path is recreated with a new filesystem identity", () => {
+    const pluginData = temp();
+    const data = prepareKiroPowerDataPaths(pluginData);
+    const parent = temp();
+    const workspace = path.join(parent, "workspace");
+    fs.mkdirSync(workspace);
+    const firstIdentity = workspaceIdentity(workspace);
+    const first = prepareKiroPowerProjectPaths(data.projects, firstIdentity);
+    fs.writeFileSync(path.join(first.memory, "sentinel"), "old-project");
+
+    fs.rmSync(workspace, { recursive: true, force: true });
+    // Filesystems may immediately recycle an inode. Create candidates until a
+    // distinct filesystem identity is observed so the regression is portable.
+    let secondIdentity: KiroPowerWorkspaceIdentity | undefined;
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      fs.mkdirSync(workspace);
+      const candidate = workspaceIdentity(workspace);
+      if (candidate.deviceId !== firstIdentity.deviceId || candidate.fileId !== firstIdentity.fileId) {
+        secondIdentity = candidate;
+        break;
+      }
+      fs.rmSync(workspace, { recursive: true });
+      const spacer = path.join(parent, `spacer-${attempt}`);
+      fs.mkdirSync(spacer);
+    }
+    expect(secondIdentity).toBeDefined();
+    const second = prepareKiroPowerProjectPaths(data.projects, secondIdentity!);
+    expect(second.root).not.toBe(first.root);
+    expect(fs.existsSync(path.join(second.memory, "sentinel"))).toBe(false);
+  });
+
+  it("rejects a mismatched or linked workspace identity manifest", () => {
+    const data = prepareKiroPowerDataPaths(temp());
+    const workspace = temp();
+    const identity = workspaceIdentity(workspace);
+    const project = prepareKiroPowerProjectPaths(data.projects, identity);
+    fs.writeFileSync(project.identityFile, JSON.stringify({ ...identity, fileId: "different" }));
+    expect(() => prepareKiroPowerProjectPaths(data.projects, identity)).toThrow(/does not match/i);
   });
 
   it("rejects a symlinked host-owned MCP configuration", () => {
@@ -224,14 +282,17 @@ describe("Kiro Power security boundaries", () => {
     } finally { await runtime.close(); }
   });
 
-  it("does not mount k.* and mounts state only for a bound Power runtime", async () => {
+  it("does not mount project memory, state, or k.* until a workspace is bound", async () => {
     const root = temp();
-    const unbound = createKiroRuntime({ cwd: root, integration: "power", memoryRoot: path.join(root, "memory"), powerMcpConfigPath: powerMcpConfig() });
+    const unbound = createKiroRuntime({ cwd: root, integration: "power", powerMcpConfigPath: powerMcpConfig() });
     try {
-      expect(unbound.registry.providers().map((entry) => entry.name)).not.toContain("k");
-      expect(unbound.registry.providers().map((entry) => entry.name)).toContain("artifacts");
-      expect(unbound.registry.providers().map((entry) => entry.name)).not.toContain("state");
+      const providers = unbound.registry.providers().map((entry) => entry.name);
+      expect(providers).not.toContain("k");
+      expect(providers).toContain("artifacts");
+      expect(providers).not.toContain("memory");
+      expect(providers).not.toContain("state");
       expect(unbound.registry.unavailableProviders()).toContainEqual(expect.objectContaining({ name: "k" }));
+      expect(unbound.registry.unavailableProviders()).toContainEqual(expect.objectContaining({ name: "memory", reason: expect.stringMatching(/until a workspace is bound/i) }));
     } finally { await unbound.close(); }
     const bound = createKiroRuntime({
       cwd: root,

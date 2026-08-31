@@ -1,100 +1,75 @@
 #!/usr/bin/env node
-// PR1 package/closure size certification.
-//
-// Certifies that the built Kiro runtime closure stays within explicit byte
-// ceilings, that it contains no source maps, and that the required entry and
-// metadata are present. Machine-readable measurements are printed to stdout.
-//
-// Usage: node scripts/certify-closure-size.mjs [--json]
-// Must be run after `pnpm run build` (which emits dist/kiro-closure).
-
+// Certify independent managed and Power runtime closure size/surface budgets.
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const closureDir = join(root, "dist", "kiro-closure");
 const json = process.argv.includes("--json");
+const specs = [
+  {
+    id: "managed",
+    directory: join(root, "dist", "kiro-closure"),
+    required: ["kiro/mcp-entry.js", "kiro/agent-worker-entry.js", "kiro/management-entry.js", "package.json"],
+    forbidden: [],
+    ceilings: { closureBytes: 32 * 1024 * 1024, fileCount: 200, largestChunkBytes: 12 * 1024 * 1024 },
+  },
+  {
+    id: "power",
+    directory: join(root, "dist", "kiro-power-closure"),
+    required: ["kiro/mcp-entry.js", "package.json"],
+    forbidden: ["kiro/agent-worker-entry.js", "kiro/management-entry.js"],
+    ceilings: { closureBytes: 24 * 1024 * 1024, fileCount: 180, largestChunkBytes: 12 * 1024 * 1024 },
+  },
+];
 
-// Explicit ceilings. Tune with measured baselines; PR1 establishes first-pass
-// bounds over what the bundle actually ships so regressions fail loudly.
-const CEILINGS = {
-  /** Total shipped bytes (incl. role JS + package.json). */
-  closureBytes: 32 * 1024 * 1024,
-  /** Total count of shipped files. */
-  fileCount: 200,
-  /** Largest single JS chunk. */
-  largestChunkBytes: 12 * 1024 * 1024,
-};
-
-const fileList = (dir) => {
+const fileList = (directory) => {
   const files = [];
-  const walk = (d) => {
-    for (const entry of readdirSync(d, { withFileTypes: true })) {
-      const full = join(d, entry.name);
+  const walk = (current) => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const full = join(current, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.isFile()) files.push(full);
     }
   };
-  if (existsSync(dir)) walk(dir);
+  if (existsSync(directory)) walk(directory);
   return files;
 };
 
-const allFiles = fileList(closureDir);
-const jsFiles = allFiles.filter((f) => f.endsWith(".js"));
-const mapFiles = allFiles.filter((f) => f.endsWith(".map"));
-const totalBytes = allFiles.reduce((sum, f) => sum + statSync(f).size, 0);
-const largestJs = jsFiles.reduce(
-  (m, f) => Math.max(m, statSync(f).size),
-  0,
-);
-
 const errors = [];
-if (mapFiles.length > 0) {
-  errors.push(`closure contains ${mapFiles.length} source maps`);
-}
-for (const required of ["kiro/mcp-entry.js", "kiro/agent-worker-entry.js", "package.json"]) {
-  if (!existsSync(join(closureDir, required))) errors.push(`missing ${required}`);
-}
-if (existsSync(join(closureDir, "node_modules"))) {
-  errors.push("closure ships a node_modules directory");
-}
-if (totalBytes > CEILINGS.closureBytes) {
-  errors.push(
-    `closure ${totalBytes} bytes exceeds ceiling ${CEILINGS.closureBytes}`,
-  );
-}
-if (allFiles.length > CEILINGS.fileCount) {
-  errors.push(
-    `closure ${allFiles.length} files exceeds ceiling ${CEILINGS.fileCount}`,
-  );
-}
-if (largestJs > CEILINGS.largestChunkBytes) {
-  errors.push(
-    `largest JS chunk ${largestJs} bytes exceeds ceiling ${CEILINGS.largestChunkBytes}`,
-  );
-}
+const closures = specs.map((spec) => {
+  const allFiles = fileList(spec.directory);
+  const jsFiles = allFiles.filter((file) => file.endsWith(".js"));
+  const mapFiles = allFiles.filter((file) => file.endsWith(".map"));
+  const totalBytes = allFiles.reduce((sum, file) => sum + statSync(file).size, 0);
+  const largestJs = jsFiles.reduce((maximum, file) => Math.max(maximum, statSync(file).size), 0);
+  if (allFiles.length === 0) errors.push(`${spec.id} closure is absent`);
+  if (mapFiles.length > 0) errors.push(`${spec.id} closure contains ${mapFiles.length} source maps`);
+  for (const required of spec.required) {
+    if (!existsSync(join(spec.directory, required))) errors.push(`${spec.id} closure missing ${required}`);
+  }
+  for (const forbidden of spec.forbidden) {
+    if (existsSync(join(spec.directory, forbidden))) errors.push(`${spec.id} closure contains forbidden ${forbidden}`);
+  }
+  if (existsSync(join(spec.directory, "node_modules"))) errors.push(`${spec.id} closure ships node_modules`);
+  if (totalBytes > spec.ceilings.closureBytes) errors.push(`${spec.id} closure ${totalBytes} bytes exceeds ${spec.ceilings.closureBytes}`);
+  if (allFiles.length > spec.ceilings.fileCount) errors.push(`${spec.id} closure ${allFiles.length} files exceeds ${spec.ceilings.fileCount}`);
+  if (largestJs > spec.ceilings.largestChunkBytes) errors.push(`${spec.id} largest chunk ${largestJs} exceeds ${spec.ceilings.largestChunkBytes}`);
+  return {
+    id: spec.id,
+    bytes: totalBytes,
+    bytesKiB: Math.round(totalBytes / 1024),
+    fileCount: allFiles.length,
+    jsFileCount: jsFiles.length,
+    mapFileCount: mapFiles.length,
+    largestJsBytes: largestJs,
+    ceilings: spec.ceilings,
+  };
+});
 
-const measured = {
-  bytes: totalBytes,
-  bytesKiB: Math.round(totalBytes / 1024),
-  fileCount: allFiles.length,
-  jsFileCount: jsFiles.length,
-  mapFileCount: mapFiles.length,
-  largestJsBytes: largestJs,
-  ceilings: CEILINGS,
-};
-
-if (json) {
-  process.stdout.write(JSON.stringify({ ok: errors.length === 0, measured }, null, 2) + "\n");
-} else {
-  console.log(
-    `closure size: ${measured.bytesKiB} KiB across ${measured.fileCount} files ` +
-    `(${measured.jsFileCount} JS, ${measured.mapFileCount} maps)`,
-  );
-}
-
+if (json) process.stdout.write(`${JSON.stringify({ ok: errors.length === 0, closures }, null, 2)}\n`);
+else for (const closure of closures) console.log(`${closure.id} closure size: ${closure.bytesKiB} KiB across ${closure.fileCount} files (${closure.jsFileCount} JS, ${closure.mapFileCount} maps)`);
 if (errors.length > 0) {
-  for (const e of errors) console.error(`certify-closure-size: ${e}`);
+  for (const error of errors) console.error(`certify-closure-size: ${error}`);
   process.exitCode = 1;
 }

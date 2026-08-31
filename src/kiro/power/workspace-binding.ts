@@ -3,6 +3,7 @@ import { lstatSync, realpathSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { KiroPowerWorkspaceIdentity } from "./data-paths.js";
 
 export type KiroPowerWorkspaceRequest =
   | { action: "status" }
@@ -17,6 +18,12 @@ export interface KiroPowerElicitor {
 
 interface Candidate { id: string; root: string; name: string; dev: bigint; ino: bigint }
 interface Binding extends Candidate { source: "client-roots" | "manual" }
+
+export interface KiroPowerBoundWorkspace extends KiroPowerWorkspaceIdentity {
+  rootId: string;
+  name: string;
+  source: Binding["source"];
+}
 
 const idFor = (root: string): string => createHash("sha256")
   .update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
@@ -88,13 +95,21 @@ export class KiroPowerWorkspaceBinding {
     }
   }
 
-  boundRoot(): string | undefined {
+  boundWorkspace(): KiroPowerBoundWorkspace | undefined {
     const binding = this.#binding;
     if (!binding) return undefined;
     try {
       const current = this.#canonical(binding.root);
       if (current.dev !== binding.dev || current.ino !== binding.ino) throw new Error("identity changed");
-      return binding.root;
+      return {
+        schemaVersion: 1,
+        canonicalPath: binding.root,
+        deviceId: binding.dev.toString(),
+        fileId: binding.ino.toString(),
+        rootId: binding.id,
+        name: binding.name,
+        source: binding.source,
+      };
     } catch {
       this.#binding = undefined;
       this.#initialAutoBindAllowed = false;
@@ -102,10 +117,14 @@ export class KiroPowerWorkspaceBinding {
     }
   }
 
+  boundRoot(): string | undefined {
+    return this.boundWorkspace()?.canonicalPath;
+  }
+
   status() {
-    const root = this.boundRoot();
-    return root
-      ? { status: "bound" as const, rootId: this.#binding!.id, name: this.#binding!.name, source: this.#binding!.source, capabilities: ["checked-execution", "overflow-artifacts", "state"] }
+    const workspace = this.boundWorkspace();
+    return workspace
+      ? { status: "bound" as const, rootId: workspace.rootId, name: workspace.name, source: workspace.source, capabilities: ["checked-execution", "overflow-artifacts", "memory", "state"] }
       : { status: "unbound" as const, requiresSelection: this.#candidates.length > 1, capabilities: ["checked-execution", "overflow-artifacts"] };
   }
 

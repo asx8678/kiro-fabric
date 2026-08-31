@@ -32,6 +32,34 @@ const packageNameFromInput = (input: string): string | null => {
     : first;
 };
 
+describe("Power-only closure graph", () => {
+  it("contains only the MCP process entry and excludes unavailable role sources", async () => {
+    const result = await build({
+      entryPoints: ["src/kiro/mcp-entry.ts"],
+      outdir: "dist/.power-closure-graph-test",
+      outbase: "src",
+      entryNames: "[dir]/[name]",
+      chunkNames: "chunks/[name]-[hash]",
+      bundle: true,
+      write: false,
+      metafile: true,
+      platform: "node",
+      format: "esm",
+      target: "node24",
+      splitting: true,
+      logLevel: "silent",
+    });
+    const inputs = Object.keys(result.metafile.inputs).map(normalizePath);
+    const entries = Object.values(result.metafile.outputs)
+      .map((output) => output.entryPoint && normalizePath(output.entryPoint))
+      .filter((entry): entry is string => entry !== undefined);
+    expect(entries).toContain("src/kiro/mcp-entry.ts");
+    expect(inputs).not.toContain("src/kiro/agent-worker-entry.ts");
+    expect(inputs).not.toContain("src/kiro/management-entry.ts");
+    expect(inputs).not.toContain("src/kiro/acp-worker.ts");
+  }, 30_000);
+});
+
 describe("Kiro deployable closure graph", () => {
   let metafile!: Metafile;
 

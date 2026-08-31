@@ -20,6 +20,7 @@ import {
   validateContextCertification,
   validateKiroClaimsCertification,
   validatePowerCertification,
+  validatePowerRealQualification,
   validateReleaseACertification,
 } from "./certification/readiness-reports.mjs";
 
@@ -33,6 +34,7 @@ const parseArgs = (argv) => {
     ["--claims-report", "claimsReport"],
     ["--release-report", "releaseReport"],
     ["--power-report", "powerReport"],
+    ["--power-real-report", "powerRealReport"],
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -61,13 +63,14 @@ try {
     options.claimsReport,
     options.releaseReport,
     options.powerReport,
+    options.powerRealReport,
   ].filter(Boolean);
   if (artifactPaths.some((candidate) => pathIsInside(root, candidate))) {
     throw new Error("readiness report inputs and --output must be outside the checkout so they cannot alter its Git binding");
   }
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.stderr.write("Usage: node scripts/refresh-kiro-readiness.mjs [--check] [--output <path>] [--context-report <path>] [--claims-report <path>] [--release-report <path>] [--power-report <path>]\n");
+  process.stderr.write("Usage: node scripts/refresh-kiro-readiness.mjs [--check] [--output <path>] [--context-report <path>] [--claims-report <path>] [--release-report <path>] [--power-report <path>] [--power-real-report <path>]\n");
   process.exit(2);
 }
 
@@ -177,6 +180,13 @@ const reportInputs = [
     validate: (report) => validatePowerCertification(report, expectedPackage),
     evidence: "Kiro Power manifest/MCP/workspace/elicitation/execution/lifecycle",
   },
+  {
+    id: "cert.power-real",
+    descriptor: "power-real",
+    filePath: options.powerRealReport,
+    validate: (report) => validatePowerRealQualification(report, expectedPackage),
+    evidence: "Clean-machine real Kiro Power qualification on Linux/macOS/Windows",
+  },
 ];
 const runReports = reportInputs.map(({ id, evidence, ...input }) => ({
   id,
@@ -218,7 +228,12 @@ const readiness = {
     status: "historical",
     note: "Historical real-Kiro observations (docs/kiro/baseline.md, docs/kiro/status.md) are not reclassified as current evidence by this generator.",
   },
-  unavailable: ["real-Kiro CLI", "billable Release B model turns"],
+  unavailable: [
+    ...(runReports.find((report) => report.id === "cert.power-real")?.verdict === "verified"
+      ? []
+      : ["real Kiro Power qualification on Linux/macOS/Windows"]),
+    "billable Release B model turns",
+  ],
   policy: { billableGatesExecuted: false, modelTurnsRequested: 0, realKiroClaimsRequireExplicitRun: true },
 };
 

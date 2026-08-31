@@ -1,0 +1,76 @@
+name: Real Kiro Power qualification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  qualify:
+    name: real Power (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            runner: linux
+          - os: darwin
+            runner: macos
+          - os: win32
+            runner: windows
+    runs-on: [self-hosted, kiro-power, "${{ matrix.runner }}"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Execute the configured clean-machine Kiro driver
+        run: node scripts/run-kiro-power-real-driver.mjs --output "${{ runner.temp }}/power-real-${{ matrix.os }}.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: power-real-${{ matrix.os }}
+          path: ${{ runner.temp }}/power-real-${{ matrix.os }}.json
+          if-no-files-found: error
+
+  aggregate:
+    name: real Power (all platforms)
+    needs: qualify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: power-real-*
+          path: ${{ runner.temp }}/power-real
+          merge-multiple: true
+      - name: Aggregate Git-bound qualification evidence
+        run: >-
+          node scripts/certify-kiro-power-real.mjs
+          --evidence "${{ runner.temp }}/power-real/power-real-linux.json"
+          --evidence "${{ runner.temp }}/power-real/power-real-darwin.json"
+          --evidence "${{ runner.temp }}/power-real/power-real-win32.json"
+          --output "${{ runner.temp }}/kiro-power-real-qualification.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: kiro-power-real-qualification
+          path: ${{ runner.temp }}/kiro-power-real-qualification.json
+          if-no-files-found: error
+      - name: Publish commit qualification status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh api --method POST
+          "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+          -f state=success
+          -f context=kiro-power-real/all
+          -f description='Real Power qualified on Linux, macOS, and Windows'
+          -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
