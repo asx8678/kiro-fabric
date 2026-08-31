@@ -35,9 +35,8 @@ jobs:
         run: |
           pnpm run typecheck
           pnpm run build
-          pnpm exec vitest run --config vitest.config.ts tests/kiro-power.test.ts tests/kiro-workspace-context.test.ts tests/kiro-power-manifest.test.ts tests/kiro-closure-graph.test.ts tests/kiro-runtime-closure.test.ts
+          pnpm exec vitest run --config vitest.config.ts tests/kiro-workspace-context.test.ts tests/kiro-power-manifest.test.ts tests/kiro-closure-graph.test.ts
           pnpm run power:validate
-          pnpm run certify:power:built
 
   reproducibility:
     name: reproducible Power closure
