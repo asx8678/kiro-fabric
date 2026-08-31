@@ -6,15 +6,19 @@ globalThis.__dirname = __kfDirname(globalThis.__filename);
 const require = __kfCreateRequire(import.meta.url);
 
 import {
+  DEFAULT_COMPILER_TIMEOUT_MS,
   normalizeTypeScriptPath,
   transpileFabricCodeWithSourceMap,
   typeCheckFabricCode,
+  typeCheckFabricCodeInWorker,
   wrapFabricGuestCode
-} from "./chunk-7W2AG64Q.js";
+} from "./chunk-S3FSRH3K.js";
 import "./chunk-GX475RD4.js";
 export {
+  DEFAULT_COMPILER_TIMEOUT_MS,
   normalizeTypeScriptPath,
   transpileFabricCodeWithSourceMap,
   typeCheckFabricCode,
+  typeCheckFabricCodeInWorker,
   wrapFabricGuestCode
 };

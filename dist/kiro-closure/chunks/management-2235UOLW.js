@@ -11,7 +11,7 @@ import {
   inspectFabricConfig,
   require_dist,
   resolveAgentDir
-} from "./chunk-6UT4PSAK.js";
+} from "./chunk-BEHN6HY5.js";
 import {
   resolveKiroMcpLaunchEnvironment
 } from "./chunk-VGY2FX2U.js";
@@ -2508,7 +2508,8 @@ var USAGE = [
   "  --force                   Install/repair: back up and replace modified managed content",
   "  --allow-shell             Trusted opt-in: enable k.bash",
   "  --subagents               Enable bounded ACP fan-out (requires shell grant)",
-  "  --allow-tools             Trusted opt-in: auto-approve only fabric/fabric_exec",
+  "  --allow-tools             Trusted opt-in: auto-approve fabric_exec meta-capability",
+  "                            (it can invoke all configured Fabric providers/tools)",
   "  --revoke-shell            Revoke shell and dependent subagent grants",
   "  --revoke-subagents        Revoke only the subagent grant",
   "  --revoke-tools            Restore the exact Fabric MCP rule to ask",
@@ -2954,7 +2955,7 @@ var runInstall = async (parsed, io) => {
       throw new Error("refusing to " + command + " without a terminal; pass --yes to confirm");
     }
     const proceed = await io.confirm(
-      "Proceed with " + command + " (" + roots.layout + " scope: " + roots.installRoot + ")\n  grants: " + renderGrantDiff(beforeGrants, afterGrants) + (afterGrants.allowTools ? "\n  fabric/fabric_exec is auto-approved and confined to " + roots.projectRoot : "") + "?"
+      "Proceed with " + command + " (" + roots.layout + " scope: " + roots.installRoot + ")\n  grants: " + renderGrantDiff(beforeGrants, afterGrants) + (afterGrants.allowTools ? "\n  WARNING: fabric/fabric_exec is an auto-approved meta-capability that may invoke every configured Fabric provider/tool; workspace access is confined to " + roots.projectRoot : "") + "?"
     );
     if (!proceed) throw new Error("cancelled");
   }

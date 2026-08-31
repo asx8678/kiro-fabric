@@ -7809,23 +7809,48 @@ var parseFabricAgentRunner = (value, fallback) => {
   throw new Error(unsupportedFabricAgentRunnerMessage(value));
 };
 
-// src/config-migrations.ts
-var CURRENT_FABRIC_CONFIG_VERSION = 4;
-var isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var mergeObjects = (base, override) => {
-  const merged = { ...base };
-  for (const [key, value] of Object.entries(override)) {
+// src/config-object.ts
+var FORBIDDEN_CONFIG_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
+var assertSafeConfigDocument = (value, path4 = "configuration") => {
+  if (typeof value !== "object" || value === null) return;
+  for (const key of Object.keys(value)) {
+    if (FORBIDDEN_CONFIG_KEYS.has(key)) {
+      throw new Error(`${path4} contains forbidden key ${JSON.stringify(key)}`);
+    }
+    assertSafeConfigDocument(value[key], `${path4}.${key}`);
+  }
+};
+var safeConfigClone = (value) => {
+  if (Array.isArray(value)) return value.map(safeConfigClone);
+  if (typeof value !== "object" || value === null) return value;
+  const clone = /* @__PURE__ */ Object.create(null);
+  for (const key of Object.keys(value)) {
+    clone[key] = safeConfigClone(value[key]);
+  }
+  return clone;
+};
+var safeConfigMerge = (base, override) => {
+  assertSafeConfigDocument(base);
+  assertSafeConfigDocument(override);
+  const merged = safeConfigClone(base);
+  for (const key of Object.keys(override)) {
+    const value = override[key];
     const current = merged[key];
-    merged[key] = isObject(current) && isObject(value) ? mergeObjects(current, value) : value;
+    merged[key] = isConfigObject(current) && isConfigObject(value) ? safeConfigMerge(current, value) : safeConfigClone(value);
   }
   return merged;
 };
+var isConfigObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// src/config-migrations.ts
+var CURRENT_FABRIC_CONFIG_VERSION = 4;
+var isObject = isConfigObject;
 var migrations = [
   {
     from: 0,
     to: 1,
     migrate(document) {
-      const migrated = { ...document };
+      const migrated = safeConfigClone(document);
       const legacy = migrated.subagents;
       const canonical = migrated.agents;
       if (legacy !== void 0) {
@@ -7834,7 +7859,7 @@ var migrations = [
             "Fabric configuration cannot merge legacy subagents with a malformed agents section"
           );
         }
-        migrated.agents = isObject(legacy) && isObject(canonical) ? mergeObjects(legacy, canonical) : canonical ?? legacy;
+        migrated.agents = isObject(legacy) && isObject(canonical) ? safeConfigMerge(legacy, canonical) : canonical ?? legacy;
       }
       delete migrated.subagents;
       return migrated;
@@ -7844,10 +7869,10 @@ var migrations = [
     from: 1,
     to: 2,
     migrate(document) {
-      const migrated = { ...document };
+      const migrated = safeConfigClone(document);
       const ui = migrated.ui;
       if (isObject(ui) && Object.hasOwn(ui, "showNestedToolCalls")) {
-        const renamed = { ...ui };
+        const renamed = safeConfigClone(ui);
         if (!Object.hasOwn(renamed, "showAgentToolPreview")) {
           renamed.showAgentToolPreview = renamed.showNestedToolCalls;
         }
@@ -7861,10 +7886,10 @@ var migrations = [
     from: 2,
     to: 3,
     migrate(document) {
-      const migrated = { ...document };
+      const migrated = safeConfigClone(document);
       const ui = migrated.ui;
       if (isObject(ui) && Object.hasOwn(ui, "nestedToolDebounceMs")) {
-        const renamed = { ...ui };
+        const renamed = safeConfigClone(ui);
         if (!Object.hasOwn(renamed, "updateDebounceMs")) {
           renamed.updateDebounceMs = renamed.nestedToolDebounceMs;
         }
@@ -7878,7 +7903,7 @@ var migrations = [
     from: 3,
     to: 4,
     migrate(document) {
-      return { ...document };
+      return safeConfigClone(document);
     }
   }
 ];
@@ -7898,9 +7923,10 @@ var configVersion = (document) => {
   return value;
 };
 var migrateFabricConfigDocument = (input) => {
+  assertSafeConfigDocument(input);
   const fromVersion = configVersion(input);
   let version = fromVersion;
-  let document = structuredClone(input);
+  let document = safeConfigClone(input);
   const appliedVersions = [];
   if (fromVersion > CURRENT_FABRIC_CONFIG_VERSION) {
     return {
@@ -8189,6 +8215,7 @@ var readJsonObjectFile = (filePath) => {
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       throw new Error("configuration root must be an object");
     }
+    assertSafeConfigDocument(parsed);
     return { document: parsed, source };
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return void 0;
@@ -8196,21 +8223,7 @@ var readJsonObjectFile = (filePath) => {
     throw new Error(`Failed to read ${filePath}: ${message}`);
   }
 };
-var mergeObjects2 = (base, override) => {
-  const merged = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    const baseValue = merged[key];
-    if (typeof baseValue === "object" && baseValue !== null && !Array.isArray(baseValue) && typeof value === "object" && value !== null && !Array.isArray(value)) {
-      merged[key] = mergeObjects2(
-        baseValue,
-        value
-      );
-    } else {
-      merged[key] = value;
-    }
-  }
-  return merged;
-};
+var mergeObjects = safeConfigMerge;
 var approvalMode = (value, fallback) => value === "allow" || value === "ask" || value === "auto" || value === "deny" ? value : fallback;
 var booleanValue = (value, fallback) => typeof value === "boolean" ? value : fallback;
 var boundedInteger = (value, fallback, min, max) => typeof value === "number" && Number.isInteger(value) ? Math.max(min, Math.min(max, value)) : fallback;
@@ -8805,10 +8818,10 @@ var resolveFabricConfig = (options, includeProject, persistMigrations = true) =>
     if (persistMigrations && plan.changed) {
       writeJsonAtomic(plan.path, plan.document, plan.source);
     }
-    merged = mergeObjects2(merged, plan.document);
+    merged = mergeObjects(merged, plan.document);
   }
   const benchmarkTreatment = benchmarkTreatmentDocument();
-  if (benchmarkTreatment) merged = mergeObjects2(merged, benchmarkTreatment);
+  if (benchmarkTreatment) merged = mergeObjects(merged, benchmarkTreatment);
   const inheritedFullCodeMode = process.env.KIRO_FABRIC_FULL_CODE_MODE;
   if (inheritedFullCodeMode === "true" || inheritedFullCodeMode === "false") {
     merged.fullCodeMode = inheritedFullCodeMode === "true";
@@ -8841,6 +8854,7 @@ var assertKiroAccountingCompatible = (agents, forceKiroRunner = false) => {
 };
 
 export {
+  typebox_exports,
   normalizeRunDisplay,
   fabricExecInputSchema,
   prepareFabricExecArguments,

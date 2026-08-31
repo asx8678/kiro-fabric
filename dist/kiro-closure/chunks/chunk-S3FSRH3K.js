@@ -211546,6 +211546,11 @@ Additional information: BADCLIENT: Bad error code, ${badCode} not found in range
 // src/runtime/type-checker.ts
 var import_typescript = __toESM(require_typescript(), 1);
 import path from "node:path";
+import { Worker } from "node:worker_threads";
+var DEFAULT_COMPILER_TIMEOUT_MS = 1e4;
+var MAX_COMPILER_DIAGNOSTICS = 50;
+var MAX_DIAGNOSTIC_MESSAGE_CHARS = 4096;
+var COMPILER_MEMORY_MB = 128;
 var compilerOptions = {
   target: import_typescript.default.ScriptTarget.ES2022,
   module: import_typescript.default.ModuleKind.ESNext,
@@ -211643,7 +211648,7 @@ var FabricTypeChecker = class {
   #sourceText = "";
   #sourceFile;
   #program;
-  check(code) {
+  check(code, mode) {
     this.#sourceText = wrapFabricGuestCode(code);
     this.#sourceFile = import_typescript.default.createSourceFile(
       this.#guestFile,
@@ -211660,10 +211665,11 @@ var FabricTypeChecker = class {
     this.#program = program;
     const diagnostics = [
       ...program.getSyntacticDiagnostics(this.#sourceFile),
-      ...program.getSemanticDiagnostics(this.#sourceFile).filter((diagnostic) => !TYPE_CORRECTNESS_CODES.has(diagnostic.code))
-    ];
+      ...program.getSemanticDiagnostics(this.#sourceFile).filter((diagnostic) => mode === "strict" || !TYPE_CORRECTNESS_CODES.has(diagnostic.code))
+    ].slice(0, MAX_COMPILER_DIAGNOSTICS);
     const errors = diagnostics.map((diagnostic) => {
-      const message = import_typescript.default.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+      const flattened = import_typescript.default.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+      const message = flattened.length > MAX_DIAGNOSTIC_MESSAGE_CHARS ? `${flattened.slice(0, MAX_DIAGNOSTIC_MESSAGE_CHARS)}\u2026[truncated]` : flattened;
       if (!diagnostic.file || diagnostic.start === void 0) {
         return { line: 0, column: 0, message };
       }
@@ -211719,13 +211725,55 @@ var transpileFabricCodeWithSourceMap = (code) => {
     ...result.sourceMapText ? { sourceMap: result.sourceMapText } : {}
   };
 };
-var typeCheckFabricCode = (code, declarations) => checkerFor(declarations).check(code);
+var typeCheckFabricCode = (code, declarations, mode = "schema-relaxed") => checkerFor(declarations).check(code, mode);
+var typeCheckFabricCodeInWorker = (request, options = {}) => new Promise((resolve, reject) => {
+  if (options.signal?.aborted) {
+    reject(options.signal.reason ?? new Error("Fabric compiler aborted"));
+    return;
+  }
+  const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? DEFAULT_COMPILER_TIMEOUT_MS, 6e4));
+  const defaultWorkerUrl = import.meta.url.endsWith(".ts") ? new URL("../../dist/runtime/compiler-worker-entry.js", import.meta.url) : new URL("../runtime/compiler-worker-entry.js", import.meta.url);
+  const worker = new Worker(
+    options.workerUrl ?? defaultWorkerUrl,
+    { resourceLimits: { maxOldGenerationSizeMb: COMPILER_MEMORY_MB, stackSizeMb: 4 } }
+  );
+  let settled = false;
+  const finish = (error, result) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", onAbort);
+    void worker.terminate();
+    if (error) reject(error);
+    else resolve(result);
+  };
+  const onAbort = () => finish(new Error("Fabric compiler aborted"));
+  const timer = setTimeout(
+    () => finish(new Error(`Fabric compiler timed out after ${timeoutMs}ms`)),
+    timeoutMs
+  );
+  timer.unref();
+  options.signal?.addEventListener("abort", onAbort, { once: true });
+  worker.once("message", (response) => {
+    if (response.ok) finish(void 0, response.result);
+    else finish(new Error(`Fabric compiler failed: ${response.error}`));
+  });
+  worker.once("error", (error) => finish(new Error(
+    `Fabric compiler worker failed: ${error instanceof Error ? error.message : String(error)}`
+  )));
+  worker.once("exit", (code) => {
+    if (!settled) finish(new Error(`Fabric compiler worker exited before replying (${code})`));
+  });
+  worker.postMessage(request);
+});
 
 export {
+  DEFAULT_COMPILER_TIMEOUT_MS,
   normalizeTypeScriptPath,
   wrapFabricGuestCode,
   transpileFabricCodeWithSourceMap,
-  typeCheckFabricCode
+  typeCheckFabricCode,
+  typeCheckFabricCodeInWorker
 };
 /*! Bundled license information:
 
