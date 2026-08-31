@@ -23,7 +23,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { runKiroSetup } from "../src/kiro/setup.js";
+import { runKiroSetup, runMenuAction } from "../src/kiro/setup.js";
 import { withPrivateKiroLauncherFixtures } from "../src/kiro/compatibility-test-seam.js";
 import {
   managedFileTransition,
@@ -367,6 +367,10 @@ describe("source installer bootstrap", () => {
 });
 
 describe("runKiroSetup usage", () => {
+  it("propagates ordinary nonzero interactive action exits", async () => {
+    await expect(runMenuAction(async () => 37)).resolves.toBe(37);
+  });
+
   itPosix("exits 2 with usage guidance for an unknown command", async () => {
     const run = await runSetup(["frobnicate"]);
     expect(run.code).toBe(2);
@@ -600,6 +604,20 @@ describe("runKiroSetup update", () => {
         { path: ".kiro-fabric/install.json", transition: managedFileTransition(sha256Bytes(manifestBefore), manifestAfter) },
       ],
     });
+
+    const unconfirmed = await runSetup(["update", ...common.filter((value) => value !== "--yes")]);
+    expect(unconfirmed.code).toBe(1);
+    expect(unconfirmed.stdout).toMatch(/refusing to recover and update/);
+    expect(existsSync(join(canonicalHome, ".kiro-fabric", "transaction.json"))).toBe(true);
+    expect(readFileSync(profilePath)).toEqual(profileBefore);
+    expect(readFileSync(manifestPath)).toEqual(manifestBefore);
+
+    const dryRun = await runSetup(["update", "--dry-run", ...common]);
+    expect(dryRun.code).toBe(1);
+    expect(dryRun.stdout).toMatch(/dry-run left it unchanged/);
+    expect(existsSync(join(canonicalHome, ".kiro-fabric", "transaction.json"))).toBe(true);
+    expect(readFileSync(profilePath)).toEqual(profileBefore);
+    expect(readFileSync(manifestPath)).toEqual(manifestBefore);
 
     const updated = await runSetup(["update", ...common]);
     expect(updated.code).toBe(0);

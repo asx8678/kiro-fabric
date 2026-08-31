@@ -40,6 +40,7 @@ import {
   managedPaths,
   readManagedFileNoFollow,
   readManifest,
+  probeManagedTransactionRecovery,
   recoverManagedTransaction,
   sha256Bytes,
   type KiroManagedGrants,
@@ -388,9 +389,12 @@ const scopeStatusFor = (
       if (!manifest.runtime.closure) throw new Error("runtime closure attestation is absent");
       const generations = manifest.runtime.generations;
       if (!generations?.length) throw new Error("format-3 runtime generation lineage is absent; run update or repair");
-      for (const generation of generations) {
-        verifyRuntimeClosureAttestation(roots.installRoot, generation);
+      if (!generations.some((generation) => generation.root === manifest.runtime.closure!.root)) {
+        throw new Error("active runtime generation is absent from lineage");
       }
+      // Launch/status cost is bounded to the selected active release. Historical
+      // generations are cleanup ownership, not execution dependencies.
+      verifyRuntimeClosureAttestation(roots.installRoot, manifest.runtime.closure);
       const releasePackagePath = join(
         roots.installRoot,
         ...manifest.runtime.closure.root.split("/"),
@@ -624,17 +628,34 @@ const renderGrantDiff = (before: KiroManagedGrants | null, after: KiroManagedGra
 const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
   const command = parsed.command === "update" ? "update" : parsed.command === "repair" ? "repair" : "install";
   const roots = resolveRoots(parsed);
-  if (command === "update" || command === "repair") {
-    const transaction = managedPaths(roots.installRoot, roots.layout).transaction;
-    if (existsSync(transaction)) {
-      const recoveryLock = acquireOperationLock(roots.installRoot, roots.layout);
-      try {
-        // Grant preservation must observe the converged profile+manifest pair,
-        // never pre-recovery bytes from an interrupted activation.
-        recoverManagedTransaction(roots.installRoot, roots.layout);
-      } finally {
-        recoveryLock.release();
+  const transaction = managedPaths(roots.installRoot, roots.layout).transaction;
+  const pendingRecovery = existsSync(transaction);
+  let confirmed = false;
+  if (pendingRecovery) {
+    // Validate recoverability without changing bytes. Consent (or --yes) is the
+    // mutation boundary; dry-run never consumes an interrupted transaction.
+    probeManagedTransactionRecovery(roots.installRoot, roots.layout);
+    if (parsed.dryRun) {
+      throw new KiroInstallError(
+        "concurrency",
+        "a recoverable lifecycle transaction is pending; dry-run left it unchanged",
+      );
+    }
+    if (needsConfirmation(parsed)) {
+      if (!isInteractive()) {
+        throw new Error("refusing to recover and " + command + " without a terminal; pass --yes to confirm");
       }
+      if (!await io.confirm(
+        "Recover the interrupted lifecycle transaction, then proceed with " + command +
+          " (" + roots.layout + " scope: " + roots.installRoot + ")?",
+      )) throw new InteractiveCancelError("cancelled");
+      confirmed = true;
+    }
+    const recoveryLock = acquireOperationLock(roots.installRoot, roots.layout);
+    try {
+      recoverManagedTransaction(roots.installRoot, roots.layout);
+    } finally {
+      recoveryLock.release();
     }
   }
   if ((command === "update" || command === "repair") && !existsSync(managedManifestPath(roots))) {
@@ -653,7 +674,7 @@ const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
     enableSubagents: installOptions.enableSubagents === true,
     allowTools: installOptions.allowTools === true,
   };
-  if (needsConfirmation(parsed)) {
+  if (needsConfirmation(parsed) && !confirmed) {
     if (!isInteractive()) {
       throw new Error("refusing to " + command + " without a terminal; pass --yes to confirm");
     }
@@ -867,11 +888,12 @@ const MENU_TEXT =
     "\n",
   );
 
-const runMenuAction = async (action: () => Promise<number>): Promise<void> => {
+export const runMenuAction = async (action: () => Promise<number>): Promise<number> => {
   try {
-    await action();
+    return await action();
   } catch (error) {
     process.stderr.write("kiro-fabric: " + errorMessage(error) + "\n");
+    return 1;
   }
 };
 
@@ -900,21 +922,31 @@ const runMenu = async (parsed: SetupArgs): Promise<number> => {
       switch (choice) {
         case "":
           continue;
-        case "1":
-          await runMenuAction(() => runInstall({ ...parsed, command: "install" }, menuIo));
+        case "1": {
+          const code = await runMenuAction(() => runInstall({ ...parsed, command: "install" }, menuIo));
+          if (code !== 0) return code;
           break;
-        case "2":
-          await runMenuAction(() => runInstall({ ...parsed, command: "update" }, menuIo));
+        }
+        case "2": {
+          const code = await runMenuAction(() => runInstall({ ...parsed, command: "update" }, menuIo));
+          if (code !== 0) return code;
           break;
-        case "3":
-          await runMenuAction(() => runInstall({ ...parsed, command: "repair" }, menuIo));
+        }
+        case "3": {
+          const code = await runMenuAction(() => runInstall({ ...parsed, command: "repair" }, menuIo));
+          if (code !== 0) return code;
           break;
-        case "4":
-          await runMenuAction(() => runUninstall({ ...parsed, command: "uninstall" }, menuIo));
+        }
+        case "4": {
+          const code = await runMenuAction(() => runUninstall({ ...parsed, command: "uninstall" }, menuIo));
+          if (code !== 0) return code;
           break;
-        case "5":
-          await runMenuAction(() => runDoctor({ ...parsed, command: "doctor" }));
+        }
+        case "5": {
+          const code = await runMenuAction(() => runDoctor({ ...parsed, command: "doctor" }));
+          if (code !== 0) return code;
           break;
+        }
         case "6":
           // kiro-cli needs the terminal; drop back to cooked mode while it runs.
           // The launch supervisor owns signals until the complete child tree exits.
@@ -930,7 +962,7 @@ const runMenu = async (parsed: SetupArgs): Promise<number> => {
             rl = createInterface({ input: process.stdin, output: process.stdout });
             rl.on("SIGINT", cancel);
           }
-          if (launchCode !== undefined && launchCode >= 128) return launchCode;
+          if (launchCode !== undefined && launchCode !== 0) return launchCode;
           break;
         case "q":
         case "quit":

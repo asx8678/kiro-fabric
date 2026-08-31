@@ -35,6 +35,8 @@ import {
   removeRuntimeClosure,
   computeRuntimeClosureDigest,
   planRuntimeClosureDeployment,
+  recoverRuntimeClosureRepair,
+  runtimeClosureRepairJournalPath,
 } from "../src/kiro/runtime-closure.js";
 import {
   attestExecutable,
@@ -117,6 +119,37 @@ describe("runtime closure deployment", () => {
       nodeSourcePath: fakeRuntimePath,
       kiroAttestation: attestExecutable(fakeRuntimePath),
     });
+
+  it("normalizes an existing runtime parent to uninstall's private-mode contract", () => {
+    const dir = project("runtime-parent-mode");
+    const runtimeDir = runtimeClosurePath(dir, "project");
+    mkdirSync(runtimeDir, { recursive: true, mode: 0o755 });
+    chmodSync(runtimeDir, 0o755);
+
+    const closure = deploySmall(dir, "project");
+    expect(statSync(runtimeDir).mode & 0o777).toBe(0o700);
+    expect(removeAttestedRuntimeClosure(dir, "project", closure.attestation)).toBe(true);
+  });
+
+  it("directly recovers the SIGKILL window after parking a same-digest release", () => {
+    const dir = project("repair-park-recovery");
+    const closure = deploySmall(dir, "project");
+    const runtimeDir = runtimeClosurePath(dir, "project");
+    const versionDir = join(runtimeDir, closure.digest);
+    const damagedDir = join(runtimeDir, `.damaged-${closure.digest}`);
+    const journal = runtimeClosureRepairJournalPath(dir, "project", closure.digest);
+    writeFileSync(journal, JSON.stringify({
+      format: 1,
+      digest: closure.digest,
+      root: closure.attestation.root,
+    }, null, 2) + "\n", { mode: 0o600 });
+    renameSync(versionDir, damagedDir);
+
+    expect(recoverRuntimeClosureRepair(dir, "project", closure.attestation)).toBe(true);
+    expect(existsSync(versionDir)).toBe(true);
+    expect(existsSync(damagedDir)).toBe(false);
+    expect(existsSync(journal)).toBe(false);
+  });
 
   it("quarantines a generation before verification and never deletes a raced replacement", () => {
     const dir = project("generation-quarantine-race");
@@ -573,6 +606,21 @@ describe("uninstaller removes runtime closure", () => {
       join(realpathSync(home), ...generation.root.split("/")),
     );
     expect(ownedRoots).toContain(dirname(dirname(first.runtimeClosure!.mcpEntryPath)));
+
+    const thirdNode = join(base, "third-runtime");
+    writeFileSync(thirdNode, "#!/bin/sh\nexit 44\n", { mode: 0o755 });
+    chmodSync(thirdNode, 0o755);
+    const third = await installWithFake(dir, {
+      scope: "user",
+      kiroHome: home,
+      runtimeNodeSourcePath: thirdNode,
+    });
+    const bounded = JSON.parse(readFileSync(third.manifestPath, "utf8")) as {
+      runtime: { generations: Array<{ digest: string; root: string }> };
+    };
+    expect(bounded.runtime.generations).toHaveLength(2);
+    expect(existsSync(dirname(dirname(first.runtimeClosure!.mcpEntryPath)))).toBe(false);
+
     uninstallKiroProfile({ projectRoot: dir, scope: "user", kiroHome: home });
     for (const owned of ownedRoots) expect(existsSync(owned)).toBe(false);
     expect(existsSync(second.manifestPath)).toBe(false);

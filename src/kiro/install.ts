@@ -51,6 +51,7 @@ import {
   managedPaths,
   readManagedFileNoFollow,
   readManifest,
+  probeManagedTransactionRecovery,
   recoverManagedTransaction,
   readPackageVersion,
   resolveKiroProjectRoot,
@@ -75,6 +76,9 @@ import {
   deployRuntimeClosure,
   planRuntimeClosureDeployment,
   resolveSourcePackageRoot,
+  hasPendingRuntimeClosureRepair,
+  recoverRuntimeClosureRepair,
+  removeAttestedRuntimeClosure,
   type RuntimeClosurePlan,
   type RuntimeClosureResult,
   runtimeClosurePath,
@@ -226,12 +230,14 @@ const buildManifest = (
     ...(closure
       ? {
           closure: closure.attestation,
-          generations: [...new Map([
-            ...((previous?.runtime.generations ?? (previous?.runtime.closure ? [previous.runtime.closure] : []))
-              .map((generation) => [generation.root, generation] as const)),
-            [closure.attestation.root, closure.attestation] as const,
-          ]).values()].sort((left, right) =>
-            left.digest.localeCompare(right.digest) || left.root.localeCompare(right.root)),
+          // Keep launch/status verification and eventual uninstall bounded:
+          // current plus the immediately preceding active generation only.
+          generations: [
+            closure.attestation,
+            ...(previous?.runtime.closure && previous.runtime.closure.root !== closure.attestation.root
+              ? [previous.runtime.closure]
+              : []),
+          ],
           managerEntryPath: closure.managementEntryPath,
           nodeSha256: closure.attestation.files.find((file) => file.path.endsWith("/bin/node") || file.path.endsWith("/bin/node.exe"))!.installedSha256,
         }
@@ -435,12 +441,15 @@ export const planKiroProfileInstall = (
   }
 
   const manifest = readManifest(installRoot, layout);
-  for (const generation of manifest?.runtime.generations ?? (manifest?.runtime.closure ? [manifest.runtime.closure] : [])) {
-    const generationRoot = join(installRoot, ...generation.root.split("/"));
+  // Preflight only the active generation. Historical ownership is retained for
+  // bounded rollback/uninstall cleanup, not paid on every launch or update.
+  const activeGeneration = manifest?.runtime.closure;
+  if (activeGeneration) {
+    const generationRoot = join(installRoot, ...activeGeneration.root.split("/"));
     const repairingPlannedGeneration =
-      options.repairRuntime === true && generation.digest === planning.closure?.digest;
+      options.repairRuntime === true && activeGeneration.digest === planning.closure?.digest;
     if (existsSync(generationRoot) && !repairingPlannedGeneration) {
-      verifyRuntimeClosureAttestation(installRoot, generation);
+      verifyRuntimeClosureAttestation(installRoot, activeGeneration);
     }
   }
   let existingSha256: string | null = null;
@@ -813,6 +822,19 @@ const resultFromPlan = (
   };
 };
 
+const cleanupSupersededRuntimeGenerations = (plan: KiroInstallPlan): void => {
+  const previous = readManifest(plan.installRoot, plan.layout);
+  if (!previous?.runtime.closure) return;
+  const desired = JSON.parse(plan.manifestJson) as KiroInstallManifest;
+  const retained = new Set((desired.runtime.generations ?? []).map((generation) => generation.root));
+  for (const generation of previous.runtime.generations ?? [previous.runtime.closure]) {
+    // Never remove the generation activated by the still-current manifest.
+    if (generation.root !== previous.runtime.closure.root && !retained.has(generation.root)) {
+      removeAttestedRuntimeClosure(plan.installRoot, plan.layout, generation);
+    }
+  }
+};
+
 const commitInstall = (plan: KiroInstallPlan): void => {
   if (plan.action === "blocked") {
     throw new KiroInstallError("collision", plan.blockedReason ?? "profile collision");
@@ -968,6 +990,13 @@ export const installKiroProfile = async (
     // reading the manifest/profile so all owned leaves converge together.
     const recoveryPaths = managedPaths(roots.installRoot, roots.layout);
     if (existsSync(recoveryPaths.transaction)) {
+      if (options.dryRun) {
+        probeManagedTransactionRecovery(roots.installRoot, roots.layout);
+        throw new KiroInstallError(
+          "concurrency",
+          "a recoverable lifecycle transaction is pending; dry-run left it unchanged",
+        );
+      }
       const recoveryLock = acquireOperationLock(roots.installRoot, roots.layout);
       try {
         recoverManagedTransaction(roots.installRoot, roots.layout);
@@ -1003,6 +1032,15 @@ export const installKiroProfile = async (
           kiroAttestation: kiroIdentity,
           ...(options.repairRuntime ? { repairExisting: true } : {}),
         });
+    if (
+      options.dryRun && closurePlan &&
+      hasPendingRuntimeClosureRepair(roots.installRoot, roots.layout, closurePlan.digest)
+    ) {
+      throw new KiroInstallError(
+        "concurrency",
+        "a recoverable runtime repair is pending; dry-run left it unchanged",
+      );
+    }
     const effectiveMcpEntry = closurePlan?.mcpEntryPath ?? options.mcpEntryPath;
     const planOptions: KiroInstallOptions = {
       ...options,
@@ -1024,6 +1062,7 @@ export const installKiroProfile = async (
     const lock = acquireOperationLock(planned.installRoot, planned.layout);
     try {
       recoverManagedTransaction(planned.installRoot, planned.layout);
+      if (closurePlan) recoverRuntimeClosureRepair(roots.installRoot, roots.layout, closurePlan.attestation);
       if (stagedNode) assertExecutableAttestation(stagedNode);
       assertSupportedKiroUnchanged(kiroIdentity);
       const lockedClosurePlan = skipRuntimeClosure
@@ -1074,7 +1113,10 @@ export const installKiroProfile = async (
         : null;
       const activationNeeded = plan.activation !== null &&
         sha256Bytes(plan.activation.nextBytes) !== (activationCurrent === null ? null : sha256Bytes(activationCurrent));
-      if (plan.action !== "noop" || activationNeeded) commitInstall(plan);
+      if (plan.action !== "noop" || activationNeeded) {
+        cleanupSupersededRuntimeGenerations(plan);
+        commitInstall(plan);
+      }
       return resultFromPlan(plan, false, closureResult);
     } finally {
       lock.release();

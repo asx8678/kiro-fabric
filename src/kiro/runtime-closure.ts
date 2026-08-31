@@ -34,6 +34,7 @@ import {
   attestExecutable,
   copyAttestedExecutable,
   ensureManagedDirectory,
+  fsyncDirectory,
   KiroInstallError,
   lstatOrNull,
   managedPaths,
@@ -413,6 +414,104 @@ export const planRuntimeClosureDeployment = (
   };
 };
 
+const ensurePrivateRuntimeDirectory = (runtimeDir: string): void => {
+  ensureManagedDirectory(runtimeDir);
+  const stat = lstatSync(runtimeDir);
+  if (process.geteuid && stat.uid !== process.geteuid()) {
+    throw new KiroInstallError("ownership", "managed runtime directory is not owned by the effective user");
+  }
+  if ((stat.mode & 0o777) !== 0o700) chmodSync(runtimeDir, 0o700);
+  fsyncDirectory(dirname(runtimeDir));
+};
+
+const repairJournalPath = (runtimeDir: string, digest: string): string =>
+  join(runtimeDir, `.repair-${digest}.json`);
+
+const damagedGenerationPath = (runtimeDir: string, digest: string): string =>
+  join(runtimeDir, `.damaged-${digest}`);
+
+const serializeRepairJournal = (closure: KiroRuntimeClosureManifest): string =>
+  JSON.stringify({ format: 1, digest: closure.digest, root: closure.root }, null, 2) + "\n";
+
+export const runtimeClosureRepairJournalPath = (
+  installRoot: string,
+  layout: KiroManagedLayout,
+  digest: string,
+): string => repairJournalPath(runtimeClosurePath(installRoot, layout), digest);
+
+export const hasPendingRuntimeClosureRepair = (
+  installRoot: string,
+  layout: KiroManagedLayout,
+  digest: string,
+): boolean => existsSync(runtimeClosureRepairJournalPath(installRoot, layout, digest));
+
+const makeRuntimeTreeRemovable = (dir: string): void => {
+  const stat = lstatOrNull(dir);
+  if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new KiroInstallError("symlink", "damaged runtime root is not a real directory");
+  }
+  chmodSync(dir, 0o700);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeRuntimeTreeRemovable(join(dir, entry.name));
+  }
+};
+
+/** Recover either side of the two-rename same-digest repair protocol. */
+export const recoverRuntimeClosureRepair = (
+  installRoot: string,
+  layout: KiroManagedLayout,
+  closure: KiroRuntimeClosureManifest,
+): boolean => {
+  const runtimeDir = runtimeDirectoryForClosure(installRoot, layout, closure);
+  const journal = repairJournalPath(runtimeDir, closure.digest);
+  const journalStat = lstatOrNull(journal);
+  if (!journalStat) return false;
+  if (journalStat.isSymbolicLink() || !journalStat.isFile()) {
+    throw new KiroInstallError("symlink", "runtime repair journal is not a regular file");
+  }
+  let record: unknown;
+  try { record = JSON.parse(readFileSync(journal, "utf8")); } catch {
+    throw new KiroInstallError("manifest", "runtime repair journal is malformed");
+  }
+  if (
+    typeof record !== "object" || record === null || Array.isArray(record) ||
+    (record as { format?: unknown }).format !== 1 ||
+    (record as { digest?: unknown }).digest !== closure.digest ||
+    (record as { root?: unknown }).root !== closure.root
+  ) {
+    throw new KiroInstallError("manifest", "runtime repair journal does not match the closure");
+  }
+  ensurePrivateRuntimeDirectory(runtimeDir);
+  const versionDir = join(runtimeDir, closure.digest);
+  const damagedDir = damagedGenerationPath(runtimeDir, closure.digest);
+  const versionExists = existsSync(versionDir);
+  const damagedExists = existsSync(damagedDir);
+  if (!versionExists && damagedExists) {
+    renameSync(damagedDir, versionDir);
+    fsyncDirectory(runtimeDir);
+  } else if (versionExists) {
+    if (damagedExists) {
+      // Both names means the replacement rename completed. Prove it before
+      // discarding the parked original.
+      verifyRuntimeClosureAttestation(installRoot, closure);
+      makeRuntimeTreeRemovable(damagedDir);
+      rmSync(damagedDir, { recursive: true, force: false });
+      fsyncDirectory(runtimeDir);
+    } else {
+      // Journal-only is the kill point before the first rename (the reason for
+      // repair may be that this version does not attest). A valid version can
+      // also mean cleanup finished just before journal unlink; both converge by
+      // consuming the journal and letting a damaged version be repaired anew.
+      try { verifyRuntimeClosureAttestation(installRoot, closure); } catch { /* retry on next repair */ }
+    }
+  } else {
+    throw new KiroInstallError("fs", "runtime repair lost both the original and replacement generation");
+  }
+  unlinkSync(journal);
+  fsyncDirectory(runtimeDir);
+  return true;
+};
+
 const writeClosureMarker = (runtimeDir: string, digest: string): void => {
   const marker = join(runtimeDir, ".closure-current");
   const markerStat = lstatOrNull(marker);
@@ -485,6 +584,7 @@ export const deployRuntimeClosure = (
   // name. Ordinary publication refuses drift; trusted repair stages a complete
   // replacement and swaps the directory without mutating leaves in place.
   if (existsSync(versionMcpEntry) && planned.action !== "repair") {
+    ensurePrivateRuntimeDirectory(runtimeDir);
     verifyRuntimeClosureAttestation(installRoot, planned.attestation);
     const markerNow = lstatOrNull(marker);
     if (markerNow && (markerNow.isSymbolicLink() || !markerNow.isFile())) {
@@ -507,8 +607,8 @@ export const deployRuntimeClosure = (
     };
   }
 
-  // Ensure parent managed directory exists.
-  ensureManagedDirectory(runtimeDir);
+  // Ensure uninstall's quarantine precondition is established by install.
+  ensurePrivateRuntimeDirectory(runtimeDir);
   assertNoSymlinkComponents(installRoot, versionDir);
 
   // Source: the pre-built closure bundle.
@@ -623,26 +723,23 @@ export const deployRuntimeClosure = (
     const publishStart = Date.now();
     if (existsSync(versionDir)) {
       if (planned.action === "repair") {
-        const damagedDir = join(runtimeDir, `.damaged-${digest}-${process.pid}-${Date.now().toString(36)}`);
-        renameSync(versionDir, damagedDir);
-        try {
-          renameSync(stagingDir, versionDir);
-        } catch (error) {
-          renameSync(damagedDir, versionDir);
-          throw error;
+        const damagedDir = damagedGenerationPath(runtimeDir, digest);
+        const journal = repairJournalPath(runtimeDir, digest);
+        if (existsSync(damagedDir) || existsSync(journal)) {
+          throw new KiroInstallError("concurrency", "a same-digest runtime repair is already pending recovery");
         }
-        const makeRemovable = (dir: string): void => {
-          const stat = lstatOrNull(dir);
-          if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) {
-            throw new KiroInstallError("symlink", "damaged runtime root is not a real directory");
-          }
-          chmodSync(dir, 0o700);
-          for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            if (entry.isDirectory()) makeRemovable(join(dir, entry.name));
-          }
-        };
-        makeRemovable(damagedDir);
-        rmSync(damagedDir, { recursive: true, force: true });
+        writeAtomic(journal, serializeRepairJournal(planned.attestation), 0o600);
+        fsyncDirectory(runtimeDir);
+        renameSync(versionDir, damagedDir);
+        fsyncDirectory(runtimeDir);
+        renameSync(stagingDir, versionDir);
+        fsyncDirectory(runtimeDir);
+        verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+        makeRuntimeTreeRemovable(damagedDir);
+        rmSync(damagedDir, { recursive: true, force: false });
+        fsyncDirectory(runtimeDir);
+        unlinkSync(journal);
+        fsyncDirectory(runtimeDir);
       } else {
         const unsealStaging = (dir: string): void => {
           chmodSync(dir, 0o700);
@@ -674,6 +771,15 @@ export const deployRuntimeClosure = (
       metrics: metadata,
     };
   } catch (error) {
+    // A repair journal is durable before either rename. Converge it now when
+    // possible; after SIGKILL the next locked installer performs the same step.
+    try {
+      if (hasPendingRuntimeClosureRepair(installRoot, layout, digest)) {
+        recoverRuntimeClosureRepair(installRoot, layout, planned.attestation);
+      }
+    } catch {
+      // Preserve the original failure and durable journal for explicit retry.
+    }
     // Clean up staging on failure. The prior runtime is left intact. A failure
     // after sealing must first restore directory owner-write permissions.
     try {
