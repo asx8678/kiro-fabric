@@ -1,7 +1,11 @@
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 
-export const IS_JOB_OBJECT_AVAILABLE = process.platform === "win32";
+// Node does not expose Windows Job Objects. Windows tree cleanup below uses
+// the operating system's taskkill utility by an absolute, System32-confined
+// path instead of claiming native Job Object ownership.
+export const IS_JOB_OBJECT_AVAILABLE = false;
 
 const TEST_PLATFORM_ENV = "KIRO_FABRIC_TEST_PLATFORM";
 const TEST_PS_FAILURE_ENV = "KIRO_FABRIC_TEST_PS_FAILURE";
@@ -218,9 +222,17 @@ const killPosixGroup = (pgid: number, signal: NodeJS.Signals): void => {
   }
 };
 
-const killWindowsTree = async (pid: number): Promise<void> => {
+const confinedWindowsTaskkill = (): string => {
+  const configuredRoot = process.env.SystemRoot ?? process.env.windir;
+  const systemRoot = configuredRoot && path.win32.isAbsolute(configuredRoot)
+    ? configuredRoot
+    : "C:\\Windows";
+  return path.win32.join(systemRoot, "System32", "taskkill.exe");
+};
+
+const killWindowsTree = async (pid: number, confined = false): Promise<void> => {
   await new Promise<void>((resolve) => {
-    const treeKillCommand = ["task", "kill"].join("");
+    const treeKillCommand = confined ? confinedWindowsTaskkill() : ["task", "kill"].join("");
     const killer = spawn(treeKillCommand, ["/pid", String(pid), "/T", "/F"], {
       stdio: "ignore",
       windowsHide: true,
@@ -241,8 +253,13 @@ const killWindowsTree = async (pid: number): Promise<void> => {
     }, 2_000);
     timeout.unref?.();
     killer.once("error", () => {
-      for (const childPid of descendantPids(pid).filter((value) => value !== pid)) {
-        killPid(childPid, "SIGKILL");
+      // Confined callers must never fall back to PowerShell discovered via
+      // PATH. The absolute taskkill /T invocation is the Windows descendant
+      // primitive; retain a direct-root fallback if the OS utility is absent.
+      if (!confined) {
+        for (const childPid of descendantPids(pid).filter((value) => value !== pid)) {
+          killPid(childPid, "SIGKILL");
+        }
       }
       killPid(pid, "SIGKILL");
       finish();
@@ -294,7 +311,8 @@ export interface ProcessTreeController {
 }
 
 export interface ProcessTreeControllerOptions {
-  /** Disable ps/PowerShell/taskkill PATH helpers; use only kernel PID/group signals. */
+  /** Disable PATH-discovered helpers. Uses kernel signals on POSIX and the
+   *  absolute System32 taskkill tree primitive on Windows. */
   ambientHelpers?: boolean;
 }
 
@@ -318,7 +336,7 @@ export const createProcessTreeController = (
   const signal = async (value: NodeJS.Signals): Promise<void> => {
     refresh();
     if (!ambientHelpers) {
-      if (runtimePlatform() === "win32") killPid(pid, value);
+      if (runtimePlatform() === "win32") await killWindowsTree(pid, true);
       else {
         const tree = readKernelProcessTree(pid);
         killPosixGroup(tree?.pgid ?? pid, value);

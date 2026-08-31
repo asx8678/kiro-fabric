@@ -149,9 +149,14 @@ export const spawnDetached = async (
   workerPath: string,
   workerArguments: string[],
   cwd: string,
-  options: { ambientHelpers?: boolean; stdoutPath?: string; stderrPath?: string } = {},
+  options: {
+    ambientHelpers?: boolean;
+    stdoutPath?: string;
+    stderrPath?: string;
+    runtime?: ScriptRuntimeOptions;
+  } = {},
 ): Promise<{ pid: number; stop(): Promise<void>; isAlive(): Promise<boolean> }> => {
-  const runtime = await resolveScriptRuntime();
+  const runtime = await resolveScriptRuntime(options.runtime);
   let stdout: number | undefined;
   let stderr: number | undefined;
   let child;
@@ -171,7 +176,21 @@ export const spawnDetached = async (
     if (stdout !== undefined) fs.closeSync(stdout);
     if (stderr !== undefined) fs.closeSync(stderr);
   }
-  if (!child.pid) throw new Error("Failed to launch Fabric worker process");
+  await new Promise<void>((resolve, reject) => {
+    const onSpawn = (): void => {
+      child.off("error", onError);
+      resolve();
+    };
+    const onError = (error: Error): void => {
+      child.off("spawn", onSpawn);
+      reject(new Error(`Failed to launch Fabric worker process (${runtime}): ${error.message}`, {
+        cause: error,
+      }));
+    };
+    child.once("spawn", onSpawn);
+    child.once("error", onError);
+  });
+  if (!child.pid) throw new Error(`Failed to launch Fabric worker process (${runtime}): missing pid`);
   const pid = child.pid;
   const tree = createProcessTreeController(pid, {
     ambientHelpers: options.ambientHelpers !== false,

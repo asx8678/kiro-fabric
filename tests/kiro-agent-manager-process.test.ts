@@ -40,6 +40,9 @@ if (task === "HANG") {
     setTimeout(() => process.exit(0), 150);
   });
 }
+if (task === "TERMINAL_THEN_LINGER") {
+  process.on("SIGTERM", () => setTimeout(() => process.exit(0), 250));
+}
 if (task === "COMPLETE_ON_TERM") {
   process.on("SIGTERM", () => {
     const completed = {
@@ -67,6 +70,7 @@ if (task === "CRASH") {
     ...(model ? { model } : {}), ...(thinking ? { thinking } : {}),
   };
   fs.writeFileSync(statusFile, JSON.stringify(record));
+  if (task === "TERMINAL_THEN_LINGER") setTimeout(() => process.exit(0), 350);
 }
 `, { mode: 0o700 });
   return { root, runRoot, worker };
@@ -155,6 +159,50 @@ describe("KiroAgentManager process runtime", () => {
     expect(Date.now() - startedStopping).toBeGreaterThanOrEqual(100);
     expect(processIsAlive(pid)).toBe(false);
     expect(() => instance.steer(handle.id, "too late")).toThrow(/already finished/);
+  });
+
+  it("does not release a concurrency lane until a terminal worker is reaped", async () => {
+    const { instance, runRoot } = manager({ maxConcurrent: 1 });
+    const started = Date.now();
+    const first = await instance.spawn({ task: "TERMINAL_THEN_LINGER", tools: [] });
+    await waitForFile(join(runRoot, first.id, "status.json"));
+    const firstPid = Number(first.sessionId);
+    const secondSpawn = instance.spawn({ task: "finish", tools: [] });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(processIsAlive(firstPid)).toBe(true);
+    expect(readdirSync(runRoot)).toHaveLength(1);
+
+    const firstResult = await instance.wait(first.id);
+    const second = await secondSpawn;
+    expect(firstResult.status).toBe("completed");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+    expect(processIsAlive(firstPid)).toBe(false);
+    expect(second.status).toBe("running");
+    await instance.wait(second.id);
+  });
+
+  it("reaps a live transport when stop observes an existing terminal record", async () => {
+    const { instance, runRoot } = manager();
+    const handle = await instance.spawn({ task: "TERMINAL_THEN_LINGER", tools: [] });
+    await waitForFile(join(runRoot, handle.id, "status.json"));
+    const pid = Number(handle.sessionId);
+    expect(processIsAlive(pid)).toBe(true);
+
+    const result = await instance.stop(handle.id);
+    expect(result.status).toBe("completed");
+    expect(processIsAlive(pid)).toBe(false);
+  });
+
+  it("close reaps a live worker that has already published terminal status", async () => {
+    const { instance, runRoot } = manager();
+    const handle = await instance.spawn({ task: "TERMINAL_THEN_LINGER", tools: [] });
+    await waitForFile(join(runRoot, handle.id, "status.json"));
+    const pid = Number(handle.sessionId);
+    expect(processIsAlive(pid)).toBe(true);
+
+    await instance.close();
+    expect(processIsAlive(pid)).toBe(false);
   });
 
   it("settles detached monitor failures and retains bounded worker diagnostics", async () => {

@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   IS_JOB_OBJECT_AVAILABLE,
+  createProcessTreeController,
   descendantPids,
   killDescendantTree,
   quoteCommandArg,
@@ -58,8 +59,8 @@ afterEach(async () => {
 });
 
 describe("process-tree helpers", () => {
-  it("reports whether native Windows process-tree support is available", () => {
-    expect(IS_JOB_OBJECT_AVAILABLE).toBe(process.platform === "win32");
+  it("does not claim unavailable native Windows Job Object ownership", () => {
+    expect(IS_JOB_OBJECT_AVAILABLE).toBe(false);
   });
 
   it("quotes POSIX arguments safely", () => {
@@ -92,6 +93,34 @@ describe("process-tree helpers", () => {
       withPlatform("win32", () => killDescendantTree(999_999_999, "SIGTERM", 10)),
     ).resolves.toBeUndefined();
   });
+
+  it.skipIf(process.platform !== "win32" || process.env[ALLOW_KILL_ENV] !== "1")(
+    "kills descendants in confined Windows mode without PATH discovery",
+    async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-windows-tree-"));
+      tmpRoots.push(root);
+      const pidFile = path.join(root, "pids.json");
+      const childCode = [
+        "const fs = require('node:fs');",
+        "const { spawn } = require('node:child_process');",
+        `const pidFile = ${JSON.stringify(pidFile)};`,
+        "const descendant = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e6)'], { stdio: 'ignore' });",
+        "fs.writeFileSync(pidFile, JSON.stringify({ root: process.pid, descendant: descendant.pid }));",
+        "setInterval(() => {}, 1e6);",
+      ].join(" ");
+      const parent = spawn(process.execPath, ["-e", childCode], { stdio: "ignore" });
+      if (!parent.pid) throw new Error("failed to spawn Windows tree root");
+      const controller = createProcessTreeController(parent.pid, { ambientHelpers: false });
+      await waitFor(() => fs.existsSync(pidFile), 2_000);
+      const pids = JSON.parse(fs.readFileSync(pidFile, "utf8")) as {
+        root: number;
+        descendant: number;
+      };
+
+      await controller.terminate(100, 1_000);
+      await waitFor(() => !processIsAlive(pids.root) && !processIsAlive(pids.descendant), 2_000);
+    },
+  );
 
   it.skipIf(process.platform === "win32" || process.env[ALLOW_KILL_ENV] !== "1")(
     "kills a detached POSIX child tree within a bounded deadline",

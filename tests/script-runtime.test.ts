@@ -1,6 +1,7 @@
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { commandAvailable } from "../src/agents/transports/process-utils.js";
+import { commandAvailable, spawnDetached } from "../src/agents/transports/process-utils.js";
 import {
   resolveScriptRuntime,
   resolveScriptRuntimeSync,
@@ -71,5 +72,15 @@ describe("script runtime resolution", () => {
     expect(() =>
       resolveScriptRuntimeSync({ execPath: "/usr/local/bin/bun", requireNode: true }),
     ).toThrow();
+  });
+
+  it("rejects a missing detached executable without an unhandled child error", async () => {
+    const missing = path.join(os.tmpdir(), `fabric-missing-runtime-${process.pid}`);
+    await expect(spawnDetached("worker.js", [], process.cwd(), {
+      runtime: { env: { KIRO_FABRIC_NODE_BINARY: missing } },
+    })).rejects.toThrow(new RegExp(`Failed to launch Fabric worker process.*${process.pid}.*ENOENT`));
+    // Let the ChildProcess error turn complete; an unhandled event would fail
+    // this behavioral test after the promise rejection was observed.
+    await new Promise((resolve) => setTimeout(resolve, 25));
   });
 });

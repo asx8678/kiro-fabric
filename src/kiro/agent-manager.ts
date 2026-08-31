@@ -360,9 +360,29 @@ export class KiroAgentManager {
 
   async stop(id: string): Promise<AgentRunResult> {
     const managed = this.#require(id);
-    if (managed.settled) return this.wait(id);
+    if (managed.settled) {
+      if (await managed.transport.isAlive()) await managed.transport.stop();
+      return this.wait(id);
+    }
     const existing = readRecord(managed.statusFile);
     if (existing && terminalStatuses.has(existing.status)) {
+      // A worker can publish its final record before its process and
+      // descendants leave. Preserve that result, but do not release its lane
+      // (or let close ignore it) until transport ownership is discharged.
+      managed.stopRequested = true;
+      try {
+        if (await managed.transport.isAlive()) await managed.transport.stop();
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const failed = this.#failure(
+          managed,
+          "failed",
+          `Agent reached ${existing.status}, but transport cleanup failed: ${reason}${this.#workerDiagnostic(managed)}`,
+        );
+        try { writeRecord(managed.statusFile, failed); } catch { /* preserve waiter settlement */ }
+        this.#settle(managed, failed);
+        return failed;
+      }
       const result = this.#metadata(existing, managed) as AgentRunResult;
       this.#settle(managed, result);
       return result;
@@ -464,8 +484,10 @@ export class KiroAgentManager {
   async close(): Promise<void> {
     this.#closing = true;
     while (this.#waiters.length > 0) this.#waiters.shift()?.();
-    const running = [...this.#runs.values()].filter((run) => !run.settled);
-    await Promise.allSettled(running.map((run) => this.stop(run.id)));
+    // Include settled records defensively: terminal status and OS process exit
+    // are separate events, and close must never leave a live owned transport.
+    const runs = [...this.#runs.values()];
+    await Promise.allSettled(runs.map((run) => this.stop(run.id)));
     if (this.#managedTempRoot || !this.config.retainRuns) {
       fs.rmSync(this.#runRoot, { recursive: true, force: true });
     }
@@ -556,6 +578,14 @@ export class KiroAgentManager {
     managed.result = undefined;
   }
 
+  async #reapTerminalTransport(managed: ManagedKiroAgent): Promise<void> {
+    if (await managed.transport.isAlive()) await managed.transport.stop();
+    if (managed.stopRequested || managed.settled) return;
+    if (await managed.transport.isAlive()) {
+      throw new Error("transport remained alive after bounded cleanup");
+    }
+  }
+
   async #monitor(managed: ManagedKiroAgent, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs + TRANSPORT_EXIT_GRACE_MS;
     let deadSince: number | undefined;
@@ -563,6 +593,8 @@ export class KiroAgentManager {
       const record = readRecord(managed.statusFile);
       if (record) managed.latestRecord = record;
       if (record && terminalStatuses.has(record.status)) {
+        await this.#reapTerminalTransport(managed);
+        if (managed.stopRequested || managed.settled) return;
         this.#settle(managed, this.#metadata(record, managed) as AgentRunResult);
         return;
       }
