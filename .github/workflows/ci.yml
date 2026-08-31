@@ -27,7 +27,17 @@ jobs:
       - name: Install pinned pnpm
         run: npm install --global pnpm@11.20.0
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run check
+      - name: Full repository check (Linux)
+        if: runner.os == 'Linux'
+        run: pnpm run check
+      - name: Cross-platform Power build and validation
+        if: runner.os != 'Linux'
+        run: |
+          pnpm run typecheck
+          pnpm run build
+          pnpm exec vitest run --config vitest.config.ts tests/kiro-power.test.ts tests/kiro-workspace-context.test.ts tests/kiro-power-manifest.test.ts tests/kiro-closure-graph.test.ts tests/kiro-runtime-closure.test.ts
+          pnpm run power:validate
+          pnpm run certify:power:built
 
   reproducibility:
     name: reproducible Power closure
