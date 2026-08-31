@@ -36,24 +36,21 @@ const MAX_COMPILER_DIAGNOSTICS = 50;
 const MAX_DIAGNOSTIC_MESSAGE_CHARS = 4_096;
 const COMPILER_MEMORY_MB = 128;
 
-const compilerOptions: ts.CompilerOptions = {
+const relaxedCompilerOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.ESNext,
   moduleResolution: ts.ModuleResolutionKind.NodeNext,
   strict: false,
-  noImplicitAny: false,
-  strictNullChecks: false,
-  strictFunctionTypes: false,
-  strictBindCallApply: false,
-  alwaysStrict: false,
-  strictPropertyInitialization: false,
-  noImplicitThis: false,
-  useUnknownInCatchVariables: false,
   noEmit: false,
   sourceMap: true,
   skipLibCheck: true,
   lib: ["lib.es2022.d.ts"],
 };
+
+const compilerOptionsFor = (mode: FabricCompilerCheckingMode): ts.CompilerOptions =>
+  mode === "strict"
+    ? { ...relaxedCompilerOptions, strict: true }
+    : relaxedCompilerOptions;
 
 const TYPE_CORRECTNESS_CODES = new Set<number>([
   2339, 2551,
@@ -74,7 +71,7 @@ export const wrapFabricGuestCode = (code: string): string =>
 class FabricTypeChecker {
   readonly #guestFile: string;
   readonly #declarationFile: string;
-  readonly #baseHost = ts.createCompilerHost(compilerOptions, true);
+  readonly #baseHost = ts.createCompilerHost(relaxedCompilerOptions, true);
   readonly #stableFiles = new Map<string, ts.SourceFile>();
   readonly #declarationSource: ts.SourceFile;
   readonly #host: ts.CompilerHost;
@@ -135,6 +132,7 @@ class FabricTypeChecker {
   }
 
   check(code: string, mode: FabricCompilerCheckingMode): FabricTypeCheckResult {
+    const compilerOptions = compilerOptionsFor(mode);
     this.#sourceText = wrapFabricGuestCode(code);
     this.#sourceFile = ts.createSourceFile(
       this.#guestFile,

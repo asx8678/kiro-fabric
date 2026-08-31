@@ -294,6 +294,15 @@ return out;
       .toEqual(expect.arrayContaining([expect.objectContaining({ message: expect.stringMatching(/number/) })]));
   });
 
+  it("enables TypeScript strictness diagnostics in strict mode", () => {
+    const code = "const value: string | undefined = undefined; return value.length;";
+    expect(typeCheckFabricCode(code, GUEST_TYPE_DECLARATIONS, "schema-relaxed").errors).toEqual([]);
+    expect(typeCheckFabricCode(code, GUEST_TYPE_DECLARATIONS, "strict").errors)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ message: expect.stringMatching(/possibly 'undefined'/) }),
+      ]));
+  });
+
   it("runs checking in a bounded worker", async () => {
     const result = await typeCheckFabricCodeInWorker({
       code: 'return "ok";',
