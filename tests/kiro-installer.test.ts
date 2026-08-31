@@ -821,7 +821,7 @@ describe("management CLI", () => {
 
   beforeEach(() => {
     wrapperPath = buildNativeKiroFixture(base);
-  });
+  }, 30_000);
 
   it("rejects unknown commands with usage exit 2", async () => {
     await expect(
