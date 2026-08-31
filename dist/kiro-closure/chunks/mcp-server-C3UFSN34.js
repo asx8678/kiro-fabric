@@ -50,10 +50,7 @@ import {
   resolveAgentDir,
   typebox_exports,
   writeFileAtomic
-} from "./chunk-BEHN6HY5.js";
-import {
-  spawnDetached
-} from "./chunk-5A4B7V74.js";
+} from "./chunk-6GR27BT7.js";
 import {
   runAbortable,
   settleWithin,
@@ -73,13 +70,14 @@ import {
   MAX_AGENT_STEER_LINE_BYTES,
   normalizeKiroSemanticContext,
   value_exports
-} from "./chunk-7TD7WBCG.js";
+} from "./chunk-ELJJP3DS.js";
 import {
   KIRO_EXECUTION_TIMEOUT_MS,
   KIRO_MCP_CALL_TIMEOUT_MS,
+  KIRO_MCP_DRAIN_TIMEOUT_MS,
   assertSupportedKiro,
   assertSupportedKiroUnchanged
-} from "./chunk-ULR3BHCM.js";
+} from "./chunk-UMXA4XWU.js";
 import {
   processInstanceIdentity,
   processInstanceIsAlive,
@@ -88,8 +86,9 @@ import {
   sha256Bytes
 } from "./chunk-G3LPLMI7.js";
 import {
-  createProcessTreeController
-} from "./chunk-SXRQQ7MG.js";
+  createProcessTreeController,
+  spawnDetached
+} from "./chunk-SSHRMRMV.js";
 import {
   kiroChildToolRefs,
   parseKiroChildTools
@@ -1229,7 +1228,8 @@ var KiroPowerApprover = class {
     this.timeoutMs = timeoutMs;
   }
   async approveOnce(request) {
-    if (!this.adapter.supported() || request.signal?.aborted) return false;
+    request.signal?.throwIfAborted();
+    if (!this.adapter.supported()) return false;
     try {
       const result = await this.adapter.request({
         title: "Approve one Fabric action",
@@ -1239,8 +1239,10 @@ ${request.summary}`),
         ...request.signal ? { signal: request.signal } : {},
         timeoutMs: this.timeoutMs
       });
-      return !request.signal?.aborted && result.action === "accept" && result.approved === true;
+      request.signal?.throwIfAborted();
+      return result.action === "accept" && result.approved === true;
     } catch {
+      if (request.signal?.aborted) request.signal.throwIfAborted();
       return false;
     }
   }
@@ -1407,6 +1409,8 @@ var CachedWorkspaceContextProvider = class {
   #snapshot;
   #stale = true;
   #refresh;
+  #refreshGeneration = -1;
+  #invalidationGeneration = 0;
   #revision = 0;
   constructor(source, options = {}) {
     this.#source = source;
@@ -1415,6 +1419,7 @@ var CachedWorkspaceContextProvider = class {
   }
   invalidate() {
     this.#stale = true;
+    this.#invalidationGeneration++;
   }
   subscribe(listener) {
     this.#listeners.add(listener);
@@ -1427,13 +1432,20 @@ var CachedWorkspaceContextProvider = class {
     if (!options.force && !this.#stale && this.#snapshot && now - this.#snapshot.observedAt < this.#ttlMs) {
       return this.#snapshot;
     }
-    if (this.#refresh) return this.#refresh;
-    this.#refresh = this.#load(now).finally(() => {
+    if (this.#refresh) {
+      if (!options.force || this.#refreshGeneration === this.#invalidationGeneration) {
+        return this.#refresh;
+      }
+      return this.#refresh.then(() => this.current({ force: true }));
+    }
+    const generation = this.#invalidationGeneration;
+    this.#refreshGeneration = generation;
+    this.#refresh = this.#load(now, generation).finally(() => {
       this.#refresh = void 0;
     });
     return this.#refresh;
   }
-  async #load(observedAt) {
+  async #load(observedAt, generation) {
     try {
       const roots = this.#source.supported() ? [...await this.#source.load()] : [];
       const snapshot2 = {
@@ -1442,7 +1454,7 @@ var CachedWorkspaceContextProvider = class {
         roots,
         observedAt
       };
-      this.#stale = false;
+      this.#stale = generation !== this.#invalidationGeneration;
       this.#publish(snapshot2);
       return snapshot2;
     } catch (error) {
@@ -1494,6 +1506,8 @@ var KiroPowerWorkspaceBinding = class {
   #pluginRoot;
   #pluginData;
   #elicitor;
+  #home;
+  #kiroHome;
   #candidates = [];
   #binding;
   #initialAutoBindAllowed = true;
@@ -1501,6 +1515,8 @@ var KiroPowerWorkspaceBinding = class {
     this.#pluginRoot = options.pluginRoot;
     this.#pluginData = options.pluginData;
     this.#elicitor = options.elicitor;
+    this.#home = realpathSync(os.homedir());
+    this.#kiroHome = path3.join(this.#home, ".kiro");
   }
   #canonical(candidate) {
     if (!path3.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
@@ -1512,11 +1528,9 @@ var KiroPowerWorkspaceBinding = class {
     }
     const stats = statSync(root, { bigint: true });
     if (!stats.isDirectory()) throw new Error("workspace root must be an existing directory");
-    const home = realpathSync(os.homedir());
-    const kiroHome = path3.join(home, ".kiro");
-    const kiroRelative = path3.relative(kiroHome, root);
+    const kiroRelative = path3.relative(this.#kiroHome, root);
     const insideKiroHome = kiroRelative === "" || kiroRelative !== ".." && !kiroRelative.startsWith(`..${path3.sep}`) && !path3.isAbsolute(kiroRelative);
-    const unsafe = [path3.parse(root).root, home, this.#pluginRoot, this.#pluginData];
+    const unsafe = [path3.parse(root).root, this.#home, this.#pluginRoot, this.#pluginData];
     if (unsafe.includes(root) || insideKiroHome) {
       throw new Error("workspace root is too broad or reserved");
     }
@@ -1541,9 +1555,12 @@ var KiroPowerWorkspaceBinding = class {
       }
     }
     this.#candidates = [...new Map(candidates.map((entry) => [entry.id, entry])).values()];
-    if (this.#binding?.source === "client-roots" && !this.#candidates.some((entry) => entry.id === this.#binding.id)) {
-      this.#binding = void 0;
-      this.#initialAutoBindAllowed = false;
+    if (this.#binding?.source === "client-roots") {
+      const current = this.#candidates.find((entry) => entry.id === this.#binding.id);
+      if (!current || current.dev !== this.#binding.dev || current.ino !== this.#binding.ino) {
+        this.#binding = void 0;
+        this.#initialAutoBindAllowed = false;
+      }
     }
     if (this.#candidates.length > 1) this.#initialAutoBindAllowed = false;
     if (!this.#binding && this.#initialAutoBindAllowed && this.#candidates.length === 1) {
@@ -1567,8 +1584,6 @@ var KiroPowerWorkspaceBinding = class {
         source: binding.source
       };
     } catch {
-      this.#binding = void 0;
-      this.#initialAutoBindAllowed = false;
       return void 0;
     }
   }
@@ -1592,10 +1607,11 @@ var KiroPowerWorkspaceBinding = class {
     }
     const candidate = this.#canonical(request.path);
     if (!this.#elicitor) throw new Error("manual workspace attachment requires MCP elicitation support");
-    if (signal?.aborted || !await this.#elicitor.approveWorkspace(candidate.root, signal) || signal?.aborted) {
-      throw new Error("manual workspace attachment was not approved");
-    }
-    return { action: "attach", root: candidate.root };
+    signal?.throwIfAborted();
+    const approved = await this.#elicitor.approveWorkspace(candidate.root, signal);
+    signal?.throwIfAborted();
+    if (!approved) throw new Error("manual workspace attachment was not approved");
+    return { action: "attach", root: candidate.root, dev: candidate.dev, ino: candidate.ino };
   }
   commitMutation(mutation) {
     if (mutation.action === "detach") {
@@ -1610,6 +1626,9 @@ var KiroPowerWorkspaceBinding = class {
       this.#binding = { ...candidate, source: "client-roots" };
     } else {
       const candidate = this.#canonical(mutation.root);
+      if (candidate.dev !== mutation.dev || candidate.ino !== mutation.ino) {
+        throw new Error("workspace root identity changed after approval; attach and approve again");
+      }
       this.#binding = { ...candidate, source: "manual" };
     }
     this.#initialAutoBindAllowed = false;
@@ -4990,7 +5009,7 @@ var fabricExecTitleHintCached = (code) => {
 var runtimeDependencies;
 var loadRuntimeDependencies = () => runtimeDependencies ??= Promise.all([
   import("./quickjs-runtime-EOQFTCVR.js"),
-  import("./node-process-runtime-ZVL4JC2X.js"),
+  import("./node-process-runtime-CD7Q635E.js"),
   import("./type-checker-ZXL6HVHN.js"),
   import("./guest-types-6A5BKABT.js"),
   import("./dynamic-guest-types-YIYN3HDU.js"),
@@ -5617,7 +5636,7 @@ var FabricExecutionService = class {
 // src/kiro/tools-provider.ts
 import { spawn } from "node:child_process";
 var import_ignore = __toESM(require_ignore(), 1);
-import { createReadStream, promises as fs2 } from "node:fs";
+import { closeSync as closeSync2, createReadStream, openSync as openSync2, promises as fs2, writeSync } from "node:fs";
 import os2 from "node:os";
 import path7 from "node:path";
 import { createInterface } from "node:readline";
@@ -7475,6 +7494,106 @@ var expandSkillDirMarkersForRead = (content, args, cwd) => {
   return expandSkillDirMarkers(content, path5.dirname(requestedPath));
 };
 
+// src/memory/regex.ts
+import { Worker } from "node:worker_threads";
+var WORKER_SOURCE = String.raw`
+const { parentPort } = require("node:worker_threads");
+parentPort.on("message", ({ pattern, flags, haystacks }) => {
+  try {
+    const regex = new RegExp(pattern, flags);
+    const matched = [];
+    for (let index = 0; index < haystacks.length; index += 1) {
+      if (regex.test(haystacks[index])) matched.push(index);
+    }
+    parentPort.postMessage({ matched });
+  } catch (error) {
+    parentPort.postMessage({
+      error: {
+        code: "invalid_regex",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
+});
+`;
+var executeBoundedRegex = async (pattern, haystacks, limits, flags = "iu") => {
+  const patternBytes = Buffer.byteLength(pattern, "utf8");
+  if (patternBytes > limits.maxPatternBytes) {
+    return {
+      complete: false,
+      matched: [],
+      error: {
+        code: "regex_pattern_too_large",
+        message: `Regex pattern is ${patternBytes} bytes; limit is ${limits.maxPatternBytes}.`
+      }
+    };
+  }
+  return new Promise((resolve) => {
+    let worker;
+    try {
+      worker = new Worker(WORKER_SOURCE, {
+        eval: true,
+        resourceLimits: { maxOldGenerationSizeMb: 16, maxYoungGenerationSizeMb: 4 }
+      });
+    } catch (error) {
+      resolve({
+        complete: false,
+        matched: [],
+        error: {
+          code: "regex_worker_error",
+          message: error instanceof Error ? error.message : String(error)
+        }
+      });
+      return;
+    }
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      resolve(result);
+    };
+    const timer = setTimeout(() => {
+      finish({
+        complete: false,
+        matched: [],
+        error: {
+          code: "regex_timeout",
+          message: `Regex execution exceeded ${limits.timeoutMs} ms.`
+        }
+      });
+    }, limits.timeoutMs);
+    worker.once("message", (message) => {
+      const record = message;
+      if (record.error) {
+        finish({ complete: false, matched: [], error: record.error });
+        return;
+      }
+      if (Array.isArray(record.matched) && record.matched.every((value) => Number.isInteger(value))) {
+        finish({ complete: true, matched: record.matched });
+        return;
+      }
+      finish({
+        complete: false,
+        matched: [],
+        error: { code: "regex_worker_error", message: "Regex worker returned an invalid result." }
+      });
+    });
+    worker.once("error", (error) => {
+      finish({
+        complete: false,
+        matched: [],
+        error: {
+          code: "regex_worker_error",
+          message: error instanceof Error ? error.message : String(error)
+        }
+      });
+    });
+    worker.postMessage({ pattern, flags, haystacks });
+  });
+};
+
 // src/providers/project-root-guard.ts
 import fs from "node:fs";
 import { homedir as homedir2 } from "node:os";
@@ -7579,7 +7698,15 @@ var MAX_READ_LINES = 2e3;
 var MAX_EDIT_CHARS = 2e6;
 var MAX_WRITE_BYTES = 8 * 1024 * 1024;
 var MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+var MAX_IMAGE_DIMENSION = 16384;
+var MAX_IMAGE_PIXELS = 64 * 1024 * 1024;
 var MAX_SEARCH_FILE_BYTES = 4 * 1024 * 1024;
+var MAX_SEARCH_PATTERN_BYTES = 1024;
+var MAX_SEARCH_GLOB_BYTES = 4096;
+var MAX_GREP_CONTEXT = 100;
+var MAX_GREP_MATCHES = 100;
+var MAX_FIND_MATCHES = 1e3;
+var GREP_REGEX_TIMEOUT_MS = 250;
 var MAX_WALK_FILES = 1e5;
 var MAX_WALK_DIRECTORIES = 2e4;
 var MAX_WALK_DEPTH = 64;
@@ -7673,7 +7800,6 @@ var truncateLines = (value, limit, fromEnd = false) => {
   if (lines.length <= limit) return { text: value, truncated: false };
   return { text: (fromEnd ? lines.slice(-limit) : lines.slice(0, limit)).join("\n"), truncated: true };
 };
-var escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 var normalizeRelative = (root, file) => path7.relative(root, file).split(path7.sep).join("/");
 var matchesGlob = (file, pattern) => minimatch(file, pattern, {
   dot: true,
@@ -7684,6 +7810,57 @@ var byteLength2 = (value) => Buffer.byteLength(value, "utf8");
 var abortReason = (signal, fallback) => {
   const reason = signal?.reason;
   return reason instanceof Error ? reason : new Error(typeof reason === "string" ? reason : fallback);
+};
+var imageDimensions = (data, extension) => {
+  if (extension === ".png" && data.length >= 24 && data.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
+    return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+  }
+  if (extension === ".gif" && data.length >= 10 && (data.toString("ascii", 0, 6) === "GIF87a" || data.toString("ascii", 0, 6) === "GIF89a")) {
+    return { width: data.readUInt16LE(6), height: data.readUInt16LE(8) };
+  }
+  if (extension === ".bmp" && data.length >= 26 && data.toString("ascii", 0, 2) === "BM") {
+    return { width: Math.abs(data.readInt32LE(18)), height: Math.abs(data.readInt32LE(22)) };
+  }
+  if ((extension === ".jpg" || extension === ".jpeg") && data.length >= 4 && data[0] === 255 && data[1] === 216) {
+    for (let offset = 2; offset + 9 < data.length; ) {
+      if (data[offset] !== 255) {
+        offset += 1;
+        continue;
+      }
+      const marker = data[offset + 1];
+      if (marker === 216 || marker === 217 || marker === 1) {
+        offset += 2;
+        continue;
+      }
+      if (offset + 4 > data.length) break;
+      const length = data.readUInt16BE(offset + 2);
+      if (length < 2 || offset + 2 + length > data.length) break;
+      if (marker >= 192 && marker <= 195 || marker >= 197 && marker <= 199 || marker >= 201 && marker <= 203 || marker >= 205 && marker <= 207) {
+        return { width: data.readUInt16BE(offset + 7), height: data.readUInt16BE(offset + 5) };
+      }
+      offset += 2 + length;
+    }
+  }
+  if (extension === ".webp" && data.length >= 30 && data.toString("ascii", 0, 4) === "RIFF" && data.toString("ascii", 8, 12) === "WEBP") {
+    const kind = data.toString("ascii", 12, 16);
+    if (kind === "VP8X") return { width: 1 + data.readUIntLE(24, 3), height: 1 + data.readUIntLE(27, 3) };
+    if (kind === "VP8L" && data[20] === 47) {
+      const bits = data.readUInt32LE(21);
+      return { width: (bits & 16383) + 1, height: (bits >>> 14 & 16383) + 1 };
+    }
+    if (kind === "VP8 " && data.length >= 30 && data[23] === 157 && data[24] === 1 && data[25] === 42) {
+      return { width: data.readUInt16LE(26) & 16383, height: data.readUInt16LE(28) & 16383 };
+    }
+  }
+  return void 0;
+};
+var assertImageBounds = (data, extension) => {
+  const dimensions = imageDimensions(data, extension);
+  if (!dimensions) throw new Error(`k.read could not validate ${extension || "image"} dimensions`);
+  const { width, height } = dimensions;
+  if (width < 1 || height < 1 || width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION || width * height > MAX_IMAGE_PIXELS) {
+    throw new Error(`k.read refuses images over ${MAX_IMAGE_DIMENSION}x${MAX_IMAGE_DIMENSION} or ${MAX_IMAGE_PIXELS} pixels (got ${width}x${height})`);
+  }
 };
 var KiroToolsProvider = class {
   name = "k";
@@ -7770,6 +7947,7 @@ var KiroToolsProvider = class {
       if (!stat.isFile()) throw new Error(`k.read requires a regular file: ${String(args.path)}`);
       if (stat.size > MAX_IMAGE_BYTES) throw new Error(`k.read refuses images over ${MAX_IMAGE_BYTES} bytes`);
       const data = await runAbortable(context.signal, () => fs2.readFile(target));
+      assertImageBounds(data, path7.extname(target).toLowerCase());
       const note = `Read image file [${mimeType}]`;
       context.attachMedia?.([{ type: "image", data: data.toString("base64"), mimeType }], note);
       return note;
@@ -7961,7 +8139,8 @@ var KiroToolsProvider = class {
   }
   async #find(target, args, context) {
     const pattern = stringArg(args, "pattern");
-    const limit = positiveInteger(args.limit, 1e3, 1);
+    if (byteLength2(pattern) > MAX_SEARCH_GLOB_BYTES) throw new Error(`k.find refuses patterns over ${MAX_SEARCH_GLOB_BYTES} bytes`);
+    const limit = Math.min(positiveInteger(args.limit, MAX_FIND_MATCHES, 1), MAX_FIND_MATCHES);
     const matches = [];
     let bytes = 0;
     for await (const file of this.#walk(target, context.signal)) {
@@ -7976,12 +8155,20 @@ var KiroToolsProvider = class {
   }
   async #grep(target, args, context) {
     const pattern = stringArg(args, "pattern");
-    const flags = args.ignoreCase === true ? "i" : "";
-    const matcher = new RegExp(args.literal === true ? escapeRegex(pattern) : pattern, flags);
+    if (byteLength2(pattern) > MAX_SEARCH_PATTERN_BYTES) throw new Error(`k.grep refuses patterns over ${MAX_SEARCH_PATTERN_BYTES} bytes`);
+    const literal = args.literal === true;
+    if (!literal) {
+      try {
+        new RegExp(pattern, args.ignoreCase === true ? "iu" : "u");
+      } catch (error) {
+        throw new Error(`k.grep invalid regular expression: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     const stat = await runAbortable(context.signal, () => fs2.stat(target));
     const glob = typeof args.glob === "string" ? args.glob : void 0;
-    const limit = positiveInteger(args.limit, 100, 1);
-    const contextLines = positiveInteger(args.context, 0, 0);
+    if (glob !== void 0 && byteLength2(glob) > MAX_SEARCH_GLOB_BYTES) throw new Error(`k.grep refuses globs over ${MAX_SEARCH_GLOB_BYTES} bytes`);
+    const limit = Math.min(positiveInteger(args.limit, MAX_GREP_MATCHES, 1), MAX_GREP_MATCHES);
+    const contextLines = Math.min(positiveInteger(args.context, 0, 0), MAX_GREP_CONTEXT);
     const output = [];
     let outputBytes = 0;
     let matches = 0;
@@ -7997,14 +8184,26 @@ var KiroToolsProvider = class {
         const fileStat = await fs2.stat(file);
         if (!fileStat.isFile() || fileStat.size > MAX_SEARCH_FILE_BYTES) continue;
         source = await fs2.readFile(file, "utf8");
-      } catch {
-        continue;
+      } catch (error) {
+        if (error.code === "ENOENT") continue;
+        throw error;
       }
       if (source.includes("\0")) continue;
       const lines = source.split("\n");
+      let matchedLines;
+      if (!literal) {
+        const result = await executeBoundedRegex(pattern, lines, {
+          maxPatternBytes: MAX_SEARCH_PATTERN_BYTES,
+          timeoutMs: GREP_REGEX_TIMEOUT_MS
+        }, args.ignoreCase === true ? "iu" : "u");
+        throwIfAborted(context.signal);
+        if (!result.complete) throw new Error(`k.grep ${result.error.message}`);
+        matchedLines = new Set(result.matched);
+      }
+      const literalNeedle = args.ignoreCase === true ? pattern.toLowerCase() : pattern;
       for (let line = 0; line < lines.length && matches < limit; line += 1) {
-        matcher.lastIndex = 0;
-        if (!matcher.test(lines[line])) continue;
+        const matched = literal ? (args.ignoreCase === true ? lines[line].toLowerCase() : lines[line]).includes(literalNeedle) : matchedLines.has(line);
+        if (!matched) continue;
         matches += 1;
         for (let shown = Math.max(0, line - contextLines); shown <= Math.min(lines.length - 1, line + contextLines); shown += 1) {
           const rendered = `${relative2}:${shown + 1}:${lines[shown].slice(0, 500)}`;
@@ -8023,7 +8222,6 @@ var KiroToolsProvider = class {
     if (byteLength2(command) > MAX_BASH_COMMAND_BYTES) throw new Error(`k.bash refuses commands over ${MAX_BASH_COMMAND_BYTES} bytes`);
     const timeoutMs = typeof args.timeout === "number" && args.timeout > 0 ? args.timeout * 1e3 : void 0;
     const fullOutputPath = path7.join(os2.tmpdir(), `kiro-fabric-bash-${crypto.randomUUID()}.log`);
-    const outputFile = await fs2.open(fullOutputPath, "wx", 384);
     let result;
     try {
       result = await new Promise((resolve, reject) => {
@@ -8040,8 +8238,10 @@ var KiroToolsProvider = class {
         }
         const tree = createProcessTreeController(child.pid, { ambientHelpers: false });
         let tail = Buffer.alloc(0);
+        const capturedChunks = [];
+        let capturedBytes = 0;
+        let outputDescriptor;
         let totalBytes = 0;
-        let writeChain = Promise.resolve();
         let terminationError;
         let stopPromise;
         let timer;
@@ -8059,14 +8259,22 @@ var KiroToolsProvider = class {
           const captured = remaining >= chunk.length ? chunk : chunk.subarray(0, remaining);
           totalBytes += chunk.length;
           if (captured.length > 0) {
+            try {
+              if (outputDescriptor === void 0) {
+                capturedChunks.push(captured);
+                capturedBytes += captured.length;
+                if (capturedBytes > MAX_BYTES) {
+                  outputDescriptor = openSync2(fullOutputPath, "wx", 384);
+                  for (const buffered of capturedChunks.splice(0)) writeSync(outputDescriptor, buffered);
+                }
+              } else {
+                writeSync(outputDescriptor, captured);
+              }
+            } catch (error) {
+              requestStop(error instanceof Error ? error : new Error(String(error)));
+            }
             tail = Buffer.concat([tail, captured]);
             if (tail.length > MAX_BYTES) tail = tail.subarray(tail.length - MAX_BYTES);
-            stream?.pause();
-            writeChain = writeChain.then(async () => {
-              await outputFile.write(captured);
-            }).catch((error) => {
-              requestStop(error instanceof Error ? error : new Error(String(error)));
-            }).finally(() => stream?.resume());
           }
           if (preview) {
             const boundedPreview = truncateLines(tail.toString("utf8"), MAX_READ_LINES, true).text;
@@ -8082,22 +8290,24 @@ var KiroToolsProvider = class {
           if (timer) clearTimeout(timer);
           context.signal?.removeEventListener("abort", abort);
           try {
-            await writeChain;
             await stopPromise;
-            await outputFile.close();
+            if (outputDescriptor !== void 0) {
+              closeSync2(outputDescriptor);
+              outputDescriptor = void 0;
+            }
           } catch (error) {
             reject(error);
             return;
           }
-          if (terminationError) {
-            reject(terminationError);
-            return;
-          }
-          if (signal) {
-            reject(new Error(`k.bash terminated by ${signal}`));
-            return;
-          }
-          resolve({ output: tail.toString("utf8"), code, totalBytes });
+          if (signal && !terminationError) terminationError = new Error(`k.bash terminated by ${signal}`);
+          resolve({
+            output: tail.toString("utf8"),
+            fullOutput: Buffer.concat(capturedChunks),
+            spooled: capturedBytes > MAX_BYTES,
+            code,
+            totalBytes,
+            ...terminationError ? { terminationError } : {}
+          });
         };
         context.signal?.addEventListener("abort", abort, { once: true });
         child.stdout?.on("data", (chunk) => enqueue(chunk, true, child.stdout));
@@ -8111,23 +8321,28 @@ var KiroToolsProvider = class {
         }
       });
     } catch (error) {
-      await outputFile.close().catch(() => void 0);
       await fs2.rm(fullOutputPath, { force: true });
       throw error;
     }
-    throwIfAborted(context.signal);
     const byLines = truncateLines(result.output, MAX_READ_LINES, true);
     const bounded2 = truncateBytes(byLines.text, true);
     const truncated = result.totalBytes > byteLength2(result.output) || byLines.truncated || bounded2.truncated;
     let details = null;
     if (truncated) {
+      if (!result.spooled) {
+        await fs2.writeFile(fullOutputPath, result.fullOutput, { flag: "wx", mode: 384 });
+      }
       details = { fullOutputPath, truncation: { truncated: true } };
-    } else {
-      await fs2.rm(fullOutputPath, { force: true });
+    }
+    const fullOutputHint = truncated ? `
+[Full output saved to ${fullOutputPath}; inspect it with k.bash({ command: ${JSON.stringify(`tail -n 2000 -- ${JSON.stringify(fullOutputPath)}`)} })]` : "";
+    if (result.terminationError) {
+      const partial = bounded2.text ? `${bounded2.text}
+
+` : "";
+      throw new Error(`${partial}${result.terminationError.message}${fullOutputHint}`);
     }
     if (result.code !== 0) {
-      const fullOutputHint = truncated ? `
-[Full output: ${fullOutputPath}]` : "";
       throw new Error(`${bounded2.text}${fullOutputHint}
 
 Command exited with code ${result.code ?? 1}`);
@@ -8245,6 +8460,7 @@ var TRANSPORT_EXIT_GRACE_MS = 1e3;
 var MIN_TIMEOUT_MS = 1e3;
 var MAX_TIMEOUT_MS = 24 * 36e5;
 var MAX_NAME_LENGTH = 60;
+var MAX_KIRO_STEER_FILE_BYTES = 4 * 1024 * 1024;
 var terminalStatuses = /* @__PURE__ */ new Set(["completed", "failed", "stopped", "timed_out"]);
 var delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 var safeName = (value) => value.replace(/[\r\n\t]+/g, " ").trim().slice(0, MAX_NAME_LENGTH) || "Fabric agent";
@@ -8333,8 +8549,10 @@ var KiroAgentManager = class {
         this.#waiters.push(wake);
         signal?.addEventListener("abort", abort, { once: true });
       });
-      if (this.#closing) throw new Error("Kiro agent manager is closing");
-      if (signal?.aborted) throw new Error("Agent launch aborted");
+      if (this.#closing || signal?.aborted) {
+        this.#waiters.shift()?.();
+        throw new Error(this.#closing ? "Kiro agent manager is closing" : "Agent launch aborted");
+      }
     }
     if (this.#closing) throw new Error("Kiro agent manager is closing");
     this.#active += 1;
@@ -8380,6 +8598,8 @@ var KiroAgentManager = class {
       const taskFile = path8.join(runDirectory, "task.txt");
       const statusFile = path8.join(runDirectory, "status.json");
       const logFile = path8.join(runDirectory, "events.jsonl");
+      const stdoutFile = path8.join(runDirectory, "worker.stdout.log");
+      const stderrFile = path8.join(runDirectory, "worker.stderr.log");
       const steerFile = path8.join(runDirectory, "steer.jsonl");
       const schemaFile = request.schema ? path8.join(runDirectory, "schema.json") : void 0;
       const contextFile = request.kiroContext ? path8.join(runDirectory, "kiro-context.json") : void 0;
@@ -8432,7 +8652,7 @@ var KiroAgentManager = class {
         this.#workerPath,
         workerArguments,
         agentCwd,
-        { ambientHelpers: false }
+        { ambientHelpers: false, stdoutPath: stdoutFile, stderrPath: stderrFile }
       );
       const transport = {
         kind: "process",
@@ -8463,6 +8683,7 @@ var KiroAgentManager = class {
         residency,
         abortSignal: signal,
         abortHandler: void 0,
+        stopRequested: false,
         ...request.model ? { model: request.model } : {},
         ...thinking ? { thinking } : {}
       };
@@ -8472,7 +8693,20 @@ var KiroAgentManager = class {
       }
       this.#runs.set(id, managed);
       launchDirectory = void 0;
-      void this.#monitor(managed, timeoutMs);
+      void this.#monitor(managed, timeoutMs).catch((error) => {
+        if (managed.settled || managed.stopRequested) return;
+        const reason = error instanceof Error ? error.message : String(error);
+        const failed = this.#failure(
+          managed,
+          "failed",
+          `Agent monitor failed: ${reason}${this.#workerDiagnostic(managed)}`
+        );
+        try {
+          writeRecord(managed.statusFile, failed);
+        } catch {
+        }
+        this.#settle(managed, failed);
+      });
       return this.#handle(managed, "running");
     } catch (error) {
       if (launchDirectory) fs4.rmSync(launchDirectory, { recursive: true, force: true });
@@ -8523,10 +8757,31 @@ var KiroAgentManager = class {
       this.#settle(managed, result2);
       return result2;
     }
-    await managed.transport.stop();
+    managed.stopRequested = true;
+    try {
+      await managed.transport.stop();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const stopped = this.#failure(
+        managed,
+        "stopped",
+        `Agent stopped; transport cleanup failed: ${reason}${this.#workerDiagnostic(managed)}`
+      );
+      try {
+        writeRecord(managed.statusFile, stopped);
+      } catch {
+      }
+      this.#settle(managed, stopped);
+      return stopped;
+    }
     const terminal = readRecord(managed.statusFile);
-    const result = terminal && terminalStatuses.has(terminal.status) ? this.#metadata(terminal, managed) : this.#failure(managed, "stopped", "Agent stopped");
-    if (!terminal || !terminalStatuses.has(terminal.status)) writeRecord(managed.statusFile, result);
+    const result = terminal?.status === "stopped" ? this.#metadata(terminal, managed) : this.#failure(managed, "stopped", `Agent stopped${this.#workerDiagnostic(managed)}`);
+    if (terminal?.status !== "stopped") {
+      try {
+        writeRecord(managed.statusFile, result);
+      } catch {
+      }
+    }
     this.#settle(managed, result);
     return result;
   }
@@ -8579,7 +8834,18 @@ var KiroAgentManager = class {
     if (bytes > MAX_AGENT_STEER_LINE_BYTES) {
       throw new Error(`Fabric agent steering command is too large (${bytes} bytes; maximum ${MAX_AGENT_STEER_LINE_BYTES})`);
     }
-    fs4.appendFileSync(path8.join(managed.runDirectory, "steer.jsonl"), line, { encoding: "utf8", mode: 384 });
+    const steerFile = path8.join(managed.runDirectory, "steer.jsonl");
+    let queuedBytes = 0;
+    try {
+      queuedBytes = fs4.statSync(steerFile).size;
+    } catch {
+    }
+    if (queuedBytes + bytes > MAX_KIRO_STEER_FILE_BYTES) {
+      throw new Error(
+        `Fabric agent steering queue is full (${queuedBytes} bytes; maximum ${MAX_KIRO_STEER_FILE_BYTES})`
+      );
+    }
+    fs4.appendFileSync(steerFile, line, { encoding: "utf8", mode: 384 });
     return { queued: true, messageId };
   }
   async close() {
@@ -8619,6 +8885,15 @@ var KiroAgentManager = class {
       ...managed.model && !record.model ? { model: managed.model } : {},
       ...managed.thinking && !record.thinking ? { thinking: managed.thinking } : {}
     };
+  }
+  #workerDiagnostic(managed) {
+    const stderrFile = path8.join(managed.runDirectory, "worker.stderr.log");
+    try {
+      const bytes = fs4.statSync(stderrFile).size;
+      return bytes > 0 ? `; worker stderr captured (${bytes} bytes) at ${stderrFile}` : "";
+    } catch {
+      return "";
+    }
   }
   #failure(managed, status, error) {
     const now = Date.now();
@@ -8660,7 +8935,7 @@ var KiroAgentManager = class {
   async #monitor(managed, timeoutMs) {
     const deadline = Date.now() + timeoutMs + TRANSPORT_EXIT_GRACE_MS;
     let deadSince;
-    while (!managed.settled) {
+    while (!managed.settled && !managed.stopRequested) {
       const record = readRecord(managed.statusFile);
       if (record) managed.latestRecord = record;
       if (record && terminalStatuses.has(record.status)) {
@@ -8669,16 +8944,22 @@ var KiroAgentManager = class {
       }
       if (Date.now() >= deadline) {
         await managed.transport.stop();
+        if (managed.stopRequested || managed.settled) return;
         const timedOut = this.#failure(managed, "timed_out", `Agent timed out after ${timeoutMs}ms`);
         writeRecord(managed.statusFile, timedOut);
         this.#settle(managed, timedOut);
         return;
       }
       const alive = await managed.transport.isAlive();
+      if (managed.stopRequested || managed.settled) return;
       if (!alive) {
         deadSince ??= Date.now();
         if (Date.now() - deadSince >= TRANSPORT_EXIT_GRACE_MS) {
-          const failed = this.#failure(managed, "failed", "Agent transport exited without a result");
+          const failed = this.#failure(
+            managed,
+            "failed",
+            `Agent transport exited without a result${this.#workerDiagnostic(managed)}`
+          );
           writeRecord(managed.statusFile, failed);
           this.#settle(managed, failed);
           return;
@@ -9204,9 +9485,7 @@ var stringArray = (value, label) => {
 };
 var isWithinOrEqual = (root, candidate) => {
   const child = relative(root, candidate);
-  if (child === "" || child === ".") return true;
-  if (isAbsolute(child)) return false;
-  return child.split(sep2).filter(Boolean)[0] !== "..";
+  return child === "" || child === "." || !isAbsolute(child) && !child.startsWith(`..${sep2}`) && child !== "..";
 };
 var progressLabel = (status) => {
   const currentTool = "currentTool" in status && status.currentTool ? ` \xB7 ${status.currentTool}` : "";
@@ -9296,9 +9575,9 @@ var KiroAgentsProvider = class {
     let cwd;
     if (typeof args.cwd === "string") {
       cwd = this.manager.resolveCwd(args.cwd);
-      if (!isWithinOrEqual(this.manager.cwd, cwd) || cwd !== this.manager.cwd) {
+      if (!isWithinOrEqual(this.manager.cwd, cwd)) {
         throw new Error(
-          "Managed Kiro ACP children must use the directory where kiro-cli was launched"
+          "Managed Kiro ACP child cwd must stay within the directory where kiro-cli was launched"
         );
       }
     }
@@ -9308,9 +9587,7 @@ var KiroAgentsProvider = class {
     const requestedModel = typeof args.model === "string" ? args.model.trim() : void 0;
     const explicitlyAuto = requestedModel?.toLowerCase() === "auto";
     const route = requestedModel ? void 0 : resolveKiroTaskRoute(task);
-    const routedModelAvailable = !route?.model || new Set(
-      this.availableModelIds ?? (await this.#models(false)).flatMap((entry) => typeof entry.id === "string" ? [entry.id] : [])
-    ).has(route.model);
+    const routedModelAvailable = !route?.model || this.availableModelIds !== void 0 && new Set(this.availableModelIds).has(route.model);
     const useKiroAuto = explicitlyAuto || !routedModelAvailable;
     const model = useKiroAuto ? void 0 : requestedModel || route?.model;
     const thinking = explicitThinking ?? (useKiroAuto ? void 0 : route?.thinking);
@@ -9584,6 +9861,19 @@ var managementDescriptors = [
     namespace: "management"
   }
 ];
+var requiredStringArgument = (value, label) => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
+  return value;
+};
+var explicitToolArguments = (value) => {
+  if (value === void 0) return {};
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("mcp.call args must be an object when provided");
+  }
+  return value;
+};
 var normalizeSchema = (schema) => typeof schema === "object" && schema !== null && !Array.isArray(schema) ? schema : emptyObjectSchema;
 var normalizeMcpResult = (result) => {
   if (typeof result !== "object" || result === null || Array.isArray(result)) return result;
@@ -9748,9 +10038,9 @@ var McpProvider = class {
       return { registered: definition.name };
     }
     if (actionName === "$call") {
-      const server = String(args.server);
-      const tool = String(args.tool);
-      const toolArgs = typeof args.args === "object" && args.args !== null && !Array.isArray(args.args) ? args.args : {};
+      const server = requiredStringArgument(args.server, "mcp.call server");
+      const tool = requiredStringArgument(args.tool, "mcp.call tool");
+      const toolArgs = explicitToolArguments(args.args);
       return this.#call(server, tool, toolArgs, context.signal, {
         preferExactRaw: true,
         validateInputSchema: true,
@@ -10401,7 +10691,16 @@ var KiroMcpProvider = class {
       );
     }
     if (actionName === "$call") {
-      const server = String(args.server);
+      if (typeof args.server !== "string" || args.server.trim().length === 0) {
+        throw new TypeError("mcp.call server must be a non-empty string");
+      }
+      if (typeof args.tool !== "string" || args.tool.trim().length === 0) {
+        throw new TypeError("mcp.call tool must be a non-empty string");
+      }
+      if (args.args !== void 0 && (typeof args.args !== "object" || args.args === null || Array.isArray(args.args))) {
+        throw new TypeError("mcp.call args must be an object when provided");
+      }
+      const server = args.server;
       const transport = await this.#delegate.configuredServerTransport(server);
       if (!transport) {
         throw new Error(`Unknown or unsupported configured MCP server: ${server}`);
@@ -10448,6 +10747,7 @@ var MEMORY_FORMAT = 1;
 var OWNERSHIP_MARKER = ".kiro-fabric-owner";
 var MAX_FILE_NAME_BYTES = 240;
 var MUTATION_LOCK = ".kiro-fabric-mutation-lock";
+var MUTATION_LOCK_OWNER = "owner.json";
 var MUTATION_LOCK_TIMEOUT_MS = 5e3;
 var STALE_MUTATION_LOCK_MS = 3e4;
 var OWNERSHIP_INITIALIZATION_WAIT_MS = 250;
@@ -10485,6 +10785,15 @@ var lstatOrNull = (target) => {
 };
 var errorCode = (error) => error instanceof Error && "code" in error ? String(error.code) : void 0;
 var delay2 = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+var processIsAlive = (pid) => {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return errorCode(error) === "EPERM";
+  }
+};
 var withNamespaceMutationLock = async (namespaceRoot, operation) => {
   const lockPath = path12.join(namespaceRoot, MUTATION_LOCK);
   const deadline = Date.now() + MUTATION_LOCK_TIMEOUT_MS;
@@ -10497,6 +10806,20 @@ var withNamespaceMutationLock = async (namespaceRoot, operation) => {
         throw new KiroMemoryScopeError("Kiro memory mutation lock is not a real directory");
       }
       identity = { dev: stat.dev, ino: stat.ino };
+      try {
+        fs6.writeFileSync(
+          path12.join(lockPath, MUTATION_LOCK_OWNER),
+          JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }),
+          { encoding: "utf8", mode: 384, flag: "wx" }
+        );
+      } catch (error) {
+        identity = void 0;
+        try {
+          fs6.rmdirSync(lockPath);
+        } catch {
+        }
+        throw error;
+      }
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
       let stat;
@@ -10510,7 +10833,23 @@ var withNamespaceMutationLock = async (namespaceRoot, operation) => {
         throw new KiroMemoryScopeError("Kiro memory mutation lock is foreign");
       }
       if (Date.now() - stat.mtimeMs > STALE_MUTATION_LOCK_MS) {
+        let ownerPid;
         try {
+          const owner = JSON.parse(fs6.readFileSync(path12.join(lockPath, MUTATION_LOCK_OWNER), "utf8"));
+          if (typeof owner.pid === "number") ownerPid = owner.pid;
+        } catch {
+        }
+        if (ownerPid !== void 0 && processIsAlive(ownerPid)) {
+          if (Date.now() >= deadline) {
+            throw new KiroMemoryScopeError("Timed out waiting for a live Kiro memory mutation lock");
+          }
+          await delay2(10);
+          continue;
+        }
+        try {
+          const current = fs6.lstatSync(lockPath);
+          if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== stat.dev || current.ino !== stat.ino) continue;
+          fs6.rmSync(path12.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
           fs6.rmdirSync(lockPath);
         } catch {
           if (Date.now() >= deadline) {
@@ -10531,7 +10870,10 @@ var withNamespaceMutationLock = async (namespaceRoot, operation) => {
   } finally {
     try {
       const current = fs6.lstatSync(lockPath);
-      if (current.isDirectory() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) fs6.rmdirSync(lockPath);
+      if (current.isDirectory() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
+        fs6.rmSync(path12.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
+        fs6.rmdirSync(lockPath);
+      }
     } catch {
     }
   }
@@ -10908,6 +11250,14 @@ ${JSON.stringify(entry.value)}`.toLowerCase();
 };
 
 // src/kiro/memory-provider.ts
+var MAX_KEY_CHARS = 512;
+var MAX_QUERY_CHARS = 2e3;
+var boundedString = (value, label, maxLength) => {
+  if (typeof value !== "string" || value.length < 1 || value.length > maxLength) {
+    throw new TypeError(`${label} must be a non-empty string of at most ${maxLength} characters`);
+  }
+  return value;
+};
 var descriptors2 = [
   {
     name: "get",
@@ -10981,23 +11331,37 @@ var KiroMemoryProvider = class {
   async describe(actionName, _context) {
     return descriptors2.find((descriptor) => descriptor.name === actionName);
   }
-  async invoke(actionName, args, _context) {
-    const memory = this.#memory();
+  async invoke(actionName, args, context) {
+    throwIfAborted(context.signal);
+    let operation;
     switch (actionName) {
-      case "get":
-        return memory.get(String(args.key));
-      case "set":
-        return memory.set(String(args.key), args.value);
-      case "search":
-        return memory.search(
-          String(args.query),
-          typeof args.limit === "number" ? args.limit : void 0
+      case "get": {
+        const key = boundedString(args.key, "memory.get key", MAX_KEY_CHARS);
+        operation = this.#memory().get(key);
+        break;
+      }
+      case "set": {
+        const key = boundedString(args.key, "memory.set key", MAX_KEY_CHARS);
+        operation = this.#memory().set(key, args.value);
+        break;
+      }
+      case "search": {
+        const query = boundedString(args.query, "memory.search query", MAX_QUERY_CHARS);
+        operation = this.#memory().search(
+          query,
+          typeof args.limit === "number" ? Math.max(1, Math.min(Math.floor(args.limit), 32)) : void 0
         );
+        break;
+      }
       case "index":
-        return memory.index();
+        operation = this.#memory().index();
+        break;
       default:
         throw new Error(`Unknown managed Kiro memory action: ${actionName}`);
     }
+    const result = await operation;
+    throwIfAborted(context.signal);
+    return result;
   }
   #memory() {
     this.#binding ??= openKiroMemory(this.#namespace, this.#root);
@@ -13728,8 +14092,8 @@ var EphemeralKiroArtifactStore = class {
     if (normalizedOffset < 0 || normalizedLimit < 0) {
       throw new KiroArtifactStoreError("artifact offset and limit must be positive integers");
     }
-    entry.lastReadAt = this.#now();
     const text = entry.content.slice(normalizedOffset, normalizedOffset + normalizedLimit);
+    if (text.length > 0) entry.lastReadAt = this.#now();
     const nextOffset = normalizedOffset + text.length;
     return {
       id,
@@ -14071,7 +14435,19 @@ var createKiroMcpServer = async (options) => {
   const drainActive = async (reason) => {
     const executions = [...active];
     for (const execution of executions) execution.controller.abort(reason);
-    await Promise.allSettled(executions.map((execution) => execution.settled));
+    if (executions.length === 0) return;
+    let timer;
+    try {
+      await Promise.race([
+        Promise.allSettled(executions.map((execution) => execution.settled)),
+        new Promise((resolve) => {
+          timer = setTimeout(resolve, KIRO_MCP_DRAIN_TIMEOUT_MS);
+          timer.unref?.();
+        })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   };
   const closeRuntime = async () => {
     const current = runtime;
@@ -14138,7 +14514,7 @@ var createKiroMcpServer = async (options) => {
     return snapshot2;
   };
   const clientWorkspaceTemporarilyUnavailable = () => workspaceSnapshot?.status === "temporarily-unavailable" && binding?.boundWorkspace()?.source === "client-roots";
-  const createRuntime = async () => {
+  const createRuntime = async (powerWorkspace) => {
     if (integration !== "power") {
       return prepareKiroRuntime({
         cwd: options.cwd,
@@ -14147,10 +14523,9 @@ var createKiroMcpServer = async (options) => {
         ...options.enableSubagents ? { enableSubagents: true } : {}
       });
     }
-    const bound = binding.boundWorkspace();
-    const project = bound ? prepareKiroPowerProjectPaths(data.projects, bound) : void 0;
+    const project = powerWorkspace ? prepareKiroPowerProjectPaths(data.projects, powerWorkspace) : void 0;
     return prepareKiroRuntime({
-      cwd: bound?.canonicalPath ?? data.root,
+      cwd: powerWorkspace?.canonicalPath ?? data.root,
       integration: "power",
       agentDir: data.config,
       powerMcpConfigPath: data.mcpConfig,
@@ -14159,10 +14534,11 @@ var createKiroMcpServer = async (options) => {
     });
   };
   const runtimeForCurrentIdentity = async () => {
-    const identity = integration === "power" ? identityKey(binding.boundWorkspace()) : options.cwd;
+    const powerWorkspace = integration === "power" ? binding.boundWorkspace() : void 0;
+    const identity = integration === "power" ? identityKey(powerWorkspace) : options.cwd;
     if (runtime && runtimeIdentity === identity) return runtime;
     await closeRuntime();
-    runtime = await createRuntime();
+    runtime = await createRuntime(powerWorkspace);
     runtimeIdentity = identity;
     return runtime;
   };
@@ -14191,10 +14567,16 @@ var createKiroMcpServer = async (options) => {
       ...providers.has("mcp") ? ["mcp-federation"] : []
     ];
   };
-  const reportWorkspace = async (result) => ({
-    ...result,
-    capabilities: registryCapabilities(await getRuntime())
-  });
+  const reportWorkspace = (result) => {
+    const identity = identityKey(binding.boundWorkspace());
+    return {
+      ...result,
+      // Read-only status/list must not initialize a heavyweight runtime. Only
+      // report capabilities that have actually been observed for this exact
+      // binding; fabric_info is the explicit runtime probe.
+      ...runtime && runtimeIdentity === identity ? { capabilities: registryCapabilities(runtime) } : {}
+    };
+  };
   const handleWorkspace = async (request, signal) => {
     if (request.action === "status") return reportWorkspace(binding.status());
     if (request.action === "list") return reportWorkspace(binding.list());
@@ -14270,40 +14652,41 @@ var createKiroMcpServer = async (options) => {
     if (integration === "power") await syncWorkspaceContext();
     const name = request.params.name;
     if (integration === "power" && name === "fabric_info") {
-      if (Object.keys(request.params.arguments ?? {}).length) {
+      try {
+        if (Object.keys(request.params.arguments ?? {}).length) {
+          return publicToolError("invalid_info_arguments", "fabric_info accepts no arguments");
+        }
+        const status = binding.status();
+        const current = await getRuntime();
+        const capabilities = registryCapabilities(current);
         return {
-          content: [{ type: "text", text: "fabric_info accepts no arguments" }],
-          isError: true
-        };
-      }
-      const status = binding.status();
-      const current = await getRuntime();
-      const capabilities = registryCapabilities(current);
-      return {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            integration: "power",
-            version,
-            runtime: { quickjs: "available" },
-            workspace: {
-              ...status,
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              integration: "power",
+              version,
+              runtime: { executor: current.service.config.executor.runtime },
+              workspace: {
+                ...status,
+                capabilities,
+                context: {
+                  status: workspaceSnapshot?.status ?? "temporarily-unavailable",
+                  revision: workspaceSnapshot?.revision ?? 0
+                }
+              },
+              kiroAcp: {
+                status: "unavailable",
+                agents: false,
+                reason: "real Kiro ACP qualification is a separate fail-closed gate"
+              },
               capabilities,
-              context: {
-                status: workspaceSnapshot?.status ?? "temporarily-unavailable",
-                revision: workspaceSnapshot?.revision ?? 0
-              }
-            },
-            kiroAcp: {
-              status: "unavailable",
-              agents: false,
-              reason: "real Kiro ACP qualification is a separate fail-closed gate"
-            },
-            capabilities,
-            durability: { guaranteedAcrossPowerDeactivation: false }
-          })
-        }]
-      };
+              durability: { guaranteedAcrossPowerDeactivation: false }
+            })
+          }]
+        };
+      } catch (error) {
+        return publicToolError("info_request_failed", error);
+      }
     }
     if (integration === "power" && name === "fabric_workspace") {
       try {

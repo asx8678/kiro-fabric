@@ -8,6 +8,7 @@ const require = __kfCreateRequire(import.meta.url);
 
 // src/agents/transports/process-utils.ts
 import { execFile, spawn as spawn2 } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 
 // src/worker/process-tree.ts
@@ -354,11 +355,21 @@ var resolveScriptRuntimeSync = (options = {}) => {
 };
 var spawnDetached = async (workerPath, workerArguments, cwd, options = {}) => {
   const runtime = await resolveScriptRuntime();
-  const child = spawn2(runtime, [workerPath, ...workerArguments], {
-    cwd,
-    detached: process.platform !== "win32",
-    stdio: "ignore"
-  });
+  let stdout;
+  let stderr;
+  let child;
+  try {
+    stdout = options.stdoutPath === void 0 ? void 0 : fs.openSync(options.stdoutPath, "a", 384);
+    stderr = options.stderrPath === void 0 ? void 0 : fs.openSync(options.stderrPath, "a", 384);
+    child = spawn2(runtime, [workerPath, ...workerArguments], {
+      cwd,
+      detached: process.platform !== "win32",
+      stdio: ["ignore", stdout ?? "ignore", stderr ?? "ignore"]
+    });
+  } finally {
+    if (stdout !== void 0) fs.closeSync(stdout);
+    if (stderr !== void 0) fs.closeSync(stderr);
+  }
   if (!child.pid) throw new Error("Failed to launch Fabric worker process");
   const pid = child.pid;
   const tree = createProcessTreeController(pid, {

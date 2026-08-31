@@ -11,7 +11,7 @@ import {
   inspectFabricConfig,
   require_dist,
   resolveAgentDir
-} from "./chunk-BEHN6HY5.js";
+} from "./chunk-6GR27BT7.js";
 import {
   resolveKiroMcpLaunchEnvironment
 } from "./chunk-VGY2FX2U.js";
@@ -41,7 +41,7 @@ import {
   kiroProfilePath,
   resolveKiroInstallRoots,
   sameExecutableIdentity
-} from "./chunk-ULR3BHCM.js";
+} from "./chunk-UMXA4XWU.js";
 import {
   KIRO_INSTALL_MANIFEST_FORMAT,
   KiroInstallError,
@@ -73,8 +73,9 @@ import {
   writeExclusive
 } from "./chunk-G3LPLMI7.js";
 import {
-  createProcessTreeController
-} from "./chunk-SXRQQ7MG.js";
+  createProcessTreeController,
+  resolveScriptRuntimeSync
+} from "./chunk-SSHRMRMV.js";
 import {
   __toESM
 } from "./chunk-GX475RD4.js";
@@ -93,7 +94,16 @@ import { join as join4, resolve as resolve3 } from "node:path";
 
 // src/kiro/supervisor.ts
 import { spawn } from "node:child_process";
+import path from "node:path";
 var STDERR_LIMIT = 4096;
+var NODE_SCRIPT_EXTENSIONS = /* @__PURE__ */ new Set([".js", ".cjs", ".mjs", ".ts", ".cts", ".mts"]);
+var scriptRuntime = (env) => {
+  try {
+    return resolveScriptRuntimeSync({ env: { ...process.env, ...env }, requireNode: true });
+  } catch {
+    return "node";
+  }
+};
 var ProbeError = class extends Error {
   constructor(message) {
     super(message);
@@ -101,12 +111,18 @@ var ProbeError = class extends Error {
   }
 };
 var spawnJsonRpcProcess = (options) => {
-  const child = spawn(options.argv[0], options.argv.slice(1), {
-    cwd: options.cwd,
-    env: options.env,
-    detached: process.platform !== "win32",
-    stdio: ["pipe", "pipe", "pipe"]
-  });
+  const command = options.argv[0];
+  const script = NODE_SCRIPT_EXTENSIONS.has(path.extname(command).toLowerCase());
+  const child = spawn(
+    script ? scriptRuntime(options.env) : command,
+    script ? [command, ...options.argv.slice(1)] : options.argv.slice(1),
+    {
+      cwd: options.cwd,
+      env: options.env,
+      detached: process.platform !== "win32",
+      stdio: ["pipe", "pipe", "pipe"]
+    }
+  );
   let earlySpawnError;
   child.on("error", (error) => {
     earlySpawnError = error;
@@ -127,6 +143,7 @@ var spawnJsonRpcProcess = (options) => {
   let fatal = false;
   let closeError = null;
   let terminatePromise;
+  const withStderr = (message) => stderrTail.trim() ? `${message}; stderr: ${stderrTail.trim()}` : message;
   const rejectAll = (error) => {
     closeError = error;
     for (const call2 of pending.values()) call2.reject(error);
@@ -139,9 +156,9 @@ var spawnJsonRpcProcess = (options) => {
     void terminate();
   };
   const timer = setTimeout(() => {
-    fail(new ProbeError(
+    fail(new ProbeError(withStderr(
       `probe timed out after ${options.timeoutMs}ms: ${options.argv.join(" ")}`
-    ));
+    )));
   }, options.timeoutMs);
   timer.unref?.();
   child.stdout.setEncoding("utf8");
@@ -184,7 +201,7 @@ var spawnJsonRpcProcess = (options) => {
   });
   child.on("close", () => {
     if (!closed && !fatal && pending.size > 0) {
-      fail(new ProbeError("probe child exited while requests were pending"));
+      fail(new ProbeError(withStderr("probe child exited while requests were pending")));
     }
   });
   async function terminate(graceMs = 3e3, killMs = 2e3) {
@@ -208,18 +225,37 @@ var spawnJsonRpcProcess = (options) => {
     const frame = JSON.stringify({ jsonrpc: "2.0", id, method, params });
     return new Promise((resolvePromise, rejectPromise) => {
       pending.set(id, { resolve: resolvePromise, reject: rejectPromise, method });
-      child.stdin.write(frame + "\n", (error) => {
-        if (error) {
-          pending.delete(id);
-          rejectPromise(new ProbeError(`failed writing ${method}: ${error.message}`));
-        }
-      });
+      try {
+        child.stdin.write(frame + "\n", (error) => {
+          if (error) {
+            pending.delete(id);
+            const failure = new ProbeError(withStderr(`failed writing ${method}: ${error.message}`));
+            rejectPromise(failure);
+            fail(failure);
+          }
+        });
+      } catch (error) {
+        pending.delete(id);
+        const failure = new ProbeError(withStderr(
+          `failed writing ${method}: ${error instanceof Error ? error.message : String(error)}`
+        ));
+        rejectPromise(failure);
+        fail(failure);
+      }
     });
   };
   const notify = (method, params) => {
     if (closed || fatal) return;
     outboundMethods.push(method);
-    child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
+    try {
+      child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n", (error) => {
+        if (error) fail(new ProbeError(withStderr(`failed writing ${method}: ${error.message}`)));
+      });
+    } catch (error) {
+      fail(new ProbeError(withStderr(
+        `failed writing ${method}: ${error instanceof Error ? error.message : String(error)}`
+      )));
+    }
   };
   return {
     pid,
@@ -404,7 +440,13 @@ var planRuntimeClosureDeployment = (installRoot, layout, options = {}) => {
   digestHash.update(computeRuntimeClosureDigest(packageRoot));
   digestHash.update("\0node\0");
   digestHash.update(nodeAttestation.sha256);
-  const kiroAttestation = options.kiroAttestation ?? nodeAttestation;
+  const kiroAttestation = options.kiroAttestation;
+  if (!kiroAttestation) {
+    throw new KiroInstallError(
+      "kiro-version",
+      "runtime closure deployment requires a separately attested Kiro executable"
+    );
+  }
   assertExecutableAttestation(kiroAttestation);
   digestHash.update("\0kiro\0");
   digestHash.update(kiroAttestation.sha256);
@@ -501,10 +543,17 @@ var writeClosureMarker = (runtimeDir, digest) => {
 var deployRuntimeClosure = (installRoot, layout, options) => {
   const startWall = Date.now();
   const packageRoot = resolveSourcePackageRoot();
+  const kiroAttestation = options?.kiroAttestation;
+  if (!kiroAttestation) {
+    throw new KiroInstallError(
+      "kiro-version",
+      "runtime closure deployment requires a separately attested Kiro executable"
+    );
+  }
   const planned = planRuntimeClosureDeployment(installRoot, layout, {
     ...options?.nodeSourcePath ? { nodeSourcePath: options.nodeSourcePath } : {},
     ...options?.nodeAttestation ? { nodeAttestation: options.nodeAttestation } : {},
-    ...options?.kiroAttestation ? { kiroAttestation: options.kiroAttestation } : {},
+    kiroAttestation,
     ...options?.repairExisting ? { repairExisting: true } : {}
   });
   const digest = planned.digest;
@@ -585,7 +634,7 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
     bytes += nodeSource.size;
     fileCount += 1;
     const stagedKiro = join(stagingDir, "bin", process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli");
-    const kiroSource = options?.kiroAttestation ?? nodeSource;
+    const kiroSource = kiroAttestation;
     copyAttestedExecutable(kiroSource, stagedKiro, 365);
     bytes += kiroSource.size;
     fileCount += 1;
@@ -740,12 +789,12 @@ var verifyRuntimeClosureAtRoot = (closure, root) => {
   }
   for (const file of closure.files) {
     const relativePath = file.path.slice(closure.root.length + 1);
-    const path = join(root, ...relativePath.split("/"));
-    const bytes = readFileSync(path);
+    const path2 = join(root, ...relativePath.split("/"));
+    const bytes = readFileSync(path2);
     if (sha256Bytes(bytes) !== file.installedSha256) {
       throw new KiroInstallError("ownership", "installed runtime closure hash mismatch: " + file.path);
     }
-    const mode = statSync(path).mode & 511;
+    const mode = statSync(path2).mode & 511;
     const expectedMode = file.executableMode ?? 292;
     if (mode !== expectedMode) {
       throw new KiroInstallError("ownership", "installed runtime release mode mismatch: " + file.path);
@@ -766,39 +815,39 @@ var verifyRuntimeClosureAttestation = (installRoot, closure) => {
   assertNoSymlinkComponents(installRoot, root);
   verifyRuntimeClosureAtRoot(closure, root);
 };
-var sameHeldIdentity = (held, path) => {
+var sameHeldIdentity = (held, path2) => {
   try {
-    const pathStat = lstatSync(path, { bigint: true });
+    const pathStat = lstatSync(path2, { bigint: true });
     const openStat = fstatSync(held.descriptor, { bigint: true });
     return !pathStat.isSymbolicLink() && openStat.dev === held.dev && openStat.ino === held.ino && pathStat.dev === held.dev && pathStat.ino === held.ino;
   } catch {
     return false;
   }
 };
-var assertPrivateOwnedDirectory = (path, label, exactMode) => {
+var assertPrivateOwnedDirectory = (path2, label, exactMode) => {
   if (process.platform !== "linux" && process.platform !== "darwin" || !process.geteuid) {
     throw new KiroInstallError(
       "ownership",
       "safe attested quarantine deletion is unavailable on this platform; refusing cleanup"
     );
   }
-  const stat = label === "runtime" ? statSync(path) : lstatSync(path);
+  const stat = label === "runtime" ? statSync(path2) : lstatSync(path2);
   if (!stat.isDirectory() || label !== "runtime" && stat.isSymbolicLink() || stat.uid !== process.geteuid() || (stat.mode & 63) !== 0 || exactMode !== void 0 && (stat.mode & 511) !== exactMode) {
     throw new KiroInstallError("ownership", `${label} directory is not private and owned by the effective user`);
   }
 };
 var holdClosureIdentity = (closure, root) => {
   const held = [];
-  const hold = (path, file) => {
+  const hold = (path2, file) => {
     const descriptor = openSync(
-      path,
+      path2,
       constants.O_RDONLY | (file ? 0 : constants.O_DIRECTORY) | (constants.O_NOFOLLOW ?? 0)
     );
     const stat = fstatSync(descriptor, { bigint: true });
-    const identity = { path, descriptor, dev: stat.dev, ino: stat.ino, file };
-    if (!sameHeldIdentity(identity, path) || (file ? !stat.isFile() : !stat.isDirectory())) {
+    const identity = { path: path2, descriptor, dev: stat.dev, ino: stat.ino, file };
+    if (!sameHeldIdentity(identity, path2) || (file ? !stat.isFile() : !stat.isDirectory())) {
       closeSync(descriptor);
-      throw new KiroInstallError("concurrency", "quarantined runtime identity changed while opening: " + path);
+      throw new KiroInstallError("concurrency", "quarantined runtime identity changed while opening: " + path2);
     }
     held.push(identity);
     return identity;
@@ -808,13 +857,13 @@ var holdClosureIdentity = (closure, root) => {
     const directories = /* @__PURE__ */ new Set([root]);
     for (const record of closure.files) {
       const relativePath = record.path.slice(closure.root.length + 1);
-      const path = join(root, ...relativePath.split("/"));
-      let cursor = dirname(path);
+      const path2 = join(root, ...relativePath.split("/"));
+      let cursor = dirname(path2);
       while (cursor !== root) {
         directories.add(cursor);
         cursor = dirname(cursor);
       }
-      const identity = hold(path, true);
+      const identity = hold(path2, true);
       const bytes = readFileSync(identity.descriptor);
       if (sha256Bytes(bytes) !== record.installedSha256) {
         throw new KiroInstallError("ownership", "quarantined runtime hash changed: " + record.path);
@@ -1294,10 +1343,10 @@ var planKiroProfileInstall = (options = {}, planning = {}) => {
   }
   const backupPath = backupRecord ? join3(installRoot, ...backupRecord.path.split("/")) : null;
   const activation = planning.closure ? (() => {
-    const path = join3(runtimeClosurePath(installRoot, layout), ".closure-current");
-    const current = readManagedFileNoFollow(installRoot, path);
+    const path2 = join3(runtimeClosurePath(installRoot, layout), ".closure-current");
+    const current = readManagedFileNoFollow(installRoot, path2);
     return {
-      path,
+      path: path2,
       expectedSha256: current === null ? null : sha256Bytes(current),
       nextBytes: planning.closure.digest + "\n"
     };
@@ -1345,9 +1394,10 @@ var runKiro = async (kiro, args) => {
     const err = error;
     const detail = `${err.stdout ?? ""}
 ${err.stderr ?? ""}`.trim();
+    const timedOut = err.killed === true || err.code === "ETIMEDOUT" || err.signal === "SIGTERM";
     throw new KiroInstallError(
       "kiro-validate",
-      `kiro-cli ${args.join(" ")} failed${detail ? `: ${detail.slice(0, 2e3)}` : `: ${err.message ?? String(error)}`}`
+      `kiro-cli ${args.join(" ")} ${timedOut ? "timed out" : "failed"}` + (detail ? `: ${detail.slice(0, 2e3)}` : `: ${err.message ?? String(error)}`)
     );
   } finally {
     staged?.dispose();
@@ -1374,7 +1424,7 @@ ${stderr}`;
     );
   }
 };
-var ERROR_DIAGNOSTIC = /\b(error|invalid|missing|failed)\b/i;
+var ERROR_DIAGNOSTIC = /^\s*(?:error|fatal|invalid)\s*[:\[]/imu;
 var validateKiroProfile = async (profileJson, kiro = "kiro-cli") => {
   const dir = await mkdtemp(join3(tmpdir(), "kiro-fabric-kiro-validate-"));
   try {
@@ -1714,6 +1764,7 @@ var runKiroDoctor = async (options = {}) => {
   );
   let attestedInstalledMcpEntryPath;
   let attestedInstalledNodePath;
+  let observedNodeVersion = process.versions.node;
   const checks = [];
   let tupleFailed = false;
   const run = async (id, probe) => {
@@ -1782,8 +1833,8 @@ var runKiroDoctor = async (options = {}) => {
         const records = installedManifest.skills?.files;
         if (!records || records.length === 0) throw new Error("managed skill attestation is absent");
         const sources = records.map((record) => {
-          const path = join4(roots.installRoot, ...record.path.split("/"));
-          const bytes = readManagedFileNoFollow(roots.installRoot, path);
+          const path2 = join4(roots.installRoot, ...record.path.split("/"));
+          const bytes = readManagedFileNoFollow(roots.installRoot, path2);
           if (!bytes) throw new Error("managed skill is absent: " + record.path);
           if (sha256Bytes(bytes) !== record.installedSha256) {
             throw new Error("managed skill hash mismatch: " + record.path);
@@ -1792,7 +1843,7 @@ var runKiroDoctor = async (options = {}) => {
           return {
             sourceRelative: record.path.slice(marker + "skills/".length),
             installedRelative: record.path,
-            installedPath: path,
+            installedPath: path2,
             bytes,
             sha256: record.installedSha256
           };
@@ -1842,13 +1893,14 @@ var runKiroDoctor = async (options = {}) => {
   });
   const workspace = await mkdtemp2(join4(tmpdir2(), "kiro-fabric-kiro-doctor-"));
   const projectRoot = join4(workspace, "project");
-  await mkdir(projectRoot, { recursive: true });
   try {
+    await mkdir(projectRoot, { recursive: true });
     await run("tuple", async () => {
       if (checkingInstalled && (!attestedInstalledNodePath || !attestedInstalledMcpEntryPath || !managedKiroBinaryPath)) {
         throw new Error("installed format-3 runtime is not fully attested; run update or repair before doctor");
       }
       const node = await assertSupportedNode(attestedInstalledNodePath ?? process.execPath);
+      observedNodeVersion = node.version;
       const kiro = await assertKiroVersion(kiroBinary);
       observedKiro = kiro;
       if (managedKiroBinaryPath && (!sameExecutableIdentity(kiro.sourcePath, managedKiroBinaryPath) || kiro.version !== KIRO_CLI_VERSION || kiro.sha256 !== managedKiroSha256)) {
@@ -2135,7 +2187,7 @@ var runKiroDoctor = async (options = {}) => {
     observed: {
       node: {
         path: attestedInstalledNodePath ?? process.execPath,
-        version: process.versions.node
+        version: observedNodeVersion
       },
       kiro: {
         path: observedKiro?.sourcePath ?? kiroBinary,
@@ -2188,8 +2240,8 @@ var planKiroProfileUninstall = (options = {}) => {
   if (backup) assertBackupBytes(installRoot, backup);
   const ownershipWarnings = [];
   const skills = (manifest.skills?.files ?? []).map((record) => {
-    const path = join5(installRoot, ...record.path.split("/"));
-    const current = readManagedFileNoFollow(installRoot, path);
+    const path2 = join5(installRoot, ...record.path.split("/"));
+    const current = readManagedFileNoFollow(installRoot, path2);
     const currentSha256 = current === null ? null : sha256Bytes(current);
     const backupBytes = record.backup ? assertBackupBytes(installRoot, record.backup) : null;
     let nextBytes = current;
@@ -2207,10 +2259,10 @@ var planKiroProfileUninstall = (options = {}) => {
     } else {
       throw new KiroInstallError(
         "ownership",
-        "managed skill changed; refusing to uninstall: " + path
+        "managed skill changed; refusing to uninstall: " + path2
       );
     }
-    return { record, path, currentSha256, nextBytes, needsMutation };
+    return { record, path: path2, currentSha256, nextBytes, needsMutation };
   });
   if (manifest.runtime.closure) {
     const generations = manifest.runtime.generations ?? [manifest.runtime.closure];
@@ -2459,6 +2511,7 @@ var uninstallKiroProfile = (options = {}) => {
   const planned = planKiroProfileUninstall(options);
   if (options.dryRun) return resultFromPlan2(planned, true);
   if (planned.action === "noop" && !planned.needsManifestRemoval && !existsSync5(managedPaths(planned.installRoot, planned.layout).transaction)) {
+    cleanupEmptyManagedDirs(planned.installRoot, planned.layout);
     return resultFromPlan2(planned, false);
   }
   const lock = acquireOperationLock(planned.installRoot, planned.layout);
@@ -2520,6 +2573,8 @@ var USAGE = [
   "Exit codes: 0 success \xB7 1 failure \xB7 2 usage \xB7 130 interactive cancel."
 ].join("\n") + "\n";
 var UsageError = class extends Error {
+};
+var InteractiveCancelError = class extends Error {
 };
 var baseArgs = (command) => ({
   command,
@@ -2635,8 +2690,11 @@ var parseSetupArgs = (argv) => {
   if (parsed.allowShell && parsed.revokeShell) throw new UsageError("--allow-shell conflicts with --revoke-shell");
   if (parsed.enableSubagents && parsed.revokeSubagents) throw new UsageError("--subagents conflicts with --revoke-subagents");
   if (parsed.allowTools && parsed.revokeTools) throw new UsageError("--allow-tools conflicts with --revoke-tools");
-  if (parsed.resetGrants && (parsed.allowShell || parsed.enableSubagents || parsed.allowTools)) {
-    throw new UsageError("--reset-grants conflicts with grant-enabling flags");
+  if (parsed.enableSubagents && parsed.revokeShell) {
+    throw new UsageError("--subagents conflicts with --revoke-shell");
+  }
+  if (parsed.resetGrants && (parsed.allowShell || parsed.enableSubagents || parsed.allowTools || parsed.revokeShell || parsed.revokeSubagents || parsed.revokeTools)) {
+    throw new UsageError("--reset-grants conflicts with other grant-changing flags");
   }
   return parsed;
 };
@@ -2901,18 +2959,18 @@ var resolveDesiredGrants = (parsed) => {
   return grants;
 };
 var buildInstallOptions = (parsed) => {
-  const installed = scopeStatusFor(
-    parsed.user ? "user" : "project",
-    parsed.projectRoot,
-    parsed.kiroHome
-  );
-  const pinnedKiroBinary = parsed.kiroBinary ?? installed.kiroBinaryPath;
+  let installedKiroBinary;
+  if (parsed.kiroBinary === void 0) {
+    const roots = resolveRoots(parsed);
+    installedKiroBinary = readManifest(roots.installRoot, roots.layout)?.runtime.kiroBinaryPath;
+  }
+  const pinnedKiroBinary = parsed.kiroBinary ?? installedKiroBinary;
   const grants = resolveDesiredGrants(parsed);
   return {
     ...parsed.projectRoot !== void 0 ? { projectRoot: parsed.projectRoot } : {},
     ...parsed.user ? { scope: "user" } : {},
     ...parsed.kiroHome !== void 0 ? { kiroHome: parsed.kiroHome } : {},
-    ...pinnedKiroBinary !== null && pinnedKiroBinary !== void 0 ? { kiroBinary: pinnedKiroBinary } : {},
+    ...pinnedKiroBinary !== void 0 ? { kiroBinary: pinnedKiroBinary } : {},
     ...parsed.force || parsed.command === "repair" ? { force: true } : {},
     ...grants.allowShell ? { allowShell: true } : {},
     ...grants.enableSubagents ? { enableSubagents: true } : {},
@@ -2957,7 +3015,7 @@ var runInstall = async (parsed, io) => {
     const proceed = await io.confirm(
       "Proceed with " + command + " (" + roots.layout + " scope: " + roots.installRoot + ")\n  grants: " + renderGrantDiff(beforeGrants, afterGrants) + (afterGrants.allowTools ? "\n  WARNING: fabric/fabric_exec is an auto-approved meta-capability that may invoke every configured Fabric provider/tool; workspace access is confined to " + roots.projectRoot : "") + "?"
     );
-    if (!proceed) throw new Error("cancelled");
+    if (!proceed) throw new InteractiveCancelError("cancelled");
   }
   const result = await installKiroProfile({
     ...installOptions,
@@ -2996,7 +3054,7 @@ var runUninstall = async (parsed, io) => {
     const proceed = await io.confirm(
       "Proceed with uninstall (" + roots.layout + " scope: " + roots.installRoot + ")?"
     );
-    if (!proceed) throw new Error("cancelled");
+    if (!proceed) throw new InteractiveCancelError("cancelled");
   }
   const result = uninstallKiroProfile({ ...options, dryRun: parsed.dryRun });
   if (parsed.json) {
@@ -3072,23 +3130,26 @@ var runLaunch = async (parsed) => {
     let escalation;
     const forward = (signal, code) => {
       interruptedCode ??= code;
-      if (!processTree) return;
+      if (!processTree || processTree.gone()) return;
       if (escalation) {
-        void processTree.terminate(0, 2e3);
+        if (!processTree.gone()) void processTree.terminate(0, 2e3);
         return;
       }
       escalation = processTree.signal(signal).then(async () => {
         if (processTree.gone()) return;
         await new Promise((resolve4) => setTimeout(resolve4, 3e3));
         if (!processTree.gone()) await processTree.terminate(0, 2e3);
+      }).catch(() => {
       });
     };
     const onSighup = () => forward("SIGHUP", 129);
     const onSigint = () => forward("SIGINT", 130);
     const onSigterm = () => forward("SIGTERM", 143);
+    const onSigquit = () => forward("SIGQUIT", 131);
     process.on("SIGHUP", onSighup);
     process.on("SIGINT", onSigint);
     process.on("SIGTERM", onSigterm);
+    process.on("SIGQUIT", onSigquit);
     const outcome = await new Promise(
       (resolvePromise) => {
         child.once("error", (error) => {
@@ -3104,6 +3165,7 @@ var runLaunch = async (parsed) => {
       process.removeListener("SIGHUP", onSighup);
       process.removeListener("SIGINT", onSigint);
       process.removeListener("SIGTERM", onSigterm);
+      process.removeListener("SIGQUIT", onSigquit);
       if (interruptedCode !== void 0 && processTree && !processTree.gone()) {
         await processTree.terminate(0, 2e3);
       }
@@ -3246,7 +3308,7 @@ var runKiroSetup = async (argv) => {
     }
   } catch (error) {
     writeSetupFailure(parsed.json, error);
-    return error instanceof UsageError ? 2 : 1;
+    return error instanceof UsageError ? 2 : error instanceof InteractiveCancelError ? 130 : 1;
   }
   return 2;
 };

@@ -12,7 +12,7 @@ import {
   parseKiroAgentWorkerOptions,
   readSteerLines,
   value_exports
-} from "../chunks/chunk-7TD7WBCG.js";
+} from "../chunks/chunk-ELJJP3DS.js";
 import {
   KIRO_V3_AGENT_MODE,
   assertKiroV3AgentModeAvailable,
@@ -27,7 +27,7 @@ import {
   generateKiroProfile,
   resolveKiroHome,
   sameExecutableIdentity
-} from "../chunks/chunk-ULR3BHCM.js";
+} from "../chunks/chunk-UMXA4XWU.js";
 import {
   KiroInstallError,
   assertManagedTree,
@@ -39,8 +39,9 @@ import {
   sha256Bytes
 } from "../chunks/chunk-G3LPLMI7.js";
 import {
-  createProcessTreeController
-} from "../chunks/chunk-SXRQQ7MG.js";
+  createProcessTreeController,
+  resolveScriptRuntimeSync
+} from "../chunks/chunk-SSHRMRMV.js";
 import {
   assertRunnerSessionId,
   parseKiroChildTools,
@@ -63,13 +64,20 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 var NODE_SCRIPT_EXTENSIONS = /* @__PURE__ */ new Set([".js", ".cjs", ".mjs", ".ts", ".cts", ".mts"]);
 var DEFAULT_MAX_FRAME_BYTES = 4 * 1024 * 1024;
+var scriptRuntime = (env) => {
+  try {
+    return resolveScriptRuntimeSync({ env: { ...process.env, ...env }, requireNode: true });
+  } catch {
+    return "node";
+  }
+};
 var AcpProcessError = class extends Error {
   constructor(message) {
     super(message);
     this.name = "AcpProcessError";
   }
 };
-var spawnCommand = (command, args, options) => NODE_SCRIPT_EXTENSIONS.has(path.extname(command).toLowerCase()) ? spawn(options.env?.KIRO_FABRIC_NODE_BINARY ?? process.env.KIRO_FABRIC_NODE_BINARY ?? process.execPath, [command, ...args], {
+var spawnCommand = (command, args, options) => NODE_SCRIPT_EXTENSIONS.has(path.extname(command).toLowerCase()) ? spawn(scriptRuntime(options.env), [command, ...args], {
   cwd: options.cwd,
   env: options.env,
   detached: process.platform !== "win32",
@@ -110,6 +118,7 @@ var spawnAcpProcess = (options) => {
   let lastEscalated = false;
   let fatal = false;
   let terminatePromise;
+  const withStderrDiagnostic = (message) => stderrBytes > 0 ? `${message}; ACP child stderr redacted (${stderrBytes} bytes)` : message;
   const rejectAll = (error) => {
     closeError = error;
     for (const call2 of pending.values()) call2.reject(error);
@@ -205,7 +214,7 @@ var spawnAcpProcess = (options) => {
   child.on("close", () => {
     if (closed || fatal) return;
     if (pending.size > 0) {
-      fail(new AcpProcessError("ACP process exited while requests were pending"));
+      fail(new AcpProcessError(withStderrDiagnostic("ACP process exited while requests were pending")));
     }
   });
   async function terminate(graceMs = 3e3, killMs = 2e3) {
@@ -231,12 +240,20 @@ var spawnAcpProcess = (options) => {
     if (closed || fatal) {
       throw closeError ?? new AcpProcessError("ACP process is closed");
     }
-    child.stdin.write(`${JSON.stringify(frame)}
+    try {
+      child.stdin.write(`${JSON.stringify(frame)}
 `, (error) => {
-      if (error) {
-        fail(new AcpProcessError(`failed writing ACP frame: ${error.message}`));
-      }
-    });
+        if (error) {
+          fail(new AcpProcessError(withStderrDiagnostic(`failed writing ACP frame: ${error.message}`)));
+        }
+      });
+    } catch (error) {
+      const failure = new AcpProcessError(withStderrDiagnostic(
+        `failed writing ACP frame: ${error instanceof Error ? error.message : String(error)}`
+      ));
+      fail(failure);
+      throw failure;
+    }
   };
   const call = (method, params) => {
     if (closed || fatal) {
@@ -263,21 +280,24 @@ var spawnAcpProcess = (options) => {
     outboundMethods.push(method);
     try {
       writeFrame({ jsonrpc: "2.0", method, params });
-    } catch {
+    } catch (error) {
+      fail(error instanceof Error ? error : new AcpProcessError(String(error)));
     }
   };
   const respond = (id, result) => {
     if (closed || fatal) return;
     try {
       writeFrame({ jsonrpc: "2.0", id, result });
-    } catch {
+    } catch (error) {
+      fail(error instanceof Error ? error : new AcpProcessError(String(error)));
     }
   };
   const respondError = (id, code, message) => {
     if (closed || fatal) return;
     try {
       writeFrame({ jsonrpc: "2.0", id, error: { code, message } });
-    } catch {
+    } catch (error) {
+      fail(error instanceof Error ? error : new AcpProcessError(String(error)));
     }
   };
   return {
@@ -533,9 +553,9 @@ var assertKiroWorkerLaunch = (options) => {
         `Kiro runner cwd must equal or stay within the worktree root (${executionRoot}); received ${options.cwd}`
       );
     }
-  } else if (cwd !== projectRoot) {
+  } else if (!isPathWithinOrEqual(projectRoot, cwd)) {
     throw new Error(
-      `Kiro runner cwd must equal the managed project root (${projectRoot}); received ${options.cwd}`
+      `Kiro runner cwd must stay within the managed project root (${projectRoot}); received ${options.cwd}`
     );
   }
   const projectManifest = readManifest(projectRoot);
@@ -934,7 +954,7 @@ ${task}
     log(redactKiroAcpEvidence(frame));
   };
   const failClosed = (status, error) => {
-    if (terminalStatus) return;
+    if (terminalStatus && terminalStatus !== "completed") return;
     terminalStatus = status;
     terminalError = error.slice(0, MAX_RUN_ERROR_CHARS);
     frozen = true;
@@ -1362,7 +1382,7 @@ ${task}
       };
       syncResidentQueue();
       while (!terminalStatus && !frozen) {
-        const commands = readKiroSteerCommands(options.steerFile, steerState);
+        const commands = steerQueue.length === 0 && followQueue.length === 0 ? readKiroSteerCommands(options.steerFile, steerState) : [];
         let sawNewPrompt = false;
         for (const command of commands) {
           if (command.type === "steer" && typeof command.message === "string") {
@@ -1402,6 +1422,7 @@ ${task}
               if (nextStopReason === "end_turn") {
                 nextQueue.shift();
                 delivered = true;
+                idleStartedAt = Date.now();
               }
             } finally {
               activeResidentMessage = void 0;
