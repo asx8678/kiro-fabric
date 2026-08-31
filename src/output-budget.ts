@@ -1,6 +1,3 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { truncateMiddle } from "./util.js";
 
 export const MAX_FAILURE_MODEL_OUTPUT_CHARS = 20_000;
@@ -22,18 +19,11 @@ export interface BoundedModelOutput {
 type ArtifactWriter = (content: string) => Promise<string>;
 type ArtifactReadHint = (id: string) => string;
 
-const writeOutputArtifact: ArtifactWriter = async (content) => {
-  const directory = await mkdtemp(path.join(tmpdir(), "kiro-fabric-output-"));
-  const artifactPath = path.join(directory, "output.txt");
-  await writeFile(artifactPath, content, { encoding: "utf8", mode: 0o600 });
-  return artifactPath;
-};
-
 export const boundModelOutput = async (
   visible: string,
   maxChars: number,
   fullOutput = visible,
-  writeArtifact: ArtifactWriter = writeOutputArtifact,
+  writeArtifact?: ArtifactWriter,
   artifactReadHint: ArtifactReadHint = (id) => `k.readArtifact({ id: \"${id}\" })`,
 ): Promise<BoundedModelOutput> => {
   if (visible.length <= maxChars && fullOutput.length <= maxChars) {
@@ -42,7 +32,7 @@ export const boundModelOutput = async (
 
   let artifactPath: string | undefined;
   try {
-    artifactPath = await writeArtifact(fullOutput);
+    artifactPath = await writeArtifact?.(fullOutput);
   } catch {
     artifactPath = undefined;
   }

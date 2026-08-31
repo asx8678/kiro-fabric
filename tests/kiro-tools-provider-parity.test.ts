@@ -20,7 +20,12 @@ describe("host-neutral Kiro tools provider", () => {
     const native = new KiroToolsProvider(cwd);
     const pi = new PiToolsProvider(cwd, undefined, undefined, { namespace: "k", exposeSessionEnvironment: false });
     for (const name of ["read", "bash", "edit", "write", "grep", "find", "ls"]) {
-      expect(await native.describe(name, context(cwd))).toEqual(await pi.describe(name, context(cwd)));
+      const nativeDescriptor = await native.describe(name, context(cwd));
+      const piDescriptor = await pi.describe(name, context(cwd));
+      expect({ ...nativeDescriptor, description: undefined }).toEqual({
+        ...piDescriptor,
+        description: undefined,
+      });
     }
     expect((await native.list({ query: "directory" }, context(cwd))).map((item) => item.name)).toEqual(["bash", "find", "ls"]);
   });

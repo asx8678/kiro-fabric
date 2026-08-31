@@ -85,7 +85,8 @@ const USAGE =
     "  --force                   Install/repair: back up and replace modified managed content",
     "  --allow-shell             Trusted opt-in: enable k.bash",
     "  --subagents               Enable bounded ACP fan-out (requires shell grant)",
-    "  --allow-tools             Trusted opt-in: auto-approve only fabric/fabric_exec",
+    "  --allow-tools             Trusted opt-in: auto-approve fabric_exec meta-capability",
+    "                            (it can invoke all configured Fabric providers/tools)",
     "  --revoke-shell            Revoke shell and dependent subagent grants",
     "  --revoke-subagents        Revoke only the subagent grant",
     "  --revoke-tools            Restore the exact Fabric MCP rule to ask",
@@ -649,7 +650,8 @@ const runInstall = async (parsed: SetupArgs, io: SetupIo): Promise<number> => {
       "Proceed with " + command + " (" + roots.layout + " scope: " + roots.installRoot + ")" +
         "\n  grants: " + renderGrantDiff(beforeGrants, afterGrants) +
         (afterGrants.allowTools
-          ? "\n  fabric/fabric_exec is auto-approved and confined to " + roots.projectRoot
+          ? "\n  WARNING: fabric/fabric_exec is an auto-approved meta-capability that may invoke" +
+            " every configured Fabric provider/tool; workspace access is confined to " + roots.projectRoot
           : "") +
         "?",
     );

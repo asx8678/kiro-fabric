@@ -30,12 +30,12 @@ jobs:
       - name: Full repository check (Linux)
         if: runner.os == 'Linux'
         run: pnpm run check
-      - name: Cross-platform Power build and validation
+      - name: Cross-platform security core, build, and Power validation
         if: runner.os != 'Linux'
         run: |
           pnpm run typecheck
           pnpm run build
-          pnpm exec vitest run --config vitest.config.ts tests/kiro-workspace-context.test.ts tests/kiro-power-manifest.test.ts tests/kiro-closure-graph.test.ts
+          pnpm run test:security-core
           pnpm run power:validate
 
   reproducibility:

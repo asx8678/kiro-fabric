@@ -1,11 +1,10 @@
-import { rm, stat } from "node:fs/promises";
-import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   boundModelOutput,
   MAX_FAILURE_MODEL_OUTPUT_CHARS,
   modelOutputBudget,
 } from "../src/output-budget.js";
+import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
 
 describe("modelOutputBudget", () => {
   it("caps failures without reducing successful or stricter configured budgets", () => {
@@ -40,14 +39,26 @@ describe("boundModelOutput", () => {
     expect(writer).toHaveBeenCalledWith(full);
   });
 
-  it("persists retrievable artifacts with private POSIX permissions", async () => {
+  it("does not retain successful truncated output in an unmanaged temp path", async () => {
     const result = await boundModelOutput("x".repeat(4_000), 1_000);
-    expect(result.artifactPath).toBeDefined();
-    const info = await stat(result.artifactPath!);
-    if (process.platform !== "win32") {
-      expect(info.mode & 0o777).toBe(0o600);
-    }
-    await rm(path.dirname(result.artifactPath!), { recursive: true, force: true });
+    expect(result.artifactPath).toBeUndefined();
+    expect(result.text).toContain("characters omitted by Pi Fabric");
+  });
+
+  it("retains Kiro output in the bounded opaque artifact store", async () => {
+    const store = createKiroArtifactStore();
+    const result = await boundModelOutput(
+      "x".repeat(4_000),
+      1_000,
+      undefined,
+      async (content) => store.write(content),
+    );
+
+    expect(result.artifactPath).toMatch(/^ka_/);
+    expect(result.text).toContain("available as artifact");
+    expect(store.read(result.artifactPath!).totalChars).toBe(4_000);
+    store.close();
+    expect(() => store.read(result.artifactPath!)).toThrow(/closed/);
   });
 
   it("stays bounded if artifact persistence fails", async () => {

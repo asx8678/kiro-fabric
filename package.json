@@ -119,6 +119,7 @@
     "test": "pnpm run test:parallel && pnpm run test:process",
     "test:parallel": "vitest run --config vitest.config.ts",
     "test:process": "vitest run --config vitest.process.config.ts",
+    "test:security-core": "vitest run --config vitest.security-core.config.ts",
     "lint:dead": "knip --no-gitignore",
     "check": "pnpm run typecheck && pnpm run build && pnpm run test && pnpm run lint:dead && pnpm run power:validate && pnpm run certify:power:built",
     "power:sync": "node scripts/sync-power-manifests.mjs",
