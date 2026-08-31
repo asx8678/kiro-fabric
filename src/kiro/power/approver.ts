@@ -16,7 +16,15 @@ export interface KiroPowerElicitationAdapter {
   }): Promise<{ action: "accept" | "decline" | "cancel"; approved?: boolean }>;
 }
 
-const SECRET = /(token|secret|password|api[_-]?key|authorization|cookie)\s*[:=]\s*\S+/gi;
+const SECRET_NAME =
+  "(?:access[_-]?token|refresh[_-]?token|id[_-]?token|auth[_-]?token|client[_-]?secret|api[_-]?key|private[_-]?key|authorization|cookie|password|secret|token)";
+const SECRET = new RegExp(
+  `\\b(${SECRET_NAME})\\b["']?\\s*[:=]\\s*(?:"[^"\\r\\n]*"|'[^'\\r\\n]*'|[^\\r\\n,;}]+)`,
+  "gi",
+);
+const NORMALIZED_SECRET_KEY = /^(?:accesstoken|refreshtoken|idtoken|authtoken|clientsecret|apikey|privatekey|authorization|cookie|password|secret|token)$/i;
+const isSecretKey = (key: string): boolean =>
+  NORMALIZED_SECRET_KEY.test(key.replace(/[_\-\s]/g, ""));
 const bounded = (value: string, maximum = 1_500): string =>
   value.replace(SECRET, "$1=<redacted>").slice(0, maximum);
 
@@ -53,13 +61,14 @@ const summarizeArguments = (
   const projectPath = (value: string): string => {
     if (!path.isAbsolute(value)) return value;
     const relative = path.relative(cwd, value);
-    return relative && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+    if (relative === "") return ".";
+    return !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative)
       ? relative
       : "<outside-workspace>";
   };
   const safe: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(args).slice(0, 12)) {
-    if (/(token|secret|password|api[_-]?key|authorization|cookie|env)/i.test(key)) {
+    if (isSecretKey(key) || /env/i.test(key)) {
       safe[key] = "<redacted>";
     } else if (typeof value === "string") {
       safe[key] = /(?:path|file|cwd|root)/i.test(key)

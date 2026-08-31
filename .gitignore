@@ -11,6 +11,7 @@ coverage/
 .DS_Store
 
 .kiro/
+.fabric/
 results2008/
 
 # Separately versioned Cursor marketplace checkout; never stage as a parent gitlink.

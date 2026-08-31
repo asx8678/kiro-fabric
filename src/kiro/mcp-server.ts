@@ -23,8 +23,15 @@ import { projectFabricExecutionText } from "./projection.js";
 import { prepareKiroRuntime, type KiroRuntime } from "./runtime.js";
 
 const STRICT_DESCRIPTION = "Execute type-checked TypeScript through Fabric's configured executor for coding tools, MCP, Fabric providers, and discovery.";
-const POWER_DESCRIPTION = "Execute checked TypeScript for Fabric workflows, state, MCP federation, and bounded agent orchestration. Use Kiro native tools for ordinary single-step file, shell, web, and code-intelligence operations.";
+const POWER_DESCRIPTION = "Execute checked TypeScript for programmable workflows, memory, bound state, and configured MCP federation. Power ACP agents are unavailable; use Kiro native tools and native subagents outside Fabric for ordinary work.";
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** MCP's empty elicitation capability is the backwards-compatible form capability. */
+export const supportsKiroPowerElicitation = (capabilities: unknown): boolean => {
+  if (!isRecord(capabilities) || !isRecord(capabilities.elicitation)) return false;
+  const elicitation = capabilities.elicitation;
+  return Object.keys(elicitation).length === 0 || Object.hasOwn(elicitation, "form");
+};
 
 export interface KiroMcpServerOptions {
   integration?: KiroIntegrationMode;
@@ -78,7 +85,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   let runtimeIdentity = options.cwd ?? "";
   const data = integration === "power" ? prepareKiroPowerDataPaths(options.pluginData!) : undefined;
   const powerApprover = integration === "power" ? new KiroPowerApprover({
-    supported: () => Boolean((server.getClientCapabilities() as { elicitation?: { form?: unknown } } | undefined)?.elicitation?.form),
+    supported: () => supportsKiroPowerElicitation(server.getClientCapabilities()),
     request: async ({ message, signal, timeoutMs }) => {
       const result = await server.elicitInput({
         mode: "form",
@@ -131,6 +138,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     runtime = await prepareKiroRuntime({
       cwd: bound ?? data!.root,
       integration: "power",
+      agentDir: data!.config,
       memoryRoot: project?.memory ?? path.join(data!.root, "global", "memory"),
       ...(project ? { stateRoot: project.state } : {}),
       powerApprover: powerApprover!,
@@ -169,7 +177,16 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     if (integration === "power" && name === "fabric_info") {
       if (Object.keys(request.params.arguments ?? {}).length) return { content: [{ type: "text" as const, text: "fabric_info accepts no arguments" }], isError: true };
       const status = binding!.status();
-      return { content: [{ type: "text" as const, text: JSON.stringify({ integration: "power", version, runtime: { quickjs: "available" }, workspace: status, kiroAcp: { status: "unavailable", agents: false, reason: "real Kiro ACP qualification is a separate fail-closed gate" }, capabilities: status.capabilities, durability: { guaranteedAcrossPowerDeactivation: false } }) }] };
+      const current = await getRuntime();
+      const providers = new Set(current.registry.providers().map((provider) => provider.name));
+      const capabilities = [
+        "checked-execution",
+        ...(providers.has("artifacts") ? ["overflow-artifacts"] : []),
+        ...(providers.has("memory") ? ["memory"] : []),
+        ...(providers.has("state") ? ["state"] : []),
+        ...(providers.has("mcp") ? ["mcp-federation"] : []),
+      ];
+      return { content: [{ type: "text" as const, text: JSON.stringify({ integration: "power", version, runtime: { quickjs: "available" }, workspace: { ...status, capabilities }, kiroAcp: { status: "unavailable", agents: false, reason: "real Kiro ACP qualification is a separate fail-closed gate" }, capabilities, durability: { guaranteedAcrossPowerDeactivation: false } }) }] };
     }
     if (integration === "power" && name === "fabric_workspace") {
       try { await refreshRoots(); return { content: [{ type: "text" as const, text: JSON.stringify(await binding!.handle(workspaceRequest(request.params.arguments ?? {}), extra.signal)) }] }; }
@@ -189,7 +206,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     try {
       const current = await getRuntime();
       const result = await current.service.execute({ code: input.code, ...(input.strings ? { strings: input.strings } : {}), signal: controller.signal, parentToolCallId: `kiro:${randomUUID()}`, host: current.host, ...(input.tokenBudget !== undefined ? { tokenBudget: input.tokenBudget } : {}), ...(input.agentBudget !== undefined ? { maxAgentCalls: input.agentBudget } : {}), ...(normalizeRunDisplay(input.display) ? { display: normalizeRunDisplay(input.display)! } : {}), onPartial() {} });
-      const projected = await projectFabricExecutionText({ result, code: input.code, resultFormat: input.resultFormat ?? current.service.config.executor.resultFormat, maxOutputChars: current.service.config.executor.maxOutputChars, writeArtifact: (content) => Promise.resolve(current.artifacts.write(content)) });
+      const projected = await projectFabricExecutionText({ result, code: input.code, resultFormat: input.resultFormat ?? current.service.config.executor.resultFormat, maxOutputChars: current.service.config.executor.maxOutputChars, writeArtifact: (content) => Promise.resolve(current.artifacts.write(content)), ...(integration === "power" ? { artifactReadHint: (id: string) => `await tools.call({ ref: "artifacts.read", args: { id: ${JSON.stringify(id)} } })` } : {}) });
       return { content: [{ type: "text" as const, text: projected.text }], ...(projected.isError ? { isError: true } : {}) };
     } catch (error) { return { content: [{ type: "text" as const, text: `Fabric adapter error: ${(error as Error).message}` }], isError: true }; }
     finally { clearTimeout(timer); active.delete(controller); extra.signal.removeEventListener("abort", cancel); }

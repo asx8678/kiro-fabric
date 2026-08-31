@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { realpathSync, statSync } from "node:fs";
+import { lstatSync, realpathSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +27,7 @@ export class KiroPowerWorkspaceBinding {
   readonly #elicitor: KiroPowerElicitor | undefined;
   #candidates: Candidate[] = [];
   #binding: Binding | undefined;
+  #initialAutoBindAllowed = true;
 
   constructor(options: { pluginRoot: string; pluginData: string; elicitor?: KiroPowerElicitor }) {
     this.#pluginRoot = options.pluginRoot;
@@ -36,11 +37,23 @@ export class KiroPowerWorkspaceBinding {
 
   #canonical(candidate: string): Candidate {
     if (!path.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
-    const root = realpathSync(path.resolve(candidate));
+    const resolved = path.resolve(candidate);
+    const lexical = lstatSync(resolved);
+    const root = realpathSync(resolved);
+    if (lexical.isSymbolicLink() || root !== resolved) {
+      throw new Error("workspace root must be a canonical, non-symlink directory");
+    }
     const stats = statSync(root, { bigint: true });
     if (!stats.isDirectory()) throw new Error("workspace root must be an existing directory");
-    const unsafe = [path.parse(root).root, this.#pluginRoot, this.#pluginData, path.join(os.homedir(), ".kiro")];
-    if (unsafe.includes(root)) throw new Error("workspace root is too broad or reserved");
+    const home = realpathSync(os.homedir());
+    const kiroHome = path.join(home, ".kiro");
+    const kiroRelative = path.relative(kiroHome, root);
+    const insideKiroHome = kiroRelative === "" ||
+      (kiroRelative !== ".." && !kiroRelative.startsWith(`..${path.sep}`) && !path.isAbsolute(kiroRelative));
+    const unsafe = [path.parse(root).root, home, this.#pluginRoot, this.#pluginData];
+    if (unsafe.includes(root) || insideKiroHome) {
+      throw new Error("workspace root is too broad or reserved");
+    }
     for (const reserved of [this.#pluginRoot, this.#pluginData]) {
       const rootInsideReserved = path.relative(reserved, root);
       const reservedInsideRoot = path.relative(root, reserved);
@@ -66,8 +79,13 @@ export class KiroPowerWorkspaceBinding {
     this.#candidates = [...new Map(candidates.map((entry) => [entry.id, entry])).values()];
     if (this.#binding?.source === "client-roots" && !this.#candidates.some((entry) => entry.id === this.#binding!.id)) {
       this.#binding = undefined;
+      this.#initialAutoBindAllowed = false;
     }
-    if (!this.#binding && this.#candidates.length === 1) this.#binding = { ...this.#candidates[0]!, source: "client-roots" };
+    if (this.#candidates.length > 1) this.#initialAutoBindAllowed = false;
+    if (!this.#binding && this.#initialAutoBindAllowed && this.#candidates.length === 1) {
+      this.#binding = { ...this.#candidates[0]!, source: "client-roots" };
+      this.#initialAutoBindAllowed = false;
+    }
   }
 
   boundRoot(): string | undefined {
@@ -79,6 +97,7 @@ export class KiroPowerWorkspaceBinding {
       return binding.root;
     } catch {
       this.#binding = undefined;
+      this.#initialAutoBindAllowed = false;
       return undefined;
     }
   }
@@ -86,8 +105,8 @@ export class KiroPowerWorkspaceBinding {
   status() {
     const root = this.boundRoot();
     return root
-      ? { status: "bound" as const, rootId: this.#binding!.id, name: this.#binding!.name, source: this.#binding!.source, capabilities: ["checked-execution", "memory", "state", "mcp-federation"] }
-      : { status: "unbound" as const, requiresSelection: this.#candidates.length > 1, capabilities: ["checked-execution"] };
+      ? { status: "bound" as const, rootId: this.#binding!.id, name: this.#binding!.name, source: this.#binding!.source, capabilities: ["checked-execution", "overflow-artifacts", "state"] }
+      : { status: "unbound" as const, requiresSelection: this.#candidates.length > 1, capabilities: ["checked-execution", "overflow-artifacts"] };
   }
 
   list() { return { ...this.status(), roots: this.#candidates.map(({ id, name }) => ({ rootId: id, name })) }; }
@@ -96,11 +115,15 @@ export class KiroPowerWorkspaceBinding {
     switch (request.action) {
       case "status": return this.status();
       case "list": return this.list();
-      case "detach": this.#binding = undefined; return this.status();
+      case "detach":
+        this.#binding = undefined;
+        this.#initialAutoBindAllowed = false;
+        return this.status();
       case "select": {
         const candidate = this.#candidates.find((entry) => entry.id === request.rootId);
         if (!candidate) throw new Error("unknown workspace rootId; call fabric_workspace list first");
         this.#binding = { ...candidate, source: "client-roots" };
+        this.#initialAutoBindAllowed = false;
         return this.status();
       }
       case "attach": {
@@ -110,6 +133,7 @@ export class KiroPowerWorkspaceBinding {
           throw new Error("manual workspace attachment was not approved");
         }
         this.#binding = { ...candidate, source: "manual" };
+        this.#initialAutoBindAllowed = false;
         return this.status();
       }
     }

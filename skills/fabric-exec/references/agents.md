@@ -1,6 +1,7 @@
-# Power agent reference
+# Power agent boundary
 
-`agents.run` is available only after a workspace is securely bound and a
-non-billable capability probe qualifies the exact supported Kiro ACP runtime.
-Use bounded independent fan-out and await every child. Power v1 does not expose
-spawn, actors, durable residency, recursion, or detached work.
+The current Kiro Fabric Power release does not mount `agents.*` and does not
+advertise ACP orchestration. Use Kiro's native subagent interface outside
+`fabric_exec`. Do not probe for, cast to, or dynamically invoke `agents.run`.
+Power v1 also exposes no spawn, actors, durable residency, recursion, or
+detached work.

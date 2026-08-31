@@ -228,9 +228,10 @@ const buildManifest = (
           closure: closure.attestation,
           generations: [...new Map([
             ...((previous?.runtime.generations ?? (previous?.runtime.closure ? [previous.runtime.closure] : []))
-              .map((generation) => [generation.digest, generation] as const)),
-            [closure.attestation.digest, closure.attestation] as const,
-          ]).values()].sort((left, right) => left.digest.localeCompare(right.digest)),
+              .map((generation) => [generation.root, generation] as const)),
+            [closure.attestation.root, closure.attestation] as const,
+          ]).values()].sort((left, right) =>
+            left.digest.localeCompare(right.digest) || left.root.localeCompare(right.root)),
           managerEntryPath: closure.managementEntryPath,
           nodeSha256: closure.attestation.files.find((file) => file.path.endsWith("/bin/node") || file.path.endsWith("/bin/node.exe"))!.installedSha256,
         }

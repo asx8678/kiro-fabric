@@ -40,7 +40,7 @@ export const resolveKiroHome = (explicit?: string): string => {
 
 export interface KiroInstallRoots {
   layout: KiroManagedLayout;
-  /** Filesystem root that contains agents/ and .kiro-fabric/ (or project/.kiro/). */
+  /** Filesystem root that contains Kiro profiles plus the managed `.fabric/runtime` closure. */
   installRoot: string;
   /** Canonical project bound into the profile MCP environment. */
   projectRoot: string;

@@ -1,6 +1,6 @@
 ---
 name: fabric-exec
-description: Exact checked-TypeScript reference for Kiro Fabric Power workflows, state, MCP federation, and bounded orchestration.
+description: Exact checked-TypeScript reference for Kiro Fabric Power workflows, state, memory, and configured MCP federation.
 ---
 
 # fabric_exec in Kiro Fabric Power
@@ -16,7 +16,11 @@ mount `k.*`; never use Fabric as a substitute for one native operation.
 Mounted namespaces are capability-sensitive. Use `tools.providers()`,
 `tools.search()`, and `tools.describe()` rather than guessing. Call
 `fabric_info` first and bind a workspace with `fabric_workspace` before using
-workspace-dependent actions. `agents.*` is omitted unless Kiro ACP is qualified.
+workspace-dependent actions. The current Power release does not mount
+`agents.*`; use Kiro's native subagents outside Fabric instead. When a result is
+truncated, use the returned opaque ID with
+`await tools.call({ ref: "artifacts.read", args: { id } })`; artifacts are
+process-local.
 
 Power v1 supports synchronous, session-bounded work only. No detached actors or
 durability across deactivation is promised. Approval, timeout, cancellation,

@@ -311,6 +311,68 @@ describe("Kiro MCP adapter", () => {
     expect(text).toContain("no MCP elicitation");
     await runtime.close();
   });
+
+  it("persists complete long type diagnostics through the supplied artifact writer", async () => {
+    const artifactId = `ka_${"a".repeat(48)}`;
+    const diagnostic = `credential-type-${"x".repeat(30_000)}-diagnostic-end`;
+    let persisted = "";
+    const projected = await projectFabricExecutionText({
+      result: {
+        success: false,
+        value: undefined,
+        logs: [],
+        audits: [],
+        phases: [],
+        trace: undefined,
+        elapsedMs: 0,
+        typeErrors: [{ line: 7, column: 11, message: diagnostic }],
+      },
+      code: "return missingValue;",
+      resultFormat: "auto",
+      maxOutputChars: 1_000,
+      writeArtifact: async (content) => { persisted = content; return artifactId; },
+      artifactReadHint: (id) => `artifacts.read(${id})`,
+    });
+
+    expect(projected.isError).toBe(true);
+    expect(projected.text.length).toBeLessThanOrEqual(1_000);
+    expect(projected.text).toContain(`artifact ${artifactId}`);
+    expect(projected.text).toContain(`artifacts.read(${artifactId})`);
+    expect(projected.text).not.toContain("/tmp/");
+    expect(persisted).toContain(diagnostic);
+    expect(persisted).toContain("Line 7:11");
+  });
+
+  it("persists full structured multiline values instead of the bounded preview", async () => {
+    const artifactId = `ka_${"b".repeat(48)}`;
+    const section = (name: string): string =>
+      `${name}-start\n${name.repeat(8_000)}\n${name}-end`;
+    const sections = [section("first"), section("middle"), section("last")];
+    let persisted = "";
+    const projected = await projectFabricExecutionText({
+      result: {
+        success: true,
+        value: { first: sections[0], middle: sections[1], last: sections[2] },
+        logs: [],
+        audits: [],
+        phases: [],
+        trace: { outcome: "succeeded", operations: [] },
+        elapsedMs: 0,
+      },
+      code: "return value;",
+      resultFormat: "auto",
+      maxOutputChars: 2_000,
+      writeArtifact: async (content) => { persisted = content; return artifactId; },
+      artifactReadHint: (id) => `artifacts.read(${id})`,
+    });
+
+    expect(projected.isError).toBe(false);
+    expect(projected.text.length).toBeLessThanOrEqual(2_000);
+    expect(projected.text).toContain(`artifact ${artifactId}`);
+    expect(projected.text).toContain("chars omitted");
+    for (const sectionText of sections) expect(persisted).toContain(sectionText);
+    expect(persisted).not.toContain("chars omitted");
+  });
 });
 
 describe("Kiro profile generation", () => {

@@ -1,117 +1,426 @@
 # Kiro Fabric
 
-> **Native Kiro for ordinary work. Checked TypeScript for workflows.**
+> Add checked TypeScript workflows to Kiro while keeping Kiro's native tools.
 
-Kiro Fabric is an additive **Kiro Power**, an installable Kiro IDE add-on for coordinated workflows. Ask Kiro to use Fabric and Kiro writes a small, checked TypeScript program for parallel work, branches, loops, state, memory, or configured external tools. Those tool connections use MCP, the Model Context Protocol. Kiro's native tools remain available.
+Kiro Fabric is a Kiro Power for jobs that need several coordinated steps. Kiro
+writes a small TypeScript program, Fabric type-checks it, runs it, and returns a
+bounded result. This gives Kiro a checked composition layer for loops, branches,
+parallel configured-provider calls, project memory, workspace state, and MCP
+federation.
 
-> **Release status:** the Power is source-installable for local Kiro IDE testing. Public GitHub import waits for publication of exact `kiro-fabric@0.63.0` and clean-machine certification. Kiro CLI v3 Power support and real-client elicitation are separate certification gates.
+[MCP](https://modelcontextprotocol.io/) is the Model Context Protocol used to
+connect tools and services.
 
-```text
-+----------------------------------------+
-| KIRO IDE                               |
-|                                        |
-| native tools -> ordinary work          |
-|                                        |
-| Fabric Power -> coordinated workflows  |
-|       |                                |
-| checked TypeScript                     |
-|       |                                |
-| memory | bound state | configured MCP  |
-+----------------------------------------+
+> **Current release status:** local source installation is supported for Kiro
+> IDE testing. Direct GitHub Power import waits for publication and clean-machine
+> certification of exact package `kiro-fabric@0.63.0`. Kiro CLI v3 Power support
+> and Power ACP agents have separate certification gates.
+
+## Start here
+
+Choose one integration:
+
+| You want | Install | Recommended for |
+|---|---|---|
+| Fabric beside Kiro's existing read, edit, shell, web, and subagent tools | [Kiro Power](#install-the-kiro-power-recommended) | Most Kiro IDE users |
+| One managed Kiro CLI profile with a narrow audited tool boundary | [Strict mode](#install-strict-mode-advanced) | Advanced and controlled environments |
+
+Start with the **Kiro Power** if you are unsure.
+
+- [Install the Kiro Power](#install-the-kiro-power-recommended)
+- [Verify the installation](#verify-the-power-installation)
+- [Use Kiro Fabric](#use-kiro-fabric)
+- [Copy-paste examples](#copy-paste-examples)
+- [Update or remove the Power](#update-or-remove-the-power)
+- [Install Strict mode](#install-strict-mode-advanced)
+- [Troubleshooting](#troubleshooting)
+
+## What Kiro Fabric adds
+
+Use Kiro's native tools for a single read, edit, shell command, web lookup, code
+search, or native subagent. Use Fabric when the result depends on a coordinated
+workflow.
+
+| Task | Best choice |
+|---|---|
+| Read or edit one file | Native Kiro |
+| Run one command or test | Native Kiro |
+| Search code or the web once | Native Kiro |
+| Apply a loop or branch to structured inputs | Fabric |
+| Query independent configured services in parallel | Fabric |
+| Save and retrieve a project decision | Fabric memory |
+| Record a verified workspace transition | Fabric state |
+| Combine several configured MCP tools into one result | Fabric |
+
+The Power exposes three Kiro-facing MCP tools:
+
+| Tool | What it does |
+|---|---|
+| `fabric_info` | Reports the runtime, workspace binding, capabilities, ACP status, and durability status. |
+| `fabric_workspace` | Lists, selects, or manually attaches a validated workspace root. |
+| `fabric_exec` | Type-checks and runs one TypeScript workflow. |
+
+Inside `fabric_exec`, the program can use mounted Fabric providers such as
+`memory`, `state`, `mcp`, and `artifacts`. Availability depends on the current
+workspace and configuration. The program cannot call back into Kiro's outer
+native tools. Keep ordinary file, shell, web, and native-subagent work in Kiro.
+
+## Install the Kiro Power (recommended)
+
+### Requirements
+
+Install these first:
+
+- [Kiro IDE](https://kiro.dev/)
+- [Node.js](https://nodejs.org/) 24 or newer
+- Git
+- pnpm 11.20.0
+
+Check the versions:
+
+```bash
+node --version
+pnpm --version
 ```
 
-## When to use Fabric
+If `pnpm` is missing, install the version used by this repository:
 
-Use native Kiro tools for one read, edit, shell command, web lookup, code search, or simple subagent. Use Fabric when a workflow needs parallel tasks, branches, loops, retained memory, workspace-bound state, or several configured MCP services.
+```bash
+npm install --global pnpm@11.20.0
+```
 
-Fabric adds checked composition, `Promise.all` fan-out, and deterministic result assembly. Power ACP agents are unavailable pending separate runtime qualification.
+### 1. Download the source
 
-The Power exposes exactly three MCP tools:
+```bash
+git clone https://github.com/asx8678/kiro-fabric.git
+cd kiro-fabric
+```
 
-| Tool | Purpose |
-|---|---|
-| `fabric_info` | Show runtime, workspace, ACP, and durability status. |
-| `fabric_workspace` | Inspect or select validated roots; manual attachment needs one-time approval. |
-| `fabric_exec` | Type-check and run a TypeScript workflow. |
+If you already have this repository, open a terminal at its root.
 
-Power does not expose `k.*` and cannot call backward into outer Kiro native tools. Do not invoke Fabric for one simple file or shell operation.
-
-## How it works
-
-An ordinary Kiro session keeps native read, edit, shell, code, web, subagents, other Powers, and MCP integrations. Fabric adds concise orchestration skills and one MCP server beside them. `fabric_exec` validates TypeScript, then normally runs it in QuickJS. Effects cross the host boundary and follow the configured approval policy, deadlines, cancellation, output bounds, and provider capability view. `node-process`, external MCP servers, and Strict shell execution use host privileges; they are trusted execution, not sandboxes.
-
-Workspace identity never comes from process CWD. The server validates MCP client roots, auto-binds one safe root, requires selection for multiple roots, and uses elicitation for approve-once manual attachment. Missing, ambiguous, changed, unsafe, declined, or unsupported attachment paths fail closed.
-
-## Install locally in Kiro IDE
-
-Requirements: Kiro IDE, Node.js 24+, and pnpm 11.20.0. Download or clone this repository, open a terminal at the repository root, then run:
+### 2. Install dependencies and build the local Power
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm run power:dev
 ```
 
-The second command prints the absolute path to the generated Power. In Kiro:
+`power:dev` builds the compiled runtime and creates a local Power package at:
 
-1. Open the **Powers** panel using the Ghosty lightning icon.
-2. Choose **Add Custom Power**.
-3. Choose **Import power from a folder**.
-4. Select the printed path, which ends in `.tmp/kiro-fabric-power/`.
-5. Click **Install**.
+```text
+<repository>/.tmp/kiro-fabric-power/
+```
 
-After installation, paste this first prompt into Kiro:
+The command prints the absolute path. Select this generated folder in Kiro. Do
+not select the repository root.
 
-> **Use the Kiro Fabric Power to run `fabric_info` and explain what is available.**
+### 3. Import the generated folder in Kiro IDE
 
-If it reports one safe workspace root, Fabric can bind it automatically. Use `fabric_workspace` only when the workspace is unbound or Kiro presents multiple roots.
+1. Open Kiro IDE.
+2. Open the **Powers** panel with the Ghosty lightning icon.
+3. Select **Add Custom Power**.
+4. Select **Import power from a folder**.
+5. Choose the absolute `.tmp/kiro-fabric-power/` path printed by
+   `pnpm run power:dev`.
+6. Select **Install** and enable the Power for your workspace.
 
-For non-billable troubleshooting after `power:dev`, run:
+No global npm installation is needed for this local Power path.
+
+## Verify the Power installation
+
+Open a project in Kiro and paste this prompt into chat:
+
+```text
+Use the Kiro Fabric Power. Run fabric_info and explain the integration,
+workspace status, mounted capabilities, durability, and ACP status.
+```
+
+A healthy response should show:
+
+- `integration: "power"`
+- the checked QuickJS runtime as available
+- a bound workspace, or a clear unbound/multiple-root status
+- `kiroAcp.status: "unavailable"` for this release
+
+The unavailable ACP status is expected. Use Kiro's native subagents outside
+Fabric.
+
+If the workspace is unbound, paste:
+
+```text
+Use Kiro Fabric. Run fabric_workspace to list the available roots. If exactly
+one safe root exists, select it. If several roots exist, show them and wait for
+me to choose one.
+```
+
+A manual path attachment asks for one-time approval. Missing, unsafe, changed,
+declined, or ambiguous roots fail closed.
+
+Run the local non-billable diagnostic from the repository when setup fails:
 
 ```bash
 node dist/kiro/cli-entry.js doctor power --json
 ```
 
-See the complete [Power guide](docs/kiro/power.md) for lifecycle, multi-root behavior, approval gates, updates, and troubleshooting.
+## Use Kiro Fabric
 
-## Choose a mode
+You normally describe the outcome in chat. Kiro writes the TypeScript body and
+calls `fabric_exec` for you.
 
-| Mode | Best for | Outer Kiro tools | Workspace interface |
-|---|---|---|---|
-| **Power** | Additive orchestration in Kiro IDE | Preserved | Native Kiro outside Fabric; validated binding for Fabric state/MCP |
-| **Strict mode** | One managed, auditable custom-agent boundary | Replaced by exactly `@fabric/fabric_exec` | Project-confined `k.*` inside Fabric |
-| **internal-child** | Hermetic implementation profile for qualified ACP workers | Not user-selected | Scoped, non-recursive `k.*` |
+A useful prompt has three parts:
 
-Strict mode retains the managed installation, exact permission rule, project-identity binding, immutable runtime closure, and update/repair/uninstall lifecycle:
+1. Say **Use Kiro Fabric**.
+2. Describe the inputs and desired result.
+3. State limits such as parallelism, failure handling, or output shape.
+
+Example pattern:
+
+```text
+Use Kiro Fabric for one checked workflow. Process INPUTS with RULES. Keep each
+failure as data, cap parallel work at LIMIT, and return RESULT_SHAPE.
+```
+
+Fabric type-checks the program before execution. A type error means the program
+did not run. Read, write, network, and execute effects follow the configured
+approval policy. Large results include an opaque artifact ID that Kiro can read
+in bounded chunks.
+
+## Copy-paste examples
+
+### 1. Discover the available capabilities
+
+```text
+Use Kiro Fabric. Run fabric_info, then use fabric_exec to call
+tools.providers(). Return a short table with each available provider, its
+purpose, and whether it needs a bound workspace. Do not guess unavailable
+capabilities.
+```
+
+Use this first when you do not know which providers are mounted.
+
+### 2. Run a deterministic scoring workflow
+
+```text
+Use Kiro Fabric for one checked TypeScript workflow. Score these release
+candidates with score = passedTests * 2 - failedTests * 5 - openBlockers * 10:
+
+- alpha: passedTests 94, failedTests 3, openBlockers 1
+- beta: passedTests 91, failedTests 0, openBlockers 2
+- gamma: passedTests 88, failedTests 1, openBlockers 0
+
+Use a loop, sort highest score first, and return JSON containing the score,
+rank, and winning candidate. Use no external tools.
+```
+
+This example exercises checked computation, loops, and deterministic result
+assembly without any side effects.
+
+### 3. Save a project decision in memory
+
+Run this after the workspace is bound:
+
+```text
+Use Kiro Fabric. In one fabric_exec call, save this project memory with
+memory.set under key "architecture/package-manager":
+{"choice":"pnpm","version":"11.20.0","reason":"repository packageManager pin"}.
+Then read the same key with memory.get and return the confirmed stored value.
+```
+
+A write approval may appear. Memory is isolated by project.
+
+### 4. Record and inspect workspace state
+
+```text
+Use Kiro Fabric. Record a state.transition with label "release checks passed",
+to "ready-for-review", and summary "typecheck, tests, and build passed". Then
+call state.get and return the new head plus recent labels. Ask for approval for
+the state write.
+```
+
+`state` is mounted only after Fabric has a validated workspace binding.
+
+### 5. Fan out across configured MCP services
+
+This example requires external MCP servers in the Fabric configuration:
+
+```text
+Use Kiro Fabric. Discover configured MCP servers and their tool contracts first.
+If at least two read-only lookup tools are available, call independent lookups
+in parallel with Promise.all. Preserve each success or failure as data and
+return one compact comparison table. Do not invent server names, tool names, or
+argument shapes. Ask for approval before network calls.
+```
+
+Fabric can compose configured MCP services. It does not provide external
+services by itself.
+
+### 6. Continue an oversized result
+
+```text
+The previous Fabric result returned an artifacts.read ID. Use Kiro Fabric to
+read that artifact in bounded chunks until done, then summarize the complete
+result. Keep the artifact ID private to this session.
+```
+
+Overflow artifacts are process-local and expire with the Power process.
+
+## Workspace access and approvals
+
+- The Power validates workspace roots supplied by the MCP client.
+- One safe root can bind automatically. Several roots require an explicit
+  selection.
+- Manual attachment is canonicalized and requires one-time approval.
+- Fabric memory and state use workspace-isolated storage.
+- Approval messages redact common credential and token fields.
+- Power `fabric_exec` programs do not receive Kiro's native `k.*` filesystem or
+  shell tools.
+- The current Power release does not mount `agents.*`. Use Kiro native
+  subagents.
+- Power v1 supports synchronous session-bounded work. Detached work and
+  cross-deactivation completion guarantees are unavailable.
+
+Read [Power security and lifecycle details](docs/kiro/power.md#data-and-security)
+before enabling trusted external MCP services.
+
+## Update or remove the Power
+
+### Update a local source installation
+
+From the repository:
 
 ```bash
-npm install --global kiro-fabric@0.63.0   # only after this exact release is published
+git pull --ff-only
+pnpm install --frozen-lockfile
+pnpm run power:dev
+```
+
+Remove or disable the previous custom Power in Kiro, then import the regenerated
+`.tmp/kiro-fabric-power/` folder.
+
+### Remove the Power
+
+Open Kiro's **Powers** panel, disable or remove Kiro Fabric, and restart the
+workspace if Kiro still shows the old MCP server. Mutable Power data remains
+under Kiro-owned `PLUGIN_DATA` according to Kiro's uninstall behavior.
+
+## Install Strict mode (advanced)
+
+Strict mode installs a managed Kiro CLI v3 profile. The profile replaces the
+outer tool set with exactly `@fabric/fabric_exec`. Its installed binaries run
+from `.fabric/runtime/<digest>/`, while repository access follows the canonical
+folder where `kiro-cli` starts.
+
+Use this mode only when you want a narrow managed boundary. The source installer
+supports Linux and macOS and requires Node.js 24+ plus Kiro CLI 2.20.1/v3.
+
+### Source installation
+
+```bash
+git clone https://github.com/asx8678/kiro-fabric.git
+cd kiro-fabric
+
+FABRIC_REPO="$(pwd -P)"
+PROJECT="/absolute/path/to/your/project"
+
+# Inspect the proposed user-scoped installation without writing managed files.
+sh "$FABRIC_REPO/scripts/install-kiro-fabric.sh" install \
+  --project-root "$PROJECT" --dry-run --yes
+
+# Install the profile under $KIRO_HOME or ~/.kiro.
+sh "$FABRIC_REPO/scripts/install-kiro-fabric.sh" install \
+  --project-root "$PROJECT" --yes
+
+# Verify the installed profile.
+sh "$FABRIC_REPO/scripts/install-kiro-fabric.sh" doctor \
+  --project-root "$PROJECT"
+
+# Start Kiro in the project with the managed profile.
+cd "$PROJECT"
+kiro-cli --v3 --agent kiro-fabric
+```
+
+The source script adds user scope automatically. New installs leave shell,
+subagents, and automatic tool approval disabled. Add trusted grants only after
+reading the [Strict installer guide](docs/kiro/installer.md).
+
+Common lifecycle commands from the source checkout:
+
+```bash
+# Rebuild from pulled source and update while preserving existing grants.
+KIRO_FABRIC_REBUILD=1 sh "$FABRIC_REPO/scripts/install-kiro-fabric.sh" update \
+  --project-root "$PROJECT" --yes
+
+# Repair managed files from the current trusted source artifact.
+sh "$FABRIC_REPO/scripts/install-kiro-fabric.sh" repair \
+  --project-root "$PROJECT" --yes
+
+# Remove the user-scoped managed profile.
+sh "$FABRIC_REPO/scripts/install-kiro-fabric.sh" uninstall \
+  --project-root "$PROJECT" --yes
+```
+
+After exact `kiro-fabric@0.63.0` is published and certified, the npm route will
+be:
+
+```bash
+npm install --global kiro-fabric@0.63.0
 kiro-fabric doctor kiro
 kiro-fabric install kiro --user --project-root "$(pwd -P)"
 kiro-cli --v3 --agent kiro-fabric
 ```
 
-Strict shell and ACP children are explicit trusted grants. Shell is not a sandbox. Until npm publication, follow the [Strict installer guide](docs/kiro/installer.md) from a source checkout.
+Do not use the npm route until that exact package exists in the registry. See
+[the full Strict installer guide](docs/kiro/installer.md) for project scope,
+custom Kiro homes, trusted grants, backup behavior, and recovery commands.
 
-## Security and lifecycle
+## Troubleshooting
 
-- Mutable Power data lives beneath `PLUGIN_DATA`; workspace directories use path-derived hashes.
-- Manual bindings and overflow artifacts are process-local. Declined, malformed, timed-out, cancelled, or unsupported elicitation denies access.
-- Power shutdown aborts tracked calls and closes owned runtime resources on a best-effort basis. Completed effects are not rolled back.
-- Stored memory may survive, but Power v1 makes **no durability guarantee across deactivation**, restart, update, uninstall, or crash. Detached and durable agents are not exposed.
-- `fabric_info` omits raw plugin-data paths, credentials, ACP payloads, and private session IDs.
+| Problem | What to do |
+|---|---|
+| `node --version` is below 24 | Install Node.js 24+ and reopen the terminal. |
+| `pnpm` is missing | Run `npm install --global pnpm@11.20.0`. |
+| Kiro rejects the imported folder | Run `pnpm run power:dev` again and select `.tmp/kiro-fabric-power/`, not the repository root. |
+| The Power does not appear | Confirm it is installed and enabled in the current Kiro workspace, then restart the workspace. |
+| `fabric_info` reports an unbound workspace | Ask `fabric_workspace` to list roots and select the intended canonical root. |
+| Several roots are listed | Choose one root explicitly. Fabric fails closed on ambiguity. |
+| A manual attach is denied | Confirm the client supports form elicitation and approve the canonical path. |
+| `agents.*` is unavailable | Use Kiro's native subagents outside Fabric. |
+| An output is truncated | Ask Kiro to follow the returned `artifacts.read` ID in chunks. |
+| A local health check fails | Run `node dist/kiro/cli-entry.js doctor power --json`. |
 
-Read [Power security and limitations](docs/kiro/power.md#data-and-security) and the repository [security replay model](docs/security-replay.md) before enabling trusted execution paths.
+## Security summary
+
+- Package assets are immutable during execution.
+- Mutable Power data lives under Kiro-owned `PLUGIN_DATA`.
+- External MCP, Node process, and Strict shell actions use host privileges. They
+  are trusted execution paths, not sandboxes.
+- Completed effects are not rolled back when a later workflow step fails.
+- Stored memory can survive a session, with no Power v1 durability guarantee
+  across deactivation, restart, update, uninstall, or crash.
+- `fabric_info` omits raw plugin-data paths, credentials, ACP payloads, and
+  private session IDs.
+
+See [Power security details](docs/kiro/power.md#data-and-security) and the
+[security replay model](docs/security-replay.md).
 
 ## Development
 
 ```bash
-pnpm run power:validate   # manifests, versions, skills, package boundary
-pnpm run certify:power    # generated package + three-tool MCP smoke test
-pnpm run check            # typecheck, build, tests, dead-code lint, Power validation
+pnpm run power:validate   # validate manifests, versions, skills, and package boundary
+pnpm run certify:power    # build the local package and run the Power MCP certification
+pnpm run check            # typecheck, build, all tests, dead-code lint, and Power validation
 ```
 
-Key paths: `src/kiro/mcp-server.ts` owns the mode-specific MCP surface, `src/kiro/runtime.ts` assembles providers, `skills/` contains Power guidance, and `strict/skills/` contains managed-profile guidance.
+Important paths:
 
-Documentation: [Power](docs/kiro/power.md) · [Strict installer](docs/kiro/installer.md) · [Current Kiro records](docs/kiro/README.md) · [Security](docs/security-replay.md)
+- `src/kiro/mcp-server.ts`: Kiro MCP surface
+- `src/kiro/runtime.ts`: provider assembly
+- `skills/`: Power guidance
+- `strict/skills/`: managed-profile guidance
+- `docs/kiro/power.md`: complete Power behavior and limits
+- `docs/kiro/installer.md`: complete Strict installation and lifecycle guide
 
-MIT licensed. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Documentation: [Power guide](docs/kiro/power.md) · [Strict installer](docs/kiro/installer.md) · [Kiro records](docs/kiro/README.md) · [Security](docs/security-replay.md)
+
+MIT licensed. See [LICENSE](LICENSE) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

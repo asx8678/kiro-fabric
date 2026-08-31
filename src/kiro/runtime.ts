@@ -23,6 +23,7 @@ import { KiroMemoryProvider } from "./memory-provider.js";
 import { MeshStore } from "../mesh/store.js";
 import { StateProvider } from "../providers/state-provider.js";
 import { KiroPowerFabricApprover, type KiroPowerApprover } from "./power/approver.js";
+import { KiroPowerArtifactsProvider } from "./power/artifacts-provider.js";
 import { createKiroArtifactStore, type KiroArtifactStore } from "./artifacts.js";
 import {
   FabricDenyApprovalFallback,
@@ -91,8 +92,10 @@ export interface KiroRuntimeOptions {
    * when installed with --allow-shell. Only set this on a trusted local machine.
    */
   allowExecute?: boolean;
-  /** Override config (tests); defaults to loadFabricConfig global-only. */
+  /** Override config (tests); defaults to loading from the host-owned agent directory. */
   config?: FabricConfig;
+  /** Host-owned configuration directory. Power sets this beneath PLUGIN_DATA. */
+  agentDir?: string;
   /** Extra providers to register (tests). */
   registerProviders?: (registry: KiroProviderRegistry) => void;
   /**
@@ -196,7 +199,7 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   // executor policy. Resolve the real user Fabric agent directory instead.
   const base = options.config ?? loadFabricConfig({
     cwd: options.cwd,
-    agentDir: resolveAgentDir(),
+    agentDir: options.agentDir ?? resolveAgentDir(),
     projectTrusted: false,
   });
   if (options.enableSubagents === true) {
@@ -215,7 +218,8 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   // DENY, so a Kiro host cannot grant shell access by mere omission.
   const allowExecute =
     options.allowExecute === true ||
-    /^1$/i.test(process.env.KIRO_FABRIC_ALLOW_SHELL ?? "");
+    (options.integration !== "power" &&
+      /^1$/i.test(process.env.KIRO_FABRIC_ALLOW_SHELL ?? ""));
   if (options.enableSubagents === true && !allowExecute) {
     throw new Error(
       "Managed Kiro subagents require trusted-local shell access; install with --allow-shell --subagents",
@@ -268,11 +272,13 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
         ...(protectedRelease ? { protectedRoots: [protectedRelease] } : {}),
       }),
     );
+    registry.markUnavailable("artifacts", "Strict mode exposes overflow artifacts through k.readArtifact");
   } else {
     registry.markUnavailable(
       "k",
       "Power mode intentionally uses Kiro native tools for ordinary repository and shell operations",
     );
+    registry.register(new KiroPowerArtifactsProvider(artifacts));
   }
   // Main gets an on-demand MCP facade: configured servers are never contacted
   // during discovery/type checking, and the statically described mcp.call is

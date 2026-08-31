@@ -2,17 +2,17 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kiro-fabric",
   "version": "0.63.0",
-  "description": "Checked TypeScript workflows and multi-agent orchestration for Kiro",
+  "description": "Checked TypeScript workflows, state, memory, and MCP federation for Kiro",
   "author": {
     "name": "monotykamary"
   },
   "keywords": [
     "fabric_exec",
-    "multi-agent orchestration",
-    "parallel agent workflow",
-    "agent fan-out",
-    "ACP orchestration",
-    "programmable agent workflow",
+    "checked TypeScript workflow",
+    "programmable aggregation",
+    "MCP federation",
+    "workflow state",
+    "workflow memory",
     "Fabric workflow"
   ],
   "homepage": "https://github.com/asx8678/kiro-fabric",

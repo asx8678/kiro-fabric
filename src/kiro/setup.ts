@@ -45,7 +45,7 @@ import {
   type KiroManagedGrants,
 } from "./managed.js";
 import { kiroProfilePath } from "./profile.js";
-import { runtimeClosurePath, verifyRuntimeClosureAttestation } from "./runtime-closure.js";
+import { runtimeClosureMarkerPath, verifyRuntimeClosureAttestation } from "./runtime-closure.js";
 import { managedKiroSkillBundleSha256 } from "./skills.js";
 import {
   planKiroProfileUninstall,
@@ -396,7 +396,7 @@ const scopeStatusFor = (
       if (releasePackage.version !== manifest.packageVersion || releasePackage.digest !== manifest.runtime.closure.digest) {
         throw new Error("manifest package identity does not match the attested release");
       }
-      const markerPath = join(runtimeClosurePath(roots.installRoot, roots.layout), ".closure-current");
+      const markerPath = runtimeClosureMarkerPath(roots.installRoot, roots.layout, manifest.runtime.closure);
       const markerStat = lstatOrNull(markerPath);
       if (!markerStat || markerStat.isSymbolicLink() || !markerStat.isFile()) {
         throw new Error("runtime activation marker is missing or invalid");

@@ -44,9 +44,9 @@ A project install writes only:
 - the packaged `fabric-exec`, `fabric-guide`, `fabric-review`, and
   `fabric-workflow` skills under `<project>/.kiro/skills/`
 - an immutable, digest-addressed release under
-  `<project>/.kiro/.kiro-fabric/runtime/<digest>/`, including `bin/node`,
-  `bin/kiro-cli`, the MCP and worker entries, exact skill sources, and
-  `kiro/management-entry.js`
+  `<project>/.fabric/runtime/<digest>/`, including `bin/node`, `bin/kiro-cli`,
+  the MCP and worker entries, exact skill sources, and
+  `kiro/management-entry.js`; the installed profile executes this copy
 - content-addressed backups under `<project>/.kiro/.kiro-fabric/backups/`
 - a short-lived `<project>/.kiro/.kiro-fabric/operation.lock` during mutation
 
@@ -60,11 +60,18 @@ that reused the PID. Other platforms retain the lock on ambiguous liveness.
 - `<kiro-home>/agents/kiro-fabric.json`
 - `<kiro-home>/.kiro-fabric/install.json`
 - the same four managed skills under `<kiro-home>/skills/`
-- the attested runtime (vendored Node plus an immutable Kiro execution copy),
-  backups, and operation lock under `<kiro-home>/.kiro-fabric/`
+- the attested runtime (vendored Node plus an immutable Kiro execution copy)
+  under `<kiro-home>/.fabric/runtime/`
+- backups and the operation lock under `<kiro-home>/.kiro-fabric/`
 
-For managed interactive sessions, Fabric confines filesystem tools to the
-canonical directory where `kiro-cli chat` was launched. This lets one global
+The installed Node, Kiro CLI, and MCP entry execute from the immutable
+`.fabric/runtime/<digest>/` closure, but that runtime location is never used as
+the workspace. Update and uninstall continue to recognize an attested runtime
+from the former `.kiro-fabric/runtime` layout; an update activates the new
+`.fabric` closure while retaining hash ownership of the prior generation until
+safe uninstall cleanup. For managed interactive sessions, Fabric resolves and confines
+filesystem tools to the canonical directory where `kiro-cli chat` was started
+(or the exact `cwd` selected by `kiro-fabric-setup launch`). This lets one global
 profile under `~/.kiro` work across projects without granting access outside the
 active launch directory. `--project-root` remains the installation identity and
 fallback when the launch directory no longer exists; Kiro home is never treated

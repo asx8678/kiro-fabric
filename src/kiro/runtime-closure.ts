@@ -1,5 +1,5 @@
 // Runtime closure management. Copies the pre-built self-contained bundle
-// (dist/kiro-closure/) into the managed .kiro-fabric tree so the installed
+// (dist/kiro-closure/) into the managed .fabric runtime tree so the installed
 // profile executes without depending on the source checkout or the global
 // npm installation path. The closure is built by scripts/build-kiro-closure.mjs
 // and bundles all runtime dependencies inline (zero node_modules needed).
@@ -26,7 +26,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import {
   assertExecutableAttestation,
@@ -36,6 +36,7 @@ import {
   ensureManagedDirectory,
   KiroInstallError,
   lstatOrNull,
+  managedPaths,
   readPackageVersion,
   sha256Bytes,
   withContainedParent,
@@ -47,28 +48,42 @@ import {
 import { runBeforeRuntimeQuarantineForTest } from "./runtime-closure-test-seam.js";
 
 /**
- * Relative path within the managed tree where the runtime closure is deployed.
- *
- * Deployments are content-addressed: each published closure lives under an
- * immutable `runtime/<digest>/` directory so an install is never destructive
- * to an already-referenced runtime. The digest is computed over every
- * deployable file's canonical relative path AND full content bytes (PR1:
- * full-content digest), so same-size chunk-content changes still invalidate
- * it.
- */
-const RUNTIME_DIR_RELATIVE: Record<KiroManagedLayout, string> = {
-  project: ".kiro/.kiro-fabric/runtime",
-  user: ".kiro-fabric/runtime",
-};
-
-/**
  * Root that holds content-addressed closure versions
- * (`<root>/<digest>/kiro/mcp-entry.js`).
+ * (`<install-root>/.fabric/runtime/<digest>/kiro/mcp-entry.js`). Keeping the
+ * executable closure outside Kiro's profile directory makes the runtime
+ * location explicit while profile discovery remains under `.kiro/agents`.
  */
 export const runtimeClosurePath = (
   installRoot: string,
   layout: KiroManagedLayout,
-): string => join(installRoot, ...RUNTIME_DIR_RELATIVE[layout].split("/"));
+): string => managedPaths(installRoot, layout).runtimeDir;
+
+const runtimeDirectoryForClosure = (
+  installRoot: string,
+  layout: KiroManagedLayout,
+  closure: Pick<KiroRuntimeClosureManifest, "digest" | "root">,
+): string => {
+  const root = join(installRoot, ...closure.root.split("/"));
+  const runtimeDir = dirname(root);
+  const paths = managedPaths(installRoot, layout);
+  const expectedRoots = [paths.runtimeDir, paths.legacyRuntimeDir]
+    .map((parent) => relative(installRoot, join(parent, closure.digest)).split(sep).join("/"));
+  if (
+    basename(root) !== closure.digest ||
+    !expectedRoots.includes(closure.root) ||
+    (runtimeDir !== paths.runtimeDir && runtimeDir !== paths.legacyRuntimeDir)
+  ) {
+    throw new KiroInstallError("ownership", "runtime generation root is outside a managed runtime parent");
+  }
+  return runtimeDir;
+};
+
+/** Marker for an attested active closure, including pre-.fabric installations. */
+export const runtimeClosureMarkerPath = (
+  installRoot: string,
+  layout: KiroManagedLayout,
+  closure: Pick<KiroRuntimeClosureManifest, "digest" | "root">,
+): string => join(runtimeDirectoryForClosure(installRoot, layout, closure), ".closure-current");
 
 /**
  * Entry point for the current digest-addressed closure. As this is a fixed
@@ -835,10 +850,7 @@ export const removeAttestedRuntimeClosure = (
 ): boolean => {
   const root = join(installRoot, ...closure.root.split("/"));
   if (!existsSync(root)) return false;
-  const runtimeDir = runtimeClosurePath(installRoot, layout);
-  if (dirname(root) !== runtimeDir) {
-    throw new KiroInstallError("ownership", "runtime generation root is outside its descriptor-anchored parent");
-  }
+  const runtimeDir = runtimeDirectoryForClosure(installRoot, layout, closure);
   return withContainedParent(installRoot, root, (parent, leaf) => {
     const source = join(parent, leaf);
     const quarantinedRoot = join(parent, `.quarantine-generation-${process.pid}-${randomBytes(8).toString("hex")}`);
@@ -888,8 +900,14 @@ export const removeRuntimeActivationMarker = (
   installRoot: string,
   layout: KiroManagedLayout,
   expectedDigest: string,
+  closure?: Pick<KiroRuntimeClosureManifest, "digest" | "root">,
 ): boolean => {
-  const runtimeDir = runtimeClosurePath(installRoot, layout);
+  if (closure && closure.digest !== expectedDigest) {
+    throw new KiroInstallError("ownership", "runtime activation digest differs from its closure");
+  }
+  const runtimeDir = closure
+    ? runtimeDirectoryForClosure(installRoot, layout, closure)
+    : runtimeClosurePath(installRoot, layout);
   const marker = join(runtimeDir, ".closure-current");
   const markerStat = lstatOrNull(marker);
   if (!markerStat) return false;

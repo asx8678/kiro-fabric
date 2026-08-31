@@ -49,7 +49,7 @@ import {
 } from "./managed.js";
 import { resolveKiroInstallRoots } from "./home.js";
 import {
-  runtimeClosurePath,
+  runtimeClosureMarkerPath,
   verifyRuntimeClosureAttestation,
 } from "./runtime-closure.js";
 import { managedKiroSkillBundleSha256 } from "./skills.js";
@@ -253,7 +253,7 @@ export const runKiroDoctor = async (
         ) {
           throw new Error("manifest package identity does not match the attested release");
         }
-        const marker = join(runtimeClosurePath(roots.installRoot, roots.layout), ".closure-current");
+        const marker = runtimeClosureMarkerPath(roots.installRoot, roots.layout, closure);
         const stat = lstatOrNull(marker);
         if (!stat || stat.isSymbolicLink() || !stat.isFile()) {
           throw new Error("runtime closure marker is missing or invalid");

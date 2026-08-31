@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { DEFAULT_FABRIC_CONFIG } from "../../config.js";
 import { inspectKiroCompatibility } from "../compatibility.js";
 import { resolveSourcePackageRoot } from "../runtime-closure.js";
 import { resolveKiroPowerLaunchContext } from "./launch-context.js";
@@ -54,7 +55,14 @@ export const runKiroPowerDoctor = async (): Promise<KiroPowerDoctorReport> => {
       return "PLUGIN_ROOT/PLUGIN_DATA confinement and writable data verified";
     });
     await run("power.quickjs", async () => {
-      const runtime = await prepareKiroRuntime({ cwd: pluginData, integration: "power", memoryRoot: path.join(pluginData, "memory") });
+      const config = structuredClone(DEFAULT_FABRIC_CONFIG);
+      config.executor.runtime = "quickjs";
+      const runtime = await prepareKiroRuntime({
+        cwd: pluginData,
+        integration: "power",
+        config,
+        memoryRoot: path.join(pluginData, "memory"),
+      });
       try {
         const result = await runtime.service.execute({ code: "return 'ok'", signal: undefined, parentToolCallId: "doctor:power", host: runtime.host, onPartial() {} });
         if (!result.success) throw new Error("checked QuickJS probe failed");

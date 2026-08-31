@@ -20,6 +20,7 @@ export interface BoundedModelOutput {
 }
 
 type ArtifactWriter = (content: string) => Promise<string>;
+type ArtifactReadHint = (id: string) => string;
 
 const writeOutputArtifact: ArtifactWriter = async (content) => {
   const directory = await mkdtemp(path.join(tmpdir(), "kiro-fabric-output-"));
@@ -33,6 +34,7 @@ export const boundModelOutput = async (
   maxChars: number,
   fullOutput = visible,
   writeArtifact: ArtifactWriter = writeOutputArtifact,
+  artifactReadHint: ArtifactReadHint = (id) => `k.readArtifact({ id: \"${id}\" })`,
 ): Promise<BoundedModelOutput> => {
   if (visible.length <= maxChars && fullOutput.length <= maxChars) {
     return { text: visible, originalChars: fullOutput.length, omittedChars: 0 };
@@ -46,7 +48,7 @@ export const boundModelOutput = async (
   }
   const suffix = artifactPath
     ? artifactPath.startsWith("ka_")
-      ? `\n\n[Full output (${fullOutput.length} chars) available as artifact ${artifactPath}; read it with k.readArtifact({ id: \"${artifactPath}\" }).]`
+      ? `\n\n[Full output (${fullOutput.length} chars) available as artifact ${artifactPath}; read it with ${artifactReadHint(artifactPath)}.]`
       : `\n\n[Full output (${fullOutput.length} chars) saved to: ${artifactPath}]`
     : "";
   const bodyBudget = Math.max(1, maxChars - suffix.length);

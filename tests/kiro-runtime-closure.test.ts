@@ -1,5 +1,5 @@
 // Tests for the runtime closure feature: installer deploys a self-contained
-// runtime under the managed .kiro-fabric/ directory, the profile points at the
+// runtime under the managed .fabric/runtime directory, the profile points at the
 // copied entry, updates refresh the closure, and uninstall removes it.
 
 import {
@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { installKiroProfile } from "../src/kiro/install-test-helper.js";
+import { resolveKiroMcpLaunchEnvironment } from "../src/kiro/mcp-environment.js";
 import { uninstallKiroProfile } from "../src/kiro/uninstall.js";
 import {
   runtimeClosurePath,
@@ -35,7 +36,13 @@ import {
   computeRuntimeClosureDigest,
   planRuntimeClosureDeployment,
 } from "../src/kiro/runtime-closure.js";
-import { attestExecutable, managedPaths } from "../src/kiro/managed.js";
+import {
+  attestExecutable,
+  managedPaths,
+  readManifest,
+  serializeJson,
+  sha256Bytes,
+} from "../src/kiro/managed.js";
 import { withRuntimeQuarantineRaceForTest } from "../src/kiro/runtime-closure-test-seam.js";
 
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -199,8 +206,8 @@ describe("runtime closure deployment", () => {
     expect(existsSync(join(versionDir, closureWorkerEntry))).toBe(true);
     expect(existsSync(closure.runtimeNodePath)).toBe(true);
     expect(existsSync(closure.managementEntryPath)).toBe(true);
-    expect(closure.runtimeNodePath.startsWith(join(dir, ".kiro"))).toBe(true);
-    expect(closure.managementEntryPath.startsWith(join(dir, ".kiro"))).toBe(true);
+    expect(closure.runtimeNodePath.startsWith(join(dir, ".fabric", "runtime"))).toBe(true);
+    expect(closure.managementEntryPath.startsWith(join(dir, ".fabric", "runtime"))).toBe(true);
     expect(readFileSync(closure.runtimeNodePath)).toEqual(readFileSync(fakeRuntimePath));
     expect(closure.attestation.files).toContainEqual(expect.objectContaining({
       path: expect.stringMatching(/\/bin\/node(?:\.exe)?$/),
@@ -227,7 +234,7 @@ describe("runtime closure deployment", () => {
     expect(closure.mcpEntryPath).toBe(
       runtimeClosureMcpEntry(home, "user"),
     );
-    expect(closure.mcpEntryPath).toContain(".kiro-fabric/runtime/");
+    expect(closure.mcpEntryPath).toContain(".fabric/runtime/");
     expect(closure.mcpEntryPath).toContain(closure.digest);
     expect(closure.mcpEntryPath).toContain("/kiro/mcp-entry.js");
   });
@@ -360,12 +367,18 @@ describe("installer with runtime closure", () => {
     // Must point inside the Kiro home's managed runtime closure
     const resolvedHome = realpathSync(home);
     expect(mcpEntryInProfile.startsWith(resolvedHome)).toBe(true);
-    expect(mcpEntryInProfile).toContain(".kiro-fabric/runtime/");
+    expect(mcpEntryInProfile).toContain(".fabric/runtime/");
     expect(mcpEntryInProfile).toMatch(/\/mcp-entry\.js$/);
 
     // Must NOT point at the source checkout
     expect(mcpEntryInProfile).not.toBe(sourceMcpEntry);
     expect(mcpEntryInProfile).not.toContain(repoRoot + "/dist");
+
+    // Runtime bytes execute from .fabric, while repository access follows the
+    // canonical directory in which kiro-cli started.
+    const launchDirectory = project("launch-workspace");
+    expect(resolveKiroMcpLaunchEnvironment(profile.mcpServers.fabric.env, launchDirectory))
+      .toEqual({ mode: "strict", cwd: realpathSync(launchDirectory), kind: "managed-main" });
   });
 
   it("manifest runtime.mcpEntryPath records the closure path", async () => {
@@ -380,7 +393,43 @@ describe("installer with runtime closure", () => {
     };
     const resolvedHome = realpathSync(home);
     expect(manifest.runtime.mcpEntryPath.startsWith(resolvedHome)).toBe(true);
-    expect(manifest.runtime.mcpEntryPath).toContain(".kiro-fabric/runtime");
+    expect(manifest.runtime.mcpEntryPath).toContain(".fabric/runtime");
+  });
+
+  it("updates and uninstalls an attested pre-.fabric runtime without orphaning it", async () => {
+    const dir = project("legacy-runtime-migration");
+    const installed = await installWithFake(dir);
+    const paths = managedPaths(dir, "project");
+    mkdirSync(dirname(paths.legacyRuntimeDir), { recursive: true });
+    renameSync(paths.runtimeDir, paths.legacyRuntimeDir);
+
+    const relocate = <T>(value: T): T => JSON.parse(
+      JSON.stringify(value).replaceAll(".fabric/runtime", ".kiro/.kiro-fabric/runtime"),
+    ) as T;
+    const profile = relocate(JSON.parse(readFileSync(installed.profilePath, "utf8")));
+    const profileJson = serializeJson(profile);
+    writeFileSync(installed.profilePath, profileJson, { mode: 0o600 });
+    const manifest = relocate(JSON.parse(readFileSync(installed.manifestPath, "utf8"))) as {
+      profile: { installedSha256: string };
+    };
+    manifest.profile.installedSha256 = sha256Bytes(profileJson);
+    writeFileSync(installed.manifestPath, serializeJson(manifest), { mode: 0o600 });
+
+    expect(readManifest(dir, "project")?.runtime.closure?.root)
+      .toContain(".kiro/.kiro-fabric/runtime/");
+    const updated = await installWithFake(dir);
+    expect(updated.runtimeClosure?.mcpEntryPath).toContain(".fabric/runtime/");
+    const migrated = readManifest(dir, "project")!;
+    expect(migrated.runtime.generations?.map((generation) => generation.root))
+      .toEqual(expect.arrayContaining([
+        expect.stringContaining(".fabric/runtime/"),
+        expect.stringContaining(".kiro/.kiro-fabric/runtime/"),
+      ]));
+
+    uninstallKiroProfile({ projectRoot: dir });
+    expect(existsSync(paths.runtimeDir)).toBe(false);
+    expect(existsSync(paths.legacyRuntimeDir)).toBe(false);
+    expect(existsSync(dirname(paths.runtimeDir))).toBe(false);
   });
 
 

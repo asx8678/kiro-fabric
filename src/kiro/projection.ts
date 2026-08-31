@@ -47,8 +47,10 @@ export const projectFabricExecutionText = async (options: {
   maxOutputChars: number;
   /** Opaque artifact writer; Kiro supplies its process-local session store. */
   writeArtifact?: (content: string) => Promise<string>;
+  /** Model-facing retrieval hint (defaults to Strict's k.readArtifact). */
+  artifactReadHint?: (id: string) => string;
 }): Promise<FabricExecTextProjection> => {
-  const { result, code, resultFormat, maxOutputChars, writeArtifact } = options;
+  const { result, code, resultFormat, maxOutputChars, writeArtifact, artifactReadHint } = options;
   const outputBudget = modelOutputBudget(
     Math.min(maxOutputChars, KIRO_MODEL_OUTPUT_MAX_CHARS),
     result.success,
@@ -63,41 +65,53 @@ export const projectFabricExecutionText = async (options: {
       )
       .join("\n");
     const recoveryHint = typeErrorRecoveryHint(code, result.typeErrors);
+    const fullOutput = `Type errors; code was not executed:\n${text}${
+      recoveryHint ? `\n\n${recoveryHint}` : ""
+    }`;
     const bounded = await boundModelOutput(
-      `Type errors; code was not executed:\n${text}${
-        recoveryHint ? `\n\n${recoveryHint}` : ""
-      }`,
+      fullOutput,
       outputBudget,
+      fullOutput,
+      writeArtifact,
+      artifactReadHint,
     );
     return { text: bounded.text, isError: true };
   }
 
   const formatted = formatFabricValue(result.value, resultFormat, outputBudget);
+  const fullFormatted = formatFabricValue(result.value, resultFormat);
   const failureProgress = formatFailureProgress(
     result.trace as Parameters<typeof formatFailureProgress>[0],
   );
-  const sections = [...result.logs];
-  const visibleBeforeDiff = [...result.logs, formatted.text].filter(Boolean).join("\n\n");
-  if (formatted.text) {
-    sections.push(colorizeReturnedMutationDiffs(
-      formatted.text,
-      result.audits as Parameters<typeof colorizeReturnedMutationDiffs>[1],
-    ));
-  }
-  const mutationDiffs = formatMutationDiffs(
-    result.audits as Parameters<typeof formatMutationDiffs>[0],
-    visibleBeforeDiff,
-  );
-  if (mutationDiffs) sections.push(`Changes:\n${mutationDiffs}`);
-  if (result.error) sections.push(`Runtime error: ${result.error}`);
-  if (failureProgress) sections.push(failureProgress);
-  const rawOutput = sections.join("\n\n");
+  const renderOutput = (formattedText: string): string => {
+    const sections = [...result.logs];
+    const visibleBeforeDiff = [...result.logs, formattedText].filter(Boolean).join("\n\n");
+    if (formattedText) {
+      sections.push(colorizeReturnedMutationDiffs(
+        formattedText,
+        result.audits as Parameters<typeof colorizeReturnedMutationDiffs>[1],
+      ));
+    }
+    const mutationDiffs = formatMutationDiffs(
+      result.audits as Parameters<typeof formatMutationDiffs>[0],
+      visibleBeforeDiff,
+    );
+    if (mutationDiffs) sections.push(`Changes:\n${mutationDiffs}`);
+    if (result.error) sections.push(`Runtime error: ${result.error}`);
+    if (failureProgress) sections.push(failureProgress);
+    return sections.join("\n\n") || "(no output)";
+  };
+  const visibleOutput = renderOutput(formatted.text);
+  const fullOutput = fullFormatted.text === formatted.text
+    ? visibleOutput
+    : renderOutput(fullFormatted.text);
 
   const bounded = await boundModelOutput(
-    rawOutput || "(no output)",
+    visibleOutput,
     outputBudget,
-    rawOutput || "(no output)",
+    fullOutput,
     writeArtifact,
+    artifactReadHint,
   );
   return { text: bounded.text, isError: result.success ? false : true };
 };

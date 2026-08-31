@@ -304,6 +304,17 @@ describe("planKiroProfileInstall", () => {
     ).toThrow(/symlink/);
     expect(readFileSync(join(outside, "sentinel"), "utf8")).toBe("safe");
   });
+
+  it("refuses a symlink at the .fabric runtime root", () => {
+    const dir = project("runtime-link");
+    const outside = project("outside-runtime");
+    writeFileSync(join(outside, "sentinel"), "safe");
+    symlinkSync(outside, join(dir, ".fabric"));
+    expect(() =>
+      planKiroProfileInstall({ projectRoot: dir, mcpEntryPath: mcpEntry }),
+    ).toThrow(/symlink/);
+    expect(readFileSync(join(outside, "sentinel"), "utf8")).toBe("safe");
+  });
 });
 
 describe("installKiroProfile", () => {
@@ -727,7 +738,7 @@ describe("installKiroProfile", () => {
       createdAt: Date.now(),
       files: [
         {
-          path: ".kiro/.kiro-fabric/runtime/.closure-current",
+          path: ".fabric/runtime/.closure-current",
           transition: managedFileTransition(sha256Bytes(markerBefore), closure.digest + "\n"),
         },
         {

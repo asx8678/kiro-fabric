@@ -34,6 +34,7 @@ describe("published package policy", () => {
     expect(files).toContain("dist/kiro/cli-entry.js");
     expect(files).toContain("dist/kiro/mcp-entry.js");
     expect(files).toContain("dist/kiro/setup-entry.js");
+    expect(files).toContain("docs/kiro/power.md");
     expect(files).not.toContain("dist/worker.js");
     expect([...files].filter((file) => file.endsWith(".map"))).toEqual([]);
 

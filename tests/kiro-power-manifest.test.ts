@@ -19,4 +19,17 @@ describe("Agent Plugins 1.0.0 package", () => {
     const output = execFileSync(process.execPath, ["scripts/validate-power-package.mjs", "."], { encoding: "utf8" });
     expect(JSON.parse(output)).toMatchObject({ ok: true, version: "0.63.0", skills: 2 });
   });
+
+  it("does not advertise the unavailable Power agent provider", () => {
+    const plugin = JSON.parse(fs.readFileSync("plugin.json", "utf8")) as {
+      description: string;
+      keywords: string[];
+    };
+    const orchestration = fs.readFileSync("skills/fabric-orchestration/SKILL.md", "utf8");
+    const agentReference = fs.readFileSync("skills/fabric-exec/references/agents.md", "utf8");
+    expect([plugin.description, ...plugin.keywords].join(" ")).not.toMatch(/multi-agent|agent fan-out|ACP orchestration/i);
+    expect(orchestration).not.toContain("agents.run({");
+    expect(orchestration).toMatch(/current Power release does not\s+mount `agents\.\*`/i);
+    expect(agentReference).toMatch(/does not mount `agents\.\*`/i);
+  });
 });

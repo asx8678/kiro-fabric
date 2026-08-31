@@ -8,11 +8,12 @@ the Agent Plugins 1.0.0 package root (`plugin.json`, `mcp.json`, and immediate
 `fabric_exec`. It does not install or select a custom Kiro agent, so ordinary
 Kiro native tools and other Powers remain available.
 
-Use native Kiro reads, edits, shell, code intelligence, web tools, and simple
-native subagents for ordinary work. Use Fabric for checked programmable
-composition, independent fan-out and aggregation, branches/loops, Fabric
-memory/state, configured MCP federation, or qualified Kiro ACP children. The
-MCP process cannot call backward into outer Kiro native tools.
+Use native Kiro reads, edits, shell, code intelligence, web tools, and native
+subagents for ordinary work. Use Fabric for checked programmable composition,
+independent configured-provider fan-out and aggregation, branches/loops,
+Fabric memory/state, or configured MCP federation. The current Power release
+does not mount `agents.*`; the MCP process also cannot call backward into outer
+Kiro native tools.
 
 ## Local development import
 
@@ -37,10 +38,11 @@ is also a separate real-client certification lane and is not claimed here.
 
 ## Activation
 
-Narrow keywords cover `fabric_exec`, multi-agent orchestration, parallel agent
-workflows, fan-out, ACP orchestration, and programmable Fabric workflows. Do
-not activate Fabric for a single read, grep, edit, test, or shell command.
-Kiro may namespace the Power MCP server; guidance never assumes a fixed prefix.
+Narrow keywords cover `fabric_exec`, checked TypeScript workflows,
+programmable aggregation, state, memory, and configured MCP federation. Do not
+activate Fabric for a single read, grep, edit, test, shell command, or subagent
+call. Kiro may namespace the Power MCP server; guidance never assumes a fixed
+prefix.
 
 ## Workspace binding
 
@@ -55,14 +57,17 @@ persisted across MCP sessions.
 
 Before binding, only checked pure execution and safe Power-scoped capabilities
 are usable. Power mode intentionally does not mount `k.*`; native Kiro owns
-normal repository operations.
+normal repository operations. Truncated results remain process-local and can be
+read in a later call through `tools.call` with the returned `artifacts.read` ID.
 
 ## Data and security
 
 Package assets are immutable. Mutable directories are mode `0700` beneath
 `${PLUGIN_DATA}/fabric`; workspace directories use a stable SHA-256 identity
-rather than raw paths. Paths, environment values, credentials, ACP payloads,
-and private session IDs are omitted from `fabric_info`.
+rather than raw paths. Power configuration is loaded only from
+`${PLUGIN_DATA}/fabric/config`; ambient Pi configuration and Strict-only grants
+are ignored. Paths, environment values, credentials, ACP payloads, and private
+session IDs are omitted from `fabric_info`.
 
 Nested approvals use standards-compliant MCP elicitation only where the client
 advertises it. Requests are approve-once/deny, bounded, redacted, non-secret,
@@ -70,10 +75,11 @@ and cancellation-aware. Decline, dismiss, timeout, malformed response, or an
 unsupported client denies. The current real-Kiro elicitation path remains an
 explicit certification gate; unsupported paths retain Fabric's deny fallback.
 
-Optional Kiro ACP children require a separately qualified exact Kiro runtime.
-Failure or absence does not prevent the base Power from loading. `fabric_info`
-reports the omission. Internal children continue to use the hermetic Strict
-child profile and cannot recurse.
+Kiro ACP children are unavailable in the current Power release. `fabric_info`
+reports `kiroAcp.status: "unavailable"` and no `agents.*` provider is mounted.
+Use Kiro native subagents outside Fabric. ACP qualification remains a separate
+future release gate and its absence does not prevent the base Power from
+loading.
 
 ## Lifecycle and durability
 

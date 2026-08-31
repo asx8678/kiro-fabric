@@ -94,7 +94,7 @@ describe("host-neutral Kiro tools provider", () => {
 
   it("never traverses or mutates a protected managed release", async () => {
     const cwd = root();
-    const release = path.join(cwd, ".kiro", ".kiro-fabric", "runtime", "digest");
+    const release = path.join(cwd, ".fabric", "runtime", "digest");
     fs.mkdirSync(release, { recursive: true });
     fs.writeFileSync(path.join(release, "runtime.js"), "attested\n");
     const provider = new KiroToolsProvider(cwd, { protectedRoots: [release] });

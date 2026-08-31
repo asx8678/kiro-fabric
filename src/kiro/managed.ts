@@ -43,6 +43,8 @@ const LAYOUT = {
     manager: ".kiro/.kiro-fabric/bin/kiro-fabric",
     agentsDir: ".kiro/agents",
     skillsDir: ".kiro/skills",
+    runtimeDir: ".fabric/runtime",
+    legacyRuntimeDir: ".kiro/.kiro-fabric/runtime",
   },
   user: {
     profile: "agents/kiro-fabric.json",
@@ -54,6 +56,8 @@ const LAYOUT = {
     manager: ".kiro-fabric/bin/kiro-fabric",
     agentsDir: "agents",
     skillsDir: "skills",
+    runtimeDir: ".fabric/runtime",
+    legacyRuntimeDir: ".kiro-fabric/runtime",
   },
 } as const;
 
@@ -159,6 +163,8 @@ export interface ManagedPaths {
   agentsDir: string;
   skillsDir: string;
   runtimeDir: string;
+  /** Pre-.fabric runtime location accepted for update/uninstall compatibility. */
+  legacyRuntimeDir: string;
 }
 
 export const sha256Bytes = (bytes: Buffer | string): string =>
@@ -196,7 +202,8 @@ export const managedPaths = (
     manager: join(root, ...spec.manager.split("/")),
     agentsDir: join(root, ...spec.agentsDir.split("/")),
     skillsDir: join(root, ...spec.skillsDir.split("/")),
-    runtimeDir: join(root, ...spec.manifestDir.split("/"), "runtime"),
+    runtimeDir: join(root, ...spec.runtimeDir.split("/")),
+    legacyRuntimeDir: join(root, ...spec.legacyRuntimeDir.split("/")),
   };
 };
 
@@ -259,6 +266,7 @@ export const assertManagedTree = (
     paths.backupDir,
     paths.skillsDir,
     paths.runtimeDir,
+    paths.legacyRuntimeDir,
     paths.lock,
     paths.transaction,
     paths.manager,
@@ -449,13 +457,15 @@ export const readManifest = (
     if (!isRecord(parsed.runtime.closure) || !isSha256Hex(parsed.runtime.closure.digest) || typeof parsed.runtime.closure.root !== "string") {
       throw new KiroInstallError("manifest", "install manifest runtime closure attestation is malformed");
     }
-    const runtimeRoot = relative(root, join(paths.manifestDir, "runtime", parsed.runtime.closure.digest))
-      .split(sep).join("/");
-    if (parsed.runtime.closure.root !== runtimeRoot) {
+    const closureDigest = parsed.runtime.closure.digest;
+    const runtimeRoot = parsed.runtime.closure.root;
+    const managedRuntimeRoots = [paths.runtimeDir, paths.legacyRuntimeDir]
+      .map((runtimeDir) => relative(root, join(runtimeDir, closureDigest)).split(sep).join("/"));
+    if (!managedRuntimeRoots.includes(runtimeRoot)) {
       throw new KiroInstallError("manifest", "install manifest runtime closure root is not managed");
     }
     closure = {
-      digest: parsed.runtime.closure.digest,
+      digest: closureDigest,
       root: runtimeRoot,
       files: parseOwnedFiles(
         parsed.runtime.closure.files,
@@ -503,23 +513,30 @@ export const readManifest = (
     } else if (!Array.isArray(rawGenerations) || rawGenerations.length === 0) {
       throw new KiroInstallError("manifest", "install manifest runtime generations are malformed");
     } else {
-      generations = rawGenerations.map((generation) => {
-        if (!isRecord(generation) || !isSha256Hex(generation.digest)) {
+      const parsedGenerations = rawGenerations.map((generation): KiroRuntimeClosureManifest => {
+        if (!isRecord(generation) || !isSha256Hex(generation.digest) || typeof generation.root !== "string") {
           throw new KiroInstallError("manifest", "install manifest runtime generation is malformed");
         }
-        const generationRoot = relative(root, join(paths.manifestDir, "runtime", generation.digest))
-          .split(sep).join("/");
-        if (generation.root !== generationRoot) {
+        const generationDigest = generation.digest;
+        const generationRoot = generation.root;
+        const managedGenerationRoots = [paths.runtimeDir, paths.legacyRuntimeDir]
+          .map((runtimeDir) => relative(root, join(runtimeDir, generationDigest)).split(sep).join("/"));
+        if (!managedGenerationRoots.includes(generationRoot)) {
           throw new KiroInstallError("manifest", "install manifest runtime generation root is not managed");
         }
         return {
-          digest: generation.digest,
+          digest: generationDigest,
           root: generationRoot,
           files: parseOwnedFiles(generation.files, root, layout, generationRoot + "/", false),
         };
       });
-      const digests = generations.map((generation) => generation.digest);
-      if (new Set(digests).size !== digests.length || !digests.includes(closure.digest)) {
+      generations = parsedGenerations;
+      const roots = parsedGenerations.map((generation) => generation.root);
+      if (
+        new Set(roots).size !== roots.length ||
+        !parsedGenerations.some((generation) =>
+          generation.digest === closure!.digest && generation.root === closure!.root)
+      ) {
         throw new KiroInstallError("manifest", "install manifest runtime generation ownership is inconsistent");
       }
     }
@@ -928,6 +945,7 @@ const transactionRelativePath = (
     relative(root, paths.profile).split(sep).join("/"),
     relative(root, paths.manifest).split(sep).join("/"),
     relative(root, join(paths.runtimeDir, ".closure-current")).split(sep).join("/"),
+    relative(root, join(paths.legacyRuntimeDir, ".closure-current")).split(sep).join("/"),
   ]);
   const skillsPrefix = relative(root, paths.skillsDir).split(sep).join("/") + "/fabric-";
   if (!allowedLeaves.has(value) && !value.startsWith(skillsPrefix)) {

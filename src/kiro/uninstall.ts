@@ -30,7 +30,7 @@ import { resolveKiroInstallRoots } from "./home.js";
 import {
   removeAttestedRuntimeClosure,
   removeRuntimeActivationMarker,
-  runtimeClosurePath,
+  runtimeClosureMarkerPath,
   verifyRuntimeClosureAttestation,
 } from "./runtime-closure.js";
 
@@ -149,22 +149,32 @@ export const planKiroProfileUninstall = (
   });
   if (manifest.runtime.closure) {
     const generations = manifest.runtime.generations ?? [manifest.runtime.closure];
+    const markerOwners = new Map<string, typeof generations>();
     for (const generation of generations) {
       const generationRoot = join(installRoot, ...generation.root.split("/"));
       if (existsSync(generationRoot)) verifyRuntimeClosureAttestation(installRoot, generation);
       else ownershipWarnings.push("recorded runtime generation is already absent: " + generation.digest);
+      const marker = runtimeClosureMarkerPath(installRoot, layout, generation);
+      markerOwners.set(marker, [...(markerOwners.get(marker) ?? []), generation]);
     }
+    const activeMarker = runtimeClosureMarkerPath(installRoot, layout, manifest.runtime.closure);
     const activeRoot = join(installRoot, ...manifest.runtime.closure.root.split("/"));
-    const marker = join(runtimeClosurePath(installRoot, layout), ".closure-current");
-    const markerStat = lstatOrNull(marker);
-    if (markerStat && (
-      markerStat.isSymbolicLink() || !markerStat.isFile() ||
-      readFileSync(marker, "utf8").trim() !== manifest.runtime.closure.digest
-    )) {
-      throw new KiroInstallError("ownership", "runtime closure marker does not match manifest");
-    }
-    if (existsSync(activeRoot) && !markerStat) {
-      throw new KiroInstallError("ownership", "runtime closure marker does not match manifest");
+    for (const [marker, owners] of markerOwners) {
+      const markerStat = lstatOrNull(marker);
+      if (markerStat && (markerStat.isSymbolicLink() || !markerStat.isFile())) {
+        throw new KiroInstallError("ownership", "runtime closure marker does not match manifest");
+      }
+      const markerDigest = markerStat ? readFileSync(marker, "utf8").trim() : undefined;
+      if (markerDigest && !owners.some((owner) => owner.digest === markerDigest)) {
+        throw new KiroInstallError("ownership", "runtime closure marker is not owned by the manifest");
+      }
+      if (
+        marker === activeMarker &&
+        existsSync(activeRoot) &&
+        markerDigest !== manifest.runtime.closure.digest
+      ) {
+        throw new KiroInstallError("ownership", "runtime closure marker does not match manifest");
+      }
     }
   }
   const ownedState = { warnings: ownershipWarnings, skills, manifest };
@@ -320,14 +330,24 @@ const commitUninstall = (plan: KiroUninstallPlan): string[] => {
   // from any generations already absent. Cleanup errors are fatal.
   if (plan.manifest?.runtime.closure) {
     const generations = plan.manifest.runtime.generations ?? [plan.manifest.runtime.closure];
+    const markers = new Map<string, { digest: string; owner: (typeof generations)[number] }>();
+    for (const generation of generations) {
+      const marker = runtimeClosureMarkerPath(plan.installRoot, plan.layout, generation);
+      const markerStat = lstatOrNull(marker);
+      if (!markerStat) continue;
+      const digest = readFileSync(marker, "utf8").trim();
+      const owner = generations.find((candidate) =>
+        runtimeClosureMarkerPath(plan.installRoot, plan.layout, candidate) === marker &&
+        candidate.digest === digest);
+      if (!owner) throw new KiroInstallError("ownership", "runtime closure marker is not owned by the manifest");
+      markers.set(marker, { digest, owner });
+    }
     for (const generation of generations) {
       removeAttestedRuntimeClosure(plan.installRoot, plan.layout, generation);
     }
-    removeRuntimeActivationMarker(
-      plan.installRoot,
-      plan.layout,
-      plan.manifest.runtime.closure.digest,
-    );
+    for (const { digest, owner } of markers.values()) {
+      removeRuntimeActivationMarker(plan.installRoot, plan.layout, digest, owner);
+    }
   }
 
   const currentManifest = readManagedFileNoFollow(plan.installRoot, plan.manifestPath);
@@ -387,6 +407,9 @@ const commitUninstall = (plan: KiroUninstallPlan): string[] => {
 
 const cleanupEmptyManagedDirs = (root: string, layout: KiroManagedLayout): void => {
   const paths = managedPaths(root, layout);
+  rmdirIfEmpty(paths.runtimeDir);
+  rmdirIfEmpty(dirname(paths.runtimeDir));
+  rmdirIfEmpty(paths.legacyRuntimeDir);
   rmdirIfEmpty(paths.skillsDir);
   rmdirIfEmpty(paths.backupDir);
   rmdirIfEmpty(paths.manifestDir);
