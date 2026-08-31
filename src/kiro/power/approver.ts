@@ -39,7 +39,8 @@ export class KiroPowerApprover {
     summary: string;
     signal?: AbortSignal;
   }): Promise<boolean> {
-    if (!this.adapter.supported() || request.signal?.aborted) return false;
+    request.signal?.throwIfAborted();
+    if (!this.adapter.supported()) return false;
     try {
       const result = await this.adapter.request({
         title: "Approve one Fabric action",
@@ -47,8 +48,13 @@ export class KiroPowerApprover {
         ...(request.signal ? { signal: request.signal } : {}),
         timeoutMs: this.timeoutMs,
       });
-      return !request.signal?.aborted && result.action === "accept" && result.approved === true;
+      request.signal?.throwIfAborted();
+      return result.action === "accept" && result.approved === true;
     } catch {
+      // Cancellation is control flow, not a policy denial. Preserve the abort
+      // reason so MCP callers can distinguish cancellation from a rejected
+      // approval while still treating transport/malformed outcomes as denial.
+      if (request.signal?.aborted) request.signal.throwIfAborted();
       return false;
     }
   }

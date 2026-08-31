@@ -211,6 +211,36 @@ describe("Kiro Power security boundaries", () => {
     await expect(Promise.resolve().then(() => binding.commitMutation(prepared))).rejects.toThrow("changed");
   });
 
+  it("binds manual approval to the approved filesystem object", async () => {
+    const root = temp(); const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data"); const workspace = path.join(root, "workspace");
+    for (const dir of [pluginRoot, pluginData, workspace]) fs.mkdirSync(dir);
+    let release!: (approved: boolean) => void;
+    const binding = new KiroPowerWorkspaceBinding({
+      pluginRoot,
+      pluginData,
+      elicitor: { approveWorkspace: () => new Promise((resolve) => { release = resolve; }) },
+    });
+    const pending = binding.prepareMutation({ action: "attach", path: workspace });
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    fs.renameSync(workspace, `${workspace}.approved`);
+    fs.mkdirSync(workspace);
+    release(true);
+    const mutation = await pending;
+    expect(() => binding.commitMutation(mutation)).toThrow(/identity changed after approval/i);
+    expect(binding.status().status).toBe("unbound");
+  });
+
+  it("does not detach as a side effect of observing an unavailable bound workspace", async () => {
+    const root = temp(); const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data"); const workspace = path.join(root, "workspace");
+    for (const dir of [pluginRoot, pluginData, workspace]) fs.mkdirSync(dir);
+    const binding = new KiroPowerWorkspaceBinding({ pluginRoot, pluginData });
+    binding.updateClientRoots([{ uri: pathToFileURL(workspace).href }]);
+    fs.renameSync(workspace, `${workspace}.temporarily-moved`);
+    expect(binding.boundWorkspace()).toBeUndefined();
+    fs.renameSync(`${workspace}.temporarily-moved`, workspace);
+    expect(binding.boundWorkspace()?.canonicalPath).toBe(workspace);
+  });
+
   it("treats an attachment to the current identity as a stable no-op", async () => {
     const root = temp(); const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data"); const workspace = path.join(root, "workspace");
     for (const dir of [pluginRoot, pluginData, workspace]) fs.mkdirSync(dir);
@@ -258,6 +288,12 @@ describe("Kiro Power security boundaries", () => {
 
     const deny = new KiroPowerApprover({ supported: () => false, request });
     await expect(deny.approveOnce({ risk: "write", provider: "x", action: "y", summary: "z" })).resolves.toBe(false);
+
+    const controller = new AbortController();
+    controller.abort(new Error("caller cancelled"));
+    await expect(approver.approveOnce({
+      risk: "write", provider: "x", action: "y", summary: "z", signal: controller.signal,
+    })).rejects.toThrow("caller cancelled");
   });
 
   it("shows the exact workspace as dot and recognizes standard form elicitation", async () => {

@@ -40,6 +40,8 @@ export class CachedWorkspaceContextProvider implements WorkspaceContextProvider 
   #snapshot: KiroWorkspaceSnapshot | undefined;
   #stale = true;
   #refresh: Promise<KiroWorkspaceSnapshot> | undefined;
+  #refreshGeneration = -1;
+  #invalidationGeneration = 0;
   #revision = 0;
 
   constructor(
@@ -53,6 +55,7 @@ export class CachedWorkspaceContextProvider implements WorkspaceContextProvider 
 
   invalidate(): void {
     this.#stale = true;
+    this.#invalidationGeneration++;
   }
 
   subscribe(listener: (snapshot: KiroWorkspaceSnapshot) => void): { dispose(): void } {
@@ -68,12 +71,22 @@ export class CachedWorkspaceContextProvider implements WorkspaceContextProvider 
     ) {
       return this.#snapshot;
     }
-    if (this.#refresh) return this.#refresh;
-    this.#refresh = this.#load(now).finally(() => { this.#refresh = undefined; });
+    if (this.#refresh) {
+      if (!options.force || this.#refreshGeneration === this.#invalidationGeneration) {
+        return this.#refresh;
+      }
+      // A roots-changed notification arrived during discovery. Serialize a
+      // second load after the old one so its late result cannot consume the
+      // invalidation or overwrite fresher roots.
+      return this.#refresh.then(() => this.current({ force: true }));
+    }
+    const generation = this.#invalidationGeneration;
+    this.#refreshGeneration = generation;
+    this.#refresh = this.#load(now, generation).finally(() => { this.#refresh = undefined; });
     return this.#refresh;
   }
 
-  async #load(observedAt: number): Promise<KiroWorkspaceSnapshot> {
+  async #load(observedAt: number, generation: number): Promise<KiroWorkspaceSnapshot> {
     try {
       const roots = this.#source.supported() ? [...await this.#source.load()] : [];
       const snapshot: KiroWorkspaceSnapshot = {
@@ -82,7 +95,7 @@ export class CachedWorkspaceContextProvider implements WorkspaceContextProvider 
         roots,
         observedAt,
       };
-      this.#stale = false;
+      this.#stale = generation !== this.#invalidationGeneration;
       this.#publish(snapshot);
       return snapshot;
     } catch (error) {

@@ -35,7 +35,7 @@ interface Candidate { id: string; root: string; name: string; dev: bigint; ino: 
 interface Binding extends Candidate { source: "client-roots" | "manual" }
 export type KiroPowerWorkspaceMutation =
   | { action: "select"; rootId: string }
-  | { action: "attach"; root: string }
+  | { action: "attach"; root: string; dev: bigint; ino: bigint }
   | { action: "detach" };
 
 export interface KiroPowerBoundWorkspace extends KiroPowerWorkspaceIdentity {
@@ -51,6 +51,8 @@ export class KiroPowerWorkspaceBinding {
   readonly #pluginRoot: string;
   readonly #pluginData: string;
   readonly #elicitor: KiroPowerElicitor | undefined;
+  readonly #home: string;
+  readonly #kiroHome: string;
   #candidates: Candidate[] = [];
   #binding: Binding | undefined;
   #initialAutoBindAllowed = true;
@@ -59,6 +61,8 @@ export class KiroPowerWorkspaceBinding {
     this.#pluginRoot = options.pluginRoot;
     this.#pluginData = options.pluginData;
     this.#elicitor = options.elicitor;
+    this.#home = realpathSync(os.homedir());
+    this.#kiroHome = path.join(this.#home, ".kiro");
   }
 
   #canonical(candidate: string): Candidate {
@@ -71,12 +75,10 @@ export class KiroPowerWorkspaceBinding {
     }
     const stats = statSync(root, { bigint: true });
     if (!stats.isDirectory()) throw new Error("workspace root must be an existing directory");
-    const home = realpathSync(os.homedir());
-    const kiroHome = path.join(home, ".kiro");
-    const kiroRelative = path.relative(kiroHome, root);
+    const kiroRelative = path.relative(this.#kiroHome, root);
     const insideKiroHome = kiroRelative === "" ||
       (kiroRelative !== ".." && !kiroRelative.startsWith(`..${path.sep}`) && !path.isAbsolute(kiroRelative));
-    const unsafe = [path.parse(root).root, home, this.#pluginRoot, this.#pluginData];
+    const unsafe = [path.parse(root).root, this.#home, this.#pluginRoot, this.#pluginData];
     if (unsafe.includes(root) || insideKiroHome) {
       throw new Error("workspace root is too broad or reserved");
     }
@@ -103,9 +105,12 @@ export class KiroPowerWorkspaceBinding {
       } catch { /* invalid roots are unavailable, never broadened */ }
     }
     this.#candidates = [...new Map(candidates.map((entry) => [entry.id, entry])).values()];
-    if (this.#binding?.source === "client-roots" && !this.#candidates.some((entry) => entry.id === this.#binding!.id)) {
-      this.#binding = undefined;
-      this.#initialAutoBindAllowed = false;
+    if (this.#binding?.source === "client-roots") {
+      const current = this.#candidates.find((entry) => entry.id === this.#binding!.id);
+      if (!current || current.dev !== this.#binding.dev || current.ino !== this.#binding.ino) {
+        this.#binding = undefined;
+        this.#initialAutoBindAllowed = false;
+      }
     }
     if (this.#candidates.length > 1) this.#initialAutoBindAllowed = false;
     if (!this.#binding && this.#initialAutoBindAllowed && this.#candidates.length === 1) {
@@ -130,8 +135,8 @@ export class KiroPowerWorkspaceBinding {
         source: binding.source,
       };
     } catch {
-      this.#binding = undefined;
-      this.#initialAutoBindAllowed = false;
+      // Observation is deliberately non-destructive. A transient filesystem
+      // failure must not turn status/list into an implicit detach operation.
       return undefined;
     }
   }
@@ -162,10 +167,14 @@ export class KiroPowerWorkspaceBinding {
     }
     const candidate = this.#canonical(request.path);
     if (!this.#elicitor) throw new Error("manual workspace attachment requires MCP elicitation support");
-    if (signal?.aborted || !(await this.#elicitor.approveWorkspace(candidate.root, signal)) || signal?.aborted) {
-      throw new Error("manual workspace attachment was not approved");
-    }
-    return { action: "attach", root: candidate.root };
+    signal?.throwIfAborted();
+    const approved = await this.#elicitor.approveWorkspace(candidate.root, signal);
+    signal?.throwIfAborted();
+    if (!approved) throw new Error("manual workspace attachment was not approved");
+    // Bind approval to the exact filesystem object that was presented. The
+    // pathname alone is insufficient because it can be replaced while the
+    // elicitation dialog is open.
+    return { action: "attach", root: candidate.root, dev: candidate.dev, ino: candidate.ino };
   }
 
   commitMutation(mutation: KiroPowerWorkspaceMutation): ReturnType<KiroPowerWorkspaceBinding["status"]> {
@@ -181,6 +190,9 @@ export class KiroPowerWorkspaceBinding {
       this.#binding = { ...candidate, source: "client-roots" };
     } else {
       const candidate = this.#canonical(mutation.root);
+      if (candidate.dev !== mutation.dev || candidate.ino !== mutation.ino) {
+        throw new Error("workspace root identity changed after approval; attach and approve again");
+      }
       this.#binding = { ...candidate, source: "manual" };
     }
     this.#initialAutoBindAllowed = false;

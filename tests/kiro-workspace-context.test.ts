@@ -27,6 +27,29 @@ describe("CachedWorkspaceContextProvider", () => {
     expect(load).toHaveBeenCalledTimes(3);
   });
 
+  it("does not lose an invalidation that arrives during an in-flight refresh", async () => {
+    let release!: (roots: readonly KiroWorkspaceRoot[]) => void;
+    const first = new Promise<readonly KiroWorkspaceRoot[]>((resolve) => { release = resolve; });
+    const load = vi.fn()
+      .mockImplementationOnce(() => first)
+      .mockResolvedValueOnce([{ uri: "file:///new-workspace" }]);
+    const provider = new CachedWorkspaceContextProvider({ supported: () => true, load });
+
+    const oldRefresh = provider.current();
+    provider.invalidate();
+    const forcedRefresh = provider.current({ force: true });
+    release([{ uri: "file:///old-workspace" }]);
+
+    await expect(oldRefresh).resolves.toMatchObject({ roots: [{ uri: "file:///old-workspace" }] });
+    await expect(forcedRefresh).resolves.toMatchObject({
+      revision: 2,
+      roots: [{ uri: "file:///new-workspace" }],
+    });
+    expect(load).toHaveBeenCalledTimes(2);
+    await provider.current();
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it("distinguishes explicit empty roots from transient failure", async () => {
     let fail = false;
     let roots: KiroWorkspaceRoot[] = [{ uri: "file:///workspace" }];

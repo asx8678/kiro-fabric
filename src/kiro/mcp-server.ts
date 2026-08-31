@@ -18,7 +18,7 @@ import {
   type FabricExecInput,
 } from "../kernel/fabric-exec-contract.js";
 import { normalizeRunDisplay } from "../run-display.js";
-import { KIRO_MCP_CALL_TIMEOUT_MS } from "./deadlines.js";
+import { KIRO_MCP_CALL_TIMEOUT_MS, KIRO_MCP_DRAIN_TIMEOUT_MS } from "./deadlines.js";
 import type { KiroIntegrationMode } from "./integration-mode.js";
 import { readPackageVersion } from "./managed.js";
 import { KiroPowerApprover } from "./power/approver.js";
@@ -140,7 +140,19 @@ export const createKiroMcpServer = async (
   const drainActive = async (reason: Error): Promise<void> => {
     const executions = [...active];
     for (const execution of executions) execution.controller.abort(reason);
-    await Promise.allSettled(executions.map((execution) => execution.settled));
+    if (executions.length === 0) return;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        Promise.allSettled(executions.map((execution) => execution.settled)),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, KIRO_MCP_DRAIN_TIMEOUT_MS);
+          timer.unref?.();
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   };
   const closeRuntime = async (): Promise<void> => {
     const current = runtime;
@@ -220,7 +232,9 @@ export const createKiroMcpServer = async (
     workspaceSnapshot?.status === "temporarily-unavailable" &&
     binding?.boundWorkspace()?.source === "client-roots";
 
-  const createRuntime = async (): Promise<KiroRuntime> => {
+  const createRuntime = async (
+    powerWorkspace?: KiroPowerBoundWorkspace,
+  ): Promise<KiroRuntime> => {
     if (integration !== "power") {
       return prepareKiroRuntime({
         cwd: options.cwd!,
@@ -229,12 +243,11 @@ export const createKiroMcpServer = async (
         ...(options.enableSubagents ? { enableSubagents: true } : {}),
       });
     }
-    const bound = binding!.boundWorkspace();
-    const project = bound
-      ? prepareKiroPowerProjectPaths(data!.projects, bound)
+    const project = powerWorkspace
+      ? prepareKiroPowerProjectPaths(data!.projects, powerWorkspace)
       : undefined;
     return prepareKiroRuntime({
-      cwd: bound?.canonicalPath ?? data!.root,
+      cwd: powerWorkspace?.canonicalPath ?? data!.root,
       integration: "power",
       agentDir: data!.config,
       powerMcpConfigPath: data!.mcpConfig,
@@ -244,12 +257,13 @@ export const createKiroMcpServer = async (
   };
 
   const runtimeForCurrentIdentity = async (): Promise<KiroRuntime> => {
+    const powerWorkspace = integration === "power" ? binding!.boundWorkspace() : undefined;
     const identity = integration === "power"
-      ? identityKey(binding!.boundWorkspace())
+      ? identityKey(powerWorkspace)
       : options.cwd!;
     if (runtime && runtimeIdentity === identity) return runtime;
     await closeRuntime();
-    runtime = await createRuntime();
+    runtime = await createRuntime(powerWorkspace);
     runtimeIdentity = identity;
     return runtime;
   };
@@ -282,10 +296,18 @@ export const createKiroMcpServer = async (
       ...(providers.has("mcp") ? ["mcp-federation"] : []),
     ];
   };
-  const reportWorkspace = async (result: unknown): Promise<unknown> => ({
-    ...(result as object),
-    capabilities: registryCapabilities(await getRuntime()),
-  });
+  const reportWorkspace = (result: unknown): unknown => {
+    const identity = identityKey(binding!.boundWorkspace());
+    return {
+      ...(result as object),
+      // Read-only status/list must not initialize a heavyweight runtime. Only
+      // report capabilities that have actually been observed for this exact
+      // binding; fabric_info is the explicit runtime probe.
+      ...(runtime && runtimeIdentity === identity
+        ? { capabilities: registryCapabilities(runtime) }
+        : {}),
+    };
+  };
 
   const handleWorkspace = async (
     request: KiroPowerWorkspaceRequest,
@@ -370,40 +392,41 @@ export const createKiroMcpServer = async (
     if (integration === "power") await syncWorkspaceContext();
     const name = request.params.name;
     if (integration === "power" && name === "fabric_info") {
-      if (Object.keys(request.params.arguments ?? {}).length) {
+      try {
+        if (Object.keys(request.params.arguments ?? {}).length) {
+          return publicToolError("invalid_info_arguments", "fabric_info accepts no arguments");
+        }
+        const status = binding!.status();
+        const current = await getRuntime();
+        const capabilities = registryCapabilities(current);
         return {
-          content: [{ type: "text" as const, text: "fabric_info accepts no arguments" }],
-          isError: true,
-        };
-      }
-      const status = binding!.status();
-      const current = await getRuntime();
-      const capabilities = registryCapabilities(current);
-      return {
-        content: [{
-          type: "text" as const,
-          text: JSON.stringify({
-            integration: "power",
-            version,
-            runtime: { quickjs: "available" },
-            workspace: {
-              ...status,
-              capabilities,
-              context: {
-                status: workspaceSnapshot?.status ?? "temporarily-unavailable",
-                revision: workspaceSnapshot?.revision ?? 0,
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              integration: "power",
+              version,
+              runtime: { executor: current.service.config.executor.runtime },
+              workspace: {
+                ...status,
+                capabilities,
+                context: {
+                  status: workspaceSnapshot?.status ?? "temporarily-unavailable",
+                  revision: workspaceSnapshot?.revision ?? 0,
+                },
               },
-            },
-            kiroAcp: {
-              status: "unavailable",
-              agents: false,
-              reason: "real Kiro ACP qualification is a separate fail-closed gate",
-            },
-            capabilities,
-            durability: { guaranteedAcrossPowerDeactivation: false },
-          }),
-        }],
-      };
+              kiroAcp: {
+                status: "unavailable",
+                agents: false,
+                reason: "real Kiro ACP qualification is a separate fail-closed gate",
+              },
+              capabilities,
+              durability: { guaranteedAcrossPowerDeactivation: false },
+            }),
+          }],
+        };
+      } catch (error) {
+        return publicToolError("info_request_failed", error);
+      }
     }
     if (integration === "power" && name === "fabric_workspace") {
       try {
