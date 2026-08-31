@@ -897,7 +897,8 @@ describe("management CLI", () => {
       "--json",
     ])).rejects.toMatchObject({
       code: 2,
-      stderr: expect.stringContaining("--subagents requires --allow-shell"),
+      stdout: expect.stringContaining("--subagents requires --allow-shell"),
+      stderr: "",
     });
   });
 
@@ -966,6 +967,11 @@ describe("user-home Kiro install", () => {
   });
 
   it("rejects --kiro-home without --user", async () => {
+    let stdout = "";
+    vi.spyOn(process.stdout, "write").mockImplementation(((chunk: unknown) => {
+      stdout += String(chunk);
+      return true;
+    }) as never);
     const code = await runKiroCli([
       "install",
       "kiro",
@@ -974,5 +980,9 @@ describe("user-home Kiro install", () => {
       "--json",
     ]);
     expect(code).toBe(2);
+    expect(JSON.parse(stdout)).toMatchObject({
+      ok: false,
+      error: { code: "usage", message: "--kiro-home requires --user" },
+    });
   });
 });

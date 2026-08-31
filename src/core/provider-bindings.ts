@@ -34,6 +34,7 @@ export class FabricProviderBindings {
   readonly #all = new Map<string, FabricProviderBinding>();
   readonly #generations = new Map<string, number>();
   readonly #listeners = new Set<(event: FabricProviderBindingEvent) => void>();
+  readonly #closeWaiters = new Map<string, { promise: Promise<void>; resolve(): void }>();
 
   subscribe(listener: (event: FabricProviderBindingEvent) => void): () => void {
     this.#listeners.add(listener);
@@ -84,6 +85,9 @@ export class FabricProviderBindings {
       retainers: 0,
       inFlight: 0,
     };
+    let resolveClosed!: () => void;
+    const closed = new Promise<void>((resolve) => { resolveClosed = resolve; });
+    this.#closeWaiters.set(binding.id, { promise: closed, resolve: resolveClosed });
     if (provider.subscribeCatalog) {
       binding.unsubscribeCatalog = provider.subscribeCatalog(() =>
         this.notifyCatalogChanged(provider.name),
@@ -221,12 +225,15 @@ export class FabricProviderBindings {
         delete binding.unsubscribeCatalog;
         binding.state = "closed";
         this.#all.delete(binding.id);
+        this.#resolveClosed(binding.id);
         continue;
       }
+      const waiter = this.#closeWaiters.get(binding.id);
       this.retire(binding.id);
       binding.ownerRetained = false;
       binding.retainers = 0;
-      tasks.push(this.#maybeClose(binding));
+      void this.#maybeClose(binding).catch(() => undefined);
+      if (waiter) tasks.push(waiter.promise);
     }
     await Promise.allSettled(tasks);
     this.#current.clear();
@@ -274,9 +281,17 @@ export class FabricProviderBindings {
         binding.state = "closed";
         this.#all.delete(binding.id);
         this.#emit({ type: "closed", binding: snapshot(binding) });
+        this.#resolveClosed(binding.id);
       }
     })();
     return binding.closeTask;
+  }
+
+  #resolveClosed(id: string): void {
+    const waiter = this.#closeWaiters.get(id);
+    if (!waiter) return;
+    this.#closeWaiters.delete(id);
+    waiter.resolve();
   }
 
   #emit(event: FabricProviderBindingEvent): void {

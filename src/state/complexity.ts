@@ -297,6 +297,8 @@ const languageComplexities: readonly LanguageComplexity[] = [
   typeScriptJavaScriptComplexity,
 ];
 
+export const MAX_COMPLEXITY_FILE_BYTES = 2 * 1024 * 1024;
+
 const complexityForFile = (
   file: string,
   languages: readonly LanguageComplexity[] = languageComplexities,
@@ -305,14 +307,54 @@ const complexityForFile = (
   return languages.find((language) => language.extensions.includes(extension));
 };
 
+const containedBy = (root: string, candidate: string): boolean => {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+};
+
 export const countFileComplexity = (
-  file: string,
+  requestedFile: string,
+  root?: string,
 ): FileComplexity | undefined => {
-  const language = complexityForFile(file);
+  const language = complexityForFile(requestedFile);
   if (!language) return undefined;
-  return {
+  const requestedStats = fs.lstatSync(requestedFile);
+  if (requestedStats.isSymbolicLink()) {
+    throw new Error(`State complexity input must not be a symlink: ${requestedFile}`);
+  }
+  const file = fs.realpathSync(requestedFile);
+  if (root && !containedBy(fs.realpathSync(root), file)) {
+    throw new Error(`State complexity file resolves outside the project cwd: ${requestedFile}`);
+  }
+  const lexical = fs.lstatSync(file);
+  if (!lexical.isFile() || lexical.isSymbolicLink()) {
+    throw new Error(`State complexity input must be a regular non-symlink file: ${requestedFile}`);
+  }
+  if (lexical.size > MAX_COMPLEXITY_FILE_BYTES) {
+    throw new Error(`State complexity input exceeds ${MAX_COMPLEXITY_FILE_BYTES} bytes: ${requestedFile}`);
+  }
+  const descriptor = fs.openSync(
     file,
-    language: language.language,
-    count: language.count(fs.readFileSync(file, "utf8")),
-  };
+    fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0),
+  );
+  try {
+    const opened = fs.fstatSync(descriptor);
+    if (!opened.isFile() || opened.dev !== lexical.dev || opened.ino !== lexical.ino) {
+      throw new Error(`State complexity input changed during validation: ${requestedFile}`);
+    }
+    if (opened.size > MAX_COMPLEXITY_FILE_BYTES) {
+      throw new Error(`State complexity input exceeds ${MAX_COMPLEXITY_FILE_BYTES} bytes: ${requestedFile}`);
+    }
+    return {
+      file: requestedFile,
+      language: language.language,
+      count: language.count(fs.readFileSync(descriptor, "utf8")),
+    };
+  } finally {
+    fs.closeSync(descriptor);
+  }
 };

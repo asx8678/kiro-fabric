@@ -5,101 +5,162 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+const SHUTDOWN_GRACE_MS = 5_000;
+
 export const startKiroMcpServer = async (): Promise<{ close(): Promise<void> }> => {
   const { createKiroMcpServer } = await import("./mcp-server.js");
   const { resolveKiroMcpLaunchEnvironment } = await import("./mcp-environment.js");
   const { parseKiroChildToolsEnv } = await import("./run-scope.js");
   const launch = resolveKiroMcpLaunchEnvironment();
-  const server = await createKiroMcpServer(launch.mode === "power"
-    ? { integration: "power", pluginRoot: launch.pluginRoot, pluginData: launch.pluginData }
+  return createKiroMcpServer(launch.mode === "power"
+    ? {
+        integration: "power",
+        pluginRoot: launch.pluginRoot,
+        pluginData: launch.pluginData,
+      }
     : {
         integration: launch.mode,
         cwd: launch.cwd,
-        ...(launch.mode === "internal-child" ? { tools: parseKiroChildToolsEnv(launch.toolsEnv) } : {}),
-        ...(launch.mode === "strict" && /^1$/i.test(process.env.KIRO_FABRIC_ENABLE_SUBAGENTS ?? "") ? { enableSubagents: true } : {}),
+        ...(launch.mode === "internal-child"
+          ? { tools: parseKiroChildToolsEnv(launch.toolsEnv) }
+          : {}),
+        ...(launch.mode === "strict" &&
+        /^1$/i.test(process.env.KIRO_FABRIC_ENABLE_SUBAGENTS ?? "")
+          ? { enableSubagents: true }
+          : {}),
       });
-  let closing = false;
-  const shutdown = async () => {
-    if (closing) return;
-    closing = true;
-    try { await server.close(); } finally { process.exit(0); }
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-  process.stdin.on("end", () => void shutdown());
-  return server;
+};
+
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+const closeWithin = async (server: { close(): Promise<void> }): Promise<void> => {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      server.close(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`MCP shutdown exceeded ${SHUTDOWN_GRACE_MS}ms`)),
+          SHUTDOWN_GRACE_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
+/** Process lifecycle wrapper used by both executable entry points. */
+export const runKiroMcpProcess = async (): Promise<number> => {
+  let server: { close(): Promise<void> };
+  try {
+    server = await startKiroMcpServer();
+  } catch (error) {
+    const reason = `kiro-fabric MCP server failed to start: ${errorMessage(error)}`;
+    process.stderr.write(`${reason}\n`);
+    return serveStartupError(reason);
+  }
+
+  return new Promise<number>((resolve) => {
+    let closing = false;
+    const cleanup = (): void => {
+      process.removeListener("SIGHUP", onSighup);
+      process.removeListener("SIGINT", onSigint);
+      process.removeListener("SIGTERM", onSigterm);
+      process.stdin.removeListener("end", onEnd);
+      process.stdin.pause();
+    };
+    const shutdown = (exitCode: number): void => {
+      if (closing) {
+        cleanup();
+        process.exit(exitCode);
+      }
+      closing = true;
+      void closeWithin(server).then(
+        () => {
+          cleanup();
+          resolve(exitCode);
+        },
+        (error: unknown) => {
+          process.stderr.write(`kiro-fabric: shutdown failed: ${errorMessage(error)}\n`);
+          cleanup();
+          process.exit(1);
+        },
+      );
+    };
+    const onSighup = (): void => shutdown(129);
+    const onSigint = (): void => shutdown(130);
+    const onSigterm = (): void => shutdown(143);
+    const onEnd = (): void => shutdown(0);
+    process.on("SIGHUP", onSighup);
+    process.on("SIGINT", onSigint);
+    process.on("SIGTERM", onSigterm);
+    process.stdin.on("end", onEnd);
+    if (process.stdin.readableEnded || process.stdin.destroyed) queueMicrotask(onEnd);
+  });
 };
 
 const invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : "";
 const selfPath = fileURLToPath(import.meta.url);
 if (invokedPath === selfPath || invokedPath === realpathSync(selfPath)) {
-  const launchError = await (async (): Promise<Error | null> => {
-    try {
-      await startKiroMcpServer();
-      return null;
-    } catch (error) {
-      return error instanceof Error ? error : new Error(String(error));
-    }
-  })();
-
-  if (launchError !== null) {
-    // Fail closed, but over the protocol: a confined trusted profile must not
-    // start, yet dying before the initialize handshake leaves Kiro with an
-    // opaque inbound-close diagnostic.
-    const reason = `kiro-fabric MCP server failed to start: ${launchError.message}`;
-    console.error(reason);
-    serveStartupError(reason);
-  }
+  process.exit(await runKiroMcpProcess());
 }
 
 /**
  * Serve the newline-delimited JSON-RPC handshake with the startup failure
- * reason so the MCP host can surface it, then exit non-zero once the host
- * closes stdin or a hard grace period expires.
+ * reason, flush one diagnostic response, and then exit non-zero.
  */
-function serveStartupError(message: string): void {
-  const respond = (incoming: string) => {
-    let request: { id?: unknown } | null = null;
-    try {
-      const parsed = JSON.parse(incoming) as Record<string, unknown>;
-      if (parsed && typeof parsed === "object") request = parsed as { id?: unknown };
-    } catch {
-      // ignore non-JSON probes
-    }
-    if (request?.id !== undefined) {
-      responded = true;
+function serveStartupError(message: string): Promise<number> {
+  return new Promise((resolve) => {
+    let buffer = "";
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      process.stdin.removeListener("data", onData);
+      process.stdin.removeListener("end", finish);
+      process.removeListener("SIGHUP", finish);
+      process.removeListener("SIGINT", finish);
+      process.removeListener("SIGTERM", finish);
+      process.stdin.pause();
+      resolve(1);
+    };
+    const respond = (incoming: string): void => {
+      let request: { id?: unknown } | null = null;
+      try {
+        const parsed = JSON.parse(incoming) as Record<string, unknown>;
+        if (parsed && typeof parsed === "object") request = parsed as { id?: unknown };
+      } catch {
+        // Ignore non-JSON probes while waiting for a real request.
+      }
+      if (request?.id === undefined || settled) return;
       process.stdout.write(
         `${JSON.stringify({
           jsonrpc: "2.0" as const,
           id: request.id,
           error: { code: -32603 as const, message },
         })}\n`,
+        finish,
       );
-    }
-  };
-
-  let buffer = "";
-  process.stdin.setEncoding("utf8");
-  let responded = false;
-  process.stdin.on("data", (chunk: string) => {
-    buffer += chunk;
-    let index: number;
-    while ((index = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, index).trim();
-      buffer = buffer.slice(index + 1);
-      if (line) respond(line);
-    }
+    };
+    const onData = (chunk: Buffer | string): void => {
+      buffer += chunk.toString();
+      let index: number;
+      while ((index = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, index).trim();
+        buffer = buffer.slice(index + 1);
+        if (line) respond(line);
+      }
+    };
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", onData);
+    process.stdin.on("end", finish);
+    process.on("SIGHUP", finish);
+    process.on("SIGINT", finish);
+    process.on("SIGTERM", finish);
+    const timer = setTimeout(finish, 15_000);
+    if (process.stdin.readableEnded || process.stdin.destroyed) queueMicrotask(finish);
   });
-  process.stdin.on("end", () => process.exit(1));
-  // Hosts that never issue a request must not strand this child; bound the
-  // diagnostic window and then fail the launch loudly.
-  setTimeout(() => process.exit(1), 15_000);
-  process.on("SIGINT", () => process.exit(1));
-  process.on("SIGTERM", () => process.exit(1));
-  // After the first diagnostic response the launch is genuinely refused;
-  // closing stdin once the pipe drained keeps the failed child from lingering
-  // while still letting the host read the failure reason.
-  process.stdout.on("drain", () => {
-    if (responded) process.stdin.end();
-  });
-};
+}

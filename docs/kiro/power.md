@@ -28,13 +28,13 @@ checkout-specific absolute path. Re-running the command replaces it
 deterministically. `kiro-fabric doctor power --json` is read-only,
 non-billable, and sends no model prompt.
 
-## Future GitHub installation
+## GitHub installation
 
-The repository root is a valid package layout, but release `mcp.json` launches
-`npx -y kiro-fabric@<exact-version>`. Import the public GitHub repository only
-after that exact npm version has been published and passed a clean-machine IDE
-import gate. This repository task does not publish it. Kiro CLI v3 Power support
-is also a separate real-client certification lane and is not claimed here.
+The repository root is a valid package layout. Release `mcp.json` launches the
+checked-in `dist/kiro-closure` directly, so Power activation performs no npm
+resolution, package download, or lifecycle-script execution. A release remains
+blocked until `pnpm check` has rebuilt and certified that closure and a
+clean-machine Kiro CLI v3 import/activation/deactivation gate has passed.
 
 ## Activation
 
@@ -65,8 +65,9 @@ read in a later call through `tools.call` with the returned `artifacts.read` ID.
 Package assets are immutable. Mutable directories are mode `0700` beneath
 `${PLUGIN_DATA}/fabric`; workspace directories use a stable SHA-256 identity
 rather than raw paths. Power configuration is loaded only from
-`${PLUGIN_DATA}/fabric/config`; ambient Pi configuration and Strict-only grants
-are ignored. Paths, environment values, credentials, ACP payloads, and private
+`${PLUGIN_DATA}/fabric/config`; ambient Pi, Mcporter, workspace MCP
+configuration, and Strict-only grants are ignored. Network federation always
+requires approve-once elicitation and fails closed when elicitation is absent. Paths, environment values, credentials, ACP payloads, and private
 session IDs are omitted from `fabric_info`.
 
 Nested approvals use standards-compliant MCP elicitation only where the client

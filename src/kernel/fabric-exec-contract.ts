@@ -5,9 +5,8 @@
 // the kernel import test enforce that mechanically.
 //
 // Compatibility rules (see docs/architecture.md "Tool-call robustness"):
-// - Root and `display` objects stay open (no `additionalProperties: false`):
-//   extra keys validate and are ignored by the execution projection.
-// - Only `code` is required; budgets are numbers with a lower bound of 1 and
+// - Root and `display` objects are closed: misspelled flags fail before execution.
+// - Only `code` is required; budgets are integers with a lower bound of 1 and
 //   no declared maximum.
 // - `resultFormat` is `anyOf` literals, not `enum`, because the emitted JSON
 //   Schema shape is observable by hosts that serialize the schema verbatim.
@@ -49,7 +48,7 @@ const fabricExecDisplayObject = Type.Object({
         "Compact declared objective or acceptance criterion shown in the dashboard and richer compaction activity",
     }),
   ),
-});
+}, { additionalProperties: false });
 
 const fabricExecDisplayString = Type.String({
   description:
@@ -58,8 +57,8 @@ const fabricExecDisplayString = Type.String({
 
 /**
  * The exact model-facing schema. Do not restructure: property order,
- * `anyOf`/`const` representation, descriptions, and the deliberate absence
- * of `additionalProperties: false` are all observable contract.
+ * `anyOf`/`const` representation, descriptions, and closed-object policy are
+ * all observable contract.
  */
 export const fabricExecInputSchema = Type.Object({
   code: Type.String({
@@ -76,19 +75,19 @@ export const fabricExecInputSchema = Type.Object({
     Type.Union(FABRIC_EXEC_RESULT_FORMATS.map((value) => Type.Literal(value))),
   ),
   tokenBudget: Type.Optional(
-    Type.Number({
+    Type.Integer({
       minimum: 1,
       description: "Optional token budget for hosts that expose usage-accounted workflow agents; unmetered Kiro ACP children do not consume it",
     }),
   ),
   agentBudget: Type.Optional(
-    Type.Number({
+    Type.Integer({
       minimum: 1,
       description: "Optional agent-call cap, bounded by host capabilities and Fabric configuration",
     }),
   ),
   display: Type.Optional(Type.Union([fabricExecDisplayObject, fabricExecDisplayString])),
-}) satisfies TSchema;
+}, { additionalProperties: false }) satisfies TSchema;
 
 export const OPTIONAL_FABRIC_EXEC_KEYS = [
   "strings",

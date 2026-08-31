@@ -19,6 +19,7 @@ import {
 import {
   validateContextCertification,
   validateKiroClaimsCertification,
+  validatePowerCertification,
   validateReleaseACertification,
 } from "./certification/readiness-reports.mjs";
 
@@ -31,6 +32,7 @@ const parseArgs = (argv) => {
     ["--context-report", "contextReport"],
     ["--claims-report", "claimsReport"],
     ["--release-report", "releaseReport"],
+    ["--power-report", "powerReport"],
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -58,13 +60,14 @@ try {
     options.contextReport,
     options.claimsReport,
     options.releaseReport,
+    options.powerReport,
   ].filter(Boolean);
   if (artifactPaths.some((candidate) => pathIsInside(root, candidate))) {
     throw new Error("readiness report inputs and --output must be outside the checkout so they cannot alter its Git binding");
   }
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.stderr.write("Usage: node scripts/refresh-kiro-readiness.mjs [--check] [--output <path>] [--context-report <path>] [--claims-report <path>] [--release-report <path>]\n");
+  process.stderr.write("Usage: node scripts/refresh-kiro-readiness.mjs [--check] [--output <path>] [--context-report <path>] [--claims-report <path>] [--release-report <path>] [--power-report <path>]\n");
   process.exit(2);
 }
 
@@ -166,6 +169,13 @@ const reportInputs = [
     filePath: options.releaseReport,
     validate: (report) => validateReleaseACertification(report, expectedPackage),
     evidence: "Packed Release-A install/doctor/MCP/uninstall",
+  },
+  {
+    id: "cert.power",
+    descriptor: "power",
+    filePath: options.powerReport,
+    validate: (report) => validatePowerCertification(report, expectedPackage),
+    evidence: "Kiro Power manifest/MCP/workspace/elicitation/execution/lifecycle",
   },
 ];
 const runReports = reportInputs.map(({ id, evidence, ...input }) => ({

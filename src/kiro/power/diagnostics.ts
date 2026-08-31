@@ -1,7 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { DEFAULT_FABRIC_CONFIG } from "../../config.js";
 import { inspectKiroCompatibility } from "../compatibility.js";
 import { resolveSourcePackageRoot } from "../runtime-closure.js";
@@ -27,12 +26,21 @@ export const runKiroPowerDoctor = async (): Promise<KiroPowerDoctorReport> => {
     if (Number(process.versions.node.split(".")[0]) < 24) throw new Error("Node 24 or newer is required");
     return `Node ${process.version}`;
   });
-  await run("power.npx", () => {
-    const result = spawnSync("npx", ["--version"], { encoding: "utf8", timeout: 5_000 });
-    if (result.status !== 0) throw new Error("npx is unavailable for the release launcher");
-    return "npx available";
-  });
   const root = resolveSourcePackageRoot();
+  await run("power.launcher", () => {
+    const mcp = JSON.parse(readFileSync(path.join(root, "mcp.json"), "utf8")) as {
+      mcpServers?: { fabric?: { command?: unknown; args?: unknown } };
+    };
+    const server = mcp.mcpServers?.fabric;
+    const expected = "${PLUGIN_ROOT}/dist/kiro-closure/kiro/mcp-entry.js";
+    if (server?.command !== "node" || !Array.isArray(server.args) || server.args[0] !== expected) {
+      throw new Error("release manifest does not launch the bundled runtime closure");
+    }
+    if (!existsSync(path.join(root, "dist", "kiro-closure", "kiro", "mcp-entry.js"))) {
+      throw new Error("bundled Power runtime closure is absent");
+    }
+    return "bundled runtime closure available without activation-time download";
+  });
   await run("power.manifests", () => {
     const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
     const plugin = JSON.parse(readFileSync(path.join(root, "plugin.json"), "utf8"));
@@ -49,9 +57,10 @@ export const runKiroPowerDoctor = async (): Promise<KiroPowerDoctorReport> => {
   const pluginRoot = path.join(temp, "plugin");
   try {
     const { mkdirSync } = await import("node:fs"); mkdirSync(pluginData); mkdirSync(pluginRoot);
+    let powerData: ReturnType<typeof prepareKiroPowerDataPaths> | undefined;
     await run("power.launch", () => {
       const launch = resolveKiroPowerLaunchContext({ PLUGIN_ROOT: pluginRoot, PLUGIN_DATA: pluginData });
-      prepareKiroPowerDataPaths(launch.pluginData);
+      powerData = prepareKiroPowerDataPaths(launch.pluginData);
       return "PLUGIN_ROOT/PLUGIN_DATA confinement and writable data verified";
     });
     await run("power.quickjs", async () => {
@@ -61,6 +70,7 @@ export const runKiroPowerDoctor = async (): Promise<KiroPowerDoctorReport> => {
         cwd: pluginData,
         integration: "power",
         config,
+        powerMcpConfigPath: powerData!.mcpConfig,
         memoryRoot: path.join(pluginData, "memory"),
       });
       try {

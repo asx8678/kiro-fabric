@@ -43,9 +43,19 @@ export const validatePowerPackage = (root) => {
       if (/(TOKEN|SECRET|PASSWORD|API_KEY|AUTHORIZATION|COOKIE)/i.test(key) || /(bearer\s+|-----BEGIN|api[_-]?key)/i.test(String(value))) fail(`${name} contains secret-looking environment data`);
     }
   }
-  const releaseSpec = mcp.mcpServers.fabric?.args?.find((value) => typeof value === "string" && value.startsWith(`${pkg.name}@`));
-  if (mcp.mcpServers.fabric?.command === "npx" && !releaseSpec) fail("release npx launcher is missing an exact package spec");
-  if (releaseSpec && releaseSpec !== `${pkg.name}@${pkg.version}`) fail("MCP npm spec is not exact package version");
+  const fabric = mcp.mcpServers.fabric;
+  if (fabric?.command !== "node") fail("fabric MCP must use the bundled Node runtime closure");
+  const launcher = fabric.args?.[0];
+  const allowedLaunchers = [
+    "${PLUGIN_ROOT}/dist/kiro-closure/kiro/mcp-entry.js",
+    "${PLUGIN_ROOT}/runtime/kiro/mcp-entry.js",
+  ];
+  if (!allowedLaunchers.includes(launcher)) fail("fabric MCP launcher is not a bundled closure entry");
+  const launcherPath = path.join(root, launcher.slice("${PLUGIN_ROOT}/".length));
+  const launcherStats = lstatSync(launcherPath);
+  if (!launcherStats.isFile() || launcherStats.isSymbolicLink()) {
+    fail("fabric MCP bundled closure entry is absent or is a symlink");
+  }
   const skills = path.join(root, "skills");
   const entries = readdirSync(skills, { withFileTypes: true });
   if (!entries.length) fail("skills directory is empty");
@@ -56,7 +66,12 @@ export const validatePowerPackage = (root) => {
   const visit = (directory) => { for (const entry of readdirSync(directory, { withFileTypes: true })) { const target = path.join(directory, entry.name); if (entry.isSymbolicLink()) fail(`symlink is not allowed: ${path.relative(root, target)}`); if (entry.isDirectory()) visit(target); else if (!entry.isFile()) fail(`non-file package entry: ${path.relative(root, target)}`); } };
   for (const file of ["plugin.json", "mcp.json", "package.json"]) if (!lstatSync(path.join(root, file)).isFile()) fail(`${file} is not a regular file`);
   visit(skills);
-  try { const runtime = path.join(root, "runtime"); if (lstatSync(runtime).isDirectory()) visit(runtime); } catch { /* release package uses npm launcher */ }
+  const runtime = path.dirname(path.dirname(launcherPath));
+  const runtimeStats = lstatSync(runtime);
+  if (!runtimeStats.isDirectory() || runtimeStats.isSymbolicLink()) {
+    fail("fabric MCP runtime closure is not a regular directory");
+  }
+  visit(runtime);
   return { ok: true, root, version: pkg.version, skills: entries.length };
 };
 

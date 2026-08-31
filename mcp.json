@@ -3,13 +3,9 @@
   "mcpServers": {
     "fabric": {
       "type": "stdio",
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "kiro-fabric@0.63.0",
-        "mcp",
-        "--integration",
-        "power"
+        "${PLUGIN_ROOT}/dist/kiro-closure/kiro/mcp-entry.js"
       ],
       "cwd": "${PLUGIN_ROOT}",
       "env": {

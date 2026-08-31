@@ -6,6 +6,8 @@ export const KIRO_CLAIMS_KIND = "kiro-fabric.kiro-claims";
 export const KIRO_CLAIMS_SCHEMA_VERSION = 1;
 export const RELEASE_A_CERTIFICATION_KIND = "kiro-fabric.release-a-certification";
 export const RELEASE_A_CERTIFICATION_SCHEMA_VERSION = 1;
+export const POWER_CERTIFICATION_KIND = "kiro-fabric.power-certification";
+export const POWER_CERTIFICATION_SCHEMA_VERSION = 1;
 
 const CONTEXT_CHECK_IDS = Object.freeze([
   "context.cycles",
@@ -55,6 +57,17 @@ export const REQUIRED_KIRO_CLAIM_IDS = Object.freeze([
 ]);
 
 const RELEASE_A_CHECKS = Object.freeze(["pack", "install", "doctor", "mcp", "uninstall"]);
+const POWER_CHECKS = Object.freeze([
+  "manifest",
+  "initialize",
+  "tools",
+  "workspace-rebind",
+  "elicitation",
+  "execution",
+  "artifact-recovery",
+  "shutdown",
+  "immutability",
+]);
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const hasExactIds = (values, required) => values.length === required.length
   && new Set(values).size === required.length
@@ -141,6 +154,23 @@ export const validateKiroClaimsCertification = (report) => {
   const passed = report.claims.every((claim) => claim.status === "pass");
   if (report.ok !== passed) return invalid("Kiro claims result contradicts its claims");
   return valid(passed);
+};
+
+export const validatePowerCertification = (report, expectedPackage) => {
+  const envelopeError = validateEnvelope(report, POWER_CERTIFICATION_KIND, POWER_CERTIFICATION_SCHEMA_VERSION);
+  if (envelopeError) return invalid(envelopeError);
+  if (report.ok !== true || report.package !== expectedPackage
+    || !Array.isArray(report.checks) || !hasExactIds(report.checks, POWER_CHECKS)
+    || !Array.isArray(report.tools) || !validFinishedAt(report.finishedAt)) {
+    return invalid("Power certification metadata is invalid or incomplete");
+  }
+  if (!hasExactIds(report.tools, ["fabric_info", "fabric_workspace", "fabric_exec"])
+    || report.roots !== "select-rebind" || report.elicitation !== "approve-once"
+    || report.execution !== "checked" || report.artifactRecovery !== "lossless"
+    || report.acpAgents !== false) {
+    return invalid("Power certification evidence contradicts the required surface");
+  }
+  return valid(true);
 };
 
 export const validateReleaseACertification = (report, expectedPackage) => {

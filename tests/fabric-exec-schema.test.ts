@@ -13,7 +13,7 @@ import { createFabricExecTool } from "../src/fabric-exec-tool.js";
 // Golden contract for the host-neutral fabric_exec input schema. Every host
 // adapter (Pi today, Kiro MCP next) must consume this exact object; the test
 // pins property order, anyOf/const representation, descriptions, and the
-// deliberate absence of additionalProperties:false.
+// strict closed-object policy.
 
 const publicJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 
@@ -40,12 +40,12 @@ const EXPECTED_SCHEMA = {
       ],
     },
     tokenBudget: {
-      type: "number",
+      type: "integer",
       minimum: 1,
       description: "Optional token budget for hosts that expose usage-accounted workflow agents; unmetered Kiro ACP children do not consume it",
     },
     agentBudget: {
-      type: "number",
+      type: "integer",
       minimum: 1,
       description: "Optional agent-call cap, bounded by host capabilities and Fabric configuration",
     },
@@ -65,6 +65,7 @@ const EXPECTED_SCHEMA = {
                 "Compact declared objective or acceptance criterion shown in the dashboard and richer compaction activity",
             },
           },
+          additionalProperties: false,
         },
         {
           type: "string",
@@ -75,6 +76,7 @@ const EXPECTED_SCHEMA = {
     },
   },
   required: ["code"],
+  additionalProperties: false,
 };
 
 describe("fabric_exec kernel contract", () => {
@@ -93,22 +95,22 @@ describe("fabric_exec kernel contract", () => {
     expect(publicJson(tool.parameters)).toEqual(EXPECTED_SCHEMA);
   });
 
-  it("keeps root and display objects open for forward compatibility", () => {
+  it("rejects unknown root and display fields", () => {
     expect(Value.Check(fabricExecInputSchema, {
       code: "return 1;",
       futureKey: { anything: true },
-    })).toBe(true);
+    })).toBe(false);
     expect(Value.Check(fabricExecInputSchema, {
       code: "return 1;",
       display: { name: "x", unknownExtra: 1 },
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it("requires only code and applies numeric minima", () => {
     expect(Value.Check(fabricExecInputSchema, { code: "return 1;" })).toBe(true);
     expect(Value.Check(fabricExecInputSchema, {})).toBe(false);
     expect(Value.Check(fabricExecInputSchema, { code: "x", tokenBudget: 0 })).toBe(false);
-    expect(Value.Check(fabricExecInputSchema, { code: "x", agentBudget: 1.5 })).toBe(true);
+    expect(Value.Check(fabricExecInputSchema, { code: "x", agentBudget: 1.5 })).toBe(false);
     expect(Value.Check(fabricExecInputSchema, {
       code: "x",
       resultFormat: "yaml",

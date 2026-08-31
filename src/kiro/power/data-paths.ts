@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { chmodSync, lstatSync, mkdirSync } from "node:fs";
+import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export interface KiroPowerDataPaths {
   root: string;
   config: string;
+  mcpConfig: string;
   cache: string;
   logs: string;
   projects: string;
@@ -39,11 +40,33 @@ const privateDirectory = (directory: string, boundary: string): string => {
   return target;
 };
 
+const privateMcpConfig = (configDirectory: string): string => {
+  const target = path.join(configDirectory, "mcporter.json");
+  try {
+    const descriptor = openSync(target, "wx", 0o600);
+    try {
+      writeFileSync(descriptor, `${JSON.stringify({ mcpServers: {}, imports: [] }, null, 2)}\n`);
+    } finally {
+      closeSync(descriptor);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  const stats = lstatSync(target);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
+    throw new Error(`Power MCP configuration is a symlink, hardlink, or non-file: ${target}`);
+  }
+  chmodSync(target, 0o600);
+  return target;
+};
+
 export const prepareKiroPowerDataPaths = (pluginData: string): KiroPowerDataPaths => {
   const root = privateDirectory(path.join(pluginData, "fabric"), pluginData);
+  const config = privateDirectory(path.join(root, "config"), root);
   return {
     root,
-    config: privateDirectory(path.join(root, "config"), root),
+    config,
+    mcpConfig: privateMcpConfig(config),
     cache: privateDirectory(path.join(root, "global", "cache"), root),
     logs: privateDirectory(path.join(root, "global", "logs"), root),
     projects: privateDirectory(path.join(root, "projects"), root),

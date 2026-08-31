@@ -12,7 +12,7 @@ const mcp = {
   $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   mcpServers: { fabric: {
     type: "stdio", command: "node",
-    args: ["${PLUGIN_ROOT}/runtime/kiro/mcp-entry.js", "--integration", "power"],
+    args: ["${PLUGIN_ROOT}/runtime/kiro/mcp-entry.js"],
     cwd: "${PLUGIN_ROOT}", env: { KIRO_FABRIC_INTEGRATION: "power" },
   } },
 };

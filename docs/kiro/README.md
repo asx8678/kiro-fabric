@@ -7,8 +7,9 @@ integration workspaces.
 
 The additive default is [Kiro Fabric Power](power.md). Run `pnpm power:dev` in a
 source checkout and import the generated local folder in Kiro IDE. Public GitHub
-import remains gated on publication of the exact npm version referenced by
-`mcp.json`.
+imports launch the checked-in runtime closure without activation-time package
+resolution and remain gated by Power certification plus a clean-machine client
+qualification.
 
 The managed custom-agent integration below is **Strict mode**.
 

@@ -149,6 +149,25 @@ const releaseReport = (identity: unknown, passed = true) => ({
   finishedAt: new Date().toISOString(),
 });
 
+const powerReport = (identity: unknown) => ({
+  kind: "kiro-fabric.power-certification",
+  schemaVersion: 1,
+  identity,
+  ok: true,
+  package: `kiro-fabric@${packageVersion}`,
+  checks: [
+    "manifest", "initialize", "tools", "workspace-rebind", "elicitation",
+    "execution", "artifact-recovery", "shutdown", "immutability",
+  ],
+  tools: ["fabric_info", "fabric_workspace", "fabric_exec"],
+  roots: "select-rebind",
+  elicitation: "approve-once",
+  execution: "checked",
+  artifactRecovery: "lossless",
+  acpAgents: false,
+  finishedAt: new Date().toISOString(),
+});
+
 const reportEntry = (report: any, id: string) => report.currentEvidence.reports.find(
   (entry: { id: string }) => entry.id === id,
 );
@@ -190,14 +209,17 @@ describe("Kiro readiness generator", () => {
     const context = writeReport(contextReport(identity));
     const claims = writeReport(claimsReport(identity));
     const release = writeReport(releaseReport(identity));
+    const power = writeReport(powerReport(identity));
     const { report, status } = run([
       "--check",
       "--context-report", context,
       "--claims-report", claims,
       "--release-report", release,
+      "--power-report", power,
     ]);
     expect(status).toBe(0);
     expect(report.currentEvidence.reports.map((entry: { verdict: string }) => entry.verdict)).toEqual([
+      "verified",
       "verified",
       "verified",
       "verified",

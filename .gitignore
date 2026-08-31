@@ -1,6 +1,8 @@
 node_modules/
 .pnpm-store/
-dist/
+dist/*
+!dist/kiro-closure/
+!dist/kiro-closure/**
 coverage/
 .tmp/kiro-fabric-power/
 .pi/fabric-runs/

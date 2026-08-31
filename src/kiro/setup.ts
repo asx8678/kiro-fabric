@@ -47,6 +47,7 @@ import {
 import { kiroProfilePath } from "./profile.js";
 import { runtimeClosureMarkerPath, verifyRuntimeClosureAttestation } from "./runtime-closure.js";
 import { managedKiroSkillBundleSha256 } from "./skills.js";
+import { createProcessTreeController } from "../worker/process-tree.js";
 import {
   planKiroProfileUninstall,
   uninstallKiroProfile,
@@ -781,7 +782,35 @@ const runLaunch = async (parsed: SetupArgs): Promise<number> => {
       throw new Error("refusing to launch a Kiro executable that differs from the managed manifest");
     }
     assertSupportedKiroUnchanged(identity);
-    const child = spawn(identity.executablePath, LAUNCH_ARGS, { stdio: "inherit", cwd: projectRoot });
+    const child = spawn(identity.executablePath, LAUNCH_ARGS, {
+      stdio: "inherit",
+      cwd: projectRoot,
+      detached: process.platform !== "win32",
+    });
+    const processTree = child.pid
+      ? createProcessTreeController(child.pid, { ambientHelpers: false })
+      : undefined;
+    let interruptedCode: number | undefined;
+    let escalation: Promise<unknown> | undefined;
+    const forward = (signal: NodeJS.Signals, code: number): void => {
+      interruptedCode ??= code;
+      if (!processTree) return;
+      if (escalation) {
+        void processTree.terminate(0, 2_000);
+        return;
+      }
+      escalation = processTree.signal(signal).then(async () => {
+        if (processTree.gone()) return;
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        if (!processTree.gone()) await processTree.terminate(0, 2_000);
+      });
+    };
+    const onSighup = (): void => forward("SIGHUP", 129);
+    const onSigint = (): void => forward("SIGINT", 130);
+    const onSigterm = (): void => forward("SIGTERM", 143);
+    process.on("SIGHUP", onSighup);
+    process.on("SIGINT", onSigint);
+    process.on("SIGTERM", onSigterm);
     const outcome = await new Promise<{ code: number } | { missing: boolean }>(
       (resolvePromise) => {
         child.once("error", (error: NodeJS.ErrnoException) => {
@@ -789,11 +818,20 @@ const runLaunch = async (parsed: SetupArgs): Promise<number> => {
         });
         child.once("close", (code, signal) => {
           resolvePromise({
-            code: signal !== null ? SIGNAL_EXIT_CODES[signal] ?? 128 : code ?? 1,
+            code: interruptedCode ??
+              (signal !== null ? SIGNAL_EXIT_CODES[signal] ?? 128 : code ?? 1),
           });
         });
       },
-    );
+    ).finally(async () => {
+      process.removeListener("SIGHUP", onSighup);
+      process.removeListener("SIGINT", onSigint);
+      process.removeListener("SIGTERM", onSigterm);
+      if (interruptedCode !== undefined && processTree && !processTree.gone()) {
+        await processTree.terminate(0, 2_000);
+      }
+      await escalation;
+    });
     if ("missing" in outcome) {
       throw new Error(outcome.missing ? "managed Kiro execution artifact disappeared" : "failed to launch managed Kiro");
     }
@@ -858,10 +896,20 @@ const runMenu = async (parsed: SetupArgs): Promise<number> => {
           break;
         case "6":
           // kiro-cli needs the terminal; drop back to cooked mode while it runs.
+          // The launch supervisor owns signals until the complete child tree exits.
           rl.close();
-          await runMenuAction(() => runLaunch({ ...parsed, command: "launch" }));
-          rl = createInterface({ input: process.stdin, output: process.stdout });
-          rl.on("SIGINT", cancel);
+          process.removeListener("SIGINT", cancel);
+          let launchCode: number | undefined;
+          try {
+            launchCode = await runLaunch({ ...parsed, command: "launch" });
+          } catch (error) {
+            process.stderr.write(`kiro-fabric: ${errorMessage(error)}\n`);
+          } finally {
+            process.on("SIGINT", cancel);
+            rl = createInterface({ input: process.stdin, output: process.stdout });
+            rl.on("SIGINT", cancel);
+          }
+          if (launchCode !== undefined && launchCode >= 128) return launchCode;
           break;
         case "q":
         case "quit":

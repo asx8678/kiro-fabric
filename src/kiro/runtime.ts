@@ -96,6 +96,8 @@ export interface KiroRuntimeOptions {
   config?: FabricConfig;
   /** Host-owned configuration directory. Power sets this beneath PLUGIN_DATA. */
   agentDir?: string;
+  /** Power-only explicit Mcporter configuration; must be beneath PLUGIN_DATA. */
+  powerMcpConfigPath?: string;
   /** Extra providers to register (tests). */
   registerProviders?: (registry: KiroProviderRegistry) => void;
   /**
@@ -216,10 +218,10 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   // Execute is never inherited from a user/global default that happened to be
   // "allow": unless the explicit opt-in is present, the policy is forced to
   // DENY, so a Kiro host cannot grant shell access by mere omission.
+  const power = options.integration === "power";
   const allowExecute =
     options.allowExecute === true ||
-    (options.integration !== "power" &&
-      /^1$/i.test(process.env.KIRO_FABRIC_ALLOW_SHELL ?? ""));
+    (!power && /^1$/i.test(process.env.KIRO_FABRIC_ALLOW_SHELL ?? ""));
   if (options.enableSubagents === true && !allowExecute) {
     throw new Error(
       "Managed Kiro subagents require trusted-local shell access; install with --allow-shell --subagents",
@@ -255,12 +257,24 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
     approvals: {
       ...base.approvals,
       execute: allowExecute ? "allow" : "deny",
+      network: power ? "ask" : base.approvals.network,
+    },
+    mcp: {
+      ...base.mcp,
+      ...(power
+        ? {
+            ...(options.powerMcpConfigPath ? { configPath: options.powerMcpConfigPath } : {}),
+            allowDynamicServers: false,
+          }
+        : {}),
     },
   };
+  if (power && config.mcp.enabled && !options.powerMcpConfigPath) {
+    throw new Error("Power MCP federation requires a PLUGIN_DATA-owned configuration path");
+  }
 
   const registry = new ActionRegistry();
   const artifacts = createKiroArtifactStore();
-  const power = options.integration === "power";
   const managedNode = process.env.KIRO_FABRIC_NODE_BINARY;
   const protectedRelease = managedNode && path.isAbsolute(managedNode)
     ? path.dirname(path.dirname(managedNode))

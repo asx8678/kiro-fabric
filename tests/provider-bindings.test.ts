@@ -56,6 +56,25 @@ const invoke = (
   });
 
 describe("provider binding generations", () => {
+  it("waits for in-flight invocations before provider close completes", async () => {
+    const registry = new ActionRegistry();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const close = vi.fn();
+    registry.register(provider("active", { wait: gate, close }));
+    const call = invoke(registry);
+    await new Promise((resolve) => setImmediate(resolve));
+    let closeSettled = false;
+    const closing = registry.close().then(() => { closeSettled = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(closeSettled).toBe(false);
+    expect(close).not.toHaveBeenCalled();
+    release();
+    await expect(call).resolves.toBe("active");
+    await closing;
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("keeps a retiring provider alive for committed views and protects replacements from stale leases", async () => {
     const registry = new ActionRegistry();
     const firstClosed = vi.fn();

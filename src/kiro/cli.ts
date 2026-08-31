@@ -12,11 +12,13 @@ import {
   type KiroInstallOptions,
 } from "./install.js";
 import { runKiroDoctor } from "./doctor.js";
+import { readPackageVersion } from "./managed.js";
 import { uninstallKiroProfile } from "./uninstall.js";
 
 const USAGE = `kiro-fabric — Kiro integration management
 
 Usage:
+  kiro-fabric --version
   kiro-fabric install kiro [options]     Install the managed Kiro v3 profile
   kiro-fabric uninstall kiro [options]   Remove a managed profile or restore the backup
   kiro-fabric doctor kiro [options]      Read-only non-billable Strict health checks
@@ -34,6 +36,8 @@ Install options:
   --dry-run              Validate and report without changing files
   --force                Back up and replace unknown/modified profile content
   --json                 Machine-readable output
+  --debug                Include stack traces in human-readable failures
+  --version              Print the package version
   -h, --help
 
 Uninstall options:
@@ -157,29 +161,38 @@ const parseArgs = (argv: string[]): ParsedArgs => {
   return parsed;
 };
 
-export const runKiroCli = async (argv: string[]): Promise<number> => {
+const runKiroCliUnsafe = async (argv: string[]): Promise<number> => {
+  if (argv.length === 1 && argv[0] === "--version") {
+    process.stdout.write(`${readPackageVersion()}\n`);
+    return 0;
+  }
   if (argv[0] === "mcp") {
-    if (argv.length !== 3 || argv[1] !== "--integration") {
-      process.stderr.write("kiro-fabric: mcp requires --integration power|strict|internal-child\n");
-      return 2;
-    }
-    try {
-      const { parseKiroIntegrationMode } = await import("./integration-mode.js");
-      const mode = parseKiroIntegrationMode(argv[2], "--integration");
-      process.env.KIRO_FABRIC_INTEGRATION = mode;
-      const { startKiroMcpServer } = await import("./mcp-entry.js");
-      await startKiroMcpServer();
+    if (argv.includes("--help") || argv.includes("-h")) {
+      process.stdout.write("Usage: kiro-fabric mcp --integration power|strict|internal-child\n");
       return 0;
-    } catch (error) {
-      process.stderr.write(`kiro-fabric: ${(error as Error).message}\n`);
-      return 1;
     }
+    if (argv.length !== 3 || argv[1] !== "--integration") {
+      throw new UsageError("mcp requires --integration power|strict|internal-child");
+    }
+    const { parseKiroIntegrationMode } = await import("./integration-mode.js");
+    let mode;
+    try {
+      mode = parseKiroIntegrationMode(argv[2], "--integration");
+    } catch (error) {
+      throw new UsageError(error instanceof Error ? error.message : String(error));
+    }
+    process.env.KIRO_FABRIC_INTEGRATION = mode;
+    const { runKiroMcpProcess } = await import("./mcp-entry.js");
+    return runKiroMcpProcess();
   }
   if (argv[0] === "doctor" && argv[1] === "power") {
     const rest = argv.slice(2);
+    if (rest.includes("--help") || rest.includes("-h")) {
+      process.stdout.write("Usage: kiro-fabric doctor power [--json] [--debug]\n");
+      return 0;
+    }
     if (rest.some((value) => value !== "--json")) {
-      process.stderr.write("kiro-fabric: doctor power accepts only --json\n");
-      return 2;
+      throw new UsageError("doctor power accepts only --json");
     }
     const { runKiroPowerDoctor } = await import("./power/diagnostics.js");
     const report = await runKiroPowerDoctor();
@@ -187,13 +200,7 @@ export const runKiroCli = async (argv: string[]): Promise<number> => {
     else for (const check of report.checks) process.stdout.write(`${check.status === "pass" ? "ok" : check.status.toUpperCase()} ${check.id} — ${check.message}\n`);
     return report.ok ? 0 : 1;
   }
-  let parsed: ParsedArgs;
-  try {
-    parsed = parseArgs(argv);
-  } catch (error) {
-    process.stderr.write(`kiro-fabric: ${(error as Error).message}\n\n${USAGE}`);
-    return 2;
-  }
+  const parsed = parseArgs(argv);
 
   if (parsed.command === "help") {
     process.stdout.write(USAGE);
@@ -202,8 +209,7 @@ export const runKiroCli = async (argv: string[]): Promise<number> => {
 
   if (parsed.command === "doctor") {
     if (parsed.kiroHome && !parsed.user) {
-      process.stderr.write(`kiro-fabric: --kiro-home requires --user\n\n${USAGE}`);
-      return 2;
+      throw new UsageError("--kiro-home requires --user");
     }
     const report = await runKiroDoctor({
       checkInstalled: true,
@@ -227,12 +233,10 @@ export const runKiroCli = async (argv: string[]): Promise<number> => {
   }
 
   if (parsed.kiroHome && !parsed.user) {
-    process.stderr.write(`kiro-fabric: --kiro-home requires --user\n\n${USAGE}`);
-    return 2;
+    throw new UsageError("--kiro-home requires --user");
   }
 
-  try {
-    if (parsed.command === "uninstall") {
+  if (parsed.command === "uninstall") {
       const result = uninstallKiroProfile({
         ...(parsed.projectRoot ? { projectRoot: parsed.projectRoot } : {}),
         ...(parsed.user ? { scope: "user" } : {}),
@@ -272,17 +276,28 @@ export const runKiroCli = async (argv: string[]): Promise<number> => {
           (result.backupPath ? `backup: ${result.backupPath}\n` : ""),
       );
     }
-    return 0;
+  return 0;
+};
+
+export const runKiroCli = async (argv: string[]): Promise<number> => {
+  const debug = argv.includes("--debug");
+  const cleaned = argv.filter((value) => value !== "--debug");
+  const json = cleaned.includes("--json");
+  try {
+    return await runKiroCliUnsafe(cleaned);
   } catch (error) {
-    const code = error instanceof KiroInstallError ? error.code : "fs";
+    const usage = error instanceof UsageError;
+    const code = usage ? "usage" : error instanceof KiroInstallError ? error.code : "internal";
     const message = error instanceof Error ? error.message : String(error);
-    if (parsed.json) {
-      process.stdout.write(
-        JSON.stringify({ ok: false, error: { code, message } }, null, 2) + "\n",
-      );
+    if (json) {
+      process.stdout.write(`${JSON.stringify({ ok: false, error: { code, message } }, null, 2)}\n`);
     } else {
       process.stderr.write(`kiro-fabric: ${message}\n`);
+      if (debug && error instanceof Error && error.stack) {
+        process.stderr.write(`${error.stack}\n`);
+      }
+      if (usage) process.stderr.write(`\n${USAGE}`);
     }
-    return 1;
+    return usage ? 2 : 1;
   }
 };

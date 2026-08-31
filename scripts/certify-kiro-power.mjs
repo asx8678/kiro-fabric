@@ -1,11 +1,36 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { assertArtifactOutsideCheckout } from "./certification/artifact-path.mjs";
+import { captureGitBinding } from "./certification/git-binding.mjs";
+import {
+  POWER_CERTIFICATION_KIND,
+  POWER_CERTIFICATION_SCHEMA_VERSION,
+} from "./certification/readiness-reports.mjs";
 
-const pluginRoot = path.resolve(process.argv[2] ?? ".tmp/kiro-fabric-power");
+const checkout = path.resolve(".");
+const argv = process.argv.slice(2);
+let pluginRoot = path.resolve(".tmp/kiro-fabric-power");
+let jsonPath;
+for (let index = 0; index < argv.length; index += 1) {
+  const value = argv[index];
+  if (value === "--json") {
+    if (jsonPath || !argv[index + 1] || argv[index + 1].startsWith("--")) {
+      throw new Error("Usage: certify-kiro-power [plugin-root] [--json <path>]");
+    }
+    jsonPath = path.resolve(argv[++index]);
+  } else if (pluginRoot !== path.resolve(".tmp/kiro-fabric-power")) {
+    throw new Error("Usage: certify-kiro-power [plugin-root] [--json <path>]");
+  } else {
+    pluginRoot = path.resolve(value);
+  }
+}
+assertArtifactOutsideCheckout(checkout, jsonPath, "--json");
+const identity = captureGitBinding(checkout);
+const pkg = JSON.parse(readFileSync(path.join(checkout, "package.json"), "utf8"));
 const entry = path.join(pluginRoot, "runtime", "kiro", "mcp-entry.js");
 const temporary = mkdtempSync(path.join(tmpdir(), "kiro-fabric-power-cert-"));
 const pluginData = path.join(temporary, "data");
@@ -256,15 +281,34 @@ try {
   if (!statSync(path.join(pluginData, "fabric")).isDirectory()) {
     throw new Error("Power MCP did not initialize PLUGIN_DATA");
   }
-  process.stdout.write(JSON.stringify({
+  const report = {
+    kind: POWER_CERTIFICATION_KIND,
+    schemaVersion: POWER_CERTIFICATION_SCHEMA_VERSION,
+    identity,
     ok: true,
+    package: `${pkg.name}@${pkg.version}`,
+    checks: [
+      "manifest",
+      "initialize",
+      "tools",
+      "workspace-rebind",
+      "elicitation",
+      "execution",
+      "artifact-recovery",
+      "shutdown",
+      "immutability",
+    ],
     tools: names,
     roots: "select-rebind",
     elicitation: "approve-once",
     execution: "checked",
     artifactRecovery: "lossless",
     acpAgents: false,
-  }) + "\n");
+    finishedAt: new Date().toISOString(),
+  };
+  const serialized = `${JSON.stringify(report, null, 2)}\n`;
+  if (jsonPath) writeFileSync(jsonPath, serialized, { mode: 0o600 });
+  process.stdout.write(serialized);
 } finally {
   if (child.exitCode === null) child.kill("SIGTERM");
   rmSync(temporary, { recursive: true, force: true });

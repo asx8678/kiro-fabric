@@ -1048,7 +1048,7 @@ export class StateStore {
     const files: StateComplexityFile[] = [];
     let netDelta = 0;
     for (const file of this.normalizeComplexityFiles(requestedFiles, input.cwd)) {
-      const measured = countFileComplexity(path.resolve(input.cwd, file));
+      const measured = countFileComplexity(path.resolve(input.cwd, file), input.cwd);
       if (!measured) {
         files.push({ file, supported: false });
         continue;
@@ -1082,7 +1082,7 @@ export class StateStore {
     const updates: PreparedComplexity["updates"] = [];
     let netDelta = 0;
     for (const file of this.normalizeComplexityFiles(files, cwd)) {
-      const measured = countFileComplexity(path.resolve(cwd, file));
+      const measured = countFileComplexity(path.resolve(cwd, file), cwd);
       if (!measured) {
         deltas.push({ file, supported: false });
         continue;
