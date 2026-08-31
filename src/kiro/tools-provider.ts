@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createTwoFilesPatch } from "diff";
-import { createReadStream, promises as fs } from "node:fs";
+import { closeSync, createReadStream, openSync, promises as fs, writeSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -9,6 +9,7 @@ import { minimatch } from "minimatch";
 import { runAbortable, throwIfAborted } from "../async-settlement.js";
 import { writeFileAtomic } from "../core/atomic-write.js";
 import { expandSkillDirMarkersForRead } from "../core/skill-dir.js";
+import { executeBoundedRegex } from "../memory/regex.js";
 import { ProjectRootGuard } from "../providers/project-root-guard.js";
 import { MAX_WRITE_DIFF_BYTES, writeContentForPreview } from "../providers/write-diff-limits.js";
 import type {
@@ -27,7 +28,15 @@ const MAX_READ_LINES = 2_000;
 const MAX_EDIT_CHARS = 2_000_000;
 const MAX_WRITE_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 16_384;
+const MAX_IMAGE_PIXELS = 64 * 1024 * 1024;
 const MAX_SEARCH_FILE_BYTES = 4 * 1024 * 1024;
+const MAX_SEARCH_PATTERN_BYTES = 1_024;
+const MAX_SEARCH_GLOB_BYTES = 4_096;
+const MAX_GREP_CONTEXT = 100;
+const MAX_GREP_MATCHES = 100;
+const MAX_FIND_MATCHES = 1_000;
+const GREP_REGEX_TIMEOUT_MS = 250;
 const MAX_WALK_FILES = 100_000;
 const MAX_WALK_DIRECTORIES = 20_000;
 const MAX_WALK_DEPTH = 64;
@@ -120,7 +129,6 @@ const truncateLines = (value: string, limit: number, fromEnd = false): { text: s
   if (lines.length <= limit) return { text: value, truncated: false };
   return { text: (fromEnd ? lines.slice(-limit) : lines.slice(0, limit)).join("\n"), truncated: true };
 };
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const normalizeRelative = (root: string, file: string): string => path.relative(root, file).split(path.sep).join("/");
 const matchesGlob = (file: string, pattern: string): boolean => minimatch(file, pattern, {
   dot: true,
@@ -131,6 +139,53 @@ const byteLength = (value: string): number => Buffer.byteLength(value, "utf8");
 const abortReason = (signal: AbortSignal | undefined, fallback: string): Error => {
   const reason = signal?.reason;
   return reason instanceof Error ? reason : new Error(typeof reason === "string" ? reason : fallback);
+};
+
+const imageDimensions = (data: Buffer, extension: string): { width: number; height: number } | undefined => {
+  if (extension === ".png" && data.length >= 24 && data.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
+    return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+  }
+  if (extension === ".gif" && data.length >= 10 && (data.toString("ascii", 0, 6) === "GIF87a" || data.toString("ascii", 0, 6) === "GIF89a")) {
+    return { width: data.readUInt16LE(6), height: data.readUInt16LE(8) };
+  }
+  if (extension === ".bmp" && data.length >= 26 && data.toString("ascii", 0, 2) === "BM") {
+    return { width: Math.abs(data.readInt32LE(18)), height: Math.abs(data.readInt32LE(22)) };
+  }
+  if ((extension === ".jpg" || extension === ".jpeg") && data.length >= 4 && data[0] === 0xff && data[1] === 0xd8) {
+    for (let offset = 2; offset + 9 < data.length;) {
+      if (data[offset] !== 0xff) { offset += 1; continue; }
+      const marker = data[offset + 1]!;
+      if (marker === 0xd8 || marker === 0xd9 || marker === 0x01) { offset += 2; continue; }
+      if (offset + 4 > data.length) break;
+      const length = data.readUInt16BE(offset + 2);
+      if (length < 2 || offset + 2 + length > data.length) break;
+      if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+        return { width: data.readUInt16BE(offset + 7), height: data.readUInt16BE(offset + 5) };
+      }
+      offset += 2 + length;
+    }
+  }
+  if (extension === ".webp" && data.length >= 30 && data.toString("ascii", 0, 4) === "RIFF" && data.toString("ascii", 8, 12) === "WEBP") {
+    const kind = data.toString("ascii", 12, 16);
+    if (kind === "VP8X") return { width: 1 + data.readUIntLE(24, 3), height: 1 + data.readUIntLE(27, 3) };
+    if (kind === "VP8L" && data[20] === 0x2f) {
+      const bits = data.readUInt32LE(21);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+    }
+    if (kind === "VP8 " && data.length >= 30 && data[23] === 0x9d && data[24] === 0x01 && data[25] === 0x2a) {
+      return { width: data.readUInt16LE(26) & 0x3fff, height: data.readUInt16LE(28) & 0x3fff };
+    }
+  }
+  return undefined;
+};
+
+const assertImageBounds = (data: Buffer, extension: string): void => {
+  const dimensions = imageDimensions(data, extension);
+  if (!dimensions) throw new Error(`k.read could not validate ${extension || "image"} dimensions`);
+  const { width, height } = dimensions;
+  if (width < 1 || height < 1 || width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION || width * height > MAX_IMAGE_PIXELS) {
+    throw new Error(`k.read refuses images over ${MAX_IMAGE_DIMENSION}x${MAX_IMAGE_DIMENSION} or ${MAX_IMAGE_PIXELS} pixels (got ${width}x${height})`);
+  }
 };
 
 interface IgnoreFrame {
@@ -239,6 +294,7 @@ export class KiroToolsProvider implements FabricProvider {
       if (!stat.isFile()) throw new Error(`k.read requires a regular file: ${String(args.path)}`);
       if (stat.size > MAX_IMAGE_BYTES) throw new Error(`k.read refuses images over ${MAX_IMAGE_BYTES} bytes`);
       const data = await runAbortable(context.signal, () => fs.readFile(target));
+      assertImageBounds(data, path.extname(target).toLowerCase());
       const note = `Read image file [${mimeType}]`;
       context.attachMedia?.([{ type: "image", data: data.toString("base64"), mimeType }], note);
       return note;
@@ -442,7 +498,8 @@ export class KiroToolsProvider implements FabricProvider {
 
   async #find(target: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<string> {
     const pattern = stringArg(args, "pattern");
-    const limit = positiveInteger(args.limit, 1_000, 1);
+    if (byteLength(pattern) > MAX_SEARCH_GLOB_BYTES) throw new Error(`k.find refuses patterns over ${MAX_SEARCH_GLOB_BYTES} bytes`);
+    const limit = Math.min(positiveInteger(args.limit, MAX_FIND_MATCHES, 1), MAX_FIND_MATCHES);
     const matches: string[] = [];
     let bytes = 0;
     for await (const file of this.#walk(target, context.signal)) {
@@ -458,12 +515,17 @@ export class KiroToolsProvider implements FabricProvider {
 
   async #grep(target: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<string> {
     const pattern = stringArg(args, "pattern");
-    const flags = args.ignoreCase === true ? "i" : "";
-    const matcher = new RegExp(args.literal === true ? escapeRegex(pattern) : pattern, flags);
+    if (byteLength(pattern) > MAX_SEARCH_PATTERN_BYTES) throw new Error(`k.grep refuses patterns over ${MAX_SEARCH_PATTERN_BYTES} bytes`);
+    const literal = args.literal === true;
+    if (!literal) {
+      try { new RegExp(pattern, args.ignoreCase === true ? "iu" : "u"); }
+      catch (error) { throw new Error(`k.grep invalid regular expression: ${error instanceof Error ? error.message : String(error)}`); }
+    }
     const stat = await runAbortable(context.signal, () => fs.stat(target));
     const glob = typeof args.glob === "string" ? args.glob : undefined;
-    const limit = positiveInteger(args.limit, 100, 1);
-    const contextLines = positiveInteger(args.context, 0, 0);
+    if (glob !== undefined && byteLength(glob) > MAX_SEARCH_GLOB_BYTES) throw new Error(`k.grep refuses globs over ${MAX_SEARCH_GLOB_BYTES} bytes`);
+    const limit = Math.min(positiveInteger(args.limit, MAX_GREP_MATCHES, 1), MAX_GREP_MATCHES);
+    const contextLines = Math.min(positiveInteger(args.context, 0, 0), MAX_GREP_CONTEXT);
     const output: string[] = [];
     let outputBytes = 0;
     let matches = 0;
@@ -477,12 +539,28 @@ export class KiroToolsProvider implements FabricProvider {
         const fileStat = await fs.stat(file);
         if (!fileStat.isFile() || fileStat.size > MAX_SEARCH_FILE_BYTES) continue;
         source = await fs.readFile(file, "utf8");
-      } catch { continue; }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
       if (source.includes("\0")) continue;
       const lines = source.split("\n");
+      let matchedLines: Set<number> | undefined;
+      if (!literal) {
+        const result = await executeBoundedRegex(pattern, lines, {
+          maxPatternBytes: MAX_SEARCH_PATTERN_BYTES,
+          timeoutMs: GREP_REGEX_TIMEOUT_MS,
+        }, args.ignoreCase === true ? "iu" : "u");
+        throwIfAborted(context.signal);
+        if (!result.complete) throw new Error(`k.grep ${result.error.message}`);
+        matchedLines = new Set(result.matched);
+      }
+      const literalNeedle = args.ignoreCase === true ? pattern.toLowerCase() : pattern;
       for (let line = 0; line < lines.length && matches < limit; line += 1) {
-        matcher.lastIndex = 0;
-        if (!matcher.test(lines[line]!)) continue;
+        const matched = literal
+          ? (args.ignoreCase === true ? lines[line]!.toLowerCase() : lines[line]!).includes(literalNeedle)
+          : matchedLines!.has(line);
+        if (!matched) continue;
         matches += 1;
         for (let shown = Math.max(0, line - contextLines); shown <= Math.min(lines.length - 1, line + contextLines); shown += 1) {
           const rendered = `${relative}:${shown + 1}:${lines[shown]!.slice(0, 500)}`;
@@ -502,8 +580,7 @@ export class KiroToolsProvider implements FabricProvider {
     if (byteLength(command) > MAX_BASH_COMMAND_BYTES) throw new Error(`k.bash refuses commands over ${MAX_BASH_COMMAND_BYTES} bytes`);
     const timeoutMs = typeof args.timeout === "number" && args.timeout > 0 ? args.timeout * 1_000 : undefined;
     const fullOutputPath = path.join(os.tmpdir(), `kiro-fabric-bash-${crypto.randomUUID()}.log`);
-    const outputFile = await fs.open(fullOutputPath, "wx", 0o600);
-    let result: { output: string; code: number | null; totalBytes: number };
+    let result: { output: string; fullOutput: Buffer; spooled: boolean; code: number | null; totalBytes: number; terminationError?: Error };
     try {
       result = await new Promise((resolve, reject) => {
         const shell = process.platform === "win32"
@@ -521,8 +598,10 @@ export class KiroToolsProvider implements FabricProvider {
         }
         const tree = createProcessTreeController(child.pid, { ambientHelpers: false });
         let tail = Buffer.alloc(0);
+        const capturedChunks: Buffer[] = [];
+        let capturedBytes = 0;
+        let outputDescriptor: number | undefined;
         let totalBytes = 0;
-        let writeChain: Promise<void> = Promise.resolve();
         let terminationError: Error | undefined;
         let stopPromise: Promise<void> | undefined;
         let timer: NodeJS.Timeout | undefined;
@@ -541,13 +620,22 @@ export class KiroToolsProvider implements FabricProvider {
           const captured = remaining >= chunk.length ? chunk : chunk.subarray(0, remaining);
           totalBytes += chunk.length;
           if (captured.length > 0) {
+            try {
+              if (outputDescriptor === undefined) {
+                capturedChunks.push(captured);
+                capturedBytes += captured.length;
+                if (capturedBytes > MAX_BYTES) {
+                  outputDescriptor = openSync(fullOutputPath, "wx", 0o600);
+                  for (const buffered of capturedChunks.splice(0)) writeSync(outputDescriptor, buffered);
+                }
+              } else {
+                writeSync(outputDescriptor, captured);
+              }
+            } catch (error) {
+              requestStop(error instanceof Error ? error : new Error(String(error)));
+            }
             tail = Buffer.concat([tail, captured]);
             if (tail.length > MAX_BYTES) tail = tail.subarray(tail.length - MAX_BYTES);
-            stream?.pause();
-            writeChain = writeChain
-              .then(async () => { await outputFile.write(captured); })
-              .catch((error: unknown) => { requestStop(error instanceof Error ? error : new Error(String(error))); })
-              .finally(() => stream?.resume());
           }
           if (preview) {
             const boundedPreview = truncateLines(tail.toString("utf8"), MAX_READ_LINES, true).text;
@@ -563,16 +651,24 @@ export class KiroToolsProvider implements FabricProvider {
           if (timer) clearTimeout(timer);
           context.signal?.removeEventListener("abort", abort);
           try {
-            await writeChain;
             await stopPromise;
-            await outputFile.close();
+            if (outputDescriptor !== undefined) {
+              closeSync(outputDescriptor);
+              outputDescriptor = undefined;
+            }
           } catch (error) {
             reject(error);
             return;
           }
-          if (terminationError) { reject(terminationError); return; }
-          if (signal) { reject(new Error(`k.bash terminated by ${signal}`)); return; }
-          resolve({ output: tail.toString("utf8"), code, totalBytes });
+          if (signal && !terminationError) terminationError = new Error(`k.bash terminated by ${signal}`);
+          resolve({
+            output: tail.toString("utf8"),
+            fullOutput: Buffer.concat(capturedChunks),
+            spooled: capturedBytes > MAX_BYTES,
+            code,
+            totalBytes,
+            ...(terminationError ? { terminationError } : {}),
+          });
         };
 
         context.signal?.addEventListener("abort", abort, { once: true });
@@ -585,22 +681,27 @@ export class KiroToolsProvider implements FabricProvider {
         }
       });
     } catch (error) {
-      await outputFile.close().catch(() => undefined);
       await fs.rm(fullOutputPath, { force: true });
       throw error;
     }
-    throwIfAborted(context.signal);
     const byLines = truncateLines(result.output, MAX_READ_LINES, true);
     const bounded = truncateBytes(byLines.text, true);
     const truncated = result.totalBytes > byteLength(result.output) || byLines.truncated || bounded.truncated;
     let details: Record<string, unknown> | null = null;
     if (truncated) {
+      if (!result.spooled) {
+        await fs.writeFile(fullOutputPath, result.fullOutput, { flag: "wx", mode: 0o600 });
+      }
       details = { fullOutputPath, truncation: { truncated: true } };
-    } else {
-      await fs.rm(fullOutputPath, { force: true });
+    }
+    const fullOutputHint = truncated
+      ? `\n[Full output saved to ${fullOutputPath}; inspect it with k.bash({ command: ${JSON.stringify(`tail -n 2000 -- ${JSON.stringify(fullOutputPath)}`)} })]`
+      : "";
+    if (result.terminationError) {
+      const partial = bounded.text ? `${bounded.text}\n\n` : "";
+      throw new Error(`${partial}${result.terminationError.message}${fullOutputHint}`);
     }
     if (result.code !== 0) {
-      const fullOutputHint = truncated ? `\n[Full output: ${fullOutputPath}]` : "";
       throw new Error(`${bounded.text}${fullOutputHint}\n\nCommand exited with code ${result.code ?? 1}`);
     }
     const normalized = { ok: true, output: bounded.text || "(no output)", details };

@@ -87,6 +87,52 @@ describe("host-neutral Kiro tools provider", () => {
     }
   });
 
+  it("preserves partial bash output on timeout and abort", async () => {
+    const cwd = root();
+    const provider = new KiroToolsProvider(cwd);
+    await expect(provider.invoke(
+      "bash",
+      { command: "printf timeout-prefix; sleep 10", timeout: 0.02 },
+      context(cwd),
+    )).rejects.toThrow(/timeout-prefix[\s\S]*timed out/);
+
+    const controller = new AbortController();
+    const call = provider.invoke(
+      "bash",
+      { command: "printf abort-prefix; sleep 10" },
+      context(cwd, controller.signal),
+    );
+    setTimeout(() => controller.abort(new Error("requested stop")), 30);
+    await expect(call).rejects.toThrow(/abort-prefix[\s\S]*requested stop/);
+  });
+
+  it("bounds image dimensions before attaching media", async () => {
+    const cwd = root();
+    const oversized = Buffer.alloc(24);
+    Buffer.from("89504e470d0a1a0a", "hex").copy(oversized);
+    oversized.writeUInt32BE(20_000, 16);
+    oversized.writeUInt32BE(20_000, 20);
+    fs.writeFileSync(path.join(cwd, "oversized.png"), oversized);
+    const provider = new KiroToolsProvider(cwd);
+    await expect(provider.invoke("read", { path: "oversized.png" }, context(cwd)))
+      .rejects.toThrow(/refuses images/);
+  });
+
+  it("bounds grep regex execution and surfaces unreadable files", async () => {
+    const cwd = root();
+    fs.writeFileSync(path.join(cwd, "redos.txt"), `${"a".repeat(100_000)}!`);
+    const provider = new KiroToolsProvider(cwd);
+    await expect(provider.invoke("grep", { path: "redos.txt", pattern: "(a+)+$" }, context(cwd)))
+      .rejects.toThrow(/Regex execution exceeded/);
+
+    if (process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() !== 0) {
+      const unreadable = path.join(cwd, "unreadable.txt");
+      fs.writeFileSync(unreadable, "needle", { mode: 0o000 });
+      await expect(provider.invoke("grep", { path: unreadable, pattern: "needle", literal: true }, context(cwd)))
+        .rejects.toMatchObject({ code: expect.stringMatching(/EACCES|EPERM/) });
+    }
+  });
+
   it("emits the runtime settlement marker for nonzero bash exits", async () => {
     const cwd = root();
     const provider = new KiroToolsProvider(cwd);

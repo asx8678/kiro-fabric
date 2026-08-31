@@ -98,8 +98,9 @@ class EphemeralKiroArtifactStore implements KiroArtifactStore {
     if (normalizedOffset < 0 || normalizedLimit < 0) {
       throw new KiroArtifactStoreError("artifact offset and limit must be positive integers");
     }
-    entry.lastReadAt = this.#now();
     const text = entry.content.slice(normalizedOffset, normalizedOffset + normalizedLimit);
+    // Out-of-range probes must not keep an artifact alive indefinitely.
+    if (text.length > 0) entry.lastReadAt = this.#now();
     const nextOffset = normalizedOffset + text.length;
     return {
       id,

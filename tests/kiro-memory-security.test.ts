@@ -7,10 +7,13 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { KiroMemoryProvider } from "../src/kiro/memory-provider.js";
 import { KiroMemoryScopeError, openKiroMemory } from "../src/kiro/memory.js";
+import type { FabricInvocationContext } from "../src/protocol.js";
 
 const roots: string[] = [];
 
@@ -63,6 +66,28 @@ describe("Kiro persistent memory ownership", () => {
     await expect(memory.set("collision", { replacement: true })).rejects
       .toThrow(/malformed|foreign|collision/i);
     expect(readFileSync(collision, "utf8")).toBe("user data");
+  });
+
+  it("bounds direct provider input and honors cancellation", async () => {
+    const root = scratch();
+    const provider = new KiroMemoryProvider({ cwd: root, root: path.join(root, "store") });
+    const invocation = {
+      cwd: root,
+      parentToolCallId: "parent",
+      nestedToolCallId: "nested",
+      extensionContext: { cwd: root },
+      update() {},
+    } as unknown as FabricInvocationContext;
+
+    await expect(provider.invoke("get", { key: "x".repeat(513) }, invocation))
+      .rejects.toThrow(/at most 512/);
+    await expect(provider.invoke("search", { query: "x".repeat(2_001) }, invocation))
+      .rejects.toThrow(/at most 2000/);
+    const controller = new AbortController();
+    controller.abort(new Error("memory cancelled"));
+    await expect(provider.invoke("index", {}, { ...invocation, signal: controller.signal }))
+      .rejects.toThrow("memory cancelled");
+    expect(fs.existsSync(path.join(root, "store"))).toBe(false);
   });
 
   it("serializes concurrent session quota checks and commits", async () => {

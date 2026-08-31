@@ -16,9 +16,9 @@ export type RegexExecutionResult =
 
 const WORKER_SOURCE = String.raw`
 const { parentPort } = require("node:worker_threads");
-parentPort.on("message", ({ pattern, haystacks }) => {
+parentPort.on("message", ({ pattern, flags, haystacks }) => {
   try {
-    const regex = new RegExp(pattern, "iu");
+    const regex = new RegExp(pattern, flags);
     const matched = [];
     for (let index = 0; index < haystacks.length; index += 1) {
       if (regex.test(haystacks[index])) matched.push(index);
@@ -40,6 +40,7 @@ export const executeBoundedRegex = async (
   pattern: string,
   haystacks: string[],
   limits: RegexLimits,
+  flags = "iu",
 ): Promise<RegexExecutionResult> => {
   const patternBytes = Buffer.byteLength(pattern, "utf8");
   if (patternBytes > limits.maxPatternBytes) {
@@ -115,6 +116,6 @@ export const executeBoundedRegex = async (
         },
       });
     });
-    worker.postMessage({ pattern, haystacks });
+    worker.postMessage({ pattern, flags, haystacks });
   });
 };

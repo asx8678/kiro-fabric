@@ -82,6 +82,17 @@ describe("Kiro opaque output artifacts", () => {
     })).toHaveLength(8);
   });
 
+  it("does not extend TTL for empty out-of-range reads", () => {
+    let now = 1_000;
+    const store = createKiroArtifactStore(undefined, { now: () => now });
+    const id = store.write("payload");
+    now += 50_000;
+    expect(store.read(id, 999).text).toBe("");
+    now += 11_000;
+    store.sweep(60_000);
+    expect(() => store.read(id)).toThrow(/unavailable|expired/);
+  });
+
   it("rejects oversized payloads and malformed read ranges", () => {
     const store = createKiroArtifactStore();
     expect(() => store.write("x".repeat(2_000_001))).toThrow(KiroArtifactStoreError);

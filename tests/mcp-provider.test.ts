@@ -5,6 +5,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import type { FabricMcpConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
+import { KiroMcpProvider } from "../src/kiro/mcp-provider.js";
 import { McpDescriptorCacheStore } from "../src/providers/mcp-descriptor-cache.js";
 import { McpProvider } from "../src/providers/mcp-provider.js";
 import { loadCachedMcpDescriptors } from "../src/providers/mcp-advisory.js";
@@ -101,6 +102,39 @@ const registryContext = (approve: (action: unknown, args: Record<string, unknown
 });
 
 describe("McpProvider", () => {
+  it("rejects malformed explicit server, tool, and argument shapes without coercion", async () => {
+    const directory = temporaryDirectory();
+    const countFile = path.join(directory, "tools-list.log");
+    const configPath = writeTwoServerConfig({ directory, countFile });
+    const provider = new McpProvider(directory, mcpConfig({ configPath }));
+    try {
+      await expect(provider.invoke("$call", { server: 1, tool: "echo-value" }, context))
+        .rejects.toThrow(/server must be a non-empty string/);
+      await expect(provider.invoke("$call", { server: "test", tool: null }, context))
+        .rejects.toThrow(/tool must be a non-empty string/);
+      await expect(provider.invoke("$call", { server: "test", tool: "echo-value", args: "bad" }, context))
+        .rejects.toThrow(/args must be an object/);
+      expect(countLines(countFile)).toEqual([]);
+    } finally {
+      await provider.close();
+    }
+  });
+
+  it("applies the same strict argument checks in the managed Kiro facade", async () => {
+    const directory = temporaryDirectory();
+    const provider = new KiroMcpProvider(directory, mcpConfig());
+    try {
+      await expect(provider.invoke("$call", { server: 1, tool: "echo" }, context))
+        .rejects.toThrow(/server must be a non-empty string/);
+      await expect(provider.invoke("$call", { server: "test", tool: [], args: {} }, context))
+        .rejects.toThrow(/tool must be a non-empty string/);
+      await expect(provider.invoke("$call", { server: "test", tool: "echo", args: [] }, context))
+        .rejects.toThrow(/args must be an object/);
+    } finally {
+      await provider.close();
+    }
+  });
+
   it("fails closed when multiple tools share one sanitized alias", async () => {
     const directory = temporaryDirectory();
     const countFile = path.join(directory, "tools-list.log");

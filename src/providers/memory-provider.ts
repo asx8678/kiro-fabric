@@ -1,3 +1,4 @@
+import { throwIfAborted } from "../async-settlement.js";
 import type {
   FabricActionDescriptor,
   FabricInvocationContext,
@@ -40,6 +41,15 @@ import { actionArgNormalizer, type ArgNormalizationSpec } from "./arg-normalizat
 const RECALL_DEFAULT_PAGE_SIZE = 25;
 const RECALL_MAX_PAGE_SIZE = 200;
 const SESSIONS_MAX = 500;
+const MAX_QUERY_BYTES = 16 * 1024;
+const MAX_SELECTOR_ITEMS = 1_000;
+const MAX_SELECTOR_CHARS = 4_096;
+
+const assertBoundedText = (value: string | undefined, label: string, maxBytes = MAX_SELECTOR_CHARS): void => {
+  if (value !== undefined && Buffer.byteLength(value, "utf8") > maxBytes) {
+    throw new Error(`${label} exceeds the ${maxBytes}-byte input limit`);
+  }
+};
 
 const descriptors: FabricActionDescriptor[] = [
   {
@@ -345,16 +355,23 @@ export class MemoryProvider implements FabricProvider {
     invocationContext: FabricInvocationContext,
   ): Promise<unknown> {
     try {
+      throwIfAborted(invocationContext.signal);
+      let result: unknown;
       switch (actionName) {
         case "recall":
-          return await this.recall(args, invocationContext);
+          result = await this.recall(args, invocationContext);
+          break;
         case "expand":
-          return await this.expand(args);
+          result = await this.expand(args);
+          break;
         case "sessions":
-          return await this.sessions(args);
+          result = await this.sessions(args);
+          break;
         default:
           throw new Error(`Unknown memory action: ${actionName}`);
       }
+      throwIfAborted(invocationContext.signal);
+      return result;
     } catch (error) {
       if (error instanceof AmbiguousSessionError) {
         return {
@@ -375,6 +392,7 @@ export class MemoryProvider implements FabricProvider {
     invocationContext: FabricInvocationContext,
   ): Promise<unknown> {
     const query = typeof args.query === "string" ? args.query : undefined;
+    assertBoundedText(query, "memory.recall query", MAX_QUERY_BYTES);
     const rawQueryMode = args.queryMode;
     if (rawQueryMode !== undefined && rawQueryMode !== "literal" && rawQueryMode !== "regex") {
       throw new Error('memory.recall queryMode must be "literal" or "regex"');
@@ -393,6 +411,9 @@ export class MemoryProvider implements FabricProvider {
     const ref = typeof args.ref === "string" ? args.ref : undefined;
     const provider = typeof args.provider === "string" ? args.provider : undefined;
     const action = typeof args.action === "string" ? args.action : undefined;
+    for (const [label, value] of Object.entries({ scope, role, tool, ref, provider, action })) {
+      assertBoundedText(value, `memory.recall ${label}`);
+    }
     const rawOutcome = args.outcome;
     if (
       rawOutcome !== undefined &&
@@ -607,6 +628,7 @@ export class MemoryProvider implements FabricProvider {
 
   private async expand(args: Record<string, unknown>): Promise<unknown> {
     const session = typeof args.session === "string" ? args.session : "";
+    assertBoundedText(session, "memory.expand session");
     const expectedSourceHash = typeof args.expectedSourceHash === "string"
       ? args.expectedSourceHash
       : undefined;
@@ -617,6 +639,9 @@ export class MemoryProvider implements FabricProvider {
     const rawIndices = args.indices;
     if (rawIndices !== undefined && !Array.isArray(rawIndices)) {
       throw new Error("memory.expand indices must be an array");
+    }
+    if (Array.isArray(rawIndices) && rawIndices.length > MAX_SELECTOR_ITEMS) {
+      throw new Error(`memory.expand indices exceeds the ${MAX_SELECTOR_ITEMS}-item input limit`);
     }
     if (Array.isArray(rawIndices) && !rawIndices.every((index) =>
       typeof index === "number" && Number.isSafeInteger(index) && index >= 0)) {
@@ -633,6 +658,12 @@ export class MemoryProvider implements FabricProvider {
           (address): address is string => typeof address === "string" && address.length > 0,
         )
       : [];
+    if (entryIds.length > MAX_SELECTOR_ITEMS || operationAddresses.length > MAX_SELECTOR_ITEMS) {
+      throw new Error(`memory.expand selectors exceed the ${MAX_SELECTOR_ITEMS}-item input limit`);
+    }
+    for (const value of [...entryIds, ...operationAddresses]) {
+      assertBoundedText(value, "memory.expand selector");
+    }
     const rawRange = args.entryRange;
     const rangeRecord = rawRange && typeof rawRange === "object" && !Array.isArray(rawRange)
       ? rawRange as Record<string, unknown>

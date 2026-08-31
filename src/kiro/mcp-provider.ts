@@ -98,7 +98,16 @@ export class KiroMcpProvider implements FabricProvider {
       );
     }
     if (actionName === "$call") {
-      const server = String(args.server);
+      if (typeof args.server !== "string" || args.server.trim().length === 0) {
+        throw new TypeError("mcp.call server must be a non-empty string");
+      }
+      if (typeof args.tool !== "string" || args.tool.trim().length === 0) {
+        throw new TypeError("mcp.call tool must be a non-empty string");
+      }
+      if (args.args !== undefined && (typeof args.args !== "object" || args.args === null || Array.isArray(args.args))) {
+        throw new TypeError("mcp.call args must be an object when provided");
+      }
+      const server = args.server;
       const transport = await this.#delegate.configuredServerTransport(server);
       if (!transport) {
         throw new Error(`Unknown or unsupported configured MCP server: ${server}`);

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { throwIfAborted } from "../async-settlement.js";
 import type {
   FabricActionDescriptor,
   FabricInvocationContext,
@@ -19,6 +20,16 @@ type KiroMemoryJsonValue =
   | string
   | KiroMemoryJsonValue[]
   | { [key: string]: KiroMemoryJsonValue };
+
+const MAX_KEY_CHARS = 512;
+const MAX_QUERY_CHARS = 2_000;
+
+const boundedString = (value: unknown, label: string, maxLength: number): string => {
+  if (typeof value !== "string" || value.length < 1 || value.length > maxLength) {
+    throw new TypeError(`${label} must be a non-empty string of at most ${maxLength} characters`);
+  }
+  return value;
+};
 
 const descriptors: FabricActionDescriptor[] = [
   {
@@ -124,24 +135,38 @@ export class KiroMemoryProvider implements FabricProvider {
   async invoke(
     actionName: string,
     args: Record<string, unknown>,
-    _context: FabricInvocationContext,
+    context: FabricInvocationContext,
   ): Promise<unknown> {
-    const memory = this.#memory();
+    throwIfAborted(context.signal);
+    let operation: Promise<unknown>;
     switch (actionName) {
-      case "get":
-        return memory.get(String(args.key));
-      case "set":
-        return memory.set(String(args.key), args.value as KiroMemoryJsonValue);
-      case "search":
-        return memory.search(
-          String(args.query),
-          typeof args.limit === "number" ? args.limit : undefined,
+      case "get": {
+        const key = boundedString(args.key, "memory.get key", MAX_KEY_CHARS);
+        operation = this.#memory().get(key);
+        break;
+      }
+      case "set": {
+        const key = boundedString(args.key, "memory.set key", MAX_KEY_CHARS);
+        operation = this.#memory().set(key, args.value as KiroMemoryJsonValue);
+        break;
+      }
+      case "search": {
+        const query = boundedString(args.query, "memory.search query", MAX_QUERY_CHARS);
+        operation = this.#memory().search(
+          query,
+          typeof args.limit === "number" ? Math.max(1, Math.min(Math.floor(args.limit), 32)) : undefined,
         );
+        break;
+      }
       case "index":
-        return memory.index();
+        operation = this.#memory().index();
+        break;
       default:
         throw new Error(`Unknown managed Kiro memory action: ${actionName}`);
     }
+    const result = await operation;
+    throwIfAborted(context.signal);
+    return result;
   }
 
   #memory(): KiroMemoryBinding<KiroMemoryJsonValue> {

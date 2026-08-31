@@ -84,6 +84,24 @@ describe("memory query and pointer hardening", () => {
       ...texts.map((text, index) => message(`${id}-${index}`, text, index)),
     ]);
 
+  it("rejects oversized input and honors pre-abort before filesystem work", async () => {
+    await expect(provider().invoke(
+      "recall",
+      { query: "x".repeat(16 * 1024 + 1) },
+      invocationContext(cwd),
+    )).rejects.toThrow(/input limit/);
+
+    const controller = new AbortController();
+    controller.abort(new Error("recall cancelled"));
+    await expect(provider().invoke(
+      "recall",
+      { query: "anything", scope: "global" },
+      { ...invocationContext(cwd), signal: controller.signal },
+    )).rejects.toThrow("recall cancelled");
+    expect(fs.existsSync(indexDir)).toBe(true);
+    expect(fs.readdirSync(indexDir)).toEqual([]);
+  });
+
   it("never infers regex mode from dots or paths", async () => {
     expect(planMemoryQuery("src/foo.ts")).toEqual({ kind: "terms", terms: ["src", "foo", "ts"] });
     const file = seed("literal.jsonl", "literal", ["srcXfooYts only"]);

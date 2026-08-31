@@ -11,6 +11,7 @@ const MEMORY_FORMAT = 1 as const;
 const OWNERSHIP_MARKER = ".kiro-fabric-owner";
 const MAX_FILE_NAME_BYTES = 240;
 const MUTATION_LOCK = ".kiro-fabric-mutation-lock";
+const MUTATION_LOCK_OWNER = "owner.json";
 const MUTATION_LOCK_TIMEOUT_MS = 5_000;
 const STALE_MUTATION_LOCK_MS = 30_000;
 const OWNERSHIP_INITIALIZATION_WAIT_MS = 250;
@@ -106,6 +107,16 @@ const errorCode = (error: unknown): string | undefined =>
 const delay = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+const processIsAlive = (pid: number): boolean => {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return errorCode(error) === "EPERM";
+  }
+};
+
 const withNamespaceMutationLock = async <T>(
   namespaceRoot: string,
   operation: () => T | Promise<T>,
@@ -121,6 +132,17 @@ const withNamespaceMutationLock = async <T>(
         throw new KiroMemoryScopeError("Kiro memory mutation lock is not a real directory");
       }
       identity = { dev: stat.dev, ino: stat.ino };
+      try {
+        fs.writeFileSync(
+          path.join(lockPath, MUTATION_LOCK_OWNER),
+          JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }),
+          { encoding: "utf8", mode: 0o600, flag: "wx" },
+        );
+      } catch (error) {
+        identity = undefined;
+        try { fs.rmdirSync(lockPath); } catch {}
+        throw error;
+      }
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
       let stat: fs.Stats;
@@ -134,7 +156,27 @@ const withNamespaceMutationLock = async <T>(
         throw new KiroMemoryScopeError("Kiro memory mutation lock is foreign");
       }
       if (Date.now() - stat.mtimeMs > STALE_MUTATION_LOCK_MS) {
+        let ownerPid: number | undefined;
         try {
+          const owner = JSON.parse(fs.readFileSync(path.join(lockPath, MUTATION_LOCK_OWNER), "utf8")) as { pid?: unknown };
+          if (typeof owner.pid === "number") ownerPid = owner.pid;
+        } catch {}
+        if (ownerPid !== undefined && processIsAlive(ownerPid)) {
+          if (Date.now() >= deadline) {
+            throw new KiroMemoryScopeError("Timed out waiting for a live Kiro memory mutation lock");
+          }
+          await delay(10);
+          continue;
+        }
+        try {
+          const current = fs.lstatSync(lockPath);
+          if (
+            !current.isDirectory() ||
+            current.isSymbolicLink() ||
+            current.dev !== stat.dev ||
+            current.ino !== stat.ino
+          ) continue;
+          fs.rmSync(path.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
           fs.rmdirSync(lockPath);
         } catch {
           if (Date.now() >= deadline) {
@@ -160,7 +202,10 @@ const withNamespaceMutationLock = async <T>(
         !current.isSymbolicLink() &&
         current.dev === identity.dev &&
         current.ino === identity.ino
-      ) fs.rmdirSync(lockPath);
+      ) {
+        fs.rmSync(path.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
+        fs.rmdirSync(lockPath);
+      }
     } catch {}
   }
 };

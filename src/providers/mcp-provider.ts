@@ -108,6 +108,21 @@ const managementDescriptors: FabricActionDescriptor[] = [
   },
 ];
 
+const requiredStringArgument = (value: unknown, label: string): string => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
+  return value;
+};
+
+const explicitToolArguments = (value: unknown): Record<string, unknown> => {
+  if (value === undefined) return {};
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("mcp.call args must be an object when provided");
+  }
+  return value as Record<string, unknown>;
+};
+
 const normalizeSchema = (schema: unknown): Record<string, unknown> =>
   typeof schema === "object" && schema !== null && !Array.isArray(schema)
     ? (schema as Record<string, unknown>)
@@ -355,12 +370,9 @@ export class McpProvider implements FabricProvider {
       return { registered: definition.name };
     }
     if (actionName === "$call") {
-      const server = String(args.server);
-      const tool = String(args.tool);
-      const toolArgs =
-        typeof args.args === "object" && args.args !== null && !Array.isArray(args.args)
-          ? (args.args as Record<string, unknown>)
-          : {};
+      const server = requiredStringArgument(args.server, "mcp.call server");
+      const tool = requiredStringArgument(args.tool, "mcp.call tool");
+      const toolArgs = explicitToolArguments(args.args);
       return this.#call(server, tool, toolArgs, context.signal, {
         preferExactRaw: true,
         validateInputSchema: true,
