@@ -70,55 +70,63 @@ native tools. Keep ordinary file, shell, web, and native-subagent work in Kiro.
 
 ## Install the Kiro Power (recommended)
 
+Use this path for the normal Kiro IDE Power and Kiro CLI v3. If you want the
+separate managed CLI profile instead, skip to [Strict mode](#install-strict-mode-advanced).
+
+| Your situation | Follow these instructions |
+|---|---|
+| Kiro Fabric has never been installed | [Fresh installation](#fresh-installation) |
+| You already cloned and imported it | [Update an existing Power](#update-an-existing-power) |
+| Dependencies or generated files appear stale | [Clean rebuild](#clean-rebuild-an-existing-checkout) |
+
 ### Requirements
 
 Install these first:
 
-- [Kiro IDE](https://kiro.dev/) (required to install a local custom Power)
-- `kiro-cli 2.20.1` when using the Power from CLI v3
+- [Kiro IDE](https://kiro.dev/) (required for the one-time local custom-Power import)
+- `kiro-cli 2.20.1` when using the installed Power from Kiro CLI v3
 - [Node.js](https://nodejs.org/) 24 or newer
 - Git
 - pnpm 11.20.0
 
-Check the versions:
+Check all locally installed command-line requirements:
 
 ```bash
 node --version
+git --version
 pnpm --version
+kiro-cli --version  # needed only for Kiro CLI v3
 ```
 
-If `pnpm` is missing, install the version used by this repository:
+If `pnpm` is missing, install the exact version used by this repository:
 
 ```bash
 npm install --global pnpm@11.20.0
 ```
 
-### 1. Download the source
+### Fresh installation
+
+Choose a parent directory, clone the trusted GitHub repository, install exactly
+the locked dependencies, and build the local Power:
 
 ```bash
 git clone https://github.com/asx8678/kiro-fabric.git
 cd kiro-fabric
-```
-
-If you already have this repository, open a terminal at its root.
-
-### 2. Install dependencies and build the local Power
-
-```bash
 pnpm install --frozen-lockfile
 pnpm run power:dev
 ```
 
-`power:dev` builds the compiled runtime and creates a local Power package at:
+`--frozen-lockfile` prevents installation from silently changing the reviewed
+dependency lockfile. `power:dev` builds the compiled runtime and creates:
 
 ```text
 <repository>/.tmp/kiro-fabric-power/
 ```
 
-The command prints the absolute path. Select this generated folder in Kiro. Do
-not select the repository root.
+The command prints the absolute path. Import that generated folder into Kiro;
+do **not** import the repository root, `src/`, or `dist/`.
 
-### 3. Import the generated folder in Kiro IDE
+### Import the generated folder in Kiro IDE
 
 1. Open Kiro IDE.
 2. Open the **Powers** panel with the Ghosty lightning icon.
@@ -126,27 +134,28 @@ not select the repository root.
 4. Select **Import power from a folder**.
 5. Choose the absolute `.tmp/kiro-fabric-power/` path printed by
    `pnpm run power:dev`.
-6. Select **Install** and enable the Power for your workspace.
+6. Select **Install** and enable Kiro Fabric for the intended workspace.
+7. Restart or reload the workspace if the Fabric tools do not appear immediately.
 
-No global npm installation is needed for this local Power path.
+No global `kiro-fabric` npm installation is required. The project is currently
+installed from local source; do not use an unpublished global npm package as a
+substitute.
 
-### 4. Use the installed Power from Kiro CLI v3
+### Use the installed Power from Kiro CLI v3
 
-Kiro CLI v3 automatically picks up Powers installed through Kiro IDE. From the
-project you want to work on, run:
+Kiro CLI v3 automatically discovers Powers installed through Kiro IDE. From the
+project you want Fabric to work on, run:
 
 ```bash
 kiro-fabric-setup launch-power --project-root /absolute/path/to/project
 ```
 
-This validates the supported Kiro CLI and launches `kiro-cli --v3` without
-selecting Fabric's separate Strict-mode agent. It is equivalent to running
-`kiro-cli --v3` directly after installation. Do not add
-`--agent kiro-fabric`: that selects Strict mode, whose profile intentionally
-disables ambient Powers.
+You may also run `kiro-cli --v3` directly after the IDE installation. Do not add
+`--agent kiro-fabric` when you want the Power: that selects the separate Strict
+mode profile, whose narrow tool boundary intentionally disables ambient Powers.
 
 Kiro currently has no separate CLI-only importer for a local custom Power, so
-the one-time IDE import above is required.
+the one-time Kiro IDE import is required before CLI v3 can discover it.
 
 ## Verify the Power installation
 
@@ -307,24 +316,81 @@ before enabling trusted external MCP services.
 
 ## Update or remove the Power
 
-### Update a local source installation
+### Update an existing Power
 
-From the repository:
+An update has two parts: update and rebuild the source checkout, then replace the
+Power imported into Kiro. From the existing `kiro-fabric` repository:
 
 ```bash
-git pull --ff-only
+# Confirm that you are in the expected checkout and review local changes first.
+git status --short
+git remote -v
+
+# Commit or stash any intentional local changes before pulling.
+git switch main
+git pull --ff-only origin main
+
+# Reproduce the dependency tree and regenerate the local Power.
 pnpm install --frozen-lockfile
 pnpm run power:dev
 ```
 
-Remove or disable the previous custom Power in Kiro, then import the regenerated
-`.tmp/kiro-fabric-power/` folder.
+Then replace the installed Power:
+
+1. Open Kiro IDE's **Powers** panel.
+2. Disable or remove the previous Kiro Fabric custom Power.
+3. Select **Add Custom Power** → **Import power from a folder**.
+4. Select the newly generated `<repository>/.tmp/kiro-fabric-power/` folder.
+5. Install and enable it for the workspace, then reload the workspace.
+6. Run the verification prompt in [Verify the Power installation](#verify-the-power-installation).
+
+Do not select the repository root. Do not reuse an old copied package from a
+different directory: always import the folder regenerated by the latest
+`pnpm run power:dev`.
+
+### Clean rebuild an existing checkout
+
+Use this when normal updating succeeds but Kiro still loads stale output, or
+when dependencies/generated files may be damaged. First update the checkout as
+shown above. Then remove only reproducible local artifacts and rebuild them:
+
+```bash
+node -e "for (const p of ['node_modules','dist','.tmp/kiro-fabric-power']) require('node:fs').rmSync(p,{recursive:true,force:true})"
+pnpm install --frozen-lockfile
+pnpm run power:dev
+```
+
+This intentionally preserves source files and unrelated untracked work. Avoid
+`git clean -xdf` unless you understand that it permanently deletes **all**
+untracked and ignored files. After the clean rebuild, remove/re-import the Power
+in Kiro using the update steps above.
+
+### Check the source before importing
+
+For the strongest local verification, run the complete repository gate:
+
+```bash
+pnpm run check
+```
+
+It runs typechecking, a fresh build, all tests, dead-code lint, Power validation,
+and Power certification. For a quicker Power-specific diagnostic after a build:
+
+```bash
+node dist/kiro/cli-entry.js doctor power --json
+```
 
 ### Remove the Power
 
-Open Kiro's **Powers** panel, disable or remove Kiro Fabric, and restart the
-workspace if Kiro still shows the old MCP server. Mutable Power data remains
-under Kiro-owned `PLUGIN_DATA` according to Kiro's uninstall behavior.
+1. Open Kiro's **Powers** panel.
+2. Disable and remove Kiro Fabric.
+3. Restart or reload the workspace if Kiro still shows the old MCP server.
+4. Optionally delete the local source checkout after preserving any changes you
+   want to keep.
+
+Mutable Power data remains under Kiro-owned `PLUGIN_DATA` according to Kiro's
+uninstall behavior. Removing a local checkout does not guarantee deletion of
+that Kiro-managed data.
 
 ## Install Strict mode (advanced)
 
