@@ -56,7 +56,7 @@ import {
   mergeCapabilities,
   safeParse,
   serializeMessage
-} from "./chunk-YLCJCAIG.js";
+} from "./chunk-Z54RA65E.js";
 import {
   KIRO_EXECUTION_TIMEOUT_MS,
   KIRO_MCP_CALL_TIMEOUT_MS,
@@ -22667,7 +22667,7 @@ var range = (a, b, str) => {
   return result;
 };
 
-// node_modules/.pnpm/brace-expansion@5.0.8/node_modules/brace-expansion/dist/esm/index.js
+// node_modules/.pnpm/brace-expansion@5.0.9/node_modules/brace-expansion/dist/esm/index.js
 var escSlash = "\0SLASH" + Math.random() + "\0";
 var escOpen = "\0OPEN" + Math.random() + "\0";
 var escClose = "\0CLOSE" + Math.random() + "\0";
@@ -22755,7 +22755,7 @@ function combine(acc, pre, values, max, maxLength, dropEmpties) {
   }
   return out;
 }
-function expandSequence(body, isAlphaSequence, max) {
+function expandSequence(body, isAlphaSequence, max, maxLength) {
   const n = body.split(/\.\./);
   const N = [];
   if (n[0] === void 0 || n[1] === void 0) {
@@ -22772,6 +22772,7 @@ function expandSequence(body, isAlphaSequence, max) {
     test = gte;
   }
   const pad = n.some(isPadded);
+  let length = 0;
   for (let i = x; test(i, y) && N.length < max; i += incr) {
     let c;
     if (isAlphaSequence) {
@@ -22793,7 +22794,10 @@ function expandSequence(body, isAlphaSequence, max) {
         }
       }
     }
+    if (length + c.length > maxLength)
+      break;
     N.push(c);
+    length += c.length;
   }
   return N;
 }
@@ -22833,7 +22837,7 @@ function expand_(str, max, maxLength, isTop) {
     }
     let values;
     if (isSequence) {
-      values = expandSequence(m.body, isAlphaSequence, max);
+      values = expandSequence(m.body, isAlphaSequence, max, maxLength);
     } else {
       let n = parseCommaParts(m.body);
       if (n.length === 1 && n[0] !== void 0) {
@@ -22846,9 +22850,26 @@ function expand_(str, max, maxLength, isTop) {
           continue;
         }
       }
+      let dropsEmpties = dropEmpties && !m.post.length && !pre;
+      for (let d = 0; dropsEmpties && d < acc.length; d++) {
+        if (acc[d]) {
+          dropsEmpties = false;
+        }
+      }
       values = [];
-      for (let j = 0; j < n.length; j++) {
-        values.push.apply(values, expand_(n[j], max, maxLength, false));
+      let valuesLength = 0;
+      outer: for (let j = 0; j < n.length; j++) {
+        const expanded = expand_(n[j], max, maxLength, false);
+        for (let k = 0; k < expanded.length; k++) {
+          const v = expanded[k];
+          if (dropsEmpties && !v)
+            continue;
+          if (values.length >= max || valuesLength + v.length > maxLength) {
+            break outer;
+          }
+          values.push(v);
+          valuesLength += v.length;
+        }
       }
     }
     acc = combine(acc, pre, values, max, maxLength, dropEmpties && !m.post.length);
@@ -27742,7 +27763,7 @@ var McpProvider = class {
     if (this.#runtimeCreation?.generation === generation) {
       return this.#runtimeCreation.promise;
     }
-    const promise = import("./dist-QTSSVXPS.js").then(({ createRuntime }) => createRuntime({
+    const promise = import("./dist-JG2RRXMO.js").then(({ createRuntime }) => createRuntime({
       rootDir: this.cwd,
       ...this.config.configPath ? { configPath: this.config.configPath } : {},
       clientInfo: { name: "kiro-fabric", version: "0.1.0" }
