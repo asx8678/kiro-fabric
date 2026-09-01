@@ -178,8 +178,14 @@ describe("detached installed Kiro runtime", () => {
       const packed = await execFileAsync("npm", [
         "pack", "--ignore-scripts", "--json", "--pack-destination", packDir,
       ], { cwd: repoRoot, encoding: "utf8", timeout: 60_000 });
-      const packReport = JSON.parse(String(packed.stdout)) as Array<{ filename?: unknown }>;
-      const filename = packReport[0]?.filename;
+      // npm <= 11 emits a JSON array of pack entries; npm >= 12 emits an
+      // object keyed by package name. Accept both shapes.
+      const packReport = JSON.parse(String(packed.stdout)) as
+        Array<{ filename?: unknown }> | Record<string, { filename?: unknown }>;
+      const packEntry = Array.isArray(packReport)
+        ? packReport[0]
+        : Object.values(packReport)[0];
+      const filename = packEntry?.filename;
       if (typeof filename !== "string" || !filename.endsWith(".tgz")) {
         throw new Error(`nested npm pack returned no tarball filename: ${String(packed.stdout).slice(0, 500)}`);
       }
