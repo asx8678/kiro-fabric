@@ -1,9 +1,3 @@
----
-name: fabric-workflow
-description: Runs an explicit bounded workflow across managed Kiro ACP children. Use for a large audit or implementation already partitioned into independent items.
-disable-model-invocation: true
----
-
 # Bounded Kiro workflow
 
 Requires a managed profile installed with `--allow-shell --subagents`. Pass the

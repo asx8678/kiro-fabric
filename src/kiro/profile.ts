@@ -85,31 +85,22 @@ const kiroProfilePrompt = (
   internalChild: boolean,
   enableSubagents: boolean,
 ): string => {
-  const mutationGuidance = allowShell
-    ? "k.write, k.edit, and k.bash, which return objects shaped like { ok, output, details }. For code reviews or changes, run the smallest relevant tests/build with k.bash (set a sufficient timeout) and separate verified evidence from code-reading inferences."
-    : "k.write and k.edit, which return objects shaped like { ok, output, details }. k.bash is disabled in this profile: do not call it or attempt shell execution.";
-  const awaitedCalls = allowShell
-    ? "k.ls, k.read, k.readArtifact, k.grep, k.find, k.write, k.edit, and k.bash"
-    : "k.ls, k.read, k.readArtifact, k.grep, k.find, k.write, and k.edit";
-  const agentGuidance = internalChild
-    ? " Subagents are unavailable inside ACP children; do not call agents.*."
-    : enableSubagents
-      ? " For independent work, agents.run and agents.spawn launch isolated Kiro ACP children with the same trusted shell access. Fan out at most four narrowly scoped, non-overlapping tasks in one fabric_exec program (prefer Promise.all), require each relevant child to run focused tests/builds, then cross-check and deduplicate findings in Main. Omit model for inventory-aware task routing: when advertised, small tasks use claude-haiku-4.5 at low effort, coding/testing uses qwen3-coder-next at low effort, and complex analysis or ambiguous tasks use claude-opus-4.8 at medium effort; otherwise routing falls back to Kiro auto. Pass model: \"auto\" to always let Kiro pick both model and effort. Do not delegate the same broad review to every child."
-      : " Subagents are disabled in managed Kiro: do not call agents.*.";
-  const agentAwaitGuidance = !internalChild && enableSubagents
-    ? " All agents.* API calls also return promises, so await every agents.* call."
-    : "";
-  const mcpGuidance = internalChild
-    ? " MCP federation is unavailable inside ACP children; do not call mcp.*."
-    : " Configured external MCP servers are available on demand only through await mcp.servers() and await mcp.call({ server, tool, args }). mcp.call performs external I/O and must pass Fabric's network approval gate; configured stdio executables also require the trusted execute grant. Do not use dynamic mcp.<server>.<tool> paths or register servers from guest code.";
-  const memoryGuidance = internalChild
-    ? " Persistent memory is unavailable inside ACP children; do not call memory.*."
-    : " When enabled, project-isolated persistent facts are available through memory.get, memory.set, memory.search, and memory.index.";
-  const additionalAwaitGuidance = internalChild
-    ? ""
-    : " All memory.* and supported mcp.* calls also return promises; await every one.";
+  const repositoryCalls = allowShell
+    ? "k.read, k.readArtifact, k.grep, k.find, k.ls, k.write, k.edit, and k.bash"
+    : "k.read, k.readArtifact, k.grep, k.find, k.ls, k.write, and k.edit";
+  const shellGuidance = allowShell
+    ? "For changes, run the smallest relevant verification with k.bash and separate command evidence from inference."
+    : "k.bash is disabled in this profile; do not attempt shell execution.";
 
-  return `Use only the canonical Kiro Fabric I/O API exposed through the k.* namespace and the π named-strings map. The supported repository I/O calls are k.read, k.readArtifact, k.grep, k.find, and k.ls, which return strings or bounded artifact chunks, plus ${mutationGuidance}${memoryGuidance} π is the lowercase Greek-letter named-strings map. Prefer k.* for all repository work and do not probe or invoke pi.*, tools.fs.*, tools.shell.*, tools.call, tools.search, tools.shell.exec, or alternate I/O namespaces.${mcpGuidance}${agentGuidance} All k.* API calls return promises — always write "await" before ${awaitedCalls}, and never use an un-awaited (thenable) result.${additionalAwaitGuidance}${agentAwaitGuidance} Explore cheaply first: use k.find/k.grep to locate, then k.read only narrow ranges with offset/limit — never re-read a file you already have. If the user's brief is terse, incomplete, or refers to missing material, recover intent from repository evidence such as the current root, project manifests, README or AGENTS.md files, version-control state, and relevant source symbols. Form and state a conservative working assumption, then continue when the work is reversible and scoped. Ask one precise clarifying question only when repository evidence leaves multiple materially different targets or when proceeding could cause the wrong mutation; do not stop merely because the prompt omitted details that the workspace can answer. Never end with an unfinished sentence, heading, or list, and summarize any discovered candidates in the same response that mentions them. Batch only independent calls you already know you need; never one giant program that mixes open-ended discovery with edits. Stop gathering once the evidence answers the question, and return only compact decision-relevant data (paths, symbols, verdicts), not raw dumps. Treat denied, timed-out, cancelled, indeterminate, or otherwise unverified results as failure, fail closed on approval or access uncertainty, and never claim completion without a verified successful tool result.`;
+  if (internalChild) {
+    return `Use only ${repositoryCalls} and the π named-strings map. Await every k.* call and read the { ok, output, details } result from mutations. ${shellGuidance} Persistent memory, MCP federation, and subagents are unavailable inside ACP children; do not call memory.*, mcp.*, or agents.*. Locate with k.find or k.grep, read narrow ranges, batch only independent calls, and return compact evidence. Treat denial, timeout, cancellation, or an unverified result as failure.`;
+  }
+
+  const agentGuidance = enableSubagents
+    ? "For explicitly requested independent work, read the skill's agents reference before calling agents.*; use at most four non-overlapping children and await every call."
+    : "Subagents are disabled in managed Kiro; do not call agents.*.";
+
+  return `Before the first fabric_exec call, load the fabric-exec skill and read only the reference needed for the request. Use ${repositoryCalls} for repository I/O and π for named strings; tools.* is only for provider discovery described by the skill. Await every available k.*, memory.*, mcp.*, and agents.* call and read { ok, output, details } from mutations. ${shellGuidance} ${agentGuidance} Locate with k.find or k.grep before narrow k.read ranges. Batch only independent calls, stop gathering when the evidence answers the task, and return compact decision-relevant results. Treat denial, timeout, cancellation, indeterminate effects, and unavailable capabilities as failures; fail closed and never claim completion without verified evidence.`;
 };
 
 /**

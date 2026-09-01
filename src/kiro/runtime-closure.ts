@@ -158,10 +158,10 @@ const closureSourceDirectory = (packageRoot: string): string => {
 const MANAGED_RELEASE_SKILL_FILES = [
   "fabric-exec/SKILL.md",
   "fabric-exec/references/agents.md",
+  "fabric-exec/references/guide.md",
   "fabric-exec/references/mcp.md",
-  "fabric-guide/SKILL.md",
-  "fabric-review/SKILL.md",
-  "fabric-workflow/SKILL.md",
+  "fabric-exec/references/review.md",
+  "fabric-exec/references/workflow.md",
 ] as const;
 
 const managedReleaseSkillPath = (packageRoot: string, relativePath: string): string => {

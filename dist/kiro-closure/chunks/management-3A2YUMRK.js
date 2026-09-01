@@ -11,7 +11,7 @@ import {
   inspectFabricConfig,
   require_dist,
   resolveAgentDir
-} from "./chunk-Z5TQWEW6.js";
+} from "./chunk-GBDWQFNI.js";
 import {
   resolveKiroMcpLaunchEnvironment
 } from "./chunk-HQ66VDCC.js";
@@ -41,7 +41,7 @@ import {
   kiroProfilePath,
   resolveKiroInstallRoots,
   sameExecutableIdentity
-} from "./chunk-DTWQSS3Y.js";
+} from "./chunk-KQOUOZBQ.js";
 import {
   KIRO_INSTALL_MANIFEST_FORMAT,
   KiroInstallError,
@@ -370,10 +370,10 @@ var closureSourceDirectory = (packageRoot) => {
 var MANAGED_RELEASE_SKILL_FILES = [
   "fabric-exec/SKILL.md",
   "fabric-exec/references/agents.md",
+  "fabric-exec/references/guide.md",
   "fabric-exec/references/mcp.md",
-  "fabric-guide/SKILL.md",
-  "fabric-review/SKILL.md",
-  "fabric-workflow/SKILL.md"
+  "fabric-exec/references/review.md",
+  "fabric-exec/references/workflow.md"
 ];
 var managedReleaseSkillPath = (packageRoot, relativePath) => {
   const strictPath = join(packageRoot, "strict", "skills", ...relativePath.split("/"));
@@ -1062,10 +1062,10 @@ import { join as join2 } from "node:path";
 var MANAGED_SKILL_FILES = [
   "fabric-exec/SKILL.md",
   "fabric-exec/references/agents.md",
+  "fabric-exec/references/guide.md",
   "fabric-exec/references/mcp.md",
-  "fabric-guide/SKILL.md",
-  "fabric-review/SKILL.md",
-  "fabric-workflow/SKILL.md"
+  "fabric-exec/references/review.md",
+  "fabric-exec/references/workflow.md"
 ];
 var skillPrefix = (layout) => layout === "project" ? ".kiro/skills" : "skills";
 var managedKiroSkillSources = (installRoot, layout) => {
@@ -1094,9 +1094,7 @@ var managedKiroSkillBundleSha256 = (sources) => {
   }
   return hash.digest("hex");
 };
-var managedKiroSkillResources = (layout) => ["fabric-exec", "fabric-guide", "fabric-review", "fabric-workflow"].map(
-  (name) => layout === "project" ? `skill://.kiro/skills/${name}/SKILL.md` : `skill:///skills/${name}/SKILL.md`
-);
+var managedKiroSkillResources = (layout) => [layout === "project" ? "skill://.kiro/skills/fabric-exec/SKILL.md" : "skill:///skills/fabric-exec/SKILL.md"];
 
 // src/kiro/install.ts
 var execFileAsync = promisify(execFile);

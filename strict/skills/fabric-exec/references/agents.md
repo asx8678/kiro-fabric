@@ -30,6 +30,12 @@ Supported operations are `run`, `spawn`, `wait`, `status`, `list`, `models`,
 `runner: "kiro"` is the only runner value and executes the configured
 `kiro-cli` binary through ACP.
 
+Model routing is inventory-aware. When available, use `claude-haiku-4.5` at
+low effort for small work, `qwen3-coder-next` at low effort for coding and
+testing, and `claude-opus-4.8` at medium effort for complex or ambiguous work.
+If only `auto` is advertised, omit both model and effort so Kiro selects a
+supported route. Passing `model: "auto"` likewise leaves effort to Kiro.
+
 There are no Pi/Claude/Veda runners, actors, peers, mesh subscriptions,
 worktrees, recursive mode, durable residency, extension loading, or global
 `agent()` helper. Kiro ACP usage is reported as unavailable, so do not claim

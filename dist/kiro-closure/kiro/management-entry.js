@@ -13,6 +13,6 @@ import { fileURLToPath } from "node:url";
 var invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : "";
 var selfPath = fileURLToPath(import.meta.url);
 if (invokedPath === selfPath || invokedPath === realpathSync(selfPath)) {
-  const { runInstalledManagement } = await import("../chunks/management-BDDSRZ6M.js");
+  const { runInstalledManagement } = await import("../chunks/management-3A2YUMRK.js");
   process.exitCode = await runInstalledManagement(process.argv.slice(2));
 }

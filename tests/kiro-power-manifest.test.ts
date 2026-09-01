@@ -30,10 +30,13 @@ describe("Agent Plugins 1.0.0 package", () => {
       description: string;
       keywords: string[];
     };
+    const execution = fs.readFileSync("skills/fabric-exec/SKILL.md", "utf8");
     const orchestration = fs.readFileSync("skills/fabric-orchestration/SKILL.md", "utf8");
     const agentReference = fs.readFileSync("skills/fabric-exec/references/agents.md", "utf8");
     expect([plugin.description, ...plugin.keywords].join(" ")).not.toMatch(/multi-agent|agent fan-out|ACP orchestration/i);
+    expect(execution).not.toContain("agents.run({");
     expect(orchestration).not.toContain("agents.run({");
+    expect(execution).toMatch(/mounts no `k\.\*` and no\s+`agents\.\*`/i);
     expect(orchestration).toMatch(/current Power release does not\s+mount `agents\.\*`/i);
     expect(agentReference).toMatch(/does not mount `agents\.\*`/i);
   });

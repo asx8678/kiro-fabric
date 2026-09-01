@@ -7,19 +7,24 @@ import { describe, expect, it } from "vitest";
 import { guestTypeDeclarations } from "../src/runtime/guest-types.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
 
-const EXPECTED_SKILLS = [
-  "fabric-exec",
-  "fabric-guide",
-  "fabric-review",
-  "fabric-workflow",
+const EXPECTED_SKILLS = ["fabric-exec"] as const;
+const EXPECTED_REFERENCES = [
+  "agents.md",
+  "guide.md",
+  "mcp.md",
+  "review.md",
+  "workflow.md",
 ] as const;
 const REMOVED_SKILLS = [
   "fabric-advisor",
   "fabric-ambient",
   "fabric-fusion",
+  "fabric-guide",
+  "fabric-review",
   "fabric-schema",
   "fabric-spec",
   "fabric-supervisor",
+  "fabric-workflow",
 ] as const;
 const KIRO_DECLARATIONS = guestTypeDeclarations(true, {
   coreToolNamespace: "k",
@@ -39,20 +44,21 @@ describe("managed Kiro skill contract", () => {
     const loaded = loadSkillsFromDir({ dir: "strict/skills", source: "test" });
     expect(loaded.diagnostics).toEqual([]);
     expect(loaded.skills.map((skill) => skill.name).sort()).toEqual([...EXPECTED_SKILLS]);
-    expect(loaded.skills.filter((skill) => !skill.disableModelInvocation)
-      .map((skill) => skill.name)).toEqual(["fabric-exec"]);
+    expect(loaded.skills.map((skill) => skill.name)).toEqual(["fabric-exec"]);
     const prompt = formatSkillsForPrompt(loaded.skills);
     expect(prompt).toContain("<name>fabric-exec</name>");
-    for (const hidden of EXPECTED_SKILLS.filter((name) => name !== "fabric-exec")) {
-      expect(prompt).not.toContain(`<name>${hidden}</name>`);
+    for (const removed of REMOVED_SKILLS) {
+      expect(prompt).not.toContain(`<name>${removed}</name>`);
     }
+    expect(fs.readFileSync("strict/skills/fabric-exec/SKILL.md", "utf8"))
+      .not.toContain("disable-model-invocation");
   });
 
   it("type-checks every executable example against the Kiro capability view", () => {
     const files = [
       ...skillFiles(),
-      "strict/skills/fabric-exec/references/agents.md",
-      "strict/skills/fabric-exec/references/mcp.md",
+      ...EXPECTED_REFERENCES.map((name) =>
+        `strict/skills/fabric-exec/references/${name}`),
     ];
     for (const file of files) {
       const markdown = fs.readFileSync(file, "utf8");
@@ -78,13 +84,17 @@ describe("managed Kiro skill contract", () => {
     expect(exec).toContain("read, describe,\nretry");
     expect(exec).toContain("settle: true");
     expect(exec).not.toContain("pi.read(");
-    for (const match of exec.matchAll(/`<skill-dir>\/([^`]+\.md)`/g)) {
+    const skillDirRefs = [...exec.matchAll(/`<skill-dir>\/([^`]+\.md)`/g)];
+    expect(skillDirRefs.length).toBeGreaterThan(0);
+    for (const match of skillDirRefs) {
       expect(fs.existsSync(path.resolve("strict/skills/fabric-exec", match[1]!))).toBe(true);
     }
 
     const agents = fs.readFileSync("strict/skills/fabric-exec/references/agents.md", "utf8");
     expect(agents).toContain("at most four non-recursive");
     expect(agents).toContain("There are no Pi/Claude/Veda runners");
+    expect(agents).toContain("qwen3-coder-next");
+    expect(agents).toContain("claude-opus-4.8");
     expect(agents).not.toContain("agents.create(");
 
     const mcp = fs.readFileSync("strict/skills/fabric-exec/references/mcp.md", "utf8");
@@ -93,9 +103,8 @@ describe("managed Kiro skill contract", () => {
     expect(mcp).not.toContain("mcp.register(");
   });
 
-  it("keeps orchestration user-invoked, bounded, and direct-agent only", () => {
-    const workflow = fs.readFileSync("strict/skills/fabric-workflow/SKILL.md", "utf8");
-    expect(workflow).toContain("disable-model-invocation: true");
+  it("keeps orchestration references bounded and direct-agent only", () => {
+    const workflow = fs.readFileSync("strict/skills/fabric-exec/references/workflow.md", "utf8");
     expect(workflow).toContain("agents.run({");
     expect(workflow).toContain("1-4 non-empty independent items");
     expect(workflow).toContain('"partial"');
@@ -109,7 +118,7 @@ describe("managed Kiro skill contract", () => {
     expect(workflow).not.toMatch(/\bagent\s*\(/);
     expect(workflow).not.toContain("worktree:");
 
-    const review = fs.readFileSync("strict/skills/fabric-review/SKILL.md", "utf8");
+    const review = fs.readFileSync("strict/skills/fabric-exec/references/review.md", "utf8");
     expect(review).toContain("Correctness & security");
     expect(review).toContain("Maintainability");
     expect(review).toContain("advisory");
@@ -130,34 +139,36 @@ describe("managed Kiro skill contract", () => {
     expect(review).toContain("schema-invalid response is a lane");
     expect(review).toContain("Never fall back to\nunvalidated `result.text`");
 
-    const guide = fs.readFileSync("strict/skills/fabric-guide/SKILL.md", "utf8");
+    const guide = fs.readFileSync("strict/skills/fabric-exec/references/guide.md", "utf8");
     expect(guide).toContain("smallest sufficient path");
-    expect(guide).toContain("/skill:fabric-workflow");
-    expect(guide).toContain("/skill:fabric-review");
+    expect(guide).toContain("references/workflow.md");
+    expect(guide).toContain("references/review.md");
     expect(guide).not.toContain("/skill:fabric-schema");
   });
 
   it("packs no removed skills and includes every required Kiro reference", () => {
     const packed = JSON.parse(execFileSync(
-      process.platform === "win32" ? process.env.ComSpec ?? "cmd.exe" : "npm",
+      process.platform === "win32" ? process.env.ComSpec ?? "cmd.exe" : "pnpm",
       process.platform === "win32"
-        ? ["/d", "/s", "/c", "npm", "pack", "--ignore-scripts", "--dry-run", "--json"]
-        : ["pack", "--ignore-scripts", "--dry-run", "--json"],
+        ? ["/d", "/s", "/c", "pnpm", "pack", "--dry-run", "--json", "--config.ignore-scripts=true"]
+        : ["pack", "--dry-run", "--json", "--config.ignore-scripts=true"],
       {
         cwd: process.cwd(),
         encoding: "utf8",
         env: { ...process.env, npm_config_cache: path.join(os.tmpdir(), "kiro-fabric-npm-cache") },
       },
     ));
-    const entries = Array.isArray(packed) ? packed : Object.values(packed);
+    const entries = Array.isArray(packed) ? packed : [packed];
     const files = new Set((entries as Array<{ files: Array<{ path: string }> }>)
       .flatMap((entry) => entry.files).map((entry) => entry.path));
     for (const name of EXPECTED_SKILLS) expect(files).toContain(`strict/skills/${name}/SKILL.md`);
     for (const name of REMOVED_SKILLS) expect(files).not.toContain(`strict/skills/${name}/SKILL.md`);
-    expect(files).toContain("strict/skills/fabric-exec/references/agents.md");
-    expect(files).toContain("strict/skills/fabric-exec/references/mcp.md");
+    for (const name of EXPECTED_REFERENCES) {
+      expect(files).toContain(`strict/skills/fabric-exec/references/${name}`);
+    }
     expect(files).not.toContain("strict/skills/fabric-exec/references/mesh.md");
     expect(files).toContain("skills/fabric-orchestration/SKILL.md");
+    expect(files).toContain("skills/fabric-exec/references/troubleshooting.md");
     expect(files).toContain("plugin.json");
     expect(files).toContain("mcp.json");
     expect(files).toContain("docs/skills.md");

@@ -6,17 +6,23 @@ boundary.
 
 ## Shipped skills
 
-- `fabric-exec` is the model-visible reference for the exact managed Kiro API:
-  bounded `k.*` tools, discovery, optional MCP/memory, and optional Kiro ACP
-  children.
-- `fabric-workflow` is an explicitly invoked, bounded fan-out across already
-  partitioned Kiro ACP work items. It requires `--allow-shell --subagents`.
-- `fabric-review` defines a two-lane advisory review using those same optional
-  Kiro children.
-- `fabric-guide` recommends the smallest of those paths without running it.
+Managed Kiro ships exactly one routable skill, `fabric-exec`. Its main
+`SKILL.md` contains the exact managed API boundary: bounded `k.*` tools,
+discovery, optional MCP/memory, and optional Kiro ACP children.
 
-Only `fabric-exec` is model-invocable. The other skills require explicit user
-invocation and never invoke one another automatically.
+Detailed paths are progressive references beneath
+`fabric-exec/references/`. The main skill loads only the relevant file:
+
+- `mcp.md` for configured MCP federation;
+- `agents.md` for explicitly enabled Kiro ACP children;
+- `workflow.md` for an explicitly requested, already partitioned workflow;
+- `review.md` for an explicitly requested two-lane Fabric review;
+- `guide.md` when choosing a Fabric path without executing it.
+
+The workflow, review, and guide references are not separate skills and must
+not activate for ordinary implementation or review requests that did not ask
+to use Fabric. This keeps router context small while preserving exact examples
+on demand.
 
 ## Deliberately unavailable
 

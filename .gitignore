@@ -14,7 +14,13 @@ coverage/
 *.log
 .DS_Store
 
-.kiro/
+.kiro/*
+!.kiro/agents/
+.kiro/agents/*
+!.kiro/agents/kiro-fabric-dev.json
+!.kiro/steering/
+.kiro/steering/*
+!.kiro/steering/*.md
 .fabric/
 results2008/
 

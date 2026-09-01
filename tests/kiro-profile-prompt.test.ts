@@ -12,30 +12,19 @@ describe("Kiro profile prompt contract", () => {
 
     expect(profile.description).toBe("Managed Kiro Fabric profile for Kiro CLI v3");
     expect(profile.prompt.trim().length).toBeGreaterThan(0);
+    expect(profile.prompt.length).toBeLessThan(1_500);
+    expect(profile.prompt).toMatch(/load the fabric-exec skill/i);
     expect(profile.prompt).toContain("k.read");
     expect(profile.prompt).toContain("k.ls");
     expect(profile.prompt).toContain("{ ok, output, details }");
-    expect(profile.prompt).toMatch(/prefer k\.\*/i);
-    expect(profile.prompt).toMatch(/do not probe/i);
-    expect(profile.prompt).toMatch(/all k\.\* API calls return promises/i);
-    expect(profile.prompt).toMatch(/always write "await"/i);
-    expect(profile.prompt).toMatch(/un-awaited \(thenable\)/i);
+    expect(profile.prompt).toMatch(/tools\.\* is only for provider discovery/i);
+    expect(profile.prompt).toMatch(/await every available/i);
     expect(profile.prompt).toMatch(/k\.bash is disabled in this profile/i);
-    expect(profile.prompt).not.toMatch(/before .*k\.bash/i);
     expect(profile.prompt).toMatch(/batch only independent/i);
-    expect(profile.prompt).toMatch(/narrow ranges|offset\/limit/i);
-    expect(profile.prompt).toMatch(/terse, incomplete, or refers to missing material/i);
-    expect(profile.prompt).toMatch(/recover intent from repository evidence/i);
-    expect(profile.prompt).toMatch(/form and state a conservative working assumption/i);
-    expect(profile.prompt).toMatch(/ask one precise clarifying question only when/i);
-    expect(profile.prompt).toMatch(/do not stop merely because the prompt omitted details/i);
-    expect(profile.prompt).toMatch(/never end with an unfinished sentence, heading, or list/i);
+    expect(profile.prompt).toMatch(/narrow k\.read ranges/i);
     expect(profile.prompt).toMatch(/stop gathering/i);
     expect(profile.prompt).toMatch(/fail closed/i);
     expect(profile.prompt).toMatch(/subagents are disabled in managed Kiro/i);
-    expect(profile.prompt).toContain("memory.get");
-    expect(profile.prompt).toContain("mcp.call");
-    expect(profile.prompt).toMatch(/network approval gate/i);
     expect(profile.prompt).not.toContain("agents.run");
     expect(profile.prompt).not.toContain("agents.spawn");
 
@@ -59,10 +48,10 @@ describe("Kiro profile prompt contract", () => {
     expect(profile.resources).toEqual([]);
     expect(profile.prompt).not.toContain("agents.run");
     expect(profile.prompt).not.toContain("agents.spawn");
-    expect(profile.prompt).toMatch(/all k\.\* API calls return promises/i);
-    expect(profile.prompt).not.toMatch(/all agents\.\* API calls/i);
-    expect(profile.prompt).toMatch(/persistent memory is unavailable inside ACP children/i);
-    expect(profile.prompt).toMatch(/MCP federation is unavailable inside ACP children/i);
+    expect(profile.prompt).toMatch(/await every k\.\* call/i);
+    expect(profile.prompt).toMatch(
+      /persistent memory, MCP federation, and subagents are unavailable inside ACP children/i,
+    );
     expect(profile.prompt).not.toContain("memory.set");
     expect(profile.prompt).not.toContain("mcp.call");
   });
@@ -90,7 +79,7 @@ describe("Kiro profile prompt contract", () => {
     expect(trustedEnv.KIRO_FABRIC_ALLOW_SHELL).toBe("1");
     expect(trustedEnv.KIRO_FABRIC_ENFORCE_PROJECT_ROOT).toBe("1");
     expect(trustedProfile.prompt).not.toMatch(/k\.bash is disabled/i);
-    expect(trustedProfile.prompt).toMatch(/before .*k\.bash/i);
+    expect(trustedProfile.prompt).toMatch(/smallest relevant verification with k\.bash/i);
     expect(trustedProfile.tools).toEqual(["@fabric/fabric_exec"]);
   });
 
@@ -115,16 +104,10 @@ describe("Kiro profile prompt contract", () => {
       KIRO_FABRIC_ENABLE_SUBAGENTS: "1",
       KIRO_FABRIC_ENFORCE_PROJECT_ROOT: "1",
     });
-    expect(profile.prompt).toContain("agents.run");
-    expect(profile.prompt).toContain("agents.spawn");
+    expect(profile.prompt).toMatch(/read the skill's agents reference/i);
     expect(profile.prompt).toMatch(/at most four/i);
-    expect(profile.prompt).toContain("qwen3-coder-next");
-    expect(profile.prompt).toContain("claude-opus-4.8");
-    expect(profile.prompt).toMatch(
-      /complex analysis or ambiguous tasks use claude-opus-4.8 at medium effort/i,
-    );
-    expect(profile.prompt).toMatch(/inventory-aware.*falls back to Kiro auto/i);
-    expect(profile.prompt).toMatch(/focused tests\/builds/i);
+    expect(profile.prompt).not.toContain("qwen3-coder-next");
+    expect(profile.prompt).not.toContain("claude-opus-4.8");
   });
 
   it("emits one exact v3 MCP rule: ask by default, allow only with tool auto-approval", () => {

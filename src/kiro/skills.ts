@@ -8,10 +8,10 @@ import { resolveSourcePackageRoot } from "./runtime-closure.js";
 const MANAGED_SKILL_FILES = [
   "fabric-exec/SKILL.md",
   "fabric-exec/references/agents.md",
+  "fabric-exec/references/guide.md",
   "fabric-exec/references/mcp.md",
-  "fabric-guide/SKILL.md",
-  "fabric-review/SKILL.md",
-  "fabric-workflow/SKILL.md",
+  "fabric-exec/references/review.md",
+  "fabric-exec/references/workflow.md",
 ] as const;
 
 export interface KiroManagedSkillSource {
@@ -62,8 +62,6 @@ export const managedKiroSkillBundleSha256 = (
 
 /** Exact pinned Kiro 2.20.1 skill allow-list; no resource glob can claim siblings. */
 export const managedKiroSkillResources = (layout: KiroManagedLayout): string[] =>
-  ["fabric-exec", "fabric-guide", "fabric-review", "fabric-workflow"].map((name) =>
-    layout === "project"
-      ? `skill://.kiro/skills/${name}/SKILL.md`
-      : `skill:///skills/${name}/SKILL.md`,
-  );
+  [layout === "project"
+    ? "skill://.kiro/skills/fabric-exec/SKILL.md"
+    : "skill:///skills/fabric-exec/SKILL.md"];

@@ -58,8 +58,8 @@ A project install writes only:
 
 - `<project>/.kiro/agents/kiro-fabric.json`
 - `<project>/.kiro/.kiro-fabric/install.json`
-- the packaged `fabric-exec`, `fabric-guide`, `fabric-review`, and
-  `fabric-workflow` skills under `<project>/.kiro/skills/`
+- the packaged `fabric-exec` skill and its five attested progressive
+  references under `<project>/.kiro/skills/fabric-exec/`
 - an immutable, digest-addressed release under
   `<project>/.fabric/runtime/<digest>/`, including `bin/node`, `bin/kiro-cli`,
   the MCP and worker entries, exact skill sources, and
@@ -76,7 +76,8 @@ that reused the PID. Other platforms retain the lock on ambiguous liveness.
 
 - `<kiro-home>/agents/kiro-fabric.json`
 - `<kiro-home>/.kiro-fabric/install.json`
-- the same four managed skills under `<kiro-home>/skills/`
+- the same managed skill and five attested references under
+  `<kiro-home>/skills/fabric-exec/`
 - the attested runtime (vendored Node plus an immutable Kiro execution copy)
   under `<kiro-home>/.fabric/runtime/`
 - backups and the operation lock under `<kiro-home>/.kiro-fabric/`

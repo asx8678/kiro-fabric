@@ -1,39 +1,39 @@
 ---
 name: fabric-exec
-description: Exact checked-TypeScript reference for Kiro Fabric Power workflows, state, memory, and configured MCP federation.
+description: Write, debug, or recover checked-TypeScript fabric_exec programs in Kiro Fabric Power — state, memory, provider fan-out, configured MCP federation. Load when composing fabric_exec calls or after a type or argument-shape error.
 ---
 
 # fabric_exec in Kiro Fabric Power
 
-## Runtime preflight
+Each call runs a type-checked TypeScript function body in QuickJS. Top-level
+`await` and `return` are supported; only the returned value reaches Kiro.
+Named strings are available as `π.key`.
 
-The Power requires Node.js 24 or newer on the executable search path inherited
-by Kiro. If the MCP server does not start, use Kiro's native shell to run
-`node --version` and `command -v node` (or `where.exe node` on Windows), then
-run `kiro-fabric doctor power --json`. Do not download or execute an unpinned
-runtime as a workaround; install a supported Node 24 release and restart Kiro.
+Use Kiro native tools for ordinary reads, edits, shell, web, and subagents —
+never Fabric for a single native operation. Power mode mounts no `k.*` and no
+`agents.*`; neither can be probed, cast, or worked around.
 
-Each call executes a type-checked TypeScript function body in QuickJS by
-default. Top-level `await` and `return` are supported; only the returned value
-reaches Kiro. Named strings are available as `π.key`.
+## Workflow
 
-Use Kiro native tools outside Fabric for normal reads, edits, shell, web, code
-intelligence, and simple native subagents. Power mode intentionally does not
-mount `k.*`; never use Fabric as a substitute for one native operation.
+1. Call `fabric_info` once per session. Bind a workspace with
+   `fabric_workspace` before workspace-dependent actions.
+2. Call an action directly when its contract is already known. Otherwise use
+   `tools.search()` once, then `tools.describe({ ref })` for the selected
+   action. Use `tools.providers()` only when provider availability itself is
+   unknown. Never guess action contracts; mounted namespaces are
+   capability-sensitive.
+3. On truncated output, page with the returned opaque ID:
+   `await tools.call({ ref: "artifacts.read", args: { id } })`. Artifacts are
+   process-local.
 
-Mounted namespaces are capability-sensitive. Use `tools.providers()`,
-`tools.search()`, and `tools.describe()` rather than guessing. Call
-`fabric_info` first and bind a workspace with `fabric_workspace` before using
-workspace-dependent actions. The current Power release does not mount
-`agents.*`; use Kiro's native subagents outside Fabric instead. When a result is
-truncated, use the returned opaque ID with
-`await tools.call({ ref: "artifacts.read", args: { id } })`; artifacts are
-process-local.
+Approval, timeout, cancellation, and unavailable-capability errors fail
+closed: omit the operation, never retry around a denial. Power v1 work is
+synchronous and session-bounded; nothing survives deactivation.
 
-Power v1 supports synchronous, session-bounded work only. No detached actors or
-durability across deactivation is promised. Approval, timeout, cancellation,
-and unavailable-capability errors fail closed.
+MCP tools may be client-namespaced; do not assume a fixed server prefix. Read
+only the reference needed for the current request:
 
-See `references/api.md`, `references/agents.md`, and `references/mcp.md` for
-advanced contracts. MCP tools may be client-namespaced; do not assume a fixed
-server prefix.
+- Exact call contract: `references/api.md`.
+- Agent boundary: `references/agents.md`.
+- Configured MCP federation: `references/mcp.md`.
+- MCP startup failure: `references/troubleshooting.md`.

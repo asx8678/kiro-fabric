@@ -504,8 +504,9 @@ Important paths:
 
 - `src/kiro/mcp-server.ts`: Kiro MCP surface
 - `src/kiro/runtime.ts`: provider assembly
-- `skills/`: Power guidance
-- `strict/skills/`: managed-profile guidance
+- `skills/`: additive Power skills and progressive references
+- `strict/skills/fabric-exec/`: the managed-profile skill and progressive references
+- `.kiro/steering/`: contributor architecture and authoring constraints
 - `docs/kiro/power.md`: complete Power behavior and limits
 - `docs/kiro/installer.md`: complete Strict installation and lifecycle guide
 

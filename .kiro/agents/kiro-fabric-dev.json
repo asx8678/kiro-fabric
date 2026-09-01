@@ -1,0 +1,48 @@
+{
+  "name": "kiro-fabric-dev",
+  "description": "Develop and verify the Kiro Fabric repository with repository steering and an explicit Fabric MCP boundary.",
+  "prompt": "Follow the bound repository steering. Use native tools for ordinary repository work. Use @fabric/fabric_exec only for checked programmable composition, provider fan-out, Fabric state or memory, or configured MCP federation. Treat denial, timeout, cancellation, and indeterminate effects as failures.",
+  "includeMcpJson": false,
+  "includePowers": false,
+  "resources": [
+    "file://.kiro/steering/**/*.md"
+  ],
+  "mcpServers": {
+    "fabric": {
+      "command": "node",
+      "args": ["dist/kiro/mcp-entry.js"],
+      "env": {
+        "KIRO_FABRIC_HOST": "kiro-v3",
+        "KIRO_FABRIC_PROFILE_KIND": "managed-main"
+      }
+    }
+  },
+  "tools": [
+    "read",
+    "write",
+    "shell",
+    "@fabric/fabric_exec"
+  ],
+  "allowedTools": [
+    "read",
+    "@fabric/fabric_exec"
+  ],
+  "permissions": {
+    "rules": [
+      {
+        "capability": "fs_write",
+        "match": ["./**"],
+        "effect": "ask"
+      },
+      {
+        "capability": "shell",
+        "effect": "ask"
+      },
+      {
+        "capability": "mcp",
+        "match": ["fabric/fabric_exec"],
+        "effect": "ask"
+      }
+    ]
+  }
+}

@@ -8,8 +8,8 @@ type AsyncCallable = (...values: unknown[]) => Promise<unknown>;
 type AsyncFunctionConstructor = new (...args: string[]) => AsyncCallable;
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as AsyncFunctionConstructor;
 
-const skillProgram = (name: "fabric-workflow" | "fabric-review"): string => {
-  const markdown = fs.readFileSync(`strict/skills/${name}/SKILL.md`, "utf8")
+const skillProgram = (name: "workflow" | "review"): string => {
+  const markdown = fs.readFileSync(`strict/skills/fabric-exec/references/${name}.md`, "utf8")
     .replace(/\r\n?/g, "\n");
   const match = markdown.match(/```ts\n([\s\S]*?)\n```/);
   if (!match) throw new Error(name + " has no TypeScript program");
@@ -17,7 +17,7 @@ const skillProgram = (name: "fabric-workflow" | "fabric-review"): string => {
 };
 
 const runSkill = async (
-  name: "fabric-workflow" | "fabric-review",
+  name: "workflow" | "review",
   context: Context,
 ): Promise<Record<string, unknown>> => {
   const javascript = transpileModule(skillProgram(name), {
@@ -29,10 +29,10 @@ const runSkill = async (
 };
 
 const runWorkflow = async (context: Context): Promise<Record<string, unknown>> =>
-  runSkill("fabric-workflow", context);
+  runSkill("workflow", context);
 
 const runReview = async (context: Context): Promise<Record<string, unknown>> =>
-  runSkill("fabric-review", context);
+  runSkill("review", context);
 
 const parallel = async <T, R>(
   items: T[],

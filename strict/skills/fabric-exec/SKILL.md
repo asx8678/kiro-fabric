@@ -1,9 +1,10 @@
 ---
 name: fabric-exec
 description: >-
-  Managed Kiro reference for writing type-checked fabric_exec programs with
-  bounded coding tools, discovery, MCP, memory, and optional Kiro ACP agents.
-  Use after an argument-shape error or when an exact API contract is needed.
+  Write or correct managed Kiro fabric_exec programs with bounded coding tools,
+  discovery, MCP, memory, and optional Kiro ACP agents. Use for exact API help
+  or when the user explicitly requests a Fabric review or partitioned workflow;
+  do not use for ordinary Kiro work that does not request Fabric.
 ---
 
 # fabric_exec for managed Kiro
@@ -92,10 +93,20 @@ Managed memory is project-scoped:
 - `memory.search({query,limit?})`
 - `memory.index()`
 
-For configured MCP servers, read
-`<skill-dir>/references/mcp.md`. For explicitly enabled Kiro ACP children, read
-`<skill-dir>/references/agents.md`. Those references describe only the managed
-Kiro surface.
+Read only the reference needed for the current request:
+
+- Configured MCP federation: `<skill-dir>/references/mcp.md`.
+- Explicitly enabled Kiro ACP children: `<skill-dir>/references/agents.md`.
+- An explicitly requested, already partitioned workflow:
+  `<skill-dir>/references/workflow.md`.
+- An explicitly requested two-lane Fabric review:
+  `<skill-dir>/references/review.md`.
+- Choosing among the core, workflow, and review paths without executing one:
+  `<skill-dir>/references/guide.md`.
+
+The advanced workflow and review references are not separate skills and must
+not be selected for an ordinary review or implementation request that did not
+explicitly ask to use Fabric.
 
 ## Error recovery
 

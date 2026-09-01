@@ -89,7 +89,14 @@ describe("runKiroDoctor", () => {
     expect(check(pristine, "mcp.initialize")?.message).not.toContain(mcpEntry);
 
     writeFileSync(
-      join(projectRoot, ".kiro", "skills", "fabric-review", "SKILL.md"),
+      join(
+        projectRoot,
+        ".kiro",
+        "skills",
+        "fabric-exec",
+        "references",
+        "review.md",
+      ),
       "tampered skill\n",
     );
     const tampered = await runDoctor({

@@ -381,9 +381,6 @@ describe("installKiroProfile", () => {
     };
     expect(profile.resources).toEqual([
       "skill://.kiro/skills/fabric-exec/SKILL.md",
-      "skill://.kiro/skills/fabric-guide/SKILL.md",
-      "skill://.kiro/skills/fabric-review/SKILL.md",
-      "skill://.kiro/skills/fabric-workflow/SKILL.md",
     ]);
     expect(profile.mcpServers.fabric.env.KIRO_FABRIC_SKILL_BUNDLE_SHA256).toMatch(/^[a-f0-9]{64}$/);
 
@@ -406,7 +403,14 @@ describe("installKiroProfile", () => {
 
   it("blocks a foreign same-name skill before publishing the runtime closure", async () => {
     const dir = project("skill-collision");
-    const target = join(dir, ".kiro", "skills", "fabric-review", "SKILL.md");
+    const target = join(
+      dir,
+      ".kiro",
+      "skills",
+      "fabric-exec",
+      "references",
+      "review.md",
+    );
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, "foreign review skill\n");
     await expect(
@@ -952,11 +956,14 @@ describe("user-home Kiro install", () => {
     expect(profile.mcpServers.fabric.env.KIRO_FABRIC_PROJECT_ROOT).toBe(realpathSync(dir));
     expect(profile.resources).toEqual([
       "skill:///skills/fabric-exec/SKILL.md",
-      "skill:///skills/fabric-guide/SKILL.md",
-      "skill:///skills/fabric-review/SKILL.md",
-      "skill:///skills/fabric-workflow/SKILL.md",
     ]);
-    expect(existsSync(join(home, "skills", "fabric-workflow", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(
+      home,
+      "skills",
+      "fabric-exec",
+      "references",
+      "workflow.md",
+    ))).toBe(true);
     const manifest = JSON.parse(
       readFileSync(join(home, ".kiro-fabric", "install.json"), "utf8"),
     ) as { scope?: string; projectRoot: string; profile: { path: string } };

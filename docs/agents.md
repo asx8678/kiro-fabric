@@ -1,6 +1,12 @@
 # Agents, actors & mesh
 
-Fabric exposes its multi-agent runtime through the model-facing APIs in [`skills/fabric-exec/references/agents.md`](../skills/fabric-exec/references/agents.md) and [`mesh.md`](../skills/fabric-exec/references/mesh.md). Reusable Kiro-native patterns are in the [skills](../skills/), led by `fabric-workflow`, `fabric-schema`, and `fabric-review`. For the `agents` and `mesh` settings, see [configuration](configuration.md).
+This page documents Fabric's general multi-agent runtime. Kiro's additive Power
+does not mount `agents.*`; its [agent boundary](../skills/fabric-exec/references/agents.md)
+directs work to Kiro-native subagents outside Fabric. The managed Kiro profile
+can optionally expose its narrower, direct-child API described in the
+[managed agent reference](../strict/skills/fabric-exec/references/agents.md).
+For general `agents` and `mesh` settings, see
+[configuration](configuration.md).
 
 ## Workflows
 
@@ -18,7 +24,13 @@ Use these helpers:
 - Use `workflow.log(...)` to add short progress notes.
 - Read `workflow.budget` for token-budget observations.
 
-You can give `fabric_exec` optional `agentBudget` and `tokenBudget` limits. Configuration sets a hard agent limit for each execution. Add a JSON Schema to an agent request to make the worker return validated structured data in `result.value`. Workflow helpers return this value directly. Without a schema value, they return the agent's final text. See [`/skill:fabric-workflow`](../skills/fabric-workflow/SKILL.md) for the complete pattern.
+You can give `fabric_exec` optional `agentBudget` and `tokenBudget` limits.
+Configuration sets a hard agent limit for each execution. Add a JSON Schema to
+an agent request to make the worker return validated structured data in
+`result.value`. Workflow helpers return this value directly. Without a schema
+value, they return the agent's final text. See
+[`/skill:fabric-workflow`](../strict/skills/fabric-workflow/SKILL.md) for the
+complete managed-Kiro pattern.
 
 ## Agents
 

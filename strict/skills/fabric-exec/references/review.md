@@ -1,9 +1,3 @@
----
-name: fabric-review
-description: Runs a bounded advisory review of a changed-file scope using managed Kiro ACP children. Use for correctness/security and maintainability review when subagents are enabled.
-disable-model-invocation: true
----
-
 # Managed Kiro review
 
 Use two independent read-only lanes:
