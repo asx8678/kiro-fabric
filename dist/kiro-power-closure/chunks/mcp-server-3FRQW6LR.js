@@ -12,9 +12,10 @@ import {
 } from "./chunk-4KRLFCN5.js";
 import {
   assertFabricTranspiledWrapper,
+  shutdownFabricCompilerWorker,
   transpileFabricCodeWithSourceMap,
   typeCheckFabricCodeInWorker
-} from "./chunk-RDWBPINU.js";
+} from "./chunk-SPHG3WWN.js";
 import "./chunk-G3LABT6U.js";
 import "./chunk-FWH3VULO.js";
 import "./chunk-G6V3LW4W.js";
@@ -53,8 +54,8 @@ import {
 } from "./chunk-LSWTYIW3.js";
 
 // src/kiro/mcp-server.ts
-import { readFileSync } from "node:fs";
-import path8 from "node:path";
+import fs9, { readFileSync } from "node:fs";
+import path9 from "node:path";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
 var ExperimentalServerTasks = class {
@@ -8592,23 +8593,23 @@ function Parse(...args) {
 }
 
 // node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/delta/diff.mjs
-function CreateUpdate(path9, value) {
-  return { type: "update", path: path9, value };
+function CreateUpdate(path10, value) {
+  return { type: "update", path: path10, value };
 }
-function CreateInsert(path9, value) {
-  return { type: "insert", path: path9, value };
+function CreateInsert(path10, value) {
+  return { type: "insert", path: path10, value };
 }
-function CreateDelete(path9) {
-  return { type: "delete", path: path9 };
+function CreateDelete(path10) {
+  return { type: "delete", path: path10 };
 }
 function AssertCanDiffObject(value) {
   if (guard_exports.IsObject(value) && guard_exports.IsEqual(guard_exports.Symbols(value).length, 0))
     return;
   throw new Error("Cannot create diffs for objects with symbols keys");
 }
-function* FromObject17(path9, left, right) {
+function* FromObject17(path10, left, right) {
   if (!guard_exports.IsObject(right) || guard_exports.IsArray(right))
-    return yield CreateUpdate(path9, right);
+    return yield CreateUpdate(path10, right);
   AssertCanDiffObject(left);
   AssertCanDiffObject(right);
   const leftKeys = guard_exports.Keys(left);
@@ -8618,7 +8619,7 @@ function* FromObject17(path9, left, right) {
       continue;
     if (guard_exports.IsUnsafePropertyKey(key))
       continue;
-    yield CreateInsert(`${path9}/${key}`, right[key]);
+    yield CreateInsert(`${path10}/${key}`, right[key]);
   }
   for (const key of leftKeys) {
     if (!guard_exports.HasPropertyKey(right, key))
@@ -8627,52 +8628,52 @@ function* FromObject17(path9, left, right) {
       continue;
     if (Equal(left, right))
       continue;
-    yield* FromValue4(`${path9}/${key}`, left[key], right[key]);
+    yield* FromValue4(`${path10}/${key}`, left[key], right[key]);
   }
   for (const key of leftKeys) {
     if (guard_exports.HasPropertyKey(right, key))
       continue;
     if (guard_exports.IsUnsafePropertyKey(key))
       continue;
-    yield CreateDelete(`${path9}/${key}`);
+    yield CreateDelete(`${path10}/${key}`);
   }
 }
-function* FromArray13(path9, left, right) {
+function* FromArray13(path10, left, right) {
   if (!guard_exports.IsArray(right))
-    return yield CreateUpdate(path9, right);
+    return yield CreateUpdate(path10, right);
   for (let i = 0; i < Math.min(left.length, right.length); i++) {
-    yield* FromValue4(`${path9}/${i}`, left[i], right[i]);
+    yield* FromValue4(`${path10}/${i}`, left[i], right[i]);
   }
   for (let i = 0; i < right.length; i++) {
     if (i < left.length)
       continue;
-    yield CreateInsert(`${path9}/${i}`, right[i]);
+    yield CreateInsert(`${path10}/${i}`, right[i]);
   }
   for (let i = left.length - 1; i >= 0; i--) {
     if (i < right.length)
       continue;
-    yield CreateDelete(`${path9}/${i}`);
+    yield CreateDelete(`${path10}/${i}`);
   }
 }
-function* FromTypedArray2(path9, left, right) {
+function* FromTypedArray2(path10, left, right) {
   const typeLeft = globalThis.Object.getPrototypeOf(left).constructor.name;
   const typeRight = globalThis.Object.getPrototypeOf(right).constructor.name;
   const predicate = globals_exports.IsTypeArray(right) && guard_exports.IsEqual(left.length, right.length) && guard_exports.IsEqual(typeLeft, typeRight);
   if (predicate) {
     for (let index = 0; index < Math.min(left.length, right.length); index++) {
-      yield* FromValue4(`${path9}/${index}`, left[index], right[index]);
+      yield* FromValue4(`${path10}/${index}`, left[index], right[index]);
     }
   } else {
-    return yield CreateUpdate(path9, right);
+    return yield CreateUpdate(path10, right);
   }
 }
-function* FromUnknown(path9, left, right) {
+function* FromUnknown(path10, left, right) {
   if (left === right)
     return;
-  yield CreateUpdate(path9, right);
+  yield CreateUpdate(path10, right);
 }
-function* FromValue4(path9, left, right) {
-  return globals_exports.IsTypeArray(left) ? yield* FromTypedArray2(path9, left, right) : guard_exports.IsArray(left) ? yield* FromArray13(path9, left, right) : guard_exports.IsObject(left) ? yield* FromObject17(path9, left, right) : yield* FromUnknown(path9, left, right);
+function* FromValue4(path10, left, right) {
+  return globals_exports.IsTypeArray(left) ? yield* FromTypedArray2(path10, left, right) : guard_exports.IsArray(left) ? yield* FromArray13(path10, left, right) : guard_exports.IsObject(left) ? yield* FromObject17(path10, left, right) : yield* FromUnknown(path10, left, right);
 }
 function Diff(current, next) {
   return [...FromValue4("", current, next)];
@@ -9041,7 +9042,8 @@ var DEFAULT_FABRIC_POWER_CONFIG = {
     maxArtifactChars: 2e6,
     maxTotalChars: 8e6,
     ttlMs: 36e5
-  }
+  },
+  tracing: { enabled: false }
 };
 var record = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
 var integer = (value, fallback, minimum, maximum) => typeof value === "number" && Number.isSafeInteger(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback;
@@ -9053,7 +9055,8 @@ var FILE_CONFIG_KEYS = {
   mcp: ["enabled", "disableOAuth", "callTimeoutMs"],
   memory: ["enabled", "maxEntries", "maxValueChars"],
   state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
-  artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"]
+  artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
+  tracing: ["enabled"]
 };
 var assertFileConfigShape = (value) => {
   const root = record(value);
@@ -9076,6 +9079,7 @@ var normalizeFabricPowerConfig = (input, defaults = DEFAULT_FABRIC_POWER_CONFIG)
   const memory = record(root.memory) ?? {};
   const state = record(root.state) ?? {};
   const artifacts = record(root.artifacts) ?? {};
+  const tracing = record(root.tracing) ?? {};
   const timeoutMs = integer(executor.timeoutMs, defaults.executor.timeoutMs, 1, 9e5);
   const maxTimeoutMs = integer(executor.maxTimeoutMs, defaults.executor.maxTimeoutMs, timeoutMs, 9e5);
   const resultFormat = executor.resultFormat === "json" || executor.resultFormat === "text" || executor.resultFormat === "auto" ? executor.resultFormat : defaults.executor.resultFormat;
@@ -9124,6 +9128,9 @@ var normalizeFabricPowerConfig = (input, defaults = DEFAULT_FABRIC_POWER_CONFIG)
       maxArtifactChars: integer(artifacts.maxArtifactChars, defaults.artifacts.maxArtifactChars, 1e3, 8e6),
       maxTotalChars: integer(artifacts.maxTotalChars, defaults.artifacts.maxTotalChars, 1e3, 32e6),
       ttlMs: integer(artifacts.ttlMs, defaults.artifacts.ttlMs, 1e3, 864e5)
+    },
+    tracing: {
+      enabled: bool(tracing.enabled, defaults.tracing.enabled)
     }
   };
 };
@@ -9252,7 +9259,7 @@ var delegatedSchemaKeywords = /* @__PURE__ */ new Set([
   "then",
   "uniqueItems"
 ]);
-var locallyBoundedSchema = (schema) => {
+var walkLocallyBoundedSchema = (schema) => {
   const stack = [{ value: schema, depth: 0 }];
   const seen = /* @__PURE__ */ new Set();
   let nodes = 0;
@@ -9280,6 +9287,14 @@ var locallyBoundedSchema = (schema) => {
   }
   return true;
 };
+var locallyBoundedSchemaCache = /* @__PURE__ */ new WeakMap();
+var locallyBoundedSchema = (schema) => {
+  const cached = locallyBoundedSchemaCache.get(schema);
+  if (cached !== void 0) return cached;
+  const result = walkLocallyBoundedSchema(schema);
+  locallyBoundedSchemaCache.set(schema, result);
+  return result;
+};
 var pointerPart = (value) => value.replaceAll("~", "~0").replaceAll("/", "~1");
 var decodePointerPart = (value) => value.replaceAll("~1", "/").replaceAll("~0", "~");
 var schemaForDynamicProperty = (schema, property) => {
@@ -9294,8 +9309,8 @@ var schemaForDynamicProperty = (schema, property) => {
   }
   return isRecord(schema.additionalProperties) ? schema.additionalProperties : void 0;
 };
-var traceSafePath = (schema, path9) => {
-  const rawParts = typeof path9 === "string" ? path9 === "" || path9 === "/" ? [] : path9.split("/").slice(1).map(decodePointerPart) : Array.isArray(path9) ? path9.filter(
+var traceSafePath = (schema, path10) => {
+  const rawParts = typeof path10 === "string" ? path10 === "" || path10 === "/" ? [] : path10.split("/").slice(1).map(decodePointerPart) : Array.isArray(path10) ? path10.filter(
     (part) => typeof part === "string" || typeof part === "number"
   ).map(String) : [];
   const safeParts = [];
@@ -9321,7 +9336,7 @@ var traceSafePath = (schema, path9) => {
   }
   return safeParts.map((part) => `/${pointerPart(part)}`).join("");
 };
-var prefixedPath = (schema, prefix, path9) => `${prefix}${traceSafePath(schema, path9)}` || "/";
+var prefixedPath = (schema, prefix, path10) => `${prefix}${traceSafePath(schema, path10)}` || "/";
 var traceSafeErrorMessage = (error) => {
   if (error.keyword === "additionalProperties") return "must not have additional properties";
   if (error.keyword === "propertyNames") return "property names are invalid";
@@ -9334,8 +9349,8 @@ var validateSchemaValue = (schema, value, options = {}) => {
     const messages = [];
     for (const rawError of value_exports.Errors(schema, value)) {
       const error = rawError;
-      const path9 = error.path ?? (options.includeInstancePath ? error.instancePath : void 0);
-      const parentPath = prefixedPath(schema, prefix, path9);
+      const path10 = error.path ?? (options.includeInstancePath ? error.instancePath : void 0);
+      const parentPath = prefixedPath(schema, prefix, path10);
       const safePath = error.keyword === "additionalProperties" || error.keyword === "propertyNames" ? `${parentPath === "/" ? "" : parentPath}/${REDACTED_PROPERTY_SEGMENT}` : parentPath;
       messages.push(`${safePath}: ${traceSafeErrorMessage(error)}`);
       if (messages.length >= 5) break;
@@ -9740,6 +9755,240 @@ var FabricDeadline = class {
   }
 };
 
+// src/trace/tracer.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
+
+// src/trace/trace-writer.ts
+import fs2 from "node:fs";
+import path from "node:path";
+var DEFAULT_MAX_BUFFER_LINES = 4096;
+var DEFAULT_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
+var DEFAULT_FLUSH_INTERVAL_MS = 250;
+var DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024;
+var DEFAULT_MAX_LINE_BYTES = 8 * 1024;
+var LineRing = class {
+  constructor(capacity, maxBytes) {
+    this.capacity = capacity;
+    this.maxBytes = maxBytes;
+    this.#slots = new Array(capacity);
+  }
+  #slots;
+  #start = 0;
+  #size = 0;
+  #bytes = 0;
+  /** Returns true when an oldest line was dropped to make room. */
+  push(line) {
+    let dropped = false;
+    const lineBytes = Buffer.byteLength(line, "utf8");
+    while (this.#size > 0 && (this.#size >= this.capacity || this.#bytes + lineBytes > this.maxBytes)) {
+      const index = this.#start;
+      this.#bytes -= Buffer.byteLength(this.#slots[index], "utf8");
+      this.#slots[index] = void 0;
+      this.#start = (this.#start + 1) % this.capacity;
+      this.#size -= 1;
+      dropped = true;
+    }
+    this.#slots[(this.#start + this.#size) % this.capacity] = line;
+    this.#size += 1;
+    this.#bytes += lineBytes;
+    return dropped;
+  }
+  drain() {
+    const out = [];
+    for (let index = 0; index < this.#size; index += 1) {
+      out.push(this.#slots[(this.#start + index) % this.capacity]);
+    }
+    this.#slots.fill(void 0);
+    this.#start = 0;
+    this.#size = 0;
+    this.#bytes = 0;
+    return out;
+  }
+  get size() {
+    return this.#size;
+  }
+};
+var BufferedTraceWriter = class {
+  file;
+  #fd;
+  #ring;
+  #maxFileBytes;
+  #maxLineBytes;
+  #timer;
+  #onExit = () => {
+    this.#flushSync(true);
+  };
+  #writtenBytes = 0;
+  #dropped = 0;
+  #disabled = false;
+  #closed = false;
+  constructor(options) {
+    if (!path.isAbsolute(options.file)) throw new Error("trace file must be an absolute path");
+    this.file = options.file;
+    fs2.mkdirSync(path.dirname(options.file), { recursive: true, mode: 448 });
+    this.#fd = fs2.openSync(options.file, "wx", 384);
+    this.#ring = new LineRing(
+      options.maxBufferLines ?? DEFAULT_MAX_BUFFER_LINES,
+      options.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
+    );
+    this.#maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
+    this.#maxLineBytes = options.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES;
+    this.#timer = setInterval(() => {
+      this.#flushSync(true);
+    }, options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS);
+    this.#timer.unref();
+    process.once("exit", this.#onExit);
+  }
+  get dropped() {
+    return this.#dropped;
+  }
+  get disabled() {
+    return this.#disabled;
+  }
+  write(line) {
+    if (this.#disabled || this.#closed) return;
+    const bounded3 = Buffer.byteLength(line, "utf8") > this.#maxLineBytes ? `${line.slice(0, this.#maxLineBytes)}
+` : `${line}
+`;
+    if (this.#ring.push(bounded3)) this.#dropped += 1;
+  }
+  #flushSync(fsync) {
+    if (this.#closed || this.#ring.size === 0) return;
+    const chunk = this.#ring.drain().join("");
+    const chunkBytes = Buffer.byteLength(chunk, "utf8");
+    try {
+      if (this.#writtenBytes + chunkBytes > this.#maxFileBytes) {
+        const marker = JSON.stringify({ v: 1, cat: "teardown", ev: "trace.truncated", data: { maxFileBytes: this.#maxFileBytes } });
+        const room = this.#maxFileBytes - this.#writtenBytes;
+        if (room > marker.length + 1) fs2.writeSync(this.#fd, `${marker}
+`);
+        this.#disabled = true;
+        return;
+      }
+      fs2.writeSync(this.#fd, chunk);
+      this.#writtenBytes += chunkBytes;
+      if (fsync) fs2.fsyncSync(this.#fd);
+    } catch {
+      this.#disabled = true;
+    }
+  }
+  flush() {
+    this.#flushSync(true);
+  }
+  close() {
+    if (this.#closed) return;
+    this.#flushSync(true);
+    this.#closed = true;
+    clearInterval(this.#timer);
+    process.removeListener("exit", this.#onExit);
+    try {
+      fs2.closeSync(this.#fd);
+    } catch {
+    }
+  }
+};
+var createTraceWriter = (options) => new BufferedTraceWriter(options);
+
+// src/trace/tracer.ts
+var MAX_EVENT_CHARS = 6e3;
+var NOOP_SPAN = Object.freeze({ id: "", end: () => void 0 });
+var DISABLED_TRACER = Object.freeze({
+  enabled: false,
+  file: void 0,
+  newExecutionId: () => "",
+  span: () => NOOP_SPAN,
+  event: () => void 0,
+  flush: () => void 0,
+  close: () => void 0
+});
+var monotonicUs = () => Number(process.hrtime.bigint() / 1000n);
+var ActiveFabricTracer = class {
+  enabled = true;
+  file;
+  #writer;
+  #closed = false;
+  #reportedDrops = 0;
+  #seq = 0;
+  #spanSeq = 0;
+  constructor(writer) {
+    this.#writer = writer;
+    this.file = writer.file;
+  }
+  newExecutionId() {
+    return `exec_${randomUUID2()}`;
+  }
+  #emit(event) {
+    if (this.#closed) return;
+    const sequenced = { ...event, seq: ++this.#seq };
+    let line;
+    try {
+      line = fabricJsonText(sequenced, MAX_EVENT_CHARS);
+    } catch {
+      const fallback = { v: 1, ts: event.ts, monoUs: event.monoUs, seq: sequenced.seq, cat: event.cat, ev: event.ev, ...event.execId ? { execId: event.execId } : {}, ...event.spanId ? { spanId: event.spanId } : {}, ...event.parentId ? { parentId: event.parentId } : {}, ...event.durUs !== void 0 ? { durUs: event.durUs } : {}, data: { traceDataError: true } };
+      line = fabricJsonText(fallback, MAX_EVENT_CHARS);
+    }
+    this.#writer.write(line);
+  }
+  span(cat, ev, execId, data, parentId) {
+    const id = `span_${++this.#spanSeq}`;
+    const startedUs = monotonicUs();
+    let ended = false;
+    return {
+      id,
+      end: (endData) => {
+        if (ended) return;
+        ended = true;
+        this.#emit({
+          v: 1,
+          ts: (/* @__PURE__ */ new Date()).toISOString(),
+          monoUs: startedUs,
+          cat,
+          ev,
+          ...execId ? { execId } : {},
+          spanId: id,
+          ...parentId ? { parentId } : {},
+          durUs: Math.max(0, monotonicUs() - startedUs),
+          ...data || endData ? { data: { ...data ?? {}, ...endData ?? {} } } : {}
+        });
+      }
+    };
+  }
+  event(cat, ev, execId, data) {
+    this.#emit({
+      v: 1,
+      ts: (/* @__PURE__ */ new Date()).toISOString(),
+      monoUs: monotonicUs(),
+      cat,
+      ev,
+      ...execId ? { execId } : {},
+      ...data ? { data } : {}
+    });
+  }
+  flush() {
+    this.#writer.flush();
+    const dropped = this.#writer.dropped;
+    if (dropped > this.#reportedDrops) {
+      const lost = dropped - this.#reportedDrops;
+      this.#reportedDrops = dropped;
+      this.event("teardown", "trace.dropped", void 0, { lost, total: dropped });
+      this.#writer.flush();
+    }
+  }
+  close() {
+    if (this.#closed) return;
+    this.flush();
+    this.#closed = true;
+    this.#writer.close();
+  }
+};
+var resolveTraceEnabled = (envValue, configured) => {
+  const normalized = envValue?.trim().toLowerCase();
+  if (normalized === "1" || normalized === "true" || normalized === "yes") return true;
+  if (normalized === "0" || normalized === "false" || normalized === "no") return false;
+  return configured;
+};
+var createFabricTracer = (options) => new ActiveFabricTracer(options.writer ?? createTraceWriter(options));
+
 // src/runtime/quickjs-runtime.ts
 var modulePromise;
 var quickJsModule = () => modulePromise ??= newQuickJSWASMModuleFromVariant(src_default);
@@ -9916,12 +10165,20 @@ var QuickJsRuntime = class {
     if (!Number.isSafeInteger(options.memoryLimitBytes) || options.memoryLimitBytes < 1 || options.memoryLimitBytes > 4294967295) {
       return { value: void 0, logs: [], terminationReason: "runtime_error", error: "QuickJS memory limit is outside the WASM32 range", effectiveTimeoutMs: requestedTimeoutMs };
     }
+    const tracer = options.tracer ?? DISABLED_TRACER;
+    const execId = options.execId;
+    const parentSpanId = options.parentSpanId;
+    const moduleCached = modulePromise !== void 0;
+    const moduleSpan = tracer.enabled ? tracer.span("init", "quickjs.module.acquire", execId, { cached: moduleCached }, parentSpanId) : void 0;
     const module = await quickJsModule();
+    moduleSpan?.end();
     if (options.signal?.aborted) {
       return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
     }
+    const contextSpan = tracer.enabled ? tracer.span("init", "quickjs.context.create", execId, void 0, parentSpanId) : void 0;
     const context = module.newContext();
     const runtime = context.runtime;
+    contextSpan?.end({ memoryLimitBytes: options.memoryLimitBytes, stackSizeBytes: QUICKJS_MAX_STACK_SIZE_BYTES });
     const jsonObject = context.getProp(context.global, "JSON");
     const jsonParse = context.getProp(jsonObject, "parse");
     runtime.setMemoryLimit(options.memoryLimitBytes);
@@ -10075,7 +10332,9 @@ var QuickJsRuntime = class {
       );
       context.setProp(context.global, "payloads", payloadHandle);
       payloadHandle.dispose();
+      const setupSpan = tracer.enabled ? tracer.span("eval", "quickjs.eval.setup", execId, { sourceBytes: GUEST_SETUP.length }, parentSpanId) : void 0;
       const setup = context.evalCode(GUEST_SETUP, "kiro-fabric-setup.js");
+      setupSpan?.end();
       if (setup.error) {
         const error = formatValue(context.dump(setup.error));
         setup.error.dispose();
@@ -10090,8 +10349,10 @@ var QuickJsRuntime = class {
       if (transpiledError) return { value: void 0, logs, terminationReason: "runtime_error", error: transpiledError, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       const stackMap = createGuestStackMap(bundle.sourceMap);
       const guestLineCount = bundle.code.split("\n").length;
+      const guestEvalSpan = tracer.enabled ? tracer.span("eval", "quickjs.eval.guest", execId, { sourceBytes: Buffer.byteLength(bundle.code, "utf8") }, parentSpanId) : void 0;
       const evaluation = context.evalCode(bundle.code, "kiro-fabric-guest.js");
       runtime.executePendingJobs();
+      guestEvalSpan?.end();
       if (evaluation.error) {
         const deadlineExceeded = interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(evaluation.error)), stackMap, guestLineCount);
@@ -10125,10 +10386,12 @@ var QuickJsRuntime = class {
         if (options.signal?.aborted) abortListener();
         else options.signal?.addEventListener("abort", abortListener, { once: true });
       });
+      const runSpan = tracer.enabled ? tracer.span("eval", "quickjs.run", execId, void 0, parentSpanId) : void 0;
       const settled = await Promise.race([resolution, deadlineRace, cancellation]);
       resolutionConsumed = true;
       activeHandle.dispose();
       activeHandle = void 0;
+      runSpan?.end();
       if (settled.error) {
         const deadlineExceeded = timedOut || interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(settled.error)), stackMap, guestLineCount);
@@ -10148,6 +10411,21 @@ var QuickJsRuntime = class {
       abortHost(new Error(message));
       return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error: message, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     } finally {
+      if (tracer.enabled) {
+        try {
+          const usageHandle = runtime.computeMemoryUsage();
+          try {
+            const raw = context.dump(usageHandle);
+            const usage = {};
+            for (const [key, entry] of Object.entries(raw)) if (typeof entry === "number" && Number.isFinite(entry)) usage[key] = entry;
+            tracer.event("eval", "quickjs.memory", execId, { usage, hostRssBytes: process.memoryUsage().rss });
+          } finally {
+            usageHandle.dispose();
+          }
+        } catch {
+        }
+      }
+      const teardownSpan = tracer.enabled ? tracer.span("teardown", "quickjs.teardown", execId, void 0, parentSpanId) : void 0;
       closing = true;
       if (deadlineTimer) clearTimeout(deadlineTimer);
       if (abortListener) options.signal?.removeEventListener("abort", abortListener);
@@ -10169,6 +10447,7 @@ var QuickJsRuntime = class {
       jsonParse.dispose();
       jsonObject.dispose();
       context.dispose();
+      teardownSpan?.end();
     }
   }
 };
@@ -10179,6 +10458,13 @@ var FABRIC_APPROVAL_TIMEOUT_MS = 3e4;
 var FABRIC_PROVIDER_TIMEOUT_GRACE_MS = 2e3;
 var MAX_MCP_APPROVAL_STAGES = 2;
 var statusFor = (reason) => reason === "completed" ? "succeeded" : reason === "aborted" ? "aborted" : reason === "timed_out" ? "timed_out" : "failed";
+var traceJsonChars = (value) => {
+  try {
+    return fabricJsonText(value, MAX_FABRIC_JSON_CHARS).length;
+  } catch {
+    return -1;
+  }
+};
 var effectiveFabricTimeout = (configuredMaximum, executorDefault, exactActionFloor, invocationTimeout) => Math.min(configuredMaximum, Math.max(executorDefault, exactActionFloor, invocationTimeout));
 var exactActionTimeoutFloor = (ref, mcpCallTimeoutMs) => ref === "mcp.$call" ? mcpCallTimeoutMs + FABRIC_APPROVAL_TIMEOUT_MS * MAX_MCP_APPROVAL_STAGES + FABRIC_PROVIDER_TIMEOUT_GRACE_MS : 0;
 var exactHostActionReference = (bridgeRef, args) => bridgeRef === "fabric.call" ? typeof args.ref === "string" ? args.ref : void 0 : bridgeRef;
@@ -10191,6 +10477,8 @@ var FabricExecutionService = class {
   #runtime = new QuickJsRuntime();
   async execute(options) {
     const started = performance.now();
+    const tracer = options.tracer ?? DISABLED_TRACER;
+    const execId = options.execId;
     const configuredMaximum = this.config.executor.maxTimeoutMs;
     const invocationTimeout = options.timeoutMs ?? 0;
     const effectiveTimeoutMs = effectiveFabricTimeout(
@@ -10203,6 +10491,14 @@ var FabricExecutionService = class {
     options.onEffectiveTimeoutChange?.(effectiveTimeoutMs);
     const sourceError = fabricSourceLimitError(options.code, this.config.executor.maxSourceBytes) ?? fabricPayloadsLimitError(options.payloads, this.config.executor.maxInputBytes);
     if (sourceError) return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: sourceError, effectiveTimeoutMs };
+    if (tracer.enabled) {
+      tracer.event("eval", "exec.start", execId, {
+        sourceBytes: Buffer.byteLength(options.code, "utf8"),
+        payloadKeys: options.payloads ? Object.keys(options.payloads).length : 0,
+        effectiveTimeoutMs
+      });
+    }
+    const compileSpan = tracer.enabled ? tracer.span("eval", "compile", execId) : void 0;
     let checked;
     try {
       checked = await typeCheckFabricCodeInWorker({
@@ -10213,10 +10509,14 @@ var FabricExecutionService = class {
         timeoutMs: Math.min(FABRIC_COMPILER_TIMEOUT_MS, effectiveTimeoutMs)
       });
     } catch (error) {
+      compileSpan?.end({ failed: true });
       const aborted = options.signal?.aborted === true;
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: aborted ? "aborted" : "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0 });
       return { status: aborted ? "aborted" : "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: aborted ? "Execution cancelled" : error instanceof Error ? error.message : String(error), effectiveTimeoutMs };
     }
+    compileSpan?.end({ errors: checked.errors.length });
     if (checked.errors.length) {
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: checked.errors.length, resultChars: 0 });
       return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: "TypeScript validation failed", typeErrors: checked.errors, effectiveTimeoutMs };
     }
     const audits = [];
@@ -10230,6 +10530,8 @@ var FabricExecutionService = class {
       signal,
       deadline
     });
+    const executeSpan = tracer.enabled ? tracer.span("eval", "execute", execId) : void 0;
+    const executeSpanId = executeSpan?.id;
     const result = await this.#runtime.execute(options.code, async (ref, args, signal, deadline) => {
       providerCalls += 1;
       if (providerCalls > this.config.executor.maxProviderCalls) throw new Error("Fabric provider call quota exceeded");
@@ -10238,24 +10540,38 @@ var FabricExecutionService = class {
         activeProviderCalls -= 1;
         throw new Error("Fabric concurrent provider call quota exceeded");
       }
+      const bridgeSpan = tracer.enabled ? tracer.span("bridge", ref, execId, { argsChars: traceJsonChars(args) }, executeSpanId) : void 0;
+      let bridgeEnd = {};
       try {
         const context = providerContext(signal, deadline);
-        if (ref === "fabric.providers") return this.registry.providers();
-        if (ref === "fabric.list") return this.registry.list();
+        if (ref === "fabric.providers") {
+          const value2 = this.registry.providers();
+          if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value2) };
+          return value2;
+        }
+        if (ref === "fabric.list") {
+          const value2 = await this.registry.list();
+          if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value2) };
+          return value2;
+        }
         if (ref === "fabric.search") {
           if (typeof args.query !== "string") throw new Error("fabric.search query must be a string");
-          return this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
+          const value2 = await this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
+          if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value2) };
+          return value2;
         }
         if (ref === "fabric.describe") {
           if (typeof args.ref !== "string") throw new Error("fabric.describe ref must be a string");
-          return this.registry.describe(args.ref);
+          const value2 = await this.registry.describe(args.ref);
+          if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value2) };
+          return value2;
         }
         const actionRef = ref === "fabric.call" ? args.ref : ref;
         const actionArgs = ref === "fabric.call" ? args.args ?? {} : args;
         if (typeof actionRef !== "string" || typeof actionArgs !== "object" || actionArgs === null || Array.isArray(actionArgs)) {
           throw new Error("Fabric provider call requires an exact ref and object args");
         }
-        return await this.registry.invoke(actionRef, actionArgs, {
+        const value = await this.registry.invoke(actionRef, actionArgs, {
           ...context,
           audits,
           auditBudget,
@@ -10270,14 +10586,25 @@ var FabricExecutionService = class {
               pendingApprovals -= 1;
               throw new Error("Fabric pending approval quota exceeded");
             }
+            const approvalSpan = tracer.enabled ? tracer.span("eval", "approval.wait", execId, { ref: action.ref, risk: action.risk }, bridgeSpan?.id) : void 0;
             try {
               await options.approver.approve(action, exactArgs, signal);
+              approvalSpan?.end({ approved: true });
+            } catch (error) {
+              approvalSpan?.end({ approved: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 200) });
+              throw error;
             } finally {
               pendingApprovals -= 1;
             }
           }
         });
+        if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value), ...actionRef !== ref ? { actionRef } : {} };
+        return value;
+      } catch (error) {
+        if (bridgeSpan) bridgeEnd = { error: (error instanceof Error ? error.message : String(error)).slice(0, 200) };
+        throw error;
       } finally {
+        bridgeSpan?.end(bridgeEnd);
         activeProviderCalls -= 1;
       }
     }, {
@@ -10292,6 +10619,7 @@ var FabricExecutionService = class {
       ...options.signal ? { signal: options.signal } : {},
       ...checked.javascript ? { transpiledCode: checked.javascript } : {},
       ...checked.sourceMap ? { transpiledSourceMap: checked.sourceMap } : {},
+      ...execId !== void 0 ? { tracer, execId, ...executeSpanId ? { parentSpanId: executeSpanId } : {} } : {},
       minimumTimeoutMsForHostCall: (bridgeRef, args) => {
         const actionRef = exactHostActionReference(bridgeRef, args);
         const actionFloor = actionRef ? exactActionTimeoutFloor(actionRef, this.config.mcp.callTimeoutMs) : 0;
@@ -10308,6 +10636,7 @@ var FabricExecutionService = class {
         return candidate;
       }
     });
+    executeSpan?.end({ termination: result.terminationReason, effectiveTimeoutMs: result.effectiveTimeoutMs });
     let status = statusFor(result.terminationReason);
     let outputError = result.error;
     if (status === "succeeded") {
@@ -10317,6 +10646,10 @@ var FabricExecutionService = class {
         status = "failed";
         outputError = error instanceof Error ? error.message : String(error);
       }
+    }
+    if (tracer.enabled) {
+      tracer.event("eval", "exec.end", execId, { status, elapsedMs: performance.now() - started, audits: audits.length, logs: result.logs.length, typeErrors: 0, resultChars: status === "succeeded" ? traceJsonChars(result.value) : 0 });
+      tracer.flush();
     }
     return {
       status,
@@ -10331,6 +10664,7 @@ var FabricExecutionService = class {
   }
   async close() {
     await this.registry.close();
+    await shutdownFabricCompilerWorker();
   }
 };
 
@@ -10494,7 +10828,7 @@ var kiroMcpOuterDeadlineMs = (guestMaximumMs, compilerTimeoutMs) => guestMaximum
 
 // src/kiro/power/approver.ts
 import { createHash } from "node:crypto";
-import path from "node:path";
+import path2 from "node:path";
 var SECRET_KEY = /(?:apikey|authorization|authtoken|bearer|clientkey|clientsecret|cookie|credential|idtoken|passphrase|password|privatekey|refreshtoken|secret|session|token)/iu;
 var SECRET_VALUE = /^(?:(?:basic|bearer)\s+|gh[pousr]_|github_pat_|sk-[a-z0-9_-]{12,}|akia[0-9a-z]{12,}|eyj[a-z0-9_-]+\.[a-z0-9_-]+\.|-----begin\s)|(?:^|[?&])(?:api[_-]?key|password|secret|token)=/iu;
 var URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//iu;
@@ -10541,9 +10875,9 @@ var summarize = (args, cwd) => {
     if (isSecretKey(key)) return "<redacted>";
     if (typeof value === "string") {
       if (SECRET_VALUE.test(value)) return "<redacted>";
-      if (path.isAbsolute(value)) {
-        const relative = path.relative(cwd, value);
-        return relative === "" ? "." : relative.startsWith("..") || path.isAbsolute(relative) ? "<outside-workspace>" : relative;
+      if (path2.isAbsolute(value)) {
+        const relative = path2.relative(cwd, value);
+        return relative === "" ? "." : relative.startsWith("..") || path2.isAbsolute(relative) ? "<outside-workspace>" : relative;
       }
       if (URL_VALUE.test(value) || /(?:url|uri|endpoint)/iu.test(key)) {
         try {
@@ -10598,12 +10932,12 @@ Preview: ${summarize(args, this.cwd)}`,
 
 // src/kiro/power/data-paths.ts
 import { createHash as createHash2, randomBytes } from "node:crypto";
-import fs2 from "node:fs";
-import path2 from "node:path";
+import fs3 from "node:fs";
+import path3 from "node:path";
 var isRecord4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var errorCode = (error) => isRecord4(error) && typeof error.code === "string" ? error.code : void 0;
 var projectKiroPowerWorkspaceIdentity = (value) => {
-  if (!isRecord4(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path2.isAbsolute(value.canonicalPath) || typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
+  if (!isRecord4(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path3.isAbsolute(value.canonicalPath) || typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
     throw new Error("Power workspace identity is malformed");
   }
   return Object.freeze({ schemaVersion: 1, canonicalPath: value.canonicalPath, deviceId: value.deviceId, fileId: value.fileId });
@@ -10616,37 +10950,37 @@ var assertCurrentUser = (stats, target) => {
   }
 };
 var assertPrivateDirectory = (target) => {
-  const stats = fs2.lstatSync(target);
+  const stats = fs3.lstatSync(target);
   if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power storage is not a regular directory: ${target}`);
   assertCurrentUser(stats, target);
   if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Power storage is not private: ${target}`);
   return stats;
 };
 var privateDirectory = (directory, boundary) => {
-  const root = path2.resolve(boundary);
-  const rootStats = fs2.lstatSync(root);
+  const root = path3.resolve(boundary);
+  const rootStats = fs3.lstatSync(root);
   if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new Error(`Power storage root is not a regular directory: ${boundary}`);
   assertCurrentUser(rootStats, root);
-  const target = path2.resolve(directory);
-  const relative = path2.relative(root, target);
-  if (relative === ".." || relative.startsWith(`..${path2.sep}`) || path2.isAbsolute(relative)) throw new Error(`Power data path escapes storage: ${directory}`);
+  const target = path3.resolve(directory);
+  const relative = path3.relative(root, target);
+  if (relative === ".." || relative.startsWith(`..${path3.sep}`) || path3.isAbsolute(relative)) throw new Error(`Power data path escapes storage: ${directory}`);
   let cursor = root;
-  for (const segment of relative.split(path2.sep).filter(Boolean)) {
-    cursor = path2.join(cursor, segment);
+  for (const segment of relative.split(path3.sep).filter(Boolean)) {
+    cursor = path3.join(cursor, segment);
     try {
-      fs2.mkdirSync(cursor, { mode: 448 });
+      fs3.mkdirSync(cursor, { mode: 448 });
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
     }
-    const stats = fs2.lstatSync(cursor);
+    const stats = fs3.lstatSync(cursor);
     if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power data path contains a non-directory: ${cursor}`);
     assertCurrentUser(stats, cursor);
-    fs2.chmodSync(cursor, 448);
+    fs3.chmodSync(cursor, 448);
   }
   return target;
 };
 var privateFile = (target, maximum = 1024 * 1024) => {
-  const stats = fs2.lstatSync(target);
+  const stats = fs3.lstatSync(target);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
     throw new Error(`Legacy Power data is not a bounded unaliased regular file: ${target}`);
   }
@@ -10656,11 +10990,11 @@ var privateFile = (target, maximum = 1024 * 1024) => {
   return stats;
 };
 var fsyncDirectory = (directory) => {
-  const descriptor2 = fs2.openSync(directory, "r");
+  const descriptor2 = fs3.openSync(directory, "r");
   try {
-    fs2.fsyncSync(descriptor2);
+    fs3.fsyncSync(descriptor2);
   } finally {
-    fs2.closeSync(descriptor2);
+    fs3.closeSync(descriptor2);
   }
 };
 var writeJsonAtomic = (target, value, exclusive = false) => {
@@ -10668,12 +11002,12 @@ var writeJsonAtomic = (target, value, exclusive = false) => {
 `;
   if (exclusive) {
     try {
-      const descriptor2 = fs2.openSync(target, "wx", 384);
+      const descriptor2 = fs3.openSync(target, "wx", 384);
       try {
-        fs2.writeFileSync(descriptor2, bytes);
-        fs2.fsyncSync(descriptor2);
+        fs3.writeFileSync(descriptor2, bytes);
+        fs3.fsyncSync(descriptor2);
       } finally {
-        fs2.closeSync(descriptor2);
+        fs3.closeSync(descriptor2);
       }
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
@@ -10681,59 +11015,59 @@ var writeJsonAtomic = (target, value, exclusive = false) => {
   } else {
     const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
     try {
-      const descriptor2 = fs2.openSync(temporary, "wx", 384);
+      const descriptor2 = fs3.openSync(temporary, "wx", 384);
       try {
-        fs2.writeFileSync(descriptor2, bytes);
-        fs2.fsyncSync(descriptor2);
+        fs3.writeFileSync(descriptor2, bytes);
+        fs3.fsyncSync(descriptor2);
       } finally {
-        fs2.closeSync(descriptor2);
+        fs3.closeSync(descriptor2);
       }
-      fs2.renameSync(temporary, target);
+      fs3.renameSync(temporary, target);
     } catch (error) {
-      fs2.rmSync(temporary, { force: true });
+      fs3.rmSync(temporary, { force: true });
       throw error;
     }
   }
   privateFile(target);
-  fs2.chmodSync(target, 384);
-  fsyncDirectory(path2.dirname(target));
+  fs3.chmodSync(target, 384);
+  fsyncDirectory(path3.dirname(target));
   return target;
 };
 var privateJson = (target, initial) => writeJsonAtomic(target, initial, true);
 var copyFileAtomic = (source, target) => {
   privateFile(source);
-  const bytes = fs2.readFileSync(source);
+  const bytes = fs3.readFileSync(source);
   const sourceDigest = createHash2("sha256").update(bytes).digest("hex");
   const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.migration.tmp`;
   try {
-    const descriptor2 = fs2.openSync(temporary, "wx", 384);
+    const descriptor2 = fs3.openSync(temporary, "wx", 384);
     try {
-      fs2.writeFileSync(descriptor2, bytes);
-      fs2.fsyncSync(descriptor2);
+      fs3.writeFileSync(descriptor2, bytes);
+      fs3.fsyncSync(descriptor2);
     } finally {
-      fs2.closeSync(descriptor2);
+      fs3.closeSync(descriptor2);
     }
-    if (createHash2("sha256").update(fs2.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
+    if (createHash2("sha256").update(fs3.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
     try {
-      fs2.linkSync(temporary, target);
+      fs3.linkSync(temporary, target);
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
       privateFile(target);
-      if (createHash2("sha256").update(fs2.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
+      if (createHash2("sha256").update(fs3.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
     }
-    fs2.unlinkSync(temporary);
-    fsyncDirectory(path2.dirname(target));
+    fs3.unlinkSync(temporary);
+    fsyncDirectory(path3.dirname(target));
   } catch (error) {
-    fs2.rmSync(temporary, { force: true });
+    fs3.rmSync(temporary, { force: true });
     throw error;
   }
 };
 var migrateMcpConfiguration = (config) => {
-  const current = path2.join(config, "mcp.json");
-  const legacy = path2.join(config, "mcporter.json");
-  if (fs2.existsSync(current) || !fs2.existsSync(legacy)) return [];
+  const current = path3.join(config, "mcp.json");
+  const legacy = path3.join(config, "mcporter.json");
+  if (fs3.existsSync(current) || !fs3.existsSync(legacy)) return [];
   privateFile(legacy, 256 * 1024);
-  const parsed = JSON.parse(fs2.readFileSync(legacy, "utf8"));
+  const parsed = JSON.parse(fs3.readFileSync(legacy, "utf8"));
   if (!isRecord4(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting the Power");
   copyFileAtomic(legacy, current);
   return ["config/mcporter.json -> config/mcp.json"];
@@ -10747,10 +11081,10 @@ var LEGACY_CONFIG_FIELDS = {
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"]
 };
 var migrateLegacyFabricConfiguration = (root, config) => {
-  const legacy = path2.join(config, "fabric.json");
-  if (!fs2.existsSync(legacy)) return { migrated: [], ignored: [], quarantined: [] };
+  const legacy = path3.join(config, "fabric.json");
+  if (!fs3.existsSync(legacy)) return { migrated: [], ignored: [], quarantined: [] };
   privateFile(legacy, 256 * 1024);
-  const parsed = JSON.parse(fs2.readFileSync(legacy, "utf8"));
+  const parsed = JSON.parse(fs3.readFileSync(legacy, "utf8"));
   if (!isRecord4(parsed)) throw new Error("Legacy fabric configuration is malformed");
   const projected = {};
   const ignored = [];
@@ -10770,26 +11104,26 @@ var migrateLegacyFabricConfiguration = (root, config) => {
     }
     if (Object.keys(fields).length) projected[section] = fields;
   }
-  const current = path2.join(config, "config.json");
+  const current = path3.join(config, "config.json");
   const migrated = [];
-  if (!fs2.existsSync(current) && Object.keys(projected).length) {
+  if (!fs3.existsSync(current) && Object.keys(projected).length) {
     writeJsonAtomic(current, projected, true);
     migrated.push("config/fabric.json -> allowlisted config/config.json");
   }
-  const quarantine = privateDirectory(path2.join(root, "quarantine"), root);
-  const destination = path2.join(quarantine, "legacy-fabric.json");
-  if (!fs2.existsSync(destination)) fs2.renameSync(legacy, destination);
-  else fs2.rmSync(legacy);
+  const quarantine = privateDirectory(path3.join(root, "quarantine"), root);
+  const destination = path3.join(quarantine, "legacy-fabric.json");
+  if (!fs3.existsSync(destination)) fs3.renameSync(legacy, destination);
+  else fs3.rmSync(legacy);
   fsyncDirectory(quarantine);
   return { migrated, ignored, quarantined: ["legacy fabric.json"] };
 };
 var prepareKiroPowerDataPaths = (pluginData) => {
-  const root = privateDirectory(path2.join(pluginData, "fabric"), pluginData);
-  const config = privateDirectory(path2.join(root, "config"), root);
+  const root = privateDirectory(path3.join(pluginData, "fabric"), pluginData);
+  const config = privateDirectory(path3.join(root, "config"), root);
   const mcpMigrated = migrateMcpConfiguration(config);
   const policy = migrateLegacyFabricConfiguration(root, config);
   if (mcpMigrated.length || policy.migrated.length || policy.quarantined.length) {
-    writeJsonAtomic(path2.join(root, "migration-report.json"), {
+    writeJsonAtomic(path3.join(root, "migration-report.json"), {
       schemaVersion: 2,
       migrated: [...mcpMigrated, ...policy.migrated],
       ignoredFields: policy.ignored.sort(),
@@ -10799,98 +11133,98 @@ var prepareKiroPowerDataPaths = (pluginData) => {
   return {
     root,
     config,
-    configFile: path2.join(config, "config.json"),
-    mcpConfig: privateJson(path2.join(config, "mcp.json"), { mcpServers: {}, imports: [] }),
-    artifacts: privateDirectory(path2.join(root, "artifacts"), root),
-    projects: privateDirectory(path2.join(root, "projects"), root)
+    configFile: path3.join(config, "config.json"),
+    mcpConfig: privateJson(path3.join(config, "mcp.json"), { mcpServers: {}, imports: [] }),
+    artifacts: privateDirectory(path3.join(root, "artifacts"), root),
+    projects: privateDirectory(path3.join(root, "projects"), root)
   };
 };
 var kiroPowerWorkspaceId = (identity, generation = 3) => createHash2("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0").update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
 var encodeName = (value) => encodeURIComponent(value).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 var memoryNamespaceDirectory = (namespace) => `${encodeName(namespace)}-${createHash2("sha256").update(namespace).digest("hex").slice(0, 16)}`;
 var migrateCompatibleMemory = (sourceRoot, targetRoot, namespace) => {
-  if (!fs2.existsSync(sourceRoot)) return false;
+  if (!fs3.existsSync(sourceRoot)) return false;
   assertPrivateDirectory(sourceRoot);
-  const sourceMemory = path2.join(sourceRoot, "memory");
-  if (!fs2.existsSync(sourceMemory)) return false;
+  const sourceMemory = path3.join(sourceRoot, "memory");
+  if (!fs3.existsSync(sourceMemory)) return false;
   assertPrivateDirectory(sourceMemory);
-  const rootMarker = path2.join(sourceMemory, ".kiro-fabric-owner");
+  const rootMarker = path3.join(sourceMemory, ".kiro-fabric-owner");
   privateFile(rootMarker, 8 * 1024);
-  const rootOwner = JSON.parse(fs2.readFileSync(rootMarker, "utf8"));
+  const rootOwner = JSON.parse(fs3.readFileSync(rootMarker, "utf8"));
   if (rootOwner.format !== 1 || rootOwner.owner !== "kiro-fabric" || rootOwner.kind !== "memory-root" || rootOwner.root !== sourceRoot) {
     throw new Error("Legacy memory root ownership is incompatible");
   }
   const namespaceName = memoryNamespaceDirectory(namespace);
-  const sourceNamespace = path2.join(sourceMemory, namespaceName);
+  const sourceNamespace = path3.join(sourceMemory, namespaceName);
   assertPrivateDirectory(sourceNamespace);
-  const namespaceMarker = path2.join(sourceNamespace, ".kiro-fabric-owner");
+  const namespaceMarker = path3.join(sourceNamespace, ".kiro-fabric-owner");
   privateFile(namespaceMarker, 8 * 1024);
-  const namespaceOwner = JSON.parse(fs2.readFileSync(namespaceMarker, "utf8"));
+  const namespaceOwner = JSON.parse(fs3.readFileSync(namespaceMarker, "utf8"));
   if (namespaceOwner.format !== 1 || namespaceOwner.owner !== "kiro-fabric" || namespaceOwner.kind !== "memory-namespace" || namespaceOwner.root !== sourceRoot || namespaceOwner.namespace !== namespace) throw new Error("Legacy memory namespace ownership is incompatible");
-  const sourceEntries = fs2.readdirSync(sourceNamespace, { withFileTypes: true });
+  const sourceEntries = fs3.readdirSync(sourceNamespace, { withFileTypes: true });
   if (sourceEntries.length > 130) throw new Error("Legacy memory entry limit exceeded");
-  const targetMemory = privateDirectory(path2.join(targetRoot, "memory"), targetRoot);
-  writeJsonAtomic(path2.join(targetMemory, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: targetRoot }, true);
-  const targetNamespace = privateDirectory(path2.join(targetMemory, namespaceName), targetMemory);
-  writeJsonAtomic(path2.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: targetRoot, namespace }, true);
+  const targetMemory = privateDirectory(path3.join(targetRoot, "memory"), targetRoot);
+  writeJsonAtomic(path3.join(targetMemory, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: targetRoot }, true);
+  const targetNamespace = privateDirectory(path3.join(targetMemory, namespaceName), targetMemory);
+  writeJsonAtomic(path3.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: targetRoot, namespace }, true);
   let totalBytes = 0;
   for (const entry of sourceEntries) {
     if (entry.name === ".kiro-fabric-owner") continue;
     if (!entry.isFile() || !entry.name.endsWith(".json")) throw new Error("Legacy memory contains incompatible residue");
-    const source = path2.join(sourceNamespace, entry.name);
+    const source = path3.join(sourceNamespace, entry.name);
     const stats = privateFile(source, 16 * 1024);
     totalBytes += stats.size;
     if (totalBytes > 256 * 1024) throw new Error("Legacy memory namespace byte limit exceeded");
-    const value = JSON.parse(fs2.readFileSync(source, "utf8"));
+    const value = JSON.parse(fs3.readFileSync(source, "utf8"));
     if (value.format !== 1 || value.owner !== "kiro-fabric" || value.kind !== "memory-entry" || value.namespace !== namespace || typeof value.key !== "string" || value.key.trim() !== value.key || !value.key || `${encodeName(value.key)}.json` !== entry.name || typeof value.updatedAt !== "string" || !("value" in value)) throw new Error("Legacy memory entry is incompatible");
-    copyFileAtomic(source, path2.join(targetNamespace, entry.name));
+    copyFileAtomic(source, path3.join(targetNamespace, entry.name));
   }
   return true;
 };
 var validateWorkspaceObject = (identity) => {
-  const canonical = fs2.realpathSync(identity.canonicalPath);
-  const stats = fs2.statSync(canonical, { bigint: true });
+  const canonical = fs3.realpathSync(identity.canonicalPath);
+  const stats = fs3.statSync(canonical, { bigint: true });
   if (canonical !== identity.canonicalPath || String(stats.dev) !== identity.deviceId || String(stats.ino) !== identity.fileId) {
     throw new Error("Power workspace identity no longer matches the verified filesystem object");
   }
 };
 var validatePersistedIdentity = (file, expected) => {
   privateFile(file, 64 * 1024);
-  const persisted = projectKiroPowerWorkspaceIdentity(JSON.parse(fs2.readFileSync(file, "utf8")));
+  const persisted = projectKiroPowerWorkspaceIdentity(JSON.parse(fs3.readFileSync(file, "utf8")));
   if (!sameIdentity(persisted, expected)) throw new Error("Legacy workspace identity does not match the currently verified filesystem object");
 };
 var quarantineLegacyWorkspace = (projects, legacy, identity) => {
-  if (!fs2.existsSync(legacy)) return void 0;
-  const quarantine = privateDirectory(path2.join(projects, ".quarantine"), projects);
-  const destination = path2.join(quarantine, `workspace-v2-${kiroPowerWorkspaceId(identity, 2)}`);
-  if (fs2.existsSync(destination)) throw new Error("Legacy workspace quarantine collision");
-  fs2.renameSync(legacy, destination);
+  if (!fs3.existsSync(legacy)) return void 0;
+  const quarantine = privateDirectory(path3.join(projects, ".quarantine"), projects);
+  const destination = path3.join(quarantine, `workspace-v2-${kiroPowerWorkspaceId(identity, 2)}`);
+  if (fs3.existsSync(destination)) throw new Error("Legacy workspace quarantine collision");
+  fs3.renameSync(legacy, destination);
   fsyncDirectory(quarantine);
   return destination;
 };
 var migrateWorkspaceGeneration = (projects, identity) => {
-  const current = path2.join(projects, kiroPowerWorkspaceId(identity, 3));
-  const legacy = path2.join(projects, kiroPowerWorkspaceId(identity, 2));
-  if (!fs2.existsSync(legacy)) return { current, migrated: false };
+  const current = path3.join(projects, kiroPowerWorkspaceId(identity, 3));
+  const legacy = path3.join(projects, kiroPowerWorkspaceId(identity, 2));
+  if (!fs3.existsSync(legacy)) return { current, migrated: false };
   const legacyStats = assertPrivateDirectory(legacy);
   void legacyStats;
-  validatePersistedIdentity(path2.join(legacy, "workspace-identity.json"), identity);
+  validatePersistedIdentity(path3.join(legacy, "workspace-identity.json"), identity);
   validateWorkspaceObject(identity);
-  if (fs2.existsSync(current)) {
-    validatePersistedIdentity(path2.join(current, "workspace-identity.json"), identity);
+  if (fs3.existsSync(current)) {
+    validatePersistedIdentity(path3.join(current, "workspace-identity.json"), identity);
     quarantineLegacyWorkspace(projects, legacy, identity);
     return { current, migrated: true };
   }
-  const staging = path2.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity).slice(0, 16)}-${process.pid}-${randomBytes(8).toString("hex")}.tmp`);
-  fs2.mkdirSync(staging, { mode: 448 });
+  const staging = path3.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity).slice(0, 16)}-${process.pid}-${randomBytes(8).toString("hex")}.tmp`);
+  fs3.mkdirSync(staging, { mode: 448 });
   let memoryMigrated = false;
   try {
-    writeJsonAtomic(path2.join(staging, "workspace-identity.json"), identity, true);
+    writeJsonAtomic(path3.join(staging, "workspace-identity.json"), identity, true);
     memoryMigrated = migrateCompatibleMemory(legacy, staging, kiroPowerMemoryNamespace(identity));
-    privateDirectory(path2.join(staging, "memory"), staging);
-    privateDirectory(path2.join(staging, "state"), staging);
-    privateDirectory(path2.join(staging, "artifacts"), staging);
-    writeJsonAtomic(path2.join(staging, "migration-report.json"), {
+    privateDirectory(path3.join(staging, "memory"), staging);
+    privateDirectory(path3.join(staging, "state"), staging);
+    privateDirectory(path3.join(staging, "artifacts"), staging);
+    writeJsonAtomic(path3.join(staging, "migration-report.json"), {
       schemaVersion: 2,
       sourceGeneration: 2,
       destinationGeneration: 3,
@@ -10899,19 +11233,19 @@ var migrateWorkspaceGeneration = (projects, identity) => {
       complete: false
     }, true);
     try {
-      fs2.renameSync(staging, current);
+      fs3.renameSync(staging, current);
     } catch (error) {
       if (errorCode(error) !== "EEXIST" && errorCode(error) !== "ENOTEMPTY") throw error;
-      validatePersistedIdentity(path2.join(current, "workspace-identity.json"), identity);
-      fs2.rmSync(staging, { recursive: true, force: true });
+      validatePersistedIdentity(path3.join(current, "workspace-identity.json"), identity);
+      fs3.rmSync(staging, { recursive: true, force: true });
     }
     fsyncDirectory(projects);
   } catch (error) {
-    fs2.rmSync(staging, { recursive: true, force: true });
+    fs3.rmSync(staging, { recursive: true, force: true });
     throw error;
   }
   quarantineLegacyWorkspace(projects, legacy, identity);
-  writeJsonAtomic(path2.join(current, "migration-report.json"), {
+  writeJsonAtomic(path3.join(current, "migration-report.json"), {
     schemaVersion: 2,
     sourceGeneration: 2,
     destinationGeneration: 3,
@@ -10926,15 +11260,15 @@ var prepareKiroPowerProjectPaths = (projects, rawIdentity) => {
   const migration = migrateWorkspaceGeneration(projects, identity);
   if (!migration.migrated) validateWorkspaceObject(identity);
   const root = privateDirectory(migration.current, projects);
-  const identityFile = privateJson(path2.join(root, "workspace-identity.json"), identity);
+  const identityFile = privateJson(path3.join(root, "workspace-identity.json"), identity);
   validatePersistedIdentity(identityFile, identity);
   return {
     root,
     identityFile,
-    memory: privateDirectory(path2.join(root, "memory"), root),
+    memory: privateDirectory(path3.join(root, "memory"), root),
     memoryNamespace: kiroPowerMemoryNamespace(identity),
-    state: privateDirectory(path2.join(root, "state"), root),
-    artifacts: privateDirectory(path2.join(root, "artifacts"), root)
+    state: privateDirectory(path3.join(root, "state"), root),
+    artifacts: privateDirectory(path3.join(root, "artifacts"), root)
   };
 };
 
@@ -10942,7 +11276,7 @@ var prepareKiroPowerProjectPaths = (projects, rawIdentity) => {
 import { createHash as createHash3 } from "node:crypto";
 import { existsSync } from "node:fs";
 import os2 from "node:os";
-import path3 from "node:path";
+import path4 from "node:path";
 import { fileURLToPath } from "node:url";
 var kiroPowerWorkspaceRequestSchema = typebox_exports.Union([
   typebox_exports.Object({ action: typebox_exports.Literal("status") }, { additionalProperties: false }),
@@ -10980,11 +11314,11 @@ var KiroPowerWorkspaceBinding = class {
     this.#elicitor = options.elicitor;
     this.#home = inspectCanonicalPath(os2.homedir(), { kind: "directory" }).canonicalPath;
     this.#temporary = inspectCanonicalPath(os2.tmpdir(), { kind: "directory" }).canonicalPath;
-    const kiroHome = path3.join(this.#home, ".kiro");
+    const kiroHome = path4.join(this.#home, ".kiro");
     this.#kiroHome = existsSync(kiroHome) ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath : kiroHome;
   }
   #canonical(candidate) {
-    if (!path3.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
+    if (!path4.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
     const inspected = inspectCanonicalPath(candidate, {
       kind: "directory",
       rejectFinalSymlink: true
@@ -10992,7 +11326,7 @@ var KiroPowerWorkspaceBinding = class {
     const root = inspected.canonicalPath;
     const currentKiroHome = existsSync(this.#kiroHome) ? inspectCanonicalPath(this.#kiroHome, { kind: "directory" }).canonicalPath : this.#kiroHome;
     const insideKiroHome = canonicalPathContains(currentKiroHome, root);
-    const unsafe = [path3.parse(root).root, this.#home, this.#temporary, this.#pluginRoot, this.#pluginData];
+    const unsafe = [path4.parse(root).root, this.#home, this.#temporary, this.#pluginRoot, this.#pluginData];
     if (unsafe.includes(root) || insideKiroHome || canonicalPathContains(root, this.#home)) {
       throw new Error("workspace root is too broad or reserved");
     }
@@ -11005,7 +11339,7 @@ var KiroPowerWorkspaceBinding = class {
       id: idFor(root),
       root,
       lexicalPath: inspected.lexicalPath,
-      name: path3.basename(root) || "workspace",
+      name: path4.basename(root) || "workspace",
       ...inspected.identity
     };
   }
@@ -11016,7 +11350,7 @@ var KiroPowerWorkspaceBinding = class {
       let advertised;
       try {
         if (!item.uri.startsWith("file:")) continue;
-        advertised = path3.resolve(fileURLToPath(item.uri));
+        advertised = path4.resolve(fileURLToPath(item.uri));
         const candidate = this.#canonical(advertised);
         advertisedCanonicalRoots.add(candidate.root);
         candidates.push({ ...candidate, name: (item.name?.trim() || candidate.name).slice(0, 120) });
@@ -11292,8 +11626,8 @@ Output exceeded ${options.maxOutputChars} characters and could not be retained w
 
 // src/providers/state-provider.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
-import fs3 from "node:fs";
-import path4 from "node:path";
+import fs4 from "node:fs";
+import path5 from "node:path";
 var emptyEntries = () => /* @__PURE__ */ Object.create(null);
 var emptyDocument = () => ({ schemaVersion: 1, revision: 0, entries: emptyEntries() });
 var KEY_MAX = 512;
@@ -11324,16 +11658,16 @@ var processIsAlive = (pid) => {
   }
 };
 var privateRoot = (root) => {
-  fs3.mkdirSync(root, { recursive: true, mode: 448 });
-  const stat = fs3.lstatSync(root);
+  fs4.mkdirSync(root, { recursive: true, mode: 448 });
+  const stat = fs4.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error("state root must be a private regular directory");
   }
   if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new Error("state root must be owned by the current user");
   }
-  fs3.chmodSync(root, 448);
-  return fs3.realpathSync(root);
+  fs4.chmodSync(root, 448);
+  return fs4.realpathSync(root);
 };
 var StateProvider = class {
   name = "state";
@@ -11346,8 +11680,8 @@ var StateProvider = class {
   #maxTotalChars;
   constructor(root, options = {}) {
     this.#root = privateRoot(root);
-    this.#file = path4.join(this.#root, "state.json");
-    this.#lock = path4.join(this.#root, LOCK_NAME);
+    this.#file = path5.join(this.#root, "state.json");
+    this.#lock = path5.join(this.#root, LOCK_NAME);
     this.#maxEntries = options.maxEntries ?? 1e3;
     this.#maxValueChars = options.maxValueChars ?? 1e5;
     this.#maxTotalChars = options.maxTotalChars ?? 8e6;
@@ -11415,15 +11749,15 @@ var StateProvider = class {
   #read() {
     let descriptor2;
     try {
-      const lexicalStats = fs3.lstatSync(this.#file);
+      const lexicalStats = fs4.lstatSync(this.#file);
       if (!lexicalStats.isFile() || lexicalStats.isSymbolicLink() || lexicalStats.nlink !== 1) {
         throw new Error("state file is not a private regular file");
       }
-      descriptor2 = fs3.openSync(
+      descriptor2 = fs4.openSync(
         this.#file,
-        fs3.constants.O_RDONLY | (fs3.constants.O_NOFOLLOW ?? 0)
+        fs4.constants.O_RDONLY | (fs4.constants.O_NOFOLLOW ?? 0)
       );
-      const stat = fs3.fstatSync(descriptor2);
+      const stat = fs4.fstatSync(descriptor2);
       if (!stat.isFile() || stat.nlink !== 1 || stat.dev !== lexicalStats.dev || stat.ino !== lexicalStats.ino) {
         throw new Error("state file changed while it was being opened");
       }
@@ -11434,7 +11768,7 @@ var StateProvider = class {
         if ((stat.mode & 63) !== 0) throw new Error("state file permissions must be private");
       }
       if (stat.size > this.#maxTotalChars * 4) throw new Error("state document exceeds configured bounds");
-      const text = fs3.readFileSync(descriptor2, "utf8");
+      const text = fs4.readFileSync(descriptor2, "utf8");
       if (text.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
       const parsed = JSON.parse(text);
       if (!isRecord5(parsed) || !hasExactKeys(parsed, ["schemaVersion", "revision", "entries"]) || parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) || parsed.revision < 0 || !isRecord5(parsed.entries)) {
@@ -11462,30 +11796,30 @@ var StateProvider = class {
       if (errorCode2(error) === "ENOENT") return emptyDocument();
       throw error;
     } finally {
-      if (descriptor2 !== void 0) fs3.closeSync(descriptor2);
+      if (descriptor2 !== void 0) fs4.closeSync(descriptor2);
     }
   }
   #write(document, beforeCommit) {
     const text = `${JSON.stringify(document, null, 2)}
 `;
     if (text.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
-    const temporary = path4.join(
+    const temporary = path5.join(
       this.#root,
       `.state-${process.pid}-${randomBytes2(8).toString("hex")}.tmp`
     );
-    const descriptor2 = fs3.openSync(temporary, "wx", 384);
+    const descriptor2 = fs4.openSync(temporary, "wx", 384);
     try {
-      fs3.writeFileSync(descriptor2, text);
-      fs3.fsyncSync(descriptor2);
+      fs4.writeFileSync(descriptor2, text);
+      fs4.fsyncSync(descriptor2);
     } finally {
-      fs3.closeSync(descriptor2);
+      fs4.closeSync(descriptor2);
     }
     try {
       beforeCommit();
-      fs3.renameSync(temporary, this.#file);
-      fs3.chmodSync(this.#file, 384);
+      fs4.renameSync(temporary, this.#file);
+      fs4.chmodSync(this.#file, 384);
     } catch (error) {
-      fs3.rmSync(temporary, { force: true });
+      fs4.rmSync(temporary, { force: true });
       throw error;
     }
   }
@@ -11495,21 +11829,21 @@ var StateProvider = class {
     while (!identity) {
       throwIfAbortedOrExpired(context.signal, context.deadline);
       try {
-        const descriptor2 = fs3.openSync(this.#lock, "wx", 384);
+        const descriptor2 = fs4.openSync(this.#lock, "wx", 384);
         try {
-          fs3.writeFileSync(descriptor2, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}
+          fs4.writeFileSync(descriptor2, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}
 `);
-          fs3.fsyncSync(descriptor2);
-          const stat = fs3.fstatSync(descriptor2);
+          fs4.fsyncSync(descriptor2);
+          const stat = fs4.fstatSync(descriptor2);
           identity = { dev: stat.dev, ino: stat.ino };
         } finally {
-          fs3.closeSync(descriptor2);
+          fs4.closeSync(descriptor2);
         }
       } catch (error) {
         if (errorCode2(error) !== "EEXIST") throw error;
         let stat;
         try {
-          stat = fs3.lstatSync(this.#lock);
+          stat = fs4.lstatSync(this.#lock);
         } catch (statError) {
           if (errorCode2(statError) === "ENOENT") continue;
           throw statError;
@@ -11518,14 +11852,14 @@ var StateProvider = class {
         if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
           let ownerPid = 0;
           try {
-            const owner = JSON.parse(fs3.readFileSync(this.#lock, "utf8"));
+            const owner = JSON.parse(fs4.readFileSync(this.#lock, "utf8"));
             if (typeof owner.pid === "number") ownerPid = owner.pid;
           } catch {
           }
           if (!processIsAlive(ownerPid)) {
-            const current = fs3.lstatSync(this.#lock);
+            const current = fs4.lstatSync(this.#lock);
             if (current.dev === stat.dev && current.ino === stat.ino && current.isFile()) {
-              fs3.rmSync(this.#lock);
+              fs4.rmSync(this.#lock);
               continue;
             }
           }
@@ -11541,9 +11875,9 @@ var StateProvider = class {
       return result;
     } finally {
       try {
-        const current = fs3.lstatSync(this.#lock);
+        const current = fs4.lstatSync(this.#lock);
         if (current.isFile() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
-          fs3.rmSync(this.#lock);
+          fs4.rmSync(this.#lock);
         }
       } catch (error) {
         if (errorCode2(error) !== "ENOENT") throw error;
@@ -11554,8 +11888,8 @@ var StateProvider = class {
 
 // src/kiro/artifacts.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
-import fs4 from "node:fs";
-import path5 from "node:path";
+import fs5 from "node:fs";
+import path6 from "node:path";
 var ARTIFACT_ID = /^ka_[a-f0-9]{48}$/u;
 var MAX_ARTIFACT_RESIDUE_AGE_MS = 864e5;
 var KiroArtifactStoreError = class extends Error {
@@ -11581,22 +11915,22 @@ var ArtifactStore = class {
     this.#maxTotalChars = options.maxTotalChars ?? 8e6;
     this.#ttlMs = options.ttlMs ?? 36e5;
     if (options.root) {
-      fs4.mkdirSync(options.root, { recursive: true, mode: 448 });
-      const stat = fs4.lstatSync(options.root);
+      fs5.mkdirSync(options.root, { recursive: true, mode: 448 });
+      const stat = fs5.lstatSync(options.root);
       if (!stat.isDirectory() || stat.isSymbolicLink()) throw new KiroArtifactStoreError("artifact root must be a regular directory");
       if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
         throw new KiroArtifactStoreError("artifact root must be owned by the current user");
       }
-      fs4.chmodSync(options.root, 448);
-      const canonicalRoot = fs4.realpathSync(options.root);
-      for (const entry of fs4.readdirSync(canonicalRoot, { withFileTypes: true })) {
-        const target = path5.join(canonicalRoot, entry.name);
-        const targetStats = fs4.lstatSync(target);
+      fs5.chmodSync(options.root, 448);
+      const canonicalRoot = fs5.realpathSync(options.root);
+      for (const entry of fs5.readdirSync(canonicalRoot, { withFileTypes: true })) {
+        const target = path6.join(canonicalRoot, entry.name);
+        const targetStats = fs5.lstatSync(target);
         if (!entry.isFile() || targetStats.isSymbolicLink() || !ARTIFACT_ID.test(entry.name)) {
           throw new KiroArtifactStoreError(`artifact root contains an unsupported entry: ${entry.name}`);
         }
         if (this.#now() - targetStats.mtimeMs > MAX_ARTIFACT_RESIDUE_AGE_MS) {
-          fs4.rmSync(target);
+          fs5.rmSync(target);
         }
       }
       this.#root = canonicalRoot;
@@ -11614,17 +11948,17 @@ var ArtifactStore = class {
     let id;
     do
       id = `ka_${randomBytes3(24).toString("hex")}`;
-    while (this.#entries.has(id) || this.#root !== void 0 && fs4.existsSync(path5.join(this.#root, id)));
-    const file = this.#root ? path5.join(this.#root, id) : void 0;
+    while (this.#entries.has(id) || this.#root !== void 0 && fs5.existsSync(path6.join(this.#root, id)));
+    const file = this.#root ? path6.join(this.#root, id) : void 0;
     if (file) {
-      const descriptor2 = fs4.openSync(file, "wx", 384);
+      const descriptor2 = fs5.openSync(file, "wx", 384);
       try {
-        fs4.writeFileSync(descriptor2, content);
-        fs4.fsyncSync(descriptor2);
+        fs5.writeFileSync(descriptor2, content);
+        fs5.fsyncSync(descriptor2);
       } finally {
-        fs4.closeSync(descriptor2);
+        fs5.closeSync(descriptor2);
       }
-      fs4.chmodSync(file, 384);
+      fs5.chmodSync(file, 384);
     }
     const now = this.#now();
     this.#entries.set(id, { content, createdAt: now, lastReadAt: now, ...file ? { file } : {} });
@@ -11659,7 +11993,7 @@ var ArtifactStore = class {
     if (!entry) return;
     this.#entries.delete(id);
     this.#totalChars -= entry.content.length;
-    if (entry.file) fs4.rmSync(entry.file, { force: true });
+    if (entry.file) fs5.rmSync(entry.file, { force: true });
   }
   close() {
     if (this.#closed) return;
@@ -11671,8 +12005,8 @@ var createKiroArtifactStore = (options = {}) => new ArtifactStore(options);
 
 // src/kiro/mcp-provider.ts
 import { createHash as createHash4 } from "node:crypto";
-import fs5 from "node:fs";
-import path6 from "node:path";
+import fs6 from "node:fs";
+import path7 from "node:path";
 var descriptors2 = [
   {
     name: "$servers",
@@ -11705,9 +12039,9 @@ var isRecord6 = (value) => typeof value === "object" && value !== null && !Array
 var MCP_CLOSE_GRACE_MS = 1e3;
 var configuredEnvironment = (configPath, server) => {
   if (!configPath) return {};
-  const stats = fs5.lstatSync(configPath);
+  const stats = fs6.lstatSync(configPath);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 256 * 1024) throw new Error("MCP configuration is not a bounded unaliased regular file");
-  const parsed = JSON.parse(fs5.readFileSync(configPath, "utf8"));
+  const parsed = JSON.parse(fs6.readFileSync(configPath, "utf8"));
   const root = isRecord6(parsed) ? parsed : {};
   const servers = isRecord6(root.mcpServers) ? root.mcpServers : root;
   const entry = isRecord6(servers[server]) ? servers[server] : {};
@@ -11717,20 +12051,24 @@ var configuredEnvironment = (configPath, server) => {
   return result;
 };
 var executablePath = (command) => {
-  if (command.includes("/") || command.includes("\\")) return fs5.realpathSync(command);
-  for (const directory of (process.env.PATH ?? "").split(path6.delimiter)) {
+  if (command.includes("/") || command.includes("\\")) return fs6.realpathSync(command);
+  for (const directory of (process.env.PATH ?? "").split(path7.delimiter)) {
     if (!directory) continue;
-    const candidate = path6.join(directory, command);
+    const candidate = path7.join(directory, command);
     try {
-      if (fs5.statSync(candidate).isFile()) return fs5.realpathSync(candidate);
+      if (fs6.statSync(candidate).isFile()) return fs6.realpathSync(candidate);
     } catch {
     }
   }
   throw new Error(`Configured MCP executable cannot be resolved: ${command}`);
 };
-var fileDigest = (file) => createHash4("sha256").update(fs5.readFileSync(file)).digest("hex");
+var fileDigest = (file) => createHash4("sha256").update(fs6.readFileSync(file)).digest("hex");
 var environmentDigest = () => createHash4("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
 var configDigest = (configPath) => configPath ? fileDigest(configPath) : null;
+var fileStatKey = (file) => {
+  const stats = fs6.statSync(file);
+  return `${stats.dev}:${stats.ino}:${stats.mtimeMs}:${stats.size}:${stats.nlink}:${Number(stats.isSymbolicLink())}`;
+};
 var executeApproval = (name, description) => ({
   name,
   ref: `mcp.${name}`,
@@ -11765,6 +12103,8 @@ var KiroMcpProvider = class {
   #runtime;
   #runtimeCreation;
   #serverTails = /* @__PURE__ */ new Map();
+  #snapshotCache = /* @__PURE__ */ new Map();
+  #resolvedExecutables = /* @__PURE__ */ new Map();
   #closed = false;
   constructor(cwd, config, runtimeFactory) {
     this.#cwd = cwd;
@@ -11888,6 +12228,8 @@ var KiroMcpProvider = class {
     this.#runtimeCreation = void 0;
     await Promise.allSettled([...this.#serverTails.values()]);
     this.#serverTails.clear();
+    this.#snapshotCache.clear();
+    this.#resolvedExecutables.clear();
     if (runtime) {
       await runtime.close();
     } else if (creation) {
@@ -11896,15 +12238,33 @@ var KiroMcpProvider = class {
   }
   #transportSnapshot(runtime, server) {
     const definition = runtime.getDefinition(server);
+    const processEnvironmentDigest = environmentDigest();
+    let executable;
+    if (definition.command.kind === "stdio") {
+      executable = this.#resolvedExecutables.get(definition.command.command);
+      if (!executable) {
+        executable = executablePath(definition.command.command);
+        this.#resolvedExecutables.set(definition.command.command, executable);
+      }
+    }
+    const statKey = `${executable ? fileStatKey(executable) : "-"}|${this.#config.configPath ? fileStatKey(this.#config.configPath) : "-"}`;
+    const cached = this.#snapshotCache.get(server);
+    if (cached && cached.envDigest === processEnvironmentDigest && cached.statKey === statKey) return cached.snapshot;
+    const snapshot = this.#computeTransportSnapshot(runtime, server, processEnvironmentDigest, executable);
+    this.#snapshotCache.set(server, { envDigest: processEnvironmentDigest, statKey, snapshot });
+    return snapshot;
+  }
+  #computeTransportSnapshot(runtime, server, processEnvironmentDigest, resolvedExecutable) {
+    const definition = runtime.getDefinition(server);
     const base = {
       schemaVersion: 1,
       server,
-      processEnvironmentDigest: environmentDigest(),
+      processEnvironmentDigest,
       configDigest: configDigest(this.#config.configPath)
     };
     const details = definition.command.kind === "stdio" ? (() => {
-      const executable = executablePath(definition.command.command);
-      const stats = fs5.statSync(executable);
+      const executable = resolvedExecutable ?? executablePath(definition.command.command);
+      const stats = fs6.statSync(executable);
       const configured = configuredEnvironment(this.#config.configPath, server);
       return {
         kind: "stdio",
@@ -11912,7 +12272,7 @@ var KiroMcpProvider = class {
         executableDigest: fileDigest(executable),
         executableDevice: String(stats.dev),
         executableFile: String(stats.ino),
-        cwd: fs5.realpathSync(definition.command.cwd ?? this.#cwd),
+        cwd: fs6.realpathSync(definition.command.cwd ?? this.#cwd),
         arguments: [...definition.command.args ?? []],
         configuredEnvironmentDigest: createHash4("sha256").update(JSON.stringify(Object.entries(configured).sort(([left], [right]) => left.localeCompare(right)))).digest("hex")
       };
@@ -12027,12 +12387,12 @@ var KiroMcpProvider = class {
 
 // src/kiro/memory-provider.ts
 import { createHash as createHash5 } from "node:crypto";
-import fs7 from "node:fs";
+import fs8 from "node:fs";
 
 // src/kiro/memory.ts
 import crypto from "node:crypto";
-import fs6 from "node:fs";
-import path7 from "node:path";
+import fs7 from "node:fs";
+import path8 from "node:path";
 var DEFAULT_MAX_NAMESPACE_ENTRIES = 128;
 var DEFAULT_MAX_NAMESPACE_BYTES = 256 * 1024;
 var DEFAULT_MAX_ENTRY_BYTES = 16 * 1024;
@@ -12066,14 +12426,14 @@ var normalizeKiroMemoryToken = (value, label) => {
 var encodeName2 = (value) => encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 var hashNamespace = (namespace) => crypto.createHash("sha256").update(namespace).digest("hex").slice(0, 16);
 var isWithinOrEqual = (root, candidate) => {
-  const relative = path7.relative(root, candidate);
+  const relative = path8.relative(root, candidate);
   if (relative === "" || relative === ".") return true;
-  if (path7.isAbsolute(relative)) return false;
-  return relative.split(path7.sep).filter(Boolean)[0] !== "..";
+  if (path8.isAbsolute(relative)) return false;
+  return relative.split(path8.sep).filter(Boolean)[0] !== "..";
 };
 var lstatOrNull = (target) => {
   try {
-    return fs6.lstatSync(target);
+    return fs7.lstatSync(target);
   } catch (error) {
     if (error.code === "ENOENT") return null;
     throw error;
@@ -12091,29 +12451,29 @@ var processIsAlive2 = (pid) => {
   }
 };
 var withNamespaceMutationLock = async (namespaceRoot, operation, signal, beforeCommit) => {
-  const lockPath = path7.join(namespaceRoot, MUTATION_LOCK);
+  const lockPath = path8.join(namespaceRoot, MUTATION_LOCK);
   const deadline = performance.now() + MUTATION_LOCK_TIMEOUT_MS;
   let identity;
   while (!identity) {
     throwIfAborted(signal);
     beforeCommit?.();
     try {
-      fs6.mkdirSync(lockPath, { mode: 448 });
-      const stat = fs6.lstatSync(lockPath);
+      fs7.mkdirSync(lockPath, { mode: 448 });
+      const stat = fs7.lstatSync(lockPath);
       if (!stat.isDirectory() || stat.isSymbolicLink()) {
         throw new KiroMemoryScopeError("Kiro memory mutation lock is not a real directory");
       }
       identity = { dev: stat.dev, ino: stat.ino };
       try {
-        fs6.writeFileSync(
-          path7.join(lockPath, MUTATION_LOCK_OWNER),
+        fs7.writeFileSync(
+          path8.join(lockPath, MUTATION_LOCK_OWNER),
           JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }),
           { encoding: "utf8", mode: 384, flag: "wx" }
         );
       } catch (error) {
         identity = void 0;
         try {
-          fs6.rmdirSync(lockPath);
+          fs7.rmdirSync(lockPath);
         } catch {
         }
         throw error;
@@ -12122,7 +12482,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal, beforeC
       if (errorCode3(error) !== "EEXIST") throw error;
       let stat;
       try {
-        stat = fs6.lstatSync(lockPath);
+        stat = fs7.lstatSync(lockPath);
       } catch (statError) {
         if (errorCode3(statError) === "ENOENT") continue;
         throw statError;
@@ -12133,7 +12493,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal, beforeC
       if (Date.now() - stat.mtimeMs > STALE_MUTATION_LOCK_MS) {
         let ownerPid;
         try {
-          const owner = JSON.parse(fs6.readFileSync(path7.join(lockPath, MUTATION_LOCK_OWNER), "utf8"));
+          const owner = JSON.parse(fs7.readFileSync(path8.join(lockPath, MUTATION_LOCK_OWNER), "utf8"));
           if (typeof owner.pid === "number") ownerPid = owner.pid;
         } catch {
         }
@@ -12145,10 +12505,10 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal, beforeC
           continue;
         }
         try {
-          const current = fs6.lstatSync(lockPath);
+          const current = fs7.lstatSync(lockPath);
           if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== stat.dev || current.ino !== stat.ino) continue;
-          fs6.rmSync(path7.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
-          fs6.rmdirSync(lockPath);
+          fs7.rmSync(path8.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
+          fs7.rmdirSync(lockPath);
         } catch {
           if (performance.now() >= deadline) {
             throw new KiroMemoryScopeError("Stale Kiro memory mutation lock is not reclaimable");
@@ -12172,25 +12532,25 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal, beforeC
     return result;
   } finally {
     try {
-      const current = fs6.lstatSync(lockPath);
+      const current = fs7.lstatSync(lockPath);
       if (current.isDirectory() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
-        fs6.rmSync(path7.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
-        fs6.rmdirSync(lockPath);
+        fs7.rmSync(path8.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
+        fs7.rmdirSync(lockPath);
       }
     } catch {
     }
   }
 };
 var ensureDirectory = (target) => {
-  fs6.mkdirSync(target, { recursive: true, mode: 448 });
-  const stat = fs6.lstatSync(target);
+  fs7.mkdirSync(target, { recursive: true, mode: 448 });
+  const stat = fs7.lstatSync(target);
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new KiroMemoryScopeError(`Kiro memory directory must be a real directory: ${target}`);
   }
   if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new KiroMemoryScopeError(`Kiro memory directory is owned by another user: ${target}`);
   }
-  fs6.chmodSync(target, 448);
+  fs7.chmodSync(target, 448);
 };
 var assertPrivateDirectory2 = (target, stat) => {
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
@@ -12208,11 +12568,11 @@ var assertPrivateDirectory2 = (target, stat) => {
 var readOwnershipMarker = (filePath) => {
   let descriptor2;
   try {
-    descriptor2 = fs6.openSync(
+    descriptor2 = fs7.openSync(
       filePath,
-      fs6.constants.O_RDONLY | (fs6.constants.O_NOFOLLOW ?? 0)
+      fs7.constants.O_RDONLY | (fs7.constants.O_NOFOLLOW ?? 0)
     );
-    const stat = fs6.fstatSync(descriptor2);
+    const stat = fs7.fstatSync(descriptor2);
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > 8 * 1024) {
       throw new KiroMemoryScopeError(`Kiro memory ownership marker is invalid: ${filePath}`);
     }
@@ -12224,14 +12584,14 @@ var readOwnershipMarker = (filePath) => {
         throw new KiroMemoryScopeError(`Kiro memory ownership marker is not private: ${filePath}`);
       }
     }
-    return JSON.parse(fs6.readFileSync(descriptor2, "utf8"));
+    return JSON.parse(fs7.readFileSync(descriptor2, "utf8"));
   } catch (error) {
     if (error instanceof KiroMemoryScopeError) throw error;
     throw new KiroMemoryScopeError(
       `Kiro memory directory is foreign or its ownership marker is unreadable: ${filePath}`
     );
   } finally {
-    if (descriptor2 !== void 0) fs6.closeSync(descriptor2);
+    if (descriptor2 !== void 0) fs7.closeSync(descriptor2);
   }
 };
 var ensureOwnedDirectory = (memoryRoot, target, marker) => {
@@ -12240,42 +12600,42 @@ var ensureOwnedDirectory = (memoryRoot, target, marker) => {
   let created = false;
   if (!existing) {
     try {
-      fs6.mkdirSync(target, { mode: 448 });
+      fs7.mkdirSync(target, { mode: 448 });
       created = true;
     } catch (error) {
       if (errorCode3(error) !== "EEXIST") throw error;
     }
   }
-  const stat = fs6.lstatSync(target);
+  const stat = fs7.lstatSync(target);
   assertPrivateDirectory2(target, stat);
-  const markerPath = path7.join(target, OWNERSHIP_MARKER);
+  const markerPath = path8.join(target, OWNERSHIP_MARKER);
   if (created) {
-    const temporaryMarker = path7.join(
+    const temporaryMarker = path8.join(
       target,
       `.kiro-fabric-owner-${process.pid}-${crypto.randomBytes(8).toString("hex")}.tmp`
     );
     try {
-      const descriptor2 = fs6.openSync(
+      const descriptor2 = fs7.openSync(
         temporaryMarker,
-        fs6.constants.O_WRONLY | fs6.constants.O_CREAT | fs6.constants.O_EXCL | (fs6.constants.O_NOFOLLOW ?? 0),
+        fs7.constants.O_WRONLY | fs7.constants.O_CREAT | fs7.constants.O_EXCL | (fs7.constants.O_NOFOLLOW ?? 0),
         384
       );
       try {
-        fs6.writeFileSync(descriptor2, `${JSON.stringify(marker)}
+        fs7.writeFileSync(descriptor2, `${JSON.stringify(marker)}
 `, "utf8");
-        fs6.fsyncSync(descriptor2);
+        fs7.fsyncSync(descriptor2);
       } finally {
-        fs6.closeSync(descriptor2);
+        fs7.closeSync(descriptor2);
       }
-      fs6.linkSync(temporaryMarker, markerPath);
-      fs6.unlinkSync(temporaryMarker);
+      fs7.linkSync(temporaryMarker, markerPath);
+      fs7.unlinkSync(temporaryMarker);
     } catch (error) {
       try {
-        fs6.unlinkSync(temporaryMarker);
+        fs7.unlinkSync(temporaryMarker);
       } catch {
       }
       try {
-        fs6.rmdirSync(target);
+        fs7.rmdirSync(target);
       } catch {
       }
       throw error;
@@ -12283,7 +12643,7 @@ var ensureOwnedDirectory = (memoryRoot, target, marker) => {
   } else if (!lstatOrNull(markerPath)) {
     let entries = [];
     try {
-      entries = fs6.readdirSync(target);
+      entries = fs7.readdirSync(target);
     } catch {
     }
     if (entries.every((name) => name.startsWith(".kiro-fabric-owner-"))) {
@@ -12304,9 +12664,9 @@ var assertNoSymlinkComponents = (root, target) => {
     throw new KiroMemoryScopeError(`Kiro memory path escapes its root: ${target}`);
   }
   let cursor = root;
-  const relative = path7.relative(root, target);
-  for (const part of relative.split(path7.sep).filter(Boolean)) {
-    cursor = path7.join(cursor, part);
+  const relative = path8.relative(root, target);
+  for (const part of relative.split(path8.sep).filter(Boolean)) {
+    cursor = path8.join(cursor, part);
     const stat = lstatOrNull(cursor);
     if (!stat) continue;
     if (stat.isSymbolicLink()) {
@@ -12315,16 +12675,16 @@ var assertNoSymlinkComponents = (root, target) => {
   }
 };
 var canonicalDirectory = (root) => {
-  const candidate = path7.resolve(normalizeKiroMemoryToken(root, "root"));
+  const candidate = path8.resolve(normalizeKiroMemoryToken(root, "root"));
   ensureDirectory(candidate);
-  const canonical = fs6.realpathSync(candidate);
-  const stat = fs6.statSync(canonical);
+  const canonical = fs7.realpathSync(candidate);
+  const stat = fs7.statSync(canonical);
   if (!stat.isDirectory()) {
     throw new KiroMemoryScopeError(`Kiro memory root is not a directory: ${canonical}`);
   }
   return canonical;
 };
-var memoryNamespaceRoot = (root, namespace) => path7.join(root, MEMORY_DIR, `${encodeName2(namespace)}-${hashNamespace(namespace)}`);
+var memoryNamespaceRoot = (root, namespace) => path8.join(root, MEMORY_DIR, `${encodeName2(namespace)}-${hashNamespace(namespace)}`);
 var entryPath = (namespaceRoot, key) => (() => {
   const name = `${encodeName2(key)}.json`;
   if (utf8Bytes(name) > MAX_FILE_NAME_BYTES) {
@@ -12332,14 +12692,14 @@ var entryPath = (namespaceRoot, key) => (() => {
       `Kiro memory key is too long after filesystem-safe encoding`
     );
   }
-  return path7.join(namespaceRoot, name);
+  return path8.join(namespaceRoot, name);
 })();
 var readEntry = (filePath, expectedNamespace, maxValueChars) => {
   let descriptor2;
   let raw;
   try {
-    descriptor2 = fs6.openSync(filePath, fs6.constants.O_RDONLY | (fs6.constants.O_NOFOLLOW ?? 0));
-    const stat = fs6.fstatSync(descriptor2);
+    descriptor2 = fs7.openSync(filePath, fs7.constants.O_RDONLY | (fs7.constants.O_NOFOLLOW ?? 0));
+    const stat = fs7.fstatSync(descriptor2);
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > DEFAULT_MAX_ENTRY_BYTES) {
       throw new KiroMemoryScopeError(`Kiro memory entry must be a bounded regular file: ${filePath}`);
     }
@@ -12351,9 +12711,9 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
         throw new KiroMemoryScopeError(`Kiro memory entry must be private: ${filePath}`);
       }
     }
-    raw = fs6.readFileSync(descriptor2, "utf8");
+    raw = fs7.readFileSync(descriptor2, "utf8");
   } finally {
-    if (descriptor2 !== void 0) fs6.closeSync(descriptor2);
+    if (descriptor2 !== void 0) fs7.closeSync(descriptor2);
   }
   let parsed;
   try {
@@ -12369,7 +12729,7 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
     encodedValue = JSON.stringify(parsed.value);
   } catch {
   }
-  if (parsed.namespace !== expectedNamespace || normalizeKiroMemoryToken(parsed.key, "key") !== parsed.key || entryPath(path7.dirname(filePath), parsed.key) !== filePath || encodedValue === void 0 || encodedValue.length > maxValueChars) {
+  if (parsed.namespace !== expectedNamespace || normalizeKiroMemoryToken(parsed.key, "key") !== parsed.key || entryPath(path8.dirname(filePath), parsed.key) !== filePath || encodedValue === void 0 || encodedValue.length > maxValueChars) {
     throw new KiroMemoryScopeError(`Kiro memory entry violates its configured scope: ${filePath}`);
   }
   return {
@@ -12381,33 +12741,33 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
   };
 };
 var writeJsonAtomic2 = (filePath, content, beforeCommit) => {
-  const directory = path7.dirname(filePath);
-  const temporary = path7.join(
+  const directory = path8.dirname(filePath);
+  const temporary = path8.join(
     directory,
-    `.${path7.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+    `.${path8.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
   );
   let descriptor2;
   try {
-    descriptor2 = fs6.openSync(temporary, "wx", 384);
-    fs6.writeFileSync(descriptor2, content, "utf8");
-    fs6.fsyncSync(descriptor2);
-    fs6.closeSync(descriptor2);
+    descriptor2 = fs7.openSync(temporary, "wx", 384);
+    fs7.writeFileSync(descriptor2, content, "utf8");
+    fs7.fsyncSync(descriptor2);
+    fs7.closeSync(descriptor2);
     descriptor2 = void 0;
     beforeCommit?.();
-    fs6.renameSync(temporary, filePath);
+    fs7.renameSync(temporary, filePath);
     try {
-      const directoryDescriptor = fs6.openSync(directory, "r");
+      const directoryDescriptor = fs7.openSync(directory, "r");
       try {
-        fs6.fsyncSync(directoryDescriptor);
+        fs7.fsyncSync(directoryDescriptor);
       } finally {
-        fs6.closeSync(directoryDescriptor);
+        fs7.closeSync(directoryDescriptor);
       }
     } catch {
     }
   } catch (error) {
-    if (descriptor2 !== void 0) fs6.closeSync(descriptor2);
+    if (descriptor2 !== void 0) fs7.closeSync(descriptor2);
     try {
-      fs6.rmSync(temporary, { force: true });
+      fs7.rmSync(temporary, { force: true });
     } catch {
     }
     throw error;
@@ -12415,7 +12775,7 @@ var writeJsonAtomic2 = (filePath, content, beforeCommit) => {
 };
 var listEntryFiles = (namespaceRoot) => {
   try {
-    return fs6.readdirSync(namespaceRoot, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => path7.join(namespaceRoot, entry.name)).sort((left, right) => left.localeCompare(right));
+    return fs7.readdirSync(namespaceRoot, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => path8.join(namespaceRoot, entry.name)).sort((left, right) => left.localeCompare(right));
   } catch (error) {
     if (error.code === "ENOENT") return [];
     throw error;
@@ -12453,7 +12813,7 @@ var openKiroMemory = (namespace, root, limits = {}) => {
   const maxValueChars = Number.isSafeInteger(limits.maxValueChars) && limits.maxValueChars > 0 ? Math.min(DEFAULT_MAX_ENTRY_BYTES, limits.maxValueChars) : DEFAULT_MAX_ENTRY_BYTES;
   const memoryNamespace = normalizeKiroMemoryToken(namespace, "namespace");
   const memoryRoot = canonicalDirectory(root);
-  const scopedRoot = path7.join(memoryRoot, MEMORY_DIR);
+  const scopedRoot = path8.join(memoryRoot, MEMORY_DIR);
   ensureOwnedDirectory(memoryRoot, scopedRoot, {
     format: MEMORY_FORMAT,
     owner: MEMORY_OWNER,
@@ -12559,18 +12919,18 @@ var openKiroMemory = (namespace, root, limits = {}) => {
         const entry = readEntry(filePath, memoryNamespace, maxValueChars);
         if (entry.key !== normalizedKey) throw new KiroMemoryScopeError("Kiro memory entry identity mismatch");
         throwIfAborted(signal);
-        const current = fs6.lstatSync(filePath);
+        const current = fs7.lstatSync(filePath);
         if (current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1) {
           throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
         }
         beforeCommit?.();
-        fs6.unlinkSync(filePath);
+        fs7.unlinkSync(filePath);
         try {
-          const descriptor2 = fs6.openSync(namespaceRoot, "r");
+          const descriptor2 = fs7.openSync(namespaceRoot, "r");
           try {
-            fs6.fsyncSync(descriptor2);
+            fs7.fsyncSync(descriptor2);
           } finally {
-            fs6.closeSync(descriptor2);
+            fs7.closeSync(descriptor2);
           }
         } catch {
         }
@@ -12642,7 +13002,7 @@ var KiroMemoryProvider = class {
   #binding;
   constructor(options) {
     this.#root = options.root;
-    const canonicalWorkspace = fs7.realpathSync(options.cwd);
+    const canonicalWorkspace = fs8.realpathSync(options.cwd);
     this.#namespace = options.namespace ?? `project:${createHash5("sha256").update(canonicalWorkspace).digest("hex")}`;
     this.#maxEntries = options.maxEntries;
     this.#maxValueChars = options.maxValueChars;
@@ -12759,7 +13119,7 @@ var createKiroRuntime = (options) => {
 };
 
 // src/kiro/mcp-server.ts
-var EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Power-scoped memory, workspace-bound state, and configured MCP federation. Use Kiro native tools for files, shell, web, and subagents.";
+var EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Power-scoped memory, workspace-bound state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
 var isRecord7 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var bounded2 = (value, fallback, maximum = 800) => (value instanceof Error ? value.message : typeof value === "string" ? value : fallback).replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, maximum) || fallback;
 var toolError = (code, error, issues) => ({
@@ -12775,11 +13135,54 @@ var workspaceRequest = (value) => {
   const issues = [...value_exports.Errors(kiroPowerWorkspaceRequestSchema, value)].map((entry) => entry.message);
   throw Object.assign(new Error("Invalid fabric_workspace arguments"), { issues });
 };
+var TRACE_RETENTION_MAX_FILES = 16;
+var TRACE_RETENTION_MAX_AGE_MS = 7 * 864e5;
+var TRACE_FILE_NAME = /^fabric-\d+-[a-z0-9]+\.jsonl$/u;
+var sweepTraceDirectory = (directory) => {
+  try {
+    const now = Date.now();
+    const candidates = fs9.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && !entry.isSymbolicLink() && TRACE_FILE_NAME.test(entry.name)).map((entry) => {
+      try {
+        return { name: entry.name, mtimeMs: fs9.lstatSync(path9.join(directory, entry.name)).mtimeMs };
+      } catch {
+        return void 0;
+      }
+    }).filter((entry) => entry !== void 0).sort((left, right) => right.mtimeMs - left.mtimeMs);
+    candidates.forEach((entry, index) => {
+      if (index < TRACE_RETENTION_MAX_FILES && now - entry.mtimeMs <= TRACE_RETENTION_MAX_AGE_MS) return;
+      try {
+        fs9.rmSync(path9.join(directory, entry.name), { force: true });
+      } catch {
+      }
+    });
+  } catch {
+  }
+};
+var createPowerTracer = (data, version) => {
+  let configured = false;
+  try {
+    configured = loadFabricPowerConfig(data.configFile).tracing.enabled;
+  } catch {
+    configured = false;
+  }
+  if (!resolveTraceEnabled(process.env.KIRO_FABRIC_DEBUG, configured)) return DISABLED_TRACER;
+  try {
+    const directory = path9.join(data.root, "traces");
+    sweepTraceDirectory(directory);
+    const file = path9.join(directory, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
+    const tracer = createFabricTracer({ file });
+    tracer.event("init", "power.start", void 0, { product: "kiro-fabric-power", version, pid: process.pid, file });
+    return tracer;
+  } catch {
+    return DISABLED_TRACER;
+  }
+};
 var createKiroMcpServer = async (options) => {
   if (!options.pluginRoot || !options.pluginData) throw new Error("Power MCP launch requires PLUGIN_ROOT and PLUGIN_DATA");
-  const version = options.version ?? String(JSON.parse(readFileSync(path8.join(options.pluginRoot, "package.json"), "utf8")).version);
+  const version = options.version ?? String(JSON.parse(readFileSync(path9.join(options.pluginRoot, "package.json"), "utf8")).version);
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
   const data = prepareKiroPowerDataPaths(options.pluginData);
+  const tracer = createPowerTracer(data, version);
   const powerApprover = new KiroPowerApprover({
     supported: () => supportsKiroPowerElicitation(server.getClientCapabilities()),
     request: async ({ title: _title, message, signal, timeoutMs }) => {
@@ -12940,6 +13343,7 @@ var createKiroMcpServer = async (options) => {
             verification: workspaceObservation.status
           },
           providers,
+          tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
           nativeKiroTools: { owner: "kiro", availability: "not-observed-by-power" }
         }) }] };
       } catch (error) {
@@ -12989,6 +13393,8 @@ var createKiroMcpServer = async (options) => {
       return toolError("invalid_exec_arguments", "Invalid fabric_exec arguments", errors);
     }
     const input = normalized.value;
+    const execId = tracer.enabled ? tracer.newExecutionId() : void 0;
+    if (tracer.enabled) tracer.event("eval", "tool.fabric_exec", execId);
     const controller = new AbortController();
     const cancel = () => controller.abort(extra.signal.reason ?? new Error("MCP request cancelled"));
     if (extra.signal.aborted) cancel();
@@ -13031,7 +13437,8 @@ var createKiroMcpServer = async (options) => {
         ...input.timeoutMs !== void 0 ? { timeoutMs: input.timeoutMs } : {},
         signal: controller.signal,
         approver,
-        onEffectiveTimeoutChange: scheduleOuterDeadline
+        onEffectiveTimeoutChange: scheduleOuterDeadline,
+        ...execId !== void 0 ? { tracer, execId } : {}
       });
       const projection = projectFabricExecutionText({
         result,
@@ -13065,6 +13472,7 @@ var createKiroMcpServer = async (options) => {
         });
       } finally {
         await server.close();
+        tracer.close();
       }
     })();
     return closeTask;

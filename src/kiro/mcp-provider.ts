@@ -73,6 +73,14 @@ const environmentDigest = (): string => createHash("sha256")
   .digest("hex");
 const configDigest = (configPath: string | undefined): string | null => configPath ? fileDigest(configPath) : null;
 
+/** Cheap change-detection key for a file: modification or replacement flips
+ * at least one component, so expensive content hashing is only repeated when
+ * the file actually changed. */
+const fileStatKey = (file: string): string => {
+  const stats = fs.statSync(file);
+  return `${stats.dev}:${stats.ino}:${stats.mtimeMs}:${stats.size}:${stats.nlink}:${Number(stats.isSymbolicLink())}`;
+};
+
 type McpTransportSnapshot = {
   schemaVersion: 1;
   server: string;
@@ -146,6 +154,8 @@ export class KiroMcpProvider implements FabricProvider {
   #runtime: Runtime | undefined;
   #runtimeCreation: Promise<Runtime> | undefined;
   readonly #serverTails = new Map<string, Promise<void>>();
+  readonly #snapshotCache = new Map<string, { envDigest: string; statKey: string; snapshot: McpTransportSnapshot }>();
+  readonly #resolvedExecutables = new Map<string, string>();
   #closed = false;
 
   constructor(cwd: string, config: FabricMcpConfig, runtimeFactory?: McpRuntimeFactory) {
@@ -292,6 +302,8 @@ export class KiroMcpProvider implements FabricProvider {
     // provider quarantined instead of enabling a successor with overlapping effects.
     await Promise.allSettled([...this.#serverTails.values()]);
     this.#serverTails.clear();
+    this.#snapshotCache.clear();
+    this.#resolvedExecutables.clear();
     if (runtime) {
       await runtime.close();
     } else if (creation) {
@@ -303,15 +315,40 @@ export class KiroMcpProvider implements FabricProvider {
 
   #transportSnapshot(runtime: Runtime, server: string): McpTransportSnapshot {
     const definition = runtime.getDefinition(server);
+    // Fast path: the expensive snapshot inputs are content hashes of the
+    // executable and configuration file plus executable PATH resolution. Gate
+    // them on cheap stat keys so an unchanged transport costs a few statSync
+    // calls instead of full file reads and SHA-256 passes on every snapshot.
+    // The process-environment digest is always recomputed, so environment
+    // drift between approval and contact is still detected immediately.
+    const processEnvironmentDigest = environmentDigest();
+    let executable: string | undefined;
+    if (definition.command.kind === "stdio") {
+      executable = this.#resolvedExecutables.get(definition.command.command);
+      if (!executable) {
+        executable = executablePath(definition.command.command);
+        this.#resolvedExecutables.set(definition.command.command, executable);
+      }
+    }
+    const statKey = `${executable ? fileStatKey(executable) : "-"}|${this.#config.configPath ? fileStatKey(this.#config.configPath) : "-"}`;
+    const cached = this.#snapshotCache.get(server);
+    if (cached && cached.envDigest === processEnvironmentDigest && cached.statKey === statKey) return cached.snapshot;
+    const snapshot = this.#computeTransportSnapshot(runtime, server, processEnvironmentDigest, executable);
+    this.#snapshotCache.set(server, { envDigest: processEnvironmentDigest, statKey, snapshot });
+    return snapshot;
+  }
+
+  #computeTransportSnapshot(runtime: Runtime, server: string, processEnvironmentDigest: string, resolvedExecutable?: string): McpTransportSnapshot {
+    const definition = runtime.getDefinition(server);
     const base = {
       schemaVersion: 1 as const,
       server,
-      processEnvironmentDigest: environmentDigest(),
+      processEnvironmentDigest,
       configDigest: configDigest(this.#config.configPath),
     };
     const details = definition.command.kind === "stdio"
       ? (() => {
-          const executable = executablePath(definition.command.command);
+          const executable = resolvedExecutable ?? executablePath(definition.command.command);
           const stats = fs.statSync(executable);
           const configured = configuredEnvironment(this.#config.configPath, server);
           return {

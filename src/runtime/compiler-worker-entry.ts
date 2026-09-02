@@ -7,17 +7,15 @@ import {
 
 // Build-artifact verification imports every entry point in the main thread.
 // Only install the protocol handler when this entry is actually a worker.
+// The worker is warm-pooled: it serves many requests over its lifetime and is
+// recycled by the parent on error, timeout, abort, idle, or the use cap.
 const port = parentPort;
-port?.once("message", (request: FabricCompilerRequest) => {
+port?.on("message", (request: FabricCompilerRequest & { id: number }) => {
+  let response: FabricCompilerWorkerResponse;
   try {
-    port.postMessage({
-      ok: true,
-      result: typeCheckFabricCode(request.code, request.declarations),
-    } satisfies FabricCompilerWorkerResponse);
+    response = { id: request.id, ok: true, result: typeCheckFabricCode(request.code, request.declarations) };
   } catch (error) {
-    port.postMessage({
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    } satisfies FabricCompilerWorkerResponse);
+    response = { id: request.id, ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+  port.postMessage(response);
 });

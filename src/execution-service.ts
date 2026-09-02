@@ -2,10 +2,11 @@ import type { FabricPowerConfig } from "./config.js";
 import { ActionRegistry, type FabricCallAudit } from "./core/action-registry.js";
 import type { ResolvedFabricAction } from "./protocol.js";
 import { powerGuestDeclarations } from "./runtime/guest-types.js";
-import { assertFabricJsonBudget } from "./runtime/json-budget.js";
+import { assertFabricJsonBudget, fabricJsonText, MAX_FABRIC_JSON_CHARS } from "./runtime/json-budget.js";
 import { QuickJsRuntime, type FabricSandboxTerminationReason } from "./runtime/quickjs-runtime.js";
 import { fabricPayloadsLimitError, fabricSourceLimitError } from "./runtime/source-limit.js";
-import { typeCheckFabricCodeInWorker, type FabricTypeError } from "./runtime/type-checker.js";
+import { DISABLED_TRACER, type FabricTracer } from "./trace/tracer.js";
+import { shutdownFabricCompilerWorker, typeCheckFabricCodeInWorker, type FabricTypeError } from "./runtime/type-checker.js";
 
 export const FABRIC_COMPILER_TIMEOUT_MS = 10_000;
 export const FABRIC_APPROVAL_TIMEOUT_MS = 30_000;
@@ -23,6 +24,10 @@ export interface FabricExecutionOptions {
   signal?: AbortSignal;
   approver: FabricExecutionApprover;
   onEffectiveTimeoutChange?(timeoutMs: number): void;
+  /** Optional tracer; when absent (or disabled) tracing adds one boolean
+   * branch per hook and zero allocations. */
+  tracer?: FabricTracer;
+  execId?: string;
 }
 
 export interface FabricExecutionResult {
@@ -39,6 +44,13 @@ export interface FabricExecutionResult {
 
 const statusFor = (reason: FabricSandboxTerminationReason): FabricExecutionResult["status"] =>
   reason === "completed" ? "succeeded" : reason === "aborted" ? "aborted" : reason === "timed_out" ? "timed_out" : "failed";
+
+/** Serialized character size for trace attribution. Tracing-only: never
+ * called on the disabled path, and never throws into an execution. */
+const traceJsonChars = (value: unknown): number => {
+  try { return fabricJsonText(value, MAX_FABRIC_JSON_CHARS).length; }
+  catch { return -1; }
+};
 
 export const effectiveFabricTimeout = (
   configuredMaximum: number,
@@ -71,6 +83,8 @@ export class FabricExecutionService {
 
   async execute(options: FabricExecutionOptions): Promise<FabricExecutionResult> {
     const started = performance.now();
+    const tracer = options.tracer ?? DISABLED_TRACER;
+    const execId = options.execId;
     const configuredMaximum = this.config.executor.maxTimeoutMs;
     const invocationTimeout = options.timeoutMs ?? 0;
     const effectiveTimeoutMs = effectiveFabricTimeout(
@@ -85,6 +99,14 @@ export class FabricExecutionService {
       ?? fabricPayloadsLimitError(options.payloads, this.config.executor.maxInputBytes);
     if (sourceError) return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: sourceError, effectiveTimeoutMs };
 
+    if (tracer.enabled) {
+      tracer.event("eval", "exec.start", execId, {
+        sourceBytes: Buffer.byteLength(options.code, "utf8"),
+        payloadKeys: options.payloads ? Object.keys(options.payloads).length : 0,
+        effectiveTimeoutMs,
+      });
+    }
+    const compileSpan = tracer.enabled ? tracer.span("eval", "compile", execId) : undefined;
     let checked;
     try {
       checked = await typeCheckFabricCodeInWorker({
@@ -95,10 +117,14 @@ export class FabricExecutionService {
         timeoutMs: Math.min(FABRIC_COMPILER_TIMEOUT_MS, effectiveTimeoutMs),
       });
     } catch (error) {
+      compileSpan?.end({ failed: true });
       const aborted = options.signal?.aborted === true;
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: aborted ? "aborted" : "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0 });
       return { status: aborted ? "aborted" : "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: aborted ? "Execution cancelled" : error instanceof Error ? error.message : String(error), effectiveTimeoutMs };
     }
+    compileSpan?.end({ errors: checked.errors.length });
     if (checked.errors.length) {
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: checked.errors.length, resultChars: 0 });
       return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: "TypeScript validation failed", typeErrors: checked.errors, effectiveTimeoutMs };
     }
 
@@ -113,6 +139,8 @@ export class FabricExecutionService {
       signal,
       deadline,
     });
+    const executeSpan = tracer.enabled ? tracer.span("eval", "execute", execId) : undefined;
+    const executeSpanId = executeSpan?.id;
     const result = await this.#runtime.execute(options.code, async (ref, args, signal, deadline) => {
       providerCalls += 1;
       if (providerCalls > this.config.executor.maxProviderCalls) throw new Error("Fabric provider call quota exceeded");
@@ -121,24 +149,32 @@ export class FabricExecutionService {
         activeProviderCalls -= 1;
         throw new Error("Fabric concurrent provider call quota exceeded");
       }
+      // One span per host-bridge call, parented to the execute span. Byte
+      // sizes attribute cost to payload volume, not just provider latency.
+      const bridgeSpan = tracer.enabled ? tracer.span("bridge", ref, execId, { argsChars: traceJsonChars(args) }, executeSpanId) : undefined;
+      let bridgeEnd: Record<string, unknown> = {};
       try {
         const context = providerContext(signal, deadline);
-        if (ref === "fabric.providers") return this.registry.providers();
-        if (ref === "fabric.list") return this.registry.list();
+        if (ref === "fabric.providers") { const value = this.registry.providers(); if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) }; return value; }
+        if (ref === "fabric.list") { const value = await this.registry.list(); if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) }; return value; }
         if (ref === "fabric.search") {
           if (typeof args.query !== "string") throw new Error("fabric.search query must be a string");
-          return this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
+          const value = await this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
+          if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) };
+          return value;
         }
         if (ref === "fabric.describe") {
           if (typeof args.ref !== "string") throw new Error("fabric.describe ref must be a string");
-          return this.registry.describe(args.ref);
+          const value = await this.registry.describe(args.ref);
+          if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) };
+          return value;
         }
         const actionRef = ref === "fabric.call" ? args.ref : ref;
         const actionArgs = ref === "fabric.call" ? args.args ?? {} : args;
         if (typeof actionRef !== "string" || typeof actionArgs !== "object" || actionArgs === null || Array.isArray(actionArgs)) {
           throw new Error("Fabric provider call requires an exact ref and object args");
         }
-        return await this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
+        const value = await this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
           ...context,
           audits,
           auditBudget,
@@ -153,11 +189,25 @@ export class FabricExecutionService {
               pendingApprovals -= 1;
               throw new Error("Fabric pending approval quota exceeded");
             }
-            try { await options.approver.approve(action, exactArgs, signal); }
-            finally { pendingApprovals -= 1; }
+            // Approval wait is frequently the dominant latency (user
+            // elicitation). Trace ref/risk only, never arguments.
+            const approvalSpan = tracer.enabled ? tracer.span("eval", "approval.wait", execId, { ref: action.ref, risk: action.risk }, bridgeSpan?.id) : undefined;
+            try {
+              await options.approver.approve(action, exactArgs, signal);
+              approvalSpan?.end({ approved: true });
+            } catch (error) {
+              approvalSpan?.end({ approved: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 200) });
+              throw error;
+            } finally { pendingApprovals -= 1; }
           },
         });
+        if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value), ...(actionRef !== ref ? { actionRef } : {}) };
+        return value;
+      } catch (error) {
+        if (bridgeSpan) bridgeEnd = { error: (error instanceof Error ? error.message : String(error)).slice(0, 200) };
+        throw error;
       } finally {
+        bridgeSpan?.end(bridgeEnd);
         activeProviderCalls -= 1;
       }
     }, {
@@ -172,6 +222,7 @@ export class FabricExecutionService {
       ...(options.signal ? { signal: options.signal } : {}),
       ...(checked.javascript ? { transpiledCode: checked.javascript } : {}),
       ...(checked.sourceMap ? { transpiledSourceMap: checked.sourceMap } : {}),
+      ...(execId !== undefined ? { tracer, execId, ...(executeSpanId ? { parentSpanId: executeSpanId } : {}) } : {}),
       minimumTimeoutMsForHostCall: (bridgeRef, args) => {
         // Resolve the exact action carried by tools.call without source
         // inspection, rewriting, or fuzzy matching.
@@ -192,6 +243,7 @@ export class FabricExecutionService {
         return candidate;
       },
     });
+    executeSpan?.end({ termination: result.terminationReason, effectiveTimeoutMs: result.effectiveTimeoutMs });
     let status = statusFor(result.terminationReason);
     let outputError = result.error;
     if (status === "succeeded") {
@@ -201,6 +253,12 @@ export class FabricExecutionService {
         status = "failed";
         outputError = error instanceof Error ? error.message : String(error);
       }
+    }
+    if (tracer.enabled) {
+      tracer.event("eval", "exec.end", execId, { status, elapsedMs: performance.now() - started, audits: audits.length, logs: result.logs.length, typeErrors: 0, resultChars: status === "succeeded" ? traceJsonChars(result.value) : 0 });
+      // Flush at each execution boundary so post-hoc analysis never waits
+      // on the interval timer for the tail of a finished run.
+      tracer.flush();
     }
     return {
       status,
@@ -214,5 +272,5 @@ export class FabricExecutionService {
     };
   }
 
-  async close(): Promise<void> { await this.registry.close(); }
+  async close(): Promise<void> { await this.registry.close(); await shutdownFabricCompilerWorker(); }
 }

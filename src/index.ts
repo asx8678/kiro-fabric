@@ -25,6 +25,7 @@ export type {
   FabricPowerConfig,
   FabricResultFormat,
   FabricStateConfig,
+  FabricTracingConfig,
 } from "./config.js";
 export type {
   KiroWorkspaceContextStatus,

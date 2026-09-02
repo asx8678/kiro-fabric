@@ -29,6 +29,7 @@ memory.get(args: { key: string }): Promise<JsonValue>
 memory.set(args: { key: string; value: JsonValue }): Promise<JsonValue>
 memory.search(args: { query: string; limit?: number }): Promise<JsonValue>
 memory.index(args?: Record<string, never>): Promise<JsonValue>
+memory.delete(args: { key: string }): Promise<JsonValue>
 
 state.get(args: { key: string }): Promise<JsonValue>
 state.set(args: { key: string; value: JsonValue; expectedRevision?: number }): Promise<JsonValue>
@@ -41,6 +42,6 @@ mcp.call(args: { server: string; tool: string; args?: JsonObject }): Promise<Jso
 
 `FabricActionSummary.ref` is the exact `provider.action` reference. `tools.call` validates the exact descriptor schema before approval and invocation. `mcp.call` validates the exact advertised remote schema when available.
 
-All values crossing the bridge must fit the JSON budgets. Cycles, proxies, unsupported values, over-depth objects, over-budget logs/results, and malformed provider output fail closed. `print` output is returned in a bounded `Fabric logs` sideband after the formatted value. Conservative payload decoding similarly adds an explicit normalization-diagnostics sideband. Cancellation and the effective request deadline propagate through nested calls.
+All values crossing the bridge must fit the JSON budgets. Cycles, proxies, unsupported values, over-depth objects, over-budget logs/results, and malformed provider output fail closed. `print` output is returned in a bounded `Fabric logs` sideband after the formatted value. Cancellation and the effective request deadline propagate through nested calls.
 
 QuickJS intentionally has no host imports, dynamic import, built-in modules, process object, environment variables, timers, filesystem, shell, or unrestricted network.

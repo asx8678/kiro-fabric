@@ -35,7 +35,9 @@
     "src/runtime/quickjs-runtime.ts",
     "src/runtime/source-limit.ts",
     "src/runtime/type-checker.ts",
-    "src/schema-validation.ts"
+    "src/schema-validation.ts",
+    "src/trace/trace-writer.ts",
+    "src/trace/tracer.ts"
   ],
   "packageInputs": [
     {
@@ -201,9 +203,9 @@
       "sha256": "3025e9234dba3830ae1f7ba6a2571183afebc8f196e9f0c188e2a4457448c454"
     },
     {
-      "path": "chunks/chunk-RDWBPINU.js",
-      "bytes": 9988219,
-      "sha256": "877a07199479346b03c1062c018809fb6dfefaa9d3075853a1e230908a4d706d"
+      "path": "chunks/chunk-SPHG3WWN.js",
+      "bytes": 9990419,
+      "sha256": "bf79fec8e3e8c99a7d1cd90497d91115ef9bfab2ab4d09a702b0f439b8afac62"
     },
     {
       "path": "chunks/chunk-SRO3YB3P.js",
@@ -516,9 +518,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-DZ6AWISL.js",
-      "bytes": 597751,
-      "sha256": "11bec51aeadb243e0ecc44e28f645ce9b09cc9dbd84e623096852b6d142d3e75"
+      "path": "chunks/mcp-server-3FRQW6LR.js",
+      "bytes": 614082,
+      "sha256": "d16a37a06cbf0098675cc5c24e00bdd28ce6342b8f46bfc1cdcc5b899e0185dc"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-HUUMGB7P.js",
@@ -533,7 +535,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 3950,
-      "sha256": "84ad892525efc115f2f4cbfa8294bbf2f3a6167b37a99078aa88ebc10b253d5c"
+      "sha256": "b8e046bbcb7f4ba2ce67199882826cdff49e9e10ed59582075100f78f957b13f"
     },
     {
       "path": "package.json",
@@ -542,8 +544,8 @@
     },
     {
       "path": "runtime/compiler-worker-entry.js",
-      "bytes": 872,
-      "sha256": "79573799d703ef9727d4ea5e99a9ed7bee38f95bb1c688741e6f6d0c492722a5"
+      "bytes": 902,
+      "sha256": "2041af6da10c86c36526e41a4d1ab5db7026030a77dd5064e38c87bb0dd36169"
     },
     {
       "path": "THIRD_PARTY_NOTICES.txt",
@@ -551,5 +553,5 @@
       "sha256": "5f740628f0925baa3fd24b826ebcc7bce8e676f72bb85d90f940c0f0cc20e786"
     }
   ],
-  "contentDigest": "ee44a6ec4f7a767233d92f52c3e8a47b6392984baf3f76ec1453005489d4f9f1"
+  "contentDigest": "5e6ccb5f9b5788648b5e1b391d7ffd9c54e8ff02af25714e7299e097d0c8814e"
 }

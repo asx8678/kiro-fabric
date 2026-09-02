@@ -18,6 +18,7 @@ const expectedFiles = [
   "docs/audit.md",
   "docs/configuration.md",
   "docs/release.md",
+  "docs/tracing.md",
   "README.md",
   "STATUS.md",
   "SECURITY.md",

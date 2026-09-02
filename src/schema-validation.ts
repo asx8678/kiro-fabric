@@ -14,7 +14,7 @@ const delegatedSchemaKeywords = new Set([
   "oneOf", "pattern", "patternProperties", "propertyNames", "then", "uniqueItems",
 ]);
 
-const locallyBoundedSchema = (schema: Record<string, unknown>): boolean => {
+const walkLocallyBoundedSchema = (schema: Record<string, unknown>): boolean => {
   const stack: Array<{ value: unknown; depth: number }> = [{ value: schema, depth: 0 }];
   const seen = new Set<object>();
   let nodes = 0;
@@ -44,6 +44,18 @@ const locallyBoundedSchema = (schema: Record<string, unknown>): boolean => {
     }
   }
   return true;
+};
+
+/** Schema descriptors are immutable and reference-stable for the process
+ * lifetime, so the bounded-walk verdict (a walk of up to 5,000 nodes) is
+ * cached per schema object instead of repeated on every bridged call. */
+const locallyBoundedSchemaCache = new WeakMap<object, boolean>();
+const locallyBoundedSchema = (schema: Record<string, unknown>): boolean => {
+  const cached = locallyBoundedSchemaCache.get(schema);
+  if (cached !== undefined) return cached;
+  const result = walkLocallyBoundedSchema(schema);
+  locallyBoundedSchemaCache.set(schema, result);
+  return result;
 };
 
 const pointerPart = (value: string): string => value.replaceAll("~", "~0").replaceAll("/", "~1");

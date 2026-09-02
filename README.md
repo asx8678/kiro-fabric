@@ -1,17 +1,21 @@
 # Kiro Fabric
 
-Kiro Fabric is a single Kiro Power for bounded, checked TypeScript composition. Kiro native tools remain responsible for ordinary file reading, editing, shell commands, web access, and subagents.
+A Kiro CLI v3 Power for bounded, checked TypeScript composition. `fabric_exec` is the only execution interface — strictly type-checked and run in QuickJS with no fallback; Kiro native tools keep ownership of files, shell, web, and subagents.
 
-## Build and stage
+## Prerequisites
+
+- Node.js ≥ 24
+- pnpm 11.20.0 (`corepack prepare pnpm@11.20.0 --activate`)
+- Kiro CLI v3
+
+## Quickstart
 
 ```sh
 pnpm install
-pnpm run power:stage
+pnpm run power:stage   # builds and stages .tmp/kiro-fabric-power
 ```
 
-The deterministic checkout-local import source is `.tmp/kiro-fabric-power`. Import that folder and enable **Kiro Fabric** through Kiro's supported Power import flow. Copying or exporting a folder does **not** register or enable a Power.
-
-After the one-time import and enable step, start sessions with the only supported session command:
+Import `.tmp/kiro-fabric-power` through Kiro's supported Power import flow and enable **Kiro Fabric**. Copying or exporting the folder does not register a Power. Then start sessions with the only supported command:
 
 ```sh
 kiro-cli --v3
@@ -19,23 +23,47 @@ kiro-cli --v3
 
 ## Tools
 
-The Power exposes exactly three top-level MCP tools:
+| Tool | Purpose |
+| --- | --- |
+| `fabric_info` | Bounded health, limits, provider availability, workspace status |
+| `fabric_workspace` | Discover, select, attach, or detach the canonical workspace |
+| `fabric_exec` | Checked TypeScript composition over bounded providers |
 
-- `fabric_info` — bounded health, limits, provider availability, and workspace status;
-- `fabric_workspace` — canonical workspace discovery, selection, attachment, and detachment;
-- `fabric_exec` — checked QuickJS composition over bounded providers.
+`fabric_exec` requires a TypeScript function body in `code`, checks it in an isolated compiler worker, and runs it in QuickJS. The guest has no filesystem, shell, environment, import, timer, or unrestricted network access. Mounted providers: `artifacts`, `memory`, `state`, and explicitly configured `mcp` federation. Use `payloads?: Record<string, string>` for named string input. Write, execute, and network calls require approval and fail closed when elicitation is unavailable.
 
-`fabric_exec` is the only Fabric execution interface: every invocation requires a strictly checked TypeScript function body and runs in QuickJS, with no text/action/manual fallback. It has no host filesystem, shell, environment, dynamic import, built-in module, timer, or unrestricted network access. Its mounted providers are artifacts, Power-scoped memory, workspace-bound state, and explicitly configured MCP federation. Use `payloads?: Record<string, string>` for named string input.
+## Configuration
 
-## Local staging
+Optional file: `${PLUGIN_DATA}/fabric/config/config.json`. Absent means secure defaults; if present it must be a private, current-user, non-symlink regular file ≤ 256 KiB. Unknown sections or fields are rejected.
 
-`pnpm run power:stage` creates the validated checkout-local `.tmp/kiro-fabric-power` import source. Import and enable that exact folder through Kiro's supported Power flow. No retained command writes to user home or `$KIRO_HOME`; user-home export was removed pending a smaller independently reviewed design.
+| Section | Keys |
+| --- | --- |
+| `executor` | `timeoutMs`, `maxTimeoutMs`, `memoryLimitBytes`, source/input/output/nested-result bounds, provider/approval/audit quotas, `resultFormat` |
+| `approvals` | `read` / `write` / `execute` / `network`, each `allow` \| `ask` \| `deny` |
+| `mcp` | `enabled`, `disableOAuth`, `callTimeoutMs` |
+| `memory` | `enabled`, `maxEntries`, `maxValueChars` |
+| `state` | `enabled`, `maxEntries`, `maxValueChars`, `maxTotalChars` |
+| `artifacts` | `maxArtifacts`, `maxArtifactChars`, `maxTotalChars`, `ttlMs` |
+| `tracing` | `enabled` |
+
+Federated MCP servers are declared in `${PLUGIN_DATA}/fabric/config/mcp.json`. See [docs/configuration.md](docs/configuration.md).
+
+## Tracing
+
+Optional execution tracing writes bounded JSONL spans (`init` / `eval` / `bridge` / `teardown`, microsecond monotonic timestamps, QuickJS heap snapshots) to `${PLUGIN_DATA}/fabric/traces/`. Enable with `KIRO_FABRIC_DEBUG=1` (overrides config) or `"tracing": { "enabled": true }`. Disabled means one boolean branch per hook and no allocations. See [docs/tracing.md](docs/tracing.md).
+
+## Execution flow
+
+```text
+MCP schema → TypeScript compiler worker → QuickJS → ActionRegistry → provider
+```
+
+One path, no textual, action-name, or manual fallback. The effective guest deadline is `min(maxTimeoutMs, max(executor default, action floor, invocation timeout))`; cancellation interrupts QuickJS, propagates to providers, and drains active leases before runtime replacement or shutdown.
 
 ## Development
 
 ```sh
-pnpm run test
-pnpm run check
+pnpm run test    # build + full suite
+pnpm run check   # typecheck, build, tests, dead-code lint, certify, SBOM
 ```
 
-See [docs/architecture.md](docs/architecture.md), [docs/configuration.md](docs/configuration.md), [docs/release.md](docs/release.md), and [docs/audit.md](docs/audit.md).
+See [docs/architecture.md](docs/architecture.md), [docs/configuration.md](docs/configuration.md), [docs/tracing.md](docs/tracing.md), [docs/release.md](docs/release.md), and [docs/audit.md](docs/audit.md).

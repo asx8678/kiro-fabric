@@ -56,6 +56,10 @@ export interface FabricArtifactsConfig {
   ttlMs: number;
 }
 
+export interface FabricTracingConfig {
+  enabled: boolean;
+}
+
 export interface FabricPowerConfig {
   executor: FabricExecutorConfig;
   approvals: FabricApprovalConfig;
@@ -63,6 +67,7 @@ export interface FabricPowerConfig {
   memory: FabricMemoryConfig;
   state: FabricStateConfig;
   artifacts: FabricArtifactsConfig;
+  tracing: FabricTracingConfig;
 }
 
 const QUICKJS_MAX_MEMORY_LIMIT_BYTES = 0xffff_ffff;
@@ -107,6 +112,7 @@ export const DEFAULT_FABRIC_POWER_CONFIG: FabricPowerConfig = {
     maxTotalChars: 8_000_000,
     ttlMs: 3_600_000,
   },
+  tracing: { enabled: false },
 };
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -129,6 +135,7 @@ const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
   memory: ["enabled", "maxEntries", "maxValueChars"],
   state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
+  tracing: ["enabled"],
 };
 const assertFileConfigShape = (value: unknown): void => {
   const root = record(value);
@@ -155,6 +162,7 @@ export const normalizeFabricPowerConfig = (
   const memory = record(root.memory) ?? {};
   const state = record(root.state) ?? {};
   const artifacts = record(root.artifacts) ?? {};
+  const tracing = record(root.tracing) ?? {};
   const timeoutMs = integer(executor.timeoutMs, defaults.executor.timeoutMs, 1, 900_000);
   const maxTimeoutMs = integer(executor.maxTimeoutMs, defaults.executor.maxTimeoutMs, timeoutMs, 900_000);
   const resultFormat = executor.resultFormat === "json" || executor.resultFormat === "text" || executor.resultFormat === "auto"
@@ -205,6 +213,9 @@ export const normalizeFabricPowerConfig = (
       maxArtifactChars: integer(artifacts.maxArtifactChars, defaults.artifacts.maxArtifactChars, 1_000, 8_000_000),
       maxTotalChars: integer(artifacts.maxTotalChars, defaults.artifacts.maxTotalChars, 1_000, 32_000_000),
       ttlMs: integer(artifacts.ttlMs, defaults.artifacts.ttlMs, 1_000, 86_400_000),
+    },
+    tracing: {
+      enabled: bool(tracing.enabled, defaults.tracing.enabled),
     },
   };
 };

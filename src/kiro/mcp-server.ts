@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import fs, { readFileSync } from "node:fs";
 import path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -37,8 +37,14 @@ import {
 } from "./power/workspace-context.js";
 import { projectFabricExecutionText } from "./projection.js";
 import { createKiroRuntime, type KiroRuntime, type KiroRuntimeOptions } from "./runtime.js";
+import {
+  DISABLED_TRACER,
+  createFabricTracer,
+  resolveTraceEnabled,
+  type FabricTracer,
+} from "../trace/tracer.js";
 
-const EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Power-scoped memory, workspace-bound state, and configured MCP federation. Use Kiro native tools for files, shell, web, and subagents.";
+const EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Power-scoped memory, workspace-bound state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const bounded = (value: unknown, fallback: string, maximum = 800): string =>
   (value instanceof Error ? value.message : typeof value === "string" ? value : fallback)
@@ -69,11 +75,61 @@ const workspaceRequest = (value: unknown): KiroPowerWorkspaceRequest => {
   throw Object.assign(new Error("Invalid fabric_workspace arguments"), { issues });
 };
 
+const TRACE_RETENTION_MAX_FILES = 16;
+const TRACE_RETENTION_MAX_AGE_MS = 7 * 86_400_000;
+const TRACE_FILE_NAME = /^fabric-\d+-[a-z0-9]+\.jsonl$/u;
+
+/** Best-effort trace hygiene: keep only the newest few trace files and
+ * nothing older than a week. Never touches non-trace entries or symlinks;
+ * failure never blocks startup. */
+const sweepTraceDirectory = (directory: string): void => {
+  try {
+    const now = Date.now();
+    const candidates = fs.readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && !entry.isSymbolicLink() && TRACE_FILE_NAME.test(entry.name))
+      .map((entry) => {
+        try { return { name: entry.name, mtimeMs: fs.lstatSync(path.join(directory, entry.name)).mtimeMs }; }
+        catch { return undefined; }
+      })
+      .filter((entry): entry is { name: string; mtimeMs: number } => entry !== undefined)
+      .sort((left, right) => right.mtimeMs - left.mtimeMs);
+    candidates.forEach((entry, index) => {
+      if (index < TRACE_RETENTION_MAX_FILES && now - entry.mtimeMs <= TRACE_RETENTION_MAX_AGE_MS) return;
+      try { fs.rmSync(path.join(directory, entry.name), { force: true }); } catch { /* best effort */ }
+    });
+  } catch { /* missing directory or unreadable entries: nothing to sweep */ }
+};
+
+/** Tracing is off unless KIRO_FABRIC_DEBUG forces it on/off or the Power
+ * configuration enables it. A malformed configuration or an uncreatable
+ * trace file must never break Power startup: fall back to the frozen
+ * zero-allocation disabled tracer. */
+const createPowerTracer = (data: { root: string; configFile: string }, version: string): FabricTracer => {
+  let configured = false;
+  try {
+    configured = loadFabricPowerConfig(data.configFile).tracing.enabled;
+  } catch {
+    configured = false;
+  }
+  if (!resolveTraceEnabled(process.env.KIRO_FABRIC_DEBUG, configured)) return DISABLED_TRACER;
+  try {
+    const directory = path.join(data.root, "traces");
+    sweepTraceDirectory(directory);
+    const file = path.join(directory, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
+    const tracer = createFabricTracer({ file });
+    tracer.event("init", "power.start", undefined, { product: "kiro-fabric-power", version, pid: process.pid, file });
+    return tracer;
+  } catch {
+    return DISABLED_TRACER;
+  }
+};
+
 export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promise<{ close(): Promise<void> }> => {
   if (!options.pluginRoot || !options.pluginData) throw new Error("Power MCP launch requires PLUGIN_ROOT and PLUGIN_DATA");
   const version = options.version ?? String((JSON.parse(readFileSync(path.join(options.pluginRoot, "package.json"), "utf8")) as { version: unknown }).version);
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
   const data = prepareKiroPowerDataPaths(options.pluginData);
+  const tracer = createPowerTracer(data, version);
   const powerApprover = new KiroPowerApprover({
     supported: () => supportsKiroPowerElicitation(server.getClientCapabilities()),
     request: async ({ title: _title, message, signal, timeoutMs }) => {
@@ -233,6 +289,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
             verification: workspaceObservation.status,
           },
           providers,
+          tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
           nativeKiroTools: { owner: "kiro", availability: "not-observed-by-power" },
         }) }] };
       } catch (error) { return toolError("info_request_failed", error); }
@@ -284,6 +341,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       return toolError("invalid_exec_arguments", "Invalid fabric_exec arguments", errors);
     }
     const input = normalized.value as FabricExecInput;
+    const execId = tracer.enabled ? tracer.newExecutionId() : undefined;
+    if (tracer.enabled) tracer.event("eval", "tool.fabric_exec", execId);
     const controller = new AbortController();
     const cancel = (): void => controller.abort(extra.signal.reason ?? new Error("MCP request cancelled"));
     if (extra.signal.aborted) cancel(); else extra.signal.addEventListener("abort", cancel, { once: true });
@@ -326,6 +385,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         signal: controller.signal,
         approver,
         onEffectiveTimeoutChange: scheduleOuterDeadline,
+        ...(execId !== undefined ? { tracer, execId } : {}),
       });
       const projection = projectFabricExecutionText({
         result,
@@ -354,7 +414,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
           const drained = await drain([...active], reason);
           await closeRuntime(reason, drained);
         });
-      } finally { await server.close(); }
+      } finally { await server.close(); tracer.close(); }
     })();
     return closeTask;
   } };

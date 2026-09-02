@@ -24,6 +24,8 @@ const result = await tools.call({ ref: "memory.get", args: { key: "release" } })
 return { actions: actions.length, result };
 ```
 
-The mounted namespaces are `artifacts`, `memory`, `state`, and `mcp`. Workspace-scoped providers remain unavailable until `fabric_workspace` has a verified binding. Write, execute, and network calls follow Power approval policy and fail closed when required elicitation is unavailable. Cancellation and the effective deadline propagate through nested calls.
+The mounted namespaces are `artifacts`, `memory`, `state`, and `mcp`. Workspace-scoped providers remain unavailable until `fabric_workspace` has a verified binding. Write, execute, and network calls follow Power approval policy and fail closed when required elicitation is unavailable; batching work into one program does not merge approvals — each write/network action elicits separately. Cancellation and the effective deadline propagate through nested calls.
+
+Only the returned value re-enters context. Returned output is capped (`executor.maxOutputChars`, 50,000 chars by default) and spills to an artifact reference when exceeded, so filter, aggregate, and slice inside the program and return only the data the task needs.
 
 See [references/api.md](references/api.md) for the complete guest surface.

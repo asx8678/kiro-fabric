@@ -10,6 +10,7 @@ Supported sections:
 - `memory`: enabled flag plus entry and per-value bounds;
 - `state`: enabled flag plus entry, per-value, and complete-document bounds (`maxTotalChars`);
 - `artifacts`: count, per-item, total, and lifetime bounds. Artifacts are private process-local overflow transport, expire after the configured TTL (one hour by default), and are not a publication or durable workspace API.
+- `tracing`: `enabled` flag for optional execution tracing (default off). `KIRO_FABRIC_DEBUG` overrides it (`1` forces on, `0` forces off). Traces are private JSONL files under `${PLUGIN_DATA}/fabric/traces/`; see [tracing.md](tracing.md).
 
 Numeric input is finite, integer-normalized, and clamped to enforced product limits. Unknown fields in the on-disk file are rejected; programmatic normalization cannot use unknown values to add providers or authority. There are no alternate product modes. Guest code cannot configure host tools, operating-system access, workspace identity, or federation endpoints.
 

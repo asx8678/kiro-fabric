@@ -7,22 +7,18 @@ const require = __createRequire(import.meta.url);
 
 import {
   typeCheckFabricCode
-} from "../chunks/chunk-RDWBPINU.js";
+} from "../chunks/chunk-SPHG3WWN.js";
 import "../chunks/chunk-LSWTYIW3.js";
 
 // src/runtime/compiler-worker-entry.ts
 import { parentPort } from "node:worker_threads";
 var port = parentPort;
-port?.once("message", (request) => {
+port?.on("message", (request) => {
+  let response;
   try {
-    port.postMessage({
-      ok: true,
-      result: typeCheckFabricCode(request.code, request.declarations)
-    });
+    response = { id: request.id, ok: true, result: typeCheckFabricCode(request.code, request.declarations) };
   } catch (error) {
-    port.postMessage({
-      ok: false,
-      error: error instanceof Error ? error.message : String(error)
-    });
+    response = { id: request.id, ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+  port.postMessage(response);
 });

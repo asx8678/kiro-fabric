@@ -15,6 +15,7 @@ import {
   fabricTranspiledLimitError,
 } from "./source-limit.js";
 import { FabricDeadline } from "./deadline.js";
+import { DISABLED_TRACER, type FabricTracer } from "../trace/tracer.js";
 import { assertFabricTranspiledWrapper, transpileFabricCodeWithSourceMap } from "./type-checker.js";
 
 export type FabricSandboxTerminationReason = "completed" | "runtime_error" | "timed_out" | "aborted";
@@ -41,6 +42,12 @@ export interface FabricSandboxOptions {
   transpiledCode?: string;
   transpiledSourceMap?: string;
   cleanupGraceMs?: number;
+  /** Optional tracer; when absent (or disabled) each hook is one boolean
+   * branch with no allocation. */
+  tracer?: FabricTracer;
+  execId?: string;
+  /** Parent span (the service-level `execute` span) for sandbox spans. */
+  parentSpanId?: string;
 }
 
 export type FabricHostCall = (
@@ -230,12 +237,20 @@ export class QuickJsRuntime {
       return { value: undefined, logs: [], terminationReason: "runtime_error", error: "QuickJS memory limit is outside the WASM32 range", effectiveTimeoutMs: requestedTimeoutMs };
     }
 
+    const tracer = options.tracer ?? DISABLED_TRACER;
+    const execId = options.execId;
+    const parentSpanId = options.parentSpanId;
+    const moduleCached = modulePromise !== undefined;
+    const moduleSpan = tracer.enabled ? tracer.span("init", "quickjs.module.acquire", execId, { cached: moduleCached }, parentSpanId) : undefined;
     const module = await quickJsModule();
+    moduleSpan?.end();
     if (options.signal?.aborted) {
       return { value: undefined, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
     }
+    const contextSpan = tracer.enabled ? tracer.span("init", "quickjs.context.create", execId, undefined, parentSpanId) : undefined;
     const context = module.newContext();
     const runtime = context.runtime;
+    contextSpan?.end({ memoryLimitBytes: options.memoryLimitBytes, stackSizeBytes: QUICKJS_MAX_STACK_SIZE_BYTES });
     const jsonObject = context.getProp(context.global, "JSON");
     const jsonParse = context.getProp(jsonObject, "parse");
     runtime.setMemoryLimit(options.memoryLimitBytes);
@@ -396,7 +411,9 @@ export class QuickJsRuntime {
       context.setProp(context.global, "payloads", payloadHandle);
       payloadHandle.dispose();
 
+      const setupSpan = tracer.enabled ? tracer.span("eval", "quickjs.eval.setup", execId, { sourceBytes: GUEST_SETUP.length }, parentSpanId) : undefined;
       const setup = context.evalCode(GUEST_SETUP, "kiro-fabric-setup.js");
+      setupSpan?.end();
       if (setup.error) {
         const error = formatValue(context.dump(setup.error));
         setup.error.dispose();
@@ -414,8 +431,10 @@ export class QuickJsRuntime {
       if (transpiledError) return { value: undefined, logs, terminationReason: "runtime_error", error: transpiledError, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       const stackMap = createGuestStackMap(bundle.sourceMap);
       const guestLineCount = bundle.code.split("\n").length;
+      const guestEvalSpan = tracer.enabled ? tracer.span("eval", "quickjs.eval.guest", execId, { sourceBytes: Buffer.byteLength(bundle.code, "utf8") }, parentSpanId) : undefined;
       const evaluation = context.evalCode(bundle.code, "kiro-fabric-guest.js");
       runtime.executePendingJobs();
+      guestEvalSpan?.end();
       if (evaluation.error) {
         const deadlineExceeded = interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(evaluation.error)), stackMap, guestLineCount);
@@ -442,10 +461,12 @@ export class QuickJsRuntime {
         if (options.signal?.aborted) abortListener();
         else options.signal?.addEventListener("abort", abortListener, { once: true });
       });
+      const runSpan = tracer.enabled ? tracer.span("eval", "quickjs.run", execId, undefined, parentSpanId) : undefined;
       const settled = await Promise.race([resolution, deadlineRace, cancellation]);
       resolutionConsumed = true;
       activeHandle.dispose();
       activeHandle = undefined;
+      runSpan?.end();
       if (settled.error) {
         const deadlineExceeded = timedOut || interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(settled.error)), stackMap, guestLineCount);
@@ -465,6 +486,21 @@ export class QuickJsRuntime {
       abortHost(new Error(message));
       return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error: message, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     } finally {
+      if (tracer.enabled) {
+        // Snapshot VM heap state while the runtime is still alive. Numeric
+        // counters come from JS_ComputeMemoryUsage so traces can be trended
+        // programmatically; failure must not affect cleanup.
+        try {
+          const usageHandle = runtime.computeMemoryUsage();
+          try {
+            const raw = context.dump(usageHandle) as Record<string, unknown>;
+            const usage: Record<string, number> = {};
+            for (const [key, entry] of Object.entries(raw)) if (typeof entry === "number" && Number.isFinite(entry)) usage[key] = entry;
+            tracer.event("eval", "quickjs.memory", execId, { usage, hostRssBytes: process.memoryUsage().rss });
+          } finally { usageHandle.dispose(); }
+        } catch { /* runtime may be unrecoverable after hard interruption */ }
+      }
+      const teardownSpan = tracer.enabled ? tracer.span("teardown", "quickjs.teardown", execId, undefined, parentSpanId) : undefined;
       closing = true;
       if (deadlineTimer) clearTimeout(deadlineTimer);
       if (abortListener) options.signal?.removeEventListener("abort", abortListener);
@@ -486,6 +522,7 @@ export class QuickJsRuntime {
       jsonParse.dispose();
       jsonObject.dispose();
       context.dispose();
+      teardownSpan?.end();
     }
   }
 }
