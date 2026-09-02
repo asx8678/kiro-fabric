@@ -426,7 +426,16 @@ export const createKiroMcpServer = async (
             text: JSON.stringify({
               integration: "power",
               version,
-              runtime: { executor: current.service.config.executor.runtime },
+              runtime: {
+                executor: current.service.config.executor.runtime,
+                limits: {
+                  timeoutMs: current.service.config.executor.timeoutMs,
+                  memoryLimitBytes: current.service.config.executor.memoryLimitBytes,
+                  maxSourceBytes: current.service.config.executor.maxSourceBytes,
+                  maxOutputChars: current.service.config.executor.maxOutputChars,
+                  maxNestedResultChars: current.service.config.executor.maxNestedResultChars,
+                },
+              },
               workspace: {
                 ...status,
                 capabilities,

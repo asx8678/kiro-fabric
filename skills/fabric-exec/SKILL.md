@@ -19,8 +19,9 @@ never Fabric for a single native operation. Power mode mounts no `k.*` and no
 
 ## Workflow
 
-1. Call `fabric_info` once per session. Bind a workspace with
-   `fabric_workspace` before workspace-dependent actions.
+1. Call `fabric_info` once per session for live executor limits and mounted
+   capabilities. Bind a workspace with `fabric_workspace` before
+   workspace-dependent actions.
 2. Call an action directly when its contract is already known. Otherwise use
    `tools.search()` once, then `tools.describe({ ref })` for the selected
    action. Use `tools.providers()` only when provider availability itself is

@@ -6,26 +6,30 @@ globalThis.__dirname = __kfDirname(globalThis.__filename);
 const require = __kfCreateRequire(import.meta.url);
 
 import {
-  resolveScriptRuntimeSync
-} from "./chunk-DWCZKXAW.js";
-import {
+  assertFabricJsonBudget,
   createGuestStackMap,
   guestSetupForCoreToolNamespace,
   remapGuestErrorText
-} from "./chunk-2BL5QOED.js";
+} from "./chunk-6DX2GB5G.js";
+import {
+  runAbortable,
+  settleWithin
+} from "./chunk-SY6LZTI3.js";
 import {
   effectiveFabricSourceLimit,
   fabricSourceLimitError,
-  fabricTranspiledLimitError,
-  runAbortable,
-  settleWithin
-} from "./chunk-7PM3D3KB.js";
-import "./chunk-P6PCWHKI.js";
-import "./chunk-Z3MYUJJ2.js";
-import "./chunk-MPF465HQ.js";
+  fabricStringsLimitError,
+  fabricTranspiledLimitError
+} from "./chunk-7D73AS5J.js";
+import {
+  resolveScriptRuntimeSync
+} from "./chunk-DWCZKXAW.js";
 import {
   transpileFabricCodeWithSourceMap
 } from "./chunk-MMKAFZEV.js";
+import "./chunk-P6PCWHKI.js";
+import "./chunk-Z3MYUJJ2.js";
+import "./chunk-MPF465HQ.js";
 import "./chunk-GX475RD4.js";
 
 // src/runtime/node-process-runtime.ts
@@ -53,10 +57,17 @@ const formatValue = (value) => {
   }
 };
 
+const MAX_JSON_CHARS = 2000000;
 const jsonCompatible = (value) => {
   if (value === undefined) return undefined;
   const serialized = JSON.stringify(value);
-  return serialized === undefined ? undefined : JSON.parse(serialized);
+  if (serialized === undefined) return undefined;
+  if (serialized.length > MAX_JSON_CHARS) {
+    throw new Error(
+      "Fabric host JSON exceeds " + MAX_JSON_CHARS + " characters: received " + serialized.length,
+    );
+  }
+  return JSON.parse(serialized);
 };
 
 const run = async (message) => {
@@ -152,10 +163,8 @@ var NodeProcessRuntime = class {
         error: "Execution cancelled"
       };
     }
-    const sourceError = fabricSourceLimitError(
-      code,
-      effectiveFabricSourceLimit(options.maxSourceBytes)
-    );
+    const sourceLimit = effectiveFabricSourceLimit(options.maxSourceBytes);
+    const sourceError = fabricSourceLimitError(code, sourceLimit) ?? fabricStringsLimitError(options.strings, sourceLimit);
     if (sourceError) {
       return {
         value: void 0,
@@ -273,11 +282,14 @@ var NodeProcessRuntime = class {
         }
         if (message.type !== "call") return;
         extendDeadline(message.ref, message.args);
-        const task = runAbortable(
-          hostAbortController.signal,
-          () => hostCall(message.ref, message.args, hostAbortController.signal)
-        ).then(
-          (value) => send(child, { type: "response", id: message.id, ok: true, value }),
+        const task = runAbortable(hostAbortController.signal, () => {
+          assertFabricJsonBudget(message.args);
+          return hostCall(message.ref, message.args, hostAbortController.signal);
+        }).then(
+          (value) => {
+            assertFabricJsonBudget(value);
+            send(child, { type: "response", id: message.id, ok: true, value });
+          },
           (error) => send(child, {
             type: "response",
             id: message.id,

@@ -11,11 +11,11 @@ import {
   inspectFabricConfig,
   require_dist,
   resolveAgentDir
-} from "./chunk-WIFHE7YW.js";
+} from "./chunk-K6GHEZH6.js";
 import {
   resolveKiroMcpLaunchEnvironment
 } from "./chunk-RC6PVX4B.js";
-import "./chunk-PGDCKPF6.js";
+import "./chunk-7D73AS5J.js";
 import "./chunk-D27TRCNO.js";
 import {
   KIRO_V3_AGENT_MODE,

@@ -4,9 +4,11 @@ import { performance } from "node:perf_hooks";
 import { runAbortable, settleWithin } from "../async-settlement.js";
 import { createGuestStackMap, remapGuestErrorText } from "./guest-stack-map.js";
 import { transpileFabricCodeWithSourceMap } from "./type-checker.js";
+import { assertFabricJsonBudget, fabricJsonText } from "./json-budget.js";
 import {
   effectiveFabricSourceLimit,
   fabricSourceLimitError,
+  fabricStringsLimitError,
   fabricTranspiledLimitError,
 } from "./source-limit.js";
 
@@ -775,11 +777,7 @@ const formatValue = (value: unknown): string => {
   }
 };
 
-const jsonText = (value: unknown): string => {
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined) return "null";
-  return serialized;
-};
+const jsonText = (value: unknown): string => fabricJsonText(value);
 
 const jsonHandle = (
   context: any,
@@ -789,7 +787,10 @@ const jsonHandle = (
 ): any => {
   if (value === undefined) return context.undefined;
   if (value === null) return context.null;
-  if (typeof value === "string") return context.newString(value);
+  if (typeof value === "string") {
+    assertFabricJsonBudget(value);
+    return context.newString(value);
+  }
   if (typeof value === "boolean") return value ? context.true : context.false;
   if (typeof value === "number") {
     return Number.isFinite(value) ? context.newNumber(value) : context.null;
@@ -835,10 +836,9 @@ export class QuickJsRuntime {
         error: "Execution cancelled",
       };
     }
-    const sourceError = fabricSourceLimitError(
-      code,
-      effectiveFabricSourceLimit(options.maxSourceBytes),
-    );
+    const sourceLimit = effectiveFabricSourceLimit(options.maxSourceBytes);
+    const sourceError = fabricSourceLimitError(code, sourceLimit)
+      ?? fabricStringsLimitError(options.strings, sourceLimit);
     if (sourceError) {
       return {
         value: undefined,
@@ -962,6 +962,7 @@ export class QuickJsRuntime {
             typeof dumpedArgs === "object" && dumpedArgs !== null && !Array.isArray(dumpedArgs)
               ? (dumpedArgs as Record<string, unknown>)
               : {};
+          assertFabricJsonBudget(args);
           extendExecutionTimeout(reference, args);
           const promise = context.newPromise();
           pendingHostPromises.add(promise);

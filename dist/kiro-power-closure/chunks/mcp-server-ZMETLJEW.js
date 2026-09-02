@@ -70,10 +70,11 @@ import {
   MAX_EXECUTOR_SOURCE_BYTES,
   MIN_EXECUTOR_SOURCE_BYTES,
   fabricSourceLimitError,
+  fabricStringsLimitError,
   runAbortable,
   settleWithin,
   throwIfAborted
-} from "./chunk-7PM3D3KB.js";
+} from "./chunk-T5M76CKL.js";
 import {
   __commonJS,
   __export,
@@ -158,17 +159,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path22) {
-      const ctrl = callVisitor(key, node, visitor, path22);
+    function visit_(key, node, visitor, path23) {
+      const ctrl = callVisitor(key, node, visitor, path23);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path22, ctrl);
-        return visit_(key, ctrl, visitor, path22);
+        replaceNode(key, path23, ctrl);
+        return visit_(key, ctrl, visitor, path23);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path22 = Object.freeze(path22.concat(node));
+          path23 = Object.freeze(path23.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = visit_(i, node.items[i], visitor, path22);
+            const ci = visit_(i, node.items[i], visitor, path23);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -179,13 +180,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path22 = Object.freeze(path22.concat(node));
-          const ck = visit_("key", node.key, visitor, path22);
+          path23 = Object.freeze(path23.concat(node));
+          const ck = visit_("key", node.key, visitor, path23);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path22);
+          const cv = visit_("value", node.value, visitor, path23);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -206,17 +207,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path22) {
-      const ctrl = await callVisitor(key, node, visitor, path22);
+    async function visitAsync_(key, node, visitor, path23) {
+      const ctrl = await callVisitor(key, node, visitor, path23);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path22, ctrl);
-        return visitAsync_(key, ctrl, visitor, path22);
+        replaceNode(key, path23, ctrl);
+        return visitAsync_(key, ctrl, visitor, path23);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path22 = Object.freeze(path22.concat(node));
+          path23 = Object.freeze(path23.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = await visitAsync_(i, node.items[i], visitor, path22);
+            const ci = await visitAsync_(i, node.items[i], visitor, path23);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -227,13 +228,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path22 = Object.freeze(path22.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path22);
+          path23 = Object.freeze(path23.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path23);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path22);
+          const cv = await visitAsync_("value", node.value, visitor, path23);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -260,23 +261,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node, visitor, path22) {
+    function callVisitor(key, node, visitor, path23) {
       if (typeof visitor === "function")
-        return visitor(key, node, path22);
+        return visitor(key, node, path23);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path22);
+        return visitor.Map?.(key, node, path23);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path22);
+        return visitor.Seq?.(key, node, path23);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path22);
+        return visitor.Pair?.(key, node, path23);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path22);
+        return visitor.Scalar?.(key, node, path23);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path22);
+        return visitor.Alias?.(key, node, path23);
       return void 0;
     }
-    function replaceNode(key, path22, node) {
-      const parent = path22[path22.length - 1];
+    function replaceNode(key, path23, node) {
+      const parent = path23[path23.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -886,10 +887,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path22, value) {
+    function collectionFromPath(schema, path23, value) {
       let v = value;
-      for (let i = path22.length - 1; i >= 0; --i) {
-        const k = path22[i];
+      for (let i = path23.length - 1; i >= 0; --i) {
+        const k = path23[i];
         if (typeof k === "number" && Number.isInteger(k) && k >= 0) {
           const a = [];
           a[k] = v;
@@ -908,7 +909,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path22) => path22 == null || typeof path22 === "object" && !!path22[Symbol.iterator]().next().done;
+    var isEmptyPath = (path23) => path23 == null || typeof path23 === "object" && !!path23[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -938,11 +939,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path22, value) {
-        if (isEmptyPath(path22))
+      addIn(path23, value) {
+        if (isEmptyPath(path23))
           this.add(value);
         else {
-          const [key, ...rest] = path22;
+          const [key, ...rest] = path23;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -956,8 +957,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path22) {
-        const [key, ...rest] = path22;
+      deleteIn(path23) {
+        const [key, ...rest] = path23;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -971,8 +972,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path22, keepScalar) {
-        const [key, ...rest] = path22;
+      getIn(path23, keepScalar) {
+        const [key, ...rest] = path23;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -990,8 +991,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path22) {
-        const [key, ...rest] = path22;
+      hasIn(path23) {
+        const [key, ...rest] = path23;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -1001,8 +1002,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path22, value) {
-        const [key, ...rest] = path22;
+      setIn(path23, value) {
+        const [key, ...rest] = path23;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -3517,9 +3518,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path22, value) {
+      addIn(path23, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path22, value);
+          this.contents.addIn(path23, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -3594,14 +3595,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path22) {
-        if (Collection.isEmptyPath(path22)) {
+      deleteIn(path23) {
+        if (Collection.isEmptyPath(path23)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path22) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path23) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -3616,10 +3617,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path22, keepScalar) {
-        if (Collection.isEmptyPath(path22))
+      getIn(path23, keepScalar) {
+        if (Collection.isEmptyPath(path23))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path22, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path23, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -3630,10 +3631,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path22) {
-        if (Collection.isEmptyPath(path22))
+      hasIn(path23) {
+        if (Collection.isEmptyPath(path23))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path22) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path23) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -3650,13 +3651,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path22, value) {
-        if (Collection.isEmptyPath(path22)) {
+      setIn(path23, value) {
+        if (Collection.isEmptyPath(path23)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path22), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path23), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path22, value);
+          this.contents.setIn(path23, value);
         }
       }
       /**
@@ -5616,9 +5617,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path22) => {
+    visit.itemAtPath = (cst, path23) => {
       let item = cst;
-      for (const [field, index] of path22) {
+      for (const [field, index] of path23) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -5627,23 +5628,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path22) => {
-      const parent = visit.itemAtPath(cst, path22.slice(0, -1));
-      const field = path22[path22.length - 1][0];
+    visit.parentCollection = (cst, path23) => {
+      const parent = visit.itemAtPath(cst, path23.slice(0, -1));
+      const field = path23[path23.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path22, item, visitor) {
-      let ctrl = visitor(item, path22);
+    function _visit(path23, item, visitor) {
+      let ctrl = visitor(item, path23);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i = 0; i < token.items.length; ++i) {
-            const ci = _visit(Object.freeze(path22.concat([[field, i]])), token.items[i], visitor);
+            const ci = _visit(Object.freeze(path23.concat([[field, i]])), token.items[i], visitor);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -5654,10 +5655,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path22);
+            ctrl = ctrl(item, path23);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path22) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path23) : ctrl;
     }
     exports.visit = visit;
   }
@@ -7705,7 +7706,7 @@ var require_ignore = __commonJS({
       //   path matching.
       // - check `string` either `MODE_IGNORE` or `MODE_CHECK_IGNORE`
       // @returns {TestResult} true if a file is ignored
-      test(path22, checkUnignored, mode) {
+      test(path23, checkUnignored, mode) {
         let ignored = false;
         let unignored = false;
         let matchedRule;
@@ -7714,7 +7715,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule[mode].test(path22);
+          const matched = rule[mode].test(path23);
           if (!matched) {
             return;
           }
@@ -7735,17 +7736,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path22, originalPath, doThrow) => {
-      if (!isString(path22)) {
+    var checkPath = (path23, originalPath, doThrow) => {
+      if (!isString(path23)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path22) {
+      if (!path23) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path22)) {
+      if (checkPath.isNotRelative(path23)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -7754,7 +7755,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path22) => REGEX_TEST_INVALID_PATH.test(path22);
+    var isNotRelative = (path23) => REGEX_TEST_INVALID_PATH.test(path23);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore = class {
@@ -7784,19 +7785,19 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache2, checkUnignored, slices) {
-        const path22 = originalPath && checkPath.convert(originalPath);
+        const path23 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path22,
+          path23,
           originalPath,
           this._strictPathCheck ? throwError : RETURN_FALSE
         );
-        return this._t(path22, cache2, checkUnignored, slices);
+        return this._t(path23, cache2, checkUnignored, slices);
       }
-      checkIgnore(path22) {
-        if (!REGEX_TEST_TRAILING_SLASH.test(path22)) {
-          return this.test(path22);
+      checkIgnore(path23) {
+        if (!REGEX_TEST_TRAILING_SLASH.test(path23)) {
+          return this.test(path23);
         }
-        const slices = path22.split(SLASH).filter(Boolean);
+        const slices = path23.split(SLASH).filter(Boolean);
         slices.pop();
         if (slices.length) {
           const parent = this._t(
@@ -7809,18 +7810,18 @@ var require_ignore = __commonJS({
             return parent;
           }
         }
-        return this._rules.test(path22, false, MODE_CHECK_IGNORE);
+        return this._rules.test(path23, false, MODE_CHECK_IGNORE);
       }
-      _t(path22, cache2, checkUnignored, slices) {
-        if (path22 in cache2) {
-          return cache2[path22];
+      _t(path23, cache2, checkUnignored, slices) {
+        if (path23 in cache2) {
+          return cache2[path23];
         }
         if (!slices) {
-          slices = path22.split(SLASH).filter(Boolean);
+          slices = path23.split(SLASH).filter(Boolean);
         }
         slices.pop();
         if (!slices.length) {
-          return cache2[path22] = this._rules.test(path22, checkUnignored, MODE_IGNORE);
+          return cache2[path23] = this._rules.test(path23, checkUnignored, MODE_IGNORE);
         }
         const parent = this._t(
           slices.join(SLASH) + SLASH,
@@ -7828,29 +7829,29 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache2[path22] = parent.ignored ? parent : this._rules.test(path22, checkUnignored, MODE_IGNORE);
+        return cache2[path23] = parent.ignored ? parent : this._rules.test(path23, checkUnignored, MODE_IGNORE);
       }
-      ignores(path22) {
-        return this._test(path22, this._ignoreCache, false).ignored;
+      ignores(path23) {
+        return this._test(path23, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path22) => !this.ignores(path22);
+        return (path23) => !this.ignores(path23);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path22) {
-        return this._test(path22, this._testCache, true);
+      test(path23) {
+        return this._test(path23, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore(options);
-    var isPathValid = (path22) => checkPath(path22 && checkPath.convert(path22), path22, RETURN_FALSE);
+    var isPathValid = (path23) => checkPath(path23 && checkPath.convert(path23), path23, RETURN_FALSE);
     var setupWindows = () => {
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGEX_TEST_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path22) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path22) || isNotRelative(path22);
+      checkPath.isNotRelative = (path23) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path23) || isNotRelative(path23);
     };
     if (
       // Detect `process` so that it can run in browsers.
@@ -7868,7 +7869,7 @@ var require_ignore = __commonJS({
 // src/kiro/mcp-server.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
 import { readFileSync as readFileSync4 } from "node:fs";
-import path21 from "node:path";
+import path22 from "node:path";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
 var ExperimentalServerTasks = class {
@@ -16406,23 +16407,23 @@ function Parse(...args) {
 }
 
 // node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/delta/diff.mjs
-function CreateUpdate(path22, value) {
-  return { type: "update", path: path22, value };
+function CreateUpdate(path23, value) {
+  return { type: "update", path: path23, value };
 }
-function CreateInsert(path22, value) {
-  return { type: "insert", path: path22, value };
+function CreateInsert(path23, value) {
+  return { type: "insert", path: path23, value };
 }
-function CreateDelete(path22) {
-  return { type: "delete", path: path22 };
+function CreateDelete(path23) {
+  return { type: "delete", path: path23 };
 }
 function AssertCanDiffObject(value) {
   if (guard_exports.IsObject(value) && guard_exports.IsEqual(guard_exports.Symbols(value).length, 0))
     return;
   throw new Error("Cannot create diffs for objects with symbols keys");
 }
-function* FromObject17(path22, left, right) {
+function* FromObject17(path23, left, right) {
   if (!guard_exports.IsObject(right) || guard_exports.IsArray(right))
-    return yield CreateUpdate(path22, right);
+    return yield CreateUpdate(path23, right);
   AssertCanDiffObject(left);
   AssertCanDiffObject(right);
   const leftKeys = guard_exports.Keys(left);
@@ -16432,7 +16433,7 @@ function* FromObject17(path22, left, right) {
       continue;
     if (guard_exports.IsUnsafePropertyKey(key))
       continue;
-    yield CreateInsert(`${path22}/${key}`, right[key]);
+    yield CreateInsert(`${path23}/${key}`, right[key]);
   }
   for (const key of leftKeys) {
     if (!guard_exports.HasPropertyKey(right, key))
@@ -16441,52 +16442,52 @@ function* FromObject17(path22, left, right) {
       continue;
     if (Equal(left, right))
       continue;
-    yield* FromValue4(`${path22}/${key}`, left[key], right[key]);
+    yield* FromValue4(`${path23}/${key}`, left[key], right[key]);
   }
   for (const key of leftKeys) {
     if (guard_exports.HasPropertyKey(right, key))
       continue;
     if (guard_exports.IsUnsafePropertyKey(key))
       continue;
-    yield CreateDelete(`${path22}/${key}`);
+    yield CreateDelete(`${path23}/${key}`);
   }
 }
-function* FromArray13(path22, left, right) {
+function* FromArray13(path23, left, right) {
   if (!guard_exports.IsArray(right))
-    return yield CreateUpdate(path22, right);
+    return yield CreateUpdate(path23, right);
   for (let i = 0; i < Math.min(left.length, right.length); i++) {
-    yield* FromValue4(`${path22}/${i}`, left[i], right[i]);
+    yield* FromValue4(`${path23}/${i}`, left[i], right[i]);
   }
   for (let i = 0; i < right.length; i++) {
     if (i < left.length)
       continue;
-    yield CreateInsert(`${path22}/${i}`, right[i]);
+    yield CreateInsert(`${path23}/${i}`, right[i]);
   }
   for (let i = left.length - 1; i >= 0; i--) {
     if (i < right.length)
       continue;
-    yield CreateDelete(`${path22}/${i}`);
+    yield CreateDelete(`${path23}/${i}`);
   }
 }
-function* FromTypedArray2(path22, left, right) {
+function* FromTypedArray2(path23, left, right) {
   const typeLeft = globalThis.Object.getPrototypeOf(left).constructor.name;
   const typeRight = globalThis.Object.getPrototypeOf(right).constructor.name;
   const predicate = globals_exports.IsTypeArray(right) && guard_exports.IsEqual(left.length, right.length) && guard_exports.IsEqual(typeLeft, typeRight);
   if (predicate) {
     for (let index = 0; index < Math.min(left.length, right.length); index++) {
-      yield* FromValue4(`${path22}/${index}`, left[index], right[index]);
+      yield* FromValue4(`${path23}/${index}`, left[index], right[index]);
     }
   } else {
-    return yield CreateUpdate(path22, right);
+    return yield CreateUpdate(path23, right);
   }
 }
-function* FromUnknown(path22, left, right) {
+function* FromUnknown(path23, left, right) {
   if (left === right)
     return;
-  yield CreateUpdate(path22, right);
+  yield CreateUpdate(path23, right);
 }
-function* FromValue4(path22, left, right) {
-  return globals_exports.IsTypeArray(left) ? yield* FromTypedArray2(path22, left, right) : guard_exports.IsArray(left) ? yield* FromArray13(path22, left, right) : guard_exports.IsObject(left) ? yield* FromObject17(path22, left, right) : yield* FromUnknown(path22, left, right);
+function* FromValue4(path23, left, right) {
+  return globals_exports.IsTypeArray(left) ? yield* FromTypedArray2(path23, left, right) : guard_exports.IsArray(left) ? yield* FromArray13(path23, left, right) : guard_exports.IsObject(left) ? yield* FromObject17(path23, left, right) : yield* FromUnknown(path23, left, right);
 }
 function Diff(current, next) {
   return [...FromValue4("", current, next)];
@@ -17522,17 +17523,17 @@ var formatJsonAsYaml = (value) => {
   return (0, import_yaml.stringify)(normalized, { indent: 2, lineWidth: 0 }).trimEnd();
 };
 var isPlainObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var hoistMultilineStrings = (value, path22, sections, seen) => {
+var hoistMultilineStrings = (value, path23, sections, seen) => {
   if (typeof value === "string") {
     if (!value.includes("\n")) return value;
-    sections.push({ path: path22, text: value });
-    return `<multi-line string, see section: ${path22}>`;
+    sections.push({ path: path23, text: value });
+    return `<multi-line string, see section: ${path23}>`;
   }
   if (Array.isArray(value)) {
     if (seen.has(value)) return "[circular reference]";
     seen.add(value);
     const skeleton = value.map(
-      (item, index) => hoistMultilineStrings(item, `${path22}[${index}]`, sections, seen)
+      (item, index) => hoistMultilineStrings(item, `${path23}[${index}]`, sections, seen)
     );
     seen.delete(value);
     return skeleton;
@@ -17544,7 +17545,7 @@ var hoistMultilineStrings = (value, path22, sections, seen) => {
     for (const [key, item] of Object.entries(value)) {
       skeleton[key] = hoistMultilineStrings(
         item,
-        path22 ? `${path22}.${key}` : key,
+        path23 ? `${path23}.${key}` : key,
         sections,
         seen
       );
@@ -17639,8 +17640,8 @@ var formatFailureProgress = (trace) => {
   );
   if (completed.length === 0) return void 0;
   const summaries = completed.slice(0, MAX_COMPLETED_CALLS).map((operation) => {
-    const path22 = operation.args.path;
-    return typeof path22 === "string" ? `${operation.ref}(${compactPath(path22)})` : operation.ref;
+    const path23 = operation.args.path;
+    return typeof path23 === "string" ? `${operation.ref}(${compactPath(path23)})` : operation.ref;
   });
   const omitted = completed.length - summaries.length;
   return [
@@ -17788,16 +17789,16 @@ var Diff2 = class {
       }
     }
   }
-  addToPath(path22, added, removed, oldPosInc, options) {
-    const last = path22.lastComponent;
+  addToPath(path23, added, removed, oldPosInc, options) {
+    const last = path23.lastComponent;
     if (last && !options.oneChangePerToken && last.added === added && last.removed === removed) {
       return {
-        oldPos: path22.oldPos + oldPosInc,
+        oldPos: path23.oldPos + oldPosInc,
         lastComponent: { count: last.count + 1, added, removed, previousComponent: last.previousComponent }
       };
     } else {
       return {
-        oldPos: path22.oldPos + oldPosInc,
+        oldPos: path23.oldPos + oldPosInc,
         lastComponent: { count: 1, added, removed, previousComponent: last }
       };
     }
@@ -18361,7 +18362,7 @@ ${mutationDiffs}`);
 
 // src/kiro/runtime.ts
 import { createHash as createHash7 } from "node:crypto";
-import path20 from "node:path";
+import path21 from "node:path";
 
 // src/core/action-registry.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
@@ -19123,8 +19124,8 @@ var schemaForDynamicProperty = (schema, property) => {
   }
   return isRecord3(schema.additionalProperties) ? schema.additionalProperties : void 0;
 };
-var traceSafePath = (schema, path22) => {
-  const rawParts = typeof path22 === "string" ? path22 === "" || path22 === "/" ? [] : path22.split("/").slice(1).map(decodePointerPart) : Array.isArray(path22) ? path22.filter(
+var traceSafePath = (schema, path23) => {
+  const rawParts = typeof path23 === "string" ? path23 === "" || path23 === "/" ? [] : path23.split("/").slice(1).map(decodePointerPart) : Array.isArray(path23) ? path23.filter(
     (part) => typeof part === "string" || typeof part === "number"
   ).map(String) : [];
   const safeParts = [];
@@ -19150,7 +19151,7 @@ var traceSafePath = (schema, path22) => {
   }
   return safeParts.map((part) => `/${pointerPart(part)}`).join("");
 };
-var prefixedPath = (schema, prefix, path22) => `${prefix}${traceSafePath(schema, path22)}` || "/";
+var prefixedPath = (schema, prefix, path23) => `${prefix}${traceSafePath(schema, path23)}` || "/";
 var traceSafeErrorMessage = (error) => {
   if (error.keyword === "additionalProperties") return "must not have additional properties";
   if (error.keyword === "propertyNames") return "property names are invalid";
@@ -19163,8 +19164,8 @@ var validateSchemaValue = (schema, value, options = {}) => {
     const messages = [];
     for (const rawError of value_exports.Errors(schema, value)) {
       const error = rawError;
-      const path22 = error.path ?? (options.includeInstancePath ? error.instancePath : void 0);
-      const parentPath = prefixedPath(schema, prefix, path22);
+      const path23 = error.path ?? (options.includeInstancePath ? error.instancePath : void 0);
+      const parentPath = prefixedPath(schema, prefix, path23);
       const safePath = error.keyword === "additionalProperties" || error.keyword === "propertyNames" ? `${parentPath === "/" ? "" : parentPath}/${REDACTED_PROPERTY_SEGMENT}` : parentPath;
       messages.push(`${safePath}: ${traceSafeErrorMessage(error)}`);
       if (messages.length >= 5) break;
@@ -19189,8 +19190,37 @@ var schemaValidationMessage = (schema, value) => {
 };
 
 // src/core/effect-conflict.ts
+import path4 from "node:path";
+var FILE_MUTATION_ACTIONS = /* @__PURE__ */ new Set(["write", "edit", "commit"]);
 var reasonText = (reason) => reason === "unknown_resource" ? "unknown resource footprint; declare resources and ordering" : "shared noncommutative resource";
 var formatFabricEffectConflict = (target, resources, reason) => `${target} [${resources.join(", ")}] (${reasonText(reason)})`;
+var addFileResource = (resources, cwd, value) => {
+  if (typeof value !== "string" || value.length === 0) return;
+  resources.push(`file:${path4.resolve(cwd, value)}`.slice(0, 256));
+};
+var fileMutationResources = (actionName, args, cwd) => {
+  if (!FILE_MUTATION_ACTIONS.has(actionName)) return [];
+  const resources = [];
+  addFileResource(resources, cwd, args.path);
+  if (Array.isArray(args.operations)) {
+    for (const operation of args.operations) {
+      if (operation && typeof operation === "object" && !Array.isArray(operation)) {
+        addFileResource(resources, cwd, operation.path);
+      }
+    }
+  }
+  return [...new Set(resources)].slice(0, 64);
+};
+var refineActionEffect = (effect, actionName, args, cwd) => {
+  if (effect.kind === "none") return effect;
+  const extra = fileMutationResources(actionName, args, cwd);
+  if (extra.length === 0) return effect;
+  return {
+    ...effect,
+    resources: [.../* @__PURE__ */ new Set([...effect.resources ?? [], ...extra])].slice(0, 64),
+    ordering: effect.ordering === "commutative" ? "ordered" : effect.ordering ?? "ordered"
+  };
+};
 
 // src/core/session-approvals.ts
 import { randomUUID } from "node:crypto";
@@ -20220,11 +20250,19 @@ var ActionRegistry = class {
         context.approvalScope
       );
       const nestedToolCallId = `${NESTED_TOOL_CALL_ID_PREFIX}${randomUUID3()}`;
-      const effect = action.effect;
+      const effect = refineActionEffect(
+        action.effect,
+        action.name,
+        preparedArgs,
+        context.cwd
+      );
       const effectConflicts = [...this.#activeEffects.values()].flatMap((active) => {
         const conflict = conflictBetween(effect, active.effect);
         return conflict ? [{ withRef: active.ref, ...conflict }] : [];
       }).slice(0, 32);
+      const blockingConflicts = effectConflicts.filter(
+        (conflict) => context.effectPolicy === "strict" || conflict.reason === "shared_resource" && conflict.resources.some((resource) => resource.startsWith("file:"))
+      );
       const argsPreview = previewArgs(ref, preparedArgs);
       const activeAudit = {
         ref,
@@ -20247,10 +20285,10 @@ var ActionRegistry = class {
         ref,
         args: argsPreview
       });
-      if (effectConflicts.length > 0 && context.effectPolicy === "strict") {
+      if (blockingConflicts.length > 0) {
         failureStage = "guard";
         throw new FabricTraceSafeError(
-          `Fabric effect conflict for ${ref}: ${effectConflicts.map((conflict) => formatFabricEffectConflict(
+          `Fabric effect conflict for ${ref}: ${blockingConflicts.map((conflict) => formatFabricEffectConflict(
             conflict.withRef,
             conflict.resources,
             conflict.reason
@@ -20539,7 +20577,7 @@ var cloneGuestTypeSources = (sources) => {
 
 // src/core/agent-dir.ts
 import { homedir } from "node:os";
-import path4 from "node:path";
+import path5 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var ENV_AGENT_DIR = "PI_CODING_AGENT_DIR";
 var CONFIG_DIR_NAME = ".pi";
@@ -20547,14 +20585,14 @@ var expandEnvDir = (envDir) => {
   if (/^file:\/\//.test(envDir)) return fileURLToPath2(envDir);
   if (envDir === "~") return homedir();
   if (envDir.startsWith("~/") || process.platform === "win32" && envDir.startsWith("~\\")) {
-    return path4.join(homedir(), envDir.slice(2));
+    return path5.join(homedir(), envDir.slice(2));
   }
   return envDir;
 };
 var resolveAgentDir = () => {
   const envDir = process.env[ENV_AGENT_DIR];
   if (envDir) return expandEnvDir(envDir);
-  return path4.join(homedir(), CONFIG_DIR_NAME, "agent");
+  return path5.join(homedir(), CONFIG_DIR_NAME, "agent");
 };
 
 // src/activity/store.ts
@@ -20563,7 +20601,7 @@ import { randomUUID as randomUUID4 } from "node:crypto";
 // src/config.ts
 import fs2 from "node:fs";
 import os2 from "node:os";
-import path6 from "node:path";
+import path7 from "node:path";
 
 // src/benchmark-boundary.ts
 var BOUNDARY_SYMBOL = Symbol.for("kiro-fabric.benchmark-boundary.v1");
@@ -20581,7 +20619,7 @@ var benchmarkTreatmentDocument = () => boundary()?.document;
 // src/core/atomic-write.ts
 import { randomUUID as randomUUID5 } from "node:crypto";
 import fs from "node:fs";
-import path5 from "node:path";
+import path6 from "node:path";
 var RETRYABLE_RENAME_CODES = /* @__PURE__ */ new Set(["EPERM", "EACCES", "EEXIST", "EBUSY"]);
 var errorCode = (error) => typeof error === "object" && error !== null && "code" in error ? String(error.code) : void 0;
 var syncSleep = (() => {
@@ -20622,7 +20660,7 @@ var fsyncDirectory = (directory) => {
   }
 };
 var writeFileAtomic = (filePath, contents, options) => {
-  const directory = path5.dirname(filePath);
+  const directory = path6.dirname(filePath);
   fs.mkdirSync(directory, {
     recursive: true,
     mode: options?.dirMode ?? 448
@@ -20660,13 +20698,13 @@ var parseFabricAgentRunner = (value, fallback) => {
 
 // src/config-object.ts
 var FORBIDDEN_CONFIG_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
-var assertSafeConfigDocument = (value, path22 = "configuration") => {
+var assertSafeConfigDocument = (value, path23 = "configuration") => {
   if (typeof value !== "object" || value === null) return;
   for (const key of Object.keys(value)) {
     if (FORBIDDEN_CONFIG_KEYS.has(key)) {
-      throw new Error(`${path22} contains forbidden key ${JSON.stringify(key)}`);
+      throw new Error(`${path23} contains forbidden key ${JSON.stringify(key)}`);
     }
-    assertSafeConfigDocument(value[key], `${path22}.${key}`);
+    assertSafeConfigDocument(value[key], `${path23}.${key}`);
   }
 };
 var safeConfigClone = (value) => {
@@ -21613,12 +21651,12 @@ var planConfigFile = (filePath) => {
 };
 var writeJsonAtomic = (filePath, document, expectedSource) => {
   const resolvedPath = fs2.existsSync(filePath) ? fs2.realpathSync(filePath) : filePath;
-  const directory = path6.dirname(resolvedPath);
+  const directory = path7.dirname(resolvedPath);
   if (!fs2.existsSync(directory)) fs2.mkdirSync(directory, { recursive: true });
   const mode = fs2.existsSync(resolvedPath) ? fs2.statSync(resolvedPath).mode & 511 : 384;
-  const temporaryPath = path6.join(
+  const temporaryPath = path7.join(
     directory,
-    `.${path6.basename(resolvedPath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+    `.${path7.basename(resolvedPath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
   );
   let descriptor;
   try {
@@ -21660,8 +21698,8 @@ var writeJsonAtomic = (filePath, document, expectedSource) => {
 var resolveFabricConfig = (options, includeProject, persistMigrations = true) => {
   let merged = structuredClone(DEFAULT_FABRIC_CONFIG);
   const plans = [
-    planConfigFile(path6.join(options.agentDir, "fabric.json")),
-    ...includeProject ? [planConfigFile(path6.join(options.cwd, ".pi", "fabric.json"))] : []
+    planConfigFile(path7.join(options.agentDir, "fabric.json")),
+    ...includeProject ? [planConfigFile(path7.join(options.cwd, ".pi", "fabric.json"))] : []
   ].filter((plan) => plan !== void 0);
   for (const plan of plans) {
     if (persistMigrations && plan.changed) {
@@ -21997,8 +22035,8 @@ var fabricExecTitleHintCached = (code) => {
 // src/execution-service.ts
 var runtimeDependencies;
 var loadRuntimeDependencies = () => runtimeDependencies ??= Promise.all([
-  import("./quickjs-runtime-PPKPDEBZ.js"),
-  import("./node-process-runtime-7ZVGEE26.js"),
+  import("./quickjs-runtime-VFVX5H7J.js"),
+  import("./node-process-runtime-LZT4BRMX.js"),
   import("./type-checker-ZXL6HVHN.js"),
   import("./guest-types-6A5BKABT.js"),
   import("./dynamic-guest-types-YIYN3HDU.js"),
@@ -22060,16 +22098,17 @@ var FabricExecutionService = class {
     const coreToolNamespace = this.registry.has("k") && !this.registry.has("pi") ? "k" : "pi";
     const traceRecorder = new FabricExecutionTraceRecorder(coreToolNamespace);
     const sourceError = fabricSourceLimitError(options.code, this.config.executor.maxSourceBytes);
-    if (sourceError) {
+    const stringsError = sourceError ?? fabricStringsLimitError(options.strings, this.config.executor.maxSourceBytes);
+    if (stringsError) {
       return {
         success: false,
         value: void 0,
         logs: [],
         audits: [],
         phases: [],
-        trace: traceRecorder.seal("failed", [], sourceError),
+        trace: traceRecorder.seal("failed", [], stringsError),
         elapsedMs: performance.now() - startedAt,
-        error: sourceError
+        error: stringsError
       };
     }
     this.activity?.start(
@@ -22627,7 +22666,7 @@ import { spawn } from "node:child_process";
 var import_ignore = __toESM(require_ignore(), 1);
 import { closeSync as closeSync2, createReadStream, openSync as openSync2, promises as fs4, writeSync } from "node:fs";
 import os3 from "node:os";
-import path10 from "node:path";
+import path11 from "node:path";
 import { createInterface } from "node:readline";
 
 // node_modules/.pnpm/balanced-match@4.0.4/node_modules/balanced-match/dist/esm/index.js
@@ -23735,11 +23774,11 @@ var qmarksTestNoExtDot = ([$0]) => {
   return (f) => f.length === len && f !== "." && f !== "..";
 };
 var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-var path7 = {
+var path8 = {
   win32: { sep: "\\" },
   posix: { sep: "/" }
 };
-var sep = defaultPlatform === "win32" ? path7.win32.sep : path7.posix.sep;
+var sep = defaultPlatform === "win32" ? path8.win32.sep : path8.posix.sep;
 minimatch.sep = sep;
 var GLOBSTAR = Symbol("globstar **");
 minimatch.GLOBSTAR = GLOBSTAR;
@@ -24487,21 +24526,21 @@ minimatch.unescape = unescape;
 
 // src/core/skill-dir.ts
 import { homedir as homedir2 } from "node:os";
-import path8 from "node:path";
+import path9 from "node:path";
 var SKILL_DIR_MARKER = "<skill-dir>";
 var expandSkillDirMarkers = (content, skillDir) => content.replaceAll(SKILL_DIR_MARKER, skillDir);
 var resolveReadPath = (requestedPath, cwd) => {
   const withoutAtPrefix = requestedPath.startsWith("@") ? requestedPath.slice(1) : requestedPath;
-  const expandedHome = withoutAtPrefix === "~" ? homedir2() : /^~[\\/]/.test(withoutAtPrefix) ? path8.join(homedir2(), withoutAtPrefix.slice(2)) : withoutAtPrefix;
-  return path8.resolve(cwd, expandedHome);
+  const expandedHome = withoutAtPrefix === "~" ? homedir2() : /^~[\\/]/.test(withoutAtPrefix) ? path9.join(homedir2(), withoutAtPrefix.slice(2)) : withoutAtPrefix;
+  return path9.resolve(cwd, expandedHome);
 };
 var expandSkillDirMarkersForRead = (content, args, cwd) => {
   if (!content.includes(SKILL_DIR_MARKER) || typeof args.path !== "string") {
     return content;
   }
   const requestedPath = resolveReadPath(args.path, cwd);
-  if (path8.basename(requestedPath) !== "SKILL.md") return content;
-  return expandSkillDirMarkers(content, path8.dirname(requestedPath));
+  if (path9.basename(requestedPath) !== "SKILL.md") return content;
+  return expandSkillDirMarkers(content, path9.dirname(requestedPath));
 };
 
 // src/memory/regex.ts
@@ -24623,12 +24662,12 @@ var BoundedRegexWorkerSession = class {
 // src/providers/project-root-guard.ts
 import fs3 from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import path9 from "node:path";
+import path10 from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var UNICODE_SPACES = /[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g;
 var isWithin = (root, candidate) => {
-  const relative2 = path9.relative(root, candidate);
-  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path9.sep}`) && !path9.isAbsolute(relative2);
+  const relative2 = path10.relative(root, candidate);
+  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path10.sep}`) && !path10.isAbsolute(relative2);
 };
 var normalizeToolPath = (input) => {
   let normalized = input.replace(UNICODE_SPACES, " ");
@@ -24636,7 +24675,7 @@ var normalizeToolPath = (input) => {
   if (/^file:\/\//i.test(normalized)) normalized = fileURLToPath3(normalized);
   if (normalized === "~") return homedir3();
   if (normalized.startsWith("~/") || process.platform === "win32" && normalized.startsWith("~\\")) {
-    return path9.join(homedir3(), normalized.slice(2));
+    return path10.join(homedir3(), normalized.slice(2));
   }
   return normalized;
 };
@@ -24645,7 +24684,7 @@ var ProjectRootGuard = class {
   cwd;
   canonicalRoot;
   constructor(cwd) {
-    this.cwd = path9.resolve(cwd);
+    this.cwd = path10.resolve(cwd);
     this.canonicalRoot = realpath(this.cwd);
   }
   assertPath(input, action) {
@@ -24658,7 +24697,7 @@ var ProjectRootGuard = class {
     } catch {
       throw new Error(`${action} received an invalid file URL or path: ${input}`);
     }
-    const absolute = path9.isAbsolute(normalized) ? path9.resolve(normalized) : path9.resolve(this.cwd, normalized);
+    const absolute = path10.isAbsolute(normalized) ? path10.resolve(normalized) : path10.resolve(this.cwd, normalized);
     let existing = absolute;
     for (; ; ) {
       try {
@@ -24675,7 +24714,7 @@ var ProjectRootGuard = class {
         if (error instanceof Error && !(error.code === "ENOENT" || error.code === "ENOTDIR")) {
           throw error;
         }
-        const parent = path9.dirname(existing);
+        const parent = path10.dirname(existing);
         if (parent === existing) {
           throw new Error(`${action} path has no accessible project ancestor: ${input}`);
         }
@@ -24696,7 +24735,7 @@ var ProjectRootGuard = class {
       const code = error.code;
       if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
     }
-    const canonicalTarget = path9.resolve(canonicalAncestor, path9.relative(existing, absolute));
+    const canonicalTarget = path10.resolve(canonicalAncestor, path10.relative(existing, absolute));
     if (!isWithin(this.canonicalRoot, canonicalTarget)) {
       throw new Error(`${action} path escapes the project root through a symlink or junction: ${input}`);
     }
@@ -24826,7 +24865,7 @@ var truncateLines = (value, limit, fromEnd = false) => {
   if (lines.length <= limit) return { text: value, truncated: false };
   return { text: (fromEnd ? lines.slice(-limit) : lines.slice(0, limit)).join("\n"), truncated: true };
 };
-var normalizeRelative = (root, file) => path10.relative(root, file).split(path10.sep).join("/");
+var normalizeRelative = (root, file) => path11.relative(root, file).split(path11.sep).join("/");
 var matchesGlob = (file, pattern) => minimatch(file, pattern, {
   dot: true,
   matchBase: !pattern.includes("/"),
@@ -24903,12 +24942,12 @@ var KiroToolsProvider = class {
     this.#readArtifact = options.readArtifact;
     this.#writeArtifact = options.writeArtifact;
     this.#bashPath = options.bashPath ?? process.env.KIRO_FABRIC_BASH ?? "bash";
-    this.#protectedRoots = (options.protectedRoots ?? []).map((root) => path10.resolve(root));
+    this.#protectedRoots = (options.protectedRoots ?? []).map((root) => path11.resolve(root));
   }
   #isProtected(target) {
-    const resolved = path10.resolve(target);
+    const resolved = path11.resolve(target);
     return this.#protectedRoots.some(
-      (root) => resolved === root || resolved.startsWith(root + path10.sep)
+      (root) => resolved === root || resolved.startsWith(root + path11.sep)
     );
   }
   #assertNotProtected(target, action) {
@@ -24971,13 +25010,13 @@ var KiroToolsProvider = class {
     return this.#grep(target, args, context);
   }
   async #read(target, args, context) {
-    const mimeType = IMAGE_TYPES[path10.extname(target).toLowerCase()];
+    const mimeType = IMAGE_TYPES[path11.extname(target).toLowerCase()];
     if (mimeType) {
       const stat = await runAbortable(context.signal, () => fs4.stat(target));
       if (!stat.isFile()) throw new Error(`k.read requires a regular file: ${String(args.path)}`);
       if (stat.size > MAX_IMAGE_BYTES) throw new Error(`k.read refuses images over ${MAX_IMAGE_BYTES} bytes`);
       const data = await runAbortable(context.signal, () => fs4.readFile(target));
-      assertImageBounds(data, path10.extname(target).toLowerCase());
+      assertImageBounds(data, path11.extname(target).toLowerCase());
       const note = `Read image file [${mimeType}]`;
       context.attachMedia?.([{ type: "image", data: data.toString("base64"), mimeType }], note);
       return note;
@@ -25098,11 +25137,11 @@ var KiroToolsProvider = class {
   async #ls(target, args, context) {
     const entries = await runAbortable(context.signal, () => fs4.readdir(target, { withFileTypes: true }));
     const limit = Math.min(positiveInteger(args.limit, 500, 1), 500);
-    const text = entries.filter((entry) => !this.#isProtected(path10.join(target, entry.name))).sort((left, right) => left.name.localeCompare(right.name)).slice(0, limit).map((entry) => entry.name + (entry.isDirectory() ? "/" : "")).join("\n");
+    const text = entries.filter((entry) => !this.#isProtected(path11.join(target, entry.name))).sort((left, right) => left.name.localeCompare(right.name)).slice(0, limit).map((entry) => entry.name + (entry.isDirectory() ? "/" : "")).join("\n");
     return truncateBytes(text).text;
   }
   async #ignoreFrame(directory) {
-    const file = path10.join(directory, ".gitignore");
+    const file = path11.join(directory, ".gitignore");
     let stat;
     try {
       stat = await fs4.stat(file);
@@ -25126,15 +25165,15 @@ var KiroToolsProvider = class {
     return ignored;
   }
   async #ancestorIgnoreFrames(directory) {
-    const relative2 = path10.relative(this.#cwd, directory);
+    const relative2 = path11.relative(this.#cwd, directory);
     if (!relative2 || relative2 === ".") return [];
-    const segments = relative2.split(path10.sep).filter(Boolean);
+    const segments = relative2.split(path11.sep).filter(Boolean);
     const frames = [];
     let current = this.#cwd;
     for (const segment of segments.slice(0, -1)) {
       const frame = await this.#ignoreFrame(current);
       if (frame) frames.push(frame);
-      current = path10.join(current, segment);
+      current = path11.join(current, segment);
     }
     const parentFrame = await this.#ignoreFrame(current);
     if (parentFrame) frames.push(parentFrame);
@@ -25155,7 +25194,7 @@ var KiroToolsProvider = class {
     for (const entry of entries) {
       throwIfAborted(signal);
       if (entry.name === ".git" || entry.name === "node_modules") continue;
-      const full = path10.join(root, entry.name);
+      const full = path11.join(root, entry.name);
       if (this.#isProtected(full)) continue;
       if (entry.isDirectory()) {
         if (!this.#isIgnored(full, true, frames)) yield* this.#walk(full, signal, state, frames, depth + 1);
@@ -25212,7 +25251,7 @@ var KiroToolsProvider = class {
     try {
       fileLoop: for await (const file of files) {
         throwIfAborted(context.signal);
-        const relative2 = stat.isDirectory() ? normalizeRelative(target, file) : path10.basename(file);
+        const relative2 = stat.isDirectory() ? normalizeRelative(target, file) : path11.basename(file);
         if (glob && !matchesGlob(relative2, glob)) continue;
         let source;
         try {
@@ -25256,7 +25295,7 @@ var KiroToolsProvider = class {
     const command = stringArg(args, "command");
     if (byteLength2(command) > MAX_BASH_COMMAND_BYTES) throw new Error(`k.bash refuses commands over ${MAX_BASH_COMMAND_BYTES} bytes`);
     const timeoutMs = typeof args.timeout === "number" && args.timeout > 0 ? args.timeout * 1e3 : void 0;
-    const fullOutputPath = path10.join(os3.tmpdir(), `kiro-fabric-bash-${crypto.randomUUID()}.log`);
+    const fullOutputPath = path11.join(os3.tmpdir(), `kiro-fabric-bash-${crypto.randomUUID()}.log`);
     let result;
     try {
       result = await new Promise((resolve3, reject) => {
@@ -25400,7 +25439,7 @@ import { isAbsolute as isAbsolute3, relative, sep as sep2 } from "node:path";
 import { randomUUID as randomUUID6 } from "node:crypto";
 import fs7 from "node:fs";
 import os4 from "node:os";
-import path11 from "node:path";
+import path12 from "node:path";
 
 // src/log-tail.ts
 import fs5 from "node:fs";
@@ -25544,7 +25583,7 @@ var KiroAgentManager = class {
     this.config = config;
     this.#workerPath = options.workerPath;
     this.#managedTempRoot = options.runRoot === void 0 && process.env.KIRO_FABRIC_RUN_ROOT === void 0;
-    this.#runRoot = options.runRoot ?? process.env.KIRO_FABRIC_RUN_ROOT ?? fs7.mkdtempSync(path11.join(os4.tmpdir(), "kiro-fabric-runs-"));
+    this.#runRoot = options.runRoot ?? process.env.KIRO_FABRIC_RUN_ROOT ?? fs7.mkdtempSync(path12.join(os4.tmpdir(), "kiro-fabric-runs-"));
     this.#projectRoot = options.projectRoot ?? cwd;
     this.#kiroBinary = options.kiroBinary ?? process.env.KIRO_FABRIC_KIRO_BINARY ?? "kiro-cli";
   }
@@ -25565,7 +25604,7 @@ var KiroAgentManager = class {
     if (typeof requestedCwd !== "string" || requestedCwd.trim().length === 0) {
       throw new Error(`Invalid Fabric agent cwd ${JSON.stringify(requestedCwd)}: path must not be empty`);
     }
-    const candidate = path11.isAbsolute(requestedCwd) ? requestedCwd : path11.resolve(this.cwd, requestedCwd);
+    const candidate = path12.isAbsolute(requestedCwd) ? requestedCwd : path12.resolve(this.cwd, requestedCwd);
     try {
       const canonical = fs7.realpathSync(candidate);
       fs7.accessSync(canonical, fs7.constants.R_OK | fs7.constants.X_OK);
@@ -25636,17 +25675,17 @@ var KiroAgentManager = class {
       if (this.#closing) throw new Error("Kiro agent manager is closing");
       const id = randomUUID6().replaceAll("-", "");
       const name = safeName(request.name ?? request.task.split("\n", 1)[0] ?? "Fabric agent");
-      const runDirectory = path11.join(this.#runRoot, id);
+      const runDirectory = path12.join(this.#runRoot, id);
       launchDirectory = runDirectory;
       fs7.mkdirSync(runDirectory, { recursive: true });
-      const taskFile = path11.join(runDirectory, "task.txt");
-      const statusFile = path11.join(runDirectory, "status.json");
-      const logFile = path11.join(runDirectory, "events.jsonl");
-      const stdoutFile = path11.join(runDirectory, "worker.stdout.log");
-      const stderrFile = path11.join(runDirectory, "worker.stderr.log");
-      const steerFile = path11.join(runDirectory, "steer.jsonl");
-      const schemaFile = request.schema ? path11.join(runDirectory, "schema.json") : void 0;
-      const contextFile = request.kiroContext ? path11.join(runDirectory, "kiro-context.json") : void 0;
+      const taskFile = path12.join(runDirectory, "task.txt");
+      const statusFile = path12.join(runDirectory, "status.json");
+      const logFile = path12.join(runDirectory, "events.jsonl");
+      const stdoutFile = path12.join(runDirectory, "worker.stdout.log");
+      const stderrFile = path12.join(runDirectory, "worker.stderr.log");
+      const steerFile = path12.join(runDirectory, "steer.jsonl");
+      const schemaFile = request.schema ? path12.join(runDirectory, "schema.json") : void 0;
+      const contextFile = request.kiroContext ? path12.join(runDirectory, "kiro-context.json") : void 0;
       fs7.writeFileSync(taskFile, request.task, { encoding: "utf8", mode: 384 });
       if (schemaFile) fs7.writeFileSync(schemaFile, JSON.stringify(request.schema, null, 2), { mode: 384 });
       if (contextFile) fs7.writeFileSync(contextFile, JSON.stringify(request.kiroContext, null, 2), { mode: 384 });
@@ -25685,7 +25724,7 @@ var KiroAgentManager = class {
         "--project-root",
         this.#projectRoot,
         "--run-root",
-        path11.join(runDirectory, "nested"),
+        path12.join(runDirectory, "nested"),
         ...residency === "one-shot" ? [] : ["--steer-file", steerFile],
         ...contextFile ? ["--kiro-context-file", contextFile] : [],
         "--kiro-residency",
@@ -25858,7 +25897,7 @@ var KiroAgentManager = class {
   }
   readLog(id, opts = {}) {
     const managed = this.#require(id);
-    const logFile = path11.join(managed.runDirectory, "events.jsonl");
+    const logFile = path12.join(managed.runDirectory, "events.jsonl");
     const page = readJsonlPage(logFile, Math.max(1, Math.min(opts.lines ?? 200, 5e3)), opts.before);
     const status = readRecord(managed.statusFile);
     return {
@@ -25898,7 +25937,7 @@ var KiroAgentManager = class {
     if (bytes > MAX_AGENT_STEER_LINE_BYTES) {
       throw new Error(`Fabric agent steering command is too large (${bytes} bytes; maximum ${MAX_AGENT_STEER_LINE_BYTES})`);
     }
-    const steerFile = path11.join(managed.runDirectory, "steer.jsonl");
+    const steerFile = path12.join(managed.runDirectory, "steer.jsonl");
     let queuedBytes = 0;
     try {
       queuedBytes = fs7.statSync(steerFile).size;
@@ -25951,7 +25990,7 @@ var KiroAgentManager = class {
     };
   }
   #workerDiagnostic(managed) {
-    const stderrFile = path11.join(managed.runDirectory, "worker.stderr.log");
+    const stderrFile = path12.join(managed.runDirectory, "worker.stderr.log");
     try {
       const bytes = fs7.statSync(stderrFile).size;
       return bytes > 0 ? `; worker stderr captured (${bytes} bytes) at ${stderrFile}` : "";
@@ -26519,8 +26558,8 @@ var failedProbeState = (error) => {
   const failure = error;
   return failure.killed === true || failure.code === "ETIMEDOUT" || failure.signal === "SIGTERM" ? "timeout" : "exec-failure";
 };
-var hasNativeExecutableFormat = (path22) => {
-  const header = readFileSync3(path22).subarray(0, 4);
+var hasNativeExecutableFormat = (path23) => {
+  const header = readFileSync3(path23).subarray(0, 4);
   if (header.length < 4) return false;
   if (process.platform === "linux") {
     return header.equals(Buffer.from([127, 69, 76, 70]));
@@ -27054,38 +27093,38 @@ var createKiroAgentsProvider = (options) => new KiroAgentsProvider(
 );
 
 // src/providers/mcp-provider.ts
-import path14 from "node:path";
+import path15 from "node:path";
 
 // src/providers/mcp-descriptor-cache.ts
 import fs9 from "node:fs/promises";
 import fsSync from "node:fs";
 import os5 from "node:os";
-import path12 from "node:path";
+import path13 from "node:path";
 var MCP_DESCRIPTOR_CACHE_VERSION = 1;
 var expandHome = (input) => {
   if (!input.startsWith("~")) return input;
   const home = os5.homedir();
   if (input === "~") return home;
   if (input.startsWith("~/") || input.startsWith("~\\")) {
-    return path12.join(home, input.slice(2));
+    return path13.join(home, input.slice(2));
   }
   return input;
 };
-var legacyMcporterDir = () => path12.join(os5.homedir(), ".mcporter");
+var legacyMcporterDir = () => path13.join(os5.homedir(), ".mcporter");
 var mcporterConfigDir = () => {
   const raw = process.env.XDG_CONFIG_HOME;
   if (raw && raw.trim().length > 0) {
     const resolved = expandHome(raw.trim());
-    if (path12.isAbsolute(resolved)) return path12.join(resolved, "mcporter");
+    if (path13.isAbsolute(resolved)) return path13.join(resolved, "mcporter");
   }
   return legacyMcporterDir();
 };
 var mcporterConfigCandidates = () => {
   const base = mcporterConfigDir();
-  const candidates = [path12.join(base, "mcporter.json"), path12.join(base, "mcporter.jsonc")];
+  const candidates = [path13.join(base, "mcporter.json"), path13.join(base, "mcporter.jsonc")];
   const legacy = legacyMcporterDir();
   if (base !== legacy) {
-    candidates.push(path12.join(legacy, "mcporter.json"), path12.join(legacy, "mcporter.jsonc"));
+    candidates.push(path13.join(legacy, "mcporter.json"), path13.join(legacy, "mcporter.jsonc"));
   }
   return candidates;
 };
@@ -27100,12 +27139,12 @@ var pathExists = (filePath) => {
 var mcpConfigLayerPaths = (rootDir, configPath) => {
   const explicitRaw = configPath ?? process.env.MCPORTER_CONFIG;
   if (explicitRaw && explicitRaw.trim().length > 0) {
-    return [path12.resolve(expandHome(explicitRaw.trim()))];
+    return [path13.resolve(expandHome(explicitRaw.trim()))];
   }
   const paths = [];
   const home = mcporterConfigCandidates().find(pathExists);
   if (home) paths.push(home);
-  const projectPath = path12.resolve(rootDir, "config", "mcporter.json");
+  const projectPath = path13.resolve(rootDir, "config", "mcporter.json");
   if (pathExists(projectPath)) paths.push(projectPath);
   return paths;
 };
@@ -27145,7 +27184,7 @@ var parseCachedServer = (value) => {
 };
 
 // src/providers/mcp-advisory.ts
-import path13 from "node:path";
+import path14 from "node:path";
 
 // src/providers/mcp-provider.ts
 var TOOL_METADATA_TTL_MS = 6e4;
@@ -27827,7 +27866,7 @@ var McpProvider = class {
           kind: "stdio",
           command: args.command,
           args: commandArgs,
-          cwd: path14.resolve(this.cwd, typeof args.cwd === "string" ? args.cwd : ".")
+          cwd: path15.resolve(this.cwd, typeof args.cwd === "string" ? args.cwd : ".")
         },
         ...env ? { env } : {}
       };
@@ -28097,12 +28136,12 @@ var KiroMcpProvider = class {
 
 // src/kiro/memory-provider.ts
 import fs11 from "node:fs";
-import path16 from "node:path";
+import path17 from "node:path";
 
 // src/kiro/memory.ts
 import crypto2 from "node:crypto";
 import fs10 from "node:fs";
-import path15 from "node:path";
+import path16 from "node:path";
 var DEFAULT_MAX_NAMESPACE_ENTRIES = 128;
 var DEFAULT_MAX_NAMESPACE_BYTES = 256 * 1024;
 var DEFAULT_MAX_ENTRY_BYTES = 16 * 1024;
@@ -28136,10 +28175,10 @@ var assertMemoryToken = (value, label) => {
 var encodeName = (value) => encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 var hashNamespace = (namespace) => crypto2.createHash("sha256").update(namespace).digest("hex").slice(0, 16);
 var isWithinOrEqual2 = (root, candidate) => {
-  const relative2 = path15.relative(root, candidate);
+  const relative2 = path16.relative(root, candidate);
   if (relative2 === "" || relative2 === ".") return true;
-  if (path15.isAbsolute(relative2)) return false;
-  return relative2.split(path15.sep).filter(Boolean)[0] !== "..";
+  if (path16.isAbsolute(relative2)) return false;
+  return relative2.split(path16.sep).filter(Boolean)[0] !== "..";
 };
 var lstatOrNull2 = (target) => {
   try {
@@ -28160,7 +28199,7 @@ var processIsAlive = (pid) => {
   }
 };
 var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
-  const lockPath = path15.join(namespaceRoot, MUTATION_LOCK);
+  const lockPath = path16.join(namespaceRoot, MUTATION_LOCK);
   const deadline = Date.now() + MUTATION_LOCK_TIMEOUT_MS;
   let identity;
   while (!identity) {
@@ -28174,7 +28213,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
       identity = { dev: stat.dev, ino: stat.ino };
       try {
         fs10.writeFileSync(
-          path15.join(lockPath, MUTATION_LOCK_OWNER),
+          path16.join(lockPath, MUTATION_LOCK_OWNER),
           JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }),
           { encoding: "utf8", mode: 384, flag: "wx" }
         );
@@ -28201,7 +28240,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
       if (Date.now() - stat.mtimeMs > STALE_MUTATION_LOCK_MS) {
         let ownerPid;
         try {
-          const owner = JSON.parse(fs10.readFileSync(path15.join(lockPath, MUTATION_LOCK_OWNER), "utf8"));
+          const owner = JSON.parse(fs10.readFileSync(path16.join(lockPath, MUTATION_LOCK_OWNER), "utf8"));
           if (typeof owner.pid === "number") ownerPid = owner.pid;
         } catch {
         }
@@ -28215,7 +28254,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
         try {
           const current = fs10.lstatSync(lockPath);
           if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== stat.dev || current.ino !== stat.ino) continue;
-          fs10.rmSync(path15.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
+          fs10.rmSync(path16.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
           fs10.rmdirSync(lockPath);
         } catch {
           if (Date.now() >= deadline) {
@@ -28238,7 +28277,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
     try {
       const current = fs10.lstatSync(lockPath);
       if (current.isDirectory() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
-        fs10.rmSync(path15.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
+        fs10.rmSync(path16.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
         fs10.rmdirSync(lockPath);
       }
     } catch {
@@ -28307,9 +28346,9 @@ var ensureOwnedDirectory = (memoryRoot, target, marker) => {
   }
   const stat = fs10.lstatSync(target);
   assertPrivateDirectory(target, stat);
-  const markerPath = path15.join(target, OWNERSHIP_MARKER);
+  const markerPath = path16.join(target, OWNERSHIP_MARKER);
   if (created) {
-    const temporaryMarker = path15.join(
+    const temporaryMarker = path16.join(
       target,
       `.kiro-fabric-owner-${process.pid}-${crypto2.randomBytes(8).toString("hex")}.tmp`
     );
@@ -28363,9 +28402,9 @@ var assertNoSymlinkComponents = (root, target) => {
     throw new KiroMemoryScopeError(`Kiro memory path escapes its root: ${target}`);
   }
   let cursor = root;
-  const relative2 = path15.relative(root, target);
-  for (const part of relative2.split(path15.sep).filter(Boolean)) {
-    cursor = path15.join(cursor, part);
+  const relative2 = path16.relative(root, target);
+  for (const part of relative2.split(path16.sep).filter(Boolean)) {
+    cursor = path16.join(cursor, part);
     const stat = lstatOrNull2(cursor);
     if (!stat) continue;
     if (stat.isSymbolicLink()) {
@@ -28374,7 +28413,7 @@ var assertNoSymlinkComponents = (root, target) => {
   }
 };
 var canonicalDirectory = (root) => {
-  const candidate = path15.resolve(assertMemoryToken(root, "root"));
+  const candidate = path16.resolve(assertMemoryToken(root, "root"));
   ensureDirectory(candidate);
   const canonical = fs10.realpathSync(candidate);
   const stat = fs10.statSync(canonical);
@@ -28383,7 +28422,7 @@ var canonicalDirectory = (root) => {
   }
   return canonical;
 };
-var memoryNamespaceRoot = (root, namespace) => path15.join(root, MEMORY_DIR, `${encodeName(namespace)}-${hashNamespace(namespace)}`);
+var memoryNamespaceRoot = (root, namespace) => path16.join(root, MEMORY_DIR, `${encodeName(namespace)}-${hashNamespace(namespace)}`);
 var entryPath = (namespaceRoot, key) => (() => {
   const name = `${encodeName(key)}.json`;
   if (utf8Bytes(name) > MAX_FILE_NAME_BYTES) {
@@ -28391,7 +28430,7 @@ var entryPath = (namespaceRoot, key) => (() => {
       `Kiro memory key is too long after filesystem-safe encoding`
     );
   }
-  return path15.join(namespaceRoot, name);
+  return path16.join(namespaceRoot, name);
 })();
 var actorStoreKey = (actorId, key) => `actor/${assertMemoryToken(actorId, "actorId")}/${assertMemoryToken(key, "key")}`;
 var readEntry = (filePath) => {
@@ -28414,10 +28453,10 @@ var readEntry = (filePath) => {
   };
 };
 var writeJsonAtomic2 = (filePath, content) => {
-  const directory = path15.dirname(filePath);
-  const temporary = path15.join(
+  const directory = path16.dirname(filePath);
+  const temporary = path16.join(
     directory,
-    `.${path15.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+    `.${path16.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
   );
   let descriptor;
   try {
@@ -28451,7 +28490,7 @@ var writeJsonAtomic2 = (filePath, content) => {
 };
 var listEntryFiles = (namespaceRoot) => {
   try {
-    return fs10.readdirSync(namespaceRoot, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => path15.join(namespaceRoot, entry.name)).sort((left, right) => left.localeCompare(right));
+    return fs10.readdirSync(namespaceRoot, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => path16.join(namespaceRoot, entry.name)).sort((left, right) => left.localeCompare(right));
   } catch {
     return [];
   }
@@ -28486,7 +28525,7 @@ var assertEntryFits = (namespaceRoot, next, targetPath) => {
 var openKiroMemory = (namespace, root) => {
   const memoryNamespace = assertMemoryToken(namespace, "namespace");
   const memoryRoot = canonicalDirectory(root);
-  const scopedRoot = path15.join(memoryRoot, MEMORY_DIR);
+  const scopedRoot = path16.join(memoryRoot, MEMORY_DIR);
   ensureOwnedDirectory(memoryRoot, scopedRoot, {
     format: MEMORY_FORMAT,
     owner: MEMORY_OWNER,
@@ -28686,7 +28725,7 @@ var KiroMemoryProvider = class {
   #binding;
   constructor(options) {
     this.#cwd = fs11.realpathSync(options.cwd);
-    this.#root = path16.resolve(options.root);
+    this.#root = path17.resolve(options.root);
     this.#namespace = `project:${sha256Bytes(this.#cwd)}`;
   }
   async list(request, _context) {
@@ -28740,7 +28779,7 @@ var KiroMemoryProvider = class {
 // src/mesh/store.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
 import fs12 from "node:fs";
-import path17 from "node:path";
+import path18 from "node:path";
 var MeshCompareAndSwapError = class extends Error {
   constructor(key, expectedVersion, actualVersion) {
     super(
@@ -28886,11 +28925,11 @@ var MeshStore = class {
     this.root = root;
     this.maxEventBytes = maxEventBytes;
     this.maxReadEvents = maxReadEvents;
-    this.#eventsPath = path17.join(root, "events.jsonl");
-    this.#statePath = path17.join(root, "state.json");
-    this.#counterPath = path17.join(root, "sequence");
-    this.#generationPath = path17.join(root, "generation");
-    this.#lockPath = path17.join(root, ".lock");
+    this.#eventsPath = path18.join(root, "events.jsonl");
+    this.#statePath = path18.join(root, "state.json");
+    this.#counterPath = path18.join(root, "sequence");
+    this.#generationPath = path18.join(root, "generation");
+    this.#lockPath = path18.join(root, ".lock");
     this.#maxEventLogBytes = Math.min(
       CURSOR_OFFSET_BASE - 1,
       Math.max(maxEventBytes + 2, Math.floor(options.maxEventLogBytes ?? DEFAULT_MAX_EVENT_LOG_BYTES))
@@ -29284,7 +29323,7 @@ var MeshStore = class {
     fs12.mkdirSync(this.root, { recursive: true, mode: 448 });
     const deadline = Date.now() + this.#lockTimeoutMs;
     const token = randomUUID7();
-    const ownerPath = path17.join(this.#lockPath, "owner");
+    const ownerPath = path18.join(this.#lockPath, "owner");
     const owner = {
       format: 2,
       token,
@@ -29481,11 +29520,11 @@ var MeshStore = class {
 
 // src/state/store.ts
 import { createHash as createHash6 } from "node:crypto";
-import path19 from "node:path";
+import path20 from "node:path";
 
 // src/state/complexity.ts
 import fs13 from "node:fs";
-import path18 from "node:path";
+import path19 from "node:path";
 var isWordStart = (character) => character !== void 0 && (character >= "a" && character <= "z" || character >= "A" && character <= "Z" || character === "_" || character === "$");
 var isWordPart = (character) => isWordStart(character) || character !== void 0 && character >= "0" && character <= "9";
 var regularExpressionPrefixWords = /* @__PURE__ */ new Set([
@@ -29718,12 +29757,12 @@ var languageComplexities = [
 ];
 var MAX_COMPLEXITY_FILE_BYTES = 2 * 1024 * 1024;
 var complexityForFile = (file, languages = languageComplexities) => {
-  const extension = path18.extname(file).toLowerCase();
+  const extension = path19.extname(file).toLowerCase();
   return languages.find((language) => language.extensions.includes(extension));
 };
 var containedBy = (root, candidate) => {
-  const relative2 = path18.relative(root, candidate);
-  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path18.sep}`) && !path18.isAbsolute(relative2);
+  const relative2 = path19.relative(root, candidate);
+  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path19.sep}`) && !path19.isAbsolute(relative2);
 };
 var countFileComplexity = (requestedFile, root) => {
   const language = complexityForFile(requestedFile);
@@ -30643,7 +30682,7 @@ var StateStore = class {
     const files = [];
     let netDelta = 0;
     for (const file of this.normalizeComplexityFiles(requestedFiles, input.cwd)) {
-      const measured = countFileComplexity(path19.resolve(input.cwd, file), input.cwd);
+      const measured = countFileComplexity(path20.resolve(input.cwd, file), input.cwd);
       if (!measured) {
         files.push({ file, supported: false });
         continue;
@@ -30670,7 +30709,7 @@ var StateStore = class {
     const updates = [];
     let netDelta = 0;
     for (const file of this.normalizeComplexityFiles(files, cwd)) {
-      const measured = countFileComplexity(path19.resolve(cwd, file), cwd);
+      const measured = countFileComplexity(path20.resolve(cwd, file), cwd);
       if (!measured) {
         deltas.push({ file, supported: false });
         continue;
@@ -30720,11 +30759,11 @@ var StateStore = class {
     const normalized = /* @__PURE__ */ new Set();
     for (const file of files) {
       if (!file.trim()) continue;
-      const relative2 = path19.relative(cwd, path19.resolve(cwd, file));
-      if (relative2 === ".." || relative2.startsWith(`..${path19.sep}`) || path19.isAbsolute(relative2)) {
+      const relative2 = path20.relative(cwd, path20.resolve(cwd, file));
+      if (relative2 === ".." || relative2.startsWith(`..${path20.sep}`) || path20.isAbsolute(relative2)) {
         throw new Error(`State complexity file must be inside the project cwd: ${file}`);
       }
-      normalized.add(relative2.split(path19.sep).join("/"));
+      normalized.add(relative2.split(path20.sep).join("/"));
     }
     return [...normalized];
   }
@@ -31641,7 +31680,7 @@ var createKiroRuntime = (options) => {
   const registry = new ActionRegistry();
   const artifacts = createKiroArtifactStore();
   const managedNode = process.env.KIRO_FABRIC_NODE_BINARY;
-  const protectedRelease = managedNode && path20.isAbsolute(managedNode) ? path20.dirname(path20.dirname(managedNode)) : void 0;
+  const protectedRelease = managedNode && path21.isAbsolute(managedNode) ? path21.dirname(path21.dirname(managedNode)) : void 0;
   if (!power) {
     registry.register(
       new KiroToolsProvider(options.cwd, {
@@ -31655,6 +31694,10 @@ var createKiroRuntime = (options) => {
     registry.markUnavailable(
       "k",
       "Power mode intentionally uses Kiro native tools for ordinary repository and shell operations"
+    );
+    registry.markUnavailable(
+      "pi",
+      "Power mode does not mount the Pi `pi.*` coding-tool namespace"
     );
     registry.register(new KiroPowerArtifactsProvider(artifacts));
   }
@@ -31670,7 +31713,7 @@ var createKiroRuntime = (options) => {
   if (memoryAvailable) {
     registry.register(new KiroMemoryProvider({
       cwd: options.cwd,
-      root: options.memoryRoot ?? path20.join(resolveAgentDir(), "fabric", "kiro-memory")
+      root: options.memoryRoot ?? path21.join(resolveAgentDir(), "fabric", "kiro-memory")
     }));
   } else {
     registry.markUnavailable(
@@ -31800,7 +31843,7 @@ var createKiroMcpServer = async (options) => {
   if (integration === "power" && (!options.pluginRoot || !options.pluginData)) {
     throw new Error("power MCP launch requires PLUGIN_ROOT and PLUGIN_DATA");
   }
-  const version = options.version ?? (integration === "power" ? String(JSON.parse(readFileSync4(path21.join(options.pluginRoot, "package.json"), "utf8")).version) : readPackageVersion());
+  const version = options.version ?? (integration === "power" ? String(JSON.parse(readFileSync4(path22.join(options.pluginRoot, "package.json"), "utf8")).version) : readPackageVersion());
   const server = new Server(
     { name: "kiro-fabric", version },
     { capabilities: { tools: {} } }
@@ -32064,7 +32107,16 @@ var createKiroMcpServer = async (options) => {
             text: JSON.stringify({
               integration: "power",
               version,
-              runtime: { executor: current.service.config.executor.runtime },
+              runtime: {
+                executor: current.service.config.executor.runtime,
+                limits: {
+                  timeoutMs: current.service.config.executor.timeoutMs,
+                  memoryLimitBytes: current.service.config.executor.memoryLimitBytes,
+                  maxSourceBytes: current.service.config.executor.maxSourceBytes,
+                  maxOutputChars: current.service.config.executor.maxOutputChars,
+                  maxNestedResultChars: current.service.config.executor.maxNestedResultChars
+                }
+              },
               workspace: {
                 ...status,
                 capabilities,

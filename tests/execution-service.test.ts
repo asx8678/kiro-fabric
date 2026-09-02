@@ -46,6 +46,24 @@ describe("FabricExecutionService", () => {
     expect(result.trace.operations).toEqual([]);
   });
 
+  it("rejects oversized strings before TypeScript checking", async () => {
+    const config = structuredClone(DEFAULT_FABRIC_CONFIG);
+    config.executor.maxSourceBytes = 33;
+    const result = await new FabricExecutionService(new ActionRegistry(), config).execute({
+      code: "return π.payload;",
+      strings: { payload: "é".repeat(17) },
+      signal: undefined,
+      parentToolCallId: "oversized-strings",
+      host: testHost(process.cwd()),
+      onPartial() {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/exceeds executor\.maxSourceBytes/);
+    expect(result.typeErrors).toBeUndefined();
+    expect(result.audits).toEqual([]);
+  });
+
   it("defers explicit handoff and completes every later call in the same program", async () => {
     const registry = new ActionRegistry();
     const demoDescriptor = {

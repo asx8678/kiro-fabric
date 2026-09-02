@@ -9,7 +9,7 @@ import {
   DEFAULT_EXECUTOR_SOURCE_BYTES,
   MAX_EXECUTOR_SOURCE_BYTES,
   MIN_EXECUTOR_SOURCE_BYTES
-} from "./chunk-PGDCKPF6.js";
+} from "./chunk-7D73AS5J.js";
 import {
   Any,
   BigInt as BigInt2,

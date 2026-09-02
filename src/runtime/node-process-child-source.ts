@@ -18,10 +18,17 @@ const formatValue = (value) => {
   }
 };
 
+const MAX_JSON_CHARS = 2000000;
 const jsonCompatible = (value) => {
   if (value === undefined) return undefined;
   const serialized = JSON.stringify(value);
-  return serialized === undefined ? undefined : JSON.parse(serialized);
+  if (serialized === undefined) return undefined;
+  if (serialized.length > MAX_JSON_CHARS) {
+    throw new Error(
+      "Fabric host JSON exceeds " + MAX_JSON_CHARS + " characters: received " + serialized.length,
+    );
+  }
+  return JSON.parse(serialized);
 };
 
 const run = async (message) => {

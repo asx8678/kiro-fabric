@@ -12,8 +12,9 @@ import {
 import {
   effectiveFabricSourceLimit,
   fabricSourceLimitError,
+  fabricStringsLimitError,
   fabricTranspiledLimitError
-} from "./chunk-PGDCKPF6.js";
+} from "./chunk-7D73AS5J.js";
 import {
   transpileFabricCodeWithSourceMap
 } from "./chunk-MMKAFZEV.js";
@@ -122,6 +123,23 @@ var remapGuestErrorText = (text, stackMap, guestLineCount) => {
     if (guestLineCount !== void 0 && line > guestLineCount) return "fabric driver";
     return match;
   });
+};
+
+// src/runtime/json-budget.ts
+var DEFAULT_FABRIC_JSON_CHARS = 2e6;
+var budgetError = (received, maxChars) => new Error(`Fabric host JSON exceeds ${maxChars} characters: received ${received}`);
+var fabricJsonText = (value, maxChars = DEFAULT_FABRIC_JSON_CHARS) => {
+  const serialized = JSON.stringify(value);
+  if (serialized === void 0) return "null";
+  if (serialized.length > maxChars) throw budgetError(serialized.length, maxChars);
+  return serialized;
+};
+var assertFabricJsonBudget = (value, maxChars = DEFAULT_FABRIC_JSON_CHARS) => {
+  if (typeof value === "string") {
+    if (value.length > maxChars) throw budgetError(value.length, maxChars);
+    return;
+  }
+  fabricJsonText(value, maxChars);
 };
 
 // src/runtime/quickjs-runtime.ts
@@ -826,15 +844,14 @@ var formatValue = (value) => {
     return String(value);
   }
 };
-var jsonText = (value) => {
-  const serialized = JSON.stringify(value);
-  if (serialized === void 0) return "null";
-  return serialized;
-};
+var jsonText = (value) => fabricJsonText(value);
 var jsonHandle = (context, jsonObject, jsonParse, value) => {
   if (value === void 0) return context.undefined;
   if (value === null) return context.null;
-  if (typeof value === "string") return context.newString(value);
+  if (typeof value === "string") {
+    assertFabricJsonBudget(value);
+    return context.newString(value);
+  }
   if (typeof value === "boolean") return value ? context.true : context.false;
   if (typeof value === "number") {
     return Number.isFinite(value) ? context.newNumber(value) : context.null;
@@ -868,10 +885,8 @@ var QuickJsRuntime = class {
         error: "Execution cancelled"
       };
     }
-    const sourceError = fabricSourceLimitError(
-      code,
-      effectiveFabricSourceLimit(options.maxSourceBytes)
-    );
+    const sourceLimit = effectiveFabricSourceLimit(options.maxSourceBytes);
+    const sourceError = fabricSourceLimitError(code, sourceLimit) ?? fabricStringsLimitError(options.strings, sourceLimit);
     if (sourceError) {
       return {
         value: void 0,
@@ -976,6 +991,7 @@ var QuickJsRuntime = class {
           const reference = context.getString(referenceHandle);
           const dumpedArgs = context.dump(argsHandle);
           const args = typeof dumpedArgs === "object" && dumpedArgs !== null && !Array.isArray(dumpedArgs) ? dumpedArgs : {};
+          assertFabricJsonBudget(args);
           extendExecutionTimeout(reference, args);
           const promise = context.newPromise();
           pendingHostPromises.add(promise);
@@ -1191,6 +1207,7 @@ Promise.race([__kiroFabricMain(), globalThis.__fabricExecutionGate])`;
 export {
   createGuestStackMap,
   remapGuestErrorText,
+  assertFabricJsonBudget,
   guestSetupForCoreToolNamespace,
   GUEST_SETUP,
   QuickJsRuntime

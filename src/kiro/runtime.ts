@@ -293,6 +293,10 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
       "k",
       "Power mode intentionally uses Kiro native tools for ordinary repository and shell operations",
     );
+    registry.markUnavailable(
+      "pi",
+      "Power mode does not mount the Pi `pi.*` coding-tool namespace",
+    );
     registry.register(new KiroPowerArtifactsProvider(artifacts));
   }
   // Main gets an on-demand MCP facade: configured servers are never contacted

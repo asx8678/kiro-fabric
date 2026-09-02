@@ -50,15 +50,16 @@ import {
   resolveAgentDir,
   typebox_exports,
   writeFileAtomic
-} from "./chunk-WIFHE7YW.js";
+} from "./chunk-K6GHEZH6.js";
 import {
   runAbortable,
   settleWithin,
   throwIfAborted
 } from "./chunk-SY6LZTI3.js";
 import {
-  fabricSourceLimitError
-} from "./chunk-PGDCKPF6.js";
+  fabricSourceLimitError,
+  fabricStringsLimitError
+} from "./chunk-7D73AS5J.js";
 import {
   sanitizeMcpRefPart
 } from "./chunk-NVONZONP.js";
@@ -400,7 +401,7 @@ var require_ignore = __commonJS({
       //   path matching.
       // - check `string` either `MODE_IGNORE` or `MODE_CHECK_IGNORE`
       // @returns {TestResult} true if a file is ignored
-      test(path19, checkUnignored, mode) {
+      test(path20, checkUnignored, mode) {
         let ignored = false;
         let unignored = false;
         let matchedRule;
@@ -409,7 +410,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule[mode].test(path19);
+          const matched = rule[mode].test(path20);
           if (!matched) {
             return;
           }
@@ -430,17 +431,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path19, originalPath, doThrow) => {
-      if (!isString(path19)) {
+    var checkPath = (path20, originalPath, doThrow) => {
+      if (!isString(path20)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path19) {
+      if (!path20) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path19)) {
+      if (checkPath.isNotRelative(path20)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -449,7 +450,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path19) => REGEX_TEST_INVALID_PATH.test(path19);
+    var isNotRelative = (path20) => REGEX_TEST_INVALID_PATH.test(path20);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore = class {
@@ -479,19 +480,19 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache2, checkUnignored, slices) {
-        const path19 = originalPath && checkPath.convert(originalPath);
+        const path20 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path19,
+          path20,
           originalPath,
           this._strictPathCheck ? throwError : RETURN_FALSE
         );
-        return this._t(path19, cache2, checkUnignored, slices);
+        return this._t(path20, cache2, checkUnignored, slices);
       }
-      checkIgnore(path19) {
-        if (!REGEX_TEST_TRAILING_SLASH.test(path19)) {
-          return this.test(path19);
+      checkIgnore(path20) {
+        if (!REGEX_TEST_TRAILING_SLASH.test(path20)) {
+          return this.test(path20);
         }
-        const slices = path19.split(SLASH).filter(Boolean);
+        const slices = path20.split(SLASH).filter(Boolean);
         slices.pop();
         if (slices.length) {
           const parent = this._t(
@@ -504,18 +505,18 @@ var require_ignore = __commonJS({
             return parent;
           }
         }
-        return this._rules.test(path19, false, MODE_CHECK_IGNORE);
+        return this._rules.test(path20, false, MODE_CHECK_IGNORE);
       }
-      _t(path19, cache2, checkUnignored, slices) {
-        if (path19 in cache2) {
-          return cache2[path19];
+      _t(path20, cache2, checkUnignored, slices) {
+        if (path20 in cache2) {
+          return cache2[path20];
         }
         if (!slices) {
-          slices = path19.split(SLASH).filter(Boolean);
+          slices = path20.split(SLASH).filter(Boolean);
         }
         slices.pop();
         if (!slices.length) {
-          return cache2[path19] = this._rules.test(path19, checkUnignored, MODE_IGNORE);
+          return cache2[path20] = this._rules.test(path20, checkUnignored, MODE_IGNORE);
         }
         const parent = this._t(
           slices.join(SLASH) + SLASH,
@@ -523,29 +524,29 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache2[path19] = parent.ignored ? parent : this._rules.test(path19, checkUnignored, MODE_IGNORE);
+        return cache2[path20] = parent.ignored ? parent : this._rules.test(path20, checkUnignored, MODE_IGNORE);
       }
-      ignores(path19) {
-        return this._test(path19, this._ignoreCache, false).ignored;
+      ignores(path20) {
+        return this._test(path20, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path19) => !this.ignores(path19);
+        return (path20) => !this.ignores(path20);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path19) {
-        return this._test(path19, this._testCache, true);
+      test(path20) {
+        return this._test(path20, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore(options);
-    var isPathValid = (path19) => checkPath(path19 && checkPath.convert(path19), path19, RETURN_FALSE);
+    var isPathValid = (path20) => checkPath(path20 && checkPath.convert(path20), path20, RETURN_FALSE);
     var setupWindows = () => {
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGEX_TEST_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path19) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path19) || isNotRelative(path19);
+      checkPath.isNotRelative = (path20) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path20) || isNotRelative(path20);
     };
     if (
       // Detect `process` so that it can run in browsers.
@@ -563,7 +564,7 @@ var require_ignore = __commonJS({
 // src/kiro/mcp-server.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
 import { readFileSync as readFileSync2 } from "node:fs";
-import path18 from "node:path";
+import path19 from "node:path";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
 var ExperimentalServerTasks = class {
@@ -1732,17 +1733,17 @@ var formatJsonAsYaml = (value) => {
   return (0, import_yaml.stringify)(normalized, { indent: 2, lineWidth: 0 }).trimEnd();
 };
 var isPlainObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var hoistMultilineStrings = (value, path19, sections, seen) => {
+var hoistMultilineStrings = (value, path20, sections, seen) => {
   if (typeof value === "string") {
     if (!value.includes("\n")) return value;
-    sections.push({ path: path19, text: value });
-    return `<multi-line string, see section: ${path19}>`;
+    sections.push({ path: path20, text: value });
+    return `<multi-line string, see section: ${path20}>`;
   }
   if (Array.isArray(value)) {
     if (seen.has(value)) return "[circular reference]";
     seen.add(value);
     const skeleton = value.map(
-      (item, index) => hoistMultilineStrings(item, `${path19}[${index}]`, sections, seen)
+      (item, index) => hoistMultilineStrings(item, `${path20}[${index}]`, sections, seen)
     );
     seen.delete(value);
     return skeleton;
@@ -1754,7 +1755,7 @@ var hoistMultilineStrings = (value, path19, sections, seen) => {
     for (const [key, item] of Object.entries(value)) {
       skeleton[key] = hoistMultilineStrings(
         item,
-        path19 ? `${path19}.${key}` : key,
+        path20 ? `${path20}.${key}` : key,
         sections,
         seen
       );
@@ -1849,8 +1850,8 @@ var formatFailureProgress = (trace) => {
   );
   if (completed.length === 0) return void 0;
   const summaries = completed.slice(0, MAX_COMPLETED_CALLS).map((operation) => {
-    const path19 = operation.args.path;
-    return typeof path19 === "string" ? `${operation.ref}(${compactPath(path19)})` : operation.ref;
+    const path20 = operation.args.path;
+    return typeof path20 === "string" ? `${operation.ref}(${compactPath(path20)})` : operation.ref;
   });
   const omitted = completed.length - summaries.length;
   return [
@@ -1998,16 +1999,16 @@ var Diff = class {
       }
     }
   }
-  addToPath(path19, added, removed, oldPosInc, options) {
-    const last = path19.lastComponent;
+  addToPath(path20, added, removed, oldPosInc, options) {
+    const last = path20.lastComponent;
     if (last && !options.oneChangePerToken && last.added === added && last.removed === removed) {
       return {
-        oldPos: path19.oldPos + oldPosInc,
+        oldPos: path20.oldPos + oldPosInc,
         lastComponent: { count: last.count + 1, added, removed, previousComponent: last.previousComponent }
       };
     } else {
       return {
-        oldPos: path19.oldPos + oldPosInc,
+        oldPos: path20.oldPos + oldPosInc,
         lastComponent: { count: 1, added, removed, previousComponent: last }
       };
     }
@@ -2571,7 +2572,7 @@ ${mutationDiffs}`);
 
 // src/kiro/runtime.ts
 import { createHash as createHash6 } from "node:crypto";
-import path17 from "node:path";
+import path18 from "node:path";
 
 // src/core/action-registry.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
@@ -3333,8 +3334,8 @@ var schemaForDynamicProperty = (schema, property) => {
   }
   return isRecord2(schema.additionalProperties) ? schema.additionalProperties : void 0;
 };
-var traceSafePath = (schema, path19) => {
-  const rawParts = typeof path19 === "string" ? path19 === "" || path19 === "/" ? [] : path19.split("/").slice(1).map(decodePointerPart) : Array.isArray(path19) ? path19.filter(
+var traceSafePath = (schema, path20) => {
+  const rawParts = typeof path20 === "string" ? path20 === "" || path20 === "/" ? [] : path20.split("/").slice(1).map(decodePointerPart) : Array.isArray(path20) ? path20.filter(
     (part) => typeof part === "string" || typeof part === "number"
   ).map(String) : [];
   const safeParts = [];
@@ -3360,7 +3361,7 @@ var traceSafePath = (schema, path19) => {
   }
   return safeParts.map((part) => `/${pointerPart(part)}`).join("");
 };
-var prefixedPath = (schema, prefix, path19) => `${prefix}${traceSafePath(schema, path19)}` || "/";
+var prefixedPath = (schema, prefix, path20) => `${prefix}${traceSafePath(schema, path20)}` || "/";
 var traceSafeErrorMessage = (error) => {
   if (error.keyword === "additionalProperties") return "must not have additional properties";
   if (error.keyword === "propertyNames") return "property names are invalid";
@@ -3373,8 +3374,8 @@ var validateSchemaValue = (schema, value, options = {}) => {
     const messages = [];
     for (const rawError of value_exports.Errors(schema, value)) {
       const error = rawError;
-      const path19 = error.path ?? (options.includeInstancePath ? error.instancePath : void 0);
-      const parentPath = prefixedPath(schema, prefix, path19);
+      const path20 = error.path ?? (options.includeInstancePath ? error.instancePath : void 0);
+      const parentPath = prefixedPath(schema, prefix, path20);
       const safePath = error.keyword === "additionalProperties" || error.keyword === "propertyNames" ? `${parentPath === "/" ? "" : parentPath}/${REDACTED_PROPERTY_SEGMENT}` : parentPath;
       messages.push(`${safePath}: ${traceSafeErrorMessage(error)}`);
       if (messages.length >= 5) break;
@@ -3399,8 +3400,37 @@ var schemaValidationMessage = (schema, value) => {
 };
 
 // src/core/effect-conflict.ts
+import path4 from "node:path";
+var FILE_MUTATION_ACTIONS = /* @__PURE__ */ new Set(["write", "edit", "commit"]);
 var reasonText = (reason) => reason === "unknown_resource" ? "unknown resource footprint; declare resources and ordering" : "shared noncommutative resource";
 var formatFabricEffectConflict = (target, resources, reason) => `${target} [${resources.join(", ")}] (${reasonText(reason)})`;
+var addFileResource = (resources, cwd, value) => {
+  if (typeof value !== "string" || value.length === 0) return;
+  resources.push(`file:${path4.resolve(cwd, value)}`.slice(0, 256));
+};
+var fileMutationResources = (actionName, args, cwd) => {
+  if (!FILE_MUTATION_ACTIONS.has(actionName)) return [];
+  const resources = [];
+  addFileResource(resources, cwd, args.path);
+  if (Array.isArray(args.operations)) {
+    for (const operation of args.operations) {
+      if (operation && typeof operation === "object" && !Array.isArray(operation)) {
+        addFileResource(resources, cwd, operation.path);
+      }
+    }
+  }
+  return [...new Set(resources)].slice(0, 64);
+};
+var refineActionEffect = (effect, actionName, args, cwd) => {
+  if (effect.kind === "none") return effect;
+  const extra = fileMutationResources(actionName, args, cwd);
+  if (extra.length === 0) return effect;
+  return {
+    ...effect,
+    resources: [.../* @__PURE__ */ new Set([...effect.resources ?? [], ...extra])].slice(0, 64),
+    ordering: effect.ordering === "commutative" ? "ordered" : effect.ordering ?? "ordered"
+  };
+};
 
 // src/core/session-approvals.ts
 import { randomUUID } from "node:crypto";
@@ -4430,11 +4460,19 @@ var ActionRegistry = class {
         context.approvalScope
       );
       const nestedToolCallId = `${NESTED_TOOL_CALL_ID_PREFIX}${randomUUID3()}`;
-      const effect = action.effect;
+      const effect = refineActionEffect(
+        action.effect,
+        action.name,
+        preparedArgs,
+        context.cwd
+      );
       const effectConflicts = [...this.#activeEffects.values()].flatMap((active) => {
         const conflict = conflictBetween(effect, active.effect);
         return conflict ? [{ withRef: active.ref, ...conflict }] : [];
       }).slice(0, 32);
+      const blockingConflicts = effectConflicts.filter(
+        (conflict) => context.effectPolicy === "strict" || conflict.reason === "shared_resource" && conflict.resources.some((resource) => resource.startsWith("file:"))
+      );
       const argsPreview = previewArgs(ref, preparedArgs);
       const activeAudit = {
         ref,
@@ -4457,10 +4495,10 @@ var ActionRegistry = class {
         ref,
         args: argsPreview
       });
-      if (effectConflicts.length > 0 && context.effectPolicy === "strict") {
+      if (blockingConflicts.length > 0) {
         failureStage = "guard";
         throw new FabricTraceSafeError(
-          `Fabric effect conflict for ${ref}: ${effectConflicts.map((conflict) => formatFabricEffectConflict(
+          `Fabric effect conflict for ${ref}: ${blockingConflicts.map((conflict) => formatFabricEffectConflict(
             conflict.withRef,
             conflict.resources,
             conflict.reason
@@ -5060,8 +5098,8 @@ var fabricExecTitleHintCached = (code) => {
 // src/execution-service.ts
 var runtimeDependencies;
 var loadRuntimeDependencies = () => runtimeDependencies ??= Promise.all([
-  import("./quickjs-runtime-EOQFTCVR.js"),
-  import("./node-process-runtime-A6JBJ7PI.js"),
+  import("./quickjs-runtime-SBMGLDOF.js"),
+  import("./node-process-runtime-U5BF2GOE.js"),
   import("./type-checker-ZXL6HVHN.js"),
   import("./guest-types-6A5BKABT.js"),
   import("./dynamic-guest-types-YIYN3HDU.js"),
@@ -5123,16 +5161,17 @@ var FabricExecutionService = class {
     const coreToolNamespace = this.registry.has("k") && !this.registry.has("pi") ? "k" : "pi";
     const traceRecorder = new FabricExecutionTraceRecorder(coreToolNamespace);
     const sourceError = fabricSourceLimitError(options.code, this.config.executor.maxSourceBytes);
-    if (sourceError) {
+    const stringsError = sourceError ?? fabricStringsLimitError(options.strings, this.config.executor.maxSourceBytes);
+    if (stringsError) {
       return {
         success: false,
         value: void 0,
         logs: [],
         audits: [],
         phases: [],
-        trace: traceRecorder.seal("failed", [], sourceError),
+        trace: traceRecorder.seal("failed", [], stringsError),
         elapsedMs: performance.now() - startedAt,
-        error: sourceError
+        error: stringsError
       };
     }
     this.activity?.start(
@@ -5690,7 +5729,7 @@ import { spawn } from "node:child_process";
 var import_ignore = __toESM(require_ignore(), 1);
 import { closeSync as closeSync2, createReadStream, openSync as openSync2, promises as fs2, writeSync } from "node:fs";
 import os2 from "node:os";
-import path7 from "node:path";
+import path8 from "node:path";
 import { createInterface } from "node:readline";
 
 // node_modules/.pnpm/balanced-match@4.0.4/node_modules/balanced-match/dist/esm/index.js
@@ -6798,11 +6837,11 @@ var qmarksTestNoExtDot = ([$0]) => {
   return (f) => f.length === len && f !== "." && f !== "..";
 };
 var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-var path4 = {
+var path5 = {
   win32: { sep: "\\" },
   posix: { sep: "/" }
 };
-var sep = defaultPlatform === "win32" ? path4.win32.sep : path4.posix.sep;
+var sep = defaultPlatform === "win32" ? path5.win32.sep : path5.posix.sep;
 minimatch.sep = sep;
 var GLOBSTAR = Symbol("globstar **");
 minimatch.GLOBSTAR = GLOBSTAR;
@@ -7550,21 +7589,21 @@ minimatch.unescape = unescape;
 
 // src/core/skill-dir.ts
 import { homedir } from "node:os";
-import path5 from "node:path";
+import path6 from "node:path";
 var SKILL_DIR_MARKER = "<skill-dir>";
 var expandSkillDirMarkers = (content, skillDir) => content.replaceAll(SKILL_DIR_MARKER, skillDir);
 var resolveReadPath = (requestedPath, cwd) => {
   const withoutAtPrefix = requestedPath.startsWith("@") ? requestedPath.slice(1) : requestedPath;
-  const expandedHome = withoutAtPrefix === "~" ? homedir() : /^~[\\/]/.test(withoutAtPrefix) ? path5.join(homedir(), withoutAtPrefix.slice(2)) : withoutAtPrefix;
-  return path5.resolve(cwd, expandedHome);
+  const expandedHome = withoutAtPrefix === "~" ? homedir() : /^~[\\/]/.test(withoutAtPrefix) ? path6.join(homedir(), withoutAtPrefix.slice(2)) : withoutAtPrefix;
+  return path6.resolve(cwd, expandedHome);
 };
 var expandSkillDirMarkersForRead = (content, args, cwd) => {
   if (!content.includes(SKILL_DIR_MARKER) || typeof args.path !== "string") {
     return content;
   }
   const requestedPath = resolveReadPath(args.path, cwd);
-  if (path5.basename(requestedPath) !== "SKILL.md") return content;
-  return expandSkillDirMarkers(content, path5.dirname(requestedPath));
+  if (path6.basename(requestedPath) !== "SKILL.md") return content;
+  return expandSkillDirMarkers(content, path6.dirname(requestedPath));
 };
 
 // src/memory/regex.ts
@@ -7686,12 +7725,12 @@ var BoundedRegexWorkerSession = class {
 // src/providers/project-root-guard.ts
 import fs from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import path6 from "node:path";
+import path7 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var UNICODE_SPACES = /[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g;
 var isWithin = (root, candidate) => {
-  const relative2 = path6.relative(root, candidate);
-  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path6.sep}`) && !path6.isAbsolute(relative2);
+  const relative2 = path7.relative(root, candidate);
+  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path7.sep}`) && !path7.isAbsolute(relative2);
 };
 var normalizeToolPath = (input) => {
   let normalized = input.replace(UNICODE_SPACES, " ");
@@ -7699,7 +7738,7 @@ var normalizeToolPath = (input) => {
   if (/^file:\/\//i.test(normalized)) normalized = fileURLToPath2(normalized);
   if (normalized === "~") return homedir2();
   if (normalized.startsWith("~/") || process.platform === "win32" && normalized.startsWith("~\\")) {
-    return path6.join(homedir2(), normalized.slice(2));
+    return path7.join(homedir2(), normalized.slice(2));
   }
   return normalized;
 };
@@ -7708,7 +7747,7 @@ var ProjectRootGuard = class {
   cwd;
   canonicalRoot;
   constructor(cwd) {
-    this.cwd = path6.resolve(cwd);
+    this.cwd = path7.resolve(cwd);
     this.canonicalRoot = realpath(this.cwd);
   }
   assertPath(input, action) {
@@ -7721,7 +7760,7 @@ var ProjectRootGuard = class {
     } catch {
       throw new Error(`${action} received an invalid file URL or path: ${input}`);
     }
-    const absolute = path6.isAbsolute(normalized) ? path6.resolve(normalized) : path6.resolve(this.cwd, normalized);
+    const absolute = path7.isAbsolute(normalized) ? path7.resolve(normalized) : path7.resolve(this.cwd, normalized);
     let existing = absolute;
     for (; ; ) {
       try {
@@ -7738,7 +7777,7 @@ var ProjectRootGuard = class {
         if (error instanceof Error && !(error.code === "ENOENT" || error.code === "ENOTDIR")) {
           throw error;
         }
-        const parent = path6.dirname(existing);
+        const parent = path7.dirname(existing);
         if (parent === existing) {
           throw new Error(`${action} path has no accessible project ancestor: ${input}`);
         }
@@ -7759,7 +7798,7 @@ var ProjectRootGuard = class {
       const code = error.code;
       if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
     }
-    const canonicalTarget = path6.resolve(canonicalAncestor, path6.relative(existing, absolute));
+    const canonicalTarget = path7.resolve(canonicalAncestor, path7.relative(existing, absolute));
     if (!isWithin(this.canonicalRoot, canonicalTarget)) {
       throw new Error(`${action} path escapes the project root through a symlink or junction: ${input}`);
     }
@@ -7889,7 +7928,7 @@ var truncateLines = (value, limit, fromEnd = false) => {
   if (lines.length <= limit) return { text: value, truncated: false };
   return { text: (fromEnd ? lines.slice(-limit) : lines.slice(0, limit)).join("\n"), truncated: true };
 };
-var normalizeRelative = (root, file) => path7.relative(root, file).split(path7.sep).join("/");
+var normalizeRelative = (root, file) => path8.relative(root, file).split(path8.sep).join("/");
 var matchesGlob = (file, pattern) => minimatch(file, pattern, {
   dot: true,
   matchBase: !pattern.includes("/"),
@@ -7966,12 +8005,12 @@ var KiroToolsProvider = class {
     this.#readArtifact = options.readArtifact;
     this.#writeArtifact = options.writeArtifact;
     this.#bashPath = options.bashPath ?? process.env.KIRO_FABRIC_BASH ?? "bash";
-    this.#protectedRoots = (options.protectedRoots ?? []).map((root) => path7.resolve(root));
+    this.#protectedRoots = (options.protectedRoots ?? []).map((root) => path8.resolve(root));
   }
   #isProtected(target) {
-    const resolved = path7.resolve(target);
+    const resolved = path8.resolve(target);
     return this.#protectedRoots.some(
-      (root) => resolved === root || resolved.startsWith(root + path7.sep)
+      (root) => resolved === root || resolved.startsWith(root + path8.sep)
     );
   }
   #assertNotProtected(target, action) {
@@ -8034,13 +8073,13 @@ var KiroToolsProvider = class {
     return this.#grep(target, args, context);
   }
   async #read(target, args, context) {
-    const mimeType = IMAGE_TYPES[path7.extname(target).toLowerCase()];
+    const mimeType = IMAGE_TYPES[path8.extname(target).toLowerCase()];
     if (mimeType) {
       const stat = await runAbortable(context.signal, () => fs2.stat(target));
       if (!stat.isFile()) throw new Error(`k.read requires a regular file: ${String(args.path)}`);
       if (stat.size > MAX_IMAGE_BYTES) throw new Error(`k.read refuses images over ${MAX_IMAGE_BYTES} bytes`);
       const data = await runAbortable(context.signal, () => fs2.readFile(target));
-      assertImageBounds(data, path7.extname(target).toLowerCase());
+      assertImageBounds(data, path8.extname(target).toLowerCase());
       const note = `Read image file [${mimeType}]`;
       context.attachMedia?.([{ type: "image", data: data.toString("base64"), mimeType }], note);
       return note;
@@ -8161,11 +8200,11 @@ var KiroToolsProvider = class {
   async #ls(target, args, context) {
     const entries = await runAbortable(context.signal, () => fs2.readdir(target, { withFileTypes: true }));
     const limit = Math.min(positiveInteger(args.limit, 500, 1), 500);
-    const text = entries.filter((entry) => !this.#isProtected(path7.join(target, entry.name))).sort((left, right) => left.name.localeCompare(right.name)).slice(0, limit).map((entry) => entry.name + (entry.isDirectory() ? "/" : "")).join("\n");
+    const text = entries.filter((entry) => !this.#isProtected(path8.join(target, entry.name))).sort((left, right) => left.name.localeCompare(right.name)).slice(0, limit).map((entry) => entry.name + (entry.isDirectory() ? "/" : "")).join("\n");
     return truncateBytes(text).text;
   }
   async #ignoreFrame(directory) {
-    const file = path7.join(directory, ".gitignore");
+    const file = path8.join(directory, ".gitignore");
     let stat;
     try {
       stat = await fs2.stat(file);
@@ -8189,15 +8228,15 @@ var KiroToolsProvider = class {
     return ignored;
   }
   async #ancestorIgnoreFrames(directory) {
-    const relative2 = path7.relative(this.#cwd, directory);
+    const relative2 = path8.relative(this.#cwd, directory);
     if (!relative2 || relative2 === ".") return [];
-    const segments = relative2.split(path7.sep).filter(Boolean);
+    const segments = relative2.split(path8.sep).filter(Boolean);
     const frames = [];
     let current = this.#cwd;
     for (const segment of segments.slice(0, -1)) {
       const frame = await this.#ignoreFrame(current);
       if (frame) frames.push(frame);
-      current = path7.join(current, segment);
+      current = path8.join(current, segment);
     }
     const parentFrame = await this.#ignoreFrame(current);
     if (parentFrame) frames.push(parentFrame);
@@ -8218,7 +8257,7 @@ var KiroToolsProvider = class {
     for (const entry of entries) {
       throwIfAborted(signal);
       if (entry.name === ".git" || entry.name === "node_modules") continue;
-      const full = path7.join(root, entry.name);
+      const full = path8.join(root, entry.name);
       if (this.#isProtected(full)) continue;
       if (entry.isDirectory()) {
         if (!this.#isIgnored(full, true, frames)) yield* this.#walk(full, signal, state, frames, depth + 1);
@@ -8275,7 +8314,7 @@ var KiroToolsProvider = class {
     try {
       fileLoop: for await (const file of files) {
         throwIfAborted(context.signal);
-        const relative2 = stat.isDirectory() ? normalizeRelative(target, file) : path7.basename(file);
+        const relative2 = stat.isDirectory() ? normalizeRelative(target, file) : path8.basename(file);
         if (glob && !matchesGlob(relative2, glob)) continue;
         let source;
         try {
@@ -8319,7 +8358,7 @@ var KiroToolsProvider = class {
     const command = stringArg(args, "command");
     if (byteLength2(command) > MAX_BASH_COMMAND_BYTES) throw new Error(`k.bash refuses commands over ${MAX_BASH_COMMAND_BYTES} bytes`);
     const timeoutMs = typeof args.timeout === "number" && args.timeout > 0 ? args.timeout * 1e3 : void 0;
-    const fullOutputPath = path7.join(os2.tmpdir(), `kiro-fabric-bash-${crypto.randomUUID()}.log`);
+    const fullOutputPath = path8.join(os2.tmpdir(), `kiro-fabric-bash-${crypto.randomUUID()}.log`);
     let result;
     try {
       result = await new Promise((resolve, reject) => {
@@ -8463,7 +8502,7 @@ import { isAbsolute, relative, sep as sep2 } from "node:path";
 import { randomUUID as randomUUID5 } from "node:crypto";
 import fs4 from "node:fs";
 import os3 from "node:os";
-import path8 from "node:path";
+import path9 from "node:path";
 
 // src/log-tail.ts
 import fs3 from "node:fs";
@@ -8602,7 +8641,7 @@ var KiroAgentManager = class {
     this.config = config;
     this.#workerPath = options.workerPath;
     this.#managedTempRoot = options.runRoot === void 0 && process.env.KIRO_FABRIC_RUN_ROOT === void 0;
-    this.#runRoot = options.runRoot ?? process.env.KIRO_FABRIC_RUN_ROOT ?? fs4.mkdtempSync(path8.join(os3.tmpdir(), "kiro-fabric-runs-"));
+    this.#runRoot = options.runRoot ?? process.env.KIRO_FABRIC_RUN_ROOT ?? fs4.mkdtempSync(path9.join(os3.tmpdir(), "kiro-fabric-runs-"));
     this.#projectRoot = options.projectRoot ?? cwd;
     this.#kiroBinary = options.kiroBinary ?? process.env.KIRO_FABRIC_KIRO_BINARY ?? "kiro-cli";
   }
@@ -8623,7 +8662,7 @@ var KiroAgentManager = class {
     if (typeof requestedCwd !== "string" || requestedCwd.trim().length === 0) {
       throw new Error(`Invalid Fabric agent cwd ${JSON.stringify(requestedCwd)}: path must not be empty`);
     }
-    const candidate = path8.isAbsolute(requestedCwd) ? requestedCwd : path8.resolve(this.cwd, requestedCwd);
+    const candidate = path9.isAbsolute(requestedCwd) ? requestedCwd : path9.resolve(this.cwd, requestedCwd);
     try {
       const canonical = fs4.realpathSync(candidate);
       fs4.accessSync(canonical, fs4.constants.R_OK | fs4.constants.X_OK);
@@ -8694,17 +8733,17 @@ var KiroAgentManager = class {
       if (this.#closing) throw new Error("Kiro agent manager is closing");
       const id = randomUUID5().replaceAll("-", "");
       const name = safeName(request.name ?? request.task.split("\n", 1)[0] ?? "Fabric agent");
-      const runDirectory = path8.join(this.#runRoot, id);
+      const runDirectory = path9.join(this.#runRoot, id);
       launchDirectory = runDirectory;
       fs4.mkdirSync(runDirectory, { recursive: true });
-      const taskFile = path8.join(runDirectory, "task.txt");
-      const statusFile = path8.join(runDirectory, "status.json");
-      const logFile = path8.join(runDirectory, "events.jsonl");
-      const stdoutFile = path8.join(runDirectory, "worker.stdout.log");
-      const stderrFile = path8.join(runDirectory, "worker.stderr.log");
-      const steerFile = path8.join(runDirectory, "steer.jsonl");
-      const schemaFile = request.schema ? path8.join(runDirectory, "schema.json") : void 0;
-      const contextFile = request.kiroContext ? path8.join(runDirectory, "kiro-context.json") : void 0;
+      const taskFile = path9.join(runDirectory, "task.txt");
+      const statusFile = path9.join(runDirectory, "status.json");
+      const logFile = path9.join(runDirectory, "events.jsonl");
+      const stdoutFile = path9.join(runDirectory, "worker.stdout.log");
+      const stderrFile = path9.join(runDirectory, "worker.stderr.log");
+      const steerFile = path9.join(runDirectory, "steer.jsonl");
+      const schemaFile = request.schema ? path9.join(runDirectory, "schema.json") : void 0;
+      const contextFile = request.kiroContext ? path9.join(runDirectory, "kiro-context.json") : void 0;
       fs4.writeFileSync(taskFile, request.task, { encoding: "utf8", mode: 384 });
       if (schemaFile) fs4.writeFileSync(schemaFile, JSON.stringify(request.schema, null, 2), { mode: 384 });
       if (contextFile) fs4.writeFileSync(contextFile, JSON.stringify(request.kiroContext, null, 2), { mode: 384 });
@@ -8743,7 +8782,7 @@ var KiroAgentManager = class {
         "--project-root",
         this.#projectRoot,
         "--run-root",
-        path8.join(runDirectory, "nested"),
+        path9.join(runDirectory, "nested"),
         ...residency === "one-shot" ? [] : ["--steer-file", steerFile],
         ...contextFile ? ["--kiro-context-file", contextFile] : [],
         "--kiro-residency",
@@ -8916,7 +8955,7 @@ var KiroAgentManager = class {
   }
   readLog(id, opts = {}) {
     const managed = this.#require(id);
-    const logFile = path8.join(managed.runDirectory, "events.jsonl");
+    const logFile = path9.join(managed.runDirectory, "events.jsonl");
     const page = readJsonlPage(logFile, Math.max(1, Math.min(opts.lines ?? 200, 5e3)), opts.before);
     const status = readRecord(managed.statusFile);
     return {
@@ -8956,7 +8995,7 @@ var KiroAgentManager = class {
     if (bytes > MAX_AGENT_STEER_LINE_BYTES) {
       throw new Error(`Fabric agent steering command is too large (${bytes} bytes; maximum ${MAX_AGENT_STEER_LINE_BYTES})`);
     }
-    const steerFile = path8.join(managed.runDirectory, "steer.jsonl");
+    const steerFile = path9.join(managed.runDirectory, "steer.jsonl");
     let queuedBytes = 0;
     try {
       queuedBytes = fs4.statSync(steerFile).size;
@@ -9009,7 +9048,7 @@ var KiroAgentManager = class {
     };
   }
   #workerDiagnostic(managed) {
-    const stderrFile = path8.join(managed.runDirectory, "worker.stderr.log");
+    const stderrFile = path9.join(managed.runDirectory, "worker.stderr.log");
     try {
       const bytes = fs4.statSync(stderrFile).size;
       return bytes > 0 ? `; worker stderr captured (${bytes} bytes) at ${stderrFile}` : "";
@@ -9820,38 +9859,38 @@ var createKiroAgentsProvider = (options) => new KiroAgentsProvider(
 );
 
 // src/providers/mcp-provider.ts
-import path11 from "node:path";
+import path12 from "node:path";
 
 // src/providers/mcp-descriptor-cache.ts
 import fs5 from "node:fs/promises";
 import fsSync from "node:fs";
 import os4 from "node:os";
-import path9 from "node:path";
+import path10 from "node:path";
 var MCP_DESCRIPTOR_CACHE_VERSION = 1;
 var expandHome = (input) => {
   if (!input.startsWith("~")) return input;
   const home = os4.homedir();
   if (input === "~") return home;
   if (input.startsWith("~/") || input.startsWith("~\\")) {
-    return path9.join(home, input.slice(2));
+    return path10.join(home, input.slice(2));
   }
   return input;
 };
-var legacyMcporterDir = () => path9.join(os4.homedir(), ".mcporter");
+var legacyMcporterDir = () => path10.join(os4.homedir(), ".mcporter");
 var mcporterConfigDir = () => {
   const raw = process.env.XDG_CONFIG_HOME;
   if (raw && raw.trim().length > 0) {
     const resolved = expandHome(raw.trim());
-    if (path9.isAbsolute(resolved)) return path9.join(resolved, "mcporter");
+    if (path10.isAbsolute(resolved)) return path10.join(resolved, "mcporter");
   }
   return legacyMcporterDir();
 };
 var mcporterConfigCandidates = () => {
   const base = mcporterConfigDir();
-  const candidates = [path9.join(base, "mcporter.json"), path9.join(base, "mcporter.jsonc")];
+  const candidates = [path10.join(base, "mcporter.json"), path10.join(base, "mcporter.jsonc")];
   const legacy = legacyMcporterDir();
   if (base !== legacy) {
-    candidates.push(path9.join(legacy, "mcporter.json"), path9.join(legacy, "mcporter.jsonc"));
+    candidates.push(path10.join(legacy, "mcporter.json"), path10.join(legacy, "mcporter.jsonc"));
   }
   return candidates;
 };
@@ -9866,12 +9905,12 @@ var pathExists = (filePath) => {
 var mcpConfigLayerPaths = (rootDir, configPath) => {
   const explicitRaw = configPath ?? process.env.MCPORTER_CONFIG;
   if (explicitRaw && explicitRaw.trim().length > 0) {
-    return [path9.resolve(expandHome(explicitRaw.trim()))];
+    return [path10.resolve(expandHome(explicitRaw.trim()))];
   }
   const paths = [];
   const home = mcporterConfigCandidates().find(pathExists);
   if (home) paths.push(home);
-  const projectPath = path9.resolve(rootDir, "config", "mcporter.json");
+  const projectPath = path10.resolve(rootDir, "config", "mcporter.json");
   if (pathExists(projectPath)) paths.push(projectPath);
   return paths;
 };
@@ -9911,7 +9950,7 @@ var parseCachedServer = (value) => {
 };
 
 // src/providers/mcp-advisory.ts
-import path10 from "node:path";
+import path11 from "node:path";
 
 // src/providers/mcp-provider.ts
 var TOOL_METADATA_TTL_MS = 6e4;
@@ -10593,7 +10632,7 @@ var McpProvider = class {
           kind: "stdio",
           command: args.command,
           args: commandArgs,
-          cwd: path11.resolve(this.cwd, typeof args.cwd === "string" ? args.cwd : ".")
+          cwd: path12.resolve(this.cwd, typeof args.cwd === "string" ? args.cwd : ".")
         },
         ...env ? { env } : {}
       };
@@ -10863,12 +10902,12 @@ var KiroMcpProvider = class {
 
 // src/kiro/memory-provider.ts
 import fs7 from "node:fs";
-import path13 from "node:path";
+import path14 from "node:path";
 
 // src/kiro/memory.ts
 import crypto2 from "node:crypto";
 import fs6 from "node:fs";
-import path12 from "node:path";
+import path13 from "node:path";
 var DEFAULT_MAX_NAMESPACE_ENTRIES = 128;
 var DEFAULT_MAX_NAMESPACE_BYTES = 256 * 1024;
 var DEFAULT_MAX_ENTRY_BYTES = 16 * 1024;
@@ -10902,10 +10941,10 @@ var assertMemoryToken = (value, label) => {
 var encodeName = (value) => encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 var hashNamespace = (namespace) => crypto2.createHash("sha256").update(namespace).digest("hex").slice(0, 16);
 var isWithinOrEqual2 = (root, candidate) => {
-  const relative2 = path12.relative(root, candidate);
+  const relative2 = path13.relative(root, candidate);
   if (relative2 === "" || relative2 === ".") return true;
-  if (path12.isAbsolute(relative2)) return false;
-  return relative2.split(path12.sep).filter(Boolean)[0] !== "..";
+  if (path13.isAbsolute(relative2)) return false;
+  return relative2.split(path13.sep).filter(Boolean)[0] !== "..";
 };
 var lstatOrNull = (target) => {
   try {
@@ -10926,7 +10965,7 @@ var processIsAlive = (pid) => {
   }
 };
 var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
-  const lockPath = path12.join(namespaceRoot, MUTATION_LOCK);
+  const lockPath = path13.join(namespaceRoot, MUTATION_LOCK);
   const deadline = Date.now() + MUTATION_LOCK_TIMEOUT_MS;
   let identity;
   while (!identity) {
@@ -10940,7 +10979,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
       identity = { dev: stat.dev, ino: stat.ino };
       try {
         fs6.writeFileSync(
-          path12.join(lockPath, MUTATION_LOCK_OWNER),
+          path13.join(lockPath, MUTATION_LOCK_OWNER),
           JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }),
           { encoding: "utf8", mode: 384, flag: "wx" }
         );
@@ -10967,7 +11006,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
       if (Date.now() - stat.mtimeMs > STALE_MUTATION_LOCK_MS) {
         let ownerPid;
         try {
-          const owner = JSON.parse(fs6.readFileSync(path12.join(lockPath, MUTATION_LOCK_OWNER), "utf8"));
+          const owner = JSON.parse(fs6.readFileSync(path13.join(lockPath, MUTATION_LOCK_OWNER), "utf8"));
           if (typeof owner.pid === "number") ownerPid = owner.pid;
         } catch {
         }
@@ -10981,7 +11020,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
         try {
           const current = fs6.lstatSync(lockPath);
           if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== stat.dev || current.ino !== stat.ino) continue;
-          fs6.rmSync(path12.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
+          fs6.rmSync(path13.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
           fs6.rmdirSync(lockPath);
         } catch {
           if (Date.now() >= deadline) {
@@ -11004,7 +11043,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
     try {
       const current = fs6.lstatSync(lockPath);
       if (current.isDirectory() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
-        fs6.rmSync(path12.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
+        fs6.rmSync(path13.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
         fs6.rmdirSync(lockPath);
       }
     } catch {
@@ -11073,9 +11112,9 @@ var ensureOwnedDirectory = (memoryRoot, target, marker) => {
   }
   const stat = fs6.lstatSync(target);
   assertPrivateDirectory(target, stat);
-  const markerPath = path12.join(target, OWNERSHIP_MARKER);
+  const markerPath = path13.join(target, OWNERSHIP_MARKER);
   if (created) {
-    const temporaryMarker = path12.join(
+    const temporaryMarker = path13.join(
       target,
       `.kiro-fabric-owner-${process.pid}-${crypto2.randomBytes(8).toString("hex")}.tmp`
     );
@@ -11129,9 +11168,9 @@ var assertNoSymlinkComponents = (root, target) => {
     throw new KiroMemoryScopeError(`Kiro memory path escapes its root: ${target}`);
   }
   let cursor = root;
-  const relative2 = path12.relative(root, target);
-  for (const part of relative2.split(path12.sep).filter(Boolean)) {
-    cursor = path12.join(cursor, part);
+  const relative2 = path13.relative(root, target);
+  for (const part of relative2.split(path13.sep).filter(Boolean)) {
+    cursor = path13.join(cursor, part);
     const stat = lstatOrNull(cursor);
     if (!stat) continue;
     if (stat.isSymbolicLink()) {
@@ -11140,7 +11179,7 @@ var assertNoSymlinkComponents = (root, target) => {
   }
 };
 var canonicalDirectory = (root) => {
-  const candidate = path12.resolve(assertMemoryToken(root, "root"));
+  const candidate = path13.resolve(assertMemoryToken(root, "root"));
   ensureDirectory(candidate);
   const canonical = fs6.realpathSync(candidate);
   const stat = fs6.statSync(canonical);
@@ -11149,7 +11188,7 @@ var canonicalDirectory = (root) => {
   }
   return canonical;
 };
-var memoryNamespaceRoot = (root, namespace) => path12.join(root, MEMORY_DIR, `${encodeName(namespace)}-${hashNamespace(namespace)}`);
+var memoryNamespaceRoot = (root, namespace) => path13.join(root, MEMORY_DIR, `${encodeName(namespace)}-${hashNamespace(namespace)}`);
 var entryPath = (namespaceRoot, key) => (() => {
   const name = `${encodeName(key)}.json`;
   if (utf8Bytes(name) > MAX_FILE_NAME_BYTES) {
@@ -11157,7 +11196,7 @@ var entryPath = (namespaceRoot, key) => (() => {
       `Kiro memory key is too long after filesystem-safe encoding`
     );
   }
-  return path12.join(namespaceRoot, name);
+  return path13.join(namespaceRoot, name);
 })();
 var actorStoreKey = (actorId, key) => `actor/${assertMemoryToken(actorId, "actorId")}/${assertMemoryToken(key, "key")}`;
 var readEntry = (filePath) => {
@@ -11180,10 +11219,10 @@ var readEntry = (filePath) => {
   };
 };
 var writeJsonAtomic = (filePath, content) => {
-  const directory = path12.dirname(filePath);
-  const temporary = path12.join(
+  const directory = path13.dirname(filePath);
+  const temporary = path13.join(
     directory,
-    `.${path12.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+    `.${path13.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
   );
   let descriptor;
   try {
@@ -11217,7 +11256,7 @@ var writeJsonAtomic = (filePath, content) => {
 };
 var listEntryFiles = (namespaceRoot) => {
   try {
-    return fs6.readdirSync(namespaceRoot, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => path12.join(namespaceRoot, entry.name)).sort((left, right) => left.localeCompare(right));
+    return fs6.readdirSync(namespaceRoot, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => path13.join(namespaceRoot, entry.name)).sort((left, right) => left.localeCompare(right));
   } catch {
     return [];
   }
@@ -11252,7 +11291,7 @@ var assertEntryFits = (namespaceRoot, next, targetPath) => {
 var openKiroMemory = (namespace, root) => {
   const memoryNamespace = assertMemoryToken(namespace, "namespace");
   const memoryRoot = canonicalDirectory(root);
-  const scopedRoot = path12.join(memoryRoot, MEMORY_DIR);
+  const scopedRoot = path13.join(memoryRoot, MEMORY_DIR);
   ensureOwnedDirectory(memoryRoot, scopedRoot, {
     format: MEMORY_FORMAT,
     owner: MEMORY_OWNER,
@@ -11452,7 +11491,7 @@ var KiroMemoryProvider = class {
   #binding;
   constructor(options) {
     this.#cwd = fs7.realpathSync(options.cwd);
-    this.#root = path13.resolve(options.root);
+    this.#root = path14.resolve(options.root);
     this.#namespace = `project:${sha256Bytes(this.#cwd)}`;
   }
   async list(request, _context) {
@@ -11506,7 +11545,7 @@ var KiroMemoryProvider = class {
 // src/mesh/store.ts
 import { randomUUID as randomUUID6 } from "node:crypto";
 import fs8 from "node:fs";
-import path14 from "node:path";
+import path15 from "node:path";
 var MeshCompareAndSwapError = class extends Error {
   constructor(key, expectedVersion, actualVersion) {
     super(
@@ -11652,11 +11691,11 @@ var MeshStore = class {
     this.root = root;
     this.maxEventBytes = maxEventBytes;
     this.maxReadEvents = maxReadEvents;
-    this.#eventsPath = path14.join(root, "events.jsonl");
-    this.#statePath = path14.join(root, "state.json");
-    this.#counterPath = path14.join(root, "sequence");
-    this.#generationPath = path14.join(root, "generation");
-    this.#lockPath = path14.join(root, ".lock");
+    this.#eventsPath = path15.join(root, "events.jsonl");
+    this.#statePath = path15.join(root, "state.json");
+    this.#counterPath = path15.join(root, "sequence");
+    this.#generationPath = path15.join(root, "generation");
+    this.#lockPath = path15.join(root, ".lock");
     this.#maxEventLogBytes = Math.min(
       CURSOR_OFFSET_BASE - 1,
       Math.max(maxEventBytes + 2, Math.floor(options.maxEventLogBytes ?? DEFAULT_MAX_EVENT_LOG_BYTES))
@@ -12050,7 +12089,7 @@ var MeshStore = class {
     fs8.mkdirSync(this.root, { recursive: true, mode: 448 });
     const deadline = Date.now() + this.#lockTimeoutMs;
     const token = randomUUID6();
-    const ownerPath = path14.join(this.#lockPath, "owner");
+    const ownerPath = path15.join(this.#lockPath, "owner");
     const owner = {
       format: 2,
       token,
@@ -12247,11 +12286,11 @@ var MeshStore = class {
 
 // src/state/store.ts
 import { createHash as createHash5 } from "node:crypto";
-import path16 from "node:path";
+import path17 from "node:path";
 
 // src/state/complexity.ts
 import fs9 from "node:fs";
-import path15 from "node:path";
+import path16 from "node:path";
 var isWordStart = (character) => character !== void 0 && (character >= "a" && character <= "z" || character >= "A" && character <= "Z" || character === "_" || character === "$");
 var isWordPart = (character) => isWordStart(character) || character !== void 0 && character >= "0" && character <= "9";
 var regularExpressionPrefixWords = /* @__PURE__ */ new Set([
@@ -12484,12 +12523,12 @@ var languageComplexities = [
 ];
 var MAX_COMPLEXITY_FILE_BYTES = 2 * 1024 * 1024;
 var complexityForFile = (file, languages = languageComplexities) => {
-  const extension = path15.extname(file).toLowerCase();
+  const extension = path16.extname(file).toLowerCase();
   return languages.find((language) => language.extensions.includes(extension));
 };
 var containedBy = (root, candidate) => {
-  const relative2 = path15.relative(root, candidate);
-  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path15.sep}`) && !path15.isAbsolute(relative2);
+  const relative2 = path16.relative(root, candidate);
+  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path16.sep}`) && !path16.isAbsolute(relative2);
 };
 var countFileComplexity = (requestedFile, root) => {
   const language = complexityForFile(requestedFile);
@@ -13409,7 +13448,7 @@ var StateStore = class {
     const files = [];
     let netDelta = 0;
     for (const file of this.normalizeComplexityFiles(requestedFiles, input.cwd)) {
-      const measured = countFileComplexity(path16.resolve(input.cwd, file), input.cwd);
+      const measured = countFileComplexity(path17.resolve(input.cwd, file), input.cwd);
       if (!measured) {
         files.push({ file, supported: false });
         continue;
@@ -13436,7 +13475,7 @@ var StateStore = class {
     const updates = [];
     let netDelta = 0;
     for (const file of this.normalizeComplexityFiles(files, cwd)) {
-      const measured = countFileComplexity(path16.resolve(cwd, file), cwd);
+      const measured = countFileComplexity(path17.resolve(cwd, file), cwd);
       if (!measured) {
         deltas.push({ file, supported: false });
         continue;
@@ -13486,11 +13525,11 @@ var StateStore = class {
     const normalized = /* @__PURE__ */ new Set();
     for (const file of files) {
       if (!file.trim()) continue;
-      const relative2 = path16.relative(cwd, path16.resolve(cwd, file));
-      if (relative2 === ".." || relative2.startsWith(`..${path16.sep}`) || path16.isAbsolute(relative2)) {
+      const relative2 = path17.relative(cwd, path17.resolve(cwd, file));
+      if (relative2 === ".." || relative2.startsWith(`..${path17.sep}`) || path17.isAbsolute(relative2)) {
         throw new Error(`State complexity file must be inside the project cwd: ${file}`);
       }
-      normalized.add(relative2.split(path16.sep).join("/"));
+      normalized.add(relative2.split(path17.sep).join("/"));
     }
     return [...normalized];
   }
@@ -14393,7 +14432,7 @@ var createKiroRuntime = (options) => {
   const registry = new ActionRegistry();
   const artifacts = createKiroArtifactStore();
   const managedNode = process.env.KIRO_FABRIC_NODE_BINARY;
-  const protectedRelease = managedNode && path17.isAbsolute(managedNode) ? path17.dirname(path17.dirname(managedNode)) : void 0;
+  const protectedRelease = managedNode && path18.isAbsolute(managedNode) ? path18.dirname(path18.dirname(managedNode)) : void 0;
   if (!power) {
     registry.register(
       new KiroToolsProvider(options.cwd, {
@@ -14407,6 +14446,10 @@ var createKiroRuntime = (options) => {
     registry.markUnavailable(
       "k",
       "Power mode intentionally uses Kiro native tools for ordinary repository and shell operations"
+    );
+    registry.markUnavailable(
+      "pi",
+      "Power mode does not mount the Pi `pi.*` coding-tool namespace"
     );
     registry.register(new KiroPowerArtifactsProvider(artifacts));
   }
@@ -14422,7 +14465,7 @@ var createKiroRuntime = (options) => {
   if (memoryAvailable) {
     registry.register(new KiroMemoryProvider({
       cwd: options.cwd,
-      root: options.memoryRoot ?? path17.join(resolveAgentDir(), "fabric", "kiro-memory")
+      root: options.memoryRoot ?? path18.join(resolveAgentDir(), "fabric", "kiro-memory")
     }));
   } else {
     registry.markUnavailable(
@@ -14552,7 +14595,7 @@ var createKiroMcpServer = async (options) => {
   if (integration === "power" && (!options.pluginRoot || !options.pluginData)) {
     throw new Error("power MCP launch requires PLUGIN_ROOT and PLUGIN_DATA");
   }
-  const version = options.version ?? (integration === "power" ? String(JSON.parse(readFileSync2(path18.join(options.pluginRoot, "package.json"), "utf8")).version) : readPackageVersion());
+  const version = options.version ?? (integration === "power" ? String(JSON.parse(readFileSync2(path19.join(options.pluginRoot, "package.json"), "utf8")).version) : readPackageVersion());
   const server = new Server(
     { name: "kiro-fabric", version },
     { capabilities: { tools: {} } }
@@ -14816,7 +14859,16 @@ var createKiroMcpServer = async (options) => {
             text: JSON.stringify({
               integration: "power",
               version,
-              runtime: { executor: current.service.config.executor.runtime },
+              runtime: {
+                executor: current.service.config.executor.runtime,
+                limits: {
+                  timeoutMs: current.service.config.executor.timeoutMs,
+                  memoryLimitBytes: current.service.config.executor.memoryLimitBytes,
+                  maxSourceBytes: current.service.config.executor.maxSourceBytes,
+                  maxOutputChars: current.service.config.executor.maxOutputChars,
+                  maxNestedResultChars: current.service.config.executor.maxNestedResultChars
+                }
+              },
               workspace: {
                 ...status,
                 capabilities,

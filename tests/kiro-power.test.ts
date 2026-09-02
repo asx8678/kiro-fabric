@@ -588,6 +588,7 @@ describe("Kiro Power security boundaries", () => {
       expect(providers).not.toContain("memory");
       expect(providers).not.toContain("state");
       expect(unbound.registry.unavailableProviders()).toContainEqual(expect.objectContaining({ name: "k" }));
+      expect(unbound.registry.unavailableProviders()).toContainEqual(expect.objectContaining({ name: "pi" }));
       expect(unbound.registry.unavailableProviders()).toContainEqual(expect.objectContaining({ name: "memory", reason: expect.stringMatching(/until a workspace is bound/i) }));
     } finally { await unbound.close(); }
     const bound = createKiroRuntime({

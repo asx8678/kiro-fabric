@@ -142,6 +142,103 @@ describe("ActionRegistry", () => {
     await first;
   });
 
+  it("rejects overlapping file mutations without a strict effect policy", async () => {
+    let releaseFirst!: () => void;
+    let markStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markStarted = resolve; });
+    const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const writes: string[] = [];
+    const writeDescriptor = {
+      name: "write",
+      description: "Write a file",
+      inputSchema: {
+        type: "object",
+        properties: { path: { type: "string" }, content: { type: "string" } },
+        required: ["path", "content"],
+        additionalProperties: false,
+      },
+      risk: "write" as const,
+    };
+    const registry = new ActionRegistry();
+    registry.register({
+      name: "io",
+      description: "io",
+      async list() { return [writeDescriptor]; },
+      async describe(name) { return name === "write" ? writeDescriptor : undefined; },
+      async invoke(_name, args) {
+        if (args.content === "first") {
+          markStarted();
+          await gate;
+        }
+        writes.push(String(args.content));
+        return args.content;
+      },
+    });
+    const makeContext = (audits: FabricCallAudit[]) => ({
+      ...context,
+      approve: async () => undefined,
+      audits,
+      maxResultChars: 10_000,
+    });
+    const first = registry.invoke(
+      "io.write",
+      { path: "same.txt", content: "first" },
+      makeContext([]),
+    );
+    await firstStarted;
+    await expect(
+      registry.invoke("io.write", { path: "same.txt", content: "second" }, makeContext([])),
+    ).rejects.toThrow("effect conflict");
+    releaseFirst();
+    await first;
+    expect(writes).toEqual(["first"]);
+  });
+
+  it("keeps independent file mutations parallelizable", async () => {
+    let releaseFirst!: () => void;
+    let markStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markStarted = resolve; });
+    const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const writeDescriptor = {
+      name: "write",
+      description: "Write a file",
+      inputSchema: {
+        type: "object",
+        properties: { path: { type: "string" }, content: { type: "string" } },
+        required: ["path", "content"],
+        additionalProperties: false,
+      },
+      risk: "write" as const,
+    };
+    const registry = new ActionRegistry();
+    registry.register({
+      name: "io",
+      description: "io",
+      async list() { return [writeDescriptor]; },
+      async describe(name) { return name === "write" ? writeDescriptor : undefined; },
+      async invoke(_name, args) {
+        if (args.path === "a.txt") {
+          markStarted();
+          await gate;
+        }
+        return args.path;
+      },
+    });
+    const makeContext = () => ({
+      ...context,
+      approve: async () => undefined,
+      audits: [] as FabricCallAudit[],
+      maxResultChars: 10_000,
+    });
+    const first = registry.invoke("io.write", { path: "a.txt", content: "a" }, makeContext());
+    await firstStarted;
+    await expect(
+      registry.invoke("io.write", { path: "b.txt", content: "b" }, makeContext()),
+    ).resolves.toBe("b.txt");
+    releaseFirst();
+    await expect(first).resolves.toBe("a.txt");
+  });
+
   it("describes a bare action name through the unique-name fallback", async () => {
     const registry = new ActionRegistry();
     registry.register(provider());

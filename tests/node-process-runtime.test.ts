@@ -28,6 +28,18 @@ describe("NodeProcessRuntime", () => {
     expect(hostCall).not.toHaveBeenCalled();
   });
 
+  it("rejects oversized strings before child spawn", async () => {
+    const hostCall = vi.fn(async () => undefined);
+    const result = await new NodeProcessRuntime().execute(
+      "return π.payload;",
+      hostCall,
+      { ...options, maxSourceBytes: 33, strings: { payload: "é".repeat(17) } },
+    );
+    expect(result.terminationReason).toBe("runtime_error");
+    expect(result.error).toMatch(/exceeds executor\.maxSourceBytes/);
+    expect(hostCall).not.toHaveBeenCalled();
+  });
+
   it.each([
     [Number.NaN, DEFAULT_EXECUTOR_SOURCE_BYTES],
     [Number.POSITIVE_INFINITY, DEFAULT_EXECUTOR_SOURCE_BYTES],

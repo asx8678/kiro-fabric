@@ -27,3 +27,37 @@ export const fabricTranspiledLimitError = (code: string): string | undefined => 
     ? `Fabric transpiled source exceeds hard limit: received ${received} bytes, limit ${MAX_EXECUTOR_TRANSPILED_BYTES} bytes`
     : undefined;
 };
+
+export const MAX_FABRIC_STRING_KEYS = 64;
+export const MAX_FABRIC_STRING_KEY_BYTES = 256;
+
+export const fabricStringsLimitError = (
+  strings: Record<string, string> | undefined,
+  maxSourceBytes: number,
+): string | undefined => {
+  if (strings === undefined) return undefined;
+  const keys = Object.keys(strings);
+  if (keys.length > MAX_FABRIC_STRING_KEYS) {
+    return `Fabric strings exceed key count: received ${keys.length} keys, limit ${MAX_FABRIC_STRING_KEYS}`;
+  }
+  let total = 0;
+  for (const key of keys) {
+    const keyBytes = Buffer.byteLength(key, "utf8");
+    if (keyBytes > MAX_FABRIC_STRING_KEY_BYTES) {
+      return `Fabric strings key exceeds ${MAX_FABRIC_STRING_KEY_BYTES} bytes`;
+    }
+    const value = strings[key];
+    if (typeof value !== "string") {
+      return "Fabric strings values must be strings";
+    }
+    const valueBytes = Buffer.byteLength(value, "utf8");
+    if (valueBytes > maxSourceBytes) {
+      return `Fabric strings value exceeds executor.maxSourceBytes: received ${valueBytes} bytes, limit ${maxSourceBytes} bytes`;
+    }
+    total += keyBytes + valueBytes;
+    if (total > maxSourceBytes) {
+      return `Fabric strings exceed executor.maxSourceBytes: received ${total} bytes, limit ${maxSourceBytes} bytes`;
+    }
+  }
+  return undefined;
+};

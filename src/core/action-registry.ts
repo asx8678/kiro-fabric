@@ -29,7 +29,7 @@ import {
   type FabricScopedProviderResult,
 } from "../protocol.js";
 import { schemaValidationMessage } from "../schema-validation.js";
-import { formatFabricEffectConflict } from "./effect-conflict.js";
+import { formatFabricEffectConflict, refineActionEffect } from "./effect-conflict.js";
 import { stableJsonHash } from "./stable-hash.js";
 import {
   consumeFabricApprovalLeases,
@@ -891,11 +891,21 @@ export class ActionRegistry {
       // Publish the audit immediately after consumption. A later guard failure
       // must not make a successfully consumed composite grant invisible.
       const nestedToolCallId = `${NESTED_TOOL_CALL_ID_PREFIX}${randomUUID()}`;
-      const effect = action.effect!;
+      const effect = refineActionEffect(
+        action.effect!,
+        action.name,
+        preparedArgs,
+        context.cwd,
+      );
       const effectConflicts = [...this.#activeEffects.values()].flatMap((active) => {
         const conflict = conflictBetween(effect, active.effect);
         return conflict ? [{ withRef: active.ref, ...conflict }] : [];
       }).slice(0, 32);
+      const blockingConflicts = effectConflicts.filter((conflict) =>
+        context.effectPolicy === "strict" ||
+        (conflict.reason === "shared_resource" &&
+          conflict.resources.some((resource) => resource.startsWith("file:"))),
+      );
       const argsPreview = previewArgs(ref, preparedArgs);
       const activeAudit: FabricCallAudit = {
         ref,
@@ -918,10 +928,10 @@ export class ActionRegistry {
         ref,
         args: argsPreview,
       });
-      if (effectConflicts.length > 0 && context.effectPolicy === "strict") {
+      if (blockingConflicts.length > 0) {
         failureStage = "guard";
         throw new FabricTraceSafeError(
-          `Fabric effect conflict for ${ref}: ${effectConflicts
+          `Fabric effect conflict for ${ref}: ${blockingConflicts
             .map((conflict) => formatFabricEffectConflict(
               conflict.withRef,
               conflict.resources,

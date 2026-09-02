@@ -11,9 +11,11 @@ import { NODE_PROCESS_CHILD_SOURCE } from "./node-process-child-source.js";
 import { createGuestStackMap, remapGuestErrorText } from "./guest-stack-map.js";
 import { transpileFabricCodeWithSourceMap } from "./type-checker.js";
 import { resolveScriptRuntimeSync } from "../agents/transports/process-utils.js";
+import { assertFabricJsonBudget } from "./json-budget.js";
 import {
   effectiveFabricSourceLimit,
   fabricSourceLimitError,
+  fabricStringsLimitError,
   fabricTranspiledLimitError,
 } from "./source-limit.js";
 
@@ -52,10 +54,9 @@ export class NodeProcessRuntime {
         error: "Execution cancelled",
       };
     }
-    const sourceError = fabricSourceLimitError(
-      code,
-      effectiveFabricSourceLimit(options.maxSourceBytes),
-    );
+    const sourceLimit = effectiveFabricSourceLimit(options.maxSourceBytes);
+    const sourceError = fabricSourceLimitError(code, sourceLimit)
+      ?? fabricStringsLimitError(options.strings, sourceLimit);
     if (sourceError) {
       return {
         value: undefined,
@@ -182,10 +183,14 @@ export class NodeProcessRuntime {
         }
         if (message.type !== "call") return;
         extendDeadline(message.ref, message.args);
-        const task = runAbortable(hostAbortController.signal, () =>
-          hostCall(message.ref, message.args, hostAbortController.signal),
-        ).then(
-          (value) => send(child, { type: "response", id: message.id, ok: true, value }),
+        const task = runAbortable(hostAbortController.signal, () => {
+          assertFabricJsonBudget(message.args);
+          return hostCall(message.ref, message.args, hostAbortController.signal);
+        }).then(
+          (value) => {
+            assertFabricJsonBudget(value);
+            send(child, { type: "response", id: message.id, ok: true, value });
+          },
           (error) =>
             send(child, {
               type: "response",

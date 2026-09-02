@@ -16,7 +16,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 var SHUTDOWN_GRACE_MS = KIRO_MCP_DRAIN_TIMEOUT_MS + 2e3;
 var startKiroMcpServer = async () => {
-  const { createKiroMcpServer } = await import("../chunks/mcp-server-Y2WOJSC2.js");
+  const { createKiroMcpServer } = await import("../chunks/mcp-server-KQMU4TFP.js");
   const { resolveKiroMcpLaunchEnvironment } = await import("../chunks/mcp-environment-JAJINY77.js");
   const { parseKiroChildToolsEnv } = await import("../chunks/run-scope-2AOED3QV.js");
   const launch = resolveKiroMcpLaunchEnvironment();

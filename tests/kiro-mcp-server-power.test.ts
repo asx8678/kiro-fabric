@@ -49,7 +49,14 @@ describe("Kiro Power MCP reporting", () => {
     for (const directory of [pluginRoot, pluginData, workspace]) fs.mkdirSync(directory);
     fs.writeFileSync(path.join(pluginRoot, "package.json"), JSON.stringify({ version: "1.0.0" }));
     const runtime = {
-      service: { config: { executor: { runtime: "quickjs" } } },
+      service: { config: { executor: {
+        runtime: "quickjs",
+        timeoutMs: 120_000,
+        memoryLimitBytes: 64 * 1024 * 1024,
+        maxSourceBytes: 256 * 1024,
+        maxOutputChars: 50_000,
+        maxNestedResultChars: 2_000_000,
+      } } },
       registry: { providers: () => [] },
       close: vi.fn(async () => {}),
     } as unknown as KiroRuntime;
@@ -68,7 +75,16 @@ describe("Kiro Power MCP reporting", () => {
     });
     const callHandler = harness.handlers.at(-1)!;
     const signal = new AbortController().signal;
-    await callHandler({ params: { name: "fabric_info", arguments: {} } }, { signal });
+    const info = await callHandler({ params: { name: "fabric_info", arguments: {} } }, { signal }) as {
+      content: Array<{ text: string }>;
+    };
+    expect(JSON.parse(info.content[0]!.text).runtime.limits).toEqual({
+      timeoutMs: 120_000,
+      memoryLimitBytes: 64 * 1024 * 1024,
+      maxSourceBytes: 256 * 1024,
+      maxOutputChars: 50_000,
+      maxNestedResultChars: 2_000_000,
+    });
     expect(prepareRuntime).toHaveBeenCalledOnce();
 
     fs.renameSync(workspace, `${workspace}.away`);

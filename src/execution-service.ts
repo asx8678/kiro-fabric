@@ -51,7 +51,7 @@ import type {
 } from "./runtime/quickjs-runtime.js";
 import type { NodeProcessRuntime } from "./runtime/node-process-runtime.js";
 import type { FabricTypeError } from "./runtime/type-checker.js";
-import { fabricSourceLimitError } from "./runtime/source-limit.js";
+import { fabricSourceLimitError, fabricStringsLimitError } from "./runtime/source-limit.js";
 
 let runtimeDependencies:
   | Promise<{
@@ -190,16 +190,18 @@ export class FabricExecutionService {
       this.registry.has("k") && !this.registry.has("pi") ? "k" : "pi";
     const traceRecorder = new FabricExecutionTraceRecorder(coreToolNamespace);
     const sourceError = fabricSourceLimitError(options.code, this.config.executor.maxSourceBytes);
-    if (sourceError) {
+    const stringsError = sourceError
+      ?? fabricStringsLimitError(options.strings, this.config.executor.maxSourceBytes);
+    if (stringsError) {
       return {
         success: false,
         value: undefined,
         logs: [],
         audits: [],
         phases: [],
-        trace: traceRecorder.seal("failed", [], sourceError),
+        trace: traceRecorder.seal("failed", [], stringsError),
         elapsedMs: performance.now() - startedAt,
-        error: sourceError,
+        error: stringsError,
       };
     }
     this.activity?.start(
