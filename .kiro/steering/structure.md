@@ -18,3 +18,5 @@ description: Repository ownership map for Kiro Fabric runtime, provider, Power p
 - `tests/` should verify the narrowest owning boundary and any affected
   cross-boundary projection.
 - `dist/` and `.tmp/kiro-fabric-power/` are generated artifacts.
+- `pnpm run power:dev` also installs `$KIRO_HOME/powers/kiro-fabric`
+  (default `~/.kiro/powers/kiro-fabric`).

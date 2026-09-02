@@ -30,11 +30,12 @@ Rules (maintained like the plugins verification map):
 
 ## Baseline (shared prerequisites)
 
-1. `pnpm run build` (Pi loads `dist/`, not `src/`).
-2. Launch Pi with the extension path: `pi -e <repo-root>`.
+1. `pnpm run build` (Kiro Power and Strict load `dist/`, not `src/`).
+2. Launch Kiro CLI v3 after the Power is installed: `kiro-cli --v3`. For
+   Strict, `kiro-cli --v3 --agent kiro-fabric`.
 3. Use a disposable project/config location; never your active session.
-4. Doctor via `/fabric status` (expected cwd, mode, providers, runner,
-   capture, MCP, UI state) before driving and after any surprising failure.
+4. Doctor via `kiro-fabric-setup doctor` before driving and after any
+   surprising failure.
 5. Secrets-bearing or billable paths are captured as references, not pasted.
 
 ## Maintenance

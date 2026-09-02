@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 import { cpSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import {
+  installPowerPackage,
+  resolveUserPowerRoot,
+  shouldInstallUserPower,
+} from "./power-user-install.mjs";
 import { validatePowerPackage } from "./validate-power-package.mjs";
 const root = path.resolve(".tmp/kiro-fabric-power");
 rmSync(root, { recursive: true, force: true });
@@ -27,8 +32,19 @@ const mcp = {
 };
 writeFileSync(path.join(root, "mcp.json"), JSON.stringify(mcp, null, 2) + "\n", { mode: 0o600 });
 validatePowerPackage(root);
-process.stdout.write(
-  `${root}\nImport this local folder in Kiro IDE as a custom Power. ` +
-  `Kiro CLI v3 will then pick it up automatically; from this source checkout ` +
-  `launch with node dist/kiro/setup-entry.js launch-power.\n`,
-);
+const lines = [root];
+if (shouldInstallUserPower()) {
+  const userRoot = installPowerPackage(root, resolveUserPowerRoot());
+  lines.push(userRoot);
+  process.stdout.write(
+    `${lines.join("\n")}\nStaged a checkout copy and installed the user-global Power at ` +
+    `${userRoot}. Import that folder in Kiro IDE as a custom Power if this is the first ` +
+    `install; later power:dev runs refresh it in place. Kiro CLI v3 picks up IDE-installed ` +
+    `Powers; from this source checkout launch with node dist/kiro/setup-entry.js launch-power.\n`,
+  );
+} else {
+  process.stdout.write(
+    `${root}\nSkipped user-global Power install (KIRO_FABRIC_SKIP_USER_POWER_INSTALL=1). ` +
+    `Import this local folder in Kiro IDE as a custom Power.\n`,
+  );
+}

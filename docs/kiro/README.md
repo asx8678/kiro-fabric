@@ -6,7 +6,8 @@ integration workspaces.
 ## Start here: choose an integration
 
 The additive default is [Kiro Fabric Power](power.md). Run `pnpm power:dev` in a
-source checkout and import the generated local folder in Kiro IDE. Kiro CLI v3
+source checkout; it installs `$KIRO_HOME/powers/kiro-fabric` (default
+`~/.kiro/powers/kiro-fabric`). Import that folder in Kiro IDE. Kiro CLI v3
 automatically picks up that IDE-installed Power; launch it with
 `node dist/kiro/setup-entry.js launch-power --project-root /absolute/project`
 from the built checkout, or directly

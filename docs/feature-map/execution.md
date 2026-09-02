@@ -16,17 +16,19 @@ tools, with a bounded result for the conversation.
 
 ## Driving it with pnpm, Vitest, and the packaged CLI
 
-- Build: `pnpm build` (mandatory; Pi runs `dist/`).
+- Build: `pnpm build` (mandatory; Kiro CLI v3 and the Power/Strict closures
+  run `dist/`).
 - Probes:
   - `pnpm vitest run tests/kernel-schema.test.ts` (contract + single-tool).
   - `pnpm vitest run tests/output-budget.test.ts` (bounded projection).
-  - Headless: `pi -p "run `fabric_exec` against the schema fixture" -e <repo>`.
+  - Headless: after Power or Strict install, `kiro-cli --v3` (or
+    `kiro-cli --v3 --agent kiro-fabric`) and submit a `fabric_exec` task.
 - Evidence: capture JSONL session + the returned program's `typeErrorGuidance`
   when present.
 
 ## Gotchas
 
 - `dist/` is the runnable surface; green `src/` tests alone do not update the
-  TUI or published bundle.
+  Kiro Power/Strict closures or published bundle.
 - Ascribing "fabric_exec generated?" is a deterministic wire assertion via the
   kernel contract, not a model self-report.

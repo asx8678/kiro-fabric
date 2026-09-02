@@ -22,11 +22,14 @@ pnpm install --frozen-lockfile
 pnpm power:dev
 ```
 
-Import the printed `.tmp/kiro-fabric-power` folder as a custom Power in Kiro
-IDE. The generated package contains a relative local runtime closure and no
-checkout-specific absolute path. Re-running the command replaces it
-deterministically. `kiro-fabric doctor power --json` is read-only,
-non-billable, and sends no model prompt.
+`pnpm power:dev` stages `.tmp/kiro-fabric-power` and copies it to
+`$KIRO_HOME/powers/kiro-fabric` (`~/.kiro/powers/kiro-fabric` by default).
+Import that user-global folder as a custom Power in Kiro IDE. The generated
+package contains a relative local runtime closure and no checkout-specific
+absolute path. Re-running the command replaces the user-global copy
+deterministically. Set `KIRO_FABRIC_SKIP_USER_POWER_INSTALL=1` to stage only.
+`kiro-fabric doctor power --json` is read-only, non-billable, and sends no
+model prompt.
 
 Kiro CLI v3 automatically detects Powers installed through Kiro IDE. After the
 one-time IDE import, launch the additive Power session from the target project:

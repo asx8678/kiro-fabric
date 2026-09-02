@@ -8,10 +8,10 @@ Always finish a change with a fresh build before handing it back:
 pnpm run build
 ```
 
-Pi loads and publishes the compiled bundle in `dist/` — not `src/`. Tests run
-against `src/`, so green tests alone are not enough: without a build the
-change is invisible in the TUI and unpublished. Rebuild so the user can
-verify immediately.
+Kiro CLI v3 (`kiro-cli --v3`) and the published Power/Strict closures load
+`dist/` — not `src/`. Tests run against `src/`, so green tests alone are not
+enough: without a build the change is invisible in Kiro and unpublished.
+Rebuild so the user can verify immediately.
 
 ## Before committing
 
