@@ -1015,9 +1015,14 @@ var removeAttestedRuntimeClosure = (installRoot, layout, closure) => {
       unsealDirectories(quarantinedRoot);
       assertHeldIdentities(held);
       rmSync(quarantinedRoot, { recursive: true, force: false });
+      runBeforeRuntimeQuarantineForTest("generation-post-delete", quarantinedRoot);
       for (const identity of held) {
-        if (fstatSync(identity.descriptor).nlink !== 0) {
-          throw new KiroInstallError("concurrency", "verified runtime inode survived quarantine deletion");
+        const linkCount = fstatSync(identity.descriptor).nlink;
+        if (lstatOrNull(identity.path) !== null || identity.file && linkCount !== 0) {
+          throw new KiroInstallError(
+            "concurrency",
+            `verified runtime inode survived quarantine deletion: ${identity.path} (links=${linkCount})`
+          );
         }
       }
       return true;

@@ -3,6 +3,7 @@
 export type RuntimeClosureQuarantineKind =
   | "generation"
   | "generation-post-verify"
+  | "generation-post-delete"
   | "marker"
   | "marker-post-verify";
 

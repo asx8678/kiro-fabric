@@ -239,6 +239,23 @@ describe("runtime closure deployment", () => {
     expect(existsSync(parked)).toBe(true);
   });
 
+  it("rejects a quarantine pathname recreated after recursive deletion", () => {
+    const dir = project("generation-post-delete-race");
+    const closure = deploySmall(dir, "project");
+    let replacementSentinel = "";
+
+    expect(() => withRuntimeQuarantineRaceForTest((kind, source) => {
+      if (kind !== "generation-post-delete") return;
+      const actual = join(realpathSync(dirname(source)), basename(source));
+      mkdirSync(actual);
+      replacementSentinel = join(actual, "must-survive");
+      writeFileSync(replacementSentinel, "post-delete replacement\n");
+    }, () => removeAttestedRuntimeClosure(dir, "project", closure.attestation)))
+      .toThrow(/survived quarantine deletion/);
+
+    expect(readFileSync(replacementSentinel, "utf8")).toBe("post-delete replacement\n");
+  });
+
   it("quarantines the activation marker and preserves raced bytes on mismatch", () => {
     const dir = project("marker-quarantine-race");
     const closure = deploySmall(dir, "project");

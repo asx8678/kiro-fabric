@@ -1018,9 +1018,18 @@ export const removeAttestedRuntimeClosure = (
       unsealDirectories(quarantinedRoot);
       assertHeldIdentities(held);
       rmSync(quarantinedRoot, { recursive: true, force: false });
+      runBeforeRuntimeQuarantineForTest("generation-post-delete", quarantinedRoot);
       for (const identity of held) {
-        if (fstatSync(identity.descriptor).nlink !== 0) {
-          throw new KiroInstallError("concurrency", "verified runtime inode survived quarantine deletion");
+        const linkCount = fstatSync(identity.descriptor).nlink;
+        // APFS may retain a nonzero st_nlink for an open, already-unlinked
+        // directory descriptor. Directory hard links are not available to the
+        // unprivileged owner here, so pathname absence is the portable deletion
+        // proof. Regular closure leaves retain the stronger zero-link check.
+        if (lstatOrNull(identity.path) !== null || (identity.file && linkCount !== 0)) {
+          throw new KiroInstallError(
+            "concurrency",
+            `verified runtime inode survived quarantine deletion: ${identity.path} (links=${linkCount})`,
+          );
         }
       }
       return true;
