@@ -49,6 +49,17 @@ import {
 } from "./managed.js";
 import { runBeforeRuntimeQuarantineForTest } from "./runtime-closure-test-seam.js";
 
+const canonicalRuntimeInstallRoot = (installRoot: string): string => {
+  try {
+    return inspectCanonicalPath(installRoot, { kind: "directory" }).canonicalPath;
+  } catch (error) {
+    throw new KiroInstallError(
+      "root",
+      `cannot canonicalize runtime install root: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+};
+
 /**
  * Root that holds content-addressed closure versions
  * (`<install-root>/.fabric/runtime/<digest>/kiro/mcp-entry.js`). Keeping the
@@ -309,6 +320,7 @@ export const planRuntimeClosureDeployment = (
   layout: KiroManagedLayout,
   options: RuntimeClosureDeploymentOptions = {},
 ): RuntimeClosurePlan => {
+  const canonicalInstallRoot = canonicalRuntimeInstallRoot(installRoot);
   const packageRoot = resolveSourcePackageRoot();
   const nodeSourcePath = options.nodeSourcePath ?? process.execPath;
   const nodeAttestation = options.nodeAttestation ?? attestExecutable(nodeSourcePath);
@@ -342,7 +354,7 @@ export const planRuntimeClosureDeployment = (
   const digest = digestHash.digest("hex");
   const sourceDir = closureSourceDirectory(packageRoot);
   const sourceFiles = closureFileList(sourceDir);
-  const runtimeDir = runtimeClosurePath(installRoot, layout);
+  const runtimeDir = runtimeClosurePath(canonicalInstallRoot, layout);
   const mcpEntryPath = join(runtimeDir, digest, "kiro", "mcp-entry.js");
   const runtimeNodePath = join(runtimeDir, digest, "bin", nodeExecutableName());
   const runtimeKiroPath = join(runtimeDir, digest, "bin", process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli");
@@ -356,7 +368,7 @@ export const planRuntimeClosureDeployment = (
   const published = existsSync(mcpEntryPath);
   const versionRoot = join(runtimeDir, digest);
   const versionStat = lstatOrNull(versionRoot);
-  const runtimeRoot = relative(installRoot, versionRoot).split(sep).join("/");
+  const runtimeRoot = relative(canonicalInstallRoot, versionRoot).split(sep).join("/");
   const generatedPackage = JSON.stringify({
     name: "kiro-fabric-runtime-closure",
     version: readPackageVersion(),
@@ -389,7 +401,7 @@ export const planRuntimeClosureDeployment = (
       throw new KiroInstallError("symlink", "runtime closure version root is not a real directory");
     }
     try {
-      verifyRuntimeClosureAttestation(installRoot, attestation);
+      verifyRuntimeClosureAttestation(canonicalInstallRoot, attestation);
     } catch (error) {
       if (!(error instanceof KiroInstallError) || (error.code !== "ownership" && error.code !== "fs")) {
         throw error;
@@ -556,6 +568,7 @@ export const deployRuntimeClosure = (
   },
 ): RuntimeClosureResult => {
   const startWall = Date.now();
+  const canonicalInstallRoot = canonicalRuntimeInstallRoot(installRoot);
   const packageRoot = resolveSourcePackageRoot();
   const kiroAttestation = options?.kiroAttestation;
   if (!kiroAttestation) {
@@ -564,7 +577,7 @@ export const deployRuntimeClosure = (
       "runtime closure deployment requires a separately attested Kiro executable",
     );
   }
-  const planned = planRuntimeClosureDeployment(installRoot, layout, {
+  const planned = planRuntimeClosureDeployment(canonicalInstallRoot, layout, {
     ...(options?.nodeSourcePath ? { nodeSourcePath: options.nodeSourcePath } : {}),
     ...(options?.nodeAttestation ? { nodeAttestation: options.nodeAttestation } : {}),
     kiroAttestation,
@@ -595,7 +608,7 @@ export const deployRuntimeClosure = (
   // replacement and swaps the directory without mutating leaves in place.
   if (existsSync(versionMcpEntry) && planned.action !== "repair") {
     ensurePrivateRuntimeDirectory(runtimeDir);
-    verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+    verifyRuntimeClosureAttestation(canonicalInstallRoot, planned.attestation);
     const markerNow = lstatOrNull(marker);
     if (markerNow && (markerNow.isSymbolicLink() || !markerNow.isFile())) {
       throw new KiroInstallError("symlink", "runtime closure marker is not a regular file");
@@ -619,7 +632,7 @@ export const deployRuntimeClosure = (
 
   // Ensure uninstall's quarantine precondition is established by install.
   ensurePrivateRuntimeDirectory(runtimeDir);
-  assertNoSymlinkComponents(installRoot, versionDir);
+  assertNoSymlinkComponents(canonicalInstallRoot, versionDir);
 
   // Source: the pre-built closure bundle.
   const closureSource = closureSourceDirectory(packageRoot);
@@ -744,7 +757,7 @@ export const deployRuntimeClosure = (
         fsyncDirectory(runtimeDir);
         renameSync(stagingDir, versionDir);
         fsyncDirectory(runtimeDir);
-        verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+        verifyRuntimeClosureAttestation(canonicalInstallRoot, planned.attestation);
         makeRuntimeTreeRemovable(damagedDir);
         rmSync(damagedDir, { recursive: true, force: false });
         fsyncDirectory(runtimeDir);
@@ -759,7 +772,7 @@ export const deployRuntimeClosure = (
         };
         unsealStaging(stagingDir);
         rmSync(stagingDir, { recursive: true, force: true });
-        verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+        verifyRuntimeClosureAttestation(canonicalInstallRoot, planned.attestation);
       }
     } else {
       renameSync(stagingDir, versionDir);
@@ -784,8 +797,8 @@ export const deployRuntimeClosure = (
     // A repair journal is durable before either rename. Converge it now when
     // possible; after SIGKILL the next locked installer performs the same step.
     try {
-      if (hasPendingRuntimeClosureRepair(installRoot, layout, digest)) {
-        recoverRuntimeClosureRepair(installRoot, layout, planned.attestation);
+      if (hasPendingRuntimeClosureRepair(canonicalInstallRoot, layout, digest)) {
+        recoverRuntimeClosureRepair(canonicalInstallRoot, layout, planned.attestation);
       }
     } catch {
       // Preserve the original failure and durable journal for explicit retry.

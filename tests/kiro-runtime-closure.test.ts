@@ -150,6 +150,35 @@ describe("runtime closure deployment", () => {
     expect(attestation.path).toBe(realpathSync(canonicalNode));
   });
 
+  it("plans and deploys against the canonical install root behind a parent alias", () => {
+    const canonicalParent = project("canonical-install-parent");
+    const canonicalRoot = join(canonicalParent, "project");
+    const aliasParent = join(base, "install-parent-alias");
+    mkdirSync(canonicalRoot);
+    symlinkSync(canonicalParent, aliasParent, process.platform === "win32" ? "junction" : "dir");
+    const lexicalRoot = join(aliasParent, "project");
+    const canonical = realpathSync(canonicalRoot);
+    const options = {
+      nodeSourcePath: fakeRuntimePath,
+      kiroAttestation: attestExecutable(fakeRuntimePath),
+    };
+
+    const plan = planRuntimeClosureDeployment(lexicalRoot, "project", options);
+    expect(plan.runtimeDir).toBe(join(canonical, ".fabric", "runtime"));
+    expect(plan.mcpEntryPath).toBe(join(
+      canonical,
+      ".fabric",
+      "runtime",
+      plan.digest,
+      "kiro",
+      "mcp-entry.js",
+    ));
+
+    const deployed = deployRuntimeClosure(lexicalRoot, "project", options);
+    expect(deployed.runtimeDir).toBe(plan.runtimeDir);
+    expect(deployed.mcpEntryPath).toBe(plan.mcpEntryPath);
+  });
+
   it("directly recovers the SIGKILL window after parking a same-digest release", () => {
     const dir = project("repair-park-recovery");
     const closure = deploySmall(dir, "project");

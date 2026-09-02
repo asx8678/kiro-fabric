@@ -323,6 +323,16 @@ var beforeQuarantine;
 var runBeforeRuntimeQuarantineForTest = (kind, source) => beforeQuarantine?.(kind, source);
 
 // src/kiro/runtime-closure.ts
+var canonicalRuntimeInstallRoot = (installRoot) => {
+  try {
+    return inspectCanonicalPath(installRoot, { kind: "directory" }).canonicalPath;
+  } catch (error) {
+    throw new KiroInstallError(
+      "root",
+      `cannot canonicalize runtime install root: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};
 var runtimeClosurePath = (installRoot, layout) => managedPaths(installRoot, layout).runtimeDir;
 var runtimeDirectoryForClosure = (installRoot, layout, closure) => {
   const root = join(installRoot, ...closure.root.split("/"));
@@ -434,6 +444,7 @@ var computeRuntimeClosureDigest = (packageRoot) => {
   return hash.digest("hex");
 };
 var planRuntimeClosureDeployment = (installRoot, layout, options = {}) => {
+  const canonicalInstallRoot = canonicalRuntimeInstallRoot(installRoot);
   const packageRoot = resolveSourcePackageRoot();
   const nodeSourcePath = options.nodeSourcePath ?? process.execPath;
   const nodeAttestation = options.nodeAttestation ?? attestExecutable(nodeSourcePath);
@@ -467,7 +478,7 @@ var planRuntimeClosureDeployment = (installRoot, layout, options = {}) => {
   const digest = digestHash.digest("hex");
   const sourceDir = closureSourceDirectory(packageRoot);
   const sourceFiles = closureFileList(sourceDir);
-  const runtimeDir = runtimeClosurePath(installRoot, layout);
+  const runtimeDir = runtimeClosurePath(canonicalInstallRoot, layout);
   const mcpEntryPath = join(runtimeDir, digest, "kiro", "mcp-entry.js");
   const runtimeNodePath = join(runtimeDir, digest, "bin", nodeExecutableName());
   const runtimeKiroPath = join(runtimeDir, digest, "bin", process.platform === "win32" ? "kiro-cli.exe" : "kiro-cli");
@@ -481,7 +492,7 @@ var planRuntimeClosureDeployment = (installRoot, layout, options = {}) => {
   const published = existsSync(mcpEntryPath);
   const versionRoot = join(runtimeDir, digest);
   const versionStat = lstatOrNull(versionRoot);
-  const runtimeRoot = relative(installRoot, versionRoot).split(sep).join("/");
+  const runtimeRoot = relative(canonicalInstallRoot, versionRoot).split(sep).join("/");
   const generatedPackage = JSON.stringify({
     name: "kiro-fabric-runtime-closure",
     version: readPackageVersion(),
@@ -512,7 +523,7 @@ var planRuntimeClosureDeployment = (installRoot, layout, options = {}) => {
       throw new KiroInstallError("symlink", "runtime closure version root is not a real directory");
     }
     try {
-      verifyRuntimeClosureAttestation(installRoot, attestation);
+      verifyRuntimeClosureAttestation(canonicalInstallRoot, attestation);
     } catch (error) {
       if (!(error instanceof KiroInstallError) || error.code !== "ownership" && error.code !== "fs") {
         throw error;
@@ -624,6 +635,7 @@ var writeClosureMarker = (runtimeDir, digest) => {
 };
 var deployRuntimeClosure = (installRoot, layout, options) => {
   const startWall = Date.now();
+  const canonicalInstallRoot = canonicalRuntimeInstallRoot(installRoot);
   const packageRoot = resolveSourcePackageRoot();
   const kiroAttestation = options?.kiroAttestation;
   if (!kiroAttestation) {
@@ -632,7 +644,7 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
       "runtime closure deployment requires a separately attested Kiro executable"
     );
   }
-  const planned = planRuntimeClosureDeployment(installRoot, layout, {
+  const planned = planRuntimeClosureDeployment(canonicalInstallRoot, layout, {
     ...options?.nodeSourcePath ? { nodeSourcePath: options.nodeSourcePath } : {},
     ...options?.nodeAttestation ? { nodeAttestation: options.nodeAttestation } : {},
     kiroAttestation,
@@ -658,7 +670,7 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
   };
   if (existsSync(versionMcpEntry) && planned.action !== "repair") {
     ensurePrivateRuntimeDirectory(runtimeDir);
-    verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+    verifyRuntimeClosureAttestation(canonicalInstallRoot, planned.attestation);
     const markerNow = lstatOrNull(marker);
     if (markerNow && (markerNow.isSymbolicLink() || !markerNow.isFile())) {
       throw new KiroInstallError("symlink", "runtime closure marker is not a regular file");
@@ -680,7 +692,7 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
     };
   }
   ensurePrivateRuntimeDirectory(runtimeDir);
-  assertNoSymlinkComponents(installRoot, versionDir);
+  assertNoSymlinkComponents(canonicalInstallRoot, versionDir);
   const closureSource = closureSourceDirectory(packageRoot);
   if (!existsSync(join(closureSource, "kiro", "mcp-entry.js"))) {
     throw new KiroInstallError(
@@ -784,7 +796,7 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
         fsyncDirectory(runtimeDir);
         renameSync(stagingDir, versionDir);
         fsyncDirectory(runtimeDir);
-        verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+        verifyRuntimeClosureAttestation(canonicalInstallRoot, planned.attestation);
         makeRuntimeTreeRemovable(damagedDir);
         rmSync(damagedDir, { recursive: true, force: false });
         fsyncDirectory(runtimeDir);
@@ -799,7 +811,7 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
         };
         unsealStaging(stagingDir);
         rmSync(stagingDir, { recursive: true, force: true });
-        verifyRuntimeClosureAttestation(installRoot, planned.attestation);
+        verifyRuntimeClosureAttestation(canonicalInstallRoot, planned.attestation);
       }
     } else {
       renameSync(stagingDir, versionDir);
@@ -821,8 +833,8 @@ var deployRuntimeClosure = (installRoot, layout, options) => {
     };
   } catch (error) {
     try {
-      if (hasPendingRuntimeClosureRepair(installRoot, layout, digest)) {
-        recoverRuntimeClosureRepair(installRoot, layout, planned.attestation);
+      if (hasPendingRuntimeClosureRepair(canonicalInstallRoot, layout, digest)) {
+        recoverRuntimeClosureRepair(canonicalInstallRoot, layout, planned.attestation);
       }
     } catch {
     }
