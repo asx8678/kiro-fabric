@@ -89,6 +89,11 @@ Install these first:
 - Git
 - pnpm 11.20.0
 
+Go is not a Kiro Fabric runtime dependency. Contributors running the native,
+non-billable Kiro installer/security fixtures also need Go 1.22 or newer; CI
+pins Go 1.25.1 exactly. A missing Go toolchain fails those required tests,
+names their owners, and never silently skips them.
+
 Check all locally installed command-line requirements:
 
 ```bash
@@ -147,8 +152,12 @@ Kiro CLI v3 automatically discovers Powers installed through Kiro IDE. From the
 project you want Fabric to work on, run:
 
 ```bash
-kiro-fabric-setup launch-power --project-root /absolute/path/to/project
+node dist/kiro/setup-entry.js launch-power --project-root /absolute/path/to/project
 ```
+
+That command is guaranteed in the source checkout after `pnpm run power:dev`.
+Use the shorter `kiro-fabric-setup ...` form only after installing a published
+package that provides the binary.
 
 You may also run `kiro-cli --v3` directly after the IDE installation. Do not add
 `--agent kiro-fabric` when you want the Power: that selects the separate Strict

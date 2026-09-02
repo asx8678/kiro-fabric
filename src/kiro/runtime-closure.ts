@@ -27,6 +27,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { inspectCanonicalPath } from "./canonical-path.js";
 
 import {
   assertExecutableAttestation,
@@ -311,7 +312,16 @@ export const planRuntimeClosureDeployment = (
   const packageRoot = resolveSourcePackageRoot();
   const nodeSourcePath = options.nodeSourcePath ?? process.execPath;
   const nodeAttestation = options.nodeAttestation ?? attestExecutable(nodeSourcePath);
-  if (nodeAttestation.path !== resolve(nodeSourcePath)) {
+  let canonicalNodeSource: string;
+  try {
+    canonicalNodeSource = inspectCanonicalPath(nodeSourcePath, { kind: "file" }).canonicalPath;
+  } catch (error) {
+    throw new KiroInstallError(
+      "fs",
+      `cannot canonicalize staged Node source: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (nodeAttestation.path !== canonicalNodeSource) {
     throw new KiroInstallError("concurrency", "staged Node path does not match its attestation");
   }
   assertExecutableAttestation(nodeAttestation);

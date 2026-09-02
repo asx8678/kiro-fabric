@@ -8,7 +8,7 @@ cannot spawn more children.
 Use `agents.run()` for bounded work that should settle inside the current call:
 
 ```ts
-return agents.run({
+return await agents.run({
   name: "auth-review",
   runner: "kiro",
   task: "Review the authentication changes. Cite paths and run focused checks.",

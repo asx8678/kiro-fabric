@@ -194,6 +194,7 @@ export const spawnDetached = async (
   const pid = child.pid;
   const tree = createProcessTreeController(pid, {
     ambientHelpers: options.ambientHelpers !== false,
+    child,
   });
   child.unref();
   return {

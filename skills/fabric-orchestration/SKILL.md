@@ -1,6 +1,10 @@
 ---
 name: fabric-orchestration
-description: Orchestrate multi-step work in Kiro with Fabric — checked fan-out across configured providers, branches/loops, Fabric memory/state, configured MCP federation. Do not load for a single native read, edit, shell command, or subagent call.
+description: >-
+  Use when deciding whether a bounded multi-step Kiro workflow needs Fabric
+  for checked provider fan-out, branches or loops, memory/state, or configured
+  MCP federation. Do not use for a single native read, edit, shell command, or
+  subagent call, and do not use to repair an already selected fabric_exec body.
 ---
 
 # Kiro Fabric orchestration

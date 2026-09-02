@@ -30,6 +30,7 @@ import {
   resolveKiroProjectRoot,
 } from "../src/kiro/install.js";
 import { installKiroProfile } from "../src/kiro/install-test-helper.js";
+import { withOperationLockProcessProbeForTest } from "../src/kiro/operation-lock-test-seam.js";
 import { uninstallKiroProfile } from "../src/kiro/uninstall.js";
 import { runKiroCli } from "../src/kiro/cli.js";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
@@ -829,8 +830,50 @@ describe("installKiroProfile", () => {
       processStart: "older-process-instance",
     }), { mode: 0o600 });
 
-    await expect(installWithFake(dir)).resolves.toMatchObject({ action: "noop" });
+    await expect(withOperationLockProcessProbeForTest(
+      (pid) => ({
+        liveness: "alive",
+        identity: { pid, processStart: "newer-process-instance" },
+      }),
+      () => installWithFake(dir),
+    )).resolves.toMatchObject({ action: "noop" });
     expect(existsSync(lock)).toBe(false);
+  });
+
+  it("reclaims a lock only when the owner process is positively missing", async () => {
+    const dir = project("locked-missing-owner");
+    await installWithFake(dir);
+    const lock = join(dir, ".kiro", ".kiro-fabric", "operation.lock");
+    writeFileSync(lock, JSON.stringify({
+      token: "missing-owner",
+      pid: 424_243,
+      hostname: hostname(),
+    }), { mode: 0o600 });
+
+    await expect(withOperationLockProcessProbeForTest(
+      () => ({ liveness: "missing" }),
+      () => installWithFake(dir),
+    )).resolves.toMatchObject({ action: "noop" });
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it("never reclaims a lock after an indeterminate liveness probe", async () => {
+    const dir = project("locked-indeterminate");
+    await installWithFake(dir);
+    const lock = join(dir, ".kiro", ".kiro-fabric", "operation.lock");
+    const body = JSON.stringify({
+      token: "indeterminate-owner",
+      pid: 424_244,
+      hostname: hostname(),
+      processStart: "old-instance",
+    });
+    writeFileSync(lock, body, { mode: 0o600 });
+
+    await expect(withOperationLockProcessProbeForTest(
+      () => ({ liveness: "indeterminate" }),
+      () => installWithFake(dir, { force: true }),
+    )).rejects.toThrow(/in progress/);
+    expect(readFileSync(lock, "utf8")).toBe(body);
   });
 });
 

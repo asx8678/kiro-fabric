@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { spawnAcpProcess } from "../src/kiro/acp-process.js";
 import { spawnJsonRpcProcess } from "../src/kiro/supervisor.js";
+import { observeProcessState } from "../src/worker/process-tree.js";
 
 const roots: string[] = [];
 const waitFor = async (predicate: () => boolean, timeoutMs = 3_000): Promise<void> => {
@@ -13,14 +14,7 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 3_000): Promise<voi
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
 };
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const alive = (pid: number): boolean => observeProcessState(pid).running;
 
 afterEach(() => {
   delete process.env.KIRO_FABRIC_TEST_PS_FAILURE;
@@ -89,29 +83,37 @@ describe("Kiro process lifecycle", () => {
   it("rejects ACP RPC immediately on a fatal frame and terminates descendants", async () => {
     const fixture = malformedChild();
     const processHandle = spawnAcpProcess({ argv: [fixture.script], timeoutMs: 10_000 });
-    await waitFor(() => fs.existsSync(fixture.pidFile));
-    const pids = JSON.parse(fs.readFileSync(fixture.pidFile, "utf8")) as {
-      child: number;
-      descendant: number;
-    };
-    const started = Date.now();
-    await expect(processHandle.call("session/test", {})).rejects.toThrow(/malformed JSON frame/);
-    expect(Date.now() - started).toBeLessThan(1_000);
-    await processHandle.terminate(200, 1_000);
-    await waitFor(() => !alive(pids.child) && !alive(pids.descendant));
+    try {
+      await waitFor(() => fs.existsSync(fixture.pidFile));
+      const pids = JSON.parse(fs.readFileSync(fixture.pidFile, "utf8")) as {
+        child: number;
+        descendant: number;
+      };
+      const started = Date.now();
+      await expect(processHandle.call("session/test", {})).rejects.toThrow(/malformed JSON frame/);
+      expect(Date.now() - started).toBeLessThan(1_000);
+      await processHandle.terminate(200, 1_000);
+      await waitFor(() => !alive(pids.child) && !alive(pids.descendant));
+    } finally {
+      await processHandle.terminate(0, 1_000).catch(() => undefined);
+    }
   });
 
   it("escalates to a real SIGKILL for a stubborn detached process tree", async () => {
     const fixture = malformedChild(true);
     const processHandle = spawnAcpProcess({ argv: [fixture.script], timeoutMs: 10_000 });
-    await waitFor(() => fs.existsSync(fixture.pidFile));
-    const pids = JSON.parse(fs.readFileSync(fixture.pidFile, "utf8")) as {
-      child: number;
-      descendant: number;
-    };
-    const result = await processHandle.terminate(100, 1_000);
-    expect(result.escalated).toBe(true);
-    await waitFor(() => !alive(pids.child) && !alive(pids.descendant));
+    try {
+      await waitFor(() => fs.existsSync(fixture.pidFile));
+      const pids = JSON.parse(fs.readFileSync(fixture.pidFile, "utf8")) as {
+        child: number;
+        descendant: number;
+      };
+      const result = await processHandle.terminate(100, 1_000);
+      expect(result.escalated).toBe(true);
+      await waitFor(() => !alive(pids.child) && !alive(pids.descendant));
+    } finally {
+      await processHandle.terminate(0, 1_000).catch(() => undefined);
+    }
   });
 
   it.skipIf(process.platform === "win32")(
@@ -119,15 +121,19 @@ describe("Kiro process lifecycle", () => {
     async () => {
       const fixture = malformedChild(true, false);
       const processHandle = spawnAcpProcess({ argv: [fixture.script], timeoutMs: 10_000 });
-      await waitFor(() => fs.existsSync(fixture.pidFile));
-      const pids = JSON.parse(fs.readFileSync(fixture.pidFile, "utf8")) as {
-        child: number;
-        descendant: number;
-      };
-      process.env.KIRO_FABRIC_TEST_PS_FAILURE = "1";
-      const result = await processHandle.terminate(100, 1_000);
-      expect(result.escalated).toBe(true);
-      await waitFor(() => !alive(pids.child) && !alive(pids.descendant));
+      try {
+        await waitFor(() => fs.existsSync(fixture.pidFile));
+        const pids = JSON.parse(fs.readFileSync(fixture.pidFile, "utf8")) as {
+          child: number;
+          descendant: number;
+        };
+        process.env.KIRO_FABRIC_TEST_PS_FAILURE = "1";
+        const result = await processHandle.terminate(100, 1_000);
+        expect(result.escalated).toBe(true);
+        await waitFor(() => !alive(pids.child) && !alive(pids.descendant));
+      } finally {
+        await processHandle.terminate(0, 1_000).catch(() => undefined);
+      }
     },
   );
 
@@ -171,15 +177,19 @@ describe("Kiro process lifecycle", () => {
       argv: [process.execPath, fixture.script],
       timeoutMs: 10_000,
     });
-    await waitFor(() => fs.existsSync(fixture.pidFile));
-    const pids = JSON.parse(fs.readFileSync(fixture.pidFile, "utf8")) as {
-      child: number;
-      descendant: number;
-    };
-    const started = Date.now();
-    await expect(processHandle.call("probe/test", {})).rejects.toThrow(/malformed JSON frame/);
-    expect(Date.now() - started).toBeLessThan(1_000);
-    await processHandle.terminate(200, 1_000);
-    await waitFor(() => !alive(pids.child) && !alive(pids.descendant));
+    try {
+      await waitFor(() => fs.existsSync(fixture.pidFile));
+      const pids = JSON.parse(fs.readFileSync(fixture.pidFile, "utf8")) as {
+        child: number;
+        descendant: number;
+      };
+      const started = Date.now();
+      await expect(processHandle.call("probe/test", {})).rejects.toThrow(/malformed JSON frame/);
+      expect(Date.now() - started).toBeLessThan(1_000);
+      await processHandle.terminate(200, 1_000);
+      await waitFor(() => !alive(pids.child) && !alive(pids.descendant));
+    } finally {
+      await processHandle.terminate(0, 1_000).catch(() => undefined);
+    }
   });
 });

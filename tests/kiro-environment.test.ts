@@ -122,6 +122,29 @@ describe("Kiro managed environment precedence", () => {
     }, nested)).toEqual({ mode: "strict", cwd: nested, kind: "managed-main" });
   });
 
+  it("binds a trusted parent-component alias to one canonical project identity", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-env-alias-"));
+    roots.push(root);
+    const canonicalParent = path.join(root, "canonical-parent");
+    const aliasParent = path.join(root, "alias-parent");
+    const project = path.join(canonicalParent, "project");
+    fs.mkdirSync(project, { recursive: true });
+    fs.symlinkSync(canonicalParent, aliasParent, "dir");
+    const lexicalProject = path.join(aliasParent, "project");
+    const profile = generateKiroProfile({
+      projectRoot: lexicalProject,
+      mcpEntryPath: "/tmp/mcp.js",
+      allowTools: true,
+    });
+    const env = profile.mcpServers.fabric!.env;
+    expect(env.KIRO_FABRIC_PROJECT_ROOT).toBe(fs.realpathSync(project));
+    expect(resolveKiroMcpLaunchEnvironment(env, lexicalProject)).toEqual({
+      mode: "strict",
+      cwd: fs.realpathSync(project),
+      kind: "managed-main",
+    });
+  });
+
   it("rejects a trusted grant rooted at the Kiro config home", () => {
     const { project } = dirs();
     expect(() => generateKiroProfile({

@@ -131,6 +131,25 @@ describe("runtime closure deployment", () => {
     expect(removeAttestedRuntimeClosure(dir, "project", closure.attestation)).toBe(true);
   });
 
+  it("compares executable attestations against the canonical source target", () => {
+    const dir = project("canonical-node-attestation");
+    const canonicalParent = project("canonical-node-source");
+    const aliasParent = join(base, "node-source-parent-alias");
+    const canonicalNode = join(canonicalParent, "node");
+    writeFileSync(canonicalNode, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    chmodSync(canonicalNode, 0o755);
+    symlinkSync(canonicalParent, aliasParent, "dir");
+    const lexicalNode = join(aliasParent, "node");
+    const attestation = attestExecutable(lexicalNode);
+
+    expect(() => planRuntimeClosureDeployment(dir, "project", {
+      nodeSourcePath: lexicalNode,
+      nodeAttestation: attestation,
+      kiroAttestation: attestExecutable(fakeRuntimePath),
+    })).not.toThrow();
+    expect(attestation.path).toBe(realpathSync(canonicalNode));
+  });
+
   it("directly recovers the SIGKILL window after parking a same-digest release", () => {
     const dir = project("repair-park-recovery");
     const closure = deploySmall(dir, "project");

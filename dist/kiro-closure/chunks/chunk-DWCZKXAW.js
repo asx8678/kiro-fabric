@@ -13,7 +13,7 @@ import path2 from "node:path";
 
 // src/worker/process-tree.ts
 import { execFileSync, spawn } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 var TEST_PLATFORM_ENV = "KIRO_FABRIC_TEST_PLATFORM";
 var TEST_PS_FAILURE_ENV = "KIRO_FABRIC_TEST_PS_FAILURE";
@@ -22,7 +22,7 @@ var WINDOWS_PROCESS_COMMAND = "Get-CimInstance Win32_Process | Select-Object Pro
 var sleep = (ms) => new Promise((resolve) => {
   setTimeout(resolve, ms);
 });
-var processIsAlive = (pid) => {
+var pidExists = (pid) => {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
@@ -31,20 +31,31 @@ var processIsAlive = (pid) => {
     return error.code === "EPERM";
   }
 };
-var parsePsEntries = (stdout) => stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).map((line) => line.split(/\s+/u)).map(([pidText, ppidText, pgidText]) => ({
-  pid: Number(pidText),
-  ppid: Number(ppidText),
-  pgid: Number(pgidText)
+var parsePsEntries = (stdout) => stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).map((line) => line.split(/\s+/u)).map((fields) => ({
+  pid: Number(fields[0]),
+  ppid: Number(fields[1]),
+  pgid: Number(fields[2]),
+  state: fields[3] ?? "?",
+  // lstart is five whitespace-separated fields. It is a stable-enough
+  // process-instance fingerprint on macOS, where procfs is unavailable.
+  ...fields.length >= 9 ? { identity: `ps:${fields.slice(4, 9).join(" ")}` } : {},
+  ...fields.length > 9 ? { command: fields.slice(9).join(" ").slice(0, 160) } : {}
 })).filter(
-  (entry) => Number.isSafeInteger(entry.pid) && entry.pid > 0 && Number.isSafeInteger(entry.ppid) && entry.ppid >= 0 && Number.isSafeInteger(entry.pgid) && entry.pgid > 0
+  (entry) => Number.isSafeInteger(entry.pid) && entry.pid > 0 && Number.isSafeInteger(entry.ppid) && entry.ppid >= 0 && Number.isSafeInteger(entry.pgid) && entry.pgid > 0 && entry.state.length > 0
 );
-var readPosixProcessTable = () => {
+var psExecutable = () => existsSync("/bin/ps") ? "/bin/ps" : "ps";
+var readPsProcessTable = () => {
   if (process.env[TEST_PS_FAILURE_ENV] === "1") return null;
   try {
-    const stdout = execFileSync("ps", ["-axo", "pid=,ppid=,pgid="], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"]
-    });
+    const stdout = execFileSync(
+      psExecutable(),
+      ["-axo", "pid=,ppid=,pgid=,state=,lstart=,command="],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 2e3
+      }
+    );
     return parsePsEntries(stdout);
   } catch {
     return null;
@@ -62,10 +73,18 @@ var readLinuxProcessTable = () => {
         if (close < 0) continue;
         const fields = stat.slice(close + 2).trim().split(/\s+/u);
         const pid = Number(name);
+        const state = fields[0] ?? "?";
         const ppid = Number(fields[1]);
         const pgid = Number(fields[2]);
+        const startTicks = fields[19];
         if (Number.isSafeInteger(pid) && Number.isSafeInteger(ppid) && Number.isSafeInteger(pgid)) {
-          entries.push({ pid, ppid, pgid });
+          entries.push({
+            pid,
+            ppid,
+            pgid,
+            state,
+            ...startTicks ? { identity: `linux:${startTicks}` } : {}
+          });
         }
       } catch {
       }
@@ -74,6 +93,16 @@ var readLinuxProcessTable = () => {
   } catch {
     return null;
   }
+};
+var readPosixProcessTable = (ambientHelpers = true) => {
+  const platform = runtimePlatform();
+  if (platform === "linux") return readLinuxProcessTable() ?? (ambientHelpers ? readPsProcessTable() : null);
+  if (platform === "darwin") return readPsProcessTable();
+  return ambientHelpers ? readPsProcessTable() : null;
+};
+var processStateIsRunning = (state) => {
+  const code = state.trim().charAt(0).toUpperCase();
+  return code !== "Z" && code !== "X" && code !== "";
 };
 var processTreeFromEntries = (entries, pid) => {
   const root = entries.find((entry) => entry.pid === pid);
@@ -98,11 +127,7 @@ var processTreeFromEntries = (entries, pid) => {
   return { pgid: root.pgid, members: [...tree].sort((left, right) => left - right) };
 };
 var readPosixProcessTree = (pid) => {
-  const entries = readPosixProcessTable();
-  return entries ? processTreeFromEntries(entries, pid) : null;
-};
-var readKernelProcessTree = (pid) => {
-  const entries = readLinuxProcessTable();
+  const entries = readPosixProcessTable(true);
   return entries ? processTreeFromEntries(entries, pid) : null;
 };
 var parseWindowsProcessTree = (stdout) => {
@@ -154,18 +179,33 @@ var descendantPids = (pid) => {
   if (runtimePlatform() === "win32") return readWindowsDescendants(pid) ?? [pid];
   return readPosixProcessTree(pid)?.members ?? [];
 };
+var observeProcessState = (pid) => {
+  if (!Number.isSafeInteger(pid) || pid <= 0) {
+    return { pid, exists: false, running: false, state: "missing" };
+  }
+  if (runtimePlatform() !== "win32") {
+    const entry = readPosixProcessTable(false)?.find((candidate) => candidate.pid === pid);
+    if (entry) {
+      return {
+        pid,
+        exists: true,
+        running: processStateIsRunning(entry.state),
+        state: entry.state,
+        ppid: entry.ppid,
+        pgid: entry.pgid,
+        ...entry.identity ? { identity: entry.identity } : {},
+        ...entry.command ? { command: entry.command } : {}
+      };
+    }
+  }
+  const exists = pidExists(pid);
+  return { pid, exists, running: exists, state: exists ? "unknown" : "missing" };
+};
+var processIsRunning = (pid) => observeProcessState(pid).running;
 var killPid = (pid, signal) => {
   try {
     process.kill(pid, signal);
   } catch {
-  }
-};
-var posixGroupIsAlive = (pgid) => {
-  try {
-    process.kill(-pgid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
   }
 };
 var killPosixGroup = (pgid, signal) => {
@@ -212,55 +252,144 @@ var killWindowsTree = async (pid, confined = false) => {
     killer.once("close", finish);
   });
 };
-var killDescendantTree = async (pid, signal = "SIGTERM", graceMs = 0) => {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return;
-  if (runtimePlatform() === "win32") {
-    await killWindowsTree(pid);
-    return;
-  }
-  const group = readPosixProcessTree(pid);
-  if (!group) {
-    killPosixGroup(pid, signal);
-    killPid(pid, signal);
-    if (graceMs > 0 && signal !== "SIGKILL") {
-      await sleep(graceMs);
-      if (posixGroupIsAlive(pid)) killPosixGroup(pid, "SIGKILL");
-      if (processIsAlive(pid)) killPid(pid, "SIGKILL");
-    }
-    return;
-  }
-  killPosixGroup(group.pgid, signal);
-  for (const member of [...group.members].reverse()) killPid(member, signal);
-  if (graceMs > 0 && signal !== "SIGKILL") {
-    await sleep(graceMs);
-    for (const member of group.members) {
-      if (processIsAlive(member)) killPid(member, "SIGKILL");
-    }
+var ProcessTreeTerminationError = class extends Error {
+  remaining;
+  constructor(pid, pgid, remaining) {
+    const rows = remaining.slice(0, 16).map(
+      (entry) => `pid=${entry.pid} ppid=${entry.ppid ?? "?"} pgid=${entry.pgid ?? "?"} state=${entry.state} command=${entry.command ?? "?"}`
+    );
+    super(
+      `process tree ${pid}${pgid === void 0 ? "" : ` (pgid ${pgid})`} did not terminate` + (rows.length > 0 ? `: ${rows.join("; ")}` : "")
+    );
+    this.name = "ProcessTreeTerminationError";
+    this.remaining = remaining;
   }
 };
 var createProcessTreeController = (pid, options = {}) => {
   const ambientHelpers = options.ambientHelpers !== false;
-  const tracked = /* @__PURE__ */ new Set([pid]);
+  if (options.child?.pid !== void 0 && options.child.pid !== pid) {
+    throw new Error(`process-tree child pid ${options.child.pid} does not match ${pid}`);
+  }
+  const tracked = /* @__PURE__ */ new Map([[pid, void 0]]);
+  let pgid = runtimePlatform() === "win32" ? void 0 : pid;
+  let lastTable = null;
+  let ownerClosed = options.child === void 0 || options.child.exitCode !== null || options.child.signalCode !== null;
+  if (options.child && !ownerClosed) options.child.once("close", () => {
+    ownerClosed = true;
+  });
   let termination;
-  const refresh = () => {
-    const members = ambientHelpers ? descendantPids(pid) : readKernelProcessTree(pid)?.members ?? [];
-    for (const member of members) tracked.add(member);
+  const identityRelation = (entry) => {
+    const expected = tracked.get(entry.pid);
+    if (!tracked.has(entry.pid)) return "mismatch";
+    if (expected === void 0) return "match";
+    if (entry.identity === void 0) return "indeterminate";
+    return expected === entry.identity ? "match" : "mismatch";
   };
-  const gone = () => [...tracked].every((member) => !processIsAlive(member)) && (runtimePlatform() === "win32" || !posixGroupIsAlive(pid));
+  const matchingEntry = (entry) => identityRelation(entry) === "match";
+  const remember = (entry) => {
+    if (!tracked.has(entry.pid)) tracked.set(entry.pid, entry.identity);
+    else if (tracked.get(entry.pid) === void 0 && entry.identity !== void 0) {
+      tracked.set(entry.pid, entry.identity);
+    }
+  };
+  const refresh = () => {
+    if (runtimePlatform() === "win32") {
+      const members = ambientHelpers ? readWindowsDescendants(pid) : null;
+      for (const member of members ?? [pid]) if (!tracked.has(member)) tracked.set(member, void 0);
+      return;
+    }
+    const entries = readPosixProcessTable(ambientHelpers);
+    lastTable = entries;
+    if (!entries) return;
+    const root = entries.find((entry) => entry.pid === pid && matchingEntry(entry));
+    if (root) {
+      pgid = root.pgid;
+      remember(root);
+    }
+    const children = /* @__PURE__ */ new Map();
+    for (const entry of entries) {
+      const list = children.get(entry.ppid) ?? [];
+      list.push(entry);
+      children.set(entry.ppid, list);
+    }
+    const queue = [...tracked.keys()];
+    const seen = /* @__PURE__ */ new Set();
+    while (queue.length > 0) {
+      const parent = queue.shift();
+      if (parent === void 0 || seen.has(parent)) continue;
+      seen.add(parent);
+      const parentEntry = entries.find((entry) => entry.pid === parent);
+      if (parentEntry && !matchingEntry(parentEntry)) continue;
+      for (const child of children.get(parent) ?? []) {
+        remember(child);
+        queue.push(child.pid);
+      }
+    }
+    const groupStillBound = pgid !== void 0 && entries.some(
+      (entry) => entry.pgid === pgid && matchingEntry(entry)
+    );
+    if (groupStillBound) {
+      for (const entry of entries) if (entry.pgid === pgid) remember(entry);
+    }
+  };
+  refresh();
+  const remaining = () => {
+    refresh();
+    if (runtimePlatform() === "win32") {
+      return [...tracked.keys()].map(observeProcessState).filter((entry) => entry.running);
+    }
+    if (!lastTable) {
+      return [...tracked.keys()].map(observeProcessState).filter((entry) => entry.running);
+    }
+    const rows = [];
+    for (const entry of lastTable) {
+      if (!tracked.has(entry.pid) || identityRelation(entry) === "mismatch" || !processStateIsRunning(entry.state)) continue;
+      let command = entry.command;
+      if (!command && runtimePlatform() === "linux") {
+        try {
+          command = readFileSync(`/proc/${entry.pid}/cmdline`, "utf8").replaceAll("\0", " ").trim().slice(0, 160) || void 0;
+        } catch {
+        }
+      }
+      rows.push({
+        pid: entry.pid,
+        exists: true,
+        running: true,
+        state: entry.state,
+        ppid: entry.ppid,
+        pgid: entry.pgid,
+        ...entry.identity ? { identity: entry.identity } : {},
+        ...command ? { command } : {}
+      });
+    }
+    return rows.sort((left, right) => left.pid - right.pid);
+  };
+  const gone = () => remaining().length === 0 && ownerClosed;
+  const groupSignalIsBound = () => {
+    if (pgid === void 0) return false;
+    if (!lastTable) return tracked.has(pid) && processIsRunning(pid);
+    return lastTable.some((entry) => entry.pgid === pgid && matchingEntry(entry));
+  };
+  const signalTracked = (value) => {
+    if (!lastTable) {
+      for (const member of [...tracked.keys()].reverse()) killPid(member, value);
+      return;
+    }
+    for (const entry of [...lastTable].reverse()) {
+      if (tracked.has(entry.pid) && matchingEntry(entry) && processStateIsRunning(entry.state)) killPid(entry.pid, value);
+    }
+  };
   const signal = async (value) => {
     refresh();
-    if (!ambientHelpers) {
-      if (runtimePlatform() === "win32") await killWindowsTree(pid, true);
-      else {
-        const tree = readKernelProcessTree(pid);
-        killPosixGroup(tree?.pgid ?? pid, value);
-        for (const member of [...tree?.members ?? [pid]].reverse()) killPid(member, value);
-      }
+    if (runtimePlatform() === "win32") {
+      if (value === "SIGKILL") await killWindowsTree(pid, !ambientHelpers);
+      else signalTracked(value);
     } else {
-      await killDescendantTree(pid, value);
+      if (groupSignalIsBound()) killPosixGroup(pgid, value);
+      signalTracked(value);
     }
     refresh();
-    for (const member of [...tracked].reverse()) killPid(member, value);
+    signalTracked(value);
   };
   const waitUntilGone = async (durationMs) => {
     const deadline = Date.now() + Math.max(0, durationMs);
@@ -277,10 +406,13 @@ var createProcessTreeController = (pid, options = {}) => {
     terminate(graceMs = 3e3, killMs = 2e3) {
       if (termination) return termination;
       termination = (async () => {
+        if (gone()) return { escalated: false };
         await signal("SIGTERM");
         if (await waitUntilGone(graceMs)) return { escalated: false };
         await signal("SIGKILL");
-        await waitUntilGone(killMs);
+        if (!await waitUntilGone(killMs)) {
+          throw new ProcessTreeTerminationError(pid, pgid, remaining());
+        }
         return { escalated: true };
       })();
       return termination;
@@ -394,7 +526,8 @@ var spawnDetached = async (workerPath, workerArguments, cwd, options = {}) => {
   if (!child.pid) throw new Error(`Failed to launch Fabric worker process (${runtime}): missing pid`);
   const pid = child.pid;
   const tree = createProcessTreeController(pid, {
-    ambientHelpers: options.ambientHelpers !== false
+    ambientHelpers: options.ambientHelpers !== false,
+    child
   });
   child.unref();
   return {

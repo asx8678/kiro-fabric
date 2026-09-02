@@ -20,6 +20,7 @@ AGENT_DIR="$5"
 
 BENCH="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$BENCH/.." && pwd)"
+source "$BENCH/lib/process-groups.sh"
 TASK="$TASK_DIR/task.json"
 PROMPT_FILE="$TASK_DIR/prompt.txt"
 VERIFY_SCRIPT="$TASK_DIR/verify.sh"
@@ -150,77 +151,46 @@ CANDIDATE_EXTENSION="$REPO_ROOT"
 # cleanup has killed and drained descendants, even when the group leader exits
 # normally before a background child.
 ACTIVE_STAGE_PID=""
+ACTIVE_STAGE_PGID=""
 ACTIVE_WATCHDOG_PID=""
-
-signal_group() {
-  local signal="$1" pid="$2"
-  [[ -n "$pid" ]] || return 0
-  kill -"$signal" -- "-$pid" 2>/dev/null || true
-}
-
-wait_for_pid() {
-  local pid="$1"
-  [[ -n "$pid" ]] || return 0
-  wait "$pid" 2>/dev/null || true
-}
-
-group_exists() { kill -0 -- "-$1" 2>/dev/null; }
-
-terminate_and_drain_group() {
-  local pid="$1" attempt
-  [[ -n "$pid" ]] || return 0
-  signal_group TERM "$pid"
-  for ((attempt = 0; attempt < 10; attempt++)); do
-    group_exists "$pid" || return 0
-    sleep 0.02
-  done
-  signal_group KILL "$pid"
-  for ((attempt = 0; attempt < 100; attempt++)); do
-    group_exists "$pid" || return 0
-    sleep 0.02
-  done
-  echo "benchmark process group $pid did not drain" >&2
-  return 1
-}
-
-stop_active_process_trees() {
-  local watchdog="$ACTIVE_WATCHDOG_PID" stage="$ACTIVE_STAGE_PID"
-  terminate_and_drain_group "$watchdog"
-  wait_for_pid "$watchdog"
-  terminate_and_drain_group "$stage"
-  wait_for_pid "$stage"
-  ACTIVE_WATCHDOG_PID=""
-  ACTIVE_STAGE_PID=""
-}
+ACTIVE_WATCHDOG_PGID=""
 
 cleanup_process_trees() {
-  stop_active_process_trees
+  local failed=0
+  pg_stop_active_process_trees || failed=1
   if [[ -n "${CANDIDATE_STAGE:-}" && -d "$CANDIDATE_STAGE" ]]; then
     rm -rf -- "$CANDIDATE_STAGE"
   fi
+  return "$failed"
+}
+cleanup_on_exit() {
+  local status=$?
+  trap - EXIT
+  cleanup_process_trees || true
+  exit "$status"
 }
 interrupt() {
   local status="$1"
   trap - INT TERM
   exit "$status"
 }
-trap cleanup_process_trees EXIT
+trap cleanup_on_exit EXIT
 trap 'interrupt 130' INT
 trap 'interrupt 143' TERM
 
 run_grouped_stage() {
   local timeout="$1" grace="$2" stdout_file="$3" stderr_file="$4"
   shift 4
-  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
-    "$@" >"$stdout_file" 2>"$stderr_file" &
-  ACTIVE_STAGE_PID=$!
-  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+  pg_start_session ACTIVE_STAGE_PID ACTIVE_STAGE_PGID "$stdout_file" "$stderr_file" -- "$@"
+  pg_start_session ACTIVE_WATCHDOG_PID ACTIVE_WATCHDOG_PGID /dev/null /dev/null -- \
     bash -c 'sleep "$2"; kill -TERM -- "-$1" 2>/dev/null || true; sleep "$3"; kill -KILL -- "-$1" 2>/dev/null || true' \
-    bench-watchdog "$ACTIVE_STAGE_PID" "$timeout" "$grace" &
-  ACTIVE_WATCHDOG_PID=$!
+    bench-watchdog "$ACTIVE_STAGE_PGID" "$timeout" "$grace"
   local status
   if wait "$ACTIVE_STAGE_PID"; then status=0; else status=$?; fi
-  stop_active_process_trees
+  if ! pg_stop_active_process_trees; then
+    [[ "$status" -ne 0 ]] && return "$status"
+    return 125
+  fi
   return "$status"
 }
 

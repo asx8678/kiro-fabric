@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { generateKiroProfile } from "../src/kiro/profile.js";
+import { managedProviderCalls } from "../src/kiro/namespace-policy.js";
 
 describe("Kiro profile prompt contract", () => {
   it("keeps the minimum prompt guidance and fail-closed one-tool profile shape", () => {
@@ -17,7 +18,7 @@ describe("Kiro profile prompt contract", () => {
     expect(profile.prompt).toContain("k.read");
     expect(profile.prompt).toContain("k.ls");
     expect(profile.prompt).toContain("{ ok, output, details }");
-    expect(profile.prompt).toMatch(/tools\.\* is only for provider discovery/i);
+    for (const api of managedProviderCalls()) expect(profile.prompt).toContain(api);
     expect(profile.prompt).toMatch(/await every available/i);
     expect(profile.prompt).toMatch(/k\.bash is disabled in this profile/i);
     expect(profile.prompt).toMatch(/batch only independent/i);

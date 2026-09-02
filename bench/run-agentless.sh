@@ -23,6 +23,7 @@ TOTAL_TIMEOUT="$7"
 
 BENCH="$(cd "$(dirname "$0")" && pwd)"
 CONFIG="$BENCH/configs/agentless.json"
+source "$BENCH/lib/process-groups.sh"
 
 CONFIG_VALUES=$(python3 - "$CONFIG" "$TOTAL_TIMEOUT" <<'PYEOF'
 import json, sys
@@ -57,73 +58,33 @@ read -r LOCALIZATION_TIMEOUT REPAIR_TIMEOUT MAX_LOCALIZATION_BYTES MODEL THINKIN
 mkdir -p "$SESSION_DIR" "$LOGS_DIR" "$ARTIFACTS_DIR"
 LOCALIZE_WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/kiro-fabric-agentless.XXXXXX") || exit 2
 ACTIVE_STAGE_PID=""
+ACTIVE_STAGE_PGID=""
 ACTIVE_WATCHDOG_PID=""
-
-signal_group() {
-  local signal="$1"
-  local pid="$2"
-  [[ -n "$pid" ]] || return 0
-  kill -"$signal" -- "-$pid" 2>/dev/null || true
-}
-
-wait_for_pid() {
-  local pid="$1"
-  [[ -n "$pid" ]] || return 0
-  wait "$pid" 2>/dev/null || true
-}
-
-group_exists() {
-  local pid="$1"
-  kill -0 -- "-$pid" 2>/dev/null
-}
-
-terminate_and_drain_group() {
-  local pid="$1"
-  local attempt
-  [[ -n "$pid" ]] || return 0
-  signal_group TERM "$pid"
-  for ((attempt = 0; attempt < 10; attempt++)); do
-    group_exists "$pid" || return 0
-    sleep 0.02
-  done
-  signal_group KILL "$pid"
-  for ((attempt = 0; attempt < 100; attempt++)); do
-    group_exists "$pid" || return 0
-    sleep 0.02
-  done
-  echo "agentless process group $pid did not drain" >&2
-  return 1
-}
-
-stop_active_process_trees() {
-  local stage="$ACTIVE_STAGE_PID"
-  local watchdog="$ACTIVE_WATCHDOG_PID"
-  # Stop the watchdog first so it cannot race cleanup, then terminate and
-  # drain the complete stage group (Pi and every child it started). Active ids
-  # remain set until both groups are gone, including after an ordinary wait
-  # where the Pi leader exited before one of its background children.
-  terminate_and_drain_group "$watchdog"
-  wait_for_pid "$watchdog"
-  terminate_and_drain_group "$stage"
-  wait_for_pid "$stage"
-  ACTIVE_WATCHDOG_PID=""
-  ACTIVE_STAGE_PID=""
-}
+ACTIVE_WATCHDOG_PGID=""
 
 cleanup() {
-  stop_active_process_trees
+  local failed=0
+  pg_stop_active_process_trees || failed=1
   rm -rf -- "$LOCALIZE_WORKDIR"
+  return "$failed"
+}
+
+cleanup_on_exit() {
+  local status=$?
+  trap - EXIT
+  cleanup || true
+  exit "$status"
 }
 
 interrupt() {
   local status="$1"
   trap - INT TERM
-  cleanup
+  cleanup || true
   trap - EXIT
   exit "$status"
 }
 
-trap cleanup EXIT
+trap cleanup_on_exit EXIT
 trap 'interrupt 130' INT
 trap 'interrupt 143' TERM
 
@@ -170,21 +131,22 @@ run_stage() {
       agentless-stage "$directory" "$AGENT_DIR" "$THINKING" "$MODEL" \
       "$SESSION_DIR" "$prompt_file")
   fi
-  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
-    "${stage_command[@]}" >"$stdout_file" 2>"$stderr_file" &
-  ACTIVE_STAGE_PID=$!
+  pg_start_session ACTIVE_STAGE_PID ACTIVE_STAGE_PGID "$stdout_file" "$stderr_file" -- \
+    "${stage_command[@]}"
 
-  python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+  pg_start_session ACTIVE_WATCHDOG_PID ACTIVE_WATCHDOG_PGID /dev/null /dev/null -- \
     bash -c 'sleep "$2"; kill -TERM -- "-$1" 2>/dev/null || true; sleep 20; kill -KILL -- "-$1" 2>/dev/null || true' \
-    agentless-watchdog "$ACTIVE_STAGE_PID" "$timeout" &
-  ACTIVE_WATCHDOG_PID=$!
+    agentless-watchdog "$ACTIVE_STAGE_PGID" "$timeout"
 
   local status
   if wait "$ACTIVE_STAGE_PID"; then status=0; else status=$?; fi
   # A successful wait only reaps the session leader. Pi may have exited after
   # starting a background child, so always terminate and drain both groups
   # before clearing ACTIVE_STAGE_PID.
-  stop_active_process_trees
+  if ! pg_stop_active_process_trees; then
+    [[ "$status" -ne 0 ]] && return "$status"
+    return 125
+  fi
   return "$status"
 }
 

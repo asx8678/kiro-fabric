@@ -6,6 +6,11 @@ After importing the generated Kiro Fabric Power through Kiro IDE, CLI v3
 automatically detects it. Launch from the target workspace with:
 
 ```bash
+# From a built source checkout:
+node /absolute/path/to/kiro-fabric/dist/kiro/setup-entry.js launch-power \
+  --project-root /absolute/path/to/project
+
+# From an actually installed published package:
 kiro-fabric-setup launch-power --project-root /absolute/path/to/project
 ```
 
@@ -274,7 +279,8 @@ interactive launch processes execute a private read-only preflight stage or that
 installed copy—never the replaceable external path. A healthy installed release can use
 its installed copy as the source for no-op lifecycle maintenance. To update
 versions or repair runtime tampering, invoke `kiro-fabric-setup` from a trusted
-current package or source artifact; do not execute a damaged installed Node,
+current installed package, or invoke `node dist/kiro/setup-entry.js` from a
+trusted built source artifact; do not execute a damaged installed Node,
 Kiro artifact, or manager.
 
 Uninstall is hash-owned:

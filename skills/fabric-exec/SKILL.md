@@ -1,6 +1,10 @@
 ---
 name: fabric-exec
-description: Write, debug, or recover checked-TypeScript fabric_exec programs in Kiro Fabric Power — state, memory, provider fan-out, configured MCP federation. Load when composing fabric_exec calls or after a type or argument-shape error.
+description: >-
+  Use when Fabric has already been selected and an exact checked-TypeScript
+  fabric_exec body must be written, debugged, or repaired after a type or
+  argument-shape error. Do not use to decide whether Fabric is appropriate or
+  for an ordinary single native operation.
 ---
 
 # fabric_exec in Kiro Fabric Power

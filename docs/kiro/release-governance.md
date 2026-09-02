@@ -8,7 +8,8 @@ release authorization.
 `.github/workflows/ci.yml` runs Node 24 on Linux, macOS, and Windows. Branch
 protection requires these exact job names: `check (ubuntu-latest, Node 24)`,
 `check (macos-latest, Node 24)`, `check (windows-latest, Node 24)`, and
-`reproducible Power closure`. The reproducibility job rebuilds both runtime
+`reproducible Power closure`, plus the Linux and macOS lifecycle-stress jobs.
+The reproducibility job rebuilds both runtime
 closures, synchronizes manifests, runs protocol certification, and requires
 `git diff --exit-code` for every checked-in generated artifact.
 
@@ -31,9 +32,11 @@ permission:
 GH_TOKEN=... GITHUB_REPOSITORY=asx8678/kiro-fabric pnpm run github:protect-main
 ```
 
-The `github:protect-main` script protects `main`, requires the four CI jobs
-named above, enforces signed commits, blocks force pushes/deletion, and requires
-both an approving review and CODEOWNER review for future changes. Verify the resulting GitHub ruleset in
+The `github:protect-main` script protects `main`, requires the CI jobs named
+above, enforces signed commits, and blocks force pushes/deletion. The repository
+currently has a solo maintainer, so it deliberately does not require an
+impossible second-party approval or CODEOWNER review. Conversation resolution
+remains required; enable reviews when a second maintainer exists. Verify the resulting GitHub ruleset in
 the repository settings; absence of that server-side policy is a release
 blocker.
 
@@ -53,6 +56,13 @@ The workflow aggregates all three platforms into
 failed evidence cannot be promoted to a pass.
 
 ## Tagged releases
+
+Before tagging, manually run the **Release candidate** workflow for the exact
+commit. It reruns the local gate, checks generated artifacts, versions,
+changelog and package contents, produces an SPDX SBOM and checksums, requires
+all protected CI contexts plus exact-commit real-Kiro evidence, and records the
+signed-tag prerequisite without publishing anything. Its evidence artifact is
+review input, not release authorization.
 
 A maintainer updates the version and changelog on a reviewed branch, runs
 `pnpm run check`, merges only after all required CI jobs pass, then creates and

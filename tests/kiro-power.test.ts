@@ -45,13 +45,49 @@ describe("Kiro Power security boundaries", () => {
     expect(() => parseKiroIntegrationMode("managed-main")).toThrow("must be one of");
   });
 
-  it("requires canonical separate plugin roots and never uses process cwd", () => {
+  it("canonicalizes parent aliases for separate plugin roots and never uses process cwd", () => {
     const root = temp(); const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data");
     fs.mkdirSync(pluginRoot); fs.mkdirSync(pluginData);
     expect(resolveKiroMcpLaunchEnvironment({ KIRO_FABRIC_INTEGRATION: "power", PLUGIN_ROOT: pluginRoot, PLUGIN_DATA: pluginData }))
       .toEqual({ mode: "power", pluginRoot, pluginData });
     expect(() => resolveKiroMcpLaunchEnvironment({ KIRO_FABRIC_INTEGRATION: "power", PLUGIN_ROOT: pluginRoot })).toThrow("PLUGIN_DATA");
     expect(() => resolveKiroMcpLaunchEnvironment({ KIRO_FABRIC_INTEGRATION: "unknown", PLUGIN_ROOT: pluginRoot, PLUGIN_DATA: pluginData })).toThrow("KIRO_FABRIC_INTEGRATION");
+
+    const canonicalParent = path.join(root, "canonical-parent");
+    const parentAlias = path.join(root, "parent-alias");
+    fs.mkdirSync(canonicalParent);
+    fs.symlinkSync(canonicalParent, parentAlias, "dir");
+    const canonicalPlugin = path.join(canonicalParent, "plugin");
+    const canonicalData = path.join(canonicalParent, "data");
+    fs.mkdirSync(canonicalPlugin);
+    fs.mkdirSync(canonicalData);
+    expect(resolveKiroMcpLaunchEnvironment({
+      KIRO_FABRIC_INTEGRATION: "power",
+      PLUGIN_ROOT: path.join(parentAlias, "plugin"),
+      PLUGIN_DATA: path.join(parentAlias, "data"),
+    })).toEqual({
+      mode: "power",
+      pluginRoot: fs.realpathSync(canonicalPlugin),
+      pluginData: fs.realpathSync(canonicalData),
+    });
+
+    const finalAlias = path.join(root, "plugin-final-alias");
+    fs.symlinkSync(canonicalPlugin, finalAlias, "dir");
+    expect(() => resolveKiroMcpLaunchEnvironment({
+      KIRO_FABRIC_INTEGRATION: "power",
+      PLUGIN_ROOT: finalAlias,
+      PLUGIN_DATA: canonicalData,
+    })).toThrow(/selected entry must not be a symlink/i);
+
+    const containingData = path.join(root, "containing-data");
+    const nestedPlugin = path.join(containingData, "nested-plugin");
+    fs.mkdirSync(containingData);
+    fs.mkdirSync(nestedPlugin);
+    expect(() => resolveKiroMcpLaunchEnvironment({
+      KIRO_FABRIC_INTEGRATION: "power",
+      PLUGIN_ROOT: nestedPlugin,
+      PLUGIN_DATA: containingData,
+    })).toThrow(/must not contain one another/i);
   });
 
   it("creates private deterministic isolated project data and rejects intermediate symlinks", () => {
@@ -171,6 +207,50 @@ describe("Kiro Power security boundaries", () => {
       { uri: pathToFileURL(alias).href, name: "alias" },
     ]);
     expect(binding.list().roots).toHaveLength(0);
+  });
+
+  it("stores and approves the canonical workspace target behind a parent alias", async () => {
+    const root = temp();
+    const canonicalParent = path.join(root, "canonical-parent");
+    const parentAlias = path.join(root, "parent-alias");
+    const pluginRoot = path.join(root, "plugin");
+    const pluginData = path.join(root, "data");
+    const workspace = path.join(canonicalParent, "workspace");
+    for (const directory of [canonicalParent, pluginRoot, pluginData]) fs.mkdirSync(directory);
+    fs.mkdirSync(workspace);
+    fs.symlinkSync(canonicalParent, parentAlias, "dir");
+    const lexicalWorkspace = path.join(parentAlias, "workspace");
+    const approvals: string[] = [];
+    const binding = new KiroPowerWorkspaceBinding({
+      pluginRoot,
+      pluginData,
+      elicitor: {
+        approveWorkspace: async (canonicalPath) => {
+          approvals.push(canonicalPath);
+          return true;
+        },
+      },
+    });
+    binding.updateClientRoots([{ uri: pathToFileURL(lexicalWorkspace).href }]);
+    expect(binding.boundRoot()).toBe(fs.realpathSync(workspace));
+    await binding.handle({ action: "attach", path: lexicalWorkspace });
+    expect(approvals).toEqual([fs.realpathSync(workspace)]);
+    expect(binding.boundWorkspace()?.canonicalPath).toBe(fs.realpathSync(workspace));
+  });
+
+  it("applies reserved-root containment to canonical targets behind aliases", () => {
+    const root = temp();
+    const pluginRoot = path.join(root, "plugin");
+    const pluginData = path.join(root, "data");
+    const reservedWorkspace = path.join(pluginData, "nested-workspace");
+    const dataAlias = path.join(root, "data-parent-alias");
+    fs.mkdirSync(pluginRoot);
+    fs.mkdirSync(pluginData);
+    fs.mkdirSync(reservedWorkspace);
+    fs.symlinkSync(pluginData, dataAlias, "dir");
+    const binding = new KiroPowerWorkspaceBinding({ pluginRoot, pluginData });
+    binding.updateClientRoots([{ uri: pathToFileURL(path.join(dataAlias, "nested-workspace")).href }]);
+    expect(binding.list().roots).toEqual([]);
   });
 
   it("manual attachment fails closed without elicitation and rejects storage ancestors", async () => {

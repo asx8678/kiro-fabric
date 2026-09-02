@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  createProcessTreeController,
+  observeProcessState,
+  type ProcessTreeController,
+} from "../src/worker/process-tree.js";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const RUNNER = join(ROOT, "bench", "run-agentless.sh");
@@ -17,6 +22,7 @@ const BLINDED_ISOLATION_AVAILABLE = spawnSync("bash", [CANDIDATE_LAUNCHER, "--pr
   stdio: "ignore",
 }).status === 0;
 const temporaryDirectories: string[] = [];
+const activeRunners: Array<{ controller: ProcessTreeController }> = [];
 
 const temporaryDirectory = (): string => {
   const directory = mkdtempSync(join(tmpdir(), "kiro-agentless-test-"));
@@ -64,14 +70,7 @@ const createCellFixture = (root: string, verifier: string) => {
   return { task, agent, bin, cell };
 };
 
-const processIsAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const processIsAlive = (pid: number): boolean => observeProcessState(pid).running;
 
 const waitForFile = async (path: string, timeoutMs = 5_000): Promise<void> => {
   const deadline = Date.now() + timeoutMs;
@@ -81,7 +80,10 @@ const waitForFile = async (path: string, timeoutMs = 5_000): Promise<void> => {
   expect(existsSync(path), `timed out waiting for ${path}`).toBe(true);
 };
 
-afterEach(() => {
+afterEach(async () => {
+  for (const { controller } of activeRunners.splice(0)) {
+    await controller.terminate(0, 1_000).catch(() => undefined);
+  }
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -273,8 +275,13 @@ wait "$child"
           FAKE_PI_CHILD_PID_FILE: childPidFile,
         },
         stdio: "ignore",
+        detached: process.platform !== "win32",
       },
     );
+    if (!runner.pid) throw new Error("failed to spawn agentless runner");
+    activeRunners.push({
+      controller: createProcessTreeController(runner.pid, { child: runner }),
+    });
     const deadline = Date.now() + 5_000;
     while ((!existsSync(piPidFile) || !existsSync(childPidFile)) && Date.now() < deadline) {
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 20));
@@ -294,14 +301,10 @@ wait "$child"
 
     for (const file of [piPidFile, childPidFile]) {
       const pid = Number(readFileSync(file, "utf8"));
-      let alive = true;
+      let alive = processIsAlive(pid);
       for (let attempt = 0; attempt < 50 && alive; attempt += 1) {
-        try {
-          process.kill(pid, 0);
-          await new Promise((resolvePromise) => setTimeout(resolvePromise, 20));
-        } catch {
-          alive = false;
-        }
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 20));
+        alive = processIsAlive(pid);
       }
       expect(alive, `process ${pid} from ${file} survived cleanup`).toBe(false);
     }
@@ -637,8 +640,13 @@ wait
           cwd: root,
           env: { ...process.env, PATH: `${fixture.bin}:${process.env.PATH ?? ""}` },
           stdio: "ignore",
+          detached: process.platform !== "win32",
         },
       );
+      if (!runner.pid) throw new Error("failed to spawn run-cell");
+      activeRunners.push({
+        controller: createProcessTreeController(runner.pid, { child: runner }),
+      });
       const leaderFile = join(fixture.cell, "workdir", `${stage}-leader.pid`);
       const childFile = join(fixture.cell, "workdir", `${stage}-child.pid`);
       await waitForFile(leaderFile);

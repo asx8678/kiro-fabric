@@ -28,15 +28,16 @@ await api("/branches/main/protection", {
         "check (macos-latest, Node 24)",
         "check (windows-latest, Node 24)",
         "reproducible Power closure",
+        "lifecycle stress (ubuntu-latest)",
+        "lifecycle stress (macos-latest)",
       ],
     },
     enforce_admins: true,
-    required_pull_request_reviews: {
-      dismiss_stale_reviews: true,
-      require_code_owner_reviews: true,
-      required_approving_review_count: 1,
-      require_last_push_approval: true,
-    },
+    // This repository currently has one maintainer. Requiring a separate
+    // approving/CODEOWNER review would make compliant releases impossible.
+    // CI, conversation resolution, signatures, and history protections remain
+    // mandatory; add review requirements when a second maintainer exists.
+    required_pull_request_reviews: null,
     restrictions: null,
     required_conversation_resolution: true,
     allow_force_pushes: false,
@@ -48,4 +49,4 @@ await api("/branches/main/protection", {
   }),
 });
 await api("/branches/main/protection/required_signatures", { method: "POST" });
-process.stdout.write(`Protected ${repository}:main with required CI jobs and code-owner review\n`);
+process.stdout.write(`Protected ${repository}:main for the solo-maintainer model with required CI and signatures\n`);

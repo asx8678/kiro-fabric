@@ -21,6 +21,12 @@ coverage/
 !.kiro/steering/
 .kiro/steering/*
 !.kiro/steering/*.md
+!.kiro/skills/
+.kiro/skills/*
+!.kiro/skills/fabric-power-maintenance/
+!.kiro/skills/fabric-power-maintenance/**
+!.kiro/skills/strict-skill-maintenance/
+!.kiro/skills/strict-skill-maintenance/**
 .fabric/
 results2008/
 

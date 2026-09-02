@@ -63,7 +63,7 @@ const fabricExecDisplayString = Type.String({
 export const fabricExecInputSchema = Type.Object({
   code: Type.String({
     description:
-      "TypeScript function body. Top-level await and return are supported. Globals are capability-sensitive: managed Kiro provides `k`, `tools`, `print`, and `π`, plus `mcp`, `memory`, or `agents` only when enabled. Unavailable namespaces are omitted and fail closed; other host adapters may expose additional globals. See the host's `fabric-exec` skill for exact signatures.",
+      "TypeScript function body. Top-level await and return are supported. Globals are capability-sensitive: managed Kiro provides repository I/O only through `k` and mounted-provider access only through `tools.providers/catalog/search/describe/list/call`, plus `mcp`, `memory`, or `agents` only when enabled. Unavailable namespaces are omitted and fail closed; other host adapters may expose additional globals. See the host's `fabric-exec` skill for exact signatures.",
   }),
   strings: Type.Optional(
     Type.Record(Type.String(), Type.String(), {

@@ -1,9 +1,15 @@
 import { createHash } from "node:crypto";
-import { lstatSync, realpathSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
+import {
+  canonicalPathContains,
+  inspectCanonicalPath,
+  sameCanonicalFilesystemIdentity,
+  type CanonicalFilesystemIdentity,
+} from "../canonical-path.js";
 import type { KiroPowerWorkspaceIdentity } from "./data-paths.js";
 
 export const kiroPowerWorkspaceRequestSchema = Type.Union([
@@ -31,7 +37,12 @@ export interface KiroPowerElicitor {
   approveWorkspace(canonicalPath: string, signal?: AbortSignal): Promise<boolean>;
 }
 
-interface Candidate { id: string; root: string; name: string; dev: bigint; ino: bigint; ctimeNs: bigint }
+interface Candidate extends CanonicalFilesystemIdentity {
+  id: string;
+  root: string;
+  lexicalPath: string;
+  name: string;
+}
 interface Binding extends Candidate { source: "client-roots" | "manual" }
 export type KiroPowerWorkspaceMutation =
   | { action: "select"; rootId: string }
@@ -63,61 +74,70 @@ export class KiroPowerWorkspaceBinding {
   #initialAutoBindAllowed = true;
 
   constructor(options: { pluginRoot: string; pluginData: string; elicitor?: KiroPowerElicitor }) {
-    this.#pluginRoot = options.pluginRoot;
-    this.#pluginData = options.pluginData;
+    this.#pluginRoot = inspectCanonicalPath(options.pluginRoot, {
+      kind: "directory",
+      rejectFinalSymlink: true,
+    }).canonicalPath;
+    this.#pluginData = inspectCanonicalPath(options.pluginData, {
+      kind: "directory",
+      rejectFinalSymlink: true,
+    }).canonicalPath;
     this.#elicitor = options.elicitor;
-    this.#home = realpathSync(os.homedir());
-    this.#kiroHome = path.join(this.#home, ".kiro");
+    this.#home = inspectCanonicalPath(os.homedir(), { kind: "directory" }).canonicalPath;
+    const kiroHome = path.join(this.#home, ".kiro");
+    this.#kiroHome = existsSync(kiroHome)
+      ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath
+      : kiroHome;
   }
 
   #canonical(candidate: string): Candidate {
     if (!path.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
-    const resolved = path.resolve(candidate);
-    const lexical = lstatSync(resolved);
-    const root = realpathSync(resolved);
-    if (lexical.isSymbolicLink() || root !== resolved) {
-      throw new Error("workspace root must be a canonical, non-symlink directory");
-    }
-    const stats = statSync(root, { bigint: true });
-    if (!stats.isDirectory()) throw new Error("workspace root must be an existing directory");
-    const kiroRelative = path.relative(this.#kiroHome, root);
-    const insideKiroHome = kiroRelative === "" ||
-      (kiroRelative !== ".." && !kiroRelative.startsWith(`..${path.sep}`) && !path.isAbsolute(kiroRelative));
+    const inspected = inspectCanonicalPath(candidate, {
+      kind: "directory",
+      rejectFinalSymlink: true,
+    });
+    const root = inspected.canonicalPath;
+    const currentKiroHome = existsSync(this.#kiroHome)
+      ? inspectCanonicalPath(this.#kiroHome, { kind: "directory" }).canonicalPath
+      : this.#kiroHome;
+    const insideKiroHome = canonicalPathContains(currentKiroHome, root);
     const unsafe = [path.parse(root).root, this.#home, this.#pluginRoot, this.#pluginData];
     if (unsafe.includes(root) || insideKiroHome) {
       throw new Error("workspace root is too broad or reserved");
     }
     for (const reserved of [this.#pluginRoot, this.#pluginData]) {
-      const rootInsideReserved = path.relative(reserved, root);
-      const reservedInsideRoot = path.relative(root, reserved);
-      const isContained = (relative: string): boolean =>
-        relative === "" ||
-        (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-      if (isContained(rootInsideReserved) || isContained(reservedInsideRoot)) {
+      if (canonicalPathContains(reserved, root) || canonicalPathContains(root, reserved)) {
         throw new Error("workspace root and plugin storage must not contain one another");
       }
     }
     return {
       id: idFor(root),
       root,
+      lexicalPath: inspected.lexicalPath,
       name: path.basename(root) || "workspace",
-      dev: stats.dev,
-      ino: stats.ino,
-      ctimeNs: stats.ctimeNs,
+      ...inspected.identity,
     };
   }
 
   updateClientRoots(roots: readonly { uri: string; name?: string | undefined }[]): void {
     const candidates: Candidate[] = [];
-    const advertisedPaths = new Set<string>();
+    const advertisedCanonicalRoots = new Set<string>();
     for (const item of roots) {
+      let advertised: string | undefined;
       try {
         if (!item.uri.startsWith("file:")) continue;
-        const advertised = path.resolve(fileURLToPath(item.uri));
-        advertisedPaths.add(advertised);
+        advertised = path.resolve(fileURLToPath(item.uri));
         const candidate = this.#canonical(advertised);
+        advertisedCanonicalRoots.add(candidate.root);
         candidates.push({ ...candidate, name: (item.name?.trim() || candidate.name).slice(0, 120) });
-      } catch { /* invalid roots are unavailable, never broadened */ }
+      } catch {
+        // Preserve an already-bound alias as temporarily unavailable when the
+        // client still advertises the same lexical spelling. Failure to inspect
+        // it (including EPERM) is not evidence that the root was removed.
+        if (advertised && this.#binding?.lexicalPath === advertised) {
+          advertisedCanonicalRoots.add(this.#binding.root);
+        }
+      }
     }
     this.#candidates = [...new Map(candidates.map((entry) => [entry.id, entry])).values()];
     if (this.#binding?.source === "client-roots") {
@@ -125,7 +145,7 @@ export class KiroPowerWorkspaceBinding {
       // An advertised path that cannot currently be inspected is not evidence
       // that the client removed it. Retain the binding but fail closed through
       // workspaceObservation() until local verification recovers.
-      const transient = advertisedPaths.has(this.#binding.root) && !current;
+      const transient = advertisedCanonicalRoots.has(this.#binding.root) && !current;
       if (!transient && (!current || current.dev !== this.#binding.dev || current.ino !== this.#binding.ino)) {
         this.#binding = undefined;
         this.#initialAutoBindAllowed = false;
@@ -152,7 +172,7 @@ export class KiroPowerWorkspaceBinding {
     if (!binding) return { status: "unbound" };
     try {
       const current = this.#canonical(binding.root);
-      if (current.dev !== binding.dev || current.ino !== binding.ino) {
+      if (!sameCanonicalFilesystemIdentity(current, binding)) {
         return { status: "temporarily-unavailable" };
       }
       return {
@@ -204,6 +224,9 @@ export class KiroPowerWorkspaceBinding {
       return request;
     }
     const candidate = this.#canonical(request.path);
+    if (candidate.ctimeNs === undefined) {
+      throw new Error("workspace root identity cannot be verified for approval");
+    }
     if (!this.#elicitor) throw new Error("manual workspace attachment requires MCP elicitation support");
     signal?.throwIfAborted();
     const approved = await this.#elicitor.approveWorkspace(candidate.root, signal);
@@ -212,11 +235,11 @@ export class KiroPowerWorkspaceBinding {
     // Bind approval to the exact filesystem object that was presented. The
     // pathname alone is insufficient because it can be replaced while the
     // elicitation dialog is open.
-    const approvedIdentity = statSync(candidate.root, { bigint: true });
-    if (
-      approvedIdentity.dev !== candidate.dev || approvedIdentity.ino !== candidate.ino ||
-      approvedIdentity.ctimeNs !== candidate.ctimeNs
-    ) {
+    const approvedIdentity = inspectCanonicalPath(candidate.root, {
+      kind: "directory",
+      rejectFinalSymlink: true,
+    });
+    if (!sameCanonicalFilesystemIdentity(approvedIdentity.identity, candidate, { includeCtime: true })) {
       throw new Error("workspace root identity changed during approval; attach and approve again");
     }
     // ctime cannot be restored by an unprivileged pathname swap. Carry it to
@@ -227,7 +250,7 @@ export class KiroPowerWorkspaceBinding {
       root: candidate.root,
       dev: candidate.dev,
       ino: candidate.ino,
-      ctimeNs: candidate.ctimeNs,
+      ctimeNs: candidate.ctimeNs!,
     };
   }
 
@@ -238,16 +261,20 @@ export class KiroPowerWorkspaceBinding {
       const candidate = this.#candidates.find((entry) => entry.id === mutation.rootId);
       if (!candidate) throw new Error("workspace root selection changed while the request was pending; list and retry");
       const current = this.#canonical(candidate.root);
-      if (current.dev !== candidate.dev || current.ino !== candidate.ino) {
+      if (!sameCanonicalFilesystemIdentity(current, candidate)) {
         throw new Error("workspace root identity changed while the request was pending; list and retry");
       }
       this.#binding = { ...candidate, source: "client-roots" };
     } else {
       const candidate = this.#canonical(mutation.root);
-      const approvedIdentity = statSync(candidate.root, { bigint: true });
+      const approvedIdentity = inspectCanonicalPath(candidate.root, {
+        kind: "directory",
+        rejectFinalSymlink: true,
+      });
       if (
         candidate.dev !== mutation.dev || candidate.ino !== mutation.ino ||
-        approvedIdentity.ctimeNs !== mutation.ctimeNs
+        approvedIdentity.identity.ctimeNs === undefined ||
+        approvedIdentity.identity.ctimeNs !== mutation.ctimeNs
       ) {
         throw new Error("workspace root identity changed after approval; attach and approve again");
       }

@@ -29,6 +29,6 @@ writeFileSync(path.join(root, "mcp.json"), JSON.stringify(mcp, null, 2) + "\n", 
 validatePowerPackage(root);
 process.stdout.write(
   `${root}\nImport this local folder in Kiro IDE as a custom Power. ` +
-  `Kiro CLI v3 will then pick it up automatically; launch with ` +
-  `kiro-fabric-setup launch-power.\n`,
+  `Kiro CLI v3 will then pick it up automatically; from this source checkout ` +
+  `launch with node dist/kiro/setup-entry.js launch-power.\n`,
 );

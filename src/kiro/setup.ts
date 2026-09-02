@@ -809,7 +809,7 @@ const superviseKiro = async (
     detached: process.platform !== "win32",
   });
   const processTree = child.pid
-    ? createProcessTreeController(child.pid, { ambientHelpers: false })
+    ? createProcessTreeController(child.pid, { ambientHelpers: false, child })
     : undefined;
   let interruptedCode: number | undefined;
   let escalation: Promise<unknown> | undefined;

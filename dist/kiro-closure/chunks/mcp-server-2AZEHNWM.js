@@ -50,7 +50,7 @@ import {
   resolveAgentDir,
   typebox_exports,
   writeFileAtomic
-} from "./chunk-GBDWQFNI.js";
+} from "./chunk-EXSX65MA.js";
 import {
   runAbortable,
   settleWithin,
@@ -70,22 +70,25 @@ import {
   MAX_AGENT_STEER_LINE_BYTES,
   normalizeKiroSemanticContext,
   value_exports
-} from "./chunk-VYMOC3V3.js";
+} from "./chunk-AWB6CKDD.js";
 import {
   assertSupportedKiro,
   assertSupportedKiroUnchanged
-} from "./chunk-KQOUOZBQ.js";
+} from "./chunk-YAWOEC55.js";
 import {
+  canonicalPathContains,
+  inspectCanonicalPath,
   processInstanceIdentity,
   processInstanceIsAlive,
   readPackageVersion,
   resolveKiroProjectRoot,
+  sameCanonicalFilesystemIdentity,
   sha256Bytes
-} from "./chunk-MI2H25H6.js";
+} from "./chunk-42TCR6YA.js";
 import {
   createProcessTreeController,
   spawnDetached
-} from "./chunk-27626ACZ.js";
+} from "./chunk-DWCZKXAW.js";
 import {
   kiroChildToolRefs,
   parseKiroChildTools
@@ -1482,7 +1485,7 @@ var CachedWorkspaceContextProvider = class {
 
 // src/kiro/power/workspace-binding.ts
 import { createHash as createHash2 } from "node:crypto";
-import { lstatSync as lstatSync2, realpathSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path3 from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1510,62 +1513,66 @@ var KiroPowerWorkspaceBinding = class {
   #binding;
   #initialAutoBindAllowed = true;
   constructor(options) {
-    this.#pluginRoot = options.pluginRoot;
-    this.#pluginData = options.pluginData;
+    this.#pluginRoot = inspectCanonicalPath(options.pluginRoot, {
+      kind: "directory",
+      rejectFinalSymlink: true
+    }).canonicalPath;
+    this.#pluginData = inspectCanonicalPath(options.pluginData, {
+      kind: "directory",
+      rejectFinalSymlink: true
+    }).canonicalPath;
     this.#elicitor = options.elicitor;
-    this.#home = realpathSync(os.homedir());
-    this.#kiroHome = path3.join(this.#home, ".kiro");
+    this.#home = inspectCanonicalPath(os.homedir(), { kind: "directory" }).canonicalPath;
+    const kiroHome = path3.join(this.#home, ".kiro");
+    this.#kiroHome = existsSync(kiroHome) ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath : kiroHome;
   }
   #canonical(candidate) {
     if (!path3.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
-    const resolved = path3.resolve(candidate);
-    const lexical = lstatSync2(resolved);
-    const root = realpathSync(resolved);
-    if (lexical.isSymbolicLink() || root !== resolved) {
-      throw new Error("workspace root must be a canonical, non-symlink directory");
-    }
-    const stats = statSync(root, { bigint: true });
-    if (!stats.isDirectory()) throw new Error("workspace root must be an existing directory");
-    const kiroRelative = path3.relative(this.#kiroHome, root);
-    const insideKiroHome = kiroRelative === "" || kiroRelative !== ".." && !kiroRelative.startsWith(`..${path3.sep}`) && !path3.isAbsolute(kiroRelative);
+    const inspected = inspectCanonicalPath(candidate, {
+      kind: "directory",
+      rejectFinalSymlink: true
+    });
+    const root = inspected.canonicalPath;
+    const currentKiroHome = existsSync(this.#kiroHome) ? inspectCanonicalPath(this.#kiroHome, { kind: "directory" }).canonicalPath : this.#kiroHome;
+    const insideKiroHome = canonicalPathContains(currentKiroHome, root);
     const unsafe = [path3.parse(root).root, this.#home, this.#pluginRoot, this.#pluginData];
     if (unsafe.includes(root) || insideKiroHome) {
       throw new Error("workspace root is too broad or reserved");
     }
     for (const reserved of [this.#pluginRoot, this.#pluginData]) {
-      const rootInsideReserved = path3.relative(reserved, root);
-      const reservedInsideRoot = path3.relative(root, reserved);
-      const isContained = (relative2) => relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path3.sep}`) && !path3.isAbsolute(relative2);
-      if (isContained(rootInsideReserved) || isContained(reservedInsideRoot)) {
+      if (canonicalPathContains(reserved, root) || canonicalPathContains(root, reserved)) {
         throw new Error("workspace root and plugin storage must not contain one another");
       }
     }
     return {
       id: idFor(root),
       root,
+      lexicalPath: inspected.lexicalPath,
       name: path3.basename(root) || "workspace",
-      dev: stats.dev,
-      ino: stats.ino,
-      ctimeNs: stats.ctimeNs
+      ...inspected.identity
     };
   }
   updateClientRoots(roots) {
     const candidates = [];
-    const advertisedPaths = /* @__PURE__ */ new Set();
+    const advertisedCanonicalRoots = /* @__PURE__ */ new Set();
     for (const item of roots) {
+      let advertised;
       try {
         if (!item.uri.startsWith("file:")) continue;
-        const advertised = path3.resolve(fileURLToPath(item.uri));
-        advertisedPaths.add(advertised);
+        advertised = path3.resolve(fileURLToPath(item.uri));
         const candidate = this.#canonical(advertised);
+        advertisedCanonicalRoots.add(candidate.root);
         candidates.push({ ...candidate, name: (item.name?.trim() || candidate.name).slice(0, 120) });
       } catch {
+        if (advertised && this.#binding?.lexicalPath === advertised) {
+          advertisedCanonicalRoots.add(this.#binding.root);
+        }
       }
     }
     this.#candidates = [...new Map(candidates.map((entry) => [entry.id, entry])).values()];
     if (this.#binding?.source === "client-roots") {
       const current = this.#candidates.find((entry) => entry.id === this.#binding.id);
-      const transient = advertisedPaths.has(this.#binding.root) && !current;
+      const transient = advertisedCanonicalRoots.has(this.#binding.root) && !current;
       if (!transient && (!current || current.dev !== this.#binding.dev || current.ino !== this.#binding.ino)) {
         this.#binding = void 0;
         this.#initialAutoBindAllowed = false;
@@ -1589,7 +1596,7 @@ var KiroPowerWorkspaceBinding = class {
     if (!binding) return { status: "unbound" };
     try {
       const current = this.#canonical(binding.root);
-      if (current.dev !== binding.dev || current.ino !== binding.ino) {
+      if (!sameCanonicalFilesystemIdentity(current, binding)) {
         return { status: "temporarily-unavailable" };
       }
       return {
@@ -1631,13 +1638,19 @@ var KiroPowerWorkspaceBinding = class {
       return request;
     }
     const candidate = this.#canonical(request.path);
+    if (candidate.ctimeNs === void 0) {
+      throw new Error("workspace root identity cannot be verified for approval");
+    }
     if (!this.#elicitor) throw new Error("manual workspace attachment requires MCP elicitation support");
     signal?.throwIfAborted();
     const approved = await this.#elicitor.approveWorkspace(candidate.root, signal);
     signal?.throwIfAborted();
     if (!approved) throw new Error("manual workspace attachment was not approved");
-    const approvedIdentity = statSync(candidate.root, { bigint: true });
-    if (approvedIdentity.dev !== candidate.dev || approvedIdentity.ino !== candidate.ino || approvedIdentity.ctimeNs !== candidate.ctimeNs) {
+    const approvedIdentity = inspectCanonicalPath(candidate.root, {
+      kind: "directory",
+      rejectFinalSymlink: true
+    });
+    if (!sameCanonicalFilesystemIdentity(approvedIdentity.identity, candidate, { includeCtime: true })) {
       throw new Error("workspace root identity changed during approval; attach and approve again");
     }
     return {
@@ -1655,14 +1668,17 @@ var KiroPowerWorkspaceBinding = class {
       const candidate = this.#candidates.find((entry) => entry.id === mutation.rootId);
       if (!candidate) throw new Error("workspace root selection changed while the request was pending; list and retry");
       const current = this.#canonical(candidate.root);
-      if (current.dev !== candidate.dev || current.ino !== candidate.ino) {
+      if (!sameCanonicalFilesystemIdentity(current, candidate)) {
         throw new Error("workspace root identity changed while the request was pending; list and retry");
       }
       this.#binding = { ...candidate, source: "client-roots" };
     } else {
       const candidate = this.#canonical(mutation.root);
-      const approvedIdentity = statSync(candidate.root, { bigint: true });
-      if (candidate.dev !== mutation.dev || candidate.ino !== mutation.ino || approvedIdentity.ctimeNs !== mutation.ctimeNs) {
+      const approvedIdentity = inspectCanonicalPath(candidate.root, {
+        kind: "directory",
+        rejectFinalSymlink: true
+      });
+      if (candidate.dev !== mutation.dev || candidate.ino !== mutation.ino || approvedIdentity.identity.ctimeNs === void 0 || approvedIdentity.identity.ctimeNs !== mutation.ctimeNs) {
         throw new Error("workspace root identity changed after approval; attach and approve again");
       }
       this.#binding = { ...candidate, source: "manual" };
@@ -5045,7 +5061,7 @@ var fabricExecTitleHintCached = (code) => {
 var runtimeDependencies;
 var loadRuntimeDependencies = () => runtimeDependencies ??= Promise.all([
   import("./quickjs-runtime-EOQFTCVR.js"),
-  import("./node-process-runtime-7H7INE4M.js"),
+  import("./node-process-runtime-A6JBJ7PI.js"),
   import("./type-checker-ZXL6HVHN.js"),
   import("./guest-types-6A5BKABT.js"),
   import("./dynamic-guest-types-YIYN3HDU.js"),
@@ -8319,7 +8335,7 @@ var KiroToolsProvider = class {
         child.once("error", launchError);
         if (!child.pid) return;
         child.removeListener("error", launchError);
-        const tree = createProcessTreeController(child.pid, { ambientHelpers: false });
+        const tree = createProcessTreeController(child.pid, { ambientHelpers: false, child });
         let tail = Buffer.alloc(0);
         const capturedChunks = [];
         let capturedBytes = 0;

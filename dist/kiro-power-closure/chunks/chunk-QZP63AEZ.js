@@ -261,33 +261,66 @@ var readPackageVersion = () => {
   throw new KiroInstallError("fs", `cannot resolve immediate Fabric package metadata from ${import.meta.dirname}`);
 };
 
-// src/kiro/project-root-identity.ts
-import { lstatSync as lstatSync2, realpathSync as realpathSync2, statSync as statSync2 } from "node:fs";
+// src/kiro/canonical-path.ts
+import {
+  lstatSync as lstatSync2,
+  realpathSync as realpathSync2,
+  statSync as statSync2
+} from "node:fs";
 import path from "node:path";
+var inspectCanonicalPath = (value, options = {}) => {
+  if (!path.isAbsolute(value)) throw new Error("path must be absolute");
+  const lexicalPath = path.resolve(value);
+  const lexicalStats = lstatSync2(lexicalPath);
+  const canonicalPath = realpathSync2(lexicalPath);
+  const targetStats = statSync2(canonicalPath, { bigint: true });
+  const finalEntryIsSymlink = lexicalStats.isSymbolicLink();
+  if (options.rejectFinalSymlink && finalEntryIsSymlink) {
+    throw new Error("selected entry must not be a symlink");
+  }
+  if (options.kind === "directory" && !targetStats.isDirectory()) {
+    throw new Error("selected entry must be a directory");
+  }
+  if (options.kind === "file" && !targetStats.isFile()) {
+    throw new Error("selected entry must be a regular file");
+  }
+  return {
+    lexicalPath,
+    canonicalPath,
+    finalEntryIsSymlink,
+    lexicalStats,
+    targetStats,
+    identity: {
+      dev: targetStats.dev,
+      ino: targetStats.ino,
+      ctimeNs: typeof targetStats.ctimeNs === "bigint" ? targetStats.ctimeNs : void 0
+    }
+  };
+};
+var canonicalPathContains = (canonicalAncestor, canonicalTarget) => {
+  const relative2 = path.relative(canonicalAncestor, canonicalTarget);
+  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path.sep}`) && !path.isAbsolute(relative2);
+};
+var sameCanonicalFilesystemIdentity = (left, right, options = {}) => left.dev === right.dev && left.ino === right.ino && (options.includeCtime !== true || left.ctimeNs !== void 0 && right.ctimeNs !== void 0 && left.ctimeNs === right.ctimeNs);
+
+// src/kiro/project-root-identity.ts
 var resolveCanonicalKiroProjectRootIdentity = (projectRoot) => {
-  const configured = path.resolve(projectRoot);
-  let lexical;
-  let canonical;
-  let identity;
+  let inspected;
   try {
-    lexical = lstatSync2(configured);
-    canonical = realpathSync2(configured);
-    identity = statSync2(canonical, { bigint: true });
+    inspected = inspectCanonicalPath(projectRoot, {
+      kind: "directory",
+      rejectFinalSymlink: true
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `trusted Kiro project root ${configured} is unreadable (${detail}); reinstall the profile`
-    );
-  }
-  if (lexical.isSymbolicLink() || !lexical.isDirectory() || canonical !== configured) {
-    throw new Error(
-      "trusted Kiro project root must be a canonical, non-symlink directory; reinstall the profile from the canonical path"
+      `trusted Kiro project root ${projectRoot} is unreadable (${detail}); reinstall the profile`
     );
   }
   return {
-    root: canonical,
-    dev: String(identity.dev),
-    ino: String(identity.ino)
+    root: inspected.canonicalPath,
+    dev: String(inspected.identity.dev),
+    ino: String(inspected.identity.ino)
   };
 };
 var verifyCanonicalKiroProjectRootIdentity = (projectRoot, expected) => {
@@ -309,5 +342,8 @@ export {
   assertExecutableAttestation,
   copyAttestedExecutable,
   readPackageVersion,
+  inspectCanonicalPath,
+  canonicalPathContains,
+  sameCanonicalFilesystemIdentity,
   verifyCanonicalKiroProjectRootIdentity
 };

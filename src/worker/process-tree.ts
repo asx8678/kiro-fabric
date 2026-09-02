@@ -1,5 +1,5 @@
-import { execFileSync, spawn } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 // Node does not expose Windows Job Objects. Windows tree cleanup below uses
@@ -23,7 +23,7 @@ const sleep = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
-const processIsAlive = (pid: number): boolean => {
+const pidExists = (pid: number): boolean => {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
@@ -37,6 +37,9 @@ interface PosixProcessEntry {
   pid: number;
   ppid: number;
   pgid: number;
+  state: string;
+  identity?: string;
+  command?: string;
 }
 
 const parsePsEntries = (stdout: string): PosixProcessEntry[] =>
@@ -45,27 +48,39 @@ const parsePsEntries = (stdout: string): PosixProcessEntry[] =>
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => line.split(/\s+/u))
-    .map(([pidText, ppidText, pgidText]) => ({
-      pid: Number(pidText),
-      ppid: Number(ppidText),
-      pgid: Number(pgidText),
+    .map((fields): PosixProcessEntry => ({
+      pid: Number(fields[0]),
+      ppid: Number(fields[1]),
+      pgid: Number(fields[2]),
+      state: fields[3] ?? "?",
+      // lstart is five whitespace-separated fields. It is a stable-enough
+      // process-instance fingerprint on macOS, where procfs is unavailable.
+      ...(fields.length >= 9 ? { identity: `ps:${fields.slice(4, 9).join(" ")}` } : {}),
+      ...(fields.length > 9 ? { command: fields.slice(9).join(" ").slice(0, 160) } : {}),
     }))
     .filter(
-      (entry): entry is PosixProcessEntry =>
+      (entry) =>
         Number.isSafeInteger(entry.pid)
         && entry.pid > 0
         && Number.isSafeInteger(entry.ppid)
         && entry.ppid >= 0
         && Number.isSafeInteger(entry.pgid)
-        && entry.pgid > 0,
+        && entry.pgid > 0
+        && entry.state.length > 0,
     );
 
-const readPosixProcessTable = (): PosixProcessEntry[] | null => {
+const psExecutable = (): string => existsSync("/bin/ps") ? "/bin/ps" : "ps";
+
+const readPsProcessTable = (): PosixProcessEntry[] | null => {
   if (process.env[TEST_PS_FAILURE_ENV] === "1") return null;
   try {
-    const stdout = execFileSync("ps", ["-axo", "pid=,ppid=,pgid="], {
+    const stdout = execFileSync(
+      psExecutable(),
+      ["-axo", "pid=,ppid=,pgid=,state=,lstart=,command="],
+      {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      timeout: 2_000,
     });
     return parsePsEntries(stdout);
   } catch {
@@ -85,10 +100,18 @@ const readLinuxProcessTable = (): PosixProcessEntry[] | null => {
         if (close < 0) continue;
         const fields = stat.slice(close + 2).trim().split(/\s+/u);
         const pid = Number(name);
+        const state = fields[0] ?? "?";
         const ppid = Number(fields[1]);
         const pgid = Number(fields[2]);
+        const startTicks = fields[19];
         if (Number.isSafeInteger(pid) && Number.isSafeInteger(ppid) && Number.isSafeInteger(pgid)) {
-          entries.push({ pid, ppid, pgid });
+          entries.push({
+            pid,
+            ppid,
+            pgid,
+            state,
+            ...(startTicks ? { identity: `linux:${startTicks}` } : {}),
+          });
         }
       } catch {
         // Process exited between /proc enumeration and stat read.
@@ -98,6 +121,20 @@ const readLinuxProcessTable = (): PosixProcessEntry[] | null => {
   } catch {
     return null;
   }
+};
+
+const readPosixProcessTable = (ambientHelpers = true): PosixProcessEntry[] | null => {
+  const platform = runtimePlatform();
+  if (platform === "linux") return readLinuxProcessTable() ?? (ambientHelpers ? readPsProcessTable() : null);
+  // macOS has no procfs. /bin/ps is an absolute, OS-owned observation helper;
+  // it does not perform PATH discovery even in confined Kiro mode.
+  if (platform === "darwin") return readPsProcessTable();
+  return ambientHelpers ? readPsProcessTable() : null;
+};
+
+const processStateIsRunning = (state: string): boolean => {
+  const code = state.trim().charAt(0).toUpperCase();
+  return code !== "Z" && code !== "X" && code !== "";
 };
 
 const processTreeFromEntries = (
@@ -127,12 +164,7 @@ const processTreeFromEntries = (
 };
 
 const readPosixProcessTree = (pid: number): { pgid: number; members: number[] } | null => {
-  const entries = readPosixProcessTable();
-  return entries ? processTreeFromEntries(entries, pid) : null;
-};
-
-const readKernelProcessTree = (pid: number): { pgid: number; members: number[] } | null => {
-  const entries = readLinuxProcessTable();
+  const entries = readPosixProcessTable(true);
   return entries ? processTreeFromEntries(entries, pid) : null;
 };
 
@@ -197,6 +229,44 @@ export const descendantPids = (pid: number): number[] => {
   return readPosixProcessTree(pid)?.members ?? [];
 };
 
+export interface ProcessStateObservation {
+  pid: number;
+  exists: boolean;
+  running: boolean;
+  state: string;
+  ppid?: number;
+  pgid?: number;
+  identity?: string;
+  command?: string;
+}
+
+/** State-aware liveness observation. A zombie still has a PID but is not a
+ * live workload and must not hold termination open. */
+export const observeProcessState = (pid: number): ProcessStateObservation => {
+  if (!Number.isSafeInteger(pid) || pid <= 0) {
+    return { pid, exists: false, running: false, state: "missing" };
+  }
+  if (runtimePlatform() !== "win32") {
+    const entry = readPosixProcessTable(false)?.find((candidate) => candidate.pid === pid);
+    if (entry) {
+      return {
+        pid,
+        exists: true,
+        running: processStateIsRunning(entry.state),
+        state: entry.state,
+        ppid: entry.ppid,
+        pgid: entry.pgid,
+        ...(entry.identity ? { identity: entry.identity } : {}),
+        ...(entry.command ? { command: entry.command } : {}),
+      };
+    }
+  }
+  const exists = pidExists(pid);
+  return { pid, exists, running: exists, state: exists ? "unknown" : "missing" };
+};
+
+const processIsRunning = (pid: number): boolean => observeProcessState(pid).running;
+
 const killPid = (pid: number, signal: NodeJS.Signals): void => {
   try {
     process.kill(pid, signal);
@@ -206,6 +276,10 @@ const killPid = (pid: number, signal: NodeJS.Signals): void => {
 };
 
 const posixGroupIsAlive = (pgid: number): boolean => {
+  const table = readPosixProcessTable(false);
+  if (table) {
+    return table.some((entry) => entry.pgid === pgid && processStateIsRunning(entry.state));
+  }
   try {
     process.kill(-pgid, 0);
     return true;
@@ -287,7 +361,7 @@ export const killDescendantTree = async (
     if (graceMs > 0 && signal !== "SIGKILL") {
       await sleep(graceMs);
       if (posixGroupIsAlive(pid)) killPosixGroup(pid, "SIGKILL");
-      if (processIsAlive(pid)) killPid(pid, "SIGKILL");
+      if (processIsRunning(pid)) killPid(pid, "SIGKILL");
     }
     return;
   }
@@ -298,7 +372,7 @@ export const killDescendantTree = async (
   if (graceMs > 0 && signal !== "SIGKILL") {
     await sleep(graceMs);
     for (const member of group.members) {
-      if (processIsAlive(member)) killPid(member, "SIGKILL");
+      if (processIsRunning(member)) killPid(member, "SIGKILL");
     }
   }
 };
@@ -310,10 +384,30 @@ export interface ProcessTreeController {
   terminate(graceMs?: number, killMs?: number): Promise<{ escalated: boolean }>;
 }
 
+class ProcessTreeTerminationError extends Error {
+  readonly remaining: readonly ProcessStateObservation[];
+
+  constructor(pid: number, pgid: number | undefined, remaining: readonly ProcessStateObservation[]) {
+    const rows = remaining.slice(0, 16).map((entry) =>
+      `pid=${entry.pid} ppid=${entry.ppid ?? "?"} pgid=${entry.pgid ?? "?"} ` +
+      `state=${entry.state} command=${entry.command ?? "?"}`,
+    );
+    super(
+      `process tree ${pid}${pgid === undefined ? "" : ` (pgid ${pgid})`} did not terminate` +
+      (rows.length > 0 ? `: ${rows.join("; ")}` : ""),
+    );
+    this.name = "ProcessTreeTerminationError";
+    this.remaining = remaining;
+  }
+}
+
 export interface ProcessTreeControllerOptions {
   /** Disable PATH-discovered helpers. Uses kernel signals on POSIX and the
    *  absolute System32 taskkill tree primitive on Windows. */
   ambientHelpers?: boolean;
+  /** Direct child owned by the caller. terminate() does not complete until its
+   * close lifecycle fires and Node has reaped it. */
+  child?: ChildProcess;
 }
 
 /** One lifecycle abstraction used by Kiro ACP and probe children. */
@@ -322,32 +416,148 @@ export const createProcessTreeController = (
   options: ProcessTreeControllerOptions = {},
 ): ProcessTreeController => {
   const ambientHelpers = options.ambientHelpers !== false;
-  const tracked = new Set<number>([pid]);
+  if (options.child?.pid !== undefined && options.child.pid !== pid) {
+    throw new Error(`process-tree child pid ${options.child.pid} does not match ${pid}`);
+  }
+  const tracked = new Map<number, string | undefined>([[pid, undefined]]);
+  let pgid: number | undefined = runtimePlatform() === "win32" ? undefined : pid;
+  let lastTable: PosixProcessEntry[] | null = null;
+  let ownerClosed = options.child === undefined ||
+    options.child.exitCode !== null || options.child.signalCode !== null;
+  if (options.child && !ownerClosed) options.child.once("close", () => { ownerClosed = true; });
   let termination: Promise<{ escalated: boolean }> | undefined;
-  const refresh = (): void => {
-    const members = ambientHelpers
-      ? descendantPids(pid)
-      : readKernelProcessTree(pid)?.members ?? [];
-    for (const member of members) tracked.add(member);
+
+  const identityRelation = (entry: PosixProcessEntry): "match" | "mismatch" | "indeterminate" => {
+    const expected = tracked.get(entry.pid);
+    if (!tracked.has(entry.pid)) return "mismatch";
+    if (expected === undefined) return "match";
+    if (entry.identity === undefined) return "indeterminate";
+    return expected === entry.identity ? "match" : "mismatch";
   };
-  const gone = (): boolean =>
-    [...tracked].every((member) => !processIsAlive(member)) &&
-    (runtimePlatform() === "win32" || !posixGroupIsAlive(pid));
+  const matchingEntry = (entry: PosixProcessEntry): boolean => identityRelation(entry) === "match";
+
+  const remember = (entry: PosixProcessEntry): void => {
+    if (!tracked.has(entry.pid)) tracked.set(entry.pid, entry.identity);
+    else if (tracked.get(entry.pid) === undefined && entry.identity !== undefined) {
+      tracked.set(entry.pid, entry.identity);
+    }
+  };
+
+  const refresh = (): void => {
+    if (runtimePlatform() === "win32") {
+      const members = ambientHelpers ? readWindowsDescendants(pid) : null;
+      for (const member of members ?? [pid]) if (!tracked.has(member)) tracked.set(member, undefined);
+      return;
+    }
+    const entries = readPosixProcessTable(ambientHelpers);
+    lastTable = entries;
+    if (!entries) return;
+    const root = entries.find((entry) => entry.pid === pid && matchingEntry(entry));
+    if (root) {
+      pgid = root.pgid;
+      remember(root);
+    }
+    // Descendants that establish a new session/group remain owned. Discover
+    // them from every still-identifiable tracked parent before signalling.
+    const children = new Map<number, PosixProcessEntry[]>();
+    for (const entry of entries) {
+      const list = children.get(entry.ppid) ?? [];
+      list.push(entry);
+      children.set(entry.ppid, list);
+    }
+    const queue = [...tracked.keys()];
+    const seen = new Set<number>();
+    while (queue.length > 0) {
+      const parent = queue.shift();
+      if (parent === undefined || seen.has(parent)) continue;
+      seen.add(parent);
+      const parentEntry = entries.find((entry) => entry.pid === parent);
+      if (parentEntry && !matchingEntry(parentEntry)) continue;
+      for (const child of children.get(parent) ?? []) {
+        remember(child);
+        queue.push(child.pid);
+      }
+    }
+    // A PGID is safe to bind only while at least one previously tracked member
+    // still has its original identity. This prevents adopting a reused group.
+    const groupStillBound = pgid !== undefined && entries.some((entry) =>
+      entry.pgid === pgid && matchingEntry(entry),
+    );
+    if (groupStillBound) {
+      for (const entry of entries) if (entry.pgid === pgid) remember(entry);
+    }
+  };
+
+  refresh();
+
+  const remaining = (): ProcessStateObservation[] => {
+    refresh();
+    if (runtimePlatform() === "win32") {
+      return [...tracked.keys()].map(observeProcessState).filter((entry) => entry.running);
+    }
+    if (!lastTable) {
+      return [...tracked.keys()].map(observeProcessState).filter((entry) => entry.running);
+    }
+    const rows: ProcessStateObservation[] = [];
+    for (const entry of lastTable) {
+      if (
+        !tracked.has(entry.pid) || identityRelation(entry) === "mismatch" ||
+        !processStateIsRunning(entry.state)
+      ) continue;
+      let command = entry.command;
+      if (!command && runtimePlatform() === "linux") {
+        try {
+          command = readFileSync(`/proc/${entry.pid}/cmdline`, "utf8")
+            .replaceAll("\0", " ").trim().slice(0, 160) || undefined;
+        } catch { /* process exited during diagnostics */ }
+      }
+      rows.push({
+        pid: entry.pid,
+        exists: true,
+        running: true,
+        state: entry.state,
+        ppid: entry.ppid,
+        pgid: entry.pgid,
+        ...(entry.identity ? { identity: entry.identity } : {}),
+        ...(command ? { command } : {}),
+      });
+    }
+    return rows.sort((left, right) => left.pid - right.pid);
+  };
+
+  const gone = (): boolean => remaining().length === 0 && ownerClosed;
+
+  const groupSignalIsBound = (): boolean => {
+    if (pgid === undefined) return false;
+    if (!lastTable) return tracked.has(pid) && processIsRunning(pid);
+    return lastTable.some((entry) => entry.pgid === pgid && matchingEntry(entry));
+  };
+
+  const signalTracked = (value: NodeJS.Signals): void => {
+    if (!lastTable) {
+      for (const member of [...tracked.keys()].reverse()) killPid(member, value);
+      return;
+    }
+    for (const entry of [...lastTable].reverse()) {
+      if (
+        tracked.has(entry.pid) && matchingEntry(entry) &&
+        processStateIsRunning(entry.state)
+      ) killPid(entry.pid, value);
+    }
+  };
+
   const signal = async (value: NodeJS.Signals): Promise<void> => {
     refresh();
-    if (!ambientHelpers) {
-      if (runtimePlatform() === "win32") await killWindowsTree(pid, true);
-      else {
-        const tree = readKernelProcessTree(pid);
-        killPosixGroup(tree?.pgid ?? pid, value);
-        for (const member of [...(tree?.members ?? [pid])].reverse()) killPid(member, value);
-      }
+    if (runtimePlatform() === "win32") {
+      if (value === "SIGKILL") await killWindowsTree(pid, !ambientHelpers);
+      else signalTracked(value);
     } else {
-      await killDescendantTree(pid, value);
+      if (groupSignalIsBound()) killPosixGroup(pgid!, value);
+      signalTracked(value);
     }
     // The parent can race by spawning just before it receives the signal.
     refresh();
-    for (const member of [...tracked].reverse()) killPid(member, value);
+    signalTracked(value);
   };
   const waitUntilGone = async (durationMs: number): Promise<boolean> => {
     const deadline = Date.now() + Math.max(0, durationMs);
@@ -364,10 +574,13 @@ export const createProcessTreeController = (
     terminate(graceMs = 3_000, killMs = 2_000) {
       if (termination) return termination;
       termination = (async () => {
+        if (gone()) return { escalated: false };
         await signal("SIGTERM");
         if (await waitUntilGone(graceMs)) return { escalated: false };
         await signal("SIGKILL");
-        await waitUntilGone(killMs);
+        if (!await waitUntilGone(killMs)) {
+          throw new ProcessTreeTerminationError(pid, pgid, remaining());
+        }
         return { escalated: true };
       })();
       return termination;

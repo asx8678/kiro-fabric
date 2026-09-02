@@ -3,7 +3,10 @@
 // never infer management from filename or profile `name` alone.
 
 import { createHash, randomBytes } from "node:crypto";
-import { processInstanceIdentity } from "../core/process-instance.js";
+import {
+  processInstanceIdentity,
+  type ProcessInstanceIdentity,
+} from "../core/process-instance.js";
 import {
   chmodSync,
   closeSync,
@@ -24,6 +27,10 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  currentOperationLockProcessProbeForTest,
+  type OperationLockProcessObservation,
+} from "./operation-lock-test-seam.js";
 
 export const KIRO_INSTALL_MANIFEST_FORMAT = 3 as const;
 const KIRO_PREVIOUS_INSTALL_MANIFEST_FORMAT = 2 as const;
@@ -1155,22 +1162,34 @@ export interface OperationLock {
   release: () => void;
 }
 
-const processStartFingerprint = (pid: number): string | undefined => {
-  if (!Number.isSafeInteger(pid) || pid <= 0 || process.platform !== "linux") return undefined;
+const observeOperationLockProcess = (pid: number): OperationLockProcessObservation => {
+  const injected = currentOperationLockProcessProbeForTest();
+  if (injected) return injected(pid);
   try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    const close = stat.lastIndexOf(") ");
-    const fields = close >= 0 ? stat.slice(close + 2).trim().split(/\s+/u) : [];
-    // The suffix starts at proc field 3; process start time is field 22.
-    const startTicks = fields[19];
-    return startTicks ? `linux:${startTicks}` : undefined;
-  } catch {
-    // Managed lifecycle code never invokes ambient ps/PowerShell/PATH helpers.
-    // Without a kernel-provided process-instance identity lock recovery stays
-    // conservative and requires the PID to disappear.
-    return undefined;
+    process.kill(pid, 0);
+    return { liveness: "alive", identity: processInstanceIdentity(pid) };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return { liveness: "missing" };
+    // EPERM and unknown probe failures are not evidence that the owner died.
+    return { liveness: "indeterminate" };
   }
 };
+
+const processIdentityMismatch = (
+  owner: { bootId: string | undefined; processStart: string | undefined },
+  current: ProcessInstanceIdentity | undefined,
+): boolean => current !== undefined && (
+  (
+    typeof owner.bootId === "string" &&
+    typeof current.bootId === "string" &&
+    owner.bootId !== current.bootId
+  ) || (
+    typeof owner.processStart === "string" &&
+    typeof current.processStart === "string" &&
+    owner.processStart !== current.processStart
+  )
+);
 
 export const acquireOperationLock = (
   root: string,
@@ -1199,30 +1218,13 @@ export const acquireOperationLock = (
           owner.hostname === hostname() &&
           typeof owner.token === "string"
         ) {
-          try {
-            process.kill(owner.pid as number, 0);
-            const currentStart = processStartFingerprint(owner.pid as number);
-            const currentInstance = processInstanceIdentity(owner.pid as number);
-            if (
-              (
-                typeof owner.bootId === "string" &&
-                currentInstance.bootId !== undefined &&
-                currentInstance.bootId !== owner.bootId
-              ) || (
-                typeof owner.processStart === "string" &&
-                currentStart !== undefined &&
-                currentStart !== owner.processStart
-              )
-            ) {
-              // PID exists but belongs to a newer process instance.
-              stale = true;
-            }
-          } catch (error) {
-            // EPERM means the process exists but belongs to another user. Only
-            // ESRCH proves the recorded owner is gone; never reclaim a lock on
-            // an ambiguous liveness failure.
-            stale = (error as NodeJS.ErrnoException).code === "ESRCH";
-          }
+          const observed = observeOperationLockProcess(owner.pid as number);
+          stale = observed.liveness === "missing" || (
+            observed.liveness === "alive" && processIdentityMismatch({
+              bootId: typeof owner.bootId === "string" ? owner.bootId : undefined,
+              processStart: typeof owner.processStart === "string" ? owner.processStart : undefined,
+            }, observed.identity)
+          );
         }
       } catch {
         // A malformed/foreign lock is never removed automatically.
@@ -1243,14 +1245,13 @@ export const acquireOperationLock = (
     fsyncDirectory(paths.manifestDir);
   }
   const token = randomBytes(16).toString("hex");
-  const processStart = processStartFingerprint(process.pid);
   const instance = processInstanceIdentity();
   const body = serializeJson({
     token,
     pid: process.pid,
     hostname: hostname(),
     ...(instance.bootId ? { bootId: instance.bootId } : {}),
-    ...(processStart ? { processStart } : {}),
+    ...(instance.processStart ? { processStart: instance.processStart } : {}),
   });
   try {
     writeExclusive(paths.lock, body, 0o600);

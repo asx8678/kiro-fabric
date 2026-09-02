@@ -82,6 +82,12 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+
+// src/kiro/operation-lock-test-seam.ts
+var activeProbe;
+var currentOperationLockProcessProbeForTest = () => activeProbe;
+
+// src/kiro/managed.ts
 var KIRO_INSTALL_MANIFEST_FORMAT = 3;
 var KIRO_PREVIOUS_INSTALL_MANIFEST_FORMAT = 2;
 var KIRO_LEGACY_INSTALL_MANIFEST_FORMAT = 1;
@@ -837,18 +843,19 @@ var defaultMcpEntryPath = () => {
   if (existsSync(layout)) return layout;
   return resolve(import.meta.dirname, "..", "kiro", "mcp-entry.js");
 };
-var processStartFingerprint = (pid) => {
-  if (!Number.isSafeInteger(pid) || pid <= 0 || process.platform !== "linux") return void 0;
+var observeOperationLockProcess = (pid) => {
+  const injected = currentOperationLockProcessProbeForTest();
+  if (injected) return injected(pid);
   try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    const close = stat.lastIndexOf(") ");
-    const fields = close >= 0 ? stat.slice(close + 2).trim().split(/\s+/u) : [];
-    const startTicks = fields[19];
-    return startTicks ? `linux:${startTicks}` : void 0;
-  } catch {
-    return void 0;
+    process.kill(pid, 0);
+    return { liveness: "alive", identity: processInstanceIdentity(pid) };
+  } catch (error) {
+    const code = error.code;
+    if (code === "ESRCH") return { liveness: "missing" };
+    return { liveness: "indeterminate" };
   }
 };
+var processIdentityMismatch = (owner, current) => current !== void 0 && (typeof owner.bootId === "string" && typeof current.bootId === "string" && owner.bootId !== current.bootId || typeof owner.processStart === "string" && typeof current.processStart === "string" && owner.processStart !== current.processStart);
 var acquireOperationLock = (root, layout = "project") => {
   const paths = managedPaths(root, layout);
   assertManagedTree(root, layout);
@@ -862,16 +869,11 @@ var acquireOperationLock = (root, layout = "project") => {
       try {
         const owner = JSON.parse(existingBytes.toString("utf8"));
         if (Number.isSafeInteger(owner.pid) && owner.pid > 0 && owner.hostname === hostname() && typeof owner.token === "string") {
-          try {
-            process.kill(owner.pid, 0);
-            const currentStart = processStartFingerprint(owner.pid);
-            const currentInstance = processInstanceIdentity(owner.pid);
-            if (typeof owner.bootId === "string" && currentInstance.bootId !== void 0 && currentInstance.bootId !== owner.bootId || typeof owner.processStart === "string" && currentStart !== void 0 && currentStart !== owner.processStart) {
-              stale = true;
-            }
-          } catch (error) {
-            stale = error.code === "ESRCH";
-          }
+          const observed = observeOperationLockProcess(owner.pid);
+          stale = observed.liveness === "missing" || observed.liveness === "alive" && processIdentityMismatch({
+            bootId: typeof owner.bootId === "string" ? owner.bootId : void 0,
+            processStart: typeof owner.processStart === "string" ? owner.processStart : void 0
+          }, observed.identity);
         }
       } catch {
       }
@@ -890,14 +892,13 @@ var acquireOperationLock = (root, layout = "project") => {
     fsyncDirectory(paths.manifestDir);
   }
   const token = randomBytes(16).toString("hex");
-  const processStart = processStartFingerprint(process.pid);
   const instance = processInstanceIdentity();
   const body = serializeJson({
     token,
     pid: process.pid,
     hostname: hostname(),
     ...instance.bootId ? { bootId: instance.bootId } : {},
-    ...processStart ? { processStart } : {}
+    ...instance.processStart ? { processStart: instance.processStart } : {}
   });
   try {
     writeExclusive(paths.lock, body, 384);
@@ -937,33 +938,66 @@ var rmdirIfEmpty = (path2) => {
   }
 };
 
-// src/kiro/project-root-identity.ts
-import { lstatSync as lstatSync2, realpathSync as realpathSync2, statSync as statSync2 } from "node:fs";
+// src/kiro/canonical-path.ts
+import {
+  lstatSync as lstatSync2,
+  realpathSync as realpathSync2,
+  statSync as statSync2
+} from "node:fs";
 import path from "node:path";
+var inspectCanonicalPath = (value, options = {}) => {
+  if (!path.isAbsolute(value)) throw new Error("path must be absolute");
+  const lexicalPath = path.resolve(value);
+  const lexicalStats = lstatSync2(lexicalPath);
+  const canonicalPath = realpathSync2(lexicalPath);
+  const targetStats = statSync2(canonicalPath, { bigint: true });
+  const finalEntryIsSymlink = lexicalStats.isSymbolicLink();
+  if (options.rejectFinalSymlink && finalEntryIsSymlink) {
+    throw new Error("selected entry must not be a symlink");
+  }
+  if (options.kind === "directory" && !targetStats.isDirectory()) {
+    throw new Error("selected entry must be a directory");
+  }
+  if (options.kind === "file" && !targetStats.isFile()) {
+    throw new Error("selected entry must be a regular file");
+  }
+  return {
+    lexicalPath,
+    canonicalPath,
+    finalEntryIsSymlink,
+    lexicalStats,
+    targetStats,
+    identity: {
+      dev: targetStats.dev,
+      ino: targetStats.ino,
+      ctimeNs: typeof targetStats.ctimeNs === "bigint" ? targetStats.ctimeNs : void 0
+    }
+  };
+};
+var canonicalPathContains = (canonicalAncestor, canonicalTarget) => {
+  const relative2 = path.relative(canonicalAncestor, canonicalTarget);
+  return relative2 === "" || relative2 !== ".." && !relative2.startsWith(`..${path.sep}`) && !path.isAbsolute(relative2);
+};
+var sameCanonicalFilesystemIdentity = (left, right, options = {}) => left.dev === right.dev && left.ino === right.ino && (options.includeCtime !== true || left.ctimeNs !== void 0 && right.ctimeNs !== void 0 && left.ctimeNs === right.ctimeNs);
+
+// src/kiro/project-root-identity.ts
 var resolveCanonicalKiroProjectRootIdentity = (projectRoot) => {
-  const configured = path.resolve(projectRoot);
-  let lexical;
-  let canonical;
-  let identity;
+  let inspected;
   try {
-    lexical = lstatSync2(configured);
-    canonical = realpathSync2(configured);
-    identity = statSync2(canonical, { bigint: true });
+    inspected = inspectCanonicalPath(projectRoot, {
+      kind: "directory",
+      rejectFinalSymlink: true
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `trusted Kiro project root ${configured} is unreadable (${detail}); reinstall the profile`
-    );
-  }
-  if (lexical.isSymbolicLink() || !lexical.isDirectory() || canonical !== configured) {
-    throw new Error(
-      "trusted Kiro project root must be a canonical, non-symlink directory; reinstall the profile from the canonical path"
+      `trusted Kiro project root ${projectRoot} is unreadable (${detail}); reinstall the profile`
     );
   }
   return {
-    root: canonical,
-    dev: String(identity.dev),
-    ino: String(identity.ino)
+    root: inspected.canonicalPath,
+    dev: String(inspected.identity.dev),
+    ino: String(inspected.identity.ino)
   };
 };
 var verifyCanonicalKiroProjectRootIdentity = (projectRoot, expected) => {
@@ -1008,6 +1042,9 @@ export {
   defaultMcpEntryPath,
   acquireOperationLock,
   rmdirIfEmpty,
+  inspectCanonicalPath,
+  canonicalPathContains,
+  sameCanonicalFilesystemIdentity,
   resolveCanonicalKiroProjectRootIdentity,
   verifyCanonicalKiroProjectRootIdentity
 };

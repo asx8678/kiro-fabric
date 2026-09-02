@@ -21,6 +21,7 @@ jobs:
           - os: win32
             runner: windows
     runs-on: [self-hosted, kiro-power, "${{ matrix.runner }}"]
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -40,6 +41,7 @@ jobs:
     name: real Power (all platforms)
     needs: qualify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:

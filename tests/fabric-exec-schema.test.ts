@@ -23,7 +23,9 @@ const EXPECTED_SCHEMA = {
     code: {
       type: "string",
       description:
-        "TypeScript function body. Top-level await and return are supported. Globals are capability-sensitive: managed Kiro provides `k`, `tools`, `print`, and `π`, plus `mcp`, `memory`, or `agents` only when enabled. Unavailable namespaces are omitted and fail closed; other host adapters may expose additional globals. See the host's `fabric-exec` skill for exact signatures.",
+        // This exact sentence is public, model-facing compatibility data: MCP
+        // clients consume it as part of the canonical fabric_exec schema.
+        "TypeScript function body. Top-level await and return are supported. Globals are capability-sensitive: managed Kiro provides repository I/O only through `k` and mounted-provider access only through `tools.providers/catalog/search/describe/list/call`, plus `mcp`, `memory`, or `agents` only when enabled. Unavailable namespaces are omitted and fail closed; other host adapters may expose additional globals. See the host's `fabric-exec` skill for exact signatures.",
     },
     strings: {
       type: "object",

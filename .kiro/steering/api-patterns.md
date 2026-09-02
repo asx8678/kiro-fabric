@@ -14,21 +14,10 @@ fileMatchPattern:
 
 # Fabric contract patterns
 
-- Change the canonical input schema before changing adapters, prompts, or
-  documentation.
-- Keep guest declarations, runtime validation, provider descriptors, and
-  model-facing guidance synchronized.
-- Treat capabilities as mode-sensitive: additive Power mode has no `k.*` or
-  `agents.*`; managed mode may expose them only when configured.
-- Never advertise a namespace that the effective runtime does not mount.
-- Use direct provider calls when the contract is known. Discover and describe
-  only when uncertainty remains.
-- Parallelize only independent effects and preserve expected per-item failures
-  as data.
-- Denial, timeout, cancellation, deactivation, missing capability, and
-  indeterminate effects fail closed.
-- Keep model-facing results bounded; use opaque artifact identifiers for
-  overflow.
-- For Power packaging, keep manifest versions synchronized, use only
-  schema-supported fields, and keep skills as immediate `skills/*/SKILL.md`
-  children.
+The schema is the contract owner. Keep runtime validation, guest declarations,
+provider descriptors, prompts, examples, and tests synchronized. Capability
+views are mode-sensitive and failures remain fail-closed.
+
+For public Power/API or package work, load `fabric-power-maintenance`. For the
+installer-owned managed skill, load `strict-skill-maintenance`. Do not load
+either skill for unrelated runtime implementation.

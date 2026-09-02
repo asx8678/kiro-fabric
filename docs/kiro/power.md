@@ -32,7 +32,7 @@ Kiro CLI v3 automatically detects Powers installed through Kiro IDE. After the
 one-time IDE import, launch the additive Power session from the target project:
 
 ```bash
-kiro-fabric-setup launch-power --project-root /absolute/path/to/project
+node dist/kiro/setup-entry.js launch-power --project-root /absolute/path/to/project
 ```
 
 The command validates Kiro CLI 2.20.1 and supervises `kiro-cli --v3`. Running
@@ -40,6 +40,9 @@ The command validates Kiro CLI 2.20.1 and supervises `kiro-cli --v3`. Running
 custom-Power importer, so the IDE installation remains required. Do not pass
 `--agent kiro-fabric`; that is the separate Strict integration and deliberately
 sets `includePowers: false`.
+
+The `node dist/...` form is the source-checkout command. The bare
+`kiro-fabric-setup` binary is reserved for an installed published package.
 
 ## GitHub installation
 

@@ -1,0 +1,80 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  statuses: read
+
+jobs:
+  report:
+    name: release-candidate report
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: 1.25.1
+          cache: false
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@11.20.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run power:sync
+      - name: Prove generated artifacts are clean
+        run: >-
+          git diff --exit-code --
+          dist/kiro-closure
+          dist/kiro-power-closure
+          plugin.json
+          mcp.json
+          package.json
+      - name: Download exact-commit real Kiro qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow "Real Kiro Power qualification" --commit "$GITHUB_SHA" --status success --json databaseId --jq '.[0].databaseId')
+          test -n "$run_id"
+          gh run download "$run_id" -n kiro-power-real-qualification -D "$RUNNER_TEMP/qualification"
+      - name: Generate SPDX SBOM
+        run: node scripts/generate-power-sbom.mjs --output "$RUNNER_TEMP/kiro-power-sbom.spdx.json"
+      - name: Produce release-candidate report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/release-candidate-report.mjs
+          --output "$RUNNER_TEMP/release-candidate.json"
+          --sbom "$RUNNER_TEMP/kiro-power-sbom.spdx.json"
+          --qualification "$RUNNER_TEMP/qualification/kiro-power-real-qualification.json"
+          --require-clean
+          --require-github
+      - name: Build candidate archive and checksums
+        run: |
+          archive="$RUNNER_TEMP/kiro-fabric-power-v$(node -p 'require("./package.json").version')-candidate.tar.gz"
+          git archive --format=tar.gz --prefix="kiro-fabric-power-candidate/" -o "$archive" HEAD -- \
+            plugin.json mcp.json package.json skills dist/kiro-power-closure \
+            docs/kiro/power.md LICENSE THIRD_PARTY_NOTICES.md
+          cd "$RUNNER_TEMP"
+          sha256sum "$(basename "$archive")" release-candidate.json \
+            kiro-power-sbom.spdx.json qualification/kiro-power-real-qualification.json \
+            > SHA256SUMS
+      - name: Upload candidate evidence (never publish)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-candidate-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/release-candidate.json
+            ${{ runner.temp }}/kiro-power-sbom.spdx.json
+            ${{ runner.temp }}/SHA256SUMS
+            ${{ runner.temp }}/qualification/kiro-power-real-qualification.json
+            ${{ runner.temp }}/kiro-fabric-power-*-candidate.tar.gz
+          if-no-files-found: error
+          retention-days: 14

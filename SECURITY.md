@@ -14,7 +14,11 @@ Please do not disclose the issue until a fixed release is available.
 
 ## Supported versions
 
-Security fixes are provided for the latest published release. Users should
-upgrade to the newest immutable tagged release; older versions are unsupported.
-Release artifacts and verification requirements are described in
+Kiro Fabric has not yet published its first immutable supported release. The
+current source checkout is pre-release software and receives best-effort
+security fixes on `main`; it is not covered by a published-version support
+promise. Do not treat a mutable branch or local Power import as a signed
+release. When the first release satisfies the documented qualification,
+signature, SBOM, checksum, and attestation gates, this section will name the
+supported release line explicitly. See
 [`docs/kiro/release-governance.md`](docs/kiro/release-governance.md).

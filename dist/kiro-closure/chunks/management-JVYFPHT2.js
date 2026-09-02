@@ -11,10 +11,10 @@ import {
   inspectFabricConfig,
   require_dist,
   resolveAgentDir
-} from "./chunk-GBDWQFNI.js";
+} from "./chunk-EXSX65MA.js";
 import {
   resolveKiroMcpLaunchEnvironment
-} from "./chunk-HQ66VDCC.js";
+} from "./chunk-H2235NCG.js";
 import "./chunk-PGDCKPF6.js";
 import "./chunk-D27TRCNO.js";
 import {
@@ -41,7 +41,7 @@ import {
   kiroProfilePath,
   resolveKiroInstallRoots,
   sameExecutableIdentity
-} from "./chunk-KQOUOZBQ.js";
+} from "./chunk-YAWOEC55.js";
 import {
   KIRO_INSTALL_MANIFEST_FORMAT,
   KiroInstallError,
@@ -57,6 +57,7 @@ import {
   defaultMcpEntryPath,
   ensureManagedDirectory,
   fsyncDirectory,
+  inspectCanonicalPath,
   lstatOrNull,
   managedFileTransition,
   managedPaths,
@@ -72,11 +73,11 @@ import {
   withContainedParent,
   writeAtomic,
   writeExclusive
-} from "./chunk-MI2H25H6.js";
+} from "./chunk-42TCR6YA.js";
 import {
   createProcessTreeController,
   resolveScriptRuntimeSync
-} from "./chunk-27626ACZ.js";
+} from "./chunk-DWCZKXAW.js";
 import "./chunk-OZKYNYCD.js";
 import {
   __toESM
@@ -135,7 +136,7 @@ var spawnJsonRpcProcess = (options) => {
       earlySpawnError ? `failed to spawn ${options.argv[0]}: ${earlySpawnError.message}` : `failed to spawn ${options.argv[0]}`
     );
   }
-  const processTree = createProcessTreeController(pid, { ambientHelpers: false });
+  const processTree = createProcessTreeController(pid, { ambientHelpers: false, child });
   const outboundMethods = [];
   const pending = /* @__PURE__ */ new Map();
   let buffer = "";
@@ -155,7 +156,9 @@ var spawnJsonRpcProcess = (options) => {
     if (fatal || closed) return;
     fatal = true;
     rejectAll(error);
-    void terminate();
+    void terminate().catch((terminationError) => {
+      closeError = terminationError instanceof Error ? terminationError : new ProbeError(String(terminationError));
+    });
   };
   const timer = setTimeout(() => {
     fail(new ProbeError(withStderr(
@@ -434,7 +437,16 @@ var planRuntimeClosureDeployment = (installRoot, layout, options = {}) => {
   const packageRoot = resolveSourcePackageRoot();
   const nodeSourcePath = options.nodeSourcePath ?? process.execPath;
   const nodeAttestation = options.nodeAttestation ?? attestExecutable(nodeSourcePath);
-  if (nodeAttestation.path !== resolve(nodeSourcePath)) {
+  let canonicalNodeSource;
+  try {
+    canonicalNodeSource = inspectCanonicalPath(nodeSourcePath, { kind: "file" }).canonicalPath;
+  } catch (error) {
+    throw new KiroInstallError(
+      "fs",
+      `cannot canonicalize staged Node source: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  if (nodeAttestation.path !== canonicalNodeSource) {
     throw new KiroInstallError("concurrency", "staged Node path does not match its attestation");
   }
   assertExecutableAttestation(nodeAttestation);
@@ -1731,11 +1743,17 @@ var installKiroProfile = async (options = {}) => {
     if (options.repairRuntime) {
       const existingClosure = readManifest(roots.installRoot, roots.layout)?.runtime.closure;
       if (existingClosure) {
-        const sourceRoot = resolve2(resolveSourcePackageRoot());
-        const installedReleaseRoot = resolve2(
-          roots.installRoot,
-          ...existingClosure.root.split("/")
-        );
+        const sourceRoot = inspectCanonicalPath(resolveSourcePackageRoot(), {
+          kind: "directory"
+        }).canonicalPath;
+        let installedReleaseRoot;
+        try {
+          installedReleaseRoot = inspectCanonicalPath(resolve2(
+            roots.installRoot,
+            ...existingClosure.root.split("/")
+          ), { kind: "directory" }).canonicalPath;
+        } catch {
+        }
         if (sourceRoot === installedReleaseRoot) {
           try {
             verifyRuntimeClosureAttestation(roots.installRoot, existingClosure);
@@ -3229,7 +3247,7 @@ var superviseKiro = async (executablePath, args, projectRoot) => {
     cwd: projectRoot,
     detached: process.platform !== "win32"
   });
-  const processTree = child.pid ? createProcessTreeController(child.pid, { ambientHelpers: false }) : void 0;
+  const processTree = child.pid ? createProcessTreeController(child.pid, { ambientHelpers: false, child }) : void 0;
   let interruptedCode;
   let escalation;
   const forward = (signal, code) => {

@@ -66,6 +66,7 @@ import {
   type KiroManagedOwnedFile,
 } from "./managed.js";
 import { resolveKiroInstallRoots } from "./home.js";
+import { inspectCanonicalPath } from "./canonical-path.js";
 import { currentKiroInstallTestOverrides } from "./install-test-seam.js";
 import { resolveKiroMcpLaunchEnvironment } from "./mcp-environment.js";
 import {
@@ -1007,11 +1008,19 @@ export const installKiroProfile = async (
     if (options.repairRuntime) {
       const existingClosure = readManifest(roots.installRoot, roots.layout)?.runtime.closure;
       if (existingClosure) {
-        const sourceRoot = resolve(resolveSourcePackageRoot());
-        const installedReleaseRoot = resolve(
-          roots.installRoot,
-          ...existingClosure.root.split("/"),
-        );
+        const sourceRoot = inspectCanonicalPath(resolveSourcePackageRoot(), {
+          kind: "directory",
+        }).canonicalPath;
+        let installedReleaseRoot: string | undefined;
+        try {
+          installedReleaseRoot = inspectCanonicalPath(resolve(
+            roots.installRoot,
+            ...existingClosure.root.split("/"),
+          ), { kind: "directory" }).canonicalPath;
+        } catch {
+          // A missing/damaged installed generation is not the invoking source;
+          // the normal repair planner below owns replacement and diagnostics.
+        }
         if (sourceRoot === installedReleaseRoot) {
           try {
             verifyRuntimeClosureAttestation(roots.installRoot, existingClosure);

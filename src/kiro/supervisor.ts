@@ -73,7 +73,7 @@ export const spawnJsonRpcProcess = (options: SupervisedProcessOptions) => {
         : `failed to spawn ${options.argv[0]}`,
     );
   }
-  const processTree = createProcessTreeController(pid, { ambientHelpers: false });
+  const processTree = createProcessTreeController(pid, { ambientHelpers: false, child });
 
   const outboundMethods: string[] = [];
   const pending = new Map<number, PendingCall>();
@@ -99,7 +99,11 @@ export const spawnJsonRpcProcess = (options: SupervisedProcessOptions) => {
     // Reject first; process-tree cleanup is bounded but must never delay RPC
     // settlement after a fatal protocol violation.
     rejectAll(error);
-    void terminate();
+    void terminate().catch((terminationError: unknown) => {
+      closeError = terminationError instanceof Error
+        ? terminationError
+        : new ProbeError(String(terminationError));
+    });
   };
 
   const timer = setTimeout(() => {

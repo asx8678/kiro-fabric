@@ -14,7 +14,7 @@ import {
   managedPaths,
   resolveCanonicalKiroProjectRootIdentity,
   resolveKiroProjectRoot
-} from "./chunk-MI2H25H6.js";
+} from "./chunk-42TCR6YA.js";
 import {
   KIRO_PROFILE_REQUEST_TIMEOUT_MS
 } from "./chunk-OZKYNYCD.js";
@@ -57,6 +57,109 @@ var resolveKiroInstallRoots = (options = {}) => {
   return { layout: "project", installRoot: projectRoot, projectRoot };
 };
 
+// src/kiro/namespace-policy.ts
+var KIRO_NAMESPACE_POLICY = {
+  managedMain: {
+    repositoryIo: {
+      namespace: "k",
+      always: ["read", "readArtifact", "grep", "find", "ls", "write", "edit"],
+      conditional: ["bash"]
+    },
+    providerAccess: {
+      namespace: "tools",
+      actions: ["providers", "catalog", "search", "describe", "list", "call"]
+    },
+    conditionalProviders: {
+      memory: ["get", "set", "search", "index"],
+      mcp: ["servers", "call"],
+      agents: [
+        "run",
+        "spawn",
+        "wait",
+        "status",
+        "list",
+        "models",
+        "stop",
+        "cleanup",
+        "steer",
+        "followUp",
+        "setSteeringMode",
+        "setFollowUpMode",
+        "log"
+      ]
+    }
+  },
+  internalChild: {
+    inheritedFromParent: ["k", "\u03C0"],
+    parentOnly: ["tools", "memory", "mcp", "agents"],
+    childOnly: []
+  },
+  power: {
+    always: ["tools", "\u03C0"],
+    conditionalProviders: ["memory", "state", "mcp", "artifacts"],
+    unavailable: ["k", "agents"]
+  },
+  forbiddenAlternateIo: [
+    "pi",
+    "tools.fs",
+    "tools.shell",
+    "tools.shell.exec"
+  ],
+  unavailableManagedGlobals: [
+    "state",
+    "schema",
+    "mesh",
+    "components",
+    "compact",
+    "extensions",
+    "agent"
+  ],
+  promiseApis: [
+    "k.read",
+    "k.readArtifact",
+    "k.grep",
+    "k.find",
+    "k.ls",
+    "k.write",
+    "k.edit",
+    "k.bash",
+    "tools.providers",
+    "tools.catalog",
+    "tools.search",
+    "tools.describe",
+    "tools.list",
+    "tools.call",
+    "memory.get",
+    "memory.set",
+    "memory.search",
+    "memory.index",
+    "mcp.servers",
+    "mcp.call",
+    "agents.run",
+    "agents.spawn",
+    "agents.wait",
+    "agents.status",
+    "agents.list",
+    "agents.models",
+    "agents.stop",
+    "agents.cleanup",
+    "agents.steer",
+    "agents.followUp",
+    "agents.setSteeringMode",
+    "agents.setFollowUpMode",
+    "agents.log"
+  ]
+};
+var managedRepositoryCalls = (allowShell) => [
+  ...KIRO_NAMESPACE_POLICY.managedMain.repositoryIo.always,
+  ...allowShell ? KIRO_NAMESPACE_POLICY.managedMain.repositoryIo.conditional : []
+].map(
+  (action) => `${KIRO_NAMESPACE_POLICY.managedMain.repositoryIo.namespace}.${action}`
+);
+var managedProviderCalls = () => KIRO_NAMESPACE_POLICY.managedMain.providerAccess.actions.map(
+  (action) => `${KIRO_NAMESPACE_POLICY.managedMain.providerAccess.namespace}.${action}`
+);
+
 // src/kiro/profile.ts
 var KIRO_CLI_VERSION = "2.20.1";
 var KIRO_AGENT_ENGINE = "v3";
@@ -66,13 +169,15 @@ var KIRO_VERSION_ENV = "KIRO_FABRIC_KIRO_VERSION";
 var KIRO_SHA256_ENV = "KIRO_FABRIC_KIRO_SHA256";
 var KIRO_MCP_REQUEST_TIMEOUT_MS = KIRO_PROFILE_REQUEST_TIMEOUT_MS;
 var kiroProfilePrompt = (allowShell, internalChild, enableSubagents) => {
-  const repositoryCalls = allowShell ? "k.read, k.readArtifact, k.grep, k.find, k.ls, k.write, k.edit, and k.bash" : "k.read, k.readArtifact, k.grep, k.find, k.ls, k.write, and k.edit";
+  const repositoryList = managedRepositoryCalls(allowShell);
+  const repositoryCalls = repositoryList.length < 2 ? repositoryList.join("") : `${repositoryList.slice(0, -1).join(", ")}, and ${repositoryList.at(-1)}`;
+  const providerCalls = managedProviderCalls().join(", ");
   const shellGuidance = allowShell ? "For changes, run the smallest relevant verification with k.bash and separate command evidence from inference." : "k.bash is disabled in this profile; do not attempt shell execution.";
   if (internalChild) {
     return `Use only ${repositoryCalls} and the \u03C0 named-strings map. Await every k.* call and read the { ok, output, details } result from mutations. ${shellGuidance} Persistent memory, MCP federation, and subagents are unavailable inside ACP children; do not call memory.*, mcp.*, or agents.*. Locate with k.find or k.grep, read narrow ranges, batch only independent calls, and return compact evidence. Treat denial, timeout, cancellation, or an unverified result as failure.`;
   }
   const agentGuidance = enableSubagents ? "For explicitly requested independent work, read the skill's agents reference before calling agents.*; use at most four non-overlapping children and await every call." : "Subagents are disabled in managed Kiro; do not call agents.*.";
-  return `Before the first fabric_exec call, load the fabric-exec skill and read only the reference needed for the request. Use ${repositoryCalls} for repository I/O and \u03C0 for named strings; tools.* is only for provider discovery described by the skill. Await every available k.*, memory.*, mcp.*, and agents.* call and read { ok, output, details } from mutations. ${shellGuidance} ${agentGuidance} Locate with k.find or k.grep before narrow k.read ranges. Batch only independent calls, stop gathering when the evidence answers the task, and return compact decision-relevant results. Treat denial, timeout, cancellation, indeterminate effects, and unavailable capabilities as failures; fail closed and never claim completion without verified evidence.`;
+  return `Before the first fabric_exec call, load the fabric-exec skill and read only the reference needed for the request. Use ${repositoryCalls} for repository I/O and \u03C0 for named strings. Generic provider access is limited to ${providerCalls}; do not use ${KIRO_NAMESPACE_POLICY.forbiddenAlternateIo.join(", ")}. Await every available k.*, tools.*, memory.*, mcp.*, and agents.* call and read { ok, output, details } from mutations. ${shellGuidance} ${agentGuidance} Locate with k.find or k.grep before narrow k.read ranges. Batch only independent calls, stop gathering when the evidence answers the task, and return compact decision-relevant results. Treat denial, timeout, cancellation, indeterminate effects, and unavailable capabilities as failures; fail closed and never claim completion without verified evidence.`;
 };
 var generateKiroProfile = (options) => {
   for (const key of Object.keys(options.extraEnv ?? {})) {

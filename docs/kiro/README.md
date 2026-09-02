@@ -8,7 +8,8 @@ integration workspaces.
 The additive default is [Kiro Fabric Power](power.md). Run `pnpm power:dev` in a
 source checkout and import the generated local folder in Kiro IDE. Kiro CLI v3
 automatically picks up that IDE-installed Power; launch it with
-`kiro-fabric-setup launch-power --project-root /absolute/project` or directly
+`node dist/kiro/setup-entry.js launch-power --project-root /absolute/project`
+from the built checkout, or directly
 with `kiro-cli --v3`. Public GitHub imports launch the checked-in runtime closure without activation-time package
 resolution and remain gated by Power certification plus a clean-machine client
 qualification.
@@ -19,6 +20,10 @@ Requirements: Node.js 24 or newer and an installed, authenticated Kiro CLI
 2.20.1 native executable (ELF/Mach-O/PE as applicable). Unsupported shebang
 wrappers are rejected unless a future launcher supplies a complete attested
 dependency closure.
+
+Go is development/test-only: the required native Kiro security fixture needs
+Go 1.22 or newer, while CI pins 1.25.1. Installed Power and Strict runtimes do
+not use Go.
 
 After installing the npm package globally, launch the guided setup console:
 

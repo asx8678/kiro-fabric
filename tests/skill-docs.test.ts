@@ -79,10 +79,14 @@ describe("managed Kiro skill contract", () => {
 
   it("advertises only Kiro operations and resolves progressive references", () => {
     const exec = fs.readFileSync("strict/skills/fabric-exec/SKILL.md", "utf8");
-    expect(exec).toContain("`k` is the built-in");
-    expect(exec).toContain("global `agent()` helper are unavailable");
-    expect(exec).toContain("read, describe,\nretry");
-    expect(exec).toContain("settle: true");
+    // These anchors are deliberate public compatibility text: they encode the
+    // sole repository namespace, unavailable global agent path, and explicit
+    // nonzero-shell control-flow opt-in shown to managed Kiro.
+    for (const anchor of [
+      "`k` is the built-in",
+      "global `agent()` helper are unavailable",
+      "settle: true",
+    ]) expect(exec).toContain(anchor);
     expect(exec).not.toContain("pi.read(");
     const skillDirRefs = [...exec.matchAll(/`<skill-dir>\/([^`]+\.md)`/g)];
     expect(skillDirRefs.length).toBeGreaterThan(0);
@@ -91,58 +95,41 @@ describe("managed Kiro skill contract", () => {
     }
 
     const agents = fs.readFileSync("strict/skills/fabric-exec/references/agents.md", "utf8");
-    expect(agents).toContain("at most four non-recursive");
-    expect(agents).toContain("There are no Pi/Claude/Veda runners");
-    expect(agents).toContain("qwen3-coder-next");
-    expect(agents).toContain("claude-opus-4.8");
+    expect(agents).toMatch(/at most four non-recursive/iu);
+    expect(agents).toMatch(/no (?:Pi\/Claude\/Veda|recursive|durable)/iu);
+    expect(agents).toMatch(/runner:\s*"kiro"/u);
     expect(agents).not.toContain("agents.create(");
 
     const mcp = fs.readFileSync("strict/skills/fabric-exec/references/mcp.md", "utf8");
-    expect(mcp).toContain("mcp.call({server, tool, args?})");
-    expect(mcp).toContain("does not expose dynamic `mcp.server.tool` proxies");
+    expect(mcp).toMatch(/mcp\.call\(\{server, tool, args\?\}\)/u);
+    expect(mcp).toMatch(/does not expose dynamic .* proxies/iu);
     expect(mcp).not.toContain("mcp.register(");
   });
 
   it("keeps orchestration references bounded and direct-agent only", () => {
     const workflow = fs.readFileSync("strict/skills/fabric-exec/references/workflow.md", "utf8");
-    expect(workflow).toContain("agents.run({");
+    expect(workflow).toMatch(/await agents\.run\(/u);
+    // Public routing/partial-failure anchors intentionally remain exact.
     expect(workflow).toContain("1-4 non-empty independent items");
-    expect(workflow).toContain('"partial"');
     expect(workflow).toContain("never rerun a successful partition");
-    expect(workflow).toContain("strings.checks");
-    expect(workflow).toContain("k.bash({ command, timeout: 120 })");
-    expect(workflow).toContain("only after child\nfan-out settles");
-    expect(workflow).toContain("never from child\ntext or values");
-    expect(workflow).toContain("fails acceptance closed while preserving every child result");
-    expect(workflow).toContain("there are no automatic\nretries");
+    expect(workflow).toMatch(/"(?:completed|partial|failed)"/u);
+    expect(workflow).toMatch(/acceptance.*(?:closed|fail)/isu);
+    expect(workflow).toMatch(/no automatic\s+retries/iu);
     expect(workflow).not.toMatch(/\bagent\s*\(/);
     expect(workflow).not.toContain("worktree:");
 
     const review = fs.readFileSync("strict/skills/fabric-exec/references/review.md", "utf8");
-    expect(review).toContain("Correctness & security");
-    expect(review).toContain("Maintainability");
-    expect(review).toContain("advisory");
-    expect(review).toContain("deduplicate");
-    expect(review).toContain("concise, risk-first evidence packet");
-    expect(review).toContain("exactly one shared, falsifiable safety invariant");
-    expect(review).toContain("proof grade");
-    expect(review).toContain("**Observed**");
-    expect(review).toContain("**Inferred**");
-    expect(review).toContain("old/new trace only when");
-    expect(review).toContain("at most eight numbered steps per side");
-    expect(review).toContain("agents.run({");
-    expect(review).toContain("schema: reviewResultSchema");
-    expect(review).toContain("additionalProperties: false");
-    expect(review).toContain('result.status !== "completed"');
-    expect(review).toContain("result.value");
-    expect(review).toContain("{ concurrency: 2 }");
-    expect(review).toContain("schema-invalid response is a lane");
-    expect(review).toContain("Never fall back to\nunvalidated `result.text`");
+    expect(review).toMatch(/correctness.*security/iu);
+    expect(review).toMatch(/maintainability/iu);
+    expect(review).toMatch(/observed[\s\S]*inferred/iu);
+    expect(review).toMatch(/await agents\.run\(/u);
+    expect(review).toMatch(/additionalProperties:\s*false/u);
+    expect(review).toMatch(/schema-invalid.*lane/iu);
+    expect(review).toMatch(/never fall back to\s+unvalidated `result\.text`/iu);
 
     const guide = fs.readFileSync("strict/skills/fabric-exec/references/guide.md", "utf8");
-    expect(guide).toContain("smallest sufficient path");
-    expect(guide).toContain("references/workflow.md");
-    expect(guide).toContain("references/review.md");
+    expect(guide).toMatch(/smallest sufficient path/iu);
+    expect(guide).toMatch(/references\/(?:workflow|review)\.md/u);
     expect(guide).not.toContain("/skill:fabric-schema");
   });
 

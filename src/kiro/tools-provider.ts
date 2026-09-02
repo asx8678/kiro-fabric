@@ -609,7 +609,7 @@ export class KiroToolsProvider implements FabricProvider {
         child.once("error", launchError);
         if (!child.pid) return;
         child.removeListener("error", launchError);
-        const tree = createProcessTreeController(child.pid, { ambientHelpers: false });
+        const tree = createProcessTreeController(child.pid, { ambientHelpers: false, child });
         let tail = Buffer.alloc(0);
         const capturedChunks: Buffer[] = [];
         let capturedBytes = 0;

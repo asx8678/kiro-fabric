@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
@@ -87,5 +87,6 @@ const document = {
     relatedSpdxElement: entry.SPDXID,
   })),
 };
+mkdirSync(path.dirname(output), { recursive: true });
 writeFileSync(output, `${JSON.stringify(document, null, 2)}\n`, { mode: 0o600 });
 process.stdout.write(`${output}\n`);

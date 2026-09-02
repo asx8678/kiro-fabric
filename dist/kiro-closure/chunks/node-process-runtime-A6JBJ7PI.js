@@ -6,26 +6,28 @@ globalThis.__dirname = __kfDirname(globalThis.__filename);
 const require = __kfCreateRequire(import.meta.url);
 
 import {
-  resolveScriptRuntimeSync
-} from "./chunk-27626ACZ.js";
-import {
   createGuestStackMap,
   guestSetupForCoreToolNamespace,
   remapGuestErrorText
-} from "./chunk-2BL5QOED.js";
+} from "./chunk-3CTLDJEX.js";
+import {
+  runAbortable,
+  settleWithin
+} from "./chunk-SY6LZTI3.js";
 import {
   effectiveFabricSourceLimit,
   fabricSourceLimitError,
-  fabricTranspiledLimitError,
-  runAbortable,
-  settleWithin
-} from "./chunk-7PM3D3KB.js";
-import "./chunk-P6PCWHKI.js";
-import "./chunk-Z3MYUJJ2.js";
-import "./chunk-MPF465HQ.js";
+  fabricTranspiledLimitError
+} from "./chunk-PGDCKPF6.js";
+import {
+  resolveScriptRuntimeSync
+} from "./chunk-DWCZKXAW.js";
 import {
   transpileFabricCodeWithSourceMap
 } from "./chunk-MMKAFZEV.js";
+import "./chunk-P6PCWHKI.js";
+import "./chunk-Z3MYUJJ2.js";
+import "./chunk-MPF465HQ.js";
 import "./chunk-GX475RD4.js";
 
 // src/runtime/node-process-runtime.ts

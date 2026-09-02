@@ -5,7 +5,9 @@
   "includeMcpJson": false,
   "includePowers": false,
   "resources": [
-    "file://.kiro/steering/**/*.md"
+    "file://.kiro/steering/tech.md",
+    "file://.kiro/steering/structure.md",
+    "skill://.kiro/skills/**/SKILL.md"
   ],
   "mcpServers": {
     "fabric": {

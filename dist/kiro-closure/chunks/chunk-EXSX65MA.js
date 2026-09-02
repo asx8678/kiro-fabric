@@ -128,7 +128,7 @@ import {
   _Function_,
   _Object_,
   result_exports
-} from "./chunk-KQOUOZBQ.js";
+} from "./chunk-YAWOEC55.js";
 import {
   __commonJS,
   __export,
@@ -7632,7 +7632,7 @@ var fabricExecDisplayString = typebox_exports.String({
 });
 var fabricExecInputSchema = typebox_exports.Object({
   code: typebox_exports.String({
-    description: "TypeScript function body. Top-level await and return are supported. Globals are capability-sensitive: managed Kiro provides `k`, `tools`, `print`, and `\u03C0`, plus `mcp`, `memory`, or `agents` only when enabled. Unavailable namespaces are omitted and fail closed; other host adapters may expose additional globals. See the host's `fabric-exec` skill for exact signatures."
+    description: "TypeScript function body. Top-level await and return are supported. Globals are capability-sensitive: managed Kiro provides repository I/O only through `k` and mounted-provider access only through `tools.providers/catalog/search/describe/list/call`, plus `mcp`, `memory`, or `agents` only when enabled. Unavailable namespaces are omitted and fail closed; other host adapters may expose additional globals. See the host's `fabric-exec` skill for exact signatures."
   }),
   strings: typebox_exports.Optional(
     typebox_exports.Record(typebox_exports.String(), typebox_exports.String(), {

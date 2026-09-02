@@ -13,7 +13,7 @@ const servers = await mcp.servers();
 if (!servers.some((server) => server.name === "project-docs")) {
   return { available: false, servers };
 }
-return mcp.call({
+return await mcp.call({
   server: "project-docs",
   tool: "search",
   args: { query: π.query },

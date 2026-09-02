@@ -5,6 +5,11 @@ import { managedPaths, type KiroManagedLayout } from "./managed.js";
 import { KIRO_PROFILE_REQUEST_TIMEOUT_MS } from "./deadlines.js";
 import { resolveKiroHome } from "./home.js";
 import { resolveCanonicalKiroProjectRootIdentity } from "./project-root-identity.js";
+import {
+  KIRO_NAMESPACE_POLICY,
+  managedProviderCalls,
+  managedRepositoryCalls,
+} from "./namespace-policy.js";
 export const KIRO_CLI_VERSION = "2.20.1" as const;
 export const KIRO_AGENT_ENGINE = "v3" as const;
 export const KIRO_ACP_AUTH_METHOD = "cli" as const;
@@ -85,9 +90,11 @@ const kiroProfilePrompt = (
   internalChild: boolean,
   enableSubagents: boolean,
 ): string => {
-  const repositoryCalls = allowShell
-    ? "k.read, k.readArtifact, k.grep, k.find, k.ls, k.write, k.edit, and k.bash"
-    : "k.read, k.readArtifact, k.grep, k.find, k.ls, k.write, and k.edit";
+  const repositoryList = managedRepositoryCalls(allowShell);
+  const repositoryCalls = repositoryList.length < 2
+    ? repositoryList.join("")
+    : `${repositoryList.slice(0, -1).join(", ")}, and ${repositoryList.at(-1)}`;
+  const providerCalls = managedProviderCalls().join(", ");
   const shellGuidance = allowShell
     ? "For changes, run the smallest relevant verification with k.bash and separate command evidence from inference."
     : "k.bash is disabled in this profile; do not attempt shell execution.";
@@ -100,7 +107,7 @@ const kiroProfilePrompt = (
     ? "For explicitly requested independent work, read the skill's agents reference before calling agents.*; use at most four non-overlapping children and await every call."
     : "Subagents are disabled in managed Kiro; do not call agents.*.";
 
-  return `Before the first fabric_exec call, load the fabric-exec skill and read only the reference needed for the request. Use ${repositoryCalls} for repository I/O and π for named strings; tools.* is only for provider discovery described by the skill. Await every available k.*, memory.*, mcp.*, and agents.* call and read { ok, output, details } from mutations. ${shellGuidance} ${agentGuidance} Locate with k.find or k.grep before narrow k.read ranges. Batch only independent calls, stop gathering when the evidence answers the task, and return compact decision-relevant results. Treat denial, timeout, cancellation, indeterminate effects, and unavailable capabilities as failures; fail closed and never claim completion without verified evidence.`;
+  return `Before the first fabric_exec call, load the fabric-exec skill and read only the reference needed for the request. Use ${repositoryCalls} for repository I/O and π for named strings. Generic provider access is limited to ${providerCalls}; do not use ${KIRO_NAMESPACE_POLICY.forbiddenAlternateIo.join(", ")}. Await every available k.*, tools.*, memory.*, mcp.*, and agents.* call and read { ok, output, details } from mutations. ${shellGuidance} ${agentGuidance} Locate with k.find or k.grep before narrow k.read ranges. Batch only independent calls, stop gathering when the evidence answers the task, and return compact decision-relevant results. Treat denial, timeout, cancellation, indeterminate effects, and unavailable capabilities as failures; fail closed and never claim completion without verified evidence.`;
 };
 
 /**

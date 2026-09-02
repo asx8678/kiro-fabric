@@ -1,5 +1,4 @@
-import { lstatSync, realpathSync, statSync, type BigIntStats, type Stats } from "node:fs";
-import path from "node:path";
+import { inspectCanonicalPath } from "./canonical-path.js";
 
 export interface KiroProjectRootIdentity {
   root: string;
@@ -13,37 +12,30 @@ export interface ExpectedKiroProjectRootIdentity {
 }
 
 /**
- * Resolve and fingerprint a trusted project directory without accepting a
- * symlinked or merely equivalent spelling. Profile generation and MCP startup
- * use this same check so their trust-boundary interpretation cannot drift.
+ * Resolve and fingerprint a trusted project directory. Parent-component
+ * aliases are canonicalized consistently, while a symlink at the selected
+ * final directory remains forbidden. Profile generation and MCP startup use
+ * this same check so their trust-boundary interpretation cannot drift.
  */
 export const resolveCanonicalKiroProjectRootIdentity = (
   projectRoot: string,
 ): KiroProjectRootIdentity => {
-  const configured = path.resolve(projectRoot);
-  let lexical: Stats;
-  let canonical: string;
-  let identity: BigIntStats;
+  let inspected;
   try {
-    lexical = lstatSync(configured);
-    canonical = realpathSync(configured);
-    identity = statSync(canonical, { bigint: true });
+    inspected = inspectCanonicalPath(projectRoot, {
+      kind: "directory",
+      rejectFinalSymlink: true,
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `trusted Kiro project root ${configured} is unreadable (${detail}); reinstall the profile`,
-    );
-  }
-  if (lexical.isSymbolicLink() || !lexical.isDirectory() || canonical !== configured) {
-    throw new Error(
-      "trusted Kiro project root must be a canonical, non-symlink directory; " +
-        "reinstall the profile from the canonical path",
+      `trusted Kiro project root ${projectRoot} is unreadable (${detail}); reinstall the profile`,
     );
   }
   return {
-    root: canonical,
-    dev: String(identity.dev),
-    ino: String(identity.ino),
+    root: inspected.canonicalPath,
+    dev: String(inspected.identity.dev),
+    ino: String(inspected.identity.ino),
   };
 };
 

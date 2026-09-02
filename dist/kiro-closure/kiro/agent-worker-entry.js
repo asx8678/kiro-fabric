@@ -12,7 +12,7 @@ import {
   parseKiroAgentWorkerOptions,
   readSteerLines,
   value_exports
-} from "../chunks/chunk-VYMOC3V3.js";
+} from "../chunks/chunk-AWB6CKDD.js";
 import {
   KIRO_V3_AGENT_MODE,
   assertKiroV3AgentModeAvailable,
@@ -27,7 +27,7 @@ import {
   generateKiroProfile,
   resolveKiroHome,
   sameExecutableIdentity
-} from "../chunks/chunk-KQOUOZBQ.js";
+} from "../chunks/chunk-YAWOEC55.js";
 import {
   KiroInstallError,
   assertManagedTree,
@@ -37,11 +37,11 @@ import {
   readPackageVersion,
   resolveKiroProjectRoot,
   sha256Bytes
-} from "../chunks/chunk-MI2H25H6.js";
+} from "../chunks/chunk-42TCR6YA.js";
 import {
   createProcessTreeController,
   resolveScriptRuntimeSync
-} from "../chunks/chunk-27626ACZ.js";
+} from "../chunks/chunk-DWCZKXAW.js";
 import {
   assertRunnerSessionId,
   parseKiroChildTools,
@@ -108,7 +108,7 @@ var spawnAcpProcess = (options) => {
       earlySpawnError ? `failed to spawn ${options.argv[0]}: ${earlySpawnError.message}` : `failed to spawn ${options.argv[0]}`
     );
   }
-  const processTree = createProcessTreeController(pid, { ambientHelpers: false });
+  const processTree = createProcessTreeController(pid, { ambientHelpers: false, child });
   const outboundMethods = [];
   const pending = /* @__PURE__ */ new Map();
   let buffer = "";
@@ -129,7 +129,9 @@ var spawnAcpProcess = (options) => {
     if (fatal) return;
     fatal = true;
     rejectAll(error);
-    void terminate();
+    void terminate().catch((terminationError) => {
+      closeError = terminationError instanceof Error ? terminationError : new AcpProcessError(String(terminationError));
+    });
   };
   const timer = options.timeoutMs === void 0 ? void 0 : setTimeout(() => {
     fail(

@@ -8,6 +8,7 @@ import {
   createProcessTreeController,
   descendantPids,
   killDescendantTree,
+  observeProcessState,
   quoteCommandArg,
 } from "../src/worker/process-tree.js";
 
@@ -41,14 +42,7 @@ const waitFor = async (
   expect(predicate()).toBe(true);
 };
 
-const processIsAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const processIsAlive = (pid: number): boolean => observeProcessState(pid).running;
 
 const tmpRoots: string[] = [];
 
@@ -110,7 +104,7 @@ describe("process-tree helpers", () => {
       ].join(" ");
       const parent = spawn(process.execPath, ["-e", childCode], { stdio: "ignore" });
       if (!parent.pid) throw new Error("failed to spawn Windows tree root");
-      const controller = createProcessTreeController(parent.pid, { ambientHelpers: false });
+      const controller = createProcessTreeController(parent.pid, { ambientHelpers: false, child: parent });
       await waitFor(() => fs.existsSync(pidFile), 2_000);
       const pids = JSON.parse(fs.readFileSync(pidFile, "utf8")) as {
         root: number;
