@@ -10,7 +10,7 @@ import {
   inspectCanonicalPath,
   resolveKiroProjectRoot,
   verifyCanonicalKiroProjectRootIdentity
-} from "./chunk-42TCR6YA.js";
+} from "./chunk-D7BZ3OUY.js";
 
 // src/kiro/mcp-environment.ts
 import path2 from "node:path";

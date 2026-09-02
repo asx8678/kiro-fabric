@@ -594,7 +594,7 @@ describe("installKiroProfile", () => {
     const updated = await installWithFake(dir, { nodePath: otherNode });
     expect(["update", "noop"]).toContain(updated.action);
     const profile = JSON.parse(readFileSync(first.profilePath, "utf8"));
-    expect(profile.mcpServers.fabric.command).toBe(otherNode);
+    expect(profile.mcpServers.fabric.command).toBe(realpathSync(otherNode));
   });
 
   it("refuses a user-modified managed profile without --force", async () => {
@@ -665,6 +665,42 @@ describe("installKiroProfile", () => {
     expect(existsSync(paths.transaction)).toBe(false);
   });
 
+  it("persists canonical transaction roots behind parent aliases and rejects foreign roots", async () => {
+    const canonicalParent = project("transaction-canonical-parent");
+    const canonicalRoot = join(canonicalParent, "project");
+    const parentAlias = join(base, "transaction-parent-alias");
+    mkdirSync(canonicalRoot);
+    symlinkSync(canonicalParent, parentAlias, process.platform === "win32" ? "junction" : "dir");
+    const lexicalRoot = join(parentAlias, "project");
+    const installed = await installWithFake(lexicalRoot);
+    const profileBytes = readFileSync(installed.profilePath);
+    const manifestBytes = readFileSync(installed.manifestPath);
+    const transaction: KiroManagedTransaction = {
+      format: 1,
+      owner: "kiro-fabric",
+      operation: "install",
+      layout: "project",
+      root: lexicalRoot,
+      createdAt: Date.now(),
+      profile: managedFileTransition(sha256Bytes(profileBytes), profileBytes),
+      manifest: managedFileTransition(sha256Bytes(manifestBytes), manifestBytes),
+    };
+
+    writeManagedTransactionJournal(lexicalRoot, "project", transaction);
+    const canonical = realpathSync(canonicalRoot);
+    const paths = managedPaths(canonical);
+    expect(JSON.parse(readFileSync(paths.transaction, "utf8")).root).toBe(canonical);
+
+    const foreignRoot = project("transaction-foreign-root");
+    expect(() => writeManagedTransactionJournal(lexicalRoot, "project", {
+      ...transaction,
+      root: foreignRoot,
+    })).toThrow(/foreign or malformed/i);
+
+    await expect(installWithFake(lexicalRoot)).resolves.toMatchObject({ ok: true });
+    expect(existsSync(paths.transaction)).toBe(false);
+  });
+
   it("recovers an interrupted profile-before-manifest transaction", async () => {
     const dir = project("transaction-recovery");
     const installed = await installWithFake(dir);
@@ -707,9 +743,9 @@ describe("installKiroProfile", () => {
     expect(["noop", "update"]).toContain(recovered.action);
     expect(existsSync(paths.transaction)).toBe(false);
     expect(JSON.parse(readFileSync(installed.manifestPath, "utf8")).runtime.nodePath)
-      .toBe(otherNode);
+      .toBe(realpathSync(otherNode));
     expect(JSON.parse(readFileSync(installed.profilePath, "utf8")).mcpServers.fabric.command)
-      .toBe(otherNode);
+      .toBe(realpathSync(otherNode));
   });
 
   it("deterministically recovers SIGKILL after format-3 marker activation", async () => {

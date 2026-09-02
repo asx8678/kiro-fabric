@@ -703,7 +703,22 @@ var transactionRelativePath = (root, layout, value) => {
 };
 var parseManagedTransaction = (value, root, layout) => {
   if (!isRecord(value)) throw new KiroInstallError("manifest", "transaction journal is malformed");
-  if (value.format !== 1 && value.format !== 2 || value.owner !== MANAGED_OWNER || value.operation !== "install" && value.operation !== "uninstall" || value.layout !== layout || value.root !== root || typeof value.createdAt !== "number") {
+  const canonicalRoot = (() => {
+    try {
+      return realpathSync(root);
+    } catch {
+      return null;
+    }
+  })();
+  const canonicalJournalRoot = (() => {
+    if (typeof value.root !== "string" || !isAbsolute(value.root)) return null;
+    try {
+      return realpathSync(value.root);
+    } catch {
+      return null;
+    }
+  })();
+  if (value.format !== 1 && value.format !== 2 || value.owner !== MANAGED_OWNER || value.operation !== "install" && value.operation !== "uninstall" || value.layout !== layout || canonicalRoot === null || canonicalJournalRoot !== canonicalRoot || typeof value.createdAt !== "number") {
     throw new KiroInstallError("manifest", "transaction journal is foreign or malformed");
   }
   if (value.format === 1) {
@@ -732,9 +747,20 @@ var parseManagedTransaction = (value, root, layout) => {
   return value;
 };
 var writeManagedTransactionJournal = (root, layout, transaction) => {
-  const paths = managedPaths(root, layout);
-  assertManagedTree(root, layout);
-  writeManagedAtomic(root, paths.transaction, serializeJson(transaction), 384);
+  let canonicalRoot;
+  try {
+    canonicalRoot = realpathSync(root);
+  } catch {
+    throw new KiroInstallError("root", `managed transaction root does not exist: ${root}`);
+  }
+  const validated = parseManagedTransaction(transaction, canonicalRoot, layout);
+  const canonicalTransaction = {
+    ...validated,
+    root: canonicalRoot
+  };
+  const paths = managedPaths(canonicalRoot, layout);
+  assertManagedTree(canonicalRoot, layout);
+  writeManagedAtomic(canonicalRoot, paths.transaction, serializeJson(canonicalTransaction), 384);
   fsyncDirectory(paths.manifestDir);
 };
 var readManagedTransaction = (root, layout) => {

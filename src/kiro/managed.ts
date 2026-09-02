@@ -976,12 +976,28 @@ const parseManagedTransaction = (
   layout: KiroManagedLayout,
 ): KiroManagedTransaction => {
   if (!isRecord(value)) throw new KiroInstallError("manifest", "transaction journal is malformed");
+  const canonicalRoot = (() => {
+    try {
+      return realpathSync(root);
+    } catch {
+      return null;
+    }
+  })();
+  const canonicalJournalRoot = (() => {
+    if (typeof value.root !== "string" || !isAbsolute(value.root)) return null;
+    try {
+      return realpathSync(value.root);
+    } catch {
+      return null;
+    }
+  })();
   if (
     (value.format !== 1 && value.format !== 2) ||
     value.owner !== MANAGED_OWNER ||
     (value.operation !== "install" && value.operation !== "uninstall") ||
     value.layout !== layout ||
-    value.root !== root ||
+    canonicalRoot === null ||
+    canonicalJournalRoot !== canonicalRoot ||
     typeof value.createdAt !== "number"
   ) {
     throw new KiroInstallError("manifest", "transaction journal is foreign or malformed");
@@ -1017,9 +1033,20 @@ export const writeManagedTransactionJournal = (
   layout: KiroManagedLayout,
   transaction: KiroManagedTransaction,
 ): void => {
-  const paths = managedPaths(root, layout);
-  assertManagedTree(root, layout);
-  writeManagedAtomic(root, paths.transaction, serializeJson(transaction), 0o600);
+  let canonicalRoot: string;
+  try {
+    canonicalRoot = realpathSync(root);
+  } catch {
+    throw new KiroInstallError("root", `managed transaction root does not exist: ${root}`);
+  }
+  const validated = parseManagedTransaction(transaction, canonicalRoot, layout);
+  const canonicalTransaction: KiroManagedTransaction = {
+    ...validated,
+    root: canonicalRoot,
+  };
+  const paths = managedPaths(canonicalRoot, layout);
+  assertManagedTree(canonicalRoot, layout);
+  writeManagedAtomic(canonicalRoot, paths.transaction, serializeJson(canonicalTransaction), 0o600);
   fsyncDirectory(paths.manifestDir);
 };
 

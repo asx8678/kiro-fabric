@@ -50,7 +50,7 @@ import {
   resolveAgentDir,
   typebox_exports,
   writeFileAtomic
-} from "./chunk-EXSX65MA.js";
+} from "./chunk-WIFHE7YW.js";
 import {
   runAbortable,
   settleWithin,
@@ -70,11 +70,11 @@ import {
   MAX_AGENT_STEER_LINE_BYTES,
   normalizeKiroSemanticContext,
   value_exports
-} from "./chunk-AWB6CKDD.js";
+} from "./chunk-I5XNR5HP.js";
 import {
   assertSupportedKiro,
   assertSupportedKiroUnchanged
-} from "./chunk-YAWOEC55.js";
+} from "./chunk-B6YQEEM2.js";
 import {
   canonicalPathContains,
   inspectCanonicalPath,
@@ -84,7 +84,7 @@ import {
   resolveKiroProjectRoot,
   sameCanonicalFilesystemIdentity,
   sha256Bytes
-} from "./chunk-42TCR6YA.js";
+} from "./chunk-D7BZ3OUY.js";
 import {
   createProcessTreeController,
   spawnDetached

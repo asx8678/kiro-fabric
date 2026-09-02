@@ -11,10 +11,10 @@ import {
   inspectFabricConfig,
   require_dist,
   resolveAgentDir
-} from "./chunk-EXSX65MA.js";
+} from "./chunk-WIFHE7YW.js";
 import {
   resolveKiroMcpLaunchEnvironment
-} from "./chunk-H2235NCG.js";
+} from "./chunk-RC6PVX4B.js";
 import "./chunk-PGDCKPF6.js";
 import "./chunk-D27TRCNO.js";
 import {
@@ -41,7 +41,7 @@ import {
   kiroProfilePath,
   resolveKiroInstallRoots,
   sameExecutableIdentity
-} from "./chunk-YAWOEC55.js";
+} from "./chunk-B6YQEEM2.js";
 import {
   KIRO_INSTALL_MANIFEST_FORMAT,
   KiroInstallError,
@@ -73,7 +73,7 @@ import {
   withContainedParent,
   writeAtomic,
   writeExclusive
-} from "./chunk-42TCR6YA.js";
+} from "./chunk-D7BZ3OUY.js";
 import {
   createProcessTreeController,
   resolveScriptRuntimeSync

@@ -13,6 +13,6 @@ import { fileURLToPath } from "node:url";
 var invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : "";
 var selfPath = fileURLToPath(import.meta.url);
 if (invokedPath === selfPath || invokedPath === realpathSync(selfPath)) {
-  const { runInstalledManagement } = await import("../chunks/management-JVYFPHT2.js");
+  const { runInstalledManagement } = await import("../chunks/management-JBC5Z3AS.js");
   process.exitCode = await runInstalledManagement(process.argv.slice(2));
 }

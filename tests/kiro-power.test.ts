@@ -49,7 +49,11 @@ describe("Kiro Power security boundaries", () => {
     const root = temp(); const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data");
     fs.mkdirSync(pluginRoot); fs.mkdirSync(pluginData);
     expect(resolveKiroMcpLaunchEnvironment({ KIRO_FABRIC_INTEGRATION: "power", PLUGIN_ROOT: pluginRoot, PLUGIN_DATA: pluginData }))
-      .toEqual({ mode: "power", pluginRoot, pluginData });
+      .toEqual({
+        mode: "power",
+        pluginRoot: fs.realpathSync(pluginRoot),
+        pluginData: fs.realpathSync(pluginData),
+      });
     expect(() => resolveKiroMcpLaunchEnvironment({ KIRO_FABRIC_INTEGRATION: "power", PLUGIN_ROOT: pluginRoot })).toThrow("PLUGIN_DATA");
     expect(() => resolveKiroMcpLaunchEnvironment({ KIRO_FABRIC_INTEGRATION: "unknown", PLUGIN_ROOT: pluginRoot, PLUGIN_DATA: pluginData })).toThrow("KIRO_FABRIC_INTEGRATION");
 
@@ -280,10 +284,10 @@ describe("Kiro Power security boundaries", () => {
     });
     binding.updateClientRoots([{ uri: pathToFileURL(a).href }]);
     const pending = binding.prepareMutation({ action: "attach", path: b });
-    expect(binding.boundRoot()).toBe(a);
+    expect(binding.boundRoot()).toBe(fs.realpathSync(a));
     release(false);
     await expect(pending).rejects.toThrow("not approved");
-    expect(binding.boundRoot()).toBe(a);
+    expect(binding.boundRoot()).toBe(fs.realpathSync(a));
 
     const selected = binding.list().roots[0]!;
     const prepared = await binding.prepareMutation({ action: "select", rootId: selected.rootId });
@@ -329,7 +333,7 @@ describe("Kiro Power security boundaries", () => {
     expect(binding.bindingSource()).toBe("client-roots");
     expect(binding.workspaceObservation().status).toBe("temporarily-unavailable");
     fs.renameSync(`${workspace}.temporarily-moved`, workspace);
-    expect(binding.boundWorkspace()?.canonicalPath).toBe(workspace);
+    expect(binding.boundWorkspace()?.canonicalPath).toBe(fs.realpathSync(workspace));
   });
 
   it("treats an attachment to the current identity as a stable no-op", async () => {

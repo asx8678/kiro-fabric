@@ -14,7 +14,7 @@ import {
   managedPaths,
   resolveCanonicalKiroProjectRootIdentity,
   resolveKiroProjectRoot
-} from "./chunk-42TCR6YA.js";
+} from "./chunk-D7BZ3OUY.js";
 import {
   KIRO_PROFILE_REQUEST_TIMEOUT_MS
 } from "./chunk-OZKYNYCD.js";
