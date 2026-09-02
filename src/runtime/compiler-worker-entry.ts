@@ -12,7 +12,7 @@ port?.once("message", (request: FabricCompilerRequest) => {
   try {
     port.postMessage({
       ok: true,
-      result: typeCheckFabricCode(request.code, request.declarations, request.mode),
+      result: typeCheckFabricCode(request.code, request.declarations),
     } satisfies FabricCompilerWorkerResponse);
   } catch (error) {
     port.postMessage({

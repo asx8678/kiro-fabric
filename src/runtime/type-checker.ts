@@ -14,64 +14,44 @@ export interface FabricTypeCheckResult {
   sourceMap?: string;
 }
 
-/**
- * `strict` reports all semantic diagnostics. `schema-relaxed` leaves argument
- * value/shape correctness to the runtime schema validator, while still
- * rejecting syntax errors, missing names, and other non-schema failures.
- */
-export type FabricCompilerCheckingMode = "strict" | "schema-relaxed";
-
 export interface FabricCompilerRequest {
   code: string;
   declarations: string;
-  mode: FabricCompilerCheckingMode;
 }
 
 export type FabricCompilerWorkerResponse =
   | { ok: true; result: FabricTypeCheckResult }
   | { ok: false; error: string };
 
-export const DEFAULT_COMPILER_TIMEOUT_MS = 10_000;
+const DEFAULT_COMPILER_TIMEOUT_MS = 10_000;
 const MAX_COMPILER_DIAGNOSTICS = 50;
 const MAX_DIAGNOSTIC_MESSAGE_CHARS = 4_096;
 const COMPILER_MEMORY_MB = 128;
 
-const relaxedCompilerOptions: ts.CompilerOptions = {
+const compilerOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.ESNext,
   moduleResolution: ts.ModuleResolutionKind.NodeNext,
-  strict: false,
+  strict: true,
   noEmit: false,
   sourceMap: true,
   skipLibCheck: true,
   lib: ["lib.es2022.d.ts"],
 };
 
-const compilerOptionsFor = (mode: FabricCompilerCheckingMode): ts.CompilerOptions =>
-  mode === "strict"
-    ? { ...relaxedCompilerOptions, strict: true }
-    : relaxedCompilerOptions;
-
-const TYPE_CORRECTNESS_CODES = new Set<number>([
-  2339, 2551,
-  2322, 2345, 2367,
-  2531, 2532, 18047, 18048,
-  7006, 7008, 7019, 7031, 7032, 7033, 7034,
-]);
-
 let nextCheckerId = 0;
 
-export const normalizeTypeScriptPath = (fileName: string): string =>
+const normalizeTypeScriptPath = (fileName: string): string =>
   fileName.replaceAll("\\", "/");
 
 /** Guest programs execute inside this wrapper; user code starts on wrapped line 2. */
-export const wrapFabricGuestCode = (code: string): string =>
+const wrapFabricGuestCode = (code: string): string =>
   `async function __kiroFabricMain() {\n${code}\n}\n`;
 
 class FabricTypeChecker {
   readonly #guestFile: string;
   readonly #declarationFile: string;
-  readonly #baseHost = ts.createCompilerHost(relaxedCompilerOptions, true);
+  readonly #baseHost = ts.createCompilerHost(compilerOptions, true);
   readonly #stableFiles = new Map<string, ts.SourceFile>();
   readonly #declarationSource: ts.SourceFile;
   readonly #host: ts.CompilerHost;
@@ -131,8 +111,7 @@ class FabricTypeChecker {
     };
   }
 
-  check(code: string, mode: FabricCompilerCheckingMode): FabricTypeCheckResult {
-    const compilerOptions = compilerOptionsFor(mode);
+  check(code: string): FabricTypeCheckResult {
     this.#sourceText = wrapFabricGuestCode(code);
     this.#sourceFile = ts.createSourceFile(
       this.#guestFile,
@@ -149,9 +128,7 @@ class FabricTypeChecker {
     this.#program = program;
     const diagnostics = [
       ...program.getSyntacticDiagnostics(this.#sourceFile),
-      ...program
-        .getSemanticDiagnostics(this.#sourceFile)
-        .filter((diagnostic) => mode === "strict" || !TYPE_CORRECTNESS_CODES.has(diagnostic.code)),
+      ...program.getSemanticDiagnostics(this.#sourceFile),
     ].slice(0, MAX_COMPILER_DIAGNOSTICS);
     const errors = diagnostics.map((diagnostic) => {
       const flattened = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
@@ -226,8 +203,7 @@ export const transpileFabricCodeWithSourceMap = (code: string): FabricTranspileR
 export const typeCheckFabricCode = (
   code: string,
   declarations: string,
-  mode: FabricCompilerCheckingMode = "schema-relaxed",
-): FabricTypeCheckResult => checkerFor(declarations).check(code, mode);
+): FabricTypeCheckResult => checkerFor(declarations).check(code);
 
 export interface FabricCompilerWorkerOptions {
   signal?: AbortSignal;
@@ -263,17 +239,25 @@ export const typeCheckFabricCodeInWorker = (
     settled = true;
     clearTimeout(timer);
     options.signal?.removeEventListener("abort", onAbort);
-    void worker.terminate();
-    if (error) reject(error);
-    else resolve(result!);
+    const complete = (): void => {
+      if (error) reject(error);
+      else resolve(result!);
+    };
+    // Do not resolve the request while its compiler worker can still execute.
+    void worker.terminate().then(complete, complete);
   };
-  const onAbort = (): void => finish(new Error("Fabric compiler aborted"));
+  const onAbort = (): void => finish(
+    options.signal?.reason instanceof Error
+      ? options.signal.reason
+      : new Error("Fabric compiler aborted"),
+  );
   const timer = setTimeout(
     () => finish(new Error(`Fabric compiler timed out after ${timeoutMs}ms`)),
     timeoutMs,
   );
   timer.unref();
   options.signal?.addEventListener("abort", onAbort, { once: true });
+  if (options.signal?.aborted) onAbort();
   worker.once("message", (response: FabricCompilerWorkerResponse) => {
     if (response.ok) finish(undefined, response.result);
     else finish(new Error(`Fabric compiler failed: ${response.error}`));
@@ -284,5 +268,5 @@ export const typeCheckFabricCodeInWorker = (
   worker.once("exit", (code) => {
     if (!settled) finish(new Error(`Fabric compiler worker exited before replying (${code})`));
   });
-  worker.postMessage(request);
+  if (!settled) worker.postMessage(request);
 });

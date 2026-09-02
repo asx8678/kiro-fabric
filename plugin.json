@@ -1,19 +1,18 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kiro-fabric",
-  "version": "0.63.0",
-  "description": "Run bounded checked TypeScript workflows for coordinated aggregation, Fabric memory or state, and configured MCP federation in Kiro",
+  "version": "0.64.0",
+  "description": "Run bounded checked TypeScript composition with Power-scoped memory, state, artifacts, and configured MCP federation",
   "author": {
     "name": "monotykamary"
   },
   "keywords": [
     "Kiro Fabric",
     "fabric_exec",
-    "checked TypeScript workflow",
-    "programmable aggregation",
-    "configured MCP federation",
-    "Fabric state",
-    "Fabric memory"
+    "checked TypeScript",
+    "MCP federation",
+    "workspace state",
+    "Power memory"
   ],
   "homepage": "https://github.com/asx8678/kiro-fabric",
   "repository": "https://github.com/asx8678/kiro-fabric",

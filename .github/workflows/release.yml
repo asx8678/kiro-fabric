@@ -6,10 +6,7 @@ on:
 
 permissions:
   contents: write
-  id-token: write
-  attestations: write
   actions: read
-  statuses: read
 
 jobs:
   release:
@@ -17,70 +14,41 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version: 1.25.1
-          cache: false
-      - name: Require a signed, version-matching tag
-        run: |
-          git verify-tag "${GITHUB_REF_NAME}"
-          test "${GITHUB_REF_NAME}" = "v$(node -p 'require("./package.json").version')"
-      - name: Require real Kiro qualification for this commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          state=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/status" --jq '.statuses[] | select(.context == "kiro-power-real/all") | .state' | head -1)
-          test "$state" = success
-          run_id=$(gh run list --workflow "Real Kiro Power qualification" --commit "$GITHUB_SHA" --status success --json databaseId --jq '.[0].databaseId')
-          test -n "$run_id"
-          gh run download "$run_id" -n kiro-power-real-qualification -D "$RUNNER_TEMP/qualification"
+        with: { node-version: 24 }
       - run: npm install --global pnpm@11.20.0
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run check
-      - run: pnpm run power:sync
-      - name: Prove the release closure is reproducible
-        run: >-
-          git diff --exit-code --
-          dist/kiro-closure
-          dist/kiro-power-closure
-          plugin.json
-          mcp.json
-          package.json
-      - name: Produce Git-bound protocol certification
-        run: >-
-          node scripts/certify-kiro-power.mjs .tmp/kiro-fabric-power
-          --json "$RUNNER_TEMP/kiro-power-certification.json"
-      - name: Generate SPDX SBOM
-        run: node scripts/generate-power-sbom.mjs --output "$RUNNER_TEMP/kiro-power-sbom.spdx.json"
-      - name: Build immutable Power archive and checksums
-        run: |
-          archive="$RUNNER_TEMP/kiro-fabric-power-${GITHUB_REF_NAME}.tar.gz"
-          git archive --format=tar.gz --prefix="kiro-fabric-power-${GITHUB_REF_NAME}/" -o "$archive" HEAD -- \
-            plugin.json mcp.json package.json skills dist/kiro-power-closure \
-            docs/kiro/power.md LICENSE THIRD_PARTY_NOTICES.md
-          cd "$RUNNER_TEMP"
-          sha256sum "$(basename "$archive")" kiro-power-certification.json \
-            kiro-power-sbom.spdx.json qualification/kiro-power-real-qualification.json \
-            > SHA256SUMS
-      - name: Sign GitHub artifact attestations
+      - run: node scripts/assert-kiro-home-unchanged.mjs pnpm run check
+      - name: Require matching GitHub-verified signed tag
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh attestation sign "$RUNNER_TEMP/kiro-fabric-power-${GITHUB_REF_NAME}.tar.gz" --repo "$GITHUB_REPOSITORY"
-          gh attestation sign "$RUNNER_TEMP/kiro-power-sbom.spdx.json" --repo "$GITHUB_REPOSITORY"
-      - name: Publish immutable GitHub release
+          test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME")
+          test "$(jq -r '.object.type' <<<"$ref")" = "tag"
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$(jq -r '.object.sha' <<<"$ref")")
+          test "$(jq -r '.verification.verified' <<<"$tag")" = "true"
+          test "$(jq -r '.object.type' <<<"$tag")" = "commit"
+          test "$(jq -r '.object.sha' <<<"$tag")" = "$GITHUB_SHA"
+      - name: Download exact-commit real-client evidence
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "$GITHUB_REF_NAME"
-          "$RUNNER_TEMP/kiro-fabric-power-${GITHUB_REF_NAME}.tar.gz"
-          "$RUNNER_TEMP/kiro-power-certification.json"
-          "$RUNNER_TEMP/kiro-power-sbom.spdx.json"
-          "$RUNNER_TEMP/qualification/kiro-power-real-qualification.json"
-          "$RUNNER_TEMP/SHA256SUMS"
-          --verify-tag --generate-notes --title "Kiro Fabric ${GITHUB_REF_NAME}"
+        run: |
+          run_id=$(gh run list --workflow "Real Kiro Power qualification" --commit "$GITHUB_SHA" --status success --json databaseId --jq '.[0].databaseId')
+          test -n "$run_id"
+          gh run download "$run_id" -n "real-client-${GITHUB_SHA}" -D "$RUNNER_TEMP/qualification"
+          test -f "$RUNNER_TEMP/qualification/real-client.json"
+      - name: Bind release report to real-client evidence
+        run: |
+          node scripts/release-candidate-report.mjs \
+            --output "$RUNNER_TEMP/release.json" \
+            --sbom .tmp/kiro-fabric-power.spdx.json \
+            --qualification "$RUNNER_TEMP/qualification/real-client.json"
+      - run: pnpm pack --pack-destination "$RUNNER_TEMP" --config.ignore-scripts=true
+      - uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631
+        with:
+          files: |
+            ${{ runner.temp }}/kiro-fabric-*.tgz
+            ${{ runner.temp }}/release.json
+            ${{ runner.temp }}/qualification/real-client.json

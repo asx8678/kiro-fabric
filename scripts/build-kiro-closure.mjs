@@ -1,61 +1,28 @@
 #!/usr/bin/env node
-// Builds a self-contained runtime closure bundle for the Kiro MCP adapter.
-// Output goes to dist/kiro-closure/ with all dependencies bundled inline.
-// This bundle requires zero node_modules at runtime for most functionality.
-// The managed closure is host-independent and rejects Pi packages in its
-// resolved input graph.
-
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { builtinModules } from "node:module";
 import { build } from "esbuild";
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-  statSync,
-} from "node:fs";
-import { join, resolve } from "node:path";
 
-const outdir = resolve("dist/kiro-closure");
-const powerOutdir = resolve("dist/kiro-power-closure");
+const root = path.resolve(".");
+const outdir = path.join(root, "dist", "kiro-power-closure");
+const product = JSON.parse(fs.readFileSync(path.join(root, "power-product.json"), "utf8"));
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+if (product.entrypoint !== "src/kiro/mcp-entry.ts") throw new Error("Power product entrypoint drifted");
+const allowedDirect = new Set(product.allowedPackageDependencies);
+for (const dependency of Object.keys(pkg.dependencies ?? {})) {
+  if (!allowedDirect.has(dependency)) throw new Error(`Power dependency is not allowed by power-product.json: ${dependency}`);
+}
+for (const allowed of allowedDirect) {
+  if (!Object.hasOwn(pkg.dependencies ?? {}, allowed)) throw new Error(`Power manifest allows an unused direct dependency: ${allowed}`);
+}
 
-// Clean first
-rmSync(outdir, { recursive: true, force: true });
-rmSync(powerOutdir, { recursive: true, force: true });
-
-// Node built-in modules that must stay external
-const nodeBuiltins = [
-  "assert", "async_hooks", "buffer", "child_process", "cluster",
-  "console", "constants", "crypto", "dgram", "diagnostics_channel",
-  "dns", "domain", "events", "fs", "http", "http2", "https",
-  "inspector", "module", "net", "os", "path", "perf_hooks",
-  "process", "punycode", "querystring", "readline", "repl",
-  "stream", "string_decoder", "sys", "timers", "tls", "trace_events",
-  "tty", "url", "util", "v8", "vm", "wasi", "worker_threads", "zlib",
-];
-
-const external = [
-  ...nodeBuiltins.map(m => `node:${m}`),
-  ...nodeBuiltins,
-];
-
-const closureBanner = `import { createRequire as __kfCreateRequire } from "node:module";
-import { fileURLToPath as __kfFileURLToPath } from "node:url";
-import { dirname as __kfDirname } from "node:path";
-globalThis.__filename = __kfFileURLToPath(import.meta.url);
-globalThis.__dirname = __kfDirname(globalThis.__filename);
-const require = __kfCreateRequire(import.meta.url);
-`;
-
+fs.rmSync(outdir, { recursive: true, force: true });
+const external = [...new Set(builtinModules.flatMap((name) => [name, name.startsWith("node:") ? name.slice(5) : `node:${name}`]))];
+const banner = `import { createRequire as __createRequire } from "node:module";\nimport { fileURLToPath as __fileURLToPath } from "node:url";\nimport { dirname as __dirnameOf } from "node:path";\nglobalThis.__filename = __fileURLToPath(import.meta.url);\nglobalThis.__dirname = __dirnameOf(globalThis.__filename);\nconst require = __createRequire(import.meta.url);\n`;
 const result = await build({
-  entryPoints: [
-    "src/kiro/mcp-entry.ts",
-    "src/kiro/agent-worker-entry.ts",
-    "src/kiro/management-entry.ts",
-    "src/runtime/compiler-worker-entry.ts",
-  ],
+  entryPoints: [product.entrypoint, product.runtimeAssets.compilerWorker],
   outdir,
   outbase: "src",
   entryNames: "[dir]/[name]",
@@ -65,193 +32,155 @@ const result = await build({
   format: "esm",
   target: "node24",
   splitting: true,
-  // Production managed runtimes are content-addressed release artifacts;
-  // source maps stay in the normal development build rather than every install.
   sourcemap: false,
   metafile: true,
   logLevel: "info",
   external,
-  // Supply CommonJS compatibility globals per output chunk without lexical
-  // declarations, so bundled modules with their own definitions do not collide.
-  banner: { js: closureBanner },
+  banner: { js: banner },
+});
+const normalize = (value) => value.replaceAll("\\", "/");
+const inputs = Object.keys(result.metafile.inputs).map(normalize).sort();
+const sourceInputs = inputs.filter((input) => input.startsWith("src/"));
+for (const forbidden of product.forbiddenRuntimeModules) {
+  const hit = sourceInputs.find((input) => forbidden.endsWith("/") ? input.startsWith(forbidden) : input === forbidden);
+  if (hit) throw new Error(`Power closure reached forbidden runtime module: ${hit}`);
+}
+const packageName = (input) => {
+  const suffix = input.split("node_modules/").at(-1);
+  if (!suffix || suffix === input) return undefined;
+  const parts = suffix.split("/");
+  return parts[0].startsWith("@") ? `${parts[0]}/${parts[1]}` : parts[0];
+};
+const packageNames = [...new Set(inputs.map(packageName).filter(Boolean))].sort();
+for (const dependency of Object.keys(pkg.dependencies ?? {})) {
+  if (!packageNames.includes(dependency)) {
+    throw new Error(`Direct dependency is not reached by the Power closure: ${dependency}`);
+  }
+}
+const legacyHost = String.fromCodePoint(112, 105);
+if (packageNames.some((name) => name.startsWith(`@earendil-works/${legacyHost}-`) || name.startsWith(`@mariozechner/${legacyHost}-`))) throw new Error("Power closure reached a forbidden package");
+const packageInputs = packageNames.map((name) => {
+  const matchingInput = inputs.find((input) => packageName(input) === name);
+  let cursor = path.dirname(path.resolve(root, matchingInput));
+  while (cursor !== path.dirname(cursor)) {
+    const manifest = path.join(cursor, "package.json");
+    if (fs.existsSync(manifest)) {
+      const candidate = JSON.parse(fs.readFileSync(manifest, "utf8"));
+      if (candidate.name === name) {
+        return {
+          name,
+          version: String(candidate.version),
+          license: typeof candidate.license === "string" && candidate.license
+            ? candidate.license
+            : "NOASSERTION",
+        };
+      }
+    }
+    cursor = path.dirname(cursor);
+  }
+  throw new Error(`Unable to resolve package version for closure input: ${name}`);
 });
 
-// Keep the deployable Kiro graph independent from the generic Pi agent stack.
-// These checks use esbuild's resolved input graph, so aliases, re-exports, and
-// transitive imports cannot bypass the boundary by avoiding a source marker in
-// the emitted JavaScript.
-const graphInputs = Object.keys(result.metafile.inputs).map((input) =>
-  input.replaceAll("\\", "/"),
-);
-const forbiddenInputRoots = ["src/actors/", "src/residency/"];
-const forbiddenInputFiles = [
-  "src/worker.ts",
-  "src/agents/manager.ts",
-  "src/agents/executor-registry.ts",
-  "src/agents/session-export.ts",
-  "src/agents/worktree-manager.ts",
-  "src/agents/transports/herdr-transport.ts",
-  "src/agents/transports/localterm-transport.ts",
-  "src/agents/transports/process-transport.ts",
-  "src/agents/transports/screen-transport.ts",
-  "src/agents/transports/tmux-transport.ts",
-];
-const forbiddenInputs = graphInputs.filter((input) =>
-  forbiddenInputFiles.includes(input) ||
-  forbiddenInputRoots.some((root) => input.startsWith(root)),
-);
-if (forbiddenInputs.length > 0) {
-  throw new Error(
-    `Kiro closure includes forbidden generic runtime inputs:\n${forbiddenInputs.join("\n")}`,
-  );
+const tsLib = path.join(root, "node_modules", "typescript", "lib");
+const chunks = path.join(outdir, "chunks");
+fs.mkdirSync(chunks, { recursive: true, mode: 0o755 });
+const libraries = new Set();
+const queue = ["lib.es2022.d.ts"];
+while (queue.length) {
+  const name = queue.pop();
+  if (libraries.has(name)) continue;
+  const source = path.join(tsLib, name);
+  if (!fs.existsSync(source)) throw new Error(`TypeScript guest library is missing: ${name}`);
+  libraries.add(name);
+  const text = fs.readFileSync(source, "utf8");
+  for (const match of text.matchAll(/<reference lib="([^"]+)"/gu)) queue.push(`lib.${match[1]}.d.ts`);
 }
+for (const name of [...libraries].sort()) fs.copyFileSync(path.join(tsLib, name), path.join(chunks, name));
+fs.writeFileSync(path.join(outdir, "package.json"), `${JSON.stringify({ name: "kiro-fabric-power-runtime", version: pkg.version, type: "module", private: true }, null, 2)}\n`);
 
-const packageNameFromInput = (input) => {
-  const segments = input.split("/");
-  const nodeModulesIndex = segments.lastIndexOf("node_modules");
-  if (nodeModulesIndex < 0 || nodeModulesIndex + 1 >= segments.length) return null;
-  const first = segments[nodeModulesIndex + 1];
-  if (!first) return null;
-  return first.startsWith("@")
-    ? `${first}/${segments[nodeModulesIndex + 2] ?? ""}`
-    : first;
-};
-const forbiddenPackagePrefixes = ["@earendil-works/"];
-const forbiddenPackages = [...new Set(
-  graphInputs
-    .map(packageNameFromInput)
-    .filter((name) =>
-      name !== null && forbiddenPackagePrefixes.some((prefix) => name.startsWith(prefix)),
-    ),
-)].sort();
-if (forbiddenPackages.length > 0) {
-  throw new Error(
-    `Kiro closure includes forbidden generic runtime packages:\n${forbiddenPackages.join("\n")}`,
-  );
-}
+const kiroProviderFiles = new Set([
+  "src/kiro/artifacts.ts",
+  "src/kiro/mcp-provider.ts",
+  "src/kiro/memory-provider.ts",
+  "src/kiro/memory.ts",
+  "src/kiro/power/artifacts-provider.ts",
+]);
+const classify = (file) => file.startsWith("src/providers/") || kiroProviderFiles.has(file)
+  ? "mounted-provider"
+  : file.startsWith("src/kiro/")
+    ? "power-runtime"
+    : "checked-execution-kernel";
+const byClass = Object.groupBy(sourceInputs, classify);
+const evidenceDirectory = path.join(root, ".tmp");
+fs.mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
+const evidenceStats = fs.lstatSync(evidenceDirectory);
+if (!evidenceStats.isDirectory() || evidenceStats.isSymbolicLink()) throw new Error(".tmp must be a regular checkout-local directory");
+if (process.platform !== "win32" && typeof process.getuid === "function" && evidenceStats.uid !== process.getuid()) throw new Error(".tmp must be owned by the current user");
+fs.chmodSync(evidenceDirectory, 0o700);
+fs.writeFileSync(path.join(evidenceDirectory, "power-reachability.json"), `${JSON.stringify({
+  schemaVersion: 1,
+  entrypoints: [product.entrypoint, product.runtimeAssets.compilerWorker],
+  sourceInputs,
+  classifications: Object.fromEntries(Object.entries(byClass).map(([key, files]) => [key, files])),
+  packageInputs,
+  packaging: [
+    "scripts/package-policy.mjs",
+    "scripts/build.mjs",
+    "scripts/build-kiro-closure.mjs",
+    "scripts/assert-build-artifacts.mjs",
+    "scripts/build-power-dev.mjs",
+    "scripts/validate-power-package.mjs",
+    "scripts/power-user-install.mjs",
+    "scripts/assert-kiro-home-unchanged.mjs",
+    "scripts/certify-kiro-power.mjs",
+    "scripts/real-client-evidence.mjs",
+    "scripts/certify-kiro-power-real.mjs",
+    "scripts/generate-power-sbom.mjs",
+    "scripts/release-candidate-report.mjs",
+  ],
+}, null, 2)}\n`);
 
-// ---- Ship the TypeScript default lib chain the guest type-checker needs ----
-// esbuild bundles the TypeScript compiler into a chunk, but its lib/*.d.ts
-// files are read from disk at runtime by path.
-const copyTypeScriptLibraries = (targetOutdir) => {
-  const tsLibDir = join(resolve("."), "node_modules", "typescript", "lib");
-  const chunksDir = join(targetOutdir, "chunks");
-  const libSet = new Set();
-  const queue = ["lib.es2022.d.ts"];
-  while (queue.length) {
-    const name = queue.pop();
-    if (libSet.has(name)) continue;
-    const full = join(tsLibDir, name);
-    if (!existsSync(full)) {
-      throw new Error(`closure lib dependency missing: node_modules/typescript/lib/${name}`);
-    }
-    libSet.add(name);
-    const text = readFileSync(full, "utf8");
-    for (const dep of text.matchAll(/<reference lib="([^"]+)"/g)) {
-      queue.push(`lib.${dep[1]}.d.ts`);
-    }
-  }
-  mkdirSync(chunksDir, { recursive: true });
-  for (const name of libSet) copyFileSync(join(tsLibDir, name), join(chunksDir, name));
-};
-
-const writeClosurePackage = (targetOutdir, name) => writeFileSync(
-  join(targetOutdir, "package.json"),
-  JSON.stringify(
-    { name, version: "0.0.0-closure", type: "module", private: true },
-    null,
-    2,
-  ) + "\n",
-);
-
-copyTypeScriptLibraries(outdir);
-writeClosurePackage(outdir, "kiro-fabric-runtime");
-
-
-// ---- PR1: production closure correctness assertions ----
-// 1. No source maps in the production closure.
-let mapCount = 0;
-let jsBytes = 0;
-let jsFileCount = 0;
-const walk = (dir) => {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) walk(full);
-    else if (entry.name.endsWith(".map")) {
-      mapCount++;
-      console.error(`closure contains source map: ${full}`);
-    } else if (entry.name.endsWith(".js")) {
-      jsFileCount++;
-      jsBytes += statSync(full).size;
-    }
+const files = [];
+const walk = (directory) => {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) walk(target);
+    else if (entry.isFile()) files.push(target);
+    else throw new Error(`Unsupported closure entry: ${target}`);
   }
 };
 walk(outdir);
-if (mapCount > 0) throw new Error(`Production closure must not contain source maps (found ${mapCount})`);
-
-// 2. Required entries + metadata present.
-// The setup entry is the self-hosted management/lifecycle entry in every
-// immutable installed release.
-for (const entry of ["mcp-entry.js", "agent-worker-entry.js", "management-entry.js"]) {
-  if (!existsSync(join(outdir, "kiro", entry))) {
-    throw new Error(`closure entry missing: kiro/${entry}`);
-  }
-}
-if (!existsSync(join(outdir, "package.json"))) {
-  throw new Error("closure package.json missing");
-}
-
-// 3. No node_modules shipped inline.
-if (existsSync(join(outdir, "node_modules"))) {
-  throw new Error("closure must not bundle a node_modules directory");
-}
-
-console.log(
-  `Closure built: ${Object.keys(result.metafile.outputs).length} output files; ` +
-  `${jsFileCount} js files, ${(jsBytes / 1024).toFixed(0)} KiB JS, no source maps`,
-);
-
-// Power v1 ships only the MCP entry and its reachable graph. Strict-mode
-// management and ACP worker entrypoints remain in dist/kiro-closure.
-const powerResult = await build({
-  entryPoints: ["src/kiro/mcp-entry.ts", "src/runtime/compiler-worker-entry.ts"],
-  outdir: powerOutdir,
-  outbase: "src",
-  entryNames: "[dir]/[name]",
-  chunkNames: "chunks/[name]-[hash]",
-  bundle: true,
-  platform: "node",
-  format: "esm",
-  target: "node24",
-  splitting: true,
-  sourcemap: false,
-  metafile: true,
-  logLevel: "info",
-  external,
-  banner: { js: closureBanner },
+const digest = createHash("sha256");
+const evidenceFiles = files.map((file) => {
+  const relative = normalize(path.relative(outdir, file));
+  const content = fs.readFileSync(file);
+  digest.update(relative).update("\0").update(content);
+  return { path: relative, bytes: content.length, sha256: createHash("sha256").update(content).digest("hex") };
 });
-const powerInputs = Object.keys(powerResult.metafile.inputs).map((input) => input.replaceAll("\\", "/"));
-const forbiddenPowerInputs = powerInputs.filter((input) =>
-  input === "src/kiro/agent-worker-entry.ts" ||
-  input === "src/kiro/management-entry.ts" ||
-  input === "src/kiro/acp-worker.ts" ||
-  input.startsWith("src/residency/") ||
-  input.startsWith("src/actors/"),
-);
-if (forbiddenPowerInputs.length > 0) {
-  throw new Error(`Power closure includes unavailable worker/management inputs:\n${forbiddenPowerInputs.join("\n")}`);
+const manifest = {
+  schemaVersion: 1,
+  product: product.product,
+  entrypoint: "kiro/mcp-entry.js",
+  compilerWorker: "runtime/compiler-worker-entry.js",
+  executor: "quickjs",
+  sourceInputs,
+  packageInputs,
+  files: evidenceFiles,
+  contentDigest: digest.digest("hex"),
+};
+fs.writeFileSync(path.join(outdir, "closure-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+
+const forbiddenText = [
+  `@earendil-works/${legacyHost}-`, `@mariozechner/${legacyHost}-`,
+  `PI_CODING_${"AGENT"}_DIR`, `managed-${"main"}`, `internal-${"child"}`,
+  `kiro-fabric-${"dev"}`, `node-${"process"}-runtime`, `agent-${"worker"}-entry`,
+  `management-${"entry"}`, String.fromCodePoint(960),
+];
+for (const file of files.filter((file) => file.endsWith(".js") || file.endsWith(".json"))) {
+  const text = fs.readFileSync(file, "utf8");
+  for (const term of forbiddenText) if (text.includes(term)) throw new Error(`Forbidden runtime term ${JSON.stringify(term)} in ${path.relative(root, file)}`);
+  if (text.includes(root)) throw new Error(`Closure contains source-checkout absolute path: ${path.relative(root, file)}`);
 }
-copyTypeScriptLibraries(powerOutdir);
-writeClosurePackage(powerOutdir, "kiro-fabric-power-runtime");
-for (const entry of ["agent-worker-entry.js", "management-entry.js"]) {
-  if (existsSync(join(powerOutdir, "kiro", entry))) {
-    throw new Error(`Power closure must not contain kiro/${entry}`);
-  }
-}
-if (!existsSync(join(powerOutdir, "kiro", "mcp-entry.js"))) {
-  throw new Error("Power closure entry missing: kiro/mcp-entry.js");
-}
-if (existsSync(join(powerOutdir, "node_modules"))) {
-  throw new Error("Power closure must not bundle a node_modules directory");
-}
-console.log(`Power closure built: ${Object.keys(powerResult.metafile.outputs).length} output files; MCP-only entry graph`);
+const finalFiles = [...files, path.join(outdir, "closure-manifest.json")];
+const bytes = finalFiles.reduce((total, file) => total + fs.statSync(file).size, 0);
+console.log(`Power closure built: ${finalFiles.length} files, ${bytes} bytes, ${sourceInputs.length} source modules`);

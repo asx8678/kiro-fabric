@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/asx8678/kiro-fabric/main/docs/power-product.schema.json",
+  "schemaVersion": 1,
+  "product": "kiro-fabric-power",
+  "entrypoint": "src/kiro/mcp-entry.ts",
+  "runtimeAssets": {
+    "compilerWorker": "src/runtime/compiler-worker-entry.ts"
+  },
+  "mountedProviders": [
+    "artifacts",
+    "memory",
+    "state",
+    "mcp"
+  ],
+  "allowedPackageDependencies": [
+    "@jitl/quickjs-singlefile-mjs-release-sync",
+    "@modelcontextprotocol/sdk",
+    "mcporter",
+    "quickjs-emscripten-core",
+    "typebox",
+    "typescript"
+  ],
+  "forbiddenRuntimeModules": [
+    "src/actors/",
+    "src/agents/",
+    "src/capture/",
+    "src/compaction/",
+    "src/components/",
+    "src/residency/",
+    "src/schema/",
+    "src/ui/",
+    "src/verification/",
+    "src/worker/",
+    "src/worker.ts",
+    "src/runtime/node-process-runtime.ts",
+    "src/runtime/node-process-child-source.ts",
+    "src/kiro/acp-process.ts",
+    "src/kiro/acp-worker.ts",
+    "src/kiro/agent-worker-entry.ts",
+    "src/kiro/management-entry.ts"
+  ]
+}

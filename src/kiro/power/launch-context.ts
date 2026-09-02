@@ -2,7 +2,6 @@ import path from "node:path";
 import { canonicalPathContains, inspectCanonicalPath } from "../canonical-path.js";
 
 export interface KiroPowerLaunchContext {
-  mode: "power";
   pluginRoot: string;
   pluginData: string;
 }
@@ -29,5 +28,5 @@ export const resolveKiroPowerLaunchContext = (
   if (canonicalPathContains(pluginRoot, pluginData) || canonicalPathContains(pluginData, pluginRoot)) {
     throw new Error("PLUGIN_ROOT and PLUGIN_DATA must not contain one another");
   }
-  return { mode: "power", pluginRoot, pluginData };
+  return { pluginRoot, pluginData };
 };

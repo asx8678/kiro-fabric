@@ -1,153 +1,79 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-import {
-  assertPackagePolicy,
-  BUILT_RUNTIME_ARTIFACTS,
-  PACKAGE_BIN_ARTIFACTS,
-  PUBLISHED_DECLARATION_ARTIFACTS,
-  PUBLIC_DECLARATION_ROOTS,
-  REMOVED_BUILD_ARTIFACTS,
-  REPOSITORY_ROOT,
-} from "./package-policy.mjs";
-
-assertPackagePolicy();
-
-const root = REPOSITORY_ROOT;
-const dist = join(root, "dist");
-const fromDist = (file) => file.replace(/^dist\//u, "");
-const stable = BUILT_RUNTIME_ARTIFACTS.map(fromDist);
-const declarations = PUBLISHED_DECLARATION_ARTIFACTS.map(fromDist);
-const declarationRoots = PUBLIC_DECLARATION_ROOTS.map(fromDist);
 const required = [
-  ...stable,
-  ...stable.map((file) => `${file}.map`),
-  ...declarations,
-  ...declarations.map((file) => `${file}.map`),
+  "dist/index.js",
+  "dist/index.d.ts",
+  "dist/runtime/compiler-worker-entry.js",
+  "dist/kiro-power-closure/kiro/mcp-entry.js",
+  "dist/kiro-power-closure/runtime/compiler-worker-entry.js",
+  "dist/kiro-power-closure/closure-manifest.json",
 ];
-const missing = required.filter((file) => !existsSync(join(dist, file)));
-if (missing.length > 0) throw new Error(`Missing build artifacts:\n${missing.join("\n")}`);
-for (const artifact of REMOVED_BUILD_ARTIFACTS) {
-  const removed = fromDist(artifact);
-  if (existsSync(join(dist, removed))) throw new Error(`Removed legacy artifact still exists: ${removed}`);
-}
-
-const emittedDeclarations = [];
-const declarationDirectories = [dist];
-const SKIPPED_DECLARATION_DIRECTORIES = ["kiro-closure", "kiro-power-closure"];
-while (declarationDirectories.length > 0) {
-  const directory = declarationDirectories.pop();
-  if (!directory) continue;
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const file = join(directory, entry.name);
-    // The kiro-closure bundle is a self-contained runtime payload with its own
-    // nested private declarations and package.json. It is published under the
-    // `dist/kiro-closure/**/*` glob and is independent of the public entry
-    // declaration allowlist.
-    if (entry.isDirectory() && SKIPPED_DECLARATION_DIRECTORIES.includes(entry.name)) continue;
-    if (entry.isDirectory()) declarationDirectories.push(file);
-    else if (entry.name.endsWith(".d.ts")) emittedDeclarations.push(relative(dist, file));
+for (const file of required) {
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    throw new Error(`Required build artifact is missing: ${file}`);
   }
 }
-const publishedDeclarationSet = new Set(declarations);
-const unpublishedDeclarations = emittedDeclarations
-  .filter((file) => !publishedDeclarationSet.has(file))
-  .sort();
-if (unpublishedDeclarations.length > 0) {
-  throw new Error(
-    `Emitted declarations are missing from the package allowlist:\n${unpublishedDeclarations.join("\n")}`,
-  );
+for (const forbidden of [
+  "dist/kiro-closure",
+  "dist/kiro-power-closure/kiro/agent-worker-entry.js",
+  "dist/kiro-power-closure/kiro/management-entry.js",
+]) {
+  if (fs.existsSync(forbidden)) throw new Error(`Obsolete build artifact exists: ${forbidden}`);
 }
 
-const chunks = join(dist, "chunks");
-const chunkFiles = existsSync(chunks)
-  ? readdirSync(chunks).filter((file) => file.endsWith(".js"))
-  : [];
-if (chunkFiles.length === 0) throw new Error("Build did not produce dynamic chunks");
-for (const chunk of chunkFiles) {
-  if (!existsSync(join(chunks, `${chunk}.map`))) {
-    throw new Error(`Missing source map for chunk ${chunk}`);
+const files = [];
+const visit = (directory) => {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) visit(target);
+    else if (entry.isFile()) files.push(target);
+    else throw new Error(`Unsupported build artifact: ${target}`);
   }
-}
-
-const staticImport = /(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["']([^"']+)["']/g;
-const visited = new Set();
-const stack = [join(dist, "index.js")];
-while (stack.length > 0) {
-  const file = stack.pop();
-  if (!file || visited.has(file)) continue;
-  visited.add(file);
-  const source = readFileSync(file, "utf8");
-  for (const match of source.matchAll(staticImport)) {
-    const specifier = match[1];
-    if (specifier?.startsWith(".")) stack.push(resolve(dirname(file), specifier));
-  }
-}
-const initialSource = [...visited].map((file) => readFileSync(file, "utf8")).join("\n");
-for (const forbidden of ["src/fabric-runtime-state.ts", "src/capture/interceptor.ts", "src/prewalk/arm.ts", "@earendil-works/pi-tui"]) {
-  if (initialSource.includes(forbidden)) {
-    throw new Error(`Kiro public entry contains removed Pi runtime marker: ${forbidden}`);
-  }
-}
-
-const declarationImports = (source) => [
-  ...source.matchAll(/(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["']([^"']+)["']/g),
-  ...source.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g),
-].map((match) => match[1]).filter(Boolean);
-
-const declarationTarget = (file, specifier) => {
-  const base = resolve(dirname(file), specifier);
-  const candidates = [
-    base,
-    base.replace(/\.(?:c|m)?js$/u, ".d.ts"),
-    `${base}.d.ts`,
-    join(base, "index.d.ts"),
-  ];
-  return candidates.find((candidate) => candidate.endsWith(".d.ts") && existsSync(candidate));
 };
-
-// Consumers install the Kiro package without Pi. Follow every declaration
-// reachable from a public entry and reject accidental Pi host type leakage.
-const declarationStack = declarationRoots.map((file) => join(dist, file));
-const declarationVisited = new Set();
-const forbiddenDeclarationImports = [
-  "@earendil-works/",
-  "@mariozechner/pi-",
-];
-while (declarationStack.length > 0) {
-  const file = declarationStack.pop();
-  if (!file || declarationVisited.has(file)) continue;
-  declarationVisited.add(file);
-  const source = readFileSync(file, "utf8");
-  const forbiddenImport = forbiddenDeclarationImports.find((marker) => source.includes(marker));
-  if (forbiddenImport) {
-    throw new Error(
-      `Public declaration graph imports a development-only Pi package (${forbiddenImport}): ${relative(dist, file)}`,
-    );
-  }
-  for (const specifier of declarationImports(source)) {
-    if (!specifier.startsWith(".")) continue;
-    const target = declarationTarget(file, specifier);
-    if (target) declarationStack.push(target);
-  }
+visit("dist");
+for (const file of files) {
+  if (file.endsWith(".map")) throw new Error(`Production build contains a source map: ${file}`);
 }
 
-for (const artifact of PACKAGE_BIN_ARTIFACTS) {
-  const file = fromDist(artifact);
-  const text = readFileSync(join(dist, file), "utf8");
-  if (!text.startsWith("#!/usr/bin/env node")) {
-    throw new Error(`missing shebang: ${file}`);
+const closureRoot = path.resolve("dist/kiro-power-closure");
+const manifest = JSON.parse(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"), "utf8"));
+const actualClosureFiles = files
+  .filter((file) => path.resolve(file).startsWith(`${closureRoot}${path.sep}`) && !file.endsWith("closure-manifest.json"))
+  .map((file) => path.relative(closureRoot, file).replaceAll("\\", "/"))
+  .sort();
+const manifestFiles = manifest.files.map((entry) => entry.path).sort();
+if (JSON.stringify(actualClosureFiles) !== JSON.stringify(manifestFiles)) {
+  throw new Error("Closure manifest file inventory does not match dist");
+}
+const digest = createHash("sha256");
+for (const entry of manifest.files) {
+  const file = path.join(closureRoot, entry.path);
+  const content = fs.readFileSync(file);
+  if (content.length !== entry.bytes || createHash("sha256").update(content).digest("hex") !== entry.sha256) {
+    throw new Error(`Closure manifest checksum mismatch: ${entry.path}`);
+  }
+  digest.update(entry.path).update("\0").update(content);
+}
+if (digest.digest("hex") !== manifest.contentDigest) throw new Error("Closure content digest mismatch");
+
+const declarations = fs.readFileSync("dist/index.d.ts", "utf8");
+for (const removed of ["agent", "managed", "extension", "node-process", "orchestration"]) {
+  if (declarations.toLowerCase().includes(removed)) {
+    throw new Error(`Public declarations expose removed surface: ${removed}`);
   }
 }
-for (const file of stable) {
-  const checked = spawnSync(process.execPath, ["--check", join(dist, file)], { encoding: "utf8" });
-  if (checked.status !== 0) throw new Error(checked.stderr || `Syntax check failed: ${file}`);
+
+// Static imports are exercised here; the worker entry is separate and must be
+// imported explicitly. Entry guards prevent stdio startup in this process.
+for (const entry of [
+  "dist/index.js",
+  "dist/runtime/compiler-worker-entry.js",
+  "dist/kiro-power-closure/kiro/mcp-entry.js",
+  "dist/kiro-power-closure/runtime/compiler-worker-entry.js",
+]) {
+  await import(`${pathToFileURL(path.resolve(entry)).href}?build-audit=${Date.now()}`);
 }
-await Promise.all(
-  stable.map((file) =>
-    import(new URL(`../dist/${file}`, import.meta.url)),
-  ),
-);
-console.log(`build artifacts and lazy startup graph verified (${visited.size} startup files, ${declarationVisited.size} declaration files, ${chunkFiles.length} chunks)`);

@@ -1,84 +1,77 @@
 #!/usr/bin/env node
-// Aggregate real Kiro Power UI evidence from clean Linux/macOS/Windows hosts.
-// This script never synthesizes a pass: every required check must be supplied
-// by a real-client driver or a reviewed machine evidence recorder.
-import { readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { assertArtifactOutsideCheckout } from "./certification/artifact-path.mjs";
 import {
-  captureGitBinding,
-  gitBindingsMatch,
-  validateGitBinding,
-} from "./certification/git-binding.mjs";
-import {
-  POWER_REAL_CHECKS,
-  POWER_REAL_QUALIFICATION_KIND,
-  POWER_REAL_QUALIFICATION_SCHEMA_VERSION,
-} from "./certification/readiness-reports.mjs";
+  assertRealClientEvidence,
+  REAL_CLIENT_SESSION_COMMAND,
+  REAL_CLIENT_TOOLS,
+} from "./real-client-evidence.mjs";
+import { digestPowerPackage, validatePowerPackage } from "./validate-power-package.mjs";
 
-const checkout = path.resolve(".");
-const evidencePaths = [];
-let output;
-for (let index = 2; index < process.argv.length; index += 1) {
-  const argument = process.argv[index];
-  if (argument === "--evidence") {
-    const value = process.argv[++index];
-    if (!value) throw new Error("--evidence requires a path");
-    evidencePaths.push(path.resolve(value));
-  } else if (argument === "--output") {
-    const value = process.argv[++index];
-    if (!value || output) throw new Error("--output requires one path");
-    output = path.resolve(value);
-  } else {
-    throw new Error(`unknown argument: ${argument}`);
-  }
-}
-if (!output || evidencePaths.length !== 3) {
-  throw new Error("Usage: certify-kiro-power-real --evidence <linux.json> --evidence <macos.json> --evidence <windows.json> --output <report.json>");
-}
-assertArtifactOutsideCheckout(checkout, output, "--output");
-const identity = captureGitBinding(checkout);
-const pkg = JSON.parse(readFileSync(path.join(checkout, "package.json"), "utf8"));
-const expectedPackage = `${pkg.name}@${pkg.version}`;
-const expectedChecks = [...POWER_REAL_CHECKS];
-const platforms = evidencePaths.map((file) => {
-  const evidence = JSON.parse(readFileSync(file, "utf8"));
-  if (!validateGitBinding(evidence.identity) || !gitBindingsMatch(evidence.identity, identity)) {
-    throw new Error(`real Power evidence is not bound to this checkout: ${file}`);
-  }
-  if (evidence.package !== expectedPackage || !["linux", "darwin", "win32"].includes(evidence.os)
-    || typeof evidence.arch !== "string" || typeof evidence.nodeVersion !== "string"
-    || typeof evidence.kiroVersion !== "string" || !Array.isArray(evidence.checks)) {
-    throw new Error(`real Power evidence metadata is invalid: ${file}`);
-  }
-  const ids = evidence.checks.map((check) => check?.id);
-  if (ids.length !== expectedChecks.length || new Set(ids).size !== expectedChecks.length
-    || expectedChecks.some((id) => !ids.includes(id))) {
-    throw new Error(`real Power evidence check set is incomplete: ${file}`);
-  }
-  if (evidence.checks.some((check) => check?.status !== "pass"
-    || typeof check.evidence !== "string" || check.evidence.length === 0)) {
-    throw new Error(`real Power evidence contains a non-pass check: ${file}`);
-  }
-  return {
-    os: evidence.os,
-    arch: evidence.arch,
-    nodeVersion: evidence.nodeVersion,
-    kiroVersion: evidence.kiroVersion,
-    checks: evidence.checks,
-  };
-});
-if (new Set(platforms.map((platform) => platform.os)).size !== 3) {
-  throw new Error("real Power evidence must cover Linux, macOS, and Windows exactly once");
-}
-const report = {
-  kind: POWER_REAL_QUALIFICATION_KIND,
-  schemaVersion: POWER_REAL_QUALIFICATION_SCHEMA_VERSION,
-  identity,
-  package: expectedPackage,
-  ok: true,
-  platforms: platforms.sort((left, right) => left.os.localeCompare(right.os)),
-  finishedAt: new Date().toISOString(),
+const valueAfter = (flag) => {
+  const index = process.argv.indexOf(flag);
+  return index >= 0 ? process.argv[index + 1] : undefined;
 };
-writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-process.stdout.write(`${output}\n`);
+const packageRoot = path.resolve(valueAfter("--package") ?? ".tmp/kiro-fabric-power");
+const output = path.resolve(valueAfter("--output") ?? ".tmp/kiro-power-real-qualification.json");
+validatePowerPackage(packageRoot);
+const digest = digestPowerPackage(packageRoot, { excludeOwner: true }).digest;
+
+const configuredDriver = process.env.KIRO_POWER_REAL_DRIVER;
+if (!configuredDriver || !path.isAbsolute(configuredDriver)) {
+  throw new Error("Real-client qualification was not run: KIRO_POWER_REAL_DRIVER must name an absolute reviewed driver executable");
+}
+const driverStats = fs.lstatSync(configuredDriver);
+if (!driverStats.isFile() || driverStats.isSymbolicLink() || driverStats.nlink !== 1) {
+  throw new Error("KIRO_POWER_REAL_DRIVER must be a single-link regular non-symlink file");
+}
+if (process.platform !== "win32") {
+  if ((driverStats.mode & 0o111) === 0) throw new Error("KIRO_POWER_REAL_DRIVER is not executable");
+  if ((driverStats.mode & 0o022) !== 0) throw new Error("KIRO_POWER_REAL_DRIVER must not be group/world writable");
+  if (typeof process.getuid === "function" && driverStats.uid !== process.getuid() && driverStats.uid !== 0) {
+    throw new Error("KIRO_POWER_REAL_DRIVER must be owned by the current user or root");
+  }
+}
+const driver = fs.realpathSync(configuredDriver);
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-power-real-"));
+const evidence = path.join(temporary, "driver-evidence.json");
+try {
+  const result = spawnSync(driver, [
+    "--package", packageRoot,
+    "--package-digest", digest,
+    "--session-command-json", JSON.stringify(REAL_CLIENT_SESSION_COMMAND),
+    "--output", evidence,
+  ], {
+    stdio: "inherit",
+    env: process.env,
+    timeout: 45 * 60_000,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`Real-client driver exited with status ${result.status ?? "unknown"}`);
+  const evidenceStats = fs.lstatSync(evidence);
+  if (!evidenceStats.isFile() || evidenceStats.isSymbolicLink() || evidenceStats.nlink !== 1 || evidenceStats.size > 1024 * 1024) {
+    throw new Error("Real-client driver evidence must be a bounded single-link regular file");
+  }
+  const report = assertRealClientEvidence(
+    JSON.parse(fs.readFileSync(evidence, "utf8")),
+    digest,
+  );
+  const qualification = {
+    kind: "kiro-fabric.real-client-qualification",
+    schemaVersion: 1,
+    ok: true,
+    packageDigest: digest,
+    sessionCommand: REAL_CLIENT_SESSION_COMMAND,
+    powerActivated: true,
+    tools: REAL_CLIENT_TOOLS,
+    customAgentSelected: false,
+    driverEvidence: report,
+  };
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(output, `${JSON.stringify(qualification, null, 2)}\n`, { mode: 0o600 });
+  console.log(output);
+} finally {
+  fs.rmSync(temporary, { recursive: true, force: true });
+}

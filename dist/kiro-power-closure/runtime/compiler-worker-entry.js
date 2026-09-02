@@ -1,14 +1,14 @@
-import { createRequire as __kfCreateRequire } from "node:module";
-import { fileURLToPath as __kfFileURLToPath } from "node:url";
-import { dirname as __kfDirname } from "node:path";
-globalThis.__filename = __kfFileURLToPath(import.meta.url);
-globalThis.__dirname = __kfDirname(globalThis.__filename);
-const require = __kfCreateRequire(import.meta.url);
+import { createRequire as __createRequire } from "node:module";
+import { fileURLToPath as __fileURLToPath } from "node:url";
+import { dirname as __dirnameOf } from "node:path";
+globalThis.__filename = __fileURLToPath(import.meta.url);
+globalThis.__dirname = __dirnameOf(globalThis.__filename);
+const require = __createRequire(import.meta.url);
 
 import {
   typeCheckFabricCode
-} from "../chunks/chunk-MMKAFZEV.js";
-import "../chunks/chunk-GX475RD4.js";
+} from "../chunks/chunk-LMHNRHGR.js";
+import "../chunks/chunk-LSWTYIW3.js";
 
 // src/runtime/compiler-worker-entry.ts
 import { parentPort } from "node:worker_threads";
@@ -17,7 +17,7 @@ port?.once("message", (request) => {
   try {
     port.postMessage({
       ok: true,
-      result: typeCheckFabricCode(request.code, request.declarations, request.mode)
+      result: typeCheckFabricCode(request.code, request.declarations)
     });
   } catch (error) {
     port.postMessage({

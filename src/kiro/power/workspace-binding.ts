@@ -68,6 +68,7 @@ export class KiroPowerWorkspaceBinding {
   readonly #pluginData: string;
   readonly #elicitor: KiroPowerElicitor | undefined;
   readonly #home: string;
+  readonly #temporary: string;
   readonly #kiroHome: string;
   #candidates: Candidate[] = [];
   #binding: Binding | undefined;
@@ -84,6 +85,7 @@ export class KiroPowerWorkspaceBinding {
     }).canonicalPath;
     this.#elicitor = options.elicitor;
     this.#home = inspectCanonicalPath(os.homedir(), { kind: "directory" }).canonicalPath;
+    this.#temporary = inspectCanonicalPath(os.tmpdir(), { kind: "directory" }).canonicalPath;
     const kiroHome = path.join(this.#home, ".kiro");
     this.#kiroHome = existsSync(kiroHome)
       ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath
@@ -101,8 +103,8 @@ export class KiroPowerWorkspaceBinding {
       ? inspectCanonicalPath(this.#kiroHome, { kind: "directory" }).canonicalPath
       : this.#kiroHome;
     const insideKiroHome = canonicalPathContains(currentKiroHome, root);
-    const unsafe = [path.parse(root).root, this.#home, this.#pluginRoot, this.#pluginData];
-    if (unsafe.includes(root) || insideKiroHome) {
+    const unsafe = [path.parse(root).root, this.#home, this.#temporary, this.#pluginRoot, this.#pluginData];
+    if (unsafe.includes(root) || insideKiroHome || canonicalPathContains(root, this.#home)) {
       throw new Error("workspace root is too broad or reserved");
     }
     for (const reserved of [this.#pluginRoot, this.#pluginData]) {
@@ -170,6 +172,16 @@ export class KiroPowerWorkspaceBinding {
   workspaceObservation(): KiroPowerWorkspaceObservation {
     const binding = this.#binding;
     if (!binding) return { status: "unbound" };
+    // A client-root binding remains authorized only while the client-advertised
+    // lexical path can still be resolved to the same candidate. Verifying the
+    // old canonical path alone would incorrectly preserve access after an
+    // advertised parent alias became unavailable.
+    if (binding.source === "client-roots") {
+      const advertised = this.#candidates.find((entry) => entry.id === binding.id);
+      if (!advertised || !sameCanonicalFilesystemIdentity(advertised, binding)) {
+        return { status: "temporarily-unavailable" };
+      }
+    }
     try {
       const current = this.#canonical(binding.root);
       if (!sameCanonicalFilesystemIdentity(current, binding)) {

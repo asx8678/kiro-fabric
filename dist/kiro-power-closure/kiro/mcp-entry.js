@@ -1,62 +1,60 @@
 #!/usr/bin/env node
-import { createRequire as __kfCreateRequire } from "node:module";
-import { fileURLToPath as __kfFileURLToPath } from "node:url";
-import { dirname as __kfDirname } from "node:path";
-globalThis.__filename = __kfFileURLToPath(import.meta.url);
-globalThis.__dirname = __kfDirname(globalThis.__filename);
-const require = __kfCreateRequire(import.meta.url);
+import { createRequire as __createRequire } from "node:module";
+import { fileURLToPath as __fileURLToPath } from "node:url";
+import { dirname as __dirnameOf } from "node:path";
+globalThis.__filename = __fileURLToPath(import.meta.url);
+globalThis.__dirname = __dirnameOf(globalThis.__filename);
+const require = __createRequire(import.meta.url);
 
 import {
-  KIRO_MCP_DRAIN_TIMEOUT_MS
-} from "../chunks/chunk-UGJCDWWL.js";
-import "../chunks/chunk-GX475RD4.js";
+  canonicalPathContains,
+  inspectCanonicalPath
+} from "../chunks/chunk-4KRLFCN5.js";
+import "../chunks/chunk-LSWTYIW3.js";
 
 // src/kiro/mcp-entry.ts
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-var SHUTDOWN_GRACE_MS = KIRO_MCP_DRAIN_TIMEOUT_MS + 2e3;
-var startKiroMcpServer = async () => {
-  const { createKiroMcpServer } = await import("../chunks/mcp-server-ZMETLJEW.js");
-  const { resolveKiroMcpLaunchEnvironment } = await import("../chunks/mcp-environment-Y4SRWFPV.js");
-  const { parseKiroChildToolsEnv } = await import("../chunks/run-scope-2AOED3QV.js");
-  const launch = resolveKiroMcpLaunchEnvironment();
-  return createKiroMcpServer(launch.mode === "power" ? {
-    integration: "power",
-    pluginRoot: launch.pluginRoot,
-    pluginData: launch.pluginData
-  } : {
-    integration: launch.mode,
-    cwd: launch.cwd,
-    ...launch.mode === "internal-child" ? { tools: parseKiroChildToolsEnv(launch.toolsEnv) } : {},
-    ...launch.mode === "strict" && /^1$/i.test(process.env.KIRO_FABRIC_ENABLE_SUBAGENTS ?? "") ? { enableSubagents: true } : {}
-  });
-};
-var errorMessage = (error) => error instanceof Error ? error.message : String(error);
-var closeWithin = async (server) => {
-  let timer;
+
+// src/kiro/power/launch-context.ts
+import path from "node:path";
+var canonicalDirectory = (value, name) => {
+  if (!value) throw new Error(`Power launch is missing ${name}`);
+  if (!path.isAbsolute(value)) throw new Error(`${name} must be an absolute path`);
   try {
-    await Promise.race([
-      server.close(),
-      new Promise((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`MCP shutdown exceeded ${SHUTDOWN_GRACE_MS}ms`)),
-          SHUTDOWN_GRACE_MS
-        );
-      })
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
+    return inspectCanonicalPath(value, {
+      kind: "directory",
+      rejectFinalSymlink: true
+    }).canonicalPath;
+  } catch (error) {
+    throw new Error(`${name} must be an existing directory: ${error.message}`);
   }
+};
+var resolveKiroPowerLaunchContext = (env = process.env) => {
+  const pluginRoot = canonicalDirectory(env.PLUGIN_ROOT, "PLUGIN_ROOT");
+  const pluginData = canonicalDirectory(env.PLUGIN_DATA, "PLUGIN_DATA");
+  if (pluginRoot === pluginData) throw new Error("PLUGIN_ROOT and PLUGIN_DATA must be different directories");
+  if (canonicalPathContains(pluginRoot, pluginData) || canonicalPathContains(pluginData, pluginRoot)) {
+    throw new Error("PLUGIN_ROOT and PLUGIN_DATA must not contain one another");
+  }
+  return { pluginRoot, pluginData };
+};
+
+// src/kiro/mcp-entry.ts
+var PROCESS_SHUTDOWN_TIMEOUT_MS = 8e3;
+var startKiroMcpServer = async () => {
+  const launch = resolveKiroPowerLaunchContext();
+  const { createKiroMcpServer } = await import("../chunks/mcp-server-6KNQQIEW.js");
+  return createKiroMcpServer({ pluginRoot: launch.pluginRoot, pluginData: launch.pluginData });
 };
 var runKiroMcpProcess = async () => {
   let server;
   try {
     server = await startKiroMcpServer();
   } catch (error) {
-    const reason = `kiro-fabric MCP server failed to start: ${errorMessage(error)}`;
-    process.stderr.write(`${reason}
+    process.stderr.write(`kiro-fabric Power MCP failed to start: ${error instanceof Error ? error.message : String(error)}
 `);
-    return serveStartupError(reason);
+    return 1;
   }
   return new Promise((resolve) => {
     let closing = false;
@@ -65,96 +63,46 @@ var runKiroMcpProcess = async () => {
       process.removeListener("SIGINT", onSigint);
       process.removeListener("SIGTERM", onSigterm);
       process.stdin.removeListener("end", onEnd);
-      process.stdin.pause();
     };
-    const shutdown = (exitCode) => {
-      if (closing) {
-        cleanup();
-        process.exit(exitCode);
-      }
+    const finish = (code) => {
+      cleanup();
+      resolve(code);
+    };
+    const close = (code) => {
+      if (closing) return;
       closing = true;
-      void closeWithin(server).then(
-        () => {
-          cleanup();
-          resolve(exitCode);
-        },
+      let timer;
+      const timeout = new Promise((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`shutdown exceeded ${PROCESS_SHUTDOWN_TIMEOUT_MS}ms`)),
+          PROCESS_SHUTDOWN_TIMEOUT_MS
+        );
+      });
+      void Promise.race([server.close(), timeout]).then(
+        () => finish(code),
         (error) => {
-          process.stderr.write(`kiro-fabric: shutdown failed: ${errorMessage(error)}
+          process.stderr.write(`kiro-fabric Power MCP shutdown failed: ${error instanceof Error ? error.message : String(error)}
 `);
-          cleanup();
-          process.exit(1);
+          finish(1);
         }
-      );
+      ).finally(() => {
+        if (timer) clearTimeout(timer);
+      });
     };
-    const onSighup = () => shutdown(129);
-    const onSigint = () => shutdown(130);
-    const onSigterm = () => shutdown(143);
-    const onEnd = () => shutdown(0);
-    process.on("SIGHUP", onSighup);
-    process.on("SIGINT", onSigint);
-    process.on("SIGTERM", onSigterm);
-    process.stdin.on("end", onEnd);
+    const onSighup = () => close(129);
+    const onSigint = () => close(130);
+    const onSigterm = () => close(143);
+    const onEnd = () => close(0);
+    process.once("SIGHUP", onSighup);
+    process.once("SIGINT", onSigint);
+    process.once("SIGTERM", onSigterm);
+    process.stdin.once("end", onEnd);
     if (process.stdin.readableEnded || process.stdin.destroyed) queueMicrotask(onEnd);
   });
 };
-var invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : "";
-var selfPath = fileURLToPath(import.meta.url);
-if (invokedPath === selfPath || invokedPath === realpathSync(selfPath)) {
-  process.exit(await runKiroMcpProcess());
-}
-function serveStartupError(message) {
-  return new Promise((resolve) => {
-    let buffer = "";
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      process.stdin.removeListener("data", onData);
-      process.stdin.removeListener("end", finish);
-      process.removeListener("SIGHUP", finish);
-      process.removeListener("SIGINT", finish);
-      process.removeListener("SIGTERM", finish);
-      process.stdin.pause();
-      resolve(1);
-    };
-    const respond = (incoming) => {
-      let request = null;
-      try {
-        const parsed = JSON.parse(incoming);
-        if (parsed && typeof parsed === "object") request = parsed;
-      } catch {
-      }
-      if (request?.id === void 0 || settled) return;
-      process.stdout.write(
-        `${JSON.stringify({
-          jsonrpc: "2.0",
-          id: request.id,
-          error: { code: -32603, message }
-        })}
-`,
-        finish
-      );
-    };
-    const onData = (chunk) => {
-      buffer += chunk.toString();
-      let index;
-      while ((index = buffer.indexOf("\n")) !== -1) {
-        const line = buffer.slice(0, index).trim();
-        buffer = buffer.slice(index + 1);
-        if (line) respond(line);
-      }
-    };
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", onData);
-    process.stdin.on("end", finish);
-    process.on("SIGHUP", finish);
-    process.on("SIGINT", finish);
-    process.on("SIGTERM", finish);
-    const timer = setTimeout(finish, 15e3);
-    if (process.stdin.readableEnded || process.stdin.destroyed) queueMicrotask(finish);
-  });
-}
+var invoked = process.argv[1] ? realpathSync(process.argv[1]) : "";
+var self = realpathSync(fileURLToPath(import.meta.url));
+if (invoked === self) process.exit(await runKiroMcpProcess());
 export {
   runKiroMcpProcess,
   startKiroMcpServer

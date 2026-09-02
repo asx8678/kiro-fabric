@@ -9,6 +9,43 @@ const truncateString = (value: string, max: number): string =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const delegatedSchemaKeywords = new Set([
+  "allOf", "anyOf", "contains", "dependentSchemas", "else", "if", "not",
+  "oneOf", "pattern", "patternProperties", "propertyNames", "then", "uniqueItems",
+]);
+
+const locallyBoundedSchema = (schema: Record<string, unknown>): boolean => {
+  const stack: Array<{ value: unknown; depth: number }> = [{ value: schema, depth: 0 }];
+  const seen = new Set<object>();
+  let nodes = 0;
+  let stringChars = 0;
+  while (stack.length > 0) {
+    const { value, depth } = stack.pop()!;
+    nodes += 1;
+    if (nodes > 5_000 || depth > 32) return false;
+    if (typeof value === "string") {
+      stringChars += value.length;
+      if (stringChars > 100_000) return false;
+      continue;
+    }
+    if (typeof value !== "object" || value === null) continue;
+    if (seen.has(value)) return false;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const child of value) stack.push({ value: child, depth: depth + 1 });
+      continue;
+    }
+    for (const [key, child] of Object.entries(value)) {
+      // Complex combinators and untrusted regular expressions can multiply
+      // work or block the host event loop. Such external schemas remain
+      // advisory and are delegated to the remote MCP server.
+      if (delegatedSchemaKeywords.has(key)) return false;
+      stack.push({ value: child, depth: depth + 1 });
+    }
+  }
+  return true;
+};
+
 const pointerPart = (value: string): string => value.replaceAll("~", "~0").replaceAll("/", "~1");
 const decodePointerPart = (value: string): string => value.replaceAll("~1", "/").replaceAll("~0", "~");
 
@@ -100,7 +137,7 @@ export const validateSchemaValue = (
   value: unknown,
   options: { pathPrefix?: string; includeInstancePath?: boolean } = {},
 ): SchemaValidationResult => {
-  if (!isRecord(schema)) return { status: "unavailable" };
+  if (!isRecord(schema) || !locallyBoundedSchema(schema)) return { status: "unavailable" };
   const prefix = options.pathPrefix ?? "";
   try {
     const messages: string[] = [];

@@ -27,6 +27,23 @@ export interface WorkspaceContextSource {
   load(): Promise<readonly KiroWorkspaceRoot[]>;
 }
 
+const MAX_WORKSPACE_ROOTS = 128;
+const MAX_WORKSPACE_URI_CHARS = 8_192;
+const MAX_WORKSPACE_NAME_CHARS = 256;
+
+const boundedRoots = (value: readonly KiroWorkspaceRoot[]): KiroWorkspaceRoot[] => {
+  if (value.length > MAX_WORKSPACE_ROOTS) throw new Error("workspace root count exceeds 128");
+  return value.map((root) => {
+    if (!root || typeof root.uri !== "string" || root.uri.length < 1 || root.uri.length > MAX_WORKSPACE_URI_CHARS) {
+      throw new Error("workspace root URI is outside configured bounds");
+    }
+    if (root.name !== undefined && (typeof root.name !== "string" || root.name.length > MAX_WORKSPACE_NAME_CHARS)) {
+      throw new Error("workspace root name is outside configured bounds");
+    }
+    return { uri: root.uri, ...(root.name === undefined ? {} : { name: root.name }) };
+  });
+};
+
 /**
  * Conservative cached adapter around MCP roots. A failed refresh never means
  * that the client explicitly removed its roots: the last verified root set is
@@ -91,7 +108,9 @@ export class CachedWorkspaceContextProvider implements WorkspaceContextProvider 
 
   async #load(observedAt: number): Promise<KiroWorkspaceSnapshot> {
     try {
-      const roots = this.#source.supported() ? [...await this.#source.load()] : [];
+      const roots = this.#source.supported()
+        ? boundedRoots(await this.#source.load())
+        : [];
       return {
         revision: 0,
         status: roots.length === 0 ? "explicitly-empty" : "verified",

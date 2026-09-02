@@ -1,6 +1,6 @@
 {
   "name": "kiro-fabric-power-runtime",
-  "version": "0.0.0-closure",
+  "version": "0.64.0",
   "type": "module",
   "private": true
 }

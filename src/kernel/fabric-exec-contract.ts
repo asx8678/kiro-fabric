@@ -1,143 +1,99 @@
-// Host-neutral `fabric_exec` public contract. This module is the single owner
-// of the model-facing input schema and argument normalization shared by every
-// host adapter (Pi tool registration today, Kiro MCP next). It must never
-// import a host package (`@earendil-works/pi-*`); the lazy-graph assertion and
-// the kernel import test enforce that mechanically.
-//
-// Compatibility rules (see docs/architecture.md "Tool-call robustness"):
-// - Root and `display` objects are closed: misspelled flags fail before execution.
-// - Only `code` is required; budgets are integers with a lower bound of 1 and
-//   no declared maximum.
-// - `resultFormat` is `anyOf` literals, not `enum`, because the emitted JSON
-//   Schema shape is observable by hosts that serialize the schema verbatim.
-// - Descriptions are model-facing contract data; changing them is a breaking
-//   change for downstream prompt/caching behavior.
-
 import { Type, type TSchema } from "typebox";
-import type { FabricRunDisplay } from "../activity/types.js";
-import { normalizeRunDisplay, type FabricRunDisplayLike } from "../run-display.js";
+import { MAX_EXECUTOR_SOURCE_BYTES } from "../runtime/source-limit.js";
 
-export const FABRIC_EXEC_RESULT_FORMATS = ["auto", "yaml", "json", "text"] as const;
+export const FABRIC_EXEC_RESULT_FORMATS = ["auto", "json", "text"] as const;
 export type FabricExecResultFormat = (typeof FABRIC_EXEC_RESULT_FORMATS)[number];
-
-export interface FabricExecDisplay {
-  name?: string;
-  description?: string;
-}
 
 export interface FabricExecInput {
   code: string;
-  strings?: Record<string, string>;
+  payloads?: Record<string, string>;
   resultFormat?: FabricExecResultFormat;
-  tokenBudget?: number;
-  agentBudget?: number;
-  /** Object form or schema-supported objective shorthand. */
-  display?: FabricExecDisplay | string;
+  timeoutMs?: number;
 }
 
-const fabricExecDisplayObject = Type.Object({
-  name: Type.Optional(
-    Type.String({
-      description:
-        "Concise execution milestone used by the Fabric activity UI and deterministic compaction continuity",
-    }),
-  ),
-  description: Type.Optional(
-    Type.String({
-      description:
-        "Compact declared objective or acceptance criterion shown in the dashboard and richer compaction activity",
-    }),
-  ),
-}, { additionalProperties: false });
+export interface FabricExecNormalizationDiagnostic {
+  field: "payloads";
+  repair: "json-string-map" | "double-encoded-json-string-map";
+}
 
-const fabricExecDisplayString = Type.String({
-  description:
-    "Objective shorthand normalized to { name } (a JSON-object string is parsed). Prefer the object form when available.",
-});
+export interface PreparedFabricExecArguments {
+  value: unknown;
+  diagnostics: FabricExecNormalizationDiagnostic[];
+}
 
-/**
- * The exact model-facing schema. Do not restructure: property order,
- * `anyOf`/`const` representation, descriptions, and closed-object policy are
- * all observable contract.
- */
 export const fabricExecInputSchema = Type.Object({
   code: Type.String({
-    description:
-      "TypeScript function body. Top-level await and return are supported. Globals are capability-sensitive: managed Kiro provides repository I/O only through `k` and mounted-provider access only through `tools.providers/catalog/search/describe/list/call`, plus `mcp`, `memory`, or `agents` only when enabled. Unavailable namespaces are omitted and fail closed; other host adapters may expose additional globals. See the host's `fabric-exec` skill for exact signatures.",
+    minLength: 1,
+    maxLength: MAX_EXECUTOR_SOURCE_BYTES,
+    description: "Checked TypeScript function body. Top-level await and return are supported.",
   }),
-  strings: Type.Optional(
-    Type.Record(Type.String(), Type.String(), {
-      description:
-        "Named strings exposed as π.key, useful for content that is awkward to quote",
-    }),
-  ),
-  resultFormat: Type.Optional(
-    Type.Union(FABRIC_EXEC_RESULT_FORMATS.map((value) => Type.Literal(value))),
-  ),
-  tokenBudget: Type.Optional(
-    Type.Integer({
-      minimum: 1,
-      description: "Optional token budget for hosts that expose usage-accounted workflow agents; unmetered Kiro ACP children do not consume it",
-    }),
-  ),
-  agentBudget: Type.Optional(
-    Type.Integer({
-      minimum: 1,
-      description: "Optional agent-call cap, bounded by host capabilities and Fabric configuration",
-    }),
-  ),
-  display: Type.Optional(Type.Union([fabricExecDisplayObject, fabricExecDisplayString])),
+  payloads: Type.Optional(Type.Record(
+    Type.String({ minLength: 1, maxLength: 1_024 }),
+    Type.String({ maxLength: MAX_EXECUTOR_SOURCE_BYTES }),
+    {
+      maxProperties: 128,
+      description: "Named immutable string payloads exposed to guest code as payloads.key.",
+    },
+  )),
+  resultFormat: Type.Optional(Type.Union(FABRIC_EXEC_RESULT_FORMATS.map((value) => Type.Literal(value)))),
+  timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 900_000, description: "Requested guest deadline, capped by Power policy." })),
 }, { additionalProperties: false }) satisfies TSchema;
-
-export const OPTIONAL_FABRIC_EXEC_KEYS = [
-  "strings",
-  "resultFormat",
-  "tokenBudget",
-  "agentBudget",
-  "display",
-] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-/**
- * Compatibility normalization applied by every host before schema validation:
- * root string → { code }, all-string code arrays joined, null/undefined
- * optional fields removed, display shorthand canonicalized. Required `code`
- * is preserved even when null/invalid so host validation reports the real
- * error instead of a transformed one.
- */
-export const prepareFabricExecArguments = (input: unknown): unknown => {
-  if (typeof input === "string") return { code: input };
-  if (!isRecord(input)) return input;
-
-  let prepared = input;
-  const writable = (): Record<string, unknown> => {
-    if (prepared === input) prepared = { ...input };
-    return prepared;
-  };
-
-  if (Array.isArray(prepared.code) && prepared.code.every((line) => typeof line === "string")) {
-    writable().code = prepared.code.join("\n");
+const stringMap = (value: unknown): value is Record<string, string> => {
+  if (!isRecord(value)) return false;
+  let entries = 0;
+  let characters = 0;
+  for (const key of Object.keys(value)) {
+    const entry = value[key];
+    entries += 1;
+    if (
+      entries > 128 || key.length < 1 || key.length > 1_024 ||
+      typeof entry !== "string"
+    ) return false;
+    characters += key.length + entry.length;
+    if (characters > MAX_EXECUTOR_SOURCE_BYTES) return false;
   }
-
-  for (const key of OPTIONAL_FABRIC_EXEC_KEYS) {
-    if (!Object.hasOwn(prepared, key)) continue;
-    if (prepared[key] === null || prepared[key] === undefined) delete writable()[key];
-  }
-
-  const display = prepared.display;
-  if (typeof display === "string" || isRecord(display)) {
-    const normalized: FabricRunDisplay | undefined = normalizeRunDisplay(
-      display as FabricRunDisplayLike,
-    );
-    if (normalized) writable().display = normalized;
-    else delete writable().display;
-  }
-
-  return prepared;
+  return true;
 };
 
-/** JSON-serializable view of the schema for host adapters and golden tests. */
+const MAX_ENCODED_PAYLOAD_CHARS = 8_000_000;
+const FABRIC_EXEC_KEYS = new Set(["code", "payloads", "resultFormat", "timeoutMs"]);
+const repairPayloads = (value: string): { value: Record<string, string>; repair: FabricExecNormalizationDiagnostic["repair"] } | undefined => {
+  if (value.length > MAX_ENCODED_PAYLOAD_CHARS) return undefined;
+  try {
+    const once = JSON.parse(value) as unknown;
+    if (stringMap(once)) return { value: once, repair: "json-string-map" };
+    if (typeof once === "string") {
+      const twice = JSON.parse(once) as unknown;
+      if (stringMap(twice)) return { value: twice, repair: "double-encoded-json-string-map" };
+    }
+  } catch { /* invalid input remains invalid and schema validation reports it */ }
+  return undefined;
+};
+
+/** Normalize only the Kiro-observed encoded-map failure before schema validation. */
+export const prepareFabricExecArgumentsWithDiagnostics = (input: unknown): PreparedFabricExecArguments => {
+  if (!isRecord(input)) return { value: input, diagnostics: [] };
+  const keys = Object.keys(input);
+  if (keys.length > FABRIC_EXEC_KEYS.size || keys.some((key) => !FABRIC_EXEC_KEYS.has(key))) {
+    return { value: { invalidFabricExecEnvelope: true }, diagnostics: [] };
+  }
+  const value = { ...input };
+  const diagnostics: FabricExecNormalizationDiagnostic[] = [];
+  if (typeof value.payloads === "string") {
+    const repaired = repairPayloads(value.payloads);
+    if (repaired) {
+      diagnostics.push({ field: "payloads", repair: repaired.repair });
+      value.payloads = repaired.value;
+    }
+  }
+  return { value, diagnostics };
+};
+
+export const prepareFabricExecArguments = (input: unknown): unknown =>
+  prepareFabricExecArgumentsWithDiagnostics(input).value;
+
 export const fabricExecInputSchemaJson = (): Record<string, unknown> =>
   JSON.parse(JSON.stringify(fabricExecInputSchema)) as Record<string, unknown>;

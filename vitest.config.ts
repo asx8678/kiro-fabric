@@ -1,12 +1,12 @@
 import { defineConfig } from "vitest/config";
 
-import { PROCESS_LIFECYCLE_TEST_FILES } from "./vitest.test-groups.js";
-
 export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
-    exclude: [...PROCESS_LIFECYCLE_TEST_FILES],
     restoreMocks: true,
+    fileParallelism: false,
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

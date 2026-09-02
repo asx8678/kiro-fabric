@@ -1,10 +1,10 @@
 import path from "node:path";
-import type { FabricApprovalScope } from "../../core/session-approvals.js";
-import type {
-  FabricApprovalModeConfig,
-  FabricHostApprover,
-  FabricResolvedAction,
-} from "../host.js";
+import type { FabricApprovalConfig } from "../../config.js";
+import {
+  FABRIC_APPROVAL_TIMEOUT_MS,
+  type FabricExecutionApprover,
+} from "../../execution-service.js";
+import type { ResolvedFabricAction } from "../../protocol.js";
 
 export interface KiroPowerElicitationAdapter {
   supported(): boolean;
@@ -16,29 +16,18 @@ export interface KiroPowerElicitationAdapter {
   }): Promise<{ action: "accept" | "decline" | "cancel"; approved?: boolean }>;
 }
 
-const SECRET_NAME =
-  "(?:access[_-]?token|refresh[_-]?token|id[_-]?token|auth[_-]?token|client[_-]?secret|api[_-]?key|private[_-]?key|authorization|cookie|password|secret|token)";
-const SECRET = new RegExp(
-  `\\b(${SECRET_NAME})\\b["']?\\s*[:=]\\s*(?:"[^"\\r\\n]*"|'[^'\\r\\n]*'|[^\\r\\n,;}]+)`,
-  "gi",
-);
-const NORMALIZED_SECRET_KEY = /^(?:accesstoken|refreshtoken|idtoken|authtoken|clientsecret|apikey|privatekey|authorization|cookie|password|secret|token)$/i;
-const isSecretKey = (key: string): boolean =>
-  NORMALIZED_SECRET_KEY.test(key.replace(/[_\-\s]/g, ""));
-const bounded = (value: string, maximum = 1_500): string =>
-  value.replace(SECRET, "$1=<redacted>").slice(0, maximum);
+const SECRET_KEY = /(?:apikey|authorization|authtoken|bearer|clientkey|clientsecret|cookie|credential|idtoken|passphrase|password|privatekey|refreshtoken|secret|session|token)/iu;
+const SECRET_VALUE = /^(?:(?:basic|bearer)\s+|gh[pousr]_|github_pat_|sk-[a-z0-9_-]{12,}|akia[0-9a-z]{12,}|eyj[a-z0-9_-]+\.[a-z0-9_-]+\.|-----begin\s)|(?:^|[?&])(?:api[_-]?key|password|secret|token)=/iu;
+const URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//iu;
+const isSecretKey = (key: string): boolean => SECRET_KEY.test(key.replace(/[_\-\s]/gu, ""));
+const bounded = (value: string, maximum = 1_500): string => value.replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, maximum);
 
-/** Standards-adapter seam. Every unsupported or malformed outcome is denial. */
 export class KiroPowerApprover {
-  constructor(readonly adapter: KiroPowerElicitationAdapter, readonly timeoutMs = 30_000) {}
-
-  async approveOnce(request: {
-    risk: string;
-    provider: string;
-    action: string;
-    summary: string;
-    signal?: AbortSignal;
-  }): Promise<boolean> {
+  constructor(
+    readonly adapter: KiroPowerElicitationAdapter,
+    readonly timeoutMs = FABRIC_APPROVAL_TIMEOUT_MS,
+  ) {}
+  async approveOnce(request: { risk: string; provider: string; action: string; summary: string; signal?: AbortSignal }): Promise<boolean> {
     request.signal?.throwIfAborted();
     if (!this.adapter.supported()) return false;
     try {
@@ -51,60 +40,41 @@ export class KiroPowerApprover {
       request.signal?.throwIfAborted();
       return result.action === "accept" && result.approved === true;
     } catch {
-      // Cancellation is control flow, not a policy denial. Preserve the abort
-      // reason so MCP callers can distinguish cancellation from a rejected
-      // approval while still treating transport/malformed outcomes as denial.
       if (request.signal?.aborted) request.signal.throwIfAborted();
       return false;
     }
   }
 }
 
-const summarizeArguments = (
-  args: Record<string, unknown>,
-  cwd: string,
-): string => {
-  const projectPath = (value: string): string => {
-    if (!path.isAbsolute(value)) return value;
-    const relative = path.relative(cwd, value);
-    if (relative === "") return ".";
-    return !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative)
-      ? relative
-      : "<outside-workspace>";
-  };
-  const safe: Record<string, unknown> = {};
+const summarize = (args: Record<string, unknown>, cwd: string): string => {
+  const safe = Object.create(null) as Record<string, unknown>;
   for (const [key, value] of Object.entries(args).slice(0, 12)) {
-    if (isSecretKey(key) || /env/i.test(key)) {
-      safe[key] = "<redacted>";
-    } else if (typeof value === "string") {
-      safe[key] = /(?:path|file|cwd|root)/i.test(key)
-        ? projectPath(value).slice(0, 500)
-        : bounded(value, 500);
-    } else if (typeof value === "number" || typeof value === "boolean" || value === null) {
-      safe[key] = value;
-    } else if (Array.isArray(value)) {
-      safe[key] = `<${value.length} items>`;
-    } else {
-      safe[key] = "<object>";
-    }
+    if (isSecretKey(key) || /env/iu.test(key)) safe[key] = "<redacted>";
+    else if (typeof value === "string") {
+      if (SECRET_VALUE.test(value)) safe[key] = "<redacted>";
+      else if (path.isAbsolute(value)) {
+        const relative = path.relative(cwd, value);
+        safe[key] = relative === "" ? "." : relative.startsWith("..") || path.isAbsolute(relative) ? "<outside-workspace>" : relative;
+      } else if (URL_VALUE.test(value) || /(?:url|uri|endpoint)/iu.test(key)) {
+        try {
+          const url = new URL(value);
+          url.username = "";
+          url.password = "";
+          if (url.pathname !== "/") url.pathname = "/<redacted>";
+          if (url.search) url.search = "?<redacted>";
+          url.hash = "";
+          safe[key] = bounded(url.toString(), 500);
+        } catch { safe[key] = "<redacted-url>"; }
+      } else safe[key] = bounded(value, 500);
+    } else if (value === null || typeof value === "number" || typeof value === "boolean") safe[key] = value;
+    else safe[key] = Array.isArray(value) ? `<${value.length} items>` : "<object>";
   }
-  return bounded(JSON.stringify(safe), 1_500);
+  return bounded(JSON.stringify(safe));
 };
 
-/** Fabric host adapter: explicit allows pass, denies deny, and ask/auto elicit once. */
-export class KiroPowerFabricApprover implements FabricHostApprover {
-  constructor(
-    readonly config: FabricApprovalModeConfig,
-    readonly elicitation: KiroPowerApprover,
-    readonly cwd: string,
-  ) {}
-
-  async approve(
-    action: FabricResolvedAction,
-    args: Record<string, unknown>,
-    scope: FabricApprovalScope = {},
-    signal?: AbortSignal,
-  ): Promise<void> {
+export class KiroPowerFabricApprover implements FabricExecutionApprover {
+  constructor(readonly config: FabricApprovalConfig, readonly elicitation: KiroPowerApprover, readonly cwd: string) {}
+  async approve(action: ResolvedFabricAction, args: Record<string, unknown>, signal?: AbortSignal): Promise<void> {
     const mode = this.config[action.risk];
     if (mode === "allow") return;
     if (mode === "deny") throw new Error(`${action.ref} is denied by Fabric policy`);
@@ -112,7 +82,7 @@ export class KiroPowerFabricApprover implements FabricHostApprover {
       risk: action.risk,
       provider: action.provider,
       action: action.name,
-      summary: `${summarizeArguments(args, this.cwd)}${scope.projectDigest ? "\nWorkspace-bound request" : ""}`,
+      summary: summarize(args, this.cwd),
       ...(signal ? { signal } : {}),
     });
     if (!approved) throw new Error(`${action.ref} approval was denied or unavailable`);

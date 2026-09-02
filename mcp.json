@@ -7,10 +7,7 @@
       "args": [
         "${PLUGIN_ROOT}/dist/kiro-power-closure/kiro/mcp-entry.js"
       ],
-      "cwd": "${PLUGIN_ROOT}",
-      "env": {
-        "KIRO_FABRIC_INTEGRATION": "power"
-      }
+      "cwd": "${PLUGIN_ROOT}"
     }
   }
 }

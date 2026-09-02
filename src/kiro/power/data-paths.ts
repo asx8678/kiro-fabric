@@ -1,71 +1,53 @@
 import { createHash } from "node:crypto";
-import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 
 export interface KiroPowerDataPaths {
   root: string;
   config: string;
+  configFile: string;
   mcpConfig: string;
-  cache: string;
-  logs: string;
+  artifacts: string;
   projects: string;
-  daemon: string;
 }
+export interface KiroPowerWorkspaceIdentity { schemaVersion: 1; canonicalPath: string; deviceId: string; fileId: string }
 
-export interface KiroPowerWorkspaceIdentity {
-  schemaVersion: 1;
-  canonicalPath: string;
-  deviceId: string;
-  fileId: string;
-}
-
-const WORKSPACE_IDENTITY_FILE = "workspace-identity.json";
+const assertCurrentUser = (stats: fs.Stats, target: string): void => {
+  if (process.platform !== "win32" && typeof process.getuid === "function" && stats.uid !== process.getuid()) {
+    throw new Error(`Power data path is owned by another user: ${target}`);
+  }
+};
 
 const privateDirectory = (directory: string, boundary: string): string => {
   const root = path.resolve(boundary);
-  const rootStats = lstatSync(root);
-  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
-    throw new Error(`Power storage root is a symlink or non-directory: ${boundary}`);
-  }
+  const rootStats = fs.lstatSync(root);
+  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new Error(`Power storage root is not a regular directory: ${boundary}`);
+  assertCurrentUser(rootStats, root);
   const target = path.resolve(directory);
   const relative = path.relative(root, target);
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new Error(`Power data path escapes its storage root: ${directory}`);
-  }
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error(`Power data path escapes storage: ${directory}`);
   let cursor = root;
   for (const segment of relative.split(path.sep).filter(Boolean)) {
     cursor = path.join(cursor, segment);
-    try {
-      mkdirSync(cursor, { mode: 0o700 });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-    const stats = lstatSync(cursor);
-    if (!stats.isDirectory() || stats.isSymbolicLink()) {
-      throw new Error(`Power data path contains a symlink or non-directory: ${cursor}`);
-    }
-    chmodSync(cursor, 0o700);
+    try { fs.mkdirSync(cursor, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    const stats = fs.lstatSync(cursor);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power data path contains a non-directory: ${cursor}`);
+    assertCurrentUser(stats, cursor);
+    fs.chmodSync(cursor, 0o700);
   }
   return target;
 };
 
-const privateMcpConfig = (configDirectory: string): string => {
-  const target = path.join(configDirectory, "mcporter.json");
+const privateJson = (target: string, initial: unknown): string => {
   try {
-    const descriptor = openSync(target, "wx", 0o600);
-    try {
-      writeFileSync(descriptor, `${JSON.stringify({ mcpServers: {}, imports: [] }, null, 2)}\n`);
-    } finally {
-      closeSync(descriptor);
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-  }
-  const stats = lstatSync(target);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
-    throw new Error(`Power MCP configuration is a symlink, hardlink, or non-file: ${target}`);
-  }
-  chmodSync(target, 0o600);
+    const descriptor = fs.openSync(target, "wx", 0o600);
+    try { fs.writeFileSync(descriptor, `${JSON.stringify(initial, null, 2)}\n`); } finally { fs.closeSync(descriptor); }
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+  const stats = fs.lstatSync(target);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) throw new Error(`Power configuration is not a private regular file: ${target}`);
+  assertCurrentUser(stats, target);
+  if (stats.size > 1024 * 1024) throw new Error(`Power configuration exceeds 1048576 bytes: ${target}`);
+  fs.chmodSync(target, 0o600);
   return target;
 };
 
@@ -75,76 +57,27 @@ export const prepareKiroPowerDataPaths = (pluginData: string): KiroPowerDataPath
   return {
     root,
     config,
-    mcpConfig: privateMcpConfig(config),
-    cache: privateDirectory(path.join(root, "global", "cache"), root),
-    logs: privateDirectory(path.join(root, "global", "logs"), root),
+    configFile: path.join(config, "config.json"),
+    mcpConfig: privateJson(path.join(config, "mcp.json"), { mcpServers: {}, imports: [] }),
+    artifacts: privateDirectory(path.join(root, "artifacts"), root),
     projects: privateDirectory(path.join(root, "projects"), root),
-    daemon: privateDirectory(path.join(root, "daemon"), root),
   };
 };
 
-export const kiroPowerWorkspaceId = (identity: KiroPowerWorkspaceIdentity): string =>
-  createHash("sha256")
-    .update("kiro-fabric-power-workspace-v2\0")
-    .update(identity.canonicalPath)
-    .update("\0")
-    .update(identity.deviceId)
-    .update("\0")
-    .update(identity.fileId)
-    .digest("hex");
+const kiroPowerWorkspaceId = (identity: KiroPowerWorkspaceIdentity): string => createHash("sha256")
+  .update("kiro-fabric-power-workspace-v3\0").update(identity.canonicalPath).update("\0")
+  .update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
 
-const prepareWorkspaceIdentity = (
-  root: string,
-  identity: KiroPowerWorkspaceIdentity,
-): string => {
-  const target = path.join(root, WORKSPACE_IDENTITY_FILE);
-  const serialized = `${JSON.stringify(identity, null, 2)}\n`;
-  try {
-    const descriptor = openSync(target, "wx", 0o600);
-    try {
-      writeFileSync(descriptor, serialized);
-    } finally {
-      closeSync(descriptor);
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-  }
-  const stats = lstatSync(target);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
-    throw new Error(`Power workspace identity is a symlink, hardlink, or non-file: ${target}`);
-  }
-  chmodSync(target, 0o600);
-  let persisted: unknown;
-  try {
-    persisted = JSON.parse(readFileSync(target, "utf8"));
-  } catch {
-    throw new Error(`Power workspace identity is malformed: ${target}`);
-  }
-  if (
-    typeof persisted !== "object" || persisted === null || Array.isArray(persisted) ||
-    (persisted as KiroPowerWorkspaceIdentity).schemaVersion !== identity.schemaVersion ||
-    (persisted as KiroPowerWorkspaceIdentity).canonicalPath !== identity.canonicalPath ||
-    (persisted as KiroPowerWorkspaceIdentity).deviceId !== identity.deviceId ||
-    (persisted as KiroPowerWorkspaceIdentity).fileId !== identity.fileId
-  ) {
-    throw new Error(`Power workspace identity does not match the current filesystem object: ${target}`);
-  }
-  return target;
-};
-
-export const prepareKiroPowerProjectPaths = (
-  projects: string,
-  identity: KiroPowerWorkspaceIdentity,
-) => {
+export const prepareKiroPowerProjectPaths = (projects: string, identity: KiroPowerWorkspaceIdentity) => {
   const root = privateDirectory(path.join(projects, kiroPowerWorkspaceId(identity)), projects);
-  const identityFile = prepareWorkspaceIdentity(root, identity);
+  const identityFile = privateJson(path.join(root, "workspace-identity.json"), identity);
+  const persisted = JSON.parse(fs.readFileSync(identityFile, "utf8")) as KiroPowerWorkspaceIdentity;
+  if (JSON.stringify(persisted) !== JSON.stringify(identity)) throw new Error("Power workspace identity does not match the current filesystem object");
   return {
     root,
     identityFile,
     memory: privateDirectory(path.join(root, "memory"), root),
     state: privateDirectory(path.join(root, "state"), root),
-    runs: privateDirectory(path.join(root, "runs"), root),
     artifacts: privateDirectory(path.join(root, "artifacts"), root),
-    logs: privateDirectory(path.join(root, "logs"), root),
   };
 };

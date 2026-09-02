@@ -1,0 +1,549 @@
+{
+  "schemaVersion": 1,
+  "product": "kiro-fabric-power",
+  "entrypoint": "kiro/mcp-entry.js",
+  "compilerWorker": "runtime/compiler-worker-entry.js",
+  "executor": "quickjs",
+  "sourceInputs": [
+    "src/async-settlement.ts",
+    "src/config.ts",
+    "src/core/action-registry.ts",
+    "src/execution-service.ts",
+    "src/kernel/fabric-exec-contract.ts",
+    "src/kiro/artifacts.ts",
+    "src/kiro/canonical-path.ts",
+    "src/kiro/deadlines.ts",
+    "src/kiro/mcp-entry.ts",
+    "src/kiro/mcp-provider.ts",
+    "src/kiro/mcp-server.ts",
+    "src/kiro/memory-provider.ts",
+    "src/kiro/memory.ts",
+    "src/kiro/power/approver.ts",
+    "src/kiro/power/artifacts-provider.ts",
+    "src/kiro/power/data-paths.ts",
+    "src/kiro/power/launch-context.ts",
+    "src/kiro/power/workspace-binding.ts",
+    "src/kiro/power/workspace-context.ts",
+    "src/kiro/projection.ts",
+    "src/kiro/runtime.ts",
+    "src/providers/state-provider.ts",
+    "src/runtime/compiler-worker-entry.ts",
+    "src/runtime/guest-stack-map.ts",
+    "src/runtime/guest-types.ts",
+    "src/runtime/json-budget.ts",
+    "src/runtime/quickjs-runtime.ts",
+    "src/runtime/source-limit.ts",
+    "src/runtime/type-checker.ts",
+    "src/schema-validation.ts"
+  ],
+  "packageInputs": [
+    {
+      "name": "@iarna/toml",
+      "version": "2.2.5",
+      "license": "ISC"
+    },
+    {
+      "name": "@jitl/quickjs-ffi-types",
+      "version": "0.32.0",
+      "license": "MIT"
+    },
+    {
+      "name": "@jitl/quickjs-singlefile-mjs-release-sync",
+      "version": "0.32.0",
+      "license": "MIT"
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "version": "1.30.0",
+      "license": "MIT"
+    },
+    {
+      "name": "ajv",
+      "version": "8.20.0",
+      "license": "MIT"
+    },
+    {
+      "name": "ajv-formats",
+      "version": "3.0.1",
+      "license": "MIT"
+    },
+    {
+      "name": "content-type",
+      "version": "1.0.5",
+      "license": "MIT"
+    },
+    {
+      "name": "cross-spawn",
+      "version": "7.0.6",
+      "license": "MIT"
+    },
+    {
+      "name": "eventsource",
+      "version": "3.0.7",
+      "license": "MIT"
+    },
+    {
+      "name": "eventsource-parser",
+      "version": "3.1.0",
+      "license": "MIT"
+    },
+    {
+      "name": "fast-deep-equal",
+      "version": "3.1.3",
+      "license": "MIT"
+    },
+    {
+      "name": "fast-uri",
+      "version": "3.1.5",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "isexe",
+      "version": "2.0.0",
+      "license": "ISC"
+    },
+    {
+      "name": "json-schema-traverse",
+      "version": "1.0.0",
+      "license": "MIT"
+    },
+    {
+      "name": "jsonc-parser",
+      "version": "3.3.1",
+      "license": "MIT"
+    },
+    {
+      "name": "mcporter",
+      "version": "0.12.3",
+      "license": "MIT"
+    },
+    {
+      "name": "path-key",
+      "version": "3.1.1",
+      "license": "MIT"
+    },
+    {
+      "name": "pkce-challenge",
+      "version": "5.0.1",
+      "license": "MIT"
+    },
+    {
+      "name": "quickjs-emscripten-core",
+      "version": "0.32.0",
+      "license": "MIT"
+    },
+    {
+      "name": "shebang-command",
+      "version": "2.0.0",
+      "license": "MIT"
+    },
+    {
+      "name": "shebang-regex",
+      "version": "3.0.0",
+      "license": "MIT"
+    },
+    {
+      "name": "typebox",
+      "version": "1.3.8",
+      "license": "MIT"
+    },
+    {
+      "name": "typescript",
+      "version": "6.0.3",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "which",
+      "version": "2.0.2",
+      "license": "ISC"
+    },
+    {
+      "name": "zod",
+      "version": "4.4.3",
+      "license": "MIT"
+    },
+    {
+      "name": "zod-to-json-schema",
+      "version": "3.25.2",
+      "license": "ISC"
+    }
+  ],
+  "files": [
+    {
+      "path": "chunks/chunk-4KRLFCN5.js",
+      "bytes": 2125,
+      "sha256": "d1a31c3d7c2e3be6d48671f398e5662fd9a12add757605711604c117c0eae4dc"
+    },
+    {
+      "path": "chunks/chunk-4LKE3ECX.js",
+      "bytes": 910771,
+      "sha256": "2e87cc2a622ef5624c5fcd2206518d89ab35ddadafc34b538084a297bcbe294e"
+    },
+    {
+      "path": "chunks/chunk-FWH3VULO.js",
+      "bytes": 3911,
+      "sha256": "cd57a59a06f22326d3e7debc525aa587efe06fe28c0bf68e762606d7afcba556"
+    },
+    {
+      "path": "chunks/chunk-G3LABT6U.js",
+      "bytes": 845,
+      "sha256": "6dc6eeff440eb4fffa4714ec7c315318a60b4ac00f0917ed6217a3d64882e81d"
+    },
+    {
+      "path": "chunks/chunk-G6V3LW4W.js",
+      "bytes": 55139,
+      "sha256": "2b676ed28bfe9a343857d218e7c575b4d00c5f224a4aa3eda615c0323da9d1ee"
+    },
+    {
+      "path": "chunks/chunk-LMHNRHGR.js",
+      "bytes": 9983612,
+      "sha256": "18c55ef0a6d80eec4ea6ddb569cf165e9c959ba5cc5ff17d48bb96c651e18a49"
+    },
+    {
+      "path": "chunks/chunk-LSWTYIW3.js",
+      "bytes": 2221,
+      "sha256": "3025e9234dba3830ae1f7ba6a2571183afebc8f196e9f0c188e2a4457448c454"
+    },
+    {
+      "path": "chunks/chunk-SRO3YB3P.js",
+      "bytes": 2189,
+      "sha256": "95a031ef038ca34f5bd89c1967b771382feba22574b2e0a0217c5eefd1cd731e"
+    },
+    {
+      "path": "chunks/dist-VQONG42M.js",
+      "bytes": 475825,
+      "sha256": "5b43cbc9f1dc9902d55ece8bc47ec8c7cc1844a483a09543ef5d44127ed3f8d7"
+    },
+    {
+      "path": "chunks/emscripten-module-Q67P5WYC-QODKBPIA.js",
+      "bytes": 832676,
+      "sha256": "9ca177f1556a0412c1cd343d0b6691d317e129f93befcdc7c8685b824720046b"
+    },
+    {
+      "path": "chunks/ffi-E3EUE5UE.js",
+      "bytes": 7604,
+      "sha256": "6290d0c7f473801a6806e182cc82a8b6a38a09f83e7bf2f14308088500dc0e26"
+    },
+    {
+      "path": "chunks/launch-3GYIPSIY.js",
+      "bytes": 534,
+      "sha256": "e1232c521621e3cbe4711b9b79b2fc1f6c72f9033d2e0f2e1d65205ab2f2b11e"
+    },
+    {
+      "path": "chunks/lib.decorators.d.ts",
+      "bytes": 13153,
+      "sha256": "1ce14b81c5cc821994aa8ec1d42b220dd41b27fcc06373bce3958af7421b77d4"
+    },
+    {
+      "path": "chunks/lib.decorators.legacy.d.ts",
+      "bytes": 1287,
+      "sha256": "b3a048b3e9302ef9a34ef4ebb9aecfb28b66abb3bce577206a79fee559c230da"
+    },
+    {
+      "path": "chunks/lib.es2015.collection.d.ts",
+      "bytes": 5305,
+      "sha256": "105ba8ff7ba746404fe1a2e189d1d3d2e0eb29a08c18dded791af02f29fb4711"
+    },
+    {
+      "path": "chunks/lib.es2015.core.d.ts",
+      "bytes": 22824,
+      "sha256": "eadcffda2aa84802c73938e589b9e58248d74c59cb7fcbca6474e3435ac15504"
+    },
+    {
+      "path": "chunks/lib.es2015.d.ts",
+      "bytes": 1202,
+      "sha256": "3f88bedbeb09c6f5a6645cb24c7c55f1aa22d19ae96c8e6959cbd8b85a707bc6"
+    },
+    {
+      "path": "chunks/lib.es2015.generator.d.ts",
+      "bytes": 2518,
+      "sha256": "00343ca5b2e3d48fa5df1db6e32ea2a59afab09590274a6cccb1dbae82e60c7c"
+    },
+    {
+      "path": "chunks/lib.es2015.iterable.d.ts",
+      "bytes": 18185,
+      "sha256": "ebd9f816d4002697cb2864bea1f0b70a103124e18a8cd9645eeccc09bdf80ab4"
+    },
+    {
+      "path": "chunks/lib.es2015.promise.d.ts",
+      "bytes": 3161,
+      "sha256": "2c1afac30a01772cd2a9a298a7ce7706b5892e447bb46bdbeef720f7b5da77ad"
+    },
+    {
+      "path": "chunks/lib.es2015.proxy.d.ts",
+      "bytes": 5212,
+      "sha256": "7b0225f483e4fa685625ebe43dd584bb7973bbd84e66a6ba7bbe175ee1048b4f"
+    },
+    {
+      "path": "chunks/lib.es2015.reflect.d.ts",
+      "bytes": 6454,
+      "sha256": "c0a4b8ac6ce74679c1da2b3795296f5896e31c38e888469a8e0f99dc3305de60"
+    },
+    {
+      "path": "chunks/lib.es2015.symbol.d.ts",
+      "bytes": 1610,
+      "sha256": "3084a7b5f569088e0146533a00830e206565de65cae2239509168b11434cd84f"
+    },
+    {
+      "path": "chunks/lib.es2015.symbol.wellknown.d.ts",
+      "bytes": 10971,
+      "sha256": "c5079c53f0f141a0698faa903e76cb41cd664e3efb01cc17a5c46ec2eb0bef42"
+    },
+    {
+      "path": "chunks/lib.es2016.array.include.d.ts",
+      "bytes": 5165,
+      "sha256": "32cafbc484dea6b0ab62cf8473182bbcb23020d70845b406f80b7526f38ae862"
+    },
+    {
+      "path": "chunks/lib.es2016.d.ts",
+      "bytes": 926,
+      "sha256": "7fe93b39b810eadd916be8db880dd7f0f7012a5cc6ffb62de8f62a2117fa6f1f"
+    },
+    {
+      "path": "chunks/lib.es2016.intl.d.ts",
+      "bytes": 1445,
+      "sha256": "fca4cdcb6d6c5ef18a869003d02c9f0fd95df8cfaf6eb431cd3376bc034cad36"
+    },
+    {
+      "path": "chunks/lib.es2017.arraybuffer.d.ts",
+      "bytes": 876,
+      "sha256": "b93ec88115de9a9dc1b602291b85baf825c85666bf25985cc5f698073892b467"
+    },
+    {
+      "path": "chunks/lib.es2017.d.ts",
+      "bytes": 1123,
+      "sha256": "bb0074cc08b84a2374af33d8bf044b80851ccc9e719a5e202eacf40db2c31600"
+    },
+    {
+      "path": "chunks/lib.es2017.date.d.ts",
+      "bytes": 1877,
+      "sha256": "f5c06dcc3fe849fcb297c247865a161f995cc29de7aa823afdd75aaaddc1419b"
+    },
+    {
+      "path": "chunks/lib.es2017.intl.d.ts",
+      "bytes": 1410,
+      "sha256": "c7b3542146734342e440a84b213384bfa188835537ddbda50d30766f0593aff9"
+    },
+    {
+      "path": "chunks/lib.es2017.object.d.ts",
+      "bytes": 2434,
+      "sha256": "b77e16112127a4b169ef0b8c3a4d730edf459c5f25fe52d5e436a6919206c4d7"
+    },
+    {
+      "path": "chunks/lib.es2017.sharedmemory.d.ts",
+      "bytes": 7170,
+      "sha256": "fbffd9337146eff822c7c00acbb78b01ea7ea23987f6c961eba689349e744f8c"
+    },
+    {
+      "path": "chunks/lib.es2017.string.d.ts",
+      "bytes": 2339,
+      "sha256": "a995c0e49b721312f74fdfb89e4ba29bd9824c770bbb4021d74d2bf560e4c6bd"
+    },
+    {
+      "path": "chunks/lib.es2017.typedarrays.d.ts",
+      "bytes": 1503,
+      "sha256": "ce6180fa19b1cccd07ee7f7dbb9a367ac19c0ed160573e4686425060b6df7f57"
+    },
+    {
+      "path": "chunks/lib.es2018.asyncgenerator.d.ts",
+      "bytes": 2653,
+      "sha256": "3f02e2476bccb9dbe21280d6090f0df17d2f66b74711489415a8aa4df73c9675"
+    },
+    {
+      "path": "chunks/lib.es2018.asynciterable.d.ts",
+      "bytes": 2218,
+      "sha256": "45e3ab34c1c013c8ab2dc1ba4c80c780744b13b5676800ae2e3be27ae862c40c"
+    },
+    {
+      "path": "chunks/lib.es2018.d.ts",
+      "bytes": 1049,
+      "sha256": "1a7daebe4f45fb03d9ec53d60008fbf9ac45a697fdc89e4ce218bc94b94f94d6"
+    },
+    {
+      "path": "chunks/lib.es2018.intl.d.ts",
+      "bytes": 2982,
+      "sha256": "805c86f6cca8d7702a62a844856dbaa2a3fd2abef0536e65d48732441dde5b5b"
+    },
+    {
+      "path": "chunks/lib.es2018.promise.d.ts",
+      "bytes": 1314,
+      "sha256": "e42e397f1a5a77994f0185fd1466520691456c772d06bf843e5084ceb879a0ad"
+    },
+    {
+      "path": "chunks/lib.es2018.regexp.d.ts",
+      "bytes": 1193,
+      "sha256": "f4c2b41f90c95b1c532ecc874bd3c111865793b23aebcc1c3cbbabcd5d76ffb0"
+    },
+    {
+      "path": "chunks/lib.es2019.array.d.ts",
+      "bytes": 3124,
+      "sha256": "ab26191cfad5b66afa11b8bf935ef1cd88fabfcb28d30b2dfa6fad877d050332"
+    },
+    {
+      "path": "chunks/lib.es2019.d.ts",
+      "bytes": 1032,
+      "sha256": "f94b133a3cb14a288803be545ac2683e0d0ff6661bcd37e31aaaec54fc382aed"
+    },
+    {
+      "path": "chunks/lib.es2019.intl.d.ts",
+      "bytes": 919,
+      "sha256": "689da16f46e647cef0d64b0def88910e818a5877ca5379ede156ca3afb780ac3"
+    },
+    {
+      "path": "chunks/lib.es2019.object.d.ts",
+      "bytes": 1434,
+      "sha256": "2088bc26531e38fb05eedac2951480db5309f6be3fa4a08d2221abb0f5b4200d"
+    },
+    {
+      "path": "chunks/lib.es2019.string.d.ts",
+      "bytes": 1489,
+      "sha256": "cb9d366c425fea79716a8fb3af0d78e6b22ebbab3bd64d25063b42dc9f531c1e"
+    },
+    {
+      "path": "chunks/lib.es2019.symbol.d.ts",
+      "bytes": 967,
+      "sha256": "500934a8089c26d57ebdb688fc9757389bb6207a3c8f0674d68efa900d2abb34"
+    },
+    {
+      "path": "chunks/lib.es2020.bigint.d.ts",
+      "bytes": 38258,
+      "sha256": "bc21cc8b6fee4f4c2440d08035b7ea3c06b3511314c8bab6bef7a92de58a2593"
+    },
+    {
+      "path": "chunks/lib.es2020.d.ts",
+      "bytes": 1162,
+      "sha256": "f59d0650799f8782fd74cf73c19223730c6d1b9198671b1c5b3a38e1188b5953"
+    },
+    {
+      "path": "chunks/lib.es2020.date.d.ts",
+      "bytes": 2917,
+      "sha256": "7ca53d13d2957003abb47922a71866ba7cb2068f8d154877c596d63c359fed25"
+    },
+    {
+      "path": "chunks/lib.es2020.intl.d.ts",
+      "bytes": 22399,
+      "sha256": "48915f327cd1dea4d7bd358d9dc7732f58f9e1626a29cc0c05c8c692419d9bb7"
+    },
+    {
+      "path": "chunks/lib.es2020.number.d.ts",
+      "bytes": 1548,
+      "sha256": "b7bf9377723203b5a6a4b920164df22d56a43f593269ba6ae1fdc97774b68855"
+    },
+    {
+      "path": "chunks/lib.es2020.promise.d.ts",
+      "bytes": 1764,
+      "sha256": "54725f8c4df3d900cb4dac84b64689ce29548da0b4e9b7c2de61d41c79293611"
+    },
+    {
+      "path": "chunks/lib.es2020.sharedmemory.d.ts",
+      "bytes": 5089,
+      "sha256": "e5594bc3076ac29e6c1ebda77939bc4c8833de72f654b6e376862c0473199323"
+    },
+    {
+      "path": "chunks/lib.es2020.string.d.ts",
+      "bytes": 2451,
+      "sha256": "2f3eb332c2d73e729f3364fcc0c2b375e72a121e8157d25a82d67a138c83a95c"
+    },
+    {
+      "path": "chunks/lib.es2020.symbol.wellknown.d.ts",
+      "bytes": 1566,
+      "sha256": "6f4427f9642ce8d500970e4e69d1397f64072ab73b97e476b4002a646ac743b1"
+    },
+    {
+      "path": "chunks/lib.es2021.d.ts",
+      "bytes": 997,
+      "sha256": "8a15b4607d9a499e2dbeed9ec0d3c0d7372c850b2d5f1fb259e8f6d41d468a84"
+    },
+    {
+      "path": "chunks/lib.es2021.intl.d.ts",
+      "bytes": 8206,
+      "sha256": "a917a49ac94cd26b754ab84e113369a75d1a47a710661d7cd25e961cc797065f"
+    },
+    {
+      "path": "chunks/lib.es2021.promise.d.ts",
+      "bytes": 2223,
+      "sha256": "db9709688f82c9e5f65a119c64d835f906efe5f559d08b11642d56eb85b79357"
+    },
+    {
+      "path": "chunks/lib.es2021.string.d.ts",
+      "bytes": 1553,
+      "sha256": "4b25b8c874acd1a4cf8444c3617e037d444d19080ac9f634b405583fd10ce1f7"
+    },
+    {
+      "path": "chunks/lib.es2021.weakref.d.ts",
+      "bytes": 3132,
+      "sha256": "37be57d7c90cf1f8112ee2636a068d8fd181289f82b744160ec56a7dc158a9f5"
+    },
+    {
+      "path": "chunks/lib.es2022.array.d.ts",
+      "bytes": 4637,
+      "sha256": "6d3261badeb7843d157ef3e6f5d1427d0eeb0af0cf9df84a62cfd29fd47ac86e"
+    },
+    {
+      "path": "chunks/lib.es2022.d.ts",
+      "bytes": 1069,
+      "sha256": "26e0fe14baee4e127f4365d1ae0b276f400562e45e19e35fd2d4c296684715e6"
+    },
+    {
+      "path": "chunks/lib.es2022.error.d.ts",
+      "bytes": 2340,
+      "sha256": "195daca651dde22f2167ac0d0a05e215308119a3100f5e6268e8317d05a92526"
+    },
+    {
+      "path": "chunks/lib.es2022.intl.d.ts",
+      "bytes": 7653,
+      "sha256": "8b11e4285cd2bb164a4dc09248bdec69e9842517db4ca47c1ba913011e44ff2f"
+    },
+    {
+      "path": "chunks/lib.es2022.object.d.ts",
+      "bytes": 1046,
+      "sha256": "0508571a52475e245b02bc50fa1394065a0a3d05277fbf5120c3784b85651799"
+    },
+    {
+      "path": "chunks/lib.es2022.regexp.d.ts",
+      "bytes": 1304,
+      "sha256": "fc611fea8d30ea72c6bbfb599c9b4d393ce22e2f5bfef2172534781e7d138104"
+    },
+    {
+      "path": "chunks/lib.es2022.string.d.ts",
+      "bytes": 1116,
+      "sha256": "8f9af488f510c3015af3cc8c267a9e9d96c4dd38a1fdff0e11dc5a544711415b"
+    },
+    {
+      "path": "chunks/lib.es5.d.ts",
+      "bytes": 218972,
+      "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
+    },
+    {
+      "path": "chunks/mcp-server-6KNQQIEW.js",
+      "bytes": 560358,
+      "sha256": "4ae0209a11160e968239efb8acd160b2831659d955adf16704a4fb1af3c70747"
+    },
+    {
+      "path": "chunks/module-asyncify-2EFITU5U-HUUMGB7P.js",
+      "bytes": 506,
+      "sha256": "05f13ddd329bfe070cf598c0f3bde3c7b6c8b7f143e90fb5e2c8acfd622895f1"
+    },
+    {
+      "path": "chunks/module-ES6BEMUI-364UO5I4.js",
+      "bytes": 638,
+      "sha256": "c5b7e3547c55282c6248d2c125547cafe47f9dc4949d74d3afbf54d2fd901f1d"
+    },
+    {
+      "path": "kiro/mcp-entry.js",
+      "bytes": 3950,
+      "sha256": "5c477ba5e0f107719a6263e1ea0b67e9237b21fbae070eefeaad2fbbc440a211"
+    },
+    {
+      "path": "package.json",
+      "bytes": 104,
+      "sha256": "dafb58876d978db7dc541e8286acedb3798fe1061a59f9cd547b9bcba26a6f26"
+    },
+    {
+      "path": "runtime/compiler-worker-entry.js",
+      "bytes": 872,
+      "sha256": "c44780a41c9e166588793316a7944ee0b3e60f6356a6225c88c355e7e0aa1d3e"
+    }
+  ],
+  "contentDigest": "55c94f5cda9d295707ab36e4bd29b6b4126ddc10b565beff648721fdd86d1d1f"
+}

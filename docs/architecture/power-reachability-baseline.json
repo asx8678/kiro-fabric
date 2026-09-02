@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "f38ce346f4d33eac3a14b3323cbd98e12209bc32",
+  "authority": "esbuild metafile from the Power MCP entry and compiler worker",
+  "lineCounting": "UTF-8 text split on line terminators, including the final logical line",
+  "source": {
+    "files": 315,
+    "lines": 99457
+  },
+  "powerGraph": {
+    "entrypoints": 2,
+    "resolvedInputs": 1184,
+    "sourceFiles": 104,
+    "sourceLines": 27768,
+    "classifications": {
+      "powerRuntime": { "files": 17, "lines": 3462 },
+      "sharedCheckedExecutionKernel": { "files": 75, "lines": 18718 },
+      "mountedProvider": { "files": 12, "lines": 5588 },
+      "powerPackagingCertification": { "files": 14 },
+      "unreachableLegacySurface": { "files": 211, "lines": 71689 }
+    }
+  },
+  "directRuntimeDependencies": [
+    "@jitl/quickjs-singlefile-mjs-release-sync",
+    "@modelcontextprotocol/sdk",
+    "@shikijs/themes",
+    "cross-spawn",
+    "diff",
+    "ignore",
+    "mcporter",
+    "minimatch",
+    "quickjs-emscripten-core",
+    "shiki",
+    "typebox",
+    "typescript",
+    "yaml"
+  ],
+  "directDevelopmentDependencies": 7,
+  "powerClosure": {
+    "files": 91,
+    "bytes": 14228778
+  },
+  "notes": [
+    "The graph was captured before deletion and was used as deletion authority.",
+    "The full pre-deletion path list is intentionally not shipped in the product package; current builds emit .tmp/power-reachability.json from the verified graph."
+  ]
+}

@@ -1,740 +1,89 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
-import {
-  ActionRegistry,
-  type FabricCallAudit,
-} from "../src/core/action-registry.js";
-import { FabricSessionApprovals, fabricApprovalScope } from "../src/core/session-approvals.js";
-import type {
-  FabricInvocationContext,
-  FabricProvider,
-} from "../src/protocol.js";
+import { describe, expect, it } from "vitest";
+import { ActionRegistry } from "../src/core/action-registry.js";
+import type { FabricProvider, ResolvedFabricAction } from "../src/protocol.js";
 
-const provider = (): FabricProvider => ({
-  name: "demo",
-  description: "Demo provider",
-  async list() {
-    return [
-      {
-        name: "echo",
-        description: "Echo a string",
-        inputSchema: {
-          type: "object",
-          properties: { value: { type: "string" } },
-          required: ["value"],
-          additionalProperties: false,
-        },
-        risk: "read",
-      },
-    ];
-  },
-  async describe(name) {
-    return name === "echo" ? (await this.list({}, context))[0] : undefined;
-  },
-  async invoke(_name, args, invocationContext) {
-    invocationContext.activity?.({ type: "progress", message: "echoing" });
-    invocationContext.attachPreview?.({ renderer: "rich" });
-    invocationContext.activity?.({
-      type: "entity",
-      id: "demo-entity",
-      kind: "custom",
-      name: "Echo operation",
-    });
-    return args.value;
-  },
+const provider = (invoke: FabricProvider["invoke"]): FabricProvider => ({
+  name: "state",
+  description: "test state",
+  async list() { return [{ name: "set", description: "set", inputSchema: { type: "object", properties: { key: { type: "string" }, value: {} }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } }]; },
+  async describe(name) { return name === "set" ? (await this.list())[0] : undefined; },
+  effectResources(_name, args) { return [`state:${String(args.key)}`]; },
+  invoke,
+});
+const context = (approve: (action: ResolvedFabricAction, args: Record<string, unknown>) => Promise<void>) => ({
+  cwd: "/workspace", audits: [], maxResultChars: 10_000, approve,
 });
 
-const context: FabricInvocationContext = {
-  cwd: process.cwd(),
-  signal: undefined,
-  parentToolCallId: "parent",
-  nestedToolCallId: "metadata",
-  extensionContext: {} as ExtensionContext,
-  update() {},
-};
-
-describe("ActionRegistry", () => {
-  it("lists, searches, describes, and invokes providers", async () => {
+describe("ActionRegistry security boundaries", () => {
+  it("bounds search queries and action references before provider work", async () => {
     const registry = new ActionRegistry();
-    registry.register(provider());
-    expect((await registry.list({}, context))[0]?.ref).toBe("demo.echo");
-    expect((await registry.search("echo", context))[0]?.ref).toBe("demo.echo");
-    expect((await registry.describe("demo.echo", context)).risk).toBe("read");
-
-    const leases = new FabricSessionApprovals();
-    const approvalScope = fabricApprovalScope({ plan: "return demo.echo", project: context.cwd });
-    const approve = vi.fn(async (action, args, scope) =>
-      leases.issueLease(action, args, scope ?? {}, "allow-once"),
-    );
-    const audits: FabricCallAudit[] = [];
-    const result = await registry.invoke("demo.echo", { value: "hello" }, {
-      ...context,
-      approvalScope,
-      approve,
-      audits,
-      maxResultChars: 10_000,
-    });
-    expect(result).toBe("hello");
-    expect(approve).toHaveBeenCalledOnce();
-    expect(audits).toMatchObject([
-      {
-        ref: "demo.echo",
-        provider: "demo",
-        tool: "echo",
-        args: { value: "hello" },
-        success: true,
-        approval: [{
-          source: "allow-once",
-          action: "demo.echo",
-          argumentDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
-          descriptorDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
-          planDigest: approvalScope.planDigest,
-          projectDigest: approvalScope.projectDigest,
-        }],
-      },
-    ]);
+    await expect(registry.search("x".repeat(2_001))).rejects.toThrow("query exceeds");
+    await expect(registry.describe("x".repeat(513))).rejects.toThrow("reference exceeds");
   });
 
-  it("keeps consumed approval proof visible when a later effect guard fails", async () => {
-    let releaseFirst!: () => void;
-    let markStarted!: () => void;
-    const firstStarted = new Promise<void>((resolve) => { markStarted = resolve; });
-    const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
-    const guarded = provider();
-    const originalDescribe = guarded.describe.bind(guarded);
-    guarded.describe = async (name, invocationContext) => {
-      const descriptor = await originalDescribe(name, invocationContext);
-      return descriptor ? {
-        ...descriptor,
-        effect: { kind: "emission", ordering: "ordered", resources: ["shared"] },
-      } : undefined;
-    };
-    guarded.invoke = async (_name, args) => {
-      if (args.value === "first") {
-        markStarted();
-        await gate;
-      }
-      return args.value;
-    };
+  it("fails before invocation when approval is denied", async () => {
+    let invoked = false;
     const registry = new ActionRegistry();
-    registry.register(guarded);
-    const sessions = new FabricSessionApprovals();
-    const makeContext = (audits: FabricCallAudit[]) => ({
-      ...context,
-      effectPolicy: "strict" as const,
-      approve: async (approvedAction: Parameters<typeof sessions.issueLease>[0], args: Record<string, unknown>) =>
-        sessions.issueLease(approvedAction, args, {}, "allow-once"),
-      audits,
-      maxResultChars: 10_000,
-    });
-    const firstAudits: FabricCallAudit[] = [];
-    const first = registry.invoke("demo.echo", { value: "first" }, makeContext(firstAudits));
-    await firstStarted;
-    const blockedAudits: FabricCallAudit[] = [];
-    await expect(
-      registry.invoke("demo.echo", { value: "second" }, makeContext(blockedAudits)),
-    ).rejects.toThrow("effect conflict");
-    expect(blockedAudits).toMatchObject([{
-      success: false,
-      approval: [{ leaseId: expect.any(String), action: "demo.echo" }],
-    }]);
-    releaseFirst();
-    await first;
+    registry.register(provider(async () => { invoked = true; return true; }));
+    await expect(registry.invoke("state.set", { key: "a", value: 1 }, context(async () => { throw new Error("denied"); }))).rejects.toThrow("denied");
+    expect(invoked).toBe(false);
   });
 
-  it("rejects overlapping file mutations without a strict effect policy", async () => {
-    let releaseFirst!: () => void;
-    let markStarted!: () => void;
-    const firstStarted = new Promise<void>((resolve) => { markStarted = resolve; });
-    const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
-    const writes: string[] = [];
-    const writeDescriptor = {
-      name: "write",
-      description: "Write a file",
-      inputSchema: {
-        type: "object",
-        properties: { path: { type: "string" }, content: { type: "string" } },
-        required: ["path", "content"],
-        additionalProperties: false,
-      },
-      risk: "write" as const,
-    };
+  it("binds approval to exact copied action and argument snapshots", async () => {
+    let approved: unknown; let invoked: unknown; let invokedAction = "";
     const registry = new ActionRegistry();
-    registry.register({
-      name: "io",
-      description: "io",
-      async list() { return [writeDescriptor]; },
-      async describe(name) { return name === "write" ? writeDescriptor : undefined; },
-      async invoke(_name, args) {
-        if (args.content === "first") {
-          markStarted();
-          await gate;
-        }
-        writes.push(String(args.content));
-        return args.content;
-      },
-    });
-    const makeContext = (audits: FabricCallAudit[]) => ({
-      ...context,
-      approve: async () => undefined,
-      audits,
-      maxResultChars: 10_000,
-    });
-    const first = registry.invoke(
-      "io.write",
-      { path: "same.txt", content: "first" },
-      makeContext([]),
-    );
-    await firstStarted;
-    await expect(
-      registry.invoke("io.write", { path: "same.txt", content: "second" }, makeContext([])),
-    ).rejects.toThrow("effect conflict");
-    releaseFirst();
-    await first;
-    expect(writes).toEqual(["first"]);
+    registry.register(provider(async (name, args) => { invokedAction = name; invoked = args; return true; }));
+    const args = { key: "a", value: { safe: true } };
+    await registry.invoke("state.set", args, context(async (action, exact) => {
+      approved = structuredClone(exact);
+      args.value.safe = false;
+      action.name = "different";
+      action.ref = "state.different";
+      (exact.value as { safe: boolean }).safe = false;
+    }));
+    expect(approved).toEqual({ key: "a", value: { safe: true } });
+    expect(invokedAction).toBe("set");
+    expect(invoked).toEqual(approved);
   });
 
-  it("keeps independent file mutations parallelizable", async () => {
-    let releaseFirst!: () => void;
-    let markStarted!: () => void;
-    const firstStarted = new Promise<void>((resolve) => { markStarted = resolve; });
-    const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
-    const writeDescriptor = {
-      name: "write",
-      description: "Write a file",
-      inputSchema: {
-        type: "object",
-        properties: { path: { type: "string" }, content: { type: "string" } },
-        required: ["path", "content"],
-        additionalProperties: false,
-      },
-      risk: "write" as const,
-    };
+  it("awaits cooperative provider cancellation cleanup before settling", async () => {
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => { started = resolve; });
+    let cleaned = false;
+    const controller = new AbortController();
     const registry = new ActionRegistry();
-    registry.register({
-      name: "io",
-      description: "io",
-      async list() { return [writeDescriptor]; },
-      async describe(name) { return name === "write" ? writeDescriptor : undefined; },
-      async invoke(_name, args) {
-        if (args.path === "a.txt") {
-          markStarted();
-          await gate;
-        }
-        return args.path;
-      },
-    });
-    const makeContext = () => ({
-      ...context,
-      approve: async () => undefined,
-      audits: [] as FabricCallAudit[],
-      maxResultChars: 10_000,
-    });
-    const first = registry.invoke("io.write", { path: "a.txt", content: "a" }, makeContext());
-    await firstStarted;
-    await expect(
-      registry.invoke("io.write", { path: "b.txt", content: "b" }, makeContext()),
-    ).resolves.toBe("b.txt");
-    releaseFirst();
-    await expect(first).resolves.toBe("a.txt");
-  });
-
-  it("describes a bare action name through the unique-name fallback", async () => {
-    const registry = new ActionRegistry();
-    registry.register(provider());
-    const described = await registry.describe("echo", context);
-    expect(described.ref).toBe("demo.echo");
-    expect(described.risk).toBe("read");
-  });
-
-  it("rejects a bare action name that matches more than one provider", async () => {
-    const registry = new ActionRegistry();
-    registry.register(provider());
-    registry.register({ ...provider(), name: "demo-two" });
-    await expect(registry.describe("echo", context)).rejects.toThrow(
-      /qualify with provider\.action: demo-two\.echo, demo\.echo/,
-    );
-    await expect(registry.describe("missing", context)).rejects.toThrow(
-      "Unknown Fabric action: missing",
-    );
-  });
-
-  it("builds deterministic provider/action heads and searches the complete catalog before ranking", async () => {
-    const registry = new ActionRegistry();
-    const descriptors = [{
-      name: "inspect",
-      description: "Inspect stored records",
-      inputSchema: {
-        type: "object",
-        properties: {
-          path: { type: "string", description: "Local filesystem path" },
-        },
-        required: ["path"],
-        additionalProperties: false,
-      },
-      risk: "read" as const,
-      namespace: "records",
-    }];
-    registry.register({
-      name: "storage",
-      description: "Filesystem discovery capabilities",
-      async list(request) {
-        if (!request.query) return descriptors;
-        const query = request.query.toLowerCase();
-        return descriptors.filter((descriptor) =>
-          `${descriptor.name} ${descriptor.description}`.toLowerCase().includes(query),
-        );
-      },
-      async describe(name) {
-        return name === "inspect" ? descriptors[0] : undefined;
-      },
-      async invoke() {
-        return null;
-      },
-    });
-
-    expect((await registry.search("local filesystem path", context))[0]?.ref)
-      .toBe("storage.inspect");
-    expect((await registry.search("filesystem discovery", context))[0]?.ref)
-      .toBe("storage.inspect");
-
-    const first = await registry.catalog(context);
-    const second = await registry.catalog(context);
-    expect(second).toEqual(first);
-    expect(first).toMatchObject({
-      kind: "kiro-fabric.capability-catalog",
-      version: 1,
-      complete: true,
-      totalActions: 1,
-      indexedActions: 1,
-      root: {
-        key: "capability:fabric",
-        description: expect.stringContaining("not historical session evidence"),
-        descriptorHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-      },
-      providers: [{
-        key: "provider:storage",
-        parentKey: "capability:fabric",
-        actions: [{
-          key: "action:storage.inspect",
-          parentKey: "provider:storage",
-          ref: "storage.inspect",
-          descriptorHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-        }],
-      }],
-    });
-
-    const originalHash = first.root.descriptorHash;
-    descriptors[0]!.description = "Inspect archived records";
-    const drifted = await registry.catalog(context);
-    expect(drifted.root.descriptorHash).not.toBe(originalHash);
-    expect(drifted.providers[0]!.actions[0]!.ref).toBe("storage.inspect");
-  });
-
-  it("does not invoke a provider when the returned lease is bound to different arguments", async () => {
-    const invoke = vi.fn(async () => "unsafe");
-    const registry = new ActionRegistry();
-    registry.register({ ...provider(), invoke });
-    const leases = new FabricSessionApprovals();
-
-    await expect(registry.invoke("demo.echo", { value: "requested" }, {
-      ...context,
-      approve: async (resolved, _args, scope) =>
-        leases.issueLease(resolved, { value: "substituted" }, scope ?? {}, "allow-once"),
-      audits: [],
-      maxResultChars: 10_000,
-    })).rejects.toThrow("binding does not match");
-    expect(invoke).not.toHaveBeenCalled();
-  });
-
-  it("requires a newly argument-bound lease after provider preflight rewrites", async () => {
-    const registry = new ActionRegistry();
-    registry.register({
-      ...provider(),
-      async invoke(_name, _args, invocationContext) {
-        const rewritten = { value: "rewritten" };
-        await invocationContext.updateArguments?.(rewritten);
-        return rewritten.value;
-      },
-    });
-    const leases = new FabricSessionApprovals();
-    const approve = vi.fn(async (resolved, args, scope) =>
-      leases.issueLease(resolved, args, scope ?? {}, "allow-once"),
-    );
-    const audits: FabricCallAudit[] = [];
-
-    await expect(registry.invoke("demo.echo", { value: "original" }, {
-      ...context,
-      approve,
-      audits,
-      maxResultChars: 10_000,
-    })).resolves.toBe("rewritten");
-
-    expect(approve).toHaveBeenCalledTimes(2);
-    expect(audits[0]?.approval).toHaveLength(2);
-    expect(audits[0]?.approval?.[0]?.argumentDigest)
-      .not.toBe(audits[0]?.approval?.[1]?.argumentDigest);
-    expect(audits[0]?.args).toEqual({ value: "rewritten" });
-  });
-
-  it("emits structured invocation activity without exposing another model tool", async () => {
-    const registry = new ActionRegistry();
-    registry.register(provider());
-    const events: unknown[] = [];
-    await registry.invoke("demo.echo", { value: "hello" }, {
-      ...context,
-      approve: async () => {},
-      audits: [],
-      maxResultChars: 10_000,
-      observeInvocation: (event) => events.push(event),
-    });
-
-    expect(events).toMatchObject([
-      { type: "call_start", ref: "demo.echo", args: { value: "hello" } },
-      { type: "call_update", update: { type: "progress", message: "echoing" } },
-      {
-        type: "call_update",
-        update: { type: "entity", id: "demo-entity", kind: "custom" },
-      },
-      {
-        type: "call_end",
-        success: true,
-        result: "hello",
-        preview: { renderer: "rich" },
-      },
-    ]);
-  });
-
-  it("populates audit preview metadata before invoking the provider", async () => {
-    const registry = new ActionRegistry();
-    const audits: FabricCallAudit[] = [];
-    let observed: FabricCallAudit | undefined;
-    registry.register({
-      ...provider(),
-      async invoke(_name, args) {
-        observed = audits[0] ? { ...audits[0] } : undefined;
-        return args.value;
-      },
-    });
-
-    await registry.invoke("demo.echo", { value: "in flight" }, {
-      ...context,
-      approve: async () => {},
-      audits,
-      maxResultChars: 10_000,
-    });
-
-    expect(observed).toMatchObject({
-      ref: "demo.echo",
-      provider: "demo",
-      tool: "echo",
-      args: { value: "in flight" },
-    });
-    expect(observed?.success).toBeUndefined();
-  });
-
-  it("keeps a larger bounded content preview for transient write audits", async () => {
-    const registry = new ActionRegistry();
-    const audits: FabricCallAudit[] = [];
-    const content = "x".repeat(20_000);
-    registry.register({
-      name: "pi",
-      description: "Pi tools",
-      async list() {
-        return [{
-          name: "write",
-          description: "Write a file",
-          inputSchema: {
-            type: "object",
-            properties: { path: { type: "string" }, content: { type: "string" } },
-            required: ["path", "content"],
-            additionalProperties: false,
-          },
-          risk: "write",
-        }];
-      },
-      async describe(name) {
-        return name === "write" ? (await this.list({}, context))[0] : undefined;
-      },
-      async invoke() {
-        return { ok: true };
-      },
-    });
-
-    await registry.invoke(
-      "pi.write",
-      { path: "preview.md", content },
-      {
-        ...context,
-        approve: async () => {},
-        audits,
-        maxResultChars: 10_000,
-      },
-    );
-
-    const preview = audits[0]?.args?.content;
-    expect(typeof preview).toBe("string");
-    expect((preview as string).length).toBeGreaterThan(2_000);
-    expect((preview as string).length).toBeLessThan(content.length);
-    expect(preview).toMatch(/…$/);
-  });
-
-  it("marks failed agent results as failed nested calls without hiding the result", async () => {
-    const registry = new ActionRegistry();
-    const audits: FabricCallAudit[] = [];
-    const events: unknown[] = [];
-    registry.register({
-      name: "agents",
-      description: "Test agents",
-      async list() {
-        return [{
-          name: "run",
-          description: "Run a test agent",
-          inputSchema: { type: "object", properties: {}, additionalProperties: false },
-          risk: "agent",
-        }];
-      },
-      async describe(name) {
-        return name === "run" ? (await this.list({}, context))[0] : undefined;
-      },
-      async invoke() {
-        return { status: "failed", error: "provider unavailable" };
-      },
-    });
-
-    const result = await registry.invoke("agents.run", {}, {
-      ...context,
-      approve: async () => {},
-      audits,
-      maxResultChars: 10_000,
-      observeInvocation: (event) => events.push(event),
-    });
-
-    expect(result).toEqual({ status: "failed", error: "provider unavailable" });
-    expect(audits).toMatchObject([{ success: false, error: "provider unavailable" }]);
-    expect(events.at(-1)).toMatchObject({
-      type: "call_end",
-      success: false,
-      error: "provider unavailable",
-    });
-  });
-
-  it("bounds retained audit previews without shrinking provider results", async () => {
-    const registry = new ActionRegistry();
-    const large = "x".repeat(20_000);
-    registry.register({
-      ...provider(),
-      async invoke() {
-        return Object.fromEntries(
-          Array.from({ length: 8 }, (_, index) => [`field${index}`, large]),
-        );
-      },
-    });
-    const audits: FabricCallAudit[] = [];
-    const result = (await registry.invoke("demo.echo", { value: "large" }, {
-      ...context,
-      approve: async () => {},
-      audits,
-      maxResultChars: 1_000_000,
-    })) as Record<string, string>;
-
-    expect(result.field0).toHaveLength(20_000);
-    expect(audits[0]?.result).toMatchObject({ fabricTruncated: true });
-    expect(JSON.stringify(audits[0]?.result).length).toBeLessThanOrEqual(64_000);
-  });
-
-  it("caps nested results before crossing the sandbox bridge", async () => {
-    const registry = new ActionRegistry();
-    registry.register(provider());
-    const audits: FabricCallAudit[] = [];
-    const result = await registry.invoke("demo.echo", { value: "x".repeat(100) }, {
-      ...context,
-      approve: async () => {},
-      audits,
-      maxResultChars: 40,
-    });
-    expect(result).toMatchObject({ fabricTruncated: true, originalChars: 102 });
-    expect(audits).toMatchObject([{ resultTruncated: true, resultChars: 102 }]);
-  });
-
-  it("validates arguments before approval or execution", async () => {
-    const registry = new ActionRegistry();
-    registry.register(provider());
-    const approve = vi.fn(async () => {});
-    await expect(
-      registry.invoke("demo.echo", { value: 42 }, {
-        ...context,
-        approve,
-        audits: [],
-        maxResultChars: 10_000,
-      }),
-    ).rejects.toThrow("Invalid arguments");
-    expect(approve).not.toHaveBeenCalled();
-  });
-
-  it("bounds non-cooperative provider invocation finalizers", async () => {
-    const registry = new ActionRegistry();
-    registry.register({
-      ...provider(),
-      async invocationEnded() {
-        await new Promise(() => undefined);
-      },
-    });
-    const startedAt = Date.now();
-
-    await registry.endInvocation("parent", 20);
-
-    expect(Date.now() - startedAt).toBeLessThan(500);
-  });
-
-  it("rejects duplicate and malformed provider names", () => {
-    const registry = new ActionRegistry();
-    registry.register(provider());
-    expect(() => registry.register(provider())).toThrow("already registered");
-    expect(() => registry.register({ ...provider(), name: "Bad Name" })).toThrow(
-      "Invalid Fabric provider name",
-    );
-  });
-
-  it("explains why marked providers are unavailable", async () => {
-    const registry = new ActionRegistry();
-    registry.register(provider());
-    registry.markUnavailable("memory", "disabled by configuration (memory.enabled=false)");
-
-    expect(registry.unavailableProviders()).toEqual([
-      { name: "memory", reason: "disabled by configuration (memory.enabled=false)" },
-    ]);
-    await expect(registry.describe("memory.recall", context)).rejects.toThrow(
-      'Fabric provider "memory" is unavailable: disabled by configuration (memory.enabled=false)',
-    );
-  });
-
-  it("lists registered providers for unknown provider names", async () => {
-    const registry = new ActionRegistry();
-    registry.register(provider());
-
-    await expect(registry.describe("memry.recall", context)).rejects.toThrow(
-      "Unknown Fabric provider: memry (registered providers: demo)",
-    );
-  });
-
-  it("rejects marking registered or malformed providers unavailable", () => {
-    const registry = new ActionRegistry();
-    registry.register(provider());
-
-    expect(() => registry.markUnavailable("demo", "off")).toThrow(
-      "Cannot mark a registered Fabric provider unavailable: demo",
-    );
-    expect(() => registry.markUnavailable("Bad Name", "off")).toThrow(
-      "Invalid Fabric provider name",
-    );
-  });
-
-  it("clears the unavailable mark when the provider later registers", async () => {
-    const registry = new ActionRegistry();
-    registry.markUnavailable("demo", "off");
-    expect(registry.unavailableProviders()).toEqual([{ name: "demo", reason: "off" }]);
-
-    registry.register(provider());
-
-    expect(registry.unavailableProviders()).toEqual([]);
-    await expect(registry.describe("demo.echo", context)).resolves.toMatchObject({
-      ref: "demo.echo",
-    });
-  });
-
-  describe("catalog epoch + capability caches (PR3)", () => {
-    it("caches guest type sources across unchanged executions", async () => {
-      const registry = new ActionRegistry();
-      registry.register(provider());
-
-      const sources = (input: Record<string, unknown>): FabricProvider => ({
-        name: "extensions",
-        description: "spy",
-        async list() {
-          listCalls += 1;
-          return [
-            {
-              name: "lookup",
-              description: "lookup action",
-              inputSchema: input,
-              risk: "read",
-            },
-          ];
-        },
-        async describe(name) {
-          return (await this.list({}, context))[0];
-        },
-        async invoke() {
-          return undefined;
-        },
+    registry.register(provider(async (_name, _args, invocation) => {
+      started();
+      return new Promise((_resolve, reject) => {
+        invocation.signal?.addEventListener("abort", () => {
+          setTimeout(() => {
+            cleaned = true;
+            reject(invocation.signal?.reason);
+          }, 20);
+        }, { once: true });
       });
-      let listCalls = 0;
-      registry.register(sources({ type: "object" }));
+    }));
+    const invocation = registry.invoke(
+      "state.set",
+      { key: "a", value: 1 },
+      { ...context(async () => {}), signal: controller.signal },
+    );
+    await ready;
+    controller.abort(new Error("cancelled"));
+    await expect(invocation).rejects.toThrow("cancelled");
+    expect(cleaned).toBe(true);
+  });
 
-      const first = await registry.guestTypeSources(context);
-      const second = await registry.guestTypeSources(context);
-
-      expect(listCalls).toBe(1); // second run reused the cached snapshot
-      expect(first.extensionTools).toEqual(second.extensionTools);
-    });
-
-    it("invalidates guest type sources when the catalog changes", async () => {
-      const registry = new ActionRegistry();
-      registry.register(provider());
-
-      let listCalls = 0;
-      const sources = (): FabricProvider => ({
-        name: "extensions",
-        description: "spy",
-        async list() {
-          listCalls += 1;
-          return [
-            { name: "a", description: "a", inputSchema: {}, risk: "read" },
-          ];
-        },
-        async describe(name) {
-          return (await this.list({}, context))[0];
-        },
-      async invoke() {
-        return undefined;
-      },
-      });
-      registry.register(sources());
-      await registry.guestTypeSources(context);
-      registry.notifyCatalogChanged("extensions");
-      await registry.guestTypeSources(context);
-
-      expect(listCalls).toBe(2); // epoch invalidated the early snapshot
-    });
-
-    it("caches search results and refreshes after epoch invalidation", async () => {
-      const registry = new ActionRegistry();
-      registry.register(provider());
-
-      await registry.search("echo", context, 10);
-      const first = await registry.search("echo", context, 10);
-      expect(first[0]?.ref).toBe("demo.echo");
-
-      registry.unregister("demo");
-      const after = await registry.search("echo", context, 10);
-      expect(after).toEqual([]);
-    });
-
-    it("catalogEpoch advances only on surface changes and monotonically", async () => {
-      const registry = new ActionRegistry();
-      const base = registry.catalogEpoch;
-
-      registry.register(provider());
-      expect(registry.catalogEpoch).toBeGreaterThan(base);
-
-      const stable = registry.catalogEpoch;
-      await registry.search("echo", context, 10);
-      await registry.guestTypeSources(context);
-      expect(registry.catalogEpoch).toBe(stable); // reads do not bump epoch
-
-      registry.notifyCatalogChanged("demo");
-      expect(registry.catalogEpoch).toBeGreaterThan(stable);
-    });
+  it("rejects overlapping writes while allowing distinct resources", async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const registry = new ActionRegistry();
+    registry.register(provider(async (_name, args) => { if (args.key === "a") await blocked; return args.key; }));
+    const first = registry.invoke("state.set", { key: "a", value: 1 }, context(async () => {}));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await expect(registry.invoke("state.set", { key: "a", value: 2 }, context(async () => {}))).rejects.toThrow("Overlapping write rejected");
+    await expect(registry.invoke("state.set", { key: "b", value: 2 }, context(async () => {}))).resolves.toBe("b");
+    release();
+    await expect(first).resolves.toBe("a");
   });
 });

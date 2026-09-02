@@ -1,12 +1,34 @@
-// Kiro Fabric public entry. Pi extension lifecycle integration is intentionally not exported.
-export * from "./kiro/index.js";
-export * from "./kernel/index.js";
-export * from "./verification/index.js";
 export {
-  PREWALK_DECISION_ENTRY_TYPE,
-  effectiveFabricPrewalkActivation,
-  evaluateFabricPrewalkGate,
-  type FabricPrewalkGateDecision,
-  type FabricPrewalkGateReason,
-} from "./prewalk/gate.js";
-export type { FabricPrewalkActivation } from "./config.js";
+  createKiroMcpServer,
+  supportsKiroPowerElicitation,
+  type KiroMcpServerOptions,
+} from "./kiro/mcp-server.js";
+export {
+  createKiroRuntime,
+  type KiroRuntime,
+  type KiroRuntimeOptions,
+} from "./kiro/runtime.js";
+export { ActionRegistry } from "./core/action-registry.js";
+export type {
+  FabricActionDescriptor,
+  FabricActionEffect,
+  FabricProvider,
+  FabricProviderStatus,
+} from "./protocol.js";
+export type {
+  FabricApprovalConfig,
+  FabricApprovalMode,
+  FabricArtifactsConfig,
+  FabricExecutorConfig,
+  FabricMcpConfig,
+  FabricMemoryConfig,
+  FabricPowerConfig,
+  FabricResultFormat,
+  FabricStateConfig,
+} from "./config.js";
+export type {
+  KiroWorkspaceContextStatus,
+  KiroWorkspaceRoot,
+  WorkspaceContextProvider,
+} from "./kiro/power/workspace-context.js";
+export * from "./kernel/index.js";

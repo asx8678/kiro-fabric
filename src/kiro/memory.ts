@@ -25,7 +25,7 @@ type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export class KiroMemoryScopeError extends Error {
+class KiroMemoryScopeError extends Error {
   readonly code = "kiro_memory_scope";
 
   constructor(message: string) {
@@ -34,7 +34,7 @@ export class KiroMemoryScopeError extends Error {
   }
 }
 
-export interface KiroMemoryEntry<T extends JsonValue = JsonValue> {
+interface KiroMemoryEntry<T extends JsonValue = JsonValue> {
   namespace: string;
   key: string;
   value: T;
@@ -54,7 +54,6 @@ export interface KiroMemoryBinding<T extends JsonValue = JsonValue> {
   search(query: string, limit?: number): Promise<KiroMemoryEntry<T>[]>;
   /** Metadata-only listing: key, size, and freshness without full values. */
   index(): Promise<Array<Pick<KiroMemoryEntry<T>, "key" | "bytes" | "updatedAt">>>;
-  store(actorId: string, key: string): Promise<KiroMemoryEntry<T> | null>;
 }
 
 interface PersistedMemoryEntry<T extends JsonValue = JsonValue> {
@@ -95,8 +94,9 @@ const isWithinOrEqual = (root: string, candidate: string): boolean => {
 const lstatOrNull = (target: string): fs.Stats | null => {
   try {
     return fs.lstatSync(target);
-  } catch {
-    return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
   }
 };
 
@@ -222,9 +222,10 @@ const ensureDirectory = (target: string): void => {
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new KiroMemoryScopeError(`Kiro memory directory must be a real directory: ${target}`);
   }
-  try {
-    fs.chmodSync(target, 0o700);
-  } catch {}
+  if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+    throw new KiroMemoryScopeError(`Kiro memory directory is owned by another user: ${target}`);
+  }
+  fs.chmodSync(target, 0o700);
 };
 
 const assertPrivateDirectory = (target: string, stat: fs.Stats): void => {
@@ -249,11 +250,16 @@ const readOwnershipMarker = (filePath: string): unknown => {
       fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0),
     );
     const stat = fs.fstatSync(descriptor);
-    if (!stat.isFile() || stat.size > 8 * 1024) {
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size > 8 * 1024) {
       throw new KiroMemoryScopeError(`Kiro memory ownership marker is invalid: ${filePath}`);
     }
-    if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
-      throw new KiroMemoryScopeError(`Kiro memory ownership marker is not private: ${filePath}`);
+    if (process.platform !== "win32") {
+      if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+        throw new KiroMemoryScopeError(`Kiro memory ownership marker is owned by another user: ${filePath}`);
+      }
+      if ((stat.mode & 0o077) !== 0) {
+        throw new KiroMemoryScopeError(`Kiro memory ownership marker is not private: ${filePath}`);
+      }
     }
     return JSON.parse(fs.readFileSync(descriptor, "utf8")) as unknown;
   } catch (error) {
@@ -382,11 +388,31 @@ const entryPath = (namespaceRoot: string, key: string): string =>
     return path.join(namespaceRoot, name);
   })();
 
-const actorStoreKey = (actorId: string, key: string): string =>
-  `actor/${assertMemoryToken(actorId, "actorId")}/${assertMemoryToken(key, "key")}`;
-
-const readEntry = <T extends JsonValue>(filePath: string): KiroMemoryEntry<T> => {
-  const raw = fs.readFileSync(filePath, "utf8");
+const readEntry = <T extends JsonValue>(
+  filePath: string,
+  expectedNamespace: string,
+  maxValueChars: number,
+): KiroMemoryEntry<T> => {
+  let descriptor: number | undefined;
+  let raw: string;
+  try {
+    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const stat = fs.fstatSync(descriptor);
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size > DEFAULT_MAX_ENTRY_BYTES) {
+      throw new KiroMemoryScopeError(`Kiro memory entry must be a bounded regular file: ${filePath}`);
+    }
+    if (process.platform !== "win32") {
+      if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+        throw new KiroMemoryScopeError(`Kiro memory entry is owned by another user: ${filePath}`);
+      }
+      if ((stat.mode & 0o077) !== 0) {
+        throw new KiroMemoryScopeError(`Kiro memory entry must be private: ${filePath}`);
+      }
+    }
+    raw = fs.readFileSync(descriptor, "utf8");
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
   let parsed: PersistedMemoryEntry<T>;
   try {
     parsed = JSON.parse(raw) as PersistedMemoryEntry<T>;
@@ -405,6 +431,16 @@ const readEntry = <T extends JsonValue>(filePath: string): KiroMemoryEntry<T> =>
     !("value" in parsed)
   ) {
     throw new Error(`Kiro memory entry is malformed: ${filePath}`);
+  }
+  let encodedValue: string | undefined;
+  try { encodedValue = JSON.stringify(parsed.value); } catch {}
+  if (
+    parsed.namespace !== expectedNamespace ||
+    assertMemoryToken(parsed.key, "key") !== parsed.key ||
+    entryPath(path.dirname(filePath), parsed.key) !== filePath ||
+    encodedValue === undefined || encodedValue.length > maxValueChars
+  ) {
+    throw new KiroMemoryScopeError(`Kiro memory entry violates its configured scope: ${filePath}`);
   }
   return {
     namespace: parsed.namespace,
@@ -437,9 +473,6 @@ const writeJsonAtomic = (filePath: string, content: string): void => {
         fs.closeSync(directoryDescriptor);
       }
     } catch {}
-    try {
-      fs.chmodSync(filePath, 0o600);
-    } catch {}
   } catch (error) {
     if (descriptor !== undefined) fs.closeSync(descriptor);
     try {
@@ -455,20 +488,27 @@ const listEntryFiles = (namespaceRoot: string): string[] => {
       .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
       .map((entry) => path.join(namespaceRoot, entry.name))
       .sort((left, right) => left.localeCompare(right));
-  } catch {
-    return [];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
   }
 };
 
-const collectNamespaceEntries = <T extends JsonValue>(namespaceRoot: string): KiroMemoryEntry<T>[] =>
-  listEntryFiles(namespaceRoot).map((filePath) => readEntry<T>(filePath));
+const collectNamespaceEntries = <T extends JsonValue>(
+  namespaceRoot: string,
+  namespace: string,
+  maxValueChars: number,
+): KiroMemoryEntry<T>[] => listEntryFiles(namespaceRoot)
+  .map((filePath) => readEntry<T>(filePath, namespace, maxValueChars));
 
 const assertEntryFits = <T extends JsonValue>(
   namespaceRoot: string,
   next: KiroMemoryEntry<T>,
   targetPath: string,
+  maxEntries: number,
+  maxValueChars: number,
 ): void => {
-  const entries = collectNamespaceEntries<T>(namespaceRoot);
+  const entries = collectNamespaceEntries<T>(namespaceRoot, next.namespace, maxValueChars);
   let totalBytes = next.bytes;
   let entryCount = 1;
   for (const entry of entries) {
@@ -482,9 +522,9 @@ const assertEntryFits = <T extends JsonValue>(
       `Kiro memory entry exceeds ${DEFAULT_MAX_ENTRY_BYTES} bytes for namespace ${JSON.stringify(next.namespace)}`,
     );
   }
-  if (entryCount > DEFAULT_MAX_NAMESPACE_ENTRIES) {
+  if (entryCount > maxEntries) {
     throw new Error(
-      `Kiro memory namespace ${JSON.stringify(next.namespace)} exceeds ${DEFAULT_MAX_NAMESPACE_ENTRIES} entries`,
+      `Kiro memory namespace ${JSON.stringify(next.namespace)} exceeds ${maxEntries} entries`,
     );
   }
   if (totalBytes > DEFAULT_MAX_NAMESPACE_BYTES) {
@@ -494,10 +534,22 @@ const assertEntryFits = <T extends JsonValue>(
   }
 };
 
+export interface KiroMemoryLimits {
+  maxEntries?: number;
+  maxValueChars?: number;
+}
+
 export const openKiroMemory = <T extends JsonValue = JsonValue>(
   namespace: string,
   root: string,
+  limits: KiroMemoryLimits = {},
 ): KiroMemoryBinding<T> => {
+  const maxEntries = Number.isSafeInteger(limits.maxEntries) && limits.maxEntries! > 0
+    ? Math.min(DEFAULT_MAX_NAMESPACE_ENTRIES, limits.maxEntries!)
+    : DEFAULT_MAX_NAMESPACE_ENTRIES;
+  const maxValueChars = Number.isSafeInteger(limits.maxValueChars) && limits.maxValueChars! > 0
+    ? Math.min(DEFAULT_MAX_ENTRY_BYTES, limits.maxValueChars!)
+    : DEFAULT_MAX_ENTRY_BYTES;
   const memoryNamespace = assertMemoryToken(namespace, "namespace");
   const memoryRoot = canonicalDirectory(root);
   const scopedRoot = path.join(memoryRoot, MEMORY_DIR);
@@ -536,7 +588,7 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
       if (!stat.isFile() || stat.isSymbolicLink()) {
         throw new KiroMemoryScopeError(`Kiro memory entry must be a real file: ${filePath}`);
       }
-      const entry = readEntry<T>(filePath);
+      const entry = readEntry<T>(filePath, memoryNamespace, maxValueChars);
       if (entry.namespace !== memoryNamespace) {
         throw new Error(`Kiro memory namespace mismatch for key ${JSON.stringify(entry.key)}`);
       }
@@ -556,13 +608,16 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
         if (encodedValue === undefined) {
           throw new TypeError("Kiro memory values must be JSON-serializable");
         }
+        if (encodedValue.length > maxValueChars) {
+          throw new Error(`Kiro memory value exceeds ${maxValueChars} configured characters`);
+        }
         const normalizedValue = JSON.parse(encodedValue) as T;
         const existing = lstatOrNull(filePath);
         if (existing) {
           if (!existing.isFile() || existing.isSymbolicLink()) {
             throw new KiroMemoryScopeError(`Kiro memory entry must be a real file: ${filePath}`);
           }
-          const previous = readEntry<T>(filePath);
+          const previous = readEntry<T>(filePath, memoryNamespace, maxValueChars);
           if (previous.namespace !== memoryNamespace || previous.key !== normalizedKey) {
             throw new KiroMemoryScopeError(
               `Refusing foreign Kiro memory entry collision for ${JSON.stringify(normalizedKey)}`,
@@ -586,7 +641,7 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
           updatedAt: entry.updatedAt,
         });
         entry.bytes = utf8Bytes(content);
-        assertEntryFits(namespaceRoot, entry, filePath);
+        assertEntryFits(namespaceRoot, entry, filePath, maxEntries, maxValueChars);
         throwIfAborted(signal);
         writeJsonAtomic(filePath, content);
         return entry;
@@ -594,12 +649,11 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
     },
 
     async list(): Promise<KiroMemoryEntry<T>[]> {
-      const entries = collectNamespaceEntries<T>(namespaceRoot)
-        .filter((entry) => entry.namespace === memoryNamespace)
+      const entries = collectNamespaceEntries<T>(namespaceRoot, memoryNamespace, maxValueChars)
         .sort((left, right) => left.key.localeCompare(right.key));
-      if (entries.length > DEFAULT_MAX_NAMESPACE_ENTRIES) {
+      if (entries.length > maxEntries) {
         throw new Error(
-          `Kiro memory namespace ${JSON.stringify(memoryNamespace)} exceeds ${DEFAULT_MAX_NAMESPACE_ENTRIES} entries`,
+          `Kiro memory namespace ${JSON.stringify(memoryNamespace)} exceeds ${maxEntries} entries`,
         );
       }
       const totalBytes = entries.reduce((sum, entry) => sum + entry.bytes, 0);
@@ -611,17 +665,12 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
       return entries;
     },
 
-    async store(actorId: string, key: string): Promise<KiroMemoryEntry<T> | null> {
-      return this.get(actorStoreKey(actorId, key));
-    },
-
     async search(query: string, limit = 8): Promise<KiroMemoryEntry<T>[]> {
       const needle = query.trim().toLowerCase();
       if (!needle) return [];
-      const capped = Math.max(1, Math.min(Math.floor(limit), DEFAULT_MAX_NAMESPACE_ENTRIES));
+      const capped = Math.max(1, Math.min(Math.floor(limit), maxEntries));
       const scored: Array<{ entry: KiroMemoryEntry<T>; score: number }> = [];
-      for (const entry of collectNamespaceEntries<T>(namespaceRoot)) {
-        if (entry.namespace !== memoryNamespace) continue;
+      for (const entry of collectNamespaceEntries<T>(namespaceRoot, memoryNamespace, maxValueChars)) {
         const haystack = `${entry.key}\n${JSON.stringify(entry.value)}`.toLowerCase();
         const position = haystack.indexOf(needle);
         if (position === -1) continue;
@@ -638,10 +687,14 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
     },
 
     async index(): Promise<Array<Pick<KiroMemoryEntry<T>, "key" | "bytes" | "updatedAt">>> {
-      return collectNamespaceEntries<T>(namespaceRoot)
-        .filter((entry) => entry.namespace === memoryNamespace)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-        .map((entry) => ({ key: entry.key, bytes: entry.bytes, updatedAt: entry.updatedAt }));
+      const entries = collectNamespaceEntries<T>(namespaceRoot, memoryNamespace, maxValueChars)
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      if (entries.length > maxEntries) {
+        throw new Error(
+          `Kiro memory namespace ${JSON.stringify(memoryNamespace)} exceeds ${maxEntries} entries`,
+        );
+      }
+      return entries.map((entry) => ({ key: entry.key, bytes: entry.bytes, updatedAt: entry.updatedAt }));
     },
   };
 };

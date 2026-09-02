@@ -1,24 +1,9 @@
-# Security policy
+# Security
 
-## Reporting a vulnerability
+Report vulnerabilities privately to the repository maintainers.
 
-Do not open a public issue for a suspected vulnerability. Use GitHub's private
-**Security advisories → Report a vulnerability** flow for this repository. If
-that flow is unavailable, contact the repository owner through the contact
-listed on the GitHub profile and request a private reporting channel. Include
-affected versions, impact, reproduction steps, and any proposed mitigation.
+The checked guest has no operating-system authority, timer API, or direct network path. Source is strictly type-checked in a bounded compiler worker and executes only in QuickJS. Provider calls are schema-validated, quota-bounded, cancellation-aware, and approval-gated before invocation. Configured network calls require network approval; configured stdio servers require a separate execute approval before process start.
 
-The maintainer will acknowledge a report as soon as practical, coordinate
-validation and remediation privately, and credit reporters who want attribution.
-Please do not disclose the issue until a fixed release is available.
+Workspace persistence is canonical-filesystem-identity-bound, private, atomically replaced, and cross-process mutation-serialized. Ambiguous roots, absent elicitation support, changed workspace identity, malformed or over-budget persistence, non-private configuration, package aliases, unknown export destinations, stale release evidence, and unsupported artifact-root entries fail closed.
 
-## Supported versions
-
-Kiro Fabric has not yet published its first immutable supported release. The
-current source checkout is pre-release software and receives best-effort
-security fixes on `main`; it is not covered by a published-version support
-promise. Do not treat a mutable branch or local Power import as a signed
-release. When the first release satisfies the documented qualification,
-signature, SBOM, checksum, and attestation gates, this section will name the
-supported release line explicitly. See
-[`docs/kiro/release-governance.md`](docs/kiro/release-governance.md).
+The release package contains no session wrapper, custom-agent selector, extension-host adapter, or generic MCP discovery surface. Ordinary build, test, certification, packaging, and release commands are guarded against `$KIRO_HOME` mutation.
