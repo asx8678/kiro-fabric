@@ -91,6 +91,60 @@ describe("explicit user Power export", () => {
     expect(fs.readFileSync(path.join(first.destination, "stale"), "utf8")).toBe("old");
   });
 
+  it("never removes a destination substituted during activation", async () => {
+    const { destination, sourceRoot } = fixture();
+    await expect(exportPowerPackage(stage, destination, {
+      sourceRoot,
+      beforeActivate() {
+        fs.mkdirSync(destination);
+        fs.writeFileSync(path.join(destination, "unrelated"), "keep", { mode: 0o600 });
+      },
+    })).rejects.toThrow("appeared before activation");
+    expect(fs.readFileSync(path.join(destination, "unrelated"), "utf8")).toBe("keep");
+  });
+
+  it("detects parent and lock replacement before activation without deleting replacements", async () => {
+    const first = fixture();
+    await expect(exportPowerPackage(stage, first.destination, {
+      sourceRoot: first.sourceRoot,
+      beforeActivate() {
+        const parent = path.dirname(first.destination);
+        fs.renameSync(parent, `${parent}-moved`);
+        fs.mkdirSync(parent, { mode: 0o700 });
+        fs.writeFileSync(path.join(parent, "unrelated"), "keep", { mode: 0o600 });
+      },
+    })).rejects.toThrow("parent changed");
+    expect(fs.readFileSync(path.join(path.dirname(first.destination), "unrelated"), "utf8")).toBe("keep");
+
+    const second = fixture();
+    await expect(exportPowerPackage(stage, second.destination, {
+      sourceRoot: second.sourceRoot,
+      beforeActivate() {
+        const lock = path.join(path.dirname(second.destination), ".kiro-fabric.lock");
+        fs.renameSync(lock, `${lock}-held`);
+        fs.mkdirSync(lock, { mode: 0o700 });
+        fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: process.pid, token: "foreign" }), { mode: 0o600 });
+      },
+    })).rejects.toThrow("lock changed");
+    expect(JSON.parse(fs.readFileSync(path.join(path.dirname(second.destination), ".kiro-fabric.lock", "owner.json"), "utf8")).token).toBe("foreign");
+  });
+
+  it("rejects world-writable parents and hard-linked staged files", async () => {
+    const first = fixture();
+    fs.mkdirSync(path.dirname(first.destination), { mode: 0o700 });
+    fs.chmodSync(path.dirname(first.destination), 0o777);
+    await expect(exportPowerPackage(stage, first.destination, { sourceRoot: first.sourceRoot })).rejects.toThrow("not group/world writable");
+
+    const source = temporary("fabric-hardlink-stage-");
+    fs.cpSync(fs.realpathSync(stage), source, { recursive: true });
+    const privatize = (directory: string) => { fs.chmodSync(directory, 0o700); for (const entry of fs.readdirSync(directory, { withFileTypes: true })) { const target = path.join(directory, entry.name); if (entry.isDirectory()) privatize(target); else fs.chmodSync(target, 0o600); } };
+    privatize(source);
+    const packageFile = path.join(source, "package.json");
+    fs.linkSync(packageFile, path.join(source, "package-copy.json"));
+    const second = fixture();
+    await expect(exportPowerPackage(source, second.destination, { sourceRoot: second.sourceRoot })).rejects.toThrow(/unexpected package root entry|hard-linked|single-link/u);
+  });
+
   it("refuses silent replacement from another checkout", async () => {
     const { destination, sourceRoot } = fixture();
     await exportPowerPackage(stage, destination, { sourceRoot });

@@ -69,6 +69,15 @@ const processIsAlive = (pid) => {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch (error) { return error?.code === "EPERM"; }
 };
+const lockStillHeld = (lock, held) => {
+  const lockStats = fs.lstatSync(lock);
+  const ownerPath = path.join(lock, "owner.json");
+  const ownerStats = fs.lstatSync(ownerPath);
+  if (!privateOwned(lockStats) || !sameIdentity(lockStats, held.lock) || !ownerStats.isFile() || ownerStats.isSymbolicLink() ||
+      ownerStats.nlink !== 1 || !sameIdentity(ownerStats, held.owner)) return false;
+  const marker = JSON.parse(fs.readFileSync(ownerPath, "utf8"));
+  return marker.token === held.token && marker.pid === process.pid;
+};
 const releaseLock = (lock, held) => {
   try {
     const lockStats = fs.lstatSync(lock);
@@ -201,6 +210,8 @@ export const exportPowerPackage = async (stagingRoot, requestedDestination, opti
     await options.beforeActivate?.(temporary);
     const parentNow = fs.lstatSync(parentInfo.path);
     if (!sameIdentity(parentNow, parentInfo.identity) || !privateOwned(parentNow)) throw new Error("export parent changed before activation");
+    if (!lockStillHeld(lock, held)) throw new Error("export lock changed before activation");
+    if (lstat(requested)) throw new Error("requested export destination appeared before activation; refusing unrelated replacement");
     const destination = path.join(parentInfo.path, `${prefix}${randomBytes(12).toString("hex")}`);
     if (lstat(destination)) throw new Error("versioned Power generation collided before activation");
     fs.renameSync(temporary, destination);
