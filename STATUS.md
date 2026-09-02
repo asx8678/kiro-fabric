@@ -6,11 +6,12 @@ Updated: 2026-09-02
 
 - **Kiro Power** is the default public integration. It is additive and keeps
   Kiro native tools available.
-- **Strict** is an optional installer-managed custom agent with one
-  progressively loaded `fabric-exec` skill and a confined capability view.
-- **kiro-fabric-dev** is the repository-local development agent. It is distinct
-  from the installer-owned `kiro-fabric` profile, disables ambient MCP/Powers,
-  and starts the built repository MCP entry.
+- **Strict** is an optional installer-managed custom agent with exactly one
+  model-visible tool, `@fabric/fabric_exec`; every operation runs in code mode.
+- **kiro-fabric-dev** is the repository-local code-mode development agent. It is
+  distinct from the installer-owned `kiro-fabric` profile, disables ambient
+  MCP/Powers and all native repository tools, and starts the built repository
+  MCP entry through a checkout-confined launcher that enables `k.bash`.
 
 ## Pinned development tuple
 

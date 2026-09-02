@@ -174,10 +174,10 @@ var kiroProfilePrompt = (allowShell, internalChild, enableSubagents) => {
   const providerCalls = managedProviderCalls().join(", ");
   const shellGuidance = allowShell ? "For changes, run the smallest relevant verification with k.bash and separate command evidence from inference." : "k.bash is disabled in this profile; do not attempt shell execution.";
   if (internalChild) {
-    return `Use only ${repositoryCalls} and the \u03C0 named-strings map. Await every k.* call and read the { ok, output, details } result from mutations. ${shellGuidance} Persistent memory, MCP federation, and subagents are unavailable inside ACP children; do not call memory.*, mcp.*, or agents.*. Locate with k.find or k.grep, read narrow ranges, batch only independent calls, and return compact evidence. Treat denial, timeout, cancellation, or an unverified result as failure.`;
+    return `Code mode is mandatory: @fabric/fabric_exec is the only model-visible tool and must handle every operation, including a single read. Inside each call, use only ${repositoryCalls} and the \u03C0 named-strings map. Await every k.* call and read the { ok, output, details } result from mutations. ${shellGuidance} Persistent memory, MCP federation, and subagents are unavailable inside ACP children; do not call memory.*, mcp.*, or agents.*. Locate with k.find or k.grep, read narrow ranges, batch only independent calls, and return compact evidence. Treat denial, timeout, cancellation, or an unverified result as failure.`;
   }
   const agentGuidance = enableSubagents ? "For explicitly requested independent work, read the skill's agents reference before calling agents.*; use at most four non-overlapping children and await every call." : "Subagents are disabled in managed Kiro; do not call agents.*.";
-  return `Before the first fabric_exec call, load the fabric-exec skill and read only the reference needed for the request. Use ${repositoryCalls} for repository I/O and \u03C0 for named strings. Generic provider access is limited to ${providerCalls}; do not use ${KIRO_NAMESPACE_POLICY.forbiddenAlternateIo.join(", ")}. Await every available k.*, tools.*, memory.*, mcp.*, and agents.* call and read { ok, output, details } from mutations. ${shellGuidance} ${agentGuidance} Locate with k.find or k.grep before narrow k.read ranges. Batch only independent calls, stop gathering when the evidence answers the task, and return compact decision-relevant results. Treat denial, timeout, cancellation, indeterminate effects, and unavailable capabilities as failures; fail closed and never claim completion without verified evidence.`;
+  return `Code mode is mandatory: @fabric/fabric_exec is the only model-visible tool and must handle every operation, including a single read, search, edit, or permitted shell command; native repository tools are unavailable. Before the first call, load the fabric-exec skill and read only the reference needed for the request. Inside each call, use ${repositoryCalls} for repository I/O and \u03C0 for named strings. Generic provider access is limited to ${providerCalls}; do not use ${KIRO_NAMESPACE_POLICY.forbiddenAlternateIo.join(", ")}. Await every available k.*, tools.*, memory.*, mcp.*, and agents.* call and read { ok, output, details } from mutations. ${shellGuidance} ${agentGuidance} Locate with k.find or k.grep before narrow k.read ranges. Batch only independent calls, stop gathering when the evidence answers the task, and return compact decision-relevant results. Treat denial, timeout, cancellation, indeterminate effects, and unavailable capabilities as failures; fail closed and never claim completion without verified evidence.`;
 };
 var generateKiroProfile = (options) => {
   for (const key of Object.keys(options.extraEnv ?? {})) {
@@ -209,7 +209,7 @@ var generateKiroProfile = (options) => {
   }
   return {
     name: "kiro-fabric",
-    description: "Managed Kiro Fabric profile for Kiro CLI v3",
+    description: "Managed Kiro Fabric code-mode profile for Kiro CLI v3",
     prompt: kiroProfilePrompt(
       options.allowShell === true,
       internal !== void 0,

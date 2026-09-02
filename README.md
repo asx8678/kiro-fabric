@@ -513,6 +513,22 @@ pnpm run certify:power    # build the local package and run the Power MCP certif
 pnpm run check            # typecheck, build, all tests, dead-code lint, and Power validation
 ```
 
+For repository development with a hard code-mode boundary, build first and
+select the checked-in agent:
+
+```bash
+pnpm run build
+kiro-cli --v3 --agent kiro-fabric-dev
+```
+
+`kiro-fabric-dev` exposes exactly `@fabric/fabric_exec`. Every repository
+operation, including a single read, therefore runs as checked TypeScript through
+`k.*`; native read, write, and shell tools are not model-visible. Selecting this
+repository-local profile is also the explicit trusted opt-in for project-confined
+`k.bash`, so tests and the required final build remain available inside code
+mode. The additive Kiro Power remains a separate native-tool-compatible product
+mode.
+
 Important paths:
 
 - `src/kiro/mcp-server.ts`: Kiro MCP surface

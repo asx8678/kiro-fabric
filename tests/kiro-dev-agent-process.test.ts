@@ -37,18 +37,26 @@ describe("repository development-agent non-billable validation", () => {
     expect(() => validateWithInstalledKiro(profilePath, absent, true)).toThrow(/supported kiro-cli 2\.20\.1 is missing/i);
   });
 
-  it("starts the configured built MCP from the repository root and executes pure TypeScript", async () => {
+  it("starts the code-only MCP and executes pure, repository-read, and shell programs", async () => {
     await expect(smokeDevelopmentMcp()).resolves.toEqual({ tools: ["fabric_exec"], result: "42" });
   }, 30_000);
 
-  it("explains an invalid working directory before spawning the MCP", () => {
+  it("rejects an invalid working directory in both validation and the confined launcher", () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-dev-wrong-cwd-"));
     scratch.push(directory);
-    const result = spawnSync(process.execPath, [path.resolve("scripts/validate-dev-agent.mjs")], {
+    const validator = spawnSync(process.execPath, [path.resolve("scripts/validate-dev-agent.mjs")], {
       cwd: directory,
       encoding: "utf8",
     });
-    expect(result.status).toBe(1);
-    expect(result.stderr).toMatch(/invalid working directory.*run from repository root/i);
+    expect(validator.status).toBe(1);
+    expect(validator.stderr).toMatch(/invalid working directory.*run from repository root/i);
+
+    const launcher = spawnSync(process.execPath, [path.resolve("scripts/run-kiro-fabric-dev.mjs")], {
+      cwd: directory,
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    expect(launcher.status).toBe(1);
+    expect(launcher.stderr).toMatch(/must start from repository root/iu);
   });
 });

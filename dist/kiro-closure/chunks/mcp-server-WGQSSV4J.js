@@ -50,7 +50,7 @@ import {
   resolveAgentDir,
   typebox_exports,
   writeFileAtomic
-} from "./chunk-K6GHEZH6.js";
+} from "./chunk-OL5ETRKQ.js";
 import {
   runAbortable,
   settleWithin,
@@ -71,11 +71,11 @@ import {
   MAX_AGENT_STEER_LINE_BYTES,
   normalizeKiroSemanticContext,
   value_exports
-} from "./chunk-I5XNR5HP.js";
+} from "./chunk-XU3G4XWG.js";
 import {
   assertSupportedKiro,
   assertSupportedKiroUnchanged
-} from "./chunk-B6YQEEM2.js";
+} from "./chunk-ZU666CDL.js";
 import {
   canonicalPathContains,
   inspectCanonicalPath,

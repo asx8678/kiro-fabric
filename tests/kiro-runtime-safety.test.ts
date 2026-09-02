@@ -34,6 +34,17 @@ const execute = async (
 });
 
 describe("Kiro runtime security policy", () => {
+  it("forces full code mode even when global configuration disables it", async () => {
+    const { project, agentDir } = fixture("kiro-code-mode");
+    writeFileSync(join(agentDir, "fabric.json"), JSON.stringify({ fullCodeMode: false }));
+    const runtime = createKiroRuntime({ cwd: project });
+    try {
+      expect(runtime.service.config.fullCodeMode).toBe(true);
+    } finally {
+      await runtime.close();
+    }
+  });
+
   it("denies k.bash with untouched defaults when --allow-shell is absent", async () => {
     const { project } = fixture("kiro-deny");
     const runtime = await prepareKiroRuntime({ cwd: project });

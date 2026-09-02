@@ -11,7 +11,7 @@ import {
   inspectFabricConfig,
   require_dist,
   resolveAgentDir
-} from "./chunk-K6GHEZH6.js";
+} from "./chunk-OL5ETRKQ.js";
 import {
   resolveKiroMcpLaunchEnvironment
 } from "./chunk-RC6PVX4B.js";
@@ -41,7 +41,7 @@ import {
   kiroProfilePath,
   resolveKiroInstallRoots,
   sameExecutableIdentity
-} from "./chunk-B6YQEEM2.js";
+} from "./chunk-ZU666CDL.js";
 import {
   KIRO_INSTALL_MANIFEST_FORMAT,
   KiroInstallError,

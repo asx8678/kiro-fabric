@@ -23,6 +23,7 @@ describe("repository Kiro development agent", () => {
   it("binds steering without shadowing the installer-owned agent", () => {
     const profile = JSON.parse(fs.readFileSync(".kiro/agents/kiro-fabric-dev.json", "utf8")) as {
       name: string;
+      prompt: string;
       includeMcpJson: boolean;
       includePowers: boolean;
       resources: string[];
@@ -41,20 +42,17 @@ describe("repository Kiro development agent", () => {
       "file://.kiro/steering/structure.md",
       "skill://.kiro/skills/**/SKILL.md",
     ]);
-    expect(profile.mcpServers.fabric.args).toEqual(["dist/kiro/mcp-entry.js"]);
+    expect(profile.mcpServers.fabric.args).toEqual(["scripts/run-kiro-fabric-dev.mjs"]);
     expect(profile.mcpServers.fabric.env).not.toHaveProperty("KIRO_FABRIC_INTEGRATION", "power");
-    expect(profile.tools).toContain("@fabric/fabric_exec");
-    expect(profile.tools).not.toContain("*");
-    expect(profile.allowedTools).toEqual(["read", "@fabric/fabric_exec"]);
-    expect(profile.permissions.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({ capability: "fs_write", effect: "ask" }),
-      expect.objectContaining({ capability: "shell", effect: "ask" }),
-      expect.objectContaining({ capability: "mcp", effect: "ask" }),
-    ]));
-    expect(profile.tools.join(" ")).not.toMatch(/web|http|network|browser/i);
-    expect(profile.permissions.rules).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ capability: expect.stringMatching(/web|http|network/i), effect: "allow" }),
-    ]));
+    expect(profile.tools).toEqual(["@fabric/fabric_exec"]);
+    expect(profile.allowedTools).toEqual(["@fabric/fabric_exec"]);
+    expect(profile.permissions.rules).toEqual([
+      { capability: "mcp", match: ["fabric/fabric_exec"], effect: "ask" },
+    ]);
+    expect(profile.prompt).toMatch(/code mode is mandatory/iu);
+    expect(profile.prompt).toMatch(/every repository operation/iu);
+    expect(profile.prompt).toMatch(/including a single read/iu);
+    expect(profile.prompt).toMatch(/never invoke native repository tools/iu);
   });
 
   it("uses explicit steering inclusion modes", () => {

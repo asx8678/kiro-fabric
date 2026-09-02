@@ -36,8 +36,10 @@ agent. Scores describe the remediated state.
    behavior needed in every session.
 6. A development agent is checked in as `.kiro/agents/kiro-fabric-dev.json`
    so it cannot shadow the installer-owned `kiro-fabric` profile. It binds
-   `file://.kiro/steering/**/*.md`, disables ambient MCP/Power inheritance,
-   lists tools explicitly, and asks before writes, shell, or `fabric_exec`.
+   compact steering plus lazy repository skills, disables ambient MCP/Power
+   inheritance, and exposes only `@fabric/fabric_exec`. Its launcher derives
+   the canonical checkout identity at startup and enables confined `k.bash`, so
+   every operation, including a single read and final build, stays in code mode.
 
 ## Deliberate duplication
 
@@ -57,13 +59,17 @@ save tokens at the cost of an unsafe standalone skill.
 | Managed skill layout and documentation test anchors | `.kiro/steering/strict-skills.md` | `fileMatch: strict/skills/**` |
 | Runtime/schema/provider projection rules | `.kiro/steering/api-patterns.md` | `fileMatch` for affected source, tests, skills, and manifests |
 
-The checked-in `.kiro/agents/kiro-fabric-dev.json` binds
-`file://.kiro/steering/**/*.md`. Its name intentionally differs from the
-installer-owned `kiro-fabric` profile, so repository development cannot
-overwrite or shadow an installed managed profile.
+The checked-in `.kiro/agents/kiro-fabric-dev.json` binds only compact universal
+steering and lazy repository-maintenance skills. Its name intentionally differs
+from the installer-owned `kiro-fabric` profile, so repository development
+cannot overwrite or shadow an installed managed profile. Both profiles enforce
+code mode structurally with a single model-visible `@fabric/fabric_exec` tool;
+the additive Power remains the deliberately separate native-compatible mode.
 
 ## Verification gates
 
+- `pnpm exec vitest run tests/kiro-steering.test.ts tests/kiro-profile-prompt.test.ts`
+- `pnpm exec vitest run --config vitest.process.config.ts tests/kiro-dev-agent-process.test.ts`
 - `pnpm exec vitest run tests/skill-docs.test.ts tests/kiro-power-manifest.test.ts`
 - `pnpm run power:validate`
 - `pnpm run check`

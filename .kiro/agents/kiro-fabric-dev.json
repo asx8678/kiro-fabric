@@ -1,7 +1,7 @@
 {
   "name": "kiro-fabric-dev",
-  "description": "Develop and verify the Kiro Fabric repository with repository steering and an explicit Fabric MCP boundary.",
-  "prompt": "Follow the bound repository steering. Use native tools for ordinary repository work. Use @fabric/fabric_exec only for checked programmable composition, provider fan-out, Fabric state or memory, or configured MCP federation. Treat denial, timeout, cancellation, and indeterminate effects as failures.",
+  "description": "Develop and verify the Kiro Fabric repository through an exclusive Fabric code-mode boundary.",
+  "prompt": "Code mode is mandatory. Use @fabric/fabric_exec for every repository operation, including a single read, search, edit, or shell command; never invoke native repository tools. Inside each checked TypeScript body, use k.find or k.grep before bounded k.read calls, k.edit or k.write for changes, and k.bash for verification. Await every call, read mutation and shell results from { ok, output, details }, batch only independent work, and return compact evidence. Follow the bound repository steering. Treat denial, timeout, cancellation, and indeterminate effects as failures, and never claim completion without verified evidence.",
   "includeMcpJson": false,
   "includePowers": false,
   "resources": [
@@ -12,34 +12,17 @@
   "mcpServers": {
     "fabric": {
       "command": "node",
-      "args": ["dist/kiro/mcp-entry.js"],
+      "args": ["scripts/run-kiro-fabric-dev.mjs"],
       "env": {
         "KIRO_FABRIC_HOST": "kiro-v3",
         "KIRO_FABRIC_PROFILE_KIND": "managed-main"
       }
     }
   },
-  "tools": [
-    "read",
-    "write",
-    "shell",
-    "@fabric/fabric_exec"
-  ],
-  "allowedTools": [
-    "read",
-    "@fabric/fabric_exec"
-  ],
+  "tools": ["@fabric/fabric_exec"],
+  "allowedTools": ["@fabric/fabric_exec"],
   "permissions": {
     "rules": [
-      {
-        "capability": "fs_write",
-        "match": ["./**"],
-        "effect": "ask"
-      },
-      {
-        "capability": "shell",
-        "effect": "ask"
-      },
       {
         "capability": "mcp",
         "match": ["fabric/fabric_exec"],

@@ -11,9 +11,13 @@ describe("Kiro profile prompt contract", () => {
       nodePath: "/usr/bin/node",
     });
 
-    expect(profile.description).toBe("Managed Kiro Fabric profile for Kiro CLI v3");
+    expect(profile.description).toBe("Managed Kiro Fabric code-mode profile for Kiro CLI v3");
     expect(profile.prompt.trim().length).toBeGreaterThan(0);
     expect(profile.prompt.length).toBeLessThan(1_500);
+    expect(profile.prompt).toMatch(/code mode is mandatory/i);
+    expect(profile.prompt).toMatch(/only model-visible tool/i);
+    expect(profile.prompt).toMatch(/every operation, including a single read/i);
+    expect(profile.prompt).toMatch(/native repository tools are unavailable/i);
     expect(profile.prompt).toMatch(/load the fabric-exec skill/i);
     expect(profile.prompt).toContain("k.read");
     expect(profile.prompt).toContain("k.ls");
@@ -47,6 +51,9 @@ describe("Kiro profile prompt contract", () => {
     });
 
     expect(profile.resources).toEqual([]);
+    expect(profile.prompt).toMatch(/code mode is mandatory/i);
+    expect(profile.prompt).toMatch(/only model-visible tool/i);
+    expect(profile.prompt).toMatch(/every operation, including a single read/i);
     expect(profile.prompt).not.toContain("agents.run");
     expect(profile.prompt).not.toContain("agents.spawn");
     expect(profile.prompt).toMatch(/await every k\.\* call/i);

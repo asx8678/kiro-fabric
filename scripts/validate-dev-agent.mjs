@@ -39,32 +39,30 @@ export const validateDevelopmentProfile = (root = SCRIPT_ROOT) => {
     fail("resources must bind only compact universal steering plus lazy repository skills");
   }
   const server = profile.mcpServers?.fabric;
-  if (!server || server.command !== "node" || !sameStrings(server.args, ["dist/kiro/mcp-entry.js"])) {
-    fail("fabric MCP must run node dist/kiro/mcp-entry.js from the repository root");
+  if (!server || server.command !== "node" || !sameStrings(server.args, ["scripts/run-kiro-fabric-dev.mjs"])) {
+    fail("fabric MCP must run the confined repository development launcher");
   }
   if (server.env?.KIRO_FABRIC_HOST !== "kiro-v3" ||
       server.env?.KIRO_FABRIC_PROFILE_KIND !== "managed-main" ||
       Object.hasOwn(server.env ?? {}, "KIRO_FABRIC_INTEGRATION")) {
     fail("fabric MCP environment must select managed-main, never Power");
   }
-  if (!sameStrings(profile.tools, ["read", "write", "shell", "@fabric/fabric_exec"]) ||
-      !sameStrings(profile.allowedTools, ["read", "@fabric/fabric_exec"])) {
-    fail("native read must be allowed while write, shell, and fabric_exec remain visible but approval-gated");
+  const onlyTool = ["@fabric/fabric_exec"];
+  if (!sameStrings(profile.tools, onlyTool) || !sameStrings(profile.allowedTools, onlyTool)) {
+    fail("code mode requires @fabric/fabric_exec to be the only visible and allowed tool");
+  }
+  if (!/code mode is mandatory/iu.test(profile.prompt ?? "") ||
+      !/every repository operation/iu.test(profile.prompt ?? "") ||
+      !/including a single read/iu.test(profile.prompt ?? "") ||
+      !/never invoke native repository tools/iu.test(profile.prompt ?? "")) {
+    fail("profile prompt must require Fabric code mode for every repository operation");
   }
   const rules = profile.permissions?.rules;
-  const expectedRules = [
-    ["fs_write", "ask", "./**"],
-    ["shell", "ask", undefined],
-    ["mcp", "ask", "fabric/fabric_exec"],
-  ];
-  if (!Array.isArray(rules) || expectedRules.some(([capability, effect, match]) =>
-    !rules.some((rule) => rule?.capability === capability && rule?.effect === effect &&
-      (match === undefined || Array.isArray(rule.match) && rule.match.includes(match))))) {
-    fail("write, shell, and fabric_exec must retain exact ask rules");
-  }
-  if (profile.tools.some((tool) => /(?:web|http|network|fetch|browser)/iu.test(tool)) ||
-      rules.some((rule) => rule?.effect === "allow" && /(?:web|http|network)/iu.test(String(rule.capability)))) {
-    fail("network capability must remain absent and unapproved");
+  const rule = Array.isArray(rules) && rules.length === 1 ? rules[0] : undefined;
+  if (!rule || rule.capability !== "mcp" || rule.effect !== "ask" ||
+      !sameStrings(rule.match, ["fabric/fabric_exec"]) ||
+      Object.keys(rule).some((key) => !["capability", "match", "effect"].includes(key))) {
+    fail("code mode must retain one exact approval rule for fabric/fabric_exec");
   }
   return { root: canonicalRoot, profilePath, profile, server };
 };
@@ -106,15 +104,18 @@ export const smokeDevelopmentMcp = async (root = SCRIPT_ROOT) => {
   if (current !== validated.root) {
     fail(`invalid working directory ${current}; run from repository root ${validated.root}`);
   }
-  const entry = path.join(validated.root, validated.server.args[0]);
-  let entryStats;
-  try {
-    entryStats = fs.lstatSync(entry);
-  } catch {
-    fail(`missing build output ${entry}; run pnpm run build first`);
-  }
-  if (!entryStats.isFile() || entryStats.isSymbolicLink()) {
-    fail(`built MCP entry must be a regular non-symlink file: ${entry}`);
+  const launcher = path.join(validated.root, validated.server.args[0]);
+  const builtEntry = path.join(validated.root, "dist", "kiro", "mcp-entry.js");
+  for (const [label, file] of [["development launcher", launcher], ["built MCP entry", builtEntry]]) {
+    let stats;
+    try {
+      stats = fs.lstatSync(file);
+    } catch {
+      fail(`missing ${label} ${file}; run pnpm run build first`);
+    }
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      fail(`${label} must be a regular non-symlink file: ${file}`);
+    }
   }
   const isolated = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-dev-agent-"));
   const inherited = Object.fromEntries(Object.entries(process.env)
@@ -126,6 +127,11 @@ export const smokeDevelopmentMcp = async (root = SCRIPT_ROOT) => {
     env: {
       ...inherited,
       ...validated.server.env,
+      // The launcher must replace conflicting ambient mode/grant variables
+      // with its exact code-only, checkout-confined development contract.
+      KIRO_FABRIC_INTEGRATION: "power",
+      KIRO_FABRIC_ENABLE_SUBAGENTS: "1",
+      KIRO_FABRIC_ALLOW_TOOLS: "1",
       PI_CODING_AGENT_DIR: path.join(isolated, "pi-agent"),
       KIRO_HOME: path.join(isolated, "kiro-home"),
     },
@@ -148,6 +154,30 @@ export const smokeDevelopmentMcp = async (root = SCRIPT_ROOT) => {
       .join("\n") ?? "";
     if (result.isError || output.trim() !== "42") {
       fail(`pure fabric_exec smoke failed: ${output || "no text result"}`);
+    }
+    const repository = await client.callTool({
+      name: "fabric_exec",
+      arguments: {
+        code: [
+          'const source = await k.read({ path: "package.json", offset: 1, limit: 8 });',
+          'const shell = await k.bash({ command: "printf code-mode-shell" });',
+          'return { read: source.includes(\'"name": "kiro-fabric"\'), shell: shell.output };',
+        ].join("\n"),
+        resultFormat: "json",
+      },
+    });
+    const repositoryOutput = repository.content
+      ?.filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n") ?? "";
+    let repositoryResult;
+    try {
+      repositoryResult = JSON.parse(repositoryOutput);
+    } catch {
+      fail(`code-mode repository smoke returned invalid JSON: ${repositoryOutput || "no text result"}`);
+    }
+    if (repository.isError || repositoryResult?.read !== true || repositoryResult?.shell !== "code-mode-shell") {
+      fail(`code-mode repository smoke failed: ${repositoryOutput || "no text result"}`);
     }
     return { tools: listed.tools.map((tool) => tool.name), result: output.trim() };
   } finally {

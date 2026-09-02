@@ -12,7 +12,7 @@ import {
   parseKiroAgentWorkerOptions,
   readSteerLines,
   value_exports
-} from "../chunks/chunk-I5XNR5HP.js";
+} from "../chunks/chunk-XU3G4XWG.js";
 import {
   KIRO_V3_AGENT_MODE,
   assertKiroV3AgentModeAvailable,
@@ -27,7 +27,7 @@ import {
   generateKiroProfile,
   resolveKiroHome,
   sameExecutableIdentity
-} from "../chunks/chunk-B6YQEEM2.js";
+} from "../chunks/chunk-ZU666CDL.js";
 import {
   KiroInstallError,
   assertManagedTree,
