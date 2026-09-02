@@ -17,6 +17,7 @@ jobs:
         with: { node-version: 24 }
       - run: npm install --global pnpm@11.20.0
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run audit:deps
       - run: node scripts/assert-kiro-home-unchanged.mjs pnpm run release:candidate
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

@@ -7,8 +7,8 @@ const require = __createRequire(import.meta.url);
 
 import {
   typeCheckFabricCode
-} from "../chunks/chunk-SPHG3WWN.js";
-import "../chunks/chunk-LSWTYIW3.js";
+} from "../chunks/chunk-AT66DL2P.js";
+import "../chunks/chunk-AE4E2KSU.js";
 
 // src/runtime/compiler-worker-entry.ts
 import { parentPort } from "node:worker_threads";

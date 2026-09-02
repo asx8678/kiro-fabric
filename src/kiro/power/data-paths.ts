@@ -268,8 +268,7 @@ const migrateWorkspaceGeneration = (projects: string, identity: KiroPowerWorkspa
   const current = path.join(projects, kiroPowerWorkspaceId(identity, 3));
   const legacy = path.join(projects, kiroPowerWorkspaceId(identity, 2));
   if (!fs.existsSync(legacy)) return { current, migrated: false };
-  const legacyStats = assertPrivateDirectory(legacy);
-  void legacyStats;
+  assertPrivateDirectory(legacy);
   validatePersistedIdentity(path.join(legacy, "workspace-identity.json"), identity);
   validateWorkspaceObject(identity);
   if (fs.existsSync(current)) {

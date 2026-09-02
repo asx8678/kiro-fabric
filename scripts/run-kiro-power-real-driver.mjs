@@ -20,19 +20,29 @@ export const resolveKiroCli = (pathValue = process.env.PATH ?? "") => {
   throw new Error("A private, non-writable kiro-cli executable was not found on absolute PATH entries");
 };
 const run = (executable, args, options = {}) => {
-  const result = spawnSync(executable, args, { encoding: "buffer", maxBuffer: 128_000, timeout: options.timeout ?? 60_000, input: options.input, env: options.env ?? process.env });
+  const result = spawnSync(executable, args, { encoding: "buffer", maxBuffer: 128_000, timeout: options.timeout ?? 60_000, input: options.input, env: options.env ?? process.env, cwd: options.cwd });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`kiro-cli ${args.join(" ")} exited with status ${result.status ?? "unknown"}`);
   return Buffer.concat([result.stdout ?? Buffer.alloc(0), result.stderr ?? Buffer.alloc(0)]);
 };
-export const runRealKiroPowerDriver = ({ packageRoot, packageDigest, archiveDigest, commit, driverDigest, output }) => {
+export const runRealKiroPowerDriver = ({ packageRoot, packageDigest, archiveDigest, commit, driverDigest, output, workspace }) => {
+  if (typeof workspace !== "string" || !path.isAbsolute(workspace)) throw new Error("Real-client qualification workspace must be absolute");
+  const requestedWorkspace = path.resolve(workspace);
+  const workspaceStats = fs.lstatSync(requestedWorkspace);
+  if (!workspaceStats.isDirectory() || workspaceStats.isSymbolicLink() ||
+      (process.platform !== "win32" && ((typeof process.getuid === "function" && workspaceStats.uid !== process.getuid()) || (workspaceStats.mode & 0o077) !== 0)) ||
+      fs.readdirSync(requestedWorkspace).length !== 0) {
+    throw new Error("Real-client qualification workspace must be a private empty regular directory");
+  }
+  const workspaceRoot = fs.realpathSync(requestedWorkspace);
   const executable = resolveKiroCli();
   const before = fs.readFileSync(executable); const kiroDigest = hash(before);
   const stats = fs.statSync(executable);
-  const versionRaw = run(executable, ["--version"]);
+  const environment = { ...process.env, PWD: workspaceRoot };
+  const versionRaw = run(executable, ["--version"], { cwd: workspaceRoot, env: environment });
   const nonce = randomBytes(24).toString("hex");
-  const prompt = `Import and enable the Kiro Power at ${packageRoot}. Using kiro-cli v3 only, list its MCP tools and invoke fabric_info, fabric_workspace, and fabric_exec. Then independently exercise native file-read, file-edit, shell, web, and subagent capabilities in this temporary qualification workspace. Return one JSON object with qualificationNonce=${nonce}, powerActivated=true, tools=${JSON.stringify(REAL_CLIENT_TOOLS)}, customAgentSelected=false, and nativeCapabilities=${JSON.stringify(REAL_CLIENT_NATIVE_CAPABILITIES.map((name) => ({ name, observed: true })))}.\n`;
-  const sessionRaw = run(executable, ["--v3"], { input: Buffer.from(prompt), timeout: 45 * 60_000 });
+  const prompt = `Import and enable the Kiro Power at ${packageRoot}. Using kiro-cli v3 only, list its MCP tools and invoke fabric_info, fabric_workspace, and fabric_exec. Then independently exercise native file-read, file-edit, shell, web, and subagent capabilities with every native file or shell effect confined to the empty qualification workspace at ${workspaceRoot}. Return one JSON object with qualificationNonce=${nonce}, powerActivated=true, tools=${JSON.stringify(REAL_CLIENT_TOOLS)}, customAgentSelected=false, and nativeCapabilities=${JSON.stringify(REAL_CLIENT_NATIVE_CAPABILITIES.map((name) => ({ name, observed: true })))}.\n`;
+  const sessionRaw = run(executable, ["--v3"], { input: Buffer.from(prompt), timeout: 45 * 60_000, cwd: workspaceRoot, env: environment });
   const afterStats = fs.statSync(executable); const after = fs.readFileSync(executable);
   if (stats.dev !== afterStats.dev || stats.ino !== afterStats.ino || hash(after) !== kiroDigest) throw new Error("kiro-cli changed during qualification");
   const text = sessionRaw.toString("utf8");
@@ -57,11 +67,13 @@ export const runRealKiroPowerDriver = ({ packageRoot, packageDigest, archiveDige
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const output = valueAfter(process.argv, "--output");
+  const workspace = valueAfter(process.argv, "--workspace");
   if (!output) throw new Error("--output is required");
+  if (!workspace) throw new Error("--workspace is required");
   const script = fs.readFileSync(fileURLToPath(import.meta.url));
   runRealKiroPowerDriver({
     packageRoot: path.resolve(valueAfter(process.argv, "--package") ?? ""),
     packageDigest: valueAfter(process.argv, "--package-digest"), archiveDigest: valueAfter(process.argv, "--archive-digest"),
-    commit: valueAfter(process.argv, "--commit"), driverDigest: hash(script), output: path.resolve(output),
+    commit: valueAfter(process.argv, "--commit"), driverDigest: hash(script), output: path.resolve(output), workspace: path.resolve(workspace),
   });
 }

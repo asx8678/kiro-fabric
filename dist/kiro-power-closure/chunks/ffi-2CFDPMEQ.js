@@ -6,7 +6,7 @@ globalThis.__dirname = __dirnameOf(globalThis.__filename);
 const require = __createRequire(import.meta.url);
 
 import "./chunk-G3LABT6U.js";
-import "./chunk-LSWTYIW3.js";
+import "./chunk-AE4E2KSU.js";
 
 // node_modules/.pnpm/@jitl+quickjs-singlefile-mjs-release-sync@0.32.0/node_modules/@jitl/quickjs-singlefile-mjs-release-sync/dist/ffi.mjs
 var QuickJSFFI = class {

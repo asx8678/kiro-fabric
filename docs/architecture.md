@@ -14,7 +14,7 @@ A `fabric_exec` request has one path and no textual, action-name, manual-command
 MCP schema -> strict TypeScript worker -> QuickJS -> ActionRegistry -> provider
 ```
 
-The MCP contract requires a TypeScript function body in `code`. The compiler reports all semantic diagnostics and is terminated before timeout or cancellation settles. QuickJS is the only guest runtime. It exposes immutable `payloads` and the documented provider bridge, but no timers, host imports, process, environment, filesystem, shell, or direct network. Source, input, transpiled output, nested values, logs, final output, memory, and time each have independent bounds.
+The MCP contract requires a TypeScript function body in `code`. The compiler reports all semantic diagnostics. Successful checks reuse one bounded warm worker (30-second idle timeout and 250-use cap); timeout, cancellation, or worker failure terminates that worker before request settlement. QuickJS is the only guest runtime. It exposes immutable `payloads` and the documented provider bridge, but no timers, host imports, process, environment, filesystem, shell, or direct network. Source, input, transpiled output, nested values, logs, final output, memory, and time each have independent bounds.
 
 Code Mode is mandatory whenever work is routed through Fabric. The Power does not intercept operations that the product contract leaves to Kiro native tools. Provider composition and bounded data transformation use `fabric_exec`; ordinary native file/edit/system operations remain outside the Power rather than being reimplemented by a hidden bypass.
 

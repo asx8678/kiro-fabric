@@ -6,10 +6,15 @@ globalThis.__dirname = __dirnameOf(globalThis.__filename);
 const require = __createRequire(import.meta.url);
 
 import {
-  QuickJSAsyncWASMModule
-} from "./chunk-FWH3VULO.js";
-import "./chunk-G6V3LW4W.js";
-import "./chunk-LSWTYIW3.js";
+  QuickJSModuleCallbacks,
+  QuickJSWASMModule,
+  applyBaseRuntimeOptions,
+  applyModuleEvalRuntimeOptions
+} from "./chunk-YQ4ZVOWF.js";
+import "./chunk-AE4E2KSU.js";
 export {
-  QuickJSAsyncWASMModule
+  QuickJSModuleCallbacks,
+  QuickJSWASMModule,
+  applyBaseRuntimeOptions,
+  applyModuleEvalRuntimeOptions
 };

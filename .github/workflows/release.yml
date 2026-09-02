@@ -46,6 +46,7 @@ jobs:
         with: { node-version: 24 }
       - run: corepack enable && corepack prepare pnpm@11.20.0 --activate
       - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm run audit:deps
       - name: Bind tag to package version
         env: { TAG: "${{ github.ref_name }}" }
         run: test "$TAG" = "v$(node -p 'require(\"./package.json\").version')"

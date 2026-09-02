@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { Runtime, ServerDefinition } from "mcporter";
 import { describe, expect, it } from "vitest";
 import type { FabricMcpConfig } from "../src/config.js";
@@ -79,6 +81,81 @@ describe("configured Power MCP federation", () => {
       args: { value: "hello" },
     }, context())).rejects.toThrow("Unknown configured MCP server");
     await provider.close();
+  });
+
+  it("uses only the explicit imports-disabled config through the real mcporter stdio runtime", async () => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-mcporter-"));
+    const serverFile = path.join(temporary, "server.mjs");
+    const configFile = path.join(temporary, "mcp.json");
+    fs.writeFileSync(serverFile, `
+import { Server } from ${JSON.stringify(import.meta.resolve("@modelcontextprotocol/sdk/server/index.js"))};
+import { StdioServerTransport } from ${JSON.stringify(import.meta.resolve("@modelcontextprotocol/sdk/server/stdio.js"))};
+import { CallToolRequestSchema, ListToolsRequestSchema } from ${JSON.stringify(import.meta.resolve("@modelcontextprotocol/sdk/types.js"))};
+const server = new Server({ name: "fixture", version: "1" }, { capabilities: { tools: {} } });
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [{ name: "echo", inputSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"], additionalProperties: false } }] }));
+server.setRequestHandler(CallToolRequestSchema, async (request) => ({ content: [{ type: "text", text: "echo:" + String(request.params.arguments?.value) }] }));
+await server.connect(new StdioServerTransport());
+`, { mode: 0o600 });
+    fs.writeFileSync(configFile, `${JSON.stringify({
+      imports: [],
+      mcpServers: { configured: { command: process.execPath, args: [serverFile], cwd: temporary } },
+    })}\n`, { mode: 0o600 });
+    const provider = new KiroMcpProvider(temporary, { ...config, configPath: configFile, callTimeoutMs: 5_000 });
+    try {
+      await expect(provider.invoke("$servers", {}, context())).resolves.toEqual([{
+        name: "configured", description: null, transport: "stdio",
+      }]);
+      const args = { server: "configured", tool: "echo", args: { value: "real" } };
+      const prepared = await provider.prepareArguments("$call", args, context());
+      const approvals: string[] = [];
+      await expect(provider.invoke("$call", prepared, context(undefined, async (action) => { approvals.push(action.ref); })))
+        .resolves.toMatchObject({ text: "echo:real" });
+      expect(approvals).toEqual(["mcp.$stdio"]);
+    } finally {
+      await provider.close();
+      fs.rmSync(temporary, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it("rejects config that could enable ambient mcporter imports", async () => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-mcporter-config-"));
+    const configFile = path.join(temporary, "mcp.json");
+    fs.writeFileSync(configFile, `${JSON.stringify({ mcpServers: {} })}\n`, { mode: 0o600 });
+    const provider = new KiroMcpProvider(temporary, { ...config, configPath: configFile });
+    try {
+      await expect(provider.invoke("$servers", {}, context())).rejects.toThrow("imports: []");
+    } finally {
+      await provider.close();
+      fs.rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when explicit config changes after runtime loading", async () => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-mcporter-drift-"));
+    const configFile = path.join(temporary, "mcp.json");
+    fs.writeFileSync(configFile, `${JSON.stringify({ imports: [], mcpServers: {} })}\n`, { mode: 0o600 });
+    const provider = new KiroMcpProvider(temporary, { ...config, configPath: configFile });
+    try {
+      await expect(provider.invoke("$servers", {}, context())).resolves.toEqual([]);
+      fs.writeFileSync(configFile, `${JSON.stringify({ imports: [], mcpServers: { changed: { url: "https://example.test/mcp" } } })}\n`, { mode: 0o600 });
+      await expect(provider.invoke("$servers", {}, context())).rejects.toThrow("changed after runtime loading");
+    } finally {
+      await provider.close();
+      fs.rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects ambient mcporter behavior switches", async () => {
+    const previous = process.env.MCPORTER_REPLAY;
+    process.env.MCPORTER_REPLAY = "/tmp/untrusted-replay.jsonl";
+    const provider = new KiroMcpProvider("/workspace", config);
+    try {
+      await expect(provider.invoke("$servers", {}, context())).rejects.toThrow("MCPORTER_REPLAY");
+    } finally {
+      if (previous === undefined) delete process.env.MCPORTER_REPLAY;
+      else process.env.MCPORTER_REPLAY = previous;
+      await provider.close();
+    }
   });
 
   it("cancels callers waiting for runtime creation and still closes the resolved runtime", async () => {

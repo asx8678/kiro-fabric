@@ -6,6 +6,7 @@ A Kiro CLI v3 Power for bounded, checked TypeScript composition. `fabric_exec` i
 
 - Node.js ≥ 24
 - pnpm 11.20.0 (`corepack prepare pnpm@11.20.0 --activate`)
+- Linux or macOS for checkout-local Power staging
 - Kiro CLI v3
 
 ## Quickstart
@@ -62,8 +63,9 @@ One path, no textual, action-name, or manual fallback. The effective guest deadl
 ## Development
 
 ```sh
-pnpm run test    # build + full suite
-pnpm run check   # typecheck, build, tests, dead-code lint, certify, SBOM
+pnpm run test        # build + full suite
+pnpm run check       # typecheck, build, tests, dead-code lint, certify, SBOM
+pnpm run audit:deps  # live moderate-or-higher dependency advisory gate
 ```
 
 See [docs/architecture.md](docs/architecture.md), [docs/configuration.md](docs/configuration.md), [docs/tracing.md](docs/tracing.md), [docs/release.md](docs/release.md), and [docs/audit.md](docs/audit.md).

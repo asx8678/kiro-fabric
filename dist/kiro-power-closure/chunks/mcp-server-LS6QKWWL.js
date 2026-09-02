@@ -6,6 +6,27 @@ globalThis.__dirname = __dirnameOf(globalThis.__filename);
 const require = __createRequire(import.meta.url);
 
 import {
+  _enum,
+  _null,
+  array,
+  boolean,
+  custom,
+  discriminatedUnion,
+  intersection,
+  iso_exports,
+  literal,
+  looseObject,
+  number,
+  object,
+  optional,
+  preprocess,
+  record,
+  safeParse,
+  string,
+  union,
+  unknown
+} from "./chunk-AEH4VBMI.js";
+import {
   canonicalPathContains,
   inspectCanonicalPath,
   sameCanonicalFilesystemIdentity
@@ -15,47 +36,9806 @@ import {
   shutdownFabricCompilerWorker,
   transpileFabricCodeWithSourceMap,
   typeCheckFabricCodeInWorker
-} from "./chunk-SPHG3WWN.js";
+} from "./chunk-AT66DL2P.js";
 import "./chunk-G3LABT6U.js";
-import "./chunk-FWH3VULO.js";
-import "./chunk-G6V3LW4W.js";
+import "./chunk-DDMC62E6.js";
+import "./chunk-YQ4ZVOWF.js";
 import {
-  AjvJsonSchemaValidator,
-  CallToolRequestSchema,
-  CallToolResultSchema,
-  CreateMessageResultSchema,
-  CreateMessageResultWithToolsSchema,
-  CreateTaskResultSchema,
-  ElicitResultSchema,
-  EmptyResultSchema,
-  ErrorCode,
-  InitializeRequestSchema,
-  InitializedNotificationSchema,
-  LATEST_PROTOCOL_VERSION,
-  ListRootsResultSchema,
-  ListToolsRequestSchema,
-  LoggingLevelSchema,
-  McpError,
-  Protocol,
-  ReadBuffer,
-  RootsListChangedNotificationSchema,
-  SUPPORTED_PROTOCOL_VERSIONS,
-  SetLevelRequestSchema,
-  assertClientRequestTaskCapability,
-  assertToolsCallTaskCapability,
-  getLiteralValue,
-  getObjectShape,
-  mergeCapabilities,
-  safeParse,
-  serializeMessage
-} from "./chunk-4LKE3ECX.js";
-import {
-  __export
-} from "./chunk-LSWTYIW3.js";
+  __commonJS,
+  __export,
+  __toESM
+} from "./chunk-AE4E2KSU.js";
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/codegen/code.js
+var require_code = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/codegen/code.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.regexpCode = exports.getEsmExportName = exports.getProperty = exports.safeStringify = exports.stringify = exports.strConcat = exports.addCodeArg = exports.str = exports._ = exports.nil = exports._Code = exports.Name = exports.IDENTIFIER = exports._CodeOrName = void 0;
+    var _CodeOrName = class {
+    };
+    exports._CodeOrName = _CodeOrName;
+    exports.IDENTIFIER = /^[a-z$_][a-z$_0-9]*$/i;
+    var Name = class extends _CodeOrName {
+      constructor(s) {
+        super();
+        if (!exports.IDENTIFIER.test(s))
+          throw new Error("CodeGen: name must be a valid identifier");
+        this.str = s;
+      }
+      toString() {
+        return this.str;
+      }
+      emptyStr() {
+        return false;
+      }
+      get names() {
+        return { [this.str]: 1 };
+      }
+    };
+    exports.Name = Name;
+    var _Code = class extends _CodeOrName {
+      constructor(code) {
+        super();
+        this._items = typeof code === "string" ? [code] : code;
+      }
+      toString() {
+        return this.str;
+      }
+      emptyStr() {
+        if (this._items.length > 1)
+          return false;
+        const item = this._items[0];
+        return item === "" || item === '""';
+      }
+      get str() {
+        var _a;
+        return (_a = this._str) !== null && _a !== void 0 ? _a : this._str = this._items.reduce((s, c) => `${s}${c}`, "");
+      }
+      get names() {
+        var _a;
+        return (_a = this._names) !== null && _a !== void 0 ? _a : this._names = this._items.reduce((names, c) => {
+          if (c instanceof Name)
+            names[c.str] = (names[c.str] || 0) + 1;
+          return names;
+        }, {});
+      }
+    };
+    exports._Code = _Code;
+    exports.nil = new _Code("");
+    function _(strs, ...args) {
+      const code = [strs[0]];
+      let i = 0;
+      while (i < args.length) {
+        addCodeArg(code, args[i]);
+        code.push(strs[++i]);
+      }
+      return new _Code(code);
+    }
+    exports._ = _;
+    var plus = new _Code("+");
+    function str(strs, ...args) {
+      const expr = [safeStringify(strs[0])];
+      let i = 0;
+      while (i < args.length) {
+        expr.push(plus);
+        addCodeArg(expr, args[i]);
+        expr.push(plus, safeStringify(strs[++i]));
+      }
+      optimize(expr);
+      return new _Code(expr);
+    }
+    exports.str = str;
+    function addCodeArg(code, arg) {
+      if (arg instanceof _Code)
+        code.push(...arg._items);
+      else if (arg instanceof Name)
+        code.push(arg);
+      else
+        code.push(interpolate(arg));
+    }
+    exports.addCodeArg = addCodeArg;
+    function optimize(expr) {
+      let i = 1;
+      while (i < expr.length - 1) {
+        if (expr[i] === plus) {
+          const res = mergeExprItems(expr[i - 1], expr[i + 1]);
+          if (res !== void 0) {
+            expr.splice(i - 1, 3, res);
+            continue;
+          }
+          expr[i++] = "+";
+        }
+        i++;
+      }
+    }
+    function mergeExprItems(a, b) {
+      if (b === '""')
+        return a;
+      if (a === '""')
+        return b;
+      if (typeof a == "string") {
+        if (b instanceof Name || a[a.length - 1] !== '"')
+          return;
+        if (typeof b != "string")
+          return `${a.slice(0, -1)}${b}"`;
+        if (b[0] === '"')
+          return a.slice(0, -1) + b.slice(1);
+        return;
+      }
+      if (typeof b == "string" && b[0] === '"' && !(a instanceof Name))
+        return `"${a}${b.slice(1)}`;
+      return;
+    }
+    function strConcat(c1, c2) {
+      return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str`${c1}${c2}`;
+    }
+    exports.strConcat = strConcat;
+    function interpolate(x) {
+      return typeof x == "number" || typeof x == "boolean" || x === null ? x : safeStringify(Array.isArray(x) ? x.join(",") : x);
+    }
+    function stringify2(x) {
+      return new _Code(safeStringify(x));
+    }
+    exports.stringify = stringify2;
+    function safeStringify(x) {
+      return JSON.stringify(x).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+    }
+    exports.safeStringify = safeStringify;
+    function getProperty(key) {
+      return typeof key == "string" && exports.IDENTIFIER.test(key) ? new _Code(`.${key}`) : _`[${key}]`;
+    }
+    exports.getProperty = getProperty;
+    function getEsmExportName(key) {
+      if (typeof key == "string" && exports.IDENTIFIER.test(key)) {
+        return new _Code(`${key}`);
+      }
+      throw new Error(`CodeGen: invalid export name: ${key}, use explicit $id name mapping`);
+    }
+    exports.getEsmExportName = getEsmExportName;
+    function regexpCode(rx) {
+      return new _Code(rx.toString());
+    }
+    exports.regexpCode = regexpCode;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/codegen/scope.js
+var require_scope = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/codegen/scope.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ValueScope = exports.ValueScopeName = exports.Scope = exports.varKinds = exports.UsedValueState = void 0;
+    var code_1 = require_code();
+    var ValueError = class extends Error {
+      constructor(name) {
+        super(`CodeGen: "code" for ${name} not defined`);
+        this.value = name.value;
+      }
+    };
+    var UsedValueState;
+    (function(UsedValueState2) {
+      UsedValueState2[UsedValueState2["Started"] = 0] = "Started";
+      UsedValueState2[UsedValueState2["Completed"] = 1] = "Completed";
+    })(UsedValueState || (exports.UsedValueState = UsedValueState = {}));
+    exports.varKinds = {
+      const: new code_1.Name("const"),
+      let: new code_1.Name("let"),
+      var: new code_1.Name("var")
+    };
+    var Scope = class {
+      constructor({ prefixes, parent } = {}) {
+        this._names = {};
+        this._prefixes = prefixes;
+        this._parent = parent;
+      }
+      toName(nameOrPrefix) {
+        return nameOrPrefix instanceof code_1.Name ? nameOrPrefix : this.name(nameOrPrefix);
+      }
+      name(prefix) {
+        return new code_1.Name(this._newName(prefix));
+      }
+      _newName(prefix) {
+        const ng = this._names[prefix] || this._nameGroup(prefix);
+        return `${prefix}${ng.index++}`;
+      }
+      _nameGroup(prefix) {
+        var _a, _b;
+        if (((_b = (_a = this._parent) === null || _a === void 0 ? void 0 : _a._prefixes) === null || _b === void 0 ? void 0 : _b.has(prefix)) || this._prefixes && !this._prefixes.has(prefix)) {
+          throw new Error(`CodeGen: prefix "${prefix}" is not allowed in this scope`);
+        }
+        return this._names[prefix] = { prefix, index: 0 };
+      }
+    };
+    exports.Scope = Scope;
+    var ValueScopeName = class extends code_1.Name {
+      constructor(prefix, nameStr) {
+        super(nameStr);
+        this.prefix = prefix;
+      }
+      setValue(value, { property, itemIndex }) {
+        this.value = value;
+        this.scopePath = (0, code_1._)`.${new code_1.Name(property)}[${itemIndex}]`;
+      }
+    };
+    exports.ValueScopeName = ValueScopeName;
+    var line = (0, code_1._)`\n`;
+    var ValueScope = class extends Scope {
+      constructor(opts) {
+        super(opts);
+        this._values = {};
+        this._scope = opts.scope;
+        this.opts = { ...opts, _n: opts.lines ? line : code_1.nil };
+      }
+      get() {
+        return this._scope;
+      }
+      name(prefix) {
+        return new ValueScopeName(prefix, this._newName(prefix));
+      }
+      value(nameOrPrefix, value) {
+        var _a;
+        if (value.ref === void 0)
+          throw new Error("CodeGen: ref must be passed in value");
+        const name = this.toName(nameOrPrefix);
+        const { prefix } = name;
+        const valueKey = (_a = value.key) !== null && _a !== void 0 ? _a : value.ref;
+        let vs = this._values[prefix];
+        if (vs) {
+          const _name = vs.get(valueKey);
+          if (_name)
+            return _name;
+        } else {
+          vs = this._values[prefix] = /* @__PURE__ */ new Map();
+        }
+        vs.set(valueKey, name);
+        const s = this._scope[prefix] || (this._scope[prefix] = []);
+        const itemIndex = s.length;
+        s[itemIndex] = value.ref;
+        name.setValue(value, { property: prefix, itemIndex });
+        return name;
+      }
+      getValue(prefix, keyOrRef) {
+        const vs = this._values[prefix];
+        if (!vs)
+          return;
+        return vs.get(keyOrRef);
+      }
+      scopeRefs(scopeName, values = this._values) {
+        return this._reduceValues(values, (name) => {
+          if (name.scopePath === void 0)
+            throw new Error(`CodeGen: name "${name}" has no value`);
+          return (0, code_1._)`${scopeName}${name.scopePath}`;
+        });
+      }
+      scopeCode(values = this._values, usedValues, getCode) {
+        return this._reduceValues(values, (name) => {
+          if (name.value === void 0)
+            throw new Error(`CodeGen: name "${name}" has no value`);
+          return name.value.code;
+        }, usedValues, getCode);
+      }
+      _reduceValues(values, valueCode, usedValues = {}, getCode) {
+        let code = code_1.nil;
+        for (const prefix in values) {
+          const vs = values[prefix];
+          if (!vs)
+            continue;
+          const nameSet = usedValues[prefix] = usedValues[prefix] || /* @__PURE__ */ new Map();
+          vs.forEach((name) => {
+            if (nameSet.has(name))
+              return;
+            nameSet.set(name, UsedValueState.Started);
+            let c = valueCode(name);
+            if (c) {
+              const def = this.opts.es5 ? exports.varKinds.var : exports.varKinds.const;
+              code = (0, code_1._)`${code}${def} ${name} = ${c};${this.opts._n}`;
+            } else if (c = getCode === null || getCode === void 0 ? void 0 : getCode(name)) {
+              code = (0, code_1._)`${code}${c}${this.opts._n}`;
+            } else {
+              throw new ValueError(name);
+            }
+            nameSet.set(name, UsedValueState.Completed);
+          });
+        }
+        return code;
+      }
+    };
+    exports.ValueScope = ValueScope;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/codegen/index.js
+var require_codegen = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/codegen/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.or = exports.and = exports.not = exports.CodeGen = exports.operators = exports.varKinds = exports.ValueScopeName = exports.ValueScope = exports.Scope = exports.Name = exports.regexpCode = exports.stringify = exports.getProperty = exports.nil = exports.strConcat = exports.str = exports._ = void 0;
+    var code_1 = require_code();
+    var scope_1 = require_scope();
+    var code_2 = require_code();
+    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
+      return code_2._;
+    } });
+    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
+      return code_2.str;
+    } });
+    Object.defineProperty(exports, "strConcat", { enumerable: true, get: function() {
+      return code_2.strConcat;
+    } });
+    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
+      return code_2.nil;
+    } });
+    Object.defineProperty(exports, "getProperty", { enumerable: true, get: function() {
+      return code_2.getProperty;
+    } });
+    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
+      return code_2.stringify;
+    } });
+    Object.defineProperty(exports, "regexpCode", { enumerable: true, get: function() {
+      return code_2.regexpCode;
+    } });
+    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
+      return code_2.Name;
+    } });
+    var scope_2 = require_scope();
+    Object.defineProperty(exports, "Scope", { enumerable: true, get: function() {
+      return scope_2.Scope;
+    } });
+    Object.defineProperty(exports, "ValueScope", { enumerable: true, get: function() {
+      return scope_2.ValueScope;
+    } });
+    Object.defineProperty(exports, "ValueScopeName", { enumerable: true, get: function() {
+      return scope_2.ValueScopeName;
+    } });
+    Object.defineProperty(exports, "varKinds", { enumerable: true, get: function() {
+      return scope_2.varKinds;
+    } });
+    exports.operators = {
+      GT: new code_1._Code(">"),
+      GTE: new code_1._Code(">="),
+      LT: new code_1._Code("<"),
+      LTE: new code_1._Code("<="),
+      EQ: new code_1._Code("==="),
+      NEQ: new code_1._Code("!=="),
+      NOT: new code_1._Code("!"),
+      OR: new code_1._Code("||"),
+      AND: new code_1._Code("&&"),
+      ADD: new code_1._Code("+")
+    };
+    var Node = class {
+      optimizeNodes() {
+        return this;
+      }
+      optimizeNames(_names, _constants) {
+        return this;
+      }
+    };
+    var Def = class extends Node {
+      constructor(varKind, name, rhs) {
+        super();
+        this.varKind = varKind;
+        this.name = name;
+        this.rhs = rhs;
+      }
+      render({ es5, _n }) {
+        const varKind = es5 ? scope_1.varKinds.var : this.varKind;
+        const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
+        return `${varKind} ${this.name}${rhs};` + _n;
+      }
+      optimizeNames(names, constants) {
+        if (!names[this.name.str])
+          return;
+        if (this.rhs)
+          this.rhs = optimizeExpr(this.rhs, names, constants);
+        return this;
+      }
+      get names() {
+        return this.rhs instanceof code_1._CodeOrName ? this.rhs.names : {};
+      }
+    };
+    var Assign2 = class extends Node {
+      constructor(lhs, rhs, sideEffects) {
+        super();
+        this.lhs = lhs;
+        this.rhs = rhs;
+        this.sideEffects = sideEffects;
+      }
+      render({ _n }) {
+        return `${this.lhs} = ${this.rhs};` + _n;
+      }
+      optimizeNames(names, constants) {
+        if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
+          return;
+        this.rhs = optimizeExpr(this.rhs, names, constants);
+        return this;
+      }
+      get names() {
+        const names = this.lhs instanceof code_1.Name ? {} : { ...this.lhs.names };
+        return addExprNames(names, this.rhs);
+      }
+    };
+    var AssignOp = class extends Assign2 {
+      constructor(lhs, op, rhs, sideEffects) {
+        super(lhs, rhs, sideEffects);
+        this.op = op;
+      }
+      render({ _n }) {
+        return `${this.lhs} ${this.op}= ${this.rhs};` + _n;
+      }
+    };
+    var Label = class extends Node {
+      constructor(label) {
+        super();
+        this.label = label;
+        this.names = {};
+      }
+      render({ _n }) {
+        return `${this.label}:` + _n;
+      }
+    };
+    var Break = class extends Node {
+      constructor(label) {
+        super();
+        this.label = label;
+        this.names = {};
+      }
+      render({ _n }) {
+        const label = this.label ? ` ${this.label}` : "";
+        return `break${label};` + _n;
+      }
+    };
+    var Throw = class extends Node {
+      constructor(error) {
+        super();
+        this.error = error;
+      }
+      render({ _n }) {
+        return `throw ${this.error};` + _n;
+      }
+      get names() {
+        return this.error.names;
+      }
+    };
+    var AnyCode = class extends Node {
+      constructor(code) {
+        super();
+        this.code = code;
+      }
+      render({ _n }) {
+        return `${this.code};` + _n;
+      }
+      optimizeNodes() {
+        return `${this.code}` ? this : void 0;
+      }
+      optimizeNames(names, constants) {
+        this.code = optimizeExpr(this.code, names, constants);
+        return this;
+      }
+      get names() {
+        return this.code instanceof code_1._CodeOrName ? this.code.names : {};
+      }
+    };
+    var ParentNode = class extends Node {
+      constructor(nodes = []) {
+        super();
+        this.nodes = nodes;
+      }
+      render(opts) {
+        return this.nodes.reduce((code, n) => code + n.render(opts), "");
+      }
+      optimizeNodes() {
+        const { nodes } = this;
+        let i = nodes.length;
+        while (i--) {
+          const n = nodes[i].optimizeNodes();
+          if (Array.isArray(n))
+            nodes.splice(i, 1, ...n);
+          else if (n)
+            nodes[i] = n;
+          else
+            nodes.splice(i, 1);
+        }
+        return nodes.length > 0 ? this : void 0;
+      }
+      optimizeNames(names, constants) {
+        const { nodes } = this;
+        let i = nodes.length;
+        while (i--) {
+          const n = nodes[i];
+          if (n.optimizeNames(names, constants))
+            continue;
+          subtractNames(names, n.names);
+          nodes.splice(i, 1);
+        }
+        return nodes.length > 0 ? this : void 0;
+      }
+      get names() {
+        return this.nodes.reduce((names, n) => addNames(names, n.names), {});
+      }
+    };
+    var BlockNode = class extends ParentNode {
+      render(opts) {
+        return "{" + opts._n + super.render(opts) + "}" + opts._n;
+      }
+    };
+    var Root = class extends ParentNode {
+    };
+    var Else = class extends BlockNode {
+    };
+    Else.kind = "else";
+    var If2 = class _If extends BlockNode {
+      constructor(condition, nodes) {
+        super(nodes);
+        this.condition = condition;
+      }
+      render(opts) {
+        let code = `if(${this.condition})` + super.render(opts);
+        if (this.else)
+          code += "else " + this.else.render(opts);
+        return code;
+      }
+      optimizeNodes() {
+        super.optimizeNodes();
+        const cond = this.condition;
+        if (cond === true)
+          return this.nodes;
+        let e = this.else;
+        if (e) {
+          const ns = e.optimizeNodes();
+          e = this.else = Array.isArray(ns) ? new Else(ns) : ns;
+        }
+        if (e) {
+          if (cond === false)
+            return e instanceof _If ? e : e.nodes;
+          if (this.nodes.length)
+            return this;
+          return new _If(not(cond), e instanceof _If ? [e] : e.nodes);
+        }
+        if (cond === false || !this.nodes.length)
+          return void 0;
+        return this;
+      }
+      optimizeNames(names, constants) {
+        var _a;
+        this.else = (_a = this.else) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants);
+        if (!(super.optimizeNames(names, constants) || this.else))
+          return;
+        this.condition = optimizeExpr(this.condition, names, constants);
+        return this;
+      }
+      get names() {
+        const names = super.names;
+        addExprNames(names, this.condition);
+        if (this.else)
+          addNames(names, this.else.names);
+        return names;
+      }
+    };
+    If2.kind = "if";
+    var For = class extends BlockNode {
+    };
+    For.kind = "for";
+    var ForLoop = class extends For {
+      constructor(iteration) {
+        super();
+        this.iteration = iteration;
+      }
+      render(opts) {
+        return `for(${this.iteration})` + super.render(opts);
+      }
+      optimizeNames(names, constants) {
+        if (!super.optimizeNames(names, constants))
+          return;
+        this.iteration = optimizeExpr(this.iteration, names, constants);
+        return this;
+      }
+      get names() {
+        return addNames(super.names, this.iteration.names);
+      }
+    };
+    var ForRange = class extends For {
+      constructor(varKind, name, from, to) {
+        super();
+        this.varKind = varKind;
+        this.name = name;
+        this.from = from;
+        this.to = to;
+      }
+      render(opts) {
+        const varKind = opts.es5 ? scope_1.varKinds.var : this.varKind;
+        const { name, from, to } = this;
+        return `for(${varKind} ${name}=${from}; ${name}<${to}; ${name}++)` + super.render(opts);
+      }
+      get names() {
+        const names = addExprNames(super.names, this.from);
+        return addExprNames(names, this.to);
+      }
+    };
+    var ForIter = class extends For {
+      constructor(loop, varKind, name, iterable) {
+        super();
+        this.loop = loop;
+        this.varKind = varKind;
+        this.name = name;
+        this.iterable = iterable;
+      }
+      render(opts) {
+        return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
+      }
+      optimizeNames(names, constants) {
+        if (!super.optimizeNames(names, constants))
+          return;
+        this.iterable = optimizeExpr(this.iterable, names, constants);
+        return this;
+      }
+      get names() {
+        return addNames(super.names, this.iterable.names);
+      }
+    };
+    var Func = class extends BlockNode {
+      constructor(name, args, async) {
+        super();
+        this.name = name;
+        this.args = args;
+        this.async = async;
+      }
+      render(opts) {
+        const _async = this.async ? "async " : "";
+        return `${_async}function ${this.name}(${this.args})` + super.render(opts);
+      }
+    };
+    Func.kind = "func";
+    var Return = class extends ParentNode {
+      render(opts) {
+        return "return " + super.render(opts);
+      }
+    };
+    Return.kind = "return";
+    var Try = class extends BlockNode {
+      render(opts) {
+        let code = "try" + super.render(opts);
+        if (this.catch)
+          code += this.catch.render(opts);
+        if (this.finally)
+          code += this.finally.render(opts);
+        return code;
+      }
+      optimizeNodes() {
+        var _a, _b;
+        super.optimizeNodes();
+        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNodes();
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
+        return this;
+      }
+      optimizeNames(names, constants) {
+        var _a, _b;
+        super.optimizeNames(names, constants);
+        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants);
+        return this;
+      }
+      get names() {
+        const names = super.names;
+        if (this.catch)
+          addNames(names, this.catch.names);
+        if (this.finally)
+          addNames(names, this.finally.names);
+        return names;
+      }
+    };
+    var Catch = class extends BlockNode {
+      constructor(error) {
+        super();
+        this.error = error;
+      }
+      render(opts) {
+        return `catch(${this.error})` + super.render(opts);
+      }
+    };
+    Catch.kind = "catch";
+    var Finally = class extends BlockNode {
+      render(opts) {
+        return "finally" + super.render(opts);
+      }
+    };
+    Finally.kind = "finally";
+    var CodeGen = class {
+      constructor(extScope, opts = {}) {
+        this._values = {};
+        this._blockStarts = [];
+        this._constants = {};
+        this.opts = { ...opts, _n: opts.lines ? "\n" : "" };
+        this._extScope = extScope;
+        this._scope = new scope_1.Scope({ parent: extScope });
+        this._nodes = [new Root()];
+      }
+      toString() {
+        return this._root.render(this.opts);
+      }
+      // returns unique name in the internal scope
+      name(prefix) {
+        return this._scope.name(prefix);
+      }
+      // reserves unique name in the external scope
+      scopeName(prefix) {
+        return this._extScope.name(prefix);
+      }
+      // reserves unique name in the external scope and assigns value to it
+      scopeValue(prefixOrName, value) {
+        const name = this._extScope.value(prefixOrName, value);
+        const vs = this._values[name.prefix] || (this._values[name.prefix] = /* @__PURE__ */ new Set());
+        vs.add(name);
+        return name;
+      }
+      getScopeValue(prefix, keyOrRef) {
+        return this._extScope.getValue(prefix, keyOrRef);
+      }
+      // return code that assigns values in the external scope to the names that are used internally
+      // (same names that were returned by gen.scopeName or gen.scopeValue)
+      scopeRefs(scopeName) {
+        return this._extScope.scopeRefs(scopeName, this._values);
+      }
+      scopeCode() {
+        return this._extScope.scopeCode(this._values);
+      }
+      _def(varKind, nameOrPrefix, rhs, constant) {
+        const name = this._scope.toName(nameOrPrefix);
+        if (rhs !== void 0 && constant)
+          this._constants[name.str] = rhs;
+        this._leafNode(new Def(varKind, name, rhs));
+        return name;
+      }
+      // `const` declaration (`var` in es5 mode)
+      const(nameOrPrefix, rhs, _constant) {
+        return this._def(scope_1.varKinds.const, nameOrPrefix, rhs, _constant);
+      }
+      // `let` declaration with optional assignment (`var` in es5 mode)
+      let(nameOrPrefix, rhs, _constant) {
+        return this._def(scope_1.varKinds.let, nameOrPrefix, rhs, _constant);
+      }
+      // `var` declaration with optional assignment
+      var(nameOrPrefix, rhs, _constant) {
+        return this._def(scope_1.varKinds.var, nameOrPrefix, rhs, _constant);
+      }
+      // assignment code
+      assign(lhs, rhs, sideEffects) {
+        return this._leafNode(new Assign2(lhs, rhs, sideEffects));
+      }
+      // `+=` code
+      add(lhs, rhs) {
+        return this._leafNode(new AssignOp(lhs, exports.operators.ADD, rhs));
+      }
+      // appends passed SafeExpr to code or executes Block
+      code(c) {
+        if (typeof c == "function")
+          c();
+        else if (c !== code_1.nil)
+          this._leafNode(new AnyCode(c));
+        return this;
+      }
+      // returns code for object literal for the passed argument list of key-value pairs
+      object(...keyValues) {
+        const code = ["{"];
+        for (const [key, value] of keyValues) {
+          if (code.length > 1)
+            code.push(",");
+          code.push(key);
+          if (key !== value || this.opts.es5) {
+            code.push(":");
+            (0, code_1.addCodeArg)(code, value);
+          }
+        }
+        code.push("}");
+        return new code_1._Code(code);
+      }
+      // `if` clause (or statement if `thenBody` and, optionally, `elseBody` are passed)
+      if(condition, thenBody, elseBody) {
+        this._blockNode(new If2(condition));
+        if (thenBody && elseBody) {
+          this.code(thenBody).else().code(elseBody).endIf();
+        } else if (thenBody) {
+          this.code(thenBody).endIf();
+        } else if (elseBody) {
+          throw new Error('CodeGen: "else" body without "then" body');
+        }
+        return this;
+      }
+      // `else if` clause - invalid without `if` or after `else` clauses
+      elseIf(condition) {
+        return this._elseNode(new If2(condition));
+      }
+      // `else` clause - only valid after `if` or `else if` clauses
+      else() {
+        return this._elseNode(new Else());
+      }
+      // end `if` statement (needed if gen.if was used only with condition)
+      endIf() {
+        return this._endBlockNode(If2, Else);
+      }
+      _for(node, forBody) {
+        this._blockNode(node);
+        if (forBody)
+          this.code(forBody).endFor();
+        return this;
+      }
+      // a generic `for` clause (or statement if `forBody` is passed)
+      for(iteration, forBody) {
+        return this._for(new ForLoop(iteration), forBody);
+      }
+      // `for` statement for a range of values
+      forRange(nameOrPrefix, from, to, forBody, varKind = this.opts.es5 ? scope_1.varKinds.var : scope_1.varKinds.let) {
+        const name = this._scope.toName(nameOrPrefix);
+        return this._for(new ForRange(varKind, name, from, to), () => forBody(name));
+      }
+      // `for-of` statement (in es5 mode replace with a normal for loop)
+      forOf(nameOrPrefix, iterable, forBody, varKind = scope_1.varKinds.const) {
+        const name = this._scope.toName(nameOrPrefix);
+        if (this.opts.es5) {
+          const arr = iterable instanceof code_1.Name ? iterable : this.var("_arr", iterable);
+          return this.forRange("_i", 0, (0, code_1._)`${arr}.length`, (i) => {
+            this.var(name, (0, code_1._)`${arr}[${i}]`);
+            forBody(name);
+          });
+        }
+        return this._for(new ForIter("of", varKind, name, iterable), () => forBody(name));
+      }
+      // `for-in` statement.
+      // With option `ownProperties` replaced with a `for-of` loop for object keys
+      forIn(nameOrPrefix, obj, forBody, varKind = this.opts.es5 ? scope_1.varKinds.var : scope_1.varKinds.const) {
+        if (this.opts.ownProperties) {
+          return this.forOf(nameOrPrefix, (0, code_1._)`Object.keys(${obj})`, forBody);
+        }
+        const name = this._scope.toName(nameOrPrefix);
+        return this._for(new ForIter("in", varKind, name, obj), () => forBody(name));
+      }
+      // end `for` loop
+      endFor() {
+        return this._endBlockNode(For);
+      }
+      // `label` statement
+      label(label) {
+        return this._leafNode(new Label(label));
+      }
+      // `break` statement
+      break(label) {
+        return this._leafNode(new Break(label));
+      }
+      // `return` statement
+      return(value) {
+        const node = new Return();
+        this._blockNode(node);
+        this.code(value);
+        if (node.nodes.length !== 1)
+          throw new Error('CodeGen: "return" should have one node');
+        return this._endBlockNode(Return);
+      }
+      // `try` statement
+      try(tryBody, catchCode, finallyCode) {
+        if (!catchCode && !finallyCode)
+          throw new Error('CodeGen: "try" without "catch" and "finally"');
+        const node = new Try();
+        this._blockNode(node);
+        this.code(tryBody);
+        if (catchCode) {
+          const error = this.name("e");
+          this._currNode = node.catch = new Catch(error);
+          catchCode(error);
+        }
+        if (finallyCode) {
+          this._currNode = node.finally = new Finally();
+          this.code(finallyCode);
+        }
+        return this._endBlockNode(Catch, Finally);
+      }
+      // `throw` statement
+      throw(error) {
+        return this._leafNode(new Throw(error));
+      }
+      // start self-balancing block
+      block(body, nodeCount) {
+        this._blockStarts.push(this._nodes.length);
+        if (body)
+          this.code(body).endBlock(nodeCount);
+        return this;
+      }
+      // end the current self-balancing block
+      endBlock(nodeCount) {
+        const len = this._blockStarts.pop();
+        if (len === void 0)
+          throw new Error("CodeGen: not in self-balancing block");
+        const toClose = this._nodes.length - len;
+        if (toClose < 0 || nodeCount !== void 0 && toClose !== nodeCount) {
+          throw new Error(`CodeGen: wrong number of nodes: ${toClose} vs ${nodeCount} expected`);
+        }
+        this._nodes.length = len;
+        return this;
+      }
+      // `function` heading (or definition if funcBody is passed)
+      func(name, args = code_1.nil, async, funcBody) {
+        this._blockNode(new Func(name, args, async));
+        if (funcBody)
+          this.code(funcBody).endFunc();
+        return this;
+      }
+      // end function definition
+      endFunc() {
+        return this._endBlockNode(Func);
+      }
+      optimize(n = 1) {
+        while (n-- > 0) {
+          this._root.optimizeNodes();
+          this._root.optimizeNames(this._root.names, this._constants);
+        }
+      }
+      _leafNode(node) {
+        this._currNode.nodes.push(node);
+        return this;
+      }
+      _blockNode(node) {
+        this._currNode.nodes.push(node);
+        this._nodes.push(node);
+      }
+      _endBlockNode(N1, N2) {
+        const n = this._currNode;
+        if (n instanceof N1 || N2 && n instanceof N2) {
+          this._nodes.pop();
+          return this;
+        }
+        throw new Error(`CodeGen: not in block "${N2 ? `${N1.kind}/${N2.kind}` : N1.kind}"`);
+      }
+      _elseNode(node) {
+        const n = this._currNode;
+        if (!(n instanceof If2)) {
+          throw new Error('CodeGen: "else" without "if"');
+        }
+        this._currNode = n.else = node;
+        return this;
+      }
+      get _root() {
+        return this._nodes[0];
+      }
+      get _currNode() {
+        const ns = this._nodes;
+        return ns[ns.length - 1];
+      }
+      set _currNode(node) {
+        const ns = this._nodes;
+        ns[ns.length - 1] = node;
+      }
+    };
+    exports.CodeGen = CodeGen;
+    function addNames(names, from) {
+      for (const n in from)
+        names[n] = (names[n] || 0) + (from[n] || 0);
+      return names;
+    }
+    function addExprNames(names, from) {
+      return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
+    }
+    function optimizeExpr(expr, names, constants) {
+      if (expr instanceof code_1.Name)
+        return replaceName(expr);
+      if (!canOptimize(expr))
+        return expr;
+      return new code_1._Code(expr._items.reduce((items, c) => {
+        if (c instanceof code_1.Name)
+          c = replaceName(c);
+        if (c instanceof code_1._Code)
+          items.push(...c._items);
+        else
+          items.push(c);
+        return items;
+      }, []));
+      function replaceName(n) {
+        const c = constants[n.str];
+        if (c === void 0 || names[n.str] !== 1)
+          return n;
+        delete names[n.str];
+        return c;
+      }
+      function canOptimize(e) {
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants[c.str] !== void 0);
+      }
+    }
+    function subtractNames(names, from) {
+      for (const n in from)
+        names[n] = (names[n] || 0) - (from[n] || 0);
+    }
+    function not(x) {
+      return typeof x == "boolean" || typeof x == "number" || x === null ? !x : (0, code_1._)`!${par(x)}`;
+    }
+    exports.not = not;
+    var andCode = mappend(exports.operators.AND);
+    function and(...args) {
+      return args.reduce(andCode);
+    }
+    exports.and = and;
+    var orCode = mappend(exports.operators.OR);
+    function or(...args) {
+      return args.reduce(orCode);
+    }
+    exports.or = or;
+    function mappend(op) {
+      return (x, y) => x === code_1.nil ? y : y === code_1.nil ? x : (0, code_1._)`${par(x)} ${op} ${par(y)}`;
+    }
+    function par(x) {
+      return x instanceof code_1.Name ? x : (0, code_1._)`(${x})`;
+    }
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/util.js
+var require_util = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/util.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.checkStrictMode = exports.getErrorPath = exports.Type = exports.useFunc = exports.setEvaluated = exports.evaluatedPropsToName = exports.mergeEvaluated = exports.eachItem = exports.unescapeJsonPointer = exports.escapeJsonPointer = exports.escapeFragment = exports.unescapeFragment = exports.schemaRefOrVal = exports.schemaHasRulesButRef = exports.schemaHasRules = exports.checkUnknownRules = exports.alwaysValidSchema = exports.toHash = void 0;
+    var codegen_1 = require_codegen();
+    var code_1 = require_code();
+    function toHash(arr) {
+      const hash = {};
+      for (const item of arr)
+        hash[item] = true;
+      return hash;
+    }
+    exports.toHash = toHash;
+    function alwaysValidSchema(it, schema) {
+      if (typeof schema == "boolean")
+        return schema;
+      if (Object.keys(schema).length === 0)
+        return true;
+      checkUnknownRules(it, schema);
+      return !schemaHasRules(schema, it.self.RULES.all);
+    }
+    exports.alwaysValidSchema = alwaysValidSchema;
+    function checkUnknownRules(it, schema = it.schema) {
+      const { opts, self } = it;
+      if (!opts.strictSchema)
+        return;
+      if (typeof schema === "boolean")
+        return;
+      const rules = self.RULES.keywords;
+      for (const key in schema) {
+        if (!rules[key])
+          checkStrictMode(it, `unknown keyword: "${key}"`);
+      }
+    }
+    exports.checkUnknownRules = checkUnknownRules;
+    function schemaHasRules(schema, rules) {
+      if (typeof schema == "boolean")
+        return !schema;
+      for (const key in schema)
+        if (rules[key])
+          return true;
+      return false;
+    }
+    exports.schemaHasRules = schemaHasRules;
+    function schemaHasRulesButRef(schema, RULES) {
+      if (typeof schema == "boolean")
+        return !schema;
+      for (const key in schema)
+        if (key !== "$ref" && RULES.all[key])
+          return true;
+      return false;
+    }
+    exports.schemaHasRulesButRef = schemaHasRulesButRef;
+    function schemaRefOrVal({ topSchemaRef, schemaPath }, schema, keyword, $data) {
+      if (!$data) {
+        if (typeof schema == "number" || typeof schema == "boolean")
+          return schema;
+        if (typeof schema == "string")
+          return (0, codegen_1._)`${schema}`;
+      }
+      return (0, codegen_1._)`${topSchemaRef}${schemaPath}${(0, codegen_1.getProperty)(keyword)}`;
+    }
+    exports.schemaRefOrVal = schemaRefOrVal;
+    function unescapeFragment(str) {
+      return unescapeJsonPointer(decodeURIComponent(str));
+    }
+    exports.unescapeFragment = unescapeFragment;
+    function escapeFragment(str) {
+      return encodeURIComponent(escapeJsonPointer(str));
+    }
+    exports.escapeFragment = escapeFragment;
+    function escapeJsonPointer(str) {
+      if (typeof str == "number")
+        return `${str}`;
+      return str.replace(/~/g, "~0").replace(/\//g, "~1");
+    }
+    exports.escapeJsonPointer = escapeJsonPointer;
+    function unescapeJsonPointer(str) {
+      return str.replace(/~1/g, "/").replace(/~0/g, "~");
+    }
+    exports.unescapeJsonPointer = unescapeJsonPointer;
+    function eachItem(xs, f) {
+      if (Array.isArray(xs)) {
+        for (const x of xs)
+          f(x);
+      } else {
+        f(xs);
+      }
+    }
+    exports.eachItem = eachItem;
+    function makeMergeEvaluated({ mergeNames, mergeToName, mergeValues, resultToName }) {
+      return (gen, from, to, toName) => {
+        const res = to === void 0 ? from : to instanceof codegen_1.Name ? (from instanceof codegen_1.Name ? mergeNames(gen, from, to) : mergeToName(gen, from, to), to) : from instanceof codegen_1.Name ? (mergeToName(gen, to, from), from) : mergeValues(from, to);
+        return toName === codegen_1.Name && !(res instanceof codegen_1.Name) ? resultToName(gen, res) : res;
+      };
+    }
+    exports.mergeEvaluated = {
+      props: makeMergeEvaluated({
+        mergeNames: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true && ${from} !== undefined`, () => {
+          gen.if((0, codegen_1._)`${from} === true`, () => gen.assign(to, true), () => gen.assign(to, (0, codegen_1._)`${to} || {}`).code((0, codegen_1._)`Object.assign(${to}, ${from})`));
+        }),
+        mergeToName: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true`, () => {
+          if (from === true) {
+            gen.assign(to, true);
+          } else {
+            gen.assign(to, (0, codegen_1._)`${to} || {}`);
+            setEvaluated(gen, to, from);
+          }
+        }),
+        mergeValues: (from, to) => from === true ? true : { ...from, ...to },
+        resultToName: evaluatedPropsToName
+      }),
+      items: makeMergeEvaluated({
+        mergeNames: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true && ${from} !== undefined`, () => gen.assign(to, (0, codegen_1._)`${from} === true ? true : ${to} > ${from} ? ${to} : ${from}`)),
+        mergeToName: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true`, () => gen.assign(to, from === true ? true : (0, codegen_1._)`${to} > ${from} ? ${to} : ${from}`)),
+        mergeValues: (from, to) => from === true ? true : Math.max(from, to),
+        resultToName: (gen, items) => gen.var("items", items)
+      })
+    };
+    function evaluatedPropsToName(gen, ps) {
+      if (ps === true)
+        return gen.var("props", true);
+      const props = gen.var("props", (0, codegen_1._)`{}`);
+      if (ps !== void 0)
+        setEvaluated(gen, props, ps);
+      return props;
+    }
+    exports.evaluatedPropsToName = evaluatedPropsToName;
+    function setEvaluated(gen, props, ps) {
+      Object.keys(ps).forEach((p) => gen.assign((0, codegen_1._)`${props}${(0, codegen_1.getProperty)(p)}`, true));
+    }
+    exports.setEvaluated = setEvaluated;
+    var snippets = {};
+    function useFunc(gen, f) {
+      return gen.scopeValue("func", {
+        ref: f,
+        code: snippets[f.code] || (snippets[f.code] = new code_1._Code(f.code))
+      });
+    }
+    exports.useFunc = useFunc;
+    var Type2;
+    (function(Type3) {
+      Type3[Type3["Num"] = 0] = "Num";
+      Type3[Type3["Str"] = 1] = "Str";
+    })(Type2 || (exports.Type = Type2 = {}));
+    function getErrorPath(dataProp, dataPropType, jsPropertySyntax) {
+      if (dataProp instanceof codegen_1.Name) {
+        const isNumber = dataPropType === Type2.Num;
+        return jsPropertySyntax ? isNumber ? (0, codegen_1._)`"[" + ${dataProp} + "]"` : (0, codegen_1._)`"['" + ${dataProp} + "']"` : isNumber ? (0, codegen_1._)`"/" + ${dataProp}` : (0, codegen_1._)`"/" + ${dataProp}.replace(/~/g, "~0").replace(/\\//g, "~1")`;
+      }
+      return jsPropertySyntax ? (0, codegen_1.getProperty)(dataProp).toString() : "/" + escapeJsonPointer(dataProp);
+    }
+    exports.getErrorPath = getErrorPath;
+    function checkStrictMode(it, msg, mode = it.opts.strictSchema) {
+      if (!mode)
+        return;
+      msg = `strict mode: ${msg}`;
+      if (mode === true)
+        throw new Error(msg);
+      it.self.logger.warn(msg);
+    }
+    exports.checkStrictMode = checkStrictMode;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/names.js
+var require_names = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/names.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var names = {
+      // validation function arguments
+      data: new codegen_1.Name("data"),
+      // data passed to validation function
+      // args passed from referencing schema
+      valCxt: new codegen_1.Name("valCxt"),
+      // validation/data context - should not be used directly, it is destructured to the names below
+      instancePath: new codegen_1.Name("instancePath"),
+      parentData: new codegen_1.Name("parentData"),
+      parentDataProperty: new codegen_1.Name("parentDataProperty"),
+      rootData: new codegen_1.Name("rootData"),
+      // root data - same as the data passed to the first/top validation function
+      dynamicAnchors: new codegen_1.Name("dynamicAnchors"),
+      // used to support recursiveRef and dynamicRef
+      // function scoped variables
+      vErrors: new codegen_1.Name("vErrors"),
+      // null or array of validation errors
+      errors: new codegen_1.Name("errors"),
+      // counter of validation errors
+      this: new codegen_1.Name("this"),
+      // "globals"
+      self: new codegen_1.Name("self"),
+      scope: new codegen_1.Name("scope"),
+      // JTD serialize/parse name for JSON string and position
+      json: new codegen_1.Name("json"),
+      jsonPos: new codegen_1.Name("jsonPos"),
+      jsonLen: new codegen_1.Name("jsonLen"),
+      jsonPart: new codegen_1.Name("jsonPart")
+    };
+    exports.default = names;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/errors.js
+var require_errors = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/errors.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.extendErrors = exports.resetErrorsCount = exports.reportExtraError = exports.reportError = exports.keyword$DataError = exports.keywordError = void 0;
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var names_1 = require_names();
+    exports.keywordError = {
+      message: ({ keyword }) => (0, codegen_1.str)`must pass "${keyword}" keyword validation`
+    };
+    exports.keyword$DataError = {
+      message: ({ keyword, schemaType }) => schemaType ? (0, codegen_1.str)`"${keyword}" keyword must be ${schemaType} ($data)` : (0, codegen_1.str)`"${keyword}" keyword is invalid ($data)`
+    };
+    function reportError(cxt, error = exports.keywordError, errorPaths, overrideAllErrors) {
+      const { it } = cxt;
+      const { gen, compositeRule, allErrors } = it;
+      const errObj = errorObjectCode(cxt, error, errorPaths);
+      if (overrideAllErrors !== null && overrideAllErrors !== void 0 ? overrideAllErrors : compositeRule || allErrors) {
+        addError(gen, errObj);
+      } else {
+        returnErrors(it, (0, codegen_1._)`[${errObj}]`);
+      }
+    }
+    exports.reportError = reportError;
+    function reportExtraError(cxt, error = exports.keywordError, errorPaths) {
+      const { it } = cxt;
+      const { gen, compositeRule, allErrors } = it;
+      const errObj = errorObjectCode(cxt, error, errorPaths);
+      addError(gen, errObj);
+      if (!(compositeRule || allErrors)) {
+        returnErrors(it, names_1.default.vErrors);
+      }
+    }
+    exports.reportExtraError = reportExtraError;
+    function resetErrorsCount(gen, errsCount) {
+      gen.assign(names_1.default.errors, errsCount);
+      gen.if((0, codegen_1._)`${names_1.default.vErrors} !== null`, () => gen.if(errsCount, () => gen.assign((0, codegen_1._)`${names_1.default.vErrors}.length`, errsCount), () => gen.assign(names_1.default.vErrors, null)));
+    }
+    exports.resetErrorsCount = resetErrorsCount;
+    function extendErrors({ gen, keyword, schemaValue, data, errsCount, it }) {
+      if (errsCount === void 0)
+        throw new Error("ajv implementation error");
+      const err = gen.name("err");
+      gen.forRange("i", errsCount, names_1.default.errors, (i) => {
+        gen.const(err, (0, codegen_1._)`${names_1.default.vErrors}[${i}]`);
+        gen.if((0, codegen_1._)`${err}.instancePath === undefined`, () => gen.assign((0, codegen_1._)`${err}.instancePath`, (0, codegen_1.strConcat)(names_1.default.instancePath, it.errorPath)));
+        gen.assign((0, codegen_1._)`${err}.schemaPath`, (0, codegen_1.str)`${it.errSchemaPath}/${keyword}`);
+        if (it.opts.verbose) {
+          gen.assign((0, codegen_1._)`${err}.schema`, schemaValue);
+          gen.assign((0, codegen_1._)`${err}.data`, data);
+        }
+      });
+    }
+    exports.extendErrors = extendErrors;
+    function addError(gen, errObj) {
+      const err = gen.const("err", errObj);
+      gen.if((0, codegen_1._)`${names_1.default.vErrors} === null`, () => gen.assign(names_1.default.vErrors, (0, codegen_1._)`[${err}]`), (0, codegen_1._)`${names_1.default.vErrors}.push(${err})`);
+      gen.code((0, codegen_1._)`${names_1.default.errors}++`);
+    }
+    function returnErrors(it, errs) {
+      const { gen, validateName, schemaEnv } = it;
+      if (schemaEnv.$async) {
+        gen.throw((0, codegen_1._)`new ${it.ValidationError}(${errs})`);
+      } else {
+        gen.assign((0, codegen_1._)`${validateName}.errors`, errs);
+        gen.return(false);
+      }
+    }
+    var E = {
+      keyword: new codegen_1.Name("keyword"),
+      schemaPath: new codegen_1.Name("schemaPath"),
+      // also used in JTD errors
+      params: new codegen_1.Name("params"),
+      propertyName: new codegen_1.Name("propertyName"),
+      message: new codegen_1.Name("message"),
+      schema: new codegen_1.Name("schema"),
+      parentSchema: new codegen_1.Name("parentSchema")
+    };
+    function errorObjectCode(cxt, error, errorPaths) {
+      const { createErrors } = cxt.it;
+      if (createErrors === false)
+        return (0, codegen_1._)`{}`;
+      return errorObject(cxt, error, errorPaths);
+    }
+    function errorObject(cxt, error, errorPaths = {}) {
+      const { gen, it } = cxt;
+      const keyValues = [
+        errorInstancePath(it, errorPaths),
+        errorSchemaPath(cxt, errorPaths)
+      ];
+      extraErrorProps(cxt, error, keyValues);
+      return gen.object(...keyValues);
+    }
+    function errorInstancePath({ errorPath }, { instancePath }) {
+      const instPath = instancePath ? (0, codegen_1.str)`${errorPath}${(0, util_1.getErrorPath)(instancePath, util_1.Type.Str)}` : errorPath;
+      return [names_1.default.instancePath, (0, codegen_1.strConcat)(names_1.default.instancePath, instPath)];
+    }
+    function errorSchemaPath({ keyword, it: { errSchemaPath } }, { schemaPath, parentSchema }) {
+      let schPath = parentSchema ? errSchemaPath : (0, codegen_1.str)`${errSchemaPath}/${keyword}`;
+      if (schemaPath) {
+        schPath = (0, codegen_1.str)`${schPath}${(0, util_1.getErrorPath)(schemaPath, util_1.Type.Str)}`;
+      }
+      return [E.schemaPath, schPath];
+    }
+    function extraErrorProps(cxt, { params, message }, keyValues) {
+      const { keyword, data, schemaValue, it } = cxt;
+      const { opts, propertyName, topSchemaRef, schemaPath } = it;
+      keyValues.push([E.keyword, keyword], [E.params, typeof params == "function" ? params(cxt) : params || (0, codegen_1._)`{}`]);
+      if (opts.messages) {
+        keyValues.push([E.message, typeof message == "function" ? message(cxt) : message]);
+      }
+      if (opts.verbose) {
+        keyValues.push([E.schema, schemaValue], [E.parentSchema, (0, codegen_1._)`${topSchemaRef}${schemaPath}`], [names_1.default.data, data]);
+      }
+      if (propertyName)
+        keyValues.push([E.propertyName, propertyName]);
+    }
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/boolSchema.js
+var require_boolSchema = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/boolSchema.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.boolOrEmptySchema = exports.topBoolOrEmptySchema = void 0;
+    var errors_1 = require_errors();
+    var codegen_1 = require_codegen();
+    var names_1 = require_names();
+    var boolError = {
+      message: "boolean schema is false"
+    };
+    function topBoolOrEmptySchema(it) {
+      const { gen, schema, validateName } = it;
+      if (schema === false) {
+        falseSchemaError(it, false);
+      } else if (typeof schema == "object" && schema.$async === true) {
+        gen.return(names_1.default.data);
+      } else {
+        gen.assign((0, codegen_1._)`${validateName}.errors`, null);
+        gen.return(true);
+      }
+    }
+    exports.topBoolOrEmptySchema = topBoolOrEmptySchema;
+    function boolOrEmptySchema(it, valid) {
+      const { gen, schema } = it;
+      if (schema === false) {
+        gen.var(valid, false);
+        falseSchemaError(it);
+      } else {
+        gen.var(valid, true);
+      }
+    }
+    exports.boolOrEmptySchema = boolOrEmptySchema;
+    function falseSchemaError(it, overrideAllErrors) {
+      const { gen, data } = it;
+      const cxt = {
+        gen,
+        keyword: "false schema",
+        data,
+        schema: false,
+        schemaCode: false,
+        schemaValue: false,
+        params: {},
+        it
+      };
+      (0, errors_1.reportError)(cxt, boolError, void 0, overrideAllErrors);
+    }
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/rules.js
+var require_rules = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/rules.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getRules = exports.isJSONType = void 0;
+    var _jsonTypes = ["string", "number", "integer", "boolean", "null", "object", "array"];
+    var jsonTypes = new Set(_jsonTypes);
+    function isJSONType(x) {
+      return typeof x == "string" && jsonTypes.has(x);
+    }
+    exports.isJSONType = isJSONType;
+    function getRules() {
+      const groups = {
+        number: { type: "number", rules: [] },
+        string: { type: "string", rules: [] },
+        array: { type: "array", rules: [] },
+        object: { type: "object", rules: [] }
+      };
+      return {
+        types: { ...groups, integer: true, boolean: true, null: true },
+        rules: [{ rules: [] }, groups.number, groups.string, groups.array, groups.object],
+        post: { rules: [] },
+        all: {},
+        keywords: {}
+      };
+    }
+    exports.getRules = getRules;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/applicability.js
+var require_applicability = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/applicability.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.shouldUseRule = exports.shouldUseGroup = exports.schemaHasRulesForType = void 0;
+    function schemaHasRulesForType({ schema, self }, type) {
+      const group = self.RULES.types[type];
+      return group && group !== true && shouldUseGroup(schema, group);
+    }
+    exports.schemaHasRulesForType = schemaHasRulesForType;
+    function shouldUseGroup(schema, group) {
+      return group.rules.some((rule) => shouldUseRule(schema, rule));
+    }
+    exports.shouldUseGroup = shouldUseGroup;
+    function shouldUseRule(schema, rule) {
+      var _a;
+      return schema[rule.keyword] !== void 0 || ((_a = rule.definition.implements) === null || _a === void 0 ? void 0 : _a.some((kwd) => schema[kwd] !== void 0));
+    }
+    exports.shouldUseRule = shouldUseRule;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/dataType.js
+var require_dataType = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/dataType.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.reportTypeError = exports.checkDataTypes = exports.checkDataType = exports.coerceAndCheckDataType = exports.getJSONTypes = exports.getSchemaTypes = exports.DataType = void 0;
+    var rules_1 = require_rules();
+    var applicability_1 = require_applicability();
+    var errors_1 = require_errors();
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var DataType;
+    (function(DataType2) {
+      DataType2[DataType2["Correct"] = 0] = "Correct";
+      DataType2[DataType2["Wrong"] = 1] = "Wrong";
+    })(DataType || (exports.DataType = DataType = {}));
+    function getSchemaTypes(schema) {
+      const types = getJSONTypes(schema.type);
+      const hasNull = types.includes("null");
+      if (hasNull) {
+        if (schema.nullable === false)
+          throw new Error("type: null contradicts nullable: false");
+      } else {
+        if (!types.length && schema.nullable !== void 0) {
+          throw new Error('"nullable" cannot be used without "type"');
+        }
+        if (schema.nullable === true)
+          types.push("null");
+      }
+      return types;
+    }
+    exports.getSchemaTypes = getSchemaTypes;
+    function getJSONTypes(ts) {
+      const types = Array.isArray(ts) ? ts : ts ? [ts] : [];
+      if (types.every(rules_1.isJSONType))
+        return types;
+      throw new Error("type must be JSONType or JSONType[]: " + types.join(","));
+    }
+    exports.getJSONTypes = getJSONTypes;
+    function coerceAndCheckDataType(it, types) {
+      const { gen, data, opts } = it;
+      const coerceTo = coerceToTypes(types, opts.coerceTypes);
+      const checkTypes = types.length > 0 && !(coerceTo.length === 0 && types.length === 1 && (0, applicability_1.schemaHasRulesForType)(it, types[0]));
+      if (checkTypes) {
+        const wrongType = checkDataTypes(types, data, opts.strictNumbers, DataType.Wrong);
+        gen.if(wrongType, () => {
+          if (coerceTo.length)
+            coerceData(it, types, coerceTo);
+          else
+            reportTypeError(it);
+        });
+      }
+      return checkTypes;
+    }
+    exports.coerceAndCheckDataType = coerceAndCheckDataType;
+    var COERCIBLE = /* @__PURE__ */ new Set(["string", "number", "integer", "boolean", "null"]);
+    function coerceToTypes(types, coerceTypes) {
+      return coerceTypes ? types.filter((t) => COERCIBLE.has(t) || coerceTypes === "array" && t === "array") : [];
+    }
+    function coerceData(it, types, coerceTo) {
+      const { gen, data, opts } = it;
+      const dataType = gen.let("dataType", (0, codegen_1._)`typeof ${data}`);
+      const coerced = gen.let("coerced", (0, codegen_1._)`undefined`);
+      if (opts.coerceTypes === "array") {
+        gen.if((0, codegen_1._)`${dataType} == 'object' && Array.isArray(${data}) && ${data}.length == 1`, () => gen.assign(data, (0, codegen_1._)`${data}[0]`).assign(dataType, (0, codegen_1._)`typeof ${data}`).if(checkDataTypes(types, data, opts.strictNumbers), () => gen.assign(coerced, data)));
+      }
+      gen.if((0, codegen_1._)`${coerced} !== undefined`);
+      for (const t of coerceTo) {
+        if (COERCIBLE.has(t) || t === "array" && opts.coerceTypes === "array") {
+          coerceSpecificType(t);
+        }
+      }
+      gen.else();
+      reportTypeError(it);
+      gen.endIf();
+      gen.if((0, codegen_1._)`${coerced} !== undefined`, () => {
+        gen.assign(data, coerced);
+        assignParentData(it, coerced);
+      });
+      function coerceSpecificType(t) {
+        switch (t) {
+          case "string":
+            gen.elseIf((0, codegen_1._)`${dataType} == "number" || ${dataType} == "boolean"`).assign(coerced, (0, codegen_1._)`"" + ${data}`).elseIf((0, codegen_1._)`${data} === null`).assign(coerced, (0, codegen_1._)`""`);
+            return;
+          case "number":
+            gen.elseIf((0, codegen_1._)`${dataType} == "boolean" || ${data} === null
+              || (${dataType} == "string" && ${data} && ${data} == +${data})`).assign(coerced, (0, codegen_1._)`+${data}`);
+            return;
+          case "integer":
+            gen.elseIf((0, codegen_1._)`${dataType} === "boolean" || ${data} === null
+              || (${dataType} === "string" && ${data} && ${data} == +${data} && !(${data} % 1))`).assign(coerced, (0, codegen_1._)`+${data}`);
+            return;
+          case "boolean":
+            gen.elseIf((0, codegen_1._)`${data} === "false" || ${data} === 0 || ${data} === null`).assign(coerced, false).elseIf((0, codegen_1._)`${data} === "true" || ${data} === 1`).assign(coerced, true);
+            return;
+          case "null":
+            gen.elseIf((0, codegen_1._)`${data} === "" || ${data} === 0 || ${data} === false`);
+            gen.assign(coerced, null);
+            return;
+          case "array":
+            gen.elseIf((0, codegen_1._)`${dataType} === "string" || ${dataType} === "number"
+              || ${dataType} === "boolean" || ${data} === null`).assign(coerced, (0, codegen_1._)`[${data}]`);
+        }
+      }
+    }
+    function assignParentData({ gen, parentData, parentDataProperty }, expr) {
+      gen.if((0, codegen_1._)`${parentData} !== undefined`, () => gen.assign((0, codegen_1._)`${parentData}[${parentDataProperty}]`, expr));
+    }
+    function checkDataType(dataType, data, strictNums, correct = DataType.Correct) {
+      const EQ = correct === DataType.Correct ? codegen_1.operators.EQ : codegen_1.operators.NEQ;
+      let cond;
+      switch (dataType) {
+        case "null":
+          return (0, codegen_1._)`${data} ${EQ} null`;
+        case "array":
+          cond = (0, codegen_1._)`Array.isArray(${data})`;
+          break;
+        case "object":
+          cond = (0, codegen_1._)`${data} && typeof ${data} == "object" && !Array.isArray(${data})`;
+          break;
+        case "integer":
+          cond = numCond((0, codegen_1._)`!(${data} % 1) && !isNaN(${data})`);
+          break;
+        case "number":
+          cond = numCond();
+          break;
+        default:
+          return (0, codegen_1._)`typeof ${data} ${EQ} ${dataType}`;
+      }
+      return correct === DataType.Correct ? cond : (0, codegen_1.not)(cond);
+      function numCond(_cond = codegen_1.nil) {
+        return (0, codegen_1.and)((0, codegen_1._)`typeof ${data} == "number"`, _cond, strictNums ? (0, codegen_1._)`isFinite(${data})` : codegen_1.nil);
+      }
+    }
+    exports.checkDataType = checkDataType;
+    function checkDataTypes(dataTypes, data, strictNums, correct) {
+      if (dataTypes.length === 1) {
+        return checkDataType(dataTypes[0], data, strictNums, correct);
+      }
+      let cond;
+      const types = (0, util_1.toHash)(dataTypes);
+      if (types.array && types.object) {
+        const notObj = (0, codegen_1._)`typeof ${data} != "object"`;
+        cond = types.null ? notObj : (0, codegen_1._)`!${data} || ${notObj}`;
+        delete types.null;
+        delete types.array;
+        delete types.object;
+      } else {
+        cond = codegen_1.nil;
+      }
+      if (types.number)
+        delete types.integer;
+      for (const t in types)
+        cond = (0, codegen_1.and)(cond, checkDataType(t, data, strictNums, correct));
+      return cond;
+    }
+    exports.checkDataTypes = checkDataTypes;
+    var typeError = {
+      message: ({ schema }) => `must be ${schema}`,
+      params: ({ schema, schemaValue }) => typeof schema == "string" ? (0, codegen_1._)`{type: ${schema}}` : (0, codegen_1._)`{type: ${schemaValue}}`
+    };
+    function reportTypeError(it) {
+      const cxt = getTypeErrorContext(it);
+      (0, errors_1.reportError)(cxt, typeError);
+    }
+    exports.reportTypeError = reportTypeError;
+    function getTypeErrorContext(it) {
+      const { gen, data, schema } = it;
+      const schemaCode = (0, util_1.schemaRefOrVal)(it, schema, "type");
+      return {
+        gen,
+        keyword: "type",
+        data,
+        schema: schema.type,
+        schemaCode,
+        schemaValue: schemaCode,
+        parentSchema: schema,
+        params: {},
+        it
+      };
+    }
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/defaults.js
+var require_defaults = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/defaults.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.assignDefaults = void 0;
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    function assignDefaults(it, ty) {
+      const { properties, items } = it.schema;
+      if (ty === "object" && properties) {
+        for (const key in properties) {
+          assignDefault(it, key, properties[key].default);
+        }
+      } else if (ty === "array" && Array.isArray(items)) {
+        items.forEach((sch, i) => assignDefault(it, i, sch.default));
+      }
+    }
+    exports.assignDefaults = assignDefaults;
+    function assignDefault(it, prop, defaultValue) {
+      const { gen, compositeRule, data, opts } = it;
+      if (defaultValue === void 0)
+        return;
+      const childData = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(prop)}`;
+      if (compositeRule) {
+        (0, util_1.checkStrictMode)(it, `default is ignored for: ${childData}`);
+        return;
+      }
+      let condition = (0, codegen_1._)`${childData} === undefined`;
+      if (opts.useDefaults === "empty") {
+        condition = (0, codegen_1._)`${condition} || ${childData} === null || ${childData} === ""`;
+      }
+      gen.if(condition, (0, codegen_1._)`${childData} = ${(0, codegen_1.stringify)(defaultValue)}`);
+    }
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/code.js
+var require_code2 = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/code.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateUnion = exports.validateArray = exports.usePattern = exports.callValidateCode = exports.schemaProperties = exports.allSchemaProperties = exports.noPropertyInData = exports.propertyInData = exports.isOwnProperty = exports.hasPropFunc = exports.reportMissingProp = exports.checkMissingProp = exports.checkReportMissingProp = void 0;
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var names_1 = require_names();
+    var util_2 = require_util();
+    function checkReportMissingProp(cxt, prop) {
+      const { gen, data, it } = cxt;
+      gen.if(noPropertyInData(gen, data, prop, it.opts.ownProperties), () => {
+        cxt.setParams({ missingProperty: (0, codegen_1._)`${prop}` }, true);
+        cxt.error();
+      });
+    }
+    exports.checkReportMissingProp = checkReportMissingProp;
+    function checkMissingProp({ gen, data, it: { opts } }, properties, missing) {
+      return (0, codegen_1.or)(...properties.map((prop) => (0, codegen_1.and)(noPropertyInData(gen, data, prop, opts.ownProperties), (0, codegen_1._)`${missing} = ${prop}`)));
+    }
+    exports.checkMissingProp = checkMissingProp;
+    function reportMissingProp(cxt, missing) {
+      cxt.setParams({ missingProperty: missing }, true);
+      cxt.error();
+    }
+    exports.reportMissingProp = reportMissingProp;
+    function hasPropFunc(gen) {
+      return gen.scopeValue("func", {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        ref: Object.prototype.hasOwnProperty,
+        code: (0, codegen_1._)`Object.prototype.hasOwnProperty`
+      });
+    }
+    exports.hasPropFunc = hasPropFunc;
+    function isOwnProperty(gen, data, property) {
+      return (0, codegen_1._)`${hasPropFunc(gen)}.call(${data}, ${property})`;
+    }
+    exports.isOwnProperty = isOwnProperty;
+    function propertyInData(gen, data, property, ownProperties) {
+      const cond = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(property)} !== undefined`;
+      return ownProperties ? (0, codegen_1._)`${cond} && ${isOwnProperty(gen, data, property)}` : cond;
+    }
+    exports.propertyInData = propertyInData;
+    function noPropertyInData(gen, data, property, ownProperties) {
+      const cond = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(property)} === undefined`;
+      return ownProperties ? (0, codegen_1.or)(cond, (0, codegen_1.not)(isOwnProperty(gen, data, property))) : cond;
+    }
+    exports.noPropertyInData = noPropertyInData;
+    function allSchemaProperties(schemaMap) {
+      return schemaMap ? Object.keys(schemaMap).filter((p) => p !== "__proto__") : [];
+    }
+    exports.allSchemaProperties = allSchemaProperties;
+    function schemaProperties(it, schemaMap) {
+      return allSchemaProperties(schemaMap).filter((p) => !(0, util_1.alwaysValidSchema)(it, schemaMap[p]));
+    }
+    exports.schemaProperties = schemaProperties;
+    function callValidateCode({ schemaCode, data, it: { gen, topSchemaRef, schemaPath, errorPath }, it }, func, context, passSchema) {
+      const dataAndSchema = passSchema ? (0, codegen_1._)`${schemaCode}, ${data}, ${topSchemaRef}${schemaPath}` : data;
+      const valCxt = [
+        [names_1.default.instancePath, (0, codegen_1.strConcat)(names_1.default.instancePath, errorPath)],
+        [names_1.default.parentData, it.parentData],
+        [names_1.default.parentDataProperty, it.parentDataProperty],
+        [names_1.default.rootData, names_1.default.rootData]
+      ];
+      if (it.opts.dynamicRef)
+        valCxt.push([names_1.default.dynamicAnchors, names_1.default.dynamicAnchors]);
+      const args = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
+      return context !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context}, ${args})` : (0, codegen_1._)`${func}(${args})`;
+    }
+    exports.callValidateCode = callValidateCode;
+    var newRegExp = (0, codegen_1._)`new RegExp`;
+    function usePattern({ gen, it: { opts } }, pattern) {
+      const u = opts.unicodeRegExp ? "u" : "";
+      const { regExp } = opts.code;
+      const rx = regExp(pattern, u);
+      return gen.scopeValue("pattern", {
+        key: rx.toString(),
+        ref: rx,
+        code: (0, codegen_1._)`${regExp.code === "new RegExp" ? newRegExp : (0, util_2.useFunc)(gen, regExp)}(${pattern}, ${u})`
+      });
+    }
+    exports.usePattern = usePattern;
+    function validateArray(cxt) {
+      const { gen, data, keyword, it } = cxt;
+      const valid = gen.name("valid");
+      if (it.allErrors) {
+        const validArr = gen.let("valid", true);
+        validateItems(() => gen.assign(validArr, false));
+        return validArr;
+      }
+      gen.var(valid, true);
+      validateItems(() => gen.break());
+      return valid;
+      function validateItems(notValid) {
+        const len = gen.const("len", (0, codegen_1._)`${data}.length`);
+        gen.forRange("i", 0, len, (i) => {
+          cxt.subschema({
+            keyword,
+            dataProp: i,
+            dataPropType: util_1.Type.Num
+          }, valid);
+          gen.if((0, codegen_1.not)(valid), notValid);
+        });
+      }
+    }
+    exports.validateArray = validateArray;
+    function validateUnion(cxt) {
+      const { gen, schema, keyword, it } = cxt;
+      if (!Array.isArray(schema))
+        throw new Error("ajv implementation error");
+      const alwaysValid = schema.some((sch) => (0, util_1.alwaysValidSchema)(it, sch));
+      if (alwaysValid && !it.opts.unevaluated)
+        return;
+      const valid = gen.let("valid", false);
+      const schValid = gen.name("_valid");
+      gen.block(() => schema.forEach((_sch, i) => {
+        const schCxt = cxt.subschema({
+          keyword,
+          schemaProp: i,
+          compositeRule: true
+        }, schValid);
+        gen.assign(valid, (0, codegen_1._)`${valid} || ${schValid}`);
+        const merged = cxt.mergeValidEvaluated(schCxt, schValid);
+        if (!merged)
+          gen.if((0, codegen_1.not)(valid));
+      }));
+      cxt.result(valid, () => cxt.reset(), () => cxt.error(true));
+    }
+    exports.validateUnion = validateUnion;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/keyword.js
+var require_keyword = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/keyword.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateKeywordUsage = exports.validSchemaType = exports.funcKeywordCode = exports.macroKeywordCode = void 0;
+    var codegen_1 = require_codegen();
+    var names_1 = require_names();
+    var code_1 = require_code2();
+    var errors_1 = require_errors();
+    function macroKeywordCode(cxt, def) {
+      const { gen, keyword, schema, parentSchema, it } = cxt;
+      const macroSchema = def.macro.call(it.self, schema, parentSchema, it);
+      const schemaRef = useKeyword(gen, keyword, macroSchema);
+      if (it.opts.validateSchema !== false)
+        it.self.validateSchema(macroSchema, true);
+      const valid = gen.name("valid");
+      cxt.subschema({
+        schema: macroSchema,
+        schemaPath: codegen_1.nil,
+        errSchemaPath: `${it.errSchemaPath}/${keyword}`,
+        topSchemaRef: schemaRef,
+        compositeRule: true
+      }, valid);
+      cxt.pass(valid, () => cxt.error(true));
+    }
+    exports.macroKeywordCode = macroKeywordCode;
+    function funcKeywordCode(cxt, def) {
+      var _a;
+      const { gen, keyword, schema, parentSchema, $data, it } = cxt;
+      checkAsyncKeyword(it, def);
+      const validate = !$data && def.compile ? def.compile.call(it.self, schema, parentSchema, it) : def.validate;
+      const validateRef = useKeyword(gen, keyword, validate);
+      const valid = gen.let("valid");
+      cxt.block$data(valid, validateKeyword);
+      cxt.ok((_a = def.valid) !== null && _a !== void 0 ? _a : valid);
+      function validateKeyword() {
+        if (def.errors === false) {
+          assignValid();
+          if (def.modifying)
+            modifyData(cxt);
+          reportErrs(() => cxt.error());
+        } else {
+          const ruleErrs = def.async ? validateAsync() : validateSync();
+          if (def.modifying)
+            modifyData(cxt);
+          reportErrs(() => addErrs(cxt, ruleErrs));
+        }
+      }
+      function validateAsync() {
+        const ruleErrs = gen.let("ruleErrs", null);
+        gen.try(() => assignValid((0, codegen_1._)`await `), (e) => gen.assign(valid, false).if((0, codegen_1._)`${e} instanceof ${it.ValidationError}`, () => gen.assign(ruleErrs, (0, codegen_1._)`${e}.errors`), () => gen.throw(e)));
+        return ruleErrs;
+      }
+      function validateSync() {
+        const validateErrs = (0, codegen_1._)`${validateRef}.errors`;
+        gen.assign(validateErrs, null);
+        assignValid(codegen_1.nil);
+        return validateErrs;
+      }
+      function assignValid(_await = def.async ? (0, codegen_1._)`await ` : codegen_1.nil) {
+        const passCxt = it.opts.passContext ? names_1.default.this : names_1.default.self;
+        const passSchema = !("compile" in def && !$data || def.schema === false);
+        gen.assign(valid, (0, codegen_1._)`${_await}${(0, code_1.callValidateCode)(cxt, validateRef, passCxt, passSchema)}`, def.modifying);
+      }
+      function reportErrs(errors) {
+        var _a2;
+        gen.if((0, codegen_1.not)((_a2 = def.valid) !== null && _a2 !== void 0 ? _a2 : valid), errors);
+      }
+    }
+    exports.funcKeywordCode = funcKeywordCode;
+    function modifyData(cxt) {
+      const { gen, data, it } = cxt;
+      gen.if(it.parentData, () => gen.assign(data, (0, codegen_1._)`${it.parentData}[${it.parentDataProperty}]`));
+    }
+    function addErrs(cxt, errs) {
+      const { gen } = cxt;
+      gen.if((0, codegen_1._)`Array.isArray(${errs})`, () => {
+        gen.assign(names_1.default.vErrors, (0, codegen_1._)`${names_1.default.vErrors} === null ? ${errs} : ${names_1.default.vErrors}.concat(${errs})`).assign(names_1.default.errors, (0, codegen_1._)`${names_1.default.vErrors}.length`);
+        (0, errors_1.extendErrors)(cxt);
+      }, () => cxt.error());
+    }
+    function checkAsyncKeyword({ schemaEnv }, def) {
+      if (def.async && !schemaEnv.$async)
+        throw new Error("async keyword in sync schema");
+    }
+    function useKeyword(gen, keyword, result) {
+      if (result === void 0)
+        throw new Error(`keyword "${keyword}" failed to compile`);
+      return gen.scopeValue("keyword", typeof result == "function" ? { ref: result } : { ref: result, code: (0, codegen_1.stringify)(result) });
+    }
+    function validSchemaType(schema, schemaType, allowUndefined = false) {
+      return !schemaType.length || schemaType.some((st) => st === "array" ? Array.isArray(schema) : st === "object" ? schema && typeof schema == "object" && !Array.isArray(schema) : typeof schema == st || allowUndefined && typeof schema == "undefined");
+    }
+    exports.validSchemaType = validSchemaType;
+    function validateKeywordUsage({ schema, opts, self, errSchemaPath }, def, keyword) {
+      if (Array.isArray(def.keyword) ? !def.keyword.includes(keyword) : def.keyword !== keyword) {
+        throw new Error("ajv implementation error");
+      }
+      const deps = def.dependencies;
+      if (deps === null || deps === void 0 ? void 0 : deps.some((kwd) => !Object.prototype.hasOwnProperty.call(schema, kwd))) {
+        throw new Error(`parent schema must have dependencies of ${keyword}: ${deps.join(",")}`);
+      }
+      if (def.validateSchema) {
+        const valid = def.validateSchema(schema[keyword]);
+        if (!valid) {
+          const msg = `keyword "${keyword}" value is invalid at path "${errSchemaPath}": ` + self.errorsText(def.validateSchema.errors);
+          if (opts.validateSchema === "log")
+            self.logger.error(msg);
+          else
+            throw new Error(msg);
+        }
+      }
+    }
+    exports.validateKeywordUsage = validateKeywordUsage;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/subschema.js
+var require_subschema = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/subschema.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.extendSubschemaMode = exports.extendSubschemaData = exports.getSubschema = void 0;
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    function getSubschema(it, { keyword, schemaProp, schema, schemaPath, errSchemaPath, topSchemaRef }) {
+      if (keyword !== void 0 && schema !== void 0) {
+        throw new Error('both "keyword" and "schema" passed, only one allowed');
+      }
+      if (keyword !== void 0) {
+        const sch = it.schema[keyword];
+        return schemaProp === void 0 ? {
+          schema: sch,
+          schemaPath: (0, codegen_1._)`${it.schemaPath}${(0, codegen_1.getProperty)(keyword)}`,
+          errSchemaPath: `${it.errSchemaPath}/${keyword}`
+        } : {
+          schema: sch[schemaProp],
+          schemaPath: (0, codegen_1._)`${it.schemaPath}${(0, codegen_1.getProperty)(keyword)}${(0, codegen_1.getProperty)(schemaProp)}`,
+          errSchemaPath: `${it.errSchemaPath}/${keyword}/${(0, util_1.escapeFragment)(schemaProp)}`
+        };
+      }
+      if (schema !== void 0) {
+        if (schemaPath === void 0 || errSchemaPath === void 0 || topSchemaRef === void 0) {
+          throw new Error('"schemaPath", "errSchemaPath" and "topSchemaRef" are required with "schema"');
+        }
+        return {
+          schema,
+          schemaPath,
+          topSchemaRef,
+          errSchemaPath
+        };
+      }
+      throw new Error('either "keyword" or "schema" must be passed');
+    }
+    exports.getSubschema = getSubschema;
+    function extendSubschemaData(subschema, it, { dataProp, dataPropType: dpType, data, dataTypes, propertyName }) {
+      if (data !== void 0 && dataProp !== void 0) {
+        throw new Error('both "data" and "dataProp" passed, only one allowed');
+      }
+      const { gen } = it;
+      if (dataProp !== void 0) {
+        const { errorPath, dataPathArr, opts } = it;
+        const nextData = gen.let("data", (0, codegen_1._)`${it.data}${(0, codegen_1.getProperty)(dataProp)}`, true);
+        dataContextProps(nextData);
+        subschema.errorPath = (0, codegen_1.str)`${errorPath}${(0, util_1.getErrorPath)(dataProp, dpType, opts.jsPropertySyntax)}`;
+        subschema.parentDataProperty = (0, codegen_1._)`${dataProp}`;
+        subschema.dataPathArr = [...dataPathArr, subschema.parentDataProperty];
+      }
+      if (data !== void 0) {
+        const nextData = data instanceof codegen_1.Name ? data : gen.let("data", data, true);
+        dataContextProps(nextData);
+        if (propertyName !== void 0)
+          subschema.propertyName = propertyName;
+      }
+      if (dataTypes)
+        subschema.dataTypes = dataTypes;
+      function dataContextProps(_nextData) {
+        subschema.data = _nextData;
+        subschema.dataLevel = it.dataLevel + 1;
+        subschema.dataTypes = [];
+        it.definedProperties = /* @__PURE__ */ new Set();
+        subschema.parentData = it.data;
+        subschema.dataNames = [...it.dataNames, _nextData];
+      }
+    }
+    exports.extendSubschemaData = extendSubschemaData;
+    function extendSubschemaMode(subschema, { jtdDiscriminator, jtdMetadata, compositeRule, createErrors, allErrors }) {
+      if (compositeRule !== void 0)
+        subschema.compositeRule = compositeRule;
+      if (createErrors !== void 0)
+        subschema.createErrors = createErrors;
+      if (allErrors !== void 0)
+        subschema.allErrors = allErrors;
+      subschema.jtdDiscriminator = jtdDiscriminator;
+      subschema.jtdMetadata = jtdMetadata;
+    }
+    exports.extendSubschemaMode = extendSubschemaMode;
+  }
+});
+
+// node_modules/.pnpm/fast-deep-equal@3.1.3/node_modules/fast-deep-equal/index.js
+var require_fast_deep_equal = __commonJS({
+  "node_modules/.pnpm/fast-deep-equal@3.1.3/node_modules/fast-deep-equal/index.js"(exports, module) {
+    "use strict";
+    module.exports = function equal(a, b) {
+      if (a === b) return true;
+      if (a && b && typeof a == "object" && typeof b == "object") {
+        if (a.constructor !== b.constructor) return false;
+        var length, i, keys;
+        if (Array.isArray(a)) {
+          length = a.length;
+          if (length != b.length) return false;
+          for (i = length; i-- !== 0; )
+            if (!equal(a[i], b[i])) return false;
+          return true;
+        }
+        if (a.constructor === RegExp) return a.source === b.source && a.flags === b.flags;
+        if (a.valueOf !== Object.prototype.valueOf) return a.valueOf() === b.valueOf();
+        if (a.toString !== Object.prototype.toString) return a.toString() === b.toString();
+        keys = Object.keys(a);
+        length = keys.length;
+        if (length !== Object.keys(b).length) return false;
+        for (i = length; i-- !== 0; )
+          if (!Object.prototype.hasOwnProperty.call(b, keys[i])) return false;
+        for (i = length; i-- !== 0; ) {
+          var key = keys[i];
+          if (!equal(a[key], b[key])) return false;
+        }
+        return true;
+      }
+      return a !== a && b !== b;
+    };
+  }
+});
+
+// node_modules/.pnpm/json-schema-traverse@1.0.0/node_modules/json-schema-traverse/index.js
+var require_json_schema_traverse = __commonJS({
+  "node_modules/.pnpm/json-schema-traverse@1.0.0/node_modules/json-schema-traverse/index.js"(exports, module) {
+    "use strict";
+    var traverse = module.exports = function(schema, opts, cb) {
+      if (typeof opts == "function") {
+        cb = opts;
+        opts = {};
+      }
+      cb = opts.cb || cb;
+      var pre = typeof cb == "function" ? cb : cb.pre || function() {
+      };
+      var post = cb.post || function() {
+      };
+      _traverse(opts, pre, post, schema, "", schema);
+    };
+    traverse.keywords = {
+      additionalItems: true,
+      items: true,
+      contains: true,
+      additionalProperties: true,
+      propertyNames: true,
+      not: true,
+      if: true,
+      then: true,
+      else: true
+    };
+    traverse.arrayKeywords = {
+      items: true,
+      allOf: true,
+      anyOf: true,
+      oneOf: true
+    };
+    traverse.propsKeywords = {
+      $defs: true,
+      definitions: true,
+      properties: true,
+      patternProperties: true,
+      dependencies: true
+    };
+    traverse.skipKeywords = {
+      default: true,
+      enum: true,
+      const: true,
+      required: true,
+      maximum: true,
+      minimum: true,
+      exclusiveMaximum: true,
+      exclusiveMinimum: true,
+      multipleOf: true,
+      maxLength: true,
+      minLength: true,
+      pattern: true,
+      format: true,
+      maxItems: true,
+      minItems: true,
+      uniqueItems: true,
+      maxProperties: true,
+      minProperties: true
+    };
+    function _traverse(opts, pre, post, schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex) {
+      if (schema && typeof schema == "object" && !Array.isArray(schema)) {
+        pre(schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex);
+        for (var key in schema) {
+          var sch = schema[key];
+          if (Array.isArray(sch)) {
+            if (key in traverse.arrayKeywords) {
+              for (var i = 0; i < sch.length; i++)
+                _traverse(opts, pre, post, sch[i], jsonPtr + "/" + key + "/" + i, rootSchema, jsonPtr, key, schema, i);
+            }
+          } else if (key in traverse.propsKeywords) {
+            if (sch && typeof sch == "object") {
+              for (var prop in sch)
+                _traverse(opts, pre, post, sch[prop], jsonPtr + "/" + key + "/" + escapeJsonPtr(prop), rootSchema, jsonPtr, key, schema, prop);
+            }
+          } else if (key in traverse.keywords || opts.allKeys && !(key in traverse.skipKeywords)) {
+            _traverse(opts, pre, post, sch, jsonPtr + "/" + key, rootSchema, jsonPtr, key, schema);
+          }
+        }
+        post(schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex);
+      }
+    }
+    function escapeJsonPtr(str) {
+      return str.replace(/~/g, "~0").replace(/\//g, "~1");
+    }
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/resolve.js
+var require_resolve = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/resolve.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getSchemaRefs = exports.resolveUrl = exports.normalizeId = exports._getFullPath = exports.getFullPath = exports.inlineRef = void 0;
+    var util_1 = require_util();
+    var equal = require_fast_deep_equal();
+    var traverse = require_json_schema_traverse();
+    var SIMPLE_INLINED = /* @__PURE__ */ new Set([
+      "type",
+      "format",
+      "pattern",
+      "maxLength",
+      "minLength",
+      "maxProperties",
+      "minProperties",
+      "maxItems",
+      "minItems",
+      "maximum",
+      "minimum",
+      "uniqueItems",
+      "multipleOf",
+      "required",
+      "enum",
+      "const"
+    ]);
+    function inlineRef(schema, limit = true) {
+      if (typeof schema == "boolean")
+        return true;
+      if (limit === true)
+        return !hasRef(schema);
+      if (!limit)
+        return false;
+      return countKeys(schema) <= limit;
+    }
+    exports.inlineRef = inlineRef;
+    var REF_KEYWORDS = /* @__PURE__ */ new Set([
+      "$ref",
+      "$recursiveRef",
+      "$recursiveAnchor",
+      "$dynamicRef",
+      "$dynamicAnchor"
+    ]);
+    function hasRef(schema) {
+      for (const key in schema) {
+        if (REF_KEYWORDS.has(key))
+          return true;
+        const sch = schema[key];
+        if (Array.isArray(sch) && sch.some(hasRef))
+          return true;
+        if (typeof sch == "object" && hasRef(sch))
+          return true;
+      }
+      return false;
+    }
+    function countKeys(schema) {
+      let count = 0;
+      for (const key in schema) {
+        if (key === "$ref")
+          return Infinity;
+        count++;
+        if (SIMPLE_INLINED.has(key))
+          continue;
+        if (typeof schema[key] == "object") {
+          (0, util_1.eachItem)(schema[key], (sch) => count += countKeys(sch));
+        }
+        if (count === Infinity)
+          return Infinity;
+      }
+      return count;
+    }
+    function getFullPath(resolver, id = "", normalize) {
+      if (normalize !== false)
+        id = normalizeId(id);
+      const p = resolver.parse(id);
+      return _getFullPath(resolver, p);
+    }
+    exports.getFullPath = getFullPath;
+    function _getFullPath(resolver, p) {
+      const serialized = resolver.serialize(p);
+      return serialized.split("#")[0] + "#";
+    }
+    exports._getFullPath = _getFullPath;
+    var TRAILING_SLASH_HASH = /#\/?$/;
+    function normalizeId(id) {
+      return id ? id.replace(TRAILING_SLASH_HASH, "") : "";
+    }
+    exports.normalizeId = normalizeId;
+    function resolveUrl(resolver, baseId, id) {
+      id = normalizeId(id);
+      return resolver.resolve(baseId, id);
+    }
+    exports.resolveUrl = resolveUrl;
+    var ANCHOR = /^[a-z_][-a-z0-9._]*$/i;
+    function getSchemaRefs(schema, baseId) {
+      if (typeof schema == "boolean")
+        return {};
+      const { schemaId, uriResolver } = this.opts;
+      const schId = normalizeId(schema[schemaId] || baseId);
+      const baseIds = { "": schId };
+      const pathPrefix = getFullPath(uriResolver, schId, false);
+      const localRefs = {};
+      const schemaRefs = /* @__PURE__ */ new Set();
+      traverse(schema, { allKeys: true }, (sch, jsonPtr, _, parentJsonPtr) => {
+        if (parentJsonPtr === void 0)
+          return;
+        const fullPath = pathPrefix + jsonPtr;
+        let innerBaseId = baseIds[parentJsonPtr];
+        if (typeof sch[schemaId] == "string")
+          innerBaseId = addRef.call(this, sch[schemaId]);
+        addAnchor.call(this, sch.$anchor);
+        addAnchor.call(this, sch.$dynamicAnchor);
+        baseIds[jsonPtr] = innerBaseId;
+        function addRef(ref) {
+          const _resolve = this.opts.uriResolver.resolve;
+          ref = normalizeId(innerBaseId ? _resolve(innerBaseId, ref) : ref);
+          if (schemaRefs.has(ref))
+            throw ambiguos(ref);
+          schemaRefs.add(ref);
+          let schOrRef = this.refs[ref];
+          if (typeof schOrRef == "string")
+            schOrRef = this.refs[schOrRef];
+          if (typeof schOrRef == "object") {
+            checkAmbiguosRef(sch, schOrRef.schema, ref);
+          } else if (ref !== normalizeId(fullPath)) {
+            if (ref[0] === "#") {
+              checkAmbiguosRef(sch, localRefs[ref], ref);
+              localRefs[ref] = sch;
+            } else {
+              this.refs[ref] = fullPath;
+            }
+          }
+          return ref;
+        }
+        function addAnchor(anchor) {
+          if (typeof anchor == "string") {
+            if (!ANCHOR.test(anchor))
+              throw new Error(`invalid anchor "${anchor}"`);
+            addRef.call(this, `#${anchor}`);
+          }
+        }
+      });
+      return localRefs;
+      function checkAmbiguosRef(sch1, sch2, ref) {
+        if (sch2 !== void 0 && !equal(sch1, sch2))
+          throw ambiguos(ref);
+      }
+      function ambiguos(ref) {
+        return new Error(`reference "${ref}" resolves to more than one schema`);
+      }
+    }
+    exports.getSchemaRefs = getSchemaRefs;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/index.js
+var require_validate = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/validate/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getData = exports.KeywordCxt = exports.validateFunctionCode = void 0;
+    var boolSchema_1 = require_boolSchema();
+    var dataType_1 = require_dataType();
+    var applicability_1 = require_applicability();
+    var dataType_2 = require_dataType();
+    var defaults_1 = require_defaults();
+    var keyword_1 = require_keyword();
+    var subschema_1 = require_subschema();
+    var codegen_1 = require_codegen();
+    var names_1 = require_names();
+    var resolve_1 = require_resolve();
+    var util_1 = require_util();
+    var errors_1 = require_errors();
+    function validateFunctionCode(it) {
+      if (isSchemaObj(it)) {
+        checkKeywords(it);
+        if (schemaCxtHasRules(it)) {
+          topSchemaObjCode(it);
+          return;
+        }
+      }
+      validateFunction(it, () => (0, boolSchema_1.topBoolOrEmptySchema)(it));
+    }
+    exports.validateFunctionCode = validateFunctionCode;
+    function validateFunction({ gen, validateName, schema, schemaEnv, opts }, body) {
+      if (opts.code.es5) {
+        gen.func(validateName, (0, codegen_1._)`${names_1.default.data}, ${names_1.default.valCxt}`, schemaEnv.$async, () => {
+          gen.code((0, codegen_1._)`"use strict"; ${funcSourceUrl(schema, opts)}`);
+          destructureValCxtES5(gen, opts);
+          gen.code(body);
+        });
+      } else {
+        gen.func(validateName, (0, codegen_1._)`${names_1.default.data}, ${destructureValCxt(opts)}`, schemaEnv.$async, () => gen.code(funcSourceUrl(schema, opts)).code(body));
+      }
+    }
+    function destructureValCxt(opts) {
+      return (0, codegen_1._)`{${names_1.default.instancePath}="", ${names_1.default.parentData}, ${names_1.default.parentDataProperty}, ${names_1.default.rootData}=${names_1.default.data}${opts.dynamicRef ? (0, codegen_1._)`, ${names_1.default.dynamicAnchors}={}` : codegen_1.nil}}={}`;
+    }
+    function destructureValCxtES5(gen, opts) {
+      gen.if(names_1.default.valCxt, () => {
+        gen.var(names_1.default.instancePath, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.instancePath}`);
+        gen.var(names_1.default.parentData, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.parentData}`);
+        gen.var(names_1.default.parentDataProperty, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.parentDataProperty}`);
+        gen.var(names_1.default.rootData, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.rootData}`);
+        if (opts.dynamicRef)
+          gen.var(names_1.default.dynamicAnchors, (0, codegen_1._)`${names_1.default.valCxt}.${names_1.default.dynamicAnchors}`);
+      }, () => {
+        gen.var(names_1.default.instancePath, (0, codegen_1._)`""`);
+        gen.var(names_1.default.parentData, (0, codegen_1._)`undefined`);
+        gen.var(names_1.default.parentDataProperty, (0, codegen_1._)`undefined`);
+        gen.var(names_1.default.rootData, names_1.default.data);
+        if (opts.dynamicRef)
+          gen.var(names_1.default.dynamicAnchors, (0, codegen_1._)`{}`);
+      });
+    }
+    function topSchemaObjCode(it) {
+      const { schema, opts, gen } = it;
+      validateFunction(it, () => {
+        if (opts.$comment && schema.$comment)
+          commentKeyword(it);
+        checkNoDefault(it);
+        gen.let(names_1.default.vErrors, null);
+        gen.let(names_1.default.errors, 0);
+        if (opts.unevaluated)
+          resetEvaluated(it);
+        typeAndKeywords(it);
+        returnResults(it);
+      });
+      return;
+    }
+    function resetEvaluated(it) {
+      const { gen, validateName } = it;
+      it.evaluated = gen.const("evaluated", (0, codegen_1._)`${validateName}.evaluated`);
+      gen.if((0, codegen_1._)`${it.evaluated}.dynamicProps`, () => gen.assign((0, codegen_1._)`${it.evaluated}.props`, (0, codegen_1._)`undefined`));
+      gen.if((0, codegen_1._)`${it.evaluated}.dynamicItems`, () => gen.assign((0, codegen_1._)`${it.evaluated}.items`, (0, codegen_1._)`undefined`));
+    }
+    function funcSourceUrl(schema, opts) {
+      const schId = typeof schema == "object" && schema[opts.schemaId];
+      return schId && (opts.code.source || opts.code.process) ? (0, codegen_1._)`/*# sourceURL=${schId} */` : codegen_1.nil;
+    }
+    function subschemaCode(it, valid) {
+      if (isSchemaObj(it)) {
+        checkKeywords(it);
+        if (schemaCxtHasRules(it)) {
+          subSchemaObjCode(it, valid);
+          return;
+        }
+      }
+      (0, boolSchema_1.boolOrEmptySchema)(it, valid);
+    }
+    function schemaCxtHasRules({ schema, self }) {
+      if (typeof schema == "boolean")
+        return !schema;
+      for (const key in schema)
+        if (self.RULES.all[key])
+          return true;
+      return false;
+    }
+    function isSchemaObj(it) {
+      return typeof it.schema != "boolean";
+    }
+    function subSchemaObjCode(it, valid) {
+      const { schema, gen, opts } = it;
+      if (opts.$comment && schema.$comment)
+        commentKeyword(it);
+      updateContext(it);
+      checkAsyncSchema(it);
+      const errsCount = gen.const("_errs", names_1.default.errors);
+      typeAndKeywords(it, errsCount);
+      gen.var(valid, (0, codegen_1._)`${errsCount} === ${names_1.default.errors}`);
+    }
+    function checkKeywords(it) {
+      (0, util_1.checkUnknownRules)(it);
+      checkRefsAndKeywords(it);
+    }
+    function typeAndKeywords(it, errsCount) {
+      if (it.opts.jtd)
+        return schemaKeywords(it, [], false, errsCount);
+      const types = (0, dataType_1.getSchemaTypes)(it.schema);
+      const checkedTypes = (0, dataType_1.coerceAndCheckDataType)(it, types);
+      schemaKeywords(it, types, !checkedTypes, errsCount);
+    }
+    function checkRefsAndKeywords(it) {
+      const { schema, errSchemaPath, opts, self } = it;
+      if (schema.$ref && opts.ignoreKeywordsWithRef && (0, util_1.schemaHasRulesButRef)(schema, self.RULES)) {
+        self.logger.warn(`$ref: keywords ignored in schema at path "${errSchemaPath}"`);
+      }
+    }
+    function checkNoDefault(it) {
+      const { schema, opts } = it;
+      if (schema.default !== void 0 && opts.useDefaults && opts.strictSchema) {
+        (0, util_1.checkStrictMode)(it, "default is ignored in the schema root");
+      }
+    }
+    function updateContext(it) {
+      const schId = it.schema[it.opts.schemaId];
+      if (schId)
+        it.baseId = (0, resolve_1.resolveUrl)(it.opts.uriResolver, it.baseId, schId);
+    }
+    function checkAsyncSchema(it) {
+      if (it.schema.$async && !it.schemaEnv.$async)
+        throw new Error("async schema in sync schema");
+    }
+    function commentKeyword({ gen, schemaEnv, schema, errSchemaPath, opts }) {
+      const msg = schema.$comment;
+      if (opts.$comment === true) {
+        gen.code((0, codegen_1._)`${names_1.default.self}.logger.log(${msg})`);
+      } else if (typeof opts.$comment == "function") {
+        const schemaPath = (0, codegen_1.str)`${errSchemaPath}/$comment`;
+        const rootName = gen.scopeValue("root", { ref: schemaEnv.root });
+        gen.code((0, codegen_1._)`${names_1.default.self}.opts.$comment(${msg}, ${schemaPath}, ${rootName}.schema)`);
+      }
+    }
+    function returnResults(it) {
+      const { gen, schemaEnv, validateName, ValidationError, opts } = it;
+      if (schemaEnv.$async) {
+        gen.if((0, codegen_1._)`${names_1.default.errors} === 0`, () => gen.return(names_1.default.data), () => gen.throw((0, codegen_1._)`new ${ValidationError}(${names_1.default.vErrors})`));
+      } else {
+        gen.assign((0, codegen_1._)`${validateName}.errors`, names_1.default.vErrors);
+        if (opts.unevaluated)
+          assignEvaluated(it);
+        gen.return((0, codegen_1._)`${names_1.default.errors} === 0`);
+      }
+    }
+    function assignEvaluated({ gen, evaluated, props, items }) {
+      if (props instanceof codegen_1.Name)
+        gen.assign((0, codegen_1._)`${evaluated}.props`, props);
+      if (items instanceof codegen_1.Name)
+        gen.assign((0, codegen_1._)`${evaluated}.items`, items);
+    }
+    function schemaKeywords(it, types, typeErrors, errsCount) {
+      const { gen, schema, data, allErrors, opts, self } = it;
+      const { RULES } = self;
+      if (schema.$ref && (opts.ignoreKeywordsWithRef || !(0, util_1.schemaHasRulesButRef)(schema, RULES))) {
+        gen.block(() => keywordCode(it, "$ref", RULES.all.$ref.definition));
+        return;
+      }
+      if (!opts.jtd)
+        checkStrictTypes(it, types);
+      gen.block(() => {
+        for (const group of RULES.rules)
+          groupKeywords(group);
+        groupKeywords(RULES.post);
+      });
+      function groupKeywords(group) {
+        if (!(0, applicability_1.shouldUseGroup)(schema, group))
+          return;
+        if (group.type) {
+          gen.if((0, dataType_2.checkDataType)(group.type, data, opts.strictNumbers));
+          iterateKeywords(it, group);
+          if (types.length === 1 && types[0] === group.type && typeErrors) {
+            gen.else();
+            (0, dataType_2.reportTypeError)(it);
+          }
+          gen.endIf();
+        } else {
+          iterateKeywords(it, group);
+        }
+        if (!allErrors)
+          gen.if((0, codegen_1._)`${names_1.default.errors} === ${errsCount || 0}`);
+      }
+    }
+    function iterateKeywords(it, group) {
+      const { gen, schema, opts: { useDefaults } } = it;
+      if (useDefaults)
+        (0, defaults_1.assignDefaults)(it, group.type);
+      gen.block(() => {
+        for (const rule of group.rules) {
+          if ((0, applicability_1.shouldUseRule)(schema, rule)) {
+            keywordCode(it, rule.keyword, rule.definition, group.type);
+          }
+        }
+      });
+    }
+    function checkStrictTypes(it, types) {
+      if (it.schemaEnv.meta || !it.opts.strictTypes)
+        return;
+      checkContextTypes(it, types);
+      if (!it.opts.allowUnionTypes)
+        checkMultipleTypes(it, types);
+      checkKeywordTypes(it, it.dataTypes);
+    }
+    function checkContextTypes(it, types) {
+      if (!types.length)
+        return;
+      if (!it.dataTypes.length) {
+        it.dataTypes = types;
+        return;
+      }
+      types.forEach((t) => {
+        if (!includesType(it.dataTypes, t)) {
+          strictTypesError(it, `type "${t}" not allowed by context "${it.dataTypes.join(",")}"`);
+        }
+      });
+      narrowSchemaTypes(it, types);
+    }
+    function checkMultipleTypes(it, ts) {
+      if (ts.length > 1 && !(ts.length === 2 && ts.includes("null"))) {
+        strictTypesError(it, "use allowUnionTypes to allow union type keyword");
+      }
+    }
+    function checkKeywordTypes(it, ts) {
+      const rules = it.self.RULES.all;
+      for (const keyword in rules) {
+        const rule = rules[keyword];
+        if (typeof rule == "object" && (0, applicability_1.shouldUseRule)(it.schema, rule)) {
+          const { type } = rule.definition;
+          if (type.length && !type.some((t) => hasApplicableType(ts, t))) {
+            strictTypesError(it, `missing type "${type.join(",")}" for keyword "${keyword}"`);
+          }
+        }
+      }
+    }
+    function hasApplicableType(schTs, kwdT) {
+      return schTs.includes(kwdT) || kwdT === "number" && schTs.includes("integer");
+    }
+    function includesType(ts, t) {
+      return ts.includes(t) || t === "integer" && ts.includes("number");
+    }
+    function narrowSchemaTypes(it, withTypes) {
+      const ts = [];
+      for (const t of it.dataTypes) {
+        if (includesType(withTypes, t))
+          ts.push(t);
+        else if (withTypes.includes("integer") && t === "number")
+          ts.push("integer");
+      }
+      it.dataTypes = ts;
+    }
+    function strictTypesError(it, msg) {
+      const schemaPath = it.schemaEnv.baseId + it.errSchemaPath;
+      msg += ` at "${schemaPath}" (strictTypes)`;
+      (0, util_1.checkStrictMode)(it, msg, it.opts.strictTypes);
+    }
+    var KeywordCxt = class {
+      constructor(it, def, keyword) {
+        (0, keyword_1.validateKeywordUsage)(it, def, keyword);
+        this.gen = it.gen;
+        this.allErrors = it.allErrors;
+        this.keyword = keyword;
+        this.data = it.data;
+        this.schema = it.schema[keyword];
+        this.$data = def.$data && it.opts.$data && this.schema && this.schema.$data;
+        this.schemaValue = (0, util_1.schemaRefOrVal)(it, this.schema, keyword, this.$data);
+        this.schemaType = def.schemaType;
+        this.parentSchema = it.schema;
+        this.params = {};
+        this.it = it;
+        this.def = def;
+        if (this.$data) {
+          this.schemaCode = it.gen.const("vSchema", getData(this.$data, it));
+        } else {
+          this.schemaCode = this.schemaValue;
+          if (!(0, keyword_1.validSchemaType)(this.schema, def.schemaType, def.allowUndefined)) {
+            throw new Error(`${keyword} value must be ${JSON.stringify(def.schemaType)}`);
+          }
+        }
+        if ("code" in def ? def.trackErrors : def.errors !== false) {
+          this.errsCount = it.gen.const("_errs", names_1.default.errors);
+        }
+      }
+      result(condition, successAction, failAction) {
+        this.failResult((0, codegen_1.not)(condition), successAction, failAction);
+      }
+      failResult(condition, successAction, failAction) {
+        this.gen.if(condition);
+        if (failAction)
+          failAction();
+        else
+          this.error();
+        if (successAction) {
+          this.gen.else();
+          successAction();
+          if (this.allErrors)
+            this.gen.endIf();
+        } else {
+          if (this.allErrors)
+            this.gen.endIf();
+          else
+            this.gen.else();
+        }
+      }
+      pass(condition, failAction) {
+        this.failResult((0, codegen_1.not)(condition), void 0, failAction);
+      }
+      fail(condition) {
+        if (condition === void 0) {
+          this.error();
+          if (!this.allErrors)
+            this.gen.if(false);
+          return;
+        }
+        this.gen.if(condition);
+        this.error();
+        if (this.allErrors)
+          this.gen.endIf();
+        else
+          this.gen.else();
+      }
+      fail$data(condition) {
+        if (!this.$data)
+          return this.fail(condition);
+        const { schemaCode } = this;
+        this.fail((0, codegen_1._)`${schemaCode} !== undefined && (${(0, codegen_1.or)(this.invalid$data(), condition)})`);
+      }
+      error(append, errorParams, errorPaths) {
+        if (errorParams) {
+          this.setParams(errorParams);
+          this._error(append, errorPaths);
+          this.setParams({});
+          return;
+        }
+        this._error(append, errorPaths);
+      }
+      _error(append, errorPaths) {
+        ;
+        (append ? errors_1.reportExtraError : errors_1.reportError)(this, this.def.error, errorPaths);
+      }
+      $dataError() {
+        (0, errors_1.reportError)(this, this.def.$dataError || errors_1.keyword$DataError);
+      }
+      reset() {
+        if (this.errsCount === void 0)
+          throw new Error('add "trackErrors" to keyword definition');
+        (0, errors_1.resetErrorsCount)(this.gen, this.errsCount);
+      }
+      ok(cond) {
+        if (!this.allErrors)
+          this.gen.if(cond);
+      }
+      setParams(obj, assign) {
+        if (assign)
+          Object.assign(this.params, obj);
+        else
+          this.params = obj;
+      }
+      block$data(valid, codeBlock, $dataValid = codegen_1.nil) {
+        this.gen.block(() => {
+          this.check$data(valid, $dataValid);
+          codeBlock();
+        });
+      }
+      check$data(valid = codegen_1.nil, $dataValid = codegen_1.nil) {
+        if (!this.$data)
+          return;
+        const { gen, schemaCode, schemaType, def } = this;
+        gen.if((0, codegen_1.or)((0, codegen_1._)`${schemaCode} === undefined`, $dataValid));
+        if (valid !== codegen_1.nil)
+          gen.assign(valid, true);
+        if (schemaType.length || def.validateSchema) {
+          gen.elseIf(this.invalid$data());
+          this.$dataError();
+          if (valid !== codegen_1.nil)
+            gen.assign(valid, false);
+        }
+        gen.else();
+      }
+      invalid$data() {
+        const { gen, schemaCode, schemaType, def, it } = this;
+        return (0, codegen_1.or)(wrong$DataType(), invalid$DataSchema());
+        function wrong$DataType() {
+          if (schemaType.length) {
+            if (!(schemaCode instanceof codegen_1.Name))
+              throw new Error("ajv implementation error");
+            const st = Array.isArray(schemaType) ? schemaType : [schemaType];
+            return (0, codegen_1._)`${(0, dataType_2.checkDataTypes)(st, schemaCode, it.opts.strictNumbers, dataType_2.DataType.Wrong)}`;
+          }
+          return codegen_1.nil;
+        }
+        function invalid$DataSchema() {
+          if (def.validateSchema) {
+            const validateSchemaRef = gen.scopeValue("validate$data", { ref: def.validateSchema });
+            return (0, codegen_1._)`!${validateSchemaRef}(${schemaCode})`;
+          }
+          return codegen_1.nil;
+        }
+      }
+      subschema(appl, valid) {
+        const subschema = (0, subschema_1.getSubschema)(this.it, appl);
+        (0, subschema_1.extendSubschemaData)(subschema, this.it, appl);
+        (0, subschema_1.extendSubschemaMode)(subschema, appl);
+        const nextContext = { ...this.it, ...subschema, items: void 0, props: void 0 };
+        subschemaCode(nextContext, valid);
+        return nextContext;
+      }
+      mergeEvaluated(schemaCxt, toName) {
+        const { it, gen } = this;
+        if (!it.opts.unevaluated)
+          return;
+        if (it.props !== true && schemaCxt.props !== void 0) {
+          it.props = util_1.mergeEvaluated.props(gen, schemaCxt.props, it.props, toName);
+        }
+        if (it.items !== true && schemaCxt.items !== void 0) {
+          it.items = util_1.mergeEvaluated.items(gen, schemaCxt.items, it.items, toName);
+        }
+      }
+      mergeValidEvaluated(schemaCxt, valid) {
+        const { it, gen } = this;
+        if (it.opts.unevaluated && (it.props !== true || it.items !== true)) {
+          gen.if(valid, () => this.mergeEvaluated(schemaCxt, codegen_1.Name));
+          return true;
+        }
+      }
+    };
+    exports.KeywordCxt = KeywordCxt;
+    function keywordCode(it, keyword, def, ruleType) {
+      const cxt = new KeywordCxt(it, def, keyword);
+      if ("code" in def) {
+        def.code(cxt, ruleType);
+      } else if (cxt.$data && def.validate) {
+        (0, keyword_1.funcKeywordCode)(cxt, def);
+      } else if ("macro" in def) {
+        (0, keyword_1.macroKeywordCode)(cxt, def);
+      } else if (def.compile || def.validate) {
+        (0, keyword_1.funcKeywordCode)(cxt, def);
+      }
+    }
+    var JSON_POINTER = /^\/(?:[^~]|~0|~1)*$/;
+    var RELATIVE_JSON_POINTER = /^([0-9]+)(#|\/(?:[^~]|~0|~1)*)?$/;
+    function getData($data, { dataLevel, dataNames, dataPathArr }) {
+      let jsonPointer;
+      let data;
+      if ($data === "")
+        return names_1.default.rootData;
+      if ($data[0] === "/") {
+        if (!JSON_POINTER.test($data))
+          throw new Error(`Invalid JSON-pointer: ${$data}`);
+        jsonPointer = $data;
+        data = names_1.default.rootData;
+      } else {
+        const matches = RELATIVE_JSON_POINTER.exec($data);
+        if (!matches)
+          throw new Error(`Invalid JSON-pointer: ${$data}`);
+        const up = +matches[1];
+        jsonPointer = matches[2];
+        if (jsonPointer === "#") {
+          if (up >= dataLevel)
+            throw new Error(errorMsg("property/index", up));
+          return dataPathArr[dataLevel - up];
+        }
+        if (up > dataLevel)
+          throw new Error(errorMsg("data", up));
+        data = dataNames[dataLevel - up];
+        if (!jsonPointer)
+          return data;
+      }
+      let expr = data;
+      const segments = jsonPointer.split("/");
+      for (const segment of segments) {
+        if (segment) {
+          data = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)((0, util_1.unescapeJsonPointer)(segment))}`;
+          expr = (0, codegen_1._)`${expr} && ${data}`;
+        }
+      }
+      return expr;
+      function errorMsg(pointerType, up) {
+        return `Cannot access ${pointerType} ${up} levels up, current level is ${dataLevel}`;
+      }
+    }
+    exports.getData = getData;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/validation_error.js
+var require_validation_error = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/validation_error.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var ValidationError = class extends Error {
+      constructor(errors) {
+        super("validation failed");
+        this.errors = errors;
+        this.ajv = this.validation = true;
+      }
+    };
+    exports.default = ValidationError;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/ref_error.js
+var require_ref_error = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/ref_error.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var resolve_1 = require_resolve();
+    var MissingRefError = class extends Error {
+      constructor(resolver, baseId, ref, msg) {
+        super(msg || `can't resolve reference ${ref} from id ${baseId}`);
+        this.missingRef = (0, resolve_1.resolveUrl)(resolver, baseId, ref);
+        this.missingSchema = (0, resolve_1.normalizeId)((0, resolve_1.getFullPath)(resolver, this.missingRef));
+      }
+    };
+    exports.default = MissingRefError;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/index.js
+var require_compile = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.resolveSchema = exports.getCompilingSchema = exports.resolveRef = exports.compileSchema = exports.SchemaEnv = void 0;
+    var codegen_1 = require_codegen();
+    var validation_error_1 = require_validation_error();
+    var names_1 = require_names();
+    var resolve_1 = require_resolve();
+    var util_1 = require_util();
+    var validate_1 = require_validate();
+    var SchemaEnv = class {
+      constructor(env) {
+        var _a;
+        this.refs = {};
+        this.dynamicAnchors = {};
+        let schema;
+        if (typeof env.schema == "object")
+          schema = env.schema;
+        this.schema = env.schema;
+        this.schemaId = env.schemaId;
+        this.root = env.root || this;
+        this.baseId = (_a = env.baseId) !== null && _a !== void 0 ? _a : (0, resolve_1.normalizeId)(schema === null || schema === void 0 ? void 0 : schema[env.schemaId || "$id"]);
+        this.schemaPath = env.schemaPath;
+        this.localRefs = env.localRefs;
+        this.meta = env.meta;
+        this.$async = schema === null || schema === void 0 ? void 0 : schema.$async;
+        this.refs = {};
+      }
+    };
+    exports.SchemaEnv = SchemaEnv;
+    function compileSchema(sch) {
+      const _sch = getCompilingSchema.call(this, sch);
+      if (_sch)
+        return _sch;
+      const rootId = (0, resolve_1.getFullPath)(this.opts.uriResolver, sch.root.baseId);
+      const { es5, lines } = this.opts.code;
+      const { ownProperties } = this.opts;
+      const gen = new codegen_1.CodeGen(this.scope, { es5, lines, ownProperties });
+      let _ValidationError;
+      if (sch.$async) {
+        _ValidationError = gen.scopeValue("Error", {
+          ref: validation_error_1.default,
+          code: (0, codegen_1._)`require("ajv/dist/runtime/validation_error").default`
+        });
+      }
+      const validateName = gen.scopeName("validate");
+      sch.validateName = validateName;
+      const schemaCxt = {
+        gen,
+        allErrors: this.opts.allErrors,
+        data: names_1.default.data,
+        parentData: names_1.default.parentData,
+        parentDataProperty: names_1.default.parentDataProperty,
+        dataNames: [names_1.default.data],
+        dataPathArr: [codegen_1.nil],
+        // TODO can its length be used as dataLevel if nil is removed?
+        dataLevel: 0,
+        dataTypes: [],
+        definedProperties: /* @__PURE__ */ new Set(),
+        topSchemaRef: gen.scopeValue("schema", this.opts.code.source === true ? { ref: sch.schema, code: (0, codegen_1.stringify)(sch.schema) } : { ref: sch.schema }),
+        validateName,
+        ValidationError: _ValidationError,
+        schema: sch.schema,
+        schemaEnv: sch,
+        rootId,
+        baseId: sch.baseId || rootId,
+        schemaPath: codegen_1.nil,
+        errSchemaPath: sch.schemaPath || (this.opts.jtd ? "" : "#"),
+        errorPath: (0, codegen_1._)`""`,
+        opts: this.opts,
+        self: this
+      };
+      let sourceCode;
+      try {
+        this._compilations.add(sch);
+        (0, validate_1.validateFunctionCode)(schemaCxt);
+        gen.optimize(this.opts.code.optimize);
+        const validateCode = gen.toString();
+        sourceCode = `${gen.scopeRefs(names_1.default.scope)}return ${validateCode}`;
+        if (this.opts.code.process)
+          sourceCode = this.opts.code.process(sourceCode, sch);
+        const makeValidate = new Function(`${names_1.default.self}`, `${names_1.default.scope}`, sourceCode);
+        const validate = makeValidate(this, this.scope.get());
+        this.scope.value(validateName, { ref: validate });
+        validate.errors = null;
+        validate.schema = sch.schema;
+        validate.schemaEnv = sch;
+        if (sch.$async)
+          validate.$async = true;
+        if (this.opts.code.source === true) {
+          validate.source = { validateName, validateCode, scopeValues: gen._values };
+        }
+        if (this.opts.unevaluated) {
+          const { props, items } = schemaCxt;
+          validate.evaluated = {
+            props: props instanceof codegen_1.Name ? void 0 : props,
+            items: items instanceof codegen_1.Name ? void 0 : items,
+            dynamicProps: props instanceof codegen_1.Name,
+            dynamicItems: items instanceof codegen_1.Name
+          };
+          if (validate.source)
+            validate.source.evaluated = (0, codegen_1.stringify)(validate.evaluated);
+        }
+        sch.validate = validate;
+        return sch;
+      } catch (e) {
+        delete sch.validate;
+        delete sch.validateName;
+        if (sourceCode)
+          this.logger.error("Error compiling schema, function code:", sourceCode);
+        throw e;
+      } finally {
+        this._compilations.delete(sch);
+      }
+    }
+    exports.compileSchema = compileSchema;
+    function resolveRef(root, baseId, ref) {
+      var _a;
+      ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, ref);
+      const schOrFunc = root.refs[ref];
+      if (schOrFunc)
+        return schOrFunc;
+      let _sch = resolve.call(this, root, ref);
+      if (_sch === void 0) {
+        const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
+        const { schemaId } = this.opts;
+        if (schema)
+          _sch = new SchemaEnv({ schema, schemaId, root, baseId });
+      }
+      if (_sch === void 0)
+        return;
+      return root.refs[ref] = inlineOrCompile.call(this, _sch);
+    }
+    exports.resolveRef = resolveRef;
+    function inlineOrCompile(sch) {
+      if ((0, resolve_1.inlineRef)(sch.schema, this.opts.inlineRefs))
+        return sch.schema;
+      return sch.validate ? sch : compileSchema.call(this, sch);
+    }
+    function getCompilingSchema(schEnv) {
+      for (const sch of this._compilations) {
+        if (sameSchemaEnv(sch, schEnv))
+          return sch;
+      }
+    }
+    exports.getCompilingSchema = getCompilingSchema;
+    function sameSchemaEnv(s1, s2) {
+      return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
+    }
+    function resolve(root, ref) {
+      let sch;
+      while (typeof (sch = this.refs[ref]) == "string")
+        ref = sch;
+      return sch || this.schemas[ref] || resolveSchema.call(this, root, ref);
+    }
+    function resolveSchema(root, ref) {
+      const p = this.opts.uriResolver.parse(ref);
+      const refPath = (0, resolve_1._getFullPath)(this.opts.uriResolver, p);
+      let baseId = (0, resolve_1.getFullPath)(this.opts.uriResolver, root.baseId, void 0);
+      if (Object.keys(root.schema).length > 0 && refPath === baseId) {
+        return getJsonPointer.call(this, p, root);
+      }
+      const id = (0, resolve_1.normalizeId)(refPath);
+      const schOrRef = this.refs[id] || this.schemas[id];
+      if (typeof schOrRef == "string") {
+        const sch = resolveSchema.call(this, root, schOrRef);
+        if (typeof (sch === null || sch === void 0 ? void 0 : sch.schema) !== "object")
+          return;
+        return getJsonPointer.call(this, p, sch);
+      }
+      if (typeof (schOrRef === null || schOrRef === void 0 ? void 0 : schOrRef.schema) !== "object")
+        return;
+      if (!schOrRef.validate)
+        compileSchema.call(this, schOrRef);
+      if (id === (0, resolve_1.normalizeId)(ref)) {
+        const { schema } = schOrRef;
+        const { schemaId } = this.opts;
+        const schId = schema[schemaId];
+        if (schId)
+          baseId = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, schId);
+        return new SchemaEnv({ schema, schemaId, root, baseId });
+      }
+      return getJsonPointer.call(this, p, schOrRef);
+    }
+    exports.resolveSchema = resolveSchema;
+    var PREVENT_SCOPE_CHANGE = /* @__PURE__ */ new Set([
+      "properties",
+      "patternProperties",
+      "enum",
+      "dependencies",
+      "definitions"
+    ]);
+    function getJsonPointer(parsedRef, { baseId, schema, root }) {
+      var _a;
+      if (((_a = parsedRef.fragment) === null || _a === void 0 ? void 0 : _a[0]) !== "/")
+        return;
+      for (const part of parsedRef.fragment.slice(1).split("/")) {
+        if (typeof schema === "boolean")
+          return;
+        const partSchema = schema[(0, util_1.unescapeFragment)(part)];
+        if (partSchema === void 0)
+          return;
+        schema = partSchema;
+        const schId = typeof schema === "object" && schema[this.opts.schemaId];
+        if (!PREVENT_SCOPE_CHANGE.has(part) && schId) {
+          baseId = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, schId);
+        }
+      }
+      let env;
+      if (typeof schema != "boolean" && schema.$ref && !(0, util_1.schemaHasRulesButRef)(schema, this.RULES)) {
+        const $ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, schema.$ref);
+        env = resolveSchema.call(this, root, $ref);
+      }
+      const { schemaId } = this.opts;
+      env = env || new SchemaEnv({ schema, schemaId, root, baseId });
+      if (env.schema !== env.root.schema)
+        return env;
+      return void 0;
+    }
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/refs/data.json
+var require_data = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/refs/data.json"(exports, module) {
+    module.exports = {
+      $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
+      description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
+      type: "object",
+      required: ["$data"],
+      properties: {
+        $data: {
+          type: "string",
+          anyOf: [{ format: "relative-json-pointer" }, { format: "json-pointer" }]
+        }
+      },
+      additionalProperties: false
+    };
+  }
+});
+
+// node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/utils.js
+var require_utils = __commonJS({
+  "node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/utils.js"(exports, module) {
+    "use strict";
+    var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
+    var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
+    var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
+    var isUnreserved = RegExp.prototype.test.bind(/^[\da-z\-._~]$/iu);
+    var isPathCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/]$/u);
+    var isQueryFragmentCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/?]$/u);
+    var isUserinfoCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:]$/u);
+    var BYTE_HEX = new Array(256);
+    {
+      const HEX_DIGITS = "0123456789ABCDEF";
+      for (let i = 0; i < 256; i++) {
+        BYTE_HEX[i] = "%" + HEX_DIGITS[i >> 4] + HEX_DIGITS[i & 15];
+      }
+    }
+    function percentEncodeNonAscii(cp) {
+      if (cp < 2048) {
+        return BYTE_HEX[192 | cp >> 6] + BYTE_HEX[128 | cp & 63];
+      }
+      if (cp < 65536) {
+        return BYTE_HEX[224 | cp >> 12] + BYTE_HEX[128 | cp >> 6 & 63] + BYTE_HEX[128 | cp & 63];
+      }
+      return BYTE_HEX[240 | cp >> 18] + BYTE_HEX[128 | cp >> 12 & 63] + BYTE_HEX[128 | cp >> 6 & 63] + BYTE_HEX[128 | cp & 63];
+    }
+    function stringArrayToHexStripped(input) {
+      let acc = "";
+      let code = 0;
+      let i = 0;
+      for (i = 0; i < input.length; i++) {
+        code = input[i].charCodeAt(0);
+        if (code === 48) {
+          continue;
+        }
+        if (!(code >= 48 && code <= 57 || code >= 65 && code <= 70 || code >= 97 && code <= 102)) {
+          return "";
+        }
+        acc += input[i];
+        break;
+      }
+      for (i += 1; i < input.length; i++) {
+        code = input[i].charCodeAt(0);
+        if (!(code >= 48 && code <= 57 || code >= 65 && code <= 70 || code >= 97 && code <= 102)) {
+          return "";
+        }
+        acc += input[i];
+      }
+      return acc;
+    }
+    var isHextet = RegExp.prototype.test.bind(/^[\dA-Fa-f]{1,4}$/);
+    var isIPvFuture = RegExp.prototype.test.bind(/^[vV][\dA-Fa-f]+\.[A-Za-z\d\-._~!$&'()*+,;=:]+$/);
+    var isZoneCharacter = RegExp.prototype.test.bind(/^[A-Za-z\d\-._~]$/);
+    var nonSimpleDomain = RegExp.prototype.test.bind(/[^!"$&'()*+,\-.;=_`a-z{}~]/u);
+    function isZoneIdentifier(zone) {
+      if (zone.length === 0) return false;
+      for (let i = 0; i < zone.length; i++) {
+        if (isZoneCharacter(zone[i])) continue;
+        if (zone[i] === "%" && i + 2 < zone.length && isHexPair(zone.slice(i + 1, i + 3))) {
+          i += 2;
+          continue;
+        }
+        return false;
+      }
+      return true;
+    }
+    function compressIPv6ZeroRun(hextets) {
+      let bestStart = -1;
+      let bestLength = 0;
+      let runStart = -1;
+      let runLength = 0;
+      for (let i = 0; i < hextets.length; i++) {
+        if (hextets[i] === "0") {
+          if (runStart === -1) runStart = i;
+          runLength++;
+          if (runLength > bestLength) {
+            bestLength = runLength;
+            bestStart = runStart;
+          }
+        } else {
+          runStart = -1;
+          runLength = 0;
+        }
+      }
+      if (bestLength < 2) return hextets.join(":");
+      const head = hextets.slice(0, bestStart).join(":");
+      const tail = hextets.slice(bestStart + bestLength).join(":");
+      return head + "::" + tail;
+    }
+    function normalizeIPv6Address(input) {
+      const compression = input.indexOf("::");
+      if (compression !== -1 && input.indexOf("::", compression + 1) !== -1) return void 0;
+      const left = compression === -1 ? input.split(":") : input.slice(0, compression).split(":");
+      const right = compression === -1 ? [] : input.slice(compression + 2).split(":");
+      if (compression !== -1) {
+        if (left.length === 1 && left[0] === "") left.length = 0;
+        if (right.length === 1 && right[0] === "") right.length = 0;
+      }
+      const parts = left.concat(right);
+      let hextetCount = 0;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (part === "") return void 0;
+        if (part.indexOf(".") !== -1) {
+          if (i !== parts.length - 1 || compression !== -1 && right.length === 0 || !isIPv4(part)) return void 0;
+          hextetCount += 2;
+          continue;
+        }
+        if (!isHextet(part)) return void 0;
+        parts[i] = parseInt(part, 16).toString(16);
+        hextetCount++;
+      }
+      if (compression === -1) {
+        if (hextetCount !== 8) return void 0;
+        return compressIPv6ZeroRun(parts);
+      }
+      if (hextetCount >= 8) return void 0;
+      const expanded = parts.slice(0, left.length);
+      for (let i = hextetCount; i < 8; i++) expanded.push("0");
+      for (let i = left.length; i < parts.length; i++) expanded.push(parts[i]);
+      return compressIPv6ZeroRun(expanded);
+    }
+    function normalizeIPv6(host) {
+      const bracketed = host[0] === "[" && host[host.length - 1] === "]";
+      const hasBracket = host[0] === "[" || host[host.length - 1] === "]";
+      if (hasBracket && !bracketed) return { host, isIPV6: false, error: true };
+      let input = bracketed ? host.slice(1, -1) : host;
+      if (bracketed && isIPvFuture(input)) {
+        input = input.toLowerCase();
+        return { host: `[${input}]`, escapedHost: input, isIPV6: false, isIPVFuture: true };
+      }
+      if (findToken(input, ":") < 2) {
+        return { host, isIPV6: false, error: bracketed };
+      }
+      let zoneIdentifier = "";
+      const zoneSeparator = input.indexOf("%");
+      if (zoneSeparator !== -1) {
+        const separatorLength = input.slice(zoneSeparator, zoneSeparator + 3).toLowerCase() === "%25" ? 3 : 1;
+        zoneIdentifier = input.slice(zoneSeparator + separatorLength);
+        if (!isZoneIdentifier(zoneIdentifier)) return { host, isIPV6: false, error: true };
+        input = input.slice(0, zoneSeparator);
+      }
+      const address = normalizeIPv6Address(input);
+      if (address === void 0) return { host, isIPV6: false, error: true };
+      return {
+        host: address + (zoneIdentifier ? "%" + zoneIdentifier : ""),
+        escapedHost: address + (zoneIdentifier ? "%25" + zoneIdentifier : ""),
+        isIPV6: true
+      };
+    }
+    function findToken(str, token) {
+      let ind = 0;
+      for (let i = 0; i < str.length; i++) {
+        if (str[i] === token) ind++;
+      }
+      return ind;
+    }
+    function removeDotSegments(path10) {
+      let input = path10;
+      const output = [];
+      let nextSlash = -1;
+      let len = 0;
+      while (len = input.length) {
+        if (len === 1) {
+          if (input === ".") {
+            break;
+          } else if (input === "/") {
+            output.push("/");
+            break;
+          } else {
+            output.push(input);
+            break;
+          }
+        } else if (len === 2) {
+          if (input[0] === ".") {
+            if (input[1] === ".") {
+              break;
+            } else if (input[1] === "/") {
+              input = input.slice(2);
+              continue;
+            }
+          } else if (input[0] === "/") {
+            if (input[1] === "." || input[1] === "/") {
+              output.push("/");
+              break;
+            }
+          }
+        } else if (len === 3) {
+          if (input === "/..") {
+            if (output.length !== 0) {
+              output.pop();
+            }
+            output.push("/");
+            break;
+          }
+        }
+        if (input[0] === ".") {
+          if (input[1] === ".") {
+            if (input[2] === "/") {
+              input = input.slice(3);
+              continue;
+            }
+          } else if (input[1] === "/") {
+            input = input.slice(2);
+            continue;
+          }
+        } else if (input[0] === "/") {
+          if (input[1] === ".") {
+            if (input[2] === "/") {
+              input = input.slice(2);
+              continue;
+            } else if (input[2] === ".") {
+              if (input[3] === "/") {
+                input = input.slice(3);
+                if (output.length !== 0) {
+                  output.pop();
+                }
+                continue;
+              }
+            }
+          }
+        }
+        if ((nextSlash = input.indexOf("/", 1)) === -1) {
+          output.push(input);
+          break;
+        } else {
+          output.push(input.slice(0, nextSlash));
+          input = input.slice(nextSlash);
+        }
+      }
+      return output.join("");
+    }
+    var HOST_DELIMS = { "@": "%40", "/": "%2F", "?": "%3F", "#": "%23", ":": "%3A" };
+    var HOST_DELIM_RE = /[@/?#:]/g;
+    var HOST_DELIM_NO_COLON_RE = /[@/?#]/g;
+    function reescapeHostDelimiters(host, isIP) {
+      const re = isIP ? HOST_DELIM_NO_COLON_RE : HOST_DELIM_RE;
+      re.lastIndex = 0;
+      return host.replace(re, (ch) => HOST_DELIMS[ch]);
+    }
+    function normalizePercentEncoding(input, decodeUnreserved = false) {
+      if (input.indexOf("%") === -1) {
+        return input;
+      }
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        if (input[i] === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            const normalizedHex = hex.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (decodeUnreserved && isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i += 2;
+            continue;
+          }
+        }
+        output += input[i];
+      }
+      return output;
+    }
+    function normalizePathEncoding(input) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            const normalizedHex = hex.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (decoded !== "." && isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i += 2;
+            continue;
+          }
+        }
+        if (isPathCharacter(ch)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += isEscapeSafe(code) ? ch : BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function serializePathEncoding(input, pathNoScheme = false) {
+      let output = "";
+      let firstSegment = pathNoScheme && input[0] !== "/";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            output += "%" + hex.toUpperCase();
+            i += 2;
+            continue;
+          }
+        }
+        if (ch === "/") {
+          firstSegment = false;
+        }
+        if (isPathCharacter(ch) && (ch !== ":" || !firstSegment)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function encodeComponent(input, isAllowed) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            output += "%" + hex.toUpperCase();
+            i += 2;
+            continue;
+          }
+        }
+        if (isAllowed(ch)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function encodeUserinfo(input) {
+      return encodeComponent(input, isUserinfoCharacter);
+    }
+    function encodeQuery(input) {
+      return encodeComponent(input, isQueryFragmentCharacter);
+    }
+    function encodeFragment(input) {
+      return encodeComponent(input, isQueryFragmentCharacter);
+    }
+    function isEscapeSafe(cp) {
+      return cp >= 48 && cp <= 57 || cp >= 65 && cp <= 90 || cp >= 97 && cp <= 122 || cp === 42 || cp === 43 || cp === 45 || cp === 46 || cp === 47 || cp === 64 || cp === 95;
+    }
+    function normalizeQueryFragmentEncoding(input) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            const normalizedHex = hex.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i += 2;
+            continue;
+          }
+        }
+        if (isQueryFragmentCharacter(ch)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += isEscapeSafe(code) ? ch : BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function escapePreservingEscapes(input) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        if (input[i] === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            output += "%" + hex.toUpperCase();
+            i += 2;
+            continue;
+          }
+        }
+        output += escape(input[i]);
+      }
+      return output;
+    }
+    function recomposeAuthority(component) {
+      const uriTokens = [];
+      if (component.userinfo !== void 0) {
+        uriTokens.push(encodeUserinfo(component.userinfo));
+        uriTokens.push("@");
+      }
+      if (component.host !== void 0) {
+        let host = component.host;
+        if (!isIPv4(host)) {
+          let ipV6res = normalizeIPv6(host);
+          if (ipV6res.isIPV6 !== true && ipV6res.isIPVFuture !== true) {
+            host = normalizePercentEncoding(host, true);
+            ipV6res = normalizeIPv6(host);
+          }
+          if (ipV6res.isIPV6 === true || ipV6res.isIPVFuture === true) {
+            host = `[${ipV6res.escapedHost}]`;
+          } else {
+            host = reescapeHostDelimiters(host, false);
+          }
+        }
+        uriTokens.push(host);
+      }
+      if (typeof component.port === "number" || typeof component.port === "string") {
+        uriTokens.push(":");
+        uriTokens.push(String(component.port));
+      }
+      return uriTokens.length ? uriTokens.join("") : void 0;
+    }
+    module.exports = {
+      nonSimpleDomain,
+      recomposeAuthority,
+      reescapeHostDelimiters,
+      normalizePercentEncoding,
+      normalizePathEncoding,
+      serializePathEncoding,
+      normalizeQueryFragmentEncoding,
+      encodeUserinfo,
+      encodeQuery,
+      encodeFragment,
+      escapePreservingEscapes,
+      removeDotSegments,
+      isIPv4,
+      isUUID,
+      normalizeIPv6,
+      stringArrayToHexStripped
+    };
+  }
+});
+
+// node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/schemes.js
+var require_schemes = __commonJS({
+  "node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/schemes.js"(exports, module) {
+    "use strict";
+    var { isUUID } = require_utils();
+    var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
+    var supportedSchemeNames = (
+      /** @type {const} */
+      [
+        "http",
+        "https",
+        "ws",
+        "wss",
+        "urn",
+        "urn:uuid"
+      ]
+    );
+    function isValidSchemeName(name) {
+      return supportedSchemeNames.indexOf(
+        /** @type {*} */
+        name
+      ) !== -1;
+    }
+    function wsIsSecure(wsComponent) {
+      if (wsComponent.secure === true) {
+        return true;
+      } else if (wsComponent.secure === false) {
+        return false;
+      } else if (wsComponent.scheme) {
+        return wsComponent.scheme.length === 3 && (wsComponent.scheme[0] === "w" || wsComponent.scheme[0] === "W") && (wsComponent.scheme[1] === "s" || wsComponent.scheme[1] === "S") && (wsComponent.scheme[2] === "s" || wsComponent.scheme[2] === "S");
+      } else {
+        return false;
+      }
+    }
+    function httpParse(component) {
+      if (!component.host) {
+        component.error = component.error || "HTTP URIs must have a host.";
+      }
+      return component;
+    }
+    function httpSerialize(component) {
+      const secure = String(component.scheme).toLowerCase() === "https";
+      if (component.port === (secure ? 443 : 80) || component.port === "") {
+        component.port = void 0;
+      }
+      if (!component.path) {
+        component.path = "/";
+      }
+      return component;
+    }
+    function wsParse(wsComponent) {
+      wsComponent.secure = wsIsSecure(wsComponent);
+      wsComponent.resourceName = (wsComponent.path || "/") + (wsComponent.query ? "?" + wsComponent.query : "");
+      wsComponent.path = void 0;
+      wsComponent.query = void 0;
+      return wsComponent;
+    }
+    function wsSerialize(wsComponent) {
+      if (wsComponent.port === (wsIsSecure(wsComponent) ? 443 : 80) || wsComponent.port === "") {
+        wsComponent.port = void 0;
+      }
+      if (typeof wsComponent.secure === "boolean") {
+        wsComponent.scheme = wsComponent.secure ? "wss" : "ws";
+        wsComponent.secure = void 0;
+      }
+      if (wsComponent.resourceName) {
+        const queryIndex = wsComponent.resourceName.indexOf("?");
+        const path10 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path10 && path10 !== "/" ? path10 : void 0;
+        wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
+        wsComponent.resourceName = void 0;
+      }
+      wsComponent.fragment = void 0;
+      return wsComponent;
+    }
+    function urnParse(urnComponent, options) {
+      if (!urnComponent.path) {
+        urnComponent.error = "URN can not be parsed";
+        return urnComponent;
+      }
+      const matches = urnComponent.path.match(URN_REG);
+      if (matches && matches[0] === urnComponent.path) {
+        const scheme = options.scheme || urnComponent.scheme || "urn";
+        urnComponent.nid = matches[1].toLowerCase();
+        urnComponent.nss = matches[2];
+        const urnScheme = `${scheme}:${options.nid || urnComponent.nid}`;
+        const schemeHandler = getSchemeHandler(urnScheme);
+        urnComponent.path = void 0;
+        if (schemeHandler) {
+          urnComponent = schemeHandler.parse(urnComponent, options);
+        }
+      } else {
+        urnComponent.error = urnComponent.error || "URN can not be parsed.";
+      }
+      return urnComponent;
+    }
+    function urnSerialize(urnComponent, options) {
+      if (urnComponent.nid === void 0) {
+        throw new Error("URN without nid cannot be serialized");
+      }
+      const scheme = options.scheme || urnComponent.scheme || "urn";
+      const nid = urnComponent.nid.toLowerCase();
+      const urnScheme = `${scheme}:${options.nid || nid}`;
+      const schemeHandler = getSchemeHandler(urnScheme);
+      if (schemeHandler) {
+        urnComponent = schemeHandler.serialize(urnComponent, options);
+      }
+      const uriComponent = urnComponent;
+      const nss = urnComponent.nss;
+      uriComponent.path = `${nid || options.nid}:${nss}`;
+      options.skipEscape = true;
+      return uriComponent;
+    }
+    function urnuuidParse(urnComponent, options) {
+      const uuidComponent = urnComponent;
+      uuidComponent.uuid = uuidComponent.nss;
+      uuidComponent.nss = void 0;
+      if (!options.tolerant && (!uuidComponent.uuid || !isUUID(uuidComponent.uuid))) {
+        uuidComponent.error = uuidComponent.error || "UUID is not valid.";
+      }
+      return uuidComponent;
+    }
+    function urnuuidSerialize(uuidComponent) {
+      const urnComponent = uuidComponent;
+      urnComponent.nss = (uuidComponent.uuid || "").toLowerCase();
+      return urnComponent;
+    }
+    var http = (
+      /** @type {SchemeHandler} */
+      {
+        scheme: "http",
+        domainHost: true,
+        parse: httpParse,
+        serialize: httpSerialize
+      }
+    );
+    var https = (
+      /** @type {SchemeHandler} */
+      {
+        scheme: "https",
+        domainHost: http.domainHost,
+        parse: httpParse,
+        serialize: httpSerialize
+      }
+    );
+    var ws = (
+      /** @type {SchemeHandler} */
+      {
+        scheme: "ws",
+        domainHost: true,
+        parse: wsParse,
+        serialize: wsSerialize
+      }
+    );
+    var wss = (
+      /** @type {SchemeHandler} */
+      {
+        scheme: "wss",
+        domainHost: ws.domainHost,
+        parse: ws.parse,
+        serialize: ws.serialize
+      }
+    );
+    var urn = (
+      /** @type {SchemeHandler} */
+      {
+        scheme: "urn",
+        parse: urnParse,
+        serialize: urnSerialize,
+        skipNormalize: true
+      }
+    );
+    var urnuuid = (
+      /** @type {SchemeHandler} */
+      {
+        scheme: "urn:uuid",
+        parse: urnuuidParse,
+        serialize: urnuuidSerialize,
+        skipNormalize: true
+      }
+    );
+    var SCHEMES = (
+      /** @type {Record<SchemeName, SchemeHandler>} */
+      {
+        http,
+        https,
+        ws,
+        wss,
+        urn,
+        "urn:uuid": urnuuid
+      }
+    );
+    Object.setPrototypeOf(SCHEMES, null);
+    function getSchemeHandler(scheme) {
+      return scheme && (SCHEMES[
+        /** @type {SchemeName} */
+        scheme
+      ] || SCHEMES[
+        /** @type {SchemeName} */
+        scheme.toLowerCase()
+      ]) || void 0;
+    }
+    module.exports = {
+      wsIsSecure,
+      SCHEMES,
+      isValidSchemeName,
+      getSchemeHandler
+    };
+  }
+});
+
+// node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/index.js
+var require_fast_uri = __commonJS({
+  "node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/index.js"(exports, module) {
+    "use strict";
+    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
+    var { SCHEMES, getSchemeHandler } = require_schemes();
+    var VALID_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*$/u;
+    var MALFORMED_SCHEME_ERROR = "URI scheme is malformed.";
+    function decodeValidScheme(scheme) {
+      const decodedScheme = unescape(String(scheme));
+      if (!VALID_SCHEME.test(decodedScheme)) {
+        throw new TypeError(MALFORMED_SCHEME_ERROR);
+      }
+      return decodedScheme;
+    }
+    function normalize(uri, options) {
+      if (typeof uri === "string") {
+        uri = /** @type {T} */
+        normalizeString(uri, options);
+      } else if (typeof uri === "object") {
+        uri = /** @type {T} */
+        parse2(serialize(uri, options), options);
+      }
+      return uri;
+    }
+    function resolve(baseURI, relativeURI, options) {
+      const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
+      const {
+        parsed: baseParsed,
+        malformedAuthorityOrPort: baseMalformed,
+        malformedPercentEncoding: baseMalformedPercentEncoding,
+        malformedSchemeSpecific: baseMalformedSchemeSpecific,
+        malformedHost: baseMalformedHost,
+        malformedScheme: baseMalformedScheme
+      } = parseWithStatus(baseURI, schemelessOptions);
+      const {
+        parsed: relativeParsed,
+        malformedAuthorityOrPort: relativeMalformed,
+        malformedPercentEncoding: relativeMalformedPercentEncoding,
+        malformedSchemeSpecific: relativeMalformedSchemeSpecific,
+        malformedHost: relativeMalformedHost,
+        malformedScheme: relativeMalformedScheme
+      } = parseWithStatus(relativeURI, schemelessOptions);
+      if (baseMalformed || relativeMalformed || baseMalformedPercentEncoding || relativeMalformedPercentEncoding || baseMalformedSchemeSpecific || relativeMalformedSchemeSpecific || baseMalformedHost || relativeMalformedHost || baseMalformedScheme || relativeMalformedScheme) {
+        throw new Error(baseParsed.error || relativeParsed.error || "URI is malformed.");
+      }
+      const resolved2 = resolveComponent(baseParsed, relativeParsed, schemelessOptions, true);
+      const resolvedSchemeHandler = getSchemeHandler(options && options.scheme || resolved2.scheme);
+      const resolvedHost = resolved2.host;
+      const resolvedHostIsIP = resolvedHost !== void 0 && resolvedHost !== "" && (isIPv4(resolvedHost) || normalizeIPv6(resolvedHost).isIPV6);
+      canonicalizeHost(resolved2, options || {}, resolvedSchemeHandler, resolvedHostIsIP);
+      const encodedASCIIHost = resolvedHost && resolvedHost.indexOf("%") !== -1 && !new RegExp("\\P{ASCII}", "u").test(resolvedHost);
+      if (resolved2.error && !encodedASCIIHost) {
+        throw new Error(resolved2.error);
+      }
+      schemelessOptions.skipEscape = true;
+      return serialize(resolved2, schemelessOptions);
+    }
+    function resolveComponent(base, relative, options, skipNormalization) {
+      const target = {};
+      if (!skipNormalization) {
+        base = parse2(serialize(base, options), options);
+        relative = parse2(serialize(relative, options), options);
+      }
+      options = options || {};
+      if (!options.tolerant && relative.scheme) {
+        target.scheme = relative.scheme;
+        target.userinfo = relative.userinfo;
+        target.host = relative.host;
+        target.port = relative.port;
+        target.path = removeDotSegments(relative.path || "");
+        target.query = relative.query;
+      } else {
+        if (relative.userinfo !== void 0 || relative.host !== void 0 || relative.port !== void 0) {
+          target.userinfo = relative.userinfo;
+          target.host = relative.host;
+          target.port = relative.port;
+          target.path = removeDotSegments(relative.path || "");
+          target.query = relative.query;
+        } else {
+          if (!relative.path) {
+            target.path = base.path;
+            if (relative.query !== void 0) {
+              target.query = relative.query;
+            } else {
+              target.query = base.query;
+            }
+          } else {
+            if (relative.path[0] === "/") {
+              target.path = removeDotSegments(relative.path);
+            } else {
+              if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
+                target.path = "/" + relative.path;
+              } else if (!base.path) {
+                target.path = relative.path;
+              } else {
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
+              }
+              target.path = removeDotSegments(target.path);
+            }
+            target.query = relative.query;
+          }
+          target.userinfo = base.userinfo;
+          target.host = base.host;
+          target.port = base.port;
+        }
+        target.scheme = base.scheme;
+      }
+      target.fragment = relative.fragment;
+      return target;
+    }
+    function equal(uriA, uriB, options) {
+      const normalizedA = normalizeComparableURI(uriA, options);
+      const normalizedB = normalizeComparableURI(uriB, options);
+      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA === normalizedB;
+    }
+    function serialize(cmpts, opts) {
+      const component = {
+        host: cmpts.host,
+        scheme: cmpts.scheme,
+        userinfo: cmpts.userinfo,
+        port: cmpts.port,
+        path: cmpts.path,
+        query: cmpts.query,
+        nid: cmpts.nid,
+        nss: cmpts.nss,
+        uuid: cmpts.uuid,
+        fragment: cmpts.fragment,
+        reference: cmpts.reference,
+        resourceName: cmpts.resourceName,
+        secure: cmpts.secure,
+        error: ""
+      };
+      const options = Object.assign({}, opts);
+      const uriTokens = [];
+      if (component.scheme) {
+        component.scheme = decodeValidScheme(component.scheme);
+      }
+      const schemeHandler = getSchemeHandler(options.scheme || component.scheme);
+      if (schemeHandler && schemeHandler.serialize) schemeHandler.serialize(component, options);
+      const hasAuthority = component.userinfo !== void 0 || component.host !== void 0 || component.port !== void 0;
+      const pathNoScheme = !options.skipEscape && component.scheme === void 0 && !hasAuthority;
+      if (component.path !== void 0) {
+        if (!options.skipEscape) {
+          component.path = serializePathEncoding(component.path, pathNoScheme);
+        } else {
+          component.path = normalizePercentEncoding(component.path);
+        }
+      }
+      if (options.reference !== "suffix" && component.scheme) {
+        component.scheme = decodeValidScheme(component.scheme);
+        uriTokens.push(component.scheme, ":");
+      }
+      const authority = recomposeAuthority(component);
+      if (authority !== void 0) {
+        if (options.reference !== "suffix") {
+          uriTokens.push("//");
+        }
+        uriTokens.push(authority);
+        if (component.path && component.path[0] !== "/") {
+          uriTokens.push("/");
+        }
+      }
+      if (component.path !== void 0) {
+        let s = component.path;
+        if (!options.absolutePath && (!schemeHandler || !schemeHandler.absolutePath)) {
+          s = removeDotSegments(s);
+        }
+        if (pathNoScheme) {
+          s = serializePathEncoding(s, true);
+        }
+        if (authority === void 0 && s[0] === "/" && s[1] === "/") {
+          s = "/%2F" + s.slice(2);
+        }
+        uriTokens.push(s);
+      }
+      if (component.query !== void 0) {
+        uriTokens.push("?", encodeQuery(component.query));
+      }
+      if (component.fragment !== void 0) {
+        uriTokens.push("#", encodeFragment(component.fragment));
+      }
+      return uriTokens.join("");
+    }
+    var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
+    var AUTHORITY_PREFIX = /^(?:[^#/:?]+:)?\/\/([^/?#]*)/;
+    var AUTHORITY_INTRODUCER_REGION = /^(?:[^#/:?]+:)?([/\\\t\n\r]*)/;
+    function getParseError(parsed, matches) {
+      if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
+        return 'URI path must start with "/" when authority is present.';
+      }
+      if (typeof parsed.port === "number" && (parsed.port < 0 || parsed.port > 65535)) {
+        return "URI port is malformed.";
+      }
+      return void 0;
+    }
+    function hasMalformedPercentEncoding(component) {
+      if (component === void 0) return false;
+      let percent = component.indexOf("%");
+      while (percent !== -1) {
+        if (percent + 2 >= component.length || !/^[\da-f]{2}$/iu.test(component.slice(percent + 1, percent + 3))) {
+          return true;
+        }
+        percent = component.indexOf("%", percent + 3);
+      }
+      return false;
+    }
+    function hasMalformedComponentPercentEncoding(matches) {
+      const host = matches[4];
+      return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !(host[0] === "[" && host[host.length - 1] === "]") && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
+    }
+    function canonicalizeHost(parsed, options, schemeHandler, isIP) {
+      if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && parsed.host[0] !== "[" && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+        try {
+          parsed.host = new URL("http://" + parsed.host).hostname;
+        } catch (e) {
+          parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
+          return true;
+        }
+      }
+      return false;
+    }
+    function parseWithStatus(uri, opts) {
+      const options = Object.assign({}, opts);
+      const parsed = {
+        scheme: void 0,
+        userinfo: void 0,
+        host: "",
+        port: void 0,
+        path: "",
+        query: void 0,
+        fragment: void 0
+      };
+      let malformedAuthorityOrPort = false;
+      let malformedPercentEncoding = false;
+      let malformedSchemeSpecific = false;
+      let malformedHost = false;
+      let malformedIPLiteral = false;
+      let malformedScheme = false;
+      let isIP = false;
+      if (options.reference === "suffix") {
+        if (options.scheme) {
+          uri = options.scheme + ":" + uri;
+        } else {
+          uri = "//" + uri;
+        }
+      }
+      const authorityMatch = uri.match(AUTHORITY_PREFIX);
+      if (authorityMatch !== null && authorityMatch[1].indexOf("\\") !== -1) {
+        parsed.error = "URI authority must not contain a literal backslash.";
+        malformedAuthorityOrPort = true;
+      }
+      const introducerMatch = uri.match(AUTHORITY_INTRODUCER_REGION);
+      if (introducerMatch !== null) {
+        const region = introducerMatch[1];
+        const normalizedRegion = region.replace(/[\t\n\r]/g, "");
+        if (normalizedRegion.length >= 2) {
+          if (normalizedRegion.slice(0, 2) !== "//") {
+            parsed.error = parsed.error || "URI authority must not contain a literal backslash.";
+            malformedAuthorityOrPort = true;
+          } else if (region.length !== normalizedRegion.length) {
+            parsed.error = parsed.error || "URI authority introducer must not contain whitespace.";
+            malformedAuthorityOrPort = true;
+          }
+        }
+      }
+      const matches = uri.match(URI_PARSE);
+      if (matches) {
+        parsed.scheme = matches[1];
+        parsed.userinfo = matches[3];
+        parsed.host = matches[4];
+        parsed.port = parseInt(matches[5], 10);
+        parsed.path = matches[6] || "";
+        parsed.query = matches[7];
+        parsed.fragment = matches[8];
+        if (parsed.scheme !== void 0) {
+          const decodedScheme = unescape(parsed.scheme);
+          if (VALID_SCHEME.test(decodedScheme)) {
+            parsed.scheme = decodedScheme.toLowerCase();
+          } else {
+            parsed.error = parsed.error || MALFORMED_SCHEME_ERROR;
+            malformedScheme = true;
+          }
+        }
+        malformedPercentEncoding = hasMalformedComponentPercentEncoding(matches);
+        if (malformedPercentEncoding) {
+          parsed.error = parsed.error || "URI contains malformed percent-encoding.";
+        }
+        if (isNaN(parsed.port)) {
+          parsed.port = matches[5];
+        }
+        const parseError = getParseError(parsed, matches);
+        if (parseError !== void 0) {
+          parsed.error = parsed.error || parseError;
+          malformedAuthorityOrPort = true;
+        }
+        if (parsed.host) {
+          const ipv4result = isIPv4(parsed.host);
+          if (ipv4result === false) {
+            const bracketedIPLiteral = parsed.host[0] === "[" && parsed.host[parsed.host.length - 1] === "]";
+            const ipv6result = normalizeIPv6(parsed.host);
+            isIP = ipv6result.isIPV6 || ipv6result.isIPVFuture === true;
+            malformedIPLiteral = bracketedIPLiteral && ipv6result.error === true;
+            parsed.host = isIP ? ipv6result.host : ipv6result.host.toLowerCase();
+            if (malformedIPLiteral) {
+              parsed.error = parsed.error || "URI host is malformed.";
+              malformedAuthorityOrPort = true;
+            }
+          } else {
+            isIP = true;
+          }
+        }
+        if (parsed.scheme === void 0 && parsed.userinfo === void 0 && parsed.host === void 0 && parsed.port === void 0 && parsed.query === void 0 && !parsed.path) {
+          parsed.reference = "same-document";
+        } else if (parsed.scheme === void 0) {
+          parsed.reference = "relative";
+        } else if (parsed.fragment === void 0) {
+          parsed.reference = "absolute";
+        } else {
+          parsed.reference = "uri";
+        }
+        if (options.reference && options.reference !== "suffix" && options.reference !== parsed.reference) {
+          parsed.error = parsed.error || "URI is not a " + options.reference + " reference.";
+        }
+        const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
+        malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP);
+        if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
+          if (uri.indexOf("%") !== -1) {
+            if (parsed.host !== void 0 && !malformedIPLiteral) {
+              const host = isIP ? parsed.host : normalizePercentEncoding(parsed.host, true);
+              parsed.host = reescapeHostDelimiters(host, isIP);
+            }
+          }
+          if (parsed.path) {
+            parsed.path = normalizePathEncoding(parsed.path);
+          }
+          if (parsed.query) {
+            parsed.query = normalizeQueryFragmentEncoding(parsed.query);
+          }
+          if (parsed.fragment) {
+            parsed.fragment = normalizeQueryFragmentEncoding(parsed.fragment);
+          }
+        }
+        if (schemeHandler && schemeHandler.parse) {
+          schemeHandler.parse(parsed, options);
+          if (schemeHandler === SCHEMES.urn && parsed.nid === void 0) {
+            malformedSchemeSpecific = true;
+          }
+        }
+      } else {
+        parsed.error = parsed.error || "URI can not be parsed.";
+      }
+      return { parsed, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme };
+    }
+    function parse2(uri, opts) {
+      return parseWithStatus(uri, opts).parsed;
+    }
+    function normalizeString(uri, opts) {
+      return normalizeStringWithStatus(uri, opts).normalized;
+    }
+    function normalizeStringWithStatus(uri, opts) {
+      const { parsed, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme } = parseWithStatus(uri, opts);
+      return {
+        normalized: malformedAuthorityOrPort || malformedPercentEncoding || malformedSchemeSpecific || malformedHost || malformedScheme ? uri : serialize(parsed, opts),
+        malformedAuthorityOrPort,
+        malformedPercentEncoding,
+        malformedSchemeSpecific,
+        malformedHost,
+        malformedScheme
+      };
+    }
+    function normalizeComparableURI(uri, opts) {
+      if (typeof uri !== "string" && typeof uri !== "object") {
+        return void 0;
+      }
+      let value;
+      try {
+        value = typeof uri === "string" ? uri : serialize(uri, opts);
+      } catch {
+        return void 0;
+      }
+      const { normalized, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme } = normalizeStringWithStatus(value, opts);
+      return malformedAuthorityOrPort || malformedPercentEncoding || malformedSchemeSpecific || malformedHost || malformedScheme ? void 0 : normalized;
+    }
+    var fastUri = {
+      SCHEMES,
+      normalize,
+      resolve,
+      resolveComponent,
+      equal,
+      serialize,
+      parse: parse2
+    };
+    module.exports = fastUri;
+    module.exports.default = fastUri;
+    module.exports.fastUri = fastUri;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/uri.js
+var require_uri = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/uri.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var uri = require_fast_uri();
+    uri.code = 'require("ajv/dist/runtime/uri").default';
+    exports.default = uri;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/core.js
+var require_core = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/core.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = void 0;
+    var validate_1 = require_validate();
+    Object.defineProperty(exports, "KeywordCxt", { enumerable: true, get: function() {
+      return validate_1.KeywordCxt;
+    } });
+    var codegen_1 = require_codegen();
+    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
+      return codegen_1._;
+    } });
+    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
+      return codegen_1.str;
+    } });
+    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
+      return codegen_1.stringify;
+    } });
+    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
+      return codegen_1.nil;
+    } });
+    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
+      return codegen_1.Name;
+    } });
+    Object.defineProperty(exports, "CodeGen", { enumerable: true, get: function() {
+      return codegen_1.CodeGen;
+    } });
+    var validation_error_1 = require_validation_error();
+    var ref_error_1 = require_ref_error();
+    var rules_1 = require_rules();
+    var compile_1 = require_compile();
+    var codegen_2 = require_codegen();
+    var resolve_1 = require_resolve();
+    var dataType_1 = require_dataType();
+    var util_1 = require_util();
+    var $dataRefSchema = require_data();
+    var uri_1 = require_uri();
+    var defaultRegExp = (str, flags) => new RegExp(str, flags);
+    defaultRegExp.code = "new RegExp";
+    var META_IGNORE_OPTIONS = ["removeAdditional", "useDefaults", "coerceTypes"];
+    var EXT_SCOPE_NAMES = /* @__PURE__ */ new Set([
+      "validate",
+      "serialize",
+      "parse",
+      "wrapper",
+      "root",
+      "schema",
+      "keyword",
+      "pattern",
+      "formats",
+      "validate$data",
+      "func",
+      "obj",
+      "Error"
+    ]);
+    var removedOptions = {
+      errorDataPath: "",
+      format: "`validateFormats: false` can be used instead.",
+      nullable: '"nullable" keyword is supported by default.',
+      jsonPointers: "Deprecated jsPropertySyntax can be used instead.",
+      extendRefs: "Deprecated ignoreKeywordsWithRef can be used instead.",
+      missingRefs: "Pass empty schema with $id that should be ignored to ajv.addSchema.",
+      processCode: "Use option `code: {process: (code, schemaEnv: object) => string}`",
+      sourceCode: "Use option `code: {source: true}`",
+      strictDefaults: "It is default now, see option `strict`.",
+      strictKeywords: "It is default now, see option `strict`.",
+      uniqueItems: '"uniqueItems" keyword is always validated.',
+      unknownFormats: "Disable strict mode or pass `true` to `ajv.addFormat` (or `formats` option).",
+      cache: "Map is used as cache, schema object as key.",
+      serialize: "Map is used as cache, schema object as key.",
+      ajvErrors: "It is default now."
+    };
+    var deprecatedOptions = {
+      ignoreKeywordsWithRef: "",
+      jsPropertySyntax: "",
+      unicode: '"minLength"/"maxLength" account for unicode characters by default.'
+    };
+    var MAX_EXPRESSION = 200;
+    function requiredOptions(o) {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0;
+      const s = o.strict;
+      const _optz = (_a = o.code) === null || _a === void 0 ? void 0 : _a.optimize;
+      const optimize = _optz === true || _optz === void 0 ? 1 : _optz || 0;
+      const regExp = (_c = (_b = o.code) === null || _b === void 0 ? void 0 : _b.regExp) !== null && _c !== void 0 ? _c : defaultRegExp;
+      const uriResolver = (_d = o.uriResolver) !== null && _d !== void 0 ? _d : uri_1.default;
+      return {
+        strictSchema: (_f = (_e = o.strictSchema) !== null && _e !== void 0 ? _e : s) !== null && _f !== void 0 ? _f : true,
+        strictNumbers: (_h = (_g = o.strictNumbers) !== null && _g !== void 0 ? _g : s) !== null && _h !== void 0 ? _h : true,
+        strictTypes: (_k = (_j = o.strictTypes) !== null && _j !== void 0 ? _j : s) !== null && _k !== void 0 ? _k : "log",
+        strictTuples: (_m = (_l = o.strictTuples) !== null && _l !== void 0 ? _l : s) !== null && _m !== void 0 ? _m : "log",
+        strictRequired: (_p = (_o = o.strictRequired) !== null && _o !== void 0 ? _o : s) !== null && _p !== void 0 ? _p : false,
+        code: o.code ? { ...o.code, optimize, regExp } : { optimize, regExp },
+        loopRequired: (_q = o.loopRequired) !== null && _q !== void 0 ? _q : MAX_EXPRESSION,
+        loopEnum: (_r = o.loopEnum) !== null && _r !== void 0 ? _r : MAX_EXPRESSION,
+        meta: (_s = o.meta) !== null && _s !== void 0 ? _s : true,
+        messages: (_t = o.messages) !== null && _t !== void 0 ? _t : true,
+        inlineRefs: (_u = o.inlineRefs) !== null && _u !== void 0 ? _u : true,
+        schemaId: (_v = o.schemaId) !== null && _v !== void 0 ? _v : "$id",
+        addUsedSchema: (_w = o.addUsedSchema) !== null && _w !== void 0 ? _w : true,
+        validateSchema: (_x = o.validateSchema) !== null && _x !== void 0 ? _x : true,
+        validateFormats: (_y = o.validateFormats) !== null && _y !== void 0 ? _y : true,
+        unicodeRegExp: (_z = o.unicodeRegExp) !== null && _z !== void 0 ? _z : true,
+        int32range: (_0 = o.int32range) !== null && _0 !== void 0 ? _0 : true,
+        uriResolver
+      };
+    }
+    var Ajv2 = class {
+      constructor(opts = {}) {
+        this.schemas = {};
+        this.refs = {};
+        this.formats = /* @__PURE__ */ Object.create(null);
+        this._compilations = /* @__PURE__ */ new Set();
+        this._loading = {};
+        this._cache = /* @__PURE__ */ new Map();
+        opts = this.opts = { ...opts, ...requiredOptions(opts) };
+        const { es5, lines } = this.opts.code;
+        this.scope = new codegen_2.ValueScope({ scope: {}, prefixes: EXT_SCOPE_NAMES, es5, lines });
+        this.logger = getLogger(opts.logger);
+        const formatOpt = opts.validateFormats;
+        opts.validateFormats = false;
+        this.RULES = (0, rules_1.getRules)();
+        checkOptions.call(this, removedOptions, opts, "NOT SUPPORTED");
+        checkOptions.call(this, deprecatedOptions, opts, "DEPRECATED", "warn");
+        this._metaOpts = getMetaSchemaOptions.call(this);
+        if (opts.formats)
+          addInitialFormats.call(this);
+        this._addVocabularies();
+        this._addDefaultMetaSchema();
+        if (opts.keywords)
+          addInitialKeywords.call(this, opts.keywords);
+        if (typeof opts.meta == "object")
+          this.addMetaSchema(opts.meta);
+        addInitialSchemas.call(this);
+        opts.validateFormats = formatOpt;
+      }
+      _addVocabularies() {
+        this.addKeyword("$async");
+      }
+      _addDefaultMetaSchema() {
+        const { $data, meta, schemaId } = this.opts;
+        let _dataRefSchema = $dataRefSchema;
+        if (schemaId === "id") {
+          _dataRefSchema = { ...$dataRefSchema };
+          _dataRefSchema.id = _dataRefSchema.$id;
+          delete _dataRefSchema.$id;
+        }
+        if (meta && $data)
+          this.addMetaSchema(_dataRefSchema, _dataRefSchema[schemaId], false);
+      }
+      defaultMeta() {
+        const { meta, schemaId } = this.opts;
+        return this.opts.defaultMeta = typeof meta == "object" ? meta[schemaId] || meta : void 0;
+      }
+      validate(schemaKeyRef, data) {
+        let v;
+        if (typeof schemaKeyRef == "string") {
+          v = this.getSchema(schemaKeyRef);
+          if (!v)
+            throw new Error(`no schema with key or ref "${schemaKeyRef}"`);
+        } else {
+          v = this.compile(schemaKeyRef);
+        }
+        const valid = v(data);
+        if (!("$async" in v))
+          this.errors = v.errors;
+        return valid;
+      }
+      compile(schema, _meta) {
+        const sch = this._addSchema(schema, _meta);
+        return sch.validate || this._compileSchemaEnv(sch);
+      }
+      compileAsync(schema, meta) {
+        if (typeof this.opts.loadSchema != "function") {
+          throw new Error("options.loadSchema should be a function");
+        }
+        const { loadSchema } = this.opts;
+        return runCompileAsync.call(this, schema, meta);
+        async function runCompileAsync(_schema, _meta) {
+          await loadMetaSchema.call(this, _schema.$schema);
+          const sch = this._addSchema(_schema, _meta);
+          return sch.validate || _compileAsync.call(this, sch);
+        }
+        async function loadMetaSchema($ref) {
+          if ($ref && !this.getSchema($ref)) {
+            await runCompileAsync.call(this, { $ref }, true);
+          }
+        }
+        async function _compileAsync(sch) {
+          try {
+            return this._compileSchemaEnv(sch);
+          } catch (e) {
+            if (!(e instanceof ref_error_1.default))
+              throw e;
+            checkLoaded.call(this, e);
+            await loadMissingSchema.call(this, e.missingSchema);
+            return _compileAsync.call(this, sch);
+          }
+        }
+        function checkLoaded({ missingSchema: ref, missingRef }) {
+          if (this.refs[ref]) {
+            throw new Error(`AnySchema ${ref} is loaded but ${missingRef} cannot be resolved`);
+          }
+        }
+        async function loadMissingSchema(ref) {
+          const _schema = await _loadSchema.call(this, ref);
+          if (!this.refs[ref])
+            await loadMetaSchema.call(this, _schema.$schema);
+          if (!this.refs[ref])
+            this.addSchema(_schema, ref, meta);
+        }
+        async function _loadSchema(ref) {
+          const p = this._loading[ref];
+          if (p)
+            return p;
+          try {
+            return await (this._loading[ref] = loadSchema(ref));
+          } finally {
+            delete this._loading[ref];
+          }
+        }
+      }
+      // Adds schema to the instance
+      addSchema(schema, key, _meta, _validateSchema = this.opts.validateSchema) {
+        if (Array.isArray(schema)) {
+          for (const sch of schema)
+            this.addSchema(sch, void 0, _meta, _validateSchema);
+          return this;
+        }
+        let id;
+        if (typeof schema === "object") {
+          const { schemaId } = this.opts;
+          id = schema[schemaId];
+          if (id !== void 0 && typeof id != "string") {
+            throw new Error(`schema ${schemaId} must be string`);
+          }
+        }
+        key = (0, resolve_1.normalizeId)(key || id);
+        this._checkUnique(key);
+        this.schemas[key] = this._addSchema(schema, _meta, key, _validateSchema, true);
+        return this;
+      }
+      // Add schema that will be used to validate other schemas
+      // options in META_IGNORE_OPTIONS are alway set to false
+      addMetaSchema(schema, key, _validateSchema = this.opts.validateSchema) {
+        this.addSchema(schema, key, true, _validateSchema);
+        return this;
+      }
+      //  Validate schema against its meta-schema
+      validateSchema(schema, throwOrLogError) {
+        if (typeof schema == "boolean")
+          return true;
+        let $schema;
+        $schema = schema.$schema;
+        if ($schema !== void 0 && typeof $schema != "string") {
+          throw new Error("$schema must be a string");
+        }
+        $schema = $schema || this.opts.defaultMeta || this.defaultMeta();
+        if (!$schema) {
+          this.logger.warn("meta-schema not available");
+          this.errors = null;
+          return true;
+        }
+        const valid = this.validate($schema, schema);
+        if (!valid && throwOrLogError) {
+          const message = "schema is invalid: " + this.errorsText();
+          if (this.opts.validateSchema === "log")
+            this.logger.error(message);
+          else
+            throw new Error(message);
+        }
+        return valid;
+      }
+      // Get compiled schema by `key` or `ref`.
+      // (`key` that was passed to `addSchema` or full schema reference - `schema.$id` or resolved id)
+      getSchema(keyRef) {
+        let sch;
+        while (typeof (sch = getSchEnv.call(this, keyRef)) == "string")
+          keyRef = sch;
+        if (sch === void 0) {
+          const { schemaId } = this.opts;
+          const root = new compile_1.SchemaEnv({ schema: {}, schemaId });
+          sch = compile_1.resolveSchema.call(this, root, keyRef);
+          if (!sch)
+            return;
+          this.refs[keyRef] = sch;
+        }
+        return sch.validate || this._compileSchemaEnv(sch);
+      }
+      // Remove cached schema(s).
+      // If no parameter is passed all schemas but meta-schemas are removed.
+      // If RegExp is passed all schemas with key/id matching pattern but meta-schemas are removed.
+      // Even if schema is referenced by other schemas it still can be removed as other schemas have local references.
+      removeSchema(schemaKeyRef) {
+        if (schemaKeyRef instanceof RegExp) {
+          this._removeAllSchemas(this.schemas, schemaKeyRef);
+          this._removeAllSchemas(this.refs, schemaKeyRef);
+          return this;
+        }
+        switch (typeof schemaKeyRef) {
+          case "undefined":
+            this._removeAllSchemas(this.schemas);
+            this._removeAllSchemas(this.refs);
+            this._cache.clear();
+            return this;
+          case "string": {
+            const sch = getSchEnv.call(this, schemaKeyRef);
+            if (typeof sch == "object")
+              this._cache.delete(sch.schema);
+            delete this.schemas[schemaKeyRef];
+            delete this.refs[schemaKeyRef];
+            return this;
+          }
+          case "object": {
+            const cacheKey = schemaKeyRef;
+            this._cache.delete(cacheKey);
+            let id = schemaKeyRef[this.opts.schemaId];
+            if (id) {
+              id = (0, resolve_1.normalizeId)(id);
+              delete this.schemas[id];
+              delete this.refs[id];
+            }
+            return this;
+          }
+          default:
+            throw new Error("ajv.removeSchema: invalid parameter");
+        }
+      }
+      // add "vocabulary" - a collection of keywords
+      addVocabulary(definitions) {
+        for (const def of definitions)
+          this.addKeyword(def);
+        return this;
+      }
+      addKeyword(kwdOrDef, def) {
+        let keyword;
+        if (typeof kwdOrDef == "string") {
+          keyword = kwdOrDef;
+          if (typeof def == "object") {
+            this.logger.warn("these parameters are deprecated, see docs for addKeyword");
+            def.keyword = keyword;
+          }
+        } else if (typeof kwdOrDef == "object" && def === void 0) {
+          def = kwdOrDef;
+          keyword = def.keyword;
+          if (Array.isArray(keyword) && !keyword.length) {
+            throw new Error("addKeywords: keyword must be string or non-empty array");
+          }
+        } else {
+          throw new Error("invalid addKeywords parameters");
+        }
+        checkKeyword.call(this, keyword, def);
+        if (!def) {
+          (0, util_1.eachItem)(keyword, (kwd) => addRule.call(this, kwd));
+          return this;
+        }
+        keywordMetaschema.call(this, def);
+        const definition = {
+          ...def,
+          type: (0, dataType_1.getJSONTypes)(def.type),
+          schemaType: (0, dataType_1.getJSONTypes)(def.schemaType)
+        };
+        (0, util_1.eachItem)(keyword, definition.type.length === 0 ? (k) => addRule.call(this, k, definition) : (k) => definition.type.forEach((t) => addRule.call(this, k, definition, t)));
+        return this;
+      }
+      getKeyword(keyword) {
+        const rule = this.RULES.all[keyword];
+        return typeof rule == "object" ? rule.definition : !!rule;
+      }
+      // Remove keyword
+      removeKeyword(keyword) {
+        const { RULES } = this;
+        delete RULES.keywords[keyword];
+        delete RULES.all[keyword];
+        for (const group of RULES.rules) {
+          const i = group.rules.findIndex((rule) => rule.keyword === keyword);
+          if (i >= 0)
+            group.rules.splice(i, 1);
+        }
+        return this;
+      }
+      // Add format
+      addFormat(name, format) {
+        if (typeof format == "string")
+          format = new RegExp(format);
+        this.formats[name] = format;
+        return this;
+      }
+      errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
+        if (!errors || errors.length === 0)
+          return "No errors";
+        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text, msg) => text + separator + msg);
+      }
+      $dataMetaSchema(metaSchema, keywordsJsonPointers) {
+        const rules = this.RULES.all;
+        metaSchema = JSON.parse(JSON.stringify(metaSchema));
+        for (const jsonPointer of keywordsJsonPointers) {
+          const segments = jsonPointer.split("/").slice(1);
+          let keywords = metaSchema;
+          for (const seg of segments)
+            keywords = keywords[seg];
+          for (const key in rules) {
+            const rule = rules[key];
+            if (typeof rule != "object")
+              continue;
+            const { $data } = rule.definition;
+            const schema = keywords[key];
+            if ($data && schema)
+              keywords[key] = schemaOrData(schema);
+          }
+        }
+        return metaSchema;
+      }
+      _removeAllSchemas(schemas, regex) {
+        for (const keyRef in schemas) {
+          const sch = schemas[keyRef];
+          if (!regex || regex.test(keyRef)) {
+            if (typeof sch == "string") {
+              delete schemas[keyRef];
+            } else if (sch && !sch.meta) {
+              this._cache.delete(sch.schema);
+              delete schemas[keyRef];
+            }
+          }
+        }
+      }
+      _addSchema(schema, meta, baseId, validateSchema = this.opts.validateSchema, addSchema = this.opts.addUsedSchema) {
+        let id;
+        const { schemaId } = this.opts;
+        if (typeof schema == "object") {
+          id = schema[schemaId];
+        } else {
+          if (this.opts.jtd)
+            throw new Error("schema must be object");
+          else if (typeof schema != "boolean")
+            throw new Error("schema must be object or boolean");
+        }
+        let sch = this._cache.get(schema);
+        if (sch !== void 0)
+          return sch;
+        baseId = (0, resolve_1.normalizeId)(id || baseId);
+        const localRefs = resolve_1.getSchemaRefs.call(this, schema, baseId);
+        sch = new compile_1.SchemaEnv({ schema, schemaId, meta, baseId, localRefs });
+        this._cache.set(sch.schema, sch);
+        if (addSchema && !baseId.startsWith("#")) {
+          if (baseId)
+            this._checkUnique(baseId);
+          this.refs[baseId] = sch;
+        }
+        if (validateSchema)
+          this.validateSchema(schema, true);
+        return sch;
+      }
+      _checkUnique(id) {
+        if (this.schemas[id] || this.refs[id]) {
+          throw new Error(`schema with key or id "${id}" already exists`);
+        }
+      }
+      _compileSchemaEnv(sch) {
+        if (sch.meta)
+          this._compileMetaSchema(sch);
+        else
+          compile_1.compileSchema.call(this, sch);
+        if (!sch.validate)
+          throw new Error("ajv implementation error");
+        return sch.validate;
+      }
+      _compileMetaSchema(sch) {
+        const currentOpts = this.opts;
+        this.opts = this._metaOpts;
+        try {
+          compile_1.compileSchema.call(this, sch);
+        } finally {
+          this.opts = currentOpts;
+        }
+      }
+    };
+    Ajv2.ValidationError = validation_error_1.default;
+    Ajv2.MissingRefError = ref_error_1.default;
+    exports.default = Ajv2;
+    function checkOptions(checkOpts, options, msg, log = "error") {
+      for (const key in checkOpts) {
+        const opt = key;
+        if (opt in options)
+          this.logger[log](`${msg}: option ${key}. ${checkOpts[opt]}`);
+      }
+    }
+    function getSchEnv(keyRef) {
+      keyRef = (0, resolve_1.normalizeId)(keyRef);
+      return this.schemas[keyRef] || this.refs[keyRef];
+    }
+    function addInitialSchemas() {
+      const optsSchemas = this.opts.schemas;
+      if (!optsSchemas)
+        return;
+      if (Array.isArray(optsSchemas))
+        this.addSchema(optsSchemas);
+      else
+        for (const key in optsSchemas)
+          this.addSchema(optsSchemas[key], key);
+    }
+    function addInitialFormats() {
+      for (const name in this.opts.formats) {
+        const format = this.opts.formats[name];
+        if (format)
+          this.addFormat(name, format);
+      }
+    }
+    function addInitialKeywords(defs) {
+      if (Array.isArray(defs)) {
+        this.addVocabulary(defs);
+        return;
+      }
+      this.logger.warn("keywords option as map is deprecated, pass array");
+      for (const keyword in defs) {
+        const def = defs[keyword];
+        if (!def.keyword)
+          def.keyword = keyword;
+        this.addKeyword(def);
+      }
+    }
+    function getMetaSchemaOptions() {
+      const metaOpts = { ...this.opts };
+      for (const opt of META_IGNORE_OPTIONS)
+        delete metaOpts[opt];
+      return metaOpts;
+    }
+    var noLogs = { log() {
+    }, warn() {
+    }, error() {
+    } };
+    function getLogger(logger) {
+      if (logger === false)
+        return noLogs;
+      if (logger === void 0)
+        return console;
+      if (logger.log && logger.warn && logger.error)
+        return logger;
+      throw new Error("logger must implement log, warn and error methods");
+    }
+    var KEYWORD_NAME = /^[a-z_$][a-z0-9_$:-]*$/i;
+    function checkKeyword(keyword, def) {
+      const { RULES } = this;
+      (0, util_1.eachItem)(keyword, (kwd) => {
+        if (RULES.keywords[kwd])
+          throw new Error(`Keyword ${kwd} is already defined`);
+        if (!KEYWORD_NAME.test(kwd))
+          throw new Error(`Keyword ${kwd} has invalid name`);
+      });
+      if (!def)
+        return;
+      if (def.$data && !("code" in def || "validate" in def)) {
+        throw new Error('$data keyword must have "code" or "validate" function');
+      }
+    }
+    function addRule(keyword, definition, dataType) {
+      var _a;
+      const post = definition === null || definition === void 0 ? void 0 : definition.post;
+      if (dataType && post)
+        throw new Error('keyword with "post" flag cannot have "type"');
+      const { RULES } = this;
+      let ruleGroup = post ? RULES.post : RULES.rules.find(({ type: t }) => t === dataType);
+      if (!ruleGroup) {
+        ruleGroup = { type: dataType, rules: [] };
+        RULES.rules.push(ruleGroup);
+      }
+      RULES.keywords[keyword] = true;
+      if (!definition)
+        return;
+      const rule = {
+        keyword,
+        definition: {
+          ...definition,
+          type: (0, dataType_1.getJSONTypes)(definition.type),
+          schemaType: (0, dataType_1.getJSONTypes)(definition.schemaType)
+        }
+      };
+      if (definition.before)
+        addBeforeRule.call(this, ruleGroup, rule, definition.before);
+      else
+        ruleGroup.rules.push(rule);
+      RULES.all[keyword] = rule;
+      (_a = definition.implements) === null || _a === void 0 ? void 0 : _a.forEach((kwd) => this.addKeyword(kwd));
+    }
+    function addBeforeRule(ruleGroup, rule, before) {
+      const i = ruleGroup.rules.findIndex((_rule) => _rule.keyword === before);
+      if (i >= 0) {
+        ruleGroup.rules.splice(i, 0, rule);
+      } else {
+        ruleGroup.rules.push(rule);
+        this.logger.warn(`rule ${before} is not defined`);
+      }
+    }
+    function keywordMetaschema(def) {
+      let { metaSchema } = def;
+      if (metaSchema === void 0)
+        return;
+      if (def.$data && this.opts.$data)
+        metaSchema = schemaOrData(metaSchema);
+      def.validateSchema = this.compile(metaSchema, true);
+    }
+    var $dataRef = {
+      $ref: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#"
+    };
+    function schemaOrData(schema) {
+      return { anyOf: [schema, $dataRef] };
+    }
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/core/id.js
+var require_id = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/core/id.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var def = {
+      keyword: "id",
+      code() {
+        throw new Error('NOT SUPPORTED: keyword "id", use "$id" for schema ID');
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/core/ref.js
+var require_ref = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/core/ref.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.callRef = exports.getValidate = void 0;
+    var ref_error_1 = require_ref_error();
+    var code_1 = require_code2();
+    var codegen_1 = require_codegen();
+    var names_1 = require_names();
+    var compile_1 = require_compile();
+    var util_1 = require_util();
+    var def = {
+      keyword: "$ref",
+      schemaType: "string",
+      code(cxt) {
+        const { gen, schema: $ref, it } = cxt;
+        const { baseId, schemaEnv: env, validateName, opts, self } = it;
+        const { root } = env;
+        if (($ref === "#" || $ref === "#/") && baseId === root.baseId)
+          return callRootRef();
+        const schOrEnv = compile_1.resolveRef.call(self, root, baseId, $ref);
+        if (schOrEnv === void 0)
+          throw new ref_error_1.default(it.opts.uriResolver, baseId, $ref);
+        if (schOrEnv instanceof compile_1.SchemaEnv)
+          return callValidate(schOrEnv);
+        return inlineRefSchema(schOrEnv);
+        function callRootRef() {
+          if (env === root)
+            return callRef(cxt, validateName, env, env.$async);
+          const rootName = gen.scopeValue("root", { ref: root });
+          return callRef(cxt, (0, codegen_1._)`${rootName}.validate`, root, root.$async);
+        }
+        function callValidate(sch) {
+          const v = getValidate(cxt, sch);
+          callRef(cxt, v, sch, sch.$async);
+        }
+        function inlineRefSchema(sch) {
+          const schName = gen.scopeValue("schema", opts.code.source === true ? { ref: sch, code: (0, codegen_1.stringify)(sch) } : { ref: sch });
+          const valid = gen.name("valid");
+          const schCxt = cxt.subschema({
+            schema: sch,
+            dataTypes: [],
+            schemaPath: codegen_1.nil,
+            topSchemaRef: schName,
+            errSchemaPath: $ref
+          }, valid);
+          cxt.mergeEvaluated(schCxt);
+          cxt.ok(valid);
+        }
+      }
+    };
+    function getValidate(cxt, sch) {
+      const { gen } = cxt;
+      return sch.validate ? gen.scopeValue("validate", { ref: sch.validate }) : (0, codegen_1._)`${gen.scopeValue("wrapper", { ref: sch })}.validate`;
+    }
+    exports.getValidate = getValidate;
+    function callRef(cxt, v, sch, $async) {
+      const { gen, it } = cxt;
+      const { allErrors, schemaEnv: env, opts } = it;
+      const passCxt = opts.passContext ? names_1.default.this : codegen_1.nil;
+      if ($async)
+        callAsyncRef();
+      else
+        callSyncRef();
+      function callAsyncRef() {
+        if (!env.$async)
+          throw new Error("async schema referenced by sync schema");
+        const valid = gen.let("valid");
+        gen.try(() => {
+          gen.code((0, codegen_1._)`await ${(0, code_1.callValidateCode)(cxt, v, passCxt)}`);
+          addEvaluatedFrom(v);
+          if (!allErrors)
+            gen.assign(valid, true);
+        }, (e) => {
+          gen.if((0, codegen_1._)`!(${e} instanceof ${it.ValidationError})`, () => gen.throw(e));
+          addErrorsFrom(e);
+          if (!allErrors)
+            gen.assign(valid, false);
+        });
+        cxt.ok(valid);
+      }
+      function callSyncRef() {
+        cxt.result((0, code_1.callValidateCode)(cxt, v, passCxt), () => addEvaluatedFrom(v), () => addErrorsFrom(v));
+      }
+      function addErrorsFrom(source) {
+        const errs = (0, codegen_1._)`${source}.errors`;
+        gen.assign(names_1.default.vErrors, (0, codegen_1._)`${names_1.default.vErrors} === null ? ${errs} : ${names_1.default.vErrors}.concat(${errs})`);
+        gen.assign(names_1.default.errors, (0, codegen_1._)`${names_1.default.vErrors}.length`);
+      }
+      function addEvaluatedFrom(source) {
+        var _a;
+        if (!it.opts.unevaluated)
+          return;
+        const schEvaluated = (_a = sch === null || sch === void 0 ? void 0 : sch.validate) === null || _a === void 0 ? void 0 : _a.evaluated;
+        if (it.props !== true) {
+          if (schEvaluated && !schEvaluated.dynamicProps) {
+            if (schEvaluated.props !== void 0) {
+              it.props = util_1.mergeEvaluated.props(gen, schEvaluated.props, it.props);
+            }
+          } else {
+            const props = gen.var("props", (0, codegen_1._)`${source}.evaluated.props`);
+            it.props = util_1.mergeEvaluated.props(gen, props, it.props, codegen_1.Name);
+          }
+        }
+        if (it.items !== true) {
+          if (schEvaluated && !schEvaluated.dynamicItems) {
+            if (schEvaluated.items !== void 0) {
+              it.items = util_1.mergeEvaluated.items(gen, schEvaluated.items, it.items);
+            }
+          } else {
+            const items = gen.var("items", (0, codegen_1._)`${source}.evaluated.items`);
+            it.items = util_1.mergeEvaluated.items(gen, items, it.items, codegen_1.Name);
+          }
+        }
+      }
+    }
+    exports.callRef = callRef;
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/core/index.js
+var require_core2 = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/core/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var id_1 = require_id();
+    var ref_1 = require_ref();
+    var core = [
+      "$schema",
+      "$id",
+      "$defs",
+      "$vocabulary",
+      { keyword: "$comment" },
+      "definitions",
+      id_1.default,
+      ref_1.default
+    ];
+    exports.default = core;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/limitNumber.js
+var require_limitNumber = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var ops = codegen_1.operators;
+    var KWDs = {
+      maximum: { okStr: "<=", ok: ops.LTE, fail: ops.GT },
+      minimum: { okStr: ">=", ok: ops.GTE, fail: ops.LT },
+      exclusiveMaximum: { okStr: "<", ok: ops.LT, fail: ops.GTE },
+      exclusiveMinimum: { okStr: ">", ok: ops.GT, fail: ops.LTE }
+    };
+    var error = {
+      message: ({ keyword, schemaCode }) => (0, codegen_1.str)`must be ${KWDs[keyword].okStr} ${schemaCode}`,
+      params: ({ keyword, schemaCode }) => (0, codegen_1._)`{comparison: ${KWDs[keyword].okStr}, limit: ${schemaCode}}`
+    };
+    var def = {
+      keyword: Object.keys(KWDs),
+      type: "number",
+      schemaType: "number",
+      $data: true,
+      error,
+      code(cxt) {
+        const { keyword, data, schemaCode } = cxt;
+        cxt.fail$data((0, codegen_1._)`${data} ${KWDs[keyword].fail} ${schemaCode} || isNaN(${data})`);
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/multipleOf.js
+var require_multipleOf = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var error = {
+      message: ({ schemaCode }) => (0, codegen_1.str)`must be multiple of ${schemaCode}`,
+      params: ({ schemaCode }) => (0, codegen_1._)`{multipleOf: ${schemaCode}}`
+    };
+    var def = {
+      keyword: "multipleOf",
+      type: "number",
+      schemaType: "number",
+      $data: true,
+      error,
+      code(cxt) {
+        const { gen, data, schemaCode, it } = cxt;
+        const prec = it.opts.multipleOfPrecision;
+        const res = gen.let("res");
+        const invalid = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
+        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid}))`);
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/ucs2length.js
+var require_ucs2length = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    function ucs2length(str) {
+      const len = str.length;
+      let length = 0;
+      let pos = 0;
+      let value;
+      while (pos < len) {
+        length++;
+        value = str.charCodeAt(pos++);
+        if (value >= 55296 && value <= 56319 && pos < len) {
+          value = str.charCodeAt(pos);
+          if ((value & 64512) === 56320)
+            pos++;
+        }
+      }
+      return length;
+    }
+    exports.default = ucs2length;
+    ucs2length.code = 'require("ajv/dist/runtime/ucs2length").default';
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/limitLength.js
+var require_limitLength = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var ucs2length_1 = require_ucs2length();
+    var error = {
+      message({ keyword, schemaCode }) {
+        const comp = keyword === "maxLength" ? "more" : "fewer";
+        return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} characters`;
+      },
+      params: ({ schemaCode }) => (0, codegen_1._)`{limit: ${schemaCode}}`
+    };
+    var def = {
+      keyword: ["maxLength", "minLength"],
+      type: "string",
+      schemaType: "number",
+      $data: true,
+      error,
+      code(cxt) {
+        const { keyword, data, schemaCode, it } = cxt;
+        const op = keyword === "maxLength" ? codegen_1.operators.GT : codegen_1.operators.LT;
+        const len = it.opts.unicode === false ? (0, codegen_1._)`${data}.length` : (0, codegen_1._)`${(0, util_1.useFunc)(cxt.gen, ucs2length_1.default)}(${data})`;
+        cxt.fail$data((0, codegen_1._)`${len} ${op} ${schemaCode}`);
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/pattern.js
+var require_pattern = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var code_1 = require_code2();
+    var util_1 = require_util();
+    var codegen_1 = require_codegen();
+    var error = {
+      message: ({ schemaCode }) => (0, codegen_1.str)`must match pattern "${schemaCode}"`,
+      params: ({ schemaCode }) => (0, codegen_1._)`{pattern: ${schemaCode}}`
+    };
+    var def = {
+      keyword: "pattern",
+      type: "string",
+      schemaType: "string",
+      $data: true,
+      error,
+      code(cxt) {
+        const { gen, data, $data, schema, schemaCode, it } = cxt;
+        const u = it.opts.unicodeRegExp ? "u" : "";
+        if ($data) {
+          const { regExp } = it.opts.code;
+          const regExpCode = regExp.code === "new RegExp" ? (0, codegen_1._)`new RegExp` : (0, util_1.useFunc)(gen, regExp);
+          const valid = gen.let("valid");
+          gen.try(() => gen.assign(valid, (0, codegen_1._)`${regExpCode}(${schemaCode}, ${u}).test(${data})`), () => gen.assign(valid, false));
+          cxt.fail$data((0, codegen_1._)`!${valid}`);
+        } else {
+          const regExp = (0, code_1.usePattern)(cxt, schema);
+          cxt.fail$data((0, codegen_1._)`!${regExp}.test(${data})`);
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/limitProperties.js
+var require_limitProperties = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var error = {
+      message({ keyword, schemaCode }) {
+        const comp = keyword === "maxProperties" ? "more" : "fewer";
+        return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} properties`;
+      },
+      params: ({ schemaCode }) => (0, codegen_1._)`{limit: ${schemaCode}}`
+    };
+    var def = {
+      keyword: ["maxProperties", "minProperties"],
+      type: "object",
+      schemaType: "number",
+      $data: true,
+      error,
+      code(cxt) {
+        const { keyword, data, schemaCode } = cxt;
+        const op = keyword === "maxProperties" ? codegen_1.operators.GT : codegen_1.operators.LT;
+        cxt.fail$data((0, codegen_1._)`Object.keys(${data}).length ${op} ${schemaCode}`);
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/required.js
+var require_required = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/required.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var code_1 = require_code2();
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var error = {
+      message: ({ params: { missingProperty } }) => (0, codegen_1.str)`must have required property '${missingProperty}'`,
+      params: ({ params: { missingProperty } }) => (0, codegen_1._)`{missingProperty: ${missingProperty}}`
+    };
+    var def = {
+      keyword: "required",
+      type: "object",
+      schemaType: "array",
+      $data: true,
+      error,
+      code(cxt) {
+        const { gen, schema, schemaCode, data, $data, it } = cxt;
+        const { opts } = it;
+        if (!$data && schema.length === 0)
+          return;
+        const useLoop = schema.length >= opts.loopRequired;
+        if (it.allErrors)
+          allErrorsMode();
+        else
+          exitOnErrorMode();
+        if (opts.strictRequired) {
+          const props = cxt.parentSchema.properties;
+          const { definedProperties } = cxt.it;
+          for (const requiredKey of schema) {
+            if ((props === null || props === void 0 ? void 0 : props[requiredKey]) === void 0 && !definedProperties.has(requiredKey)) {
+              const schemaPath = it.schemaEnv.baseId + it.errSchemaPath;
+              const msg = `required property "${requiredKey}" is not defined at "${schemaPath}" (strictRequired)`;
+              (0, util_1.checkStrictMode)(it, msg, it.opts.strictRequired);
+            }
+          }
+        }
+        function allErrorsMode() {
+          if (useLoop || $data) {
+            cxt.block$data(codegen_1.nil, loopAllRequired);
+          } else {
+            for (const prop of schema) {
+              (0, code_1.checkReportMissingProp)(cxt, prop);
+            }
+          }
+        }
+        function exitOnErrorMode() {
+          const missing = gen.let("missing");
+          if (useLoop || $data) {
+            const valid = gen.let("valid", true);
+            cxt.block$data(valid, () => loopUntilMissing(missing, valid));
+            cxt.ok(valid);
+          } else {
+            gen.if((0, code_1.checkMissingProp)(cxt, schema, missing));
+            (0, code_1.reportMissingProp)(cxt, missing);
+            gen.else();
+          }
+        }
+        function loopAllRequired() {
+          gen.forOf("prop", schemaCode, (prop) => {
+            cxt.setParams({ missingProperty: prop });
+            gen.if((0, code_1.noPropertyInData)(gen, data, prop, opts.ownProperties), () => cxt.error());
+          });
+        }
+        function loopUntilMissing(missing, valid) {
+          cxt.setParams({ missingProperty: missing });
+          gen.forOf(missing, schemaCode, () => {
+            gen.assign(valid, (0, code_1.propertyInData)(gen, data, missing, opts.ownProperties));
+            gen.if((0, codegen_1.not)(valid), () => {
+              cxt.error();
+              gen.break();
+            });
+          }, codegen_1.nil);
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/limitItems.js
+var require_limitItems = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var error = {
+      message({ keyword, schemaCode }) {
+        const comp = keyword === "maxItems" ? "more" : "fewer";
+        return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} items`;
+      },
+      params: ({ schemaCode }) => (0, codegen_1._)`{limit: ${schemaCode}}`
+    };
+    var def = {
+      keyword: ["maxItems", "minItems"],
+      type: "array",
+      schemaType: "number",
+      $data: true,
+      error,
+      code(cxt) {
+        const { keyword, data, schemaCode } = cxt;
+        const op = keyword === "maxItems" ? codegen_1.operators.GT : codegen_1.operators.LT;
+        cxt.fail$data((0, codegen_1._)`${data}.length ${op} ${schemaCode}`);
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/equal.js
+var require_equal = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/runtime/equal.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var equal = require_fast_deep_equal();
+    equal.code = 'require("ajv/dist/runtime/equal").default';
+    exports.default = equal;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
+var require_uniqueItems = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var dataType_1 = require_dataType();
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var equal_1 = require_equal();
+    var error = {
+      message: ({ params: { i, j } }) => (0, codegen_1.str)`must NOT have duplicate items (items ## ${j} and ${i} are identical)`,
+      params: ({ params: { i, j } }) => (0, codegen_1._)`{i: ${i}, j: ${j}}`
+    };
+    var def = {
+      keyword: "uniqueItems",
+      type: "array",
+      schemaType: "boolean",
+      $data: true,
+      error,
+      code(cxt) {
+        const { gen, data, $data, schema, parentSchema, schemaCode, it } = cxt;
+        if (!$data && !schema)
+          return;
+        const valid = gen.let("valid");
+        const itemTypes = parentSchema.items ? (0, dataType_1.getSchemaTypes)(parentSchema.items) : [];
+        cxt.block$data(valid, validateUniqueItems, (0, codegen_1._)`${schemaCode} === false`);
+        cxt.ok(valid);
+        function validateUniqueItems() {
+          const i = gen.let("i", (0, codegen_1._)`${data}.length`);
+          const j = gen.let("j");
+          cxt.setParams({ i, j });
+          gen.assign(valid, true);
+          gen.if((0, codegen_1._)`${i} > 1`, () => (canOptimize() ? loopN : loopN2)(i, j));
+        }
+        function canOptimize() {
+          return itemTypes.length > 0 && !itemTypes.some((t) => t === "object" || t === "array");
+        }
+        function loopN(i, j) {
+          const item = gen.name("item");
+          const wrongType = (0, dataType_1.checkDataTypes)(itemTypes, item, it.opts.strictNumbers, dataType_1.DataType.Wrong);
+          const indices = gen.const("indices", (0, codegen_1._)`{}`);
+          gen.for((0, codegen_1._)`;${i}--;`, () => {
+            gen.let(item, (0, codegen_1._)`${data}[${i}]`);
+            gen.if(wrongType, (0, codegen_1._)`continue`);
+            if (itemTypes.length > 1)
+              gen.if((0, codegen_1._)`typeof ${item} == "string"`, (0, codegen_1._)`${item} += "_"`);
+            gen.if((0, codegen_1._)`typeof ${indices}[${item}] == "number"`, () => {
+              gen.assign(j, (0, codegen_1._)`${indices}[${item}]`);
+              cxt.error();
+              gen.assign(valid, false).break();
+            }).code((0, codegen_1._)`${indices}[${item}] = ${i}`);
+          });
+        }
+        function loopN2(i, j) {
+          const eql = (0, util_1.useFunc)(gen, equal_1.default);
+          const outer = gen.name("outer");
+          gen.label(outer).for((0, codegen_1._)`;${i}--;`, () => gen.for((0, codegen_1._)`${j} = ${i}; ${j}--;`, () => gen.if((0, codegen_1._)`${eql}(${data}[${i}], ${data}[${j}])`, () => {
+            cxt.error();
+            gen.assign(valid, false).break(outer);
+          })));
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/const.js
+var require_const = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/const.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var equal_1 = require_equal();
+    var error = {
+      message: "must be equal to constant",
+      params: ({ schemaCode }) => (0, codegen_1._)`{allowedValue: ${schemaCode}}`
+    };
+    var def = {
+      keyword: "const",
+      $data: true,
+      error,
+      code(cxt) {
+        const { gen, data, $data, schemaCode, schema } = cxt;
+        if ($data || schema && typeof schema == "object") {
+          cxt.fail$data((0, codegen_1._)`!${(0, util_1.useFunc)(gen, equal_1.default)}(${data}, ${schemaCode})`);
+        } else {
+          cxt.fail((0, codegen_1._)`${schema} !== ${data}`);
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/enum.js
+var require_enum = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/enum.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var equal_1 = require_equal();
+    var error = {
+      message: "must be equal to one of the allowed values",
+      params: ({ schemaCode }) => (0, codegen_1._)`{allowedValues: ${schemaCode}}`
+    };
+    var def = {
+      keyword: "enum",
+      schemaType: "array",
+      $data: true,
+      error,
+      code(cxt) {
+        const { gen, data, $data, schema, schemaCode, it } = cxt;
+        if (!$data && schema.length === 0)
+          throw new Error("enum must have non-empty array");
+        const useLoop = schema.length >= it.opts.loopEnum;
+        let eql;
+        const getEql = () => eql !== null && eql !== void 0 ? eql : eql = (0, util_1.useFunc)(gen, equal_1.default);
+        let valid;
+        if (useLoop || $data) {
+          valid = gen.let("valid");
+          cxt.block$data(valid, loopEnum);
+        } else {
+          if (!Array.isArray(schema))
+            throw new Error("ajv implementation error");
+          const vSchema = gen.const("vSchema", schemaCode);
+          valid = (0, codegen_1.or)(...schema.map((_x, i) => equalCode(vSchema, i)));
+        }
+        cxt.pass(valid);
+        function loopEnum() {
+          gen.assign(valid, false);
+          gen.forOf("v", schemaCode, (v) => gen.if((0, codegen_1._)`${getEql()}(${data}, ${v})`, () => gen.assign(valid, true).break()));
+        }
+        function equalCode(vSchema, i) {
+          const sch = schema[i];
+          return typeof sch === "object" && sch !== null ? (0, codegen_1._)`${getEql()}(${data}, ${vSchema}[${i}])` : (0, codegen_1._)`${data} === ${sch}`;
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/index.js
+var require_validation = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/validation/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var limitNumber_1 = require_limitNumber();
+    var multipleOf_1 = require_multipleOf();
+    var limitLength_1 = require_limitLength();
+    var pattern_1 = require_pattern();
+    var limitProperties_1 = require_limitProperties();
+    var required_1 = require_required();
+    var limitItems_1 = require_limitItems();
+    var uniqueItems_1 = require_uniqueItems();
+    var const_1 = require_const();
+    var enum_1 = require_enum();
+    var validation = [
+      // number
+      limitNumber_1.default,
+      multipleOf_1.default,
+      // string
+      limitLength_1.default,
+      pattern_1.default,
+      // object
+      limitProperties_1.default,
+      required_1.default,
+      // array
+      limitItems_1.default,
+      uniqueItems_1.default,
+      // any
+      { keyword: "type", schemaType: ["string", "array"] },
+      { keyword: "nullable", schemaType: "boolean" },
+      const_1.default,
+      enum_1.default
+    ];
+    exports.default = validation;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
+var require_additionalItems = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateAdditionalItems = void 0;
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var error = {
+      message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
+      params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
+    };
+    var def = {
+      keyword: "additionalItems",
+      type: "array",
+      schemaType: ["boolean", "object"],
+      before: "uniqueItems",
+      error,
+      code(cxt) {
+        const { parentSchema, it } = cxt;
+        const { items } = parentSchema;
+        if (!Array.isArray(items)) {
+          (0, util_1.checkStrictMode)(it, '"additionalItems" is ignored when "items" is not an array of schemas');
+          return;
+        }
+        validateAdditionalItems(cxt, items);
+      }
+    };
+    function validateAdditionalItems(cxt, items) {
+      const { gen, schema, data, keyword, it } = cxt;
+      it.items = true;
+      const len = gen.const("len", (0, codegen_1._)`${data}.length`);
+      if (schema === false) {
+        cxt.setParams({ len: items.length });
+        cxt.pass((0, codegen_1._)`${len} <= ${items.length}`);
+      } else if (typeof schema == "object" && !(0, util_1.alwaysValidSchema)(it, schema)) {
+        const valid = gen.var("valid", (0, codegen_1._)`${len} <= ${items.length}`);
+        gen.if((0, codegen_1.not)(valid), () => validateItems(valid));
+        cxt.ok(valid);
+      }
+      function validateItems(valid) {
+        gen.forRange("i", items.length, len, (i) => {
+          cxt.subschema({ keyword, dataProp: i, dataPropType: util_1.Type.Num }, valid);
+          if (!it.allErrors)
+            gen.if((0, codegen_1.not)(valid), () => gen.break());
+        });
+      }
+    }
+    exports.validateAdditionalItems = validateAdditionalItems;
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/items.js
+var require_items = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/items.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateTuple = void 0;
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var code_1 = require_code2();
+    var def = {
+      keyword: "items",
+      type: "array",
+      schemaType: ["object", "array", "boolean"],
+      before: "uniqueItems",
+      code(cxt) {
+        const { schema, it } = cxt;
+        if (Array.isArray(schema))
+          return validateTuple(cxt, "additionalItems", schema);
+        it.items = true;
+        if ((0, util_1.alwaysValidSchema)(it, schema))
+          return;
+        cxt.ok((0, code_1.validateArray)(cxt));
+      }
+    };
+    function validateTuple(cxt, extraItems, schArr = cxt.schema) {
+      const { gen, parentSchema, data, keyword, it } = cxt;
+      checkStrictTuple(parentSchema);
+      if (it.opts.unevaluated && schArr.length && it.items !== true) {
+        it.items = util_1.mergeEvaluated.items(gen, schArr.length, it.items);
+      }
+      const valid = gen.name("valid");
+      const len = gen.const("len", (0, codegen_1._)`${data}.length`);
+      schArr.forEach((sch, i) => {
+        if ((0, util_1.alwaysValidSchema)(it, sch))
+          return;
+        gen.if((0, codegen_1._)`${len} > ${i}`, () => cxt.subschema({
+          keyword,
+          schemaProp: i,
+          dataProp: i
+        }, valid));
+        cxt.ok(valid);
+      });
+      function checkStrictTuple(sch) {
+        const { opts, errSchemaPath } = it;
+        const l = schArr.length;
+        const fullTuple = l === sch.minItems && (l === sch.maxItems || sch[extraItems] === false);
+        if (opts.strictTuples && !fullTuple) {
+          const msg = `"${keyword}" is ${l}-tuple, but minItems or maxItems/${extraItems} are not specified or different at path "${errSchemaPath}"`;
+          (0, util_1.checkStrictMode)(it, msg, opts.strictTuples);
+        }
+      }
+    }
+    exports.validateTuple = validateTuple;
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
+var require_prefixItems = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var items_1 = require_items();
+    var def = {
+      keyword: "prefixItems",
+      type: "array",
+      schemaType: ["array"],
+      before: "uniqueItems",
+      code: (cxt) => (0, items_1.validateTuple)(cxt, "items")
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/items2020.js
+var require_items2020 = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var code_1 = require_code2();
+    var additionalItems_1 = require_additionalItems();
+    var error = {
+      message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
+      params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
+    };
+    var def = {
+      keyword: "items",
+      type: "array",
+      schemaType: ["object", "boolean"],
+      before: "uniqueItems",
+      error,
+      code(cxt) {
+        const { schema, parentSchema, it } = cxt;
+        const { prefixItems } = parentSchema;
+        it.items = true;
+        if ((0, util_1.alwaysValidSchema)(it, schema))
+          return;
+        if (prefixItems)
+          (0, additionalItems_1.validateAdditionalItems)(cxt, prefixItems);
+        else
+          cxt.ok((0, code_1.validateArray)(cxt));
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/contains.js
+var require_contains = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var error = {
+      message: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1.str)`must contain at least ${min} valid item(s)` : (0, codegen_1.str)`must contain at least ${min} and no more than ${max} valid item(s)`,
+      params: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1._)`{minContains: ${min}}` : (0, codegen_1._)`{minContains: ${min}, maxContains: ${max}}`
+    };
+    var def = {
+      keyword: "contains",
+      type: "array",
+      schemaType: ["object", "boolean"],
+      before: "uniqueItems",
+      trackErrors: true,
+      error,
+      code(cxt) {
+        const { gen, schema, parentSchema, data, it } = cxt;
+        let min;
+        let max;
+        const { minContains, maxContains } = parentSchema;
+        if (it.opts.next) {
+          min = minContains === void 0 ? 1 : minContains;
+          max = maxContains;
+        } else {
+          min = 1;
+        }
+        const len = gen.const("len", (0, codegen_1._)`${data}.length`);
+        cxt.setParams({ min, max });
+        if (max === void 0 && min === 0) {
+          (0, util_1.checkStrictMode)(it, `"minContains" == 0 without "maxContains": "contains" keyword ignored`);
+          return;
+        }
+        if (max !== void 0 && min > max) {
+          (0, util_1.checkStrictMode)(it, `"minContains" > "maxContains" is always invalid`);
+          cxt.fail();
+          return;
+        }
+        if ((0, util_1.alwaysValidSchema)(it, schema)) {
+          let cond = (0, codegen_1._)`${len} >= ${min}`;
+          if (max !== void 0)
+            cond = (0, codegen_1._)`${cond} && ${len} <= ${max}`;
+          cxt.pass(cond);
+          return;
+        }
+        it.items = true;
+        const valid = gen.name("valid");
+        if (max === void 0 && min === 1) {
+          validateItems(valid, () => gen.if(valid, () => gen.break()));
+        } else if (min === 0) {
+          gen.let(valid, true);
+          if (max !== void 0)
+            gen.if((0, codegen_1._)`${data}.length > 0`, validateItemsWithCount);
+        } else {
+          gen.let(valid, false);
+          validateItemsWithCount();
+        }
+        cxt.result(valid, () => cxt.reset());
+        function validateItemsWithCount() {
+          const schValid = gen.name("_valid");
+          const count = gen.let("count", 0);
+          validateItems(schValid, () => gen.if(schValid, () => checkLimits(count)));
+        }
+        function validateItems(_valid, block) {
+          gen.forRange("i", 0, len, (i) => {
+            cxt.subschema({
+              keyword: "contains",
+              dataProp: i,
+              dataPropType: util_1.Type.Num,
+              compositeRule: true
+            }, _valid);
+            block();
+          });
+        }
+        function checkLimits(count) {
+          gen.code((0, codegen_1._)`${count}++`);
+          if (max === void 0) {
+            gen.if((0, codegen_1._)`${count} >= ${min}`, () => gen.assign(valid, true).break());
+          } else {
+            gen.if((0, codegen_1._)`${count} > ${max}`, () => gen.assign(valid, false).break());
+            if (min === 1)
+              gen.assign(valid, true);
+            else
+              gen.if((0, codegen_1._)`${count} >= ${min}`, () => gen.assign(valid, true));
+          }
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/dependencies.js
+var require_dependencies = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateSchemaDeps = exports.validatePropertyDeps = exports.error = void 0;
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var code_1 = require_code2();
+    exports.error = {
+      message: ({ params: { property, depsCount, deps } }) => {
+        const property_ies = depsCount === 1 ? "property" : "properties";
+        return (0, codegen_1.str)`must have ${property_ies} ${deps} when property ${property} is present`;
+      },
+      params: ({ params: { property, depsCount, deps, missingProperty } }) => (0, codegen_1._)`{property: ${property},
+    missingProperty: ${missingProperty},
+    depsCount: ${depsCount},
+    deps: ${deps}}`
+      // TODO change to reference
+    };
+    var def = {
+      keyword: "dependencies",
+      type: "object",
+      schemaType: "object",
+      error: exports.error,
+      code(cxt) {
+        const [propDeps, schDeps] = splitDependencies(cxt);
+        validatePropertyDeps(cxt, propDeps);
+        validateSchemaDeps(cxt, schDeps);
+      }
+    };
+    function splitDependencies({ schema }) {
+      const propertyDeps = {};
+      const schemaDeps = {};
+      for (const key in schema) {
+        if (key === "__proto__")
+          continue;
+        const deps = Array.isArray(schema[key]) ? propertyDeps : schemaDeps;
+        deps[key] = schema[key];
+      }
+      return [propertyDeps, schemaDeps];
+    }
+    function validatePropertyDeps(cxt, propertyDeps = cxt.schema) {
+      const { gen, data, it } = cxt;
+      if (Object.keys(propertyDeps).length === 0)
+        return;
+      const missing = gen.let("missing");
+      for (const prop in propertyDeps) {
+        const deps = propertyDeps[prop];
+        if (deps.length === 0)
+          continue;
+        const hasProperty = (0, code_1.propertyInData)(gen, data, prop, it.opts.ownProperties);
+        cxt.setParams({
+          property: prop,
+          depsCount: deps.length,
+          deps: deps.join(", ")
+        });
+        if (it.allErrors) {
+          gen.if(hasProperty, () => {
+            for (const depProp of deps) {
+              (0, code_1.checkReportMissingProp)(cxt, depProp);
+            }
+          });
+        } else {
+          gen.if((0, codegen_1._)`${hasProperty} && (${(0, code_1.checkMissingProp)(cxt, deps, missing)})`);
+          (0, code_1.reportMissingProp)(cxt, missing);
+          gen.else();
+        }
+      }
+    }
+    exports.validatePropertyDeps = validatePropertyDeps;
+    function validateSchemaDeps(cxt, schemaDeps = cxt.schema) {
+      const { gen, data, keyword, it } = cxt;
+      const valid = gen.name("valid");
+      for (const prop in schemaDeps) {
+        if ((0, util_1.alwaysValidSchema)(it, schemaDeps[prop]))
+          continue;
+        gen.if(
+          (0, code_1.propertyInData)(gen, data, prop, it.opts.ownProperties),
+          () => {
+            const schCxt = cxt.subschema({ keyword, schemaProp: prop }, valid);
+            cxt.mergeValidEvaluated(schCxt, valid);
+          },
+          () => gen.var(valid, true)
+          // TODO var
+        );
+        cxt.ok(valid);
+      }
+    }
+    exports.validateSchemaDeps = validateSchemaDeps;
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
+var require_propertyNames = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var error = {
+      message: "property name must be valid",
+      params: ({ params }) => (0, codegen_1._)`{propertyName: ${params.propertyName}}`
+    };
+    var def = {
+      keyword: "propertyNames",
+      type: "object",
+      schemaType: ["object", "boolean"],
+      error,
+      code(cxt) {
+        const { gen, schema, data, it } = cxt;
+        if ((0, util_1.alwaysValidSchema)(it, schema))
+          return;
+        const valid = gen.name("valid");
+        gen.forIn("key", data, (key) => {
+          cxt.setParams({ propertyName: key });
+          cxt.subschema({
+            keyword: "propertyNames",
+            data: key,
+            dataTypes: ["string"],
+            propertyName: key,
+            compositeRule: true
+          }, valid);
+          gen.if((0, codegen_1.not)(valid), () => {
+            cxt.error(true);
+            if (!it.allErrors)
+              gen.break();
+          });
+        });
+        cxt.ok(valid);
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
+var require_additionalProperties = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var code_1 = require_code2();
+    var codegen_1 = require_codegen();
+    var names_1 = require_names();
+    var util_1 = require_util();
+    var error = {
+      message: "must NOT have additional properties",
+      params: ({ params }) => (0, codegen_1._)`{additionalProperty: ${params.additionalProperty}}`
+    };
+    var def = {
+      keyword: "additionalProperties",
+      type: ["object"],
+      schemaType: ["boolean", "object"],
+      allowUndefined: true,
+      trackErrors: true,
+      error,
+      code(cxt) {
+        const { gen, schema, parentSchema, data, errsCount, it } = cxt;
+        if (!errsCount)
+          throw new Error("ajv implementation error");
+        const { allErrors, opts } = it;
+        it.props = true;
+        if (opts.removeAdditional !== "all" && (0, util_1.alwaysValidSchema)(it, schema))
+          return;
+        const props = (0, code_1.allSchemaProperties)(parentSchema.properties);
+        const patProps = (0, code_1.allSchemaProperties)(parentSchema.patternProperties);
+        checkAdditionalProperties();
+        cxt.ok((0, codegen_1._)`${errsCount} === ${names_1.default.errors}`);
+        function checkAdditionalProperties() {
+          gen.forIn("key", data, (key) => {
+            if (!props.length && !patProps.length)
+              additionalPropertyCode(key);
+            else
+              gen.if(isAdditional(key), () => additionalPropertyCode(key));
+          });
+        }
+        function isAdditional(key) {
+          let definedProp;
+          if (props.length > 8) {
+            const propsSchema = (0, util_1.schemaRefOrVal)(it, parentSchema.properties, "properties");
+            definedProp = (0, code_1.isOwnProperty)(gen, propsSchema, key);
+          } else if (props.length) {
+            definedProp = (0, codegen_1.or)(...props.map((p) => (0, codegen_1._)`${key} === ${p}`));
+          } else {
+            definedProp = codegen_1.nil;
+          }
+          if (patProps.length) {
+            definedProp = (0, codegen_1.or)(definedProp, ...patProps.map((p) => (0, codegen_1._)`${(0, code_1.usePattern)(cxt, p)}.test(${key})`));
+          }
+          return (0, codegen_1.not)(definedProp);
+        }
+        function deleteAdditional(key) {
+          gen.code((0, codegen_1._)`delete ${data}[${key}]`);
+        }
+        function additionalPropertyCode(key) {
+          if (opts.removeAdditional === "all" || opts.removeAdditional && schema === false) {
+            deleteAdditional(key);
+            return;
+          }
+          if (schema === false) {
+            cxt.setParams({ additionalProperty: key });
+            cxt.error();
+            if (!allErrors)
+              gen.break();
+            return;
+          }
+          if (typeof schema == "object" && !(0, util_1.alwaysValidSchema)(it, schema)) {
+            const valid = gen.name("valid");
+            if (opts.removeAdditional === "failing") {
+              applyAdditionalSchema(key, valid, false);
+              gen.if((0, codegen_1.not)(valid), () => {
+                cxt.reset();
+                deleteAdditional(key);
+              });
+            } else {
+              applyAdditionalSchema(key, valid);
+              if (!allErrors)
+                gen.if((0, codegen_1.not)(valid), () => gen.break());
+            }
+          }
+        }
+        function applyAdditionalSchema(key, valid, errors) {
+          const subschema = {
+            keyword: "additionalProperties",
+            dataProp: key,
+            dataPropType: util_1.Type.Str
+          };
+          if (errors === false) {
+            Object.assign(subschema, {
+              compositeRule: true,
+              createErrors: false,
+              allErrors: false
+            });
+          }
+          cxt.subschema(subschema, valid);
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/properties.js
+var require_properties = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var validate_1 = require_validate();
+    var code_1 = require_code2();
+    var util_1 = require_util();
+    var additionalProperties_1 = require_additionalProperties();
+    var def = {
+      keyword: "properties",
+      type: "object",
+      schemaType: "object",
+      code(cxt) {
+        const { gen, schema, parentSchema, data, it } = cxt;
+        if (it.opts.removeAdditional === "all" && parentSchema.additionalProperties === void 0) {
+          additionalProperties_1.default.code(new validate_1.KeywordCxt(it, additionalProperties_1.default, "additionalProperties"));
+        }
+        const allProps = (0, code_1.allSchemaProperties)(schema);
+        for (const prop of allProps) {
+          it.definedProperties.add(prop);
+        }
+        if (it.opts.unevaluated && allProps.length && it.props !== true) {
+          it.props = util_1.mergeEvaluated.props(gen, (0, util_1.toHash)(allProps), it.props);
+        }
+        const properties = allProps.filter((p) => !(0, util_1.alwaysValidSchema)(it, schema[p]));
+        if (properties.length === 0)
+          return;
+        const valid = gen.name("valid");
+        for (const prop of properties) {
+          if (hasDefault(prop)) {
+            applyPropertySchema(prop);
+          } else {
+            gen.if((0, code_1.propertyInData)(gen, data, prop, it.opts.ownProperties));
+            applyPropertySchema(prop);
+            if (!it.allErrors)
+              gen.else().var(valid, true);
+            gen.endIf();
+          }
+          cxt.it.definedProperties.add(prop);
+          cxt.ok(valid);
+        }
+        function hasDefault(prop) {
+          return it.opts.useDefaults && !it.compositeRule && schema[prop].default !== void 0;
+        }
+        function applyPropertySchema(prop) {
+          cxt.subschema({
+            keyword: "properties",
+            schemaProp: prop,
+            dataProp: prop
+          }, valid);
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
+var require_patternProperties = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var code_1 = require_code2();
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var util_2 = require_util();
+    var def = {
+      keyword: "patternProperties",
+      type: "object",
+      schemaType: "object",
+      code(cxt) {
+        const { gen, schema, data, parentSchema, it } = cxt;
+        const { opts } = it;
+        const patterns = (0, code_1.allSchemaProperties)(schema);
+        const alwaysValidPatterns = patterns.filter((p) => (0, util_1.alwaysValidSchema)(it, schema[p]));
+        if (patterns.length === 0 || alwaysValidPatterns.length === patterns.length && (!it.opts.unevaluated || it.props === true)) {
+          return;
+        }
+        const checkProperties = opts.strictSchema && !opts.allowMatchingProperties && parentSchema.properties;
+        const valid = gen.name("valid");
+        if (it.props !== true && !(it.props instanceof codegen_1.Name)) {
+          it.props = (0, util_2.evaluatedPropsToName)(gen, it.props);
+        }
+        const { props } = it;
+        validatePatternProperties();
+        function validatePatternProperties() {
+          for (const pat of patterns) {
+            if (checkProperties)
+              checkMatchingProperties(pat);
+            if (it.allErrors) {
+              validateProperties(pat);
+            } else {
+              gen.var(valid, true);
+              validateProperties(pat);
+              gen.if(valid);
+            }
+          }
+        }
+        function checkMatchingProperties(pat) {
+          for (const prop in checkProperties) {
+            if (new RegExp(pat).test(prop)) {
+              (0, util_1.checkStrictMode)(it, `property ${prop} matches pattern ${pat} (use allowMatchingProperties)`);
+            }
+          }
+        }
+        function validateProperties(pat) {
+          gen.forIn("key", data, (key) => {
+            gen.if((0, codegen_1._)`${(0, code_1.usePattern)(cxt, pat)}.test(${key})`, () => {
+              const alwaysValid = alwaysValidPatterns.includes(pat);
+              if (!alwaysValid) {
+                cxt.subschema({
+                  keyword: "patternProperties",
+                  schemaProp: pat,
+                  dataProp: key,
+                  dataPropType: util_2.Type.Str
+                }, valid);
+              }
+              if (it.opts.unevaluated && props !== true) {
+                gen.assign((0, codegen_1._)`${props}[${key}]`, true);
+              } else if (!alwaysValid && !it.allErrors) {
+                gen.if((0, codegen_1.not)(valid), () => gen.break());
+              }
+            });
+          });
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/not.js
+var require_not = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/not.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var util_1 = require_util();
+    var def = {
+      keyword: "not",
+      schemaType: ["object", "boolean"],
+      trackErrors: true,
+      code(cxt) {
+        const { gen, schema, it } = cxt;
+        if ((0, util_1.alwaysValidSchema)(it, schema)) {
+          cxt.fail();
+          return;
+        }
+        const valid = gen.name("valid");
+        cxt.subschema({
+          keyword: "not",
+          compositeRule: true,
+          createErrors: false,
+          allErrors: false
+        }, valid);
+        cxt.failResult(valid, () => cxt.reset(), () => cxt.error());
+      },
+      error: { message: "must NOT be valid" }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/anyOf.js
+var require_anyOf = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var code_1 = require_code2();
+    var def = {
+      keyword: "anyOf",
+      schemaType: "array",
+      trackErrors: true,
+      code: code_1.validateUnion,
+      error: { message: "must match a schema in anyOf" }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/oneOf.js
+var require_oneOf = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var error = {
+      message: "must match exactly one schema in oneOf",
+      params: ({ params }) => (0, codegen_1._)`{passingSchemas: ${params.passing}}`
+    };
+    var def = {
+      keyword: "oneOf",
+      schemaType: "array",
+      trackErrors: true,
+      error,
+      code(cxt) {
+        const { gen, schema, parentSchema, it } = cxt;
+        if (!Array.isArray(schema))
+          throw new Error("ajv implementation error");
+        if (it.opts.discriminator && parentSchema.discriminator)
+          return;
+        const schArr = schema;
+        const valid = gen.let("valid", false);
+        const passing = gen.let("passing", null);
+        const schValid = gen.name("_valid");
+        cxt.setParams({ passing });
+        gen.block(validateOneOf);
+        cxt.result(valid, () => cxt.reset(), () => cxt.error(true));
+        function validateOneOf() {
+          schArr.forEach((sch, i) => {
+            let schCxt;
+            if ((0, util_1.alwaysValidSchema)(it, sch)) {
+              gen.var(schValid, true);
+            } else {
+              schCxt = cxt.subschema({
+                keyword: "oneOf",
+                schemaProp: i,
+                compositeRule: true
+              }, schValid);
+            }
+            if (i > 0) {
+              gen.if((0, codegen_1._)`${schValid} && ${valid}`).assign(valid, false).assign(passing, (0, codegen_1._)`[${passing}, ${i}]`).else();
+            }
+            gen.if(schValid, () => {
+              gen.assign(valid, true);
+              gen.assign(passing, i);
+              if (schCxt)
+                cxt.mergeEvaluated(schCxt, codegen_1.Name);
+            });
+          });
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/allOf.js
+var require_allOf = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var util_1 = require_util();
+    var def = {
+      keyword: "allOf",
+      schemaType: "array",
+      code(cxt) {
+        const { gen, schema, it } = cxt;
+        if (!Array.isArray(schema))
+          throw new Error("ajv implementation error");
+        const valid = gen.name("valid");
+        schema.forEach((sch, i) => {
+          if ((0, util_1.alwaysValidSchema)(it, sch))
+            return;
+          const schCxt = cxt.subschema({ keyword: "allOf", schemaProp: i }, valid);
+          cxt.ok(valid);
+          cxt.mergeEvaluated(schCxt);
+        });
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/if.js
+var require_if = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/if.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var util_1 = require_util();
+    var error = {
+      message: ({ params }) => (0, codegen_1.str)`must match "${params.ifClause}" schema`,
+      params: ({ params }) => (0, codegen_1._)`{failingKeyword: ${params.ifClause}}`
+    };
+    var def = {
+      keyword: "if",
+      schemaType: ["object", "boolean"],
+      trackErrors: true,
+      error,
+      code(cxt) {
+        const { gen, parentSchema, it } = cxt;
+        if (parentSchema.then === void 0 && parentSchema.else === void 0) {
+          (0, util_1.checkStrictMode)(it, '"if" without "then" and "else" is ignored');
+        }
+        const hasThen = hasSchema(it, "then");
+        const hasElse = hasSchema(it, "else");
+        if (!hasThen && !hasElse)
+          return;
+        const valid = gen.let("valid", true);
+        const schValid = gen.name("_valid");
+        validateIf();
+        cxt.reset();
+        if (hasThen && hasElse) {
+          const ifClause = gen.let("ifClause");
+          cxt.setParams({ ifClause });
+          gen.if(schValid, validateClause("then", ifClause), validateClause("else", ifClause));
+        } else if (hasThen) {
+          gen.if(schValid, validateClause("then"));
+        } else {
+          gen.if((0, codegen_1.not)(schValid), validateClause("else"));
+        }
+        cxt.pass(valid, () => cxt.error(true));
+        function validateIf() {
+          const schCxt = cxt.subschema({
+            keyword: "if",
+            compositeRule: true,
+            createErrors: false,
+            allErrors: false
+          }, schValid);
+          cxt.mergeEvaluated(schCxt);
+        }
+        function validateClause(keyword, ifClause) {
+          return () => {
+            const schCxt = cxt.subschema({ keyword }, schValid);
+            gen.assign(valid, schValid);
+            cxt.mergeValidEvaluated(schCxt, valid);
+            if (ifClause)
+              gen.assign(ifClause, (0, codegen_1._)`${keyword}`);
+            else
+              cxt.setParams({ ifClause: keyword });
+          };
+        }
+      }
+    };
+    function hasSchema(it, keyword) {
+      const schema = it.schema[keyword];
+      return schema !== void 0 && !(0, util_1.alwaysValidSchema)(it, schema);
+    }
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/thenElse.js
+var require_thenElse = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var util_1 = require_util();
+    var def = {
+      keyword: ["then", "else"],
+      schemaType: ["object", "boolean"],
+      code({ keyword, parentSchema, it }) {
+        if (parentSchema.if === void 0)
+          (0, util_1.checkStrictMode)(it, `"${keyword}" without "if" is ignored`);
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/index.js
+var require_applicator = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/applicator/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var additionalItems_1 = require_additionalItems();
+    var prefixItems_1 = require_prefixItems();
+    var items_1 = require_items();
+    var items2020_1 = require_items2020();
+    var contains_1 = require_contains();
+    var dependencies_1 = require_dependencies();
+    var propertyNames_1 = require_propertyNames();
+    var additionalProperties_1 = require_additionalProperties();
+    var properties_1 = require_properties();
+    var patternProperties_1 = require_patternProperties();
+    var not_1 = require_not();
+    var anyOf_1 = require_anyOf();
+    var oneOf_1 = require_oneOf();
+    var allOf_1 = require_allOf();
+    var if_1 = require_if();
+    var thenElse_1 = require_thenElse();
+    function getApplicator(draft2020 = false) {
+      const applicator = [
+        // any
+        not_1.default,
+        anyOf_1.default,
+        oneOf_1.default,
+        allOf_1.default,
+        if_1.default,
+        thenElse_1.default,
+        // object
+        propertyNames_1.default,
+        additionalProperties_1.default,
+        dependencies_1.default,
+        properties_1.default,
+        patternProperties_1.default
+      ];
+      if (draft2020)
+        applicator.push(prefixItems_1.default, items2020_1.default);
+      else
+        applicator.push(additionalItems_1.default, items_1.default);
+      applicator.push(contains_1.default);
+      return applicator;
+    }
+    exports.default = getApplicator;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/format/format.js
+var require_format = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var error = {
+      message: ({ schemaCode }) => (0, codegen_1.str)`must match format "${schemaCode}"`,
+      params: ({ schemaCode }) => (0, codegen_1._)`{format: ${schemaCode}}`
+    };
+    var def = {
+      keyword: "format",
+      type: ["number", "string"],
+      schemaType: "string",
+      $data: true,
+      error,
+      code(cxt, ruleType) {
+        const { gen, data, $data, schema, schemaCode, it } = cxt;
+        const { opts, errSchemaPath, schemaEnv, self } = it;
+        if (!opts.validateFormats)
+          return;
+        if ($data)
+          validate$DataFormat();
+        else
+          validateFormat();
+        function validate$DataFormat() {
+          const fmts = gen.scopeValue("formats", {
+            ref: self.formats,
+            code: opts.code.formats
+          });
+          const fDef = gen.const("fDef", (0, codegen_1._)`${fmts}[${schemaCode}]`);
+          const fType = gen.let("fType");
+          const format = gen.let("format");
+          gen.if((0, codegen_1._)`typeof ${fDef} == "object" && !(${fDef} instanceof RegExp)`, () => gen.assign(fType, (0, codegen_1._)`${fDef}.type || "string"`).assign(format, (0, codegen_1._)`${fDef}.validate`), () => gen.assign(fType, (0, codegen_1._)`"string"`).assign(format, fDef));
+          cxt.fail$data((0, codegen_1.or)(unknownFmt(), invalidFmt()));
+          function unknownFmt() {
+            if (opts.strictSchema === false)
+              return codegen_1.nil;
+            return (0, codegen_1._)`${schemaCode} && !${format}`;
+          }
+          function invalidFmt() {
+            const callFormat = schemaEnv.$async ? (0, codegen_1._)`(${fDef}.async ? await ${format}(${data}) : ${format}(${data}))` : (0, codegen_1._)`${format}(${data})`;
+            const validData = (0, codegen_1._)`(typeof ${format} == "function" ? ${callFormat} : ${format}.test(${data}))`;
+            return (0, codegen_1._)`${format} && ${format} !== true && ${fType} === ${ruleType} && !${validData}`;
+          }
+        }
+        function validateFormat() {
+          const formatDef = self.formats[schema];
+          if (!formatDef) {
+            unknownFormat();
+            return;
+          }
+          if (formatDef === true)
+            return;
+          const [fmtType, format, fmtRef] = getFormat(formatDef);
+          if (fmtType === ruleType)
+            cxt.pass(validCondition());
+          function unknownFormat() {
+            if (opts.strictSchema === false) {
+              self.logger.warn(unknownMsg());
+              return;
+            }
+            throw new Error(unknownMsg());
+            function unknownMsg() {
+              return `unknown format "${schema}" ignored in schema at path "${errSchemaPath}"`;
+            }
+          }
+          function getFormat(fmtDef) {
+            const code = fmtDef instanceof RegExp ? (0, codegen_1.regexpCode)(fmtDef) : opts.code.formats ? (0, codegen_1._)`${opts.code.formats}${(0, codegen_1.getProperty)(schema)}` : void 0;
+            const fmt = gen.scopeValue("formats", { key: schema, ref: fmtDef, code });
+            if (typeof fmtDef == "object" && !(fmtDef instanceof RegExp)) {
+              return [fmtDef.type || "string", fmtDef.validate, (0, codegen_1._)`${fmt}.validate`];
+            }
+            return ["string", fmtDef, fmt];
+          }
+          function validCondition() {
+            if (typeof formatDef == "object" && !(formatDef instanceof RegExp) && formatDef.async) {
+              if (!schemaEnv.$async)
+                throw new Error("async format in sync schema");
+              return (0, codegen_1._)`await ${fmtRef}(${data})`;
+            }
+            return typeof format == "function" ? (0, codegen_1._)`${fmtRef}(${data})` : (0, codegen_1._)`${fmtRef}.test(${data})`;
+          }
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/format/index.js
+var require_format2 = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var format_1 = require_format();
+    var format = [format_1.default];
+    exports.default = format;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/metadata.js
+var require_metadata = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/metadata.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.contentVocabulary = exports.metadataVocabulary = void 0;
+    exports.metadataVocabulary = [
+      "title",
+      "description",
+      "default",
+      "deprecated",
+      "readOnly",
+      "writeOnly",
+      "examples"
+    ];
+    exports.contentVocabulary = [
+      "contentMediaType",
+      "contentEncoding",
+      "contentSchema"
+    ];
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/draft7.js
+var require_draft7 = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/draft7.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var core_1 = require_core2();
+    var validation_1 = require_validation();
+    var applicator_1 = require_applicator();
+    var format_1 = require_format2();
+    var metadata_1 = require_metadata();
+    var draft7Vocabularies = [
+      core_1.default,
+      validation_1.default,
+      (0, applicator_1.default)(),
+      format_1.default,
+      metadata_1.metadataVocabulary,
+      metadata_1.contentVocabulary
+    ];
+    exports.default = draft7Vocabularies;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/discriminator/types.js
+var require_types = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DiscrError = void 0;
+    var DiscrError;
+    (function(DiscrError2) {
+      DiscrError2["Tag"] = "tag";
+      DiscrError2["Mapping"] = "mapping";
+    })(DiscrError || (exports.DiscrError = DiscrError = {}));
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/discriminator/index.js
+var require_discriminator = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var codegen_1 = require_codegen();
+    var types_1 = require_types();
+    var compile_1 = require_compile();
+    var ref_error_1 = require_ref_error();
+    var util_1 = require_util();
+    var error = {
+      message: ({ params: { discrError, tagName } }) => discrError === types_1.DiscrError.Tag ? `tag "${tagName}" must be string` : `value of tag "${tagName}" must be in oneOf`,
+      params: ({ params: { discrError, tag, tagName } }) => (0, codegen_1._)`{error: ${discrError}, tag: ${tagName}, tagValue: ${tag}}`
+    };
+    var def = {
+      keyword: "discriminator",
+      type: "object",
+      schemaType: "object",
+      error,
+      code(cxt) {
+        const { gen, data, schema, parentSchema, it } = cxt;
+        const { oneOf } = parentSchema;
+        if (!it.opts.discriminator) {
+          throw new Error("discriminator: requires discriminator option");
+        }
+        const tagName = schema.propertyName;
+        if (typeof tagName != "string")
+          throw new Error("discriminator: requires propertyName");
+        if (schema.mapping)
+          throw new Error("discriminator: mapping is not supported");
+        if (!oneOf)
+          throw new Error("discriminator: requires oneOf keyword");
+        const valid = gen.let("valid", false);
+        const tag = gen.const("tag", (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(tagName)}`);
+        gen.if((0, codegen_1._)`typeof ${tag} == "string"`, () => validateMapping(), () => cxt.error(false, { discrError: types_1.DiscrError.Tag, tag, tagName }));
+        cxt.ok(valid);
+        function validateMapping() {
+          const mapping = getMapping();
+          gen.if(false);
+          for (const tagValue in mapping) {
+            gen.elseIf((0, codegen_1._)`${tag} === ${tagValue}`);
+            gen.assign(valid, applyTagSchema(mapping[tagValue]));
+          }
+          gen.else();
+          cxt.error(false, { discrError: types_1.DiscrError.Mapping, tag, tagName });
+          gen.endIf();
+        }
+        function applyTagSchema(schemaProp) {
+          const _valid = gen.name("valid");
+          const schCxt = cxt.subschema({ keyword: "oneOf", schemaProp }, _valid);
+          cxt.mergeEvaluated(schCxt, codegen_1.Name);
+          return _valid;
+        }
+        function getMapping() {
+          var _a;
+          const oneOfMapping = {};
+          const topRequired = hasRequired(parentSchema);
+          let tagRequired = true;
+          for (let i = 0; i < oneOf.length; i++) {
+            let sch = oneOf[i];
+            if ((sch === null || sch === void 0 ? void 0 : sch.$ref) && !(0, util_1.schemaHasRulesButRef)(sch, it.self.RULES)) {
+              const ref = sch.$ref;
+              sch = compile_1.resolveRef.call(it.self, it.schemaEnv.root, it.baseId, ref);
+              if (sch instanceof compile_1.SchemaEnv)
+                sch = sch.schema;
+              if (sch === void 0)
+                throw new ref_error_1.default(it.opts.uriResolver, it.baseId, ref);
+            }
+            const propSch = (_a = sch === null || sch === void 0 ? void 0 : sch.properties) === null || _a === void 0 ? void 0 : _a[tagName];
+            if (typeof propSch != "object") {
+              throw new Error(`discriminator: oneOf subschemas (or referenced schemas) must have "properties/${tagName}"`);
+            }
+            tagRequired = tagRequired && (topRequired || hasRequired(sch));
+            addMappings(propSch, i);
+          }
+          if (!tagRequired)
+            throw new Error(`discriminator: "${tagName}" must be required`);
+          return oneOfMapping;
+          function hasRequired({ required }) {
+            return Array.isArray(required) && required.includes(tagName);
+          }
+          function addMappings(sch, i) {
+            if (sch.const) {
+              addMapping(sch.const, i);
+            } else if (sch.enum) {
+              for (const tagValue of sch.enum) {
+                addMapping(tagValue, i);
+              }
+            } else {
+              throw new Error(`discriminator: "properties/${tagName}" must have "const" or "enum"`);
+            }
+          }
+          function addMapping(tagValue, i) {
+            if (typeof tagValue != "string" || tagValue in oneOfMapping) {
+              throw new Error(`discriminator: "${tagName}" values must be unique strings`);
+            }
+            oneOfMapping[tagValue] = i;
+          }
+        }
+      }
+    };
+    exports.default = def;
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/refs/json-schema-draft-07.json
+var require_json_schema_draft_07 = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module) {
+    module.exports = {
+      $schema: "http://json-schema.org/draft-07/schema#",
+      $id: "http://json-schema.org/draft-07/schema#",
+      title: "Core schema meta-schema",
+      definitions: {
+        schemaArray: {
+          type: "array",
+          minItems: 1,
+          items: { $ref: "#" }
+        },
+        nonNegativeInteger: {
+          type: "integer",
+          minimum: 0
+        },
+        nonNegativeIntegerDefault0: {
+          allOf: [{ $ref: "#/definitions/nonNegativeInteger" }, { default: 0 }]
+        },
+        simpleTypes: {
+          enum: ["array", "boolean", "integer", "null", "number", "object", "string"]
+        },
+        stringArray: {
+          type: "array",
+          items: { type: "string" },
+          uniqueItems: true,
+          default: []
+        }
+      },
+      type: ["object", "boolean"],
+      properties: {
+        $id: {
+          type: "string",
+          format: "uri-reference"
+        },
+        $schema: {
+          type: "string",
+          format: "uri"
+        },
+        $ref: {
+          type: "string",
+          format: "uri-reference"
+        },
+        $comment: {
+          type: "string"
+        },
+        title: {
+          type: "string"
+        },
+        description: {
+          type: "string"
+        },
+        default: true,
+        readOnly: {
+          type: "boolean",
+          default: false
+        },
+        examples: {
+          type: "array",
+          items: true
+        },
+        multipleOf: {
+          type: "number",
+          exclusiveMinimum: 0
+        },
+        maximum: {
+          type: "number"
+        },
+        exclusiveMaximum: {
+          type: "number"
+        },
+        minimum: {
+          type: "number"
+        },
+        exclusiveMinimum: {
+          type: "number"
+        },
+        maxLength: { $ref: "#/definitions/nonNegativeInteger" },
+        minLength: { $ref: "#/definitions/nonNegativeIntegerDefault0" },
+        pattern: {
+          type: "string",
+          format: "regex"
+        },
+        additionalItems: { $ref: "#" },
+        items: {
+          anyOf: [{ $ref: "#" }, { $ref: "#/definitions/schemaArray" }],
+          default: true
+        },
+        maxItems: { $ref: "#/definitions/nonNegativeInteger" },
+        minItems: { $ref: "#/definitions/nonNegativeIntegerDefault0" },
+        uniqueItems: {
+          type: "boolean",
+          default: false
+        },
+        contains: { $ref: "#" },
+        maxProperties: { $ref: "#/definitions/nonNegativeInteger" },
+        minProperties: { $ref: "#/definitions/nonNegativeIntegerDefault0" },
+        required: { $ref: "#/definitions/stringArray" },
+        additionalProperties: { $ref: "#" },
+        definitions: {
+          type: "object",
+          additionalProperties: { $ref: "#" },
+          default: {}
+        },
+        properties: {
+          type: "object",
+          additionalProperties: { $ref: "#" },
+          default: {}
+        },
+        patternProperties: {
+          type: "object",
+          additionalProperties: { $ref: "#" },
+          propertyNames: { format: "regex" },
+          default: {}
+        },
+        dependencies: {
+          type: "object",
+          additionalProperties: {
+            anyOf: [{ $ref: "#" }, { $ref: "#/definitions/stringArray" }]
+          }
+        },
+        propertyNames: { $ref: "#" },
+        const: true,
+        enum: {
+          type: "array",
+          items: true,
+          minItems: 1,
+          uniqueItems: true
+        },
+        type: {
+          anyOf: [
+            { $ref: "#/definitions/simpleTypes" },
+            {
+              type: "array",
+              items: { $ref: "#/definitions/simpleTypes" },
+              minItems: 1,
+              uniqueItems: true
+            }
+          ]
+        },
+        format: { type: "string" },
+        contentMediaType: { type: "string" },
+        contentEncoding: { type: "string" },
+        if: { $ref: "#" },
+        then: { $ref: "#" },
+        else: { $ref: "#" },
+        allOf: { $ref: "#/definitions/schemaArray" },
+        anyOf: { $ref: "#/definitions/schemaArray" },
+        oneOf: { $ref: "#/definitions/schemaArray" },
+        not: { $ref: "#" }
+      },
+      default: true
+    };
+  }
+});
+
+// node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/ajv.js
+var require_ajv = __commonJS({
+  "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/ajv.js"(exports, module) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MissingRefError = exports.ValidationError = exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = exports.Ajv = void 0;
+    var core_1 = require_core();
+    var draft7_1 = require_draft7();
+    var discriminator_1 = require_discriminator();
+    var draft7MetaSchema = require_json_schema_draft_07();
+    var META_SUPPORT_DATA = ["/properties"];
+    var META_SCHEMA_ID = "http://json-schema.org/draft-07/schema";
+    var Ajv2 = class extends core_1.default {
+      _addVocabularies() {
+        super._addVocabularies();
+        draft7_1.default.forEach((v) => this.addVocabulary(v));
+        if (this.opts.discriminator)
+          this.addKeyword(discriminator_1.default);
+      }
+      _addDefaultMetaSchema() {
+        super._addDefaultMetaSchema();
+        if (!this.opts.meta)
+          return;
+        const metaSchema = this.opts.$data ? this.$dataMetaSchema(draft7MetaSchema, META_SUPPORT_DATA) : draft7MetaSchema;
+        this.addMetaSchema(metaSchema, META_SCHEMA_ID, false);
+        this.refs["http://json-schema.org/schema"] = META_SCHEMA_ID;
+      }
+      defaultMeta() {
+        return this.opts.defaultMeta = super.defaultMeta() || (this.getSchema(META_SCHEMA_ID) ? META_SCHEMA_ID : void 0);
+      }
+    };
+    exports.Ajv = Ajv2;
+    module.exports = exports = Ajv2;
+    module.exports.Ajv = Ajv2;
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = Ajv2;
+    var validate_1 = require_validate();
+    Object.defineProperty(exports, "KeywordCxt", { enumerable: true, get: function() {
+      return validate_1.KeywordCxt;
+    } });
+    var codegen_1 = require_codegen();
+    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
+      return codegen_1._;
+    } });
+    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
+      return codegen_1.str;
+    } });
+    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
+      return codegen_1.stringify;
+    } });
+    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
+      return codegen_1.nil;
+    } });
+    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
+      return codegen_1.Name;
+    } });
+    Object.defineProperty(exports, "CodeGen", { enumerable: true, get: function() {
+      return codegen_1.CodeGen;
+    } });
+    var validation_error_1 = require_validation_error();
+    Object.defineProperty(exports, "ValidationError", { enumerable: true, get: function() {
+      return validation_error_1.default;
+    } });
+    var ref_error_1 = require_ref_error();
+    Object.defineProperty(exports, "MissingRefError", { enumerable: true, get: function() {
+      return ref_error_1.default;
+    } });
+  }
+});
+
+// node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/formats.js
+var require_formats = __commonJS({
+  "node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/formats.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
+    function fmtDef(validate, compare) {
+      return { validate, compare };
+    }
+    exports.fullFormats = {
+      // date: http://tools.ietf.org/html/rfc3339#section-5.6
+      date: fmtDef(date, compareDate),
+      // date-time: http://tools.ietf.org/html/rfc3339#section-5.6
+      time: fmtDef(getTime(true), compareTime),
+      "date-time": fmtDef(getDateTime(true), compareDateTime),
+      "iso-time": fmtDef(getTime(), compareIsoTime),
+      "iso-date-time": fmtDef(getDateTime(), compareIsoDateTime),
+      // duration: https://tools.ietf.org/html/rfc3339#appendix-A
+      duration: /^P(?!$)((\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+S)?)?|(\d+W)?)$/,
+      uri,
+      "uri-reference": /^(?:[a-z][a-z0-9+\-.]*:)?(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'"()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?(?:\?(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i,
+      // uri-template: https://tools.ietf.org/html/rfc6570
+      "uri-template": /^(?:(?:[^\x00-\x20"'<>%\\^`{|}]|%[0-9a-f]{2})|\{[+#./;?&=,!@|]?(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?(?:,(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?)*\})*$/i,
+      // For the source: https://gist.github.com/dperini/729294
+      // For test cases: https://mathiasbynens.be/demo/url-regex
+      url: /^(?:https?|ftp):\/\/(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\u{00a1}-\u{ffff}]+-)*[a-z0-9\u{00a1}-\u{ffff}]+)(?:\.(?:[a-z0-9\u{00a1}-\u{ffff}]+-)*[a-z0-9\u{00a1}-\u{ffff}]+)*(?:\.(?:[a-z\u{00a1}-\u{ffff}]{2,})))(?::\d{2,5})?(?:\/[^\s]*)?$/iu,
+      email: /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i,
+      hostname: /^(?=.{1,253}\.?$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[-0-9a-z]{0,61}[0-9a-z])?)*\.?$/i,
+      // optimized https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9780596802837/ch07s16.html
+      ipv4: /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/,
+      ipv6: /^((([0-9a-f]{1,4}:){7}([0-9a-f]{1,4}|:))|(([0-9a-f]{1,4}:){6}(:[0-9a-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9a-f]{1,4}:){5}(((:[0-9a-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9a-f]{1,4}:){4}(((:[0-9a-f]{1,4}){1,3})|((:[0-9a-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){3}(((:[0-9a-f]{1,4}){1,4})|((:[0-9a-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){2}(((:[0-9a-f]{1,4}){1,5})|((:[0-9a-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){1}(((:[0-9a-f]{1,4}){1,6})|((:[0-9a-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9a-f]{1,4}){1,7})|((:[0-9a-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))$/i,
+      regex,
+      // uuid: http://tools.ietf.org/html/rfc4122
+      uuid: /^(?:urn:uuid:)?[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i,
+      // JSON-pointer: https://tools.ietf.org/html/rfc6901
+      // uri fragment: https://tools.ietf.org/html/rfc3986#appendix-A
+      "json-pointer": /^(?:\/(?:[^~/]|~0|~1)*)*$/,
+      "json-pointer-uri-fragment": /^#(?:\/(?:[a-z0-9_\-.!$&'()*+,;:=@]|%[0-9a-f]{2}|~0|~1)*)*$/i,
+      // relative JSON-pointer: http://tools.ietf.org/html/draft-luff-relative-json-pointer-00
+      "relative-json-pointer": /^(?:0|[1-9][0-9]*)(?:#|(?:\/(?:[^~/]|~0|~1)*)*)$/,
+      // the following formats are used by the openapi specification: https://spec.openapis.org/oas/v3.0.0#data-types
+      // byte: https://github.com/miguelmota/is-base64
+      byte,
+      // signed 32 bit integer
+      int32: { type: "number", validate: validateInt32 },
+      // signed 64 bit integer
+      int64: { type: "number", validate: validateInt64 },
+      // C-type float
+      float: { type: "number", validate: validateNumber },
+      // C-type double
+      double: { type: "number", validate: validateNumber },
+      // hint to the UI to hide input strings
+      password: true,
+      // unchecked string payload
+      binary: true
+    };
+    exports.fastFormats = {
+      ...exports.fullFormats,
+      date: fmtDef(/^\d\d\d\d-[0-1]\d-[0-3]\d$/, compareDate),
+      time: fmtDef(/^(?:[0-2]\d:[0-5]\d:[0-5]\d|23:59:60)(?:\.\d+)?(?:z|[+-]\d\d(?::?\d\d)?)$/i, compareTime),
+      "date-time": fmtDef(/^\d\d\d\d-[0-1]\d-[0-3]\dt(?:[0-2]\d:[0-5]\d:[0-5]\d|23:59:60)(?:\.\d+)?(?:z|[+-]\d\d(?::?\d\d)?)$/i, compareDateTime),
+      "iso-time": fmtDef(/^(?:[0-2]\d:[0-5]\d:[0-5]\d|23:59:60)(?:\.\d+)?(?:z|[+-]\d\d(?::?\d\d)?)?$/i, compareIsoTime),
+      "iso-date-time": fmtDef(/^\d\d\d\d-[0-1]\d-[0-3]\d[t\s](?:[0-2]\d:[0-5]\d:[0-5]\d|23:59:60)(?:\.\d+)?(?:z|[+-]\d\d(?::?\d\d)?)?$/i, compareIsoDateTime),
+      // uri: https://github.com/mafintosh/is-my-json-valid/blob/master/formats.js
+      uri: /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/)?[^\s]*$/i,
+      "uri-reference": /^(?:(?:[a-z][a-z0-9+\-.]*:)?\/?\/)?(?:[^\\\s#][^\s#]*)?(?:#[^\\\s]*)?$/i,
+      // email (sources from jsen validator):
+      // http://stackoverflow.com/questions/201323/using-a-regular-expression-to-validate-an-email-address#answer-8829363
+      // http://www.w3.org/TR/html5/forms.html#valid-e-mail-address (search for 'wilful violation')
+      email: /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i
+    };
+    exports.formatNames = Object.keys(exports.fullFormats);
+    function isLeapYear(year) {
+      return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    }
+    var DATE2 = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
+    var DAYS2 = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    function date(str) {
+      const matches = DATE2.exec(str);
+      if (!matches)
+        return false;
+      const year = +matches[1];
+      const month = +matches[2];
+      const day = +matches[3];
+      return month >= 1 && month <= 12 && day >= 1 && day <= (month === 2 && isLeapYear(year) ? 29 : DAYS2[month]);
+    }
+    function compareDate(d1, d2) {
+      if (!(d1 && d2))
+        return void 0;
+      if (d1 > d2)
+        return 1;
+      if (d1 < d2)
+        return -1;
+      return 0;
+    }
+    var TIME2 = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
+    function getTime(strictTimeZone) {
+      return function time(str) {
+        const matches = TIME2.exec(str);
+        if (!matches)
+          return false;
+        const hr = +matches[1];
+        const min = +matches[2];
+        const sec = +matches[3];
+        const tz = matches[4];
+        const tzSign = matches[5] === "-" ? -1 : 1;
+        const tzH = +(matches[6] || 0);
+        const tzM = +(matches[7] || 0);
+        if (tzH > 23 || tzM > 59 || strictTimeZone && !tz)
+          return false;
+        if (hr <= 23 && min <= 59 && sec < 60)
+          return true;
+        const utcMin = min - tzM * tzSign;
+        const utcHr = hr - tzH * tzSign - (utcMin < 0 ? 1 : 0);
+        return (utcHr === 23 || utcHr === -1) && (utcMin === 59 || utcMin === -1) && sec < 61;
+      };
+    }
+    function compareTime(s1, s2) {
+      if (!(s1 && s2))
+        return void 0;
+      const t1 = (/* @__PURE__ */ new Date("2020-01-01T" + s1)).valueOf();
+      const t2 = (/* @__PURE__ */ new Date("2020-01-01T" + s2)).valueOf();
+      if (!(t1 && t2))
+        return void 0;
+      return t1 - t2;
+    }
+    function compareIsoTime(t1, t2) {
+      if (!(t1 && t2))
+        return void 0;
+      const a1 = TIME2.exec(t1);
+      const a2 = TIME2.exec(t2);
+      if (!(a1 && a2))
+        return void 0;
+      t1 = a1[1] + a1[2] + a1[3];
+      t2 = a2[1] + a2[2] + a2[3];
+      if (t1 > t2)
+        return 1;
+      if (t1 < t2)
+        return -1;
+      return 0;
+    }
+    var DATE_TIME_SEPARATOR = /t|\s/i;
+    function getDateTime(strictTimeZone) {
+      const time = getTime(strictTimeZone);
+      return function date_time(str) {
+        const dateTime = str.split(DATE_TIME_SEPARATOR);
+        return dateTime.length === 2 && date(dateTime[0]) && time(dateTime[1]);
+      };
+    }
+    function compareDateTime(dt1, dt2) {
+      if (!(dt1 && dt2))
+        return void 0;
+      const d1 = new Date(dt1).valueOf();
+      const d2 = new Date(dt2).valueOf();
+      if (!(d1 && d2))
+        return void 0;
+      return d1 - d2;
+    }
+    function compareIsoDateTime(dt1, dt2) {
+      if (!(dt1 && dt2))
+        return void 0;
+      const [d1, t1] = dt1.split(DATE_TIME_SEPARATOR);
+      const [d2, t2] = dt2.split(DATE_TIME_SEPARATOR);
+      const res = compareDate(d1, d2);
+      if (res === void 0)
+        return void 0;
+      return res || compareTime(t1, t2);
+    }
+    var NOT_URI_FRAGMENT = /\/|:/;
+    var URI = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
+    function uri(str) {
+      return NOT_URI_FRAGMENT.test(str) && URI.test(str);
+    }
+    var BYTE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/gm;
+    function byte(str) {
+      BYTE.lastIndex = 0;
+      return BYTE.test(str);
+    }
+    var MIN_INT32 = -(2 ** 31);
+    var MAX_INT32 = 2 ** 31 - 1;
+    function validateInt32(value) {
+      return Number.isInteger(value) && value <= MAX_INT32 && value >= MIN_INT32;
+    }
+    function validateInt64(value) {
+      return Number.isInteger(value);
+    }
+    function validateNumber() {
+      return true;
+    }
+    var Z_ANCHOR = /[^\\]\\Z/;
+    function regex(str) {
+      if (Z_ANCHOR.test(str))
+        return false;
+      try {
+        new RegExp(str);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+  }
+});
+
+// node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/limit.js
+var require_limit = __commonJS({
+  "node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/limit.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.formatLimitDefinition = void 0;
+    var ajv_1 = require_ajv();
+    var codegen_1 = require_codegen();
+    var ops = codegen_1.operators;
+    var KWDs = {
+      formatMaximum: { okStr: "<=", ok: ops.LTE, fail: ops.GT },
+      formatMinimum: { okStr: ">=", ok: ops.GTE, fail: ops.LT },
+      formatExclusiveMaximum: { okStr: "<", ok: ops.LT, fail: ops.GTE },
+      formatExclusiveMinimum: { okStr: ">", ok: ops.GT, fail: ops.LTE }
+    };
+    var error = {
+      message: ({ keyword, schemaCode }) => (0, codegen_1.str)`should be ${KWDs[keyword].okStr} ${schemaCode}`,
+      params: ({ keyword, schemaCode }) => (0, codegen_1._)`{comparison: ${KWDs[keyword].okStr}, limit: ${schemaCode}}`
+    };
+    exports.formatLimitDefinition = {
+      keyword: Object.keys(KWDs),
+      type: "string",
+      schemaType: "string",
+      $data: true,
+      error,
+      code(cxt) {
+        const { gen, data, schemaCode, keyword, it } = cxt;
+        const { opts, self } = it;
+        if (!opts.validateFormats)
+          return;
+        const fCxt = new ajv_1.KeywordCxt(it, self.RULES.all.format.definition, "format");
+        if (fCxt.$data)
+          validate$DataFormat();
+        else
+          validateFormat();
+        function validate$DataFormat() {
+          const fmts = gen.scopeValue("formats", {
+            ref: self.formats,
+            code: opts.code.formats
+          });
+          const fmt = gen.const("fmt", (0, codegen_1._)`${fmts}[${fCxt.schemaCode}]`);
+          cxt.fail$data((0, codegen_1.or)((0, codegen_1._)`typeof ${fmt} != "object"`, (0, codegen_1._)`${fmt} instanceof RegExp`, (0, codegen_1._)`typeof ${fmt}.compare != "function"`, compareCode(fmt)));
+        }
+        function validateFormat() {
+          const format = fCxt.schema;
+          const fmtDef = self.formats[format];
+          if (!fmtDef || fmtDef === true)
+            return;
+          if (typeof fmtDef != "object" || fmtDef instanceof RegExp || typeof fmtDef.compare != "function") {
+            throw new Error(`"${keyword}": format "${format}" does not define "compare" function`);
+          }
+          const fmt = gen.scopeValue("formats", {
+            key: format,
+            ref: fmtDef,
+            code: opts.code.formats ? (0, codegen_1._)`${opts.code.formats}${(0, codegen_1.getProperty)(format)}` : void 0
+          });
+          cxt.fail$data(compareCode(fmt));
+        }
+        function compareCode(fmt) {
+          return (0, codegen_1._)`${fmt}.compare(${data}, ${schemaCode}) ${KWDs[keyword].fail} 0`;
+        }
+      },
+      dependencies: ["format"]
+    };
+    var formatLimitPlugin = (ajv) => {
+      ajv.addKeyword(exports.formatLimitDefinition);
+      return ajv;
+    };
+    exports.default = formatLimitPlugin;
+  }
+});
+
+// node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/index.js
+var require_dist = __commonJS({
+  "node_modules/.pnpm/ajv-formats@3.0.1_ajv@8.20.0/node_modules/ajv-formats/dist/index.js"(exports, module) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var formats_1 = require_formats();
+    var limit_1 = require_limit();
+    var codegen_1 = require_codegen();
+    var fullName = new codegen_1.Name("fullFormats");
+    var fastName = new codegen_1.Name("fastFormats");
+    var formatsPlugin = (ajv, opts = { keywords: true }) => {
+      if (Array.isArray(opts)) {
+        addFormats(ajv, opts, formats_1.fullFormats, fullName);
+        return ajv;
+      }
+      const [formats2, exportName] = opts.mode === "fast" ? [formats_1.fastFormats, fastName] : [formats_1.fullFormats, fullName];
+      const list = opts.formats || formats_1.formatNames;
+      addFormats(ajv, list, formats2, exportName);
+      if (opts.keywords)
+        (0, limit_1.default)(ajv);
+      return ajv;
+    };
+    formatsPlugin.get = (name, mode = "full") => {
+      const formats2 = mode === "fast" ? formats_1.fastFormats : formats_1.fullFormats;
+      const f = formats2[name];
+      if (!f)
+        throw new Error(`Unknown format "${name}"`);
+      return f;
+    };
+    function addFormats(ajv, list, fs10, exportName) {
+      var _a;
+      var _b;
+      (_a = (_b = ajv.opts.code).formats) !== null && _a !== void 0 ? _a : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
+      for (const f of list)
+        ajv.addFormat(f, fs10[f]);
+    }
+    module.exports = exports = formatsPlugin;
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = formatsPlugin;
+  }
+});
 
 // src/kiro/mcp-server.ts
 import fs9, { readFileSync } from "node:fs";
 import path9 from "node:path";
+
+// node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
+function isZ4Schema(s) {
+  const schema = s;
+  return !!schema._zod;
+}
+function safeParse2(schema, data) {
+  if (isZ4Schema(schema)) {
+    const result2 = safeParse(schema, data);
+    return result2;
+  }
+  const v3Schema = schema;
+  const result = v3Schema.safeParse(data);
+  return result;
+}
+function getObjectShape(schema) {
+  if (!schema)
+    return void 0;
+  let rawShape;
+  if (isZ4Schema(schema)) {
+    const v4Schema = schema;
+    rawShape = v4Schema._zod?.def?.shape;
+  } else {
+    const v3Schema = schema;
+    rawShape = v3Schema.shape;
+  }
+  if (!rawShape)
+    return void 0;
+  if (typeof rawShape === "function") {
+    try {
+      return rawShape();
+    } catch {
+      return void 0;
+    }
+  }
+  return rawShape;
+}
+function getLiteralValue(schema) {
+  if (isZ4Schema(schema)) {
+    const v4Schema = schema;
+    const def2 = v4Schema._zod?.def;
+    if (def2) {
+      if (def2.value !== void 0)
+        return def2.value;
+      if (Array.isArray(def2.values) && def2.values.length > 0) {
+        return def2.values[0];
+      }
+    }
+  }
+  const v3Schema = schema;
+  const def = v3Schema._def;
+  if (def) {
+    if (def.value !== void 0)
+      return def.value;
+    if (Array.isArray(def.values) && def.values.length > 0) {
+      return def.values[0];
+    }
+  }
+  const directValue = schema.value;
+  if (directValue !== void 0)
+    return directValue;
+  return void 0;
+}
+
+// node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
+var LATEST_PROTOCOL_VERSION = "2025-11-25";
+var SUPPORTED_PROTOCOL_VERSIONS = [LATEST_PROTOCOL_VERSION, "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
+var RELATED_TASK_META_KEY = "io.modelcontextprotocol/related-task";
+var JSONRPC_VERSION = "2.0";
+var AssertObjectSchema = custom((v) => v !== null && (typeof v === "object" || typeof v === "function"));
+var ProgressTokenSchema = union([string(), number().int()]);
+var CursorSchema = string();
+var TaskCreationParamsSchema = looseObject({
+  /**
+   * Requested duration in milliseconds to retain task from creation.
+   */
+  ttl: number().optional(),
+  /**
+   * Time in milliseconds to wait between task status requests.
+   */
+  pollInterval: number().optional()
+});
+var TaskMetadataSchema = object({
+  ttl: number().optional()
+});
+var RelatedTaskMetadataSchema = object({
+  taskId: string()
+});
+var RequestMetaSchema = looseObject({
+  /**
+   * If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+   */
+  progressToken: ProgressTokenSchema.optional(),
+  /**
+   * If specified, this request is related to the provided task.
+   */
+  [RELATED_TASK_META_KEY]: RelatedTaskMetadataSchema.optional()
+});
+var BaseRequestParamsSchema = object({
+  /**
+   * See [General fields: `_meta`](/specification/draft/basic/index#meta) for notes on `_meta` usage.
+   */
+  _meta: RequestMetaSchema.optional()
+});
+var TaskAugmentedRequestParamsSchema = BaseRequestParamsSchema.extend({
+  /**
+   * If specified, the caller is requesting task-augmented execution for this request.
+   * The request will return a CreateTaskResult immediately, and the actual result can be
+   * retrieved later via tasks/result.
+   *
+   * Task augmentation is subject to capability negotiation - receivers MUST declare support
+   * for task augmentation of specific request types in their capabilities.
+   */
+  task: TaskMetadataSchema.optional()
+});
+var isTaskAugmentedRequestParams = (value) => TaskAugmentedRequestParamsSchema.safeParse(value).success;
+var RequestSchema = object({
+  method: string(),
+  params: BaseRequestParamsSchema.loose().optional()
+});
+var NotificationsParamsSchema = object({
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: RequestMetaSchema.optional()
+});
+var NotificationSchema = object({
+  method: string(),
+  params: NotificationsParamsSchema.loose().optional()
+});
+var ResultSchema = looseObject({
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: RequestMetaSchema.optional()
+});
+var RequestIdSchema = union([string(), number().int()]);
+var JSONRPCRequestSchema = object({
+  jsonrpc: literal(JSONRPC_VERSION),
+  id: RequestIdSchema,
+  ...RequestSchema.shape
+}).strict();
+var isJSONRPCRequest = (value) => JSONRPCRequestSchema.safeParse(value).success;
+var JSONRPCNotificationSchema = object({
+  jsonrpc: literal(JSONRPC_VERSION),
+  ...NotificationSchema.shape
+}).strict();
+var isJSONRPCNotification = (value) => JSONRPCNotificationSchema.safeParse(value).success;
+var JSONRPCResultResponseSchema = object({
+  jsonrpc: literal(JSONRPC_VERSION),
+  id: RequestIdSchema,
+  result: ResultSchema
+}).strict();
+var isJSONRPCResultResponse = (value) => JSONRPCResultResponseSchema.safeParse(value).success;
+var ErrorCode;
+(function(ErrorCode2) {
+  ErrorCode2[ErrorCode2["ConnectionClosed"] = -32e3] = "ConnectionClosed";
+  ErrorCode2[ErrorCode2["RequestTimeout"] = -32001] = "RequestTimeout";
+  ErrorCode2[ErrorCode2["ParseError"] = -32700] = "ParseError";
+  ErrorCode2[ErrorCode2["InvalidRequest"] = -32600] = "InvalidRequest";
+  ErrorCode2[ErrorCode2["MethodNotFound"] = -32601] = "MethodNotFound";
+  ErrorCode2[ErrorCode2["InvalidParams"] = -32602] = "InvalidParams";
+  ErrorCode2[ErrorCode2["InternalError"] = -32603] = "InternalError";
+  ErrorCode2[ErrorCode2["UrlElicitationRequired"] = -32042] = "UrlElicitationRequired";
+})(ErrorCode || (ErrorCode = {}));
+var JSONRPCErrorResponseSchema = object({
+  jsonrpc: literal(JSONRPC_VERSION),
+  id: RequestIdSchema.optional(),
+  error: object({
+    /**
+     * The error type that occurred.
+     */
+    code: number().int(),
+    /**
+     * A short description of the error. The message SHOULD be limited to a concise single sentence.
+     */
+    message: string(),
+    /**
+     * Additional information about the error. The value of this member is defined by the sender (e.g. detailed error information, nested errors etc.).
+     */
+    data: unknown().optional()
+  })
+}).strict();
+var isJSONRPCErrorResponse = (value) => JSONRPCErrorResponseSchema.safeParse(value).success;
+var JSONRPCMessageSchema = union([
+  JSONRPCRequestSchema,
+  JSONRPCNotificationSchema,
+  JSONRPCResultResponseSchema,
+  JSONRPCErrorResponseSchema
+]);
+var JSONRPCResponseSchema = union([JSONRPCResultResponseSchema, JSONRPCErrorResponseSchema]);
+var EmptyResultSchema = ResultSchema.strict();
+var CancelledNotificationParamsSchema = NotificationsParamsSchema.extend({
+  /**
+   * The ID of the request to cancel.
+   *
+   * This MUST correspond to the ID of a request previously issued in the same direction.
+   */
+  requestId: RequestIdSchema.optional(),
+  /**
+   * An optional string describing the reason for the cancellation. This MAY be logged or presented to the user.
+   */
+  reason: string().optional()
+});
+var CancelledNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/cancelled"),
+  params: CancelledNotificationParamsSchema
+});
+var IconSchema = object({
+  /**
+   * URL or data URI for the icon.
+   */
+  src: string(),
+  /**
+   * Optional MIME type for the icon.
+   */
+  mimeType: string().optional(),
+  /**
+   * Optional array of strings that specify sizes at which the icon can be used.
+   * Each string should be in WxH format (e.g., `"48x48"`, `"96x96"`) or `"any"` for scalable formats like SVG.
+   *
+   * If not provided, the client should assume that the icon can be used at any size.
+   */
+  sizes: array(string()).optional(),
+  /**
+   * Optional specifier for the theme this icon is designed for. `light` indicates
+   * the icon is designed to be used with a light background, and `dark` indicates
+   * the icon is designed to be used with a dark background.
+   *
+   * If not provided, the client should assume the icon can be used with any theme.
+   */
+  theme: _enum(["light", "dark"]).optional()
+});
+var IconsSchema = object({
+  /**
+   * Optional set of sized icons that the client can display in a user interface.
+   *
+   * Clients that support rendering icons MUST support at least the following MIME types:
+   * - `image/png` - PNG images (safe, universal compatibility)
+   * - `image/jpeg` (and `image/jpg`) - JPEG images (safe, universal compatibility)
+   *
+   * Clients that support rendering icons SHOULD also support:
+   * - `image/svg+xml` - SVG images (scalable but requires security precautions)
+   * - `image/webp` - WebP images (modern, efficient format)
+   */
+  icons: array(IconSchema).optional()
+});
+var BaseMetadataSchema = object({
+  /** Intended for programmatic or logical use, but used as a display name in past specs or fallback */
+  name: string(),
+  /**
+   * Intended for UI and end-user contexts — optimized to be human-readable and easily understood,
+   * even by those unfamiliar with domain-specific terminology.
+   *
+   * If not provided, the name should be used for display (except for Tool,
+   * where `annotations.title` should be given precedence over using `name`,
+   * if present).
+   */
+  title: string().optional()
+});
+var ImplementationSchema = BaseMetadataSchema.extend({
+  ...BaseMetadataSchema.shape,
+  ...IconsSchema.shape,
+  version: string(),
+  /**
+   * An optional URL of the website for this implementation.
+   */
+  websiteUrl: string().optional(),
+  /**
+   * An optional human-readable description of what this implementation does.
+   *
+   * This can be used by clients or servers to provide context about their purpose
+   * and capabilities. For example, a server might describe the types of resources
+   * or tools it provides, while a client might describe its intended use case.
+   */
+  description: string().optional()
+});
+var FormElicitationCapabilitySchema = intersection(object({
+  applyDefaults: boolean().optional()
+}), record(string(), unknown()));
+var ElicitationCapabilitySchema = preprocess((value) => {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (Object.keys(value).length === 0) {
+      return { form: {} };
+    }
+  }
+  return value;
+}, intersection(object({
+  form: FormElicitationCapabilitySchema.optional(),
+  url: AssertObjectSchema.optional()
+}), record(string(), unknown()).optional()));
+var ClientTasksCapabilitySchema = looseObject({
+  /**
+   * Present if the client supports listing tasks.
+   */
+  list: AssertObjectSchema.optional(),
+  /**
+   * Present if the client supports cancelling tasks.
+   */
+  cancel: AssertObjectSchema.optional(),
+  /**
+   * Capabilities for task creation on specific request types.
+   */
+  requests: looseObject({
+    /**
+     * Task support for sampling requests.
+     */
+    sampling: looseObject({
+      createMessage: AssertObjectSchema.optional()
+    }).optional(),
+    /**
+     * Task support for elicitation requests.
+     */
+    elicitation: looseObject({
+      create: AssertObjectSchema.optional()
+    }).optional()
+  }).optional()
+});
+var ServerTasksCapabilitySchema = looseObject({
+  /**
+   * Present if the server supports listing tasks.
+   */
+  list: AssertObjectSchema.optional(),
+  /**
+   * Present if the server supports cancelling tasks.
+   */
+  cancel: AssertObjectSchema.optional(),
+  /**
+   * Capabilities for task creation on specific request types.
+   */
+  requests: looseObject({
+    /**
+     * Task support for tool requests.
+     */
+    tools: looseObject({
+      call: AssertObjectSchema.optional()
+    }).optional()
+  }).optional()
+});
+var ClientCapabilitiesSchema = object({
+  /**
+   * Experimental, non-standard capabilities that the client supports.
+   */
+  experimental: record(string(), AssertObjectSchema).optional(),
+  /**
+   * Present if the client supports sampling from an LLM.
+   */
+  sampling: object({
+    /**
+     * Present if the client supports context inclusion via includeContext parameter.
+     * If not declared, servers SHOULD only use `includeContext: "none"` (or omit it).
+     */
+    context: AssertObjectSchema.optional(),
+    /**
+     * Present if the client supports tool use via tools and toolChoice parameters.
+     */
+    tools: AssertObjectSchema.optional()
+  }).optional(),
+  /**
+   * Present if the client supports eliciting user input.
+   */
+  elicitation: ElicitationCapabilitySchema.optional(),
+  /**
+   * Present if the client supports listing roots.
+   */
+  roots: object({
+    /**
+     * Whether the client supports issuing notifications for changes to the roots list.
+     */
+    listChanged: boolean().optional()
+  }).optional(),
+  /**
+   * Present if the client supports task creation.
+   */
+  tasks: ClientTasksCapabilitySchema.optional(),
+  /**
+   * Extensions that the client supports. Keys are extension identifiers (vendor-prefix/extension-name).
+   */
+  extensions: record(string(), AssertObjectSchema).optional()
+});
+var InitializeRequestParamsSchema = BaseRequestParamsSchema.extend({
+  /**
+   * The latest version of the Model Context Protocol that the client supports. The client MAY decide to support older versions as well.
+   */
+  protocolVersion: string(),
+  capabilities: ClientCapabilitiesSchema,
+  clientInfo: ImplementationSchema
+});
+var InitializeRequestSchema = RequestSchema.extend({
+  method: literal("initialize"),
+  params: InitializeRequestParamsSchema
+});
+var ServerCapabilitiesSchema = object({
+  /**
+   * Experimental, non-standard capabilities that the server supports.
+   */
+  experimental: record(string(), AssertObjectSchema).optional(),
+  /**
+   * Present if the server supports sending log messages to the client.
+   */
+  logging: AssertObjectSchema.optional(),
+  /**
+   * Present if the server supports sending completions to the client.
+   */
+  completions: AssertObjectSchema.optional(),
+  /**
+   * Present if the server offers any prompt templates.
+   */
+  prompts: object({
+    /**
+     * Whether this server supports issuing notifications for changes to the prompt list.
+     */
+    listChanged: boolean().optional()
+  }).optional(),
+  /**
+   * Present if the server offers any resources to read.
+   */
+  resources: object({
+    /**
+     * Whether this server supports clients subscribing to resource updates.
+     */
+    subscribe: boolean().optional(),
+    /**
+     * Whether this server supports issuing notifications for changes to the resource list.
+     */
+    listChanged: boolean().optional()
+  }).optional(),
+  /**
+   * Present if the server offers any tools to call.
+   */
+  tools: object({
+    /**
+     * Whether this server supports issuing notifications for changes to the tool list.
+     */
+    listChanged: boolean().optional()
+  }).optional(),
+  /**
+   * Present if the server supports task creation.
+   */
+  tasks: ServerTasksCapabilitySchema.optional(),
+  /**
+   * Extensions that the server supports. Keys are extension identifiers (vendor-prefix/extension-name).
+   */
+  extensions: record(string(), AssertObjectSchema).optional()
+});
+var InitializeResultSchema = ResultSchema.extend({
+  /**
+   * The version of the Model Context Protocol that the server wants to use. This may not match the version that the client requested. If the client cannot support this version, it MUST disconnect.
+   */
+  protocolVersion: string(),
+  capabilities: ServerCapabilitiesSchema,
+  serverInfo: ImplementationSchema,
+  /**
+   * Instructions describing how to use the server and its features.
+   *
+   * This can be used by clients to improve the LLM's understanding of available tools, resources, etc. It can be thought of like a "hint" to the model. For example, this information MAY be added to the system prompt.
+   */
+  instructions: string().optional()
+});
+var InitializedNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/initialized"),
+  params: NotificationsParamsSchema.optional()
+});
+var PingRequestSchema = RequestSchema.extend({
+  method: literal("ping"),
+  params: BaseRequestParamsSchema.optional()
+});
+var ProgressSchema = object({
+  /**
+   * The progress thus far. This should increase every time progress is made, even if the total is unknown.
+   */
+  progress: number(),
+  /**
+   * Total number of items to process (or total progress required), if known.
+   */
+  total: optional(number()),
+  /**
+   * An optional message describing the current progress.
+   */
+  message: optional(string())
+});
+var ProgressNotificationParamsSchema = object({
+  ...NotificationsParamsSchema.shape,
+  ...ProgressSchema.shape,
+  /**
+   * The progress token which was given in the initial request, used to associate this notification with the request that is proceeding.
+   */
+  progressToken: ProgressTokenSchema
+});
+var ProgressNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/progress"),
+  params: ProgressNotificationParamsSchema
+});
+var PaginatedRequestParamsSchema = BaseRequestParamsSchema.extend({
+  /**
+   * An opaque token representing the current pagination position.
+   * If provided, the server should return results starting after this cursor.
+   */
+  cursor: CursorSchema.optional()
+});
+var PaginatedRequestSchema = RequestSchema.extend({
+  params: PaginatedRequestParamsSchema.optional()
+});
+var PaginatedResultSchema = ResultSchema.extend({
+  /**
+   * An opaque token representing the pagination position after the last returned result.
+   * If present, there may be more results available.
+   */
+  nextCursor: CursorSchema.optional()
+});
+var TaskStatusSchema = _enum(["working", "input_required", "completed", "failed", "cancelled"]);
+var TaskSchema = object({
+  taskId: string(),
+  status: TaskStatusSchema,
+  /**
+   * Time in milliseconds to keep task results available after completion.
+   * If null, the task has unlimited lifetime until manually cleaned up.
+   */
+  ttl: union([number(), _null()]),
+  /**
+   * ISO 8601 timestamp when the task was created.
+   */
+  createdAt: string(),
+  /**
+   * ISO 8601 timestamp when the task was last updated.
+   */
+  lastUpdatedAt: string(),
+  pollInterval: optional(number()),
+  /**
+   * Optional diagnostic message for failed tasks or other status information.
+   */
+  statusMessage: optional(string())
+});
+var CreateTaskResultSchema = ResultSchema.extend({
+  task: TaskSchema
+});
+var TaskStatusNotificationParamsSchema = NotificationsParamsSchema.merge(TaskSchema);
+var TaskStatusNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/tasks/status"),
+  params: TaskStatusNotificationParamsSchema
+});
+var GetTaskRequestSchema = RequestSchema.extend({
+  method: literal("tasks/get"),
+  params: BaseRequestParamsSchema.extend({
+    taskId: string()
+  })
+});
+var GetTaskResultSchema = ResultSchema.merge(TaskSchema);
+var GetTaskPayloadRequestSchema = RequestSchema.extend({
+  method: literal("tasks/result"),
+  params: BaseRequestParamsSchema.extend({
+    taskId: string()
+  })
+});
+var GetTaskPayloadResultSchema = ResultSchema.loose();
+var ListTasksRequestSchema = PaginatedRequestSchema.extend({
+  method: literal("tasks/list")
+});
+var ListTasksResultSchema = PaginatedResultSchema.extend({
+  tasks: array(TaskSchema)
+});
+var CancelTaskRequestSchema = RequestSchema.extend({
+  method: literal("tasks/cancel"),
+  params: BaseRequestParamsSchema.extend({
+    taskId: string()
+  })
+});
+var CancelTaskResultSchema = ResultSchema.merge(TaskSchema);
+var ResourceContentsSchema = object({
+  /**
+   * The URI of this resource.
+   */
+  uri: string(),
+  /**
+   * The MIME type of this resource, if known.
+   */
+  mimeType: optional(string()),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var TextResourceContentsSchema = ResourceContentsSchema.extend({
+  /**
+   * The text of the item. This must only be set if the item can actually be represented as text (not binary data).
+   */
+  text: string()
+});
+var Base64Schema = string().refine((val) => {
+  try {
+    atob(val);
+    return true;
+  } catch {
+    return false;
+  }
+}, { message: "Invalid Base64 string" });
+var BlobResourceContentsSchema = ResourceContentsSchema.extend({
+  /**
+   * A base64-encoded string representing the binary data of the item.
+   */
+  blob: Base64Schema
+});
+var RoleSchema = _enum(["user", "assistant"]);
+var AnnotationsSchema = object({
+  /**
+   * Intended audience(s) for the resource.
+   */
+  audience: array(RoleSchema).optional(),
+  /**
+   * Importance hint for the resource, from 0 (least) to 1 (most).
+   */
+  priority: number().min(0).max(1).optional(),
+  /**
+   * ISO 8601 timestamp for the most recent modification.
+   */
+  lastModified: iso_exports.datetime({ offset: true }).optional()
+});
+var ResourceSchema = object({
+  ...BaseMetadataSchema.shape,
+  ...IconsSchema.shape,
+  /**
+   * The URI of this resource.
+   */
+  uri: string(),
+  /**
+   * A description of what this resource represents.
+   *
+   * This can be used by clients to improve the LLM's understanding of available resources. It can be thought of like a "hint" to the model.
+   */
+  description: optional(string()),
+  /**
+   * The MIME type of this resource, if known.
+   */
+  mimeType: optional(string()),
+  /**
+   * The size of the raw resource content, in bytes (i.e., before base64 encoding or any tokenization), if known.
+   *
+   * This can be used by Hosts to display file sizes and estimate context window usage.
+   */
+  size: optional(number()),
+  /**
+   * Optional annotations for the client.
+   */
+  annotations: AnnotationsSchema.optional(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: optional(looseObject({}))
+});
+var ResourceTemplateSchema = object({
+  ...BaseMetadataSchema.shape,
+  ...IconsSchema.shape,
+  /**
+   * A URI template (according to RFC 6570) that can be used to construct resource URIs.
+   */
+  uriTemplate: string(),
+  /**
+   * A description of what this template is for.
+   *
+   * This can be used by clients to improve the LLM's understanding of available resources. It can be thought of like a "hint" to the model.
+   */
+  description: optional(string()),
+  /**
+   * The MIME type for all resources that match this template. This should only be included if all resources matching this template have the same type.
+   */
+  mimeType: optional(string()),
+  /**
+   * Optional annotations for the client.
+   */
+  annotations: AnnotationsSchema.optional(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: optional(looseObject({}))
+});
+var ListResourcesRequestSchema = PaginatedRequestSchema.extend({
+  method: literal("resources/list")
+});
+var ListResourcesResultSchema = PaginatedResultSchema.extend({
+  resources: array(ResourceSchema)
+});
+var ListResourceTemplatesRequestSchema = PaginatedRequestSchema.extend({
+  method: literal("resources/templates/list")
+});
+var ListResourceTemplatesResultSchema = PaginatedResultSchema.extend({
+  resourceTemplates: array(ResourceTemplateSchema)
+});
+var ResourceRequestParamsSchema = BaseRequestParamsSchema.extend({
+  /**
+   * The URI of the resource to read. The URI can use any protocol; it is up to the server how to interpret it.
+   *
+   * @format uri
+   */
+  uri: string()
+});
+var ReadResourceRequestParamsSchema = ResourceRequestParamsSchema;
+var ReadResourceRequestSchema = RequestSchema.extend({
+  method: literal("resources/read"),
+  params: ReadResourceRequestParamsSchema
+});
+var ReadResourceResultSchema = ResultSchema.extend({
+  contents: array(union([TextResourceContentsSchema, BlobResourceContentsSchema]))
+});
+var ResourceListChangedNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/resources/list_changed"),
+  params: NotificationsParamsSchema.optional()
+});
+var SubscribeRequestParamsSchema = ResourceRequestParamsSchema;
+var SubscribeRequestSchema = RequestSchema.extend({
+  method: literal("resources/subscribe"),
+  params: SubscribeRequestParamsSchema
+});
+var UnsubscribeRequestParamsSchema = ResourceRequestParamsSchema;
+var UnsubscribeRequestSchema = RequestSchema.extend({
+  method: literal("resources/unsubscribe"),
+  params: UnsubscribeRequestParamsSchema
+});
+var ResourceUpdatedNotificationParamsSchema = NotificationsParamsSchema.extend({
+  /**
+   * The URI of the resource that has been updated. This might be a sub-resource of the one that the client actually subscribed to.
+   */
+  uri: string()
+});
+var ResourceUpdatedNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/resources/updated"),
+  params: ResourceUpdatedNotificationParamsSchema
+});
+var PromptArgumentSchema = object({
+  /**
+   * The name of the argument.
+   */
+  name: string(),
+  /**
+   * A human-readable description of the argument.
+   */
+  description: optional(string()),
+  /**
+   * Whether this argument must be provided.
+   */
+  required: optional(boolean())
+});
+var PromptSchema = object({
+  ...BaseMetadataSchema.shape,
+  ...IconsSchema.shape,
+  /**
+   * An optional description of what this prompt provides
+   */
+  description: optional(string()),
+  /**
+   * A list of arguments to use for templating the prompt.
+   */
+  arguments: optional(array(PromptArgumentSchema)),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: optional(looseObject({}))
+});
+var ListPromptsRequestSchema = PaginatedRequestSchema.extend({
+  method: literal("prompts/list")
+});
+var ListPromptsResultSchema = PaginatedResultSchema.extend({
+  prompts: array(PromptSchema)
+});
+var GetPromptRequestParamsSchema = BaseRequestParamsSchema.extend({
+  /**
+   * The name of the prompt or prompt template.
+   */
+  name: string(),
+  /**
+   * Arguments to use for templating the prompt.
+   */
+  arguments: record(string(), string()).optional()
+});
+var GetPromptRequestSchema = RequestSchema.extend({
+  method: literal("prompts/get"),
+  params: GetPromptRequestParamsSchema
+});
+var TextContentSchema = object({
+  type: literal("text"),
+  /**
+   * The text content of the message.
+   */
+  text: string(),
+  /**
+   * Optional annotations for the client.
+   */
+  annotations: AnnotationsSchema.optional(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var ImageContentSchema = object({
+  type: literal("image"),
+  /**
+   * The base64-encoded image data.
+   */
+  data: Base64Schema,
+  /**
+   * The MIME type of the image. Different providers may support different image types.
+   */
+  mimeType: string(),
+  /**
+   * Optional annotations for the client.
+   */
+  annotations: AnnotationsSchema.optional(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var AudioContentSchema = object({
+  type: literal("audio"),
+  /**
+   * The base64-encoded audio data.
+   */
+  data: Base64Schema,
+  /**
+   * The MIME type of the audio. Different providers may support different audio types.
+   */
+  mimeType: string(),
+  /**
+   * Optional annotations for the client.
+   */
+  annotations: AnnotationsSchema.optional(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var ToolUseContentSchema = object({
+  type: literal("tool_use"),
+  /**
+   * The name of the tool to invoke.
+   * Must match a tool name from the request's tools array.
+   */
+  name: string(),
+  /**
+   * Unique identifier for this tool call.
+   * Used to correlate with ToolResultContent in subsequent messages.
+   */
+  id: string(),
+  /**
+   * Arguments to pass to the tool.
+   * Must conform to the tool's inputSchema.
+   */
+  input: record(string(), unknown()),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var EmbeddedResourceSchema = object({
+  type: literal("resource"),
+  resource: union([TextResourceContentsSchema, BlobResourceContentsSchema]),
+  /**
+   * Optional annotations for the client.
+   */
+  annotations: AnnotationsSchema.optional(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var ResourceLinkSchema = ResourceSchema.extend({
+  type: literal("resource_link")
+});
+var ContentBlockSchema = union([
+  TextContentSchema,
+  ImageContentSchema,
+  AudioContentSchema,
+  ResourceLinkSchema,
+  EmbeddedResourceSchema
+]);
+var PromptMessageSchema = object({
+  role: RoleSchema,
+  content: ContentBlockSchema
+});
+var GetPromptResultSchema = ResultSchema.extend({
+  /**
+   * An optional description for the prompt.
+   */
+  description: string().optional(),
+  messages: array(PromptMessageSchema)
+});
+var PromptListChangedNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/prompts/list_changed"),
+  params: NotificationsParamsSchema.optional()
+});
+var ToolAnnotationsSchema = object({
+  /**
+   * A human-readable title for the tool.
+   */
+  title: string().optional(),
+  /**
+   * If true, the tool does not modify its environment.
+   *
+   * Default: false
+   */
+  readOnlyHint: boolean().optional(),
+  /**
+   * If true, the tool may perform destructive updates to its environment.
+   * If false, the tool performs only additive updates.
+   *
+   * (This property is meaningful only when `readOnlyHint == false`)
+   *
+   * Default: true
+   */
+  destructiveHint: boolean().optional(),
+  /**
+   * If true, calling the tool repeatedly with the same arguments
+   * will have no additional effect on the its environment.
+   *
+   * (This property is meaningful only when `readOnlyHint == false`)
+   *
+   * Default: false
+   */
+  idempotentHint: boolean().optional(),
+  /**
+   * If true, this tool may interact with an "open world" of external
+   * entities. If false, the tool's domain of interaction is closed.
+   * For example, the world of a web search tool is open, whereas that
+   * of a memory tool is not.
+   *
+   * Default: true
+   */
+  openWorldHint: boolean().optional()
+});
+var ToolExecutionSchema = object({
+  /**
+   * Indicates the tool's preference for task-augmented execution.
+   * - "required": Clients MUST invoke the tool as a task
+   * - "optional": Clients MAY invoke the tool as a task or normal request
+   * - "forbidden": Clients MUST NOT attempt to invoke the tool as a task
+   *
+   * If not present, defaults to "forbidden".
+   */
+  taskSupport: _enum(["required", "optional", "forbidden"]).optional()
+});
+var ToolSchema = object({
+  ...BaseMetadataSchema.shape,
+  ...IconsSchema.shape,
+  /**
+   * A human-readable description of the tool.
+   */
+  description: string().optional(),
+  /**
+   * A JSON Schema 2020-12 object defining the expected parameters for the tool.
+   * Must have type: 'object' at the root level per MCP spec.
+   */
+  inputSchema: object({
+    type: literal("object"),
+    properties: record(string(), AssertObjectSchema).optional(),
+    required: array(string()).optional()
+  }).catchall(unknown()),
+  /**
+   * An optional JSON Schema 2020-12 object defining the structure of the tool's output
+   * returned in the structuredContent field of a CallToolResult.
+   * Must have type: 'object' at the root level per MCP spec.
+   */
+  outputSchema: object({
+    type: literal("object"),
+    properties: record(string(), AssertObjectSchema).optional(),
+    required: array(string()).optional()
+  }).catchall(unknown()).optional(),
+  /**
+   * Optional additional tool information.
+   */
+  annotations: ToolAnnotationsSchema.optional(),
+  /**
+   * Execution-related properties for this tool.
+   */
+  execution: ToolExecutionSchema.optional(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var ListToolsRequestSchema = PaginatedRequestSchema.extend({
+  method: literal("tools/list")
+});
+var ListToolsResultSchema = PaginatedResultSchema.extend({
+  tools: array(ToolSchema)
+});
+var CallToolResultSchema = ResultSchema.extend({
+  /**
+   * A list of content objects that represent the result of the tool call.
+   *
+   * If the Tool does not define an outputSchema, this field MUST be present in the result.
+   * For backwards compatibility, this field is always present, but it may be empty.
+   */
+  content: array(ContentBlockSchema).default([]),
+  /**
+   * An object containing structured tool output.
+   *
+   * If the Tool defines an outputSchema, this field MUST be present in the result, and contain a JSON object that matches the schema.
+   */
+  structuredContent: record(string(), unknown()).optional(),
+  /**
+   * Whether the tool call ended in an error.
+   *
+   * If not set, this is assumed to be false (the call was successful).
+   *
+   * Any errors that originate from the tool SHOULD be reported inside the result
+   * object, with `isError` set to true, _not_ as an MCP protocol-level error
+   * response. Otherwise, the LLM would not be able to see that an error occurred
+   * and self-correct.
+   *
+   * However, any errors in _finding_ the tool, an error indicating that the
+   * server does not support tool calls, or any other exceptional conditions,
+   * should be reported as an MCP error response.
+   */
+  isError: boolean().optional()
+});
+var CompatibilityCallToolResultSchema = CallToolResultSchema.or(ResultSchema.extend({
+  toolResult: unknown()
+}));
+var CallToolRequestParamsSchema = TaskAugmentedRequestParamsSchema.extend({
+  /**
+   * The name of the tool to call.
+   */
+  name: string(),
+  /**
+   * Arguments to pass to the tool.
+   */
+  arguments: record(string(), unknown()).optional()
+});
+var CallToolRequestSchema = RequestSchema.extend({
+  method: literal("tools/call"),
+  params: CallToolRequestParamsSchema
+});
+var ToolListChangedNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/tools/list_changed"),
+  params: NotificationsParamsSchema.optional()
+});
+var ListChangedOptionsBaseSchema = object({
+  /**
+   * If true, the list will be refreshed automatically when a list changed notification is received.
+   * The callback will be called with the updated list.
+   *
+   * If false, the callback will be called with null items, allowing manual refresh.
+   *
+   * @default true
+   */
+  autoRefresh: boolean().default(true),
+  /**
+   * Debounce time in milliseconds for list changed notification processing.
+   *
+   * Multiple notifications received within this timeframe will only trigger one refresh.
+   * Set to 0 to disable debouncing.
+   *
+   * @default 300
+   */
+  debounceMs: number().int().nonnegative().default(300)
+});
+var LoggingLevelSchema = _enum(["debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"]);
+var SetLevelRequestParamsSchema = BaseRequestParamsSchema.extend({
+  /**
+   * The level of logging that the client wants to receive from the server. The server should send all logs at this level and higher (i.e., more severe) to the client as notifications/logging/message.
+   */
+  level: LoggingLevelSchema
+});
+var SetLevelRequestSchema = RequestSchema.extend({
+  method: literal("logging/setLevel"),
+  params: SetLevelRequestParamsSchema
+});
+var LoggingMessageNotificationParamsSchema = NotificationsParamsSchema.extend({
+  /**
+   * The severity of this log message.
+   */
+  level: LoggingLevelSchema,
+  /**
+   * An optional name of the logger issuing this message.
+   */
+  logger: string().optional(),
+  /**
+   * The data to be logged, such as a string message or an object. Any JSON serializable type is allowed here.
+   */
+  data: unknown()
+});
+var LoggingMessageNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/message"),
+  params: LoggingMessageNotificationParamsSchema
+});
+var ModelHintSchema = object({
+  /**
+   * A hint for a model name.
+   */
+  name: string().optional()
+});
+var ModelPreferencesSchema = object({
+  /**
+   * Optional hints to use for model selection.
+   */
+  hints: array(ModelHintSchema).optional(),
+  /**
+   * How much to prioritize cost when selecting a model.
+   */
+  costPriority: number().min(0).max(1).optional(),
+  /**
+   * How much to prioritize sampling speed (latency) when selecting a model.
+   */
+  speedPriority: number().min(0).max(1).optional(),
+  /**
+   * How much to prioritize intelligence and capabilities when selecting a model.
+   */
+  intelligencePriority: number().min(0).max(1).optional()
+});
+var ToolChoiceSchema = object({
+  /**
+   * Controls when tools are used:
+   * - "auto": Model decides whether to use tools (default)
+   * - "required": Model MUST use at least one tool before completing
+   * - "none": Model MUST NOT use any tools
+   */
+  mode: _enum(["auto", "required", "none"]).optional()
+});
+var ToolResultContentSchema = object({
+  type: literal("tool_result"),
+  toolUseId: string().describe("The unique identifier for the corresponding tool call."),
+  content: array(ContentBlockSchema).default([]),
+  structuredContent: object({}).loose().optional(),
+  isError: boolean().optional(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var SamplingContentSchema = discriminatedUnion("type", [TextContentSchema, ImageContentSchema, AudioContentSchema]);
+var SamplingMessageContentBlockSchema = discriminatedUnion("type", [
+  TextContentSchema,
+  ImageContentSchema,
+  AudioContentSchema,
+  ToolUseContentSchema,
+  ToolResultContentSchema
+]);
+var SamplingMessageSchema = object({
+  role: RoleSchema,
+  content: union([SamplingMessageContentBlockSchema, array(SamplingMessageContentBlockSchema)]),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var CreateMessageRequestParamsSchema = TaskAugmentedRequestParamsSchema.extend({
+  messages: array(SamplingMessageSchema),
+  /**
+   * The server's preferences for which model to select. The client MAY modify or omit this request.
+   */
+  modelPreferences: ModelPreferencesSchema.optional(),
+  /**
+   * An optional system prompt the server wants to use for sampling. The client MAY modify or omit this prompt.
+   */
+  systemPrompt: string().optional(),
+  /**
+   * A request to include context from one or more MCP servers (including the caller), to be attached to the prompt.
+   * The client MAY ignore this request.
+   *
+   * Default is "none". Values "thisServer" and "allServers" are soft-deprecated. Servers SHOULD only use these values if the client
+   * declares ClientCapabilities.sampling.context. These values may be removed in future spec releases.
+   */
+  includeContext: _enum(["none", "thisServer", "allServers"]).optional(),
+  temperature: number().optional(),
+  /**
+   * The requested maximum number of tokens to sample (to prevent runaway completions).
+   *
+   * The client MAY choose to sample fewer tokens than the requested maximum.
+   */
+  maxTokens: number().int(),
+  stopSequences: array(string()).optional(),
+  /**
+   * Optional metadata to pass through to the LLM provider. The format of this metadata is provider-specific.
+   */
+  metadata: AssertObjectSchema.optional(),
+  /**
+   * Tools that the model may use during generation.
+   * The client MUST return an error if this field is provided but ClientCapabilities.sampling.tools is not declared.
+   */
+  tools: array(ToolSchema).optional(),
+  /**
+   * Controls how the model uses tools.
+   * The client MUST return an error if this field is provided but ClientCapabilities.sampling.tools is not declared.
+   * Default is `{ mode: "auto" }`.
+   */
+  toolChoice: ToolChoiceSchema.optional()
+});
+var CreateMessageRequestSchema = RequestSchema.extend({
+  method: literal("sampling/createMessage"),
+  params: CreateMessageRequestParamsSchema
+});
+var CreateMessageResultSchema = ResultSchema.extend({
+  /**
+   * The name of the model that generated the message.
+   */
+  model: string(),
+  /**
+   * The reason why sampling stopped, if known.
+   *
+   * Standard values:
+   * - "endTurn": Natural end of the assistant's turn
+   * - "stopSequence": A stop sequence was encountered
+   * - "maxTokens": Maximum token limit was reached
+   *
+   * This field is an open string to allow for provider-specific stop reasons.
+   */
+  stopReason: optional(_enum(["endTurn", "stopSequence", "maxTokens"]).or(string())),
+  role: RoleSchema,
+  /**
+   * Response content. Single content block (text, image, or audio).
+   */
+  content: SamplingContentSchema
+});
+var CreateMessageResultWithToolsSchema = ResultSchema.extend({
+  /**
+   * The name of the model that generated the message.
+   */
+  model: string(),
+  /**
+   * The reason why sampling stopped, if known.
+   *
+   * Standard values:
+   * - "endTurn": Natural end of the assistant's turn
+   * - "stopSequence": A stop sequence was encountered
+   * - "maxTokens": Maximum token limit was reached
+   * - "toolUse": The model wants to use one or more tools
+   *
+   * This field is an open string to allow for provider-specific stop reasons.
+   */
+  stopReason: optional(_enum(["endTurn", "stopSequence", "maxTokens", "toolUse"]).or(string())),
+  role: RoleSchema,
+  /**
+   * Response content. May be a single block or array. May include ToolUseContent if stopReason is "toolUse".
+   */
+  content: union([SamplingMessageContentBlockSchema, array(SamplingMessageContentBlockSchema)])
+});
+var BooleanSchemaSchema = object({
+  type: literal("boolean"),
+  title: string().optional(),
+  description: string().optional(),
+  default: boolean().optional()
+});
+var StringSchemaSchema = object({
+  type: literal("string"),
+  title: string().optional(),
+  description: string().optional(),
+  minLength: number().optional(),
+  maxLength: number().optional(),
+  format: _enum(["email", "uri", "date", "date-time"]).optional(),
+  default: string().optional()
+});
+var NumberSchemaSchema = object({
+  type: _enum(["number", "integer"]),
+  title: string().optional(),
+  description: string().optional(),
+  minimum: number().optional(),
+  maximum: number().optional(),
+  default: number().optional()
+});
+var UntitledSingleSelectEnumSchemaSchema = object({
+  type: literal("string"),
+  title: string().optional(),
+  description: string().optional(),
+  enum: array(string()),
+  default: string().optional()
+});
+var TitledSingleSelectEnumSchemaSchema = object({
+  type: literal("string"),
+  title: string().optional(),
+  description: string().optional(),
+  oneOf: array(object({
+    const: string(),
+    title: string()
+  })),
+  default: string().optional()
+});
+var LegacyTitledEnumSchemaSchema = object({
+  type: literal("string"),
+  title: string().optional(),
+  description: string().optional(),
+  enum: array(string()),
+  enumNames: array(string()).optional(),
+  default: string().optional()
+});
+var SingleSelectEnumSchemaSchema = union([UntitledSingleSelectEnumSchemaSchema, TitledSingleSelectEnumSchemaSchema]);
+var UntitledMultiSelectEnumSchemaSchema = object({
+  type: literal("array"),
+  title: string().optional(),
+  description: string().optional(),
+  minItems: number().optional(),
+  maxItems: number().optional(),
+  items: object({
+    type: literal("string"),
+    enum: array(string())
+  }),
+  default: array(string()).optional()
+});
+var TitledMultiSelectEnumSchemaSchema = object({
+  type: literal("array"),
+  title: string().optional(),
+  description: string().optional(),
+  minItems: number().optional(),
+  maxItems: number().optional(),
+  items: object({
+    anyOf: array(object({
+      const: string(),
+      title: string()
+    }))
+  }),
+  default: array(string()).optional()
+});
+var MultiSelectEnumSchemaSchema = union([UntitledMultiSelectEnumSchemaSchema, TitledMultiSelectEnumSchemaSchema]);
+var EnumSchemaSchema = union([LegacyTitledEnumSchemaSchema, SingleSelectEnumSchemaSchema, MultiSelectEnumSchemaSchema]);
+var PrimitiveSchemaDefinitionSchema = union([EnumSchemaSchema, BooleanSchemaSchema, StringSchemaSchema, NumberSchemaSchema]);
+var ElicitRequestFormParamsSchema = TaskAugmentedRequestParamsSchema.extend({
+  /**
+   * The elicitation mode.
+   *
+   * Optional for backward compatibility. Clients MUST treat missing mode as "form".
+   */
+  mode: literal("form").optional(),
+  /**
+   * The message to present to the user describing what information is being requested.
+   */
+  message: string(),
+  /**
+   * A restricted subset of JSON Schema.
+   * Only top-level properties are allowed, without nesting.
+   */
+  requestedSchema: object({
+    type: literal("object"),
+    properties: record(string(), PrimitiveSchemaDefinitionSchema),
+    required: array(string()).optional()
+  })
+});
+var ElicitRequestURLParamsSchema = TaskAugmentedRequestParamsSchema.extend({
+  /**
+   * The elicitation mode.
+   */
+  mode: literal("url"),
+  /**
+   * The message to present to the user explaining why the interaction is needed.
+   */
+  message: string(),
+  /**
+   * The ID of the elicitation, which must be unique within the context of the server.
+   * The client MUST treat this ID as an opaque value.
+   */
+  elicitationId: string(),
+  /**
+   * The URL that the user should navigate to.
+   */
+  url: string().url()
+});
+var ElicitRequestParamsSchema = union([ElicitRequestFormParamsSchema, ElicitRequestURLParamsSchema]);
+var ElicitRequestSchema = RequestSchema.extend({
+  method: literal("elicitation/create"),
+  params: ElicitRequestParamsSchema
+});
+var ElicitationCompleteNotificationParamsSchema = NotificationsParamsSchema.extend({
+  /**
+   * The ID of the elicitation that completed.
+   */
+  elicitationId: string()
+});
+var ElicitationCompleteNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/elicitation/complete"),
+  params: ElicitationCompleteNotificationParamsSchema
+});
+var ElicitResultSchema = ResultSchema.extend({
+  /**
+   * The user action in response to the elicitation.
+   * - "accept": User submitted the form/confirmed the action
+   * - "decline": User explicitly decline the action
+   * - "cancel": User dismissed without making an explicit choice
+   */
+  action: _enum(["accept", "decline", "cancel"]),
+  /**
+   * The submitted form data, only present when action is "accept".
+   * Contains values matching the requested schema.
+   * Per MCP spec, content is "typically omitted" for decline/cancel actions.
+   * We normalize null to undefined for leniency while maintaining type compatibility.
+   */
+  content: preprocess((val) => val === null ? void 0 : val, record(string(), union([string(), number(), boolean(), array(string())])).optional())
+});
+var ResourceTemplateReferenceSchema = object({
+  type: literal("ref/resource"),
+  /**
+   * The URI or URI template of the resource.
+   */
+  uri: string()
+});
+var PromptReferenceSchema = object({
+  type: literal("ref/prompt"),
+  /**
+   * The name of the prompt or prompt template
+   */
+  name: string()
+});
+var CompleteRequestParamsSchema = BaseRequestParamsSchema.extend({
+  ref: union([PromptReferenceSchema, ResourceTemplateReferenceSchema]),
+  /**
+   * The argument's information
+   */
+  argument: object({
+    /**
+     * The name of the argument
+     */
+    name: string(),
+    /**
+     * The value of the argument to use for completion matching.
+     */
+    value: string()
+  }),
+  context: object({
+    /**
+     * Previously-resolved variables in a URI template or prompt.
+     */
+    arguments: record(string(), string()).optional()
+  }).optional()
+});
+var CompleteRequestSchema = RequestSchema.extend({
+  method: literal("completion/complete"),
+  params: CompleteRequestParamsSchema
+});
+var CompleteResultSchema = ResultSchema.extend({
+  completion: looseObject({
+    /**
+     * An array of completion values. Must not exceed 100 items.
+     */
+    values: array(string()).max(100),
+    /**
+     * The total number of completion options available. This can exceed the number of values actually sent in the response.
+     */
+    total: optional(number().int()),
+    /**
+     * Indicates whether there are additional completion options beyond those provided in the current response, even if the exact total is unknown.
+     */
+    hasMore: optional(boolean())
+  })
+});
+var RootSchema = object({
+  /**
+   * The URI identifying the root. This *must* start with file:// for now.
+   */
+  uri: string().startsWith("file://"),
+  /**
+   * An optional name for the root.
+   */
+  name: string().optional(),
+  /**
+   * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
+   * for notes on _meta usage.
+   */
+  _meta: record(string(), unknown()).optional()
+});
+var ListRootsRequestSchema = RequestSchema.extend({
+  method: literal("roots/list"),
+  params: BaseRequestParamsSchema.optional()
+});
+var ListRootsResultSchema = ResultSchema.extend({
+  roots: array(RootSchema)
+});
+var RootsListChangedNotificationSchema = NotificationSchema.extend({
+  method: literal("notifications/roots/list_changed"),
+  params: NotificationsParamsSchema.optional()
+});
+var ClientRequestSchema = union([
+  PingRequestSchema,
+  InitializeRequestSchema,
+  CompleteRequestSchema,
+  SetLevelRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ReadResourceRequestSchema,
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  GetTaskRequestSchema,
+  GetTaskPayloadRequestSchema,
+  ListTasksRequestSchema,
+  CancelTaskRequestSchema
+]);
+var ClientNotificationSchema = union([
+  CancelledNotificationSchema,
+  ProgressNotificationSchema,
+  InitializedNotificationSchema,
+  RootsListChangedNotificationSchema,
+  TaskStatusNotificationSchema
+]);
+var ClientResultSchema = union([
+  EmptyResultSchema,
+  CreateMessageResultSchema,
+  CreateMessageResultWithToolsSchema,
+  ElicitResultSchema,
+  ListRootsResultSchema,
+  GetTaskResultSchema,
+  ListTasksResultSchema,
+  CreateTaskResultSchema
+]);
+var ServerRequestSchema = union([
+  PingRequestSchema,
+  CreateMessageRequestSchema,
+  ElicitRequestSchema,
+  ListRootsRequestSchema,
+  GetTaskRequestSchema,
+  GetTaskPayloadRequestSchema,
+  ListTasksRequestSchema,
+  CancelTaskRequestSchema
+]);
+var ServerNotificationSchema = union([
+  CancelledNotificationSchema,
+  ProgressNotificationSchema,
+  LoggingMessageNotificationSchema,
+  ResourceUpdatedNotificationSchema,
+  ResourceListChangedNotificationSchema,
+  ToolListChangedNotificationSchema,
+  PromptListChangedNotificationSchema,
+  TaskStatusNotificationSchema,
+  ElicitationCompleteNotificationSchema
+]);
+var ServerResultSchema = union([
+  EmptyResultSchema,
+  InitializeResultSchema,
+  CompleteResultSchema,
+  GetPromptResultSchema,
+  ListPromptsResultSchema,
+  ListResourcesResultSchema,
+  ListResourceTemplatesResultSchema,
+  ReadResourceResultSchema,
+  CallToolResultSchema,
+  ListToolsResultSchema,
+  GetTaskResultSchema,
+  ListTasksResultSchema,
+  CreateTaskResultSchema
+]);
+var McpError = class _McpError extends Error {
+  constructor(code, message, data) {
+    super(`MCP error ${code}: ${message}`);
+    this.code = code;
+    this.data = data;
+    this.name = "McpError";
+  }
+  /**
+   * Factory method to create the appropriate error type based on the error code and data
+   */
+  static fromError(code, message, data) {
+    if (code === ErrorCode.UrlElicitationRequired && data) {
+      const errorData = data;
+      if (errorData.elicitations) {
+        return new UrlElicitationRequiredError(errorData.elicitations, message);
+      }
+    }
+    return new _McpError(code, message, data);
+  }
+};
+var UrlElicitationRequiredError = class extends McpError {
+  constructor(elicitations, message = `URL elicitation${elicitations.length > 1 ? "s" : ""} required`) {
+    super(ErrorCode.UrlElicitationRequired, message, {
+      elicitations
+    });
+  }
+  get elicitations() {
+    return this.data?.elicitations ?? [];
+  }
+};
+
+// node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js
+function isTerminal(status) {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+// node_modules/.pnpm/zod-to-json-schema@3.25.2_zod@4.4.3/node_modules/zod-to-json-schema/dist/esm/parsers/string.js
+var ALPHA_NUMERIC = new Set("ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvxyz0123456789");
+
+// node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js
+function getMethodLiteral(schema) {
+  const shape = getObjectShape(schema);
+  const methodSchema = shape?.method;
+  if (!methodSchema) {
+    throw new Error("Schema is missing a method literal");
+  }
+  const value = getLiteralValue(methodSchema);
+  if (typeof value !== "string") {
+    throw new Error("Schema method literal must be a string");
+  }
+  return value;
+}
+function parseWithCompat(schema, data) {
+  const result = safeParse2(schema, data);
+  if (!result.success) {
+    throw result.error;
+  }
+  return result.data;
+}
+
+// node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js
+var DEFAULT_REQUEST_TIMEOUT_MSEC = 6e4;
+var Protocol = class {
+  constructor(_options) {
+    this._options = _options;
+    this._requestMessageId = 0;
+    this._requestHandlers = /* @__PURE__ */ new Map();
+    this._requestHandlerAbortControllers = /* @__PURE__ */ new Map();
+    this._notificationHandlers = /* @__PURE__ */ new Map();
+    this._responseHandlers = /* @__PURE__ */ new Map();
+    this._progressHandlers = /* @__PURE__ */ new Map();
+    this._timeoutInfo = /* @__PURE__ */ new Map();
+    this._pendingDebouncedNotifications = /* @__PURE__ */ new Set();
+    this._taskProgressTokens = /* @__PURE__ */ new Map();
+    this._requestResolvers = /* @__PURE__ */ new Map();
+    this.setNotificationHandler(CancelledNotificationSchema, (notification) => {
+      this._oncancel(notification);
+    });
+    this.setNotificationHandler(ProgressNotificationSchema, (notification) => {
+      this._onprogress(notification);
+    });
+    this.setRequestHandler(
+      PingRequestSchema,
+      // Automatic pong by default.
+      (_request) => ({})
+    );
+    this._taskStore = _options?.taskStore;
+    this._taskMessageQueue = _options?.taskMessageQueue;
+    if (this._taskStore) {
+      this.setRequestHandler(GetTaskRequestSchema, async (request, extra) => {
+        const task = await this._taskStore.getTask(request.params.taskId, extra.sessionId);
+        if (!task) {
+          throw new McpError(ErrorCode.InvalidParams, "Failed to retrieve task: Task not found");
+        }
+        return {
+          ...task
+        };
+      });
+      this.setRequestHandler(GetTaskPayloadRequestSchema, async (request, extra) => {
+        const handleTaskResult = async () => {
+          const taskId = request.params.taskId;
+          if (this._taskMessageQueue) {
+            let queuedMessage;
+            while (queuedMessage = await this._taskMessageQueue.dequeue(taskId, extra.sessionId)) {
+              if (queuedMessage.type === "response" || queuedMessage.type === "error") {
+                const message = queuedMessage.message;
+                const requestId = message.id;
+                const resolver = this._requestResolvers.get(requestId);
+                if (resolver) {
+                  this._requestResolvers.delete(requestId);
+                  if (queuedMessage.type === "response") {
+                    resolver(message);
+                  } else {
+                    const errorMessage = message;
+                    const error = new McpError(errorMessage.error.code, errorMessage.error.message, errorMessage.error.data);
+                    resolver(error);
+                  }
+                } else {
+                  const messageType = queuedMessage.type === "response" ? "Response" : "Error";
+                  this._onerror(new Error(`${messageType} handler missing for request ${requestId}`));
+                }
+                continue;
+              }
+              await this._transport?.send(queuedMessage.message, { relatedRequestId: extra.requestId });
+            }
+          }
+          const task = await this._taskStore.getTask(taskId, extra.sessionId);
+          if (!task) {
+            throw new McpError(ErrorCode.InvalidParams, `Task not found: ${taskId}`);
+          }
+          if (!isTerminal(task.status)) {
+            await this._waitForTaskUpdate(taskId, extra.signal);
+            return await handleTaskResult();
+          }
+          if (isTerminal(task.status)) {
+            const result = await this._taskStore.getTaskResult(taskId, extra.sessionId);
+            this._clearTaskQueue(taskId);
+            return {
+              ...result,
+              _meta: {
+                ...result._meta,
+                [RELATED_TASK_META_KEY]: {
+                  taskId
+                }
+              }
+            };
+          }
+          return await handleTaskResult();
+        };
+        return await handleTaskResult();
+      });
+      this.setRequestHandler(ListTasksRequestSchema, async (request, extra) => {
+        try {
+          const { tasks, nextCursor } = await this._taskStore.listTasks(request.params?.cursor, extra.sessionId);
+          return {
+            tasks,
+            nextCursor,
+            _meta: {}
+          };
+        } catch (error) {
+          throw new McpError(ErrorCode.InvalidParams, `Failed to list tasks: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
+      this.setRequestHandler(CancelTaskRequestSchema, async (request, extra) => {
+        try {
+          const task = await this._taskStore.getTask(request.params.taskId, extra.sessionId);
+          if (!task) {
+            throw new McpError(ErrorCode.InvalidParams, `Task not found: ${request.params.taskId}`);
+          }
+          if (isTerminal(task.status)) {
+            throw new McpError(ErrorCode.InvalidParams, `Cannot cancel task in terminal status: ${task.status}`);
+          }
+          await this._taskStore.updateTaskStatus(request.params.taskId, "cancelled", "Client cancelled task execution.", extra.sessionId);
+          this._clearTaskQueue(request.params.taskId);
+          const cancelledTask = await this._taskStore.getTask(request.params.taskId, extra.sessionId);
+          if (!cancelledTask) {
+            throw new McpError(ErrorCode.InvalidParams, `Task not found after cancellation: ${request.params.taskId}`);
+          }
+          return {
+            _meta: {},
+            ...cancelledTask
+          };
+        } catch (error) {
+          if (error instanceof McpError) {
+            throw error;
+          }
+          throw new McpError(ErrorCode.InvalidRequest, `Failed to cancel task: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
+    }
+  }
+  async _oncancel(notification) {
+    if (!notification.params.requestId) {
+      return;
+    }
+    const controller = this._requestHandlerAbortControllers.get(notification.params.requestId);
+    controller?.abort(notification.params.reason);
+  }
+  _setupTimeout(messageId, timeout, maxTotalTimeout, onTimeout, resetTimeoutOnProgress = false) {
+    this._timeoutInfo.set(messageId, {
+      timeoutId: setTimeout(onTimeout, timeout),
+      startTime: Date.now(),
+      timeout,
+      maxTotalTimeout,
+      resetTimeoutOnProgress,
+      onTimeout
+    });
+  }
+  _resetTimeout(messageId) {
+    const info = this._timeoutInfo.get(messageId);
+    if (!info)
+      return false;
+    const totalElapsed = Date.now() - info.startTime;
+    if (info.maxTotalTimeout && totalElapsed >= info.maxTotalTimeout) {
+      this._timeoutInfo.delete(messageId);
+      throw McpError.fromError(ErrorCode.RequestTimeout, "Maximum total timeout exceeded", {
+        maxTotalTimeout: info.maxTotalTimeout,
+        totalElapsed
+      });
+    }
+    clearTimeout(info.timeoutId);
+    info.timeoutId = setTimeout(info.onTimeout, info.timeout);
+    return true;
+  }
+  _cleanupTimeout(messageId) {
+    const info = this._timeoutInfo.get(messageId);
+    if (info) {
+      clearTimeout(info.timeoutId);
+      this._timeoutInfo.delete(messageId);
+    }
+  }
+  /**
+   * Attaches to the given transport, starts it, and starts listening for messages.
+   *
+   * The Protocol object assumes ownership of the Transport, replacing any callbacks that have already been set, and expects that it is the only user of the Transport instance going forward.
+   */
+  async connect(transport) {
+    if (this._transport) {
+      throw new Error("Already connected to a transport. Call close() before connecting to a new transport, or use a separate Protocol instance per connection.");
+    }
+    this._transport = transport;
+    const _onclose = this.transport?.onclose;
+    this._transport.onclose = () => {
+      _onclose?.();
+      this._onclose();
+    };
+    const _onerror = this.transport?.onerror;
+    this._transport.onerror = (error) => {
+      _onerror?.(error);
+      this._onerror(error);
+    };
+    const _onmessage = this._transport?.onmessage;
+    this._transport.onmessage = (message, extra) => {
+      _onmessage?.(message, extra);
+      if (isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) {
+        this._onresponse(message);
+      } else if (isJSONRPCRequest(message)) {
+        this._onrequest(message, extra);
+      } else if (isJSONRPCNotification(message)) {
+        this._onnotification(message);
+      } else {
+        this._onerror(new Error(`Unknown message type: ${JSON.stringify(message)}`));
+      }
+    };
+    await this._transport.start();
+  }
+  _onclose() {
+    const responseHandlers = this._responseHandlers;
+    this._responseHandlers = /* @__PURE__ */ new Map();
+    this._progressHandlers.clear();
+    this._taskProgressTokens.clear();
+    this._pendingDebouncedNotifications.clear();
+    for (const info of this._timeoutInfo.values()) {
+      clearTimeout(info.timeoutId);
+    }
+    this._timeoutInfo.clear();
+    for (const controller of this._requestHandlerAbortControllers.values()) {
+      controller.abort();
+    }
+    this._requestHandlerAbortControllers.clear();
+    const error = McpError.fromError(ErrorCode.ConnectionClosed, "Connection closed");
+    this._transport = void 0;
+    this.onclose?.();
+    for (const handler of responseHandlers.values()) {
+      handler(error);
+    }
+  }
+  _onerror(error) {
+    this.onerror?.(error);
+  }
+  _onnotification(notification) {
+    const handler = this._notificationHandlers.get(notification.method) ?? this.fallbackNotificationHandler;
+    if (handler === void 0) {
+      return;
+    }
+    Promise.resolve().then(() => handler(notification)).catch((error) => this._onerror(new Error(`Uncaught error in notification handler: ${error}`)));
+  }
+  _onrequest(request, extra) {
+    const handler = this._requestHandlers.get(request.method) ?? this.fallbackRequestHandler;
+    const capturedTransport = this._transport;
+    const relatedTaskId = request.params?._meta?.[RELATED_TASK_META_KEY]?.taskId;
+    if (handler === void 0) {
+      const errorResponse = {
+        jsonrpc: "2.0",
+        id: request.id,
+        error: {
+          code: ErrorCode.MethodNotFound,
+          message: "Method not found"
+        }
+      };
+      if (relatedTaskId && this._taskMessageQueue) {
+        this._enqueueTaskMessage(relatedTaskId, {
+          type: "error",
+          message: errorResponse,
+          timestamp: Date.now()
+        }, capturedTransport?.sessionId).catch((error) => this._onerror(new Error(`Failed to enqueue error response: ${error}`)));
+      } else {
+        capturedTransport?.send(errorResponse).catch((error) => this._onerror(new Error(`Failed to send an error response: ${error}`)));
+      }
+      return;
+    }
+    const abortController = new AbortController();
+    this._requestHandlerAbortControllers.set(request.id, abortController);
+    const taskCreationParams = isTaskAugmentedRequestParams(request.params) ? request.params.task : void 0;
+    const taskStore = this._taskStore ? this.requestTaskStore(request, capturedTransport?.sessionId) : void 0;
+    const fullExtra = {
+      signal: abortController.signal,
+      sessionId: capturedTransport?.sessionId,
+      _meta: request.params?._meta,
+      sendNotification: async (notification) => {
+        if (abortController.signal.aborted)
+          return;
+        const notificationOptions = { relatedRequestId: request.id };
+        if (relatedTaskId) {
+          notificationOptions.relatedTask = { taskId: relatedTaskId };
+        }
+        await this.notification(notification, notificationOptions);
+      },
+      sendRequest: async (r, resultSchema, options) => {
+        if (abortController.signal.aborted) {
+          throw new McpError(ErrorCode.ConnectionClosed, "Request was cancelled");
+        }
+        const requestOptions = { ...options, relatedRequestId: request.id };
+        if (relatedTaskId && !requestOptions.relatedTask) {
+          requestOptions.relatedTask = { taskId: relatedTaskId };
+        }
+        const effectiveTaskId = requestOptions.relatedTask?.taskId ?? relatedTaskId;
+        if (effectiveTaskId && taskStore) {
+          await taskStore.updateTaskStatus(effectiveTaskId, "input_required");
+        }
+        return await this.request(r, resultSchema, requestOptions);
+      },
+      authInfo: extra?.authInfo,
+      requestId: request.id,
+      requestInfo: extra?.requestInfo,
+      taskId: relatedTaskId,
+      taskStore,
+      taskRequestedTtl: taskCreationParams?.ttl,
+      closeSSEStream: extra?.closeSSEStream,
+      closeStandaloneSSEStream: extra?.closeStandaloneSSEStream
+    };
+    Promise.resolve().then(() => {
+      if (taskCreationParams) {
+        this.assertTaskHandlerCapability(request.method);
+      }
+    }).then(() => handler(request, fullExtra)).then(async (result) => {
+      if (abortController.signal.aborted) {
+        return;
+      }
+      const response = {
+        result,
+        jsonrpc: "2.0",
+        id: request.id
+      };
+      if (relatedTaskId && this._taskMessageQueue) {
+        await this._enqueueTaskMessage(relatedTaskId, {
+          type: "response",
+          message: response,
+          timestamp: Date.now()
+        }, capturedTransport?.sessionId);
+      } else {
+        await capturedTransport?.send(response);
+      }
+    }, async (error) => {
+      if (abortController.signal.aborted) {
+        return;
+      }
+      const errorResponse = {
+        jsonrpc: "2.0",
+        id: request.id,
+        error: {
+          code: Number.isSafeInteger(error["code"]) ? error["code"] : ErrorCode.InternalError,
+          message: error.message ?? "Internal error",
+          ...error["data"] !== void 0 && { data: error["data"] }
+        }
+      };
+      if (relatedTaskId && this._taskMessageQueue) {
+        await this._enqueueTaskMessage(relatedTaskId, {
+          type: "error",
+          message: errorResponse,
+          timestamp: Date.now()
+        }, capturedTransport?.sessionId);
+      } else {
+        await capturedTransport?.send(errorResponse);
+      }
+    }).catch((error) => this._onerror(new Error(`Failed to send response: ${error}`))).finally(() => {
+      if (this._requestHandlerAbortControllers.get(request.id) === abortController) {
+        this._requestHandlerAbortControllers.delete(request.id);
+      }
+    });
+  }
+  _onprogress(notification) {
+    const { progressToken, ...params } = notification.params;
+    const messageId = Number(progressToken);
+    const handler = this._progressHandlers.get(messageId);
+    if (!handler) {
+      this._onerror(new Error(`Received a progress notification for an unknown token: ${JSON.stringify(notification)}`));
+      return;
+    }
+    const responseHandler = this._responseHandlers.get(messageId);
+    const timeoutInfo = this._timeoutInfo.get(messageId);
+    if (timeoutInfo && responseHandler && timeoutInfo.resetTimeoutOnProgress) {
+      try {
+        this._resetTimeout(messageId);
+      } catch (error) {
+        this._responseHandlers.delete(messageId);
+        this._progressHandlers.delete(messageId);
+        this._cleanupTimeout(messageId);
+        responseHandler(error);
+        return;
+      }
+    }
+    handler(params);
+  }
+  _onresponse(response) {
+    const messageId = Number(response.id);
+    const resolver = this._requestResolvers.get(messageId);
+    if (resolver) {
+      this._requestResolvers.delete(messageId);
+      if (isJSONRPCResultResponse(response)) {
+        resolver(response);
+      } else {
+        const error = new McpError(response.error.code, response.error.message, response.error.data);
+        resolver(error);
+      }
+      return;
+    }
+    const handler = this._responseHandlers.get(messageId);
+    if (handler === void 0) {
+      this._onerror(new Error(`Received a response for an unknown message ID: ${JSON.stringify(response)}`));
+      return;
+    }
+    this._responseHandlers.delete(messageId);
+    this._cleanupTimeout(messageId);
+    let isTaskResponse = false;
+    if (isJSONRPCResultResponse(response) && response.result && typeof response.result === "object") {
+      const result = response.result;
+      if (result.task && typeof result.task === "object") {
+        const task = result.task;
+        if (typeof task.taskId === "string") {
+          isTaskResponse = true;
+          this._taskProgressTokens.set(task.taskId, messageId);
+        }
+      }
+    }
+    if (!isTaskResponse) {
+      this._progressHandlers.delete(messageId);
+    }
+    if (isJSONRPCResultResponse(response)) {
+      handler(response);
+    } else {
+      const error = McpError.fromError(response.error.code, response.error.message, response.error.data);
+      handler(error);
+    }
+  }
+  get transport() {
+    return this._transport;
+  }
+  /**
+   * Closes the connection.
+   */
+  async close() {
+    await this._transport?.close();
+  }
+  /**
+   * Sends a request and returns an AsyncGenerator that yields response messages.
+   * The generator is guaranteed to end with either a 'result' or 'error' message.
+   *
+   * @example
+   * ```typescript
+   * const stream = protocol.requestStream(request, resultSchema, options);
+   * for await (const message of stream) {
+   *   switch (message.type) {
+   *     case 'taskCreated':
+   *       console.log('Task created:', message.task.taskId);
+   *       break;
+   *     case 'taskStatus':
+   *       console.log('Task status:', message.task.status);
+   *       break;
+   *     case 'result':
+   *       console.log('Final result:', message.result);
+   *       break;
+   *     case 'error':
+   *       console.error('Error:', message.error);
+   *       break;
+   *   }
+   * }
+   * ```
+   *
+   * @experimental Use `client.experimental.tasks.requestStream()` to access this method.
+   */
+  async *requestStream(request, resultSchema, options) {
+    const { task } = options ?? {};
+    if (!task) {
+      try {
+        const result = await this.request(request, resultSchema, options);
+        yield { type: "result", result };
+      } catch (error) {
+        yield {
+          type: "error",
+          error: error instanceof McpError ? error : new McpError(ErrorCode.InternalError, String(error))
+        };
+      }
+      return;
+    }
+    let taskId;
+    try {
+      const createResult = await this.request(request, CreateTaskResultSchema, options);
+      if (createResult.task) {
+        taskId = createResult.task.taskId;
+        yield { type: "taskCreated", task: createResult.task };
+      } else {
+        throw new McpError(ErrorCode.InternalError, "Task creation did not return a task");
+      }
+      while (true) {
+        const task2 = await this.getTask({ taskId }, options);
+        yield { type: "taskStatus", task: task2 };
+        if (isTerminal(task2.status)) {
+          if (task2.status === "completed") {
+            const result = await this.getTaskResult({ taskId }, resultSchema, options);
+            yield { type: "result", result };
+          } else if (task2.status === "failed") {
+            yield {
+              type: "error",
+              error: new McpError(ErrorCode.InternalError, `Task ${taskId} failed`)
+            };
+          } else if (task2.status === "cancelled") {
+            yield {
+              type: "error",
+              error: new McpError(ErrorCode.InternalError, `Task ${taskId} was cancelled`)
+            };
+          }
+          return;
+        }
+        if (task2.status === "input_required") {
+          const result = await this.getTaskResult({ taskId }, resultSchema, options);
+          yield { type: "result", result };
+          return;
+        }
+        const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        options?.signal?.throwIfAborted();
+      }
+    } catch (error) {
+      yield {
+        type: "error",
+        error: error instanceof McpError ? error : new McpError(ErrorCode.InternalError, String(error))
+      };
+    }
+  }
+  /**
+   * Sends a request and waits for a response.
+   *
+   * Do not use this method to emit notifications! Use notification() instead.
+   */
+  request(request, resultSchema, options) {
+    const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
+    return new Promise((resolve, reject) => {
+      const earlyReject = (error) => {
+        reject(error);
+      };
+      if (!this._transport) {
+        earlyReject(new Error("Not connected"));
+        return;
+      }
+      if (this._options?.enforceStrictCapabilities === true) {
+        try {
+          this.assertCapabilityForMethod(request.method);
+          if (task) {
+            this.assertTaskCapability(request.method);
+          }
+        } catch (e) {
+          earlyReject(e);
+          return;
+        }
+      }
+      options?.signal?.throwIfAborted();
+      const messageId = this._requestMessageId++;
+      const jsonrpcRequest = {
+        ...request,
+        jsonrpc: "2.0",
+        id: messageId
+      };
+      if (options?.onprogress) {
+        this._progressHandlers.set(messageId, options.onprogress);
+        jsonrpcRequest.params = {
+          ...request.params,
+          _meta: {
+            ...request.params?._meta || {},
+            progressToken: messageId
+          }
+        };
+      }
+      if (task) {
+        jsonrpcRequest.params = {
+          ...jsonrpcRequest.params,
+          task
+        };
+      }
+      if (relatedTask) {
+        jsonrpcRequest.params = {
+          ...jsonrpcRequest.params,
+          _meta: {
+            ...jsonrpcRequest.params?._meta || {},
+            [RELATED_TASK_META_KEY]: relatedTask
+          }
+        };
+      }
+      const cancel = (reason) => {
+        this._responseHandlers.delete(messageId);
+        this._progressHandlers.delete(messageId);
+        this._cleanupTimeout(messageId);
+        this._transport?.send({
+          jsonrpc: "2.0",
+          method: "notifications/cancelled",
+          params: {
+            requestId: messageId,
+            reason: String(reason)
+          }
+        }, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error2) => this._onerror(new Error(`Failed to send cancellation: ${error2}`)));
+        const error = reason instanceof McpError ? reason : new McpError(ErrorCode.RequestTimeout, String(reason));
+        reject(error);
+      };
+      this._responseHandlers.set(messageId, (response) => {
+        if (options?.signal?.aborted) {
+          return;
+        }
+        if (response instanceof Error) {
+          return reject(response);
+        }
+        try {
+          const parseResult = safeParse2(resultSchema, response.result);
+          if (!parseResult.success) {
+            reject(parseResult.error);
+          } else {
+            resolve(parseResult.data);
+          }
+        } catch (error) {
+          reject(error);
+        }
+      });
+      options?.signal?.addEventListener("abort", () => {
+        cancel(options?.signal?.reason);
+      });
+      const timeout = options?.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
+      const timeoutHandler = () => cancel(McpError.fromError(ErrorCode.RequestTimeout, "Request timed out", { timeout }));
+      this._setupTimeout(messageId, timeout, options?.maxTotalTimeout, timeoutHandler, options?.resetTimeoutOnProgress ?? false);
+      const relatedTaskId = relatedTask?.taskId;
+      if (relatedTaskId) {
+        const responseResolver = (response) => {
+          const handler = this._responseHandlers.get(messageId);
+          if (handler) {
+            handler(response);
+          } else {
+            this._onerror(new Error(`Response handler missing for side-channeled request ${messageId}`));
+          }
+        };
+        this._requestResolvers.set(messageId, responseResolver);
+        this._enqueueTaskMessage(relatedTaskId, {
+          type: "request",
+          message: jsonrpcRequest,
+          timestamp: Date.now()
+        }).catch((error) => {
+          this._cleanupTimeout(messageId);
+          reject(error);
+        });
+      } else {
+        this._transport.send(jsonrpcRequest, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error) => {
+          this._cleanupTimeout(messageId);
+          reject(error);
+        });
+      }
+    });
+  }
+  /**
+   * Gets the current status of a task.
+   *
+   * @experimental Use `client.experimental.tasks.getTask()` to access this method.
+   */
+  async getTask(params, options) {
+    return this.request({ method: "tasks/get", params }, GetTaskResultSchema, options);
+  }
+  /**
+   * Retrieves the result of a completed task.
+   *
+   * @experimental Use `client.experimental.tasks.getTaskResult()` to access this method.
+   */
+  async getTaskResult(params, resultSchema, options) {
+    return this.request({ method: "tasks/result", params }, resultSchema, options);
+  }
+  /**
+   * Lists tasks, optionally starting from a pagination cursor.
+   *
+   * @experimental Use `client.experimental.tasks.listTasks()` to access this method.
+   */
+  async listTasks(params, options) {
+    return this.request({ method: "tasks/list", params }, ListTasksResultSchema, options);
+  }
+  /**
+   * Cancels a specific task.
+   *
+   * @experimental Use `client.experimental.tasks.cancelTask()` to access this method.
+   */
+  async cancelTask(params, options) {
+    return this.request({ method: "tasks/cancel", params }, CancelTaskResultSchema, options);
+  }
+  /**
+   * Emits a notification, which is a one-way message that does not expect a response.
+   */
+  async notification(notification, options) {
+    if (!this._transport) {
+      throw new Error("Not connected");
+    }
+    this.assertNotificationCapability(notification.method);
+    const relatedTaskId = options?.relatedTask?.taskId;
+    if (relatedTaskId) {
+      const jsonrpcNotification2 = {
+        ...notification,
+        jsonrpc: "2.0",
+        params: {
+          ...notification.params,
+          _meta: {
+            ...notification.params?._meta || {},
+            [RELATED_TASK_META_KEY]: options.relatedTask
+          }
+        }
+      };
+      await this._enqueueTaskMessage(relatedTaskId, {
+        type: "notification",
+        message: jsonrpcNotification2,
+        timestamp: Date.now()
+      });
+      return;
+    }
+    const debouncedMethods = this._options?.debouncedNotificationMethods ?? [];
+    const canDebounce = debouncedMethods.includes(notification.method) && !notification.params && !options?.relatedRequestId && !options?.relatedTask;
+    if (canDebounce) {
+      if (this._pendingDebouncedNotifications.has(notification.method)) {
+        return;
+      }
+      this._pendingDebouncedNotifications.add(notification.method);
+      Promise.resolve().then(() => {
+        this._pendingDebouncedNotifications.delete(notification.method);
+        if (!this._transport) {
+          return;
+        }
+        let jsonrpcNotification2 = {
+          ...notification,
+          jsonrpc: "2.0"
+        };
+        if (options?.relatedTask) {
+          jsonrpcNotification2 = {
+            ...jsonrpcNotification2,
+            params: {
+              ...jsonrpcNotification2.params,
+              _meta: {
+                ...jsonrpcNotification2.params?._meta || {},
+                [RELATED_TASK_META_KEY]: options.relatedTask
+              }
+            }
+          };
+        }
+        this._transport?.send(jsonrpcNotification2, options).catch((error) => this._onerror(error));
+      });
+      return;
+    }
+    let jsonrpcNotification = {
+      ...notification,
+      jsonrpc: "2.0"
+    };
+    if (options?.relatedTask) {
+      jsonrpcNotification = {
+        ...jsonrpcNotification,
+        params: {
+          ...jsonrpcNotification.params,
+          _meta: {
+            ...jsonrpcNotification.params?._meta || {},
+            [RELATED_TASK_META_KEY]: options.relatedTask
+          }
+        }
+      };
+    }
+    await this._transport.send(jsonrpcNotification, options);
+  }
+  /**
+   * Registers a handler to invoke when this protocol object receives a request with the given method.
+   *
+   * Note that this will replace any previous request handler for the same method.
+   */
+  setRequestHandler(requestSchema, handler) {
+    const method = getMethodLiteral(requestSchema);
+    this.assertRequestHandlerCapability(method);
+    this._requestHandlers.set(method, (request, extra) => {
+      const parsed = parseWithCompat(requestSchema, request);
+      return Promise.resolve(handler(parsed, extra));
+    });
+  }
+  /**
+   * Removes the request handler for the given method.
+   */
+  removeRequestHandler(method) {
+    this._requestHandlers.delete(method);
+  }
+  /**
+   * Asserts that a request handler has not already been set for the given method, in preparation for a new one being automatically installed.
+   */
+  assertCanSetRequestHandler(method) {
+    if (this._requestHandlers.has(method)) {
+      throw new Error(`A request handler for ${method} already exists, which would be overridden`);
+    }
+  }
+  /**
+   * Registers a handler to invoke when this protocol object receives a notification with the given method.
+   *
+   * Note that this will replace any previous notification handler for the same method.
+   */
+  setNotificationHandler(notificationSchema, handler) {
+    const method = getMethodLiteral(notificationSchema);
+    this._notificationHandlers.set(method, (notification) => {
+      const parsed = parseWithCompat(notificationSchema, notification);
+      return Promise.resolve(handler(parsed));
+    });
+  }
+  /**
+   * Removes the notification handler for the given method.
+   */
+  removeNotificationHandler(method) {
+    this._notificationHandlers.delete(method);
+  }
+  /**
+   * Cleans up the progress handler associated with a task.
+   * This should be called when a task reaches a terminal status.
+   */
+  _cleanupTaskProgressHandler(taskId) {
+    const progressToken = this._taskProgressTokens.get(taskId);
+    if (progressToken !== void 0) {
+      this._progressHandlers.delete(progressToken);
+      this._taskProgressTokens.delete(taskId);
+    }
+  }
+  /**
+   * Enqueues a task-related message for side-channel delivery via tasks/result.
+   * @param taskId The task ID to associate the message with
+   * @param message The message to enqueue
+   * @param sessionId Optional session ID for binding the operation to a specific session
+   * @throws Error if taskStore is not configured or if enqueue fails (e.g., queue overflow)
+   *
+   * Note: If enqueue fails, it's the TaskMessageQueue implementation's responsibility to handle
+   * the error appropriately (e.g., by failing the task, logging, etc.). The Protocol layer
+   * simply propagates the error.
+   */
+  async _enqueueTaskMessage(taskId, message, sessionId) {
+    if (!this._taskStore || !this._taskMessageQueue) {
+      throw new Error("Cannot enqueue task message: taskStore and taskMessageQueue are not configured");
+    }
+    const maxQueueSize = this._options?.maxTaskQueueSize;
+    await this._taskMessageQueue.enqueue(taskId, message, sessionId, maxQueueSize);
+  }
+  /**
+   * Clears the message queue for a task and rejects any pending request resolvers.
+   * @param taskId The task ID whose queue should be cleared
+   * @param sessionId Optional session ID for binding the operation to a specific session
+   */
+  async _clearTaskQueue(taskId, sessionId) {
+    if (this._taskMessageQueue) {
+      const messages = await this._taskMessageQueue.dequeueAll(taskId, sessionId);
+      for (const message of messages) {
+        if (message.type === "request" && isJSONRPCRequest(message.message)) {
+          const requestId = message.message.id;
+          const resolver = this._requestResolvers.get(requestId);
+          if (resolver) {
+            resolver(new McpError(ErrorCode.InternalError, "Task cancelled or completed"));
+            this._requestResolvers.delete(requestId);
+          } else {
+            this._onerror(new Error(`Resolver missing for request ${requestId} during task ${taskId} cleanup`));
+          }
+        }
+      }
+    }
+  }
+  /**
+   * Waits for a task update (new messages or status change) with abort signal support.
+   * Uses polling to check for updates at the task's configured poll interval.
+   * @param taskId The task ID to wait for
+   * @param signal Abort signal to cancel the wait
+   * @returns Promise that resolves when an update occurs or rejects if aborted
+   */
+  async _waitForTaskUpdate(taskId, signal) {
+    let interval = this._options?.defaultTaskPollInterval ?? 1e3;
+    try {
+      const task = await this._taskStore?.getTask(taskId);
+      if (task?.pollInterval) {
+        interval = task.pollInterval;
+      }
+    } catch {
+    }
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
+        return;
+      }
+      const timeoutId = setTimeout(resolve, interval);
+      signal.addEventListener("abort", () => {
+        clearTimeout(timeoutId);
+        reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
+      }, { once: true });
+    });
+  }
+  requestTaskStore(request, sessionId) {
+    const taskStore = this._taskStore;
+    if (!taskStore) {
+      throw new Error("No task store configured");
+    }
+    return {
+      createTask: async (taskParams) => {
+        if (!request) {
+          throw new Error("No request provided");
+        }
+        return await taskStore.createTask(taskParams, request.id, {
+          method: request.method,
+          params: request.params
+        }, sessionId);
+      },
+      getTask: async (taskId) => {
+        const task = await taskStore.getTask(taskId, sessionId);
+        if (!task) {
+          throw new McpError(ErrorCode.InvalidParams, "Failed to retrieve task: Task not found");
+        }
+        return task;
+      },
+      storeTaskResult: async (taskId, status, result) => {
+        await taskStore.storeTaskResult(taskId, status, result, sessionId);
+        const task = await taskStore.getTask(taskId, sessionId);
+        if (task) {
+          const notification = TaskStatusNotificationSchema.parse({
+            method: "notifications/tasks/status",
+            params: task
+          });
+          await this.notification(notification);
+          if (isTerminal(task.status)) {
+            this._cleanupTaskProgressHandler(taskId);
+          }
+        }
+      },
+      getTaskResult: (taskId) => {
+        return taskStore.getTaskResult(taskId, sessionId);
+      },
+      updateTaskStatus: async (taskId, status, statusMessage) => {
+        const task = await taskStore.getTask(taskId, sessionId);
+        if (!task) {
+          throw new McpError(ErrorCode.InvalidParams, `Task "${taskId}" not found - it may have been cleaned up`);
+        }
+        if (isTerminal(task.status)) {
+          throw new McpError(ErrorCode.InvalidParams, `Cannot update task "${taskId}" from terminal status "${task.status}" to "${status}". Terminal states (completed, failed, cancelled) cannot transition to other states.`);
+        }
+        await taskStore.updateTaskStatus(taskId, status, statusMessage, sessionId);
+        const updatedTask = await taskStore.getTask(taskId, sessionId);
+        if (updatedTask) {
+          const notification = TaskStatusNotificationSchema.parse({
+            method: "notifications/tasks/status",
+            params: updatedTask
+          });
+          await this.notification(notification);
+          if (isTerminal(updatedTask.status)) {
+            this._cleanupTaskProgressHandler(taskId);
+          }
+        }
+      },
+      listTasks: (cursor) => {
+        return taskStore.listTasks(cursor, sessionId);
+      }
+    };
+  }
+};
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function mergeCapabilities(base, additional) {
+  const result = { ...base };
+  for (const key in additional) {
+    const k = key;
+    const addValue = additional[k];
+    if (addValue === void 0)
+      continue;
+    const baseValue = result[k];
+    if (isPlainObject(baseValue) && isPlainObject(addValue)) {
+      result[k] = { ...baseValue, ...addValue };
+    } else {
+      result[k] = addValue;
+    }
+  }
+  return result;
+}
+
+// node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js
+var import_ajv = __toESM(require_ajv(), 1);
+var import_ajv_formats = __toESM(require_dist(), 1);
+function createDefaultAjvInstance() {
+  const ajv = new import_ajv.default({
+    strict: false,
+    validateFormats: true,
+    validateSchema: false,
+    allErrors: true
+  });
+  const addFormats = import_ajv_formats.default;
+  addFormats(ajv);
+  return ajv;
+}
+var AjvJsonSchemaValidator = class {
+  /**
+   * Create an AJV validator
+   *
+   * @param ajv - Optional pre-configured AJV instance. If not provided, a default instance will be created.
+   *
+   * @example
+   * ```typescript
+   * // Use default configuration (recommended for most cases)
+   * import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
+   * const validator = new AjvJsonSchemaValidator();
+   *
+   * // Or provide custom AJV instance for advanced configuration
+   * import { Ajv } from 'ajv';
+   * import addFormats from 'ajv-formats';
+   *
+   * const ajv = new Ajv({ validateFormats: true });
+   * addFormats(ajv);
+   * const validator = new AjvJsonSchemaValidator(ajv);
+   * ```
+   */
+  constructor(ajv) {
+    this._ajv = ajv ?? createDefaultAjvInstance();
+  }
+  /**
+   * Create a validator for the given JSON Schema
+   *
+   * The validator is compiled once and can be reused multiple times.
+   * If the schema has an $id, it will be cached by AJV automatically.
+   *
+   * @param schema - Standard JSON Schema object
+   * @returns A validator function that validates input data
+   */
+  getValidator(schema) {
+    const ajvValidator = "$id" in schema && typeof schema.$id === "string" ? this._ajv.getSchema(schema.$id) ?? this._ajv.compile(schema) : this._ajv.compile(schema);
+    return (input) => {
+      const valid = ajvValidator(input);
+      if (valid) {
+        return {
+          valid: true,
+          data: input,
+          errorMessage: void 0
+        };
+      } else {
+        return {
+          valid: false,
+          data: void 0,
+          errorMessage: this._ajv.errorsText(ajvValidator.errors)
+        };
+      }
+    };
+  }
+};
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
 var ExperimentalServerTasks = class {
@@ -270,6 +10050,41 @@ var ExperimentalServerTasks = class {
   }
 };
 
+// node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js
+function assertToolsCallTaskCapability(requests, method, entityName) {
+  if (!requests) {
+    throw new Error(`${entityName} does not support task creation (required for ${method})`);
+  }
+  switch (method) {
+    case "tools/call":
+      if (!requests.tools?.call) {
+        throw new Error(`${entityName} does not support task creation for tools/call (required for ${method})`);
+      }
+      break;
+    default:
+      break;
+  }
+}
+function assertClientRequestTaskCapability(requests, method, entityName) {
+  if (!requests) {
+    throw new Error(`${entityName} does not support task creation (required for ${method})`);
+  }
+  switch (method) {
+    case "sampling/createMessage":
+      if (!requests.sampling?.createMessage) {
+        throw new Error(`${entityName} does not support task creation for sampling/createMessage (required for ${method})`);
+      }
+      break;
+    case "elicitation/create":
+      if (!requests.elicitation?.create) {
+        throw new Error(`${entityName} does not support task creation for elicitation/create (required for ${method})`);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js
 var Server = class extends Protocol {
   /**
@@ -343,7 +10158,7 @@ var Server = class extends Protocol {
     const method = methodValue;
     if (method === "tools/call") {
       const wrappedHandler = async (request, extra) => {
-        const validatedRequest = safeParse(CallToolRequestSchema, request);
+        const validatedRequest = safeParse2(CallToolRequestSchema, request);
         if (!validatedRequest.success) {
           const errorMessage = validatedRequest.error instanceof Error ? validatedRequest.error.message : String(validatedRequest.error);
           throw new McpError(ErrorCode.InvalidParams, `Invalid tools/call request: ${errorMessage}`);
@@ -351,14 +10166,14 @@ var Server = class extends Protocol {
         const { params } = validatedRequest.data;
         const result = await Promise.resolve(handler(request, extra));
         if (params.task) {
-          const taskValidationResult = safeParse(CreateTaskResultSchema, result);
+          const taskValidationResult = safeParse2(CreateTaskResultSchema, result);
           if (!taskValidationResult.success) {
             const errorMessage = taskValidationResult.error instanceof Error ? taskValidationResult.error.message : String(taskValidationResult.error);
             throw new McpError(ErrorCode.InvalidParams, `Invalid task creation result: ${errorMessage}`);
           }
           return taskValidationResult.data;
         }
-        const validationResult = safeParse(CallToolResultSchema, result);
+        const validationResult = safeParse2(CallToolResultSchema, result);
         if (!validationResult.success) {
           const errorMessage = validationResult.error instanceof Error ? validationResult.error.message : String(validationResult.error);
           throw new McpError(ErrorCode.InvalidParams, `Invalid tools/call result: ${errorMessage}`);
@@ -643,6 +10458,45 @@ var Server = class extends Protocol {
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
 import process2 from "node:process";
+
+// node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/stdio.js
+var STDIO_DEFAULT_MAX_BUFFER_SIZE = 10 * 1024 * 1024;
+var ReadBuffer = class {
+  constructor(options) {
+    this._maxBufferSize = options?.maxBufferSize ?? STDIO_DEFAULT_MAX_BUFFER_SIZE;
+  }
+  append(chunk) {
+    const newSize = (this._buffer?.length ?? 0) + chunk.length;
+    if (newSize > this._maxBufferSize) {
+      this.clear();
+      throw new Error(`ReadBuffer exceeded maximum size of ${this._maxBufferSize} bytes`);
+    }
+    this._buffer = this._buffer ? Buffer.concat([this._buffer, chunk]) : chunk;
+  }
+  readMessage() {
+    if (!this._buffer) {
+      return null;
+    }
+    const index = this._buffer.indexOf("\n");
+    if (index === -1) {
+      return null;
+    }
+    const line = this._buffer.toString("utf8", 0, index).replace(/\r$/, "");
+    this._buffer = this._buffer.subarray(index + 1);
+    return deserializeMessage(line);
+  }
+  clear() {
+    this._buffer = void 0;
+  }
+};
+function deserializeMessage(line) {
+  return JSONRPCMessageSchema.parse(JSON.parse(line));
+}
+function serializeMessage(message) {
+  return JSON.stringify(message) + "\n";
+}
+
+// node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
 var StdioServerTransport = class {
   constructor(_stdin = process2.stdin, _stdout = process2.stdout, options) {
     this._stdin = _stdin;
@@ -709,7 +10563,7 @@ var StdioServerTransport = class {
   }
 };
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/arguments/arguments.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/arguments/arguments.mjs
 var arguments_exports = {};
 __export(arguments_exports, {
   Match: () => Match
@@ -720,7 +10574,15 @@ function Match(args, match) {
   })();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/guard/guard.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/settings/settings.mjs
+var settings_exports = {};
+__export(settings_exports, {
+  Get: () => Get,
+  Reset: () => Reset,
+  Set: () => Set2
+});
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/guard.mjs
 var guard_exports = {};
 __export(guard_exports, {
   Counted: () => Counted,
@@ -763,7 +10625,7 @@ __export(guard_exports, {
   Values: () => Values
 });
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/guard/string.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/string.mjs
 function IsBetween(value, min, max) {
   return value >= min && value <= max;
 }
@@ -800,7 +10662,7 @@ function NextGraphemeClusterIndex(value, clusterStart) {
   const startCP = value.codePointAt(clusterStart);
   let clusterEnd = clusterStart + CodePointLength(startCP);
   clusterEnd = ConsumeModifiers(value, clusterEnd);
-  while (clusterEnd < value.length - 1 && value[clusterEnd] === "\u200D") {
+  while (clusterEnd < value.length - 1 && IsZeroWidthJoiner(value.codePointAt(clusterEnd))) {
     const nextCP = value.codePointAt(clusterEnd + 1);
     clusterEnd += 1 + CodePointLength(nextCP);
     clusterEnd = ConsumeModifiers(value, clusterEnd);
@@ -811,7 +10673,8 @@ function NextGraphemeClusterIndex(value, clusterStart) {
   return clusterEnd;
 }
 function IsGraphemeCodePoint(value) {
-  return IsHighSurrogate(value) || IsCombiningMark(value) || IsVariationSelector(value) || IsZeroWidthJoiner(value);
+  return value >= 768 && // above special range
+  (IsHighSurrogate(value) || IsCombiningMark(value) || IsVariationSelector(value) || IsZeroWidthJoiner(value));
 }
 function GraphemeCount(value) {
   let count = 0;
@@ -822,58 +10685,54 @@ function GraphemeCount(value) {
   }
   return count;
 }
+function IsMinLengthSegmented(value, minLength) {
+  let count = 0;
+  let index = 0;
+  while (index < value.length) {
+    index = NextGraphemeClusterIndex(value, index);
+    if (++count >= minLength)
+      return true;
+  }
+  return false;
+}
+function IsMaxLengthSegmented(value, maxLength) {
+  let count = 0;
+  let index = 0;
+  while (index < value.length) {
+    index = NextGraphemeClusterIndex(value, index);
+    if (++count > maxLength)
+      return false;
+  }
+  return true;
+}
 function IsMinLength(value, minLength) {
   if (minLength === 0)
     return true;
-  let count = 0;
+  if (value.length < minLength)
+    return false;
   let index = 0;
-  while (index < value.length) {
-    index = NextGraphemeClusterIndex(value, index);
-    count++;
-    if (count >= minLength)
+  while (true) {
+    if (IsGraphemeCodePoint(value.charCodeAt(index))) {
+      return IsMinLengthSegmented(value, minLength);
+    }
+    if (++index >= minLength)
       return true;
   }
-  return false;
 }
 function IsMaxLength(value, maxLength) {
-  let count = 0;
-  let index = 0;
-  while (index < value.length) {
-    index = NextGraphemeClusterIndex(value, index);
-    count++;
-    if (count > maxLength)
-      return false;
-  }
-  return true;
-}
-function IsMinLengthFast(value, minLength) {
-  if (minLength === 0)
+  if (value.length <= maxLength)
     return true;
   let index = 0;
-  while (index < value.length) {
+  while (true) {
     if (IsGraphemeCodePoint(value.charCodeAt(index))) {
-      return IsMinLength(value, minLength);
+      return IsMaxLengthSegmented(value, maxLength);
     }
-    index++;
-    if (index >= minLength)
-      return true;
-  }
-  return false;
-}
-function IsMaxLengthFast(value, maxLength) {
-  let index = 0;
-  while (index < value.length) {
-    if (IsGraphemeCodePoint(value.charCodeAt(index))) {
-      return IsMaxLength(value, maxLength);
-    }
-    index++;
-    if (index > maxLength)
+    if (++index > maxLength)
       return false;
   }
-  return true;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/guard/guard.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/guard.mjs
 function IsArray(value) {
   return Array.isArray(value);
 }
@@ -962,46 +10821,38 @@ function GraphemeCount2(value) {
   return GraphemeCount(value);
 }
 function IsMaxLength2(value, length) {
-  return IsMaxLengthFast(value, length);
+  return IsMaxLength(value, length);
 }
 function IsMinLength2(value, length) {
-  return IsMinLengthFast(value, length);
+  return IsMinLength(value, length);
 }
 function Every(value, offset, callback) {
-  for (let index = offset; index < value.length; index++) {
-    if (!callback(value[index], index))
-      return false;
-  }
-  return true;
+  return value.every((item, index) => index < offset || callback(item, index));
 }
 function EveryAll(value, offset, callback) {
   let result = true;
-  for (let index = offset; index < value.length; index++) {
-    if (!callback(value[index], index))
+  value.forEach((item, index) => {
+    if (index >= offset && !callback(item, index))
       result = false;
-  }
+  });
   return result;
 }
 function Some(value, callback) {
-  for (let index = 0; index < value.length; index++) {
-    if (callback(value[index], index))
-      return true;
-  }
-  return false;
+  return value.some((value2, index) => callback(value2, index));
 }
 function SomeAll(value, callback) {
   let result = false;
-  for (let index = 0; index < value.length; index++) {
-    if (callback(value[index], index))
+  value.forEach((item, index) => {
+    if (callback(item, index))
       result = true;
-  }
+  });
   return result;
 }
 function Counted(value, callback) {
   return value.reduce((result, value2, index) => callback(value2, index) ? ++result : result, 0);
 }
-function ShiftLeft(array, true_, false_) {
-  return IsEqual(array.length, 0) ? false_() : true_(array[0], array.slice(1));
+function ShiftLeft(array2, true_, false_) {
+  return IsEqual(array2.length, 0) ? false_() : true_(array2[0], array2.slice(1));
 }
 function IsUnsafePropertyKey(key) {
   return IsEqual(key, "__proto__") || IsEqual(key, "constructor") || IsEqual(key, "prototype");
@@ -1037,7 +10888,7 @@ function IsDeepEqual(left, right) {
   return IsArray(left) ? DeepEqualArray(left, right) : IsObject(left) ? DeepEqualObject(left, right) : IsEqual(left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/guard/globals.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/globals.mjs
 var globals_exports = {};
 __export(globals_exports, {
   IsBigInt64Array: () => IsBigInt64Array,
@@ -1118,15 +10969,48 @@ function IsMap(value) {
   return value instanceof globalThis.Map;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/guard/index.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/index.mjs
 var guard_default = guard_exports;
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/_refine.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/settings/settings.mjs
+var settings = {
+  immutableTypes: false,
+  maxErrors: 8,
+  maxInstantiationCount: 128,
+  useAcceleration: true,
+  exactOptionalPropertyTypes: false,
+  enumerableKind: false,
+  correctiveParse: false,
+  unionPrioritySort: true
+};
+function Reset() {
+  settings.immutableTypes = false;
+  settings.maxErrors = 8;
+  settings.maxInstantiationCount = 128;
+  settings.useAcceleration = true;
+  settings.exactOptionalPropertyTypes = false;
+  settings.enumerableKind = false;
+  settings.correctiveParse = false;
+  settings.unionPrioritySort = true;
+}
+function Set2(options) {
+  for (const key of guard_exports.Keys(options)) {
+    const value = options[key];
+    if (value !== void 0) {
+      Object.defineProperty(settings, key, { value });
+    }
+  }
+}
+function Get() {
+  return settings;
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/_refine.mjs
 function IsRefine(value) {
   return guard_exports.HasPropertyKey(value, "~refine") && guard_exports.IsArray(value["~refine"]) && guard_exports.Every(value["~refine"], 0, (value2) => guard_exports.IsObject(value2) && guard_exports.HasPropertyKey(value2, "check") && guard_exports.HasPropertyKey(value2, "error") && guard_exports.IsFunction(value2.check) && guard_exports.IsFunction(value2.error));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/schema.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/schema.mjs
 function IsSchemaObject(value) {
   return guard_exports.IsObject(value) && !guard_exports.IsArray(value);
 }
@@ -1137,107 +11021,107 @@ function IsSchema(value) {
   return IsSchemaObject(value) || IsSchemaBoolean(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/additionalItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/additionalItems.mjs
 function IsAdditionalItems(schema) {
   return guard_exports.HasPropertyKey(schema, "additionalItems") && IsSchema(schema.additionalItems);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/additionalProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/additionalProperties.mjs
 function IsAdditionalProperties(schema) {
   return guard_exports.HasPropertyKey(schema, "additionalProperties") && IsSchema(schema.additionalProperties);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/allOf.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/allOf.mjs
 function IsAllOf(schema) {
   return guard_exports.HasPropertyKey(schema, "allOf") && guard_exports.IsArray(schema.allOf) && schema.allOf.every((value) => IsSchema(value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/anchor.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/anchor.mjs
 function IsAnchor(schema) {
   return guard_exports.HasPropertyKey(schema, "$anchor") && guard_exports.IsString(schema.$anchor);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/anyOf.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/anyOf.mjs
 function IsAnyOf(schema) {
   return guard_exports.HasPropertyKey(schema, "anyOf") && guard_exports.IsArray(schema.anyOf) && schema.anyOf.every((value) => IsSchema(value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/const.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/const.mjs
 function IsConst(value) {
   return guard_exports.HasPropertyKey(value, "const");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/contains.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/contains.mjs
 function IsContains(schema) {
   return guard_exports.HasPropertyKey(schema, "contains") && IsSchema(schema.contains);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/default.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/default.mjs
 function IsDefault(schema) {
   return guard_exports.HasPropertyKey(schema, "default");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/dependencies.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dependencies.mjs
 function IsDependencies(schema) {
   return guard_exports.HasPropertyKey(schema, "dependencies") && guard_exports.IsObject(schema.dependencies) && Object.values(schema.dependencies).every((value) => IsSchema(value) || guard_exports.IsArray(value) && value.every((value2) => guard_exports.IsString(value2)));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/dependentRequired.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dependentRequired.mjs
 function IsDependentRequired(schema) {
   return guard_exports.HasPropertyKey(schema, "dependentRequired") && guard_exports.IsObject(schema.dependentRequired) && Object.values(schema.dependentRequired).every((value) => guard_exports.IsArray(value) && value.every((value2) => guard_exports.IsString(value2)));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/dependentSchemas.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dependentSchemas.mjs
 function IsDependentSchemas(schema) {
   return guard_exports.HasPropertyKey(schema, "dependentSchemas") && guard_exports.IsObject(schema.dependentSchemas) && Object.values(schema.dependentSchemas).every((value) => IsSchema(value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/dynamicAnchor.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dynamicAnchor.mjs
 function IsDynamicAnchor(schema) {
   return guard_exports.HasPropertyKey(schema, "$dynamicAnchor") && guard_exports.IsString(schema.$dynamicAnchor);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/dynamicRef.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dynamicRef.mjs
 function IsDynamicRef(schema) {
   return guard_exports.HasPropertyKey(schema, "$dynamicRef") && guard_exports.IsString(schema.$dynamicRef);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/else.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/else.mjs
 function IsElse(schema) {
   return guard_exports.HasPropertyKey(schema, "else") && IsSchema(schema.else);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/enum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/enum.mjs
 function IsEnum(schema) {
   return guard_exports.HasPropertyKey(schema, "enum") && guard_exports.IsArray(schema.enum);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/exclusiveMaximum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/exclusiveMaximum.mjs
 function IsExclusiveMaximum(schema) {
   return guard_exports.HasPropertyKey(schema, "exclusiveMaximum") && (guard_exports.IsNumber(schema.exclusiveMaximum) || guard_exports.IsBigInt(schema.exclusiveMaximum));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/exclusiveMinimum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/exclusiveMinimum.mjs
 function IsExclusiveMinimum(schema) {
   return guard_exports.HasPropertyKey(schema, "exclusiveMinimum") && (guard_exports.IsNumber(schema.exclusiveMinimum) || guard_exports.IsBigInt(schema.exclusiveMinimum));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/format.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/format.mjs
 function IsFormat(schema) {
   return guard_exports.HasPropertyKey(schema, "format") && guard_exports.IsString(schema.format);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/id.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/id.mjs
 function IsId(schema) {
   return guard_exports.HasPropertyKey(schema, "$id") && guard_exports.IsString(schema.$id);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/if.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/if.mjs
 function IsIf(schema) {
   return guard_exports.HasPropertyKey(schema, "if") && IsSchema(schema.if);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/items.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/items.mjs
 function IsItems(schema) {
   return guard_exports.HasPropertyKey(schema, "items") && (IsSchema(schema.items) || guard_exports.IsArray(schema.items) && schema.items.every((value) => {
     return IsSchema(value);
@@ -1247,97 +11131,97 @@ function IsItemsSized(schema) {
   return IsItems(schema) && guard_exports.IsArray(schema.items);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/maximum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maximum.mjs
 function IsMaximum(schema) {
   return guard_exports.HasPropertyKey(schema, "maximum") && (guard_exports.IsNumber(schema.maximum) || guard_exports.IsBigInt(schema.maximum));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/maxContains.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maxContains.mjs
 function IsMaxContains(schema) {
   return guard_exports.HasPropertyKey(schema, "maxContains") && guard_exports.IsNumber(schema.maxContains);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/maxItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maxItems.mjs
 function IsMaxItems(schema) {
   return guard_exports.HasPropertyKey(schema, "maxItems") && guard_exports.IsNumber(schema.maxItems);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/maxLength.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maxLength.mjs
 function IsMaxLength3(schema) {
   return guard_exports.HasPropertyKey(schema, "maxLength") && guard_exports.IsNumber(schema.maxLength);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/maxProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maxProperties.mjs
 function IsMaxProperties(schema) {
   return guard_exports.HasPropertyKey(schema, "maxProperties") && guard_exports.IsNumber(schema.maxProperties);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/minimum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minimum.mjs
 function IsMinimum(schema) {
   return guard_exports.HasPropertyKey(schema, "minimum") && (guard_exports.IsNumber(schema.minimum) || guard_exports.IsBigInt(schema.minimum));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/minContains.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minContains.mjs
 function IsMinContains(schema) {
   return guard_exports.HasPropertyKey(schema, "minContains") && guard_exports.IsNumber(schema.minContains);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/minItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minItems.mjs
 function IsMinItems(schema) {
   return guard_exports.HasPropertyKey(schema, "minItems") && guard_exports.IsNumber(schema.minItems);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/minLength.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minLength.mjs
 function IsMinLength3(schema) {
   return guard_exports.HasPropertyKey(schema, "minLength") && guard_exports.IsNumber(schema.minLength);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/minProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minProperties.mjs
 function IsMinProperties(schema) {
   return guard_exports.HasPropertyKey(schema, "minProperties") && guard_exports.IsNumber(schema.minProperties);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/multipleOf.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/multipleOf.mjs
 function IsMultipleOf2(schema) {
   return guard_exports.HasPropertyKey(schema, "multipleOf") && (guard_exports.IsNumber(schema.multipleOf) || guard_exports.IsBigInt(schema.multipleOf));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/not.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/not.mjs
 function IsNot(schema) {
   return guard_exports.HasPropertyKey(schema, "not") && IsSchema(schema.not);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/oneOf.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/oneOf.mjs
 function IsOneOf(schema) {
   return guard_exports.HasPropertyKey(schema, "oneOf") && guard_exports.IsArray(schema.oneOf) && schema.oneOf.every((value) => IsSchema(value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/pattern.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/pattern.mjs
 function IsPattern(schema) {
   return guard_exports.HasPropertyKey(schema, "pattern") && (guard_exports.IsString(schema.pattern) || schema.pattern instanceof RegExp);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/patternProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/patternProperties.mjs
 function IsPatternProperties(schema) {
   return guard_exports.HasPropertyKey(schema, "patternProperties") && guard_exports.IsObject(schema.patternProperties) && Object.values(schema.patternProperties).every((value) => IsSchema(value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/prefixItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/prefixItems.mjs
 function IsPrefixItems(schema) {
   return guard_exports.HasPropertyKey(schema, "prefixItems") && guard_exports.IsArray(schema.prefixItems) && schema.prefixItems.every((schema2) => IsSchema(schema2));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/properties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/properties.mjs
 function IsProperties(schema) {
   return guard_exports.HasPropertyKey(schema, "properties") && guard_exports.IsObject(schema.properties) && Object.values(schema.properties).every((value) => IsSchema(value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/propertyNames.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/propertyNames.mjs
 function IsPropertyNames(schema) {
   return guard_exports.HasPropertyKey(schema, "propertyNames") && (guard_exports.IsObject(schema.propertyNames) || IsSchema(schema.propertyNames));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/recursiveAnchor.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/recursiveAnchor.mjs
 function IsRecursiveAnchor(schema) {
   return guard_exports.HasPropertyKey(schema, "$recursiveAnchor") && guard_exports.IsBoolean(schema.$recursiveAnchor);
 }
@@ -1345,47 +11229,47 @@ function IsRecursiveAnchorTrue(schema) {
   return IsRecursiveAnchor(schema) && guard_exports.IsEqual(schema.$recursiveAnchor, true);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/recursiveRef.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/recursiveRef.mjs
 function IsRecursiveRef(schema) {
   return guard_exports.HasPropertyKey(schema, "$recursiveRef") && guard_exports.IsString(schema.$recursiveRef);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/ref.mjs
 function IsRef(schema) {
   return guard_exports.HasPropertyKey(schema, "$ref") && guard_exports.IsString(schema.$ref);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/required.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/required.mjs
 function IsRequired(schema) {
   return guard_exports.HasPropertyKey(schema, "required") && guard_exports.IsArray(schema.required) && schema.required.every((value) => guard_exports.IsString(value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/then.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/then.mjs
 function IsThen(schema) {
   return guard_exports.HasPropertyKey(schema, "then") && IsSchema(schema.then);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/type.mjs
 function IsType(schema) {
   return guard_exports.HasPropertyKey(schema, "type") && (guard_exports.IsString(schema.type) || guard_exports.IsArray(schema.type) && schema.type.every((value) => guard_exports.IsString(value)));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/uniqueItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/uniqueItems.mjs
 function IsUniqueItems(schema) {
   return guard_exports.HasPropertyKey(schema, "uniqueItems") && guard_exports.IsBoolean(schema.uniqueItems);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/unevaluatedItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/unevaluatedItems.mjs
 function IsUnevaluatedItems(schema) {
   return guard_exports.HasPropertyKey(schema, "unevaluatedItems") && IsSchema(schema.unevaluatedItems);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/types/unevaluatedProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/unevaluatedProperties.mjs
 function IsUnevaluatedProperties(schema) {
   return guard_exports.HasPropertyKey(schema, "unevaluatedProperties") && IsSchema(schema.unevaluatedProperties);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/_context.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_context.mjs
 var CheckContext = class {
   constructor() {
     const indices = /* @__PURE__ */ new Set();
@@ -1433,22 +11317,16 @@ var CheckContext = class {
   }
 };
 var ErrorContext = class extends CheckContext {
-  constructor(callback) {
-    super();
-    this.callback = callback;
-  }
-  AddError(error) {
-    this.callback(error);
-    return false;
-  }
-};
-var AccumulatedErrorContext = class extends ErrorContext {
   constructor() {
-    super((error) => this.errors.push(error));
+    super();
     this.errors = [];
   }
+  AtCapacity() {
+    return this.errors.length >= settings_exports.Get().maxErrors;
+  }
   AddError(error) {
-    this.errors.push(error);
+    if (!this.AtCapacity())
+      this.errors.push(error);
     return false;
   }
   GetErrors() {
@@ -1456,7 +11334,7 @@ var AccumulatedErrorContext = class extends ErrorContext {
   }
 };
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/_refine.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_refine.mjs
 function CheckRefine(_stack, _context, schema, value) {
   return guard_exports.Every(schema["~refine"], 0, (refinement, _) => refinement.check(value));
 }
@@ -1471,7 +11349,7 @@ function ErrorRefine(_stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/additionalItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/additionalItems.mjs
 function IsValid(schema) {
   return IsItems(schema) && guard_exports.IsArray(schema.items);
 }
@@ -1494,7 +11372,12 @@ function ErrorAdditionalItems(stack, context, schemaPath, instancePath, schema, 
   return isAdditionalItems;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/additionalProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_regexp.mjs
+function UnicodeRegExp(pattern) {
+  return new RegExp(pattern, "u");
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/additionalProperties.mjs
 function GetPropertyKeyAsPattern(key) {
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return `^${escaped}$`;
@@ -1508,20 +11391,19 @@ function GetPropertiesPattern(schema) {
   return guard_exports.IsEqual(patterns.length, 0) ? "(?!)" : `(${patterns.join("|")})`;
 }
 function CheckAdditionalProperties(stack, context, schema, value) {
-  const regexp = new RegExp(GetPropertiesPattern(schema));
+  const regexp = UnicodeRegExp(GetPropertiesPattern(schema));
   const isAdditionalProperties = guard_exports.Every(guard_exports.Keys(value), 0, (key, _index) => {
     return regexp.test(key) || CheckSchemaPushStack(stack, context, schema.additionalProperties, value[key]) && context.AddKey(key);
   });
   return isAdditionalProperties;
 }
 function ErrorAdditionalProperties(stack, context, schemaPath, instancePath, schema, value) {
-  const regexp = new RegExp(GetPropertiesPattern(schema));
+  const regexp = UnicodeRegExp(GetPropertiesPattern(schema));
   const additionalProperties = [];
   const isAdditionalProperties = guard_exports.EveryAll(guard_exports.Keys(value), 0, (key, _index) => {
     const nextSchemaPath = `${schemaPath}/additionalProperties`;
     const nextInstancePath = `${instancePath}/${key}`;
-    const nextContext = new AccumulatedErrorContext();
-    const isAdditionalProperty = regexp.test(key) || ErrorSchemaPushStack(stack, nextContext, nextSchemaPath, nextInstancePath, schema.additionalProperties, value[key]) && context.AddKey(key);
+    const isAdditionalProperty = regexp.test(key) || ErrorSchemaPushStack(stack, context, nextSchemaPath, nextInstancePath, schema.additionalProperties, value[key]) && context.AddKey(key);
     if (!isAdditionalProperty)
       additionalProperties.push(key);
     return isAdditionalProperty;
@@ -1534,7 +11416,7 @@ function ErrorAdditionalProperties(stack, context, schemaPath, instancePath, sch
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/allOf.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/allOf.mjs
 function CheckAllOf(stack, context, schema, value) {
   const results = schema.allOf.reduce((result, schema2) => {
     const nextContext = new CheckContext();
@@ -1546,7 +11428,7 @@ function ErrorAllOf(stack, context, schemaPath, instancePath, schema, value) {
   const failedContexts = [];
   const results = schema.allOf.reduce((result, schema2, index) => {
     const nextSchemaPath = `${schemaPath}/allOf/${index}`;
-    const nextContext = new AccumulatedErrorContext();
+    const nextContext = new ErrorContext();
     const isSchema = ErrorSchema(stack, nextContext, nextSchemaPath, instancePath, schema2, value);
     if (!isSchema)
       failedContexts.push(nextContext);
@@ -1558,7 +11440,7 @@ function ErrorAllOf(stack, context, schemaPath, instancePath, schema, value) {
   return isAllOf;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/anyOf.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/anyOf.mjs
 function CheckAnyOf(stack, context, schema, value) {
   const results = schema.anyOf.reduce((result, schema2) => {
     const nextContext = new CheckContext();
@@ -1569,7 +11451,7 @@ function CheckAnyOf(stack, context, schema, value) {
 function ErrorAnyOf(stack, context, schemaPath, instancePath, schema, value) {
   const failedContexts = [];
   const results = schema.anyOf.reduce((result, schema2, index) => {
-    const nextContext = new AccumulatedErrorContext();
+    const nextContext = new ErrorContext();
     const nextSchemaPath = `${schemaPath}/anyOf/${index}`;
     const isSchema = ErrorSchema(stack, nextContext, nextSchemaPath, instancePath, schema2, value);
     if (!isSchema)
@@ -1587,7 +11469,7 @@ function ErrorAnyOf(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/boolean.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/boolean.mjs
 function CheckSchemaBoolean(_stack, _context, schema, _value) {
   return schema;
 }
@@ -1600,7 +11482,7 @@ function ErrorSchemaBoolean(stack, context, schemaPath, instancePath, schema, va
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/const.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/const.mjs
 function CheckConst(_stack, _context, schema, value) {
   return guard_exports.IsValueLike(schema.const) ? guard_exports.IsEqual(value, schema.const) : guard_exports.IsDeepEqual(value, schema.const);
 }
@@ -1613,7 +11495,7 @@ function ErrorConst(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/contains.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/contains.mjs
 function IsValid2(schema) {
   return !(IsMinContains(schema) && guard_exports.IsEqual(schema.minContains, 0));
 }
@@ -1633,7 +11515,7 @@ function ErrorContains(stack, context, schemaPath, instancePath, schema, value) 
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/dependencies.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/dependencies.mjs
 function CheckDependencies(stack, context, schema, value) {
   const isLength = guard_exports.IsEqual(guard_exports.Keys(value).length, 0);
   const isEvery = guard_exports.Every(guard_exports.Entries(schema.dependencies), 0, ([key, schema2]) => {
@@ -1655,7 +11537,7 @@ function ErrorDependencies(stack, context, schemaPath, instancePath, schema, val
   return isLength || isEvery;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/dependentRequired.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/dependentRequired.mjs
 function CheckDependentRequired(_stack, _context, schema, value) {
   const isLength = guard_exports.IsEqual(guard_exports.Keys(value).length, 0);
   const isEvery = guard_exports.Every(guard_exports.Entries(schema.dependentRequired), 0, ([key, keys]) => {
@@ -1676,7 +11558,7 @@ function ErrorDependentRequired(_stack, context, schemaPath, instancePath, schem
   return isLength || isEveryEntry;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/dependentSchemas.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/dependentSchemas.mjs
 function CheckDependentSchemas(stack, context, schema, value) {
   const isLength = guard_exports.IsEqual(guard_exports.Keys(value).length, 0);
   const isEvery = guard_exports.Every(guard_exports.Entries(schema.dependentSchemas), 0, ([key, schema2]) => {
@@ -1693,7 +11575,7 @@ function ErrorDependentSchemas(stack, context, schemaPath, instancePath, schema,
   return isLength || isEvery;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/dynamicRef.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/dynamicRef.mjs
 function CheckDynamicRef(stack, context, schema, value) {
   const target = stack.DynamicRef(schema) ?? false;
   return IsSchema(target) && CheckSchema(stack, context, target, value);
@@ -1703,7 +11585,7 @@ function ErrorDynamicRef(stack, context, _schemaPath, instancePath, schema, valu
   return IsSchema(target) && ErrorSchema(stack, context, "#", instancePath, target, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/enum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/enum.mjs
 function CheckEnum(_stack, _context, schema, value) {
   return guard_exports.Some(schema.enum, (option) => guard_exports.IsValueLike(option) ? guard_exports.IsEqual(value, option) : guard_exports.IsDeepEqual(value, option));
 }
@@ -1716,7 +11598,7 @@ function ErrorEnum(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/exclusiveMaximum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/exclusiveMaximum.mjs
 function CheckExclusiveMaximum(_stack, _context, schema, value) {
   return guard_exports.IsLessThan(value, schema.exclusiveMaximum);
 }
@@ -1729,7 +11611,7 @@ function ErrorExclusiveMaximum(stack, context, schemaPath, instancePath, schema,
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/exclusiveMinimum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/exclusiveMinimum.mjs
 function CheckExclusiveMinimum(_stack, _context, schema, value) {
   return guard_exports.IsGreaterThan(value, schema.exclusiveMinimum);
 }
@@ -1742,22 +11624,22 @@ function ErrorExclusiveMinimum(stack, context, schemaPath, instancePath, schema,
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/format.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/format.mjs
 var format_exports = {};
 __export(format_exports, {
   Clear: () => Clear,
   Entries: () => Entries2,
-  Get: () => Get,
+  Get: () => Get2,
   Has: () => Has,
   IsDate: () => IsDate2,
   IsDateTime: () => IsDateTime,
   IsDuration: () => IsDuration,
   IsEmail: () => IsEmail,
-  IsHostname: () => IsHostname,
+  IsHostname: () => IsHostname2,
   IsIPv4: () => IsIPv4,
   IsIPv6: () => IsIPv6,
   IsIdnEmail: () => IsIdnEmail,
-  IsIdnHostname: () => IsIdnHostname,
+  IsIdnHostname: () => IsIdnHostname2,
   IsIri: () => IsIri,
   IsIriReference: () => IsIriReference,
   IsJsonPointer: () => IsJsonPointer,
@@ -1770,12 +11652,12 @@ __export(format_exports, {
   IsUriTemplate: () => IsUriTemplate,
   IsUrl: () => IsUrl,
   IsUuid: () => IsUuid,
-  Reset: () => Reset,
-  Set: () => Set2,
+  Reset: () => Reset2,
+  Set: () => Set3,
   Test: () => Test
 });
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/date.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/date.mjs
 var DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 var DATE = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
 function IsLeapYear(year) {
@@ -1791,54 +11673,98 @@ function IsDate2(value) {
   return month >= 1 && month <= 12 && day >= 1 && day <= (month === 2 && IsLeapYear(year) ? 29 : DAYS[month]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/time.mjs
-var TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(?:Z|([+-])(\d\d):(\d\d))?$/i;
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/time.mjs
+var TIME = /^(\d\d):(\d\d):(\d\d)(?:\.\d+)?(?:([Zz])|([+-])(\d\d):(\d\d))?$/;
 function IsTime(value, strictTimeZone = true) {
   const matches = TIME.exec(value);
   if (!matches)
     return false;
+  if (strictTimeZone && !matches[4] && !matches[5])
+    return false;
   const hr = +matches[1];
   const min = +matches[2];
   const sec = +matches[3];
-  const tzSign = matches[4] === "-" ? -1 : 1;
-  const tzH = +(matches[5] || 0);
-  const tzM = +(matches[6] || 0);
-  if (tzH > 23 || tzM > 59)
+  if (hr > 23 || min > 59 || sec > 60)
     return false;
-  if (strictTimeZone && !matches[4] && value.toLowerCase().indexOf("z") === -1) {
-    return false;
+  if (matches[5]) {
+    const tzH2 = +matches[6];
+    const tzM2 = +matches[7];
+    if (tzH2 > 23 || tzM2 > 59)
+      return false;
   }
-  if (hr <= 23 && min <= 59 && sec < 60)
+  if (sec < 60)
     return true;
-  const utcMin = min - tzM * tzSign;
-  const utcHr = hr - tzH * tzSign - (utcMin < 0 ? 1 : 0);
-  return (utcHr === 23 || utcHr === -1) && (utcMin === 59 || utcMin === -1) && sec < 61;
+  const tzSign = matches[5] === "-" ? -1 : 1;
+  const tzH = +(matches[6] || 0);
+  const tzM = +(matches[7] || 0);
+  const totalUtcMin = hr * 60 + min - tzSign * (tzH * 60 + tzM);
+  return (totalUtcMin % 1440 + 1440) % 1440 === 1439;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/date_time.mjs
-function IsDateTime(value, strictTimeZone = true) {
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/date_time.mjs
+function IsDateTime(value) {
   const dateTime = value.split(/T/i);
-  return dateTime.length === 2 && IsDate2(dateTime[0]) && IsTime(dateTime[1], strictTimeZone);
+  return dateTime.length === 2 && IsDate2(dateTime[0]) && IsTime(dateTime[1]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/duration.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/duration.mjs
 var Duration = /^P((\d+Y(\d+M(\d+D)?)?|\d+M(\d+D)?|\d+D)(T(\d+H(\d+M(\d+S)?)?|\d+M(\d+S)?|\d+S))?|T(\d+H(\d+M(\d+S)?)?|\d+M(\d+S)?|\d+S)|\d+W)$/;
 function IsDuration(value) {
   return Duration.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/email.mjs
-var Email = /^(?!.*\.\.)[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/email.mjs
+var Email = /^(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[^"\\]|\\[\x20-\x7e])*")@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*|\[(?:IPv6:[a-f0-9:]+|(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})\])$/i;
 function IsEmail(value) {
   return Email.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/unreachable/unreachable.mjs
-function Unreachable() {
-  throw new Error("Unreachable");
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/pattern/pattern.mjs
+var RE_RULE_HYPHEN_PLACEMENT = /^(?!-).*(?<!-)$/;
+var RE_RULE_NOT_RESERVED_ACE = /^(?!..--)/;
+var RE_ASCII_LDH = /^[a-zA-Z0-9-]*$/;
+var RE_ASCII = new RegExp("^\\p{ASCII}*$", "u");
+var RE_NON_ASCII = /[^\p{ASCII}]/u;
+var RE_ASCII_DIGIT = /[0-9]/;
+var RE_ARABIC_INDIC_DIGIT = /[\u{0660}-\u{0669}]/u;
+var RE_EXT_ARABIC_INDIC_DIGIT = /[\u{06f0}-\u{06f9}]/u;
+var RE_COMMON_SEPARATOR = /[\u{002e}\u{002c}\u{003a}\u{002f}]/u;
+var RE_EUROPEAN_SEPARATOR = /[\u{002d}\u{002b}]/u;
+var RE_MARK_NONSPACING = new RegExp("\\p{Mn}", "u");
+var RE_MARK_SPACING_COMBINING = new RegExp("\\p{Mc}", "u");
+var RE_MARK_ENCLOSING = new RegExp("\\p{Me}", "u");
+var RE_COMBINING_MARK = /[\p{Mn}\p{Mc}\p{Me}]/u;
+var RE_LETTER = new RegExp("\\p{L}", "u");
+var RE_NUMBER_DECIMAL = new RegExp("\\p{Nd}", "u");
+var RE_SCRIPT_GREEK = new RegExp("\\p{Script=Greek}", "u");
+var RE_SCRIPT_HEBREW = new RegExp("\\p{Script=Hebrew}", "u");
+var RE_SCRIPT_JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+var RE_SCRIPT_ARABIC_LETTER = /[\p{Script=Arabic}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Mandaic}]/u;
+var RE_VIRAMA = /[\u{094d}\u{09cd}\u{0a4d}\u{0acd}\u{0b4d}\u{0bcd}\u{0c4d}\u{0ccd}\u{0d3b}\u{0d3c}\u{0d4d}\u{0dca}\u{1b44}\u{1baa}\u{1bab}\u{a9c0}\u{11046}\u{1107f}\u{110b9}\u{11133}\u{11134}\u{111c0}\u{11235}\u{1134d}\u{11442}\u{114c2}\u{115bf}\u{1163f}\u{116b6}\u{11c3f}\u{11d44}\u{11d45}]/u;
+var RE_RFC5892_DISALLOWED = /[\u{0640}\u{07fa}\u{302e}\u{302f}\u{3031}\u{3032}\u{3033}\u{3034}\u{3035}\u{303b}]/u;
+var RE_CONTEXTO_EXCEPTIONS = /[\u{00b7}\u{0375}\u{05f3}\u{05f4}\u{200c}\u{200d}\u{30fb}]/u;
+var RE_PVALID_EXCEPTIONS = /[\u{00df}\u{03c2}\u{06fd}\u{06fe}\u{0f0b}\u{3007}]/u;
+var RE_EUROPEAN_NUMBER = new RegExp([
+  RE_ASCII_DIGIT,
+  RE_EXT_ARABIC_INDIC_DIGIT
+].map((regexp) => regexp.source).join("|"), "u");
+var RE_PERMITTED_CATEGORY = new RegExp([
+  RE_LETTER,
+  RE_EUROPEAN_SEPARATOR,
+  RE_COMMON_SEPARATOR,
+  RE_NUMBER_DECIMAL,
+  RE_MARK_NONSPACING,
+  RE_MARK_SPACING_COMBINING,
+  RE_CONTEXTO_EXCEPTIONS,
+  RE_PVALID_EXCEPTIONS
+].map((regexp) => regexp.source).join("|"), "u");
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/label/ascii.mjs
+function IsAsciiLabel(value) {
+  return RE_RULE_HYPHEN_PLACEMENT.test(value) && RE_RULE_NOT_RESERVED_ACE.test(value) && RE_ASCII_LDH.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/_puny.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/format/puny.mjs
 var PUNYCODE_BASE = 36;
 var PUNYCODE_TMIN = 1;
 var PUNYCODE_TMAX = 26;
@@ -1846,6 +11772,12 @@ var PUNYCODE_SKEW = 38;
 var PUNYCODE_DAMP = 700;
 var PUNYCODE_INITIAL_BIAS = 72;
 var PUNYCODE_INITIAL_N = 128;
+function ThrowDontCare() {
+  throw null;
+}
+function IsAcePrefixed(value) {
+  return value.toLowerCase().startsWith("xn--");
+}
 function Adapt(delta, numPoints, firstTime) {
   delta = firstTime ? Math.floor(delta / PUNYCODE_DAMP) : delta >> 1;
   delta += Math.floor(delta / numPoints);
@@ -1866,7 +11798,7 @@ function Decode(value) {
     for (let j = 0; j < delimIdx; j++) {
       const cp = value.charCodeAt(j);
       if (cp >= 128)
-        throw new Error("Invalid punycode: non-basic before delimiter");
+        ThrowDontCare();
       output.push(cp);
     }
   }
@@ -1877,17 +11809,15 @@ function Decode(value) {
     let k = PUNYCODE_BASE;
     while (true) {
       if (inIdx >= value.length)
-        throw new Error("Invalid punycode: unexpected end of input");
+        ThrowDontCare();
       const ch = value.charCodeAt(inIdx++);
       let digit;
       if (ch >= 97 && ch <= 122)
         digit = ch - 97;
       else if (ch >= 48 && ch <= 57)
         digit = ch - 48 + 26;
-      else if (ch >= 65 && ch <= 90)
-        Unreachable();
       else
-        throw new Error("Invalid punycode: bad digit character");
+        ThrowDontCare();
       i += digit * w;
       const t = k <= bias ? PUNYCODE_TMIN : k >= bias + PUNYCODE_TMAX ? PUNYCODE_TMAX : k - bias;
       if (digit < t)
@@ -1902,150 +11832,164 @@ function Decode(value) {
     output.splice(i, 0, n);
     i++;
   }
-  return globalThis.String.fromCodePoint(...output);
+  return String.fromCodePoint(...output);
+}
+function DigitToChar(digit) {
+  return digit < 26 ? String.fromCharCode(digit + 97) : String.fromCharCode(digit - 26 + 48);
+}
+var RE_REPLACE_NON_ASCII = new RegExp(RE_NON_ASCII.source, "gu");
+function Encode(input) {
+  const basic = input.replace(RE_REPLACE_NON_ASCII, "");
+  const basicLength = basic.length;
+  const result = basicLength > 0 ? [basic, "-"] : [];
+  const codePoints = Array.from(input, (char) => char.codePointAt(0));
+  let n = PUNYCODE_INITIAL_N;
+  let delta = 0;
+  let bias = PUNYCODE_INITIAL_BIAS;
+  let handledCPCount = basicLength;
+  while (handledCPCount < codePoints.length) {
+    let m = Infinity;
+    for (const cp of codePoints) {
+      if (cp >= n && cp < m)
+        m = cp;
+    }
+    delta += (m - n) * (handledCPCount + 1);
+    n = m;
+    for (const cp of codePoints) {
+      if (cp < n)
+        delta++;
+      if (cp === n) {
+        let q = delta;
+        for (let k = PUNYCODE_BASE; ; k += PUNYCODE_BASE) {
+          const t = k <= bias ? PUNYCODE_TMIN : k >= bias + PUNYCODE_TMAX ? PUNYCODE_TMAX : k - bias;
+          if (q < t)
+            break;
+          const digit = t + (q - t) % (PUNYCODE_BASE - t);
+          result.push(DigitToChar(digit));
+          q = Math.floor((q - t) / (PUNYCODE_BASE - t));
+        }
+        result.push(DigitToChar(q));
+        bias = Adapt(delta, handledCPCount + 1, handledCPCount === basicLength);
+        delta = 0;
+        handledCPCount++;
+      }
+    }
+    delta++;
+    n++;
+  }
+  return result.join("");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/_idna.mjs
-function IsNonspacingMark(cp) {
-  return new RegExp("\\p{Mn}", "u").test(String.fromCodePoint(cp));
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/format/bidi.mjs
+var RE_RTL_ALLOWED = /^(?:R|AL|AN|EN|ES|CS|ET|ON|BN|NSM)$/;
+var RE_LTR_ALLOWED = /^(?:L|EN|ES|CS|ET|ON|BN|NSM)$/;
+var RE_RTL_CLASSES = /^(?:R|AL|AN)$/;
+function HasBidiChars(value) {
+  if (IsAcePrefixed(value)) {
+    try {
+      return HasRightToLeftCharacters(Decode(value.slice(4).toLowerCase()));
+    } catch {
+      return false;
+    }
+  }
+  return HasRightToLeftCharacters(value);
 }
-function IsSpacingCombiningMark(cp) {
-  return new RegExp("\\p{Mc}", "u").test(String.fromCodePoint(cp));
+function GetBidiClass(codePoint) {
+  const char = String.fromCodePoint(codePoint);
+  return RE_EUROPEAN_NUMBER.test(char) ? "EN" : RE_ARABIC_INDIC_DIGIT.test(char) ? "AN" : (
+    // Pattern.RE_EUROPEAN_SEPARATOR.test(char) ? 'ES' : // (no-spec-coverage)
+    // Pattern.RE_COMMON_SEPARATOR.test(char) ? 'CS' : // (no-spec-coverage)
+    RE_MARK_NONSPACING.test(char) ? "NSM" : RE_SCRIPT_HEBREW.test(char) ? "R" : RE_SCRIPT_ARABIC_LETTER.test(char) ? "AL" : RE_LETTER.test(char) ? "L" : "ON"
+  );
 }
-function IsEnclosingMark(cp) {
-  return new RegExp("\\p{Me}", "u").test(String.fromCodePoint(cp));
+function HasRightToLeftCharacters(value) {
+  for (const ch of value)
+    if (RE_RTL_CLASSES.test(GetBidiClass(ch.codePointAt(0))))
+      return true;
+  return false;
 }
-function IsCombiningMark2(cp) {
-  return IsNonspacingMark(cp) || IsSpacingCombiningMark(cp) || IsEnclosingMark(cp);
+function SatisfiesBidiRule(value) {
+  let isRtl = false;
+  let allowed = RE_LTR_ALLOWED;
+  let sawEN = false;
+  let sawAN = false;
+  let isFirst = true;
+  for (const ch of value) {
+    const bidiClass = GetBidiClass(ch.codePointAt(0));
+    if (isFirst) {
+      if (bidiClass !== "L" && bidiClass !== "R" && bidiClass !== "AL")
+        return false;
+      isRtl = bidiClass === "R" || bidiClass === "AL";
+      allowed = isRtl ? RE_RTL_ALLOWED : RE_LTR_ALLOWED;
+      isFirst = false;
+    }
+    if (!allowed.test(bidiClass))
+      return false;
+    if (bidiClass === "EN")
+      sawEN = true;
+    else if (bidiClass === "AN")
+      sawAN = true;
+  }
+  if (isRtl && sawEN && sawAN)
+    return false;
+  return true;
 }
-var RFC5892_DISALLOWED = /* @__PURE__ */ new Set([
-  1600,
-  // ARABIC TATWEEL
-  2042,
-  // NKO LAJANYALAN
-  12334,
-  // HANGUL SINGLE DOT TONE MARK
-  12335,
-  // HANGUL DOUBLE DOT TONE MARK
-  12337,
-  // VERTICAL KANA REPEAT MARK
-  12338,
-  // VERTICAL KANA REPEAT WITH VOICED ITERATION MARK
-  12339,
-  // VERTICAL KANA REPEAT MARK UPPER HALF
-  12340,
-  // VERTICAL KANA REPEAT WITH VOICED ITERATION MARK UPPER HALF
-  12341,
-  // VERTICAL KANA REPEAT MARK LOWER HALF
-  12347
-  // VERTICAL IDEOGRAPHIC ITERATION MARK
-]);
-var VIRAMA_CPS = /* @__PURE__ */ new Set([
-  2381,
-  2509,
-  2637,
-  2765,
-  2893,
-  3021,
-  3149,
-  3277,
-  3387,
-  3388,
-  3405,
-  3530,
-  6980,
-  7082,
-  7083,
-  43456,
-  69702,
-  69759,
-  69817,
-  69939,
-  69940,
-  70080,
-  70197,
-  70477,
-  70722,
-  70850,
-  71103,
-  71231,
-  71350,
-  72767,
-  73028,
-  73029
-]);
-function IsGreek(cp) {
-  return new RegExp("\\p{Script=Greek}", "u").test(String.fromCodePoint(cp));
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/label/unicode.mjs
+function ExceedsMaxALabelLength(value) {
+  return RE_NON_ASCII.test(value) && Encode(value).length + 4 > 63;
 }
-function IsHebrew(cp) {
-  return new RegExp("\\p{Script=Hebrew}", "u").test(String.fromCodePoint(cp));
-}
-function IsHiragana(cp) {
-  return new RegExp("\\p{Script=Hiragana}", "u").test(String.fromCodePoint(cp));
-}
-function IsKatakana(cp) {
-  return new RegExp("\\p{Script=Katakana}", "u").test(String.fromCodePoint(cp));
-}
-function IsHan(cp) {
-  return new RegExp("\\p{Script=Han}", "u").test(String.fromCodePoint(cp));
-}
-function IsArabicIndicDigit(cp) {
-  return cp >= 1632 && cp <= 1641;
-}
-function IsExtendedArabicIndicDigit(cp) {
-  return cp >= 1776 && cp <= 1785;
-}
-function IsVirama(cp) {
-  return VIRAMA_CPS.has(cp);
+function HasInvalidHyphens(chars) {
+  if (chars[0] === "-" || chars[chars.length - 1] === "-")
+    return true;
+  return chars.slice(2).join("").startsWith("--");
 }
 function IsUnicodeLabel(value) {
-  if (value.length === 0)
-    return Unreachable();
-  const cps = [...value].map((c) => c.codePointAt(0));
-  const len = cps.length;
-  if (cps[0] === 45 || cps[len - 1] === 45)
+  if (ExceedsMaxALabelLength(value))
     return false;
-  if (len >= 4 && cps[2] === 45 && cps[3] === 45)
+  if (HasRightToLeftCharacters(value) && !SatisfiesBidiRule(value))
     return false;
-  if (IsCombiningMark2(cps[0]))
+  const chars = [...value];
+  const codePoints = chars.map((c) => c.codePointAt(0));
+  const length = codePoints.length;
+  if (HasInvalidHyphens(chars))
+    return false;
+  if (RE_COMBINING_MARK.test(chars[0]))
     return false;
   let hasJapanese = false;
-  let hasArabicIndic = false;
-  let hasExtendedArabicIndic = false;
-  for (let i = 0; i < len; i++) {
-    const cp = cps[i];
-    if (RFC5892_DISALLOWED.has(cp))
+  for (let i = 0; i < length; i++) {
+    const codePoint = codePoints[i];
+    const char = chars[i];
+    if (RE_RFC5892_DISALLOWED.test(char))
       return false;
-    if (IsHiragana(cp) || IsKatakana(cp) || IsHan(cp))
+    if (!RE_PERMITTED_CATEGORY.test(char))
+      return false;
+    if (RE_SCRIPT_JAPANESE.test(char))
       hasJapanese = true;
-    if (IsArabicIndicDigit(cp))
-      hasArabicIndic = true;
-    if (IsExtendedArabicIndicDigit(cp))
-      hasExtendedArabicIndic = true;
-    const prev = cps[i - 1], next = cps[i + 1];
-    switch (cp) {
+    const prev = codePoints[i - 1], next = codePoints[i + 1];
+    switch (codePoint) {
       case 183:
         if (prev !== 108 || next !== 108)
           return false;
         break;
       // MIDDLE DOT (Catalan)
       case 885:
-        if (next === void 0 || !IsGreek(next))
+        if (!next || !RE_SCRIPT_GREEK.test(chars[i + 1]))
           return false;
         break;
       // Greek KERAIA
       case 1523:
       case 1524:
-        if (prev === void 0 || !IsHebrew(prev))
+        if (!prev || !RE_SCRIPT_HEBREW.test(chars[i - 1]))
           return false;
         break;
       // Hebrew GERESH
       case 8204:
-        if (prev === void 0 || prev < 128 && !IsVirama(prev))
+        if (!prev || prev < 128 && !RE_VIRAMA.test(chars[i - 1]))
           return false;
         break;
       case 8205:
-        if (prev === void 0 || !IsVirama(prev))
+        if (!prev || !RE_VIRAMA.test(chars[i - 1]))
           return false;
         break;
       case 12539:
@@ -2054,395 +11998,168 @@ function IsUnicodeLabel(value) {
   }
   if (value.includes("\u30FB") && !hasJapanese)
     return false;
-  if (hasArabicIndic && hasExtendedArabicIndic)
-    return false;
   return true;
 }
-function IsAsciiLabel(value) {
-  if (value.charCodeAt(0) === 45 || value.charCodeAt(value.length - 1) === 45)
-    return false;
-  if (value.length >= 4 && value.charCodeAt(2) === 45 && value.charCodeAt(3) === 45)
-    return false;
-  for (let i = 0; i < value.length; i++) {
-    const ch = value.charCodeAt(i);
-    if (!(ch >= 97 && ch <= 122 || // a-z
-    ch >= 65 && ch <= 90 || // A-Z
-    ch >= 48 && ch <= 57 || // 0-9
-    ch === 45))
-      return false;
-  }
-  return true;
-}
-function IsPuny(value) {
-  return value.toLowerCase().startsWith("xn--");
-}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/label/puny.mjs
 function IsPunyLabel(value) {
+  if (!IsAcePrefixed(value))
+    return false;
   try {
-    const payload = value.slice(4).toLowerCase();
-    const lastHyphen = payload.lastIndexOf("-");
-    if (lastHyphen === 0) {
+    const body = value.slice(4).toLowerCase();
+    if (body.lastIndexOf("-") === 0)
       return false;
-    }
-    const decoded = Decode(payload);
-    if (!decoded)
+    const decoded = Decode(body);
+    if (!RE_NON_ASCII.test(decoded))
       return false;
     return IsUnicodeLabel(decoded);
   } catch {
     return false;
   }
 }
-function IsIdnLabel(value) {
-  if (value.length === 0 || value.length > 63)
-    return false;
-  return IsPuny(value) ? IsPunyLabel(value) : IsUnicodeLabel(value);
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/hostname.mjs
+function IsValidLabelLength(value) {
+  return value.length > 0 && value.length <= 63;
 }
 function IsLabel(value) {
-  if (value.length === 0 || value.length > 63)
-    return false;
-  return IsPuny(value) ? IsPunyLabel(value) : IsAsciiLabel(value);
+  return IsValidLabelLength(value) && (IsPunyLabel(value) || IsAsciiLabel(value));
 }
-
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/hostname.mjs
 function IsHostname(value) {
   if (value.length === 0 || value.length > 253)
     return false;
   if (value.charCodeAt(value.length - 1) === 46)
     return false;
-  for (const label of value.split(".")) {
-    if (!IsLabel(label))
-      return false;
-  }
-  return true;
+  return value.split(".").every((label) => IsLabel(label));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/idn_email.mjs
-var IdnEmail = /^(?!.*\.\.)[\p{L}\p{N}!#$%&'*+/=?^_`{|}~-]+(?:\.[\p{L}\p{N}!#$%&'*+/=?^_`{|}~-]+)*@[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?)*$/iu;
-function IsIdnEmail(value) {
-  return IdnEmail.test(value);
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/idn-hostname.mjs
+function IsValidLabelLength2(value) {
+  return value.length > 0 && value.length <= 63;
 }
-
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/idn_hostname.mjs
+function IsLabel2(value) {
+  return IsValidLabelLength2(value) && (IsPunyLabel(value) || IsUnicodeLabel(value));
+}
+function NormalizeHostname(value) {
+  return value.replace(/[\uff01-\uff5e]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 65248)).normalize("NFC").replace(/[\u00ad\u034f\u180b-\u180d\u200b\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/gu, "").replace(/[\u002E\u3002\uFF0E\uFF61]/g, ".");
+}
 function IsIdnHostname(value) {
   if (value.length === 0 || value.includes(" "))
     return false;
-  const canonical = value.normalize("NFC").replace(/[\u002E\u3002\uFF0E\uFF61]/g, ".");
-  if (canonical.length > 253)
+  const normalized = NormalizeHostname(value);
+  if (normalized.length > 253)
     return false;
-  for (const label of canonical.split(".")) {
-    if (!IsIdnLabel(label))
-      return false;
-  }
-  return true;
+  const labels = normalized.split(".");
+  const hasBidiChars = labels.some((label) => HasBidiChars(label));
+  return labels.every((label) => IsLabel2(label) && (!hasBidiChars || SatisfiesBidiRule(label)));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/ipv4.mjs
-function IsIPv4Internal(value, start, end) {
-  let dots = 0;
-  let num = 0;
-  let digits = 0;
-  let leading = 0;
-  for (let i = start; i < end; i++) {
-    const ch = value.charCodeAt(i);
-    if (ch === 46) {
-      if (digits === 0 || num > 255 || leading === 48 && digits > 1)
-        return false;
-      dots++;
-      num = 0;
-      digits = 0;
-      leading = 0;
-    } else if (ch >= 48 && ch <= 57) {
-      if (digits === 0)
-        leading = ch;
-      num = num * 10 + (ch - 48);
-      digits++;
-    } else {
-      return false;
-    }
-  }
-  return dots === 3 && digits > 0 && num <= 255 && !(leading === 48 && digits > 1);
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/hostname.mjs
+function IsHostname2(value) {
+  return IsHostname(value);
 }
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idn_email.mjs
+var IdnEmail = /^(?:[A-Za-z0-9!#$%&'*+\/=?^_`{|}~\u{0080}-\u{10FFFF}-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~\u{0080}-\u{10FFFF}-]+)*|"(?:[^"\\]|\\.)*")@[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,62})(?<!-)(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,62})(?<!-))*$/iu;
+function IsIdnEmail(value) {
+  return IdnEmail.test(value.normalize("NFC"));
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idn_hostname.mjs
+function IsIdnHostname2(value) {
+  return IsIdnHostname(value);
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/ipv4.mjs
+var IPv4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
 function IsIPv4(value) {
-  return IsIPv4Internal(value, 0, value.length);
+  return IPv4.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/ipv6.mjs
-function InRange(ch) {
-  return ch >= 48 && ch <= 57 || // 0-9
-  ch >= 65 && ch <= 70 || // A-F
-  ch >= 97 && ch <= 102;
-}
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/ipv6.mjs
+var IPv6 = /^(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:)?[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)$/i;
 function IsIPv6(value) {
-  const length = value.length;
-  if (length === 0)
-    return false;
-  let groups = 0;
-  let compressed = false;
-  let i = 0;
-  if (value.charCodeAt(0) === 58 && value.charCodeAt(1) === 58) {
-    if (length === 2)
-      return true;
-    compressed = true;
-    i = 2;
-  }
-  while (i < length) {
-    let digits = 0;
-    const start = i;
-    while (i < length && InRange(value.charCodeAt(i))) {
-      i++;
-      digits++;
-    }
-    if (digits === 0)
-      return false;
-    const next = value.charCodeAt(i);
-    if (next === 46) {
-      if (!IsIPv4Internal(value, start, length))
-        return false;
-      groups += 2;
-      i = length;
-      break;
-    }
-    if (digits > 4)
-      return false;
-    groups++;
-    if (i === length)
-      break;
-    if (next !== 58)
-      return false;
-    i++;
-    if (value.charCodeAt(i) === 58) {
-      if (compressed)
-        return false;
-      if (value.charCodeAt(i + 1) === 58)
-        return false;
-      compressed = true;
-      i++;
-      if (i === length)
-        break;
-    }
-  }
-  return compressed ? groups <= 7 : groups === 8;
+  return IPv6.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/iri_reference.mjs
-function TryUrl(value) {
-  try {
-    new URL(value, "http://example.com");
-    return true;
-  } catch {
-    return false;
-  }
-}
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/iri_reference.mjs
+var InvalidIriChars = /[\x00-\x20\x7F\\]|%(?![0-9a-fA-F]{2})/;
+var MalformedScheme = /^[a-zA-Z][a-zA-Z0-9+\-.]*\/\//;
 function IsIriReference(value) {
-  if (value.includes(" ")) {
-    return false;
-  }
-  if (value.includes("\\")) {
-    return false;
-  }
-  if (/[\x00-\x1F\x7F]/.test(value)) {
-    return false;
-  }
-  if (/%(?![0-9a-fA-F]{2})/.test(value)) {
-    return false;
-  }
-  if (value === "") {
-    return true;
-  }
-  const colonIndex = value.indexOf(":");
-  const hasValidSchemePrefix = colonIndex > 0 && // Colon must not be at the very beginning (e.g., ":foo")
-  /^[a-zA-Z][a-zA-Z0-9+\-.]*$/.test(value.substring(0, colonIndex));
-  if (hasValidSchemePrefix) {
-    return TryUrl(value);
-  } else {
-    const looksLikeMalformedSchemeAndAuthority = value.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*)(\/\/)/);
-    if (looksLikeMalformedSchemeAndAuthority && colonIndex === -1) {
-      return false;
-    }
-    return TryUrl(value);
-  }
+  return !InvalidIriChars.test(value) && !MalformedScheme.test(value) && URL.canParse(value, "http://example.com");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/iri.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/iri.mjs
+var IpvFutureMatchMaxLength = 2048;
+var IpvFutureMatch = /\[[vV][0-9a-fA-F]+\.[^\]]+\]/;
+var InvalidIriChars2 = /[\x00-\x20<>\^`{|}\\]/;
+function NarrowIpvFuture(value) {
+  return value.length < IpvFutureMatchMaxLength ? value.replace(IpvFutureMatch, "[::1]") : value;
+}
 function IsIri(value) {
-  try {
-    new URL(value);
-    return true;
-  } catch {
+  if (InvalidIriChars2.test(value))
     return false;
-  }
+  return URL.canParse(NarrowIpvFuture(value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/json_pointer_uri_fragment.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/json_pointer_uri_fragment.mjs
 var JsonPointerUriFragment = /^#(?:\/(?:[a-z0-9_\-.!$&'()*+,;:=@]|%[0-9a-f]{2}|~0|~1)*)*$/i;
 function IsJsonPointerUriFragment(value) {
   return JsonPointerUriFragment.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/json_pointer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/json_pointer.mjs
 var JsonPointer = /^(?:\/(?:[^~/]|~0|~1)*)*$/;
 function IsJsonPointer(value) {
   return JsonPointer.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/regex.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/regex.mjs
 function IsRegex(value) {
-  if (value.length === 0) {
-    return false;
-  }
   try {
-    new RegExp(value);
+    new RegExp(value, "u");
     return true;
   } catch {
     return false;
   }
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/relative_json_pointer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/relative_json_pointer.mjs
 var RelativeJsonPointer = /^(?:0|[1-9][0-9]*)(?:#|(?:\/(?:[^~/]|~0|~1)*)*)$/;
 function IsRelativeJsonPointer(value) {
   return RelativeJsonPointer.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/uri_reference.mjs
-var UriReference = /^(?!.*[^\x00-\x7F])(?!.*\\)(?:(?:[a-z][a-z0-9+\-.]*:)?(?:\/\/[^\s[\]{}<>^`|]*)?|[^\s[\]{}<>^`|]*)(?:\?[^\s[\]{}<>^`|]*)?(?:#[^\s[\]{}<>^`|]*)?$/i;
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/uri_reference.mjs
+var UriReference = /^(?:[a-z][a-z0-9+\-.]*:(?:\/\/(?:(?:[-a-z0-9._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:[\da-f]{1,4}:){6}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|::(?:[\da-f]{1,4}:){5}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:[\da-f]{1,4})?::(?:[\da-f]{1,4}:){4}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,1}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){3}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,2}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){2}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,3}[\da-f]{1,4})?::[\da-f]{1,4}:(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,4}[\da-f]{1,4})?::(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,5}[\da-f]{1,4})?::[\da-f]{1,4}|(?:(?:[\da-f]{1,4}:){0,6}[\da-f]{1,4})?::)|v[0-9a-f]+\.[-a-z0-9._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)|(?:[-a-z0-9._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:\/\/(?:(?:[-a-z0-9._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:[\da-f]{1,4}:){6}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|::(?:[\da-f]{1,4}:){5}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:[\da-f]{1,4})?::(?:[\da-f]{1,4}:){4}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,1}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){3}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,2}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){2}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,3}[\da-f]{1,4})?::[\da-f]{1,4}:(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,4}[\da-f]{1,4})?::(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,5}[\da-f]{1,4})?::[\da-f]{1,4}|(?:(?:[\da-f]{1,4}:){0,6}[\da-f]{1,4})?::)|v[0-9a-f]+\.[-a-z0-9._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)|(?:[-a-z0-9._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[-a-z0-9._~!$&'()*+,;=@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?)(?:\?(?:[-a-z0-9._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[-a-z0-9._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
 function IsUriReference(value) {
   return UriReference.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/uri_template.mjs
-var UriTemplate = /^(?:(?:[^\x00-\x20"'<>%\\^`{|}]|%[0-9a-f]{2})|\{[+#./;?&=,!@|]?(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?(?:,(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?)*\})*$/i;
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/uri_template.mjs
+var UriTemplate = /^(?:(?:[^\x00-\x20"<>%\\^`{|}\x7f]|%[0-9a-f]{2})|\{[+#./;?&=,!@|]?(?:[a-z0-9_]|%[0-9a-f]{2})+(?:\.(?:[a-z0-9_]|%[0-9a-f]{2})+)*(?::[1-9]\d{0,3}|\*)?(?:,(?:[a-z0-9_]|%[0-9a-f]{2})+(?:\.(?:[a-z0-9_]|%[0-9a-f]{2})+)*(?::[1-9]\d{0,3}|\*)?)*\})*$/i;
 function IsUriTemplate(value) {
   return UriTemplate.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/uri.mjs
-function IsAlpha(ch) {
-  return ch >= 97 && ch <= 122 || ch >= 65 && ch <= 90;
-}
-function IsAlphaNumeric(ch) {
-  return IsAlpha(ch) || ch >= 48 && ch <= 57;
-}
-function IsHex(ch) {
-  return ch >= 48 && ch <= 57 || // 0-9
-  ch >= 65 && ch <= 70 || // A-F
-  ch >= 97 && ch <= 102;
-}
-function IsSchemeChar(ch) {
-  return IsAlphaNumeric(ch) || ch === 43 || ch === 45 || ch === 46;
-}
-function IsUnreserved(ch) {
-  return IsAlphaNumeric(ch) || ch === 45 || ch === 46 || // '-', '.'
-  ch === 95 || ch === 126;
-}
-function IsSubDelim(ch) {
-  return ch === 33 || ch === 36 || ch === 38 || ch === 39 || ch === 40 || ch === 41 || ch === 42 || ch === 43 || ch === 44 || ch === 59 || ch === 61;
-}
-function IsPchar(ch) {
-  return IsUnreserved(ch) || IsSubDelim(ch) || ch === 58 || ch === 64;
-}
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/uri.mjs
+var Uri = /^[a-z][a-z0-9+\-.]*:(?:\/\/(?:(?:[-a-z0-9._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:[\da-f]{1,4}:){6}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|::(?:[\da-f]{1,4}:){5}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:[\da-f]{1,4})?::(?:[\da-f]{1,4}:){4}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,1}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){3}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,2}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){2}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,3}[\da-f]{1,4})?::[\da-f]{1,4}:(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,4}[\da-f]{1,4})?::(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,5}[\da-f]{1,4})?::[\da-f]{1,4}|(?:(?:[\da-f]{1,4}:){0,6}[\da-f]{1,4})?::)|v[0-9a-f]+\.[-a-z0-9._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)|(?:[-a-z0-9._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?(?:\?(?:[-a-z0-9._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[-a-z0-9._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
 function IsUri(value) {
-  const length = value.length;
-  if (length === 0)
-    return false;
-  if (!IsAlpha(value.charCodeAt(0)))
-    return false;
-  let i = 1;
-  while (i < length) {
-    const ch = value.charCodeAt(i);
-    if (ch === 58)
-      break;
-    if (!IsSchemeChar(ch))
-      return false;
-    i++;
-  }
-  if (value.charCodeAt(i) !== 58)
-    return false;
-  i++;
-  if (value.charCodeAt(i) === 47 && value.charCodeAt(i + 1) === 47) {
-    i += 2;
-    const authorityStart = i;
-    let atPos = -1;
-    for (let j = i; j < length; j++) {
-      const ch = value.charCodeAt(j);
-      if (ch === 64) {
-        atPos = j;
-        break;
-      }
-      if (ch === 47 || ch === 63 || ch === 35)
-        break;
-    }
-    if (atPos !== -1) {
-      for (let j = authorityStart; j < atPos; j++) {
-        const ch = value.charCodeAt(j);
-        if (ch === 91 || ch === 93)
-          return false;
-        if (ch === 37) {
-          if (j + 2 >= atPos || !IsHex(value.charCodeAt(j + 1)) || !IsHex(value.charCodeAt(j + 2)))
-            return false;
-          j += 2;
-        } else if (!IsUnreserved(ch) && !IsSubDelim(ch) && ch !== 58)
-          return false;
-      }
-      i = atPos + 1;
-    }
-    if (value.charCodeAt(i) === 91) {
-      i++;
-      while (i < length && value.charCodeAt(i) !== 93)
-        i++;
-      if (value.charCodeAt(i) !== 93)
-        return false;
-      i++;
-    } else {
-      while (i < length) {
-        const ch = value.charCodeAt(i);
-        if (ch === 47 || ch === 63 || ch === 35 || ch === 58)
-          break;
-        if (ch < 128 && !IsUnreserved(ch) && !IsSubDelim(ch))
-          return false;
-        i++;
-      }
-    }
-    if (value.charCodeAt(i) === 58) {
-      i++;
-      while (i < length) {
-        const ch = value.charCodeAt(i);
-        if (ch === 47 || ch === 63 || ch === 35)
-          break;
-        if (ch < 48 || ch > 57)
-          return false;
-        i++;
-      }
-    }
-  }
-  while (i < length) {
-    const ch = value.charCodeAt(i);
-    if (ch === 37) {
-      if (i + 2 >= length || !IsHex(value.charCodeAt(i + 1)) || !IsHex(value.charCodeAt(i + 2)))
-        return false;
-      i += 2;
-    } else if (ch > 127) {
-      return false;
-    } else if (!(IsPchar(ch) || ch === 47 || ch === 63 || ch === 35)) {
-      return false;
-    }
-    i++;
-  }
-  return true;
+  return Uri.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/url.mjs
-var Url = /^(?:https?|ftp):\/\/(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\u{00a1}-\u{ffff}]+-)*[a-z0-9\u{00a1}-\u{ffff}]+)(?:\.(?:[a-z0-9\u{00a1}-\u{ffff}]+-)*[a-z0-9\u{00a1}-\u{ffff}]+)*(?:\.(?:[a-z\u{00a1}-\u{ffff}]{2,})))(?::\d{2,5})?(?:\/[^\s]*)?$/iu;
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/url.mjs
 function IsUrl(value) {
-  return Url.test(value);
+  return URL.canParse(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/uuid.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/uuid.mjs
 var Uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 function IsUuid(value) {
   return Uuid.test(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/format/_registry.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/_registry.mjs
 var formats = /* @__PURE__ */ new Map();
 function Clear() {
   formats.clear();
@@ -2450,27 +12167,27 @@ function Clear() {
 function Entries2() {
   return [...formats.entries()];
 }
-function Set2(format, check) {
+function Set3(format, check) {
   formats.set(format, check);
 }
 function Has(format) {
   return formats.has(format);
 }
-function Get(format) {
+function Get2(format) {
   return formats.get(format);
 }
 function Test(format, value) {
   return formats.get(format)?.(value) ?? true;
 }
-function Reset() {
+function Reset2() {
   Clear();
   formats.set("date-time", IsDateTime);
   formats.set("date", IsDate2);
   formats.set("duration", IsDuration);
   formats.set("email", IsEmail);
-  formats.set("hostname", IsHostname);
+  formats.set("hostname", IsHostname2);
   formats.set("idn-email", IsIdnEmail);
-  formats.set("idn-hostname", IsIdnHostname);
+  formats.set("idn-hostname", IsIdnHostname2);
   formats.set("ipv4", IsIPv4);
   formats.set("ipv6", IsIPv6);
   formats.set("iri-reference", IsIriReference);
@@ -2486,9 +12203,9 @@ function Reset() {
   formats.set("url", IsUrl);
   formats.set("uuid", IsUuid);
 }
-Reset();
+Reset2();
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/format.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/format.mjs
 function CheckFormat(_stack, _context, schema, value) {
   return format_exports.Test(schema.format, value);
 }
@@ -2501,7 +12218,7 @@ function ErrorFormat(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/if.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/if.mjs
 function CheckIf(stack, context, schema, value) {
   const thenSchema = IsThen(schema) ? schema.then : true;
   const elseSchema = IsElse(schema) ? schema.else : true;
@@ -2510,7 +12227,7 @@ function CheckIf(stack, context, schema, value) {
 function ErrorIf(stack, context, schemaPath, instancePath, schema, value) {
   const thenSchema = IsThen(schema) ? schema.then : true;
   const elseSchema = IsElse(schema) ? schema.else : true;
-  const trueContext = new AccumulatedErrorContext();
+  const trueContext = new ErrorContext();
   const isIf = ErrorSchema(stack, trueContext, `${schemaPath}/if`, instancePath, schema.if, value) ? ErrorSchema(stack, trueContext, `${schemaPath}/then`, instancePath, thenSchema, value) || context.AddError({
     keyword: "if",
     schemaPath,
@@ -2527,7 +12244,7 @@ function ErrorIf(stack, context, schemaPath, instancePath, schema, value) {
   return isIf;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/items.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/items.mjs
 function CheckItemsSized(stack, context, schema, value) {
   return guard_exports.Every(schema.items, 0, (schema2, index) => {
     return guard_exports.IsLessEqualThan(value.length, index) || CheckSchemaPushStack(stack, context, schema2, value[index]) && context.AddIndex(index);
@@ -2561,7 +12278,7 @@ function ErrorItems(stack, context, schemaPath, instancePath, schema, value) {
   return IsItemsSized(schema) ? ErrorItemsSized(stack, context, schemaPath, instancePath, schema, value) : ErrorItemsUnsized(stack, context, schemaPath, instancePath, schema, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/maxContains.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maxContains.mjs
 function IsValid3(schema) {
   return IsContains(schema);
 }
@@ -2581,7 +12298,7 @@ function ErrorMaxContains(stack, context, schemaPath, instancePath, schema, valu
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/maximum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maximum.mjs
 function CheckMaximum(_stack, _context, schema, value) {
   return guard_exports.IsLessEqualThan(value, schema.maximum);
 }
@@ -2594,7 +12311,7 @@ function ErrorMaximum(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/maxItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maxItems.mjs
 function CheckMaxItems(_stack, _context, schema, value) {
   return guard_exports.IsLessEqualThan(value.length, schema.maxItems);
 }
@@ -2607,7 +12324,7 @@ function ErrorMaxItems(stack, context, schemaPath, instancePath, schema, value) 
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/maxLength.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maxLength.mjs
 function CheckMaxLength(_stack, _context, schema, value) {
   return guard_exports.IsMaxLength(value, schema.maxLength);
 }
@@ -2620,7 +12337,7 @@ function ErrorMaxLength(stack, context, schemaPath, instancePath, schema, value)
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/maxProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maxProperties.mjs
 function CheckMaxProperties(_stack, _context, schema, value) {
   return guard_exports.IsLessEqualThan(guard_exports.Keys(value).length, schema.maxProperties);
 }
@@ -2633,7 +12350,7 @@ function ErrorMaxProperties(stack, context, schemaPath, instancePath, schema, va
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/minContains.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minContains.mjs
 function IsValid4(schema) {
   return IsContains(schema);
 }
@@ -2652,7 +12369,7 @@ function ErrorMinContains(stack, context, schemaPath, instancePath, schema, valu
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/minimum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minimum.mjs
 function CheckMinimum(_stack, _context, schema, value) {
   return guard_exports.IsGreaterEqualThan(value, schema.minimum);
 }
@@ -2665,7 +12382,7 @@ function ErrorMinimum(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/minItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minItems.mjs
 function CheckMinItems(_stack, _context, schema, value) {
   return guard_exports.IsGreaterEqualThan(value.length, schema.minItems);
 }
@@ -2678,7 +12395,7 @@ function ErrorMinItems(stack, context, schemaPath, instancePath, schema, value) 
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/minLength.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minLength.mjs
 function CheckMinLength(_stack, _context, schema, value) {
   return guard_exports.IsMinLength(value, schema.minLength);
 }
@@ -2691,7 +12408,7 @@ function ErrorMinLength(stack, context, schemaPath, instancePath, schema, value)
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/minProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minProperties.mjs
 function CheckMinProperties(_stack, _context, schema, value) {
   return guard_exports.IsGreaterEqualThan(guard_exports.Keys(value).length, schema.minProperties);
 }
@@ -2704,7 +12421,7 @@ function ErrorMinProperties(stack, context, schemaPath, instancePath, schema, va
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/multipleOf.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/multipleOf.mjs
 function CheckMultipleOf(_stack, _context, schema, value) {
   return guard_exports.IsMultipleOf(value, schema.multipleOf);
 }
@@ -2717,7 +12434,7 @@ function ErrorMultipleOf(stack, context, schemaPath, instancePath, schema, value
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/not.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/not.mjs
 function CheckNot(stack, context, schema, value) {
   const nextContext = new CheckContext();
   const isSchema = !CheckSchema(stack, nextContext, schema.not, value);
@@ -2733,7 +12450,7 @@ function ErrorNot(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/oneOf.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/oneOf.mjs
 function CheckOneOf(stack, context, schema, value) {
   const passedContexts = schema.oneOf.reduce((result, schema2) => {
     const nextContext = new CheckContext();
@@ -2745,7 +12462,7 @@ function ErrorOneOf(stack, context, schemaPath, instancePath, schema, value) {
   const failedContexts = [];
   const passingSchemas = [];
   const passedContexts = schema.oneOf.reduce((result, schema2, index) => {
-    const nextContext = new AccumulatedErrorContext();
+    const nextContext = new ErrorContext();
     const nextSchemaPath = `${schemaPath}/oneOf/${index}`;
     const isSchema = ErrorSchema(stack, nextContext, nextSchemaPath, instancePath, schema2, value);
     if (isSchema)
@@ -2765,9 +12482,9 @@ function ErrorOneOf(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/pattern.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/pattern.mjs
 function CheckPattern(_stack, _context, schema, value) {
-  const regexp = guard_exports.IsString(schema.pattern) ? new RegExp(schema.pattern, "u") : schema.pattern;
+  const regexp = guard_exports.IsString(schema.pattern) ? UnicodeRegExp(schema.pattern) : schema.pattern;
   return regexp.test(value);
 }
 function ErrorPattern(stack, context, schemaPath, instancePath, schema, value) {
@@ -2779,10 +12496,10 @@ function ErrorPattern(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/patternProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/patternProperties.mjs
 function CheckPatternProperties(stack, context, schema, value) {
   return guard_exports.Every(guard_exports.Entries(schema.patternProperties), 0, ([pattern, schema2]) => {
-    const regexp = new RegExp(pattern, "u");
+    const regexp = UnicodeRegExp(pattern);
     return guard_exports.Every(guard_exports.Entries(value), 0, ([key, prop]) => {
       return !regexp.test(key) || CheckSchemaPushStack(stack, context, schema2, prop) && context.AddKey(key);
     });
@@ -2791,7 +12508,7 @@ function CheckPatternProperties(stack, context, schema, value) {
 function ErrorPatternProperties(stack, context, schemaPath, instancePath, schema, value) {
   return guard_exports.EveryAll(guard_exports.Entries(schema.patternProperties), 0, ([pattern, schema2]) => {
     const nextSchemaPath = `${schemaPath}/patternProperties/${pattern}`;
-    const regexp = new RegExp(pattern, "u");
+    const regexp = UnicodeRegExp(pattern);
     return guard_exports.EveryAll(guard_exports.Entries(value), 0, ([key, value2]) => {
       const nextInstancePath = `${instancePath}/${key}`;
       const notKey = !regexp.test(key);
@@ -2800,7 +12517,7 @@ function ErrorPatternProperties(stack, context, schemaPath, instancePath, schema
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/prefixItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/prefixItems.mjs
 function CheckPrefixItems(stack, context, schema, value) {
   return guard_exports.IsEqual(value.length, 0) || guard_exports.Every(schema.prefixItems, 0, (schema2, index) => {
     return guard_exports.IsLessEqualThan(value.length, index) || CheckSchemaPushStack(stack, context, schema2, value[index]) && context.AddIndex(index);
@@ -2814,44 +12531,7 @@ function ErrorPrefixItems(stack, context, schemaPath, instancePath, schema, valu
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/settings/settings.mjs
-var settings_exports = {};
-__export(settings_exports, {
-  Get: () => Get2,
-  Reset: () => Reset2,
-  Set: () => Set3
-});
-var settings = {
-  immutableTypes: false,
-  maxErrors: 8,
-  useAcceleration: true,
-  exactOptionalPropertyTypes: false,
-  enumerableKind: false,
-  correctiveParse: false,
-  unionPrioritySort: true
-};
-function Reset2() {
-  settings.immutableTypes = false;
-  settings.maxErrors = 8;
-  settings.useAcceleration = true;
-  settings.exactOptionalPropertyTypes = false;
-  settings.enumerableKind = false;
-  settings.correctiveParse = false;
-  settings.unionPrioritySort = true;
-}
-function Set3(options) {
-  for (const key of guard_exports.Keys(options)) {
-    const value = options[key];
-    if (value !== void 0) {
-      Object.defineProperty(settings, key, { value });
-    }
-  }
-}
-function Get2() {
-  return settings;
-}
-
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/_exact_optional.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_exact_optional.mjs
 function IsExactOptional(required, key) {
   return required.includes(key) || settings_exports.Get().exactOptionalPropertyTypes;
 }
@@ -2859,7 +12539,7 @@ function InexactOptionalCheck(value, key) {
   return guard_exports.IsUndefined(value[key]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/properties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/properties.mjs
 function CheckProperties(stack, context, schema, value) {
   const required = IsRequired(schema) ? schema.required : [];
   const isProperties = guard_exports.Every(guard_exports.Entries(schema.properties), 0, ([key, schema2]) => {
@@ -2879,7 +12559,7 @@ function ErrorProperties(stack, context, schemaPath, instancePath, schema, value
   return isProperties;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/propertyNames.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/propertyNames.mjs
 function CheckPropertyNames(stack, context, schema, value) {
   return guard_exports.Every(guard_exports.Keys(value), 0, (key, _index) => CheckSchema(stack, context, schema.propertyNames, key));
 }
@@ -2888,8 +12568,7 @@ function ErrorPropertyNames(stack, context, schemaPath, instancePath, schema, va
   const isPropertyNames = guard_exports.EveryAll(guard_exports.Keys(value), 0, (key, _index) => {
     const nextInstancePath = `${instancePath}/${key}`;
     const nextSchemaPath = `${schemaPath}/propertyNames`;
-    const nextContext = new AccumulatedErrorContext();
-    const isPropertyName = ErrorSchema(stack, nextContext, nextSchemaPath, nextInstancePath, schema.propertyNames, key);
+    const isPropertyName = ErrorSchema(stack, context, nextSchemaPath, nextInstancePath, schema.propertyNames, key);
     if (!isPropertyName)
       propertyNames.push(key);
     return isPropertyName;
@@ -2902,7 +12581,7 @@ function ErrorPropertyNames(stack, context, schemaPath, instancePath, schema, va
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/recursiveRef.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/recursiveRef.mjs
 function CheckRecursiveRef(stack, context, schema, value) {
   const target = stack.RecursiveRef(schema) ?? false;
   return IsSchema(target) && CheckSchema(stack, context, target, value);
@@ -2912,7 +12591,7 @@ function ErrorRecursiveRef(stack, context, _schemaPath, instancePath, schema, va
   return IsSchema(target) && ErrorSchema(stack, context, "#", instancePath, target, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/ref.mjs
 function CheckRef(stack, context, schema, value) {
   const target = stack.Ref(schema) ?? false;
   const nextContext = new CheckContext();
@@ -2923,7 +12602,7 @@ function CheckRef(stack, context, schema, value) {
 }
 function ErrorRef(stack, context, _schemaPath, instancePath, schema, value) {
   const target = stack.Ref(schema) ?? false;
-  const nextContext = new AccumulatedErrorContext();
+  const nextContext = new ErrorContext();
   const result = IsSchema(target) && ErrorSchema(stack, nextContext, "#", instancePath, target, value);
   if (result)
     context.Merge([nextContext]);
@@ -2932,7 +12611,7 @@ function ErrorRef(stack, context, _schemaPath, instancePath, schema, value) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/required.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/required.mjs
 function CheckRequired(_stack, _context, schema, value) {
   return guard_exports.Every(schema.required, 0, (key) => guard_exports.HasPropertyKey(value, key));
 }
@@ -2952,7 +12631,7 @@ function ErrorRequired(_stack, context, schemaPath, instancePath, schema, value)
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/type.mjs
 function CheckTypeName(_stack, _context, type, _schema, value) {
   return (
     // jsonschema
@@ -2978,7 +12657,7 @@ function ErrorType(stack, context, schemaPath, instancePath, schema, value) {
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/unevaluatedItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/unevaluatedItems.mjs
 function CheckUnevaluatedItems(stack, context, schema, value) {
   const indices = context.GetIndices();
   return guard_exports.Every(value, 0, (item, index) => {
@@ -2989,7 +12668,7 @@ function ErrorUnevaluatedItems(stack, context, schemaPath, instancePath, schema,
   const indices = context.GetIndices();
   const unevaluatedItems = [];
   const isUnevaluatedItems = guard_exports.EveryAll(value, 0, (item, index) => {
-    const nextContext = new AccumulatedErrorContext();
+    const nextContext = new ErrorContext();
     const isEvaluatedItem = (indices.has(index) || ErrorSchema(stack, nextContext, schemaPath, instancePath, schema.unevaluatedItems, item)) && context.AddIndex(index);
     if (!isEvaluatedItem)
       unevaluatedItems.push(index);
@@ -3003,7 +12682,7 @@ function ErrorUnevaluatedItems(stack, context, schemaPath, instancePath, schema,
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/unevaluatedProperties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/unevaluatedProperties.mjs
 function CheckUnevaluatedProperties(stack, context, schema, value) {
   const keys = context.GetKeys();
   return guard_exports.Every(guard_exports.Entries(value), 0, ([key, prop]) => {
@@ -3014,7 +12693,7 @@ function ErrorUnevaluatedProperties(stack, context, schemaPath, instancePath, sc
   const keys = context.GetKeys();
   const unevaluatedProperties = [];
   const isUnevaluatedProperties = guard_exports.EveryAll(guard_exports.Entries(value), 0, ([key, prop]) => {
-    const nextContext = new AccumulatedErrorContext();
+    const nextContext = new ErrorContext();
     const isEvaluatedProperty = keys.has(key) || ErrorSchema(stack, nextContext, schemaPath, instancePath, schema.unevaluatedProperties, prop) && context.AddKey(key);
     if (!isEvaluatedProperty)
       unevaluatedProperties.push(key);
@@ -3028,12 +12707,19 @@ function ErrorUnevaluatedProperties(stack, context, schemaPath, instancePath, sc
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/hashing/hash.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/hashing/hash.mjs
 var hash_exports = {};
 __export(hash_exports, {
   Hash: () => Hash,
   HashCode: () => HashCode
 });
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/unreachable/unreachable.mjs
+function Unreachable() {
+  throw new Error("Unreachable");
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/hashing/hash.mjs
 function InstanceKeys(value) {
   const propertyKeys = /* @__PURE__ */ new Set();
   let current = value;
@@ -3167,7 +12853,7 @@ function Hash(value) {
   return HashCode(value).toString(16).padStart(16, "0");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/uniqueItems.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/uniqueItems.mjs
 function IsValid5(schema) {
   return !guard_exports.IsEqual(schema.uniqueItems, false);
 }
@@ -3198,7 +12884,7 @@ function ErrorUniqueItems(_stack, context, schemaPath, instancePath, schema, val
   });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/schema.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/schema.mjs
 function CheckSchemaPushStack(stack, context, schema, value) {
   return context.Push() && CheckSchema(stack, context, schema, value) && context.Pop();
 }
@@ -3212,20 +12898,23 @@ function ErrorSchemaPushStack(stack, context, schemaPath, instancePath, schema, 
   return context.Push() && ErrorSchema(stack, context, schemaPath, instancePath, schema, value) && context.Pop();
 }
 function ErrorSchema(stack, context, schemaPath, instancePath, schema, value) {
+  if (context.AtCapacity())
+    return false;
   stack.Push(schema);
   const result = IsSchemaBoolean(schema) ? ErrorSchemaBoolean(stack, context, schemaPath, instancePath, schema, value) : !!(+(!IsType(schema) || ErrorType(stack, context, schemaPath, instancePath, schema, value)) & +(!(guard_exports.IsObject(value) && !guard_exports.IsArray(value)) || !!(+(!IsRequired(schema) || ErrorRequired(stack, context, schemaPath, instancePath, schema, value)) & +(!IsAdditionalProperties(schema) || ErrorAdditionalProperties(stack, context, schemaPath, instancePath, schema, value)) & +(!IsDependencies(schema) || ErrorDependencies(stack, context, schemaPath, instancePath, schema, value)) & +(!IsDependentRequired(schema) || ErrorDependentRequired(stack, context, schemaPath, instancePath, schema, value)) & +(!IsDependentSchemas(schema) || ErrorDependentSchemas(stack, context, schemaPath, instancePath, schema, value)) & +(!IsPatternProperties(schema) || ErrorPatternProperties(stack, context, schemaPath, instancePath, schema, value)) & +(!IsProperties(schema) || ErrorProperties(stack, context, schemaPath, instancePath, schema, value)) & +(!IsPropertyNames(schema) || ErrorPropertyNames(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinProperties(schema) || ErrorMinProperties(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMaxProperties(schema) || ErrorMaxProperties(stack, context, schemaPath, instancePath, schema, value)))) & +(!guard_exports.IsArray(value) || !!(+(!IsAdditionalItems(schema) || ErrorAdditionalItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsContains(schema) || ErrorContains(stack, context, schemaPath, instancePath, schema, value)) & +(!IsItems(schema) || ErrorItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMaxContains(schema) || ErrorMaxContains(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMaxItems(schema) || ErrorMaxItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinContains(schema) || ErrorMinContains(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinItems(schema) || ErrorMinItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsPrefixItems(schema) || ErrorPrefixItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsUniqueItems(schema) || ErrorUniqueItems(stack, context, schemaPath, instancePath, schema, value)))) & +(!guard_exports.IsString(value) || !!(+(!IsMaxLength3(schema) || ErrorMaxLength(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinLength3(schema) || ErrorMinLength(stack, context, schemaPath, instancePath, schema, value)) & +(!IsFormat(schema) || ErrorFormat(stack, context, schemaPath, instancePath, schema, value)) & +(!IsPattern(schema) || ErrorPattern(stack, context, schemaPath, instancePath, schema, value)))) & +(!(guard_exports.IsNumber(value) || guard_exports.IsBigInt(value)) || !!(+(!IsExclusiveMaximum(schema) || ErrorExclusiveMaximum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsExclusiveMinimum(schema) || ErrorExclusiveMinimum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMaximum(schema) || ErrorMaximum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinimum(schema) || ErrorMinimum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMultipleOf2(schema) || ErrorMultipleOf(stack, context, schemaPath, instancePath, schema, value)))) & +(!IsRef(schema) || ErrorRef(stack, context, schemaPath, instancePath, schema, value)) & +(!IsRecursiveRef(schema) || ErrorRecursiveRef(stack, context, schemaPath, instancePath, schema, value)) & +(!IsDynamicRef(schema) || ErrorDynamicRef(stack, context, schemaPath, instancePath, schema, value)) & +(!IsConst(schema) || ErrorConst(stack, context, schemaPath, instancePath, schema, value)) & +(!IsEnum(schema) || ErrorEnum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsIf(schema) || ErrorIf(stack, context, schemaPath, instancePath, schema, value)) & +(!IsNot(schema) || ErrorNot(stack, context, schemaPath, instancePath, schema, value)) & +(!IsAllOf(schema) || ErrorAllOf(stack, context, schemaPath, instancePath, schema, value)) & +(!IsAnyOf(schema) || ErrorAnyOf(stack, context, schemaPath, instancePath, schema, value)) & +(!IsOneOf(schema) || ErrorOneOf(stack, context, schemaPath, instancePath, schema, value)) & +(!IsUnevaluatedItems(schema) || (!guard_exports.IsArray(value) || ErrorUnevaluatedItems(stack, context, schemaPath, instancePath, schema, value))) & +(!IsUnevaluatedProperties(schema) || (!guard_exports.IsObject(value) || ErrorUnevaluatedProperties(stack, context, schemaPath, instancePath, schema, value)))) && (!IsRefine(schema) || ErrorRefine(stack, context, schemaPath, instancePath, schema, value));
   stack.Pop(schema);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/resolve/resolve.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/resolve/resolve.mjs
 var resolve_exports = {};
 __export(resolve_exports, {
+  DefaultBase: () => DefaultBase,
   DynamicRef: () => DynamicRef,
   Ref: () => Ref
 });
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/pointer/pointer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/pointer/pointer.mjs
 var pointer_exports = {};
 __export(pointer_exports, {
   Delete: () => Delete,
@@ -3312,7 +13001,8 @@ function Delete(value, pointer) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/resolve/ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/resolve/resolve.mjs
+var DefaultBase = new URL("https://json-schema.org");
 function MatchId(schema, base, ref) {
   if (schema.$id === ref.hash)
     return schema;
@@ -3367,8 +13057,13 @@ function FromArray2(schema, base, ref) {
     return !guard_exports.IsUndefined(match) ? match : result;
   }, void 0);
 }
+function SkipProperty(key) {
+  return guard_exports.IsEqual(key, "const") || guard_exports.IsEqual(key, "enum");
+}
 function FromObject2(schema, base, ref) {
   return guard_exports.Keys(schema).reduce((result, key) => {
+    if (SkipProperty(key))
+      return result;
     const match = FromValue2(schema[key], base, ref);
     return !guard_exports.IsUndefined(match) ? match : result;
   }, void 0);
@@ -3386,26 +13081,44 @@ function FromValue2(schema, base, ref) {
     return FromObject2(schema, nextBase, ref);
   return void 0;
 }
-function Ref(schema, ref) {
-  const defaultBase = new URL("http://unknown/");
-  const initialBase = IsId(schema) ? new URL(schema.$id, defaultBase.href) : defaultBase;
-  const initialRef = new URL(ref, initialBase.href);
-  return FromValue2(schema, initialBase, initialRef);
+function CanonicalHref(url) {
+  return url.href.split("#")[0];
 }
-function DynamicRef(root, base, dynamicRef, dynamicAnchors) {
-  const fragmentTarget = dynamicRef.$dynamicRef.startsWith("#") ? Ref(base, dynamicRef.$dynamicRef) : Ref(root, dynamicRef.$dynamicRef);
+function RefContext(context, ref) {
+  return guard_exports.HasPropertyKey(context, ref) ? context[ref] : void 0;
+}
+function RefLocal(schema, base, ref) {
+  return FromValue2(schema, base, ref);
+}
+function RefRemote(context, base, ref) {
+  const targetDocumentHref = CanonicalHref(ref);
+  if (guard_exports.IsEqual(targetDocumentHref, CanonicalHref(base)))
+    return void 0;
+  if (!guard_exports.HasPropertyKey(context, targetDocumentHref))
+    return void 0;
+  const remoteSchema = context[targetDocumentHref];
+  const remoteBase = IsSchemaObject(remoteSchema) && IsId(remoteSchema) ? new URL(remoteSchema.$id, DefaultBase.href) : new URL(targetDocumentHref);
+  return FromValue2(remoteSchema, remoteBase, ref);
+}
+function Ref(context, schema, ref) {
+  const initialBase = IsId(schema) ? new URL(schema.$id, DefaultBase.href) : DefaultBase;
+  const initialRef = new URL(ref, initialBase.href);
+  return RefContext(context, ref) ?? RefLocal(schema, initialBase, initialRef) ?? RefRemote(context, initialBase, initialRef);
+}
+function DynamicRef(context, root, base, dynamicRef, dynamicAnchors) {
+  const fragmentTarget = dynamicRef.$dynamicRef.startsWith("#") ? Ref(context, base, dynamicRef.$dynamicRef) : Ref(context, root, dynamicRef.$dynamicRef);
   if (guard_exports.IsUndefined(fragmentTarget))
     return void 0;
   if (!IsSchemaObject(fragmentTarget) || !IsDynamicAnchor(fragmentTarget))
     return fragmentTarget;
-  const fragment = new URL(dynamicRef.$dynamicRef, "http://unknown/").hash;
+  const fragment = new URL(dynamicRef.$dynamicRef, DefaultBase).hash;
   if (fragment.startsWith("#/"))
     return fragmentTarget;
   const anchorTarget = dynamicAnchors.find((anchor) => anchor.$dynamicAnchor === fragmentTarget.$dynamicAnchor);
   return anchorTarget ?? fragmentTarget;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/engine/_stack.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_stack.mjs
 var __classPrivateFieldGet = function(receiver, state, kind, f) {
   if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
   if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
@@ -3414,8 +13127,6 @@ var __classPrivateFieldGet = function(receiver, state, kind, f) {
 var _Stack_instances;
 var _Stack_PushResourceAnchors;
 var _Stack_PopResourceAnchors;
-var _Stack_FromContext;
-var _Stack_FromRef;
 var Stack = class {
   constructor(context, schema) {
     _Stack_instances.add(this);
@@ -3430,7 +13141,7 @@ var Stack = class {
   // Base
   // ----------------------------------------------------------------
   BaseURL() {
-    return this.ids.reduce((result, schema) => new URL(schema.$id, result), new URL("http://unknown"));
+    return this.ids.reduce((result, schema) => new URL(schema.$id, result), resolve_exports.DefaultBase);
   }
   Base() {
     return this.ids[this.ids.length - 1] ?? this.schema;
@@ -3466,21 +13177,25 @@ var Stack = class {
     if (IsDynamicAnchor(schema))
       this.dynamicAnchors.pop();
   }
+  // ----------------------------------------------------------------
+  // Ref
+  // ----------------------------------------------------------------
   Ref(ref) {
-    return __classPrivateFieldGet(this, _Stack_instances, "m", _Stack_FromContext).call(this, ref) ?? __classPrivateFieldGet(this, _Stack_instances, "m", _Stack_FromRef).call(this, ref);
+    const root = this.schema;
+    return !ref.$ref.startsWith("#") ? resolve_exports.Ref(this.context, root, ref.$ref) : resolve_exports.Ref(this.context, this.Base(), ref.$ref);
   }
   // ----------------------------------------------------------------
   // RecursiveRef
   // ----------------------------------------------------------------
   RecursiveRef(recursiveRef) {
-    return IsRecursiveAnchorTrue(this.Base()) ? resolve_exports.Ref(this.recursiveAnchors[0], recursiveRef.$recursiveRef) : resolve_exports.Ref(this.Base(), recursiveRef.$recursiveRef);
+    return IsRecursiveAnchorTrue(this.Base()) ? resolve_exports.Ref(this.context, this.recursiveAnchors[0], recursiveRef.$recursiveRef) : resolve_exports.Ref(this.context, this.Base(), recursiveRef.$recursiveRef);
   }
   // ----------------------------------------------------------------
   // DynamicRef
   // ----------------------------------------------------------------
   DynamicRef(dynamicRef) {
     const root = this.schema;
-    return resolve_exports.DynamicRef(root, this.Base(), dynamicRef, this.dynamicAnchors);
+    return resolve_exports.DynamicRef(this.context, root, this.Base(), dynamicRef, this.dynamicAnchors);
   }
 };
 _Stack_instances = /* @__PURE__ */ new WeakSet(), _Stack_PushResourceAnchors = function _Stack_PushResourceAnchors2(schema, isRoot = true) {
@@ -3503,14 +13218,9 @@ _Stack_instances = /* @__PURE__ */ new WeakSet(), _Stack_PushResourceAnchors = f
     this.dynamicAnchors.pop();
   for (const key of guard_exports.Keys(current))
     __classPrivateFieldGet(this, _Stack_instances, "m", _Stack_PopResourceAnchors2).call(this, current[key], false);
-}, _Stack_FromContext = function _Stack_FromContext2(ref) {
-  return guard_exports.HasPropertyKey(this.context, ref.$ref) ? this.context[ref.$ref] : void 0;
-}, _Stack_FromRef = function _Stack_FromRef2(ref) {
-  const root = this.schema;
-  return !ref.$ref.startsWith("#") ? resolve_exports.Ref(root, ref.$ref) : resolve_exports.Ref(this.Base(), ref.$ref);
 };
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/locale/en_US.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/locale/en_US.mjs
 function en_US(error) {
   switch (error.keyword) {
     case "additionalProperties":
@@ -3581,84 +13291,13 @@ function en_US(error) {
   }
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/locale/_config.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/locale/_config.mjs
 var locale = en_US;
 function Get4() {
   return locale;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/errors.mjs
-function Errors(...args) {
-  const [context, schema, value] = arguments_exports.Match(args, {
-    3: (context2, schema2, value2) => [context2, schema2, value2],
-    2: (schema2, value2) => [{}, schema2, value2]
-  });
-  const settings2 = settings_exports.Get();
-  const locale2 = Get4();
-  const errors = [];
-  const stack = new Stack(context, schema);
-  const errorContext = new ErrorContext((error) => {
-    if (guard_exports.IsGreaterEqualThan(errors.length, settings2.maxErrors))
-      return;
-    return errors.push({ ...error, message: locale2(error) });
-  });
-  const result = ErrorSchema(stack, errorContext, "#", "", schema, value);
-  return [result, errors];
-}
-
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/schema/check.mjs
-function Check(...args) {
-  const [context, schema, value] = arguments_exports.Match(args, {
-    3: (context2, schema2, value2) => [context2, schema2, value2],
-    2: (schema2, value2) => [{}, schema2, value2]
-  });
-  const stack = new Stack(context, schema);
-  const checkContext = new CheckContext();
-  return CheckSchema(stack, checkContext, schema, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/check/check.mjs
-function Check2(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  return Check(context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/errors/errors.mjs
-function Errors2(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  const [_, errors] = Errors(context, type, value);
-  return errors;
-}
-
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/assert/assert.mjs
-var AssertError = class extends Error {
-  constructor(source, value, errors) {
-    super(source);
-    Object.defineProperty(this, "cause", {
-      value: { source, errors, value },
-      writable: false,
-      configurable: false,
-      enumerable: false
-    });
-  }
-};
-function Assert(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  const check = Check2(context, type, value);
-  if (!check)
-    throw new AssertError("Assert", value, Errors2(context, type, value));
-}
-
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/memory/memory.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/memory.mjs
 var memory_exports = {};
 __export(memory_exports, {
   Assign: () => Assign,
@@ -3669,7 +13308,7 @@ __export(memory_exports, {
   Update: () => Update
 });
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/memory/metrics.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/metrics.mjs
 var Metrics = {
   assign: 0,
   create: 0,
@@ -3678,28 +13317,35 @@ var Metrics = {
   update: 0
 };
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/memory/assign.mjs
-function Assign(left, right) {
-  Metrics.assign += 1;
-  return { ...left, ...right };
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/freeze.mjs
+function Freeze(value) {
+  return settings_exports.Get().immutableTypes ? Object.freeze(value) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/memory/clone.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/assign.mjs
+function Assign(left, right) {
+  Metrics.assign += 1;
+  return Freeze({ ...left, ...right });
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/clone.mjs
 function FromClassInstance(value) {
   return value;
 }
-function IsTypeObject(value) {
+function IsSchemaObject2(value) {
   return guard_exports.HasPropertyKey(value, "~kind") || guard_exports.HasPropertyKey(value, "~unsafe");
 }
-function FromTypeObject(value) {
+function FromSchemaObject(value) {
   const result = {};
-  const descriptors4 = Object.getOwnPropertyDescriptors(value);
-  for (const key of Object.keys(descriptors4)) {
+  for (const key of guard_exports.Keys(value)) {
     if (guard_exports.IsUnsafePropertyKey(key))
       continue;
-    const descriptor2 = descriptors4[key];
-    if (guard_exports.HasPropertyKey(descriptor2, "value")) {
-      Object.defineProperty(result, key, { ...descriptor2, value: FromValue3(descriptor2.value) });
+    const descriptor2 = Object.getOwnPropertyDescriptor(value, key);
+    descriptor2.value = FromValue3(descriptor2.value);
+    if (guard_exports.IsEqual(descriptor2.enumerable, true)) {
+      result[key] = descriptor2.value;
+    } else {
+      Object.defineProperty(result, key, descriptor2);
     }
   }
   return result;
@@ -3717,7 +13363,7 @@ function FromPlainObject(value) {
   return result;
 }
 function FromObject3(value) {
-  return guard_exports.IsClassInstance(value) ? FromClassInstance(value) : IsTypeObject(value) ? FromTypeObject(value) : FromPlainObject(value);
+  return guard_exports.IsClassInstance(value) ? FromClassInstance(value) : IsSchemaObject2(value) ? FromSchemaObject(value) : FromPlainObject(value);
 }
 function FromArray3(value) {
   return value.map((element) => FromValue3(element));
@@ -3742,7 +13388,7 @@ function Clone(value) {
   return FromValue3(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/memory/create.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/create.mjs
 function MergeHidden(left, right) {
   for (const key of Object.keys(right)) {
     Object.defineProperty(left, key, {
@@ -3759,27 +13405,26 @@ function Merge(left, right) {
 }
 function Create(hidden, enumerable, options = {}) {
   Metrics.create += 1;
-  const settings2 = settings_exports.Get();
   const withOptions = Merge(enumerable, options);
-  const withHidden = settings2.enumerableKind ? Merge(withOptions, hidden) : MergeHidden(withOptions, hidden);
-  return settings2.immutableTypes ? Object.freeze(withHidden) : withHidden;
+  const withHidden = settings_exports.Get().enumerableKind ? Merge(withOptions, hidden) : MergeHidden(withOptions, hidden);
+  return Freeze(withHidden);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/memory/discard.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/discard.mjs
 function Discard(value, propertyKeys) {
   Metrics.discard += 1;
   const result = {};
-  const descriptors4 = Object.getOwnPropertyDescriptors(Clone(value));
-  const keysToDiscard = new Set(propertyKeys);
-  for (const key of Object.keys(descriptors4)) {
-    if (keysToDiscard.has(key))
+  for (const key of guard_exports.Keys(value)) {
+    if (propertyKeys.includes(key))
       continue;
-    Object.defineProperty(result, key, descriptors4[key]);
+    const descriptor2 = Object.getOwnPropertyDescriptor(value, key);
+    descriptor2.value = Clone(descriptor2.value);
+    Object.defineProperty(result, key, descriptor2);
   }
-  return result;
+  return Freeze(result);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/system/memory/update.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/update.mjs
 function Update(current, hidden, enumerable) {
   Metrics.update += 1;
   const settings2 = settings_exports.Get();
@@ -3800,10 +13445,77 @@ function Update(current, hidden, enumerable) {
       value: enumerable[key]
     });
   }
-  return result;
+  return Freeze(result);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/schema.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/errors.mjs
+function Errors(...args) {
+  const [context, schema, value] = arguments_exports.Match(args, {
+    3: (context2, schema2, value2) => [context2, schema2, value2],
+    2: (schema2, value2) => [{}, schema2, value2]
+  });
+  const stack = new Stack(context, schema);
+  const errorContext = new ErrorContext();
+  const result = ErrorSchema(stack, errorContext, "#", "", schema, value);
+  const errors = errorContext.GetErrors();
+  const locale2 = Get4();
+  const localized = errors.map((error) => ({ ...error, message: locale2(error) }));
+  return [result, localized];
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/check.mjs
+function Check(...args) {
+  const [context, schema, value] = arguments_exports.Match(args, {
+    3: (context2, schema2, value2) => [context2, schema2, value2],
+    2: (schema2, value2) => [{}, schema2, value2]
+  });
+  const stack = new Stack(context, schema);
+  const checkContext = new CheckContext();
+  return CheckSchema(stack, checkContext, schema, value);
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/check/check.mjs
+function Check2(...args) {
+  const [context, type, value] = arguments_exports.Match(args, {
+    3: (context2, type2, value2) => [context2, type2, value2],
+    2: (type2, value2) => [{}, type2, value2]
+  });
+  return Check(context, type, value);
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/errors/errors.mjs
+function Errors2(...args) {
+  const [context, type, value] = arguments_exports.Match(args, {
+    3: (context2, type2, value2) => [context2, type2, value2],
+    2: (type2, value2) => [{}, type2, value2]
+  });
+  const [_, errors] = Errors(context, type, value);
+  return errors;
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/assert/assert.mjs
+var AssertError = class extends Error {
+  constructor(source, value, errors) {
+    super(source);
+    Object.defineProperty(this, "cause", {
+      value: { source, errors, value },
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  }
+};
+function Assert(...args) {
+  const [context, type, value] = arguments_exports.Match(args, {
+    3: (context2, type2, value2) => [context2, type2, value2],
+    2: (type2, value2) => [{}, type2, value2]
+  });
+  const check = Check2(context, type, value);
+  if (!check)
+    throw new AssertError("Assert", value, Errors2(context, type, value));
+}
+
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/schema.mjs
 function IsKind(value, kind) {
   return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "~kind") && guard_exports.IsEqual(value["~kind"], kind);
 }
@@ -3811,7 +13523,7 @@ function IsSchema2(value) {
   return guard_exports.IsObject(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/deferred.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/deferred.mjs
 function Deferred(action, parameters, options) {
   return memory_exports.Create({ "~kind": "Deferred" }, { type: "deferred", action, parameters, options }, {});
 }
@@ -3819,7 +13531,7 @@ function IsDeferred(value) {
   return IsKind(value, "Deferred");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly/instantiate_add.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly/instantiate_add.mjs
 function AddReadonlyOperation(type) {
   return memory_exports.Update(type, { "~readonly": true }, {});
 }
@@ -3832,7 +13544,7 @@ function AddReadonlyInstantiate(context, state, type, options) {
   return AddReadonlyAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/optional/instantiate_add.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/optional/instantiate_add.mjs
 function AddOptionalOperation(type) {
   return memory_exports.Update(type, { "~optional": true }, {});
 }
@@ -3845,7 +13557,7 @@ function AddOptionalInstantiate(context, state, type, options) {
   return AddOptionalAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/array.mjs
 function _Array_(items, options) {
   return memory_exports.Create({ "~kind": "Array" }, { type: "array", items }, options);
 }
@@ -3856,7 +13568,7 @@ function ArrayOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "items"]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/constructor.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/constructor.mjs
 function Constructor(parameters, instanceType, options = {}) {
   return memory_exports.Create({ "~kind": "Constructor" }, { type: "constructor", parameters, instanceType }, options);
 }
@@ -3867,7 +13579,7 @@ function ConstructorOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "parameters", "instanceType"]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/function.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/function.mjs
 function _Function_(parameters, returnType, options = {}) {
   return memory_exports.Create({ ["~kind"]: "Function" }, { type: "function", parameters, returnType }, options);
 }
@@ -3878,7 +13590,7 @@ function FunctionOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "parameters", "returnType"]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/ref.mjs
 function Ref2(ref, options) {
   return memory_exports.Create({ ["~kind"]: "Ref" }, { $ref: ref }, options);
 }
@@ -3886,7 +13598,7 @@ function IsRef2(value) {
   return IsKind(value, "Ref");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/generic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/generic.mjs
 function Generic(parameters, expression) {
   return memory_exports.Create({ "~kind": "Generic" }, { type: "generic", parameters, expression });
 }
@@ -3894,7 +13606,7 @@ function IsGeneric(value) {
   return IsKind(value, "Generic");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/any.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/any.mjs
 function Any(options) {
   return memory_exports.Create({ ["~kind"]: "Any" }, {}, options);
 }
@@ -3902,7 +13614,7 @@ function IsAny(value) {
   return IsKind(value, "Any");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/never.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/never.mjs
 var NeverPattern = "(?!)";
 function Never(options) {
   return memory_exports.Create({ "~kind": "Never" }, { not: {} }, options);
@@ -3911,7 +13623,7 @@ function IsNever(value) {
   return IsKind(value, "Never");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/_add_optional.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_add_optional.mjs
 function AddOptionalDeferred(type, options = {}) {
   return Deferred("AddOptional", [type], options);
 }
@@ -3919,7 +13631,7 @@ function AddOptional(type, options = {}) {
   return AddOptionalAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/_optional.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_optional.mjs
 function Optional(type) {
   return AddOptional(type);
 }
@@ -3927,7 +13639,7 @@ function IsOptional(value) {
   return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~optional");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/properties.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/properties.mjs
 function RequiredArray(properties) {
   return guard_exports.Keys(properties).filter((key) => !IsOptional(properties[key]));
 }
@@ -3938,7 +13650,7 @@ function PropertyValues(properties) {
   return guard_exports.Values(properties);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/object.mjs
 function _Object_(properties, options = {}) {
   const requiredKeys = RequiredArray(properties);
   const required = requiredKeys.length > 0 ? { required: requiredKeys } : {};
@@ -3951,7 +13663,7 @@ function ObjectOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "properties", "required"]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/unknown.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/unknown.mjs
 function Unknown(options) {
   return memory_exports.Create({ ["~kind"]: "Unknown" }, {}, options);
 }
@@ -3959,7 +13671,7 @@ function IsUnknown(value) {
   return IsKind(value, "Unknown");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/cyclic.mjs
 function Cyclic($defs, $ref, options) {
   const defs = guard_exports.Keys($defs).reduce((result, key) => {
     return { ...result, [key]: memory_exports.Update($defs[key], {}, { $id: key }) };
@@ -3970,7 +13682,7 @@ function IsCyclic(value) {
   return IsKind(value, "Cyclic");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/unsafe.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/unsafe.mjs
 function Unsafe(schema) {
   return memory_exports.Update(schema, { ["~unsafe"]: null }, {});
 }
@@ -3978,7 +13690,7 @@ function IsUnsafe(value) {
   return guard_exports.IsObjectNotArray(value) && guard_exports.HasPropertyKey(value, "~unsafe") && guard_exports.IsNull(value["~unsafe"]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/infer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/infer.mjs
 function Infer(...args) {
   const [name, extends_] = arguments_exports.Match(args, {
     2: (name2, extends_2) => [name2, extends_2, extends_2],
@@ -3990,7 +13702,7 @@ function IsInfer(value) {
   return IsKind(value, "Infer");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/dependent.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/dependent.mjs
 function Dependent(if_, then_, else_, options = {}) {
   return memory_exports.Create({ "~kind": "Dependent" }, { if: if_, then: then_, else: else_ }, options);
 }
@@ -4001,7 +13713,7 @@ function DependentOptions(type) {
   return memory_exports.Discard(type, ["~kind", "if", "then", "else"]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/enum/typescript_enum_to_enum_values.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/enum/typescript_enum_to_enum_values.mjs
 function IsTypeScriptEnumLike(value) {
   return guard_exports.IsObjectNotArray(value);
 }
@@ -4010,7 +13722,7 @@ function TypeScriptEnumToEnumValues(type) {
   return keys.reduce((result, key) => [...result, type[key]], []);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/enum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/enum.mjs
 function IsEnumValue(value) {
   return guard_exports.IsString(value) || guard_exports.IsNumber(value);
 }
@@ -4022,7 +13734,7 @@ function IsEnum2(value) {
   return IsKind(value, "Enum");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/intersect.mjs
 function Intersect(types, options = {}) {
   return memory_exports.Create({ "~kind": "Intersect" }, { allOf: types }, options);
 }
@@ -4033,17 +13745,17 @@ function IntersectOptions(type) {
   return memory_exports.Discard(type, ["~kind", "allOf"]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/_codec.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_codec.mjs
 var EncodeBuilder = class {
-  constructor(type, decode) {
+  constructor(type, decode2) {
     this.type = type;
-    this.decode = decode;
+    this.decode = decode2;
   }
   Encode(callback) {
     const type = this.type;
-    const decode = IsCodec(type) ? (value) => this.decode(type["~codec"].decode(value)) : this.decode;
-    const encode = IsCodec(type) ? (value) => type["~codec"].encode(callback(value)) : callback;
-    const codec = { decode, encode };
+    const decode2 = IsCodec(type) ? (value) => this.decode(type["~codec"].decode(value)) : this.decode;
+    const encode2 = IsCodec(type) ? (value) => type["~codec"].encode(callback(value)) : callback;
+    const codec = { decode: decode2, encode: encode2 };
     return memory_exports.Update(this.type, { "~codec": codec }, {});
   }
 };
@@ -4063,7 +13775,7 @@ function Decode2(type, callback) {
     throw Error("Encode not implemented");
   });
 }
-function Encode(type, callback) {
+function Encode2(type, callback) {
   return Codec(type).Decode(() => {
     throw Error("Decode not implemented");
   }).Encode(callback);
@@ -4072,7 +13784,7 @@ function IsCodec(value) {
   return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~codec") && guard_exports.IsObject(value["~codec"]) && guard_exports.HasPropertyKey(value["~codec"], "encode") && guard_exports.HasPropertyKey(value["~codec"], "decode");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/_immutable.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_immutable.mjs
 function Immutable(type) {
   return AddImmutable(type);
 }
@@ -4080,7 +13792,7 @@ function IsImmutable(value) {
   return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~immutable");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/_add_readonly.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_add_readonly.mjs
 function AddReadonlyDeferred(type, options = {}) {
   return Deferred("AddReadonly", [type], options);
 }
@@ -4088,7 +13800,7 @@ function AddReadonly(type, options = {}) {
   return AddReadonlyAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/_readonly.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_readonly.mjs
 function Readonly(type) {
   return AddReadonly(type);
 }
@@ -4096,7 +13808,7 @@ function IsReadonly(value) {
   return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~readonly");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/_refine.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_refine.mjs
 function RefineAdd(type, refinement) {
   const refinements = IsRefine2(type) ? [...type["~refine"], refinement] : [refinement];
   return memory_exports.Update(type, { "~refine": refinements }, {});
@@ -4115,7 +13827,7 @@ function IsRefine2(value) {
   return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~refine") && guard_exports.IsArray(value["~refine"]) && guard_exports.Every(value["~refine"], 0, (value2) => IsRefinement(value2));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/bigint.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/bigint.mjs
 var BigIntPattern = "-?(?:0|[1-9][0-9]*)n";
 function BigInt2(options) {
   return memory_exports.Create({ "~kind": "BigInt" }, { type: "bigint" }, options);
@@ -4124,7 +13836,7 @@ function IsBigInt2(value) {
   return IsKind(value, "BigInt");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/boolean.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/boolean.mjs
 function Boolean2(options) {
   return memory_exports.Create({ "~kind": "Boolean" }, { type: "boolean" }, options);
 }
@@ -4132,7 +13844,7 @@ function IsBoolean3(value) {
   return IsKind(value, "Boolean");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/identifier.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/identifier.mjs
 function Identifier(name) {
   return memory_exports.Create({ "~kind": "Identifier" }, { name });
 }
@@ -4140,7 +13852,7 @@ function IsIdentifier(value) {
   return IsKind(value, "Identifier");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/integer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/integer.mjs
 var IntegerPattern = "-?(?:0|[1-9][0-9]*)";
 function Integer(options) {
   return memory_exports.Create({ "~kind": "Integer" }, { type: "integer" }, options);
@@ -4149,7 +13861,7 @@ function IsInteger2(value) {
   return IsKind(value, "Integer");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/literal.mjs
 var InvalidLiteralValue = class extends Error {
   constructor(value) {
     super(`Invalid Literal value`);
@@ -4188,7 +13900,7 @@ function IsLiteral(value) {
   return IsKind(value, "Literal");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/null.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/null.mjs
 function Null(options) {
   return memory_exports.Create({ "~kind": "Null" }, { type: "null" }, options);
 }
@@ -4196,7 +13908,7 @@ function IsNull2(value) {
   return IsKind(value, "Null");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/number.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/number.mjs
 var NumberPattern = "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?";
 function Number2(options) {
   return memory_exports.Create({ "~kind": "Number" }, { type: "number" }, options);
@@ -4205,7 +13917,7 @@ function IsNumber3(value) {
   return IsKind(value, "Number");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/symbol.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/symbol.mjs
 function Symbol2(options) {
   return memory_exports.Create({ "~kind": "Symbol" }, { type: "symbol" }, options);
 }
@@ -4213,7 +13925,7 @@ function IsSymbol2(value) {
   return IsKind(value, "Symbol");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/parameter.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/parameter.mjs
 function Parameter(...args) {
   const [name, extends_, equals] = arguments_exports.Match(args, {
     3: (name2, extends_2, equals2) => [name2, extends_2, equals2],
@@ -4226,7 +13938,7 @@ function IsParameter(value) {
   return IsKind(value, "Parameter");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/string.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/string.mjs
 var StringPattern = ".*";
 function String2(options) {
   return memory_exports.Create({ "~kind": "String" }, { type: "string" }, options);
@@ -4235,7 +13947,7 @@ function IsString3(value) {
   return IsKind(value, "String");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/union.mjs
 function Union(anyOf, options = {}) {
   return memory_exports.Create({ "~kind": "Union" }, { anyOf }, options);
 }
@@ -4246,14 +13958,14 @@ function UnionOptions(type) {
   return memory_exports.Discard(type, ["~kind", "anyOf"]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/patterns/pattern.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/patterns/pattern.mjs
 function ParsePatternIntoTypes(pattern) {
   const parsed = Pattern(pattern);
   const result = guard_exports.IsEqual(parsed.length, 2) ? parsed[0] : [];
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/template_literal/is_finite.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/is_finite.mjs
 function FromLiteral(_value) {
   return true;
 }
@@ -4272,12 +13984,12 @@ function IsTemplateLiteralFinite(types) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/template_literal/create.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/create.mjs
 function TemplateLiteralCreate(pattern) {
   return memory_exports.Create({ ["~kind"]: "TemplateLiteral" }, { type: "string", pattern }, {});
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/template_literal/decode.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/decode.mjs
 function FromLiteralPush(variants, value, result = []) {
   return guard_exports.ShiftLeft(variants, (left, right) => FromLiteralPush(right, value, [...result, `${left}${value}`]), () => result);
 }
@@ -4320,24 +14032,24 @@ function TemplateLiteralDecode(pattern) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/record_create.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/record_create.mjs
 function CreateRecord(key, value) {
   const type = "object";
   const patternProperties = { [key]: value };
   return memory_exports.Create({ ["~kind"]: "Record" }, { type, patternProperties });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_any.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_any.mjs
 function FromAnyKey(value) {
   return CreateRecord(StringKey, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_boolean.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_boolean.mjs
 function FromBooleanKey(value) {
   return _Object_({ true: value, false: value });
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/tuple.mjs
 function Tuple(types, options = {}) {
   const [items, minItems, additionalItems] = [types, types.length, false];
   return memory_exports.Create({ ["~kind"]: "Tuple" }, { type: "array", additionalItems, items, minItems }, options);
@@ -4349,7 +14061,7 @@ function TupleOptions(type) {
   return memory_exports.Discard(type, ["~kind", "type", "items", "minItems", "additionalItems"]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly/instantiate_remove.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly/instantiate_remove.mjs
 function RemoveReadonlyOperation(type) {
   return memory_exports.Discard(type, ["~readonly"]);
 }
@@ -4362,7 +14074,7 @@ function RemoveReadonlyInstantiate(context, state, type, options) {
   return RemoveReadonlyAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/_remove_readonly.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_remove_readonly.mjs
 function RemoveReadonlyDeferred(type, options = {}) {
   return Deferred("RemoveReadonly", [type], options);
 }
@@ -4370,7 +14082,7 @@ function RemoveReadonly(type, options = {}) {
   return RemoveReadonlyAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/optional/instantiate_remove.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/optional/instantiate_remove.mjs
 function RemoveOptionalOperation(type) {
   return memory_exports.Discard(type, ["~optional"]);
 }
@@ -4383,7 +14095,7 @@ function RemoveOptionalInstantiate(context, state, type, options) {
   return RemoveOptionalAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/_remove_optional.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_remove_optional.mjs
 function RemoveOptionalDeferred(type, options = {}) {
   return Deferred("RemoveOptional", [type], options);
 }
@@ -4391,7 +14103,7 @@ function RemoveOptional(type, options = {}) {
   return RemoveOptionalAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/tuple/to_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/tuple/to_object.mjs
 function TupleElementsToProperties(types) {
   const result = types.reduceRight((result2, right, index) => {
     return { [index]: right, ...result2 };
@@ -4404,7 +14116,10 @@ function TupleToObject(type) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/evaluate/composite.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/composite.mjs
+function CanComposite(type) {
+  return IsObject2(type) || IsTuple(type);
+}
 function IsReadonlyProperty(left, right) {
   return IsReadonly(left) ? IsReadonly(right) ? true : false : false;
 }
@@ -4422,49 +14137,52 @@ function CompositePropertyKey(left, right, key) {
   return key in left ? key in right ? CompositeProperty(left[key], right[key]) : left[key] : key in right ? right[key] : Never();
 }
 function CompositeProperties(left, right) {
-  const keys = /* @__PURE__ */ new Set([...guard_exports.Keys(right), ...guard_exports.Keys(left)]);
-  return [...keys].reduce((result, key) => {
-    return { ...result, [key]: CompositePropertyKey(left, right, key) };
+  const keys = /* @__PURE__ */ new Set([...guard_exports.Keys(left), ...guard_exports.Keys(right)]);
+  const result = [...keys].reduce((result2, key) => {
+    return { ...result2, [key]: CompositePropertyKey(left, right, key) };
   }, {});
+  return result;
 }
 function GetProperties(type) {
-  const result = IsObject2(type) ? type.properties : IsTuple(type) ? TupleElementsToProperties(type.items) : Unreachable();
+  const result = IsObject2(type) ? type.properties : IsTuple(type) ? TupleElementsToProperties(type.items) : {};
   return result;
 }
 function Composite(left, right) {
   const leftProperties = GetProperties(left);
   const rightProperties = GetProperties(right);
   const properties = CompositeProperties(leftProperties, rightProperties);
-  return _Object_(properties);
+  const result = _Object_(properties);
+  return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/evaluate/narrow.mjs
-function Narrow(left, right) {
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/narrow.mjs
+function NarrowCompareRule(left, right) {
   const result = Compare(left, right);
-  return guard_exports.IsEqual(result, ResultLeftInside) ? left : guard_exports.IsEqual(result, ResultRightInside) ? right : guard_exports.IsEqual(result, ResultEqual) ? right : Never();
+  return guard_exports.IsEqual(result, CompareResultLeftInside) ? left : guard_exports.IsEqual(result, CompareResultRightInside) ? right : guard_exports.IsEqual(result, CompareResultEqual) ? right : Never();
+}
+function NarrowCompositeRule(left, right) {
+  const canCompositeLeft = CanComposite(left);
+  const canCompositeRight = CanComposite(right);
+  return canCompositeLeft && canCompositeRight ? Composite(left, right) : canCompositeLeft && !canCompositeRight ? left : !canCompositeLeft && canCompositeRight ? right : NarrowCompareRule(left, right);
+}
+function Narrow(left, right) {
+  return IsNever(left) ? left : IsAny(left) ? left : IsUnknown(left) ? right : IsNever(right) ? right : IsAny(right) ? right : IsUnknown(right) ? left : NarrowCompositeRule(left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/evaluate/distribute.mjs
-function IsObjectLike(type) {
-  return IsObject2(type) || IsTuple(type);
-}
-function IsUnionOperand(left, right) {
-  const isUnionLeft = IsUnion(left);
-  const isUnionRight = IsUnion(right);
-  const result = isUnionLeft || isUnionRight;
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/distribute.mjs
+function ShouldEvaluate(left, right) {
+  const result = IsUnion(left) || IsUnion(right);
   return result;
 }
 function DistributeOperation(left, right) {
   const evaluatedLeft = EvaluateType(left);
   const evaluatedRight = EvaluateType(right);
-  const isUnionOperand = IsUnionOperand(evaluatedLeft, evaluatedRight);
-  const isObjectLeft = IsObjectLike(evaluatedLeft);
-  const IsObjectRight = IsObjectLike(evaluatedRight);
-  const result = isUnionOperand ? EvaluateIntersect([evaluatedLeft, evaluatedRight]) : isObjectLeft && IsObjectRight ? Composite(evaluatedLeft, evaluatedRight) : isObjectLeft && !IsObjectRight ? evaluatedLeft : !isObjectLeft && IsObjectRight ? evaluatedRight : Narrow(evaluatedLeft, evaluatedRight);
+  const shouldEvaluate = ShouldEvaluate(evaluatedLeft, evaluatedRight);
+  const result = shouldEvaluate ? EvaluateIntersect([evaluatedLeft, evaluatedRight]) : Narrow(evaluatedLeft, evaluatedRight);
   return result;
 }
 function DistributeType(type, types, result = []) {
-  return guard_exports.ShiftLeft(types, (left, right) => DistributeType(type, right, [...result, DistributeOperation(type, left)]), () => guard_exports.IsEqual(result.length, 0) ? [type] : result);
+  return guard_exports.ShiftLeft(types, (left, right) => DistributeType(type, right, [...result, DistributeOperation(left, type)]), () => guard_exports.IsEqual(result.length, 0) ? [type] : result);
 }
 function DistributeUnion(types, distribution, result = []) {
   return guard_exports.ShiftLeft(types, (left, right) => DistributeUnion(right, distribution, [...result, ...Distribute([left], distribution)]), () => result);
@@ -4473,16 +14191,14 @@ function Distribute(types, result = []) {
   return guard_exports.ShiftLeft(types, (left, right) => IsUnion(left) ? Distribute(right, DistributeUnion(left.anyOf, result)) : Distribute(right, DistributeType(left, result)), () => result);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/exclude/operation.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/exclude/operation.mjs
 function ExcludeType(left, right) {
   const check = Extends({}, left, right);
   const result = result_exports.IsExtendsTrueLike(check) ? [] : [left];
   return result;
 }
-function ExcludeUnion(types, right) {
-  return types.reduce((result, head) => {
-    return [...result, ...ExcludeType(head, right)];
-  }, []);
+function ExcludeUnion(left, right, result = []) {
+  return guard_exports.ShiftLeft(left, (head, tail) => ExcludeUnion(tail, right, [...result, ...ExcludeType(head, right)]), () => result);
 }
 function ExcludeOperation(left, right) {
   const evaluated = EvaluateType(left);
@@ -4492,21 +14208,20 @@ function ExcludeOperation(left, right) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/evaluate/evaluate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/evaluate.mjs
 function EvaluateDependent(if_, then_, else_) {
-  const intersect = Intersect([if_, then_]);
+  const intersected = EvaluateIntersect([if_, then_]);
   const excluded = ExcludeOperation(else_, if_);
-  const result = EvaluateUnion([intersect, excluded]);
+  const result = EvaluateUnion([intersected, excluded]);
   return result;
 }
-function EvaluateEnum(values) {
-  const result = values.map((value) => Literal(value));
-  return EvaluateUnion(result);
+function EvaluateEnum(values, result = []) {
+  return guard_exports.ShiftLeft(values, (left, right) => EvaluateEnum(right, [...result, Literal(left)]), () => EvaluateUnion(result));
 }
 function EvaluateIntersect(types) {
   const distribution = Distribute(types);
   const broadend = Broaden(distribution);
-  const result = EvaluateUnionFast(broadend);
+  const result = EvaluateUnion(broadend);
   return result;
 }
 function EvaluateTemplateLiteral(pattern) {
@@ -4520,50 +14235,51 @@ function EvaluateUnion(types) {
   return result;
 }
 function EvaluateType(type) {
-  return IsDependent(type) ? EvaluateDependent(type.if, type.then, type.else) : IsEnum2(type) ? EvaluateEnum(type.enum) : IsIntersect(type) ? EvaluateIntersect(type.allOf) : IsTemplateLiteral(type) ? EvaluateTemplateLiteral(type.pattern) : IsUnion(type) ? EvaluateUnion(type.anyOf) : type;
+  const result = IsDependent(type) ? EvaluateDependent(type.if, type.then, type.else) : IsEnum2(type) ? EvaluateEnum(type.enum) : IsIntersect(type) ? EvaluateIntersect(type.allOf) : IsTemplateLiteral(type) ? EvaluateTemplateLiteral(type.pattern) : IsUnion(type) ? EvaluateUnion(type.anyOf) : type;
+  return result;
 }
 function EvaluateUnionFast(types) {
   const result = guard_exports.IsEqual(types.length, 1) ? types[0] : guard_exports.IsEqual(types.length, 0) ? Never() : Union(types);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_enum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_enum.mjs
 function FromEnumKey(values, value) {
   const unionKey = EvaluateEnum(values);
   const result = FromKey(unionKey, value);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_integer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_integer.mjs
 function FromIntegerKey(_key, value) {
   const result = CreateRecord(IntegerKey, value);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_intersect.mjs
 function FromIntersectKey(types, value) {
   const evaluatedKey = EvaluateIntersect(types);
   const result = FromKey(evaluatedKey, value);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_literal.mjs
 function FromLiteralKey(key, value) {
   return guard_exports.IsString(key) || guard_exports.IsNumber(key) ? _Object_({ [key]: value }) : guard_exports.IsEqual(key, false) ? _Object_({ false: value }) : guard_exports.IsEqual(key, true) ? _Object_({ true: value }) : _Object_({});
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_number.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_number.mjs
 function FromNumberKey(_key, value) {
   const result = CreateRecord(NumberKey, value);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_string.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_string.mjs
 function FromStringKey(key, value) {
   return guard_exports.HasPropertyKey(key, "pattern") && (guard_exports.IsString(key.pattern) || key.pattern instanceof RegExp) ? CreateRecord(key.pattern.toString(), value) : CreateRecord(StringKey, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_template_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_template_literal.mjs
 function FromTemplateKey(pattern, value) {
   const types = ParsePatternIntoTypes(pattern);
   const finite = IsTemplateLiteralFinite(types);
@@ -4571,18 +14287,16 @@ function FromTemplateKey(pattern, value) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/evaluate/flatten.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/flatten.mjs
 function FlattenType(type) {
   const result = IsUnion(type) ? Flatten(type.anyOf) : [type];
   return result;
 }
-function Flatten(types) {
-  return types.reduce((result, type) => {
-    return [...result, ...FlattenType(type)];
-  }, []);
+function Flatten(types, result = []) {
+  return guard_exports.ShiftLeft(types, (left, right) => Flatten(right, [...result, ...FlattenType(left)]), () => result);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_union.mjs
 function StringOrNumberCheck(types) {
   return types.some((type) => IsString3(type) || IsNumber3(type) || IsInteger2(type));
 }
@@ -4601,17 +14315,17 @@ function CreateObject(types, value) {
 }
 function FromUnionKey(types, value) {
   const flattened = Flatten(types);
-  const record2 = TryBuildRecord(flattened, value);
-  return IsSchema2(record2) ? record2 : CreateObject(flattened, value);
+  const record3 = TryBuildRecord(flattened, value);
+  return IsSchema2(record3) ? record3 : CreateObject(flattened, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/from_key.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key.mjs
 function FromKey(key, value) {
   const result = IsAny(key) ? FromAnyKey(value) : IsBoolean3(key) ? FromBooleanKey(value) : IsEnum2(key) ? FromEnumKey(key.enum, value) : IsInteger2(key) ? FromIntegerKey(key, value) : IsIntersect(key) ? FromIntersectKey(key.allOf, value) : IsLiteral(key) ? FromLiteralKey(key.const, value) : IsNumber3(key) ? FromNumberKey(key, value) : IsUnion(key) ? FromUnionKey(key.anyOf, value) : IsString3(key) ? FromStringKey(key, value) : IsTemplateLiteral(key) ? FromTemplateKey(key.pattern, value) : _Object_({});
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/record/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/instantiate.mjs
 function RecordAction(key, value, options) {
   const result = CanInstantiate([key]) ? memory_exports.Update(FromKey(key, value), {}, options) : RecordDeferred(key, value, options);
   return result;
@@ -4622,7 +14336,7 @@ function RecordInstantiate(context, state, key, value, options) {
   return RecordAction(instantiatedKey, instantiatedValue, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/record.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/record.mjs
 var IntegerKey = `^${IntegerPattern}$`;
 var NumberKey = `^${NumberPattern}$`;
 var StringKey = `^${StringPattern}$`;
@@ -4654,7 +14368,7 @@ function IsRecord(value) {
   return IsKind(value, "Record");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/rest.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/rest.mjs
 function Rest(type) {
   return memory_exports.Create({ "~kind": "Rest" }, { type: "rest", items: type }, {});
 }
@@ -4662,7 +14376,7 @@ function IsRest(value) {
   return IsKind(value, "Rest");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/this.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/this.mjs
 function This(options) {
   return memory_exports.Create({ ["~kind"]: "This" }, { $ref: "#" }, options);
 }
@@ -4670,7 +14384,7 @@ function IsThis(value) {
   return IsKind(value, "This");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/undefined.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/undefined.mjs
 function Undefined(options) {
   return memory_exports.Create({ "~kind": "Undefined" }, { type: "undefined" }, options);
 }
@@ -4678,7 +14392,7 @@ function IsUndefined2(value) {
   return IsKind(value, "Undefined");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/void.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/void.mjs
 function Void(options) {
   return memory_exports.Create({ "~kind": "Void" }, { type: "void" }, options);
 }
@@ -4686,22 +14400,19 @@ function IsVoid(value) {
   return IsKind(value, "Void");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/mapping.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/mapping.mjs
 function IntrinsicOrCall(ref, parameters) {
   return guard_exports.IsEqual(ref, "Array") ? _Array_(parameters[0]) : guard_exports.IsEqual(ref, "Capitalize") ? CapitalizeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "ConstructorParameters") ? ConstructorParametersDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Evaluate") ? EvaluateDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Exclude") ? ExcludeDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Extract") ? ExtractDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Index") ? IndexDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "InstanceType") ? InstanceTypeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Lowercase") ? LowercaseDeferred(parameters[0]) : guard_exports.IsEqual(ref, "NonNullable") ? NonNullableDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Omit") ? OmitDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Parameters") ? ParametersDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Partial") ? PartialDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Pick") ? PickDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Readonly") ? ReadonlyObjectDeferred(parameters[0]) : guard_exports.IsEqual(ref, "KeyOf") ? KeyOfDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Record") ? RecordDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Required") ? RequiredDeferred(parameters[0]) : guard_exports.IsEqual(ref, "ReturnType") ? ReturnTypeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Uncapitalize") ? UncapitalizeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Uppercase") ? UppercaseDeferred(parameters[0]) : CallConstruct(Ref2(ref), parameters);
 }
 function Unreachable2() {
   throw Error("Unreachable");
 }
-var DelimitedDecode = (input, result = []) => {
-  return input.reduce((result2, left) => {
-    return guard_exports.IsArray(left) && guard_exports.IsEqual(left.length, 2) ? [...result2, left[0]] : [...result2, left];
-  }, []);
-};
-var Delimited = (input) => {
-  const [left, right] = input;
-  return DelimitedDecode([...left, ...right]);
-};
+function DelimitedDecode(input, result = []) {
+  return guard_exports.ShiftLeft(input, (left, right) => DelimitedDecode(right, [...result, left[1]]), () => result);
+}
+function Delimited(input) {
+  return guard_exports.IsEqual(input.length, 3) ? [input[0], ...DelimitedDecode(input[1])] : [];
+}
 function GenericParameterExtendsEqualsMapping(input) {
   return Parameter(input[0], input[2], input[4]);
 }
@@ -4932,17 +14643,11 @@ function _Object_Mapping(input) {
 function ElementNamedMapping(input) {
   return guard_exports.IsEqual(input.length, 5) ? AddReadonlyDeferred(AddOptionalDeferred(input[4])) : guard_exports.IsEqual(input.length, 3) ? input[2] : guard_exports.IsEqual(input.length, 4) ? guard_exports.IsEqual(input[2], "readonly") ? AddReadonlyDeferred(input[3]) : AddOptionalDeferred(input[3]) : Unreachable2();
 }
-function ElementReadonlyOptionalMapping(input) {
-  return AddReadonlyDeferred(AddOptionalDeferred(input[1]));
-}
-function ElementReadonlyMapping(input) {
-  return AddReadonlyDeferred(input[1]);
-}
-function ElementOptionalMapping(input) {
-  return AddOptionalDeferred(input[0]);
-}
 function ElementBaseMapping(input) {
-  return input;
+  if (!guard_exports.IsArray(input) || !guard_exports.IsEqual(input.length, 3))
+    return input;
+  const [isReadonly, type, isOptional] = input;
+  return isReadonly && isOptional ? AddReadonlyDeferred(AddOptionalDeferred(type)) : isReadonly && !isOptional ? AddReadonlyDeferred(type) : !isReadonly && isOptional ? AddOptionalDeferred(type) : type;
 }
 function ElementMapping(input) {
   return guard_exports.IsEqual(input.length, 2) ? Rest(input[1]) : guard_exports.IsEqual(input.length, 1) ? input[0] : Unreachable2();
@@ -5110,21 +14815,20 @@ function ModuleDeclarationDelimiterMapping(input) {
   return input;
 }
 function ModuleDeclarationListMapping(input) {
-  return PropertiesReduce(Delimited(input));
+  return Delimited(input);
 }
 function ModuleDeclarationMapping(input) {
   return input[1];
 }
 function ModuleMapping(input) {
-  const moduleDeclaration = input[0];
-  const moduleDeclarationList = input[1];
-  return ModuleDeferred(memory_exports.Assign(moduleDeclaration, moduleDeclarationList[0]));
+  const [moduleDeclaration, moduleDeclarationList] = [input[0], input[1]];
+  return ModuleDeferred(memory_exports.Assign(moduleDeclaration, PropertiesReduce(moduleDeclarationList)[0]));
 }
 function ScriptMapping(input) {
   return input;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/internal/match.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/match.mjs
 function IsMatch(value) {
   return IsEqual(value.length, 2);
 }
@@ -5132,7 +14836,7 @@ function Match3(input, ok, fail) {
   return IsMatch(input) ? ok(input[0], input[1]) : fail();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/internal/take.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/take.mjs
 function TakeVariant(variant2, input) {
   return IsEqual(input.indexOf(variant2), 0) ? [variant2, input.slice(variant2.length)] : [];
 }
@@ -5145,7 +14849,7 @@ function Take(variants, input) {
   return [];
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/internal/char.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/char.mjs
 function Range(start, end) {
   return Array.from({ length: end - start + 1 }, (_, i) => String.fromCharCode(start + i));
 }
@@ -5165,7 +14869,7 @@ var Dot = ".";
 var DollarSign = "$";
 var Hyphen = "-";
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/internal/trim.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/trim.mjs
 var LineComment = "//";
 var OpenComment = "/*";
 var CloseComment = "*/";
@@ -5191,12 +14895,12 @@ function Trim(input) {
   return trimmed.startsWith(OpenComment) ? Trim(DiscardMultilineComment(trimmed.slice(2))) : trimmed.startsWith(LineComment) ? Trim(DiscardLineComment(trimmed.slice(2))) : trimmed;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/internal/optional.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/optional.mjs
 function Optional2(value, input) {
   return Match3(Take([value], input), (Optional4, Rest2) => [Optional4, Rest2], () => ["", input]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/internal/many.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/many.mjs
 function IsDiscard(discard, input) {
   return discard.includes(input);
 }
@@ -5204,7 +14908,7 @@ function Many(allowed, discard, input, result = "") {
   return Match3(Take(allowed, input), (Char, Rest2) => IsDiscard(discard, Char) ? Many(allowed, discard, Rest2, result) : Many(allowed, discard, Rest2, `${result}${Char}`), () => [result, input]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/unsigned_integer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/unsigned_integer.mjs
 function TakeNonZero(input) {
   return Take(NonZero, input);
 }
@@ -5224,7 +14928,7 @@ function UnsignedInteger(input) {
   return TakeUnsignedInteger(Trim(input));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/integer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/integer.mjs
 function TakeSign(input) {
   return Optional2(Hyphen, input);
 }
@@ -5240,7 +14944,7 @@ function Integer2(input) {
   return TakeSignedInteger(Trim(input));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/bigint.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/bigint.mjs
 function TakeBigInt(input) {
   return Match3(
     Integer2(input),
@@ -5253,7 +14957,7 @@ function BigInt3(input) {
   return TakeBigInt(input);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/const.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/const.mjs
 function TakeConst(const_, input) {
   return Take([const_], input);
 }
@@ -5261,7 +14965,7 @@ function Const(const_, input) {
   return IsEqual(const_, "") ? ["", input] : const_.startsWith(NewLine) ? TakeConst(const_, TrimWhitespace(input)) : const_.startsWith(WhiteSpace) ? TakeConst(const_, input) : TakeConst(const_, Trim(input));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/ident.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/ident.mjs
 var Initial = [...Alpha, UnderScore, DollarSign];
 function TakeInitial(input) {
   return Take(Initial, input);
@@ -5282,7 +14986,7 @@ function Ident(input) {
   return TakeIdent(Trim(input));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/unsigned_number.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/unsigned_number.mjs
 var AllowedDigits2 = [...Digit, UnderScore];
 function IsLeadingDot(input) {
   return IsMatch(Take([Dot], input));
@@ -5318,7 +15022,7 @@ function UnsignedNumber(input) {
   return TakeUnsignedNumber(Trim(input));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/number.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/number.mjs
 function TakeSign2(input) {
   return Optional2(Hyphen, input);
 }
@@ -5334,7 +15038,7 @@ function Number3(input) {
   return TakeSignedNumber(Trim(input));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/until.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/until.mjs
 function TakeOne(input) {
   const result = IsEqual(input, "") ? [] : [input.slice(0, 1), input.slice(1)];
   return result;
@@ -5350,7 +15054,7 @@ function Until(end, input, result = "") {
   );
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/span.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/span.mjs
 function MultiLine(start, end, input) {
   return Match3(
     Take([start], input),
@@ -5381,7 +15085,7 @@ function Span(start, end, multiLine, input) {
   return multiLine ? MultiLine(start, end, Trim(input)) : SingleLine(start, end, Trim(input));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/string.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/string.mjs
 function TakeInitial2(quotes, input) {
   return Take(quotes, input);
 }
@@ -5395,23 +15099,23 @@ function String3(quotes, input) {
   return TakeString(quotes, Trim(input));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/token/until_1.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/until_1.mjs
 function Until_1(end, input) {
   return Match3(Until(end, input), (Until2, UntilRest) => IsEqual(Until2, "") ? [] : [Until2, UntilRest], () => []);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/parser.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/parser.mjs
 var If = (result, left, right = () => []) => result.length === 2 ? left(result) : right();
 var GenericParameterExtendsEquals = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("extends", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => If(Const("=", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [GenericParameterExtendsEqualsMapping(_0), input2]);
 var GenericParameterExtends = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("extends", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericParameterExtendsMapping(_0), input2]);
 var GenericParameterEquals = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("=", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericParameterEqualsMapping(_0), input2]);
 var GenericParameterIdentifier = (input) => If(Ident(input), ([_0, input2]) => [GenericParameterIdentifierMapping(_0), input2]);
 var GenericParameter = (input) => If(If(GenericParameterExtendsEquals(input), ([_0, input2]) => [_0, input2], () => If(GenericParameterExtends(input), ([_0, input2]) => [_0, input2], () => If(GenericParameterEquals(input), ([_0, input2]) => [_0, input2], () => If(GenericParameterIdentifier(input), ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [GenericParameterMapping(_0), input2]);
-var GenericParameterList_0 = (input, result = []) => If(If(GenericParameter(input), ([_0, input2]) => If(Const(",", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => GenericParameterList_0(input2, [...result, _0]), () => [result, input]);
-var GenericParameterList = (input) => If(If(GenericParameterList_0(input), ([_0, input2]) => If(If(If(GenericParameter(input2), ([_02, input3]) => [[_02], input3]), ([_02, input3]) => [_02, input3], () => If([[], input2], ([_02, input3]) => [_02, input3], () => [])), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [GenericParameterListMapping(_0), input2]);
+var GenericParameterList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(GenericParameter(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => GenericParameterList_0(input2, [...result, _0]), () => [result, input]);
+var GenericParameterList = (input) => If(If(If(GenericParameter(input), ([_0, input2]) => If(GenericParameterList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [GenericParameterListMapping(_0), input2]);
 var GenericParameters = (input) => If(If(Const("<", input), ([_0, input2]) => If(GenericParameterList(input2), ([_1, input3]) => If(Const(">", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericParametersMapping(_0), input2]);
-var GenericCallArgumentList_0 = (input, result = []) => If(If(Type(input), ([_0, input2]) => If(Const(",", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => GenericCallArgumentList_0(input2, [...result, _0]), () => [result, input]);
-var GenericCallArgumentList = (input) => If(If(GenericCallArgumentList_0(input), ([_0, input2]) => If(If(If(Type(input2), ([_02, input3]) => [[_02], input3]), ([_02, input3]) => [_02, input3], () => If([[], input2], ([_02, input3]) => [_02, input3], () => [])), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [GenericCallArgumentListMapping(_0), input2]);
+var GenericCallArgumentList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => GenericCallArgumentList_0(input2, [...result, _0]), () => [result, input]);
+var GenericCallArgumentList = (input) => If(If(If(Type(input), ([_0, input2]) => If(GenericCallArgumentList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [GenericCallArgumentListMapping(_0), input2]);
 var GenericCallArguments = (input) => If(If(Const("<", input), ([_0, input2]) => If(GenericCallArgumentList(input2), ([_1, input3]) => If(Const(">", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericCallArgumentsMapping(_0), input2]);
 var GenericCall = (input) => If(If(Ident(input), ([_0, input2]) => If(GenericCallArguments(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [GenericCallMapping(_0), input2]);
 var OptionalSemiColon = (input) => If(If(If(Const(";", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [OptionalSemiColonMapping(_0), input2]);
@@ -5464,18 +15168,15 @@ var Readonly2 = (input) => If(If(If(Const("readonly", input), ([_0, input2]) => 
 var Optional3 = (input) => If(If(If(Const("?", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [OptionalMapping(_0), input2]);
 var Property = (input) => If(If(Readonly2(input), ([_0, input2]) => If(PropertyKey(input2), ([_1, input3]) => If(Optional3(input3), ([_2, input4]) => If(Const(":", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [PropertyMapping(_0), input2]);
 var PropertyDelimiter = (input) => If(If(If(Const(",", input), ([_0, input2]) => If(Const("\n", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const(";", input), ([_0, input2]) => If(Const("\n", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const(",", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If(If(Const(";", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If(If(Const("\n", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => []))))), ([_0, input2]) => [PropertyDelimiterMapping(_0), input2]);
-var PropertyList_0 = (input, result = []) => If(If(Property(input), ([_0, input2]) => If(PropertyDelimiter(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => PropertyList_0(input2, [...result, _0]), () => [result, input]);
-var PropertyList = (input) => If(If(PropertyList_0(input), ([_0, input2]) => If(If(If(Property(input2), ([_02, input3]) => [[_02], input3]), ([_02, input3]) => [_02, input3], () => If([[], input2], ([_02, input3]) => [_02, input3], () => [])), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [PropertyListMapping(_0), input2]);
+var PropertyList_0 = (input, result = []) => If(If(PropertyDelimiter(input), ([_0, input2]) => If(Property(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => PropertyList_0(input2, [...result, _0]), () => [result, input]);
+var PropertyList = (input) => If(If(If(Property(input), ([_0, input2]) => If(PropertyList_0(input2), ([_1, input3]) => If(If(PropertyDelimiter(input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [PropertyListMapping(_0), input2]);
 var Properties = (input) => If(If(Const("{", input), ([_0, input2]) => If(PropertyList(input2), ([_1, input3]) => If(Const("}", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [PropertiesMapping(_0), input2]);
 var _Object_2 = (input) => If(Properties(input), ([_0, input2]) => [_Object_Mapping(_0), input2]);
 var ElementNamed = (input) => If(If(If(Ident(input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => If(Const(":", input3), ([_2, input4]) => If(Const("readonly", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [_0, input2], () => If(If(Ident(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(Const("readonly", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [_0, input2], () => If(If(Ident(input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => If(Const(":", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [_0, input2], () => If(If(Ident(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [ElementNamedMapping(_0), input2]);
-var ElementReadonlyOptional = (input) => If(If(Const("readonly", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => If(Const("?", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [ElementReadonlyOptionalMapping(_0), input2]);
-var ElementReadonly = (input) => If(If(Const("readonly", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ElementReadonlyMapping(_0), input2]);
-var ElementOptional = (input) => If(If(Type(input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ElementOptionalMapping(_0), input2]);
-var ElementBase = (input) => If(If(ElementNamed(input), ([_0, input2]) => [_0, input2], () => If(ElementReadonlyOptional(input), ([_0, input2]) => [_0, input2], () => If(ElementReadonly(input), ([_0, input2]) => [_0, input2], () => If(ElementOptional(input), ([_0, input2]) => [_0, input2], () => If(Type(input), ([_0, input2]) => [_0, input2], () => []))))), ([_0, input2]) => [ElementBaseMapping(_0), input2]);
+var ElementBase = (input) => If(If(ElementNamed(input), ([_0, input2]) => [_0, input2], () => If(If(Readonly2(input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => If(Optional3(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ElementBaseMapping(_0), input2]);
 var Element = (input) => If(If(If(Const("...", input), ([_0, input2]) => If(ElementBase(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(ElementBase(input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ElementMapping(_0), input2]);
-var ElementList_0 = (input, result = []) => If(If(Element(input), ([_0, input2]) => If(Const(",", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => ElementList_0(input2, [...result, _0]), () => [result, input]);
-var ElementList = (input) => If(If(ElementList_0(input), ([_0, input2]) => If(If(If(Element(input2), ([_02, input3]) => [[_02], input3]), ([_02, input3]) => [_02, input3], () => If([[], input2], ([_02, input3]) => [_02, input3], () => [])), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ElementListMapping(_0), input2]);
+var ElementList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(Element(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => ElementList_0(input2, [...result, _0]), () => [result, input]);
+var ElementList = (input) => If(If(If(Element(input), ([_0, input2]) => If(ElementList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ElementListMapping(_0), input2]);
 var _Tuple_ = (input) => If(If(Const("[", input), ([_0, input2]) => If(ElementList(input2), ([_1, input3]) => If(Const("]", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_Tuple_Mapping(_0), input2]);
 var ParameterReadonlyOptional = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => If(Const(":", input3), ([_2, input4]) => If(Const("readonly", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [ParameterReadonlyOptionalMapping(_0), input2]);
 var ParameterReadonly = (input) => If(If(Ident(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(Const("readonly", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [ParameterReadonlyMapping(_0), input2]);
@@ -5483,8 +15184,8 @@ var ParameterOptional = (input) => If(If(Ident(input), ([_0, input2]) => If(Cons
 var ParameterType = (input) => If(If(Ident(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [ParameterTypeMapping(_0), input2]);
 var ParameterBase = (input) => If(If(ParameterReadonlyOptional(input), ([_0, input2]) => [_0, input2], () => If(ParameterReadonly(input), ([_0, input2]) => [_0, input2], () => If(ParameterOptional(input), ([_0, input2]) => [_0, input2], () => If(ParameterType(input), ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [ParameterBaseMapping(_0), input2]);
 var Parameter2 = (input) => If(If(If(Const("...", input), ([_0, input2]) => If(ParameterBase(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(ParameterBase(input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ParameterMapping(_0), input2]);
-var ParameterList_0 = (input, result = []) => If(If(Parameter2(input), ([_0, input2]) => If(Const(",", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => ParameterList_0(input2, [...result, _0]), () => [result, input]);
-var ParameterList = (input) => If(If(ParameterList_0(input), ([_0, input2]) => If(If(If(Parameter2(input2), ([_02, input3]) => [[_02], input3]), ([_02, input3]) => [_02, input3], () => If([[], input2], ([_02, input3]) => [_02, input3], () => [])), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ParameterListMapping(_0), input2]);
+var ParameterList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(Parameter2(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => ParameterList_0(input2, [...result, _0]), () => [result, input]);
+var ParameterList = (input) => If(If(If(Parameter2(input), ([_0, input2]) => If(ParameterList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ParameterListMapping(_0), input2]);
 var _Function_2 = (input) => If(If(Const("(", input), ([_0, input2]) => If(ParameterList(input2), ([_1, input3]) => If(Const(")", input3), ([_2, input4]) => If(Const("=>", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [_Function_Mapping(_0), input2]);
 var _Constructor_ = (input) => If(If(Const("new", input), ([_0, input2]) => If(Const("(", input2), ([_1, input3]) => If(ParameterList(input3), ([_2, input4]) => If(Const(")", input4), ([_3, input5]) => If(Const("=>", input5), ([_4, input6]) => If(Type(input6), ([_5, input7]) => [[_0, _1, _2, _3, _4, _5], input7])))))), ([_0, input2]) => [_Constructor_Mapping(_0), input2]);
 var MappedReadonly = (input) => If(If(If(Const("+", input), ([_0, input2]) => If(Const("readonly", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const("-", input), ([_0, input2]) => If(Const("readonly", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const("readonly", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [MappedReadonlyMapping(_0), input2]);
@@ -5499,11 +15200,11 @@ var WithString = (input) => If(String3(['"', "'"], input), ([_0, input2]) => [Wi
 var WithNull = (input) => If(Const("null", input), ([_0, input2]) => [WithNullMapping(_0), input2]);
 var WithUndefined = (input) => If(Const("undefined", input), ([_0, input2]) => [WithUndefinedMapping(_0), input2]);
 var WithProperty = (input) => If(If(PropertyKey(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(WithValue(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [WithPropertyMapping(_0), input2]);
-var WithPropertyList_0 = (input, result = []) => If(If(WithProperty(input), ([_0, input2]) => If(PropertyDelimiter(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => WithPropertyList_0(input2, [...result, _0]), () => [result, input]);
-var WithPropertyList = (input) => If(If(WithPropertyList_0(input), ([_0, input2]) => If(If(If(WithProperty(input2), ([_02, input3]) => [[_02], input3]), ([_02, input3]) => [_02, input3], () => If([[], input2], ([_02, input3]) => [_02, input3], () => [])), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [WithPropertyListMapping(_0), input2]);
+var WithPropertyList_0 = (input, result = []) => If(If(PropertyDelimiter(input), ([_0, input2]) => If(WithProperty(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => WithPropertyList_0(input2, [...result, _0]), () => [result, input]);
+var WithPropertyList = (input) => If(If(If(WithProperty(input), ([_0, input2]) => If(WithPropertyList_0(input2), ([_1, input3]) => If(If(PropertyDelimiter(input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [WithPropertyListMapping(_0), input2]);
 var WithObject = (input) => If(If(Const("{", input), ([_0, input2]) => If(WithPropertyList(input2), ([_1, input3]) => If(Const("}", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [WithObjectMapping(_0), input2]);
-var WithElementList_0 = (input, result = []) => If(If(WithValue(input), ([_0, input2]) => If(Const(",", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => WithElementList_0(input2, [...result, _0]), () => [result, input]);
-var WithElementList = (input) => If(If(WithElementList_0(input), ([_0, input2]) => If(If(If(WithValue(input2), ([_02, input3]) => [[_02], input3]), ([_02, input3]) => [_02, input3], () => If([[], input2], ([_02, input3]) => [_02, input3], () => [])), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [WithElementListMapping(_0), input2]);
+var WithElementList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(WithValue(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => WithElementList_0(input2, [...result, _0]), () => [result, input]);
+var WithElementList = (input) => If(If(If(WithValue(input), ([_0, input2]) => If(WithElementList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [WithElementListMapping(_0), input2]);
 var WithArray = (input) => If(If(Const("[", input), ([_0, input2]) => If(WithElementList(input2), ([_1, input3]) => If(Const("]", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [WithArrayMapping(_0), input2]);
 var WithValue = (input) => If(If(WithBigInt(input), ([_0, input2]) => [_0, input2], () => If(WithNumber(input), ([_0, input2]) => [_0, input2], () => If(WithBoolean(input), ([_0, input2]) => [_0, input2], () => If(WithString(input), ([_0, input2]) => [_0, input2], () => If(WithNull(input), ([_0, input2]) => [_0, input2], () => If(WithUndefined(input), ([_0, input2]) => [_0, input2], () => If(WithObject(input), ([_0, input2]) => [_0, input2], () => If(WithArray(input), ([_0, input2]) => [_0, input2], () => [])))))))), ([_0, input2]) => [WithValueMapping(_0), input2]);
 var PatternBigInt = (input) => If(Const("-?(?:0|[1-9][0-9]*)n", input), ([_0, input2]) => [PatternBigIntMapping(_0), input2]);
@@ -5518,8 +15219,8 @@ var PatternUnion = (input) => If(If(If(PatternTerm(input), ([_0, input2]) => If(
 var PatternTerm = (input) => If(If(PatternBase(input), ([_0, input2]) => If(PatternBody(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [PatternTermMapping(_0), input2]);
 var PatternBody = (input) => If(If(PatternUnion(input), ([_0, input2]) => [_0, input2], () => If(PatternTerm(input), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [PatternBodyMapping(_0), input2]);
 var Pattern = (input) => If(If(Const("^", input), ([_0, input2]) => If(PatternBody(input2), ([_1, input3]) => If(Const("$", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [PatternMapping(_0), input2]);
-var InterfaceDeclarationHeritageList_0 = (input, result = []) => If(If(Type(input), ([_0, input2]) => If(Const(",", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => InterfaceDeclarationHeritageList_0(input2, [...result, _0]), () => [result, input]);
-var InterfaceDeclarationHeritageList = (input) => If(If(InterfaceDeclarationHeritageList_0(input), ([_0, input2]) => If(If(If(Type(input2), ([_02, input3]) => [[_02], input3]), ([_02, input3]) => [_02, input3], () => If([[], input2], ([_02, input3]) => [_02, input3], () => [])), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [InterfaceDeclarationHeritageListMapping(_0), input2]);
+var InterfaceDeclarationHeritageList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => InterfaceDeclarationHeritageList_0(input2, [...result, _0]), () => [result, input]);
+var InterfaceDeclarationHeritageList = (input) => If(If(If(Type(input), ([_0, input2]) => If(InterfaceDeclarationHeritageList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [InterfaceDeclarationHeritageListMapping(_0), input2]);
 var InterfaceDeclarationHeritage = (input) => If(If(If(Const("extends", input), ([_0, input2]) => If(InterfaceDeclarationHeritageList(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [InterfaceDeclarationHeritageMapping(_0), input2]);
 var InterfaceDeclarationGeneric = (input) => If(If(Const("interface", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => If(GenericParameters(input3), ([_2, input4]) => If(InterfaceDeclarationHeritage(input4), ([_3, input5]) => If(Properties(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [InterfaceDeclarationGenericMapping(_0), input2]);
 var InterfaceDeclaration = (input) => If(If(Const("interface", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => If(InterfaceDeclarationHeritage(input3), ([_2, input4]) => If(Properties(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [InterfaceDeclarationMapping(_0), input2]);
@@ -5527,20 +15228,20 @@ var TypeAliasDeclarationGeneric = (input) => If(If(Const("type", input), ([_0, i
 var TypeAliasDeclaration = (input) => If(If(Const("type", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => If(Const("=", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [TypeAliasDeclarationMapping(_0), input2]);
 var ExportKeyword = (input) => If(If(If(Const("export", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ExportKeywordMapping(_0), input2]);
 var ModuleDeclarationDelimiter = (input) => If(If(If(Const(";", input), ([_0, input2]) => If(Const("\n", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const(";", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If(If(Const("\n", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => []))), ([_0, input2]) => [ModuleDeclarationDelimiterMapping(_0), input2]);
-var ModuleDeclarationList_0 = (input, result = []) => If(If(ModuleDeclaration(input), ([_0, input2]) => If(ModuleDeclarationDelimiter(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => ModuleDeclarationList_0(input2, [...result, _0]), () => [result, input]);
-var ModuleDeclarationList = (input) => If(If(ModuleDeclarationList_0(input), ([_0, input2]) => If(If(If(ModuleDeclaration(input2), ([_02, input3]) => [[_02], input3]), ([_02, input3]) => [_02, input3], () => If([[], input2], ([_02, input3]) => [_02, input3], () => [])), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ModuleDeclarationListMapping(_0), input2]);
+var ModuleDeclarationList_0 = (input, result = []) => If(If(ModuleDeclarationDelimiter(input), ([_0, input2]) => If(ModuleDeclaration(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => ModuleDeclarationList_0(input2, [...result, _0]), () => [result, input]);
+var ModuleDeclarationList = (input) => If(If(If(ModuleDeclaration(input), ([_0, input2]) => If(ModuleDeclarationList_0(input2), ([_1, input3]) => If(If(ModuleDeclarationDelimiter(input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ModuleDeclarationListMapping(_0), input2]);
 var ModuleDeclaration = (input) => If(If(ExportKeyword(input), ([_0, input2]) => If(If(InterfaceDeclarationGeneric(input2), ([_02, input3]) => [_02, input3], () => If(InterfaceDeclaration(input2), ([_02, input3]) => [_02, input3], () => If(TypeAliasDeclarationGeneric(input2), ([_02, input3]) => [_02, input3], () => If(TypeAliasDeclaration(input2), ([_02, input3]) => [_02, input3], () => [])))), ([_1, input3]) => If(OptionalSemiColon(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [ModuleDeclarationMapping(_0), input2]);
 var Module = (input) => If(If(ModuleDeclaration(input), ([_0, input2]) => If(ModuleDeclarationList(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ModuleMapping(_0), input2]);
 var Script = (input) => If(If(Module(input), ([_0, input2]) => [_0, input2], () => If(GenericType(input), ([_0, input2]) => [_0, input2], () => If(Type(input), ([_0, input2]) => [_0, input2], () => []))), ([_0, input2]) => [ScriptMapping(_0), input2]);
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/patterns/template.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/patterns/template.mjs
 function ParseTemplateIntoTypes(template) {
   const parsed = TemplateLiteralTypes(`\`${template}\``);
   const result = guard_exports.IsEqual(parsed.length, 2) ? parsed[0] : Unreachable();
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/template_literal/encode.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/encode.mjs
 function JoinString(input) {
   return input.join("|");
 }
@@ -5597,7 +15298,7 @@ function TemplateLiteralEncode(types) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/template_literal/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/instantiate.mjs
 function TemplateLiteralAction(types, options) {
   const result = CanInstantiate(types) ? memory_exports.Update(TemplateLiteralEncode(types), {}, options) : TemplateLiteralDeferred(types, options);
   return result;
@@ -5607,7 +15308,7 @@ function TemplateLiteralInstantiate(context, state, types, options) {
   return TemplateLiteralAction(instantiatedTypes, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/template_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/template_literal.mjs
 function TemplateLiteralDeferred(types, options = {}) {
   return Deferred("TemplateLiteral", [types], options);
 }
@@ -5629,7 +15330,7 @@ function IsTemplateLiteral(value) {
   return IsKind(value, "TemplateLiteral");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/result.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/result.mjs
 var result_exports = {};
 __export(result_exports, {
   ExtendsFalse: () => ExtendsFalse,
@@ -5666,7 +15367,7 @@ function Match4(result, true_, false_) {
   return IsExtendsTrueLike(result) ? true_(result.inferred) : false_();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/extends_right.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/extends_right.mjs
 function ExtendsRightInfer(inferred, name, left, right) {
   return Match4(ExtendsLeft(inferred, left, right), (checkInferred) => ExtendsTrue(memory_exports.Assign(memory_exports.Assign(inferred, checkInferred), { [name]: left })), () => ExtendsFalse());
 }
@@ -5694,12 +15395,12 @@ function ExtendsRight(inferred, left, right) {
   return IsAny(right) ? ExtendsRightAny(inferred, left) : IsDependent(right) ? ExtendsRightDependent(inferred, left, right.if, right.then, right.else) : IsEnum2(right) ? ExtendsRightEnum(inferred, left, right.enum) : IsInfer(right) ? ExtendsRightInfer(inferred, right.name, left, right.extends) : IsIntersect(right) ? ExtendsRightIntersect(inferred, left, right.allOf) : IsTemplateLiteral(right) ? ExtendsRightTemplateLiteral(inferred, left, right.pattern) : IsUnion(right) ? ExtendsRightUnion(inferred, left, right.anyOf) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsFalse();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/any.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/any.mjs
 function ExtendsAny(inferred, left, right) {
   return IsInfer(right) ? ExtendsRight(inferred, left, right) : IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsUnion(inferred);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/array.mjs
 function ExtendsImmutable(left, right) {
   const isImmutableLeft = IsImmutable(left);
   const isImmutableRight = IsImmutable(right);
@@ -5709,17 +15410,17 @@ function ExtendsArray(inferred, arrayLeft, left, right) {
   return IsArray2(right) ? ExtendsImmutable(arrayLeft, right) ? ExtendsLeft(inferred, left, right.items) : ExtendsFalse() : ExtendsRight(inferred, arrayLeft, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/bigint.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/bigint.mjs
 function ExtendsBigInt(inferred, left, right) {
   return IsBigInt2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/boolean.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/boolean.mjs
 function ExtendsBoolean(inferred, left, right) {
   return IsBoolean3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/parameters.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/parameters.mjs
 function ParameterCompare(inferred, left, leftRest, right, rightRest) {
   const checkLeft = IsInfer(right) ? left : right;
   const checkRight = IsInfer(right) ? right : left;
@@ -5737,44 +15438,44 @@ function ExtendsParameters(inferred, left, right) {
   return ParametersLeft(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/return_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/return_type.mjs
 function ExtendsReturnType(inferred, left, right) {
   return IsVoid(right) ? ExtendsTrue(inferred) : ExtendsLeft(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/constructor.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/constructor.mjs
 function ExtendsConstructor(inferred, parameters, returnType, right) {
   return IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : IsConstructor2(right) ? Match4(ExtendsParameters(inferred, parameters, right["parameters"]), (inferred2) => ExtendsReturnType(inferred2, returnType, right["instanceType"]), () => ExtendsFalse()) : ExtendsFalse();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/dependent.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/dependent.mjs
 function ExtendsDependent(inferred, if_, then_, else_, right) {
   return Match4(ExtendsLeft(inferred, if_, right), () => ExtendsLeft(inferred, then_, right), () => ExtendsLeft(inferred, else_, right));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/enum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/enum.mjs
 function ExtendsEnum(inferred, left, right) {
   const evaluated = EvaluateEnum(left);
   return ExtendsLeft(inferred, evaluated, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/function.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/function.mjs
 function ExtendsFunction(inferred, parameters, returnType, right) {
   return IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : IsFunction2(right) ? Match4(ExtendsParameters(inferred, parameters, right["parameters"]), (inferred2) => ExtendsReturnType(inferred2, returnType, right["returnType"]), () => ExtendsFalse()) : ExtendsFalse();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/integer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/integer.mjs
 function ExtendsInteger(inferred, left, right) {
   return IsInteger2(right) ? ExtendsTrue(inferred) : IsNumber3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/intersect.mjs
 function ExtendsIntersect(inferred, left, right) {
   const evaluated = EvaluateIntersect(left);
   return ExtendsLeft(inferred, evaluated, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/literal.mjs
 function ExtendsLiteralValue(inferred, left, right) {
   return left === right ? ExtendsTrue(inferred) : ExtendsFalse();
 }
@@ -5794,22 +15495,22 @@ function ExtendsLiteral(inferred, left, right) {
   return guard_exports.IsBigInt(left.const) ? ExtendsLiteralBigInt(inferred, left.const, right) : guard_exports.IsBoolean(left.const) ? ExtendsLiteralBoolean(inferred, left.const, right) : guard_exports.IsNumber(left.const) ? ExtendsLiteralNumber(inferred, left.const, right) : guard_exports.IsString(left.const) ? ExtendsLiteralString(inferred, left.const, right) : Unreachable();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/never.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/never.mjs
 function ExtendsNever(inferred, left, right) {
   return IsInfer(right) ? ExtendsRight(inferred, left, right) : ExtendsTrue(inferred);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/null.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/null.mjs
 function ExtendsNull(inferred, left, right) {
   return IsNull2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/number.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/number.mjs
 function ExtendsNumber(inferred, left, right) {
   return IsNumber3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/object.mjs
 function ExtendsPropertyOptional(inferred, left, right) {
   return IsOptional(left) ? IsOptional(right) ? ExtendsTrue(inferred) : ExtendsFalse() : ExtendsTrue(inferred);
 }
@@ -5860,7 +15561,7 @@ function ExtendsObject(inferred, left, right) {
   return IsRecord(right) ? ExtendsObjectToRecord(inferred, left, RecordPattern(right), RecordValue(right)) : IsObject2(right) ? ExtendsObjectToObject(inferred, left, right.properties) : ExtendsRight(inferred, _Object_(left), right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/record.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/record.mjs
 function FromObject4(inferred, properties) {
   return guard_exports.IsEqual(guard_exports.Keys(properties).length, 0) ? ExtendsTrue(inferred) : ExtendsFalse();
 }
@@ -5871,23 +15572,23 @@ function ExtendsRecord(inferred, leftPattern, leftValue, right) {
   return IsRecord(right) ? FromRecord(inferred, RecordPatternToType(leftPattern), leftValue, RecordPatternToType(RecordPattern(right)), RecordValue(right)) : IsObject2(right) ? FromObject4(inferred, right.properties) : IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsFalse();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/string.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/string.mjs
 function ExtendsString(inferred, left, right) {
   return IsString3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/symbol.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/symbol.mjs
 function ExtendsSymbol(inferred, left, right) {
   return IsSymbol2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/template_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/template_literal.mjs
 function ExtendsTemplateLiteral(inferred, left, right) {
   const evaluated = EvaluateTemplateLiteral(left);
   return ExtendsLeft(inferred, evaluated, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/inference.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/inference.mjs
 function Inferrable(name, type) {
   return memory_exports.Create({ "~kind": "Inferrable" }, { name, type }, {});
 }
@@ -5912,7 +15613,7 @@ function InferUnionResult(inferred, name, left, right) {
   return guard_exports.IsArray(results) ? ExtendsTrue(memory_exports.Assign(inferred, { [name]: Union(results) })) : ExtendsFalse();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/tuple.mjs
 function Reverse(types) {
   return [...types].reverse();
 }
@@ -5954,12 +15655,12 @@ function ExtendsTuple(inferred, left, right) {
   return IsTuple(right) ? ExtendsTupleToTuple(inferred, instantiatedLeft, right.items) : IsArray2(right) ? ExtendsTupleToArray(inferred, instantiatedLeft, right.items) : ExtendsRight(inferred, Tuple(instantiatedLeft), right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/undefined.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/undefined.mjs
 function ExtendsUndefined(inferred, left, right) {
   return IsVoid(right) ? ExtendsTrue(inferred) : IsUndefined2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/union.mjs
 function ExtendsUnionSome(inferred, type, unionTypes) {
   return guard_exports.ShiftLeft(unionTypes, (head, tail) => Match4(ExtendsLeft(inferred, type, head), (inferred2) => ExtendsTrue(inferred2), () => ExtendsUnionSome(inferred, type, tail)), () => ExtendsFalse());
 }
@@ -5971,22 +15672,22 @@ function ExtendsUnion2(inferred, left, right) {
   return IsInferable(inferrable) ? InferUnionResult(inferred, inferrable.name, left, inferrable.type) : IsUnion(right) ? ExtendsUnionLeft(inferred, left, right.anyOf) : ExtendsUnionLeft(inferred, left, [right]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/unknown.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/unknown.mjs
 function ExtendsUnknown(inferred, left, right) {
   return IsInfer(right) ? ExtendsRight(inferred, left, right) : IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsFalse();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/void.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/void.mjs
 function ExtendsVoid(inferred, left, right) {
   return IsVoid(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/extends_left.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/extends_left.mjs
 function ExtendsLeft(inferred, left, right) {
   return IsAny(left) ? ExtendsAny(inferred, left, right) : IsArray2(left) ? ExtendsArray(inferred, left, left.items, right) : IsBigInt2(left) ? ExtendsBigInt(inferred, left, right) : IsBoolean3(left) ? ExtendsBoolean(inferred, left, right) : IsConstructor2(left) ? ExtendsConstructor(inferred, left.parameters, left.instanceType, right) : IsDependent(left) ? ExtendsDependent(inferred, left.if, left.then, left.else, right) : IsEnum2(left) ? ExtendsEnum(inferred, left.enum, right) : IsFunction2(left) ? ExtendsFunction(inferred, left.parameters, left.returnType, right) : IsInteger2(left) ? ExtendsInteger(inferred, left, right) : IsIntersect(left) ? ExtendsIntersect(inferred, left.allOf, right) : IsLiteral(left) ? ExtendsLiteral(inferred, left, right) : IsNever(left) ? ExtendsNever(inferred, left, right) : IsNull2(left) ? ExtendsNull(inferred, left, right) : IsNumber3(left) ? ExtendsNumber(inferred, left, right) : IsObject2(left) ? ExtendsObject(inferred, left.properties, right) : IsRecord(left) ? ExtendsRecord(inferred, RecordPattern(left), RecordValue(left), right) : IsString3(left) ? ExtendsString(inferred, left, right) : IsSymbol2(left) ? ExtendsSymbol(inferred, left, right) : IsTemplateLiteral(left) ? ExtendsTemplateLiteral(inferred, left.pattern, right) : IsTuple(left) ? ExtendsTuple(inferred, left.items, right) : IsUndefined2(left) ? ExtendsUndefined(inferred, left, right) : IsUnion(left) ? ExtendsUnion2(inferred, left.anyOf, right) : IsUnknown(left) ? ExtendsUnknown(inferred, left, right) : IsVoid(left) ? ExtendsVoid(inferred, left, right) : ExtendsFalse();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/interface/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/interface/instantiate.mjs
 function InterfaceOperation(heritage, properties) {
   const result = EvaluateIntersect([...heritage, _Object_(properties)]);
   return result;
@@ -6001,7 +15702,7 @@ function InterfaceInstantiate(context, state, heritage, properties, options) {
   return InterfaceAction(instantiatedHeritage, instantiatedProperties, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/interface.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/interface.mjs
 function InterfaceDeferred(heritage, properties, options = {}) {
   return Deferred("Interface", [heritage, properties], options);
 }
@@ -6012,7 +15713,7 @@ function Interface(heritage, properties, options = {}) {
   return InterfaceAction(heritage, properties, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/cyclic/check.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/check.mjs
 function FromRef(stack, context, ref) {
   return stack.includes(ref) ? true : FromType3([...stack, ref], context, context[ref]);
 }
@@ -6031,7 +15732,7 @@ function CyclicCheck(stack, context, type) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/cyclic/candidates.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/candidates.mjs
 function ResolveCandidateKeys(context, keys) {
   return keys.reduce((result, left) => {
     return CyclicCheck([left], context, context[left]) ? [...result, left] : result;
@@ -6043,7 +15744,7 @@ function CyclicCandidates(context) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/cyclic/dependencies.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/dependencies.mjs
 function FromRef2(context, ref, result) {
   return result.includes(ref) ? result : ref in context ? FromType4(context, context[ref], [...result, ref]) : Unreachable();
 }
@@ -6064,7 +15765,7 @@ function CyclicDependencies(context, key, type) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/cyclic/extends.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/extends.mjs
 function FromRef3(_ref) {
   return Any();
 }
@@ -6088,7 +15789,7 @@ function CyclicExtends(type) {
   return CyclicAnyFromParameters(type.$defs, type.$ref);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/cyclic/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/instantiate.mjs
 function CyclicInterface(context, heritage, properties) {
   const instantiatedHeritage = InstantiateTypes(context, State([], []), heritage);
   const instantiatedProperties = InstantiateProperties({}, State([], []), properties);
@@ -6110,7 +15811,7 @@ function InstantiateCyclic(context, ref, type) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/cyclic/target.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/target.mjs
 function Resolve(defs, ref) {
   return ref in defs ? IsRef2(defs[ref]) ? Resolve(defs, defs[ref].$ref) : defs[ref] : Never();
 }
@@ -6119,7 +15820,7 @@ function CyclicTarget(defs, ref) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/extends/extends.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/extends.mjs
 function Canonical(type) {
   return IsCyclic(type) ? CyclicExtends(type) : IsUnsafe(type) ? Unknown() : type;
 }
@@ -6129,46 +15830,41 @@ function Extends(inferred, left, right) {
   return ExtendsLeft(inferred, canonicalLeft, canonicalRight);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/evaluate/compare.mjs
-var ResultEqual = "equal";
-var ResultDisjoint = "disjoint";
-var ResultLeftInside = "left-inside";
-var ResultRightInside = "right-inside";
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/compare.mjs
+var CompareResultEqual = 0;
+var CompareResultDisjoint = 1;
+var CompareResultLeftInside = 2;
+var CompareResultRightInside = 3;
 function Compare(left, right) {
-  const extendsCheck = [
-    IsUnknown(left) ? result_exports.ExtendsFalse() : Extends({}, left, right),
-    IsUnknown(left) ? result_exports.ExtendsTrue({}) : Extends({}, right, left)
-  ];
-  return result_exports.IsExtendsTrueLike(extendsCheck[0]) && result_exports.IsExtendsTrueLike(extendsCheck[1]) ? ResultEqual : result_exports.IsExtendsTrueLike(extendsCheck[0]) && result_exports.IsExtendsFalse(extendsCheck[1]) ? ResultLeftInside : result_exports.IsExtendsFalse(extendsCheck[0]) && result_exports.IsExtendsTrueLike(extendsCheck[1]) ? ResultRightInside : ResultDisjoint;
+  const extendsCheck = [Extends({}, left, right), Extends({}, right, left)];
+  return result_exports.IsExtendsTrueLike(extendsCheck[0]) && result_exports.IsExtendsTrueLike(extendsCheck[1]) ? CompareResultEqual : result_exports.IsExtendsTrueLike(extendsCheck[0]) && result_exports.IsExtendsFalse(extendsCheck[1]) ? CompareResultLeftInside : result_exports.IsExtendsFalse(extendsCheck[0]) && result_exports.IsExtendsTrueLike(extendsCheck[1]) ? CompareResultRightInside : CompareResultDisjoint;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/evaluate/broaden.mjs
-function BroadFilter(type, types) {
-  return types.filter((left) => {
-    return Compare(type, left) === ResultRightInside ? false : true;
-  });
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/broaden.mjs
+function BroadenFilter(type, types, result = [], all = types) {
+  return guard_exports.ShiftLeft(types, (left, right) => {
+    const compare = Compare(type, left);
+    return guard_exports.IsEqual(compare, CompareResultLeftInside) || guard_exports.IsEqual(compare, CompareResultEqual) ? all : guard_exports.IsEqual(compare, CompareResultDisjoint) ? BroadenFilter(type, right, [...result, left], all) : BroadenFilter(type, right, result, all);
+  }, () => [...result, type]);
 }
-function IsBroadestType(type, types) {
-  const result = types.some((left) => {
-    const result2 = Compare(type, left);
-    return guard_exports.IsEqual(result2, ResultLeftInside) || guard_exports.IsEqual(result2, ResultEqual);
-  });
-  return guard_exports.IsEqual(result, false);
-}
-function BroadenType(type, types) {
+function BroadenType(type, types, result) {
   const evaluated = EvaluateType(type);
-  return IsAny(evaluated) ? [evaluated] : IsBroadestType(evaluated, types) ? [...BroadFilter(evaluated, types), evaluated] : types;
-}
-function BroadenTypes(types) {
-  return types.reduce((result, left) => {
-    return IsObject2(left) ? [...result, left] : (
-      // push
-      IsNever(left) ? result : (
-        // ignore
-        BroadenType(left, result)
+  return IsAny(evaluated) ? [evaluated] : (
+    // terminate (always the most broad)
+    IsUnknown(evaluated) ? [evaluated] : (
+      // terminate (always the most broad)
+      IsNever(evaluated) ? BroadenTypes(types, result) : (
+        // ignored: never is dropped
+        IsObject2(evaluated) ? BroadenTypes(types, [...result, evaluated]) : (
+          // objects are always considered (too expensive to compare)
+          BroadenTypes(types, BroadenFilter(evaluated, result))
+        )
       )
-    );
-  }, []);
+    )
+  );
+}
+function BroadenTypes(types, result = []) {
+  return guard_exports.ShiftLeft(types, (left, right) => BroadenType(left, right, result), () => result);
 }
 function Broaden(types) {
   const broadened = BroadenTypes(types);
@@ -6176,7 +15872,7 @@ function Broaden(types) {
   return flattened;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/evaluate/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/instantiate.mjs
 function EvaluateAction(type, options) {
   const result = memory_exports.Update(EvaluateType(type), {}, options);
   return result;
@@ -6186,7 +15882,7 @@ function EvaluateInstantiate(context, state, type, options) {
   return EvaluateAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/call/distribute_arguments.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/call/distribute_arguments.mjs
 function CollectDistributionNames(expression, result = []) {
   return (
     // Conditional
@@ -6199,8 +15895,12 @@ function BuildDistributionArray(parameters, names) {
 function ZipDistributionArray(arguments_, distributionArray, result = []) {
   return guard_exports.ShiftLeft(arguments_, (argumentLeft, argumentRight) => guard_exports.ShiftLeft(distributionArray, (booleanLeft, booleanRight) => ZipDistributionArray(argumentRight, booleanRight, [...result, [booleanLeft, argumentLeft]]), () => result), () => result);
 }
+function CanonicalArgument(type) {
+  return IsTemplateLiteral(type) ? EvaluateTemplateLiteral(type.pattern) : IsEnum2(type) ? EvaluateEnum(type.enum) : type;
+}
 function Expand(type) {
-  return IsUnion(type) ? [...type.anyOf] : [type];
+  const canonicalArgument = CanonicalArgument(type);
+  return IsUnion(canonicalArgument) ? [...canonicalArgument.anyOf] : [canonicalArgument];
 }
 function Append(current, type) {
   return current.reduce((result, left) => [...result, [...left, type]], []);
@@ -6222,7 +15922,7 @@ function DistributeArguments(parameters, arguments_, expression) {
   return IsDeferred(expression) && guard_exports.IsEqual(expression.action, "Conditional") ? Distribute2(zippedArguments) : IsDeferred(expression) && guard_exports.IsEqual(expression.action, "Mapped") ? Distribute2(zippedArguments) : [arguments_];
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/call/resolve_target.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/call/resolve_target.mjs
 function FromNotResolvable() {
   return ["(not-resolvable)", Never()];
 }
@@ -6242,7 +15942,7 @@ function ResolveTarget(context, target, arguments_) {
   return FromType6(context, "(anonymous)", target, arguments_);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/call/resolve_arguments.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/call/resolve_arguments.mjs
 function AssertArgumentExtends(name, type, extends_) {
   if (IsInfer(type) || IsCall(type) || result_exports.IsExtendsTrueLike(Extends({}, type, extends_)))
     return;
@@ -6266,7 +15966,24 @@ function ResolveArgumentsContext(context, state, parameters, arguments_) {
   return BindParameters(context, state, parameters, arguments_);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/call/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/call/instantiate.mjs
+var instantiationDepth = 0;
+var instantiationCount = 0;
+function InstantiationAssert() {
+  if (guard_exports.IsLessThan(instantiationCount, settings_exports.Get().maxInstantiationCount))
+    return;
+  throw Error("Type instantiation is excessively deep and possibly infinite");
+}
+function InstantiationIncrement() {
+  InstantiationAssert();
+  instantiationCount++;
+  instantiationDepth++;
+}
+function InstantiationDecrement() {
+  instantiationDepth--;
+  if (guard_exports.IsEqual(instantiationDepth, 0))
+    instantiationCount = 0;
+}
 function Peek(state) {
   const result = guard_exports.IsGreaterThan(state.callstack.length, 0) ? state.callstack[state.callstack.length - 1] : "";
   return result;
@@ -6276,12 +15993,20 @@ function IsTailCall(state, name) {
   return result;
 }
 function CallDispatch(context, state, target, parameters, expression, arguments_) {
-  const argumentsContext = ResolveArgumentsContext(context, state, parameters, arguments_);
-  const returnType = InstantiateType(argumentsContext, State([...state["callstack"], target["$ref"]], state["visited"]), expression);
-  return InstantiateType(argumentsContext, State([], []), returnType);
+  InstantiationIncrement();
+  try {
+    const argumentsContext = ResolveArgumentsContext(context, state, parameters, arguments_);
+    const returnType = InstantiateType(argumentsContext, State([...state["callstack"], target["$ref"]], state["visited"]), expression);
+    return InstantiateType(argumentsContext, State([], []), returnType);
+  } finally {
+    InstantiationDecrement();
+  }
 }
 function CallDistributed(context, state, target, parameters, expression, distributedArguments) {
-  return distributedArguments.reduce((result, arguments_) => [...result, CallDispatch(context, state, target, parameters, expression, arguments_)], []);
+  return distributedArguments.reduce((result, arguments_) => {
+    const returnType = CallDispatch(context, state, target, parameters, expression, arguments_);
+    return [...result, returnType];
+  }, []);
 }
 function CallImmediate(context, state, target, parameters, expression, arguments_) {
   const distributedArguments = DistributeArguments(parameters, arguments_, expression);
@@ -6298,7 +16023,7 @@ function CallInstantiate(context, state, target, arguments_) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/types/call.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/call.mjs
 function CallConstruct(target, arguments_) {
   return memory_exports.Create({ ["~kind"]: "Call" }, { type: "call", target, arguments: arguments_ }, {});
 }
@@ -6309,7 +16034,7 @@ function IsCall(value) {
   return IsKind(value, "Call");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/immutable/instantiate_remove.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/immutable/instantiate_remove.mjs
 function RemoveImmutableOperation(type) {
   return memory_exports.Discard(type, ["~immutable"]);
 }
@@ -6322,35 +16047,35 @@ function RemoveImmutableInstantiate(context, state, type, options) {
   return RemoveImmutableAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/intrinsics/mapping.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/mapping.mjs
 function ApplyMapping(mapping, value) {
   return mapping(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/intrinsics/from_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/from_literal.mjs
 function FromLiteral3(mapping, value) {
   return guard_exports.IsString(value) ? Literal(ApplyMapping(mapping, value)) : Literal(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/intrinsics/from_template_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/from_template_literal.mjs
 function FromTemplateLiteral(mapping, pattern) {
   const evaluated = EvaluateTemplateLiteral(pattern);
   const result = FromType7(mapping, evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/intrinsics/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/from_union.mjs
 function FromUnion2(mapping, types) {
   const result = types.map((type) => FromType7(mapping, type));
   return Union(result);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/intrinsics/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/from_type.mjs
 function FromType7(mapping, type) {
   return IsLiteral(type) ? FromLiteral3(mapping, type.const) : IsTemplateLiteral(type) ? FromTemplateLiteral(mapping, type.pattern) : IsUnion(type) ? FromUnion2(mapping, type.anyOf) : type;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/capitalize.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/capitalize.mjs
 function CapitalizeDeferred(type, options = {}) {
   return Deferred("Capitalize", [type], options);
 }
@@ -6358,7 +16083,7 @@ function Capitalize(type, options = {}) {
   return CapitalizeAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/lowercase.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/lowercase.mjs
 function LowercaseDeferred(type, options = {}) {
   return Deferred("Lowercase", [type], options);
 }
@@ -6366,7 +16091,7 @@ function Lowercase(type, options = {}) {
   return LowercaseAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/uncapitalize.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/uncapitalize.mjs
 function UncapitalizeDeferred(type, options = {}) {
   return Deferred("Uncapitalize", [type], options);
 }
@@ -6374,7 +16099,7 @@ function Uncapitalize(type, options = {}) {
   return UncapitalizeAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/uppercase.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/uppercase.mjs
 function UppercaseDeferred(type, options = {}) {
   return Deferred("Uppercase", [type], options);
 }
@@ -6382,7 +16107,7 @@ function Uppercase(type, options = {}) {
   return UppercaseAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/intrinsics/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/instantiate.mjs
 var CapitalizeMapping = (input) => input[0].toUpperCase() + input.slice(1);
 var LowercaseMapping = (input) => input.toLowerCase();
 var UncapitalizeMapping = (input) => input[0].toLowerCase() + input.slice(1);
@@ -6420,7 +16145,7 @@ function UppercaseInstantiate(context, state, type, options) {
   return UppercaseAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/conditional.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/conditional.mjs
 function ConditionalDeferred(left, right, true_, false_, options = {}) {
   return Deferred("Conditional", [left, right, true_, false_], options);
 }
@@ -6428,7 +16153,7 @@ function Conditional(left, right, true_, false_, options = {}) {
   return ConditionalAction({}, State([], []), left, right, true_, false_, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/conditional/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/conditional/instantiate.mjs
 function ConditionalOperation(context, state, left, right, true_, false_) {
   const extendsResult = Extends(context, left, right);
   return result_exports.IsExtendsUnion(extendsResult) ? Union([InstantiateType(extendsResult.inferred, state, true_), InstantiateType(context, state, false_)]) : result_exports.IsExtendsTrue(extendsResult) ? InstantiateType(extendsResult.inferred, state, true_) : InstantiateType(context, state, false_);
@@ -6443,7 +16168,7 @@ function ConditionalInstantiate(context, state, left, right, true_, false_, opti
   return ConditionalAction(context, state, instantiatedLeft, instantiatedRight, true_, false_, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/constructor_parameters.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/constructor_parameters.mjs
 function ConstructorParametersDeferred(type, options = {}) {
   return Deferred("ConstructorParameters", [type], options);
 }
@@ -6451,7 +16176,7 @@ function ConstructorParameters(type, options = {}) {
   return ConstructorParametersAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/constructor_parameters/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/constructor_parameters/instantiate.mjs
 function ConstructorParametersOperation(type) {
   const parameters = IsConstructor2(type) ? type["parameters"] : [];
   const instantiatedParameters = InstantiateElements({}, State([], []), parameters);
@@ -6467,7 +16192,7 @@ function ConstructorParametersInstantiate(context, state, type, options) {
   return ConstructorParametersAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/exclude.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/exclude.mjs
 function ExcludeDeferred(left, right, options = {}) {
   return Deferred("Exclude", [left, right], options);
 }
@@ -6475,7 +16200,7 @@ function Exclude(left, right, options = {}) {
   return ExcludeAction(left, right, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/exclude/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/exclude/instantiate.mjs
 function ExcludeAction(left, right, options) {
   const result = CanInstantiate([left, right]) ? memory_exports.Update(ExcludeOperation(left, right), {}, options) : ExcludeDeferred(left, right, options);
   return result;
@@ -6486,7 +16211,7 @@ function ExcludeInstantiate(context, state, left, right, options) {
   return ExcludeAction(instantiatedLeft, instantiatedRight, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/extract.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/extract.mjs
 function ExtractDeferred(left, right, options = {}) {
   return Deferred("Extract", [left, right], options);
 }
@@ -6494,16 +16219,14 @@ function Extract(left, right, options = {}) {
   return ExtractAction(left, right, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/extract/operation.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/extract/operation.mjs
 function ExtractType(left, right) {
   const check = Extends({}, left, right);
   const result = result_exports.IsExtendsTrueLike(check) ? [left] : [];
   return result;
 }
-function ExtractUnion(types, right) {
-  return types.reduce((result, head) => {
-    return [...result, ...ExtractType(head, right)];
-  }, []);
+function ExtractUnion(left, right, result = []) {
+  return guard_exports.ShiftLeft(left, (head, tail) => ExtractUnion(tail, right, [...result, ...ExtractType(head, right)]), () => result);
 }
 function ExtractOperation(left, right) {
   const evaluated = EvaluateType(left);
@@ -6513,7 +16236,7 @@ function ExtractOperation(left, right) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/extract/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/extract/instantiate.mjs
 function ExtractAction(left, right, options) {
   const result = CanInstantiate([left, right]) ? memory_exports.Update(ExtractOperation(left, right), {}, options) : ExtractDeferred(left, right, options);
   return result;
@@ -6524,7 +16247,7 @@ function ExtractInstantiate(context, state, left, right, options) {
   return ExtractAction(instantiatedLeft, instantiatedRight, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/helpers/keys_to_indexer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/helpers/keys_to_indexer.mjs
 function KeysToLiterals(keys) {
   return keys.reduce((result, left) => {
     return IsLiteralValue(left) ? [...result, Literal(left)] : result;
@@ -6536,7 +16259,7 @@ function KeysToIndexer(keys) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/indexed.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/indexed.mjs
 function IndexDeferred(type, indexer, options = {}) {
   return Deferred("Index", [type, indexer], options);
 }
@@ -6545,21 +16268,21 @@ function Index(type, indexer_or_keys, options = {}) {
   return IndexAction(type, indexer, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/object/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_cyclic.mjs
 function FromCyclic(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const result = FromType8(target);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/object/from_dependent.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_dependent.mjs
 function FromDependent(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType8(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/object/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_intersect.mjs
 function CollapseIntersectProperties(left, right) {
   const leftKeys = guard_exports.Keys(left).filter((key) => !guard_exports.HasPropertyKey(right, key));
   const rightKeys = guard_exports.Keys(right).filter((key) => !guard_exports.HasPropertyKey(left, key));
@@ -6577,19 +16300,19 @@ function FromIntersect(types) {
   }, {});
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/object/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_object.mjs
 function FromObject5(properties) {
   return properties;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/object/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_tuple.mjs
 function FromTuple(types) {
-  const object = TupleToObject(Tuple(types));
-  const result = FromType8(object);
+  const object3 = TupleToObject(Tuple(types));
+  const result = FromType8(object3);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/object/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_union.mjs
 function CollapseUnionProperties(left, right) {
   const sharedKeys = guard_exports.Keys(left).filter((key) => key in right);
   const result = sharedKeys.reduce((result2, key) => {
@@ -6604,26 +16327,26 @@ function FromUnion3(types) {
   return guard_exports.ShiftLeft(types, (left, right) => ReduceVariants(right, FromType8(left)), () => Unreachable());
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/object/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_type.mjs
 function FromType8(type) {
   return IsCyclic(type) ? FromCyclic(type.$defs, type.$ref) : IsDependent(type) ? FromDependent(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect(type.allOf) : IsUnion(type) ? FromUnion3(type.anyOf) : IsTuple(type) ? FromTuple(type.items) : IsObject2(type) ? FromObject5(type.properties) : {};
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/object/collapse.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/collapse.mjs
 function CollapseToObject(type) {
   const properties = FromType8(type);
   const result = _Object_(properties);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/helpers/keys.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/helpers/keys.mjs
 var integerKeyPattern = new RegExp("^(?:0|[1-9][0-9]*)$");
 function ConvertToIntegerKey(value) {
   const normal = `${value}`;
   return integerKeyPattern.test(normal) ? parseInt(normal) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexed/from_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/from_array.mjs
 function NormalizeLiteral(value) {
   return Literal(ConvertToIntegerKey(value));
 }
@@ -6643,66 +16366,66 @@ function FromArray4(type, indexer) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_cyclic.mjs
 function FromCyclic2(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const result = FromType9(target);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/from_dependent.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_dependent.mjs
 function FromDependent2(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType9(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/from_enum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_enum.mjs
 function FromEnum(values) {
   const evaluated = EvaluateEnum(values);
   const result = FromType9(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_intersect.mjs
 function FromIntersect2(types) {
   const evaluated = EvaluateIntersect(types);
   const result = FromType9(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/from_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_literal.mjs
 function FromLiteral4(value) {
   const result = [`${value}`];
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/from_template_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_template_literal.mjs
 function FromTemplateLiteral2(pattern) {
   const evaluated = EvaluateTemplateLiteral(pattern);
   const result = FromType9(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_union.mjs
 function FromUnion4(types) {
   return types.reduce((result, left) => {
     return [...result, ...FromType9(left)];
   }, []);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_type.mjs
 function FromType9(type) {
   return IsCyclic(type) ? FromCyclic2(type.$defs, type.$ref) : IsDependent(type) ? FromDependent2(type.if, type.then, type.else) : IsEnum2(type) ? FromEnum(type.enum) : IsIntersect(type) ? FromIntersect2(type.allOf) : IsLiteral(type) ? FromLiteral4(type.const) : IsTemplateLiteral(type) ? FromTemplateLiteral2(type.pattern) : IsUnion(type) ? FromUnion4(type.anyOf) : [];
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/to_indexable_keys.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/to_indexable_keys.mjs
 function ToIndexableKeys(type) {
   const result = FromType9(type);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/this/expand_this.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/this/expand_this.mjs
 function FromTypes5(properties, types) {
   return types.map((type) => FromType10(properties, type));
 }
@@ -6714,7 +16437,7 @@ function ExpandThis(properties, type) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexed/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/from_object.mjs
 function IndexProperty(properties, key) {
   const selectedType = key in properties ? properties[key] : Never();
   const result = ExpandThis(properties, selectedType);
@@ -6748,7 +16471,7 @@ function FromObject6(properties, indexer) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexed/array_indexer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/array_indexer.mjs
 function ConvertLiteral(value) {
   return Literal(ConvertToIntegerKey(value));
 }
@@ -6759,7 +16482,7 @@ function FormatArrayIndexer(type) {
   return IsIntersect(type) ? Intersect(ArrayIndexerTypes(type.allOf)) : IsUnion(type) ? Union(ArrayIndexerTypes(type.anyOf)) : IsLiteral(type) ? ConvertLiteral(type.const) : type;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexed/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/from_tuple.mjs
 function IndexElementsWithIndexer(types, indexer) {
   return types.reduceRight((result, right, index) => {
     const check = Extends({}, Literal(index), indexer);
@@ -6781,12 +16504,12 @@ function FromTuple2(types, indexer) {
   );
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexed/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/from_type.mjs
 function FromType11(type, indexer) {
   return IsArray2(type) ? FromArray4(type.items, indexer) : IsObject2(type) ? FromObject6(type.properties, indexer) : IsTuple(type) ? FromTuple2(type.items, indexer) : Never();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexed/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/instantiate.mjs
 function NormalizeType(type) {
   const result = IsCyclic(type) || IsDependent(type) || IsIntersect(type) || IsUnion(type) ? CollapseToObject(type) : type;
   return result;
@@ -6801,7 +16524,7 @@ function IndexInstantiate(context, state, type, indexer, options) {
   return IndexAction(instantiatedType, instantiatedIndexer, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/instance_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/instance_type.mjs
 function InstanceTypeDeferred(type, options = {}) {
   return Deferred("InstanceType", [type], options);
 }
@@ -6809,7 +16532,7 @@ function InstanceType(type, options = {}) {
   return InstanceTypeAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/instance_type/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/instance_type/instantiate.mjs
 function InstanceTypeOperation(type) {
   return IsConstructor2(type) ? type["instanceType"] : Never();
 }
@@ -6822,7 +16545,7 @@ function InstanceTypeInstantiate(context, state, type, options = {}) {
   return InstanceTypeAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/keyof.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/keyof.mjs
 function KeyOfDeferred(type, options = {}) {
   return Deferred("KeyOf", [type], options);
 }
@@ -6830,17 +16553,17 @@ function KeyOf2(type, options = {}) {
   return KeyOfAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/keyof/from_any.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_any.mjs
 function FromAny() {
   return Union([Number2(), String2(), Symbol2()]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/keyof/from_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_array.mjs
 function FromArray5(_type) {
   return Number2();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/keyof/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_object.mjs
 function FromPropertyKeys(keys) {
   const result = keys.reduce((result2, left) => {
     return IsLiteralValue(left) ? [...result2, Literal(ConvertToIntegerKey(left))] : Unreachable();
@@ -6854,23 +16577,23 @@ function FromObject7(properties) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/keyof/from_record.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_record.mjs
 function FromRecord2(type) {
   return RecordKey(type);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/keyof/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_tuple.mjs
 function FromTuple3(types) {
   const result = types.map((_, index) => Literal(index));
   return EvaluateUnionFast(result);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/keyof/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_type.mjs
 function FromType12(type) {
   return IsAny(type) ? FromAny() : IsArray2(type) ? FromArray5(type.items) : IsObject2(type) ? FromObject7(type.properties) : IsRecord(type) ? FromRecord2(type) : IsTuple(type) ? FromTuple3(type.items) : Never();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/keyof/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/instantiate.mjs
 function NormalizeType2(type) {
   const result = IsCyclic(type) || IsDependent(type) || IsIntersect(type) || IsUnion(type) ? CollapseToObject(type) : type;
   return result;
@@ -6883,7 +16606,7 @@ function KeyOfInstantiate(context, state, type, options) {
   return KeyOfAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/mapped.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/mapped.mjs
 function MappedDeferred(identifier, type, as, property, options = {}) {
   return Deferred("Mapped", [identifier, type, as, property], options);
 }
@@ -6891,7 +16614,7 @@ function Mapped(identifier, type, as, property, options = {}) {
   return MappedAction({}, State([], []), identifier, type, as, property, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/mapped/mapped_variants.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/mapped/mapped_variants.mjs
 function FromTemplateLiteral3(pattern) {
   const evaluated = EvaluateTemplateLiteral(pattern);
   const result = FromType13(evaluated);
@@ -6920,7 +16643,7 @@ function MappedVariants(type) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/mapped/mapped_operation.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/mapped/mapped_operation.mjs
 function CanonicalAs(instantiatedAs) {
   const result = IsTemplateLiteral(instantiatedAs) ? EvaluateTemplateLiteral(instantiatedAs.pattern) : instantiatedAs;
   return result;
@@ -6950,7 +16673,7 @@ function MappedOperation(context, state, identifier, type, as, property) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/mapped/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/mapped/instantiate.mjs
 function MappedAction(context, state, identifier, type, as, property, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(MappedOperation(context, state, identifier, type, as, property), {}, options) : MappedDeferred(identifier, type, as, property, options);
   return result;
@@ -6960,7 +16683,7 @@ function MappedInstantiate(context, state, identifier, type, as, property, optio
   return MappedAction(context, state, identifier, instantiatedType, as, property, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/module/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/module/instantiate.mjs
 function InstantiateCyclics(context, declarations, cyclicKeys) {
   const declarationContext = memory_exports.Assign(context, declarations);
   const declarationKeys = guard_exports.Keys(declarations).filter((key) => cyclicKeys.includes(key));
@@ -6987,7 +16710,7 @@ function ModuleInstantiate(context, _state, declarations, options) {
   return instantiatedModule;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/non_nullable.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/non_nullable.mjs
 function NonNullableDeferred(type, options = {}) {
   return Deferred("NonNullable", [type], options);
 }
@@ -6995,7 +16718,7 @@ function NonNullable(type, options = {}) {
   return NonNullableAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/non_nullable/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/non_nullable/instantiate.mjs
 function NonNullableOperation(type) {
   const excluded = Union([Null(), Undefined()]);
   return ExcludeAction(type, excluded, {});
@@ -7009,7 +16732,7 @@ function NonNullableInstantiate(context, state, type, options) {
   return NonNullableAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/omit.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/omit.mjs
 function OmitDeferred(type, indexer, options = {}) {
   return Deferred("Omit", [type, indexer], options);
 }
@@ -7018,14 +16741,14 @@ function Omit(type, indexer_or_keys, options = {}) {
   return OmitAction(type, indexer, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/indexable/to_indexable.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/to_indexable.mjs
 function ToIndexable(type) {
   const collapsed = CollapseToObject(type);
   const result = IsObject2(collapsed) ? collapsed.properties : Unreachable();
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/omit/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/omit/from_type.mjs
 function FromKeys(properties, keys) {
   const result = guard_exports.Keys(properties).reduce((result2, key) => {
     return keys.includes(key) ? result2 : { ...result2, [key]: properties[key] };
@@ -7040,7 +16763,7 @@ function FromType14(type, indexer) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/omit/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/omit/instantiate.mjs
 function OmitAction(type, indexer, options) {
   const result = CanInstantiate([type, indexer]) ? memory_exports.Update(FromType14(type, indexer), {}, options) : OmitDeferred(type, indexer, options);
   return result;
@@ -7051,7 +16774,7 @@ function OmitInstantiate(context, state, type, indexer, options) {
   return OmitAction(instantiatedType, instantiatedIndexer, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/parameters.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/parameters.mjs
 function ParametersDeferred(type, options = {}) {
   return Deferred("Parameters", [type], options);
 }
@@ -7059,7 +16782,7 @@ function Parameters(type, options = {}) {
   return ParametersAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/parameters/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/parameters/instantiate.mjs
 function ParametersOperation(type) {
   const parameters = IsFunction2(type) ? type["parameters"] : [];
   const instantiatedParameters = InstantiateElements({}, State([], []), parameters);
@@ -7075,7 +16798,7 @@ function ParametersInstantiate(context, state, type, options) {
   return ParametersAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/partial.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/partial.mjs
 function PartialDeferred(type, options = {}) {
   return Deferred("Partial", [type], options);
 }
@@ -7083,7 +16806,7 @@ function Partial(type, options = {}) {
   return PartialAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/partial/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_cyclic.mjs
 function FromCyclic3(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const partial = FromType15(target);
@@ -7091,27 +16814,27 @@ function FromCyclic3(defs, ref) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/partial/from_dependent.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_dependent.mjs
 function FromDependent3(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType15(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/partial/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_intersect.mjs
 function FromIntersect3(types) {
   const evaluated = EvaluateIntersect(types);
   const result = FromType15(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/partial/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_union.mjs
 function FromUnion6(types) {
   const result = types.map((type) => FromType15(type));
   return Union(result);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/partial/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_object.mjs
 function FromObject8(properties) {
   const mapped = guard_exports.Keys(properties).reduce((result2, left) => {
     return { ...result2, [left]: AddOptional(properties[left]) };
@@ -7120,12 +16843,12 @@ function FromObject8(properties) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/partial/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_type.mjs
 function FromType15(type) {
   return IsCyclic(type) ? FromCyclic3(type.$defs, type.$ref) : IsDependent(type) ? FromDependent3(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect3(type.allOf) : IsUnion(type) ? FromUnion6(type.anyOf) : IsObject2(type) ? FromObject8(type.properties) : _Object_({});
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/partial/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/instantiate.mjs
 function PartialAction(type, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(FromType15(type), {}, options) : PartialDeferred(type, options);
   return result;
@@ -7135,7 +16858,7 @@ function PartialInstantiate(context, state, type, options) {
   return PartialAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/pick.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/pick.mjs
 function PickDeferred(type, indexer, options = {}) {
   return Deferred("Pick", [type, indexer], options);
 }
@@ -7144,7 +16867,7 @@ function Pick(type, indexer_or_keys, options = {}) {
   return PickAction(type, indexer, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/pick/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/pick/from_type.mjs
 function FromKeys2(properties, keys) {
   const result = guard_exports.Keys(properties).reduce((result2, key) => {
     return keys.includes(key) ? memory_exports.Assign(result2, { [key]: properties[key] }) : result2;
@@ -7159,7 +16882,7 @@ function FromType16(type, indexer) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/pick/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/pick/instantiate.mjs
 function PickAction(type, indexer, options) {
   const result = CanInstantiate([type, indexer]) ? memory_exports.Update(FromType16(type, indexer), {}, options) : PickDeferred(type, indexer, options);
   return result;
@@ -7170,7 +16893,7 @@ function PickInstantiate(context, state, type, indexer, options) {
   return PickAction(instantiatedType, instantiatedIndexer, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/readonly_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/readonly_object.mjs
 function ReadonlyObjectDeferred(type, options = {}) {
   return Deferred("ReadonlyObject", [type], options);
 }
@@ -7179,13 +16902,13 @@ function ReadonlyObject(type, options = {}) {
 }
 var ReadonlyType = ReadonlyObject;
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly_object/from_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_array.mjs
 function FromArray6(type) {
   const result = AddImmutable(_Array_(type));
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly_object/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_cyclic.mjs
 function FromCyclic4(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const partial = FromType17(target);
@@ -7193,21 +16916,21 @@ function FromCyclic4(defs, ref) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly_object/from_dependent.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_dependent.mjs
 function FromDependent4(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType17(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly_object/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_intersect.mjs
 function FromIntersect4(types) {
   const evaluated = EvaluateIntersect(types);
   const result = FromType17(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly_object/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_object.mjs
 function FromObject9(properties) {
   const mapped = guard_exports.Keys(properties).reduce((result2, left) => {
     return { ...result2, [left]: AddReadonly(properties[left]) };
@@ -7216,24 +16939,24 @@ function FromObject9(properties) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly_object/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_tuple.mjs
 function FromTuple4(types) {
   const result = AddImmutable(Tuple(types));
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly_object/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_union.mjs
 function FromUnion7(types) {
   const result = types.map((type) => FromType17(type));
   return Union(result);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly_object/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_type.mjs
 function FromType17(type) {
   return IsArray2(type) ? FromArray6(type.items) : IsCyclic(type) ? FromCyclic4(type.$defs, type.$ref) : IsDependent(type) ? FromDependent4(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect4(type.allOf) : IsObject2(type) ? FromObject9(type.properties) : IsTuple(type) ? FromTuple4(type.items) : IsUnion(type) ? FromUnion7(type.anyOf) : type;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/readonly_object/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/instantiate.mjs
 function ReadonlyObjectAction(type, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(FromType17(type), {}, options) : ReadonlyObjectDeferred(type);
   return result;
@@ -7243,12 +16966,12 @@ function ReadonlyObjectInstantiate(context, state, type, options) {
   return ReadonlyObjectAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/ref/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/ref/instantiate.mjs
 function RefInstantiate(context, state, type, ref) {
   return state.visited.includes(ref) ? type : ref in context ? InstantiateType(context, State(state["callstack"], [...state["visited"], ref]), context[ref]) : type;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/required/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_cyclic.mjs
 function FromCyclic5(defs, ref) {
   const target = CyclicTarget(defs, ref);
   const partial = FromType18(target);
@@ -7256,27 +16979,27 @@ function FromCyclic5(defs, ref) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/required/from_dependent.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_dependent.mjs
 function FromDependent5(if_, then_, else_) {
   const evaluated = EvaluateDependent(if_, then_, else_);
   const result = FromType18(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/required/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_intersect.mjs
 function FromIntersect5(types) {
   const evaluated = EvaluateIntersect(types);
   const result = FromType18(evaluated);
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/required/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_union.mjs
 function FromUnion8(types) {
   const result = types.map((type) => FromType18(type));
   return Union(result);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/required/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_object.mjs
 function FromObject10(properties) {
   const mapped = guard_exports.Keys(properties).reduce((result2, left) => {
     return { ...result2, [left]: RemoveOptional(properties[left]) };
@@ -7285,12 +17008,12 @@ function FromObject10(properties) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/required/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_type.mjs
 function FromType18(type) {
   return IsCyclic(type) ? FromCyclic5(type.$defs, type.$ref) : IsDependent(type) ? FromDependent5(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect5(type.allOf) : IsUnion(type) ? FromUnion8(type.anyOf) : IsObject2(type) ? FromObject10(type.properties) : _Object_({});
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/required.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/required.mjs
 function RequiredDeferred(type, options = {}) {
   return Deferred("Required", [type], options);
 }
@@ -7298,7 +17021,7 @@ function Required(type, options = {}) {
   return RequiredAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/required/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/instantiate.mjs
 function RequiredAction(type, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(FromType18(type), {}, options) : RequiredDeferred(type, options);
   return result;
@@ -7308,7 +17031,7 @@ function RequiredInstantiate(context, state, type, options) {
   return RequiredAction(instaniatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/return_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/return_type.mjs
 function ReturnTypeDeferred(type, options = {}) {
   return Deferred("ReturnType", [type], options);
 }
@@ -7316,7 +17039,7 @@ function ReturnType(type, options = {}) {
   return ReturnTypeAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/return_type/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/return_type/instantiate.mjs
 function ReturnTypeOperation(type) {
   return IsFunction2(type) ? type["returnType"] : Never();
 }
@@ -7329,7 +17052,7 @@ function ReturnTypeInstantiate(context, state, type, options = {}) {
   return ReturnTypeAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/with.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/with.mjs
 function WithDeferred(type, options) {
   return Deferred("With", [type, options], {});
 }
@@ -7337,7 +17060,7 @@ function With2(type, options) {
   return WithAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/with/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/with/instantiate.mjs
 function WithAction(type, options) {
   const result = CanInstantiate([type]) ? memory_exports.Update(type, {}, options) : WithDeferred(type, options);
   return result;
@@ -7347,7 +17070,7 @@ function WithInstantiate(context, state, type, options) {
   return WithAction(instaniatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/rest/spread.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/rest/spread.mjs
 function SpreadElement(type) {
   const result = IsRest(type) ? IsTuple(type.items) ? RestSpread(type.items.items) : IsInfer(type.items) ? [type] : IsRef2(type.items) ? [type] : [Never()] : [type];
   return result;
@@ -7359,7 +17082,7 @@ function RestSpread(types) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/instantiate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/instantiate.mjs
 function State(callstack, visited2) {
   return { callstack, visited: visited2 };
 }
@@ -7407,7 +17130,7 @@ function Instantiate(context, type) {
   return InstantiateType(context, State([], []), type);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/immutable/instantiate_add.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/immutable/instantiate_add.mjs
 function AddImmutableOperation(type) {
   return memory_exports.Update(type, { "~immutable": true }, {});
 }
@@ -7420,7 +17143,7 @@ function AddImmutableInstantiate(context, state, type, options) {
   return AddImmutableAction(instantiatedType, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/_add_immutable.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_add_immutable.mjs
 function AddImmutableDeferred(type, options = {}) {
   return Deferred("AddImmutable", [type], options);
 }
@@ -7428,7 +17151,7 @@ function AddImmutable(type, options = {}) {
   return AddImmutableAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/evaluate.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/evaluate.mjs
 function EvaluateDeferred(type, options = {}) {
   return Deferred("Evaluate", [type], options);
 }
@@ -7436,7 +17159,7 @@ function Evaluate(type, options = {}) {
   return EvaluateAction(type, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/action/module.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/module.mjs
 function ModuleDeferred(declarations, options = {}) {
   return Deferred("Module", [declarations], options);
 }
@@ -7444,11 +17167,10 @@ function Module2(declarations, options = {}) {
   return ModuleInstantiate({}, State([], []), declarations, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/engine/priority/priority.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/priority/priority.mjs
 function Comparer(left, right) {
   const compareResult = Compare(left, right);
-  const result = guard_exports.IsEqual(compareResult, "right-inside") ? 1 : guard_exports.IsEqual(compareResult, "disjoint") ? 1 : 0;
-  return result;
+  return guard_exports.IsEqual(compareResult, CompareResultRightInside) ? 1 : guard_exports.IsEqual(compareResult, CompareResultDisjoint) ? 1 : 0;
 }
 function Insert(type, types, result = []) {
   return guard_exports.ShiftLeft(types, (left, right) => guard_exports.IsEqual(Comparer(type, left), 1) ? Insert(type, right, [...result, left]) : [...result, type, ...types], () => [...result, type]);
@@ -7461,7 +17183,7 @@ function Priority(types) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/type/script/script.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/script.mjs
 function Script2(...args) {
   const [context, input, options] = arguments_exports.Match(args, {
     2: (script, options2) => guard_exports.IsString(script) ? [{}, script, options2] : [script, options2, {}],
@@ -7473,19 +17195,19 @@ function Script2(...args) {
   return memory_exports.Update(parsed, {}, options);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/from_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_array.mjs
 function FromArray7(context, type, value) {
   if (!guard_exports.IsArray(value))
     return value;
   return value.map((value2) => FromType19(context, type.items, value2));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_cyclic.mjs
 function FromCyclic6(context, type, value) {
   return FromType19({ ...context, ...type.$defs }, Ref2(type.$ref), value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_intersect.mjs
 function EvaluateIntersection(context, type) {
   const additionalProperties = guard_exports.HasPropertyKey(type, "unevaluatedProperties") ? { additionalProperties: type.unevaluatedProperties } : {};
   const instantiated = Instantiate(context, type);
@@ -7497,13 +17219,13 @@ function FromIntersect6(context, type, value) {
   return FromType19(context, evaluated, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/additional.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/additional.mjs
 function GetAdditionalProperties(type) {
   const additionalProperties = guard_exports.HasPropertyKey(type, "additionalProperties") ? type.additionalProperties : void 0;
   return additionalProperties;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_object.mjs
 function FromObject11(context, type, value) {
   if (!guard_exports.IsObject(value) || guard_exports.IsArray(value))
     return value;
@@ -7526,7 +17248,7 @@ function FromObject11(context, type, value) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/from_record.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_record.mjs
 function FromRecord3(context, type, value) {
   if (!guard_exports.IsObject(value))
     return value;
@@ -7550,12 +17272,12 @@ function FromRecord3(context, type, value) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/from_ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_ref.mjs
 function FromRef5(context, type, value) {
   return guard_exports.HasPropertyKey(context, type.$ref) ? FromType19(context, context[type.$ref], value) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_tuple.mjs
 function FromTuple5(context, schema, value) {
   if (!guard_exports.IsArray(value))
     return value;
@@ -7566,12 +17288,12 @@ function FromTuple5(context, schema, value) {
   return guard_exports.IsGreaterThan(value.length, length) ? value.slice(0, length) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clone/clone.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clone/clone.mjs
 function Clone2(value) {
   return Clone(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_union.mjs
 function FromUnion9(context, type, value) {
   for (const schema of type.anyOf) {
     const clean = FromType19(context, schema, Clone2(value));
@@ -7581,12 +17303,12 @@ function FromUnion9(context, type, value) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_type.mjs
 function FromType19(context, type, value) {
   return IsArray2(type) ? FromArray7(context, type, value) : IsCyclic(type) ? FromCyclic6(context, type, value) : IsIntersect(type) ? FromIntersect6(context, type, value) : IsObject2(type) ? FromObject11(context, type, value) : IsRecord(type) ? FromRecord3(context, type, value) : IsRef2(type) ? FromRef5(context, type, value) : IsTuple(type) ? FromTuple5(context, type, value) : IsUnion(type) ? FromUnion9(context, type, value) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/shared/union_priority_sort.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/shared/union_priority_sort.mjs
 function Modifiers(type, next) {
   for (const key of guard_default.Keys(type)) {
     if (guard_default.HasPropertyKey(next, key))
@@ -7616,7 +17338,7 @@ function UnionPrioritySort(type) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/clean/clean.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/clean.mjs
 function Clean(...args) {
   const [context, type, value] = arguments_exports.Match(args, {
     3: (context2, type2, value2) => [context2, type2, value2],
@@ -7626,7 +17348,7 @@ function Clean(...args) {
   return FromType19(context, sorted, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/try/try.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try.mjs
 var try_exports = {};
 __export(try_exports, {
   Fail: () => Fail,
@@ -7641,7 +17363,7 @@ __export(try_exports, {
   TryUndefined: () => TryUndefined
 });
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/try/try_result.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_result.mjs
 function IsOk(value) {
   return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "value");
 }
@@ -7652,12 +17374,12 @@ function Fail() {
   return void 0;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/try/try_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_array.mjs
 function TryArray(value) {
   return guard_exports.IsArray(value) ? Ok(value) : Ok([value]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/try/try_bigint.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_bigint.mjs
 function FromBoolean2(value) {
   return guard_exports.IsEqual(value, true) ? Ok(BigInt(1)) : Ok(BigInt(0));
 }
@@ -7681,7 +17403,7 @@ function TryBigInt(value) {
   return guard_exports.IsBigInt(value) ? Ok(value) : guard_exports.IsBoolean(value) ? FromBoolean2(value) : guard_exports.IsNumber(value) ? Ok(BigInt(Math.trunc(value))) : guard_exports.IsNull(value) ? Ok(BigInt(0)) : guard_exports.IsString(value) ? FromString2(value) : guard_exports.IsUndefined(value) ? Ok(BigInt(0)) : Fail();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/try/try_boolean.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_boolean.mjs
 function FromBigInt2(value) {
   return guard_exports.IsEqual(value, BigInt(0)) ? Ok(false) : guard_exports.IsEqual(value, BigInt(1)) ? Ok(true) : Fail();
 }
@@ -7695,7 +17417,7 @@ function TryBoolean(value) {
   return guard_exports.IsBigInt(value) ? FromBigInt2(value) : guard_exports.IsBoolean(value) ? Ok(value) : guard_exports.IsNumber(value) ? FromNumber2(value) : guard_exports.IsNull(value) ? Ok(false) : guard_exports.IsString(value) ? FromString3(value) : guard_exports.IsUndefined(value) ? Ok(false) : Fail();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/try/try_null.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_null.mjs
 function FromBigInt3(value) {
   return guard_exports.IsEqual(value, BigInt(0)) ? Ok(null) : Fail();
 }
@@ -7714,7 +17436,7 @@ function TryNull(value) {
   return guard_exports.IsBigInt(value) ? FromBigInt3(value) : guard_exports.IsBoolean(value) ? FromBoolean3(value) : guard_exports.IsNumber(value) ? FromNumber3(value) : guard_exports.IsNull(value) ? Ok(null) : guard_exports.IsString(value) ? FromString4(value) : guard_exports.IsUndefined(value) ? Ok(null) : Fail();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/try/try_number.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_number.mjs
 var maxBigInt = BigInt(Number.MAX_SAFE_INTEGER);
 var minBigInt = BigInt(Number.MIN_SAFE_INTEGER);
 function FromBigInt4(value) {
@@ -7741,12 +17463,12 @@ function TryNumber(value) {
   return guard_exports.IsBigInt(value) ? FromBigInt4(value) : guard_exports.IsBoolean(value) ? FromBoolean4(value) : guard_exports.IsNumber(value) ? Ok(value) : guard_exports.IsNull(value) ? Ok(0) : guard_exports.IsString(value) ? FromString5(value) : guard_exports.IsUndefined(value) ? Ok(0) : Fail();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/try/try_string.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_string.mjs
 function TryString(value) {
   return guard_exports.IsBigInt(value) ? Ok(value.toString()) : guard_exports.IsBoolean(value) ? Ok(value.toString()) : guard_exports.IsNumber(value) ? Ok(value.toString()) : guard_exports.IsNull(value) ? Ok("null") : guard_exports.IsString(value) ? Ok(value) : guard_exports.IsUndefined(value) ? Ok("") : Fail();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/try/try_undefined.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_undefined.mjs
 function FromBigInt5(value) {
   return guard_exports.IsEqual(value, BigInt(0)) ? Ok(void 0) : Fail();
 }
@@ -7765,48 +17487,48 @@ function TryUndefined(value) {
   return guard_exports.IsBigInt(value) ? FromBigInt5(value) : guard_exports.IsBoolean(value) ? FromBoolean5(value) : guard_exports.IsNumber(value) ? FromNumber4(value) : guard_exports.IsNull(value) ? Ok(void 0) : guard_exports.IsString(value) ? FromString6(value) : guard_exports.IsUndefined(value) ? Ok(value) : Fail();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_array.mjs
 function FromArray8(context, type, value) {
   const result = try_exports.TryArray(value);
   return result.value.map((value2) => FromType21(context, type.items, value2));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_bigint.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_bigint.mjs
 function FromBigInt6(_context, _type, value) {
   const result = try_exports.TryBigInt(value);
   return try_exports.IsOk(result) ? result.value : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_boolean.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_boolean.mjs
 function FromBoolean6(_context, _type, value) {
   const result = try_exports.TryBoolean(value);
   return try_exports.IsOk(result) ? result.value : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_cyclic.mjs
 function FromCyclic7(context, type, value) {
   return FromType21({ ...context, ...type.$defs }, Ref2(type.$ref), value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_enum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_enum.mjs
 function FromEnum3(context, type, value) {
   return FromType21(context, Evaluate(type), value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_integer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_integer.mjs
 function FromInteger(_context, _type, value) {
   const result = try_exports.TryNumber(value);
   return try_exports.IsOk(result) ? Math.trunc(result.value) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_intersect.mjs
 function FromIntersect7(context, type, value) {
   const instantiated = Instantiate(context, type);
   const evaluated = Evaluate(instantiated);
   return FromType21(context, evaluated, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_literal.mjs
 function FromLiteralBigInt(_context, type, value) {
   const result = try_exports.TryBigInt(value);
   return try_exports.IsOk(result) && guard_exports.IsEqual(type.const, result.value) ? result.value : value;
@@ -7829,19 +17551,19 @@ function FromLiteral6(context, type, value) {
   return IsLiteralBigInt(type) ? FromLiteralBigInt(context, type, value) : IsLiteralBoolean(type) ? FromLiteralBoolean(context, type, value) : IsLiteralNumber(type) ? FromLiteralNumber(context, type, value) : IsLiteralString(type) ? FromLiteralString(context, type, value) : Unreachable();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_null.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_null.mjs
 function FromNull2(_context, _type, value) {
   const result = try_exports.TryNull(value);
   return try_exports.IsOk(result) ? result.value : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_number.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_number.mjs
 function FromNumber5(_context, _type, value) {
   const result = try_exports.TryNumber(value);
   return try_exports.IsOk(result) ? result.value : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_additional.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_additional.mjs
 function FromAdditionalProperties(context, entries, additionalProperties, value) {
   const keys = guard_exports.Keys(value);
   for (const [regexp, _] of entries) {
@@ -7854,12 +17576,12 @@ function FromAdditionalProperties(context, entries, additionalProperties, value)
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/shared/optional_undefined.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/shared/optional_undefined.mjs
 function IsOptionalUndefined(property, key, value) {
   return IsOptional(property) && guard_exports.IsUndefined(value[key]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_object.mjs
 function FromProperties5(context, type, value) {
   const entries = guard_exports.EntriesRegExp(type.properties);
   const keys = guard_exports.Keys(value);
@@ -7876,7 +17598,7 @@ function FromObject12(context, type, value) {
   return guard_exports.IsObjectNotArray(value) ? FromProperties5(context, type, value) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_record.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_record.mjs
 function FromPatternProperties(context, type, value) {
   const entries = guard_exports.EntriesRegExp(type.patternProperties);
   const keys = guard_exports.Keys(value);
@@ -7893,23 +17615,23 @@ function FromRecord4(context, type, value) {
   return guard_exports.IsObjectNotArray(value) ? FromPatternProperties(context, type, value) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_ref.mjs
 function FromRef6(context, type, value) {
   return guard_exports.HasPropertyKey(context, type.$ref) ? FromType21(context, context[type.$ref], value) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_string.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_string.mjs
 function FromString7(_context, _type, value) {
   const result = try_exports.TryString(value);
   return try_exports.IsOk(result) ? result.value : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_template_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_template_literal.mjs
 function FromTemplateLiteral4(context, type, value) {
   return FromType21(context, Evaluate(type), value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_tuple.mjs
 function FromTuple6(context, type, value) {
   if (!guard_exports.IsArray(value))
     return value;
@@ -7919,13 +17641,13 @@ function FromTuple6(context, type, value) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_undefined.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_undefined.mjs
 function FromUndefined2(_context, _type, value) {
   const result = try_exports.TryUndefined(value);
   return try_exports.IsOk(result) ? result.value : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_union.mjs
 function FromUnion10(context, type, value) {
   const matched = type.anyOf.some((type2) => Check2(context, type2, value));
   if (matched)
@@ -7935,18 +17657,18 @@ function FromUnion10(context, type, value) {
   return guard_exports.IsUndefined(selected) ? value : selected;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_void.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_void.mjs
 function FromVoid(_context, _type, value) {
   const result = try_exports.TryUndefined(value);
   return try_exports.IsOk(result) ? void 0 : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_type.mjs
 function FromType21(context, type, value) {
   return IsArray2(type) ? FromArray8(context, type, value) : IsBigInt2(type) ? FromBigInt6(context, type, value) : IsBoolean3(type) ? FromBoolean6(context, type, value) : IsCyclic(type) ? FromCyclic7(context, type, value) : IsEnum2(type) ? FromEnum3(context, type, value) : IsInteger2(type) ? FromInteger(context, type, value) : IsIntersect(type) ? FromIntersect7(context, type, value) : IsLiteral(type) ? FromLiteral6(context, type, value) : IsNull2(type) ? FromNull2(context, type, value) : IsNumber3(type) ? FromNumber5(context, type, value) : IsObject2(type) ? FromObject12(context, type, value) : IsRecord(type) ? FromRecord4(context, type, value) : IsRef2(type) ? FromRef6(context, type, value) : IsString3(type) ? FromString7(context, type, value) : IsTemplateLiteral(type) ? FromTemplateLiteral4(context, type, value) : IsTuple(type) ? FromTuple6(context, type, value) : IsUndefined2(type) ? FromUndefined2(context, type, value) : IsUnion(type) ? FromUnion10(context, type, value) : IsVoid(type) ? FromVoid(context, type, value) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/convert/convert.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/convert.mjs
 function Convert(...args) {
   const [context, type, value] = arguments_exports.Match(args, {
     3: (context2, type2, value2) => [context2, type2, value2],
@@ -7955,7 +17677,7 @@ function Convert(...args) {
   return FromType21(context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_array.mjs
 function FromArray9(context, type, value) {
   if (!guard_exports.IsArray(value))
     return value;
@@ -7965,26 +17687,26 @@ function FromArray9(context, type, value) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_cyclic.mjs
 function FromCyclic8(context, type, value) {
   return FromType22({ ...context, ...type.$defs }, Ref2(type.$ref), value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_default.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_default.mjs
 function FromDefault(type, value) {
   if (!guard_exports.IsUndefined(value))
     return value;
   return guard_exports.IsFunction(type.default) ? type.default() : Clone2(type.default);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_intersect.mjs
 function FromIntersect8(context, type, value) {
   const instantiated = Instantiate(context, type);
   const evaluated = Evaluate(instantiated);
   return FromType22(context, evaluated, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_object.mjs
 function FromObject13(context, type, value) {
   if (!guard_exports.IsObject(value))
     return value;
@@ -8006,7 +17728,7 @@ function FromObject13(context, type, value) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_record.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_record.mjs
 function FromRecord5(context, type, value) {
   if (!guard_exports.IsObject(value))
     return value;
@@ -8026,12 +17748,12 @@ function FromRecord5(context, type, value) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_ref.mjs
 function FromRef7(context, type, value) {
   return guard_exports.HasPropertyKey(context, type.$ref) ? FromType22(context, context[type.$ref], value) : value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_tuple.mjs
 function FromTuple7(context, schema, value) {
   if (!guard_exports.IsArray(value))
     return value;
@@ -8043,7 +17765,7 @@ function FromTuple7(context, schema, value) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_union.mjs
 function FromUnion11(context, schema, value) {
   for (const inner of schema.anyOf) {
     const result = FromType22(context, inner, Clone2(value));
@@ -8054,13 +17776,13 @@ function FromUnion11(context, schema, value) {
   return value;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_type.mjs
 function FromType22(context, type, value) {
   const defaulted = IsDefault(type) ? FromDefault(type, value) : value;
   return IsArray2(type) ? FromArray9(context, type, defaulted) : IsCyclic(type) ? FromCyclic8(context, type, defaulted) : IsIntersect(type) ? FromIntersect8(context, type, defaulted) : IsObject2(type) ? FromObject13(context, type, defaulted) : IsRecord(type) ? FromRecord5(context, type, defaulted) : IsRef2(type) ? FromRef7(context, type, defaulted) : IsTuple(type) ? FromTuple7(context, type, defaulted) : IsUnion(type) ? FromUnion11(context, type, defaulted) : defaulted;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/default/default.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/default.mjs
 function Default(...args) {
   const [context, type, value] = arguments_exports.Match(args, {
     3: (context2, type2, value2) => [context2, type2, value2],
@@ -8069,7 +17791,7 @@ function Default(...args) {
   return FromType22(context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/pipeline/pipeline.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/pipeline/pipeline.mjs
 function Pipeline(pipeline) {
   return (...args) => {
     const [context, type, value] = arguments_exports.Match(args, {
@@ -8080,20 +17802,20 @@ function Pipeline(pipeline) {
   };
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/callback.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/callback.mjs
 function Decode3(_context, type, value) {
   return type["~codec"].decode(value);
 }
-function Encode2(_context, type, value) {
+function Encode3(_context, type, value) {
   return type["~codec"].encode(value);
 }
 function Callback(direction, context, type, value) {
   if (!IsCodec(type))
     return value;
-  return guard_exports.IsEqual(direction, "Decode") ? Decode3(context, type, value) : Encode2(context, type, value);
+  return guard_exports.IsEqual(direction, "Decode") ? Decode3(context, type, value) : Encode3(context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/from_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_array.mjs
 function Decode4(direction, context, type, value) {
   if (!guard_exports.IsArray(value))
     return value;
@@ -8102,7 +17824,7 @@ function Decode4(direction, context, type, value) {
   }
   return Callback(direction, context, type, value);
 }
-function Encode3(direction, context, type, value) {
+function Encode4(direction, context, type, value) {
   const exterior = Callback(direction, context, type, value);
   if (!guard_exports.IsArray(exterior))
     return exterior;
@@ -8112,16 +17834,16 @@ function Encode3(direction, context, type, value) {
   return exterior;
 }
 function FromArray10(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode4(direction, context, type, value) : Encode3(direction, context, type, value);
+  return guard_exports.IsEqual(direction, "Decode") ? Decode4(direction, context, type, value) : Encode4(direction, context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_cyclic.mjs
 function FromCyclic9(direction, context, type, value) {
   value = FromType23(direction, { ...context, ...type.$defs }, Ref2(type.$ref), value);
   return Callback(direction, context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_intersect.mjs
 function MergeInteriors(interiors) {
   return interiors.reduce((results, interior) => ({ ...results, ...interior }), {});
 }
@@ -8139,7 +17861,7 @@ function Decode5(direction, context, type, value) {
   const exterior = structural ? MergeInteriors(interiors) : NonMatchingInterior(value, interiors);
   return Callback(direction, context, type, exterior);
 }
-function Encode4(direction, context, type, value) {
+function Encode5(direction, context, type, value) {
   if (guard_exports.IsEqual(type.allOf.length, 0))
     return Callback(direction, context, type, value);
   const exterior = Callback(direction, context, type, value);
@@ -8150,10 +17872,10 @@ function Encode4(direction, context, type, value) {
   return NonMatchingInterior(exterior, interiors);
 }
 function FromIntersect9(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode5(direction, context, type, value) : Encode4(direction, context, type, value);
+  return guard_exports.IsEqual(direction, "Decode") ? Decode5(direction, context, type, value) : Encode5(direction, context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_object.mjs
 function Decode6(direction, context, type, value) {
   if (!guard_exports.IsObjectNotArray(value))
     return value;
@@ -8164,7 +17886,7 @@ function Decode6(direction, context, type, value) {
   }
   return Callback(direction, context, type, value);
 }
-function Encode5(direction, context, type, value) {
+function Encode6(direction, context, type, value) {
   const exterior = Callback(direction, context, type, value);
   if (!guard_exports.IsObjectNotArray(exterior))
     return exterior;
@@ -8176,10 +17898,10 @@ function Encode5(direction, context, type, value) {
   return exterior;
 }
 function FromObject14(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode6(direction, context, type, value) : Encode5(direction, context, type, value);
+  return guard_exports.IsEqual(direction, "Decode") ? Decode6(direction, context, type, value) : Encode6(direction, context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/from_record.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_record.mjs
 function Decode7(direction, context, type, value) {
   if (!guard_exports.IsObjectNotArray(value))
     return value;
@@ -8191,7 +17913,7 @@ function Decode7(direction, context, type, value) {
   }
   return Callback(direction, context, type, value);
 }
-function Encode6(direction, context, type, value) {
+function Encode7(direction, context, type, value) {
   const exterior = Callback(direction, context, type, value);
   if (!guard_exports.IsObjectNotArray(exterior))
     return exterior;
@@ -8204,10 +17926,10 @@ function Encode6(direction, context, type, value) {
   return exterior;
 }
 function FromRecord6(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode7(direction, context, type, value) : Encode6(direction, context, type, value);
+  return guard_exports.IsEqual(direction, "Decode") ? Decode7(direction, context, type, value) : Encode7(direction, context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/from_ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_ref.mjs
 function ResolveRef(direction, context, type, value) {
   return guard_exports.HasPropertyKey(context, type.$ref) ? FromType23(direction, context, context[type.$ref], value) : value;
 }
@@ -8215,7 +17937,7 @@ function FromRef8(direction, context, type, value) {
   return guard_exports.IsEqual(direction, "Decode") ? Callback(direction, context, type, ResolveRef(direction, context, type, value)) : ResolveRef(direction, context, type, Callback(direction, context, type, value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_tuple.mjs
 function Decode8(direction, context, type, value) {
   if (!guard_exports.IsArray(value))
     return value;
@@ -8224,7 +17946,7 @@ function Decode8(direction, context, type, value) {
   }
   return Callback(direction, context, type, value);
 }
-function Encode7(direction, context, type, value) {
+function Encode8(direction, context, type, value) {
   const exterior = Callback(direction, context, type, value);
   if (!guard_exports.IsArray(exterior))
     return value;
@@ -8234,10 +17956,10 @@ function Encode7(direction, context, type, value) {
   return exterior;
 }
 function FromTuple8(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode8(direction, context, type, value) : Encode7(direction, context, type, value);
+  return guard_exports.IsEqual(direction, "Decode") ? Decode8(direction, context, type, value) : Encode8(direction, context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_union.mjs
 function Decode9(direction, context, type, value) {
   for (const schema of type.anyOf) {
     if (!Check2(context, schema, value))
@@ -8247,7 +17969,7 @@ function Decode9(direction, context, type, value) {
   }
   return value;
 }
-function Encode8(direction, context, type, value) {
+function Encode9(direction, context, type, value) {
   const exterior = Callback(direction, context, type, value);
   for (const schema of type.anyOf) {
     const variant2 = FromType23(direction, context, schema, Clone2(exterior));
@@ -8258,15 +17980,15 @@ function Encode8(direction, context, type, value) {
   return exterior;
 }
 function FromUnion12(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode9(direction, context, type, value) : Encode8(direction, context, type, value);
+  return guard_exports.IsEqual(direction, "Decode") ? Decode9(direction, context, type, value) : Encode9(direction, context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_type.mjs
 function FromType23(direction, context, type, value) {
   return IsArray2(type) ? FromArray10(direction, context, type, value) : IsCyclic(type) ? FromCyclic9(direction, context, type, value) : IsIntersect(type) ? FromIntersect9(direction, context, type, value) : IsObject2(type) ? FromObject14(direction, context, type, value) : IsRecord(type) ? FromRecord6(direction, context, type, value) : IsRef2(type) ? FromRef8(direction, context, type, value) : IsTuple(type) ? FromTuple8(direction, context, type, value) : IsUnion(type) ? FromUnion12(direction, context, type, value) : Callback(direction, context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/decode.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/decode.mjs
 var DecodeError = class extends AssertError {
   constructor(value, errors) {
     super("Decode", value, errors);
@@ -8297,7 +18019,7 @@ function Decode10(...args) {
   return Decoder(context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/encode.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/encode.mjs
 var EncodeError = class extends AssertError {
   constructor(value, errors) {
     super("Encode", value, errors);
@@ -8320,7 +18042,7 @@ var Encoder = Pipeline([
   (context, type, value) => Clean(context, type, value),
   (context, type, value) => Assert3(context, type, value)
 ]);
-function Encode9(...args) {
+function Encode10(...args) {
   const [context, type, value] = arguments_exports.Match(args, {
     3: (context2, type2, value2) => [context2, type2, value2],
     2: (type2, value2) => [{}, type2, value2]
@@ -8328,7 +18050,7 @@ function Encode9(...args) {
   return Encoder(context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/codec/has.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/has.mjs
 function FromArray11(context, type) {
   return IsCodec(type) || FromType24(context, type.items);
 }
@@ -8371,7 +18093,7 @@ function HasCodec(...args) {
   return FromType24(context, type);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/error.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/error.mjs
 var CreateError = class extends Error {
   constructor(type, message) {
     super(message);
@@ -8379,12 +18101,12 @@ var CreateError = class extends Error {
   }
 };
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_default.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_default.mjs
 function FromDefault2(_context, schema) {
   return guard_exports.IsFunction(schema.default) ? schema.default(schema) : guard_exports.IsObject(schema.default) ? Clone2(schema.default) : schema.default;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_array.mjs
 function FromArray12(context, type) {
   if (IsUniqueItems(type) && !IsDefault(type))
     throw new CreateError(type, "Arrays with uniqueItems constraints must specify a default annotation");
@@ -8392,17 +18114,17 @@ function FromArray12(context, type) {
   return Array.from({ length }, () => FromType25(context, type.items));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_bigint.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_bigint.mjs
 function FromBigInt7(_context, type) {
   return IsExclusiveMinimum(type) ? BigInt(type.exclusiveMinimum) + BigInt(1) : IsMinimum(type) ? BigInt(type.minimum) : BigInt(0);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_boolean.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_boolean.mjs
 function FromBoolean7(_context, _type) {
   return false;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_constructor.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_constructor.mjs
 function FromConstructor2(context, type) {
   const instanceType = FromType25(context, type.instanceType);
   return class {
@@ -8412,55 +18134,55 @@ function FromConstructor2(context, type) {
   };
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_cyclic.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_cyclic.mjs
 function FromCyclic11(context, type) {
   return FromType25({ ...context, ...type.$defs }, Ref2(type.$ref));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_enum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_enum.mjs
 function FromEnum4(context, type) {
   return FromType25(context, Evaluate(type));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_function.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_function.mjs
 function FromFunction2(context, type) {
   const returnType = FromType25(context, type.returnType);
   return () => returnType;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_integer.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_integer.mjs
 function FromInteger2(_context, type) {
   return IsExclusiveMinimum(type) && guard_exports.IsNumber(type.exclusiveMinimum) ? type.exclusiveMinimum + 1 : IsMinimum(type) ? type.minimum : 0;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_intersect.mjs
 function FromIntersect11(context, type) {
   const instantiated = Instantiate(context, type);
   const evaluated = Evaluate(instantiated);
   return FromType25(context, evaluated);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_literal.mjs
 function FromLiteral7(_context, type) {
   return type.const;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_never.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_never.mjs
 function FromNever(_context, type) {
   throw new CreateError(type, "Cannot create TNever types");
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_null.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_null.mjs
 function FromNull3(_context, _type) {
   return null;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_number.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_number.mjs
 function FromNumber6(_context, type) {
   return IsExclusiveMinimum(type) && guard_exports.IsNumber(type.exclusiveMinimum) ? type.exclusiveMinimum + 1 : IsMinimum(type) ? type.minimum : 0;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_object.mjs
 function FromObject16(context, type) {
   const required = guard_exports.IsUndefined(type.required) ? [] : type.required;
   return required.reduce((result, key) => {
@@ -8468,21 +18190,21 @@ function FromObject16(context, type) {
   }, {});
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_record.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_record.mjs
 function FromRecord8(_context, type) {
   if (IsMinProperties(type) && !IsDefault(type))
     throw new CreateError(type, "Record with the minProperties constraint must have a default annotation");
   return {};
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_ref.mjs
 function FromRef10(context, type) {
   return guard_exports.HasPropertyKey(context, type.$ref) ? FromType25(context, context[type.$ref]) : (() => {
     throw new CreateError(type, "Unable to deref Ref");
   })();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_string.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_string.mjs
 function FromString8(_context, type) {
   const needsDefault = (IsPattern(type) || IsFormat(type)) && !IsDefault(type);
   if (needsDefault)
@@ -8491,12 +18213,12 @@ function FromString8(_context, type) {
   return "".padEnd(minLength);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_symbol.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_symbol.mjs
 function FromSymbol2(_context, _type) {
-  return Symbol();
+  return /* @__PURE__ */ Symbol();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_template_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_template_literal.mjs
 function FromTemplateLiteral5(context, type) {
   const decoded = TemplateLiteralDecode(type.pattern);
   if (IsString3(decoded))
@@ -8504,17 +18226,17 @@ function FromTemplateLiteral5(context, type) {
   return FromType25(context, decoded);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_tuple.mjs
 function FromTuple10(context, type) {
   return Array.from({ length: type.minItems }, (_, i) => FromType25(context, type.items[i]));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_undefined.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_undefined.mjs
 function FromUndefined3(_context, _type) {
   return void 0;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_union.mjs
 function FromUnion14(context, type) {
   if (guard_exports.IsEqual(type.anyOf.length, 0)) {
     throw Error("Unable to create Union with no variants");
@@ -8522,12 +18244,12 @@ function FromUnion14(context, type) {
   return FromType25(context, type.anyOf[0]);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_void.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_void.mjs
 function FromVoid2(_context, _type) {
   return void 0;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_type.mjs
 function FromType25(context, type) {
   return (
     // -----------------------------------------------------
@@ -8542,7 +18264,7 @@ function FromType25(context, type) {
   );
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/create/create.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/create.mjs
 function Create2(...args) {
   const [context, type] = arguments_exports.Match(args, {
     2: (context2, type2) => [context2, type2],
@@ -8551,25 +18273,25 @@ function Create2(...args) {
   return FromType25(context, type);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/equal/equal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/equal/equal.mjs
 function Equal(left, right) {
   return guard_exports.IsDeepEqual(left, right);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/hash/hash.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/hash/hash.mjs
 function Hash2(value) {
   return hash_exports.Hash(value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/parse/parse.mjs
-var ParseError2 = class extends AssertError {
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/parse/parse.mjs
+var ParseError = class extends AssertError {
   constructor(value, errors) {
     super("Parse", value, errors);
   }
 };
 function Assert4(context, type, value) {
   if (!Check2(context, type, value))
-    throw new ParseError2(value, Errors2(context, type, value));
+    throw new ParseError(value, Errors2(context, type, value));
   return value;
 }
 var Parser = Pipeline([
@@ -8589,10 +18311,10 @@ function Parse(...args) {
     return value;
   if (settings_exports.Get().correctiveParse)
     return Parser(context, type, value);
-  throw new ParseError2(value, Errors2(context, type, value));
+  throw new ParseError(value, Errors2(context, type, value));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/delta/diff.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/delta/diff.mjs
 function CreateUpdate(path10, value) {
   return { type: "update", path: path10, value };
 }
@@ -8679,7 +18401,7 @@ function Diff(current, next) {
   return [...FromValue4("", current, next)];
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/delta/edit.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/delta/edit.mjs
 var Insert2 = _Object_({
   type: Literal("insert"),
   path: String2(),
@@ -8696,7 +18418,7 @@ var Delete2 = _Object_({
 });
 var Edit = Union([Insert2, Update2, Delete2]);
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/delta/patch.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/delta/patch.mjs
 function IsRoot(edits) {
   return edits.length > 0 && edits[0].path === "" && edits[0].type === "update";
 }
@@ -8728,7 +18450,7 @@ function Patch(current, edits) {
   return clone;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/error.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/error.mjs
 var RepairError = class extends Error {
   constructor(context, type, value, message) {
     super(message);
@@ -8738,7 +18460,7 @@ var RepairError = class extends Error {
   }
 };
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_array.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_array.mjs
 function MakeUnique(values) {
   const [hashes, result] = [/* @__PURE__ */ new Set(), []];
   for (const value of values) {
@@ -8765,19 +18487,19 @@ function FromArray14(context, type, value) {
   return unique;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_enum.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_enum.mjs
 function FromEnum5(context, type, value) {
   return FromType26(context, Evaluate(type), value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_intersect.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_intersect.mjs
 function FromIntersect12(context, type, value) {
   const instantiated = Instantiate(context, type);
   const evaluated = Evaluate(instantiated);
   return FromType26(context, evaluated, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_object.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_object.mjs
 function FromObject18(context, type, value) {
   if (Check2(context, type, value))
     return value;
@@ -8801,7 +18523,7 @@ function FromObject18(context, type, value) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_record.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_record.mjs
 function FromRecord9(context, type, value) {
   if (Check2(context, type, value))
     return value;
@@ -8827,20 +18549,20 @@ function FromRecord9(context, type, value) {
   return result;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_ref.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_ref.mjs
 function FromRef11(context, type, value) {
   return guard_exports.HasPropertyKey(context, type.$ref) ? FromType26(context, context[type.$ref], value) : (() => {
     throw new RepairError(context, type, value, "Unable to de-reference target type");
   })();
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_template_literal.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_template_literal.mjs
 function FromTemplateLiteral6(context, type, value) {
   const decoded = TemplateLiteralDecode(type.pattern);
   return FromType26(context, decoded, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_tuple.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_tuple.mjs
 function FromTuple11(context, schema, value) {
   if (Check2(context, schema, value))
     return value;
@@ -8849,7 +18571,7 @@ function FromTuple11(context, schema, value) {
   return schema.items.map((schema2, index) => FromType26(context, schema2, value[index]));
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/shared/union_score_select.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/shared/union_score_select.mjs
 function Deref(context, type, value) {
   return IsRef2(type) ? guard_exports.HasPropertyKey(context, type.$ref) ? Deref(context, context[type.$ref], value) : (() => {
     throw new Error("Unable to Deref target");
@@ -8861,10 +18583,10 @@ function ScoreVariant(context, type, value) {
   const keys = guard_exports.Keys(value);
   const entries = guard_exports.Entries(type.properties);
   return entries.reduce((result, [key, schema]) => {
-    const literal = IsLiteral(schema) && guard_exports.IsEqual(schema.const, value[key]) ? 100 : 0;
+    const literal2 = IsLiteral(schema) && guard_exports.IsEqual(schema.const, value[key]) ? 100 : 0;
     const checks = Check2(context, schema, value[key]) ? 10 : 0;
     const exists = keys.includes(key) ? 1 : 0;
-    return result + (literal + checks + exists);
+    return result + (literal2 + checks + exists);
   }, 0);
 }
 function UnionScoreSelect(context, type, value) {
@@ -8880,10 +18602,10 @@ function UnionScoreSelect(context, type, value) {
   return select;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_union.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_union.mjs
 function RepairUnion(context, type, value) {
-  const union = Union(Flatten(type.anyOf));
-  const schema = UnionScoreSelect(context, union, value);
+  const union2 = Union(Flatten(type.anyOf));
+  const schema = UnionScoreSelect(context, union2, value);
   return FromType26(context, schema, value);
 }
 function FromUnion15(context, type, value) {
@@ -8894,7 +18616,7 @@ function FromUnion15(context, type, value) {
   return RepairUnion(context, type, value);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_unknown.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_unknown.mjs
 function FromUnknown2(context, type, value) {
   if (Check2(context, type, value))
     return value;
@@ -8904,7 +18626,7 @@ function FromUnknown2(context, type, value) {
   return Create2(context, type);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/from_type.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_type.mjs
 function AssertRepairableValue(context, type, value) {
   const unsupported = globals_exports.IsDate(value) || globals_exports.IsMap(value) || globals_exports.IsSet(value) || globals_exports.IsTypeArray(value) || guard_exports.IsConstructor(value) || guard_exports.IsFunction(value);
   if (unsupported) {
@@ -8931,7 +18653,7 @@ function FromType26(context, type, value) {
   return FinalizeRepair(context, type, repaired);
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/repair/repair.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/repair.mjs
 function Repair(...args) {
   const [context, type, value] = arguments_exports.Match(args, {
     3: (context2, type2, value2) => [context2, type2, value2],
@@ -8942,7 +18664,7 @@ function Repair(...args) {
   return repaired;
 }
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/value/value.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/value.mjs
 var value_exports = {};
 __export(value_exports, {
   Assert: () => Assert,
@@ -8954,7 +18676,7 @@ __export(value_exports, {
   Decode: () => Decode10,
   Default: () => Default,
   Diff: () => Diff,
-  Encode: () => Encode9,
+  Encode: () => Encode10,
   Equal: () => Equal,
   Errors: () => Errors2,
   HasCodec: () => HasCodec,
@@ -8964,6 +18686,62 @@ __export(value_exports, {
   Pointer: () => pointer_exports,
   Repair: () => Repair
 });
+
+// src/async-settlement.ts
+var abortError = (signal) => {
+  const reason = signal.reason;
+  if (reason instanceof Error) return reason;
+  return new Error(typeof reason === "string" && reason ? reason : "Operation aborted");
+};
+var throwIfAborted = (signal) => {
+  if (signal?.aborted) throw abortError(signal);
+};
+var throwIfAbortedOrExpired = (signal, deadline) => {
+  throwIfAborted(signal);
+  deadline?.throwIfExpired();
+};
+var raceWithAbort = (operation, signal) => {
+  if (!signal) return Promise.resolve(operation);
+  if (signal.aborted) return Promise.reject(abortError(signal));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const onAbort = () => finish(() => reject(abortError(signal)));
+    signal.addEventListener("abort", onAbort, { once: true });
+    Promise.resolve(operation).then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error))
+    );
+  });
+};
+var runAbortable = (signal, operation) => {
+  try {
+    throwIfAborted(signal);
+    return raceWithAbort(Promise.resolve(operation()), signal);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+};
+var settleWithin = async (operations, timeoutMs) => {
+  const pending = [...operations].map((operation) => Promise.resolve(operation));
+  if (pending.length === 0) return true;
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.allSettled(pending).then(() => true),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(false), Math.max(0, timeoutMs));
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
 
 // src/config.ts
 import fs from "node:fs";
@@ -9045,7 +18823,7 @@ var DEFAULT_FABRIC_POWER_CONFIG = {
   },
   tracing: { enabled: false }
 };
-var record = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+var record2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
 var integer = (value, fallback, minimum, maximum) => typeof value === "number" && Number.isSafeInteger(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback;
 var bool = (value, fallback) => typeof value === "boolean" ? value : fallback;
 var approval = (value, fallback) => value === "allow" || value === "ask" || value === "deny" ? value : fallback;
@@ -9059,12 +18837,12 @@ var FILE_CONFIG_KEYS = {
   tracing: ["enabled"]
 };
 var assertFileConfigShape = (value) => {
-  const root = record(value);
+  const root = record2(value);
   if (!root) throw new Error("configuration root must be an object");
   for (const [section, raw] of Object.entries(root)) {
     const allowed = FILE_CONFIG_KEYS[section];
     if (!allowed) throw new Error(`unknown configuration section: ${section}`);
-    const fields = record(raw);
+    const fields = record2(raw);
     if (!fields) throw new Error(`configuration section must be an object: ${section}`);
     for (const field of Object.keys(fields)) {
       if (!allowed.includes(field)) throw new Error(`unknown configuration field: ${section}.${field}`);
@@ -9072,14 +18850,14 @@ var assertFileConfigShape = (value) => {
   }
 };
 var normalizeFabricPowerConfig = (input, defaults = DEFAULT_FABRIC_POWER_CONFIG) => {
-  const root = record(input) ?? {};
-  const executor = record(root.executor) ?? {};
-  const approvals = record(root.approvals) ?? {};
-  const mcp = record(root.mcp) ?? {};
-  const memory = record(root.memory) ?? {};
-  const state = record(root.state) ?? {};
-  const artifacts = record(root.artifacts) ?? {};
-  const tracing = record(root.tracing) ?? {};
+  const root = record2(input) ?? {};
+  const executor = record2(root.executor) ?? {};
+  const approvals = record2(root.approvals) ?? {};
+  const mcp = record2(root.mcp) ?? {};
+  const memory = record2(root.memory) ?? {};
+  const state = record2(root.state) ?? {};
+  const artifacts = record2(root.artifacts) ?? {};
+  const tracing = record2(root.tracing) ?? {};
   const timeoutMs = integer(executor.timeoutMs, defaults.executor.timeoutMs, 1, 9e5);
   const maxTimeoutMs = integer(executor.maxTimeoutMs, defaults.executor.maxTimeoutMs, timeoutMs, 9e5);
   const resultFormat = executor.resultFormat === "json" || executor.resultFormat === "text" || executor.resultFormat === "auto" ? executor.resultFormat : defaults.executor.resultFormat;
@@ -9182,62 +18960,6 @@ var loadFabricPowerConfig = (configFile, defaults = DEFAULT_FABRIC_POWER_CONFIG)
 
 // src/core/action-registry.ts
 import { randomUUID } from "node:crypto";
-
-// src/async-settlement.ts
-var abortError = (signal) => {
-  const reason = signal.reason;
-  if (reason instanceof Error) return reason;
-  return new Error(typeof reason === "string" && reason ? reason : "Operation aborted");
-};
-var throwIfAborted = (signal) => {
-  if (signal?.aborted) throw abortError(signal);
-};
-var throwIfAbortedOrExpired = (signal, deadline) => {
-  throwIfAborted(signal);
-  deadline?.throwIfExpired();
-};
-var raceWithAbort = (operation, signal) => {
-  if (!signal) return Promise.resolve(operation);
-  if (signal.aborted) return Promise.reject(abortError(signal));
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (callback) => {
-      if (settled) return;
-      settled = true;
-      signal.removeEventListener("abort", onAbort);
-      callback();
-    };
-    const onAbort = () => finish(() => reject(abortError(signal)));
-    signal.addEventListener("abort", onAbort, { once: true });
-    Promise.resolve(operation).then(
-      (value) => finish(() => resolve(value)),
-      (error) => finish(() => reject(error))
-    );
-  });
-};
-var runAbortable = (signal, operation) => {
-  try {
-    throwIfAborted(signal);
-    return raceWithAbort(Promise.resolve(operation()), signal);
-  } catch (error) {
-    return Promise.reject(error);
-  }
-};
-var settleWithin = async (operations, timeoutMs) => {
-  const pending = [...operations].map((operation) => Promise.resolve(operation));
-  if (pending.length === 0) return true;
-  let timer;
-  try {
-    return await Promise.race([
-      Promise.allSettled(pending).then(() => true),
-      new Promise((resolve) => {
-        timer = setTimeout(() => resolve(false), Math.max(0, timeoutMs));
-      })
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-};
 
 // src/schema-validation.ts
 var MAX_VALIDATION_MESSAGE_CHARS = 2e3;
@@ -9614,12 +19336,12 @@ declare function print(...values: unknown[]): void;
 `;
 
 // node_modules/.pnpm/@jitl+quickjs-singlefile-mjs-release-sync@0.32.0/node_modules/@jitl/quickjs-singlefile-mjs-release-sync/dist/index.mjs
-var variant = { type: "sync", importFFI: () => import("./ffi-E3EUE5UE.js").then((mod) => mod.QuickJSFFI), importModuleLoader: () => import("./emscripten-module-Q67P5WYC-QODKBPIA.js").then((mod) => mod.default) };
+var variant = { type: "sync", importFFI: () => import("./ffi-2CFDPMEQ.js").then((mod) => mod.QuickJSFFI), importModuleLoader: () => import("./emscripten-module-Q67P5WYC-K2EI3T2U.js").then((mod) => mod.default) };
 var src_default = variant;
 
 // node_modules/.pnpm/quickjs-emscripten-core@0.32.0/node_modules/quickjs-emscripten-core/dist/index.mjs
 async function newQuickJSWASMModuleFromVariant(variantOrPromise) {
-  let variant2 = smartUnwrap(await variantOrPromise), [wasmModuleLoader, QuickJSFFI, { QuickJSWASMModule: QuickJSWASMModule2 }] = await Promise.all([variant2.importModuleLoader().then(smartUnwrap), variant2.importFFI(), import("./module-ES6BEMUI-364UO5I4.js").then(smartUnwrap)]), wasmModule = await wasmModuleLoader();
+  let variant2 = smartUnwrap(await variantOrPromise), [wasmModuleLoader, QuickJSFFI, { QuickJSWASMModule: QuickJSWASMModule2 }] = await Promise.all([variant2.importModuleLoader().then(smartUnwrap), variant2.importFFI(), import("./module-ES6BEMUI-2A2DOREW.js").then(smartUnwrap)]), wasmModule = await wasmModuleLoader();
   wasmModule.type = "sync";
   let ffi = new QuickJSFFI(wasmModule);
   return new QuickJSWASMModule2(wasmModule, ffi);
@@ -9627,9 +19349,6 @@ async function newQuickJSWASMModuleFromVariant(variantOrPromise) {
 function smartUnwrap(val) {
   return val && "default" in val && val.default ? val.default && "default" in val.default && val.default.default ? val.default.default : val.default : val;
 }
-
-// src/runtime/quickjs-runtime.ts
-import "node:perf_hooks";
 
 // src/runtime/guest-stack-map.ts
 var BASE64_VALUES = (() => {
@@ -9729,6 +19448,7 @@ var FabricDeadline = class {
     this.maximumAt = this.startedAt + maximum;
     this.#expiresAt = this.startedAt + Math.min(maximum, Math.max(1, Math.floor(timeoutMs)));
   }
+  now;
   startedAt;
   maximumAt;
   #expiresAt;
@@ -9772,6 +19492,8 @@ var LineRing = class {
     this.maxBytes = maxBytes;
     this.#slots = new Array(capacity);
   }
+  capacity;
+  maxBytes;
   #slots;
   #start = 0;
   #size = 0;
@@ -10203,8 +19925,6 @@ var QuickJsRuntime = class {
     let rejectDeadline;
     let abortListener;
     let activeHandle;
-    let resolution;
-    let resolutionConsumed = false;
     let runExecution;
     let cancelExecution;
     const rejectGuestGraph = (reason) => {
@@ -10371,7 +20091,7 @@ var QuickJsRuntime = class {
         return { value: void 0, logs, terminationReason: deadline.expired ? "timed_out" : "runtime_error", error: deadline.expired ? timeoutMessage() : error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
       activeHandle = invoked.value;
-      resolution = context.resolvePromise(activeHandle);
+      const resolution = context.resolvePromise(activeHandle);
       runtime.executePendingJobs();
       const deadlineRace = new Promise((_resolve, reject) => {
         rejectDeadline = reject;
@@ -10388,7 +20108,6 @@ var QuickJsRuntime = class {
       });
       const runSpan = tracer.enabled ? tracer.span("eval", "quickjs.run", execId, void 0, parentSpanId) : void 0;
       const settled = await Promise.race([resolution, deadlineRace, cancellation]);
-      resolutionConsumed = true;
       activeHandle.dispose();
       activeHandle = void 0;
       runSpan?.end();
@@ -10439,7 +20158,6 @@ var QuickJsRuntime = class {
         }
         if (jobs.value === 0) break;
       }
-      void resolutionConsumed;
       if (activeHandle?.alive !== false) activeHandle?.dispose();
       for (const promise of pendingPromises) if (promise.alive !== false) promise.dispose();
       if (cancelExecution && cancelExecution.alive !== false) cancelExecution.dispose();
@@ -10474,6 +20192,9 @@ var FabricExecutionService = class {
     this.config = config;
     this.cwd = cwd;
   }
+  registry;
+  config;
+  cwd;
   #runtime = new QuickJsRuntime();
   async execute(options) {
     const started = performance.now();
@@ -10668,7 +20389,7 @@ var FabricExecutionService = class {
   }
 };
 
-// node_modules/.pnpm/typebox@1.3.8/node_modules/typebox/build/typebox.mjs
+// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/typebox.mjs
 var typebox_exports = {};
 __export(typebox_exports, {
   Any: () => Any,
@@ -10685,7 +20406,7 @@ __export(typebox_exports, {
   Decode: () => Decode2,
   DecodeBuilder: () => DecodeBuilder,
   Dependent: () => Dependent,
-  Encode: () => Encode,
+  Encode: () => Encode2,
   EncodeBuilder: () => EncodeBuilder,
   Enum: () => Enum,
   Evaluate: () => Evaluate,
@@ -10847,6 +20568,8 @@ var KiroPowerApprover = class {
     this.adapter = adapter;
     this.timeoutMs = timeoutMs;
   }
+  adapter;
+  timeoutMs;
   async approveOnce(request) {
     request.signal?.throwIfAborted();
     if (!this.adapter.supported()) return false;
@@ -10913,6 +20636,9 @@ var KiroPowerFabricApprover = class {
     this.elicitation = elicitation;
     this.cwd = cwd;
   }
+  config;
+  elicitation;
+  cwd;
   async approve(action, args, signal) {
     const mode = this.config[action.risk];
     if (mode === "allow") return;
@@ -11206,8 +20932,7 @@ var migrateWorkspaceGeneration = (projects, identity) => {
   const current = path3.join(projects, kiroPowerWorkspaceId(identity, 3));
   const legacy = path3.join(projects, kiroPowerWorkspaceId(identity, 2));
   if (!fs3.existsSync(legacy)) return { current, migrated: false };
-  const legacyStats = assertPrivateDirectory(legacy);
-  void legacyStats;
+  assertPrivateDirectory(legacy);
   validatePersistedIdentity(path3.join(legacy, "workspace-identity.json"), identity);
   validateWorkspaceObject(identity);
   if (fs3.existsSync(current)) {
@@ -12037,18 +21762,44 @@ var descriptors2 = [
 ];
 var isRecord6 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var MCP_CLOSE_GRACE_MS = 1e3;
+var fileDigest = (file) => createHash4("sha256").update(fs6.readFileSync(file)).digest("hex");
+var readExplicitMcpConfiguration = (configPath) => {
+  const stats = fs6.lstatSync(configPath);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 256 * 1024) {
+    throw new Error("MCP configuration is not a bounded unaliased regular file");
+  }
+  if (process.platform !== "win32" && (typeof process.getuid === "function" && stats.uid !== process.getuid() || (stats.mode & 63) !== 0)) {
+    throw new Error("MCP configuration is not private to the current user");
+  }
+  const parsed = JSON.parse(fs6.readFileSync(configPath, "utf8"));
+  if (!isRecord6(parsed) || !isRecord6(parsed.mcpServers) || !Array.isArray(parsed.imports) || parsed.imports.length !== 0 || JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify(["imports", "mcpServers"])) {
+    throw new Error("MCP configuration must contain only mcpServers and imports: []");
+  }
+  const names = Object.keys(parsed.mcpServers);
+  if (names.length > 128 || names.some((name) => !name || name.length > 256)) throw new Error("MCP configuration server names exceed product bounds");
+  return { servers: parsed.mcpServers, names: new Set(names), digest: fileDigest(configPath) };
+};
 var configuredEnvironment = (configPath, server) => {
   if (!configPath) return {};
-  const stats = fs6.lstatSync(configPath);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 256 * 1024) throw new Error("MCP configuration is not a bounded unaliased regular file");
-  const parsed = JSON.parse(fs6.readFileSync(configPath, "utf8"));
-  const root = isRecord6(parsed) ? parsed : {};
-  const servers = isRecord6(root.mcpServers) ? root.mcpServers : root;
-  const entry = isRecord6(servers[server]) ? servers[server] : {};
-  const environment = isRecord6(entry.env) ? entry.env : {};
+  const entry = readExplicitMcpConfiguration(configPath).servers[server];
+  const environment = isRecord6(entry) && isRecord6(entry.env) ? entry.env : {};
   const result = {};
   for (const [key, value] of Object.entries(environment)) if (typeof value === "string") result[key] = value;
   return result;
+};
+var AMBIENT_MCPORTER_OPTIONS = [
+  "MCPORTER_RECORD",
+  "MCPORTER_RECORD_SERVER",
+  "MCPORTER_REPLAY",
+  "MCPORTER_REPLAY_SERVER",
+  "MCPORTER_STDIO_LOGS",
+  "MCPORTER_STDIO_TRACE",
+  "MCPORTER_OAUTH_TIMEOUT",
+  "MCPORTER_OAUTH_TIMEOUT_MS"
+];
+var assertNoAmbientMcporterOptions = () => {
+  const option = AMBIENT_MCPORTER_OPTIONS.find((name) => process.env[name] !== void 0);
+  if (option) throw new Error(`Ambient mcporter option is not allowed in the Power runtime: ${option}`);
 };
 var executablePath = (command) => {
   if (command.includes("/") || command.includes("\\")) return fs6.realpathSync(command);
@@ -12062,7 +21813,6 @@ var executablePath = (command) => {
   }
   throw new Error(`Configured MCP executable cannot be resolved: ${command}`);
 };
-var fileDigest = (file) => createHash4("sha256").update(fs6.readFileSync(file)).digest("hex");
 var environmentDigest = () => createHash4("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
 var configDigest = (configPath) => configPath ? fileDigest(configPath) : null;
 var fileStatKey = (file) => {
@@ -12082,15 +21832,39 @@ var executeApproval = (name, description) => ({
 var STDIO_APPROVAL = executeApproval("$stdio", "Start one explicitly configured stdio MCP server");
 var OAUTH_APPROVAL = executeApproval("$oauth", "Launch configured HTTP MCP authorization");
 var abortError2 = (signal) => signal.reason instanceof Error ? signal.reason : new Error(typeof signal.reason === "string" && signal.reason ? signal.reason : "MCP call cancelled");
+var normalizeServerTools = (value) => {
+  if (!Array.isArray(value) || value.length > 1e3) throw new Error("Configured MCP tool list is malformed or exceeds product bounds");
+  const tools = value.map((tool, index) => {
+    if (!isRecord6(tool) || typeof tool.name !== "string" || !tool.name || tool.name.length > 256 || tool.description !== void 0 && typeof tool.description !== "string") {
+      throw new Error(`Configured MCP tool at index ${index} is malformed`);
+    }
+    return {
+      name: tool.name,
+      ...tool.description === void 0 ? {} : { description: tool.description },
+      ...tool.inputSchema === void 0 ? {} : { inputSchema: tool.inputSchema },
+      ...tool.outputSchema === void 0 ? {} : { outputSchema: tool.outputSchema }
+    };
+  });
+  assertFabricJsonBudget(tools);
+  return tools;
+};
 var normalizeMcpResult = (result) => {
-  assertFabricJsonBudget(result);
-  if (!isRecord6(result) || !Array.isArray(result.content)) return result;
-  const text = result.content.filter((part) => isRecord6(part) && part.type === "text" && typeof part.text === "string").map((part) => part.text).join("\n");
-  if (result.isError === true) throw new Error((text || "MCP tool returned an error").slice(0, 2e3));
+  if (!isRecord6(result) || !Array.isArray(result.content)) {
+    assertFabricJsonBudget(result);
+    return result;
+  }
+  const projected = {
+    content: result.content,
+    ...result.structuredContent === void 0 ? {} : { structuredContent: result.structuredContent },
+    ...result.isError === void 0 ? {} : { isError: result.isError }
+  };
+  assertFabricJsonBudget(projected);
+  const text = projected.content.filter((part) => isRecord6(part) && part.type === "text" && typeof part.text === "string").map((part) => part.text).join("\n");
+  if (projected.isError === true) throw new Error((text || "MCP tool returned an error").slice(0, 2e3));
   return {
     text,
-    content: result.content,
-    structuredContent: result.structuredContent ?? null
+    content: projected.content,
+    structuredContent: projected.structuredContent ?? null
   };
 };
 var KiroMcpProvider = class {
@@ -12102,6 +21876,7 @@ var KiroMcpProvider = class {
   #closeController = new AbortController();
   #runtime;
   #runtimeCreation;
+  #loadedConfigDigest;
   #serverTails = /* @__PURE__ */ new Map();
   #snapshotCache = /* @__PURE__ */ new Map();
   #resolvedExecutables = /* @__PURE__ */ new Map();
@@ -12110,12 +21885,26 @@ var KiroMcpProvider = class {
     this.#cwd = cwd;
     this.#config = config;
     this.#runtimeFactory = runtimeFactory ?? (async () => {
-      const { createRuntime } = await import("./dist-VQONG42M.js");
-      return createRuntime({
-        rootDir: this.#cwd,
-        ...this.#config.configPath ? { configPath: this.#config.configPath } : {},
-        clientInfo: { name: "kiro-fabric", version: "1" }
-      });
+      assertNoAmbientMcporterOptions();
+      const { createRuntime, loadServerDefinitions } = await import("./dist-54HI5WJ5.js");
+      let servers = [];
+      this.#loadedConfigDigest = null;
+      if (this.#config.configPath) {
+        const configPath = path7.resolve(this.#config.configPath);
+        const explicit = readExplicitMcpConfiguration(configPath);
+        servers = await loadServerDefinitions({ rootDir: this.#cwd, configPath });
+        const verified = readExplicitMcpConfiguration(configPath);
+        if (verified.digest !== explicit.digest) throw new Error("MCP configuration changed while loading");
+        for (const server of servers) {
+          const sources = server.sources ?? (server.source ? [server.source] : []);
+          if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) => source.kind !== "local" || path7.resolve(source.path) !== configPath)) {
+            throw new Error("mcporter loaded a server outside the explicit Power configuration");
+          }
+        }
+        if (servers.length !== explicit.names.size) throw new Error("mcporter did not load the exact Power server set");
+        this.#loadedConfigDigest = verified.digest;
+      }
+      return createRuntime({ rootDir: this.#cwd, servers, clientInfo: { name: "kiro-fabric", version: "1" } });
     });
   }
   async list() {
@@ -12130,6 +21919,7 @@ var KiroMcpProvider = class {
     const tool = typeof args.tool === "string" ? args.tool.trim() : "";
     const runtime = await this.#getRuntime(context.signal);
     throwIfAbortedOrExpired(context.signal, context.deadline);
+    this.#assertRuntimeConfigurationCurrent();
     if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
     return {
       server,
@@ -12145,6 +21935,7 @@ var KiroMcpProvider = class {
       throwIfAbortedOrExpired(signal, context.deadline);
       const runtime2 = await this.#getRuntime(signal);
       throwIfAbortedOrExpired(signal, context.deadline);
+      this.#assertRuntimeConfigurationCurrent();
       const servers = runtime2.listServers();
       if (servers.length > 128) throw new Error("Configured MCP server limit exceeded");
       return servers.map((name) => {
@@ -12165,6 +21956,7 @@ var KiroMcpProvider = class {
     }
     const runtime = await this.#getRuntime(signal);
     throwIfAbortedOrExpired(signal, context.deadline);
+    this.#assertRuntimeConfigurationCurrent();
     if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
     const approvedTransport = this.#assertTransportSnapshot(
       runtime,
@@ -12181,7 +21973,7 @@ var KiroMcpProvider = class {
       this.#assertTransportSnapshot(runtime, server, approvedTransport);
       const actionDeadline = performance.now() + this.#config.callTimeoutMs;
       const discoveryBudget = this.#remainingCallBudget(actionDeadline);
-      const tools = await this.#bounded(
+      const rawTools = await this.#bounded(
         runtime,
         server,
         runtime.listTools(server, {
@@ -12193,8 +21985,7 @@ var KiroMcpProvider = class {
         discoveryBudget,
         lease
       );
-      assertFabricJsonBudget(tools);
-      if (tools.length > 1e3) throw new Error("Configured MCP tool limit exceeded");
+      const tools = normalizeServerTools(rawTools);
       const matches = tools.filter((tool) => tool.name === toolName);
       if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
       this.#validateToolArguments(matches[0], toolArgs);
@@ -12254,7 +22045,14 @@ var KiroMcpProvider = class {
     this.#snapshotCache.set(server, { envDigest: processEnvironmentDigest, statKey, snapshot });
     return snapshot;
   }
+  #assertRuntimeConfigurationCurrent() {
+    if (this.#loadedConfigDigest === void 0) return;
+    if (configDigest(this.#config.configPath) !== this.#loadedConfigDigest) {
+      throw new Error("MCP configuration changed after runtime loading; restart before calling a server");
+    }
+  }
   #computeTransportSnapshot(runtime, server, processEnvironmentDigest, resolvedExecutable) {
+    this.#assertRuntimeConfigurationCurrent();
     const definition = runtime.getDefinition(server);
     const base = {
       schemaVersion: 1,
@@ -13064,6 +22862,7 @@ var KiroPowerArtifactsProvider = class {
   constructor(store) {
     this.store = store;
   }
+  store;
   name = "artifacts";
   description = "Bounded private Power artifacts";
   async list() {
@@ -13214,20 +23013,9 @@ var createKiroMcpServer = async (options) => {
     lifecycleTail = result.then(() => void 0, () => void 0);
     return result;
   };
-  const drain = async (items, reason) => {
+  const drain = (items, reason) => {
     for (const item of items) item.controller.abort(reason);
-    if (!items.length) return true;
-    let timer;
-    try {
-      return await Promise.race([
-        Promise.allSettled(items.map((item) => item.settled)).then(() => true),
-        new Promise((resolve) => {
-          timer = setTimeout(() => resolve(false), KIRO_MCP_DRAIN_TIMEOUT_MS);
-        })
-      ]);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
+    return settleWithin(items.map((item) => item.settled), KIRO_MCP_DRAIN_TIMEOUT_MS);
   };
   const closeRuntime = async (reason, knownDrained) => {
     const current = runtime;

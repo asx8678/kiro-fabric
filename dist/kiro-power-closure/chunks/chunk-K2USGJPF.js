@@ -6,12 +6,12 @@ globalThis.__dirname = __dirnameOf(globalThis.__filename);
 const require = __createRequire(import.meta.url);
 
 
-// node_modules/.pnpm/mcporter@0.12.3/node_modules/mcporter/dist/daemon/launch.js
+// node_modules/.pnpm/mcporter@0.13.8/node_modules/mcporter/dist/daemon/launch.js
 import { spawn } from "node:child_process";
 import path from "node:path";
-function launchDaemonDetached(options) {
+function launchDaemonDetached(options, launch = spawn) {
   const invocation = buildDaemonLaunchInvocation(options);
-  const child = spawn(invocation.command, invocation.args, {
+  const child = launch(invocation.command, invocation.args, {
     detached: true,
     stdio: "ignore",
     env: invocation.env

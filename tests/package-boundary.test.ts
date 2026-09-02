@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { isPackedPackageFileAllowed } from "../scripts/package-policy.mjs";
 import { validatePowerPackage } from "../scripts/validate-power-package.mjs";
 
 const root = path.resolve(".");
@@ -12,6 +13,30 @@ const files = (directory: string): string[] => {
 };
 
 describe("Power product boundary", () => {
+  it("keeps the file-by-file audit complete and documented repository paths live", () => {
+    const documentation = [
+      ...files(path.join(root, "docs")).filter((file) => file.endsWith(".md")),
+      ...["README.md", "STATUS.md", "SECURITY.md"].map((file) => path.join(root, file)),
+    ];
+    for (const file of documentation) {
+      const text = fs.readFileSync(file, "utf8");
+      for (const match of text.matchAll(/`((?:src|scripts|tests|docs|skills)\/[^`\s,)]+)`/gu)) {
+        const referenced = match[1]!.replace(/[.:;]+$/u, "");
+        expect(fs.existsSync(path.join(root, referenced)), `${path.relative(root, file)} -> ${referenced}`).toBe(true);
+      }
+    }
+    const audit = fs.readFileSync(path.join(root, "docs", "audit.md"), "utf8");
+    const audited = [
+      ...files(path.join(root, "src")).filter((file) => file.endsWith(".ts")),
+      ...files(path.join(root, "scripts")).filter((file) => file.endsWith(".mjs")),
+      ...files(path.join(root, "tests")).filter((file) => file.endsWith(".test.ts")),
+    ];
+    for (const file of audited) {
+      const relative = path.relative(root, file).replaceAll("\\", "/");
+      expect(audit, `missing audit inventory entry: ${relative}`).toContain(`\`${relative}\``);
+    }
+  });
+
   it("validates the exact staged package and sole closure", () => {
     const result = validatePowerPackage(path.join(root, ".tmp", "kiro-fabric-power"));
     expect(result.ok).toBe(true);
@@ -73,6 +98,11 @@ describe("Power product boundary", () => {
     const report = JSON.parse(packed.stdout);
     const document = Array.isArray(report) ? report[0] : report;
     const included = new Set<string>(document.files.map((entry: { path: string }) => entry.path));
+    for (const file of included) expect(isPackedPackageFileAllowed(file), file).toBe(true);
+    for (const unexpected of [
+      "src/index.ts", "docs/unlisted.md", "dist/chunks/nested/chunk.js",
+      "dist/../src/escape.d.ts", "skills/fabric-exec/../secret", "dist\\index.d.ts",
+    ]) expect(isPackedPackageFileAllowed(unexpected), unexpected).toBe(false);
     for (const required of ["dist/index.js", "dist/index.d.ts", "dist/runtime/compiler-worker-entry.js"]) {
       expect(included.has(required), required).toBe(true);
     }

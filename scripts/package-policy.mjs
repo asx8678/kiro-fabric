@@ -26,6 +26,16 @@ const expectedFiles = [
   "THIRD_PARTY_NOTICES.md",
 ];
 
+const exactPackedFiles = new Set(["package.json", ...expectedFiles.filter((file) => !file.includes("*"))]);
+export const isPackedPackageFileAllowed = (file) => {
+  if (typeof file !== "string" || file.includes("\\") || file.split("/").some((part) => !part || part === "." || part === "..")) return false;
+  return exactPackedFiles.has(file) ||
+    /^dist\/chunks\/[^/]+\.js$/u.test(file) ||
+    (file.startsWith("dist/") && file.endsWith(".d.ts")) ||
+    file.startsWith("dist/kiro-power-closure/") ||
+    file.startsWith("skills/fabric-exec/");
+};
+
 const readJson = (root, name) => JSON.parse(fs.readFileSync(path.join(root, name), "utf8"));
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 

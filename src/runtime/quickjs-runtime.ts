@@ -1,6 +1,5 @@
 import releaseSyncVariant from "@jitl/quickjs-singlefile-mjs-release-sync";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
-import { performance } from "node:perf_hooks";
 import { runAbortable, settleWithin } from "../async-settlement.js";
 import { createGuestStackMap, remapGuestErrorText } from "./guest-stack-map.js";
 import {
@@ -277,8 +276,6 @@ export class QuickJsRuntime {
     let rejectDeadline: ((reason: Error) => void) | undefined;
     let abortListener: (() => void) | undefined;
     let activeHandle: any;
-    let resolution: Promise<any> | undefined;
-    let resolutionConsumed = false;
     let runExecution: any;
     let cancelExecution: any;
 
@@ -453,7 +450,7 @@ export class QuickJsRuntime {
         return { value: undefined, logs, terminationReason: deadline.expired ? "timed_out" : "runtime_error", error: deadline.expired ? timeoutMessage() : error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
       activeHandle = invoked.value;
-      resolution = context.resolvePromise(activeHandle);
+      const resolution = context.resolvePromise(activeHandle);
       runtime.executePendingJobs();
       const deadlineRace = new Promise<never>((_resolve, reject) => { rejectDeadline = reject; schedule(); });
       const cancellation = new Promise<never>((_resolve, reject) => {
@@ -463,7 +460,6 @@ export class QuickJsRuntime {
       });
       const runSpan = tracer.enabled ? tracer.span("eval", "quickjs.run", execId, undefined, parentSpanId) : undefined;
       const settled = await Promise.race([resolution, deadlineRace, cancellation]);
-      resolutionConsumed = true;
       activeHandle.dispose();
       activeHandle = undefined;
       runSpan?.end();
@@ -514,7 +510,6 @@ export class QuickJsRuntime {
       // Never let an attacker-controlled promise or non-cooperative provider
       // decide when cancellation returns. All continuations check `closing`
       // before touching QuickJS, so unresolved host work can be safely detached.
-      void resolutionConsumed;
       if (activeHandle?.alive !== false) activeHandle?.dispose();
       for (const promise of pendingPromises) if (promise.alive !== false) promise.dispose();
       if (cancelExecution && cancelExecution.alive !== false) cancelExecution.dispose();

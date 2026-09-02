@@ -10,7 +10,7 @@ import {
   canonicalPathContains,
   inspectCanonicalPath
 } from "../chunks/chunk-4KRLFCN5.js";
-import "../chunks/chunk-LSWTYIW3.js";
+import "../chunks/chunk-AE4E2KSU.js";
 
 // src/kiro/mcp-entry.ts
 import { realpathSync } from "node:fs";
@@ -44,7 +44,7 @@ var resolveKiroPowerLaunchContext = (env = process.env) => {
 var PROCESS_SHUTDOWN_TIMEOUT_MS = 8e3;
 var startKiroMcpServer = async () => {
   const launch = resolveKiroPowerLaunchContext();
-  const { createKiroMcpServer } = await import("../chunks/mcp-server-3FRQW6LR.js");
+  const { createKiroMcpServer } = await import("../chunks/mcp-server-LS6QKWWL.js");
   return createKiroMcpServer({ pluginRoot: launch.pluginRoot, pluginData: launch.pluginData });
 };
 var runKiroMcpProcess = async () => {

@@ -12,4 +12,5 @@ coverage/
 .kiro/steering/*
 !.kiro/steering/fabric.md
 .fabric/
+.pi/
 plugins/

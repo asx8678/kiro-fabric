@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { isPackedPackageFileAllowed } from "./package-policy.mjs";
 import { assertRealClientEvidence } from "./real-client-evidence.mjs";
 import { digestPowerPackage, validatePowerPackage } from "./validate-power-package.mjs";
 
@@ -52,18 +53,7 @@ if (packed.error) throw packed.error;
 if (packed.status !== 0) throw new Error(`package dry-run failed: ${packed.stderr ?? packed.stdout}`);
 const packedDocument = JSON.parse(packed.stdout);
 const packedFiles = (Array.isArray(packedDocument) ? packedDocument[0] : packedDocument).files.map((entry) => entry.path);
-const allowedPackedFile = (file) =>
-  [
-    "package.json", "README.md", "LICENSE", "SECURITY.md", "STATUS.md",
-    "THIRD_PARTY_NOTICES.md", "plugin.json", "mcp.json", "power-product.json",
-    "docs/architecture.md", "docs/audit.md", "docs/configuration.md", "docs/release.md",
-    "dist/index.js", "dist/runtime/compiler-worker-entry.js",
-  ].includes(file) ||
-  (file.startsWith("dist/") && file.endsWith(".d.ts")) ||
-  /^dist\/chunks\/[^/]+\.js$/u.test(file) ||
-  file.startsWith("dist/kiro-power-closure/") ||
-  file.startsWith("skills/fabric-exec/");
-if (packedFiles.some((file) => !allowedPackedFile(file))) {
+if (packedFiles.some((file) => !isPackedPackageFileAllowed(file))) {
   throw new Error("packed artifact contains a file outside the exact Power allowlist");
 }
 for (const required of ["dist/index.js", "dist/runtime/compiler-worker-entry.js", "dist/index.d.ts"]) {
@@ -88,6 +78,7 @@ if (expectedCommit && expectedCommit !== commit) throw new Error("Release candid
 const tag = valueAfter("--tag") ?? null;
 if (tag !== null && tag !== `v${packageResult.version}`) throw new Error("Release tag does not match package version");
 const qualificationPath = valueAfter("--qualification");
+/** @type {{ status: "not-run", evidence: string } | { status: "passed", evidenceDigest: string }} */
 let realClient = { status: "not-run", evidence: "Explicit real-client qualification was not supplied; no pass is claimed." };
 if (qualificationPath) {
   const qualificationFile = path.resolve(qualificationPath);

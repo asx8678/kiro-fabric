@@ -20,6 +20,8 @@ jobs:
         with: { node-version: 24 }
       - run: npm install --global pnpm@11.20.0
       - run: pnpm install --frozen-lockfile
+      - name: Dependency advisory audit
+        run: pnpm run audit:deps
       - name: Hermetic full check
         run: node scripts/assert-kiro-home-unchanged.mjs pnpm run check
       - name: Reproducible complete Power archive
@@ -35,4 +37,22 @@ jobs:
           tar -xzf .tmp/kiro-fabric-power.tar.gz -C "$RUNNER_TEMP/second"
           diff -r "$RUNNER_TEMP/first" "$RUNNER_TEMP/second"
           test -z "$(git status --porcelain)"
+      - run: git diff --check
+
+  macos-stage:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: 24 }
+      - run: npm install --global pnpm@11.20.0
+      - run: pnpm install --frozen-lockfile
+      - name: Hermetic macOS staging
+        run: node scripts/assert-kiro-home-unchanged.mjs pnpm run power:stage
+      - name: Focused macOS staging and archive tests
+        run: pnpm exec vitest run tests/hermetic-stage.test.ts tests/package-boundary.test.ts tests/archive.test.ts
+      - name: Verify cross-platform build reproducibility
+        run: test -z "$(git status --porcelain)"
       - run: git diff --check

@@ -4,7 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { validatePowerPackage } from "./validate-power-package.mjs";
 
-if (process.platform !== "linux") throw new Error("Checkout-local Power staging is currently supported only on Linux");
+if (process.platform !== "linux" && process.platform !== "darwin") {
+  throw new Error(`Checkout-local Power staging requires Linux or macOS (received ${process.platform})`);
+}
 const sleepSync = (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 const errorCode = (error) => error?.code;
 const processIsAlive = (pid) => {

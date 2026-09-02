@@ -8,6 +8,7 @@ import {
   RootsListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Value } from "typebox/value";
+import { settleWithin } from "../async-settlement.js";
 import { loadFabricPowerConfig } from "../config.js";
 import { FABRIC_COMPILER_TIMEOUT_MS, effectiveFabricTimeout } from "../execution-service.js";
 import {
@@ -162,16 +163,9 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     lifecycleTail = result.then(() => undefined, () => undefined);
     return result;
   };
-  const drain = async (items: readonly ActiveExecution[], reason: Error): Promise<boolean> => {
+  const drain = (items: readonly ActiveExecution[], reason: Error): Promise<boolean> => {
     for (const item of items) item.controller.abort(reason);
-    if (!items.length) return true;
-    let timer: NodeJS.Timeout | undefined;
-    try {
-      return await Promise.race([
-        Promise.allSettled(items.map((item) => item.settled)).then(() => true),
-        new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), KIRO_MCP_DRAIN_TIMEOUT_MS); }),
-      ]);
-    } finally { if (timer) clearTimeout(timer); }
+    return settleWithin(items.map((item) => item.settled), KIRO_MCP_DRAIN_TIMEOUT_MS);
   };
   const closeRuntime = async (reason: Error, knownDrained?: boolean): Promise<void> => {
     const current = runtime;

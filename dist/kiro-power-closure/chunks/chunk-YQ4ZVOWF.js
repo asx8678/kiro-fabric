@@ -134,7 +134,7 @@ var UsingDisposable = class {
     return this.dispose();
   }
 };
-var SymbolDispose = Symbol.dispose ?? Symbol.for("Symbol.dispose");
+var SymbolDispose = Symbol.dispose ?? /* @__PURE__ */ Symbol.for("Symbol.dispose");
 var prototypeAsAny = UsingDisposable.prototype;
 prototypeAsAny[SymbolDispose] || (prototypeAsAny[SymbolDispose] = function() {
   return this.dispose();
@@ -377,7 +377,6 @@ var ModuleMemory = class {
     return this.module._free(ptr), str;
   }
 };
-var UnstableSymbol = Symbol("Unstable");
 var DefaultIntrinsics = Object.freeze({ BaseObjects: true, Date: true, Eval: true, StringNormalize: true, RegExp: true, JSON: true, Proxy: true, MapSet: true, TypedArrays: true, Promise: true });
 function intrinsicsToFlags(intrinsics) {
   if (!intrinsics) return 0;
@@ -851,7 +850,7 @@ ${cause.stack}Host: ${hostStack}`), Object.assign(exception, rest), exception;
     }
     return result.value;
   }
-  [Symbol.for("nodejs.util.inspect.custom")]() {
+  [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
     return this.alive ? `${this.constructor.name} { ctx: ${this.ctx.value} rt: ${this.rt.value} }` : `${this.constructor.name} { disposed }`;
   }
   getFunction(fn_id) {
@@ -988,7 +987,7 @@ var QuickJSRuntime = class extends UsingDisposable {
   debugLog(...msg) {
     this._debugMode && console.log("quickjs-emscripten:", ...msg);
   }
-  [Symbol.for("nodejs.util.inspect.custom")]() {
+  [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
     return this.alive ? `${this.constructor.name} { rt: ${this.rt.value} }` : `${this.constructor.name} { disposed }`;
   }
   getSystemContext() {

@@ -9,7 +9,7 @@ import {
   __commonJS,
   __require,
   __toESM
-} from "./chunk-LSWTYIW3.js";
+} from "./chunk-AE4E2KSU.js";
 
 // node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/lib/typescript.js
 var require_typescript = __commonJS({
@@ -211638,6 +211638,7 @@ var FabricTypeChecker = class {
       }
     };
   }
+  declarations;
   #guestFile;
   #declarationFile;
   #baseHost = import_typescript.default.createCompilerHost(compilerOptions, true);

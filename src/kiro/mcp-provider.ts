@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { Runtime, ServerToolInfo } from "mcporter";
+import type { Runtime, ServerDefinition, ServerToolInfo } from "mcporter";
 import { runAbortable, settleWithin, throwIfAbortedOrExpired } from "../async-settlement.js";
 import type { FabricMcpConfig } from "../config.js";
 import type {
@@ -45,18 +45,40 @@ const descriptors: readonly FabricActionDescriptor[] = [
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const MCP_CLOSE_GRACE_MS = 1_000;
+const fileDigest = (file: string): string => createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+const readExplicitMcpConfiguration = (configPath: string): { servers: Record<string, unknown>; names: Set<string>; digest: string } => {
+  const stats = fs.lstatSync(configPath);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 256 * 1024) {
+    throw new Error("MCP configuration is not a bounded unaliased regular file");
+  }
+  if (process.platform !== "win32" &&
+      ((typeof process.getuid === "function" && stats.uid !== process.getuid()) || (stats.mode & 0o077) !== 0)) {
+    throw new Error("MCP configuration is not private to the current user");
+  }
+  const parsed: unknown = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  if (!isRecord(parsed) || !isRecord(parsed.mcpServers) || !Array.isArray(parsed.imports) || parsed.imports.length !== 0 ||
+      JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify(["imports", "mcpServers"])) {
+    throw new Error("MCP configuration must contain only mcpServers and imports: []");
+  }
+  const names = Object.keys(parsed.mcpServers);
+  if (names.length > 128 || names.some((name) => !name || name.length > 256)) throw new Error("MCP configuration server names exceed product bounds");
+  return { servers: parsed.mcpServers, names: new Set(names), digest: fileDigest(configPath) };
+};
 const configuredEnvironment = (configPath: string | undefined, server: string): Record<string, string> => {
   if (!configPath) return {};
-  const stats = fs.lstatSync(configPath);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 256 * 1024) throw new Error("MCP configuration is not a bounded unaliased regular file");
-  const parsed: unknown = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  const root = isRecord(parsed) ? parsed : {};
-  const servers = isRecord(root.mcpServers) ? root.mcpServers : root;
-  const entry = isRecord(servers[server]) ? servers[server] : {};
-  const environment = isRecord(entry.env) ? entry.env : {};
+  const entry = readExplicitMcpConfiguration(configPath).servers[server];
+  const environment = isRecord(entry) && isRecord(entry.env) ? entry.env : {};
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(environment)) if (typeof value === "string") result[key] = value;
   return result;
+};
+const AMBIENT_MCPORTER_OPTIONS = [
+  "MCPORTER_RECORD", "MCPORTER_RECORD_SERVER", "MCPORTER_REPLAY", "MCPORTER_REPLAY_SERVER",
+  "MCPORTER_STDIO_LOGS", "MCPORTER_STDIO_TRACE", "MCPORTER_OAUTH_TIMEOUT", "MCPORTER_OAUTH_TIMEOUT_MS",
+] as const;
+const assertNoAmbientMcporterOptions = (): void => {
+  const option = AMBIENT_MCPORTER_OPTIONS.find((name) => process.env[name] !== undefined);
+  if (option) throw new Error(`Ambient mcporter option is not allowed in the Power runtime: ${option}`);
 };
 const executablePath = (command: string): string => {
   if (command.includes("/") || command.includes("\\")) return fs.realpathSync(command);
@@ -67,7 +89,6 @@ const executablePath = (command: string): string => {
   }
   throw new Error(`Configured MCP executable cannot be resolved: ${command}`);
 };
-const fileDigest = (file: string): string => createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 const environmentDigest = (): string => createHash("sha256")
   .update(JSON.stringify(Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right))))
   .digest("hex");
@@ -120,19 +141,45 @@ const abortError = (signal: AbortSignal): Error =>
       ? signal.reason
       : "MCP call cancelled");
 
+const normalizeServerTools = (value: unknown): ServerToolInfo[] => {
+  if (!Array.isArray(value) || value.length > 1_000) throw new Error("Configured MCP tool list is malformed or exceeds product bounds");
+  const tools = value.map((tool, index) => {
+    if (!isRecord(tool) || typeof tool.name !== "string" || !tool.name || tool.name.length > 256 ||
+        (tool.description !== undefined && typeof tool.description !== "string")) {
+      throw new Error(`Configured MCP tool at index ${index} is malformed`);
+    }
+    return {
+      name: tool.name,
+      ...(tool.description === undefined ? {} : { description: tool.description }),
+      ...(tool.inputSchema === undefined ? {} : { inputSchema: tool.inputSchema }),
+      ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
+    };
+  });
+  assertFabricJsonBudget(tools);
+  return tools;
+};
+
 const normalizeMcpResult = (result: unknown): unknown => {
-  assertFabricJsonBudget(result);
-  if (!isRecord(result) || !Array.isArray(result.content)) return result;
-  const text = result.content
+  if (!isRecord(result) || !Array.isArray(result.content)) {
+    assertFabricJsonBudget(result);
+    return result;
+  }
+  const projected = {
+    content: result.content,
+    ...(result.structuredContent === undefined ? {} : { structuredContent: result.structuredContent }),
+    ...(result.isError === undefined ? {} : { isError: result.isError }),
+  };
+  assertFabricJsonBudget(projected);
+  const text = projected.content
     .filter((part): part is { type: "text"; text: string } =>
       isRecord(part) && part.type === "text" && typeof part.text === "string")
     .map((part) => part.text)
     .join("\n");
-  if (result.isError === true) throw new Error((text || "MCP tool returned an error").slice(0, 2_000));
+  if (projected.isError === true) throw new Error((text || "MCP tool returned an error").slice(0, 2_000));
   return {
     text,
-    content: result.content,
-    structuredContent: result.structuredContent ?? null,
+    content: projected.content,
+    structuredContent: projected.structuredContent ?? null,
   };
 };
 
@@ -153,6 +200,7 @@ export class KiroMcpProvider implements FabricProvider {
   readonly #closeController = new AbortController();
   #runtime: Runtime | undefined;
   #runtimeCreation: Promise<Runtime> | undefined;
+  #loadedConfigDigest: string | null | undefined;
   readonly #serverTails = new Map<string, Promise<void>>();
   readonly #snapshotCache = new Map<string, { envDigest: string; statKey: string; snapshot: McpTransportSnapshot }>();
   readonly #resolvedExecutables = new Map<string, string>();
@@ -162,12 +210,27 @@ export class KiroMcpProvider implements FabricProvider {
     this.#cwd = cwd;
     this.#config = config;
     this.#runtimeFactory = runtimeFactory ?? (async () => {
-      const { createRuntime } = await import("mcporter");
-      return createRuntime({
-        rootDir: this.#cwd,
-        ...(this.#config.configPath ? { configPath: this.#config.configPath } : {}),
-        clientInfo: { name: "kiro-fabric", version: "1" },
-      });
+      assertNoAmbientMcporterOptions();
+      const { createRuntime, loadServerDefinitions } = await import("mcporter");
+      let servers: ServerDefinition[] = [];
+      this.#loadedConfigDigest = null;
+      if (this.#config.configPath) {
+        const configPath = path.resolve(this.#config.configPath);
+        const explicit = readExplicitMcpConfiguration(configPath);
+        servers = await loadServerDefinitions({ rootDir: this.#cwd, configPath });
+        const verified = readExplicitMcpConfiguration(configPath);
+        if (verified.digest !== explicit.digest) throw new Error("MCP configuration changed while loading");
+        for (const server of servers) {
+          const sources = server.sources ?? (server.source ? [server.source] : []);
+          if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) =>
+            source.kind !== "local" || path.resolve(source.path) !== configPath)) {
+            throw new Error("mcporter loaded a server outside the explicit Power configuration");
+          }
+        }
+        if (servers.length !== explicit.names.size) throw new Error("mcporter did not load the exact Power server set");
+        this.#loadedConfigDigest = verified.digest;
+      }
+      return createRuntime({ rootDir: this.#cwd, servers, clientInfo: { name: "kiro-fabric", version: "1" } });
     });
   }
 
@@ -183,6 +246,7 @@ export class KiroMcpProvider implements FabricProvider {
     const tool = typeof args.tool === "string" ? args.tool.trim() : "";
     const runtime = await this.#getRuntime(context.signal);
     throwIfAbortedOrExpired(context.signal, context.deadline);
+    this.#assertRuntimeConfigurationCurrent();
     if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
     return {
       server,
@@ -205,6 +269,7 @@ export class KiroMcpProvider implements FabricProvider {
       throwIfAbortedOrExpired(signal, context.deadline);
       const runtime = await this.#getRuntime(signal);
       throwIfAbortedOrExpired(signal, context.deadline);
+      this.#assertRuntimeConfigurationCurrent();
       const servers = runtime.listServers();
       if (servers.length > 128) throw new Error("Configured MCP server limit exceeded");
       return servers.map((name) => {
@@ -227,6 +292,7 @@ export class KiroMcpProvider implements FabricProvider {
 
     const runtime = await this.#getRuntime(signal);
     throwIfAbortedOrExpired(signal, context.deadline);
+    this.#assertRuntimeConfigurationCurrent();
     if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
     // ActionRegistry always injects this during canonical preparation. The
     // fallback preserves direct provider use in tests/embedders while still
@@ -250,7 +316,7 @@ export class KiroMcpProvider implements FabricProvider {
     // the configured limit.
     const actionDeadline = performance.now() + this.#config.callTimeoutMs;
     const discoveryBudget = this.#remainingCallBudget(actionDeadline);
-    const tools = await this.#bounded(
+    const rawTools = await this.#bounded(
       runtime,
       server,
       runtime.listTools(server, {
@@ -262,8 +328,7 @@ export class KiroMcpProvider implements FabricProvider {
       discoveryBudget,
       lease,
     );
-    assertFabricJsonBudget(tools);
-    if (tools.length > 1_000) throw new Error("Configured MCP tool limit exceeded");
+    const tools = normalizeServerTools(rawTools);
     const matches = tools.filter((tool) => tool.name === toolName);
     if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
     this.#validateToolArguments(matches[0]!, toolArgs);
@@ -338,7 +403,15 @@ export class KiroMcpProvider implements FabricProvider {
     return snapshot;
   }
 
+  #assertRuntimeConfigurationCurrent(): void {
+    if (this.#loadedConfigDigest === undefined) return;
+    if (configDigest(this.#config.configPath) !== this.#loadedConfigDigest) {
+      throw new Error("MCP configuration changed after runtime loading; restart before calling a server");
+    }
+  }
+
   #computeTransportSnapshot(runtime: Runtime, server: string, processEnvironmentDigest: string, resolvedExecutable?: string): McpTransportSnapshot {
+    this.#assertRuntimeConfigurationCurrent();
     const definition = runtime.getDefinition(server);
     const base = {
       schemaVersion: 1 as const,
