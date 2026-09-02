@@ -41,6 +41,7 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   const artifacts = createKiroArtifactStore({ root: options.artifactsRoot, ...config.artifacts });
   registry.register(new KiroPowerArtifactsProvider(artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));
+  else registry.markUnavailable("mcp", "disabled by configuration");
   if (options.memoryRoot && config.memory.enabled) {
     registry.register(new KiroMemoryProvider({
       cwd: options.cwd,
@@ -49,9 +50,9 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
       maxValueChars: config.memory.maxValueChars,
     }));
   }
-  else registry.markUnavailable("memory", "workspace binding is required");
+  else registry.markUnavailable("memory", config.memory.enabled ? "workspace binding is required" : "disabled by configuration");
   if (options.stateRoot && config.state.enabled) registry.register(new StateProvider(options.stateRoot, config.state));
-  else registry.markUnavailable("state", "workspace binding is required");
+  else registry.markUnavailable("state", config.state.enabled ? "workspace binding is required" : "disabled by configuration");
   const service = new FabricExecutionService(registry, config, options.cwd);
   return {
     service,

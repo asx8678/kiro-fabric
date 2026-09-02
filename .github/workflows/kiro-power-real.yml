@@ -12,15 +12,18 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
-      - run: npm install --global pnpm@11.20.0
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run power:stage
+      - run: corepack enable && corepack prepare pnpm@11.20.0 --activate
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm run power:stage
+      - run: corepack pnpm run power:archive
       - name: Exercise exact package with the real client
         env:
           KIRO_POWER_REAL_DRIVER: ${{ vars.KIRO_POWER_REAL_DRIVER }}
-        run: pnpm run certify:power:real -- --package .tmp/kiro-fabric-power --output "$RUNNER_TEMP/real-client.json"
+          KIRO_POWER_REAL_DRIVER_SHA256: ${{ vars.KIRO_POWER_REAL_DRIVER_SHA256 }}
+        run: corepack pnpm run certify:power:real -- --archive .tmp/kiro-fabric-power.tar.gz --output "$RUNNER_TEMP/real-client.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: real-client-${{ github.sha }}

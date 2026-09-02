@@ -22,11 +22,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Hermetic full check
         run: node scripts/assert-kiro-home-unchanged.mjs pnpm run check
-      - name: Reproducible closure
+      - name: Reproducible complete Power archive
         run: |
-          find dist/kiro-power-closure -type f -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/first"
+          pnpm run power:archive
+          cp .tmp/kiro-fabric-power.tar.gz "$RUNNER_TEMP/first.tar.gz"
           pnpm run build
-          find dist/kiro-power-closure -type f -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/second"
-          diff -u "$RUNNER_TEMP/first" "$RUNNER_TEMP/second"
+          node scripts/build-power-dev.mjs
+          pnpm run power:archive
+          cmp "$RUNNER_TEMP/first.tar.gz" .tmp/kiro-fabric-power.tar.gz
+          mkdir "$RUNNER_TEMP/first" "$RUNNER_TEMP/second"
+          tar -xzf "$RUNNER_TEMP/first.tar.gz" -C "$RUNNER_TEMP/first"
+          tar -xzf .tmp/kiro-fabric-power.tar.gz -C "$RUNNER_TEMP/second"
+          diff -r "$RUNNER_TEMP/first" "$RUNNER_TEMP/second"
           test -z "$(git status --porcelain)"
       - run: git diff --check

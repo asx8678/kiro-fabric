@@ -28,32 +28,31 @@ describe("explicit user Power export", () => {
   it("refuses unknown collisions", async () => {
     const { destination, sourceRoot } = fixture();
     fs.mkdirSync(destination, { recursive: true }); fs.writeFileSync(path.join(destination, "unknown"), "owned elsewhere");
-    await expect(exportPowerPackage(stage, destination, { sourceRoot })).rejects.toThrow("unknown or unowned");
+    await expect(exportPowerPackage(stage, destination, { sourceRoot })).rejects.toThrow("refusing in-place replacement");
   });
 
-  it("preserves the prior generation after interrupted copy", async () => {
+  it("does not disturb an activated immutable generation when a later copy is interrupted", async () => {
     const { destination, sourceRoot } = fixture();
-    await exportPowerPackage(stage, destination, { sourceRoot });
-    const before = treeDigest(destination);
-    await expect(exportPowerPackage(stage, destination, { sourceRoot, afterCopy() { throw new Error("interrupted copy"); } })).rejects.toThrow("interrupted copy");
-    expect(treeDigest(destination)).toBe(before);
+    const activated = await exportPowerPackage(stage, destination, { sourceRoot });
+    const before = treeDigest(activated.destination);
+    const secondRequest = `${destination}-next`;
+    await expect(exportPowerPackage(stage, secondRequest, { sourceRoot, afterCopy() { throw new Error("interrupted copy"); } })).rejects.toThrow("interrupted copy");
+    expect(treeDigest(activated.destination)).toBe(before);
   });
 
-  it("preserves the prior generation after copied-package validation failure", async () => {
+  it("does not disturb an activated immutable generation after validation failure", async () => {
     const { destination, sourceRoot } = fixture();
-    await exportPowerPackage(stage, destination, { sourceRoot });
-    const before = treeDigest(destination); let calls = 0;
+    const activated = await exportPowerPackage(stage, destination, { sourceRoot });
+    const before = treeDigest(activated.destination); let calls = 0;
     const { validatePowerPackage } = await import("../scripts/validate-power-package.mjs");
-    await expect(exportPowerPackage(stage, destination, { sourceRoot, validate(root: string) { calls++; if (calls > 1) throw new Error("validation failed"); return validatePowerPackage(root); } })).rejects.toThrow("validation failed");
-    expect(treeDigest(destination)).toBe(before);
+    await expect(exportPowerPackage(stage, `${destination}-next`, { sourceRoot, validate(root: string) { calls++; if (calls > 1) throw new Error("validation failed"); return validatePowerPackage(root); } })).rejects.toThrow("validation failed");
+    expect(treeDigest(activated.destination)).toBe(before);
   });
 
-  it("rolls back after replacement preparation fails", async () => {
+  it("does not publish a generation when activation preparation fails", async () => {
     const { destination, sourceRoot } = fixture();
-    await exportPowerPackage(stage, destination, { sourceRoot });
-    const before = treeDigest(destination);
-    await expect(exportPowerPackage(stage, destination, { sourceRoot, afterBackup() { throw new Error("activation failed"); } })).rejects.toThrow("activation failed");
-    expect(treeDigest(destination)).toBe(before);
+    await expect(exportPowerPackage(stage, destination, { sourceRoot, beforeActivate() { throw new Error("activation failed"); } })).rejects.toThrow("activation failed");
+    expect(fs.readdirSync(path.dirname(destination)).some((entry) => entry.startsWith("kiro-fabric-") && !entry.startsWith(".kiro-fabric-"))).toBe(false);
   });
 
   it("reclaims an identity-checked stale lock from a dead exporter", async () => {
@@ -65,7 +64,8 @@ describe("explicit user Power export", () => {
     fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: 2_147_483_647 }), { mode: 0o600 });
     const old = new Date(Date.now() - 5 * 60_000 - 1);
     fs.utimesSync(lock, old, old);
-    await expect(exportPowerPackage(stage, destination, { sourceRoot })).resolves.toMatchObject({ destination });
+    const result = await exportPowerPackage(stage, destination, { sourceRoot });
+    expect(result.destination).toMatch(new RegExp(`${path.basename(destination)}-[a-f0-9]{16}-[a-f0-9]{24}$`, "u"));
   });
 
   it("serializes concurrent exports", async () => {
@@ -76,18 +76,19 @@ describe("explicit user Power export", () => {
       exportPowerPackage(stage, destination, { sourceRoot }),
     ]);
     expect(left.digest).toBe(right.digest);
-    expect(fs.statSync(destination).isDirectory()).toBe(true);
+    expect(left.destination).toBe(right.destination);
+    expect(fs.statSync(left.destination).isDirectory()).toBe(true);
   });
 
-  it("uses restrictive permissions and removes stale files", async () => {
+  it("uses restrictive permissions and refuses a modified owned generation", async () => {
     const { destination, sourceRoot } = fixture();
-    await exportPowerPackage(stage, destination, { sourceRoot });
-    expect(fs.statSync(destination).mode & 0o777).toBe(0o700);
+    const first = await exportPowerPackage(stage, destination, { sourceRoot });
+    expect(fs.statSync(first.destination).mode & 0o777).toBe(0o700);
     const visit = (directory: string) => { for (const entry of fs.readdirSync(directory, { withFileTypes: true })) { const target = path.join(directory, entry.name); if (entry.isDirectory()) { expect(fs.statSync(target).mode & 0o777).toBe(0o700); visit(target); } else expect(fs.statSync(target).mode & 0o777).toBe(0o600); } };
-    visit(destination);
-    fs.writeFileSync(path.join(destination, "stale"), "old", { mode: 0o600 });
-    await exportPowerPackage(stage, destination, { sourceRoot });
-    expect(fs.existsSync(path.join(destination, "stale"))).toBe(false);
+    visit(first.destination);
+    fs.writeFileSync(path.join(first.destination, "stale"), "old", { mode: 0o600 });
+    await expect(exportPowerPackage(stage, destination, { sourceRoot })).rejects.toThrow("digest mismatch");
+    expect(fs.readFileSync(path.join(first.destination, "stale"), "utf8")).toBe("old");
   });
 
   it("refuses silent replacement from another checkout", async () => {

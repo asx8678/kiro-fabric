@@ -47,15 +47,17 @@ export class KiroPowerApprover {
 }
 
 const summarize = (args: Record<string, unknown>, cwd: string): string => {
-  const safe = Object.create(null) as Record<string, unknown>;
-  for (const [key, value] of Object.entries(args).slice(0, 12)) {
-    if (isSecretKey(key) || /env/iu.test(key)) safe[key] = "<redacted>";
-    else if (typeof value === "string") {
-      if (SECRET_VALUE.test(value)) safe[key] = "<redacted>";
-      else if (path.isAbsolute(value)) {
+  let nodes = 0;
+  const redact = (value: unknown, key: string, depth: number): unknown => {
+    if (++nodes > 128 || depth > 5) return "<bounded>";
+    if (isSecretKey(key)) return "<redacted>";
+    if (typeof value === "string") {
+      if (SECRET_VALUE.test(value)) return "<redacted>";
+      if (path.isAbsolute(value)) {
         const relative = path.relative(cwd, value);
-        safe[key] = relative === "" ? "." : relative.startsWith("..") || path.isAbsolute(relative) ? "<outside-workspace>" : relative;
-      } else if (URL_VALUE.test(value) || /(?:url|uri|endpoint)/iu.test(key)) {
+        return relative === "" ? "." : relative.startsWith("..") || path.isAbsolute(relative) ? "<outside-workspace>" : relative;
+      }
+      if (URL_VALUE.test(value) || /(?:url|uri|endpoint)/iu.test(key)) {
         try {
           const url = new URL(value);
           url.username = "";
@@ -63,13 +65,23 @@ const summarize = (args: Record<string, unknown>, cwd: string): string => {
           if (url.pathname !== "/") url.pathname = "/<redacted>";
           if (url.search) url.search = "?<redacted>";
           url.hash = "";
-          safe[key] = bounded(url.toString(), 500);
-        } catch { safe[key] = "<redacted-url>"; }
-      } else safe[key] = bounded(value, 500);
-    } else if (value === null || typeof value === "number" || typeof value === "boolean") safe[key] = value;
-    else safe[key] = Array.isArray(value) ? `<${value.length} items>` : "<object>";
-  }
-  return bounded(JSON.stringify(safe));
+          return bounded(url.toString(), 500);
+        } catch { return "<redacted-url>"; }
+      }
+      return bounded(value, 500);
+    }
+    if (value === null || typeof value === "number" || typeof value === "boolean") return value;
+    if (Array.isArray(value)) return value.slice(0, 24).map((entry) => redact(entry, key, depth + 1));
+    if (typeof value === "object") {
+      const safe = Object.create(null) as Record<string, unknown>;
+      for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>).slice(0, 24)) {
+        safe[nestedKey] = redact(nestedValue, nestedKey, depth + 1);
+      }
+      return safe;
+    }
+    return `<${typeof value}>`;
+  };
+  return bounded(JSON.stringify(redact(args, "arguments", 0)));
 };
 
 export class KiroPowerFabricApprover implements FabricExecutionApprover {

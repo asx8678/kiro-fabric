@@ -45,6 +45,7 @@ interface KiroMemoryEntry<T extends JsonValue = JsonValue> {
 export interface KiroMemoryBinding<T extends JsonValue = JsonValue> {
   get(key: string): Promise<KiroMemoryEntry<T> | null>;
   set(key: string, value: T, signal?: AbortSignal): Promise<KiroMemoryEntry<T>>;
+  delete(key: string, signal?: AbortSignal): Promise<{ key: string; deleted: boolean }>;
   list(): Promise<KiroMemoryEntry<T>[]>;
   /**
    * Bounded, ranked retrieval: substring match over key plus serialized
@@ -645,6 +646,31 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
         throwIfAborted(signal);
         writeJsonAtomic(filePath, content);
         return entry;
+      }, signal);
+    },
+
+    async delete(key: string, signal?: AbortSignal): Promise<{ key: string; deleted: boolean }> {
+      return withNamespaceMutationLock(namespaceRoot, () => {
+        const normalizedKey = assertMemoryToken(key, "key");
+        const filePath = resolveEntryPath(normalizedKey);
+        const before = lstatOrNull(filePath);
+        if (!before) return { key: normalizedKey, deleted: false };
+        if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) {
+          throw new KiroMemoryScopeError(`Kiro memory entry must be an unaliased real file: ${filePath}`);
+        }
+        const entry = readEntry<T>(filePath, memoryNamespace, maxValueChars);
+        if (entry.key !== normalizedKey) throw new KiroMemoryScopeError("Kiro memory entry identity mismatch");
+        throwIfAborted(signal);
+        const current = fs.lstatSync(filePath);
+        if (current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1) {
+          throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
+        }
+        fs.unlinkSync(filePath);
+        try {
+          const descriptor = fs.openSync(namespaceRoot, "r");
+          try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+        } catch {}
+        return { key: normalizedKey, deleted: true };
       }, signal);
     },
 

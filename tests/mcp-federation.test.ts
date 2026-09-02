@@ -14,7 +14,7 @@ const definition = (name: string, kind: "http" | "stdio"): ServerDefinition => (
   name,
   command: kind === "http"
     ? { kind: "http", url: new URL("https://example.test/mcp") }
-    : { kind: "stdio", command: "configured-server", args: [], cwd: "/workspace" },
+    : { kind: "stdio", command: process.execPath, args: [], cwd: process.cwd() },
 });
 
 const context = (
@@ -111,12 +111,23 @@ describe("configured Power MCP federation", () => {
     expect(calls).toBe(0);
 
     let approvedRef = "";
+    let approvedDetails: Record<string, unknown> | undefined;
     await expect(provider.invoke("$call", {
       server: "configured",
       tool: "echo",
       args: { value: "hello" },
-    }, context(undefined, async (action) => { approvedRef = action.ref; }))).resolves.toBe(true);
+    }, context(undefined, async (action, details) => { approvedRef = action.ref; approvedDetails = details; }))).resolves.toBe(true);
     expect(approvedRef).toBe("mcp.$stdio");
+    expect(approvedDetails).toEqual({
+      server: "configured",
+      executable: process.execPath,
+      cwd: process.cwd(),
+      arguments: [],
+      environment: {
+        values: {},
+        redactedDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      },
+    });
     await provider.close();
   });
 
@@ -161,6 +172,30 @@ describe("configured Power MCP federation", () => {
       args: { value: "hello" },
     }, context())).rejects.toThrow("mcp.$oauth execution approval is unavailable");
     expect(calls).toBe(0);
+    await provider.close();
+  });
+
+  it("isolates cancellation from a concurrent call to the same server", async () => {
+    let calls = 0;
+    const controller = new AbortController();
+    const provider = new KiroMcpProvider(
+      "/workspace",
+      config,
+      async () => fakeRuntime({
+        callTool: async () => {
+          calls += 1;
+          if (calls === 1) return new Promise<never>(() => {});
+          return { content: [{ type: "text", text: "second completed" }] };
+        },
+      }),
+    );
+    const first = provider.invoke("$call", { server: "configured", tool: "echo", args: { value: "first" } }, context(controller.signal));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const second = provider.invoke("$call", { server: "configured", tool: "echo", args: { value: "second" } }, context());
+    controller.abort(new Error("cancel first only"));
+    await expect(first).rejects.toThrow("cancel first only");
+    await expect(second).resolves.toMatchObject({ text: "second completed" });
+    expect(calls).toBe(2);
     await provider.close();
   });
 

@@ -17,13 +17,13 @@ describe("fabric_exec contract", () => {
     expect(Object.keys(fabricExecInputSchemaJson().properties as object)).toEqual(["code", "payloads", "resultFormat", "timeoutMs"]);
   });
 
-  it("conservatively repairs encoded string maps before validation", () => {
-    const once = prepareFabricExecArgumentsWithDiagnostics({ code: "return payloads.a", payloads: JSON.stringify({ a: "b" }) });
-    expect(once.value).toEqual({ code: "return payloads.a", payloads: { a: "b" } });
-    expect(once.diagnostics[0]?.repair).toBe("json-string-map");
-    const twice = prepareFabricExecArgumentsWithDiagnostics({ code: "return payloads.a", payloads: JSON.stringify(JSON.stringify({ a: "b" })) });
-    expect(twice.value).toEqual({ code: "return payloads.a", payloads: { a: "b" } });
-    expect(twice.diagnostics[0]?.repair).toBe("double-encoded-json-string-map");
+  it("rejects encoded payload maps without repair", () => {
+    for (const payloads of [JSON.stringify({ a: "b" }), JSON.stringify(JSON.stringify({ a: "b" }))]) {
+      const prepared = prepareFabricExecArgumentsWithDiagnostics({ code: "return payloads.a", payloads });
+      expect(prepared.value).toEqual({ code: "return payloads.a", payloads });
+      expect(prepared.diagnostics).toEqual([]);
+      expect(Value.Check(fabricExecInputSchema, prepared.value)).toBe(false);
+    }
   });
 
   it("does not rewrite malformed payload input or guest code", () => {
@@ -50,5 +50,24 @@ describe("fabric_exec contract", () => {
       powerGuestDeclarations,
     );
     expect(nonexistentTimer.errors.some((error) => error.message.includes("Cannot find name 'setTimeout'"))).toBe(true);
+  });
+
+  it("rejects every guest module and external-reference form without resolving it", () => {
+    const probes = [
+      `import value from "/definitely/secret.ts"; return value;`,
+      `import value from "./secret.js"; return value;`,
+      `export { payloads }; return null;`,
+      `return await import("file:///definitely/secret.ts");`,
+      `type Secret = import("package-name").Secret; return null;`,
+      `const value = require("%2fdefinitely%2fsecret.ts"); return value;`,
+      `/// <reference path="/definitely/secret.ts" />\nreturn null;`,
+      `declare module "package-name" { export const secret: string }\nreturn null;`,
+    ];
+    for (const probe of probes) {
+      const result = typeCheckFabricCode(probe, powerGuestDeclarations);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]?.message).toBe("Guest modules and external references are not allowed");
+      expect(result.errors[0]?.message).not.toContain("secret.ts");
+    }
   });
 });

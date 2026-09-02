@@ -195,14 +195,14 @@
       "sha256": "2b676ed28bfe9a343857d218e7c575b4d00c5f224a4aa3eda615c0323da9d1ee"
     },
     {
-      "path": "chunks/chunk-LMHNRHGR.js",
-      "bytes": 9983612,
-      "sha256": "18c55ef0a6d80eec4ea6ddb569cf165e9c959ba5cc5ff17d48bb96c651e18a49"
-    },
-    {
       "path": "chunks/chunk-LSWTYIW3.js",
       "bytes": 2221,
       "sha256": "3025e9234dba3830ae1f7ba6a2571183afebc8f196e9f0c188e2a4457448c454"
+    },
+    {
+      "path": "chunks/chunk-O5IR66GX.js",
+      "bytes": 9985955,
+      "sha256": "dc61e1be928ecb3f8219371abf6cf4bab4f01d6795021c47d3728d43951c2495"
     },
     {
       "path": "chunks/chunk-SRO3YB3P.js",
@@ -515,9 +515,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-6KNQQIEW.js",
-      "bytes": 560358,
-      "sha256": "4ae0209a11160e968239efb8acd160b2831659d955adf16704a4fb1af3c70747"
+      "path": "chunks/mcp-server-WMLYVM6K.js",
+      "bytes": 576961,
+      "sha256": "8776ae16c3416546bea4ba7bd3d545096ea2a74d0f46613442fa416167454378"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-HUUMGB7P.js",
@@ -532,7 +532,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 3950,
-      "sha256": "5c477ba5e0f107719a6263e1ea0b67e9237b21fbae070eefeaad2fbbc440a211"
+      "sha256": "245a533e5464ea863154c400d99575bbf5d164a9b4f4c5f96fc0b5b9b0bb6f75"
     },
     {
       "path": "package.json",
@@ -542,8 +542,13 @@
     {
       "path": "runtime/compiler-worker-entry.js",
       "bytes": 872,
-      "sha256": "c44780a41c9e166588793316a7944ee0b3e60f6356a6225c88c355e7e0aa1d3e"
+      "sha256": "b44deccb852a5541beb1ef033faad971a4904a40ebb389c96017dc9dfea07807"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.txt",
+      "bytes": 76420,
+      "sha256": "5f740628f0925baa3fd24b826ebcc7bce8e676f72bb85d90f940c0f0cc20e786"
     }
   ],
-  "contentDigest": "55c94f5cda9d295707ab36e4bd29b6b4126ddc10b565beff648721fdd86d1d1f"
+  "contentDigest": "aff8d51995e18d973a70bae3b34eded8bd20035dacf50f603138cb1045dff5b5"
 }

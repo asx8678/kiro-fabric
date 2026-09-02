@@ -113,7 +113,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     try {
       return await Promise.race([
         Promise.allSettled(items.map((item) => item.settled)).then(() => true),
-        new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), KIRO_MCP_DRAIN_TIMEOUT_MS); timer.unref?.(); }),
+        new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), KIRO_MCP_DRAIN_TIMEOUT_MS); }),
       ]);
     } finally { if (timer) clearTimeout(timer); }
   };
@@ -227,7 +227,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
             verification: workspaceObservation.status,
           },
           providers,
-          nativeKiroTools: { files: true, shell: true, web: true, subagents: true, owner: "kiro" },
+          nativeKiroTools: { owner: "kiro", availability: "not-observed-by-power" },
         }) }] };
       } catch (error) { return toolError("info_request_failed", error); }
     }
@@ -292,7 +292,6 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         FABRIC_COMPILER_TIMEOUT_MS,
       );
       timer = setTimeout(() => controller.abort(new Error(`MCP request exceeded ${outerDeadline}ms`)), outerDeadline);
-      timer.unref?.();
       const approver = new KiroPowerFabricApprover(
         current.service.config.approvals,
         powerApprover,
@@ -310,7 +309,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         resultFormat: input.resultFormat ?? current.service.config.executor.resultFormat,
         maxOutputChars: current.service.config.executor.maxOutputChars,
         writeArtifact: (content) => current.artifacts.write(content),
-        normalizationDiagnostics: normalized.diagnostics.map(({ field, repair }) => ({ field, repair })),
+        normalizationDiagnostics: normalized.diagnostics,
       });
       return { content: [{ type: "text" as const, text: projection.text }], ...(projection.isError ? { isError: true } : {}) };
     } catch (error) { return toolError("adapter_error", error); }

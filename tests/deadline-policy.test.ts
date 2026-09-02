@@ -65,6 +65,42 @@ describe("deadline policy", () => {
     );
   });
 
+  it("enforces total, concurrent, and approval quotas deterministically", async () => {
+    const registry = new ActionRegistry();
+    const action = {
+      name: "set",
+      description: "quota fixture",
+      inputSchema: { type: "object", properties: { key: { type: "string" }, value: {} }, required: ["key", "value"], additionalProperties: false },
+      risk: "write" as const,
+      effect: { kind: "write" as const },
+    };
+    registry.register({
+      name: "state",
+      description: "quota fixture",
+      async list() { return [action]; },
+      async describe(name) { return name === "set" ? action : undefined; },
+      effectResources(_name, args) { return [`state:${String(args.key)}`]; },
+      async invoke() { return true; },
+    });
+    const totalConfig = normalizeFabricPowerConfig({ executor: { maxProviderCalls: 2, maxConcurrentProviderCalls: 8 } });
+    const total = await new FabricExecutionService(registry, totalConfig, "/workspace").execute({
+      code: "return await Promise.all([tools.providers(), tools.providers(), tools.providers()])",
+      approver: { async approve() {} },
+    });
+    expect(total.success).toBe(false);
+    expect(total.error).toContain("provider call quota exceeded");
+
+    const approvalConfig = normalizeFabricPowerConfig({ executor: { maxApprovalRequests: 2, maxPendingApprovals: 2 } });
+    let prompts = 0;
+    const approval = await new FabricExecutionService(registry, approvalConfig, "/workspace").execute({
+      code: "return await Promise.all([state.set({ key: 'a', value: 1 }), state.set({ key: 'b', value: 2 }), state.set({ key: 'c', value: 3 })])",
+      approver: { async approve() { prompts += 1; } },
+    });
+    expect(approval.success).toBe(false);
+    expect(approval.error).toMatch(/approval request quota exceeded|pending approval quota exceeded/u);
+    expect(prompts).toBeLessThanOrEqual(2);
+  });
+
   it("keeps the outer MCP envelope beyond compilation and the maximum guest deadline", () => {
     const guestMaximum = 900_000;
     expect(KIRO_MCP_DEADLINE_GRACE_MS).toBeGreaterThan(0);

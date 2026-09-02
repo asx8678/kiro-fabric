@@ -9,11 +9,16 @@ import { digestPowerPackage, validatePowerPackage } from "./validate-power-packa
 const valueAfter = (flag) => { const index = process.argv.indexOf(flag); return index >= 0 ? process.argv[index + 1] : undefined; };
 const output = path.resolve(valueAfter("--output") ?? ".tmp/release-candidate.json");
 const sbomPath = path.resolve(valueAfter("--sbom") ?? ".tmp/kiro-fabric-power.spdx.json");
+const archivePath = path.resolve(valueAfter("--archive") ?? ".tmp/kiro-fabric-power.tar.gz");
 const stage = path.resolve(".tmp/kiro-fabric-power");
 const packageResult = validatePowerPackage(stage);
 const packageDigest = digestPowerPackage(stage, { excludeOwner: true }).digest;
-const sbom = JSON.parse(fs.readFileSync(sbomPath, "utf8"));
+const sbomBytes = fs.readFileSync(sbomPath);
+const sbom = JSON.parse(sbomBytes.toString("utf8"));
 const sbomDigest = sbom.packages?.[0]?.checksums?.[0]?.checksumValue;
+const sbomFileDigest = createHash("sha256").update(sbomBytes).digest("hex");
+const archiveBytes = fs.readFileSync(archivePath);
+const archiveDigest = createHash("sha256").update(archiveBytes).digest("hex");
 const closureRoot = path.resolve("dist/kiro-power-closure");
 const closureFiles = [];
 const walkClosure = (directory) => {
@@ -88,22 +93,27 @@ if (qualificationPath) {
   if (!qualificationStats.isFile() || qualificationStats.isSymbolicLink() || qualificationStats.nlink !== 1 || qualificationStats.size > 2 * 1024 * 1024) {
     throw new Error("real-client qualification must be a bounded single-link regular file");
   }
+  const qualificationBytes = fs.readFileSync(qualificationFile);
   assertRealClientEvidence(
-    JSON.parse(fs.readFileSync(qualificationFile, "utf8")),
+    JSON.parse(qualificationBytes.toString("utf8")),
     packageDigest,
-    { qualification: true },
+    { qualification: true, archiveDigest },
   );
-  realClient = { status: "passed", evidence: qualificationFile };
+  realClient = { status: "passed", evidenceDigest: createHash("sha256").update(qualificationBytes).digest("hex") };
 }
 const report = {
   kind: "kiro-fabric.release-candidate",
   schemaVersion: 1,
   ok: packageResult.ok && typeof sbomDigest === "string",
   packageDigest,
+  archiveDigest,
   sbomClosureDigest: sbomDigest,
+  sbomFileDigest,
+  closureManifestDigest: createHash("sha256").update(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"))).digest("hex"),
+  commit: process.env.GITHUB_SHA ?? null,
   packedFiles,
   realClient,
-  checksum: createHash("sha256").update(JSON.stringify({ packageDigest, sbomDigest, packedFiles, realClient })).digest("hex"),
+  checksum: createHash("sha256").update(JSON.stringify({ packageDigest, archiveDigest, sbomDigest, sbomFileDigest, packedFiles, realClient })).digest("hex"),
 };
 fs.mkdirSync(path.dirname(output), { recursive: true });
 fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });

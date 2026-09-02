@@ -33,7 +33,7 @@ The Power exposes exactly three top-level MCP tools:
 pnpm run power:export:user
 ```
 
-This explicit command atomically exports an owned package to `$KIRO_HOME/powers/kiro-fabric` (or the default Kiro home). It creates a stable **local import source only**. You must still import and enable that folder through Kiro's supported Power flow.
+On Linux, this explicit command creates a private immutable, digest-named generation beneath `$KIRO_HOME/powers`; it refuses in-place replacement. The command prints the exact generated folder, which is a **local import source only**. You must still import and enable that folder through Kiro's supported Power flow. User export is intentionally unsupported on macOS and Windows until equivalent reparse-point and crash-safety guarantees are tested.
 
 Ordinary build, test, check, certification, packaging, CI, and release-candidate commands never write to user home or Kiro settings.
 

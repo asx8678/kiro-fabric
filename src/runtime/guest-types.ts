@@ -17,6 +17,7 @@ declare const artifacts: Readonly<{ read(args: { id: string; offset?: number; li
 declare const memory: Readonly<{
   get(args: { key: string }): Promise<JsonValue>;
   set(args: { key: string; value: JsonValue }): Promise<JsonValue>;
+  delete(args: { key: string }): Promise<JsonValue>;
   search(args: { query: string; limit?: number }): Promise<JsonValue>;
   index(args?: EmptyArgs): Promise<JsonValue>;
 }>;

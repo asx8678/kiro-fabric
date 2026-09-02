@@ -1,7 +1,7 @@
 import releaseSyncVariant from "@jitl/quickjs-singlefile-mjs-release-sync";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
 import { performance } from "node:perf_hooks";
-import { runAbortable, settleWithin } from "../async-settlement.js";
+import { runAbortable } from "../async-settlement.js";
 import { createGuestStackMap, remapGuestErrorText } from "./guest-stack-map.js";
 import {
   assertFabricJsonBudget,
@@ -53,9 +53,76 @@ const quickJsModule = (): Promise<QuickJsModule> =>
 
 const GUEST_SETUP = `
 (() => {
+  'use strict';
   const bridge = globalThis.__fabricHostCall;
   delete globalThis.__fabricHostCall;
-  const call = (ref, args = {}) => bridge(ref, args);
+
+  const codeGenerationDenied = function () { throw new TypeError('Dynamic code generation is disabled'); };
+  const constructors = [
+    Function,
+    Object.getPrototypeOf(function* () {}).constructor,
+    Object.getPrototypeOf(async function () {}).constructor,
+    Object.getPrototypeOf(async function* () {}).constructor,
+  ];
+  for (const constructor of constructors) {
+    Object.defineProperty(constructor.prototype, 'constructor', {
+      value: codeGenerationDenied, writable: false, configurable: false,
+    });
+  }
+  Object.defineProperty(globalThis, 'eval', { value: codeGenerationDenied, writable: false, configurable: false });
+  Object.defineProperty(globalThis, 'Function', { value: codeGenerationDenied, writable: false, configurable: false });
+
+  const strictJsonText = (root) => {
+    const seen = new WeakSet();
+    let nodes = 0;
+    const visit = (value, depth) => {
+      if (++nodes > 100000 || depth > 64) throw new TypeError('Result exceeds strict JSON structural limits');
+      if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+      if (typeof value === 'number') {
+        if (!Number.isFinite(value)) throw new TypeError('Result contains a non-finite number');
+        return value;
+      }
+      if (typeof value !== 'object') throw new TypeError('Result contains a non-JSON value');
+      if (seen.has(value)) throw new TypeError('Result contains a cycle');
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) {
+        throw new TypeError('Result contains an unsupported exotic object');
+      }
+      seen.add(value);
+      const descriptors = Object.getOwnPropertyDescriptors(value);
+      if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) throw new TypeError('Result contains a symbol key');
+      let copy;
+      if (Array.isArray(value)) {
+        copy = [];
+        if (Object.keys(descriptors).some((key) => key !== 'length' && !/^(0|[1-9][0-9]*)$/.test(key))) {
+          throw new TypeError('Result array contains a non-index property');
+        }
+        for (let index = 0; index < value.length; index++) {
+          const descriptor = descriptors[index];
+          if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('Result contains an accessor or sparse array');
+          copy.push(visit(descriptor.value, depth + 1));
+        }
+      } else {
+        copy = Object.create(null);
+        for (const key of Object.keys(descriptors)) {
+          const descriptor = descriptors[key];
+          if (!Object.hasOwn(descriptor, 'value')) throw new TypeError('Result contains an accessor');
+          Object.defineProperty(copy, key, { value: visit(descriptor.value, depth + 1), enumerable: true });
+        }
+      }
+      seen.delete(value);
+      return copy;
+    };
+    const text = JSON.stringify(visit(root, 0));
+    if (typeof text !== 'string' || text.length > 8000000) throw new TypeError('Result exceeds strict JSON byte limit');
+    return text;
+  };
+  const parseStrict = (text) => JSON.parse(text);
+  const call = (ref, args = {}) => bridge(ref, strictJsonText(args)).then(parseStrict);
+  let rejectExecution;
+  const executionGate = new Promise((_resolve, reject) => { rejectExecution = reject; });
+  globalThis.__fabricCancelExecution = (message) => rejectExecution(new Error(message));
+  globalThis.__fabricRun = (main) => Promise.race([Promise.resolve().then(main), executionGate]).then(strictJsonText);
   globalThis.tools = Object.freeze({
     providers: () => call("fabric.providers"),
     list: () => call("fabric.list"),
@@ -67,6 +134,7 @@ const GUEST_SETUP = `
   globalThis.memory = Object.freeze({
     get: (args) => call("memory.get", args),
     set: (args) => call("memory.set", args),
+    delete: (args) => call("memory.delete", args),
     search: (args) => call("memory.search", args),
     index: (args = {}) => call("memory.index", args),
   });
@@ -110,15 +178,6 @@ const jsonHandle = (
 };
 
 const QUICKJS_MAX_STACK_SIZE_BYTES = 256 * 1024;
-const HOST_SETTLE_GRACE_MS = 1_500;
-const GC_ASSERTION = "list_empty(&rt->gc_obj_list)";
-const disposeContext = (context: any): void => {
-  try { context.dispose(); }
-  catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes(GC_ASSERTION)) throw error;
-  }
-};
 
 export class QuickJsRuntime {
   async execute(code: string, hostCall: FabricHostCall, options: FabricSandboxOptions): Promise<FabricSandboxResult> {
@@ -161,14 +220,38 @@ export class QuickJsRuntime {
     let logChars = 0;
     const hostController = new AbortController();
     const hostTasks = new Set<Promise<void>>();
+    const bridgeTasks = new Set<Promise<void>>();
     const pendingPromises = new Set<any>();
     let deadlineTimer: NodeJS.Timeout | undefined;
     let rejectDeadline: ((reason: Error) => void) | undefined;
     let abortListener: (() => void) | undefined;
     let activeHandle: any;
+    let resolution: Promise<any> | undefined;
+    let resolutionConsumed = false;
+    let cancelExecution: any;
 
+    const rejectGuestGraph = (reason: Error): void => {
+      if (cancelExecution && cancelExecution.alive !== false) {
+        const message = context.newString(reason.message.slice(0, 4_096));
+        const called = context.callFunction(cancelExecution, context.global, message);
+        message.dispose();
+        if (called.error) called.error.dispose(); else called.value.dispose();
+      }
+      for (const promise of pendingPromises) {
+        if (promise.alive === false) continue;
+        const handle = context.newError(reason.message.slice(0, 4_096));
+        promise.reject(handle);
+        handle.dispose();
+      }
+      for (let index = 0; index < 1_024; index++) {
+        const jobs = runtime.executePendingJobs();
+        if (jobs.error) { jobs.error.dispose(); break; }
+        if (jobs.value === 0) break;
+      }
+    };
     const abortHost = (reason: Error): void => {
       if (!hostController.signal.aborted) hostController.abort(reason);
+      rejectGuestGraph(reason);
     };
     const timeoutMessage = (): string => `Execution timed out after ${effectiveTimeoutMs}ms`;
     const expire = (): void => {
@@ -181,7 +264,6 @@ export class QuickJsRuntime {
     const schedule = (): void => {
       if (deadlineTimer) clearTimeout(deadlineTimer);
       deadlineTimer = setTimeout(expire, Math.max(0, deadlineAt - performance.now()));
-      deadlineTimer.unref?.();
     };
     const extendForExactAction = (ref: string, args: Record<string, unknown>): void => {
       const floor = options.minimumTimeoutMsForHostCall?.(ref, args);
@@ -196,9 +278,10 @@ export class QuickJsRuntime {
     try {
       const hostFunction = context.newFunction("__fabricHostCall", (refHandle: any, argsHandle: any) => {
         const ref = context.getString(refHandle);
-        const dumped = context.dump(argsHandle);
-        const args = typeof dumped === "object" && dumped !== null && !Array.isArray(dumped)
-          ? dumped as Record<string, unknown>
+        const argsText = context.getString(argsHandle);
+        const parsed: unknown = JSON.parse(argsText);
+        const args = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+          ? parsed as Record<string, unknown>
           : {};
         assertFabricJsonBudget(args);
         extendForExactAction(ref, args);
@@ -215,17 +298,15 @@ export class QuickJsRuntime {
           promise.reject(handle);
           handle.dispose();
         };
-        const task = runAbortable(hostController.signal, () => hostCall(ref, args, hostController.signal))
+        const raw = Promise.resolve().then(() => hostCall(ref, args, hostController.signal));
+        const rawSettlement = raw.then(() => undefined, () => undefined);
+        hostTasks.add(rawSettlement);
+        void rawSettlement.finally(() => hostTasks.delete(rawSettlement));
+        const task = runAbortable(hostController.signal, () => raw)
           .then((value) => {
             if (closing || promise.alive === false) return;
             try {
-              const handle = jsonHandle(
-                context,
-                jsonObject,
-                jsonParse,
-                value,
-                options.maxNestedResultChars,
-              );
+              const handle = context.newString(fabricJsonText(value, options.maxNestedResultChars));
               promise.resolve(handle);
               handle.dispose();
             } catch (error) {
@@ -238,10 +319,10 @@ export class QuickJsRuntime {
             // All provider and bridge failures must settle in the guest rather
             // than becoming process-level unhandled rejections.
           });
-        hostTasks.add(task);
+        bridgeTasks.add(task);
         void task.then(
-          () => hostTasks.delete(task),
-          () => hostTasks.delete(task),
+          () => bridgeTasks.delete(task),
+          () => bridgeTasks.delete(task),
         );
         return promise.handle;
       });
@@ -282,6 +363,7 @@ export class QuickJsRuntime {
         return { value: undefined, logs, terminationReason: "runtime_error", error };
       }
       setup.value.dispose();
+      cancelExecution = context.getProp(context.global, "__fabricCancelExecution");
 
       const bundle = options.transpiledCode === undefined
         ? transpileFabricCodeWithSourceMap(code)
@@ -290,7 +372,7 @@ export class QuickJsRuntime {
       if (transpiledError) return { value: undefined, logs, terminationReason: "runtime_error", error: transpiledError };
       const stackMap = createGuestStackMap(bundle.sourceMap);
       const guestLineCount = bundle.code.split("\n").length;
-      const evaluation = context.evalCode(`${bundle.code}\n__kiroFabricMain()`, "kiro-fabric-guest.js");
+      const evaluation = context.evalCode(`${bundle.code}\n__fabricRun(__kiroFabricMain)`, "kiro-fabric-guest.js");
       runtime.executePendingJobs();
       if (evaluation.error) {
         const deadlineExceeded = interrupted || performance.now() > deadlineAt;
@@ -300,7 +382,7 @@ export class QuickJsRuntime {
         return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error };
       }
       activeHandle = evaluation.value;
-      const resolution = context.resolvePromise(activeHandle);
+      resolution = context.resolvePromise(activeHandle);
       runtime.executePendingJobs();
       const deadline = new Promise<never>((_resolve, reject) => { rejectDeadline = reject; schedule(); });
       const cancellation = new Promise<never>((_resolve, reject) => {
@@ -309,6 +391,7 @@ export class QuickJsRuntime {
         else options.signal?.addEventListener("abort", abortListener, { once: true });
       });
       const settled = await Promise.race([resolution, deadline, cancellation]);
+      resolutionConsumed = true;
       activeHandle.dispose();
       activeHandle = undefined;
       if (settled.error) {
@@ -318,8 +401,10 @@ export class QuickJsRuntime {
         abortHost(new Error(error));
         return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error };
       }
-      const value = context.dump(settled.value);
+      const serialized = context.getString(settled.value);
       settled.value.dispose();
+      const value: unknown = JSON.parse(serialized);
+      assertFabricJsonBudget(value, options.maxNestedResultChars);
       return { value, logs, terminationReason: "completed" };
     } catch (error) {
       const message = options.signal?.aborted ? "Execution cancelled" : timedOut || interrupted ? timeoutMessage() : error instanceof Error ? error.message : String(error);
@@ -330,12 +415,21 @@ export class QuickJsRuntime {
       if (deadlineTimer) clearTimeout(deadlineTimer);
       if (abortListener) options.signal?.removeEventListener("abort", abortListener);
       abortHost(new Error("Execution request ended"));
-      await settleWithin(hostTasks, HOST_SETTLE_GRACE_MS);
+      await Promise.allSettled([...hostTasks, ...bridgeTasks]);
+      for (let index = 0; index < 1_024; index++) {
+        const jobs = runtime.executePendingJobs();
+        if (jobs.error) { jobs.error.dispose(); break; }
+        if (jobs.value === 0) break;
+      }
+      if (resolution && !resolutionConsumed) await resolution.then((settled) => {
+        if (settled.error) settled.error.dispose(); else settled.value.dispose();
+      }, () => undefined);
       if (activeHandle?.alive !== false) activeHandle?.dispose();
       for (const promise of pendingPromises) if (promise.alive !== false) promise.dispose();
+      if (cancelExecution && cancelExecution.alive !== false) cancelExecution.dispose();
       jsonParse.dispose();
       jsonObject.dispose();
-      disposeContext(context);
+      context.dispose();
     }
   }
 }

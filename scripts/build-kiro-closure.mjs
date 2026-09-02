@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { builtinModules } from "node:module";
 import { build } from "esbuild";
+import { uniquePackageRecords } from "./package-identity.mjs";
 
 const root = path.resolve(".");
 const outdir = path.join(root, "dist", "kiro-power-closure");
@@ -53,33 +54,35 @@ const packageName = (input) => {
 };
 const packageNames = [...new Set(inputs.map(packageName).filter(Boolean))].sort();
 for (const dependency of Object.keys(pkg.dependencies ?? {})) {
-  if (!packageNames.includes(dependency)) {
-    throw new Error(`Direct dependency is not reached by the Power closure: ${dependency}`);
-  }
+  if (!packageNames.includes(dependency)) throw new Error(`Direct dependency is not reached by the Power closure: ${dependency}`);
 }
 const legacyHost = String.fromCodePoint(112, 105);
 if (packageNames.some((name) => name.startsWith(`@earendil-works/${legacyHost}-`) || name.startsWith(`@mariozechner/${legacyHost}-`))) throw new Error("Power closure reached a forbidden package");
-const packageInputs = packageNames.map((name) => {
-  const matchingInput = inputs.find((input) => packageName(input) === name);
-  let cursor = path.dirname(path.resolve(root, matchingInput));
+const discoveredPackageRecords = [];
+for (const input of inputs) {
+  const name = packageName(input);
+  if (!name) continue;
+  let cursor = path.dirname(path.resolve(root, input));
+  let found;
   while (cursor !== path.dirname(cursor)) {
     const manifest = path.join(cursor, "package.json");
     if (fs.existsSync(manifest)) {
       const candidate = JSON.parse(fs.readFileSync(manifest, "utf8"));
-      if (candidate.name === name) {
-        return {
-          name,
-          version: String(candidate.version),
-          license: typeof candidate.license === "string" && candidate.license
-            ? candidate.license
-            : "NOASSERTION",
-        };
-      }
+      if (candidate.name === name) { found = { candidate, root: cursor }; break; }
     }
     cursor = path.dirname(cursor);
   }
-  throw new Error(`Unable to resolve package version for closure input: ${name}`);
-});
+  if (!found) throw new Error(`Unable to resolve package version for closure input: ${name}`);
+  const version = String(found.candidate.version);
+  discoveredPackageRecords.push({
+    name,
+    version,
+    license: typeof found.candidate.license === "string" && found.candidate.license ? found.candidate.license : "NOASSERTION",
+    root: found.root,
+  });
+}
+const records = uniquePackageRecords(discoveredPackageRecords);
+const packageInputs = records.map(({ name, version, license }) => ({ name, version, license }));
 
 const tsLib = path.join(root, "node_modules", "typescript", "lib");
 const chunks = path.join(outdir, "chunks");
@@ -97,6 +100,18 @@ while (queue.length) {
 }
 for (const name of [...libraries].sort()) fs.copyFileSync(path.join(tsLib, name), path.join(chunks, name));
 fs.writeFileSync(path.join(outdir, "package.json"), `${JSON.stringify({ name: "kiro-fabric-power-runtime", version: pkg.version, type: "module", private: true }, null, 2)}\n`);
+
+const noticeParts = ["Kiro Fabric bundled third-party license notices\n"];
+for (const record of records) {
+  const candidates = fs.readdirSync(record.root).filter((name) => /^(?:licen[cs]e|notice|thirdpartynotice)/iu.test(name)).sort();
+  if (!candidates.length) throw new Error(`Bundled dependency has no discoverable license text: ${record.name}@${record.version}`);
+  noticeParts.push(`\n===== ${record.name}@${record.version} (${record.license}) =====\n`);
+  for (const name of candidates) {
+    const target = path.join(record.root, name);
+    if (fs.lstatSync(target).isFile()) noticeParts.push(`\n--- ${name} ---\n${fs.readFileSync(target, "utf8")}\n`);
+  }
+}
+fs.writeFileSync(path.join(outdir, "THIRD_PARTY_NOTICES.txt"), noticeParts.join(""));
 
 const kiroProviderFiles = new Set([
   "src/kiro/artifacts.ts",
@@ -136,6 +151,8 @@ fs.writeFileSync(path.join(evidenceDirectory, "power-reachability.json"), `${JSO
     "scripts/real-client-evidence.mjs",
     "scripts/certify-kiro-power-real.mjs",
     "scripts/generate-power-sbom.mjs",
+    "scripts/create-power-archive.mjs",
+    "scripts/package-identity.mjs",
     "scripts/release-candidate-report.mjs",
   ],
 }, null, 2)}\n`);

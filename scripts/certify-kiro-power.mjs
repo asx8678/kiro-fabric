@@ -6,10 +6,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { validatePowerPackage } from "./validate-power-package.mjs";
 
-const pluginRoot = path.resolve(process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : ".tmp/kiro-fabric-power");
+const requestedPluginRoot = path.resolve(process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : ".tmp/kiro-fabric-power");
 const jsonIndex = process.argv.indexOf("--json");
 const jsonOutput = jsonIndex >= 0 ? path.resolve(process.argv[jsonIndex + 1]) : undefined;
-const packageEvidence = validatePowerPackage(pluginRoot);
+const packageEvidence = validatePowerPackage(requestedPluginRoot);
+const pluginRoot = fs.realpathSync(requestedPluginRoot);
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-cert-"));
 const pluginData = path.join(temporary, "data");
 const workspace = path.join(temporary, "workspace");
@@ -88,6 +89,44 @@ try {
   if (!denied.isError || deniedValue.status !== "failed" || !String(deniedValue.error).includes("approval")) {
     throw new Error("approval absence did not fail closed at the approval boundary");
   }
+  const dynamicCodeProbes = [
+    "return eval(payloads.program)",
+    "const run = eval; return run(payloads.program)",
+    "return (globalThis as any)['ev' + 'al'](payloads.program)",
+    "return Function(payloads.program)()",
+    "return ((() => {}) as any).constructor(payloads.program)()",
+    "return (Object.getPrototypeOf(() => {}) as any).constructor(payloads.program)()",
+    "return (Object.getPrototypeOf(function* () {}) as any).constructor(payloads.program)().next().value",
+    "return await (Object.getPrototypeOf(async function () {}) as any).constructor(payloads.program)()",
+    "return await (Object.getPrototypeOf(async function* () {}) as any).constructor(payloads.program)().next()",
+  ];
+  let requestId = 10;
+  for (const code of dynamicCodeProbes) {
+    const probe = await call(requestId++, "fabric_exec", { code, payloads: { program: "return 42" }, resultFormat: "json" });
+    const probeValue = JSON.parse(text(probe));
+    if (!probe.isError || !String(probeValue.error).includes("Dynamic code generation is disabled") || probeValue.audits?.length) {
+      throw new Error(`dynamic code probe was not rejected before provider/approval activity: ${code}`);
+    }
+  }
+  for (const code of [
+    "import value from '/etc/passwd'; return value as any",
+    "return await import('file:///etc/passwd') as any",
+    "type Secret = import('/etc/passwd'); return null",
+    "const value = require('../package.json'); return value",
+  ]) {
+    const probe = await call(requestId++, "fabric_exec", { code, resultFormat: "json" });
+    const probeValue = JSON.parse(text(probe));
+    if (!probe.isError || !JSON.stringify(probeValue.typeErrors ?? []).includes("Guest modules and external references are not allowed")) {
+      throw new Error(`guest import was not rejected without host resolution: ${code}: ${JSON.stringify(probeValue)}`);
+    }
+  }
+  for (const code of ["return 1n as any", "return new Map() as any", "return Number.NaN as any", "const x: any = {}; x.self = x; return x"]) {
+    const probe = await call(requestId++, "fabric_exec", { code, resultFormat: "json" });
+    const probeValue = JSON.parse(text(probe));
+    if (!probe.isError || !/non-JSON|unsupported exotic|non-finite|cycle/u.test(String(probeValue.error))) {
+      throw new Error(`unsupported guest result was not rejected: ${code}`);
+    }
+  }
   child.stdin.end();
   const code = await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error("MCP shutdown timed out")), 10_000); child.once("exit", (value) => { clearTimeout(timer); resolve(value); }); });
   if (code !== 0) throw new Error(`Power MCP exited ${code}: ${stderr}`);
@@ -99,7 +138,7 @@ try {
     tools,
     executor: "quickjs",
     customAgentSelected: false,
-    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "four-providers", "checked-execution", "approval-boundary", "bounded-output", "bounded-shutdown"],
+    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "four-providers", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "approval-boundary", "bounded-output", "bounded-shutdown"],
   };
   const serialized = `${JSON.stringify(report, null, 2)}\n`;
   if (jsonOutput) { fs.mkdirSync(path.dirname(jsonOutput), { recursive: true }); fs.writeFileSync(jsonOutput, serialized, { mode: 0o600 }); }

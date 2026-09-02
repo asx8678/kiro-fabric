@@ -24,6 +24,9 @@ export interface FabricCallAudit {
 export interface FabricRegistryInvocationContext extends FabricInvocationContext {
   audits: FabricCallAudit[];
   maxResultChars: number;
+  maxAuditEntries?: number;
+  maxAuditBytes?: number;
+  auditBudget?: { bytes: number };
   approve(action: ResolvedFabricAction, args: Record<string, unknown>): Promise<void>;
 }
 
@@ -50,6 +53,12 @@ const boundedResult = (value: unknown, maximum: number): { value: unknown; chars
 
 const overlaps = (left: readonly string[], right: readonly string[]): boolean =>
   left.includes("*") || right.includes("*") || left.some((entry) => right.includes(entry));
+const deepFreeze = <T>(value: T): T => {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+  return Object.freeze(value);
+};
+const AUDIT_RESERVATION_BYTES = 2_048;
 
 export class ActionRegistry {
   readonly #providers = new Map<string, FabricProvider>();
@@ -116,30 +125,35 @@ export class ActionRegistry {
     const invalid = schemaValidationMessage(action.inputSchema, prepared);
     if (invalid) throw new Error(`Invalid arguments for ${ref}: ${invalid}`);
 
-    // Approval is bound to the exact immutable argument snapshot passed to the provider.
-    const approvedArgs = structuredClone(prepared);
-    await runAbortable(context.signal, () => context.approve(
-      structuredClone(action),
-      structuredClone(approvedArgs),
-    ));
-    throwIfAborted(context.signal);
-    const invocationArgs = structuredClone(approvedArgs);
-
-    const resources = provider.effectResources?.(action.name, structuredClone(invocationArgs), context)
+    // Preparation, schema validation, and resource calculation all precede approval.
+    // The frozen canonical snapshot is never normalized or mutated afterwards.
+    const canonicalArgs = deepFreeze(structuredClone(prepared));
+    const resources = Object.freeze([...(provider.effectResources?.(action.name, structuredClone(canonicalArgs), context)
       ?? action.effect?.resources
-      ?? (action.risk === "write" ? ["*"] : []);
+      ?? (action.risk === "write" ? ["*"] : []))]);
     const writeLike = action.risk === "write" || action.effect?.kind === "write";
+    const nestedToolCallId = `fabric_${randomUUID()}`;
+    if (context.audits.length >= (context.maxAuditEntries ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit entry quota exceeded");
+    const audit: FabricCallAudit = { ref, nestedToolCallId, startedAt: Date.now() };
+    const auditBudget = context.auditBudget ?? { bytes: 0 };
+    if (auditBudget.bytes + AUDIT_RESERVATION_BYTES > (context.maxAuditBytes ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit byte quota exceeded");
     if (writeLike) {
       for (const active of this.#activeWrites.values()) {
         if (overlaps(resources, active.resources)) throw new Error(`Overlapping write rejected: ${ref} conflicts with ${active.ref}`);
       }
+      // Reserve write intent before prompting so an approval flood cannot queue
+      // conflicting side effects or dialogs.
+      this.#activeWrites.set(nestedToolCallId, { ref, resources });
     }
-
-    const nestedToolCallId = `fabric_${randomUUID()}`;
-    const audit: FabricCallAudit = { ref, nestedToolCallId, startedAt: Date.now() };
     context.audits.push(audit);
-    if (writeLike) this.#activeWrites.set(nestedToolCallId, { ref, resources });
+    auditBudget.bytes += AUDIT_RESERVATION_BYTES;
     try {
+      await runAbortable(context.signal, () => context.approve(
+        structuredClone(action),
+        structuredClone(canonicalArgs),
+      ));
+      throwIfAborted(context.signal);
+      const invocationArgs = structuredClone(canonicalArgs);
       // Providers receive the request signal and own cancellation cleanup.
       // Await their settlement so a cooperative provider (notably configured
       // MCP, which closes its contacted server) finishes cleanup before the
@@ -150,6 +164,7 @@ export class ActionRegistry {
       audit.success = true;
       audit.resultChars = bounded.chars;
       audit.resultTruncated = bounded.truncated;
+      throwIfAborted(context.signal);
       return bounded.value;
     } catch (error) {
       audit.endedAt = Date.now();

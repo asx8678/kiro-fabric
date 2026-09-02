@@ -16,8 +16,29 @@ for (const directory of [home, kiroHome]) {
 }
 const snapshot = (root) => {
   const digest = createHash("sha256");
-  const visit = (directory) => { for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const target = path.join(directory, entry.name); digest.update(path.relative(root, target)).update("\0"); if (entry.isDirectory()) visit(target); else digest.update(fs.readFileSync(target)); } };
-  visit(root); return digest.digest("hex");
+  const visit = (target) => {
+    const stats = fs.lstatSync(target, { bigint: true });
+    const type = stats.isSymbolicLink() ? "symlink" : stats.isDirectory() ? "directory" : stats.isFile() ? "file" : "other";
+    digest.update(JSON.stringify({
+      path: path.relative(root, target) || ".",
+      type,
+      mode: stats.mode.toString(),
+      uid: stats.uid.toString(),
+      gid: stats.gid.toString(),
+      dev: stats.dev.toString(),
+      ino: stats.ino.toString(),
+      nlink: stats.nlink.toString(),
+      size: stats.size.toString(),
+      mtimeNs: stats.mtimeNs.toString(),
+      ctimeNs: stats.ctimeNs.toString(),
+      ...(type === "symlink" ? { target: fs.readlinkSync(target) } : {}),
+    })).update("\0");
+    if (type === "directory") {
+      for (const entry of fs.readdirSync(target).sort()) visit(path.join(target, entry));
+    } else if (type === "file") digest.update(fs.readFileSync(target));
+  };
+  visit(root);
+  return digest.digest("hex");
 };
 const before = { home: snapshot(home), kiroHome: snapshot(kiroHome) };
 const result = spawnSync(process.argv[2], process.argv.slice(3), {

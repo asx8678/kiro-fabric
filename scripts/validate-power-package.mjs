@@ -26,7 +26,21 @@ const exactKeys = (value, keys) =>
 const normalized = (value) => value.replaceAll("\\", "/");
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-export const walkPackage = (root) => {
+const packageRoot = (inputRoot) => {
+  const lexical = path.resolve(inputRoot);
+  const lexicalStats = fs.lstatSync(lexical);
+  if (lexicalStats.isSymbolicLink()) {
+    const target = fs.readlinkSync(lexical);
+    if (path.isAbsolute(target) || target.includes(path.sep) || !target.startsWith(".kiro-fabric-power-generation-")) fail("root symlink is not an approved checkout-local staging pointer");
+    const resolved = fs.realpathSync(lexical);
+    if (path.dirname(resolved) !== fs.realpathSync(path.dirname(lexical))) fail("staging pointer escapes its checkout-local parent");
+    return resolved;
+  }
+  return lexical;
+};
+
+export const walkPackage = (inputRoot) => {
+  const root = packageRoot(inputRoot);
   const files = [];
   const visit = (directory) => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -42,7 +56,8 @@ export const walkPackage = (root) => {
   return files;
 };
 
-export const digestPowerPackage = (root, options = {}) => {
+export const digestPowerPackage = (inputRoot, options = {}) => {
+  const root = packageRoot(inputRoot);
   const digest = createHash("sha256");
   const files = walkPackage(root).filter((file) => !(options.excludeOwner && path.basename(file) === ".kiro-fabric-power-owner.json"));
   for (const file of files) {
@@ -55,9 +70,9 @@ export const digestPowerPackage = (root, options = {}) => {
 };
 
 export const validatePowerPackage = (inputRoot) => {
-  const rootPath = path.resolve(inputRoot);
+  const rootPath = packageRoot(inputRoot);
   const rootStat = fs.lstatSync(rootPath);
-  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail("root must be a regular directory");
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail("root must resolve to a regular directory");
   if (process.platform !== "win32") {
     if (typeof process.getuid === "function" && rootStat.uid !== process.getuid()) fail("root must be owned by the current user");
     if ((rootStat.mode & 0o077) !== 0) fail("root permissions must be private");

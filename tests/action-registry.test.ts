@@ -74,6 +74,20 @@ describe("ActionRegistry security boundaries", () => {
     expect(cleaned).toBe(true);
   });
 
+  it("reserves write intent before approval to prevent prompt floods", async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    let prompts = 0;
+    const registry = new ActionRegistry();
+    registry.register(provider(async () => true));
+    const first = registry.invoke("state.set", { key: "a", value: 1 }, context(async () => { prompts += 1; await blocked; }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await expect(registry.invoke("state.set", { key: "a", value: 2 }, context(async () => { prompts += 1; }))).rejects.toThrow("Overlapping write rejected");
+    expect(prompts).toBe(1);
+    release();
+    await expect(first).resolves.toBe(true);
+  });
+
   it("rejects overlapping writes while allowing distinct resources", async () => {
     let release!: () => void;
     const blocked = new Promise<void>((resolve) => { release = resolve; });

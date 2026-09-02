@@ -19,6 +19,15 @@ describe("Power memory confinement", () => {
     visit(root);
   });
 
+  it("reclaims capacity through an identity-checked delete", async () => {
+    const memory = openKiroMemory("workspace", temporary(), { maxEntries: 1 });
+    await memory.set("first", true);
+    await expect(memory.set("second", true)).rejects.toThrow("exceeds 1 entries");
+    await expect(memory.delete("first")).resolves.toEqual({ key: "first", deleted: true });
+    await expect(memory.delete("first")).resolves.toEqual({ key: "first", deleted: false });
+    await expect(memory.set("second", true)).resolves.toMatchObject({ key: "second", value: true });
+  });
+
   it("enforces configured entry and value bounds inside the mutation lock", async () => {
     const root = temporary();
     const memory = openKiroMemory("workspace", root, { maxEntries: 1, maxValueChars: 8 });

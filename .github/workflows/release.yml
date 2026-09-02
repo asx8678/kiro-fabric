@@ -5,50 +5,83 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
-  actions: read
+  contents: read
 
 jobs:
-  release:
+  verify-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.verify.outputs.commit }}
+    steps:
+      - id: verify
+        name: Verify annotated GitHub-signed tag without repository checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          EXPECTED: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ref=$(gh api "repos/$REPOSITORY/git/ref/tags/$TAG")
+          test "$(jq -r '.object.type' <<<"$ref")" = tag
+          tag=$(gh api "repos/$REPOSITORY/git/tags/$(jq -r '.object.sha' <<<"$ref")")
+          test "$(jq -r '.verification.verified' <<<"$tag")" = true
+          test "$(jq -r '.object.type' <<<"$tag")" = commit
+          commit=$(jq -r '.object.sha' <<<"$tag")
+          test "$commit" = "$EXPECTED"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+  qualify:
+    needs: verify-tag
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions: { contents: read, actions: read }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with: { fetch-depth: 0 }
+        with:
+          ref: ${{ needs.verify-tag.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
-      - run: npm install --global pnpm@11.20.0
-      - run: pnpm install --frozen-lockfile
-      - run: node scripts/assert-kiro-home-unchanged.mjs pnpm run check
-      - name: Require matching GitHub-verified signed tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
-          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME")
-          test "$(jq -r '.object.type' <<<"$ref")" = "tag"
-          tag=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$(jq -r '.object.sha' <<<"$ref")")
-          test "$(jq -r '.verification.verified' <<<"$tag")" = "true"
-          test "$(jq -r '.object.type' <<<"$tag")" = "commit"
-          test "$(jq -r '.object.sha' <<<"$tag")" = "$GITHUB_SHA"
+      - run: corepack enable && corepack prepare pnpm@11.20.0 --activate
+      - run: corepack pnpm install --frozen-lockfile
+      - run: node scripts/assert-kiro-home-unchanged.mjs corepack pnpm run check
+      - run: corepack pnpm run power:archive
       - name: Download exact-commit real-client evidence
-        env:
-          GH_TOKEN: ${{ github.token }}
+        env: { GH_TOKEN: "${{ github.token }}", COMMIT: "${{ needs.verify-tag.outputs.commit }}" }
         run: |
-          run_id=$(gh run list --workflow "Real Kiro Power qualification" --commit "$GITHUB_SHA" --status success --json databaseId --jq '.[0].databaseId')
+          run_id=$(gh run list --workflow "Real Kiro Power qualification" --commit "$COMMIT" --status success --json databaseId --jq '.[0].databaseId')
           test -n "$run_id"
-          gh run download "$run_id" -n "real-client-${GITHUB_SHA}" -D "$RUNNER_TEMP/qualification"
-          test -f "$RUNNER_TEMP/qualification/real-client.json"
-      - name: Bind release report to real-client evidence
-        run: |
-          node scripts/release-candidate-report.mjs \
-            --output "$RUNNER_TEMP/release.json" \
-            --sbom .tmp/kiro-fabric-power.spdx.json \
+          gh run download "$run_id" -n "real-client-${COMMIT}" -D "$RUNNER_TEMP/qualification"
+      - run: |
+          mkdir -p .tmp/release-assets
+          node scripts/release-candidate-report.mjs --output .tmp/release-assets/release.json \
+            --archive .tmp/kiro-fabric-power.tar.gz --sbom .tmp/kiro-fabric-power.spdx.json \
             --qualification "$RUNNER_TEMP/qualification/real-client.json"
-      - run: pnpm pack --pack-destination "$RUNNER_TEMP" --config.ignore-scripts=true
+          cp .tmp/kiro-fabric-power.tar.gz .tmp/release-assets/
+          cp .tmp/kiro-fabric-power.spdx.json .tmp/release-assets/
+          cp "$RUNNER_TEMP/qualification/real-client.json" .tmp/release-assets/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-release-${{ needs.verify-tag.outputs.commit }}
+          if-no-files-found: error
+          path: .tmp/release-assets/
+
+  publish:
+    needs: [verify-tag, qualify]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-release-${{ needs.verify-tag.outputs.commit }}
+          path: ${{ runner.temp }}/release
       - uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631
         with:
           files: |
-            ${{ runner.temp }}/kiro-fabric-*.tgz
-            ${{ runner.temp }}/release.json
-            ${{ runner.temp }}/qualification/real-client.json
+            ${{ runner.temp }}/release/kiro-fabric-power.tar.gz
+            ${{ runner.temp }}/release/kiro-fabric-power.spdx.json
+            ${{ runner.temp }}/release/release.json
+            ${{ runner.temp }}/release/real-client.json

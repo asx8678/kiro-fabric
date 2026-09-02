@@ -34,7 +34,8 @@
   "scripts": {
     "build": "node scripts/build.mjs && node scripts/build-kiro-closure.mjs && node scripts/assert-build-artifacts.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/build-power-dev.mjs && vitest run",
+    "test": "pnpm run build && pnpm run test:built",
+    "test:built": "node scripts/build-power-dev.mjs && vitest run",
     "lint:dead": "knip",
     "power:validate": "node scripts/validate-power-package.mjs .tmp/kiro-fabric-power",
     "power:stage": "pnpm run build && node scripts/build-power-dev.mjs",
@@ -45,8 +46,9 @@
     "certify:power:built": "node scripts/build-power-dev.mjs && node scripts/certify-kiro-power.mjs",
     "certify:power:real": "node scripts/certify-kiro-power-real.mjs",
     "sbom:power": "node scripts/generate-power-sbom.mjs --output .tmp/kiro-fabric-power.spdx.json",
-    "release:candidate": "pnpm run check && node scripts/release-candidate-report.mjs",
-    "check": "pnpm run typecheck && pnpm run build && pnpm run test && pnpm run lint:dead && node scripts/build-power-dev.mjs && node scripts/certify-kiro-power.mjs && pnpm run sbom:power",
+    "power:archive": "node scripts/create-power-archive.mjs --output .tmp/kiro-fabric-power.tar.gz",
+    "release:candidate": "pnpm run check && pnpm run power:archive && node scripts/release-candidate-report.mjs",
+    "check": "pnpm run typecheck && pnpm run build && pnpm run test:built && pnpm run lint:dead && node scripts/certify-kiro-power.mjs && pnpm run sbom:power",
     "prepack": "pnpm run check"
   },
   "keywords": [

@@ -6,20 +6,27 @@ import {
 } from "../scripts/real-client-evidence.mjs";
 
 const digest = "a".repeat(64);
+const archiveDigest = "b".repeat(64);
 const valid = {
   kind: "kiro-fabric.real-client-qualification",
-  schemaVersion: 1,
+  schemaVersion: 2,
   ok: true,
   packageDigest: digest,
+  archiveDigest,
+  commit: "c".repeat(40),
   sessionCommand: REAL_CLIENT_SESSION_COMMAND,
   powerActivated: true,
   tools: REAL_CLIENT_TOOLS,
   customAgentSelected: false,
+  driver: { digest: "d".repeat(64), version: "reviewed-1" },
+  kiro: { path: "/usr/bin/kiro-cli", digest: "e".repeat(64), version: "1.0.0" },
+  nativeCapabilities: ["file-read", "file-edit", "shell", "web", "subagent"].map((name) => ({ name, observed: true })),
+  transcript: ["power-activation", "mcp-tools-list", "native-capability-probes"].map((kind, index) => ({ kind, digest: String(index + 1).repeat(64) })),
 };
 
 describe("real-client release evidence", () => {
   it("accepts only exact digest-bound Power qualification evidence", () => {
-    expect(assertRealClientEvidence(valid, digest, { qualification: true })).toBe(valid);
+    expect(assertRealClientEvidence(valid, digest, { qualification: true, archiveDigest })).toBe(valid);
     for (const patch of [
       { packageDigest: "b".repeat(64) },
       { sessionCommand: ["kiro-cli"] },
@@ -27,13 +34,13 @@ describe("real-client release evidence", () => {
       { tools: ["fabric_exec"] },
       { customAgentSelected: true },
       { kind: "other" },
-      { schemaVersion: 2 },
+      { schemaVersion: 1 },
       { ok: false },
     ]) {
       expect(() => assertRealClientEvidence(
         { ...valid, ...patch },
         digest,
-        { qualification: true },
+        { qualification: true, archiveDigest },
       )).toThrow();
     }
   });

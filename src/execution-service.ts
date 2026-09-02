@@ -101,33 +101,62 @@ export class FabricExecutionService {
     }
 
     const audits: FabricCallAudit[] = [];
+    const auditBudget = { bytes: 0 };
+    let providerCalls = 0;
+    let activeProviderCalls = 0;
+    let approvalRequests = 0;
+    let pendingApprovals = 0;
     const providerContext = (signal: AbortSignal) => ({
       cwd: this.cwd,
       signal,
     });
     const result = await this.#runtime.execute(options.code, async (ref, args, signal) => {
-      const context = providerContext(signal);
-      if (ref === "fabric.providers") return this.registry.providers();
-      if (ref === "fabric.list") return this.registry.list();
-      if (ref === "fabric.search") {
-        if (typeof args.query !== "string") throw new Error("fabric.search query must be a string");
-        return this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
+      providerCalls += 1;
+      if (providerCalls > this.config.executor.maxProviderCalls) throw new Error("Fabric provider call quota exceeded");
+      activeProviderCalls += 1;
+      if (activeProviderCalls > this.config.executor.maxConcurrentProviderCalls) {
+        activeProviderCalls -= 1;
+        throw new Error("Fabric concurrent provider call quota exceeded");
       }
-      if (ref === "fabric.describe") {
-        if (typeof args.ref !== "string") throw new Error("fabric.describe ref must be a string");
-        return this.registry.describe(args.ref);
+      try {
+        const context = providerContext(signal);
+        if (ref === "fabric.providers") return this.registry.providers();
+        if (ref === "fabric.list") return this.registry.list();
+        if (ref === "fabric.search") {
+          if (typeof args.query !== "string") throw new Error("fabric.search query must be a string");
+          return this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
+        }
+        if (ref === "fabric.describe") {
+          if (typeof args.ref !== "string") throw new Error("fabric.describe ref must be a string");
+          return this.registry.describe(args.ref);
+        }
+        const actionRef = ref === "fabric.call" ? args.ref : ref;
+        const actionArgs = ref === "fabric.call" ? args.args ?? {} : args;
+        if (typeof actionRef !== "string" || typeof actionArgs !== "object" || actionArgs === null || Array.isArray(actionArgs)) {
+          throw new Error("Fabric provider call requires an exact ref and object args");
+        }
+        return await this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
+          ...context,
+          audits,
+          auditBudget,
+          maxAuditEntries: this.config.executor.maxAuditEntries,
+          maxAuditBytes: this.config.executor.maxAuditBytes,
+          maxResultChars: this.config.executor.maxNestedResultChars,
+          approve: async (action, exactArgs) => {
+            approvalRequests += 1;
+            if (approvalRequests > this.config.executor.maxApprovalRequests) throw new Error("Fabric approval request quota exceeded");
+            pendingApprovals += 1;
+            if (pendingApprovals > this.config.executor.maxPendingApprovals) {
+              pendingApprovals -= 1;
+              throw new Error("Fabric pending approval quota exceeded");
+            }
+            try { await options.approver.approve(action, exactArgs, signal); }
+            finally { pendingApprovals -= 1; }
+          },
+        });
+      } finally {
+        activeProviderCalls -= 1;
       }
-      const actionRef = ref === "fabric.call" ? args.ref : ref;
-      const actionArgs = ref === "fabric.call" ? args.args ?? {} : args;
-      if (typeof actionRef !== "string" || typeof actionArgs !== "object" || actionArgs === null || Array.isArray(actionArgs)) {
-        throw new Error("Fabric provider call requires an exact ref and object args");
-      }
-      return this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
-        ...context,
-        audits,
-        maxResultChars: this.config.executor.maxNestedResultChars,
-        approve: (action, exactArgs) => options.approver.approve(action, exactArgs, signal),
-      });
     }, {
       timeoutMs: effectiveTimeoutMs,
       maxTimeoutMs: configuredMaximum,

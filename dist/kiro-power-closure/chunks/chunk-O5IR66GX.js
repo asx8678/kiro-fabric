@@ -211551,6 +211551,7 @@ var DEFAULT_COMPILER_TIMEOUT_MS = 1e4;
 var MAX_COMPILER_DIAGNOSTICS = 50;
 var MAX_DIAGNOSTIC_MESSAGE_CHARS = 4096;
 var COMPILER_MEMORY_MB = 128;
+var FORBIDDEN_MODULE_MESSAGE = "Guest modules and external references are not allowed";
 var compilerOptions = {
   target: import_typescript.default.ScriptTarget.ES2022,
   module: import_typescript.default.ModuleKind.ESNext,
@@ -211559,56 +211560,65 @@ var compilerOptions = {
   noEmit: false,
   sourceMap: true,
   skipLibCheck: true,
-  lib: ["lib.es2022.d.ts"]
+  lib: ["lib.es2022.d.ts"],
+  types: []
 };
 var nextCheckerId = 0;
 var normalizeTypeScriptPath = (fileName) => fileName.replaceAll("\\", "/");
-var wrapFabricGuestCode = (code) => `async function __kiroFabricMain() {
+var standardLibraryRoot = normalizeTypeScriptPath(path.dirname(import_typescript.default.getDefaultLibFilePath(compilerOptions)));
+var standardLibraryName = /^lib(?:\.[a-z0-9.-]+)?\.d\.ts$/u;
+var standardLibraryPath = (fileName) => {
+  const normalized = normalizeTypeScriptPath(path.resolve(fileName));
+  return path.posix.dirname(normalized) === standardLibraryRoot && standardLibraryName.test(path.posix.basename(normalized));
+};
+var wrapFabricGuestCode = (code) => `async function __kiroFabricMain(): Promise<JsonValue> {
 ${code}
 }
 `;
+var forbiddenModuleNode = (source) => {
+  if (source.referencedFiles.length || source.typeReferenceDirectives.length || source.libReferenceDirectives.length) return source;
+  let found;
+  const visit = (node) => {
+    if (found) return;
+    if (import_typescript.default.isImportDeclaration(node) || import_typescript.default.isExportDeclaration(node) || import_typescript.default.isImportEqualsDeclaration(node) || import_typescript.default.isImportTypeNode(node) || import_typescript.default.isCallExpression(node) && (node.expression.kind === import_typescript.default.SyntaxKind.ImportKeyword || import_typescript.default.isIdentifier(node.expression) && node.expression.text === "require") || import_typescript.default.isModuleDeclaration(node) && import_typescript.default.isStringLiteral(node.name)) found = node;
+    else import_typescript.default.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+};
 var FabricTypeChecker = class {
   constructor(declarations) {
     this.declarations = declarations;
     const id = ++nextCheckerId;
     this.#guestFile = normalizeTypeScriptPath(path.resolve(`/__kiro_fabric_guest_${id}.ts`));
-    this.#declarationFile = normalizeTypeScriptPath(
-      path.resolve(`/__kiro_fabric_globals_${id}.d.ts`)
-    );
-    this.#sourceFile = import_typescript.default.createSourceFile(
-      this.#guestFile,
-      "",
-      import_typescript.default.ScriptTarget.ES2022,
-      true
-    );
-    this.#declarationSource = import_typescript.default.createSourceFile(
-      this.#declarationFile,
-      declarations,
-      import_typescript.default.ScriptTarget.ES2022,
-      true
-    );
-    const isGuestFile = (fileName) => this.#baseHost.getCanonicalFileName(normalizeTypeScriptPath(fileName)) === this.#baseHost.getCanonicalFileName(this.#guestFile);
-    const isDeclarationFile = (fileName) => this.#baseHost.getCanonicalFileName(normalizeTypeScriptPath(fileName)) === this.#baseHost.getCanonicalFileName(this.#declarationFile);
+    this.#declarationFile = normalizeTypeScriptPath(path.resolve(`/__kiro_fabric_globals_${id}.d.ts`));
+    this.#sourceFile = import_typescript.default.createSourceFile(this.#guestFile, "", import_typescript.default.ScriptTarget.ES2022, true);
+    this.#declarationSource = import_typescript.default.createSourceFile(this.#declarationFile, declarations, import_typescript.default.ScriptTarget.ES2022, true);
+    const canonical = (fileName) => this.#baseHost.getCanonicalFileName(normalizeTypeScriptPath(fileName));
+    const isGuestFile = (fileName) => canonical(fileName) === canonical(this.#guestFile);
+    const isDeclarationFile = (fileName) => canonical(fileName) === canonical(this.#declarationFile);
+    const allowed = (fileName) => isGuestFile(fileName) || isDeclarationFile(fileName) || standardLibraryPath(fileName);
     this.#host = {
       ...this.#baseHost,
-      fileExists: (fileName) => isGuestFile(fileName) || isDeclarationFile(fileName) || this.#baseHost.fileExists(fileName),
+      fileExists: allowed,
       readFile: (fileName) => {
         if (isGuestFile(fileName)) return this.#sourceText;
         if (isDeclarationFile(fileName)) return this.declarations;
-        return this.#baseHost.readFile(fileName);
+        return standardLibraryPath(fileName) ? this.#baseHost.readFile(fileName) : void 0;
       },
+      directoryExists: (directoryName) => normalizeTypeScriptPath(path.resolve(directoryName)) === standardLibraryRoot,
+      getDirectories: () => [],
+      realpath: (fileName) => allowed(fileName) ? normalizeTypeScriptPath(path.resolve(fileName)) : normalizeTypeScriptPath(fileName),
+      resolveModuleNames: (moduleNames) => moduleNames.map(() => void 0),
       getSourceFile: (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
         if (isGuestFile(fileName)) return this.#sourceFile;
         if (isDeclarationFile(fileName)) return this.#declarationSource;
-        const cached = this.#stableFiles.get(fileName);
+        if (!standardLibraryPath(fileName)) return void 0;
+        const normalized = normalizeTypeScriptPath(path.resolve(fileName));
+        const cached = this.#stableFiles.get(normalized);
         if (cached) return cached;
-        const source = this.#baseHost.getSourceFile(
-          fileName,
-          languageVersion,
-          onError,
-          shouldCreateNewSourceFile
-        );
-        if (source) this.#stableFiles.set(fileName, source);
+        const source = this.#baseHost.getSourceFile(normalized, languageVersion, onError, shouldCreateNewSourceFile);
+        if (source) this.#stableFiles.set(normalized, source);
         return source;
       }
     };
@@ -211623,13 +211633,17 @@ var FabricTypeChecker = class {
   #sourceFile;
   #program;
   check(code) {
+    const references = import_typescript.default.preProcessFile(code, true, true);
+    if (references.referencedFiles.length || references.typeReferenceDirectives.length || references.libReferenceDirectives.length || references.importedFiles.length) {
+      return { errors: [{ line: 1, column: 1, message: FORBIDDEN_MODULE_MESSAGE }] };
+    }
     this.#sourceText = wrapFabricGuestCode(code);
-    this.#sourceFile = import_typescript.default.createSourceFile(
-      this.#guestFile,
-      this.#sourceText,
-      import_typescript.default.ScriptTarget.ES2022,
-      true
-    );
+    this.#sourceFile = import_typescript.default.createSourceFile(this.#guestFile, this.#sourceText, import_typescript.default.ScriptTarget.ES2022, true);
+    const forbidden = forbiddenModuleNode(this.#sourceFile);
+    if (forbidden) {
+      const position = this.#sourceFile.getLineAndCharacterOfPosition(forbidden.getStart(this.#sourceFile, false));
+      return { errors: [{ line: Math.max(1, position.line), column: position.character + 1, message: FORBIDDEN_MODULE_MESSAGE }] };
+    }
     const program = import_typescript.default.createProgram({
       rootNames: [this.#declarationFile, this.#guestFile],
       options: compilerOptions,
@@ -211637,22 +211651,13 @@ var FabricTypeChecker = class {
       ...this.#program ? { oldProgram: this.#program } : {}
     });
     this.#program = program;
-    const diagnostics = [
-      ...program.getSyntacticDiagnostics(this.#sourceFile),
-      ...program.getSemanticDiagnostics(this.#sourceFile)
-    ].slice(0, MAX_COMPILER_DIAGNOSTICS);
+    const diagnostics = [...program.getSyntacticDiagnostics(this.#sourceFile), ...program.getSemanticDiagnostics(this.#sourceFile)].slice(0, MAX_COMPILER_DIAGNOSTICS);
     const errors = diagnostics.map((diagnostic) => {
       const flattened = import_typescript.default.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
       const message = flattened.length > MAX_DIAGNOSTIC_MESSAGE_CHARS ? `${flattened.slice(0, MAX_DIAGNOSTIC_MESSAGE_CHARS)}\u2026[truncated]` : flattened;
-      if (!diagnostic.file || diagnostic.start === void 0) {
-        return { line: 0, column: 0, message };
-      }
+      if (!diagnostic.file || diagnostic.start === void 0) return { line: 0, column: 0, message };
       const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
-      return {
-        line: Math.max(1, position.line),
-        column: position.character + 1,
-        message
-      };
+      return { line: Math.max(1, position.line), column: position.character + 1, message };
     });
     if (errors.length > 0) return { errors };
     let javascript;
@@ -211661,11 +211666,7 @@ var FabricTypeChecker = class {
       if (fileName.endsWith(".js.map")) sourceMap = content;
       else if (fileName.endsWith(".js")) javascript = content;
     });
-    return {
-      errors,
-      ...javascript ? { javascript } : {},
-      ...sourceMap ? { sourceMap } : {}
-    };
+    return { errors, ...javascript ? { javascript } : {}, ...sourceMap ? { sourceMap } : {} };
   }
 };
 var checkerCache = /* @__PURE__ */ new Map();
@@ -211687,17 +211688,8 @@ var checkerFor = (declarations) => {
   return checker;
 };
 var transpileFabricCodeWithSourceMap = (code) => {
-  const result = import_typescript.default.transpileModule(wrapFabricGuestCode(code), {
-    compilerOptions: {
-      target: import_typescript.default.ScriptTarget.ES2022,
-      module: import_typescript.default.ModuleKind.ESNext,
-      sourceMap: true
-    }
-  });
-  return {
-    code: result.outputText,
-    ...result.sourceMapText ? { sourceMap: result.sourceMapText } : {}
-  };
+  const result = import_typescript.default.transpileModule(wrapFabricGuestCode(code), { compilerOptions: { target: import_typescript.default.ScriptTarget.ES2022, module: import_typescript.default.ModuleKind.ESNext, sourceMap: true } });
+  return { code: result.outputText, ...result.sourceMapText ? { sourceMap: result.sourceMapText } : {} };
 };
 var typeCheckFabricCode = (code, declarations) => checkerFor(declarations).check(code);
 var typeCheckFabricCodeInWorker = (request, options = {}) => new Promise((resolve, reject) => {
@@ -211707,10 +211699,7 @@ var typeCheckFabricCodeInWorker = (request, options = {}) => new Promise((resolv
   }
   const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? DEFAULT_COMPILER_TIMEOUT_MS, 6e4));
   const defaultWorkerUrl = import.meta.url.endsWith(".ts") ? new URL("../../dist/runtime/compiler-worker-entry.js", import.meta.url) : new URL("../runtime/compiler-worker-entry.js", import.meta.url);
-  const worker = new Worker(
-    options.workerUrl ?? defaultWorkerUrl,
-    { resourceLimits: { maxOldGenerationSizeMb: COMPILER_MEMORY_MB, stackSizeMb: 4 } }
-  );
+  const worker = new Worker(options.workerUrl ?? defaultWorkerUrl, { resourceLimits: { maxOldGenerationSizeMb: COMPILER_MEMORY_MB, stackSizeMb: 4 } });
   let settled = false;
   const finish = (error, result) => {
     if (settled) return;
@@ -211723,23 +211712,15 @@ var typeCheckFabricCodeInWorker = (request, options = {}) => new Promise((resolv
     };
     void worker.terminate().then(complete, complete);
   };
-  const onAbort = () => finish(
-    options.signal?.reason instanceof Error ? options.signal.reason : new Error("Fabric compiler aborted")
-  );
-  const timer = setTimeout(
-    () => finish(new Error(`Fabric compiler timed out after ${timeoutMs}ms`)),
-    timeoutMs
-  );
-  timer.unref();
+  const onAbort = () => finish(options.signal?.reason instanceof Error ? options.signal.reason : new Error("Fabric compiler aborted"));
+  const timer = setTimeout(() => finish(new Error(`Fabric compiler timed out after ${timeoutMs}ms`)), timeoutMs);
   options.signal?.addEventListener("abort", onAbort, { once: true });
   if (options.signal?.aborted) onAbort();
   worker.once("message", (response) => {
     if (response.ok) finish(void 0, response.result);
     else finish(new Error(`Fabric compiler failed: ${response.error}`));
   });
-  worker.once("error", (error) => finish(new Error(
-    `Fabric compiler worker failed: ${error instanceof Error ? error.message : String(error)}`
-  )));
+  worker.once("error", (error) => finish(new Error(`Fabric compiler worker failed: ${error instanceof Error ? error.message : String(error)}`)));
   worker.once("exit", (code) => {
     if (!settled) finish(new Error(`Fabric compiler worker exited before replying (${code})`));
   });

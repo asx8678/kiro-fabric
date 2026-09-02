@@ -18,6 +18,12 @@ export interface FabricExecutorConfig {
   maxInputBytes: number;
   maxOutputChars: number;
   maxNestedResultChars: number;
+  maxProviderCalls: number;
+  maxConcurrentProviderCalls: number;
+  maxApprovalRequests: number;
+  maxPendingApprovals: number;
+  maxAuditEntries: number;
+  maxAuditBytes: number;
   resultFormat: FabricResultFormat;
 }
 
@@ -74,6 +80,12 @@ export const DEFAULT_FABRIC_POWER_CONFIG: FabricPowerConfig = {
     maxInputBytes: DEFAULT_EXECUTOR_SOURCE_BYTES,
     maxOutputChars: 50_000,
     maxNestedResultChars: 2_000_000,
+    maxProviderCalls: 64,
+    maxConcurrentProviderCalls: 8,
+    maxApprovalRequests: 16,
+    maxPendingApprovals: 2,
+    maxAuditEntries: 64,
+    maxAuditBytes: 64_000,
     resultFormat: "auto",
   },
   approvals: { read: "allow", write: "ask", execute: "ask", network: "ask" },
@@ -111,7 +123,7 @@ const approval = (value: unknown, fallback: FabricApprovalMode): FabricApprovalM
   value === "allow" || value === "ask" || value === "deny" ? value : fallback;
 
 const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
-  executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "resultFormat"],
+  executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
   approvals: ["read", "write", "execute", "network"],
   mcp: ["enabled", "disableOAuth", "callTimeoutMs"],
   memory: ["enabled", "maxEntries", "maxValueChars"],
@@ -157,6 +169,12 @@ export const normalizeFabricPowerConfig = (
       maxInputBytes: integer(executor.maxInputBytes, defaults.executor.maxInputBytes, 1_024, MAX_EXECUTOR_SOURCE_BYTES),
       maxOutputChars: integer(executor.maxOutputChars, defaults.executor.maxOutputChars, 1_000, 2_000_000),
       maxNestedResultChars: integer(executor.maxNestedResultChars, defaults.executor.maxNestedResultChars, 1_000, 8_000_000),
+      maxProviderCalls: integer(executor.maxProviderCalls, defaults.executor.maxProviderCalls, 1, 1_000),
+      maxConcurrentProviderCalls: integer(executor.maxConcurrentProviderCalls, defaults.executor.maxConcurrentProviderCalls, 1, 64),
+      maxApprovalRequests: integer(executor.maxApprovalRequests, defaults.executor.maxApprovalRequests, 0, 1_000),
+      maxPendingApprovals: integer(executor.maxPendingApprovals, defaults.executor.maxPendingApprovals, 1, 32),
+      maxAuditEntries: integer(executor.maxAuditEntries, defaults.executor.maxAuditEntries, 1, 1_000),
+      maxAuditBytes: integer(executor.maxAuditBytes, defaults.executor.maxAuditBytes, 1_000, 1_000_000),
       resultFormat,
     },
     approvals: {

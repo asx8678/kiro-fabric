@@ -4,13 +4,15 @@ The Power reads only `${PLUGIN_DATA}/fabric/config/config.json`. Repository file
 
 Supported sections:
 
-- `executor`: default and maximum timeout, QuickJS memory, source/input/output/nested-result bounds, and result format;
+- `executor`: default and maximum timeout, QuickJS memory, source/input/output/nested-result bounds, result format, and nested-call quotas. Defaults are 64 total provider calls, 8 active provider calls, 16 total approval requests, 2 pending approvals, 64 audit entries, and 64,000 reserved audit bytes;
 - `approvals`: `allow`, `ask`, or `deny` independently for `read`, `write`, `execute`, and `network` risk;
 - `mcp`: enabled flag, one shared discovery/invocation timeout, OAuth-disable policy, and an internal private `configPath` selected by the Power;
 - `memory`: enabled flag plus entry and per-value bounds;
 - `state`: enabled flag plus entry, per-value, and complete-document bounds (`maxTotalChars`);
-- `artifacts`: count, per-item, total, and lifetime bounds.
+- `artifacts`: count, per-item, total, and lifetime bounds. Artifacts are private process-local overflow transport, expire after the configured TTL (one hour by default), and are not a publication or durable workspace API.
 
 Numeric input is finite, integer-normalized, and clamped to enforced product limits. Unknown fields in the on-disk file are rejected; programmatic normalization cannot use unknown values to add providers or authority. There are no alternate product modes. Guest code cannot configure host tools, operating-system access, workspace identity, or federation endpoints.
+
+On first startup, a private legacy `${PLUGIN_DATA}/fabric/config/mcporter.json` is copied and digest-verified as `mcp.json`. A verified v2 workspace generation is renamed to its v3 canonical-identity generation, preserving compatible memory, state, and artifacts. Identity mismatches, malformed files, aliases, non-private permissions, or incompatible data fail closed; migration reports list preserved and ignored fields, and no deleted runtime or agent data is read.
 
 Configured MCP servers are declared in `${PLUGIN_DATA}/fabric/config/mcp.json`. Discovery returns only `$servers` and `$call` metadata and does not establish a remote connection. Calls use an exact configured server and exact advertised tool name. Network approval is always separate from the additional execute approval required before stdio startup or an enabled OAuth launch.
