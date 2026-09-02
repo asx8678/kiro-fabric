@@ -19,11 +19,8 @@ jobs:
       - run: corepack pnpm install --frozen-lockfile
       - run: corepack pnpm run power:stage
       - run: corepack pnpm run power:archive
-      - name: Exercise exact package with the real client
-        env:
-          KIRO_POWER_REAL_DRIVER: ${{ vars.KIRO_POWER_REAL_DRIVER }}
-          KIRO_POWER_REAL_DRIVER_SHA256: ${{ vars.KIRO_POWER_REAL_DRIVER_SHA256 }}
-        run: corepack pnpm run certify:power:real -- --archive .tmp/kiro-fabric-power.tar.gz --output "$RUNNER_TEMP/real-client.json"
+      - name: Exercise exact package with the repository-owned real client driver
+        run: corepack pnpm run certify:power:real -- --archive .tmp/kiro-fabric-power.tar.gz --commit "${{ github.sha }}" --output "$RUNNER_TEMP/real-client.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: real-client-${{ github.sha }}

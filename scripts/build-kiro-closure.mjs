@@ -145,7 +145,6 @@ fs.writeFileSync(path.join(evidenceDirectory, "power-reachability.json"), `${JSO
     "scripts/assert-build-artifacts.mjs",
     "scripts/build-power-dev.mjs",
     "scripts/validate-power-package.mjs",
-    "scripts/power-user-install.mjs",
     "scripts/assert-kiro-home-unchanged.mjs",
     "scripts/certify-kiro-power.mjs",
     "scripts/real-client-evidence.mjs",

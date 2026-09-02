@@ -1,3 +1,5 @@
+import type { FabricDeadline } from "./runtime/deadline.js";
+
 export type FabricRisk = "read" | "write" | "execute" | "network";
 
 export interface FabricActionEffect {
@@ -18,6 +20,8 @@ export interface FabricActionDescriptor {
 export interface FabricInvocationContext {
   cwd: string;
   signal?: AbortSignal;
+  /** Host-only absolute monotonic deadline. Providers must check it at commit boundaries. */
+  deadline?: FabricDeadline;
   approve?(action: ResolvedFabricAction, args: Record<string, unknown>): Promise<void>;
 }
 

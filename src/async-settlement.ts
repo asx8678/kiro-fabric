@@ -8,6 +8,14 @@ export const throwIfAborted = (signal: AbortSignal | undefined): void => {
   if (signal?.aborted) throw abortError(signal);
 };
 
+export const throwIfAbortedOrExpired = (
+  signal: AbortSignal | undefined,
+  deadline?: { throwIfExpired(): void },
+): void => {
+  throwIfAborted(signal);
+  deadline?.throwIfExpired();
+};
+
 const raceWithAbort = <T>(
   operation: PromiseLike<T>,
   signal: AbortSignal | undefined,

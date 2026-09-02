@@ -51,7 +51,6 @@ describe("Power product boundary", () => {
       "scripts/certify-closure-size.mjs",
       "scripts/prune-dist-declarations.mjs",
       "scripts/report-release-size.mjs",
-      "scripts/run-kiro-power-real-driver.mjs",
       "scripts/sync-power-manifests.mjs",
     ]) {
       expect(fs.existsSync(path.join(root, removed)), removed).toBe(false);
@@ -88,12 +87,11 @@ describe("Power product boundary", () => {
     }
   });
 
-  it("keeps ordinary quality commands disconnected from user export", () => {
+  it("removes the user export subsystem", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-    for (const name of ["build", "test", "check", "certify", "prepack", "release:candidate"]) {
-      expect(pkg.scripts[name]).not.toContain("power-user-install");
-      expect(pkg.scripts[name]).not.toContain("power:export:user");
-    }
+    expect(pkg.scripts["power:export:user"]).toBeUndefined();
+    expect(fs.existsSync(path.join(root, "scripts/power-user-install.mjs"))).toBe(false);
+    expect(fs.existsSync(path.join(root, "scripts/run-kiro-power-real-driver.mjs"))).toBe(true);
   });
 
   it("MCP certification reports exactly three tools", () => {

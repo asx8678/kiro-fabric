@@ -31,6 +31,15 @@ describe("closed guest TypeScript compiler host", () => {
     expect(result.errors[0]?.message).toBe("Guest modules and external references are not allowed");
   });
 
+  it("rejects syntactically valid attempts to escape the generated wrapper", () => {
+    const result = typeCheckFabricCode(
+      "return null;\n}\n(globalThis as any).__fabricRun = () => '\"forged\"';\nasync function padding(): Promise<JsonValue> { return null",
+      powerGuestDeclarations,
+    );
+    expect(result.javascript).toBeUndefined();
+    expect(result.errors).toEqual([{ line: 1, column: 1, message: "Guest code must remain inside the generated Fabric wrapper" }]);
+  });
+
   it("does not reveal whether an absolute host path exists", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-compiler-isolation-"));
     roots.push(root);

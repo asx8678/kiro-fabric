@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { runAbortable, throwIfAborted } from "../async-settlement.js";
+import { runAbortable, throwIfAbortedOrExpired } from "../async-settlement.js";
 import type {
   FabricActionDescriptor,
   FabricInvocationContext,
@@ -114,13 +114,14 @@ export class ActionRegistry {
   }
 
   async invoke(ref: string, args: Record<string, unknown>, context: FabricRegistryInvocationContext): Promise<unknown> {
-    throwIfAborted(context.signal);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
     if (!isRecord(args)) throw new Error(`Arguments for ${ref} must be an object`);
     const action = await this.describe(ref);
     const provider = this.#providers.get(action.provider)!;
     const prepared = provider.prepareArguments
-      ? await runAbortable(context.signal, () => provider.prepareArguments!(action.name, { ...args }, context))
-      : { ...args };
+      ? await runAbortable(context.signal, () => provider.prepareArguments!(action.name, structuredClone(args), context))
+      : structuredClone(args);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
     if (!isRecord(prepared)) throw new Error(`Argument preparation for ${ref} must return an object`);
     const invalid = schemaValidationMessage(action.inputSchema, prepared);
     if (invalid) throw new Error(`Invalid arguments for ${ref}: ${invalid}`);
@@ -148,23 +149,23 @@ export class ActionRegistry {
     context.audits.push(audit);
     auditBudget.bytes += AUDIT_RESERVATION_BYTES;
     try {
-      await runAbortable(context.signal, () => context.approve(
-        structuredClone(action),
-        structuredClone(canonicalArgs),
-      ));
-      throwIfAborted(context.signal);
+      // Approval cleanup remains part of the reservation lifetime. Racing the
+      // promise would release write intent while an elicitation was still live.
+      await context.approve(structuredClone(action), structuredClone(canonicalArgs));
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       const invocationArgs = structuredClone(canonicalArgs);
       // Providers receive the request signal and own cancellation cleanup.
       // Await their settlement so a cooperative provider (notably configured
       // MCP, which closes its contacted server) finishes cleanup before the
       // registry reports cancellation to the guest.
       const value = await provider.invoke(action.name, invocationArgs, context);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       const bounded = boundedResult(value, context.maxResultChars);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       audit.endedAt = Date.now();
       audit.success = true;
       audit.resultChars = bounded.chars;
       audit.resultTruncated = bounded.truncated;
-      throwIfAborted(context.signal);
       return bounded.value;
     } catch (error) {
       audit.endedAt = Date.now();

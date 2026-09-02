@@ -24,4 +24,5 @@ jobs:
           path: |
             .tmp/release-candidate.json
             .tmp/kiro-fabric-power.spdx.json
+            .tmp/kiro-fabric-power.tar.gz
           if-no-files-found: error

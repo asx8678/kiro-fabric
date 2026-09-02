@@ -27,15 +27,9 @@ The Power exposes exactly three top-level MCP tools:
 
 `fabric_exec` is the only Fabric execution interface: every invocation requires a strictly checked TypeScript function body and runs in QuickJS, with no text/action/manual fallback. It has no host filesystem, shell, environment, dynamic import, built-in module, timer, or unrestricted network access. Its mounted providers are artifacts, Power-scoped memory, workspace-bound state, and explicitly configured MCP federation. Use `payloads?: Record<string, string>` for named string input.
 
-## Optional local export source
+## Local staging
 
-```sh
-pnpm run power:export:user
-```
-
-On Linux, this explicit command creates a private immutable, digest-named generation beneath `$KIRO_HOME/powers`; it refuses in-place replacement. The command prints the exact generated folder, which is a **local import source only**. You must still import and enable that folder through Kiro's supported Power flow. User export is intentionally unsupported on macOS and Windows until equivalent reparse-point and crash-safety guarantees are tested.
-
-Ordinary build, test, check, certification, packaging, CI, and release-candidate commands never write to user home or Kiro settings.
+`pnpm run power:stage` creates the validated checkout-local `.tmp/kiro-fabric-power` import source. Import and enable that exact folder through Kiro's supported Power flow. No retained command writes to user home or `$KIRO_HOME`; user-home export was removed pending a smaller independently reviewed design.
 
 ## Development
 

@@ -4,13 +4,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { writeFileAtomic } from "./atomic-file.mjs";
 import { validatePowerPackage } from "./validate-power-package.mjs";
 
 const requestedPluginRoot = path.resolve(process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : ".tmp/kiro-fabric-power");
 const jsonIndex = process.argv.indexOf("--json");
 const jsonOutput = jsonIndex >= 0 ? path.resolve(process.argv[jsonIndex + 1]) : undefined;
 const packageEvidence = validatePowerPackage(requestedPluginRoot);
-const pluginRoot = fs.realpathSync(requestedPluginRoot);
+const pluginRoot = packageEvidence.root;
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-cert-"));
 const pluginData = path.join(temporary, "data");
 const workspace = path.join(temporary, "workspace");
@@ -141,9 +142,15 @@ try {
     checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "four-providers", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "approval-boundary", "bounded-output", "bounded-shutdown"],
   };
   const serialized = `${JSON.stringify(report, null, 2)}\n`;
-  if (jsonOutput) { fs.mkdirSync(path.dirname(jsonOutput), { recursive: true }); fs.writeFileSync(jsonOutput, serialized, { mode: 0o600 }); }
+  if (jsonOutput) writeFileAtomic(jsonOutput, serialized);
   process.stdout.write(serialized);
 } finally {
-  if (child.exitCode === null) child.kill("SIGTERM");
+  if (child.exitCode === null) {
+    child.kill("SIGTERM");
+    await new Promise((resolve) => {
+      const timer = setTimeout(() => { if (child.exitCode === null) child.kill("SIGKILL"); }, 2_000);
+      child.once("exit", () => { clearTimeout(timer); resolve(); });
+    });
+  }
   fs.rmSync(temporary, { recursive: true, force: true });
 }

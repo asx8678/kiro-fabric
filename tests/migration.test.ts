@@ -55,8 +55,10 @@ describe("retained Power data migration", () => {
     fs.writeFileSync(path.join(legacy, "state", "preserved.fixture"), "retained", { mode: 0o600 });
     const migrated = prepareKiroPowerProjectPaths(data.projects, identity);
     expect(path.basename(migrated.root)).toBe(workspaceId(identity, 3));
-    expect(fs.readFileSync(path.join(migrated.state, "preserved.fixture"), "utf8")).toBe("retained");
+    expect(fs.existsSync(path.join(migrated.state, "preserved.fixture"))).toBe(false);
     expect(fs.existsSync(legacy)).toBe(false);
+    const quarantined = path.join(data.projects, ".quarantine", `workspace-v2-${workspaceId(identity, 2)}`);
+    expect(fs.readFileSync(path.join(quarantined, "state", "preserved.fixture"), "utf8")).toBe("retained");
     expect(prepareKiroPowerProjectPaths(data.projects, identity).root).toBe(migrated.root);
   });
 

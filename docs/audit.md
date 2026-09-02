@@ -73,7 +73,7 @@ None of these files is reachable from the Power runtime.
 | `scripts/assert-build-artifacts.mjs` | Imports built entries and rejects stale/forbidden artifacts and declaration leaks. |
 | `scripts/build-power-dev.mjs` | Creates only the private checkout-local staged import source. |
 | `scripts/validate-power-package.mjs` | Rejects aliases, symlinks, unsafe modes/owners, unexpected entries, forbidden strings, and manifest drift. |
-| `scripts/power-user-install.mjs` | Sole explicit user export path; lock, ownership marker, digest verification, rename/rollback. It does not register/enable a Power. |
+| `scripts/build-power-dev.mjs` | Publishes the sole checkout-local immutable staging generation; user-home export is not supported. |
 | `scripts/assert-kiro-home-unchanged.mjs` | Guards ordinary commands against Kiro-home mutation. |
 | `scripts/certify-kiro-power.mjs` | Hermetic stdio MCP certification of initialization, exact tools, workspace binding, strict execution, approval absence, and shutdown. |
 | `scripts/real-client-evidence.mjs` | One exact validator for raw driver and qualification evidence. |

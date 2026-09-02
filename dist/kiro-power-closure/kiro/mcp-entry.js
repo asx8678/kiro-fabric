@@ -44,7 +44,7 @@ var resolveKiroPowerLaunchContext = (env = process.env) => {
 var PROCESS_SHUTDOWN_TIMEOUT_MS = 8e3;
 var startKiroMcpServer = async () => {
   const launch = resolveKiroPowerLaunchContext();
-  const { createKiroMcpServer } = await import("../chunks/mcp-server-WMLYVM6K.js");
+  const { createKiroMcpServer } = await import("../chunks/mcp-server-DZ6AWISL.js");
   return createKiroMcpServer({ pluginRoot: launch.pluginRoot, pluginData: launch.pluginData });
 };
 var runKiroMcpProcess = async () => {

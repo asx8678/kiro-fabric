@@ -211552,6 +211552,7 @@ var MAX_COMPILER_DIAGNOSTICS = 50;
 var MAX_DIAGNOSTIC_MESSAGE_CHARS = 4096;
 var COMPILER_MEMORY_MB = 128;
 var FORBIDDEN_MODULE_MESSAGE = "Guest modules and external references are not allowed";
+var GUEST_WRAPPER_INTEGRITY_MESSAGE = "Guest code must remain inside the generated Fabric wrapper";
 var compilerOptions = {
   target: import_typescript.default.ScriptTarget.ES2022,
   module: import_typescript.default.ModuleKind.ESNext,
@@ -211571,10 +211572,24 @@ var standardLibraryPath = (fileName) => {
   const normalized = normalizeTypeScriptPath(path.resolve(fileName));
   return path.posix.dirname(normalized) === standardLibraryRoot && standardLibraryName.test(path.posix.basename(normalized));
 };
-var wrapFabricGuestCode = (code) => `async function __kiroFabricMain(): Promise<JsonValue> {
-${code}
-}
-`;
+var GUEST_WRAPPER_PREFIX = "async function __kiroFabricMain(): Promise<JsonValue> {\n";
+var GUEST_WRAPPER_SUFFIX = "\n}\n";
+var wrapFabricGuestCode = (code) => `${GUEST_WRAPPER_PREFIX}${code}${GUEST_WRAPPER_SUFFIX}`;
+var isExpectedMainDeclaration = (statement) => import_typescript.default.isFunctionDeclaration(statement) && statement.name?.text === "__kiroFabricMain" && statement.parameters.length === 0 && statement.body !== void 0 && statement.modifiers?.some((modifier) => modifier.kind === import_typescript.default.SyntaxKind.AsyncKeyword) === true;
+var wrappedSourceIsIntact = (source, text) => {
+  if (source.statements.length !== 1 || !isExpectedMainDeclaration(source.statements[0])) return false;
+  const body = source.statements[0].body;
+  return body.getStart(source, false) === GUEST_WRAPPER_PREFIX.length - 2 && body.getEnd() === text.length - 1;
+};
+var assertFabricTranspiledWrapper = (javascript) => {
+  const emitted = import_typescript.default.createSourceFile("fabric-guest.js", javascript, import_typescript.default.ScriptTarget.ES2022, true, import_typescript.default.ScriptKind.JS);
+  const statements = [...emitted.statements];
+  const directive = statements[0];
+  if (directive && import_typescript.default.isExpressionStatement(directive) && import_typescript.default.isStringLiteral(directive.expression) && directive.expression.text === "use strict") statements.shift();
+  if (statements.length !== 1 || !isExpectedMainDeclaration(statements[0])) {
+    throw new Error(GUEST_WRAPPER_INTEGRITY_MESSAGE);
+  }
+};
 var forbiddenModuleNode = (source) => {
   if (source.referencedFiles.length || source.typeReferenceDirectives.length || source.libReferenceDirectives.length) return source;
   let found;
@@ -211639,6 +211654,9 @@ var FabricTypeChecker = class {
     }
     this.#sourceText = wrapFabricGuestCode(code);
     this.#sourceFile = import_typescript.default.createSourceFile(this.#guestFile, this.#sourceText, import_typescript.default.ScriptTarget.ES2022, true);
+    if (!wrappedSourceIsIntact(this.#sourceFile, this.#sourceText)) {
+      return { errors: [{ line: 1, column: 1, message: GUEST_WRAPPER_INTEGRITY_MESSAGE }] };
+    }
     const forbidden = forbiddenModuleNode(this.#sourceFile);
     if (forbidden) {
       const position = this.#sourceFile.getLineAndCharacterOfPosition(forbidden.getStart(this.#sourceFile, false));
@@ -211666,6 +211684,13 @@ var FabricTypeChecker = class {
       if (fileName.endsWith(".js.map")) sourceMap = content;
       else if (fileName.endsWith(".js")) javascript = content;
     });
+    if (javascript) {
+      try {
+        assertFabricTranspiledWrapper(javascript);
+      } catch {
+        return { errors: [{ line: 1, column: 1, message: GUEST_WRAPPER_INTEGRITY_MESSAGE }] };
+      }
+    }
     return { errors, ...javascript ? { javascript } : {}, ...sourceMap ? { sourceMap } : {} };
   }
 };
@@ -211688,7 +211713,11 @@ var checkerFor = (declarations) => {
   return checker;
 };
 var transpileFabricCodeWithSourceMap = (code) => {
-  const result = import_typescript.default.transpileModule(wrapFabricGuestCode(code), { compilerOptions: { target: import_typescript.default.ScriptTarget.ES2022, module: import_typescript.default.ModuleKind.ESNext, sourceMap: true } });
+  const wrapped = wrapFabricGuestCode(code);
+  const source = import_typescript.default.createSourceFile("fabric-guest.ts", wrapped, import_typescript.default.ScriptTarget.ES2022, true);
+  if (!wrappedSourceIsIntact(source, wrapped)) throw new Error(GUEST_WRAPPER_INTEGRITY_MESSAGE);
+  const result = import_typescript.default.transpileModule(wrapped, { compilerOptions: { target: import_typescript.default.ScriptTarget.ES2022, module: import_typescript.default.ModuleKind.ESNext, sourceMap: true } });
+  assertFabricTranspiledWrapper(result.outputText);
   return { code: result.outputText, ...result.sourceMapText ? { sourceMap: result.sourceMapText } : {} };
 };
 var typeCheckFabricCode = (code, declarations) => checkerFor(declarations).check(code);
@@ -211728,6 +211757,7 @@ var typeCheckFabricCodeInWorker = (request, options = {}) => new Promise((resolv
 });
 
 export {
+  assertFabricTranspiledWrapper,
   transpileFabricCodeWithSourceMap,
   typeCheckFabricCode,
   typeCheckFabricCodeInWorker

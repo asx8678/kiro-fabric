@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import type { FabricApprovalConfig } from "../../config.js";
 import {
@@ -5,6 +6,7 @@ import {
   type FabricExecutionApprover,
 } from "../../execution-service.js";
 import type { ResolvedFabricAction } from "../../protocol.js";
+import { fabricJsonText } from "../../runtime/json-budget.js";
 
 export interface KiroPowerElicitationAdapter {
   supported(): boolean;
@@ -21,6 +23,15 @@ const SECRET_VALUE = /^(?:(?:basic|bearer)\s+|gh[pousr]_|github_pat_|sk-[a-z0-9_
 const URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//iu;
 const isSecretKey = (key: string): boolean => SECRET_KEY.test(key.replace(/[_\-\s]/gu, ""));
 const bounded = (value: string, maximum = 1_500): string => value.replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, maximum);
+const APPROVAL_MESSAGE_CHARS = 1_500;
+
+const fabricApprovalIdentity = (action: ResolvedFabricAction, args: Record<string, unknown>) => {
+  const canonical = fabricJsonText({ schemaVersion: 1, ref: action.ref, risk: action.risk, args });
+  return {
+    digest: createHash("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex"),
+    chars: canonical.length,
+  };
+};
 
 export class KiroPowerApprover {
   constructor(
@@ -31,9 +42,10 @@ export class KiroPowerApprover {
     request.signal?.throwIfAborted();
     if (!this.adapter.supported()) return false;
     try {
+      const header = `Risk: ${bounded(request.risk, 64)}\nAction: ${bounded(`${request.provider}.${request.action}`, 256)}\n`;
       const result = await this.adapter.request({
         title: "Approve one Fabric action",
-        message: bounded(`Risk: ${request.risk}\nAction: ${request.provider}.${request.action}\n${request.summary}`),
+        message: `${header}${bounded(request.summary, Math.max(0, APPROVAL_MESSAGE_CHARS - header.length))}`,
         ...(request.signal ? { signal: request.signal } : {}),
         timeoutMs: this.timeoutMs,
       });
@@ -90,11 +102,12 @@ export class KiroPowerFabricApprover implements FabricExecutionApprover {
     const mode = this.config[action.risk];
     if (mode === "allow") return;
     if (mode === "deny") throw new Error(`${action.ref} is denied by Fabric policy`);
+    const identity = fabricApprovalIdentity(action, args);
     const approved = await this.elicitation.approveOnce({
       risk: action.risk,
       provider: action.provider,
       action: action.name,
-      summary: summarize(args, this.cwd),
+      summary: `Canonical request: sha256:${identity.digest} (${identity.chars} chars)\nPreview: ${summarize(args, this.cwd)}`,
       ...(signal ? { signal } : {}),
     });
     if (!approved) throw new Error(`${action.ref} approval was denied or unavailable`);

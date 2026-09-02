@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { throwIfAborted } from "../async-settlement.js";
+import { throwIfAbortedOrExpired } from "../async-settlement.js";
 import type {
   FabricActionDescriptor,
   FabricInvocationContext,
@@ -92,7 +92,7 @@ export class StateProvider implements FabricProvider {
     args: Record<string, unknown>,
     context: FabricInvocationContext,
   ): Promise<unknown> {
-    throwIfAborted(context.signal);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
     if (actionName === "get") {
       const entry = this.#read().entries[args.key as string];
       return entry ? { key: args.key, ...entry } : { key: args.key, found: false };
@@ -111,7 +111,7 @@ export class StateProvider implements FabricProvider {
     if (actionName !== "set" && actionName !== "delete") {
       throw new Error(`Unknown state action: ${actionName}`);
     }
-    return this.#withMutationLock(context.signal, () => {
+    return this.#withMutationLock(context, () => {
       const document = this.#read();
       const key = args.key as string;
       const current = document.entries[key];
@@ -122,7 +122,8 @@ export class StateProvider implements FabricProvider {
         if (!current) return { key, deleted: false, revision: document.revision };
         delete document.entries[key];
         document.revision += 1;
-        this.#write(document);
+        this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
+        throwIfAbortedOrExpired(context.signal, context.deadline);
         return { key, deleted: true, revision: document.revision };
       }
 
@@ -139,8 +140,9 @@ export class StateProvider implements FabricProvider {
         value: JSON.parse(serialized) as unknown,
         updatedAt: Date.now(),
       };
-      throwIfAborted(context.signal);
-      this.#write(document);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
+      this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       return { key, revision: document.revision };
     });
   }
@@ -206,7 +208,7 @@ export class StateProvider implements FabricProvider {
     }
   }
 
-  #write(document: StateDocument): void {
+  #write(document: StateDocument, beforeCommit: () => void): void {
     const text = `${JSON.stringify(document, null, 2)}\n`;
     if (text.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
     const temporary = path.join(
@@ -221,6 +223,7 @@ export class StateProvider implements FabricProvider {
       fs.closeSync(descriptor);
     }
     try {
+      beforeCommit();
       fs.renameSync(temporary, this.#file);
       fs.chmodSync(this.#file, 0o600);
     } catch (error) {
@@ -229,11 +232,11 @@ export class StateProvider implements FabricProvider {
     }
   }
 
-  async #withMutationLock<T>(signal: AbortSignal | undefined, operation: () => T): Promise<T> {
-    const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  async #withMutationLock<T>(context: FabricInvocationContext, operation: () => T): Promise<T> {
+    const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
     let identity: { dev: number; ino: number } | undefined;
     while (!identity) {
-      throwIfAborted(signal);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       try {
         const descriptor = fs.openSync(this.#lock, "wx", 0o600);
         try {
@@ -264,13 +267,15 @@ export class StateProvider implements FabricProvider {
             }
           }
         }
-        if (Date.now() >= deadline) throw new Error("timed out waiting for state mutation lock");
+        if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
         await delay(10);
       }
     }
     try {
-      throwIfAborted(signal);
-      return operation();
+      throwIfAbortedOrExpired(context.signal, context.deadline);
+      const result = operation();
+      throwIfAbortedOrExpired(context.signal, context.deadline);
+      return result;
     } finally {
       try {
         const current = fs.lstatSync(this.#lock);

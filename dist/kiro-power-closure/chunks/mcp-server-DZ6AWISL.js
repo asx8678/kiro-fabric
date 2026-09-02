@@ -11,9 +11,10 @@ import {
   sameCanonicalFilesystemIdentity
 } from "./chunk-4KRLFCN5.js";
 import {
+  assertFabricTranspiledWrapper,
   transpileFabricCodeWithSourceMap,
   typeCheckFabricCodeInWorker
-} from "./chunk-O5IR66GX.js";
+} from "./chunk-RDWBPINU.js";
 import "./chunk-G3LABT6U.js";
 import "./chunk-FWH3VULO.js";
 import "./chunk-G6V3LW4W.js";
@@ -9184,6 +9185,10 @@ var abortError = (signal) => {
 var throwIfAborted = (signal) => {
   if (signal?.aborted) throw abortError(signal);
 };
+var throwIfAbortedOrExpired = (signal, deadline) => {
+  throwIfAborted(signal);
+  deadline?.throwIfExpired();
+};
 var raceWithAbort = (operation, signal) => {
   if (!signal) return Promise.resolve(operation);
   if (signal.aborted) return Promise.reject(abortError(signal));
@@ -9502,11 +9507,12 @@ var ActionRegistry = class {
     return resolved(provider, descriptor2);
   }
   async invoke(ref, args, context) {
-    throwIfAborted(context.signal);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
     if (!isRecord2(args)) throw new Error(`Arguments for ${ref} must be an object`);
     const action = await this.describe(ref);
     const provider = this.#providers.get(action.provider);
-    const prepared = provider.prepareArguments ? await runAbortable(context.signal, () => provider.prepareArguments(action.name, { ...args }, context)) : { ...args };
+    const prepared = provider.prepareArguments ? await runAbortable(context.signal, () => provider.prepareArguments(action.name, structuredClone(args), context)) : structuredClone(args);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
     if (!isRecord2(prepared)) throw new Error(`Argument preparation for ${ref} must return an object`);
     const invalid = schemaValidationMessage(action.inputSchema, prepared);
     if (invalid) throw new Error(`Invalid arguments for ${ref}: ${invalid}`);
@@ -9527,19 +9533,17 @@ var ActionRegistry = class {
     context.audits.push(audit);
     auditBudget.bytes += AUDIT_RESERVATION_BYTES;
     try {
-      await runAbortable(context.signal, () => context.approve(
-        structuredClone(action),
-        structuredClone(canonicalArgs)
-      ));
-      throwIfAborted(context.signal);
+      await context.approve(structuredClone(action), structuredClone(canonicalArgs));
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       const invocationArgs = structuredClone(canonicalArgs);
       const value = await provider.invoke(action.name, invocationArgs, context);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       const bounded3 = boundedResult(value, context.maxResultChars);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       audit.endedAt = Date.now();
       audit.success = true;
       audit.resultChars = bounded3.chars;
       audit.resultTruncated = bounded3.truncated;
-      throwIfAborted(context.signal);
       return bounded3.value;
     } catch (error) {
       audit.endedAt = Date.now();
@@ -9610,7 +9614,7 @@ function smartUnwrap(val) {
 }
 
 // src/runtime/quickjs-runtime.ts
-import { performance as performance2 } from "node:perf_hooks";
+import "node:perf_hooks";
 
 // src/runtime/guest-stack-map.ts
 var BASE64_VALUES = (() => {
@@ -9700,6 +9704,42 @@ var remapGuestErrorText = (text, stackMap, guestLineCount) => {
   });
 };
 
+// src/runtime/deadline.ts
+import { performance as performance2 } from "node:perf_hooks";
+var FabricDeadline = class {
+  constructor(timeoutMs, maximumMs, now = () => performance2.now()) {
+    this.now = now;
+    this.startedAt = now();
+    const maximum = Math.max(1, Math.floor(maximumMs));
+    this.maximumAt = this.startedAt + maximum;
+    this.#expiresAt = this.startedAt + Math.min(maximum, Math.max(1, Math.floor(timeoutMs)));
+  }
+  startedAt;
+  maximumAt;
+  #expiresAt;
+  get expiresAt() {
+    return this.#expiresAt;
+  }
+  get effectiveTimeoutMs() {
+    return Math.round(this.#expiresAt - this.startedAt);
+  }
+  get expired() {
+    return this.now() >= this.#expiresAt;
+  }
+  remainingMs() {
+    return Math.max(0, this.#expiresAt - this.now());
+  }
+  extendTo(timeoutMs) {
+    if (this.expired || !Number.isFinite(timeoutMs)) return this.effectiveTimeoutMs;
+    const requested = this.startedAt + Math.max(1, Math.floor(timeoutMs));
+    this.#expiresAt = Math.min(this.maximumAt, Math.max(this.#expiresAt, requested));
+    return this.effectiveTimeoutMs;
+  }
+  throwIfExpired() {
+    if (this.expired) throw new Error(`Execution timed out after ${this.effectiveTimeoutMs}ms`);
+  }
+};
+
 // src/runtime/quickjs-runtime.ts
 var modulePromise;
 var quickJsModule = () => modulePromise ??= newQuickJSWASMModuleFromVariant(src_default);
@@ -9709,99 +9749,133 @@ var GUEST_SETUP = `
   const bridge = globalThis.__fabricHostCall;
   delete globalThis.__fabricHostCall;
 
-  const codeGenerationDenied = function () { throw new TypeError('Dynamic code generation is disabled'); };
+  // Capture every validator/promise primordial before guest code can mutate it.
+  const apply = Reflect.apply;
+  const ownKeys = Reflect.ownKeys;
+  const objectGetPrototypeOf = Object.getPrototypeOf;
+  const objectPrototype = Object.prototype;
+  const arrayPrototype = Array.prototype;
+  const objectGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
+  const objectHasOwn = Object.hasOwn;
+  const objectKeys = Object.keys;
+  const objectCreate = Object.create;
+  const objectDefineProperty = Object.defineProperty;
+  const objectFreeze = Object.freeze;
+  const arrayIsArray = Array.isArray;
+  const numberIsFinite = Number.isFinite;
+  const stringCharCodeAt = String.prototype.charCodeAt;
+  const jsonParse = JSON.parse;
+  const jsonStringify = JSON.stringify;
+  const weakHas = WeakSet.prototype.has;
+  const weakAdd = WeakSet.prototype.add;
+  const weakDelete = WeakSet.prototype.delete;
+  const promiseThenMethod = Promise.prototype.then;
+  const promiseResolveMethod = Promise.resolve;
+  const promiseRaceMethod = Promise.race;
+  const SafePromise = Promise;
+  const SafeWeakSet = WeakSet;
+  const SafeTypeError = TypeError;
+  const SafeError = Error;
+  const promiseThen = (promise, fulfilled, rejected) => apply(promiseThenMethod, promise, [fulfilled, rejected]);
+  const promiseResolve = (value) => apply(promiseResolveMethod, SafePromise, [value]);
+  const promiseRace = (values) => apply(promiseRaceMethod, SafePromise, [values]);
+
+  const codeGenerationDenied = function () { throw new SafeTypeError('Dynamic code generation is disabled'); };
   const constructors = [
     Function,
-    Object.getPrototypeOf(function* () {}).constructor,
-    Object.getPrototypeOf(async function () {}).constructor,
-    Object.getPrototypeOf(async function* () {}).constructor,
+    objectGetPrototypeOf(function* () {}).constructor,
+    objectGetPrototypeOf(async function () {}).constructor,
+    objectGetPrototypeOf(async function* () {}).constructor,
   ];
   for (const constructor of constructors) {
-    Object.defineProperty(constructor.prototype, 'constructor', {
+    objectDefineProperty(constructor.prototype, 'constructor', {
       value: codeGenerationDenied, writable: false, configurable: false,
     });
   }
-  Object.defineProperty(globalThis, 'eval', { value: codeGenerationDenied, writable: false, configurable: false });
-  Object.defineProperty(globalThis, 'Function', { value: codeGenerationDenied, writable: false, configurable: false });
+  objectDefineProperty(globalThis, 'eval', { value: codeGenerationDenied, writable: false, configurable: false });
+  objectDefineProperty(globalThis, 'Function', { value: codeGenerationDenied, writable: false, configurable: false });
 
+  const arrayIndex = (key) => {
+    if (key === '0') return true;
+    if (!key || key[0] === '0') return false;
+    for (let index = 0; index < key.length; index++) {
+      const code = apply(stringCharCodeAt, key, [index]);
+      if (code < 48 || code > 57) return false;
+    }
+    return true;
+  };
   const strictJsonText = (root) => {
-    const seen = new WeakSet();
+    const seen = new SafeWeakSet();
     let nodes = 0;
     const visit = (value, depth) => {
-      if (++nodes > 100000 || depth > 64) throw new TypeError('Result exceeds strict JSON structural limits');
+      if (++nodes > 100000 || depth > 64) throw new SafeTypeError('Result exceeds strict JSON structural limits');
       if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
       if (typeof value === 'number') {
-        if (!Number.isFinite(value)) throw new TypeError('Result contains a non-finite number');
+        if (!numberIsFinite(value)) throw new SafeTypeError('Result contains a non-finite number');
         return value;
       }
-      if (typeof value !== 'object') throw new TypeError('Result contains a non-JSON value');
-      if (seen.has(value)) throw new TypeError('Result contains a cycle');
-      const prototype = Object.getPrototypeOf(value);
-      if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) {
-        throw new TypeError('Result contains an unsupported exotic object');
+      if (typeof value !== 'object') throw new SafeTypeError('Result contains a non-JSON value');
+      if (apply(weakHas, seen, [value])) throw new SafeTypeError('Result contains a cycle');
+      const prototype = objectGetPrototypeOf(value);
+      if (prototype !== objectPrototype && prototype !== arrayPrototype && prototype !== null) {
+        throw new SafeTypeError('Result contains an unsupported exotic object');
       }
-      seen.add(value);
-      const descriptors = Object.getOwnPropertyDescriptors(value);
-      if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) throw new TypeError('Result contains a symbol key');
+      apply(weakAdd, seen, [value]);
+      const descriptors = objectGetOwnPropertyDescriptors(value);
+      for (const key of ownKeys(descriptors)) if (typeof key === 'symbol') throw new SafeTypeError('Result contains a symbol key');
       let copy;
-      if (Array.isArray(value)) {
+      if (arrayIsArray(value)) {
         copy = [];
-        if (Object.keys(descriptors).some((key) => key !== 'length' && !/^(0|[1-9][0-9]*)$/.test(key))) {
-          throw new TypeError('Result array contains a non-index property');
+        for (const key of objectKeys(descriptors)) {
+          if (key !== 'length' && !arrayIndex(key)) throw new SafeTypeError('Result array contains a non-index property');
         }
         for (let index = 0; index < value.length; index++) {
           const descriptor = descriptors[index];
-          if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('Result contains an accessor or sparse array');
-          copy.push(visit(descriptor.value, depth + 1));
+          if (!descriptor || !objectHasOwn(descriptor, 'value')) throw new SafeTypeError('Result contains an accessor or sparse array');
+          objectDefineProperty(copy, index, { value: visit(descriptor.value, depth + 1), enumerable: true, writable: true, configurable: true });
         }
       } else {
-        copy = Object.create(null);
-        for (const key of Object.keys(descriptors)) {
+        copy = objectCreate(null);
+        for (const key of objectKeys(descriptors)) {
           const descriptor = descriptors[key];
-          if (!Object.hasOwn(descriptor, 'value')) throw new TypeError('Result contains an accessor');
-          Object.defineProperty(copy, key, { value: visit(descriptor.value, depth + 1), enumerable: true });
+          if (!objectHasOwn(descriptor, 'value')) throw new SafeTypeError('Result contains an accessor');
+          objectDefineProperty(copy, key, { value: visit(descriptor.value, depth + 1), enumerable: true });
         }
       }
-      seen.delete(value);
+      apply(weakDelete, seen, [value]);
       return copy;
     };
-    const text = JSON.stringify(visit(root, 0));
-    if (typeof text !== 'string' || text.length > 8000000) throw new TypeError('Result exceeds strict JSON byte limit');
+    const text = apply(jsonStringify, JSON, [visit(root, 0)]);
+    if (typeof text !== 'string' || text.length > 8000000) throw new SafeTypeError('Result exceeds strict JSON byte limit');
     return text;
   };
-  const parseStrict = (text) => JSON.parse(text);
-  const call = (ref, args = {}) => bridge(ref, strictJsonText(args)).then(parseStrict);
+  const parseStrict = (text) => apply(jsonParse, JSON, [text]);
+  const call = (ref, args = {}) => promiseThen(bridge(ref, strictJsonText(args)), parseStrict);
   let rejectExecution;
-  const executionGate = new Promise((_resolve, reject) => { rejectExecution = reject; });
-  globalThis.__fabricCancelExecution = (message) => rejectExecution(new Error(message));
-  globalThis.__fabricRun = (main) => Promise.race([Promise.resolve().then(main), executionGate]).then(strictJsonText);
-  globalThis.tools = Object.freeze({
+  const executionGate = new SafePromise((_resolve, reject) => { rejectExecution = reject; });
+  const cancel = (message) => rejectExecution(new SafeError(message));
+  const run = (main) => promiseThen(promiseRace([promiseThen(promiseResolve(), main), executionGate]), strictJsonText);
+  globalThis.tools = objectFreeze({
     providers: () => call("fabric.providers"),
     list: () => call("fabric.list"),
     search: (input) => call("fabric.search", typeof input === "string" ? { query: input } : input),
     describe: (input) => call("fabric.describe", typeof input === "string" ? { ref: input } : input),
     call: (input) => call("fabric.call", input),
   });
-  globalThis.artifacts = Object.freeze({ read: (args) => call("artifacts.read", args) });
-  globalThis.memory = Object.freeze({
-    get: (args) => call("memory.get", args),
-    set: (args) => call("memory.set", args),
-    delete: (args) => call("memory.delete", args),
-    search: (args) => call("memory.search", args),
+  globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args) });
+  globalThis.memory = objectFreeze({
+    get: (args) => call("memory.get", args), set: (args) => call("memory.set", args),
+    delete: (args) => call("memory.delete", args), search: (args) => call("memory.search", args),
     index: (args = {}) => call("memory.index", args),
   });
-  globalThis.state = Object.freeze({
-    get: (args) => call("state.get", args),
-    set: (args) => call("state.set", args),
-    list: (args = {}) => call("state.list", args),
-    delete: (args) => call("state.delete", args),
+  globalThis.state = objectFreeze({
+    get: (args) => call("state.get", args), set: (args) => call("state.set", args),
+    list: (args = {}) => call("state.list", args), delete: (args) => call("state.delete", args),
   });
-  globalThis.mcp = Object.freeze({
-    servers: (args = {}) => call("mcp.$servers", args),
-    call: (args) => call("mcp.$call", args),
-  });
-  Object.freeze(globalThis.payloads);
-})();
+  globalThis.mcp = objectFreeze({ servers: (args = {}) => call("mcp.$servers", args), call: (args) => call("mcp.$call", args) });
+  objectFreeze(globalThis.payloads);
+  return objectFreeze({ run, cancel });
+})()
 `;
 var formatValue = (value, maxChars = 1e5) => {
   if (typeof value === "string") return value.slice(0, maxChars);
@@ -9832,17 +9906,19 @@ var jsonHandle = (context, jsonObject, jsonParse, value, maxChars) => {
 var QUICKJS_MAX_STACK_SIZE_BYTES = 256 * 1024;
 var QuickJsRuntime = class {
   async execute(code, hostCall, options) {
-    if (options.signal?.aborted) return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled" };
+    const maximum = Math.max(1, Math.floor(options.maxTimeoutMs));
+    const requestedTimeoutMs = Math.min(maximum, Math.max(1, Math.floor(options.timeoutMs)));
+    if (options.signal?.aborted) return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
     const sourceLimit = effectiveFabricSourceLimit(options.maxSourceBytes);
     const inputLimit = effectiveFabricSourceLimit(options.maxInputBytes ?? options.maxSourceBytes);
     const inputError = fabricSourceLimitError(code, sourceLimit) ?? fabricPayloadsLimitError(options.payloads, inputLimit);
-    if (inputError) return { value: void 0, logs: [], terminationReason: "runtime_error", error: inputError };
+    if (inputError) return { value: void 0, logs: [], terminationReason: "runtime_error", error: inputError, effectiveTimeoutMs: requestedTimeoutMs };
     if (!Number.isSafeInteger(options.memoryLimitBytes) || options.memoryLimitBytes < 1 || options.memoryLimitBytes > 4294967295) {
-      return { value: void 0, logs: [], terminationReason: "runtime_error", error: "QuickJS memory limit is outside the WASM32 range" };
+      return { value: void 0, logs: [], terminationReason: "runtime_error", error: "QuickJS memory limit is outside the WASM32 range", effectiveTimeoutMs: requestedTimeoutMs };
     }
     const module = await quickJsModule();
     if (options.signal?.aborted) {
-      return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled" };
+      return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
     }
     const context = module.newContext();
     const runtime = context.runtime;
@@ -9850,16 +9926,13 @@ var QuickJsRuntime = class {
     const jsonParse = context.getProp(jsonObject, "parse");
     runtime.setMemoryLimit(options.memoryLimitBytes);
     runtime.setMaxStackSize(QUICKJS_MAX_STACK_SIZE_BYTES);
-    const started = performance2.now();
-    const maximum = Math.max(1, Math.floor(options.maxTimeoutMs));
-    let effectiveTimeoutMs = Math.min(maximum, Math.max(1, Math.floor(options.timeoutMs)));
-    let deadlineAt = started + effectiveTimeoutMs;
+    const deadline = new FabricDeadline(requestedTimeoutMs, maximum);
     let interrupted = false;
     let timedOut = false;
     let closing = false;
     runtime.setInterruptHandler(() => {
       if (options.signal?.aborted) return true;
-      if (performance2.now() <= deadlineAt) return false;
+      if (!deadline.expired) return false;
       interrupted = true;
       return true;
     });
@@ -9867,7 +9940,6 @@ var QuickJsRuntime = class {
     const maxLogChars = Math.max(0, options.maxLogChars ?? 1e5);
     let logChars = 0;
     const hostController = new AbortController();
-    const hostTasks = /* @__PURE__ */ new Set();
     const bridgeTasks = /* @__PURE__ */ new Set();
     const pendingPromises = /* @__PURE__ */ new Set();
     let deadlineTimer;
@@ -9876,6 +9948,7 @@ var QuickJsRuntime = class {
     let activeHandle;
     let resolution;
     let resolutionConsumed = false;
+    let runExecution;
     let cancelExecution;
     const rejectGuestGraph = (reason) => {
       if (cancelExecution && cancelExecution.alive !== false) {
@@ -9904,9 +9977,13 @@ var QuickJsRuntime = class {
       if (!hostController.signal.aborted) hostController.abort(reason);
       rejectGuestGraph(reason);
     };
-    const timeoutMessage = () => `Execution timed out after ${effectiveTimeoutMs}ms`;
+    const timeoutMessage = () => `Execution timed out after ${deadline.effectiveTimeoutMs}ms`;
     const expire = () => {
       if (closing || timedOut) return;
+      if (!deadline.expired) {
+        schedule();
+        return;
+      }
       timedOut = true;
       const error = new Error(timeoutMessage());
       abortHost(error);
@@ -9914,16 +9991,14 @@ var QuickJsRuntime = class {
     };
     const schedule = () => {
       if (deadlineTimer) clearTimeout(deadlineTimer);
-      deadlineTimer = setTimeout(expire, Math.max(0, deadlineAt - performance2.now()));
+      deadlineTimer = setTimeout(expire, Math.max(0, deadline.remainingMs()));
     };
     const extendForExactAction = (ref, args) => {
       const floor = options.minimumTimeoutMsForHostCall?.(ref, args);
       if (typeof floor !== "number" || !Number.isFinite(floor)) return;
-      const next = Math.min(maximum, Math.max(effectiveTimeoutMs, Math.max(1, Math.floor(floor))));
-      if (next <= effectiveTimeoutMs) return;
-      effectiveTimeoutMs = next;
-      deadlineAt = started + next;
-      schedule();
+      const before = deadline.effectiveTimeoutMs;
+      const next = deadline.extendTo(floor);
+      if (next > before) schedule();
     };
     try {
       const hostFunction = context.newFunction("__fabricHostCall", (refHandle, argsHandle) => {
@@ -9946,13 +10021,15 @@ var QuickJsRuntime = class {
           promise.reject(handle);
           handle.dispose();
         };
-        const raw = Promise.resolve().then(() => hostCall(ref, args, hostController.signal));
-        const rawSettlement = raw.then(() => void 0, () => void 0);
-        hostTasks.add(rawSettlement);
-        void rawSettlement.finally(() => hostTasks.delete(rawSettlement));
+        const raw = Promise.resolve().then(() => {
+          deadline.throwIfExpired();
+          return hostCall(ref, args, hostController.signal, deadline);
+        });
+        void raw.catch(() => void 0);
         const task = runAbortable(hostController.signal, () => raw).then((value2) => {
           if (closing || promise.alive === false) return;
           try {
+            deadline.throwIfExpired();
             const handle = context.newString(fabricJsonText(value2, options.maxNestedResultChars));
             promise.resolve(handle);
             handle.dispose();
@@ -10002,29 +10079,40 @@ var QuickJsRuntime = class {
       if (setup.error) {
         const error = formatValue(context.dump(setup.error));
         setup.error.dispose();
-        return { value: void 0, logs, terminationReason: "runtime_error", error };
+        return { value: void 0, logs, terminationReason: "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
+      runExecution = context.getProp(setup.value, "run");
+      cancelExecution = context.getProp(setup.value, "cancel");
       setup.value.dispose();
-      cancelExecution = context.getProp(context.global, "__fabricCancelExecution");
       const bundle = options.transpiledCode === void 0 ? transpileFabricCodeWithSourceMap(code) : { code: options.transpiledCode, sourceMap: options.transpiledSourceMap };
+      assertFabricTranspiledWrapper(bundle.code);
       const transpiledError = fabricTranspiledLimitError(bundle.code);
-      if (transpiledError) return { value: void 0, logs, terminationReason: "runtime_error", error: transpiledError };
+      if (transpiledError) return { value: void 0, logs, terminationReason: "runtime_error", error: transpiledError, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       const stackMap = createGuestStackMap(bundle.sourceMap);
       const guestLineCount = bundle.code.split("\n").length;
-      const evaluation = context.evalCode(`${bundle.code}
-__fabricRun(__kiroFabricMain)`, "kiro-fabric-guest.js");
+      const evaluation = context.evalCode(bundle.code, "kiro-fabric-guest.js");
       runtime.executePendingJobs();
       if (evaluation.error) {
-        const deadlineExceeded = interrupted || performance2.now() > deadlineAt;
+        const deadlineExceeded = interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(evaluation.error)), stackMap, guestLineCount);
         evaluation.error.dispose();
         abortHost(new Error(error));
-        return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error };
+        return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
-      activeHandle = evaluation.value;
+      evaluation.value.dispose();
+      const main = context.getProp(context.global, "__kiroFabricMain");
+      context.setProp(context.global, "__kiroFabricMain", context.undefined);
+      const invoked = context.callFunction(runExecution, context.undefined, main);
+      main.dispose();
+      if (invoked.error) {
+        const error = remapGuestErrorText(formatValue(context.dump(invoked.error)), stackMap, guestLineCount);
+        invoked.error.dispose();
+        return { value: void 0, logs, terminationReason: deadline.expired ? "timed_out" : "runtime_error", error: deadline.expired ? timeoutMessage() : error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+      }
+      activeHandle = invoked.value;
       resolution = context.resolvePromise(activeHandle);
       runtime.executePendingJobs();
-      const deadline = new Promise((_resolve, reject) => {
+      const deadlineRace = new Promise((_resolve, reject) => {
         rejectDeadline = reject;
         schedule();
       });
@@ -10037,32 +10125,34 @@ __fabricRun(__kiroFabricMain)`, "kiro-fabric-guest.js");
         if (options.signal?.aborted) abortListener();
         else options.signal?.addEventListener("abort", abortListener, { once: true });
       });
-      const settled = await Promise.race([resolution, deadline, cancellation]);
+      const settled = await Promise.race([resolution, deadlineRace, cancellation]);
       resolutionConsumed = true;
       activeHandle.dispose();
       activeHandle = void 0;
       if (settled.error) {
-        const deadlineExceeded = timedOut || interrupted || performance2.now() > deadlineAt;
+        const deadlineExceeded = timedOut || interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(settled.error)), stackMap, guestLineCount);
         settled.error.dispose();
         abortHost(new Error(error));
-        return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error };
+        return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
       const serialized = context.getString(settled.value);
       settled.value.dispose();
       const value = JSON.parse(serialized);
       assertFabricJsonBudget(value, options.maxNestedResultChars);
-      return { value, logs, terminationReason: "completed" };
+      deadline.throwIfExpired();
+      return { value, logs, terminationReason: "completed", effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     } catch (error) {
-      const message = options.signal?.aborted ? "Execution cancelled" : timedOut || interrupted ? timeoutMessage() : error instanceof Error ? error.message : String(error);
+      const deadlineExceeded = timedOut || interrupted || deadline.expired;
+      const message = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : error instanceof Error ? error.message : String(error);
       abortHost(new Error(message));
-      return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : timedOut || interrupted ? "timed_out" : "runtime_error", error: message };
+      return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error: message, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     } finally {
       closing = true;
       if (deadlineTimer) clearTimeout(deadlineTimer);
       if (abortListener) options.signal?.removeEventListener("abort", abortListener);
       abortHost(new Error("Execution request ended"));
-      await Promise.allSettled([...hostTasks, ...bridgeTasks]);
+      await settleWithin(bridgeTasks, Math.max(0, options.cleanupGraceMs ?? 100));
       for (let index = 0; index < 1024; index++) {
         const jobs = runtime.executePendingJobs();
         if (jobs.error) {
@@ -10071,13 +10161,11 @@ __fabricRun(__kiroFabricMain)`, "kiro-fabric-guest.js");
         }
         if (jobs.value === 0) break;
       }
-      if (resolution && !resolutionConsumed) await resolution.then((settled) => {
-        if (settled.error) settled.error.dispose();
-        else settled.value.dispose();
-      }, () => void 0);
+      void resolutionConsumed;
       if (activeHandle?.alive !== false) activeHandle?.dispose();
       for (const promise of pendingPromises) if (promise.alive !== false) promise.dispose();
       if (cancelExecution && cancelExecution.alive !== false) cancelExecution.dispose();
+      if (runExecution && runExecution.alive !== false) runExecution.dispose();
       jsonParse.dispose();
       jsonObject.dispose();
       context.dispose();
@@ -10111,7 +10199,8 @@ var FabricExecutionService = class {
       0,
       invocationTimeout
     );
-    let observedEffectiveTimeoutMs = effectiveTimeoutMs;
+    let notifiedEffectiveTimeoutMs = effectiveTimeoutMs;
+    options.onEffectiveTimeoutChange?.(effectiveTimeoutMs);
     const sourceError = fabricSourceLimitError(options.code, this.config.executor.maxSourceBytes) ?? fabricPayloadsLimitError(options.payloads, this.config.executor.maxInputBytes);
     if (sourceError) return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: sourceError, effectiveTimeoutMs };
     let checked;
@@ -10136,11 +10225,12 @@ var FabricExecutionService = class {
     let activeProviderCalls = 0;
     let approvalRequests = 0;
     let pendingApprovals = 0;
-    const providerContext = (signal) => ({
+    const providerContext = (signal, deadline) => ({
       cwd: this.cwd,
-      signal
+      signal,
+      deadline
     });
-    const result = await this.#runtime.execute(options.code, async (ref, args, signal) => {
+    const result = await this.#runtime.execute(options.code, async (ref, args, signal, deadline) => {
       providerCalls += 1;
       if (providerCalls > this.config.executor.maxProviderCalls) throw new Error("Fabric provider call quota exceeded");
       activeProviderCalls += 1;
@@ -10149,7 +10239,7 @@ var FabricExecutionService = class {
         throw new Error("Fabric concurrent provider call quota exceeded");
       }
       try {
-        const context = providerContext(signal);
+        const context = providerContext(signal, deadline);
         if (ref === "fabric.providers") return this.registry.providers();
         if (ref === "fabric.list") return this.registry.list();
         if (ref === "fabric.search") {
@@ -10211,7 +10301,10 @@ var FabricExecutionService = class {
           actionFloor,
           invocationTimeout
         );
-        observedEffectiveTimeoutMs = Math.max(observedEffectiveTimeoutMs, candidate);
+        if (candidate > notifiedEffectiveTimeoutMs) {
+          notifiedEffectiveTimeoutMs = candidate;
+          options.onEffectiveTimeoutChange?.(candidate);
+        }
         return candidate;
       }
     });
@@ -10233,7 +10326,7 @@ var FabricExecutionService = class {
       audits,
       elapsedMs: performance.now() - started,
       ...outputError ? { error: outputError } : {},
-      effectiveTimeoutMs: observedEffectiveTimeoutMs
+      effectiveTimeoutMs: result.effectiveTimeoutMs
     };
   }
   async close() {
@@ -10400,12 +10493,21 @@ var KIRO_MCP_DRAIN_TIMEOUT_MS = 3e3;
 var kiroMcpOuterDeadlineMs = (guestMaximumMs, compilerTimeoutMs) => guestMaximumMs + compilerTimeoutMs + KIRO_MCP_DEADLINE_GRACE_MS;
 
 // src/kiro/power/approver.ts
+import { createHash } from "node:crypto";
 import path from "node:path";
 var SECRET_KEY = /(?:apikey|authorization|authtoken|bearer|clientkey|clientsecret|cookie|credential|idtoken|passphrase|password|privatekey|refreshtoken|secret|session|token)/iu;
 var SECRET_VALUE = /^(?:(?:basic|bearer)\s+|gh[pousr]_|github_pat_|sk-[a-z0-9_-]{12,}|akia[0-9a-z]{12,}|eyj[a-z0-9_-]+\.[a-z0-9_-]+\.|-----begin\s)|(?:^|[?&])(?:api[_-]?key|password|secret|token)=/iu;
 var URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//iu;
 var isSecretKey = (key) => SECRET_KEY.test(key.replace(/[_\-\s]/gu, ""));
 var bounded = (value, maximum = 1500) => value.replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, maximum);
+var APPROVAL_MESSAGE_CHARS = 1500;
+var fabricApprovalIdentity = (action, args) => {
+  const canonical = fabricJsonText({ schemaVersion: 1, ref: action.ref, risk: action.risk, args });
+  return {
+    digest: createHash("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex"),
+    chars: canonical.length
+  };
+};
 var KiroPowerApprover = class {
   constructor(adapter, timeoutMs = FABRIC_APPROVAL_TIMEOUT_MS) {
     this.adapter = adapter;
@@ -10415,11 +10517,12 @@ var KiroPowerApprover = class {
     request.signal?.throwIfAborted();
     if (!this.adapter.supported()) return false;
     try {
+      const header = `Risk: ${bounded(request.risk, 64)}
+Action: ${bounded(`${request.provider}.${request.action}`, 256)}
+`;
       const result = await this.adapter.request({
         title: "Approve one Fabric action",
-        message: bounded(`Risk: ${request.risk}
-Action: ${request.provider}.${request.action}
-${request.summary}`),
+        message: `${header}${bounded(request.summary, Math.max(0, APPROVAL_MESSAGE_CHARS - header.length))}`,
         ...request.signal ? { signal: request.signal } : {},
         timeoutMs: this.timeoutMs
       });
@@ -10480,11 +10583,13 @@ var KiroPowerFabricApprover = class {
     const mode = this.config[action.risk];
     if (mode === "allow") return;
     if (mode === "deny") throw new Error(`${action.ref} is denied by Fabric policy`);
+    const identity = fabricApprovalIdentity(action, args);
     const approved = await this.elicitation.approveOnce({
       risk: action.risk,
       provider: action.provider,
       action: action.name,
-      summary: summarize(args, this.cwd),
+      summary: `Canonical request: sha256:${identity.digest} (${identity.chars} chars)
+Preview: ${summarize(args, this.cwd)}`,
       ...signal ? { signal } : {}
     });
     if (!approved) throw new Error(`${action.ref} approval was denied or unavailable`);
@@ -10492,13 +10597,30 @@ var KiroPowerFabricApprover = class {
 };
 
 // src/kiro/power/data-paths.ts
-import { createHash } from "node:crypto";
+import { createHash as createHash2, randomBytes } from "node:crypto";
 import fs2 from "node:fs";
 import path2 from "node:path";
+var isRecord4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var errorCode = (error) => isRecord4(error) && typeof error.code === "string" ? error.code : void 0;
+var projectKiroPowerWorkspaceIdentity = (value) => {
+  if (!isRecord4(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path2.isAbsolute(value.canonicalPath) || typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
+    throw new Error("Power workspace identity is malformed");
+  }
+  return Object.freeze({ schemaVersion: 1, canonicalPath: value.canonicalPath, deviceId: value.deviceId, fileId: value.fileId });
+};
+var sameIdentity = (left, right) => left.schemaVersion === right.schemaVersion && left.canonicalPath === right.canonicalPath && left.deviceId === right.deviceId && left.fileId === right.fileId;
+var kiroPowerMemoryNamespace = (identity) => `project:${createHash2("sha256").update(identity.canonicalPath).digest("hex")}`;
 var assertCurrentUser = (stats, target) => {
   if (process.platform !== "win32" && typeof process.getuid === "function" && stats.uid !== process.getuid()) {
     throw new Error(`Power data path is owned by another user: ${target}`);
   }
+};
+var assertPrivateDirectory = (target) => {
+  const stats = fs2.lstatSync(target);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power storage is not a regular directory: ${target}`);
+  assertCurrentUser(stats, target);
+  if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Power storage is not private: ${target}`);
+  return stats;
 };
 var privateDirectory = (directory, boundary) => {
   const root = path2.resolve(boundary);
@@ -10514,7 +10636,7 @@ var privateDirectory = (directory, boundary) => {
     try {
       fs2.mkdirSync(cursor, { mode: 448 });
     } catch (error) {
-      if (error.code !== "EEXIST") throw error;
+      if (errorCode(error) !== "EEXIST") throw error;
     }
     const stats = fs2.lstatSync(cursor);
     if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power data path contains a non-directory: ${cursor}`);
@@ -10525,42 +10647,83 @@ var privateDirectory = (directory, boundary) => {
 };
 var privateFile = (target, maximum = 1024 * 1024) => {
   const stats = fs2.lstatSync(target);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > maximum) {
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
     throw new Error(`Legacy Power data is not a bounded unaliased regular file: ${target}`);
   }
+  if (stats.size > maximum) throw new Error(`Power configuration exceeds ${maximum} bytes: ${target}`);
   assertCurrentUser(stats, target);
   if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Legacy Power data is not private: ${target}`);
   return stats;
 };
+var fsyncDirectory = (directory) => {
+  const descriptor2 = fs2.openSync(directory, "r");
+  try {
+    fs2.fsyncSync(descriptor2);
+  } finally {
+    fs2.closeSync(descriptor2);
+  }
+};
+var writeJsonAtomic = (target, value, exclusive = false) => {
+  const bytes = `${JSON.stringify(value, null, 2)}
+`;
+  if (exclusive) {
+    try {
+      const descriptor2 = fs2.openSync(target, "wx", 384);
+      try {
+        fs2.writeFileSync(descriptor2, bytes);
+        fs2.fsyncSync(descriptor2);
+      } finally {
+        fs2.closeSync(descriptor2);
+      }
+    } catch (error) {
+      if (errorCode(error) !== "EEXIST") throw error;
+    }
+  } else {
+    const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+    try {
+      const descriptor2 = fs2.openSync(temporary, "wx", 384);
+      try {
+        fs2.writeFileSync(descriptor2, bytes);
+        fs2.fsyncSync(descriptor2);
+      } finally {
+        fs2.closeSync(descriptor2);
+      }
+      fs2.renameSync(temporary, target);
+    } catch (error) {
+      fs2.rmSync(temporary, { force: true });
+      throw error;
+    }
+  }
+  privateFile(target);
+  fs2.chmodSync(target, 384);
+  fsyncDirectory(path2.dirname(target));
+  return target;
+};
+var privateJson = (target, initial) => writeJsonAtomic(target, initial, true);
 var copyFileAtomic = (source, target) => {
   privateFile(source);
-  const temporary = `${target}.${process.pid}.${Date.now()}.migration.tmp`;
-  let descriptor2;
+  const bytes = fs2.readFileSync(source);
+  const sourceDigest = createHash2("sha256").update(bytes).digest("hex");
+  const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.migration.tmp`;
   try {
-    const bytes = fs2.readFileSync(source);
-    descriptor2 = fs2.openSync(temporary, "wx", 384);
-    fs2.writeFileSync(descriptor2, bytes);
-    fs2.fsyncSync(descriptor2);
-    fs2.closeSync(descriptor2);
-    descriptor2 = void 0;
-    const sourceDigest = createHash("sha256").update(bytes).digest("hex");
-    if (createHash("sha256").update(fs2.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
+    const descriptor2 = fs2.openSync(temporary, "wx", 384);
+    try {
+      fs2.writeFileSync(descriptor2, bytes);
+      fs2.fsyncSync(descriptor2);
+    } finally {
+      fs2.closeSync(descriptor2);
+    }
+    if (createHash2("sha256").update(fs2.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
     try {
       fs2.linkSync(temporary, target);
     } catch (error) {
-      if (error.code !== "EEXIST") throw error;
+      if (errorCode(error) !== "EEXIST") throw error;
       privateFile(target);
-      if (createHash("sha256").update(fs2.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
+      if (createHash2("sha256").update(fs2.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
     }
     fs2.unlinkSync(temporary);
-    const directory = fs2.openSync(path2.dirname(target), "r");
-    try {
-      fs2.fsyncSync(directory);
-    } finally {
-      fs2.closeSync(directory);
-    }
+    fsyncDirectory(path2.dirname(target));
   } catch (error) {
-    if (descriptor2 !== void 0) fs2.closeSync(descriptor2);
     fs2.rmSync(temporary, { force: true });
     throw error;
   }
@@ -10569,35 +10732,70 @@ var migrateMcpConfiguration = (config) => {
   const current = path2.join(config, "mcp.json");
   const legacy = path2.join(config, "mcporter.json");
   if (fs2.existsSync(current) || !fs2.existsSync(legacy)) return [];
+  privateFile(legacy, 256 * 1024);
   const parsed = JSON.parse(fs2.readFileSync(legacy, "utf8"));
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting the Power");
+  if (!isRecord4(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting the Power");
   copyFileAtomic(legacy, current);
   return ["config/mcporter.json -> config/mcp.json"];
 };
-var privateJson = (target, initial) => {
-  try {
-    const descriptor2 = fs2.openSync(target, "wx", 384);
-    try {
-      fs2.writeFileSync(descriptor2, `${JSON.stringify(initial, null, 2)}
-`);
-    } finally {
-      fs2.closeSync(descriptor2);
+var LEGACY_CONFIG_FIELDS = {
+  executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
+  approvals: ["read", "write", "execute", "network"],
+  mcp: ["disableOAuth", "callTimeoutMs"],
+  memory: ["enabled", "maxEntries", "maxValueChars"],
+  state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
+  artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"]
+};
+var migrateLegacyFabricConfiguration = (root, config) => {
+  const legacy = path2.join(config, "fabric.json");
+  if (!fs2.existsSync(legacy)) return { migrated: [], ignored: [], quarantined: [] };
+  privateFile(legacy, 256 * 1024);
+  const parsed = JSON.parse(fs2.readFileSync(legacy, "utf8"));
+  if (!isRecord4(parsed)) throw new Error("Legacy fabric configuration is malformed");
+  const projected = {};
+  const ignored = [];
+  for (const [section, raw] of Object.entries(parsed)) {
+    const allowed = LEGACY_CONFIG_FIELDS[section];
+    if (!allowed || !isRecord4(raw)) {
+      ignored.push(section);
+      continue;
     }
-  } catch (error) {
-    if (error.code !== "EEXIST") throw error;
+    const fields = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (!allowed.includes(key)) {
+        ignored.push(`${section}.${key}`);
+        continue;
+      }
+      fields[key] = section === "approvals" && (key === "execute" || key === "network") && value === "allow" ? "ask" : value;
+    }
+    if (Object.keys(fields).length) projected[section] = fields;
   }
-  const stats = fs2.lstatSync(target);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) throw new Error(`Power configuration is not a private regular file: ${target}`);
-  assertCurrentUser(stats, target);
-  if (stats.size > 1024 * 1024) throw new Error(`Power configuration exceeds 1048576 bytes: ${target}`);
-  fs2.chmodSync(target, 384);
-  return target;
+  const current = path2.join(config, "config.json");
+  const migrated = [];
+  if (!fs2.existsSync(current) && Object.keys(projected).length) {
+    writeJsonAtomic(current, projected, true);
+    migrated.push("config/fabric.json -> allowlisted config/config.json");
+  }
+  const quarantine = privateDirectory(path2.join(root, "quarantine"), root);
+  const destination = path2.join(quarantine, "legacy-fabric.json");
+  if (!fs2.existsSync(destination)) fs2.renameSync(legacy, destination);
+  else fs2.rmSync(legacy);
+  fsyncDirectory(quarantine);
+  return { migrated, ignored, quarantined: ["legacy fabric.json"] };
 };
 var prepareKiroPowerDataPaths = (pluginData) => {
   const root = privateDirectory(path2.join(pluginData, "fabric"), pluginData);
   const config = privateDirectory(path2.join(root, "config"), root);
-  const migrated = migrateMcpConfiguration(config);
-  if (migrated.length) privateJson(path2.join(root, "migration-report.json"), { schemaVersion: 1, migrated, ignored: [] });
+  const mcpMigrated = migrateMcpConfiguration(config);
+  const policy = migrateLegacyFabricConfiguration(root, config);
+  if (mcpMigrated.length || policy.migrated.length || policy.quarantined.length) {
+    writeJsonAtomic(path2.join(root, "migration-report.json"), {
+      schemaVersion: 2,
+      migrated: [...mcpMigrated, ...policy.migrated],
+      ignoredFields: policy.ignored.sort(),
+      quarantined: policy.quarantined
+    });
+  }
   return {
     root,
     config,
@@ -10607,46 +10805,141 @@ var prepareKiroPowerDataPaths = (pluginData) => {
     projects: privateDirectory(path2.join(root, "projects"), root)
   };
 };
-var kiroPowerWorkspaceId = (identity, generation = 3) => createHash("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0").update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
+var kiroPowerWorkspaceId = (identity, generation = 3) => createHash2("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0").update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
+var encodeName = (value) => encodeURIComponent(value).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+var memoryNamespaceDirectory = (namespace) => `${encodeName(namespace)}-${createHash2("sha256").update(namespace).digest("hex").slice(0, 16)}`;
+var migrateCompatibleMemory = (sourceRoot, targetRoot, namespace) => {
+  if (!fs2.existsSync(sourceRoot)) return false;
+  assertPrivateDirectory(sourceRoot);
+  const sourceMemory = path2.join(sourceRoot, "memory");
+  if (!fs2.existsSync(sourceMemory)) return false;
+  assertPrivateDirectory(sourceMemory);
+  const rootMarker = path2.join(sourceMemory, ".kiro-fabric-owner");
+  privateFile(rootMarker, 8 * 1024);
+  const rootOwner = JSON.parse(fs2.readFileSync(rootMarker, "utf8"));
+  if (rootOwner.format !== 1 || rootOwner.owner !== "kiro-fabric" || rootOwner.kind !== "memory-root" || rootOwner.root !== sourceRoot) {
+    throw new Error("Legacy memory root ownership is incompatible");
+  }
+  const namespaceName = memoryNamespaceDirectory(namespace);
+  const sourceNamespace = path2.join(sourceMemory, namespaceName);
+  assertPrivateDirectory(sourceNamespace);
+  const namespaceMarker = path2.join(sourceNamespace, ".kiro-fabric-owner");
+  privateFile(namespaceMarker, 8 * 1024);
+  const namespaceOwner = JSON.parse(fs2.readFileSync(namespaceMarker, "utf8"));
+  if (namespaceOwner.format !== 1 || namespaceOwner.owner !== "kiro-fabric" || namespaceOwner.kind !== "memory-namespace" || namespaceOwner.root !== sourceRoot || namespaceOwner.namespace !== namespace) throw new Error("Legacy memory namespace ownership is incompatible");
+  const sourceEntries = fs2.readdirSync(sourceNamespace, { withFileTypes: true });
+  if (sourceEntries.length > 130) throw new Error("Legacy memory entry limit exceeded");
+  const targetMemory = privateDirectory(path2.join(targetRoot, "memory"), targetRoot);
+  writeJsonAtomic(path2.join(targetMemory, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: targetRoot }, true);
+  const targetNamespace = privateDirectory(path2.join(targetMemory, namespaceName), targetMemory);
+  writeJsonAtomic(path2.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: targetRoot, namespace }, true);
+  let totalBytes = 0;
+  for (const entry of sourceEntries) {
+    if (entry.name === ".kiro-fabric-owner") continue;
+    if (!entry.isFile() || !entry.name.endsWith(".json")) throw new Error("Legacy memory contains incompatible residue");
+    const source = path2.join(sourceNamespace, entry.name);
+    const stats = privateFile(source, 16 * 1024);
+    totalBytes += stats.size;
+    if (totalBytes > 256 * 1024) throw new Error("Legacy memory namespace byte limit exceeded");
+    const value = JSON.parse(fs2.readFileSync(source, "utf8"));
+    if (value.format !== 1 || value.owner !== "kiro-fabric" || value.kind !== "memory-entry" || value.namespace !== namespace || typeof value.key !== "string" || value.key.trim() !== value.key || !value.key || `${encodeName(value.key)}.json` !== entry.name || typeof value.updatedAt !== "string" || !("value" in value)) throw new Error("Legacy memory entry is incompatible");
+    copyFileAtomic(source, path2.join(targetNamespace, entry.name));
+  }
+  return true;
+};
+var validateWorkspaceObject = (identity) => {
+  const canonical = fs2.realpathSync(identity.canonicalPath);
+  const stats = fs2.statSync(canonical, { bigint: true });
+  if (canonical !== identity.canonicalPath || String(stats.dev) !== identity.deviceId || String(stats.ino) !== identity.fileId) {
+    throw new Error("Power workspace identity no longer matches the verified filesystem object");
+  }
+};
+var validatePersistedIdentity = (file, expected) => {
+  privateFile(file, 64 * 1024);
+  const persisted = projectKiroPowerWorkspaceIdentity(JSON.parse(fs2.readFileSync(file, "utf8")));
+  if (!sameIdentity(persisted, expected)) throw new Error("Legacy workspace identity does not match the currently verified filesystem object");
+};
+var quarantineLegacyWorkspace = (projects, legacy, identity) => {
+  if (!fs2.existsSync(legacy)) return void 0;
+  const quarantine = privateDirectory(path2.join(projects, ".quarantine"), projects);
+  const destination = path2.join(quarantine, `workspace-v2-${kiroPowerWorkspaceId(identity, 2)}`);
+  if (fs2.existsSync(destination)) throw new Error("Legacy workspace quarantine collision");
+  fs2.renameSync(legacy, destination);
+  fsyncDirectory(quarantine);
+  return destination;
+};
 var migrateWorkspaceGeneration = (projects, identity) => {
   const current = path2.join(projects, kiroPowerWorkspaceId(identity, 3));
   const legacy = path2.join(projects, kiroPowerWorkspaceId(identity, 2));
-  if (fs2.existsSync(current) || !fs2.existsSync(legacy)) return [];
-  const legacyStats = fs2.lstatSync(legacy);
-  if (!legacyStats.isDirectory() || legacyStats.isSymbolicLink()) throw new Error("Legacy workspace storage is not a private regular directory");
-  assertCurrentUser(legacyStats, legacy);
-  if (process.platform !== "win32" && (legacyStats.mode & 63) !== 0) throw new Error("Legacy workspace storage permissions are not private");
-  const identityFile = path2.join(legacy, "workspace-identity.json");
-  privateFile(identityFile, 64 * 1024);
-  const persisted = JSON.parse(fs2.readFileSync(identityFile, "utf8"));
-  if (JSON.stringify(persisted) !== JSON.stringify(identity)) throw new Error("Legacy workspace identity does not match the currently verified filesystem object");
-  fs2.renameSync(legacy, current);
-  const directory = fs2.openSync(projects, "r");
-  try {
-    fs2.fsyncSync(directory);
-  } finally {
-    fs2.closeSync(directory);
+  if (!fs2.existsSync(legacy)) return { current, migrated: false };
+  const legacyStats = assertPrivateDirectory(legacy);
+  void legacyStats;
+  validatePersistedIdentity(path2.join(legacy, "workspace-identity.json"), identity);
+  validateWorkspaceObject(identity);
+  if (fs2.existsSync(current)) {
+    validatePersistedIdentity(path2.join(current, "workspace-identity.json"), identity);
+    quarantineLegacyWorkspace(projects, legacy, identity);
+    return { current, migrated: true };
   }
-  return ["workspace-v2 -> workspace-v3", "preserved compatible memory/state/artifacts", "archived incompatible legacy children in place"];
+  const staging = path2.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity).slice(0, 16)}-${process.pid}-${randomBytes(8).toString("hex")}.tmp`);
+  fs2.mkdirSync(staging, { mode: 448 });
+  let memoryMigrated = false;
+  try {
+    writeJsonAtomic(path2.join(staging, "workspace-identity.json"), identity, true);
+    memoryMigrated = migrateCompatibleMemory(legacy, staging, kiroPowerMemoryNamespace(identity));
+    privateDirectory(path2.join(staging, "memory"), staging);
+    privateDirectory(path2.join(staging, "state"), staging);
+    privateDirectory(path2.join(staging, "artifacts"), staging);
+    writeJsonAtomic(path2.join(staging, "migration-report.json"), {
+      schemaVersion: 2,
+      sourceGeneration: 2,
+      destinationGeneration: 3,
+      migrated: ["immutable workspace identity", ...memoryMigrated ? ["compatible memory"] : []],
+      quarantined: ["legacy Mesh state", "runs", "logs", "artifacts", "unknown v2 residue"],
+      complete: false
+    }, true);
+    try {
+      fs2.renameSync(staging, current);
+    } catch (error) {
+      if (errorCode(error) !== "EEXIST" && errorCode(error) !== "ENOTEMPTY") throw error;
+      validatePersistedIdentity(path2.join(current, "workspace-identity.json"), identity);
+      fs2.rmSync(staging, { recursive: true, force: true });
+    }
+    fsyncDirectory(projects);
+  } catch (error) {
+    fs2.rmSync(staging, { recursive: true, force: true });
+    throw error;
+  }
+  quarantineLegacyWorkspace(projects, legacy, identity);
+  writeJsonAtomic(path2.join(current, "migration-report.json"), {
+    schemaVersion: 2,
+    sourceGeneration: 2,
+    destinationGeneration: 3,
+    migrated: ["immutable workspace identity", ...memoryMigrated ? ["compatible memory"] : []],
+    quarantined: ["legacy Mesh state", "runs", "logs", "artifacts", "unknown v2 residue"],
+    complete: true
+  });
+  return { current, migrated: true };
 };
-var prepareKiroPowerProjectPaths = (projects, identity) => {
-  const migrated = migrateWorkspaceGeneration(projects, identity);
-  const root = privateDirectory(path2.join(projects, kiroPowerWorkspaceId(identity)), projects);
+var prepareKiroPowerProjectPaths = (projects, rawIdentity) => {
+  const identity = projectKiroPowerWorkspaceIdentity(rawIdentity);
+  const migration = migrateWorkspaceGeneration(projects, identity);
+  if (!migration.migrated) validateWorkspaceObject(identity);
+  const root = privateDirectory(migration.current, projects);
   const identityFile = privateJson(path2.join(root, "workspace-identity.json"), identity);
-  const persisted = JSON.parse(fs2.readFileSync(identityFile, "utf8"));
-  if (JSON.stringify(persisted) !== JSON.stringify(identity)) throw new Error("Power workspace identity does not match the current filesystem object");
-  if (migrated.length) privateJson(path2.join(root, "migration-report.json"), { schemaVersion: 1, migrated, ignored: ["runs", "logs", "deleted orchestration fields"] });
+  validatePersistedIdentity(identityFile, identity);
   return {
     root,
     identityFile,
     memory: privateDirectory(path2.join(root, "memory"), root),
+    memoryNamespace: kiroPowerMemoryNamespace(identity),
     state: privateDirectory(path2.join(root, "state"), root),
     artifacts: privateDirectory(path2.join(root, "artifacts"), root)
   };
 };
 
 // src/kiro/power/workspace-binding.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 import { existsSync } from "node:fs";
 import os2 from "node:os";
 import path3 from "node:path";
@@ -10664,7 +10957,7 @@ var kiroPowerWorkspaceRequestSchema = typebox_exports.Union([
   }, { additionalProperties: false }),
   typebox_exports.Object({ action: typebox_exports.Literal("detach") }, { additionalProperties: false })
 ]);
-var idFor = (root) => createHash2("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
+var idFor = (root) => createHash3("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
 var KiroPowerWorkspaceBinding = class {
   #pluginRoot;
   #pluginData;
@@ -10771,7 +11064,7 @@ var KiroPowerWorkspaceBinding = class {
       }
       return {
         status: "verified",
-        workspace: {
+        workspace: Object.freeze({
           schemaVersion: 1,
           canonicalPath: binding.root,
           deviceId: binding.dev.toString(),
@@ -10779,7 +11072,7 @@ var KiroPowerWorkspaceBinding = class {
           rootId: binding.id,
           name: binding.name,
           source: binding.source
-        }
+        })
       };
     } catch {
       return { status: "temporarily-unavailable" };
@@ -10998,7 +11291,7 @@ Output exceeded ${options.maxOutputChars} characters and could not be retained w
 };
 
 // src/providers/state-provider.ts
-import { randomBytes } from "node:crypto";
+import { randomBytes as randomBytes2 } from "node:crypto";
 import fs3 from "node:fs";
 import path4 from "node:path";
 var emptyEntries = () => /* @__PURE__ */ Object.create(null);
@@ -11013,13 +11306,13 @@ var descriptors = [
   { name: "list", description: "List bounded workspace state metadata", inputSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 1e3 } }, additionalProperties: false }, risk: "read", effect: { kind: "read" } },
   { name: "delete", description: "Atomically delete one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX }, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } }
 ];
-var isRecord4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var hasExactKeys = (value, keys) => {
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
   return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
 };
-var errorCode = (error) => isRecord4(error) && typeof error.code === "string" ? error.code : void 0;
+var errorCode2 = (error) => isRecord5(error) && typeof error.code === "string" ? error.code : void 0;
 var delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 var processIsAlive = (pid) => {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
@@ -11027,7 +11320,7 @@ var processIsAlive = (pid) => {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return errorCode(error) === "EPERM";
+    return errorCode2(error) === "EPERM";
   }
 };
 var privateRoot = (root) => {
@@ -11069,7 +11362,7 @@ var StateProvider = class {
     return typeof args.key === "string" ? [`state:${args.key}`] : ["state:index"];
   }
   async invoke(actionName, args, context) {
-    throwIfAborted(context.signal);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
     if (actionName === "get") {
       const entry = this.#read().entries[args.key];
       return entry ? { key: args.key, ...entry } : { key: args.key, found: false };
@@ -11085,7 +11378,7 @@ var StateProvider = class {
     if (actionName !== "set" && actionName !== "delete") {
       throw new Error(`Unknown state action: ${actionName}`);
     }
-    return this.#withMutationLock(context.signal, () => {
+    return this.#withMutationLock(context, () => {
       const document = this.#read();
       const key = args.key;
       const current = document.entries[key];
@@ -11096,7 +11389,8 @@ var StateProvider = class {
         if (!current) return { key, deleted: false, revision: document.revision };
         delete document.entries[key];
         document.revision += 1;
-        this.#write(document);
+        this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
+        throwIfAbortedOrExpired(context.signal, context.deadline);
         return { key, deleted: true, revision: document.revision };
       }
       const serialized = JSON.stringify(args.value);
@@ -11112,8 +11406,9 @@ var StateProvider = class {
         value: JSON.parse(serialized),
         updatedAt: Date.now()
       };
-      throwIfAborted(context.signal);
-      this.#write(document);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
+      this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       return { key, revision: document.revision };
     });
   }
@@ -11142,14 +11437,14 @@ var StateProvider = class {
       const text = fs3.readFileSync(descriptor2, "utf8");
       if (text.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
       const parsed = JSON.parse(text);
-      if (!isRecord4(parsed) || !hasExactKeys(parsed, ["schemaVersion", "revision", "entries"]) || parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) || parsed.revision < 0 || !isRecord4(parsed.entries)) {
+      if (!isRecord5(parsed) || !hasExactKeys(parsed, ["schemaVersion", "revision", "entries"]) || parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) || parsed.revision < 0 || !isRecord5(parsed.entries)) {
         throw new Error("state file is malformed");
       }
       const entries = parsed.entries;
       if (Object.keys(entries).length > this.#maxEntries) throw new Error("state entry limit reached");
       const normalizedEntries = emptyEntries();
       for (const [key, entry] of Object.entries(entries)) {
-        if (key.length < 1 || key.length > KEY_MAX || !isRecord4(entry) || !hasExactKeys(entry, ["revision", "value", "updatedAt"]) || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || entry.revision > parsed.revision || !Number.isSafeInteger(entry.updatedAt) || entry.updatedAt < 0) {
+        if (key.length < 1 || key.length > KEY_MAX || !isRecord5(entry) || !hasExactKeys(entry, ["revision", "value", "updatedAt"]) || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || entry.revision > parsed.revision || !Number.isSafeInteger(entry.updatedAt) || entry.updatedAt < 0) {
           throw new Error("state file is malformed");
         }
         const value = JSON.stringify(entry.value);
@@ -11164,19 +11459,19 @@ var StateProvider = class {
         entries: normalizedEntries
       };
     } catch (error) {
-      if (errorCode(error) === "ENOENT") return emptyDocument();
+      if (errorCode2(error) === "ENOENT") return emptyDocument();
       throw error;
     } finally {
       if (descriptor2 !== void 0) fs3.closeSync(descriptor2);
     }
   }
-  #write(document) {
+  #write(document, beforeCommit) {
     const text = `${JSON.stringify(document, null, 2)}
 `;
     if (text.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
     const temporary = path4.join(
       this.#root,
-      `.state-${process.pid}-${randomBytes(8).toString("hex")}.tmp`
+      `.state-${process.pid}-${randomBytes2(8).toString("hex")}.tmp`
     );
     const descriptor2 = fs3.openSync(temporary, "wx", 384);
     try {
@@ -11186,6 +11481,7 @@ var StateProvider = class {
       fs3.closeSync(descriptor2);
     }
     try {
+      beforeCommit();
       fs3.renameSync(temporary, this.#file);
       fs3.chmodSync(this.#file, 384);
     } catch (error) {
@@ -11193,11 +11489,11 @@ var StateProvider = class {
       throw error;
     }
   }
-  async #withMutationLock(signal, operation) {
-    const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  async #withMutationLock(context, operation) {
+    const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
     let identity;
     while (!identity) {
-      throwIfAborted(signal);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       try {
         const descriptor2 = fs3.openSync(this.#lock, "wx", 384);
         try {
@@ -11210,12 +11506,12 @@ var StateProvider = class {
           fs3.closeSync(descriptor2);
         }
       } catch (error) {
-        if (errorCode(error) !== "EEXIST") throw error;
+        if (errorCode2(error) !== "EEXIST") throw error;
         let stat;
         try {
           stat = fs3.lstatSync(this.#lock);
         } catch (statError) {
-          if (errorCode(statError) === "ENOENT") continue;
+          if (errorCode2(statError) === "ENOENT") continue;
           throw statError;
         }
         if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("state mutation lock is foreign");
@@ -11234,13 +11530,15 @@ var StateProvider = class {
             }
           }
         }
-        if (Date.now() >= deadline) throw new Error("timed out waiting for state mutation lock");
+        if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
         await delay(10);
       }
     }
     try {
-      throwIfAborted(signal);
-      return operation();
+      throwIfAbortedOrExpired(context.signal, context.deadline);
+      const result = operation();
+      throwIfAbortedOrExpired(context.signal, context.deadline);
+      return result;
     } finally {
       try {
         const current = fs3.lstatSync(this.#lock);
@@ -11248,14 +11546,14 @@ var StateProvider = class {
           fs3.rmSync(this.#lock);
         }
       } catch (error) {
-        if (errorCode(error) !== "ENOENT") throw error;
+        if (errorCode2(error) !== "ENOENT") throw error;
       }
     }
   }
 };
 
 // src/kiro/artifacts.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
+import { randomBytes as randomBytes3 } from "node:crypto";
 import fs4 from "node:fs";
 import path5 from "node:path";
 var ARTIFACT_ID = /^ka_[a-f0-9]{48}$/u;
@@ -11315,7 +11613,7 @@ var ArtifactStore = class {
     if (this.#totalChars + content.length > this.#maxTotalChars) throw new KiroArtifactStoreError("artifact quota exceeded");
     let id;
     do
-      id = `ka_${randomBytes2(24).toString("hex")}`;
+      id = `ka_${randomBytes3(24).toString("hex")}`;
     while (this.#entries.has(id) || this.#root !== void 0 && fs4.existsSync(path5.join(this.#root, id)));
     const file = this.#root ? path5.join(this.#root, id) : void 0;
     if (file) {
@@ -11372,7 +11670,7 @@ var ArtifactStore = class {
 var createKiroArtifactStore = (options = {}) => new ArtifactStore(options);
 
 // src/kiro/mcp-provider.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 import fs5 from "node:fs";
 import path6 from "node:path";
 var descriptors2 = [
@@ -11392,7 +11690,8 @@ var descriptors2 = [
       properties: {
         server: { type: "string", minLength: 1, maxLength: 256 },
         tool: { type: "string", minLength: 1, maxLength: 256 },
-        args: { type: "object", additionalProperties: true }
+        args: { type: "object", additionalProperties: true },
+        transportSnapshot: { type: "object", additionalProperties: true }
       },
       required: ["server", "tool"],
       additionalProperties: false
@@ -11402,22 +11701,22 @@ var descriptors2 = [
     effect: { kind: "emission" }
   }
 ];
-var isRecord5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord6 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var MCP_CLOSE_GRACE_MS = 1e3;
 var configuredEnvironment = (configPath, server) => {
   if (!configPath) return {};
   const stats = fs5.lstatSync(configPath);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 256 * 1024) throw new Error("MCP configuration is not a bounded unaliased regular file");
   const parsed = JSON.parse(fs5.readFileSync(configPath, "utf8"));
-  const root = isRecord5(parsed) ? parsed : {};
-  const servers = isRecord5(root.mcpServers) ? root.mcpServers : root;
-  const entry = isRecord5(servers[server]) ? servers[server] : {};
-  const environment = isRecord5(entry.env) ? entry.env : {};
+  const root = isRecord6(parsed) ? parsed : {};
+  const servers = isRecord6(root.mcpServers) ? root.mcpServers : root;
+  const entry = isRecord6(servers[server]) ? servers[server] : {};
+  const environment = isRecord6(entry.env) ? entry.env : {};
   const result = {};
   for (const [key, value] of Object.entries(environment)) if (typeof value === "string") result[key] = value;
   return result;
 };
-var executableIdentity = (command) => {
+var executablePath = (command) => {
   if (command.includes("/") || command.includes("\\")) return fs5.realpathSync(command);
   for (const directory of (process.env.PATH ?? "").split(path6.delimiter)) {
     if (!directory) continue;
@@ -11429,6 +11728,9 @@ var executableIdentity = (command) => {
   }
   throw new Error(`Configured MCP executable cannot be resolved: ${command}`);
 };
+var fileDigest = (file) => createHash4("sha256").update(fs5.readFileSync(file)).digest("hex");
+var environmentDigest = () => createHash4("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
+var configDigest = (configPath) => configPath ? fileDigest(configPath) : null;
 var executeApproval = (name, description) => ({
   name,
   ref: `mcp.${name}`,
@@ -11444,8 +11746,8 @@ var OAUTH_APPROVAL = executeApproval("$oauth", "Launch configured HTTP MCP autho
 var abortError2 = (signal) => signal.reason instanceof Error ? signal.reason : new Error(typeof signal.reason === "string" && signal.reason ? signal.reason : "MCP call cancelled");
 var normalizeMcpResult = (result) => {
   assertFabricJsonBudget(result);
-  if (!isRecord5(result) || !Array.isArray(result.content)) return result;
-  const text = result.content.filter((part) => isRecord5(part) && part.type === "text" && typeof part.text === "string").map((part) => part.text).join("\n");
+  if (!isRecord6(result) || !Array.isArray(result.content)) return result;
+  const text = result.content.filter((part) => isRecord6(part) && part.type === "text" && typeof part.text === "string").map((part) => part.text).join("\n");
   if (result.isError === true) throw new Error((text || "MCP tool returned an error").slice(0, 2e3));
   return {
     text,
@@ -11482,28 +11784,35 @@ var KiroMcpProvider = class {
   async describe(actionName) {
     return descriptors2.find((entry) => entry.name === actionName);
   }
-  async prepareArguments(actionName, args) {
+  async prepareArguments(actionName, args, context) {
     if (actionName !== "$call") return { ...args };
+    const server = typeof args.server === "string" ? args.server.trim() : "";
+    const tool = typeof args.tool === "string" ? args.tool.trim() : "";
+    const runtime = await this.#getRuntime(context.signal);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
+    if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
     return {
-      ...args,
-      ...typeof args.server === "string" ? { server: args.server.trim() } : {},
-      ...typeof args.tool === "string" ? { tool: args.tool.trim() } : {},
-      ...isRecord5(args.args) ? { args: structuredClone(args.args) } : {}
+      server,
+      tool,
+      args: isRecord6(args.args) ? structuredClone(args.args) : {},
+      transportSnapshot: this.#transportSnapshot(runtime, server)
     };
   }
   async invoke(actionName, args, context) {
+    const signal = context.signal ? AbortSignal.any([context.signal, this.#closeController.signal]) : this.#closeController.signal;
+    const invocationContext = { ...context, signal };
     if (actionName === "$servers") {
-      throwIfAborted(context.signal);
-      const runtime2 = await this.#getRuntime(context.signal);
-      throwIfAborted(context.signal);
+      throwIfAbortedOrExpired(signal, context.deadline);
+      const runtime2 = await this.#getRuntime(signal);
+      throwIfAbortedOrExpired(signal, context.deadline);
       const servers = runtime2.listServers();
       if (servers.length > 128) throw new Error("Configured MCP server limit exceeded");
       return servers.map((name) => {
-        const definition2 = runtime2.getDefinition(name);
+        const definition = runtime2.getDefinition(name);
         return {
           name,
-          description: definition2.description ?? null,
-          transport: definition2.command.kind
+          description: definition.description ?? null,
+          transport: definition.command.kind
         };
       });
     }
@@ -11511,38 +11820,26 @@ var KiroMcpProvider = class {
     const server = typeof args.server === "string" ? args.server : "";
     const toolName = typeof args.tool === "string" ? args.tool : "";
     const toolArgs = args.args === void 0 ? {} : args.args;
-    if (!server || !toolName || !isRecord5(toolArgs)) {
+    if (!server || !toolName || !isRecord6(toolArgs)) {
       throw new Error("MCP call requires non-empty server/tool strings and object args");
     }
-    const runtime = await this.#getRuntime(context.signal);
-    throwIfAborted(context.signal);
+    const runtime = await this.#getRuntime(signal);
+    throwIfAbortedOrExpired(signal, context.deadline);
     if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
-    const definition = runtime.getDefinition(server);
-    if (definition.command.kind === "stdio") {
-      const configuredCwd = definition.command.cwd ?? this.#cwd;
-      const canonicalCwd = fs5.realpathSync(configuredCwd);
-      const environment = configuredEnvironment(this.#config.configPath, server);
-      const environmentEntries = Object.keys(environment).sort().map((key) => [key, environment[key]]);
-      const environmentDigest = createHash3("sha256").update(JSON.stringify(environmentEntries)).digest("hex");
-      await this.#approveExecution(STDIO_APPROVAL, {
-        server,
-        executable: executableIdentity(definition.command.command),
-        cwd: canonicalCwd,
-        arguments: [...definition.command.args ?? []],
-        environment: {
-          values: Object.fromEntries(environmentEntries.map(([key]) => [key, "<redacted>"])),
-          redactedDigest: environmentDigest
-        }
-      }, context);
+    const approvedTransport = this.#assertTransportSnapshot(
+      runtime,
+      server,
+      args.transportSnapshot ?? this.#transportSnapshot(runtime, server)
+    );
+    if (approvedTransport.kind === "stdio") {
+      await this.#approveExecution(STDIO_APPROVAL, approvedTransport, invocationContext);
     } else if (!this.#config.disableOAuth) {
-      await this.#approveExecution(OAUTH_APPROVAL, {
-        server,
-        endpoint: definition.command.url.origin
-      }, context);
+      await this.#approveExecution(OAUTH_APPROVAL, approvedTransport, invocationContext);
     }
-    throwIfAborted(context.signal);
-    return this.#withServerLease(server, context.signal, async () => {
-      const actionDeadline = Date.now() + this.#config.callTimeoutMs;
+    throwIfAbortedOrExpired(signal, context.deadline);
+    return this.#withServerLease(server, signal, async (lease) => {
+      this.#assertTransportSnapshot(runtime, server, approvedTransport);
+      const actionDeadline = performance.now() + this.#config.callTimeoutMs;
       const discoveryBudget = this.#remainingCallBudget(actionDeadline);
       const tools = await this.#bounded(
         runtime,
@@ -11551,16 +11848,18 @@ var KiroMcpProvider = class {
           includeSchema: true,
           disableOAuth: this.#config.disableOAuth
         }),
-        context.signal,
+        signal,
         "tool discovery",
-        discoveryBudget
+        discoveryBudget,
+        lease
       );
       assertFabricJsonBudget(tools);
       if (tools.length > 1e3) throw new Error("Configured MCP tool limit exceeded");
       const matches = tools.filter((tool) => tool.name === toolName);
       if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
       this.#validateToolArguments(matches[0], toolArgs);
-      throwIfAborted(context.signal);
+      throwIfAbortedOrExpired(signal, context.deadline);
+      this.#assertTransportSnapshot(runtime, server, approvedTransport);
       const callBudget = this.#remainingCallBudget(actionDeadline);
       const result = await this.#bounded(
         runtime,
@@ -11570,11 +11869,12 @@ var KiroMcpProvider = class {
           timeoutMs: callBudget,
           disableOAuth: this.#config.disableOAuth
         }),
-        context.signal,
+        signal,
         "tool call",
-        callBudget
+        callBudget,
+        lease
       );
-      throwIfAborted(context.signal);
+      throwIfAbortedOrExpired(signal, context.deadline);
       return normalizeMcpResult(result);
     });
   }
@@ -11586,18 +11886,50 @@ var KiroMcpProvider = class {
     const creation = this.#runtimeCreation;
     this.#runtime = void 0;
     this.#runtimeCreation = void 0;
-    await settleWithin([...this.#serverTails.values()], MCP_CLOSE_GRACE_MS);
+    await Promise.allSettled([...this.#serverTails.values()]);
     this.#serverTails.clear();
     if (runtime) {
-      await settleWithin([Promise.resolve().then(() => runtime.close())], MCP_CLOSE_GRACE_MS);
+      await runtime.close();
     } else if (creation) {
       await settleWithin([creation], MCP_CLOSE_GRACE_MS);
     }
   }
+  #transportSnapshot(runtime, server) {
+    const definition = runtime.getDefinition(server);
+    const base = {
+      schemaVersion: 1,
+      server,
+      processEnvironmentDigest: environmentDigest(),
+      configDigest: configDigest(this.#config.configPath)
+    };
+    const details = definition.command.kind === "stdio" ? (() => {
+      const executable = executablePath(definition.command.command);
+      const stats = fs5.statSync(executable);
+      const configured = configuredEnvironment(this.#config.configPath, server);
+      return {
+        kind: "stdio",
+        executable,
+        executableDigest: fileDigest(executable),
+        executableDevice: String(stats.dev),
+        executableFile: String(stats.ino),
+        cwd: fs5.realpathSync(definition.command.cwd ?? this.#cwd),
+        arguments: [...definition.command.args ?? []],
+        configuredEnvironmentDigest: createHash4("sha256").update(JSON.stringify(Object.entries(configured).sort(([left], [right]) => left.localeCompare(right)))).digest("hex")
+      };
+    })() : { kind: "http", endpoint: definition.command.url.href };
+    const unsigned = { ...base, ...details };
+    return { ...unsigned, digest: createHash4("sha256").update("kiro-fabric-mcp-transport-v1\0").update(JSON.stringify(unsigned)).digest("hex") };
+  }
+  #assertTransportSnapshot(runtime, server, approved) {
+    if (!isRecord6(approved)) throw new Error("MCP call is missing its approved transport snapshot");
+    const current = this.#transportSnapshot(runtime, server);
+    if (JSON.stringify(current) !== JSON.stringify(approved)) throw new Error("MCP transport changed after approval; approve the exact transport again");
+    return current;
+  }
   async #approveExecution(action, details, context) {
     if (!context.approve) throw new Error(`${action.ref} execution approval is unavailable`);
-    await runAbortable(context.signal, () => context.approve(action, details));
-    throwIfAborted(context.signal);
+    await context.approve(action, details);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
   }
   #validateToolArguments(tool, args) {
     const validation = validateSchemaValue(tool.inputSchema, args, {
@@ -11636,21 +11968,24 @@ var KiroMcpProvider = class {
     });
     const tail = previous.then(() => current, () => current);
     this.#serverTails.set(server, tail);
+    const lease = { quiescence: Promise.resolve() };
     try {
       await runAbortable(signal, () => previous);
-      throwIfAborted(signal);
-      return await operation();
+      throwIfAbortedOrExpired(signal);
+      return await operation(lease);
     } finally {
-      release();
-      if (this.#serverTails.get(server) === tail) this.#serverTails.delete(server);
+      void lease.quiescence.finally(() => {
+        release();
+        if (this.#serverTails.get(server) === tail) this.#serverTails.delete(server);
+      });
     }
   }
   #remainingCallBudget(deadline) {
-    const remaining = Math.ceil(deadline - Date.now());
+    const remaining = Math.ceil(deadline - performance.now());
     if (remaining < 1) throw new Error(`MCP call timed out after ${this.#config.callTimeoutMs}ms`);
     return remaining;
   }
-  #bounded(runtime, server, operation, signal, label, timeoutMs) {
+  #bounded(runtime, server, operation, signal, label, timeoutMs, lease) {
     return new Promise((resolve, reject) => {
       let settled = false;
       let terminating = false;
@@ -11668,7 +12003,9 @@ var KiroMcpProvider = class {
         if (settled || terminating) return;
         terminating = true;
         cleanup();
-        void settleWithin([Promise.resolve().then(() => runtime.close(server))], MCP_CLOSE_GRACE_MS).then(() => {
+        const close = Promise.resolve().then(() => runtime.close(server));
+        lease.quiescence = Promise.allSettled([lease.quiescence, operation, close]).then(() => void 0);
+        void settleWithin([close], MCP_CLOSE_GRACE_MS).then(() => {
           settled = true;
           reject(error);
         });
@@ -11689,7 +12026,7 @@ var KiroMcpProvider = class {
 };
 
 // src/kiro/memory-provider.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 import fs7 from "node:fs";
 
 // src/kiro/memory.ts
@@ -11717,7 +12054,7 @@ var KiroMemoryScopeError = class extends Error {
   }
 };
 var utf8Bytes = (value) => Buffer.byteLength(value, "utf8");
-var assertMemoryToken = (value, label) => {
+var normalizeKiroMemoryToken = (value, label) => {
   if (typeof value !== "string") throw new TypeError(`${label} must be a string`);
   const trimmed = value.trim();
   if (!trimmed) throw new TypeError(`${label} must not be empty`);
@@ -11726,7 +12063,7 @@ var assertMemoryToken = (value, label) => {
   }
   return trimmed;
 };
-var encodeName = (value) => encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+var encodeName2 = (value) => encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 var hashNamespace = (namespace) => crypto.createHash("sha256").update(namespace).digest("hex").slice(0, 16);
 var isWithinOrEqual = (root, candidate) => {
   const relative = path7.relative(root, candidate);
@@ -11742,7 +12079,7 @@ var lstatOrNull = (target) => {
     throw error;
   }
 };
-var errorCode2 = (error) => error instanceof Error && "code" in error ? String(error.code) : void 0;
+var errorCode3 = (error) => error instanceof Error && "code" in error ? String(error.code) : void 0;
 var delay2 = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 var processIsAlive2 = (pid) => {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
@@ -11750,15 +12087,16 @@ var processIsAlive2 = (pid) => {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return errorCode2(error) === "EPERM";
+    return errorCode3(error) === "EPERM";
   }
 };
-var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
+var withNamespaceMutationLock = async (namespaceRoot, operation, signal, beforeCommit) => {
   const lockPath = path7.join(namespaceRoot, MUTATION_LOCK);
-  const deadline = Date.now() + MUTATION_LOCK_TIMEOUT_MS;
+  const deadline = performance.now() + MUTATION_LOCK_TIMEOUT_MS;
   let identity;
   while (!identity) {
     throwIfAborted(signal);
+    beforeCommit?.();
     try {
       fs6.mkdirSync(lockPath, { mode: 448 });
       const stat = fs6.lstatSync(lockPath);
@@ -11781,12 +12119,12 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
         throw error;
       }
     } catch (error) {
-      if (errorCode2(error) !== "EEXIST") throw error;
+      if (errorCode3(error) !== "EEXIST") throw error;
       let stat;
       try {
         stat = fs6.lstatSync(lockPath);
       } catch (statError) {
-        if (errorCode2(statError) === "ENOENT") continue;
+        if (errorCode3(statError) === "ENOENT") continue;
         throw statError;
       }
       if (!stat.isDirectory() || stat.isSymbolicLink()) {
@@ -11800,7 +12138,7 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
         } catch {
         }
         if (ownerPid !== void 0 && processIsAlive2(ownerPid)) {
-          if (Date.now() >= deadline) {
+          if (performance.now() >= deadline) {
             throw new KiroMemoryScopeError("Timed out waiting for a live Kiro memory mutation lock");
           }
           await delay2(10);
@@ -11812,14 +12150,14 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
           fs6.rmSync(path7.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
           fs6.rmdirSync(lockPath);
         } catch {
-          if (Date.now() >= deadline) {
+          if (performance.now() >= deadline) {
             throw new KiroMemoryScopeError("Stale Kiro memory mutation lock is not reclaimable");
           }
           await delay2(10);
         }
         continue;
       }
-      if (Date.now() >= deadline) {
+      if (performance.now() >= deadline) {
         throw new KiroMemoryScopeError("Timed out waiting for Kiro memory mutation lock");
       }
       await delay2(10);
@@ -11827,7 +12165,11 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal) => {
   }
   try {
     throwIfAborted(signal);
-    return await operation();
+    beforeCommit?.();
+    const result = await operation();
+    throwIfAborted(signal);
+    beforeCommit?.();
+    return result;
   } finally {
     try {
       const current = fs6.lstatSync(lockPath);
@@ -11850,7 +12192,7 @@ var ensureDirectory = (target) => {
   }
   fs6.chmodSync(target, 448);
 };
-var assertPrivateDirectory = (target, stat) => {
+var assertPrivateDirectory2 = (target, stat) => {
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new KiroMemoryScopeError(`Kiro memory directory must be a real directory: ${target}`);
   }
@@ -11901,11 +12243,11 @@ var ensureOwnedDirectory = (memoryRoot, target, marker) => {
       fs6.mkdirSync(target, { mode: 448 });
       created = true;
     } catch (error) {
-      if (errorCode2(error) !== "EEXIST") throw error;
+      if (errorCode3(error) !== "EEXIST") throw error;
     }
   }
   const stat = fs6.lstatSync(target);
-  assertPrivateDirectory(target, stat);
+  assertPrivateDirectory2(target, stat);
   const markerPath = path7.join(target, OWNERSHIP_MARKER);
   if (created) {
     const temporaryMarker = path7.join(
@@ -11973,7 +12315,7 @@ var assertNoSymlinkComponents = (root, target) => {
   }
 };
 var canonicalDirectory = (root) => {
-  const candidate = path7.resolve(assertMemoryToken(root, "root"));
+  const candidate = path7.resolve(normalizeKiroMemoryToken(root, "root"));
   ensureDirectory(candidate);
   const canonical = fs6.realpathSync(candidate);
   const stat = fs6.statSync(canonical);
@@ -11982,9 +12324,9 @@ var canonicalDirectory = (root) => {
   }
   return canonical;
 };
-var memoryNamespaceRoot = (root, namespace) => path7.join(root, MEMORY_DIR, `${encodeName(namespace)}-${hashNamespace(namespace)}`);
+var memoryNamespaceRoot = (root, namespace) => path7.join(root, MEMORY_DIR, `${encodeName2(namespace)}-${hashNamespace(namespace)}`);
 var entryPath = (namespaceRoot, key) => (() => {
-  const name = `${encodeName(key)}.json`;
+  const name = `${encodeName2(key)}.json`;
   if (utf8Bytes(name) > MAX_FILE_NAME_BYTES) {
     throw new KiroMemoryScopeError(
       `Kiro memory key is too long after filesystem-safe encoding`
@@ -12027,7 +12369,7 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
     encodedValue = JSON.stringify(parsed.value);
   } catch {
   }
-  if (parsed.namespace !== expectedNamespace || assertMemoryToken(parsed.key, "key") !== parsed.key || entryPath(path7.dirname(filePath), parsed.key) !== filePath || encodedValue === void 0 || encodedValue.length > maxValueChars) {
+  if (parsed.namespace !== expectedNamespace || normalizeKiroMemoryToken(parsed.key, "key") !== parsed.key || entryPath(path7.dirname(filePath), parsed.key) !== filePath || encodedValue === void 0 || encodedValue.length > maxValueChars) {
     throw new KiroMemoryScopeError(`Kiro memory entry violates its configured scope: ${filePath}`);
   }
   return {
@@ -12038,7 +12380,7 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
     bytes: utf8Bytes(raw)
   };
 };
-var writeJsonAtomic = (filePath, content) => {
+var writeJsonAtomic2 = (filePath, content, beforeCommit) => {
   const directory = path7.dirname(filePath);
   const temporary = path7.join(
     directory,
@@ -12051,6 +12393,7 @@ var writeJsonAtomic = (filePath, content) => {
     fs6.fsyncSync(descriptor2);
     fs6.closeSync(descriptor2);
     descriptor2 = void 0;
+    beforeCommit?.();
     fs6.renameSync(temporary, filePath);
     try {
       const directoryDescriptor = fs6.openSync(directory, "r");
@@ -12108,7 +12451,7 @@ var assertEntryFits = (namespaceRoot, next, targetPath, maxEntries, maxValueChar
 var openKiroMemory = (namespace, root, limits = {}) => {
   const maxEntries = Number.isSafeInteger(limits.maxEntries) && limits.maxEntries > 0 ? Math.min(DEFAULT_MAX_NAMESPACE_ENTRIES, limits.maxEntries) : DEFAULT_MAX_NAMESPACE_ENTRIES;
   const maxValueChars = Number.isSafeInteger(limits.maxValueChars) && limits.maxValueChars > 0 ? Math.min(DEFAULT_MAX_ENTRY_BYTES, limits.maxValueChars) : DEFAULT_MAX_ENTRY_BYTES;
-  const memoryNamespace = assertMemoryToken(namespace, "namespace");
+  const memoryNamespace = normalizeKiroMemoryToken(namespace, "namespace");
   const memoryRoot = canonicalDirectory(root);
   const scopedRoot = path7.join(memoryRoot, MEMORY_DIR);
   ensureOwnedDirectory(memoryRoot, scopedRoot, {
@@ -12126,7 +12469,7 @@ var openKiroMemory = (namespace, root, limits = {}) => {
     namespace: memoryNamespace
   });
   const resolveEntryPath = (key) => {
-    const normalizedKey = assertMemoryToken(key, "key");
+    const normalizedKey = normalizeKiroMemoryToken(key, "key");
     const filePath = entryPath(namespaceRoot, normalizedKey);
     assertNoSymlinkComponents(memoryRoot, filePath);
     if (!isWithinOrEqual(namespaceRoot, filePath)) {
@@ -12150,9 +12493,9 @@ var openKiroMemory = (namespace, root, limits = {}) => {
       }
       return entry;
     },
-    async set(key, value, signal) {
+    async set(key, value, signal, beforeCommit) {
       return withNamespaceMutationLock(namespaceRoot, () => {
-        const normalizedKey = assertMemoryToken(key, "key");
+        const normalizedKey = normalizeKiroMemoryToken(key, "key");
         const filePath = resolveEntryPath(normalizedKey);
         let encodedValue;
         try {
@@ -12198,13 +12541,15 @@ var openKiroMemory = (namespace, root, limits = {}) => {
         entry.bytes = utf8Bytes(content);
         assertEntryFits(namespaceRoot, entry, filePath, maxEntries, maxValueChars);
         throwIfAborted(signal);
-        writeJsonAtomic(filePath, content);
+        beforeCommit?.();
+        writeJsonAtomic2(filePath, content, beforeCommit);
+        beforeCommit?.();
         return entry;
-      }, signal);
+      }, signal, beforeCommit);
     },
-    async delete(key, signal) {
+    async delete(key, signal, beforeCommit) {
       return withNamespaceMutationLock(namespaceRoot, () => {
-        const normalizedKey = assertMemoryToken(key, "key");
+        const normalizedKey = normalizeKiroMemoryToken(key, "key");
         const filePath = resolveEntryPath(normalizedKey);
         const before = lstatOrNull(filePath);
         if (!before) return { key: normalizedKey, deleted: false };
@@ -12218,6 +12563,7 @@ var openKiroMemory = (namespace, root, limits = {}) => {
         if (current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1) {
           throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
         }
+        beforeCommit?.();
         fs6.unlinkSync(filePath);
         try {
           const descriptor2 = fs6.openSync(namespaceRoot, "r");
@@ -12228,8 +12574,9 @@ var openKiroMemory = (namespace, root, limits = {}) => {
           }
         } catch {
         }
+        beforeCommit?.();
         return { key: normalizedKey, deleted: true };
-      }, signal);
+      }, signal, beforeCommit);
     },
     async list() {
       const entries = collectNamespaceEntries(namespaceRoot, memoryNamespace, maxValueChars).sort((left, right) => left.key.localeCompare(right.key));
@@ -12296,7 +12643,7 @@ var KiroMemoryProvider = class {
   constructor(options) {
     this.#root = options.root;
     const canonicalWorkspace = fs7.realpathSync(options.cwd);
-    this.#namespace = `project:${createHash4("sha256").update(canonicalWorkspace).digest("hex")}`;
+    this.#namespace = options.namespace ?? `project:${createHash5("sha256").update(canonicalWorkspace).digest("hex")}`;
     this.#maxEntries = options.maxEntries;
     this.#maxValueChars = options.maxValueChars;
   }
@@ -12312,15 +12659,32 @@ var KiroMemoryProvider = class {
   async describe(actionName) {
     return descriptors3.find((entry) => entry.name === actionName);
   }
+  prepareArguments(actionName, args) {
+    if (["get", "set", "delete"].includes(actionName) && typeof args.key === "string") {
+      args.key = normalizeKiroMemoryToken(args.key, "key");
+    }
+    if (actionName === "search" && typeof args.query === "string") {
+      args.query = normalizeKiroMemoryToken(args.query, "query");
+      if (args.limit === void 0) args.limit = 8;
+    }
+    if (actionName === "set" && Object.hasOwn(args, "value")) {
+      const encoded = JSON.stringify(args.value);
+      if (encoded === void 0) throw new TypeError("Kiro memory values must be JSON-serializable");
+      if (encoded.length > this.#maxValueChars) throw new Error(`Kiro memory value exceeds ${this.#maxValueChars} configured characters`);
+      args.value = JSON.parse(encoded);
+    }
+    return args;
+  }
   effectResources(_action, args) {
     return typeof args.key === "string" ? [`memory:${args.key}`] : ["memory:index"];
   }
   async invoke(actionName, args, context) {
-    throwIfAborted(context.signal);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
     const memory = this.#memory();
     if (actionName === "get") return await memory.get(args.key) ?? { key: args.key, found: false };
-    if (actionName === "set") return memory.set(args.key, args.value, context.signal);
-    if (actionName === "delete") return memory.delete(args.key, context.signal);
+    const beforeCommit = () => throwIfAbortedOrExpired(context.signal, context.deadline);
+    if (actionName === "set") return memory.set(args.key, args.value, context.signal, beforeCommit);
+    if (actionName === "delete") return memory.delete(args.key, context.signal, beforeCommit);
     if (actionName === "search") return memory.search(args.query, typeof args.limit === "number" ? args.limit : 8);
     if (actionName === "index") return memory.index();
     throw new Error(`Unknown memory action: ${actionName}`);
@@ -12371,6 +12735,7 @@ var createKiroRuntime = (options) => {
     registry.register(new KiroMemoryProvider({
       cwd: options.cwd,
       root: options.memoryRoot,
+      ...options.memoryNamespace ? { namespace: options.memoryNamespace } : {},
       maxEntries: config.memory.maxEntries,
       maxValueChars: config.memory.maxValueChars
     }));
@@ -12395,14 +12760,14 @@ var createKiroRuntime = (options) => {
 
 // src/kiro/mcp-server.ts
 var EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Power-scoped memory, workspace-bound state, and configured MCP federation. Use Kiro native tools for files, shell, web, and subagents.";
-var isRecord6 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord7 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var bounded2 = (value, fallback, maximum = 800) => (value instanceof Error ? value.message : typeof value === "string" ? value : fallback).replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, maximum) || fallback;
 var toolError = (code, error, issues) => ({
   content: [{ type: "text", text: JSON.stringify({ error: { code, message: bounded2(error, "The request failed"), ...issues?.length ? { issues: issues.slice(0, 8).map((issue) => bounded2(issue, "invalid value", 200)) } : {} } }) }],
   isError: true
 });
 var supportsKiroPowerElicitation = (capabilities) => {
-  if (!isRecord6(capabilities) || !isRecord6(capabilities.elicitation)) return false;
+  if (!isRecord7(capabilities) || !isRecord7(capabilities.elicitation)) return false;
   return Object.keys(capabilities.elicitation).length === 0 || Object.hasOwn(capabilities.elicitation, "form");
 };
 var workspaceRequest = (value) => {
@@ -12423,7 +12788,7 @@ var createKiroMcpServer = async (options) => {
         message,
         requestedSchema: { type: "object", properties: { approved: { type: "boolean", title: "Approve once", default: false } }, required: ["approved"] }
       }, { ...signal ? { signal } : {}, timeout: timeoutMs });
-      return { action: result.action, ...isRecord6(result.content) && result.content.approved === true ? { approved: true } : {} };
+      return { action: result.action, ...isRecord7(result.content) && result.content.approved === true ? { approved: true } : {} };
     }
   });
   const binding = new KiroPowerWorkspaceBinding({
@@ -12463,14 +12828,15 @@ var createKiroMcpServer = async (options) => {
   };
   const closeRuntime = async (reason, knownDrained) => {
     const current = runtime;
-    runtime = void 0;
-    runtimeIdentity = "";
     if (!current) return;
     const leases = [...active].filter((item) => item.runtime === current);
     const drained = knownDrained ?? await drain(leases, reason);
-    if (drained || !leases.length) await current.close();
-    else void Promise.allSettled(leases.map((item) => item.settled)).then(() => current.close()).catch(() => {
-    });
+    if (!drained) await Promise.allSettled(leases.map((item) => item.settled));
+    await current.close();
+    if (runtime === current) {
+      runtime = void 0;
+      runtimeIdentity = "";
+    }
   };
   const syncWorkspace = async (force = false) => {
     const snapshot = await workspaceContext.current({ force });
@@ -12496,7 +12862,7 @@ var createKiroMcpServer = async (options) => {
       configFile: data.configFile,
       mcpConfigPath: data.mcpConfig,
       artifactsRoot: project?.artifacts ?? data.artifacts,
-      ...project ? { memoryRoot: project.memory, stateRoot: project.state } : {}
+      ...project ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state } : {}
     });
   };
   const runtimeForIdentity = async () => {
@@ -12516,11 +12882,20 @@ var createKiroMcpServer = async (options) => {
   });
   const acquireRuntime = (controller) => lifecycle(async () => {
     if (closing) throw new Error("Power MCP server is shutting down");
+    controller.signal.throwIfAborted();
     const current = await runtimeForIdentity();
-    let settle;
+    controller.signal.throwIfAborted();
+    let resolveSettled;
+    let didSettle = false;
     const settled = new Promise((resolve) => {
-      settle = resolve;
+      resolveSettled = resolve;
     });
+    const settle = () => {
+      if (!didSettle) {
+        didSettle = true;
+        resolveSettled();
+      }
+    };
     const execution = { controller, runtime: current, settled, settle };
     active.add(execution);
     return { current, execution };
@@ -12593,16 +12968,16 @@ var createKiroMcpServer = async (options) => {
         });
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       } catch (error) {
-        const issues = isRecord6(error) && Array.isArray(error.issues) ? error.issues : void 0;
+        const issues = isRecord7(error) && Array.isArray(error.issues) ? error.issues : void 0;
         return toolError("workspace_request_failed", error, issues);
       }
     }
     if (name !== "fabric_exec") return toolError("unknown_tool", `Unknown tool: ${String(name)}`);
     if (unavailableWorkspace()) return toolError("workspace_unavailable", "workspace roots are temporarily unverifiable");
     const normalized = prepareFabricExecArgumentsWithDiagnostics(request.params.arguments ?? {});
-    const normalizedRecord = isRecord6(normalized.value) ? normalized.value : void 0;
+    const normalizedRecord = isRecord7(normalized.value) ? normalized.value : void 0;
     const absoluteInputError = typeof normalizedRecord?.code === "string" ? fabricSourceLimitError(normalizedRecord.code, MAX_EXECUTOR_SOURCE_BYTES) : void 0;
-    const absolutePayloadError = isRecord6(normalizedRecord?.payloads) ? fabricPayloadsLimitError(
+    const absolutePayloadError = isRecord7(normalizedRecord?.payloads) ? fabricPayloadsLimitError(
       normalizedRecord.payloads,
       MAX_EXECUTOR_SOURCE_BYTES
     ) : void 0;
@@ -12620,15 +12995,31 @@ var createKiroMcpServer = async (options) => {
     else extra.signal.addEventListener("abort", cancel, { once: true });
     let execution;
     let timer;
+    const outerStarted = performance.now();
+    let outerDeadline = 0;
+    const scheduleOuterDeadline = (guestTimeoutMs) => {
+      outerDeadline = kiroMcpOuterDeadlineMs(guestTimeoutMs, FABRIC_COMPILER_TIMEOUT_MS);
+      if (timer) clearTimeout(timer);
+      const remaining = Math.max(0, outerStarted + outerDeadline - performance.now());
+      timer = setTimeout(() => controller.abort(new Error(`MCP request exceeded ${outerDeadline}ms`)), remaining);
+    };
+    const initialConfig = loadFabricPowerConfig(data.configFile);
+    scheduleOuterDeadline(effectiveFabricTimeout(
+      initialConfig.executor.maxTimeoutMs,
+      initialConfig.executor.timeoutMs,
+      0,
+      input.timeoutMs ?? 0
+    ));
     try {
       const acquired = await acquireRuntime(controller);
       execution = acquired.execution;
       const current = acquired.current;
-      const outerDeadline = kiroMcpOuterDeadlineMs(
+      scheduleOuterDeadline(effectiveFabricTimeout(
         current.service.config.executor.maxTimeoutMs,
-        FABRIC_COMPILER_TIMEOUT_MS
-      );
-      timer = setTimeout(() => controller.abort(new Error(`MCP request exceeded ${outerDeadline}ms`)), outerDeadline);
+        current.service.config.executor.timeoutMs,
+        0,
+        input.timeoutMs ?? 0
+      ));
       const approver = new KiroPowerFabricApprover(
         current.service.config.approvals,
         powerApprover,
@@ -12639,7 +13030,8 @@ var createKiroMcpServer = async (options) => {
         ...input.payloads ? { payloads: input.payloads } : {},
         ...input.timeoutMs !== void 0 ? { timeoutMs: input.timeoutMs } : {},
         signal: controller.signal,
-        approver
+        approver,
+        onEffectiveTimeoutChange: scheduleOuterDeadline
       });
       const projection = projectFabricExecutionText({
         result,

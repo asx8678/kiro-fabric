@@ -46,6 +46,9 @@ jobs:
         with: { node-version: 24 }
       - run: corepack enable && corepack prepare pnpm@11.20.0 --activate
       - run: corepack pnpm install --frozen-lockfile
+      - name: Bind tag to package version
+        env: { TAG: "${{ github.ref_name }}" }
+        run: test "$TAG" = "v$(node -p 'require(\"./package.json\").version')"
       - run: node scripts/assert-kiro-home-unchanged.mjs corepack pnpm run check
       - run: corepack pnpm run power:archive
       - name: Download exact-commit real-client evidence
@@ -58,11 +61,12 @@ jobs:
           mkdir -p .tmp/release-assets
           node scripts/release-candidate-report.mjs --output .tmp/release-assets/release.json \
             --archive .tmp/kiro-fabric-power.tar.gz --sbom .tmp/kiro-fabric-power.spdx.json \
+            --commit "${{ needs.verify-tag.outputs.commit }}" --tag "${{ github.ref_name }}" --require-release-ready \
             --qualification "$RUNNER_TEMP/qualification/real-client.json"
           cp .tmp/kiro-fabric-power.tar.gz .tmp/release-assets/
           cp .tmp/kiro-fabric-power.spdx.json .tmp/release-assets/
           cp "$RUNNER_TEMP/qualification/real-client.json" .tmp/release-assets/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: verified-release-${{ needs.verify-tag.outputs.commit }}
           if-no-files-found: error
@@ -74,7 +78,7 @@ jobs:
     environment: release
     permissions: { contents: write }
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: verified-release-${{ needs.verify-tag.outputs.commit }}
           path: ${{ runner.temp }}/release

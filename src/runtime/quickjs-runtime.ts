@@ -1,7 +1,7 @@
 import releaseSyncVariant from "@jitl/quickjs-singlefile-mjs-release-sync";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
 import { performance } from "node:perf_hooks";
-import { runAbortable } from "../async-settlement.js";
+import { runAbortable, settleWithin } from "../async-settlement.js";
 import { createGuestStackMap, remapGuestErrorText } from "./guest-stack-map.js";
 import {
   assertFabricJsonBudget,
@@ -14,7 +14,8 @@ import {
   fabricSourceLimitError,
   fabricTranspiledLimitError,
 } from "./source-limit.js";
-import { transpileFabricCodeWithSourceMap } from "./type-checker.js";
+import { FabricDeadline } from "./deadline.js";
+import { assertFabricTranspiledWrapper, transpileFabricCodeWithSourceMap } from "./type-checker.js";
 
 export type FabricSandboxTerminationReason = "completed" | "runtime_error" | "timed_out" | "aborted";
 
@@ -22,6 +23,7 @@ export interface FabricSandboxResult {
   value: unknown;
   logs: string[];
   terminationReason: FabricSandboxTerminationReason;
+  effectiveTimeoutMs: number;
   error?: string;
 }
 
@@ -38,12 +40,14 @@ export interface FabricSandboxOptions {
   minimumTimeoutMsForHostCall?(ref: string, args: Record<string, unknown>): number | undefined;
   transpiledCode?: string;
   transpiledSourceMap?: string;
+  cleanupGraceMs?: number;
 }
 
 export type FabricHostCall = (
   ref: string,
   args: Record<string, unknown>,
   signal: AbortSignal,
+  deadline: FabricDeadline,
 ) => Promise<unknown>;
 
 type QuickJsModule = Awaited<ReturnType<typeof newQuickJSWASMModuleFromVariant>>;
@@ -57,99 +61,133 @@ const GUEST_SETUP = `
   const bridge = globalThis.__fabricHostCall;
   delete globalThis.__fabricHostCall;
 
-  const codeGenerationDenied = function () { throw new TypeError('Dynamic code generation is disabled'); };
+  // Capture every validator/promise primordial before guest code can mutate it.
+  const apply = Reflect.apply;
+  const ownKeys = Reflect.ownKeys;
+  const objectGetPrototypeOf = Object.getPrototypeOf;
+  const objectPrototype = Object.prototype;
+  const arrayPrototype = Array.prototype;
+  const objectGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
+  const objectHasOwn = Object.hasOwn;
+  const objectKeys = Object.keys;
+  const objectCreate = Object.create;
+  const objectDefineProperty = Object.defineProperty;
+  const objectFreeze = Object.freeze;
+  const arrayIsArray = Array.isArray;
+  const numberIsFinite = Number.isFinite;
+  const stringCharCodeAt = String.prototype.charCodeAt;
+  const jsonParse = JSON.parse;
+  const jsonStringify = JSON.stringify;
+  const weakHas = WeakSet.prototype.has;
+  const weakAdd = WeakSet.prototype.add;
+  const weakDelete = WeakSet.prototype.delete;
+  const promiseThenMethod = Promise.prototype.then;
+  const promiseResolveMethod = Promise.resolve;
+  const promiseRaceMethod = Promise.race;
+  const SafePromise = Promise;
+  const SafeWeakSet = WeakSet;
+  const SafeTypeError = TypeError;
+  const SafeError = Error;
+  const promiseThen = (promise, fulfilled, rejected) => apply(promiseThenMethod, promise, [fulfilled, rejected]);
+  const promiseResolve = (value) => apply(promiseResolveMethod, SafePromise, [value]);
+  const promiseRace = (values) => apply(promiseRaceMethod, SafePromise, [values]);
+
+  const codeGenerationDenied = function () { throw new SafeTypeError('Dynamic code generation is disabled'); };
   const constructors = [
     Function,
-    Object.getPrototypeOf(function* () {}).constructor,
-    Object.getPrototypeOf(async function () {}).constructor,
-    Object.getPrototypeOf(async function* () {}).constructor,
+    objectGetPrototypeOf(function* () {}).constructor,
+    objectGetPrototypeOf(async function () {}).constructor,
+    objectGetPrototypeOf(async function* () {}).constructor,
   ];
   for (const constructor of constructors) {
-    Object.defineProperty(constructor.prototype, 'constructor', {
+    objectDefineProperty(constructor.prototype, 'constructor', {
       value: codeGenerationDenied, writable: false, configurable: false,
     });
   }
-  Object.defineProperty(globalThis, 'eval', { value: codeGenerationDenied, writable: false, configurable: false });
-  Object.defineProperty(globalThis, 'Function', { value: codeGenerationDenied, writable: false, configurable: false });
+  objectDefineProperty(globalThis, 'eval', { value: codeGenerationDenied, writable: false, configurable: false });
+  objectDefineProperty(globalThis, 'Function', { value: codeGenerationDenied, writable: false, configurable: false });
 
+  const arrayIndex = (key) => {
+    if (key === '0') return true;
+    if (!key || key[0] === '0') return false;
+    for (let index = 0; index < key.length; index++) {
+      const code = apply(stringCharCodeAt, key, [index]);
+      if (code < 48 || code > 57) return false;
+    }
+    return true;
+  };
   const strictJsonText = (root) => {
-    const seen = new WeakSet();
+    const seen = new SafeWeakSet();
     let nodes = 0;
     const visit = (value, depth) => {
-      if (++nodes > 100000 || depth > 64) throw new TypeError('Result exceeds strict JSON structural limits');
+      if (++nodes > 100000 || depth > 64) throw new SafeTypeError('Result exceeds strict JSON structural limits');
       if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
       if (typeof value === 'number') {
-        if (!Number.isFinite(value)) throw new TypeError('Result contains a non-finite number');
+        if (!numberIsFinite(value)) throw new SafeTypeError('Result contains a non-finite number');
         return value;
       }
-      if (typeof value !== 'object') throw new TypeError('Result contains a non-JSON value');
-      if (seen.has(value)) throw new TypeError('Result contains a cycle');
-      const prototype = Object.getPrototypeOf(value);
-      if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) {
-        throw new TypeError('Result contains an unsupported exotic object');
+      if (typeof value !== 'object') throw new SafeTypeError('Result contains a non-JSON value');
+      if (apply(weakHas, seen, [value])) throw new SafeTypeError('Result contains a cycle');
+      const prototype = objectGetPrototypeOf(value);
+      if (prototype !== objectPrototype && prototype !== arrayPrototype && prototype !== null) {
+        throw new SafeTypeError('Result contains an unsupported exotic object');
       }
-      seen.add(value);
-      const descriptors = Object.getOwnPropertyDescriptors(value);
-      if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) throw new TypeError('Result contains a symbol key');
+      apply(weakAdd, seen, [value]);
+      const descriptors = objectGetOwnPropertyDescriptors(value);
+      for (const key of ownKeys(descriptors)) if (typeof key === 'symbol') throw new SafeTypeError('Result contains a symbol key');
       let copy;
-      if (Array.isArray(value)) {
+      if (arrayIsArray(value)) {
         copy = [];
-        if (Object.keys(descriptors).some((key) => key !== 'length' && !/^(0|[1-9][0-9]*)$/.test(key))) {
-          throw new TypeError('Result array contains a non-index property');
+        for (const key of objectKeys(descriptors)) {
+          if (key !== 'length' && !arrayIndex(key)) throw new SafeTypeError('Result array contains a non-index property');
         }
         for (let index = 0; index < value.length; index++) {
           const descriptor = descriptors[index];
-          if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('Result contains an accessor or sparse array');
-          copy.push(visit(descriptor.value, depth + 1));
+          if (!descriptor || !objectHasOwn(descriptor, 'value')) throw new SafeTypeError('Result contains an accessor or sparse array');
+          objectDefineProperty(copy, index, { value: visit(descriptor.value, depth + 1), enumerable: true, writable: true, configurable: true });
         }
       } else {
-        copy = Object.create(null);
-        for (const key of Object.keys(descriptors)) {
+        copy = objectCreate(null);
+        for (const key of objectKeys(descriptors)) {
           const descriptor = descriptors[key];
-          if (!Object.hasOwn(descriptor, 'value')) throw new TypeError('Result contains an accessor');
-          Object.defineProperty(copy, key, { value: visit(descriptor.value, depth + 1), enumerable: true });
+          if (!objectHasOwn(descriptor, 'value')) throw new SafeTypeError('Result contains an accessor');
+          objectDefineProperty(copy, key, { value: visit(descriptor.value, depth + 1), enumerable: true });
         }
       }
-      seen.delete(value);
+      apply(weakDelete, seen, [value]);
       return copy;
     };
-    const text = JSON.stringify(visit(root, 0));
-    if (typeof text !== 'string' || text.length > 8000000) throw new TypeError('Result exceeds strict JSON byte limit');
+    const text = apply(jsonStringify, JSON, [visit(root, 0)]);
+    if (typeof text !== 'string' || text.length > 8000000) throw new SafeTypeError('Result exceeds strict JSON byte limit');
     return text;
   };
-  const parseStrict = (text) => JSON.parse(text);
-  const call = (ref, args = {}) => bridge(ref, strictJsonText(args)).then(parseStrict);
+  const parseStrict = (text) => apply(jsonParse, JSON, [text]);
+  const call = (ref, args = {}) => promiseThen(bridge(ref, strictJsonText(args)), parseStrict);
   let rejectExecution;
-  const executionGate = new Promise((_resolve, reject) => { rejectExecution = reject; });
-  globalThis.__fabricCancelExecution = (message) => rejectExecution(new Error(message));
-  globalThis.__fabricRun = (main) => Promise.race([Promise.resolve().then(main), executionGate]).then(strictJsonText);
-  globalThis.tools = Object.freeze({
+  const executionGate = new SafePromise((_resolve, reject) => { rejectExecution = reject; });
+  const cancel = (message) => rejectExecution(new SafeError(message));
+  const run = (main) => promiseThen(promiseRace([promiseThen(promiseResolve(), main), executionGate]), strictJsonText);
+  globalThis.tools = objectFreeze({
     providers: () => call("fabric.providers"),
     list: () => call("fabric.list"),
     search: (input) => call("fabric.search", typeof input === "string" ? { query: input } : input),
     describe: (input) => call("fabric.describe", typeof input === "string" ? { ref: input } : input),
     call: (input) => call("fabric.call", input),
   });
-  globalThis.artifacts = Object.freeze({ read: (args) => call("artifacts.read", args) });
-  globalThis.memory = Object.freeze({
-    get: (args) => call("memory.get", args),
-    set: (args) => call("memory.set", args),
-    delete: (args) => call("memory.delete", args),
-    search: (args) => call("memory.search", args),
+  globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args) });
+  globalThis.memory = objectFreeze({
+    get: (args) => call("memory.get", args), set: (args) => call("memory.set", args),
+    delete: (args) => call("memory.delete", args), search: (args) => call("memory.search", args),
     index: (args = {}) => call("memory.index", args),
   });
-  globalThis.state = Object.freeze({
-    get: (args) => call("state.get", args),
-    set: (args) => call("state.set", args),
-    list: (args = {}) => call("state.list", args),
-    delete: (args) => call("state.delete", args),
+  globalThis.state = objectFreeze({
+    get: (args) => call("state.get", args), set: (args) => call("state.set", args),
+    list: (args = {}) => call("state.list", args), delete: (args) => call("state.delete", args),
   });
-  globalThis.mcp = Object.freeze({
-    servers: (args = {}) => call("mcp.$servers", args),
-    call: (args) => call("mcp.$call", args),
-  });
-  Object.freeze(globalThis.payloads);
-})();
+  globalThis.mcp = objectFreeze({ servers: (args = {}) => call("mcp.$servers", args), call: (args) => call("mcp.$call", args) });
+  objectFreeze(globalThis.payloads);
+  return objectFreeze({ run, cancel });
+})()
 `;
 
 const formatValue = (value: unknown, maxChars = 100_000): string => {
@@ -181,18 +219,20 @@ const QUICKJS_MAX_STACK_SIZE_BYTES = 256 * 1024;
 
 export class QuickJsRuntime {
   async execute(code: string, hostCall: FabricHostCall, options: FabricSandboxOptions): Promise<FabricSandboxResult> {
-    if (options.signal?.aborted) return { value: undefined, logs: [], terminationReason: "aborted", error: "Execution cancelled" };
+    const maximum = Math.max(1, Math.floor(options.maxTimeoutMs));
+    const requestedTimeoutMs = Math.min(maximum, Math.max(1, Math.floor(options.timeoutMs)));
+    if (options.signal?.aborted) return { value: undefined, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
     const sourceLimit = effectiveFabricSourceLimit(options.maxSourceBytes);
     const inputLimit = effectiveFabricSourceLimit(options.maxInputBytes ?? options.maxSourceBytes);
     const inputError = fabricSourceLimitError(code, sourceLimit) ?? fabricPayloadsLimitError(options.payloads, inputLimit);
-    if (inputError) return { value: undefined, logs: [], terminationReason: "runtime_error", error: inputError };
+    if (inputError) return { value: undefined, logs: [], terminationReason: "runtime_error", error: inputError, effectiveTimeoutMs: requestedTimeoutMs };
     if (!Number.isSafeInteger(options.memoryLimitBytes) || options.memoryLimitBytes < 1 || options.memoryLimitBytes > 0xffff_ffff) {
-      return { value: undefined, logs: [], terminationReason: "runtime_error", error: "QuickJS memory limit is outside the WASM32 range" };
+      return { value: undefined, logs: [], terminationReason: "runtime_error", error: "QuickJS memory limit is outside the WASM32 range", effectiveTimeoutMs: requestedTimeoutMs };
     }
 
     const module = await quickJsModule();
     if (options.signal?.aborted) {
-      return { value: undefined, logs: [], terminationReason: "aborted", error: "Execution cancelled" };
+      return { value: undefined, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
     }
     const context = module.newContext();
     const runtime = context.runtime;
@@ -201,16 +241,13 @@ export class QuickJsRuntime {
     runtime.setMemoryLimit(options.memoryLimitBytes);
     runtime.setMaxStackSize(QUICKJS_MAX_STACK_SIZE_BYTES);
 
-    const started = performance.now();
-    const maximum = Math.max(1, Math.floor(options.maxTimeoutMs));
-    let effectiveTimeoutMs = Math.min(maximum, Math.max(1, Math.floor(options.timeoutMs)));
-    let deadlineAt = started + effectiveTimeoutMs;
+    const deadline = new FabricDeadline(requestedTimeoutMs, maximum);
     let interrupted = false;
     let timedOut = false;
     let closing = false;
     runtime.setInterruptHandler(() => {
       if (options.signal?.aborted) return true;
-      if (performance.now() <= deadlineAt) return false;
+      if (!deadline.expired) return false;
       interrupted = true;
       return true;
     });
@@ -219,7 +256,6 @@ export class QuickJsRuntime {
     const maxLogChars = Math.max(0, options.maxLogChars ?? 100_000);
     let logChars = 0;
     const hostController = new AbortController();
-    const hostTasks = new Set<Promise<void>>();
     const bridgeTasks = new Set<Promise<void>>();
     const pendingPromises = new Set<any>();
     let deadlineTimer: NodeJS.Timeout | undefined;
@@ -228,6 +264,7 @@ export class QuickJsRuntime {
     let activeHandle: any;
     let resolution: Promise<any> | undefined;
     let resolutionConsumed = false;
+    let runExecution: any;
     let cancelExecution: any;
 
     const rejectGuestGraph = (reason: Error): void => {
@@ -253,9 +290,10 @@ export class QuickJsRuntime {
       if (!hostController.signal.aborted) hostController.abort(reason);
       rejectGuestGraph(reason);
     };
-    const timeoutMessage = (): string => `Execution timed out after ${effectiveTimeoutMs}ms`;
+    const timeoutMessage = (): string => `Execution timed out after ${deadline.effectiveTimeoutMs}ms`;
     const expire = (): void => {
       if (closing || timedOut) return;
+      if (!deadline.expired) { schedule(); return; }
       timedOut = true;
       const error = new Error(timeoutMessage());
       abortHost(error);
@@ -263,16 +301,14 @@ export class QuickJsRuntime {
     };
     const schedule = (): void => {
       if (deadlineTimer) clearTimeout(deadlineTimer);
-      deadlineTimer = setTimeout(expire, Math.max(0, deadlineAt - performance.now()));
+      deadlineTimer = setTimeout(expire, Math.max(0, deadline.remainingMs()));
     };
     const extendForExactAction = (ref: string, args: Record<string, unknown>): void => {
       const floor = options.minimumTimeoutMsForHostCall?.(ref, args);
       if (typeof floor !== "number" || !Number.isFinite(floor)) return;
-      const next = Math.min(maximum, Math.max(effectiveTimeoutMs, Math.max(1, Math.floor(floor))));
-      if (next <= effectiveTimeoutMs) return;
-      effectiveTimeoutMs = next;
-      deadlineAt = started + next;
-      schedule();
+      const before = deadline.effectiveTimeoutMs;
+      const next = deadline.extendTo(floor);
+      if (next > before) schedule();
     };
 
     try {
@@ -298,14 +334,18 @@ export class QuickJsRuntime {
           promise.reject(handle);
           handle.dispose();
         };
-        const raw = Promise.resolve().then(() => hostCall(ref, args, hostController.signal));
-        const rawSettlement = raw.then(() => undefined, () => undefined);
-        hostTasks.add(rawSettlement);
-        void rawSettlement.finally(() => hostTasks.delete(rawSettlement));
+        const raw = Promise.resolve().then(() => {
+          deadline.throwIfExpired();
+          return hostCall(ref, args, hostController.signal, deadline);
+        });
+        // Observe detached raw failures without allowing a non-cooperative host
+        // operation to control sandbox cleanup or access a disposed context.
+        void raw.catch(() => undefined);
         const task = runAbortable(hostController.signal, () => raw)
           .then((value) => {
             if (closing || promise.alive === false) return;
             try {
+              deadline.throwIfExpired();
               const handle = context.newString(fabricJsonText(value, options.maxNestedResultChars));
               promise.resolve(handle);
               handle.dispose();
@@ -360,73 +400,89 @@ export class QuickJsRuntime {
       if (setup.error) {
         const error = formatValue(context.dump(setup.error));
         setup.error.dispose();
-        return { value: undefined, logs, terminationReason: "runtime_error", error };
+        return { value: undefined, logs, terminationReason: "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
+      runExecution = context.getProp(setup.value, "run");
+      cancelExecution = context.getProp(setup.value, "cancel");
       setup.value.dispose();
-      cancelExecution = context.getProp(context.global, "__fabricCancelExecution");
 
       const bundle = options.transpiledCode === undefined
         ? transpileFabricCodeWithSourceMap(code)
         : { code: options.transpiledCode, sourceMap: options.transpiledSourceMap };
+      assertFabricTranspiledWrapper(bundle.code);
       const transpiledError = fabricTranspiledLimitError(bundle.code);
-      if (transpiledError) return { value: undefined, logs, terminationReason: "runtime_error", error: transpiledError };
+      if (transpiledError) return { value: undefined, logs, terminationReason: "runtime_error", error: transpiledError, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       const stackMap = createGuestStackMap(bundle.sourceMap);
       const guestLineCount = bundle.code.split("\n").length;
-      const evaluation = context.evalCode(`${bundle.code}\n__fabricRun(__kiroFabricMain)`, "kiro-fabric-guest.js");
+      const evaluation = context.evalCode(bundle.code, "kiro-fabric-guest.js");
       runtime.executePendingJobs();
       if (evaluation.error) {
-        const deadlineExceeded = interrupted || performance.now() > deadlineAt;
+        const deadlineExceeded = interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(evaluation.error)), stackMap, guestLineCount);
         evaluation.error.dispose();
         abortHost(new Error(error));
-        return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error };
+        return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
-      activeHandle = evaluation.value;
+      evaluation.value.dispose();
+      const main = context.getProp(context.global, "__kiroFabricMain");
+      context.setProp(context.global, "__kiroFabricMain", context.undefined);
+      const invoked = context.callFunction(runExecution, context.undefined, main);
+      main.dispose();
+      if (invoked.error) {
+        const error = remapGuestErrorText(formatValue(context.dump(invoked.error)), stackMap, guestLineCount);
+        invoked.error.dispose();
+        return { value: undefined, logs, terminationReason: deadline.expired ? "timed_out" : "runtime_error", error: deadline.expired ? timeoutMessage() : error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+      }
+      activeHandle = invoked.value;
       resolution = context.resolvePromise(activeHandle);
       runtime.executePendingJobs();
-      const deadline = new Promise<never>((_resolve, reject) => { rejectDeadline = reject; schedule(); });
+      const deadlineRace = new Promise<never>((_resolve, reject) => { rejectDeadline = reject; schedule(); });
       const cancellation = new Promise<never>((_resolve, reject) => {
         abortListener = () => { const error = new Error("Execution cancelled"); abortHost(error); reject(error); };
         if (options.signal?.aborted) abortListener();
         else options.signal?.addEventListener("abort", abortListener, { once: true });
       });
-      const settled = await Promise.race([resolution, deadline, cancellation]);
+      const settled = await Promise.race([resolution, deadlineRace, cancellation]);
       resolutionConsumed = true;
       activeHandle.dispose();
       activeHandle = undefined;
       if (settled.error) {
-        const deadlineExceeded = timedOut || interrupted || performance.now() > deadlineAt;
+        const deadlineExceeded = timedOut || interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(settled.error)), stackMap, guestLineCount);
         settled.error.dispose();
         abortHost(new Error(error));
-        return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error };
+        return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
       const serialized = context.getString(settled.value);
       settled.value.dispose();
       const value: unknown = JSON.parse(serialized);
       assertFabricJsonBudget(value, options.maxNestedResultChars);
-      return { value, logs, terminationReason: "completed" };
+      deadline.throwIfExpired();
+      return { value, logs, terminationReason: "completed", effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     } catch (error) {
-      const message = options.signal?.aborted ? "Execution cancelled" : timedOut || interrupted ? timeoutMessage() : error instanceof Error ? error.message : String(error);
+      const deadlineExceeded = timedOut || interrupted || deadline.expired;
+      const message = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : error instanceof Error ? error.message : String(error);
       abortHost(new Error(message));
-      return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : timedOut || interrupted ? "timed_out" : "runtime_error", error: message };
+      return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error: message, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     } finally {
       closing = true;
       if (deadlineTimer) clearTimeout(deadlineTimer);
       if (abortListener) options.signal?.removeEventListener("abort", abortListener);
       abortHost(new Error("Execution request ended"));
-      await Promise.allSettled([...hostTasks, ...bridgeTasks]);
+      await settleWithin(bridgeTasks, Math.max(0, options.cleanupGraceMs ?? 100));
       for (let index = 0; index < 1_024; index++) {
         const jobs = runtime.executePendingJobs();
         if (jobs.error) { jobs.error.dispose(); break; }
         if (jobs.value === 0) break;
       }
-      if (resolution && !resolutionConsumed) await resolution.then((settled) => {
-        if (settled.error) settled.error.dispose(); else settled.value.dispose();
-      }, () => undefined);
+      // Never let an attacker-controlled promise or non-cooperative provider
+      // decide when cancellation returns. All continuations check `closing`
+      // before touching QuickJS, so unresolved host work can be safely detached.
+      void resolutionConsumed;
       if (activeHandle?.alive !== false) activeHandle?.dispose();
       for (const promise of pendingPromises) if (promise.alive !== false) promise.dispose();
       if (cancelExecution && cancelExecution.alive !== false) cancelExecution.dispose();
+      if (runExecution && runExecution.alive !== false) runExecution.dispose();
       jsonParse.dispose();
       jsonObject.dispose();
       context.dispose();

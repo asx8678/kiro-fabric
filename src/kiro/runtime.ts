@@ -19,6 +19,7 @@ export interface KiroRuntimeOptions {
   mcpConfigPath: string;
   artifactsRoot: string;
   memoryRoot?: string;
+  memoryNamespace?: string;
   stateRoot?: string;
   config?: FabricPowerConfig;
 }
@@ -46,6 +47,7 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
     registry.register(new KiroMemoryProvider({
       cwd: options.cwd,
       root: options.memoryRoot,
+      ...(options.memoryNamespace ? { namespace: options.memoryNamespace } : {}),
       maxEntries: config.memory.maxEntries,
       maxValueChars: config.memory.maxValueChars,
     }));

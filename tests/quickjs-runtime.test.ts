@@ -55,6 +55,16 @@ describe("QuickJS-only guest runtime", () => {
     expect(result.error).toContain("timed out");
   });
 
+  it("reports timeout after synchronous host work starves the deadline timer", async () => {
+    const result = await new QuickJsRuntime().execute(
+      "return await tools.call({ ref: 'test.blocking', args: {} })",
+      async () => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 40); return "committed"; },
+      { ...defaults, timeoutMs: 10, maxTimeoutMs: 10 },
+    );
+    expect(result.terminationReason).toBe("timed_out");
+    expect(result.value).toBeUndefined();
+  });
+
   it("aborts outstanding host calls and does not wait for their natural completion", async () => {
     let hostAborted = false;
     const controller = new AbortController();
@@ -71,22 +81,22 @@ describe("QuickJS-only guest runtime", () => {
     expect(hostAborted).toBe(true);
   });
 
-  it("does not return cancellation before a raw provider operation settles", async () => {
+  it("returns cancellation without waiting for a non-cooperative raw provider", async () => {
     const controller = new AbortController();
     let mutationAt = 0;
+    const startedAt = Date.now();
     const execution = new QuickJsRuntime().execute(
       "return await tools.call({ ref: 'test.noncooperative', args: {} })",
-      async () => new Promise((resolve) => setTimeout(() => { mutationAt = Date.now(); resolve(true); }, 40)),
-      { ...defaults, signal: controller.signal },
+      async () => new Promise((resolve) => setTimeout(() => { mutationAt = Date.now(); resolve(true); }, 200)),
+      { ...defaults, signal: controller.signal, cleanupGraceMs: 10 },
     );
     setTimeout(() => controller.abort(new Error("cancelled")), 5);
     const result = await execution;
-    const returnedAt = Date.now();
     expect(result.terminationReason).toBe("aborted");
+    expect(Date.now() - startedAt).toBeLessThan(150);
+    expect(mutationAt).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, 220));
     expect(mutationAt).toBeGreaterThan(0);
-    expect(returnedAt).toBeGreaterThanOrEqual(mutationAt);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(mutationAt).toBeLessThanOrEqual(returnedAt);
   });
 
   it("survives 1000 repeated cancellation and timeout settlements", { timeout: 60_000 }, async () => {
@@ -119,6 +129,22 @@ describe("QuickJS-only guest runtime", () => {
     );
     expect(nonFinite.terminationReason).toBe("runtime_error");
     expect(nonFinite.error).toContain("non-finite number");
+  });
+
+  it("keeps run handles and strict JSON primordials private from guest tampering", async () => {
+    const result = await new QuickJsRuntime().execute(
+      `
+      (globalThis as any).__fabricRun = () => 'forged';
+      (globalThis as any).__fabricCancelExecution = () => undefined;
+      JSON.stringify = (() => '\"forged\"') as any;
+      Number.isFinite = (() => true) as any;
+      Object.getOwnPropertyDescriptors = (() => ({})) as any;
+      return { safe: true };
+      `,
+      async () => null,
+      defaults,
+    );
+    expect(result).toMatchObject({ terminationReason: "completed", value: { safe: true } });
   });
 
   it("rejects unsupported guest results before host dumping without coercion", async () => {

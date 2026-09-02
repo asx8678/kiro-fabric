@@ -9,7 +9,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Value } from "typebox/value";
 import { loadFabricPowerConfig } from "../config.js";
-import { FABRIC_COMPILER_TIMEOUT_MS } from "../execution-service.js";
+import { FABRIC_COMPILER_TIMEOUT_MS, effectiveFabricTimeout } from "../execution-service.js";
 import {
   fabricExecInputSchema,
   fabricExecInputSchemaJson,
@@ -119,13 +119,15 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   };
   const closeRuntime = async (reason: Error, knownDrained?: boolean): Promise<void> => {
     const current = runtime;
-    runtime = undefined;
-    runtimeIdentity = "";
     if (!current) return;
     const leases = [...active].filter((item) => item.runtime === current);
     const drained = knownDrained ?? await drain(leases, reason);
-    if (drained || !leases.length) await current.close();
-    else void Promise.allSettled(leases.map((item) => item.settled)).then(() => current.close()).catch(() => {});
+    if (!drained) await Promise.allSettled(leases.map((item) => item.settled));
+    await current.close();
+    if (runtime === current) {
+      runtime = undefined;
+      runtimeIdentity = "";
+    }
   };
   const syncWorkspace = async (force = false): Promise<KiroWorkspaceSnapshot> => {
     const snapshot = await workspaceContext.current({ force });
@@ -155,7 +157,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       configFile: data.configFile,
       mcpConfigPath: data.mcpConfig,
       artifactsRoot: project?.artifacts ?? data.artifacts,
-      ...(project ? { memoryRoot: project.memory, stateRoot: project.state } : {}),
+      ...(project ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state } : {}),
     });
   };
   const runtimeForIdentity = async (): Promise<KiroRuntime> => {
@@ -175,9 +177,13 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   });
   const acquireRuntime = (controller: AbortController): Promise<{ current: KiroRuntime; execution: ActiveExecution }> => lifecycle(async () => {
     if (closing) throw new Error("Power MCP server is shutting down");
+    controller.signal.throwIfAborted();
     const current = await runtimeForIdentity();
-    let settle!: () => void;
-    const settled = new Promise<void>((resolve) => { settle = resolve; });
+    controller.signal.throwIfAborted();
+    let resolveSettled!: () => void;
+    let didSettle = false;
+    const settled = new Promise<void>((resolve) => { resolveSettled = resolve; });
+    const settle = () => { if (!didSettle) { didSettle = true; resolveSettled(); } };
     const execution = { controller, runtime: current, settled, settle };
     active.add(execution);
     return { current, execution };
@@ -283,15 +289,31 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     if (extra.signal.aborted) cancel(); else extra.signal.addEventListener("abort", cancel, { once: true });
     let execution: ActiveExecution | undefined;
     let timer: NodeJS.Timeout | undefined;
+    const outerStarted = performance.now();
+    let outerDeadline = 0;
+    const scheduleOuterDeadline = (guestTimeoutMs: number): void => {
+      outerDeadline = kiroMcpOuterDeadlineMs(guestTimeoutMs, FABRIC_COMPILER_TIMEOUT_MS);
+      if (timer) clearTimeout(timer);
+      const remaining = Math.max(0, outerStarted + outerDeadline - performance.now());
+      timer = setTimeout(() => controller.abort(new Error(`MCP request exceeded ${outerDeadline}ms`)), remaining);
+    };
+    const initialConfig = loadFabricPowerConfig(data.configFile);
+    scheduleOuterDeadline(effectiveFabricTimeout(
+      initialConfig.executor.maxTimeoutMs,
+      initialConfig.executor.timeoutMs,
+      0,
+      input.timeoutMs ?? 0,
+    ));
     try {
       const acquired = await acquireRuntime(controller);
       execution = acquired.execution;
       const current = acquired.current;
-      const outerDeadline = kiroMcpOuterDeadlineMs(
+      scheduleOuterDeadline(effectiveFabricTimeout(
         current.service.config.executor.maxTimeoutMs,
-        FABRIC_COMPILER_TIMEOUT_MS,
-      );
-      timer = setTimeout(() => controller.abort(new Error(`MCP request exceeded ${outerDeadline}ms`)), outerDeadline);
+        current.service.config.executor.timeoutMs,
+        0,
+        input.timeoutMs ?? 0,
+      ));
       const approver = new KiroPowerFabricApprover(
         current.service.config.approvals,
         powerApprover,
@@ -303,6 +325,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
         signal: controller.signal,
         approver,
+        onEffectiveTimeoutChange: scheduleOuterDeadline,
       });
       const projection = projectFabricExecutionText({
         result,

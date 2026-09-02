@@ -28,6 +28,7 @@ const MAX_COMPILER_DIAGNOSTICS = 50;
 const MAX_DIAGNOSTIC_MESSAGE_CHARS = 4_096;
 const COMPILER_MEMORY_MB = 128;
 const FORBIDDEN_MODULE_MESSAGE = "Guest modules and external references are not allowed";
+const GUEST_WRAPPER_INTEGRITY_MESSAGE = "Guest code must remain inside the generated Fabric wrapper";
 
 const compilerOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2022,
@@ -51,8 +52,33 @@ const standardLibraryPath = (fileName: string): boolean => {
 };
 
 /** Guest programs execute inside this wrapper; user code starts on wrapped line 2. */
-const wrapFabricGuestCode = (code: string): string =>
-  `async function __kiroFabricMain(): Promise<JsonValue> {\n${code}\n}\n`;
+const GUEST_WRAPPER_PREFIX = "async function __kiroFabricMain(): Promise<JsonValue> {\n";
+const GUEST_WRAPPER_SUFFIX = "\n}\n";
+const wrapFabricGuestCode = (code: string): string => `${GUEST_WRAPPER_PREFIX}${code}${GUEST_WRAPPER_SUFFIX}`;
+
+const isExpectedMainDeclaration = (statement: ts.Statement): statement is ts.FunctionDeclaration =>
+  ts.isFunctionDeclaration(statement) &&
+  statement.name?.text === "__kiroFabricMain" &&
+  statement.parameters.length === 0 &&
+  statement.body !== undefined &&
+  statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) === true;
+
+const wrappedSourceIsIntact = (source: ts.SourceFile, text: string): boolean => {
+  if (source.statements.length !== 1 || !isExpectedMainDeclaration(source.statements[0]!)) return false;
+  const body = source.statements[0].body!;
+  return body.getStart(source, false) === GUEST_WRAPPER_PREFIX.length - 2 &&
+    body.getEnd() === text.length - 1;
+};
+
+export const assertFabricTranspiledWrapper = (javascript: string): void => {
+  const emitted = ts.createSourceFile("fabric-guest.js", javascript, ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
+  const statements = [...emitted.statements];
+  const directive = statements[0];
+  if (directive && ts.isExpressionStatement(directive) && ts.isStringLiteral(directive.expression) && directive.expression.text === "use strict") statements.shift();
+  if (statements.length !== 1 || !isExpectedMainDeclaration(statements[0]!)) {
+    throw new Error(GUEST_WRAPPER_INTEGRITY_MESSAGE);
+  }
+};
 
 const forbiddenModuleNode = (source: ts.SourceFile): ts.Node | undefined => {
   if (source.referencedFiles.length || source.typeReferenceDirectives.length || source.libReferenceDirectives.length) return source;
@@ -128,6 +154,9 @@ class FabricTypeChecker {
     }
     this.#sourceText = wrapFabricGuestCode(code);
     this.#sourceFile = ts.createSourceFile(this.#guestFile, this.#sourceText, ts.ScriptTarget.ES2022, true);
+    if (!wrappedSourceIsIntact(this.#sourceFile, this.#sourceText)) {
+      return { errors: [{ line: 1, column: 1, message: GUEST_WRAPPER_INTEGRITY_MESSAGE }] };
+    }
     const forbidden = forbiddenModuleNode(this.#sourceFile);
     if (forbidden) {
       const position = this.#sourceFile.getLineAndCharacterOfPosition(forbidden.getStart(this.#sourceFile, false));
@@ -157,6 +186,10 @@ class FabricTypeChecker {
       if (fileName.endsWith(".js.map")) sourceMap = content;
       else if (fileName.endsWith(".js")) javascript = content;
     });
+    if (javascript) {
+      try { assertFabricTranspiledWrapper(javascript); }
+      catch { return { errors: [{ line: 1, column: 1, message: GUEST_WRAPPER_INTEGRITY_MESSAGE }] }; }
+    }
     return { errors, ...(javascript ? { javascript } : {}), ...(sourceMap ? { sourceMap } : {}) };
   }
 }
@@ -178,7 +211,11 @@ const checkerFor = (declarations: string): FabricTypeChecker => {
 
 export interface FabricTranspileResult { code: string; sourceMap?: string }
 export const transpileFabricCodeWithSourceMap = (code: string): FabricTranspileResult => {
-  const result = ts.transpileModule(wrapFabricGuestCode(code), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, sourceMap: true } });
+  const wrapped = wrapFabricGuestCode(code);
+  const source = ts.createSourceFile("fabric-guest.ts", wrapped, ts.ScriptTarget.ES2022, true);
+  if (!wrappedSourceIsIntact(source, wrapped)) throw new Error(GUEST_WRAPPER_INTEGRITY_MESSAGE);
+  const result = ts.transpileModule(wrapped, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, sourceMap: true } });
+  assertFabricTranspiledWrapper(result.outputText);
   return { code: result.outputText, ...(result.sourceMapText ? { sourceMap: result.sourceMapText } : {}) };
 };
 export const typeCheckFabricCode = (code: string, declarations: string): FabricTypeCheckResult => checkerFor(declarations).check(code);

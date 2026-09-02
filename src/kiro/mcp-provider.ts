@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Runtime, ServerToolInfo } from "mcporter";
-import { runAbortable, settleWithin, throwIfAborted } from "../async-settlement.js";
+import { runAbortable, settleWithin, throwIfAbortedOrExpired } from "../async-settlement.js";
 import type { FabricMcpConfig } from "../config.js";
 import type {
   FabricActionDescriptor,
@@ -31,6 +31,7 @@ const descriptors: readonly FabricActionDescriptor[] = [
         server: { type: "string", minLength: 1, maxLength: 256 },
         tool: { type: "string", minLength: 1, maxLength: 256 },
         args: { type: "object", additionalProperties: true },
+        transportSnapshot: { type: "object", additionalProperties: true },
       },
       required: ["server", "tool"],
       additionalProperties: false,
@@ -57,7 +58,7 @@ const configuredEnvironment = (configPath: string | undefined, server: string): 
   for (const [key, value] of Object.entries(environment)) if (typeof value === "string") result[key] = value;
   return result;
 };
-const executableIdentity = (command: string): string => {
+const executablePath = (command: string): string => {
   if (command.includes("/") || command.includes("\\")) return fs.realpathSync(command);
   for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!directory) continue;
@@ -65,6 +66,28 @@ const executableIdentity = (command: string): string => {
     try { if (fs.statSync(candidate).isFile()) return fs.realpathSync(candidate); } catch { /* continue */ }
   }
   throw new Error(`Configured MCP executable cannot be resolved: ${command}`);
+};
+const fileDigest = (file: string): string => createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+const environmentDigest = (): string => createHash("sha256")
+  .update(JSON.stringify(Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right))))
+  .digest("hex");
+const configDigest = (configPath: string | undefined): string | null => configPath ? fileDigest(configPath) : null;
+
+type McpTransportSnapshot = {
+  schemaVersion: 1;
+  server: string;
+  kind: "stdio" | "http";
+  endpoint?: string;
+  executable?: string;
+  executableDigest?: string;
+  executableDevice?: string;
+  executableFile?: string;
+  cwd?: string;
+  arguments?: string[];
+  configuredEnvironmentDigest?: string;
+  processEnvironmentDigest: string;
+  configDigest: string | null;
+  digest: string;
 };
 const executeApproval = (
   name: "$stdio" | "$oauth",
@@ -111,6 +134,7 @@ const normalizeMcpResult = (result: unknown): unknown => {
  * network approval (plus execute approval for stdio transports).
  */
 type McpRuntimeFactory = () => Promise<Runtime>;
+type ServerLease = { quiescence: Promise<void> };
 
 export class KiroMcpProvider implements FabricProvider {
   readonly name = "mcp";
@@ -143,13 +167,18 @@ export class KiroMcpProvider implements FabricProvider {
     return descriptors.find((entry) => entry.name === actionName);
   }
 
-  async prepareArguments(actionName: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async prepareArguments(actionName: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<Record<string, unknown>> {
     if (actionName !== "$call") return { ...args };
+    const server = typeof args.server === "string" ? args.server.trim() : "";
+    const tool = typeof args.tool === "string" ? args.tool.trim() : "";
+    const runtime = await this.#getRuntime(context.signal);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
+    if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
     return {
-      ...args,
-      ...(typeof args.server === "string" ? { server: args.server.trim() } : {}),
-      ...(typeof args.tool === "string" ? { tool: args.tool.trim() } : {}),
-      ...(isRecord(args.args) ? { args: structuredClone(args.args) } : {}),
+      server,
+      tool,
+      args: isRecord(args.args) ? structuredClone(args.args) : {},
+      transportSnapshot: this.#transportSnapshot(runtime, server),
     };
   }
 
@@ -158,10 +187,14 @@ export class KiroMcpProvider implements FabricProvider {
     args: Record<string, unknown>,
     context: FabricInvocationContext,
   ): Promise<unknown> {
+    const signal = context.signal
+      ? AbortSignal.any([context.signal, this.#closeController.signal])
+      : this.#closeController.signal;
+    const invocationContext = { ...context, signal };
     if (actionName === "$servers") {
-      throwIfAborted(context.signal);
-      const runtime = await this.#getRuntime(context.signal);
-      throwIfAborted(context.signal);
+      throwIfAbortedOrExpired(signal, context.deadline);
+      const runtime = await this.#getRuntime(signal);
+      throwIfAbortedOrExpired(signal, context.deadline);
       const servers = runtime.listServers();
       if (servers.length > 128) throw new Error("Configured MCP server limit exceeded");
       return servers.map((name) => {
@@ -182,39 +215,30 @@ export class KiroMcpProvider implements FabricProvider {
       throw new Error("MCP call requires non-empty server/tool strings and object args");
     }
 
-    const runtime = await this.#getRuntime(context.signal);
-    throwIfAborted(context.signal);
+    const runtime = await this.#getRuntime(signal);
+    throwIfAbortedOrExpired(signal, context.deadline);
     if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
-    const definition = runtime.getDefinition(server);
-    if (definition.command.kind === "stdio") {
-      const configuredCwd = definition.command.cwd ?? this.#cwd;
-      const canonicalCwd = fs.realpathSync(configuredCwd);
-      const environment = configuredEnvironment(this.#config.configPath, server);
-      const environmentEntries = Object.keys(environment).sort().map((key) => [key, environment[key]] as const);
-      const environmentDigest = createHash("sha256").update(JSON.stringify(environmentEntries)).digest("hex");
-      await this.#approveExecution(STDIO_APPROVAL, {
-        server,
-        executable: executableIdentity(definition.command.command),
-        cwd: canonicalCwd,
-        arguments: [...(definition.command.args ?? [])],
-        environment: {
-          values: Object.fromEntries(environmentEntries.map(([key]) => [key, "<redacted>"])),
-          redactedDigest: environmentDigest,
-        },
-      }, context);
+    // ActionRegistry always injects this during canonical preparation. The
+    // fallback preserves direct provider use in tests/embedders while still
+    // snapshotting before any contact.
+    const approvedTransport = this.#assertTransportSnapshot(
+      runtime,
+      server,
+      args.transportSnapshot ?? this.#transportSnapshot(runtime, server),
+    );
+    if (approvedTransport.kind === "stdio") {
+      await this.#approveExecution(STDIO_APPROVAL, approvedTransport, invocationContext);
     } else if (!this.#config.disableOAuth) {
-      await this.#approveExecution(OAUTH_APPROVAL, {
-        server,
-        endpoint: definition.command.url.origin,
-      }, context);
+      await this.#approveExecution(OAUTH_APPROVAL, approvedTransport, invocationContext);
     }
 
-    throwIfAborted(context.signal);
-    return this.#withServerLease(server, context.signal, async () => {
+    throwIfAbortedOrExpired(signal, context.deadline);
+    return this.#withServerLease(server, signal, async (lease) => {
+      this.#assertTransportSnapshot(runtime, server, approvedTransport);
     // Discovery and invocation share one configured operation budget. Giving
     // each phase a fresh timeout would make one mcp.call consume nearly twice
     // the configured limit.
-    const actionDeadline = Date.now() + this.#config.callTimeoutMs;
+    const actionDeadline = performance.now() + this.#config.callTimeoutMs;
     const discoveryBudget = this.#remainingCallBudget(actionDeadline);
     const tools = await this.#bounded(
       runtime,
@@ -223,9 +247,10 @@ export class KiroMcpProvider implements FabricProvider {
         includeSchema: true,
         disableOAuth: this.#config.disableOAuth,
       }),
-      context.signal,
+      signal,
       "tool discovery",
       discoveryBudget,
+      lease,
     );
     assertFabricJsonBudget(tools);
     if (tools.length > 1_000) throw new Error("Configured MCP tool limit exceeded");
@@ -233,7 +258,8 @@ export class KiroMcpProvider implements FabricProvider {
     if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
     this.#validateToolArguments(matches[0]!, toolArgs);
 
-    throwIfAborted(context.signal);
+    throwIfAbortedOrExpired(signal, context.deadline);
+    this.#assertTransportSnapshot(runtime, server, approvedTransport);
     const callBudget = this.#remainingCallBudget(actionDeadline);
     const result = await this.#bounded(
       runtime,
@@ -243,11 +269,12 @@ export class KiroMcpProvider implements FabricProvider {
         timeoutMs: callBudget,
         disableOAuth: this.#config.disableOAuth,
       }),
-      context.signal,
+      signal,
       "tool call",
       callBudget,
+      lease,
     );
-    throwIfAborted(context.signal);
+    throwIfAbortedOrExpired(signal, context.deadline);
     return normalizeMcpResult(result);
     });
   }
@@ -260,15 +287,54 @@ export class KiroMcpProvider implements FabricProvider {
     const creation = this.#runtimeCreation;
     this.#runtime = undefined;
     this.#runtimeCreation = undefined;
-    await settleWithin([...this.#serverTails.values()], MCP_CLOSE_GRACE_MS);
+    // Do not declare a transport closed or reusable until every contacted
+    // operation is provably quiescent. A stuck runtime intentionally keeps the
+    // provider quarantined instead of enabling a successor with overlapping effects.
+    await Promise.allSettled([...this.#serverTails.values()]);
     this.#serverTails.clear();
     if (runtime) {
-      await settleWithin([Promise.resolve().then(() => runtime.close())], MCP_CLOSE_GRACE_MS);
+      await runtime.close();
     } else if (creation) {
       // A late creation observes #closed in its continuation and closes the
       // runtime it produced. Do not let a stuck factory make shutdown unbounded.
       await settleWithin([creation], MCP_CLOSE_GRACE_MS);
     }
+  }
+
+  #transportSnapshot(runtime: Runtime, server: string): McpTransportSnapshot {
+    const definition = runtime.getDefinition(server);
+    const base = {
+      schemaVersion: 1 as const,
+      server,
+      processEnvironmentDigest: environmentDigest(),
+      configDigest: configDigest(this.#config.configPath),
+    };
+    const details = definition.command.kind === "stdio"
+      ? (() => {
+          const executable = executablePath(definition.command.command);
+          const stats = fs.statSync(executable);
+          const configured = configuredEnvironment(this.#config.configPath, server);
+          return {
+            kind: "stdio" as const,
+            executable,
+            executableDigest: fileDigest(executable),
+            executableDevice: String(stats.dev),
+            executableFile: String(stats.ino),
+            cwd: fs.realpathSync(definition.command.cwd ?? this.#cwd),
+            arguments: [...(definition.command.args ?? [])],
+            configuredEnvironmentDigest: createHash("sha256").update(JSON.stringify(Object.entries(configured).sort(([left], [right]) => left.localeCompare(right)))).digest("hex"),
+          };
+        })()
+      : { kind: "http" as const, endpoint: definition.command.url.href };
+    const unsigned = { ...base, ...details };
+    return { ...unsigned, digest: createHash("sha256").update("kiro-fabric-mcp-transport-v1\0").update(JSON.stringify(unsigned)).digest("hex") };
+  }
+
+  #assertTransportSnapshot(runtime: Runtime, server: string, approved: unknown): McpTransportSnapshot {
+    if (!isRecord(approved)) throw new Error("MCP call is missing its approved transport snapshot");
+    const current = this.#transportSnapshot(runtime, server);
+    if (JSON.stringify(current) !== JSON.stringify(approved)) throw new Error("MCP transport changed after approval; approve the exact transport again");
+    return current;
   }
 
   async #approveExecution(
@@ -277,8 +343,8 @@ export class KiroMcpProvider implements FabricProvider {
     context: FabricInvocationContext,
   ): Promise<void> {
     if (!context.approve) throw new Error(`${action.ref} execution approval is unavailable`);
-    await runAbortable(context.signal, () => context.approve!(action, details));
-    throwIfAborted(context.signal);
+    await context.approve(action, details);
+    throwIfAbortedOrExpired(context.signal, context.deadline);
   }
 
   #validateToolArguments(tool: ServerToolInfo, args: Record<string, unknown>): void {
@@ -317,24 +383,29 @@ export class KiroMcpProvider implements FabricProvider {
     return runAbortable(signal, () => this.#runtimeCreation!);
   }
 
-  async #withServerLease<T>(server: string, signal: AbortSignal | undefined, operation: () => Promise<T>): Promise<T> {
+  async #withServerLease<T>(server: string, signal: AbortSignal | undefined, operation: (lease: ServerLease) => Promise<T>): Promise<T> {
     const previous = this.#serverTails.get(server) ?? Promise.resolve();
     let release!: () => void;
     const current = new Promise<void>((resolve) => { release = resolve; });
     const tail = previous.then(() => current, () => current);
     this.#serverTails.set(server, tail);
+    const lease: ServerLease = { quiescence: Promise.resolve() };
     try {
       await runAbortable(signal, () => previous);
-      throwIfAborted(signal);
-      return await operation();
+      throwIfAbortedOrExpired(signal);
+      return await operation(lease);
     } finally {
-      release();
-      if (this.#serverTails.get(server) === tail) this.#serverTails.delete(server);
+      // Caller cancellation may settle after bounded close grace, but the
+      // same-server ownership tail remains until the raw operation itself ends.
+      void lease.quiescence.finally(() => {
+        release();
+        if (this.#serverTails.get(server) === tail) this.#serverTails.delete(server);
+      });
     }
   }
 
   #remainingCallBudget(deadline: number): number {
-    const remaining = Math.ceil(deadline - Date.now());
+    const remaining = Math.ceil(deadline - performance.now());
     if (remaining < 1) throw new Error(`MCP call timed out after ${this.#config.callTimeoutMs}ms`);
     return remaining;
   }
@@ -346,6 +417,7 @@ export class KiroMcpProvider implements FabricProvider {
     signal: AbortSignal | undefined,
     label: string,
     timeoutMs: number,
+    lease: ServerLease,
   ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       let settled = false;
@@ -364,7 +436,11 @@ export class KiroMcpProvider implements FabricProvider {
         if (settled || terminating) return;
         terminating = true;
         cleanup();
-        void settleWithin([Promise.resolve().then(() => runtime.close(server))], MCP_CLOSE_GRACE_MS).then(() => {
+        const close = Promise.resolve().then(() => runtime.close(server));
+        // Lease release requires both transport close and raw operation
+        // settlement; close() alone is not treated as proof of quiescence.
+        lease.quiescence = Promise.allSettled([lease.quiescence, operation, close]).then(() => undefined);
+        void settleWithin([close], MCP_CLOSE_GRACE_MS).then(() => {
           settled = true;
           reject(error);
         });

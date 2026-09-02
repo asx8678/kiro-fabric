@@ -1,55 +1,50 @@
 import { describe, expect, it } from "vitest";
 import {
   assertRealClientEvidence,
+  REAL_CLIENT_NATIVE_CAPABILITIES,
   REAL_CLIENT_SESSION_COMMAND,
   REAL_CLIENT_TOOLS,
+  transcriptEntry,
 } from "../scripts/real-client-evidence.mjs";
 
 const digest = "a".repeat(64);
 const archiveDigest = "b".repeat(64);
+const commit = "c".repeat(40);
 const valid = {
   kind: "kiro-fabric.real-client-qualification",
-  schemaVersion: 2,
+  schemaVersion: 3,
   ok: true,
   packageDigest: digest,
   archiveDigest,
-  commit: "c".repeat(40),
+  commit,
   sessionCommand: REAL_CLIENT_SESSION_COMMAND,
   powerActivated: true,
   tools: REAL_CLIENT_TOOLS,
   customAgentSelected: false,
-  driver: { digest: "d".repeat(64), version: "reviewed-1" },
+  driver: { digest: "d".repeat(64), version: "repository-driver-v1" },
   kiro: { path: "/usr/bin/kiro-cli", digest: "e".repeat(64), version: "1.0.0" },
-  nativeCapabilities: ["file-read", "file-edit", "shell", "web", "subagent"].map((name) => ({ name, observed: true })),
-  transcript: ["power-activation", "mcp-tools-list", "native-capability-probes"].map((kind, index) => ({ kind, digest: String(index + 1).repeat(64) })),
+  nativeCapabilities: REAL_CLIENT_NATIVE_CAPABILITIES.map((name) => ({ name, observed: true })),
+  transcript: ["kiro-version", "power-activation", "mcp-tools-list", "native-capability-probes"].map((kind, index) => transcriptEntry(kind, `raw-${index}`)),
 };
 
 describe("real-client release evidence", () => {
-  it("accepts only exact digest-bound Power qualification evidence", () => {
-    expect(assertRealClientEvidence(valid, digest, { qualification: true, archiveDigest })).toBe(valid);
+  it("accepts only exact package/archive/commit-bound qualification evidence", () => {
+    expect(assertRealClientEvidence(valid, digest, { qualification: true, archiveDigest, commit })).toBe(valid);
     for (const patch of [
-      { packageDigest: "b".repeat(64) },
-      { sessionCommand: ["kiro-cli"] },
-      { powerActivated: false },
-      { tools: ["fabric_exec"] },
-      { customAgentSelected: true },
-      { kind: "other" },
-      { schemaVersion: 1 },
-      { ok: false },
-    ]) {
-      expect(() => assertRealClientEvidence(
-        { ...valid, ...patch },
-        digest,
-        { qualification: true, archiveDigest },
-      )).toThrow();
-    }
+      { packageDigest: "b".repeat(64) }, { archiveDigest: "c".repeat(64) }, { commit: "d".repeat(40) },
+      { sessionCommand: ["kiro-cli"] }, { powerActivated: false }, { tools: ["fabric_exec"] },
+      { customAgentSelected: true }, { kind: "other" }, { schemaVersion: 2 }, { ok: false },
+    ]) expect(() => assertRealClientEvidence({ ...valid, ...patch }, digest, { qualification: true, archiveDigest, commit })).toThrow();
   });
 
-  it("accepts raw driver evidence without pretending it is qualification", () => {
-    const { kind: _kind, schemaVersion: _schemaVersion, ok: _ok, ...driver } = valid;
-    expect(assertRealClientEvidence(driver, digest)).toBe(driver);
-    expect(() => assertRealClientEvidence(driver, digest, { qualification: true })).toThrow(
-      "qualification identity",
-    );
+  it("recomputes transcript byte counts and hashes", () => {
+    const altered = structuredClone(valid);
+    altered.transcript[0]!.raw = Buffer.from("forged").toString("base64");
+    expect(() => assertRealClientEvidence(altered, digest, { qualification: true, archiveDigest, commit })).toThrow("transcript digest");
+  });
+
+  it("requires authoritative expected archive and commit identities", () => {
+    expect(() => assertRealClientEvidence(valid, digest, { qualification: true, archiveDigest })).toThrow("exact commit");
+    expect(() => assertRealClientEvidence(valid, digest, { qualification: true, commit })).toThrow("exact release archive");
   });
 });

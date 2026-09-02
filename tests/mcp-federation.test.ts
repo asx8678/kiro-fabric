@@ -1,5 +1,6 @@
+import fs from "node:fs";
 import type { Runtime, ServerDefinition } from "mcporter";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { FabricMcpConfig } from "../src/config.js";
 import { KiroMcpProvider } from "../src/kiro/mcp-provider.js";
 import type { FabricInvocationContext } from "../src/protocol.js";
@@ -118,45 +119,39 @@ describe("configured Power MCP federation", () => {
       args: { value: "hello" },
     }, context(undefined, async (action, details) => { approvedRef = action.ref; approvedDetails = details; }))).resolves.toBe(true);
     expect(approvedRef).toBe("mcp.$stdio");
-    expect(approvedDetails).toEqual({
+    expect(approvedDetails).toMatchObject({
+      schemaVersion: 1,
       server: "configured",
-      executable: process.execPath,
-      cwd: process.cwd(),
+      kind: "stdio",
+      executable: fs.realpathSync(process.execPath),
+      cwd: fs.realpathSync(process.cwd()),
       arguments: [],
-      environment: {
-        values: {},
-        redactedDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      },
+      configuredEnvironmentDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     });
+    expect(approvedDetails?.digest).toMatch(/^[a-f0-9]{64}$/u);
     await provider.close();
   });
 
-  it("shares one timeout budget across discovery and invocation", async () => {
-    let now = 10_000;
-    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+  it("shares one monotonic timeout budget across discovery and invocation", async () => {
     let called = false;
     const provider = new KiroMcpProvider(
       "/workspace",
-      config,
+      { ...config, callTimeoutMs: 20 },
       async () => fakeRuntime({
         async listTools() {
-          now += config.callTimeoutMs + 1;
+          await new Promise((resolve) => setTimeout(resolve, 25));
           return [{ name: "echo", inputSchema: { type: "object" } }];
         },
         async callTool() { called = true; return true; },
       }),
     );
-    try {
-      await expect(provider.invoke("$call", {
-        server: "configured",
-        tool: "echo",
-        args: {},
-      }, context())).rejects.toThrow("timed out after 1000ms");
-      expect(called).toBe(false);
-    } finally {
-      clock.mockRestore();
-      await provider.close();
-    }
+    await expect(provider.invoke("$call", {
+      server: "configured",
+      tool: "echo",
+      args: {},
+    }, context())).rejects.toThrow("timed out after 20ms");
+    expect(called).toBe(false);
+    await provider.close();
   });
 
   it("requires execute approval when HTTP OAuth is enabled", async () => {
@@ -175,8 +170,9 @@ describe("configured Power MCP federation", () => {
     await provider.close();
   });
 
-  it("isolates cancellation from a concurrent call to the same server", async () => {
+  it("quarantines a same-server lease until cancelled work is provably quiescent", async () => {
     let calls = 0;
+    let settleFirst!: (value: unknown) => void;
     const controller = new AbortController();
     const provider = new KiroMcpProvider(
       "/workspace",
@@ -184,7 +180,7 @@ describe("configured Power MCP federation", () => {
       async () => fakeRuntime({
         callTool: async () => {
           calls += 1;
-          if (calls === 1) return new Promise<never>(() => {});
+          if (calls === 1) return new Promise((resolve) => { settleFirst = resolve; });
           return { content: [{ type: "text", text: "second completed" }] };
         },
       }),
@@ -194,20 +190,23 @@ describe("configured Power MCP federation", () => {
     const second = provider.invoke("$call", { server: "configured", tool: "echo", args: { value: "second" } }, context());
     controller.abort(new Error("cancel first only"));
     await expect(first).rejects.toThrow("cancel first only");
+    expect(calls).toBe(1);
+    settleFirst({ content: [] });
     await expect(second).resolves.toMatchObject({ text: "second completed" });
     expect(calls).toBe(2);
     await provider.close();
   });
 
-  it("closes the contacted server before reporting cancellation", async () => {
+  it("closes and quiesces the contacted server before releasing its lease", async () => {
     let closeServer: string | undefined;
+    let settleOperation!: (value: unknown) => void;
     const controller = new AbortController();
     const provider = new KiroMcpProvider(
       "/workspace",
       config,
       async () => fakeRuntime({
-        callTool: async () => new Promise<never>(() => {}),
-        close: async (server) => { closeServer = server; },
+        callTool: async () => new Promise((resolve) => { settleOperation = resolve; }),
+        close: async (server) => { closeServer = server; settleOperation({ content: [] }); },
       }),
     );
     const call = provider.invoke("$call", {

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -10,12 +10,35 @@ export interface KiroPowerDataPaths {
   artifacts: string;
   projects: string;
 }
-export interface KiroPowerWorkspaceIdentity { schemaVersion: 1; canonicalPath: string; deviceId: string; fileId: string }
+export interface KiroPowerWorkspaceIdentity { readonly schemaVersion: 1; readonly canonicalPath: string; readonly deviceId: string; readonly fileId: string }
+
+type JsonRecord = Record<string, unknown>;
+const isRecord = (value: unknown): value is JsonRecord => typeof value === "object" && value !== null && !Array.isArray(value);
+const errorCode = (error: unknown): string | undefined => isRecord(error) && typeof error.code === "string" ? error.code : undefined;
+
+const projectKiroPowerWorkspaceIdentity = (value: unknown): KiroPowerWorkspaceIdentity => {
+  if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path.isAbsolute(value.canonicalPath) ||
+      typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
+    throw new Error("Power workspace identity is malformed");
+  }
+  return Object.freeze({ schemaVersion: 1, canonicalPath: value.canonicalPath, deviceId: value.deviceId, fileId: value.fileId });
+};
+const sameIdentity = (left: KiroPowerWorkspaceIdentity, right: KiroPowerWorkspaceIdentity): boolean =>
+  left.schemaVersion === right.schemaVersion && left.canonicalPath === right.canonicalPath && left.deviceId === right.deviceId && left.fileId === right.fileId;
+const kiroPowerMemoryNamespace = (identity: KiroPowerWorkspaceIdentity): string =>
+  `project:${createHash("sha256").update(identity.canonicalPath).digest("hex")}`;
 
 const assertCurrentUser = (stats: fs.Stats, target: string): void => {
   if (process.platform !== "win32" && typeof process.getuid === "function" && stats.uid !== process.getuid()) {
     throw new Error(`Power data path is owned by another user: ${target}`);
   }
+};
+const assertPrivateDirectory = (target: string): fs.Stats => {
+  const stats = fs.lstatSync(target);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power storage is not a regular directory: ${target}`);
+  assertCurrentUser(stats, target);
+  if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) throw new Error(`Power storage is not private: ${target}`);
+  return stats;
 };
 
 const privateDirectory = (directory: string, boundary: string): string => {
@@ -29,7 +52,7 @@ const privateDirectory = (directory: string, boundary: string): string => {
   let cursor = root;
   for (const segment of relative.split(path.sep).filter(Boolean)) {
     cursor = path.join(cursor, segment);
-    try { fs.mkdirSync(cursor, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    try { fs.mkdirSync(cursor, { mode: 0o700 }); } catch (error) { if (errorCode(error) !== "EEXIST") throw error; }
     const stats = fs.lstatSync(cursor);
     if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power data path contains a non-directory: ${cursor}`);
     assertCurrentUser(stats, cursor);
@@ -40,71 +63,125 @@ const privateDirectory = (directory: string, boundary: string): string => {
 
 const privateFile = (target: string, maximum = 1024 * 1024): fs.Stats => {
   const stats = fs.lstatSync(target);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > maximum) {
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
     throw new Error(`Legacy Power data is not a bounded unaliased regular file: ${target}`);
   }
+  if (stats.size > maximum) throw new Error(`Power configuration exceeds ${maximum} bytes: ${target}`);
   assertCurrentUser(stats, target);
   if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) throw new Error(`Legacy Power data is not private: ${target}`);
   return stats;
 };
 
+const fsyncDirectory = (directory: string): void => {
+  const descriptor = fs.openSync(directory, "r");
+  try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+};
+const writeJsonAtomic = (target: string, value: unknown, exclusive = false): string => {
+  const bytes = `${JSON.stringify(value, null, 2)}\n`;
+  if (exclusive) {
+    try {
+      const descriptor = fs.openSync(target, "wx", 0o600);
+      try { fs.writeFileSync(descriptor, bytes); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    } catch (error) { if (errorCode(error) !== "EEXIST") throw error; }
+  } else {
+    const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+    try {
+      const descriptor = fs.openSync(temporary, "wx", 0o600);
+      try { fs.writeFileSync(descriptor, bytes); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+      fs.renameSync(temporary, target);
+    } catch (error) { fs.rmSync(temporary, { force: true }); throw error; }
+  }
+  privateFile(target);
+  fs.chmodSync(target, 0o600);
+  fsyncDirectory(path.dirname(target));
+  return target;
+};
+const privateJson = (target: string, initial: unknown): string => writeJsonAtomic(target, initial, true);
+
 const copyFileAtomic = (source: string, target: string): void => {
   privateFile(source);
-  const temporary = `${target}.${process.pid}.${Date.now()}.migration.tmp`;
-  let descriptor: number | undefined;
+  const bytes = fs.readFileSync(source);
+  const sourceDigest = createHash("sha256").update(bytes).digest("hex");
+  const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.migration.tmp`;
   try {
-    const bytes = fs.readFileSync(source);
-    descriptor = fs.openSync(temporary, "wx", 0o600);
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    const sourceDigest = createHash("sha256").update(bytes).digest("hex");
+    const descriptor = fs.openSync(temporary, "wx", 0o600);
+    try { fs.writeFileSync(descriptor, bytes); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
     if (createHash("sha256").update(fs.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
     try { fs.linkSync(temporary, target); }
     catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (errorCode(error) !== "EEXIST") throw error;
       privateFile(target);
       if (createHash("sha256").update(fs.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
     }
     fs.unlinkSync(temporary);
-    const directory = fs.openSync(path.dirname(target), "r");
-    try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
-  } catch (error) {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-    fs.rmSync(temporary, { force: true });
-    throw error;
-  }
+    fsyncDirectory(path.dirname(target));
+  } catch (error) { fs.rmSync(temporary, { force: true }); throw error; }
 };
 
 const migrateMcpConfiguration = (config: string): string[] => {
   const current = path.join(config, "mcp.json");
   const legacy = path.join(config, "mcporter.json");
   if (fs.existsSync(current) || !fs.existsSync(legacy)) return [];
+  privateFile(legacy, 256 * 1024);
   const parsed: unknown = JSON.parse(fs.readFileSync(legacy, "utf8"));
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting the Power");
+  if (!isRecord(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting the Power");
   copyFileAtomic(legacy, current);
   return ["config/mcporter.json -> config/mcp.json"];
 };
 
-const privateJson = (target: string, initial: unknown): string => {
-  try {
-    const descriptor = fs.openSync(target, "wx", 0o600);
-    try { fs.writeFileSync(descriptor, `${JSON.stringify(initial, null, 2)}\n`); } finally { fs.closeSync(descriptor); }
-  } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-  const stats = fs.lstatSync(target);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) throw new Error(`Power configuration is not a private regular file: ${target}`);
-  assertCurrentUser(stats, target);
-  if (stats.size > 1024 * 1024) throw new Error(`Power configuration exceeds 1048576 bytes: ${target}`);
-  fs.chmodSync(target, 0o600);
-  return target;
+const LEGACY_CONFIG_FIELDS: Record<string, readonly string[]> = {
+  executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
+  approvals: ["read", "write", "execute", "network"],
+  mcp: ["disableOAuth", "callTimeoutMs"],
+  memory: ["enabled", "maxEntries", "maxValueChars"],
+  state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
+  artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
+};
+const migrateLegacyFabricConfiguration = (root: string, config: string): { migrated: string[]; ignored: string[]; quarantined: string[] } => {
+  const legacy = path.join(config, "fabric.json");
+  if (!fs.existsSync(legacy)) return { migrated: [], ignored: [], quarantined: [] };
+  privateFile(legacy, 256 * 1024);
+  const parsed: unknown = JSON.parse(fs.readFileSync(legacy, "utf8"));
+  if (!isRecord(parsed)) throw new Error("Legacy fabric configuration is malformed");
+  const projected: JsonRecord = {};
+  const ignored: string[] = [];
+  for (const [section, raw] of Object.entries(parsed)) {
+    const allowed = LEGACY_CONFIG_FIELDS[section];
+    if (!allowed || !isRecord(raw)) { ignored.push(section); continue; }
+    const fields: JsonRecord = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (!allowed.includes(key)) { ignored.push(`${section}.${key}`); continue; }
+      fields[key] = section === "approvals" && (key === "execute" || key === "network") && value === "allow" ? "ask" : value;
+    }
+    if (Object.keys(fields).length) projected[section] = fields;
+  }
+  const current = path.join(config, "config.json");
+  const migrated: string[] = [];
+  if (!fs.existsSync(current) && Object.keys(projected).length) {
+    writeJsonAtomic(current, projected, true);
+    migrated.push("config/fabric.json -> allowlisted config/config.json");
+  }
+  const quarantine = privateDirectory(path.join(root, "quarantine"), root);
+  const destination = path.join(quarantine, "legacy-fabric.json");
+  if (!fs.existsSync(destination)) fs.renameSync(legacy, destination);
+  else fs.rmSync(legacy);
+  fsyncDirectory(quarantine);
+  return { migrated, ignored, quarantined: ["legacy fabric.json"] };
 };
 
 export const prepareKiroPowerDataPaths = (pluginData: string): KiroPowerDataPaths => {
   const root = privateDirectory(path.join(pluginData, "fabric"), pluginData);
   const config = privateDirectory(path.join(root, "config"), root);
-  const migrated = migrateMcpConfiguration(config);
-  if (migrated.length) privateJson(path.join(root, "migration-report.json"), { schemaVersion: 1, migrated, ignored: [] });
+  const mcpMigrated = migrateMcpConfiguration(config);
+  const policy = migrateLegacyFabricConfiguration(root, config);
+  if (mcpMigrated.length || policy.migrated.length || policy.quarantined.length) {
+    writeJsonAtomic(path.join(root, "migration-report.json"), {
+      schemaVersion: 2,
+      migrated: [...mcpMigrated, ...policy.migrated],
+      ignoredFields: policy.ignored.sort(),
+      quarantined: policy.quarantined,
+    });
+  }
   return {
     root,
     config,
@@ -118,36 +195,138 @@ export const prepareKiroPowerDataPaths = (pluginData: string): KiroPowerDataPath
 const kiroPowerWorkspaceId = (identity: KiroPowerWorkspaceIdentity, generation: 2 | 3 = 3): string => createHash("sha256")
   .update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0")
   .update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
+const encodeName = (value: string): string => encodeURIComponent(value).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+const memoryNamespaceDirectory = (namespace: string): string => `${encodeName(namespace)}-${createHash("sha256").update(namespace).digest("hex").slice(0, 16)}`;
 
-const migrateWorkspaceGeneration = (projects: string, identity: KiroPowerWorkspaceIdentity): string[] => {
-  const current = path.join(projects, kiroPowerWorkspaceId(identity, 3));
-  const legacy = path.join(projects, kiroPowerWorkspaceId(identity, 2));
-  if (fs.existsSync(current) || !fs.existsSync(legacy)) return [];
-  const legacyStats = fs.lstatSync(legacy);
-  if (!legacyStats.isDirectory() || legacyStats.isSymbolicLink()) throw new Error("Legacy workspace storage is not a private regular directory");
-  assertCurrentUser(legacyStats, legacy);
-  if (process.platform !== "win32" && (legacyStats.mode & 0o077) !== 0) throw new Error("Legacy workspace storage permissions are not private");
-  const identityFile = path.join(legacy, "workspace-identity.json");
-  privateFile(identityFile, 64 * 1024);
-  const persisted: unknown = JSON.parse(fs.readFileSync(identityFile, "utf8"));
-  if (JSON.stringify(persisted) !== JSON.stringify(identity)) throw new Error("Legacy workspace identity does not match the currently verified filesystem object");
-  fs.renameSync(legacy, current);
-  const directory = fs.openSync(projects, "r");
-  try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
-  return ["workspace-v2 -> workspace-v3", "preserved compatible memory/state/artifacts", "archived incompatible legacy children in place"];
+const migrateCompatibleMemory = (sourceRoot: string, targetRoot: string, namespace: string): boolean => {
+  if (!fs.existsSync(sourceRoot)) return false;
+  assertPrivateDirectory(sourceRoot);
+  const sourceMemory = path.join(sourceRoot, "memory");
+  if (!fs.existsSync(sourceMemory)) return false;
+  assertPrivateDirectory(sourceMemory);
+  const rootMarker = path.join(sourceMemory, ".kiro-fabric-owner");
+  privateFile(rootMarker, 8 * 1024);
+  const rootOwner = JSON.parse(fs.readFileSync(rootMarker, "utf8")) as JsonRecord;
+  if (rootOwner.format !== 1 || rootOwner.owner !== "kiro-fabric" || rootOwner.kind !== "memory-root" || rootOwner.root !== sourceRoot) {
+    throw new Error("Legacy memory root ownership is incompatible");
+  }
+  const namespaceName = memoryNamespaceDirectory(namespace);
+  const sourceNamespace = path.join(sourceMemory, namespaceName);
+  assertPrivateDirectory(sourceNamespace);
+  const namespaceMarker = path.join(sourceNamespace, ".kiro-fabric-owner");
+  privateFile(namespaceMarker, 8 * 1024);
+  const namespaceOwner = JSON.parse(fs.readFileSync(namespaceMarker, "utf8")) as JsonRecord;
+  if (namespaceOwner.format !== 1 || namespaceOwner.owner !== "kiro-fabric" || namespaceOwner.kind !== "memory-namespace" ||
+      namespaceOwner.root !== sourceRoot || namespaceOwner.namespace !== namespace) throw new Error("Legacy memory namespace ownership is incompatible");
+  const sourceEntries = fs.readdirSync(sourceNamespace, { withFileTypes: true });
+  if (sourceEntries.length > 130) throw new Error("Legacy memory entry limit exceeded");
+  const targetMemory = privateDirectory(path.join(targetRoot, "memory"), targetRoot);
+  writeJsonAtomic(path.join(targetMemory, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: targetRoot }, true);
+  const targetNamespace = privateDirectory(path.join(targetMemory, namespaceName), targetMemory);
+  writeJsonAtomic(path.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: targetRoot, namespace }, true);
+  let totalBytes = 0;
+  for (const entry of sourceEntries) {
+    if (entry.name === ".kiro-fabric-owner") continue;
+    if (!entry.isFile() || !entry.name.endsWith(".json")) throw new Error("Legacy memory contains incompatible residue");
+    const source = path.join(sourceNamespace, entry.name);
+    const stats = privateFile(source, 16 * 1024);
+    totalBytes += stats.size;
+    if (totalBytes > 256 * 1024) throw new Error("Legacy memory namespace byte limit exceeded");
+    const value = JSON.parse(fs.readFileSync(source, "utf8")) as JsonRecord;
+    if (value.format !== 1 || value.owner !== "kiro-fabric" || value.kind !== "memory-entry" || value.namespace !== namespace ||
+        typeof value.key !== "string" || value.key.trim() !== value.key || !value.key || `${encodeName(value.key)}.json` !== entry.name ||
+        typeof value.updatedAt !== "string" || !("value" in value)) throw new Error("Legacy memory entry is incompatible");
+    copyFileAtomic(source, path.join(targetNamespace, entry.name));
+  }
+  return true;
 };
 
-export const prepareKiroPowerProjectPaths = (projects: string, identity: KiroPowerWorkspaceIdentity) => {
-  const migrated = migrateWorkspaceGeneration(projects, identity);
-  const root = privateDirectory(path.join(projects, kiroPowerWorkspaceId(identity)), projects);
+const validateWorkspaceObject = (identity: KiroPowerWorkspaceIdentity): void => {
+  const canonical = fs.realpathSync(identity.canonicalPath);
+  const stats = fs.statSync(canonical, { bigint: true });
+  if (canonical !== identity.canonicalPath || String(stats.dev) !== identity.deviceId || String(stats.ino) !== identity.fileId) {
+    throw new Error("Power workspace identity no longer matches the verified filesystem object");
+  }
+};
+const validatePersistedIdentity = (file: string, expected: KiroPowerWorkspaceIdentity): void => {
+  privateFile(file, 64 * 1024);
+  const persisted = projectKiroPowerWorkspaceIdentity(JSON.parse(fs.readFileSync(file, "utf8")));
+  if (!sameIdentity(persisted, expected)) throw new Error("Legacy workspace identity does not match the currently verified filesystem object");
+};
+
+const quarantineLegacyWorkspace = (projects: string, legacy: string, identity: KiroPowerWorkspaceIdentity): string | undefined => {
+  if (!fs.existsSync(legacy)) return undefined;
+  const quarantine = privateDirectory(path.join(projects, ".quarantine"), projects);
+  const destination = path.join(quarantine, `workspace-v2-${kiroPowerWorkspaceId(identity, 2)}`);
+  if (fs.existsSync(destination)) throw new Error("Legacy workspace quarantine collision");
+  fs.renameSync(legacy, destination);
+  fsyncDirectory(quarantine);
+  return destination;
+};
+
+const migrateWorkspaceGeneration = (projects: string, identity: KiroPowerWorkspaceIdentity): { current: string; migrated: boolean } => {
+  const current = path.join(projects, kiroPowerWorkspaceId(identity, 3));
+  const legacy = path.join(projects, kiroPowerWorkspaceId(identity, 2));
+  if (!fs.existsSync(legacy)) return { current, migrated: false };
+  const legacyStats = assertPrivateDirectory(legacy);
+  void legacyStats;
+  validatePersistedIdentity(path.join(legacy, "workspace-identity.json"), identity);
+  validateWorkspaceObject(identity);
+  if (fs.existsSync(current)) {
+    validatePersistedIdentity(path.join(current, "workspace-identity.json"), identity);
+    quarantineLegacyWorkspace(projects, legacy, identity);
+    return { current, migrated: true };
+  }
+
+  const staging = path.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity).slice(0, 16)}-${process.pid}-${randomBytes(8).toString("hex")}.tmp`);
+  fs.mkdirSync(staging, { mode: 0o700 });
+  let memoryMigrated = false;
+  try {
+    writeJsonAtomic(path.join(staging, "workspace-identity.json"), identity, true);
+    memoryMigrated = migrateCompatibleMemory(legacy, staging, kiroPowerMemoryNamespace(identity));
+    privateDirectory(path.join(staging, "memory"), staging);
+    privateDirectory(path.join(staging, "state"), staging);
+    privateDirectory(path.join(staging, "artifacts"), staging);
+    writeJsonAtomic(path.join(staging, "migration-report.json"), {
+      schemaVersion: 2,
+      sourceGeneration: 2,
+      destinationGeneration: 3,
+      migrated: ["immutable workspace identity", ...(memoryMigrated ? ["compatible memory"] : [])],
+      quarantined: ["legacy Mesh state", "runs", "logs", "artifacts", "unknown v2 residue"],
+      complete: false,
+    }, true);
+    try { fs.renameSync(staging, current); }
+    catch (error) {
+      if (errorCode(error) !== "EEXIST" && errorCode(error) !== "ENOTEMPTY") throw error;
+      validatePersistedIdentity(path.join(current, "workspace-identity.json"), identity);
+      fs.rmSync(staging, { recursive: true, force: true });
+    }
+    fsyncDirectory(projects);
+  } catch (error) { fs.rmSync(staging, { recursive: true, force: true }); throw error; }
+  quarantineLegacyWorkspace(projects, legacy, identity);
+  writeJsonAtomic(path.join(current, "migration-report.json"), {
+    schemaVersion: 2,
+    sourceGeneration: 2,
+    destinationGeneration: 3,
+    migrated: ["immutable workspace identity", ...(memoryMigrated ? ["compatible memory"] : [])],
+    quarantined: ["legacy Mesh state", "runs", "logs", "artifacts", "unknown v2 residue"],
+    complete: true,
+  });
+  return { current, migrated: true };
+};
+
+export const prepareKiroPowerProjectPaths = (projects: string, rawIdentity: KiroPowerWorkspaceIdentity) => {
+  const identity = projectKiroPowerWorkspaceIdentity(rawIdentity);
+  const migration = migrateWorkspaceGeneration(projects, identity);
+  if (!migration.migrated) validateWorkspaceObject(identity);
+  const root = privateDirectory(migration.current, projects);
   const identityFile = privateJson(path.join(root, "workspace-identity.json"), identity);
-  const persisted = JSON.parse(fs.readFileSync(identityFile, "utf8")) as KiroPowerWorkspaceIdentity;
-  if (JSON.stringify(persisted) !== JSON.stringify(identity)) throw new Error("Power workspace identity does not match the current filesystem object");
-  if (migrated.length) privateJson(path.join(root, "migration-report.json"), { schemaVersion: 1, migrated, ignored: ["runs", "logs", "deleted orchestration fields"] });
+  validatePersistedIdentity(identityFile, identity);
   return {
     root,
     identityFile,
     memory: privateDirectory(path.join(root, "memory"), root),
+    memoryNamespace: kiroPowerMemoryNamespace(identity),
     state: privateDirectory(path.join(root, "state"), root),
     artifacts: privateDirectory(path.join(root, "artifacts"), root),
   };

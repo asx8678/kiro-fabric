@@ -31,7 +31,7 @@ const packageRoot = (inputRoot) => {
   const lexicalStats = fs.lstatSync(lexical);
   if (lexicalStats.isSymbolicLink()) {
     const target = fs.readlinkSync(lexical);
-    if (path.isAbsolute(target) || target.includes(path.sep) || !target.startsWith(".kiro-fabric-power-generation-")) fail("root symlink is not an approved checkout-local staging pointer");
+    if (path.isAbsolute(target) || target.includes(path.sep) || !/^\.kiro-fabric-power-generation-[a-f0-9]{64}$/u.test(target)) fail("root symlink is not an approved checkout-local staging pointer");
     const resolved = fs.realpathSync(lexical);
     if (path.dirname(resolved) !== fs.realpathSync(path.dirname(lexical))) fail("staging pointer escapes its checkout-local parent");
     return resolved;
@@ -48,7 +48,10 @@ export const walkPackage = (inputRoot) => {
       const stats = fs.lstatSync(target);
       if (stats.isSymbolicLink()) fail(`symlink is not allowed: ${path.relative(root, target)}`);
       if (entry.isDirectory()) visit(target);
-      else if (entry.isFile()) files.push(target);
+      else if (entry.isFile()) {
+        if (stats.nlink !== 1) fail(`hard-linked file is not allowed: ${path.relative(root, target)}`);
+        files.push(target);
+      }
       else fail(`unsupported entry: ${path.relative(root, target)}`);
     }
   };
@@ -168,7 +171,10 @@ export const validatePowerPackage = (inputRoot) => {
     const text = fs.readFileSync(file, "utf8");
     for (const term of forbiddenTerms) if (text.includes(term)) fail(`forbidden product term in ${path.relative(root, file)}: ${term}`);
   }
-  return { ok: true, root, version: pkg.version, ...digestPowerPackage(root, { excludeOwner: true }) };
+  const evidence = digestPowerPackage(root, { excludeOwner: true });
+  const generation = path.basename(root).match(/^\.kiro-fabric-power-generation-([a-f0-9]{64})$/u);
+  if (generation && generation[1] !== evidence.digest) fail("generation name does not match package digest");
+  return { ok: true, root, version: pkg.version, ...evidence };
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

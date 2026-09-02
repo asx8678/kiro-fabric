@@ -44,8 +44,8 @@ node scripts/release-candidate-report.mjs \
 
 The report rejects missing, malformed, stale, or wrong-contract evidence; it never infers a pass from ordinary CI.
 
-## User export isolation
+## Checkout-local staging
 
-Only `pnpm run power:export:user` may touch `$KIRO_HOME`, and it creates an owned local import source rather than registering or enabling a Power. Build, test, check, certification, packaging, and release reporting run under a Kiro-home mutation guard. Linux export validates a private staged generation, serializes updates, verifies copied bytes, and activates a new immutable digest-named folder. It never replaces or recursively removes an existing import source. Export is not currently supported on macOS or Windows; no cross-platform safety claim is made.
+The supported source is the validated checkout-local `.tmp/kiro-fabric-power` generation, imported through Kiro's official flow. No retained build, test, certification, packaging, or release command writes to `$KIRO_HOME`. User-home export is intentionally absent until a smaller cross-platform design can be independently reviewed.
 
 A future host-neutral Fovea provider remains out of scope until this Power-only baseline is qualified. It must reuse verified workspace binding, honor `.kiroignore`, keep caches private and workspace-scoped, propagate cancellation, use existing artifacts, and avoid any extension-host wrapper.

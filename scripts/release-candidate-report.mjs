@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { assertRealClientEvidence } from "./real-client-evidence.mjs";
 import { digestPowerPackage, validatePowerPackage } from "./validate-power-package.mjs";
@@ -19,25 +20,19 @@ const sbomDigest = sbom.packages?.[0]?.checksums?.[0]?.checksumValue;
 const sbomFileDigest = createHash("sha256").update(sbomBytes).digest("hex");
 const archiveBytes = fs.readFileSync(archivePath);
 const archiveDigest = createHash("sha256").update(archiveBytes).digest("hex");
+const archiveTemporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-release-archive-"));
+try {
+  const snapshot = path.join(archiveTemporary, "package.tar.gz");
+  const extracted = path.join(archiveTemporary, "package");
+  fs.writeFileSync(snapshot, archiveBytes, { mode: 0o600 });
+  fs.mkdirSync(extracted, { mode: 0o700 });
+  const unpack = spawnSync("tar", ["-xzf", snapshot, "-C", extracted], { encoding: "utf8" });
+  if (unpack.error || unpack.status !== 0) throw unpack.error ?? new Error(`Release archive extraction failed: ${unpack.stderr}`);
+  if (validatePowerPackage(extracted).digest !== packageDigest) throw new Error("Release archive is not bound to the exact staged package");
+} finally { fs.rmSync(archiveTemporary, { recursive: true, force: true }); }
 const closureRoot = path.resolve("dist/kiro-power-closure");
-const closureFiles = [];
-const walkClosure = (directory) => {
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-    const target = path.join(directory, entry.name);
-    if (entry.isDirectory()) walkClosure(target);
-    else if (entry.isFile()) closureFiles.push(target);
-  }
-};
-walkClosure(closureRoot);
-const currentClosureDigest = createHash("sha256");
-for (const file of closureFiles) {
-  currentClosureDigest
-    .update(path.relative(closureRoot, file).replaceAll("\\", "/"))
-    .update("\0")
-    .update(fs.readFileSync(file));
-}
-if (sbomDigest !== currentClosureDigest.digest("hex")) {
-  throw new Error("SBOM is not bound to the current packaged Power closure");
+if (sbomDigest !== packageDigest) {
+  throw new Error("SBOM is not bound to the exact complete staged Power package");
 }
 const closureManifest = JSON.parse(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"), "utf8"));
 const sbomDependencies = (sbom.packages ?? []).slice(1)
@@ -85,6 +80,13 @@ for (const file of packedFiles.filter((entry) => entry.endsWith(".js"))) {
     if (!packedSet.has(target)) throw new Error(`packed runtime import is missing: ${file} -> ${target}`);
   }
 }
+const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+if (head.status !== 0) throw new Error("Cannot bind release candidate to HEAD");
+const commit = head.stdout.trim();
+const expectedCommit = valueAfter("--commit") ?? process.env.GITHUB_SHA;
+if (expectedCommit && expectedCommit !== commit) throw new Error("Release candidate commit does not match HEAD");
+const tag = valueAfter("--tag") ?? null;
+if (tag !== null && tag !== `v${packageResult.version}`) throw new Error("Release tag does not match package version");
 const qualificationPath = valueAfter("--qualification");
 let realClient = { status: "not-run", evidence: "Explicit real-client qualification was not supplied; no pass is claimed." };
 if (qualificationPath) {
@@ -97,24 +99,28 @@ if (qualificationPath) {
   assertRealClientEvidence(
     JSON.parse(qualificationBytes.toString("utf8")),
     packageDigest,
-    { qualification: true, archiveDigest },
+    { qualification: true, archiveDigest, commit },
   );
   realClient = { status: "passed", evidenceDigest: createHash("sha256").update(qualificationBytes).digest("hex") };
 }
-const report = {
+const reportBody = {
   kind: "kiro-fabric.release-candidate",
-  schemaVersion: 1,
+  schemaVersion: 2,
   ok: packageResult.ok && typeof sbomDigest === "string",
+  releaseReady: packageResult.ok && typeof sbomDigest === "string" && realClient.status === "passed",
+  version: packageResult.version,
+  tag,
+  commit,
   packageDigest,
   archiveDigest,
-  sbomClosureDigest: sbomDigest,
+  sbomPackageDigest: sbomDigest,
   sbomFileDigest,
   closureManifestDigest: createHash("sha256").update(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"))).digest("hex"),
-  commit: process.env.GITHUB_SHA ?? null,
   packedFiles,
   realClient,
-  checksum: createHash("sha256").update(JSON.stringify({ packageDigest, archiveDigest, sbomDigest, sbomFileDigest, packedFiles, realClient })).digest("hex"),
 };
+const report = { ...reportBody, checksum: createHash("sha256").update("kiro-fabric-release-candidate-v2\0").update(JSON.stringify(reportBody)).digest("hex") };
+if (process.argv.includes("--require-release-ready") && !report.releaseReady) throw new Error("Release candidate is not release-ready");
 fs.mkdirSync(path.dirname(output), { recursive: true });
 fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
 console.log(output);

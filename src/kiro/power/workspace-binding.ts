@@ -189,7 +189,7 @@ export class KiroPowerWorkspaceBinding {
       }
       return {
         status: "verified",
-        workspace: {
+        workspace: Object.freeze({
           schemaVersion: 1,
           canonicalPath: binding.root,
           deviceId: binding.dev.toString(),
@@ -197,7 +197,7 @@ export class KiroPowerWorkspaceBinding {
           rootId: binding.id,
           name: binding.name,
           source: binding.source,
-        },
+        }),
       };
     } catch {
       // Observation is deliberately non-destructive. A transient filesystem

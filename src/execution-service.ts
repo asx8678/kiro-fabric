@@ -22,6 +22,7 @@ export interface FabricExecutionOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   approver: FabricExecutionApprover;
+  onEffectiveTimeoutChange?(timeoutMs: number): void;
 }
 
 export interface FabricExecutionResult {
@@ -78,7 +79,8 @@ export class FabricExecutionService {
       0,
       invocationTimeout,
     );
-    let observedEffectiveTimeoutMs = effectiveTimeoutMs;
+    let notifiedEffectiveTimeoutMs = effectiveTimeoutMs;
+    options.onEffectiveTimeoutChange?.(effectiveTimeoutMs);
     const sourceError = fabricSourceLimitError(options.code, this.config.executor.maxSourceBytes)
       ?? fabricPayloadsLimitError(options.payloads, this.config.executor.maxInputBytes);
     if (sourceError) return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: sourceError, effectiveTimeoutMs };
@@ -106,11 +108,12 @@ export class FabricExecutionService {
     let activeProviderCalls = 0;
     let approvalRequests = 0;
     let pendingApprovals = 0;
-    const providerContext = (signal: AbortSignal) => ({
+    const providerContext = (signal: AbortSignal, deadline: import("./runtime/deadline.js").FabricDeadline) => ({
       cwd: this.cwd,
       signal,
+      deadline,
     });
-    const result = await this.#runtime.execute(options.code, async (ref, args, signal) => {
+    const result = await this.#runtime.execute(options.code, async (ref, args, signal, deadline) => {
       providerCalls += 1;
       if (providerCalls > this.config.executor.maxProviderCalls) throw new Error("Fabric provider call quota exceeded");
       activeProviderCalls += 1;
@@ -119,7 +122,7 @@ export class FabricExecutionService {
         throw new Error("Fabric concurrent provider call quota exceeded");
       }
       try {
-        const context = providerContext(signal);
+        const context = providerContext(signal, deadline);
         if (ref === "fabric.providers") return this.registry.providers();
         if (ref === "fabric.list") return this.registry.list();
         if (ref === "fabric.search") {
@@ -182,9 +185,10 @@ export class FabricExecutionService {
           actionFloor,
           invocationTimeout,
         );
-        // QuickJS deadlines only extend. Reporting must likewise never shrink
-        // after a later host call with a lower floor.
-        observedEffectiveTimeoutMs = Math.max(observedEffectiveTimeoutMs, candidate);
+        if (candidate > notifiedEffectiveTimeoutMs) {
+          notifiedEffectiveTimeoutMs = candidate;
+          options.onEffectiveTimeoutChange?.(candidate);
+        }
         return candidate;
       },
     });
@@ -206,7 +210,7 @@ export class FabricExecutionService {
       audits,
       elapsedMs: performance.now() - started,
       ...(outputError ? { error: outputError } : {}),
-      effectiveTimeoutMs: observedEffectiveTimeoutMs,
+      effectiveTimeoutMs: result.effectiveTimeoutMs,
     };
   }
 
