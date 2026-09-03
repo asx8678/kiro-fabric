@@ -78,7 +78,7 @@ None of these files is reachable from the Power runtime.
 | `scripts/build-kiro-closure.mjs` | Esbuild metafile authority, forbidden-module checks, source/package inventory, closure digest manifest. |
 | `scripts/assert-build-artifacts.mjs` | Imports built entries and rejects stale/forbidden artifacts and declaration leaks. |
 | `scripts/build-power-dev.mjs` | Creates and atomically publishes the sole private checkout-local immutable staging generation on Linux and macOS. |
-| `scripts/install-power-user.mjs` | Explicitly installs validated, digest-bound source and active Power copies under `$KIRO_HOME/powers`, safely normalizes Kiro-copied modes, transactionally replaces owned packages, and atomically registers the local Power. |
+| `scripts/install-power-user.mjs` | Explicitly installs validated, digest-bound source and active Power copies under `$KIRO_HOME/powers`, safely normalizes Kiro-copied modes, transactionally replaces owned packages, atomically registers the local Power, and publishes digest-owned always-on global steering without overwriting user modifications. |
 | `scripts/validate-power-package.mjs` | Rejects aliases, symlinks, unsafe modes/owners, unexpected entries, forbidden strings, and manifest drift. |
 | `scripts/assert-kiro-home-unchanged.mjs` | Guards ordinary commands against Kiro-home mutation. |
 | `scripts/certify-kiro-power.mjs` | Hermetic stdio MCP certification of initialization, exact tools, workspace binding, strict execution, approval absence, and shutdown. |
@@ -109,7 +109,7 @@ None of these files is reachable from the Power runtime.
 | `tests/artifacts-state.test.ts` | Artifact confinement/residue plus state revision/privacy/document bounds. |
 | `tests/package-boundary.test.ts` | Reachability, removed subsystems, manifests, policy, export isolation, and live documentation path references. |
 | `tests/hermetic-stage.test.ts` | Deterministic staged package and no user-home mutation. |
-| `tests/power-user-install.test.ts` | User-global Kiro-home installation, safe owned updates, digest parity, and unowned-destination refusal. |
+| `tests/power-user-install.test.ts` | User-global Kiro-home installation and registration, safe owned updates, digest parity, always-on steering publication, modification refusal, and unowned-destination refusal. |
 | `tests/archive.test.ts` | Cross-platform deterministic USTAR/gzip metadata, extraction, package identity, and epoch validation. |
 | `tests/release-evidence.test.ts` | Exact real-client evidence fields/digest binding and fake-client verification of isolated qualification cwd. |
 | `tests/sbom-identity.test.ts` | Parallel package-version preservation in closure and SBOM inputs. |

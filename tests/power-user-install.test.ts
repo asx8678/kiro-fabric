@@ -32,6 +32,11 @@ describe("user-global Power installation", () => {
     const activeRoot = path.join(kiroHome, "powers", "installed", "kiro-fabric");
     expect(first.root).toBe(fs.realpathSync(sourceRoot));
     expect(first.activeRoot).toBe(fs.realpathSync(activeRoot));
+    expect(first.steeringFile).toBe(path.join(kiroHome, "steering", "kiro-fabric-power-always.md"));
+    const steering = fs.readFileSync(first.steeringFile, "utf8");
+    expect(steering).toContain("inclusion: always");
+    expect(steering).toContain("For every task, activate the installed **Kiro Fabric** Power");
+    expect(steering).toMatch(/<!-- kiro-fabric-power-user-install:v1:[a-f0-9]{64} -->\n$/u);
     expect(validatePowerPackage(sourceRoot).digest).toBe(validatePowerPackage(activeRoot).digest);
     expect(JSON.parse(fs.readFileSync(path.join(kiroHome, "powers", "installed.json"), "utf8")).installedPowers)
       .toContainEqual({ name: "kiro-fabric", registryId: "user-added" });
@@ -50,6 +55,9 @@ describe("user-global Power installation", () => {
     }
     expect(installUserPower(".tmp/kiro-fabric-power", env, root).digest).toBe(first.digest);
     expect(validatePowerPackage(activeRoot).digest).toBe(first.digest);
+
+    fs.appendFileSync(first.steeringFile, "user modification\n");
+    expect(() => installUserPower(".tmp/kiro-fabric-power", env, root)).toThrow("unowned or modified Kiro Fabric steering");
   });
 
   it("refuses to replace an unowned global directory", () => {

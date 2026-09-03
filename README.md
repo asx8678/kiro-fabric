@@ -16,7 +16,7 @@ pnpm install
 pnpm run power:stage   # builds, installs, and registers the Power for Kiro IDE and CLI v3
 ```
 
-Run `power:stage` while Kiro IDE and CLI sessions are closed. The command installs the validated source at `$KIRO_HOME/powers/kiro-fabric`, refreshes `$KIRO_HOME/powers/installed/kiro-fabric`, and idempotently registers **Kiro Fabric** in Kiro's local `user-added` registry. No IDE import step is required. Use `pnpm run power:stage:local` when only the checkout-local `.tmp/kiro-fabric-power` package is needed. Then start sessions with:
+Run `power:stage` while Kiro IDE and CLI sessions are closed. The command installs the validated source at `$KIRO_HOME/powers/kiro-fabric`, refreshes `$KIRO_HOME/powers/installed/kiro-fabric`, idempotently registers **Kiro Fabric** in Kiro's local `user-added` registry, and installs always-included guidance at `$KIRO_HOME/steering/kiro-fabric-power-always.md`. No IDE import step is required. Use `pnpm run power:stage:local` when only the checkout-local `.tmp/kiro-fabric-power` package is needed. Then start sessions with:
 
 ```sh
 kiro-cli --v3

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -10,6 +10,9 @@ export const USER_POWER_NAME = "kiro-fabric";
 const OWNER_FILE = ".kiro-fabric-power-owner.json";
 const OWNER_PRODUCT = "kiro-fabric-power-user-install";
 const LOCK_NAME = ".kiro-fabric-install.lock";
+const STEERING_FILE = "kiro-fabric-power-always.md";
+const STEERING_MARKER = "kiro-fabric-power-user-install";
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const lstat = (target) => {
   try { return fs.lstatSync(target); }
@@ -175,12 +178,12 @@ const readControlJson = (file, fallback) => {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 };
 
-const writeControlJson = (file, value) => {
+const writePrivateFile = (file, content) => {
   const parent = ensurePrivateDirectory(path.dirname(file)).path;
   const destination = path.join(parent, path.basename(file));
   const temporary = path.join(parent, `.${path.basename(file)}-${process.pid}-${randomBytes(12).toString("hex")}`);
   try {
-    fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    fs.writeFileSync(temporary, content, { mode: 0o600, flag: "wx" });
     const descriptor = fs.openSync(temporary, "r");
     try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
     fs.renameSync(temporary, destination);
@@ -188,6 +191,36 @@ const writeControlJson = (file, value) => {
   } finally {
     try { fs.unlinkSync(temporary); } catch (error) { if (error?.code !== "ENOENT") throw error; }
   }
+};
+
+const writeControlJson = (file, value) => writePrivateFile(file, `${JSON.stringify(value, null, 2)}\n`);
+
+const installAlwaysSteering = (kiroHome) => {
+  const source = path.join(REPOSITORY_ROOT, "steering", "kiro-fabric-always.md");
+  const sourceStats = fs.lstatSync(source);
+  if (!sourceStats.isFile() || sourceStats.isSymbolicLink() || sourceStats.nlink !== 1 || sourceStats.size > 64 * 1024) {
+    throw new Error(`Kiro Fabric steering source is unsafe: ${source}`);
+  }
+  const body = `${fs.readFileSync(source, "utf8").trimEnd()}\n`;
+  if (!body.startsWith("---\ninclusion: always\n---\n")) throw new Error("Kiro Fabric steering must be always included");
+  const digest = createHash("sha256").update(body).digest("hex");
+  const marker = `<!-- ${STEERING_MARKER}:v1:${digest} -->\n`;
+  const destination = path.join(kiroHome, "steering", STEERING_FILE);
+  const existing = lstat(destination);
+  if (existing) {
+    if (!existing.isFile() || existing.isSymbolicLink() || existing.nlink !== 1 || existing.size > 64 * 1024 ||
+        (typeof process.getuid === "function" && existing.uid !== process.getuid()) ||
+        (process.platform !== "win32" && (existing.mode & 0o022) !== 0)) {
+      throw new Error(`Refusing unsafe Kiro Fabric steering file: ${destination}`);
+    }
+    const current = fs.readFileSync(destination, "utf8");
+    const match = current.match(/\n<!-- kiro-fabric-power-user-install:v1:([a-f0-9]{64}) -->\n$/u);
+    const currentBody = match ? current.slice(0, match.index + 1) : "";
+    const currentDigest = createHash("sha256").update(currentBody).digest("hex");
+    if (!match || match[1] !== currentDigest) throw new Error(`Refusing to replace unowned or modified Kiro Fabric steering: ${destination}`);
+  }
+  writePrivateFile(destination, `${body}${marker}`);
+  return destination;
 };
 
 const registerInstalledPower = (kiroHome, sourceRoot) => {
@@ -217,12 +250,13 @@ export const installUserPower = (stagingRoot = ".tmp/kiro-fabric-power", env = p
   const source = installPowerPackage(stagingRoot, path.join(kiroHome, "powers", USER_POWER_NAME));
   const active = installPowerPackage(stagingRoot, path.join(kiroHome, "powers", "installed", USER_POWER_NAME));
   registerInstalledPower(kiroHome, source.root);
-  return { ...source, activeRoot: active.root };
+  const steeringFile = installAlwaysSteering(kiroHome);
+  return { ...source, activeRoot: active.root, steeringFile };
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const result = installUserPower(process.argv[2]);
-    process.stdout.write(`${JSON.stringify(result)}\nInstalled and registered Kiro Fabric at ${result.activeRoot}\n`);
+    process.stdout.write(`${JSON.stringify(result)}\nInstalled and registered Kiro Fabric at ${result.activeRoot}\nInstalled always-on steering at ${result.steeringFile}\n`);
   } catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
 }
