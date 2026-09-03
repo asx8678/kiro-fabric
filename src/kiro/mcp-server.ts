@@ -28,6 +28,7 @@ import { prepareKiroPowerDataPaths, prepareKiroPowerProjectPaths } from "./power
 import {
   KiroPowerWorkspaceBinding,
   kiroPowerWorkspaceRequestSchema,
+  kiroWorkspaceToolInputSchema,
   type KiroPowerBoundWorkspace,
   type KiroPowerWorkspaceRequest,
 } from "./power/workspace-binding.js";
@@ -247,7 +248,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     await syncWorkspace();
     return { tools: [
       { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Agent-scoped state and memory.", inputSchema: JSON.parse(JSON.stringify(kiroPowerWorkspaceRequestSchema)), annotations: { readOnlyHint: false } },
+      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Agent-scoped state and memory.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
       { name: "fabric_exec", description: EXEC_DESCRIPTION, inputSchema: fabricExecInputSchemaJson(), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } },
     ] };
   });

@@ -52,7 +52,7 @@ jobs:
       - name: Hermetic macOS local staging
         run: node scripts/assert-kiro-home-unchanged.mjs pnpm run agent:stage:local
       - name: Focused macOS staging, install, and archive tests
-        run: pnpm exec vitest run tests/hermetic-stage.test.ts tests/power-user-install.test.ts tests/package-boundary.test.ts tests/archive.test.ts
+        run: pnpm exec vitest run tests/hermetic-stage.test.ts tests/agent-user-install.test.ts tests/package-boundary.test.ts tests/archive.test.ts
       - name: Verify cross-platform build reproducibility
         run: test -z "$(git status --porcelain)"
       - run: git diff --check

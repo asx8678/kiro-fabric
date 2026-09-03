@@ -21016,6 +21016,16 @@ var kiroPowerWorkspaceRequestSchema = typebox_exports.Union([
   }, { additionalProperties: false }),
   typebox_exports.Object({ action: typebox_exports.Literal("detach") }, { additionalProperties: false })
 ], { type: "object" });
+var kiroWorkspaceToolInputSchema = {
+  type: "object",
+  properties: {
+    action: { type: "string", enum: ["status", "list", "select", "attach", "detach"] },
+    rootId: { type: "string", minLength: 1, maxLength: 64 },
+    path: { type: "string", minLength: 1, maxLength: 4096 }
+  },
+  required: ["action"],
+  additionalProperties: false
+};
 var idFor = (root) => createHash3("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
 var KiroPowerWorkspaceBinding = class {
   #pluginRoot;
@@ -23100,7 +23110,7 @@ var createKiroMcpServer = async (options) => {
     await syncWorkspace();
     return { tools: [
       { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Agent-scoped state and memory.", inputSchema: JSON.parse(JSON.stringify(kiroPowerWorkspaceRequestSchema)), annotations: { readOnlyHint: false } },
+      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Agent-scoped state and memory.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
       { name: "fabric_exec", description: EXEC_DESCRIPTION, inputSchema: fabricExecInputSchemaJson(), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } }
     ] };
   });

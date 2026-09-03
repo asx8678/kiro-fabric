@@ -12,6 +12,7 @@ import {
 } from "../canonical-path.js";
 import type { KiroPowerWorkspaceIdentity } from "./data-paths.js";
 
+/** Strict runtime validator; invalid action/argument combinations fail closed. */
 export const kiroPowerWorkspaceRequestSchema = Type.Union([
   Type.Object({ action: Type.Literal("status") }, { additionalProperties: false }),
   Type.Object({ action: Type.Literal("list") }, { additionalProperties: false }),
@@ -25,6 +26,22 @@ export const kiroPowerWorkspaceRequestSchema = Type.Union([
   }, { additionalProperties: false }),
   Type.Object({ action: Type.Literal("detach") }, { additionalProperties: false }),
 ], { type: "object" });
+
+/**
+ * Model-visible schema kept free of top-level combinators because Kiro CLI 3's
+ * model gateway rejects top-level oneOf/anyOf. The strict union above remains
+ * authoritative when the tool is invoked.
+ */
+export const kiroWorkspaceToolInputSchema = {
+  type: "object",
+  properties: {
+    action: { type: "string", enum: ["status", "list", "select", "attach", "detach"] },
+    rootId: { type: "string", minLength: 1, maxLength: 64 },
+    path: { type: "string", minLength: 1, maxLength: 4096 },
+  },
+  required: ["action"],
+  additionalProperties: false,
+} as const;
 
 export type KiroPowerWorkspaceRequest =
   | { action: "status" }

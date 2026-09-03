@@ -74,6 +74,9 @@ try {
   if (JSON.stringify(tools) !== JSON.stringify(["fabric_info", "fabric_workspace", "fabric_exec"])) throw new Error(`tool surface mismatch: ${JSON.stringify(tools)}`);
   for (const tool of listed.tools) {
     if (tool.inputSchema?.type !== "object") throw new Error(`tool input schema must declare an object root: ${tool.name}`);
+    if (["oneOf", "anyOf", "allOf"].some((keyword) => keyword in tool.inputSchema)) {
+      throw new Error(`tool input schema must not use a top-level combinator: ${tool.name}`);
+    }
   }
   const info = JSON.parse(text(await call(3, "fabric_info", {})));
   if (info.product !== "kiro-fabric-agent" || info.executor !== "quickjs") throw new Error("fabric_info identity mismatch");

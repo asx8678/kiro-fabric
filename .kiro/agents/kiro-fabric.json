@@ -8,7 +8,7 @@
   "mcpServers": {
     "fabric": {
       "command": "node",
-      "args": ["scripts/run-agent-dev.mjs"]
+      "args": ["./scripts/run-agent-dev.mjs"]
     }
   },
   "tools": ["read", "write", "shell", "web", "subagent", "todo_list", "@fabric"],

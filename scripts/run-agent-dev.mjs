@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-const root=fs.realpathSync(path.resolve("."));
+import { fileURLToPath } from "node:url";
+const root=fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."));
 const data=path.join(root,".tmp","agent-dev-data");
 fs.mkdirSync(data,{recursive:true,mode:0o700});
 process.env.KIRO_FABRIC_RUNTIME_ROOT=path.join(root,"dist","kiro-agent-closure");

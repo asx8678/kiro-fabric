@@ -37,6 +37,25 @@ describe("Agent product boundary", () => {
     }
   });
 
+  it("keeps the checkout-local Agent launchable and CI on Agent tests", () => {
+    const profile = JSON.parse(fs.readFileSync(path.join(root, ".kiro", "agents", "kiro-fabric.json"), "utf8"));
+    expect(profile.includePowers).toBe(false);
+    expect(profile.includeMcpJson).toBe(false);
+    expect(Object.keys(profile.mcpServers)).toEqual(["fabric"]);
+    expect(profile.mcpServers.fabric).toEqual({ command: "node", args: ["./scripts/run-agent-dev.mjs"] });
+    expect(profile.resources).toEqual(["file://skills/fabric-exec/SKILL.md"]);
+    const launched = spawnSync(process.execPath, [path.join(root, "scripts", "run-agent-dev.mjs")], {
+      cwd: path.dirname(root),
+      encoding: "utf8",
+      input: "",
+      timeout: 30_000,
+    });
+    expect(launched.status, launched.stderr).toBe(0);
+    const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8");
+    expect(workflow).toContain("tests/agent-user-install.test.ts");
+    expect(workflow).not.toContain("tests/power-user-install.test.ts");
+  });
+
   it("validates the exact staged package and sole closure", () => {
     const result = validateAgentPackage(path.join(root, ".tmp", "kiro-fabric-agent"));
     expect(result.ok).toBe(true);

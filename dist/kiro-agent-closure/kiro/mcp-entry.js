@@ -53,7 +53,7 @@ var resolveKiroAgentLaunchContext = (env = process.env) => {
 var PROCESS_SHUTDOWN_TIMEOUT_MS = 8e3;
 var startKiroMcpServer = async () => {
   const launch = resolveKiroAgentLaunchContext();
-  const { createKiroMcpServer } = await import("../chunks/mcp-server-6JW3ZRFY.js");
+  const { createKiroMcpServer } = await import("../chunks/mcp-server-NC7WZP7G.js");
   return createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot });
 };
 var runKiroMcpProcess = async () => {
