@@ -1,4 +1,4 @@
-export const powerGuestDeclarations = `
+export const fabricGuestDeclarations = `
 type JsonPrimitive = null | boolean | number | string;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };

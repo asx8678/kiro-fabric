@@ -8,6 +8,7 @@ import {
   KiroPowerWorkspaceBinding,
   kiroPowerWorkspaceRequestSchema,
 } from "../src/kiro/power/workspace-binding.js";
+import { installedKiroHomeFor } from "../src/kiro/mcp-server.js";
 import { CachedWorkspaceContextProvider } from "../src/kiro/power/workspace-context.js";
 
 const roots: string[] = [];
@@ -88,5 +89,46 @@ describe("canonical workspace binding", () => {
     const workspace = path.join(root, "workspace"); const alias = path.join(root, "alias"); fs.mkdirSync(workspace); fs.symlinkSync(workspace, alias);
     await expect(binding.handle({ action: "attach", path: alias })).rejects.toThrow();
     await expect(binding.handle({ action: "attach", path: pluginRoot })).rejects.toThrow("too broad or reserved");
+  });
+
+  it("reserves an explicit non-default Kiro home from workspace selection", async () => {
+    const root = temporary();
+    const kiroContainer = path.join(root, "custom-kiro-container");
+    const kiroHome = path.join(kiroContainer, "home");
+    const agents = path.join(kiroHome, "agents");
+    const pluginRoot = path.join(root, "runtime");
+    const pluginData = path.join(root, "data");
+    const workspace = path.join(root, "workspace");
+    for (const directory of [kiroContainer, kiroHome, agents, pluginRoot, pluginData, workspace]) fs.mkdirSync(directory);
+    const binding = new KiroPowerWorkspaceBinding({ pluginRoot, pluginData, kiroHome });
+
+    binding.updateClientRoots([{ uri: pathToFileURL(agents).href }]);
+    expect(binding.list().roots).toEqual([]);
+    await expect(binding.handle({ action: "attach", path: agents })).rejects.toThrow("too broad or reserved");
+
+    binding.updateClientRoots([{ uri: pathToFileURL(kiroContainer).href }]);
+    expect(binding.list().roots).toEqual([]);
+    await expect(binding.handle({ action: "attach", path: kiroContainer })).rejects.toThrow("too broad or reserved");
+
+    binding.updateClientRoots([{ uri: pathToFileURL(workspace).href }]);
+    expect(binding.boundRoot()).toBe(fs.realpathSync(workspace));
+  });
+
+  it("derives and validates the installed custom Kiro home from Agent storage", () => {
+    const root = temporary();
+    const kiroHome = path.join(root, "elsewhere", ".kiro-custom");
+    const installRoot = path.join(kiroHome, "kiro-fabric");
+    const data = path.join(installRoot, "data");
+    const runtime = path.join(installRoot, "runtime", "a".repeat(64));
+    fs.mkdirSync(data, { recursive: true });
+    fs.mkdirSync(runtime, { recursive: true });
+    expect(installedKiroHomeFor(runtime, data)).toBe(fs.realpathSync(kiroHome));
+
+    const unrelatedRuntime = path.join(root, "unrelated-runtime");
+    fs.mkdirSync(unrelatedRuntime);
+    expect(() => installedKiroHomeFor(unrelatedRuntime, data)).toThrow("digest-named runtime layout");
+    const unrelatedData = path.join(root, "library-data");
+    fs.mkdirSync(unrelatedData);
+    expect(installedKiroHomeFor(unrelatedRuntime, unrelatedData)).toBeUndefined();
   });
 });

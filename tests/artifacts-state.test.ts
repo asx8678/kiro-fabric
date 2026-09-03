@@ -2,9 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
 import { KiroPowerArtifactsProvider } from "../src/kiro/power/artifacts-provider.js";
+import { createKiroRuntime } from "../src/kiro/runtime.js";
 import { StateProvider } from "../src/providers/state-provider.js";
 
 const roots: string[] = [];
@@ -92,6 +94,57 @@ describe("private artifacts and state", () => {
     expect(await provider.invoke("get", { key: "constructor" }, context)).toMatchObject({ value: "stored", revision: 3 });
     expect(({} as Record<string, unknown>).safe).toBeUndefined();
     expect(fs.statSync(path.join(root, "state.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it("shares durable memory and state safely across independent runtimes for one workspace", async () => {
+    const root = temporary();
+    const workspace = path.join(root, "workspace");
+    const memoryRoot = path.join(root, "memory");
+    const stateRoot = path.join(root, "state");
+    fs.mkdirSync(workspace, { mode: 0o700 });
+    const config = {
+      ...DEFAULT_FABRIC_CONFIG,
+      approvals: { read: "allow", write: "allow", execute: "deny", network: "deny" } as const,
+      mcp: { ...DEFAULT_FABRIC_CONFIG.mcp, enabled: false },
+    };
+    const runtime = (name: string) => createKiroRuntime({
+      cwd: workspace,
+      configFile: path.join(root, "unused-config.json"),
+      mcpConfigPath: path.join(root, "unused-mcp.json"),
+      artifactsRoot: path.join(root, `artifacts-${name}`),
+      memoryRoot,
+      memoryNamespace: "project:shared-runtime-test",
+      stateRoot,
+      config,
+    });
+    const first = runtime("first");
+    const second = runtime("second");
+    const invoke = (owner: ReturnType<typeof runtime>, ref: string, args: Record<string, unknown>) =>
+      owner.registry.invoke(ref, args, {
+        cwd: workspace,
+        audits: [],
+        maxResultChars: 100_000,
+        async approve() {},
+      });
+    try {
+      await invoke(first, "memory.set", { key: "shared", value: { nonce: "memory-visible" } });
+      await expect(invoke(second, "memory.get", { key: "shared" })).resolves.toMatchObject({ value: { nonce: "memory-visible" } });
+      await invoke(second, "memory.set", { key: "second", value: true });
+      await expect(invoke(first, "memory.get", { key: "second" })).resolves.toMatchObject({ value: true });
+
+      await expect(invoke(first, "state.set", { key: "shared", value: "initial" })).resolves.toEqual({ key: "shared", revision: 1 });
+      await expect(invoke(second, "state.get", { key: "shared" })).resolves.toMatchObject({ value: "initial", revision: 1 });
+      const competing = await Promise.allSettled([
+        invoke(first, "state.set", { key: "shared", value: "first", expectedRevision: 1 }),
+        invoke(second, "state.set", { key: "shared", value: "second", expectedRevision: 1 }),
+      ]);
+      expect(competing.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(competing.filter((result) => result.status === "rejected")).toHaveLength(1);
+      await expect(invoke(first, "state.get", { key: "shared" })).resolves.toMatchObject({ revision: 2 });
+      await expect(invoke(second, "state.get", { key: "shared" })).resolves.toMatchObject({ revision: 2 });
+    } finally {
+      await Promise.all([first.close(), second.close()]);
+    }
   });
 
   it("bounds the full state document and fails closed on malformed persistence", async () => {

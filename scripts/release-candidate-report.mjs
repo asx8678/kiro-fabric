@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { assertTrackedGitWorktreeClean } from "./package-identity.mjs";
 import { isPackedPackageFileAllowed } from "./package-policy.mjs";
 import { assertRealClientEvidence } from "./real-client-evidence.mjs";
 import { digestAgentPackage, validateAgentPackage } from "./validate-agent-package.mjs";
@@ -14,7 +15,7 @@ const sbomPath = path.resolve(valueAfter("--sbom") ?? ".tmp/kiro-fabric-agent.sp
 const archivePath = path.resolve(valueAfter("--archive") ?? ".tmp/kiro-fabric-agent.tar.gz");
 const stage = path.resolve(".tmp/kiro-fabric-agent");
 const packageResult = validateAgentPackage(stage);
-const packageDigest = digestAgentPackage(stage, { excludeOwner: true }).digest;
+const packageDigest = digestAgentPackage(stage).digest;
 const sbomBytes = fs.readFileSync(sbomPath);
 const sbom = JSON.parse(sbomBytes.toString("utf8"));
 const sbomDigest = sbom.packages?.[0]?.checksums?.[0]?.checksumValue;
@@ -75,6 +76,7 @@ if (head.status !== 0) throw new Error("Cannot bind release candidate to HEAD");
 const commit = head.stdout.trim();
 const expectedCommit = valueAfter("--commit") ?? process.env.GITHUB_SHA;
 if (expectedCommit && expectedCommit !== commit) throw new Error("Release candidate commit does not match HEAD");
+assertTrackedGitWorktreeClean();
 const tag = valueAfter("--tag") ?? null;
 if (tag !== null && tag !== `v${packageResult.version}`) throw new Error("Release tag does not match package version");
 const qualificationPath = valueAfter("--qualification");
@@ -90,7 +92,13 @@ if (qualificationPath) {
   assertRealClientEvidence(
     JSON.parse(qualificationBytes.toString("utf8")),
     packageDigest,
-    { qualification: true, archiveDigest, commit },
+    {
+      qualification: true,
+      archiveDigest,
+      commit,
+      runtimeDigest: packageResult.runtime.digest,
+      skillDigest: packageResult.skill.digest,
+    },
   );
   realClient = { status: "passed", evidenceDigest: createHash("sha256").update(qualificationBytes).digest("hex") };
 }

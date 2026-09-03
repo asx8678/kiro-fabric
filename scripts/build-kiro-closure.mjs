@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { builtinModules } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 import { build } from "esbuild";
 import { uniquePackageRecords } from "./package-identity.mjs";
 
@@ -21,6 +21,13 @@ for (const allowed of allowedDirect) {
 
 fs.rmSync(outdir, { recursive: true, force: true });
 const external = [...new Set(builtinModules.flatMap((name) => [name, name.startsWith("node:") ? name.slice(5) : `node:${name}`]))];
+// jsonc-parser advertises a legacy UMD `main` before its ESM `module`. The UMD
+// entry contains runtime-relative CommonJS requires that cannot be relocated
+// into a single-file esbuild closure. Resolve the ESM entry from mcporter's own
+// dependency graph and bind this one package explicitly; all implementation
+// modules are then statically included in the archive.
+const mcporterRequire = createRequire(import.meta.resolve("mcporter"));
+const jsoncParserEsm = mcporterRequire.resolve("jsonc-parser/lib/esm/main.js");
 const banner = `import { createRequire as __createRequire } from "node:module";\nimport { fileURLToPath as __fileURLToPath } from "node:url";\nimport { dirname as __dirnameOf } from "node:path";\nglobalThis.__filename = __fileURLToPath(import.meta.url);\nglobalThis.__dirname = __dirnameOf(globalThis.__filename);\nconst require = __createRequire(import.meta.url);\n`;
 const result = await build({
   entryPoints: [product.entrypoint, product.runtimeAssets.compilerWorker],
@@ -35,12 +42,18 @@ const result = await build({
   splitting: true,
   sourcemap: false,
   metafile: true,
+  alias: { "jsonc-parser": jsoncParserEsm },
   logLevel: "info",
   external,
   banner: { js: banner },
 });
 const normalize = (value) => value.replaceAll("\\", "/");
 const inputs = Object.keys(result.metafile.inputs).map(normalize).sort();
+const jsoncParserInputs = inputs.filter((input) => input.includes("/jsonc-parser/") || input.startsWith("jsonc-parser/"));
+if (!jsoncParserInputs.some((input) => input.endsWith("/lib/esm/main.js")) ||
+    jsoncParserInputs.some((input) => input.includes("/lib/umd/"))) {
+  throw new Error("Agent closure did not statically bind jsonc-parser's relocatable ESM implementation");
+}
 const sourceInputs = inputs.filter((input) => input.startsWith("src/"));
 for (const forbidden of product.forbiddenRuntimeModules) {
   const hit = sourceInputs.find((input) => forbidden.endsWith("/") ? input.startsWith(forbidden) : input === forbidden);

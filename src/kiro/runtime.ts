@@ -1,9 +1,9 @@
 import { ActionRegistry } from "../core/action-registry.js";
 import {
-  DEFAULT_FABRIC_POWER_CONFIG,
-  loadFabricPowerConfig,
-  normalizeFabricPowerConfig,
-  type FabricPowerConfig,
+  DEFAULT_FABRIC_CONFIG,
+  loadFabricConfig,
+  normalizeFabricConfig,
+  type FabricConfig,
 } from "../config.js";
 import { FabricExecutionService } from "../execution-service.js";
 import type { FabricProviderStatus } from "../protocol.js";
@@ -21,7 +21,7 @@ export interface KiroRuntimeOptions {
   memoryRoot?: string;
   memoryNamespace?: string;
   stateRoot?: string;
-  config?: FabricPowerConfig;
+  config?: FabricConfig;
 }
 
 export interface KiroRuntime {
@@ -33,8 +33,8 @@ export interface KiroRuntime {
 }
 
 export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
-  const loaded = options.config ?? loadFabricPowerConfig(options.configFile, DEFAULT_FABRIC_POWER_CONFIG);
-  const config = normalizeFabricPowerConfig({
+  const loaded = options.config ?? loadFabricConfig(options.configFile, DEFAULT_FABRIC_CONFIG);
+  const config = normalizeFabricConfig({
     ...loaded,
     mcp: { ...loaded.mcp, configPath: options.mcpConfigPath },
   });

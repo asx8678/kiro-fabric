@@ -1,6 +1,8 @@
 export {
   createKiroMcpServer,
-  supportsKiroPowerElicitation,
+  supportsKiroElicitation,
+  /** @deprecated Use supportsKiroElicitation. */
+  supportsKiroElicitation as supportsKiroPowerElicitation,
   type KiroMcpServerOptions,
 } from "./kiro/mcp-server.js";
 export {
@@ -22,10 +24,23 @@ export type {
   FabricExecutorConfig,
   FabricMcpConfig,
   FabricMemoryConfig,
-  FabricPowerConfig,
+  FabricConfig,
+  /** @deprecated Use FabricConfig. */
+  FabricConfig as FabricPowerConfig,
   FabricResultFormat,
   FabricStateConfig,
   FabricTracingConfig,
+} from "./config.js";
+export {
+  DEFAULT_FABRIC_CONFIG,
+  loadFabricConfig,
+  normalizeFabricConfig,
+  /** @deprecated Use DEFAULT_FABRIC_CONFIG. */
+  DEFAULT_FABRIC_CONFIG as DEFAULT_FABRIC_POWER_CONFIG,
+  /** @deprecated Use loadFabricConfig. */
+  loadFabricConfig as loadFabricPowerConfig,
+  /** @deprecated Use normalizeFabricConfig. */
+  normalizeFabricConfig as normalizeFabricPowerConfig,
 } from "./config.js";
 export type {
   KiroWorkspaceContextStatus,

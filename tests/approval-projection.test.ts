@@ -1,26 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_FABRIC_POWER_CONFIG } from "../src/config.js";
+import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { KiroPowerApprover, KiroPowerFabricApprover } from "../src/kiro/power/approver.js";
 import { projectFabricExecutionText } from "../src/kiro/projection.js";
 import type { ResolvedFabricAction } from "../src/protocol.js";
 
 const action: ResolvedFabricAction = { name: "set", ref: "memory.set", provider: "memory", description: "set", inputSchema: {}, risk: "write" };
 
-describe("Power approval and projection", () => {
+describe("Fabric approval and projection", () => {
   it("enforces explicit policy denial without elicitation", async () => {
     let requested = false;
     const bridge = new KiroPowerApprover({ supported: () => true, async request() { requested = true; return { action: "accept", approved: true }; } });
-    const approver = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_POWER_CONFIG.approvals, write: "deny" }, bridge, "/workspace");
+    const approver = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, write: "deny" }, bridge, "/workspace");
     await expect(approver.approve(action, { key: "a" })).rejects.toThrow("denied by Fabric policy");
     expect(requested).toBe(false);
   });
 
   it("fails closed when approval support is absent or declined", async () => {
     const absent = new KiroPowerApprover({ supported: () => false, async request() { throw new Error("must not run"); } });
-    const absentApprover = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_POWER_CONFIG.approvals, write: "ask" }, absent, "/workspace");
+    const absentApprover = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, write: "ask" }, absent, "/workspace");
     await expect(absentApprover.approve(action, { key: "a" })).rejects.toThrow("denied or unavailable");
     const declined = new KiroPowerApprover({ supported: () => true, async request() { return { action: "decline" }; } });
-    await expect(new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_POWER_CONFIG.approvals, write: "ask" }, declined, "/workspace").approve(action, { key: "a" })).rejects.toThrow("denied or unavailable");
+    await expect(new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, write: "ask" }, declined, "/workspace").approve(action, { key: "a" })).rejects.toThrow("denied or unavailable");
   });
 
   it("redacts secret-like keys, bearer values, URLs, and outside paths", async () => {
@@ -30,7 +30,7 @@ describe("Power approval and projection", () => {
       async request(options) { message = options.message; return { action: "accept", approved: true }; },
     });
     const approver = new KiroPowerFabricApprover(
-      { ...DEFAULT_FABRIC_POWER_CONFIG.approvals, write: "ask" },
+      { ...DEFAULT_FABRIC_CONFIG.approvals, write: "ask" },
       bridge,
       "/workspace",
     );

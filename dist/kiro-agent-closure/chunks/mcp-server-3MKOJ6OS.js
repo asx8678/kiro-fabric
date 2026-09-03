@@ -7201,6 +7201,7 @@ var require_dist = __commonJS({
 });
 
 // src/kiro/mcp-server.ts
+import { randomBytes as randomBytes4 } from "node:crypto";
 import fs9, { readFileSync } from "node:fs";
 import path9 from "node:path";
 
@@ -18785,7 +18786,7 @@ var MAX_EXECUTOR_MEMORY_LIMIT_BYTES = Math.min(
   QUICKJS_MAX_MEMORY_LIMIT_BYTES,
   Math.max(8 * 1024 * 1024, Math.floor(os.totalmem()))
 );
-var DEFAULT_FABRIC_POWER_CONFIG = {
+var DEFAULT_FABRIC_CONFIG = {
   executor: {
     timeoutMs: 12e4,
     maxTimeoutMs: 9e5,
@@ -18849,7 +18850,7 @@ var assertFileConfigShape = (value) => {
     }
   }
 };
-var normalizeFabricPowerConfig = (input, defaults = DEFAULT_FABRIC_POWER_CONFIG) => {
+var normalizeFabricConfig = (input, defaults = DEFAULT_FABRIC_CONFIG) => {
   const root = record2(input) ?? {};
   const executor = record2(root.executor) ?? {};
   const approvals = record2(root.approvals) ?? {};
@@ -18913,7 +18914,7 @@ var normalizeFabricPowerConfig = (input, defaults = DEFAULT_FABRIC_POWER_CONFIG)
   };
 };
 var MAX_CONFIG_BYTES = 256 * 1024;
-var loadFabricPowerConfig = (configFile, defaults = DEFAULT_FABRIC_POWER_CONFIG) => {
+var loadFabricConfig = (configFile, defaults = DEFAULT_FABRIC_CONFIG) => {
   let descriptor2;
   let observed = false;
   try {
@@ -18947,10 +18948,10 @@ var loadFabricPowerConfig = (configFile, defaults = DEFAULT_FABRIC_POWER_CONFIG)
     if (bytes > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
     const value = JSON.parse(buffer.subarray(0, bytes).toString("utf8"));
     assertFileConfigShape(value);
-    return normalizeFabricPowerConfig(value, defaults);
+    return normalizeFabricConfig(value, defaults);
   } catch (error) {
     if (error.code === "ENOENT" && !observed) {
-      return normalizeFabricPowerConfig(void 0, defaults);
+      return normalizeFabricConfig(void 0, defaults);
     }
     throw error;
   } finally {
@@ -19299,7 +19300,7 @@ var ActionRegistry = class {
 };
 
 // src/runtime/guest-types.ts
-var powerGuestDeclarations = `
+var fabricGuestDeclarations = `
 type JsonPrimitive = null | boolean | number | string;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };
@@ -20224,7 +20225,7 @@ var FabricExecutionService = class {
     try {
       checked = await typeCheckFabricCodeInWorker({
         code: options.code,
-        declarations: powerGuestDeclarations
+        declarations: fabricGuestDeclarations
       }, {
         ...options.signal ? { signal: options.signal } : {},
         timeoutMs: Math.min(FABRIC_COMPILER_TIMEOUT_MS, effectiveTimeoutMs)
@@ -20528,7 +20529,7 @@ var fabricExecInputSchema = typebox_exports.Object({
     }
   )),
   resultFormat: typebox_exports.Optional(typebox_exports.Union(FABRIC_EXEC_RESULT_FORMATS.map((value) => typebox_exports.Literal(value)))),
-  timeoutMs: typebox_exports.Optional(typebox_exports.Integer({ minimum: 1, maximum: 9e5, description: "Requested guest deadline, capped by Power policy." }))
+  timeoutMs: typebox_exports.Optional(typebox_exports.Integer({ minimum: 1, maximum: 9e5, description: "Requested guest deadline, capped by Fabric policy." }))
 }, { additionalProperties: false });
 var isRecord3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var FABRIC_EXEC_KEYS = /* @__PURE__ */ new Set(["code", "payloads", "resultFormat", "timeoutMs"]);
@@ -20664,7 +20665,7 @@ var isRecord4 = (value) => typeof value === "object" && value !== null && !Array
 var errorCode = (error) => isRecord4(error) && typeof error.code === "string" ? error.code : void 0;
 var projectKiroPowerWorkspaceIdentity = (value) => {
   if (!isRecord4(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path3.isAbsolute(value.canonicalPath) || typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
-    throw new Error("Power workspace identity is malformed");
+    throw new Error("Fabric workspace identity is malformed");
   }
   return Object.freeze({ schemaVersion: 1, canonicalPath: value.canonicalPath, deviceId: value.deviceId, fileId: value.fileId });
 };
@@ -20672,24 +20673,24 @@ var sameIdentity = (left, right) => left.schemaVersion === right.schemaVersion &
 var kiroPowerMemoryNamespace = (identity) => `project:${createHash2("sha256").update(identity.canonicalPath).digest("hex")}`;
 var assertCurrentUser = (stats, target) => {
   if (process.platform !== "win32" && typeof process.getuid === "function" && stats.uid !== process.getuid()) {
-    throw new Error(`Power data path is owned by another user: ${target}`);
+    throw new Error(`Fabric data path is owned by another user: ${target}`);
   }
 };
 var assertPrivateDirectory = (target) => {
   const stats = fs3.lstatSync(target);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power storage is not a regular directory: ${target}`);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Fabric storage is not a regular directory: ${target}`);
   assertCurrentUser(stats, target);
-  if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Power storage is not private: ${target}`);
+  if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Fabric storage is not private: ${target}`);
   return stats;
 };
 var privateDirectory = (directory, boundary) => {
   const root = path3.resolve(boundary);
   const rootStats = fs3.lstatSync(root);
-  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new Error(`Power storage root is not a regular directory: ${boundary}`);
+  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new Error(`Fabric storage root is not a regular directory: ${boundary}`);
   assertCurrentUser(rootStats, root);
   const target = path3.resolve(directory);
   const relative = path3.relative(root, target);
-  if (relative === ".." || relative.startsWith(`..${path3.sep}`) || path3.isAbsolute(relative)) throw new Error(`Power data path escapes storage: ${directory}`);
+  if (relative === ".." || relative.startsWith(`..${path3.sep}`) || path3.isAbsolute(relative)) throw new Error(`Fabric data path escapes storage: ${directory}`);
   let cursor = root;
   for (const segment of relative.split(path3.sep).filter(Boolean)) {
     cursor = path3.join(cursor, segment);
@@ -20699,7 +20700,7 @@ var privateDirectory = (directory, boundary) => {
       if (errorCode(error) !== "EEXIST") throw error;
     }
     const stats = fs3.lstatSync(cursor);
-    if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power data path contains a non-directory: ${cursor}`);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Fabric data path contains a non-directory: ${cursor}`);
     assertCurrentUser(stats, cursor);
     fs3.chmodSync(cursor, 448);
   }
@@ -20708,11 +20709,11 @@ var privateDirectory = (directory, boundary) => {
 var privateFile = (target, maximum = 1024 * 1024) => {
   const stats = fs3.lstatSync(target);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
-    throw new Error(`Legacy Power data is not a bounded unaliased regular file: ${target}`);
+    throw new Error(`Fabric data is not a bounded unaliased regular file: ${target}`);
   }
-  if (stats.size > maximum) throw new Error(`Power configuration exceeds ${maximum} bytes: ${target}`);
+  if (stats.size > maximum) throw new Error(`Fabric data exceeds ${maximum} bytes: ${target}`);
   assertCurrentUser(stats, target);
-  if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Legacy Power data is not private: ${target}`);
+  if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Fabric data is not private: ${target}`);
   return stats;
 };
 var fsyncDirectory = (directory) => {
@@ -20794,7 +20795,7 @@ var migrateMcpConfiguration = (config) => {
   if (fs3.existsSync(current) || !fs3.existsSync(legacy)) return [];
   privateFile(legacy, 256 * 1024);
   const parsed = JSON.parse(fs3.readFileSync(legacy, "utf8"));
-  if (!isRecord4(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting the Power");
+  if (!isRecord4(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting Fabric");
   copyFileAtomic(legacy, current);
   return ["config/mcporter.json -> config/mcp.json"];
 };
@@ -20911,7 +20912,7 @@ var validateWorkspaceObject = (identity) => {
   const canonical = fs3.realpathSync(identity.canonicalPath);
   const stats = fs3.statSync(canonical, { bigint: true });
   if (canonical !== identity.canonicalPath || String(stats.dev) !== identity.deviceId || String(stats.ino) !== identity.fileId) {
-    throw new Error("Power workspace identity no longer matches the verified filesystem object");
+    throw new Error("Fabric workspace identity no longer matches the verified filesystem object");
   }
 };
 var validatePersistedIdentity = (file, expected) => {
@@ -21049,8 +21050,16 @@ var KiroPowerWorkspaceBinding = class {
     this.#elicitor = options.elicitor;
     this.#home = inspectCanonicalPath(os2.homedir(), { kind: "directory" }).canonicalPath;
     this.#temporary = inspectCanonicalPath(os2.tmpdir(), { kind: "directory" }).canonicalPath;
-    const kiroHome = path4.join(this.#home, ".kiro");
-    this.#kiroHome = existsSync(kiroHome) ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath : kiroHome;
+    if (options.kiroHome !== void 0) {
+      if (!path4.isAbsolute(options.kiroHome)) throw new Error("Kiro home must be absolute");
+      this.#kiroHome = inspectCanonicalPath(options.kiroHome, {
+        kind: "directory",
+        rejectFinalSymlink: true
+      }).canonicalPath;
+    } else {
+      const kiroHome = path4.join(this.#home, ".kiro");
+      this.#kiroHome = existsSync(kiroHome) ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath : kiroHome;
+    }
   }
   #canonical(candidate) {
     if (!path4.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
@@ -21060,14 +21069,14 @@ var KiroPowerWorkspaceBinding = class {
     });
     const root = inspected.canonicalPath;
     const currentKiroHome = existsSync(this.#kiroHome) ? inspectCanonicalPath(this.#kiroHome, { kind: "directory" }).canonicalPath : this.#kiroHome;
-    const insideKiroHome = canonicalPathContains(currentKiroHome, root);
+    const overlapsKiroHome = canonicalPathContains(currentKiroHome, root) || canonicalPathContains(root, currentKiroHome);
     const unsafe = [path4.parse(root).root, this.#home, this.#temporary, this.#pluginRoot, this.#pluginData];
-    if (unsafe.includes(root) || insideKiroHome || canonicalPathContains(root, this.#home)) {
+    if (unsafe.includes(root) || overlapsKiroHome || canonicalPathContains(root, this.#home)) {
       throw new Error("workspace root is too broad or reserved");
     }
     for (const reserved of [this.#pluginRoot, this.#pluginData]) {
       if (canonicalPathContains(reserved, root) || canonicalPathContains(root, reserved)) {
-        throw new Error("workspace root and plugin storage must not contain one another");
+        throw new Error("workspace root and Fabric storage must not contain one another");
       }
     }
     return {
@@ -21809,13 +21818,15 @@ var AMBIENT_MCPORTER_OPTIONS = [
 ];
 var assertNoAmbientMcporterOptions = () => {
   const option = AMBIENT_MCPORTER_OPTIONS.find((name) => process.env[name] !== void 0);
-  if (option) throw new Error(`Ambient mcporter option is not allowed in the Power runtime: ${option}`);
+  if (option) throw new Error(`Ambient mcporter option is not allowed in the Fabric runtime: ${option}`);
 };
-var executablePath = (command) => {
-  if (command.includes("/") || command.includes("\\")) return fs6.realpathSync(command);
+var executablePath = (command, cwd = process.cwd()) => {
+  if (command.includes("/") || command.includes("\\")) {
+    return fs6.realpathSync(path7.isAbsolute(command) ? command : path7.resolve(cwd, command));
+  }
   for (const directory of (process.env.PATH ?? "").split(path7.delimiter)) {
     if (!directory) continue;
-    const candidate = path7.join(directory, command);
+    const candidate = path7.resolve(cwd, directory, command);
     try {
       if (fs6.statSync(candidate).isFile()) return fs6.realpathSync(candidate);
     } catch {
@@ -21826,8 +21837,17 @@ var executablePath = (command) => {
 var environmentDigest = () => createHash4("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
 var configDigest = (configPath) => configPath ? fileDigest(configPath) : null;
 var fileStatKey = (file) => {
-  const stats = fs6.statSync(file);
-  return `${stats.dev}:${stats.ino}:${stats.mtimeMs}:${stats.size}:${stats.nlink}:${Number(stats.isSymbolicLink())}`;
+  const stats = fs6.statSync(file, { bigint: true });
+  return `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.mtimeNs}:${stats.size}:${stats.nlink}:${Number(stats.isSymbolicLink())}`;
+};
+var canonicalizeStdioTransport = (server) => {
+  if (server.command.kind !== "stdio") return server;
+  const cwd = fs6.realpathSync(server.command.cwd);
+  const command = executablePath(server.command.command, cwd);
+  return {
+    ...server,
+    command: { ...server.command, command, cwd }
+  };
 };
 var executeApproval = (name, description) => ({
   name,
@@ -21889,14 +21909,13 @@ var KiroMcpProvider = class {
   #loadedConfigDigest;
   #serverTails = /* @__PURE__ */ new Map();
   #snapshotCache = /* @__PURE__ */ new Map();
-  #resolvedExecutables = /* @__PURE__ */ new Map();
   #closed = false;
   constructor(cwd, config, runtimeFactory) {
     this.#cwd = cwd;
     this.#config = config;
     this.#runtimeFactory = runtimeFactory ?? (async () => {
       assertNoAmbientMcporterOptions();
-      const { createRuntime, loadServerDefinitions } = await import("./dist-54HI5WJ5.js");
+      const { createRuntime, loadServerDefinitions } = await import("./dist-SI6ZW2DE.js");
       let servers = [];
       this.#loadedConfigDigest = null;
       if (this.#config.configPath) {
@@ -21908,10 +21927,11 @@ var KiroMcpProvider = class {
         for (const server of servers) {
           const sources = server.sources ?? (server.source ? [server.source] : []);
           if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) => source.kind !== "local" || path7.resolve(source.path) !== configPath)) {
-            throw new Error("mcporter loaded a server outside the explicit Power configuration");
+            throw new Error("mcporter loaded a server outside the explicit Fabric configuration");
           }
         }
-        if (servers.length !== explicit.names.size) throw new Error("mcporter did not load the exact Power server set");
+        if (servers.length !== explicit.names.size) throw new Error("mcporter did not load the exact Fabric server set");
+        servers = servers.map(canonicalizeStdioTransport);
         this.#loadedConfigDigest = verified.digest;
       }
       return createRuntime({ rootDir: this.#cwd, servers, clientInfo: { name: "kiro-fabric", version: "1" } });
@@ -22030,7 +22050,6 @@ var KiroMcpProvider = class {
     await Promise.allSettled([...this.#serverTails.values()]);
     this.#serverTails.clear();
     this.#snapshotCache.clear();
-    this.#resolvedExecutables.clear();
     if (runtime) {
       await runtime.close();
     } else if (creation) {
@@ -22042,11 +22061,7 @@ var KiroMcpProvider = class {
     const processEnvironmentDigest = environmentDigest();
     let executable;
     if (definition.command.kind === "stdio") {
-      executable = this.#resolvedExecutables.get(definition.command.command);
-      if (!executable) {
-        executable = executablePath(definition.command.command);
-        this.#resolvedExecutables.set(definition.command.command, executable);
-      }
+      executable = executablePath(definition.command.command, definition.command.cwd);
     }
     const statKey = `${executable ? fileStatKey(executable) : "-"}|${this.#config.configPath ? fileStatKey(this.#config.configPath) : "-"}`;
     const cached = this.#snapshotCache.get(server);
@@ -22071,8 +22086,8 @@ var KiroMcpProvider = class {
       configDigest: configDigest(this.#config.configPath)
     };
     const details = definition.command.kind === "stdio" ? (() => {
-      const executable = resolvedExecutable ?? executablePath(definition.command.command);
-      const stats = fs6.statSync(executable);
+      const executable = resolvedExecutable ?? executablePath(definition.command.command, definition.command.cwd);
+      const stats = fs6.statSync(executable, { bigint: true });
       const configured = configuredEnvironment(this.#config.configPath, server);
       return {
         kind: "stdio",
@@ -22794,15 +22809,15 @@ ${JSON.stringify(entry.value)}`.toLowerCase();
 var KEY_MAX2 = 512;
 var QUERY_MAX = 2e3;
 var descriptors3 = [
-  { name: "get", description: "Read one value from Power-scoped workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX2 } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
-  { name: "set", description: "Persist one bounded JSON value in Power-scoped workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX2 }, value: {} }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
-  { name: "delete", description: "Delete one Power-scoped workspace memory value after destructive approval", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX2 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
-  { name: "search", description: "Search Power-scoped workspace memory with bounded ranked results", inputSchema: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: QUERY_MAX }, limit: { type: "integer", minimum: 1, maximum: 32 } }, required: ["query"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
+  { name: "get", description: "Read one value from Fabric workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX2 } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
+  { name: "set", description: "Persist one bounded JSON value in Fabric workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX2 }, value: {} }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
+  { name: "delete", description: "Delete one Fabric workspace memory value after destructive approval", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX2 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
+  { name: "search", description: "Search Fabric workspace memory with bounded ranked results", inputSchema: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: QUERY_MAX }, limit: { type: "integer", minimum: 1, maximum: 32 } }, required: ["query"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
   { name: "index", description: "List bounded memory metadata without values", inputSchema: { type: "object", properties: {}, additionalProperties: false }, risk: "read", effect: { kind: "read" } }
 ];
 var KiroMemoryProvider = class {
   name = "memory";
-  description = "Private workspace-scoped Power memory";
+  description = "Private workspace-scoped Fabric memory";
   #root;
   #namespace;
   #maxEntries;
@@ -22874,7 +22889,7 @@ var KiroPowerArtifactsProvider = class {
   }
   store;
   name = "artifacts";
-  description = "Bounded private Power artifacts";
+  description = "Bounded private Fabric artifacts";
   async list() {
     return [descriptor];
   }
@@ -22890,8 +22905,8 @@ var KiroPowerArtifactsProvider = class {
 
 // src/kiro/runtime.ts
 var createKiroRuntime = (options) => {
-  const loaded = options.config ?? loadFabricPowerConfig(options.configFile, DEFAULT_FABRIC_POWER_CONFIG);
-  const config = normalizeFabricPowerConfig({
+  const loaded = options.config ?? loadFabricConfig(options.configFile, DEFAULT_FABRIC_CONFIG);
+  const config = normalizeFabricConfig({
     ...loaded,
     mcp: { ...loaded.mcp, configPath: options.mcpConfigPath }
   });
@@ -22928,16 +22943,32 @@ var createKiroRuntime = (options) => {
 };
 
 // src/kiro/mcp-server.ts
-var EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Agent-scoped memory, workspace-bound state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
+var EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, workspace-scoped durable memory and state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
+var MCP_INSTANCE_ID = `fmcp_${randomBytes4(16).toString("hex")}`;
+var MCP_STARTED_AT = (/* @__PURE__ */ new Date()).toISOString();
+var MCP_PARENT_PID = process.ppid;
 var isRecord7 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var bounded2 = (value, fallback, maximum = 800) => (value instanceof Error ? value.message : typeof value === "string" ? value : fallback).replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, maximum) || fallback;
 var toolError = (code, error, issues) => ({
   content: [{ type: "text", text: JSON.stringify({ error: { code, message: bounded2(error, "The request failed"), ...issues?.length ? { issues: issues.slice(0, 8).map((issue) => bounded2(issue, "invalid value", 200)) } : {} } }) }],
   isError: true
 });
-var supportsKiroPowerElicitation = (capabilities) => {
+var supportsKiroElicitation = (capabilities) => {
   if (!isRecord7(capabilities) || !isRecord7(capabilities.elicitation)) return false;
   return Object.keys(capabilities.elicitation).length === 0 || Object.hasOwn(capabilities.elicitation, "form");
+};
+var installedKiroHomeFor = (runtimeRoot, dataRoot) => {
+  const runtime = inspectCanonicalPath(runtimeRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
+  const data = inspectCanonicalPath(dataRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
+  const installRoot = path9.dirname(data);
+  if (path9.basename(data) !== "data" || path9.basename(installRoot) !== "kiro-fabric") return void 0;
+  if (!/^[a-f0-9]{64}$/u.test(path9.basename(runtime)) || path9.dirname(runtime) !== path9.join(installRoot, "runtime")) {
+    throw new Error("installed Agent data root does not match its digest-named runtime layout");
+  }
+  return inspectCanonicalPath(path9.dirname(installRoot), {
+    kind: "directory",
+    rejectFinalSymlink: true
+  }).canonicalPath;
 };
 var workspaceRequest = (value) => {
   if (value_exports.Check(kiroPowerWorkspaceRequestSchema, value)) return value;
@@ -22967,10 +22998,10 @@ var sweepTraceDirectory = (directory) => {
   } catch {
   }
 };
-var createPowerTracer = (data, version) => {
+var createAgentTracer = (data, version) => {
   let configured = false;
   try {
-    configured = loadFabricPowerConfig(data.configFile).tracing.enabled;
+    configured = loadFabricConfig(data.configFile).tracing.enabled;
   } catch {
     configured = false;
   }
@@ -22980,7 +23011,16 @@ var createPowerTracer = (data, version) => {
     sweepTraceDirectory(directory);
     const file = path9.join(directory, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
     const tracer = createFabricTracer({ file });
-    tracer.event("init", "power.start", void 0, { product: "kiro-fabric-agent", version, pid: process.pid, file });
+    tracer.event("init", "agent.mcp.start", void 0, {
+      product: "kiro-fabric-agent",
+      version,
+      pid: process.pid,
+      parentPid: MCP_PARENT_PID,
+      mcpInstanceId: MCP_INSTANCE_ID,
+      startedAt: MCP_STARTED_AT,
+      file
+    });
+    tracer.flush();
     return tracer;
   } catch {
     return DISABLED_TRACER;
@@ -22988,25 +23028,50 @@ var createPowerTracer = (data, version) => {
 };
 var createKiroMcpServer = async (options) => {
   if (!options.runtimeRoot || !options.dataRoot) throw new Error("Agent MCP launch requires KIRO_FABRIC_RUNTIME_ROOT and KIRO_FABRIC_DATA_ROOT");
+  const inferredKiroHome = installedKiroHomeFor(options.runtimeRoot, options.dataRoot);
+  const explicitKiroHome = options.kiroHome === void 0 ? void 0 : inspectCanonicalPath(options.kiroHome, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
+  if (inferredKiroHome !== void 0 && explicitKiroHome !== void 0 && inferredKiroHome !== explicitKiroHome) {
+    throw new Error("explicit Kiro home does not match the installed Agent storage layout");
+  }
+  const kiroHome = explicitKiroHome ?? inferredKiroHome;
   const version = options.version ?? String(JSON.parse(readFileSync(path9.join(options.runtimeRoot, "package.json"), "utf8")).version);
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
   const data = prepareKiroPowerDataPaths(options.dataRoot);
-  const tracer = createPowerTracer(data, version);
-  const powerApprover = new KiroPowerApprover({
-    supported: () => supportsKiroPowerElicitation(server.getClientCapabilities()),
+  const tracer = createAgentTracer(data, version);
+  const fabricApprover = new KiroPowerApprover({
+    supported: () => supportsKiroElicitation(server.getClientCapabilities()),
     request: async ({ title: _title, message, signal, timeoutMs }) => {
-      const result = await server.elicitInput({
-        mode: "form",
-        message,
-        requestedSchema: { type: "object", properties: { approved: { type: "boolean", title: "Approve once", default: false } }, required: ["approved"] }
-      }, { ...signal ? { signal } : {}, timeout: timeoutMs });
-      return { action: result.action, ...isRecord7(result.content) && result.content.approved === true ? { approved: true } : {} };
+      const elicitationId = `form_${randomBytes4(8).toString("hex")}`;
+      if (tracer.enabled) {
+        tracer.event("eval", "approval.form.request", void 0, { elicitationId });
+        tracer.flush();
+      }
+      try {
+        const result = await server.elicitInput({
+          mode: "form",
+          message,
+          requestedSchema: { type: "object", properties: { approved: { type: "boolean", title: "Approve once", default: false } }, required: ["approved"] }
+        }, { ...signal ? { signal } : {}, timeout: timeoutMs });
+        const approved = isRecord7(result.content) && result.content.approved === true;
+        if (tracer.enabled) {
+          tracer.event("eval", "approval.form.response", void 0, { elicitationId, action: result.action, approved });
+          tracer.flush();
+        }
+        return { action: result.action, ...approved ? { approved: true } : {} };
+      } catch (error) {
+        if (tracer.enabled) {
+          tracer.event("eval", "approval.form.response", void 0, { elicitationId, action: "error", approved: false });
+          tracer.flush();
+        }
+        throw error;
+      }
     }
   });
   const binding = new KiroPowerWorkspaceBinding({
     pluginRoot: options.runtimeRoot,
     pluginData: options.dataRoot,
-    elicitor: { approveWorkspace: (canonicalPath, signal) => powerApprover.approveOnce({ risk: "write", provider: "fabric_workspace", action: "attach", summary: `Canonical workspace: ${canonicalPath}`, ...signal ? { signal } : {} }) }
+    ...kiroHome === void 0 ? {} : { kiroHome },
+    elicitor: { approveWorkspace: (canonicalPath, signal) => fabricApprover.approveOnce({ risk: "write", provider: "fabric_workspace", action: "attach", summary: `Canonical workspace: ${canonicalPath}`, ...signal ? { signal } : {} }) }
   });
   const workspaceContext = options.workspaceContext ?? new CachedWorkspaceContextProvider({
     supported: () => server.getClientCapabilities()?.roots !== void 0,
@@ -23015,6 +23080,7 @@ var createKiroMcpServer = async (options) => {
   let workspaceSnapshot;
   let runtime = options.runtime;
   let runtimeIdentity = runtime ? "<injected>" : "";
+  let runtimeGeneration = runtime ? 1 : 0;
   let closing = false;
   let lifecycleTail = Promise.resolve();
   const active = /* @__PURE__ */ new Set();
@@ -23035,6 +23101,7 @@ var createKiroMcpServer = async (options) => {
     if (!drained) await Promise.allSettled(leases.map((item) => item.settled));
     await current.close();
     if (runtime === current) {
+      if (tracer.enabled) tracer.event("teardown", "runtime.stop", void 0, { runtimeGeneration });
       runtime = void 0;
       runtimeIdentity = "";
     }
@@ -23075,6 +23142,8 @@ var createKiroMcpServer = async (options) => {
     await closeRuntime(new Error("workspace binding changed"));
     runtime = await createRuntimeFor(workspace);
     runtimeIdentity = identity;
+    runtimeGeneration += 1;
+    if (tracer.enabled) tracer.event("init", "runtime.start", void 0, { runtimeGeneration });
     return runtime;
   };
   const getRuntime = () => lifecycle(async () => {
@@ -23110,7 +23179,7 @@ var createKiroMcpServer = async (options) => {
     await syncWorkspace();
     return { tools: [
       { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Agent-scoped state and memory.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
+      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable memory and state.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
       { name: "fabric_exec", description: EXEC_DESCRIPTION, inputSchema: fabricExecInputSchemaJson(), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } }
     ] };
   });
@@ -23123,13 +23192,29 @@ var createKiroMcpServer = async (options) => {
         const workspaceObservation = binding.workspaceObservation();
         const workspaceBlocked = unavailableWorkspace() || workspaceObservation.status === "temporarily-unavailable";
         const current = workspaceBlocked ? runtime : await getRuntime();
-        const limits = current?.service.config.executor ?? loadFabricPowerConfig(data.configFile).executor;
+        const limits = current?.service.config.executor ?? loadFabricConfig(data.configFile).executor;
         const providers = current ? current.providers().map((provider) => workspaceBlocked ? { ...provider, available: false, reason: "workspace identity is temporarily unverifiable" } : provider) : ["artifacts", "memory", "state", "mcp"].map((name2) => ({
           name: name2,
           description: "Provider unavailable until workspace identity can be verified",
           available: false,
           reason: "workspace identity is temporarily unverifiable"
         }));
+        const lifecycleInfo = {
+          mcpInstanceId: MCP_INSTANCE_ID,
+          pid: process.pid,
+          parentPid: MCP_PARENT_PID,
+          startedAt: MCP_STARTED_AT,
+          runtimeGeneration,
+          runtimeActive: current !== void 0,
+          clientCapabilities: {
+            roots: server.getClientCapabilities()?.roots !== void 0,
+            formElicitation: supportsKiroElicitation(server.getClientCapabilities())
+          }
+        };
+        if (tracer.enabled) {
+          tracer.event("eval", "tool.fabric_info", void 0, lifecycleInfo);
+          tracer.flush();
+        }
         return { content: [{ type: "text", text: JSON.stringify({
           product: "kiro-fabric-agent",
           version,
@@ -23142,6 +23227,7 @@ var createKiroMcpServer = async (options) => {
           },
           providers,
           tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
+          lifecycle: lifecycleInfo,
           nativeKiroTools: { owner: "kiro", availability: "declared-by-agent-profile" }
         }) }] };
       } catch (error) {
@@ -23151,6 +23237,10 @@ var createKiroMcpServer = async (options) => {
     if (name === "fabric_workspace") {
       try {
         const parsed = workspaceRequest(request.params.arguments ?? {});
+        if (tracer.enabled) {
+          tracer.event("eval", "tool.fabric_workspace", void 0, { action: parsed.action });
+          tracer.flush();
+        }
         if (parsed.action === "status") return { content: [{ type: "text", text: JSON.stringify({
           ...binding.status(),
           context: workspaceSnapshot?.status ?? "temporarily-unavailable",
@@ -23207,7 +23297,7 @@ var createKiroMcpServer = async (options) => {
       const remaining = Math.max(0, outerStarted + outerDeadline - performance.now());
       timer = setTimeout(() => controller.abort(new Error(`MCP request exceeded ${outerDeadline}ms`)), remaining);
     };
-    const initialConfig = loadFabricPowerConfig(data.configFile);
+    const initialConfig = loadFabricConfig(data.configFile);
     scheduleOuterDeadline(effectiveFabricTimeout(
       initialConfig.executor.maxTimeoutMs,
       initialConfig.executor.timeoutMs,
@@ -23226,7 +23316,7 @@ var createKiroMcpServer = async (options) => {
       ));
       const approver = new KiroPowerFabricApprover(
         current.service.config.approvals,
-        powerApprover,
+        fabricApprover,
         current.service.cwd
       );
       const result = await current.service.execute({
@@ -23278,5 +23368,6 @@ var createKiroMcpServer = async (options) => {
 };
 export {
   createKiroMcpServer,
-  supportsKiroPowerElicitation
+  installedKiroHomeFor,
+  supportsKiroElicitation
 };

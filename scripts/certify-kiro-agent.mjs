@@ -20,7 +20,7 @@ fs.mkdirSync(workspace, { mode: 0o700 });
 const entry = path.join(pluginRoot, "runtime", "kiro", "mcp-entry.js");
 const child = spawn(process.execPath, [entry], {
   cwd: pluginRoot,
-  env: { PATH: process.env.PATH, HOME: process.env.HOME, KIRO_FABRIC_RUNTIME_ROOT: path.join(pluginRoot, "runtime"), KIRO_FABRIC_DATA_ROOT: pluginData },
+  env: { PATH: process.env.PATH, HOME: process.env.HOME, KIRO_FABRIC_RUNTIME_ROOT: path.join(pluginRoot, "runtime"), KIRO_FABRIC_DATA_ROOT: pluginData, KIRO_FABRIC_DEBUG: "1" },
   stdio: ["pipe", "pipe", "pipe"],
 });
 const MAX_CAPTURE_CHARS = 8 * 1024 * 1024;
@@ -40,6 +40,7 @@ child.stderr.on("data", (chunk) => { stderr = capture(stderr, chunk); });
 const send = (frame) => child.stdin.write(`${JSON.stringify(frame)}\n`);
 const frames = () => stdout.split("\n").slice(0, -1).filter(Boolean).map((line) => JSON.parse(line));
 const handled = new Set();
+let elicitationRequests = 0;
 const serviceRequests = () => {
   for (const frame of frames()) {
     if (frame.id === undefined || typeof frame.method !== "string") continue;
@@ -47,7 +48,10 @@ const serviceRequests = () => {
     if (handled.has(key)) continue;
     handled.add(key);
     if (frame.method === "roots/list") send({ jsonrpc: "2.0", id: frame.id, result: { roots: [{ uri: pathToFileURL(workspace).href, name: "workspace" }] } });
-    else if (frame.method === "elicitation/create") send({ jsonrpc: "2.0", id: frame.id, result: { action: "decline" } });
+    else if (frame.method === "elicitation/create") {
+      elicitationRequests += 1;
+      send({ jsonrpc: "2.0", id: frame.id, result: { action: "decline" } });
+    }
     else throw new Error(`Unexpected MCP client request: ${frame.method}`);
   }
 };
@@ -67,7 +71,7 @@ const request = async (id, method, params) => { send({ jsonrpc: "2.0", id, metho
 const call = (id, name, args) => request(id, "tools/call", { name, arguments: args });
 const text = (result) => result.content?.[0]?.text;
 try {
-  await request(1, "initialize", { protocolVersion: "2025-06-18", capabilities: { roots: { listChanged: true } }, clientInfo: { name: "power-certifier", version: "1" } });
+  await request(1, "initialize", { protocolVersion: "2025-06-18", capabilities: { roots: { listChanged: true }, elicitation: { form: {} } }, clientInfo: { name: "fabric-component-certifier", version: "1" } });
   send({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
   const listed = await request(2, "tools/list", {});
   const tools = listed.tools.map((tool) => tool.name);
@@ -80,6 +84,13 @@ try {
   }
   const info = JSON.parse(text(await call(3, "fabric_info", {})));
   if (info.product !== "kiro-fabric-agent" || info.executor !== "quickjs") throw new Error("fabric_info identity mismatch");
+  if (!/^fmcp_[a-f0-9]{32}$/u.test(info.lifecycle?.mcpInstanceId ?? "") ||
+      info.lifecycle?.pid !== child.pid || info.lifecycle?.parentPid !== process.pid ||
+      !Number.isFinite(Date.parse(info.lifecycle?.startedAt ?? "")) ||
+      info.lifecycle?.runtimeGeneration !== 1 || info.lifecycle?.runtimeActive !== true ||
+      info.lifecycle?.clientCapabilities?.roots !== true || info.lifecycle?.clientCapabilities?.formElicitation !== true) {
+    throw new Error(`fabric_info lifecycle identity mismatch: ${JSON.stringify(info.lifecycle)}`);
+  }
   if (info.workspace?.status !== "bound" || info.workspace?.context !== "verified" || info.workspace?.verification !== "verified") {
     throw new Error("fabric_info did not prove canonical workspace binding");
   }
@@ -95,6 +106,11 @@ try {
   const deniedValue = JSON.parse(text(denied));
   if (!denied.isError || deniedValue.status !== "failed" || !String(deniedValue.error).includes("approval")) {
     throw new Error("approval absence did not fail closed at the approval boundary");
+  }
+  if (elicitationRequests !== 1) throw new Error(`expected one declined form elicitation, observed ${elicitationRequests}`);
+  const repeatedInfo = JSON.parse(text(await call(6, "fabric_info", {})));
+  if (JSON.stringify(repeatedInfo.lifecycle) !== JSON.stringify(info.lifecycle)) {
+    throw new Error("repeated fabric_info recreated the MCP instance or Fabric runtime");
   }
   const dynamicCodeProbes = [
     "return eval(payloads.program)",
@@ -134,19 +150,34 @@ try {
       throw new Error(`unsupported guest result was not rejected: ${code}`);
     }
   }
+  const finalInfo = JSON.parse(text(await call(requestId++, "fabric_info", {})));
+  if (JSON.stringify(finalInfo.lifecycle) !== JSON.stringify(info.lifecycle)) {
+    throw new Error("multiple MCP calls recreated the MCP instance or Fabric runtime");
+  }
   child.stdin.end();
   const code = await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error("MCP shutdown timed out")), 10_000); child.once("exit", (value) => { clearTimeout(timer); resolve(value); }); });
   if (code !== 0) throw new Error(`Agent MCP exited ${code}: ${stderr}`);
+  const traceDirectory = path.join(pluginData, "fabric", "traces");
+  const traceFiles = fs.readdirSync(traceDirectory).filter((name) => name.endsWith(".jsonl"));
+  if (traceFiles.length !== 1) throw new Error(`expected one component trace, observed ${traceFiles.length}`);
+  const traceEvents = fs.readFileSync(path.join(traceDirectory, traceFiles[0]), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  const formRequests = traceEvents.filter((event) => event.ev === "approval.form.request");
+  const formResponses = traceEvents.filter((event) => event.ev === "approval.form.response");
+  if (formRequests.length !== 1 || formResponses.length !== 1 ||
+      formRequests[0].data?.elicitationId !== formResponses[0].data?.elicitationId ||
+      formResponses[0].data?.action !== "decline" || formResponses[0].data?.approved !== false) {
+    throw new Error("form elicitation trace is missing, ambiguous, or not fail-closed");
+  }
   const report = {
     kind: "kiro-fabric.agent-certification",
-    schemaVersion: 1,
+    schemaVersion: 2,
     ok: true,
     packageDigest: packageEvidence.digest,
     tools,
     executor: "quickjs",
-    customAgentSelected: true,
-    powerActivated: false,
-    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "four-providers", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "approval-boundary", "bounded-output", "bounded-shutdown"],
+    lifecycle: info.lifecycle,
+    scope: "component-mcp-only",
+    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "four-providers", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
   };
   const serialized = `${JSON.stringify(report, null, 2)}\n`;
   if (jsonOutput) writeFileAtomic(jsonOutput, serialized);

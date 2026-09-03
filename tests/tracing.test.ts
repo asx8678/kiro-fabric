@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { ActionRegistry } from "../src/core/action-registry.js";
-import { normalizeFabricPowerConfig } from "../src/config.js";
+import { normalizeFabricConfig } from "../src/config.js";
 import { FabricExecutionService } from "../src/execution-service.js";
 import { QuickJsRuntime } from "../src/runtime/quickjs-runtime.js";
 import { createTraceWriter, type TraceWriter } from "../src/trace/trace-writer.js";
@@ -39,9 +39,9 @@ describe("trace toggle", () => {
   });
 
   it("keeps tracing disabled by default and normalizes the configuration section", () => {
-    expect(normalizeFabricPowerConfig(undefined).tracing).toEqual({ enabled: false });
-    expect(normalizeFabricPowerConfig({ tracing: { enabled: true } }).tracing).toEqual({ enabled: true });
-    expect(normalizeFabricPowerConfig({ tracing: { enabled: "yes" } }).tracing).toEqual({ enabled: false });
+    expect(normalizeFabricConfig(undefined).tracing).toEqual({ enabled: false });
+    expect(normalizeFabricConfig({ tracing: { enabled: true } }).tracing).toEqual({ enabled: true });
+    expect(normalizeFabricConfig({ tracing: { enabled: "yes" } }).tracing).toEqual({ enabled: false });
   });
 
   it("provides a zero-allocation disabled tracer", () => {
@@ -218,7 +218,7 @@ describe("QuickJS trace hooks", () => {
     const file = path.join(temporary(), "trace.jsonl");
     const tracer = createFabricTracer({ file });
     const execId = tracer.newExecutionId();
-    const config = normalizeFabricPowerConfig({ executor: { timeoutMs: 5_000 } });
+    const config = normalizeFabricConfig({ executor: { timeoutMs: 5_000 } });
     const service = new FabricExecutionService(new ActionRegistry(), config, "/workspace");
     const result = await service.execute({
       code: "return 40 + 2",
@@ -260,7 +260,7 @@ describe("QuickJS trace hooks", () => {
         return { stored: true, echo: args.value };
       },
     });
-    const config = normalizeFabricPowerConfig({ executor: { timeoutMs: 5_000 } });
+    const config = normalizeFabricConfig({ executor: { timeoutMs: 5_000 } });
     const service = new FabricExecutionService(registry, config, "/workspace");
     const result = await service.execute({
       code: "return await tools.call({ ref: 'probe.put', args: { value: 'x'.repeat(200) } })",
@@ -294,7 +294,7 @@ describe("QuickJS trace hooks", () => {
     const file = path.join(temporary(), "trace.jsonl");
     const tracer = createFabricTracer({ file });
     const execId = tracer.newExecutionId();
-    const config = normalizeFabricPowerConfig({ executor: { timeoutMs: 5_000 } });
+    const config = normalizeFabricConfig({ executor: { timeoutMs: 5_000 } });
     const service = new FabricExecutionService(new ActionRegistry(), config, "/workspace");
     const result = await service.execute({
       code: "return doesNotExist + 1",

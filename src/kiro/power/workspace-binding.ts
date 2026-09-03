@@ -28,8 +28,8 @@ export const kiroPowerWorkspaceRequestSchema = Type.Union([
 ], { type: "object" });
 
 /**
- * Model-visible schema kept free of top-level combinators because Kiro CLI 3's
- * model gateway rejects top-level oneOf/anyOf. The strict union above remains
+ * Model-visible schema kept free of top-level combinators because Kiro's V3
+ * agent gateway rejects top-level oneOf/anyOf. The strict union above remains
  * authoritative when the tool is invoked.
  */
 export const kiroWorkspaceToolInputSchema = {
@@ -91,7 +91,7 @@ export class KiroPowerWorkspaceBinding {
   #binding: Binding | undefined;
   #initialAutoBindAllowed = true;
 
-  constructor(options: { pluginRoot: string; pluginData: string; elicitor?: KiroPowerElicitor }) {
+  constructor(options: { pluginRoot: string; pluginData: string; kiroHome?: string; elicitor?: KiroPowerElicitor }) {
     this.#pluginRoot = inspectCanonicalPath(options.pluginRoot, {
       kind: "directory",
       rejectFinalSymlink: true,
@@ -103,10 +103,18 @@ export class KiroPowerWorkspaceBinding {
     this.#elicitor = options.elicitor;
     this.#home = inspectCanonicalPath(os.homedir(), { kind: "directory" }).canonicalPath;
     this.#temporary = inspectCanonicalPath(os.tmpdir(), { kind: "directory" }).canonicalPath;
-    const kiroHome = path.join(this.#home, ".kiro");
-    this.#kiroHome = existsSync(kiroHome)
-      ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath
-      : kiroHome;
+    if (options.kiroHome !== undefined) {
+      if (!path.isAbsolute(options.kiroHome)) throw new Error("Kiro home must be absolute");
+      this.#kiroHome = inspectCanonicalPath(options.kiroHome, {
+        kind: "directory",
+        rejectFinalSymlink: true,
+      }).canonicalPath;
+    } else {
+      const kiroHome = path.join(this.#home, ".kiro");
+      this.#kiroHome = existsSync(kiroHome)
+        ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath
+        : kiroHome;
+    }
   }
 
   #canonical(candidate: string): Candidate {
@@ -119,14 +127,15 @@ export class KiroPowerWorkspaceBinding {
     const currentKiroHome = existsSync(this.#kiroHome)
       ? inspectCanonicalPath(this.#kiroHome, { kind: "directory" }).canonicalPath
       : this.#kiroHome;
-    const insideKiroHome = canonicalPathContains(currentKiroHome, root);
+    const overlapsKiroHome = canonicalPathContains(currentKiroHome, root) ||
+      canonicalPathContains(root, currentKiroHome);
     const unsafe = [path.parse(root).root, this.#home, this.#temporary, this.#pluginRoot, this.#pluginData];
-    if (unsafe.includes(root) || insideKiroHome || canonicalPathContains(root, this.#home)) {
+    if (unsafe.includes(root) || overlapsKiroHome || canonicalPathContains(root, this.#home)) {
       throw new Error("workspace root is too broad or reserved");
     }
     for (const reserved of [this.#pluginRoot, this.#pluginData]) {
       if (canonicalPathContains(reserved, root) || canonicalPathContains(root, reserved)) {
-        throw new Error("workspace root and plugin storage must not contain one another");
+        throw new Error("workspace root and Fabric storage must not contain one another");
       }
     }
     return {

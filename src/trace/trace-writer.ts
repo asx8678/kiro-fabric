@@ -3,7 +3,7 @@ import path from "node:path";
 
 export interface TraceWriterOptions {
   /** Absolute path for the JSONL trace file. Created private (0600); the
-   * parent directory is created with 0700 and must stay under PLUGIN_DATA. */
+   * parent directory is created with 0700 and must stay under the Fabric data root. */
   file: string;
   /** Ring capacity in lines; oldest lines drop with a counter when full. */
   maxBufferLines?: number;
@@ -140,7 +140,7 @@ class BufferedTraceWriter implements TraceWriter {
       this.#writtenBytes += chunkBytes;
       if (fsync) fs.fsyncSync(this.#fd);
     } catch {
-      // Tracing must never take down the Power. Disable on any I/O failure.
+      // Tracing must never take down Fabric. Disable on any I/O failure.
       this.#disabled = true;
     }
   }

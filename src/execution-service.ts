@@ -1,7 +1,7 @@
-import type { FabricPowerConfig } from "./config.js";
+import type { FabricConfig } from "./config.js";
 import { ActionRegistry, type FabricCallAudit } from "./core/action-registry.js";
 import type { ResolvedFabricAction } from "./protocol.js";
-import { powerGuestDeclarations } from "./runtime/guest-types.js";
+import { fabricGuestDeclarations } from "./runtime/guest-types.js";
 import { assertFabricJsonBudget, fabricJsonText, MAX_FABRIC_JSON_CHARS } from "./runtime/json-budget.js";
 import { QuickJsRuntime, type FabricSandboxTerminationReason } from "./runtime/quickjs-runtime.js";
 import { fabricPayloadsLimitError, fabricSourceLimitError } from "./runtime/source-limit.js";
@@ -77,7 +77,7 @@ export class FabricExecutionService {
   readonly #runtime = new QuickJsRuntime();
   constructor(
     readonly registry: ActionRegistry,
-    readonly config: FabricPowerConfig,
+    readonly config: FabricConfig,
     readonly cwd: string,
   ) {}
 
@@ -111,7 +111,7 @@ export class FabricExecutionService {
     try {
       checked = await typeCheckFabricCodeInWorker({
         code: options.code,
-        declarations: powerGuestDeclarations,
+        declarations: fabricGuestDeclarations,
       }, {
         ...(options.signal ? { signal: options.signal } : {}),
         timeoutMs: Math.min(FABRIC_COMPILER_TIMEOUT_MS, effectiveTimeoutMs),

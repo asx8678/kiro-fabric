@@ -1,8 +1,10 @@
 # Unreleased
 
-- Convert Kiro Fabric from a Power to one native Kiro CLI 3 custom agent with an agent-owned Fabric MCP backend.
-- Make the checkout-local `.kiro/agents/kiro-fabric.json` launch Fabric MCP via a cwd-independent wrapper, with skill and steering URIs resolved from the agent file.
+- Convert Kiro Fabric from a Power to one native Kiro CLI V3 custom agent with an agent-owned Fabric MCP backend.
+- Remove the discoverable checkout-local profile so it cannot shadow the user-global `kiro-fabric` agent; generate the absolute profile only during installation.
 - Advertise `fabric_workspace` without a top-level schema combinator while keeping the strict runtime union.
+- Harden archive-only installation, ownership/tamper checks, rollback, uninstall, and relocatable package validation.
+- Add process/runtime lifecycle identity plus objective multi-turn, compaction, shutdown, and resume qualification gates.
 - Warn on install when a leftover Power may duplicate `@fabric`.
 - Point CI at `tests/agent-user-install.test.ts` instead of the removed Power install test.
 

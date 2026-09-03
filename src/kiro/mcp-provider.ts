@@ -78,13 +78,15 @@ const AMBIENT_MCPORTER_OPTIONS = [
 ] as const;
 const assertNoAmbientMcporterOptions = (): void => {
   const option = AMBIENT_MCPORTER_OPTIONS.find((name) => process.env[name] !== undefined);
-  if (option) throw new Error(`Ambient mcporter option is not allowed in the Power runtime: ${option}`);
+  if (option) throw new Error(`Ambient mcporter option is not allowed in the Fabric runtime: ${option}`);
 };
-const executablePath = (command: string): string => {
-  if (command.includes("/") || command.includes("\\")) return fs.realpathSync(command);
+const executablePath = (command: string, cwd = process.cwd()): string => {
+  if (command.includes("/") || command.includes("\\")) {
+    return fs.realpathSync(path.isAbsolute(command) ? command : path.resolve(cwd, command));
+  }
   for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!directory) continue;
-    const candidate = path.join(directory, command);
+    const candidate = path.resolve(cwd, directory, command);
     try { if (fs.statSync(candidate).isFile()) return fs.realpathSync(candidate); } catch { /* continue */ }
   }
   throw new Error(`Configured MCP executable cannot be resolved: ${command}`);
@@ -98,8 +100,21 @@ const configDigest = (configPath: string | undefined): string | null => configPa
  * at least one component, so expensive content hashing is only repeated when
  * the file actually changed. */
 const fileStatKey = (file: string): string => {
-  const stats = fs.statSync(file);
-  return `${stats.dev}:${stats.ino}:${stats.mtimeMs}:${stats.size}:${stats.nlink}:${Number(stats.isSymbolicLink())}`;
+  const stats = fs.statSync(file, { bigint: true });
+  // mtime can be restored by the file owner after a same-size in-place
+  // mutation. ctime cannot, so it must participate in cache invalidation even
+  // though the content digest remains the approved executable identity.
+  return `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.mtimeNs}:${stats.size}:${stats.nlink}:${Number(stats.isSymbolicLink())}`;
+};
+
+const canonicalizeStdioTransport = (server: ServerDefinition): ServerDefinition => {
+  if (server.command.kind !== "stdio") return server;
+  const cwd = fs.realpathSync(server.command.cwd);
+  const command = executablePath(server.command.command, cwd);
+  return {
+    ...server,
+    command: { ...server.command, command, cwd },
+  };
 };
 
 type McpTransportSnapshot = {
@@ -184,7 +199,7 @@ const normalizeMcpResult = (result: unknown): unknown => {
 };
 
 /**
- * Power-only MCP federation. Configuration is fixed beneath PLUGIN_DATA,
+ * Fabric-only MCP federation. Configuration is fixed beneath the Fabric data root,
  * descriptors are static, and server contact happens only after the registry's
  * network approval (plus execute approval for stdio transports).
  */
@@ -203,7 +218,6 @@ export class KiroMcpProvider implements FabricProvider {
   #loadedConfigDigest: string | null | undefined;
   readonly #serverTails = new Map<string, Promise<void>>();
   readonly #snapshotCache = new Map<string, { envDigest: string; statKey: string; snapshot: McpTransportSnapshot }>();
-  readonly #resolvedExecutables = new Map<string, string>();
   #closed = false;
 
   constructor(cwd: string, config: FabricMcpConfig, runtimeFactory?: McpRuntimeFactory) {
@@ -224,10 +238,15 @@ export class KiroMcpProvider implements FabricProvider {
           const sources = server.sources ?? (server.source ? [server.source] : []);
           if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) =>
             source.kind !== "local" || path.resolve(source.path) !== configPath)) {
-            throw new Error("mcporter loaded a server outside the explicit Power configuration");
+            throw new Error("mcporter loaded a server outside the explicit Fabric configuration");
           }
         }
-        if (servers.length !== explicit.names.size) throw new Error("mcporter did not load the exact Power server set");
+        if (servers.length !== explicit.names.size) throw new Error("mcporter did not load the exact Fabric server set");
+        // Bind execution to the executable and cwd that were resolved from the
+        // private configuration. mcporter otherwise resolves the original
+        // command again when it creates a transport, allowing a PATH entry or
+        // command symlink to be retargeted after approval.
+        servers = servers.map(canonicalizeStdioTransport);
         this.#loadedConfigDigest = verified.digest;
       }
       return createRuntime({ rootDir: this.#cwd, servers, clientInfo: { name: "kiro-fabric", version: "1" } });
@@ -368,7 +387,6 @@ export class KiroMcpProvider implements FabricProvider {
     await Promise.allSettled([...this.#serverTails.values()]);
     this.#serverTails.clear();
     this.#snapshotCache.clear();
-    this.#resolvedExecutables.clear();
     if (runtime) {
       await runtime.close();
     } else if (creation) {
@@ -389,11 +407,10 @@ export class KiroMcpProvider implements FabricProvider {
     const processEnvironmentDigest = environmentDigest();
     let executable: string | undefined;
     if (definition.command.kind === "stdio") {
-      executable = this.#resolvedExecutables.get(definition.command.command);
-      if (!executable) {
-        executable = executablePath(definition.command.command);
-        this.#resolvedExecutables.set(definition.command.command, executable);
-      }
+      // Re-resolve at every approval/use boundary. The stat-key cache below
+      // avoids rehashing unchanged bytes, but never pins a stale symlink/PATH
+      // resolution that differs from the command mcporter is about to use.
+      executable = executablePath(definition.command.command, definition.command.cwd);
     }
     const statKey = `${executable ? fileStatKey(executable) : "-"}|${this.#config.configPath ? fileStatKey(this.#config.configPath) : "-"}`;
     const cached = this.#snapshotCache.get(server);
@@ -421,8 +438,8 @@ export class KiroMcpProvider implements FabricProvider {
     };
     const details = definition.command.kind === "stdio"
       ? (() => {
-          const executable = resolvedExecutable ?? executablePath(definition.command.command);
-          const stats = fs.statSync(executable);
+          const executable = resolvedExecutable ?? executablePath(definition.command.command, definition.command.cwd);
+          const stats = fs.statSync(executable, { bigint: true });
           const configured = configuredEnvironment(this.#config.configPath, server);
           return {
             kind: "stdio" as const,

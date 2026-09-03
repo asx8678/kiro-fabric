@@ -3,6 +3,13 @@ import path from "node:path";
 export const AGENT_NAME = "kiro-fabric";
 export const AGENT_TOOLS = ["read", "write", "shell", "web", "subagent", "todo_list", "@fabric"];
 export const FABRIC_TOOLS = ["fabric_info", "fabric_workspace", "fabric_exec"];
+// Keep this bound to the runtime deadline formula in tests: the maximum guest
+// deadline, plus compiler time, plus the outer MCP cancellation grace period,
+// then a positive client-response margin so Fabric's own deadline wins first.
+export const FABRIC_MAX_GUEST_TIMEOUT_MS = 900_000;
+export const FABRIC_MCP_INTERNAL_DEADLINE_MS = FABRIC_MAX_GUEST_TIMEOUT_MS + 10_000 + 2_000;
+export const FABRIC_MCP_CLIENT_RESPONSE_MARGIN_MS = 5_000;
+export const FABRIC_MCP_REQUEST_TIMEOUT_MS = FABRIC_MCP_INTERNAL_DEADLINE_MS + FABRIC_MCP_CLIENT_RESPONSE_MARGIN_MS;
 export const AGENT_PROMPT = `You are Kiro Fabric, a coding agent with native Kiro tools and a bounded checked-TypeScript composition backend.
 
 Near the start of a session, call @fabric/fabric_info once to verify health. Inspect and verify the current workspace with @fabric/fabric_workspace; if there are multiple roots, require explicit selection. Bind before using workspace memory or state.
@@ -11,6 +18,16 @@ Use native Kiro tools for ordinary file reads, searches, edits, shell commands, 
 
 Await every provider call, return compact decision-relevant results, propagate failures, and never claim completion without verification. Treat denial, timeout, cancellation, unavailable capability, malformed output, and indeterminate effects as failures.`;
 
+/**
+ * @typedef {object} AgentProfileOptions
+ * @property {string} nodePath
+ * @property {string} runtimeRoot
+ * @property {string} dataRoot
+ * @property {string} skillPath
+ * @property {string} [steeringPath]
+ */
+
+/** @param {AgentProfileOptions} options */
 export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPath, steeringPath }) => {
   for (const [name, value] of Object.entries({ nodePath, runtimeRoot, dataRoot, skillPath })) {
     if (typeof value !== "string" || !path.isAbsolute(value)) throw new Error(`${name} must be absolute`);
@@ -30,7 +47,7 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
     mcpServers: { fabric: { command: nodePath, args: [path.join(runtimeRoot, "kiro", "mcp-entry.js")], env: {
       KIRO_FABRIC_RUNTIME_ROOT: runtimeRoot,
       KIRO_FABRIC_DATA_ROOT: dataRoot,
-    } } },
+    }, requestTimeout: FABRIC_MCP_REQUEST_TIMEOUT_MS } },
     tools: AGENT_TOOLS,
     allowedTools: FABRIC_TOOLS.map((name) => `@fabric/${name}`),
     permissions: { rules: [{ capability: "mcp", match: FABRIC_TOOLS.map((name) => `fabric/${name}`), effect: "allow" }] },

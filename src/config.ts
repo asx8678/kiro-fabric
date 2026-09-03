@@ -60,7 +60,7 @@ export interface FabricTracingConfig {
   enabled: boolean;
 }
 
-export interface FabricPowerConfig {
+export interface FabricConfig {
   executor: FabricExecutorConfig;
   approvals: FabricApprovalConfig;
   mcp: FabricMcpConfig;
@@ -76,7 +76,7 @@ const MAX_EXECUTOR_MEMORY_LIMIT_BYTES = Math.min(
   Math.max(8 * 1024 * 1024, Math.floor(os.totalmem())),
 );
 
-export const DEFAULT_FABRIC_POWER_CONFIG: FabricPowerConfig = {
+export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
   executor: {
     timeoutMs: 120_000,
     maxTimeoutMs: 900_000,
@@ -151,10 +151,10 @@ const assertFileConfigShape = (value: unknown): void => {
   }
 };
 
-export const normalizeFabricPowerConfig = (
+export const normalizeFabricConfig = (
   input: unknown,
-  defaults: FabricPowerConfig = DEFAULT_FABRIC_POWER_CONFIG,
-): FabricPowerConfig => {
+  defaults: FabricConfig = DEFAULT_FABRIC_CONFIG,
+): FabricConfig => {
   const root = record(input) ?? {};
   const executor = record(root.executor) ?? {};
   const approvals = record(root.approvals) ?? {};
@@ -222,7 +222,7 @@ export const normalizeFabricPowerConfig = (
 
 const MAX_CONFIG_BYTES = 256 * 1024;
 
-export const loadFabricPowerConfig = (configFile: string, defaults = DEFAULT_FABRIC_POWER_CONFIG): FabricPowerConfig => {
+export const loadFabricConfig = (configFile: string, defaults = DEFAULT_FABRIC_CONFIG): FabricConfig => {
   let descriptor: number | undefined;
   let observed = false;
   try {
@@ -260,10 +260,10 @@ export const loadFabricPowerConfig = (configFile: string, defaults = DEFAULT_FAB
     if (bytes > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
     const value: unknown = JSON.parse(buffer.subarray(0, bytes).toString("utf8"));
     assertFileConfigShape(value);
-    return normalizeFabricPowerConfig(value, defaults);
+    return normalizeFabricConfig(value, defaults);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT" && !observed) {
-      return normalizeFabricPowerConfig(undefined, defaults);
+      return normalizeFabricConfig(undefined, defaults);
     }
     throw error;
   } finally {

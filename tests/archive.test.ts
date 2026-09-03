@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
-import { createAgentArchive } from "../scripts/create-agent-archive.mjs";
+import { assertCapturedArchiveInventory, createAgentArchive } from "../scripts/create-agent-archive.mjs";
 import { validateAgentPackage } from "../scripts/validate-agent-package.mjs";
 
 const roots: string[] = [];
@@ -59,6 +59,34 @@ const bytewise = (left: string, right: string): number =>
   Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
 
 describe("deterministic Agent archive", () => {
+  it("binds the package digest to the exact captured bytes and normalized modes", () => {
+    const evidence = validateAgentPackage(".tmp/kiro-fabric-agent");
+    const captured = [
+      ...evidence.inventory.directories
+        .filter((entry) => entry.path !== ".")
+        .map((entry) => ({ relative: entry.path, directory: true, size: 0, content: undefined })),
+      ...evidence.inventory.files.map((entry) => {
+        const content = fs.readFileSync(path.join(evidence.root, ...entry.path.split("/")));
+        return { relative: entry.path, directory: false, size: content.length, content };
+      }),
+    ];
+    expect(() => assertCapturedArchiveInventory(evidence, captured)).not.toThrow();
+    const changed = captured.map((entry) => ({ ...entry }));
+    const file = changed.find((entry) => !entry.directory)!;
+    file.content = Buffer.from(file.content!);
+    file.content[0] = file.content[0]! ^ 0xff;
+    expect(() => assertCapturedArchiveInventory(evidence, changed)).toThrow("bytes or modes changed");
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-archive-mode-test-"));
+    roots.push(root);
+    const packageRoot = path.join(root, "package");
+    fs.cpSync(evidence.root, packageRoot, { recursive: true, preserveTimestamps: true });
+    const fileWithSafeButNonCanonicalMode = path.join(packageRoot, "skills", "fabric-exec", "SKILL.md");
+    fs.chmodSync(fileWithSafeButNonCanonicalMode, 0o640);
+    expect(validateAgentPackage(packageRoot).ok).toBe(true);
+    expect(() => createAgentArchive(packageRoot, path.join(root, "mode.tar.gz"))).toThrow("bytes or modes changed");
+  });
+
   it("writes normalized USTAR bytes that extract to the exact staged package", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-archive-test-"));
     roots.push(root);
@@ -89,10 +117,76 @@ describe("deterministic Agent archive", () => {
     fs.mkdirSync(extracted, { mode: 0o700 });
     const unpack = spawnSync("tar", ["-xzf", first, "-C", extracted], { encoding: "utf8" });
     expect(unpack.status, unpack.stderr).toBe(0);
-    expect(validateAgentPackage(extracted).digest).toBe(firstResult.packageDigest);
+    const extractedEvidence = validateAgentPackage(extracted);
+    expect(extractedEvidence.digest).toBe(firstResult.packageDigest);
+    expect(fs.existsSync(path.join(extracted, "agent.json"))).toBe(false);
+    expect(fs.existsSync(path.join(extracted, ".kiro"))).toBe(false);
+    for (const installer of ["agent-profile.mjs", "install-agent-user.mjs", "validate-agent-package.mjs"]) {
+      expect(fs.existsSync(path.join(extracted, "scripts", installer)), installer).toBe(true);
+    }
+    for (const entry of extractedEvidence.inventory.files) {
+      const bytes = fs.readFileSync(path.join(extracted, ...entry.path.split("/")));
+      expect(bytes.includes(Buffer.from(path.resolve("."))), entry.path).toBe(false);
+      expect(bytes.includes(Buffer.from(process.execPath)), entry.path).toBe(false);
+    }
+
+    const home = path.join(root, "unrelated-home");
+    const workspace = path.join(root, "unrelated-workspace");
+    const kiroHome = path.join(home, ".kiro");
+    fs.mkdirSync(home, { mode: 0o700 });
+    fs.mkdirSync(workspace, { mode: 0o700 });
+    const canonicalKiroHome = path.join(fs.realpathSync(home), ".kiro");
+    const workspaceBefore = fs.readdirSync(workspace);
+    const install = spawnSync(process.execPath, [path.join(extracted, "scripts", "install-agent-user.mjs")], {
+      cwd: workspace,
+      encoding: "utf8",
+      env: { ...process.env, HOME: home, KIRO_HOME: kiroHome },
+      timeout: 60_000,
+    });
+    expect(install.status, install.stderr).toBe(0);
+    const installed = JSON.parse(install.stdout.split("\n")[0]!);
+    expect(installed.profile).toBe(path.join(canonicalKiroHome, "agents", "kiro-fabric.json"));
+    expect(installed.runtime.startsWith(path.join(canonicalKiroHome, "kiro-fabric", "runtime"))).toBe(true);
+    expect(installed.runtime.includes(fs.realpathSync(extracted))).toBe(false);
+    expect(installed.runtime.includes(path.resolve("."))).toBe(false);
+    expect(fs.existsSync(installed.profile)).toBe(true);
+    expect(fs.existsSync(path.join(installed.runtime, "kiro", "mcp-entry.js"))).toBe(true);
+    expect(fs.readdirSync(workspace)).toEqual(workspaceBefore);
+    expect(install.stdout).toContain("kiro-cli --v3 --agent kiro-fabric");
+    expect(install.stdout).toContain("kiro-cli agent validate --path");
+    expect(install.stdout).not.toContain("kiro-cli chat --agent");
+
+    const uninstall = spawnSync(process.execPath, [path.join(extracted, "scripts", "install-agent-user.mjs"), "--uninstall"], {
+      cwd: workspace,
+      encoding: "utf8",
+      env: { ...process.env, HOME: home, KIRO_HOME: kiroHome },
+      timeout: 60_000,
+    });
+    expect(uninstall.status, uninstall.stderr).toBe(0);
+    expect(fs.existsSync(installed.profile)).toBe(false);
+    expect(fs.existsSync(installed.data)).toBe(true);
+    expect(fs.readdirSync(workspace)).toEqual(workspaceBefore);
     const nestedOutput = path.join(extracted, "forbidden.tar.gz");
     expect(() => createAgentArchive(extracted, nestedOutput)).toThrow("outside the staged package");
     expect(fs.existsSync(nestedOutput)).toBe(false);
+
+    const productPath = path.join(extracted, "agent-product.json");
+    const productBytes = fs.readFileSync(productPath);
+    const product = JSON.parse(productBytes.toString("utf8"));
+    product.mountedProviders = [...product.mountedProviders].reverse();
+    fs.writeFileSync(productPath, `${JSON.stringify(product, null, 2)}\n`, { mode: 0o600 });
+    expect(() => validateAgentPackage(extracted)).toThrow("agent product authority digest drifted");
+    fs.writeFileSync(productPath, productBytes, { mode: 0o600 });
+    expect(validateAgentPackage(extracted).digest).toBe(firstResult.packageDigest);
+    const emptySkill = path.join(extracted, "skills", "unexpected-empty-skill");
+    fs.mkdirSync(emptySkill, { mode: 0o700 });
+    expect(() => validateAgentPackage(extracted)).toThrow("skills root inventory drifted");
+    fs.rmdirSync(emptySkill);
+    const emptyRuntime = path.join(extracted, "runtime", "unexpected-empty-directory");
+    fs.mkdirSync(emptyRuntime, { mode: 0o700 });
+    expect(() => validateAgentPackage(extracted)).toThrow("closure directory inventory drifted");
+    fs.rmdirSync(emptyRuntime);
+    expect(validateAgentPackage(extracted).digest).toBe(firstResult.packageDigest);
   });
 
   it("rejects invalid reproducible-build epochs", () => {

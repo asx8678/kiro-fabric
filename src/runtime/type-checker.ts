@@ -228,7 +228,7 @@ export interface FabricCompilerWorkerOptions { signal?: AbortSignal; timeoutMs?:
  * code can reach. FabricTypeChecker already supports incremental oldProgram
  * reuse, which makes warm checks dramatically cheaper. Bounded shutdown is
  * preserved: pooled workers are unref'd, self-terminate after an unref'd
- * idle timeout, and are shut down explicitly on Power close. */
+ * idle timeout, and are shut down explicitly when Fabric closes. */
 const COMPILER_WORKER_IDLE_MS = 30_000;
 const COMPILER_WORKER_MAX_USES = 250;
 
@@ -294,7 +294,7 @@ const acquireCompilerWorker = (workerUrl?: URL): FabricCompilerWorkerState => {
   return spawnCompilerWorker(workerUrl);
 };
 
-/** Terminate the pooled compiler worker, if any. Called on Power close; idle
+/** Terminate the pooled compiler worker, if any. Called when Fabric closes; idle
  * workers also self-terminate, so this only shortens the shutdown tail. */
 export const shutdownFabricCompilerWorker = async (): Promise<void> => {
   const state = pooledCompiler;

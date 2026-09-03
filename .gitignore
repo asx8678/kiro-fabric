@@ -7,14 +7,7 @@ coverage/
 .tmp/
 *.log
 .DS_Store
-.kiro/*
-!.kiro/agents/
-.kiro/agents/*
-!.kiro/agents/kiro-fabric.json
-!.kiro/agents/run-fabric-mcp.mjs
-!.kiro/steering/
-.kiro/steering/*
-!.kiro/steering/fabric.md
+.kiro/
 .fabric/
 .pi/
 plugins/

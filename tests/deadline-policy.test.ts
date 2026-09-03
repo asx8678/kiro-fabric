@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeFabricPowerConfig } from "../src/config.js";
+import { normalizeFabricConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import type { FabricProvider } from "../src/protocol.js";
 import {
@@ -51,7 +51,7 @@ describe("deadline policy", () => {
       async invoke() { return "ok"; },
     };
     registry.register(provider);
-    const config = normalizeFabricPowerConfig({
+    const config = normalizeFabricConfig({
       executor: { timeoutMs: 1_000, maxTimeoutMs: 100_000 },
       mcp: { callTimeoutMs: 1_000 },
     });
@@ -82,7 +82,7 @@ describe("deadline policy", () => {
       effectResources(_name, args) { return [`state:${String(args.key)}`]; },
       async invoke() { return true; },
     });
-    const totalConfig = normalizeFabricPowerConfig({ executor: { maxProviderCalls: 2, maxConcurrentProviderCalls: 8 } });
+    const totalConfig = normalizeFabricConfig({ executor: { maxProviderCalls: 2, maxConcurrentProviderCalls: 8 } });
     const total = await new FabricExecutionService(registry, totalConfig, "/workspace").execute({
       code: "return await Promise.all([tools.providers(), tools.providers(), tools.providers()])",
       approver: { async approve() {} },
@@ -90,7 +90,7 @@ describe("deadline policy", () => {
     expect(total.success).toBe(false);
     expect(total.error).toContain("provider call quota exceeded");
 
-    const approvalConfig = normalizeFabricPowerConfig({ executor: { maxApprovalRequests: 2, maxPendingApprovals: 2 } });
+    const approvalConfig = normalizeFabricConfig({ executor: { maxApprovalRequests: 2, maxPendingApprovals: 2 } });
     let prompts = 0;
     const approval = await new FabricExecutionService(registry, approvalConfig, "/workspace").execute({
       code: "return await Promise.all([state.set({ key: 'a', value: 1 }), state.set({ key: 'b', value: 2 }), state.set({ key: 'c', value: 3 })])",

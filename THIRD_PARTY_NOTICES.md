@@ -9,4 +9,4 @@ Kiro Fabric includes or bundles software distributed under its respective open-s
 - TypeScript (`typescript`)
 - esbuild and Vitest for development and verification
 
-Exact packaged dependency names and versions are recorded by the generated Power SBOM.
+Exact packaged dependency names and versions are recorded by the generated Agent SBOM.

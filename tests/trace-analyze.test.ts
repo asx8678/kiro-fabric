@@ -26,7 +26,7 @@ const fixture = (events: Record<string, unknown>[]): string => {
 
 const base = { v: 1, ts: "2025-01-01T00:00:00.000Z" };
 const sampleEvents = [
-  { ...base, seq: 1, monoUs: 1_000_000, cat: "init", ev: "power.start", data: { file: "/x.jsonl" } },
+  { ...base, seq: 1, monoUs: 1_000_000, cat: "init", ev: "agent.mcp.start", data: { file: "/x.jsonl" } },
   { ...base, seq: 2, monoUs: 1_001_000, cat: "eval", ev: "exec.start", execId: "exec_a" },
   { ...base, seq: 3, monoUs: 1_002_000, cat: "eval", ev: "compile", execId: "exec_a", spanId: "span_1", durUs: 40_000 },
   { ...base, seq: 4, monoUs: 1_050_000, cat: "eval", ev: "execute", execId: "exec_a", spanId: "span_2", durUs: 900_000 },

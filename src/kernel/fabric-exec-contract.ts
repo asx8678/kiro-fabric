@@ -33,7 +33,7 @@ export const fabricExecInputSchema = Type.Object({
     },
   )),
   resultFormat: Type.Optional(Type.Union(FABRIC_EXEC_RESULT_FORMATS.map((value) => Type.Literal(value)))),
-  timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 900_000, description: "Requested guest deadline, capped by Power policy." })),
+  timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 900_000, description: "Requested guest deadline, capped by Fabric policy." })),
 }, { additionalProperties: false }) satisfies TSchema;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

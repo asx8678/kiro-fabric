@@ -3,20 +3,25 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_FABRIC_CONFIG,
   DEFAULT_FABRIC_POWER_CONFIG,
+  loadFabricConfig,
   loadFabricPowerConfig,
+  normalizeFabricConfig,
   normalizeFabricPowerConfig,
-} from "../src/config.js";
+  supportsKiroElicitation,
+  supportsKiroPowerElicitation,
+} from "../src/index.js";
 import { prepareKiroPowerDataPaths } from "../src/kiro/power/data-paths.js";
 
 describe("Agent-only configuration", () => {
   it("exposes only active configured-MCP settings", () => {
-    expect(Object.keys(DEFAULT_FABRIC_POWER_CONFIG.mcp).sort()).toEqual([
+    expect(Object.keys(DEFAULT_FABRIC_CONFIG.mcp).sort()).toEqual([
       "callTimeoutMs",
       "disableOAuth",
       "enabled",
     ]);
-    const normalized = normalizeFabricPowerConfig({
+    const normalized = normalizeFabricConfig({
       mcp: {
         enabled: false,
         callTimeoutMs: 5_000,
@@ -30,7 +35,7 @@ describe("Agent-only configuration", () => {
   });
 
   it("caps configurable memory limits at the enforced storage bounds", () => {
-    expect(normalizeFabricPowerConfig({
+    expect(normalizeFabricConfig({
       memory: { enabled: true, maxEntries: 10_000, maxValueChars: 2_000_000 },
     }).memory).toEqual({
       enabled: true,
@@ -39,7 +44,7 @@ describe("Agent-only configuration", () => {
     });
   });
 
-  it("bounds and privatizes the configured-MCP file under plugin data", () => {
+  it("bounds and privatizes the configured-MCP file under Fabric data", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-plugin-data-"));
     try {
       const data = prepareKiroPowerDataPaths(root);
@@ -59,7 +64,7 @@ describe("Agent-only configuration", () => {
       const alias = path.join(root, "config.json");
       fs.writeFileSync(target, "{}", { mode: 0o600 });
       fs.symlinkSync(target, alias);
-      expect(() => loadFabricPowerConfig(alias)).toThrow("private regular file");
+      expect(() => loadFabricConfig(alias)).toThrow("private regular file");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -70,16 +75,23 @@ describe("Agent-only configuration", () => {
     const file = path.join(root, "config.json");
     try {
       fs.writeFileSync(file, "{}", { mode: 0o600 });
-      expect(loadFabricPowerConfig(file)).toEqual(DEFAULT_FABRIC_POWER_CONFIG);
+      expect(loadFabricConfig(file)).toEqual(DEFAULT_FABRIC_CONFIG);
       if (process.platform !== "win32") {
         fs.chmodSync(file, 0o644);
-        expect(() => loadFabricPowerConfig(file)).toThrow("permissions must be private");
+        expect(() => loadFabricConfig(file)).toThrow("permissions must be private");
       }
       fs.chmodSync(file, 0o600);
       fs.writeFileSync(file, " ".repeat(256 * 1024 + 1));
-      expect(() => loadFabricPowerConfig(file)).toThrow("exceeds 262144 bytes");
+      expect(() => loadFabricConfig(file)).toThrow("exceeds 262144 bytes");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("retains the deprecated Power-named configuration aliases", () => {
+    expect(DEFAULT_FABRIC_POWER_CONFIG).toBe(DEFAULT_FABRIC_CONFIG);
+    expect(normalizeFabricPowerConfig).toBe(normalizeFabricConfig);
+    expect(loadFabricPowerConfig).toBe(loadFabricConfig);
+    expect(supportsKiroPowerElicitation).toBe(supportsKiroElicitation);
   });
 });

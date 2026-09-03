@@ -8,16 +8,16 @@ type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string
 const KEY_MAX = 512;
 const QUERY_MAX = 2_000;
 const descriptors: FabricActionDescriptor[] = [
-  { name: "get", description: "Read one value from Power-scoped workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
-  { name: "set", description: "Persist one bounded JSON value in Power-scoped workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX }, value: {} }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
-  { name: "delete", description: "Delete one Power-scoped workspace memory value after destructive approval", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
-  { name: "search", description: "Search Power-scoped workspace memory with bounded ranked results", inputSchema: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: QUERY_MAX }, limit: { type: "integer", minimum: 1, maximum: 32 } }, required: ["query"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
+  { name: "get", description: "Read one value from Fabric workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
+  { name: "set", description: "Persist one bounded JSON value in Fabric workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX }, value: {} }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
+  { name: "delete", description: "Delete one Fabric workspace memory value after destructive approval", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
+  { name: "search", description: "Search Fabric workspace memory with bounded ranked results", inputSchema: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: QUERY_MAX }, limit: { type: "integer", minimum: 1, maximum: 32 } }, required: ["query"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
   { name: "index", description: "List bounded memory metadata without values", inputSchema: { type: "object", properties: {}, additionalProperties: false }, risk: "read", effect: { kind: "read" } },
 ];
 
 export class KiroMemoryProvider implements FabricProvider {
   readonly name = "memory";
-  readonly description = "Private workspace-scoped Power memory";
+  readonly description = "Private workspace-scoped Fabric memory";
   readonly #root: string;
   readonly #namespace: string;
   readonly #maxEntries: number;

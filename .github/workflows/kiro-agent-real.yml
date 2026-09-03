@@ -3,13 +3,19 @@ name: Real Kiro Agent qualification
 on:
   workflow_dispatch:
 
+concurrency:
+  group: kiro-agent-real-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
 jobs:
   qualify:
-    runs-on: [self-hosted, kiro-agent]
-    timeout-minutes: 60
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.ref_protected == true
+    runs-on: [self-hosted, kiro-agent, trusted]
+    environment: kiro-agent-qualification
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: { persist-credentials: false }
@@ -17,12 +23,34 @@ jobs:
         with: { node-version: 24 }
       - run: corepack enable && corepack prepare pnpm@11.20.0 --activate
       - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm run agent:install
+      - run: corepack pnpm run check
       - run: corepack pnpm run agent:archive
+      - name: Preflight protected headless credential without logging it
+        env:
+          KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
+        run: |
+          if [ -z "${KIRO_API_KEY:-}" ]; then
+            echo "KIRO_API_KEY is unavailable on this protected qualification environment" >&2
+            exit 1
+          fi
       - name: Exercise exact package with the repository-owned real client driver
-        run: corepack pnpm run certify:agent:real -- --archive .tmp/kiro-fabric-agent.tar.gz --commit "${{ github.sha }}" --output "$RUNNER_TEMP/real-client.json"
+        env:
+          KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
+          KIRO_CLI_PATH: ${{ vars.KIRO_CLI_PATH }}
+        run: corepack pnpm run certify:agent:real -- --archive .tmp/kiro-fabric-agent.tar.gz --commit "${{ github.sha }}" --work-root "$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --output "$RUNNER_TEMP/real-client.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: real-client-${{ github.sha }}
-          path: ${{ runner.temp }}/real-client.json
+          path: |
+            ${{ runner.temp }}/real-client.json
+            .tmp/kiro-fabric-agent.tar.gz
+            .tmp/kiro-fabric-agent.spdx.json
           if-no-files-found: error
+      - name: Remove isolated Kiro qualification state
+        if: always()
+        run: |
+          target="$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          case "$target" in
+            "$RUNNER_TEMP"/kiro-fabric-real-*) rm -rf -- "$target" ;;
+            *) echo "refusing unsafe cleanup target" >&2; exit 1 ;;
+          esac

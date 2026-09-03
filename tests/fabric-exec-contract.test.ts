@@ -5,7 +5,7 @@ import {
   fabricExecInputSchemaJson,
   prepareFabricExecArgumentsWithDiagnostics,
 } from "../src/kernel/fabric-exec-contract.js";
-import { powerGuestDeclarations } from "../src/runtime/guest-types.js";
+import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
 
 describe("fabric_exec contract", () => {
@@ -37,17 +37,17 @@ describe("fabric_exec contract", () => {
   it("strictly checks the documented guest API and declares no timer fallback", () => {
     const invalidCall = typeCheckFabricCode(
       "return await memory.set({ key: 1, value: true });",
-      powerGuestDeclarations,
+      fabricGuestDeclarations,
     );
     expect(invalidCall.errors.some((error) => error.message.includes("not assignable"))).toBe(true);
     const invalidEmptyArgs = typeCheckFabricCode(
       "return await memory.index(1);",
-      powerGuestDeclarations,
+      fabricGuestDeclarations,
     );
     expect(invalidEmptyArgs.errors.some((error) => error.message.includes("not assignable"))).toBe(true);
     const nonexistentTimer = typeCheckFabricCode(
       "setTimeout(() => undefined, 1); return true;",
-      powerGuestDeclarations,
+      fabricGuestDeclarations,
     );
     expect(nonexistentTimer.errors.some((error) => error.message.includes("Cannot find name 'setTimeout'"))).toBe(true);
   });
@@ -64,7 +64,7 @@ describe("fabric_exec contract", () => {
       `declare module "package-name" { export const secret: string }\nreturn null;`,
     ];
     for (const probe of probes) {
-      const result = typeCheckFabricCode(probe, powerGuestDeclarations);
+      const result = typeCheckFabricCode(probe, fabricGuestDeclarations);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]?.message).toBe("Guest modules and external references are not allowed");
       expect(result.errors[0]?.message).not.toContain("secret.ts");

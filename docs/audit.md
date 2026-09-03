@@ -1,6 +1,6 @@
 # Agent architecture and security audit
 
-Kiro Fabric is one native custom-agent product. The selected agent owns one stdio MCP child; the child exposes exactly `fabric_info`, `fabric_workspace`, and `fabric_exec`. Native Kiro tools remain outside QuickJS. The execution, approval, workspace, persistence, cancellation, and package boundaries are covered by the files below and the full test suite. Internal names under `src/kiro/power/` and the `kiro-fabric-power-workspace-v3` salt are retained only as private on-disk compatibility identifiers.
+Kiro Fabric is one native custom-agent product. The selected agent owns one stdio MCP child; the child exposes exactly `fabric_info`, `fabric_workspace`, and `fabric_exec`. Native Kiro tools remain outside QuickJS. The repository contains no discoverable `.kiro/agents/kiro-fabric.*`; only the user-global installed profile has that name. The execution, approval, workspace, persistence, cancellation, and package boundaries are covered by the files below and the full test suite. Power-named source paths, documented deprecated API aliases, explicit migration messages, and the `kiro-fabric-power-workspace-v3` salt remain only for compatibility; active descriptions and primary APIs are Agent/Fabric-first.
 
 ## Complete implementation inventory
 
@@ -61,6 +61,7 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 - `src/trace/trace-writer.ts`
 - `src/trace/tracer.ts`
 - `tests/action-registry.test.ts`
+- `tests/agent-profile.test.ts`
 - `tests/agent-user-install.test.ts`
 - `tests/approval-projection.test.ts`
 - `tests/archive.test.ts`
@@ -73,6 +74,7 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 - `tests/json-budget.test.ts`
 - `tests/mcp-federation.test.ts`
 - `tests/memory-security.test.ts`
+- `tests/mcp-process-lifecycle.test.ts`
 - `tests/migration.test.ts`
 - `tests/package-boundary.test.ts`
 - `tests/quickjs-runtime.test.ts`
@@ -84,4 +86,4 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 
 ## Release qualification
 
-Hermetic certification cannot claim authenticated-client behavior. `certify:agent:real` binds the staged digest, archive digest, Git commit, Kiro executable path/version/digest, transcript, selected agent, native tools, and the exact Fabric tool set. The currently installed Kiro 2.21.0 client selected and started the agent-owned MCP server, but rejected the current `fabric_workspace` top-level union schema before model execution; this is recorded as an unpassed release gate, not waived.
+Hermetic certification cannot claim authenticated-client behavior. `certify:agent:real` is designed to bind the extracted package digest, archive digest, Git commit, Kiro executable path/version/digest, exact argv, global profile, OS process observations, ACP recordings, Fabric traces, and per-phase transcripts. During the audit of starting SHA `5a95ec31edd2370619d472b8c775e14ad59d609e`, the installed Kiro 2.21.0 client selected and started the agent-owned MCP server but rejected the then-advertised `fabric_workspace` top-level union before model execution. The replacement non-combinator schema and complete lifecycle still require a fresh authenticated run on the exact final commit; agent selection, native-tool visibility, form elicitation, interactive compaction, shutdown, and resume remain blocked until that run produces objective evidence.

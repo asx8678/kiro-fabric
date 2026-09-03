@@ -56,7 +56,7 @@ class ArtifactStore implements KiroArtifactStore {
         if (!entry.isFile() || targetStats.isSymbolicLink() || !ARTIFACT_ID.test(entry.name)) {
           throw new KiroArtifactStoreError(`artifact root contains an unsupported entry: ${entry.name}`);
         }
-        // Another Power process may own a fresh valid artifact in this shared
+        // Another Fabric process may own a fresh valid artifact in this shared
         // private root. Reclaim only residue older than the product-wide
         // maximum lifetime; this process never imports it into its own quota.
         if (this.#now() - targetStats.mtimeMs > MAX_ARTIFACT_RESIDUE_AGE_MS) {

@@ -97,6 +97,56 @@ const collectEntries = (root) => {
   return records.sort((left, right) => Buffer.compare(Buffer.from(left.relative, "utf8"), Buffer.from(right.relative, "utf8")));
 };
 
+const digestInventory = (inventory) => {
+  const digest = createHash("sha256");
+  for (const directory of inventory.directories) {
+    digest.update("directory\0").update(directory.path).update("\0").update(String(directory.mode)).update("\0");
+  }
+  for (const file of inventory.files) {
+    digest.update("file\0").update(file.path).update("\0").update(String(file.mode)).update("\0")
+      .update(String(file.bytes)).update("\0").update(file.sha256).update("\0");
+  }
+  return digest.digest("hex");
+};
+
+export const assertCapturedArchiveInventory = (evidence, entries) => {
+  const directories = new Map([[".", { path: ".", mode: 0o700 }]]);
+  const files = new Map();
+  for (const entry of entries) {
+    if (entry.directory) directories.set(entry.relative, { path: entry.relative, mode: 0o700 });
+    else files.set(entry.relative, {
+      path: entry.relative,
+      bytes: entry.content.length,
+      mode: 0o600,
+      sha256: createHash("sha256").update(entry.content).digest("hex"),
+    });
+  }
+  const expectedDirectoryPaths = evidence.inventory.directories.map((entry) => entry.path);
+  const expectedFilePaths = evidence.inventory.files.map((entry) => entry.path);
+  const foundDirectoryPaths = [...directories.keys()];
+  const foundFilePaths = [...files.keys()];
+  assertSameNames(foundDirectoryPaths, expectedDirectoryPaths, "directory");
+  assertSameNames(foundFilePaths, expectedFilePaths, "file");
+  const captured = {
+    directories: expectedDirectoryPaths.map((name) => directories.get(name)),
+    files: expectedFilePaths.map((name) => files.get(name)),
+  };
+  const capturedDigest = digestInventory(captured);
+  if (capturedDigest !== evidence.digest ||
+      JSON.stringify(captured.directories) !== JSON.stringify(evidence.inventory.directories) ||
+      JSON.stringify(captured.files) !== JSON.stringify(evidence.inventory.files)) {
+    throw new Error("Agent package bytes or modes changed while being captured for the archive");
+  }
+};
+
+const assertSameNames = (actual, expected, label) => {
+  const normalizedActual = [...actual].sort();
+  const normalizedExpected = [...expected].sort();
+  if (JSON.stringify(normalizedActual) !== JSON.stringify(normalizedExpected)) {
+    throw new Error(`Agent package ${label} inventory changed while being captured for the archive`);
+  }
+};
+
 const pathContains = (root, target) => {
   const relative = path.relative(root, target);
   return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
@@ -124,6 +174,7 @@ export const createAgentArchive = (packageInput, outputInput, options = {}) => {
     throw new Error("Agent archive output must be outside the staged package");
   }
   const entries = collectEntries(evidence.root);
+  assertCapturedArchiveInventory(evidence, entries);
   const verified = validateAgentPackage(evidence.root);
   if (verified.digest !== evidence.digest || verified.files !== evidence.files || verified.bytes !== evidence.bytes) {
     throw new Error("Agent package changed during archive creation");

@@ -13,7 +13,7 @@ const descriptor: FabricActionDescriptor = {
 
 export class KiroPowerArtifactsProvider implements FabricProvider {
   readonly name = "artifacts";
-  readonly description = "Bounded private Power artifacts";
+  readonly description = "Bounded private Fabric artifacts";
   constructor(readonly store: KiroArtifactStore) {}
   async list(): Promise<FabricActionDescriptor[]> { return [descriptor]; }
   async describe(actionName: string): Promise<FabricActionDescriptor | undefined> { return actionName === "read" ? descriptor : undefined; }

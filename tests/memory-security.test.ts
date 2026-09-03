@@ -8,7 +8,7 @@ const roots: string[] = [];
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-memory-")); roots.push(root); return root; };
 afterEach(() => { while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
 
-describe("Power memory confinement", () => {
+describe("Fabric memory confinement", () => {
   it("uses private files and preserves bounded values", async () => {
     const root = temporary();
     const memory = openKiroMemory("workspace", root);

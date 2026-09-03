@@ -30,7 +30,7 @@ interface TraceSpan {
 export interface FabricTracer {
   readonly enabled: boolean;
   /** Trace file path when active; reported by fabric_info so a model can
-   * locate the trace without guessing PLUGIN_DATA internals. */
+   * locate the trace without guessing Fabric data-root internals. */
   readonly file: string | undefined;
   newExecutionId(): string;
   span(cat: TraceCategory, ev: string, execId?: string, data?: Record<string, unknown>, parentId?: string): TraceSpan;

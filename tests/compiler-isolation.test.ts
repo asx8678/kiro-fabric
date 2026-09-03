@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { powerGuestDeclarations } from "../src/runtime/guest-types.js";
+import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { typeCheckFabricCode, typeCheckFabricCodeInWorker } from "../src/runtime/type-checker.js";
 
 const roots: string[] = [];
@@ -25,7 +25,7 @@ const forbidden = [
 
 describe("closed guest TypeScript compiler host", () => {
   it.each(forbidden)("rejects external syntax without path-dependent diagnostics: %s", (code) => {
-    const result = typeCheckFabricCode(code, powerGuestDeclarations);
+    const result = typeCheckFabricCode(code, fabricGuestDeclarations);
     expect(result.javascript).toBeUndefined();
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]?.message).toBe("Guest modules and external references are not allowed");
@@ -34,7 +34,7 @@ describe("closed guest TypeScript compiler host", () => {
   it("rejects syntactically valid attempts to escape the generated wrapper", () => {
     const result = typeCheckFabricCode(
       "return null;\n}\n(globalThis as any).__fabricRun = () => '\"forged\"';\nasync function padding(): Promise<JsonValue> { return null",
-      powerGuestDeclarations,
+      fabricGuestDeclarations,
     );
     expect(result.javascript).toBeUndefined();
     expect(result.errors).toEqual([{ line: 1, column: 1, message: "Guest code must remain inside the generated Fabric wrapper" }]);
@@ -48,7 +48,7 @@ describe("closed guest TypeScript compiler host", () => {
     const missing = path.join(root, "missing.ts");
     const messages = [existing, missing].map((target) => typeCheckFabricCode(
       `import value from ${JSON.stringify(target)}; return value as any`,
-      powerGuestDeclarations,
+      fabricGuestDeclarations,
     ).errors);
     expect(messages[0]).toEqual(messages[1]);
     expect(JSON.stringify(messages)).not.toContain("host secret");
@@ -56,7 +56,7 @@ describe("closed guest TypeScript compiler host", () => {
 
   it("terminates an aborted compiler worker before rejecting", async () => {
     const controller = new AbortController();
-    const checking = typeCheckFabricCodeInWorker({ code: "return true", declarations: powerGuestDeclarations }, { signal: controller.signal });
+    const checking = typeCheckFabricCodeInWorker({ code: "return true", declarations: fabricGuestDeclarations }, { signal: controller.signal });
     controller.abort(new Error("compiler cancelled"));
     await expect(checking).rejects.toThrow("compiler cancelled");
   });

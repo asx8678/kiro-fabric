@@ -31,11 +31,12 @@ const context = (
 
 const fakeRuntime = (options: {
   kind?: "http" | "stdio";
+  definition?: ServerDefinition;
   listTools?: Runtime["listTools"];
   callTool?: Runtime["callTool"];
   close?: Runtime["close"];
 } = {}): Runtime => {
-  const server = definition("configured", options.kind ?? "http");
+  const server = options.definition ?? definition("configured", options.kind ?? "http");
   return {
     listServers: () => [server.name],
     getDefinitions: () => [server],
@@ -58,7 +59,7 @@ const fakeRuntime = (options: {
   };
 };
 
-describe("configured Power MCP federation", () => {
+describe("configured Fabric MCP federation", () => {
   it("keeps discovery static and contacts only an exact configured server", async () => {
     let creations = 0;
     const runtime = fakeRuntime();
@@ -207,6 +208,80 @@ await server.connect(new StdioServerTransport());
     });
     expect(approvedDetails?.digest).toMatch(/^[a-f0-9]{64}$/u);
     await provider.close();
+  });
+
+  it("rejects a stdio command symlink retargeted after approval", async () => {
+    if (process.platform === "win32") return;
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-mcp-command-link-"));
+    const first = path.join(temporary, "first");
+    const second = path.join(temporary, "second");
+    const command = path.join(temporary, "command");
+    fs.writeFileSync(first, "first", { mode: 0o700 });
+    fs.writeFileSync(second, "other", { mode: 0o700 });
+    fs.symlinkSync(first, command);
+    let calls = 0;
+    const server: ServerDefinition = {
+      name: "configured",
+      command: { kind: "stdio", command, args: [], cwd: temporary },
+    };
+    const provider = new KiroMcpProvider("/workspace", config, async () => fakeRuntime({
+      definition: server,
+      callTool: async () => { calls += 1; return true; },
+    }));
+    try {
+      const prepared = await provider.prepareArguments("$call", {
+        server: "configured",
+        tool: "echo",
+        args: { value: "hello" },
+      }, context());
+      fs.unlinkSync(command);
+      fs.symlinkSync(second, command);
+      await expect(provider.invoke("$call", prepared, context(undefined, async () => {})))
+        .rejects.toThrow("transport changed after approval");
+      expect(calls).toBe(0);
+    } finally {
+      await provider.close();
+      fs.rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it("invalidates the executable digest cache after same-size mutation with restored mtime", async () => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-mcp-command-content-"));
+    const command = path.join(temporary, "command");
+    const fixedTime = new Date("2020-01-01T00:00:00.000Z");
+    fs.writeFileSync(command, "first", { mode: 0o700 });
+    fs.utimesSync(command, fixedTime, fixedTime);
+    let calls = 0;
+    const server: ServerDefinition = {
+      name: "configured",
+      command: { kind: "stdio", command, args: [], cwd: temporary },
+    };
+    const provider = new KiroMcpProvider("/workspace", config, async () => fakeRuntime({
+      definition: server,
+      callTool: async () => { calls += 1; return true; },
+    }));
+    try {
+      const prepared = await provider.prepareArguments("$call", {
+        server: "configured",
+        tool: "echo",
+        args: { value: "hello" },
+      }, context());
+      const before = fs.statSync(command, { bigint: true });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      fs.writeFileSync(command, "other");
+      fs.utimesSync(command, fixedTime, fixedTime);
+      const after = fs.statSync(command, { bigint: true });
+      expect(after.ino).toBe(before.ino);
+      expect(after.size).toBe(before.size);
+      expect(after.mtimeNs).toBe(before.mtimeNs);
+      expect(after.ctimeNs).not.toBe(before.ctimeNs);
+      await expect(provider.invoke("$call", prepared, context(undefined, async () => {})))
+        .rejects.toThrow("transport changed after approval");
+      expect(calls).toBe(0);
+    } finally {
+      await provider.close();
+      fs.rmSync(temporary, { recursive: true, force: true });
+    }
   });
 
   it("shares one monotonic timeout budget across discovery and invocation", async () => {

@@ -19,7 +19,7 @@ const errorCode = (error: unknown): string | undefined => isRecord(error) && typ
 const projectKiroPowerWorkspaceIdentity = (value: unknown): KiroPowerWorkspaceIdentity => {
   if (!isRecord(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path.isAbsolute(value.canonicalPath) ||
       typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
-    throw new Error("Power workspace identity is malformed");
+    throw new Error("Fabric workspace identity is malformed");
   }
   return Object.freeze({ schemaVersion: 1, canonicalPath: value.canonicalPath, deviceId: value.deviceId, fileId: value.fileId });
 };
@@ -30,31 +30,31 @@ const kiroPowerMemoryNamespace = (identity: KiroPowerWorkspaceIdentity): string 
 
 const assertCurrentUser = (stats: fs.Stats, target: string): void => {
   if (process.platform !== "win32" && typeof process.getuid === "function" && stats.uid !== process.getuid()) {
-    throw new Error(`Power data path is owned by another user: ${target}`);
+    throw new Error(`Fabric data path is owned by another user: ${target}`);
   }
 };
 const assertPrivateDirectory = (target: string): fs.Stats => {
   const stats = fs.lstatSync(target);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power storage is not a regular directory: ${target}`);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Fabric storage is not a regular directory: ${target}`);
   assertCurrentUser(stats, target);
-  if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) throw new Error(`Power storage is not private: ${target}`);
+  if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) throw new Error(`Fabric storage is not private: ${target}`);
   return stats;
 };
 
 const privateDirectory = (directory: string, boundary: string): string => {
   const root = path.resolve(boundary);
   const rootStats = fs.lstatSync(root);
-  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new Error(`Power storage root is not a regular directory: ${boundary}`);
+  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new Error(`Fabric storage root is not a regular directory: ${boundary}`);
   assertCurrentUser(rootStats, root);
   const target = path.resolve(directory);
   const relative = path.relative(root, target);
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error(`Power data path escapes storage: ${directory}`);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error(`Fabric data path escapes storage: ${directory}`);
   let cursor = root;
   for (const segment of relative.split(path.sep).filter(Boolean)) {
     cursor = path.join(cursor, segment);
     try { fs.mkdirSync(cursor, { mode: 0o700 }); } catch (error) { if (errorCode(error) !== "EEXIST") throw error; }
     const stats = fs.lstatSync(cursor);
-    if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Power data path contains a non-directory: ${cursor}`);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Fabric data path contains a non-directory: ${cursor}`);
     assertCurrentUser(stats, cursor);
     fs.chmodSync(cursor, 0o700);
   }
@@ -64,11 +64,11 @@ const privateDirectory = (directory: string, boundary: string): string => {
 const privateFile = (target: string, maximum = 1024 * 1024): fs.Stats => {
   const stats = fs.lstatSync(target);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
-    throw new Error(`Legacy Power data is not a bounded unaliased regular file: ${target}`);
+    throw new Error(`Fabric data is not a bounded unaliased regular file: ${target}`);
   }
-  if (stats.size > maximum) throw new Error(`Power configuration exceeds ${maximum} bytes: ${target}`);
+  if (stats.size > maximum) throw new Error(`Fabric data exceeds ${maximum} bytes: ${target}`);
   assertCurrentUser(stats, target);
-  if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) throw new Error(`Legacy Power data is not private: ${target}`);
+  if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) throw new Error(`Fabric data is not private: ${target}`);
   return stats;
 };
 
@@ -124,7 +124,7 @@ const migrateMcpConfiguration = (config: string): string[] => {
   if (fs.existsSync(current) || !fs.existsSync(legacy)) return [];
   privateFile(legacy, 256 * 1024);
   const parsed: unknown = JSON.parse(fs.readFileSync(legacy, "utf8"));
-  if (!isRecord(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting the Power");
+  if (!isRecord(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting Fabric");
   copyFileAtomic(legacy, current);
   return ["config/mcporter.json -> config/mcp.json"];
 };
@@ -245,7 +245,7 @@ const validateWorkspaceObject = (identity: KiroPowerWorkspaceIdentity): void => 
   const canonical = fs.realpathSync(identity.canonicalPath);
   const stats = fs.statSync(canonical, { bigint: true });
   if (canonical !== identity.canonicalPath || String(stats.dev) !== identity.deviceId || String(stats.ino) !== identity.fileId) {
-    throw new Error("Power workspace identity no longer matches the verified filesystem object");
+    throw new Error("Fabric workspace identity no longer matches the verified filesystem object");
   }
 };
 const validatePersistedIdentity = (file: string, expected: KiroPowerWorkspaceIdentity): void => {

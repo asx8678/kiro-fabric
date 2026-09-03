@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import fs, { readFileSync } from "node:fs";
 import path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -9,7 +10,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Value } from "typebox/value";
 import { settleWithin } from "../async-settlement.js";
-import { loadFabricPowerConfig } from "../config.js";
+import { loadFabricConfig } from "../config.js";
 import { FABRIC_COMPILER_TIMEOUT_MS, effectiveFabricTimeout } from "../execution-service.js";
 import {
   fabricExecInputSchema,
@@ -23,6 +24,7 @@ import {
   MAX_EXECUTOR_SOURCE_BYTES,
 } from "../runtime/source-limit.js";
 import { KIRO_MCP_DRAIN_TIMEOUT_MS, kiroMcpOuterDeadlineMs } from "./deadlines.js";
+import { inspectCanonicalPath } from "./canonical-path.js";
 import { KiroPowerApprover, KiroPowerFabricApprover } from "./power/approver.js";
 import { prepareKiroPowerDataPaths, prepareKiroPowerProjectPaths } from "./power/data-paths.js";
 import {
@@ -46,7 +48,10 @@ import {
   type FabricTracer,
 } from "../trace/tracer.js";
 
-const EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Agent-scoped memory, workspace-bound state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
+const EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, workspace-scoped durable memory and state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
+const MCP_INSTANCE_ID = `fmcp_${randomBytes(16).toString("hex")}`;
+const MCP_STARTED_AT = new Date().toISOString();
+const MCP_PARENT_PID = process.ppid;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const bounded = (value: unknown, fallback: string, maximum = 800): string =>
   (value instanceof Error ? value.message : typeof value === "string" ? value : fallback)
@@ -56,7 +61,7 @@ const toolError = (code: string, error: unknown, issues?: readonly unknown[]) =>
   isError: true as const,
 });
 
-export const supportsKiroPowerElicitation = (capabilities: unknown): boolean => {
+export const supportsKiroElicitation = (capabilities: unknown): boolean => {
   if (!isRecord(capabilities) || !isRecord(capabilities.elicitation)) return false;
   return Object.keys(capabilities.elicitation).length === 0 || Object.hasOwn(capabilities.elicitation, "form");
 };
@@ -64,12 +69,27 @@ export const supportsKiroPowerElicitation = (capabilities: unknown): boolean => 
 export interface KiroMcpServerOptions {
   runtimeRoot: string;
   dataRoot: string;
+  kiroHome?: string;
   version?: string;
   runtime?: KiroRuntime;
   prepareRuntime?: (options: KiroRuntimeOptions) => KiroRuntime | Promise<KiroRuntime>;
   workspaceContext?: WorkspaceContextProvider;
 }
 interface ActiveExecution { controller: AbortController; runtime: KiroRuntime; settled: Promise<void>; settle(): void }
+
+export const installedKiroHomeFor = (runtimeRoot: string, dataRoot: string): string | undefined => {
+  const runtime = inspectCanonicalPath(runtimeRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
+  const data = inspectCanonicalPath(dataRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
+  const installRoot = path.dirname(data);
+  if (path.basename(data) !== "data" || path.basename(installRoot) !== "kiro-fabric") return undefined;
+  if (!/^[a-f0-9]{64}$/u.test(path.basename(runtime)) || path.dirname(runtime) !== path.join(installRoot, "runtime")) {
+    throw new Error("installed Agent data root does not match its digest-named runtime layout");
+  }
+  return inspectCanonicalPath(path.dirname(installRoot), {
+    kind: "directory",
+    rejectFinalSymlink: true,
+  }).canonicalPath;
+};
 
 const workspaceRequest = (value: unknown): KiroPowerWorkspaceRequest => {
   if (Value.Check(kiroPowerWorkspaceRequestSchema, value)) return value as KiroPowerWorkspaceRequest;
@@ -106,10 +126,10 @@ const sweepTraceDirectory = (directory: string): void => {
  * configuration enables it. A malformed configuration or an uncreatable
  * trace file must never break Agent startup: fall back to the frozen
  * zero-allocation disabled tracer. */
-const createPowerTracer = (data: { root: string; configFile: string }, version: string): FabricTracer => {
+const createAgentTracer = (data: { root: string; configFile: string }, version: string): FabricTracer => {
   let configured = false;
   try {
-    configured = loadFabricPowerConfig(data.configFile).tracing.enabled;
+    configured = loadFabricConfig(data.configFile).tracing.enabled;
   } catch {
     configured = false;
   }
@@ -119,7 +139,18 @@ const createPowerTracer = (data: { root: string; configFile: string }, version: 
     sweepTraceDirectory(directory);
     const file = path.join(directory, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
     const tracer = createFabricTracer({ file });
-    tracer.event("init", "power.start", undefined, { product: "kiro-fabric-agent", version, pid: process.pid, file });
+    tracer.event("init", "agent.mcp.start", undefined, {
+      product: "kiro-fabric-agent",
+      version,
+      pid: process.pid,
+      parentPid: MCP_PARENT_PID,
+      mcpInstanceId: MCP_INSTANCE_ID,
+      startedAt: MCP_STARTED_AT,
+      file,
+    });
+    // Persist process identity before accepting MCP traffic so even a
+    // short-lived crash/reconnect is visible to startup-count qualification.
+    tracer.flush();
     return tracer;
   } catch {
     return DISABLED_TRACER;
@@ -128,25 +159,52 @@ const createPowerTracer = (data: { root: string; configFile: string }, version: 
 
 export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promise<{ close(): Promise<void> }> => {
   if (!options.runtimeRoot || !options.dataRoot) throw new Error("Agent MCP launch requires KIRO_FABRIC_RUNTIME_ROOT and KIRO_FABRIC_DATA_ROOT");
+  const inferredKiroHome = installedKiroHomeFor(options.runtimeRoot, options.dataRoot);
+  const explicitKiroHome = options.kiroHome === undefined
+    ? undefined
+    : inspectCanonicalPath(options.kiroHome, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
+  if (inferredKiroHome !== undefined && explicitKiroHome !== undefined && inferredKiroHome !== explicitKiroHome) {
+    throw new Error("explicit Kiro home does not match the installed Agent storage layout");
+  }
+  const kiroHome = explicitKiroHome ?? inferredKiroHome;
   const version = options.version ?? String((JSON.parse(readFileSync(path.join(options.runtimeRoot, "package.json"), "utf8")) as { version: unknown }).version);
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
   const data = prepareKiroPowerDataPaths(options.dataRoot);
-  const tracer = createPowerTracer(data, version);
-  const powerApprover = new KiroPowerApprover({
-    supported: () => supportsKiroPowerElicitation(server.getClientCapabilities()),
+  const tracer = createAgentTracer(data, version);
+  const fabricApprover = new KiroPowerApprover({
+    supported: () => supportsKiroElicitation(server.getClientCapabilities()),
     request: async ({ title: _title, message, signal, timeoutMs }) => {
-      const result = await server.elicitInput({
-        mode: "form",
-        message,
-        requestedSchema: { type: "object", properties: { approved: { type: "boolean", title: "Approve once", default: false } }, required: ["approved"] },
-      }, { ...(signal ? { signal } : {}), timeout: timeoutMs });
-      return { action: result.action, ...(isRecord(result.content) && result.content.approved === true ? { approved: true } : {}) };
+      const elicitationId = `form_${randomBytes(8).toString("hex")}`;
+      if (tracer.enabled) {
+        tracer.event("eval", "approval.form.request", undefined, { elicitationId });
+        tracer.flush();
+      }
+      try {
+        const result = await server.elicitInput({
+          mode: "form",
+          message,
+          requestedSchema: { type: "object", properties: { approved: { type: "boolean", title: "Approve once", default: false } }, required: ["approved"] },
+        }, { ...(signal ? { signal } : {}), timeout: timeoutMs });
+        const approved = isRecord(result.content) && result.content.approved === true;
+        if (tracer.enabled) {
+          tracer.event("eval", "approval.form.response", undefined, { elicitationId, action: result.action, approved });
+          tracer.flush();
+        }
+        return { action: result.action, ...(approved ? { approved: true } : {}) };
+      } catch (error) {
+        if (tracer.enabled) {
+          tracer.event("eval", "approval.form.response", undefined, { elicitationId, action: "error", approved: false });
+          tracer.flush();
+        }
+        throw error;
+      }
     },
   });
   const binding = new KiroPowerWorkspaceBinding({
     pluginRoot: options.runtimeRoot,
     pluginData: options.dataRoot,
-    elicitor: { approveWorkspace: (canonicalPath, signal) => powerApprover.approveOnce({ risk: "write", provider: "fabric_workspace", action: "attach", summary: `Canonical workspace: ${canonicalPath}`, ...(signal ? { signal } : {}) }) },
+    ...(kiroHome === undefined ? {} : { kiroHome }),
+    elicitor: { approveWorkspace: (canonicalPath, signal) => fabricApprover.approveOnce({ risk: "write", provider: "fabric_workspace", action: "attach", summary: `Canonical workspace: ${canonicalPath}`, ...(signal ? { signal } : {}) }) },
   });
   const workspaceContext = options.workspaceContext ?? new CachedWorkspaceContextProvider({
     supported: () => (server.getClientCapabilities() as { roots?: unknown } | undefined)?.roots !== undefined,
@@ -155,6 +213,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   let workspaceSnapshot: KiroWorkspaceSnapshot | undefined;
   let runtime = options.runtime;
   let runtimeIdentity = runtime ? "<injected>" : "";
+  let runtimeGeneration = runtime ? 1 : 0;
   let closing = false;
   let lifecycleTail = Promise.resolve();
   const active = new Set<ActiveExecution>();
@@ -176,6 +235,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     if (!drained) await Promise.allSettled(leases.map((item) => item.settled));
     await current.close();
     if (runtime === current) {
+      if (tracer.enabled) tracer.event("teardown", "runtime.stop", undefined, { runtimeGeneration });
       runtime = undefined;
       runtimeIdentity = "";
     }
@@ -220,6 +280,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     await closeRuntime(new Error("workspace binding changed"));
     runtime = await createRuntimeFor(workspace);
     runtimeIdentity = identity;
+    runtimeGeneration += 1;
+    if (tracer.enabled) tracer.event("init", "runtime.start", undefined, { runtimeGeneration });
     return runtime;
   };
   const getRuntime = (): Promise<KiroRuntime> => lifecycle(async () => {
@@ -248,7 +310,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     await syncWorkspace();
     return { tools: [
       { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Agent-scoped state and memory.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
+      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable memory and state.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
       { name: "fabric_exec", description: EXEC_DESCRIPTION, inputSchema: fabricExecInputSchemaJson(), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } },
     ] };
   });
@@ -262,7 +324,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         const workspaceObservation = binding.workspaceObservation();
         const workspaceBlocked = unavailableWorkspace() || workspaceObservation.status === "temporarily-unavailable";
         const current = workspaceBlocked ? runtime : await getRuntime();
-        const limits = current?.service.config.executor ?? loadFabricPowerConfig(data.configFile).executor;
+        const limits = current?.service.config.executor ?? loadFabricConfig(data.configFile).executor;
         const providers = current
           ? current.providers().map((provider) => workspaceBlocked
               ? { ...provider, available: false, reason: "workspace identity is temporarily unverifiable" }
@@ -273,6 +335,22 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
               available: false,
               reason: "workspace identity is temporarily unverifiable",
             }));
+        const lifecycleInfo = {
+          mcpInstanceId: MCP_INSTANCE_ID,
+          pid: process.pid,
+          parentPid: MCP_PARENT_PID,
+          startedAt: MCP_STARTED_AT,
+          runtimeGeneration,
+          runtimeActive: current !== undefined,
+          clientCapabilities: {
+            roots: (server.getClientCapabilities() as { roots?: unknown } | undefined)?.roots !== undefined,
+            formElicitation: supportsKiroElicitation(server.getClientCapabilities()),
+          },
+        };
+        if (tracer.enabled) {
+          tracer.event("eval", "tool.fabric_info", undefined, lifecycleInfo);
+          tracer.flush();
+        }
         return { content: [{ type: "text" as const, text: JSON.stringify({
           product: "kiro-fabric-agent",
           version,
@@ -285,6 +363,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
           },
           providers,
           tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
+          lifecycle: lifecycleInfo,
           nativeKiroTools: { owner: "kiro", availability: "declared-by-agent-profile" },
         }) }] };
       } catch (error) { return toolError("info_request_failed", error); }
@@ -292,6 +371,10 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     if (name === "fabric_workspace") {
       try {
         const parsed = workspaceRequest(request.params.arguments ?? {});
+        if (tracer.enabled) {
+          tracer.event("eval", "tool.fabric_workspace", undefined, { action: parsed.action });
+          tracer.flush();
+        }
         if (parsed.action === "status") return { content: [{ type: "text" as const, text: JSON.stringify({
           ...binding.status(),
           context: workspaceSnapshot?.status ?? "temporarily-unavailable",
@@ -351,7 +434,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       const remaining = Math.max(0, outerStarted + outerDeadline - performance.now());
       timer = setTimeout(() => controller.abort(new Error(`MCP request exceeded ${outerDeadline}ms`)), remaining);
     };
-    const initialConfig = loadFabricPowerConfig(data.configFile);
+    const initialConfig = loadFabricConfig(data.configFile);
     scheduleOuterDeadline(effectiveFabricTimeout(
       initialConfig.executor.maxTimeoutMs,
       initialConfig.executor.timeoutMs,
@@ -370,7 +453,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       ));
       const approver = new KiroPowerFabricApprover(
         current.service.config.approvals,
-        powerApprover,
+        fabricApprover,
         current.service.cwd,
       );
       const result = await current.service.execute({
