@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 
-export const REAL_CLIENT_SESSION_COMMAND = ["kiro-cli", "--v3"];
+export const REAL_CLIENT_SESSION_COMMAND = ["kiro-cli", "chat", "--agent", "kiro-fabric", "--v3"];
 export const REAL_CLIENT_TOOLS = ["fabric_info", "fabric_workspace", "fabric_exec"];
 export const REAL_CLIENT_NATIVE_CAPABILITIES = ["file-read", "file-edit", "shell", "web", "subagent"];
-export const REAL_CLIENT_TRANSCRIPT_KINDS = ["kiro-version", "power-activation", "mcp-tools-list", "native-capability-probes"];
+export const REAL_CLIENT_TRANSCRIPT_KINDS = ["kiro-version", "agent-selection", "mcp-tools-list", "native-capability-probes"];
 const SHA256 = /^[a-f0-9]{64}$/u;
 const GIT_OBJECT_ID = /^[a-f0-9]{40,64}$/u;
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
@@ -29,7 +29,7 @@ const verifyTranscript = (entries) => {
 export const assertRealClientEvidence = (report, packageDigest, options = {}) => {
   if (!report || typeof report !== "object") throw new Error("real-client evidence must be an object");
   if (options.qualification === true && (report.kind !== "kiro-fabric.real-client-qualification" || report.schemaVersion !== 3 || report.ok !== true)) throw new Error("real-client qualification identity is invalid");
-  if (report.packageDigest !== packageDigest || !SHA256.test(report.packageDigest) || !equal(report.sessionCommand, REAL_CLIENT_SESSION_COMMAND) || report.powerActivated !== true || !equal(report.tools, REAL_CLIENT_TOOLS) || report.customAgentSelected !== false) throw new Error("real-client evidence is incomplete or not bound to the exact packaged contract");
+  if (report.packageDigest !== packageDigest || !SHA256.test(report.packageDigest) || !equal(report.sessionCommand, REAL_CLIENT_SESSION_COMMAND) || report.powerActivated !== false || !equal(report.tools, REAL_CLIENT_TOOLS) || report.customAgentSelected !== true) throw new Error("real-client evidence is incomplete or not bound to the exact packaged contract");
   if (!options.archiveDigest || report.archiveDigest !== options.archiveDigest || !SHA256.test(report.archiveDigest)) throw new Error("real-client evidence is not bound to the exact release archive");
   if (!options.commit || report.commit !== options.commit || !GIT_OBJECT_ID.test(report.commit)) throw new Error("real-client evidence is not bound to the exact commit");
   if (!SHA256.test(report.driver?.digest ?? "") || typeof report.driver?.version !== "string" || !SHA256.test(report.kiro?.digest ?? "") || typeof report.kiro?.version !== "string" || typeof report.kiro?.path !== "string") throw new Error("real-client binary or driver identity is incomplete");

@@ -5,12 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { writeFileAtomic } from "./atomic-file.mjs";
-import { validatePowerPackage } from "./validate-power-package.mjs";
+import { validateAgentPackage } from "./validate-agent-package.mjs";
 
-const requestedPluginRoot = path.resolve(process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : ".tmp/kiro-fabric-power");
+const requestedPluginRoot = path.resolve(process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : ".tmp/kiro-fabric-agent");
 const jsonIndex = process.argv.indexOf("--json");
 const jsonOutput = jsonIndex >= 0 ? path.resolve(process.argv[jsonIndex + 1]) : undefined;
-const packageEvidence = validatePowerPackage(requestedPluginRoot);
+const packageEvidence = validateAgentPackage(requestedPluginRoot);
 const pluginRoot = packageEvidence.root;
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-cert-"));
 const pluginData = path.join(temporary, "data");
@@ -20,7 +20,7 @@ fs.mkdirSync(workspace, { mode: 0o700 });
 const entry = path.join(pluginRoot, "runtime", "kiro", "mcp-entry.js");
 const child = spawn(process.execPath, [entry], {
   cwd: pluginRoot,
-  env: { PATH: process.env.PATH, HOME: process.env.HOME, PLUGIN_ROOT: pluginRoot, PLUGIN_DATA: pluginData },
+  env: { PATH: process.env.PATH, HOME: process.env.HOME, KIRO_FABRIC_RUNTIME_ROOT: path.join(pluginRoot, "runtime"), KIRO_FABRIC_DATA_ROOT: pluginData },
   stdio: ["pipe", "pipe", "pipe"],
 });
 const MAX_CAPTURE_CHARS = 8 * 1024 * 1024;
@@ -28,7 +28,7 @@ let stdout = ""; let stderr = ""; let captureError;
 const capture = (stream, chunk) => {
   if (captureError) return stream;
   if (stream.length + chunk.length > MAX_CAPTURE_CHARS) {
-    captureError = new Error("Power MCP certification output exceeded its bound");
+    captureError = new Error("Agent MCP certification output exceeded its bound");
     child.kill("SIGKILL");
     return stream;
   }
@@ -58,10 +58,10 @@ const waitFor = async (id) => {
     serviceRequests();
     const frame = frames().find((candidate) => candidate.id === id && candidate.method === undefined);
     if (frame) return frame;
-    if (child.exitCode !== null) throw new Error(`Power MCP exited early: ${stderr}`);
+    if (child.exitCode !== null) throw new Error(`Agent MCP exited early: ${stderr}`);
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  throw new Error(`Power MCP request ${id} timed out: ${stderr}`);
+  throw new Error(`Agent MCP request ${id} timed out: ${stderr}`);
 };
 const request = async (id, method, params) => { send({ jsonrpc: "2.0", id, method, params }); const frame = await waitFor(id); if (frame.error) throw new Error(JSON.stringify(frame.error)); return frame.result; };
 const call = (id, name, args) => request(id, "tools/call", { name, arguments: args });
@@ -76,7 +76,7 @@ try {
     if (tool.inputSchema?.type !== "object") throw new Error(`tool input schema must declare an object root: ${tool.name}`);
   }
   const info = JSON.parse(text(await call(3, "fabric_info", {})));
-  if (info.product !== "kiro-fabric-power" || info.executor !== "quickjs") throw new Error("fabric_info identity mismatch");
+  if (info.product !== "kiro-fabric-agent" || info.executor !== "quickjs") throw new Error("fabric_info identity mismatch");
   if (info.workspace?.status !== "bound" || info.workspace?.context !== "verified" || info.workspace?.verification !== "verified") {
     throw new Error("fabric_info did not prove canonical workspace binding");
   }
@@ -133,15 +133,16 @@ try {
   }
   child.stdin.end();
   const code = await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error("MCP shutdown timed out")), 10_000); child.once("exit", (value) => { clearTimeout(timer); resolve(value); }); });
-  if (code !== 0) throw new Error(`Power MCP exited ${code}: ${stderr}`);
+  if (code !== 0) throw new Error(`Agent MCP exited ${code}: ${stderr}`);
   const report = {
-    kind: "kiro-fabric.power-certification",
+    kind: "kiro-fabric.agent-certification",
     schemaVersion: 1,
     ok: true,
     packageDigest: packageEvidence.digest,
     tools,
     executor: "quickjs",
-    customAgentSelected: false,
+    customAgentSelected: true,
+    powerActivated: false,
     checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "four-providers", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "approval-boundary", "bounded-output", "bounded-shutdown"],
   };
   const serialized = `${JSON.stringify(report, null, 2)}\n`;

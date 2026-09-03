@@ -2,12 +2,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeFileAtomic } from "./atomic-file.mjs";
-import { validatePowerPackage } from "./validate-power-package.mjs";
+import { validateAgentPackage } from "./validate-agent-package.mjs";
 
 const valueAfter = (flag) => { const index = process.argv.indexOf(flag); return index >= 0 ? process.argv[index + 1] : undefined; };
 const output = valueAfter("--output");
-if (!output) throw new Error("Usage: generate-power-sbom --output <path> [--package <staged-power>]");
-const packageEvidence = validatePowerPackage(path.resolve(valueAfter("--package") ?? ".tmp/kiro-fabric-power"));
+if (!output) throw new Error("Usage: generate-agent-sbom --output <path> [--package <staged-agent>]");
+const packageEvidence = validateAgentPackage(path.resolve(valueAfter("--package") ?? ".tmp/kiro-fabric-agent"));
 const pkg = JSON.parse(fs.readFileSync(path.join(packageEvidence.root, "package.json"), "utf8"));
 const closureRoot = path.join(packageEvidence.root, "runtime");
 const closure = JSON.parse(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"), "utf8"));
@@ -36,16 +36,16 @@ const packages = [{
   licenseDeclared: "MIT",
   supplier: "NOASSERTION",
   checksums: [{ algorithm: "SHA256", checksumValue: packageEvidence.digest }],
-  comment: `Exact complete staged Power package: ${packageEvidence.files} files, ${packageEvidence.bytes} bytes; runtime closure: ${files.length} files`,
+  comment: `Exact complete staged Agent package: ${packageEvidence.files} files, ${packageEvidence.bytes} bytes; runtime closure: ${files.length} files`,
 }, ...dependencies];
 const created = new Date(Number(process.env.SOURCE_DATE_EPOCH ?? "0") * 1_000).toISOString();
 const document = {
   spdxVersion: "SPDX-2.3",
   dataLicense: "CC0-1.0",
   SPDXID: "SPDXRef-DOCUMENT",
-  name: `${pkg.name}-${pkg.version}-power-sbom`,
+  name: `${pkg.name}-${pkg.version}-agent-sbom`,
   documentNamespace: `https://github.com/asx8678/kiro-fabric/sbom/${packageEvidence.digest}`,
-  creationInfo: { created, creators: ["Tool: kiro-fabric-generate-power-sbom"] },
+  creationInfo: { created, creators: ["Tool: kiro-fabric-generate-agent-sbom"] },
   packages,
   relationships: [
     { spdxElementId: "SPDXRef-DOCUMENT", relationshipType: "DESCRIBES", relatedSpdxElement: rootId },

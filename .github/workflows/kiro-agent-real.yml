@@ -1,4 +1,4 @@
-name: Real Kiro Power qualification
+name: Real Kiro Agent qualification
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   qualify:
-    runs-on: [self-hosted, kiro-power]
+    runs-on: [self-hosted, kiro-agent]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -17,10 +17,10 @@ jobs:
         with: { node-version: 24 }
       - run: corepack enable && corepack prepare pnpm@11.20.0 --activate
       - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm run power:stage
-      - run: corepack pnpm run power:archive
+      - run: corepack pnpm run agent:install
+      - run: corepack pnpm run agent:archive
       - name: Exercise exact package with the repository-owned real client driver
-        run: corepack pnpm run certify:power:real -- --archive .tmp/kiro-fabric-power.tar.gz --commit "${{ github.sha }}" --output "$RUNNER_TEMP/real-client.json"
+        run: corepack pnpm run certify:agent:real -- --archive .tmp/kiro-fabric-agent.tar.gz --commit "${{ github.sha }}" --output "$RUNNER_TEMP/real-client.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: real-client-${{ github.sha }}

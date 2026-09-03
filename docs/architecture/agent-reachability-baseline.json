@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseCommit": "f38ce346f4d33eac3a14b3323cbd98e12209bc32",
-  "authority": "esbuild metafile from the Power MCP entry and compiler worker",
+  "authority": "esbuild metafile from the Agent MCP entry and compiler worker",
   "lineCounting": "UTF-8 text split on line terminators, including the final logical line",
   "source": {
     "files": 315,
@@ -42,6 +42,6 @@
   },
   "notes": [
     "The graph was captured before deletion and was used as deletion authority.",
-    "The full pre-deletion path list is intentionally not shipped in the product package; current builds emit .tmp/power-reachability.json from the verified graph."
+    "The full pre-deletion path list is intentionally not shipped in the product package; current builds emit .tmp/agent-reachability.json from the verified graph."
   ]
 }

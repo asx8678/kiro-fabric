@@ -17,7 +17,7 @@ describe("hermetic staging", () => {
     const home = path.join(root, "home"); const kiroHome = path.join(root, "kiro"); fs.mkdirSync(home); fs.mkdirSync(kiroHome);
     fs.writeFileSync(path.join(kiroHome, "sentinel"), Buffer.from([0, 1, 255]));
     const before = digestTree(kiroHome);
-    const result = spawnSync(process.execPath, ["scripts/build-power-dev.mjs"], { cwd: path.resolve("."), encoding: "utf8", env: { ...process.env, HOME: home, KIRO_HOME: kiroHome }, timeout: 60_000 });
+    const result = spawnSync(process.execPath, ["scripts/build-agent-dev.mjs"], { cwd: path.resolve("."), encoding: "utf8", env: { ...process.env, HOME: home, KIRO_HOME: kiroHome }, timeout: 60_000 });
     expect(result.status, result.stderr).toBe(0);
     expect(digestTree(kiroHome)).toBe(before);
     fs.rmSync(root, { recursive: true, force: true });

@@ -1,3 +1,7 @@
+# Unreleased
+
+- Convert Kiro Fabric from a Power to one native Kiro CLI 3 custom agent with an agent-owned Fabric MCP backend.
+
 # Changelog
 
 ## 0.64.0

@@ -45,7 +45,7 @@ import {
   type FabricTracer,
 } from "../trace/tracer.js";
 
-const EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Power-scoped memory, workspace-bound state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
+const EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Agent-scoped memory, workspace-bound state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const bounded = (value: unknown, fallback: string, maximum = 800): string =>
   (value instanceof Error ? value.message : typeof value === "string" ? value : fallback)
@@ -61,8 +61,8 @@ export const supportsKiroPowerElicitation = (capabilities: unknown): boolean => 
 };
 
 export interface KiroMcpServerOptions {
-  pluginRoot: string;
-  pluginData: string;
+  runtimeRoot: string;
+  dataRoot: string;
   version?: string;
   runtime?: KiroRuntime;
   prepareRuntime?: (options: KiroRuntimeOptions) => KiroRuntime | Promise<KiroRuntime>;
@@ -101,9 +101,9 @@ const sweepTraceDirectory = (directory: string): void => {
   } catch { /* missing directory or unreadable entries: nothing to sweep */ }
 };
 
-/** Tracing is off unless KIRO_FABRIC_DEBUG forces it on/off or the Power
+/** Tracing is off unless KIRO_FABRIC_DEBUG forces it on/off or the Agent
  * configuration enables it. A malformed configuration or an uncreatable
- * trace file must never break Power startup: fall back to the frozen
+ * trace file must never break Agent startup: fall back to the frozen
  * zero-allocation disabled tracer. */
 const createPowerTracer = (data: { root: string; configFile: string }, version: string): FabricTracer => {
   let configured = false;
@@ -118,7 +118,7 @@ const createPowerTracer = (data: { root: string; configFile: string }, version: 
     sweepTraceDirectory(directory);
     const file = path.join(directory, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
     const tracer = createFabricTracer({ file });
-    tracer.event("init", "power.start", undefined, { product: "kiro-fabric-power", version, pid: process.pid, file });
+    tracer.event("init", "power.start", undefined, { product: "kiro-fabric-agent", version, pid: process.pid, file });
     return tracer;
   } catch {
     return DISABLED_TRACER;
@@ -126,10 +126,10 @@ const createPowerTracer = (data: { root: string; configFile: string }, version: 
 };
 
 export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promise<{ close(): Promise<void> }> => {
-  if (!options.pluginRoot || !options.pluginData) throw new Error("Power MCP launch requires PLUGIN_ROOT and PLUGIN_DATA");
-  const version = options.version ?? String((JSON.parse(readFileSync(path.join(options.pluginRoot, "package.json"), "utf8")) as { version: unknown }).version);
+  if (!options.runtimeRoot || !options.dataRoot) throw new Error("Agent MCP launch requires KIRO_FABRIC_RUNTIME_ROOT and KIRO_FABRIC_DATA_ROOT");
+  const version = options.version ?? String((JSON.parse(readFileSync(path.join(options.runtimeRoot, "package.json"), "utf8")) as { version: unknown }).version);
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
-  const data = prepareKiroPowerDataPaths(options.pluginData);
+  const data = prepareKiroPowerDataPaths(options.dataRoot);
   const tracer = createPowerTracer(data, version);
   const powerApprover = new KiroPowerApprover({
     supported: () => supportsKiroPowerElicitation(server.getClientCapabilities()),
@@ -143,8 +143,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     },
   });
   const binding = new KiroPowerWorkspaceBinding({
-    pluginRoot: options.pluginRoot,
-    pluginData: options.pluginData,
+    pluginRoot: options.runtimeRoot,
+    pluginData: options.dataRoot,
     elicitor: { approveWorkspace: (canonicalPath, signal) => powerApprover.approveOnce({ risk: "write", provider: "fabric_workspace", action: "attach", summary: `Canonical workspace: ${canonicalPath}`, ...(signal ? { signal } : {}) }) },
   });
   const workspaceContext = options.workspaceContext ?? new CachedWorkspaceContextProvider({
@@ -222,11 +222,11 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     return runtime;
   };
   const getRuntime = (): Promise<KiroRuntime> => lifecycle(async () => {
-    if (closing) throw new Error("Power MCP server is shutting down");
+    if (closing) throw new Error("Agent MCP server is shutting down");
     return runtimeForIdentity();
   });
   const acquireRuntime = (controller: AbortController): Promise<{ current: KiroRuntime; execution: ActiveExecution }> => lifecycle(async () => {
-    if (closing) throw new Error("Power MCP server is shutting down");
+    if (closing) throw new Error("Agent MCP server is shutting down");
     controller.signal.throwIfAborted();
     const current = await runtimeForIdentity();
     controller.signal.throwIfAborted();
@@ -246,8 +246,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     await syncWorkspace();
     return { tools: [
-      { name: "fabric_info", description: "Report bounded Kiro Fabric Power health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Power-scoped state and memory.", inputSchema: JSON.parse(JSON.stringify(kiroPowerWorkspaceRequestSchema)), annotations: { readOnlyHint: false } },
+      { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Agent-scoped state and memory.", inputSchema: JSON.parse(JSON.stringify(kiroPowerWorkspaceRequestSchema)), annotations: { readOnlyHint: false } },
       { name: "fabric_exec", description: EXEC_DESCRIPTION, inputSchema: fabricExecInputSchemaJson(), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } },
     ] };
   });
@@ -273,7 +273,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
               reason: "workspace identity is temporarily unverifiable",
             }));
         return { content: [{ type: "text" as const, text: JSON.stringify({
-          product: "kiro-fabric-power",
+          product: "kiro-fabric-agent",
           version,
           executor: "quickjs",
           limits,
@@ -284,7 +284,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
           },
           providers,
           tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
-          nativeKiroTools: { owner: "kiro", availability: "not-observed-by-power" },
+          nativeKiroTools: { owner: "kiro", availability: "declared-by-agent-profile" },
         }) }] };
       } catch (error) { return toolError("info_request_failed", error); }
     }
@@ -404,7 +404,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       try {
         await lifecycle(async () => {
           closing = true;
-          const reason = new Error("Power MCP server shutting down");
+          const reason = new Error("Agent MCP server shutting down");
           const drained = await drain([...active], reason);
           await closeRuntime(reason, drained);
         });

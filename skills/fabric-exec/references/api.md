@@ -5,7 +5,7 @@
 - `code: string` — required TypeScript function body; 1 to the enforced source limit
 - `payloads?: Record<string, string>` — named immutable string inputs
 - `resultFormat?: "auto" | "json" | "text"`
-- `timeoutMs?: number` — invocation request bounded by Power policy
+- `timeoutMs?: number` — invocation request bounded by Agent policy
 
 No extra input fields are accepted. Type errors stop execution before QuickJS or any provider call.
 

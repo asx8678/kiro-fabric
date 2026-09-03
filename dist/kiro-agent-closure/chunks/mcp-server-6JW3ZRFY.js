@@ -22918,7 +22918,7 @@ var createKiroRuntime = (options) => {
 };
 
 // src/kiro/mcp-server.ts
-var EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Power-scoped memory, workspace-bound state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
+var EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, Agent-scoped memory, workspace-bound state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
 var isRecord7 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var bounded2 = (value, fallback, maximum = 800) => (value instanceof Error ? value.message : typeof value === "string" ? value : fallback).replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, maximum) || fallback;
 var toolError = (code, error, issues) => ({
@@ -22970,17 +22970,17 @@ var createPowerTracer = (data, version) => {
     sweepTraceDirectory(directory);
     const file = path9.join(directory, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
     const tracer = createFabricTracer({ file });
-    tracer.event("init", "power.start", void 0, { product: "kiro-fabric-power", version, pid: process.pid, file });
+    tracer.event("init", "power.start", void 0, { product: "kiro-fabric-agent", version, pid: process.pid, file });
     return tracer;
   } catch {
     return DISABLED_TRACER;
   }
 };
 var createKiroMcpServer = async (options) => {
-  if (!options.pluginRoot || !options.pluginData) throw new Error("Power MCP launch requires PLUGIN_ROOT and PLUGIN_DATA");
-  const version = options.version ?? String(JSON.parse(readFileSync(path9.join(options.pluginRoot, "package.json"), "utf8")).version);
+  if (!options.runtimeRoot || !options.dataRoot) throw new Error("Agent MCP launch requires KIRO_FABRIC_RUNTIME_ROOT and KIRO_FABRIC_DATA_ROOT");
+  const version = options.version ?? String(JSON.parse(readFileSync(path9.join(options.runtimeRoot, "package.json"), "utf8")).version);
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
-  const data = prepareKiroPowerDataPaths(options.pluginData);
+  const data = prepareKiroPowerDataPaths(options.dataRoot);
   const tracer = createPowerTracer(data, version);
   const powerApprover = new KiroPowerApprover({
     supported: () => supportsKiroPowerElicitation(server.getClientCapabilities()),
@@ -22994,8 +22994,8 @@ var createKiroMcpServer = async (options) => {
     }
   });
   const binding = new KiroPowerWorkspaceBinding({
-    pluginRoot: options.pluginRoot,
-    pluginData: options.pluginData,
+    pluginRoot: options.runtimeRoot,
+    pluginData: options.dataRoot,
     elicitor: { approveWorkspace: (canonicalPath, signal) => powerApprover.approveOnce({ risk: "write", provider: "fabric_workspace", action: "attach", summary: `Canonical workspace: ${canonicalPath}`, ...signal ? { signal } : {} }) }
   });
   const workspaceContext = options.workspaceContext ?? new CachedWorkspaceContextProvider({
@@ -23068,11 +23068,11 @@ var createKiroMcpServer = async (options) => {
     return runtime;
   };
   const getRuntime = () => lifecycle(async () => {
-    if (closing) throw new Error("Power MCP server is shutting down");
+    if (closing) throw new Error("Agent MCP server is shutting down");
     return runtimeForIdentity();
   });
   const acquireRuntime = (controller) => lifecycle(async () => {
-    if (closing) throw new Error("Power MCP server is shutting down");
+    if (closing) throw new Error("Agent MCP server is shutting down");
     controller.signal.throwIfAborted();
     const current = await runtimeForIdentity();
     controller.signal.throwIfAborted();
@@ -23099,8 +23099,8 @@ var createKiroMcpServer = async (options) => {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     await syncWorkspace();
     return { tools: [
-      { name: "fabric_info", description: "Report bounded Kiro Fabric Power health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Power-scoped state and memory.", inputSchema: JSON.parse(JSON.stringify(kiroPowerWorkspaceRequestSchema)), annotations: { readOnlyHint: false } },
+      { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for Agent-scoped state and memory.", inputSchema: JSON.parse(JSON.stringify(kiroPowerWorkspaceRequestSchema)), annotations: { readOnlyHint: false } },
       { name: "fabric_exec", description: EXEC_DESCRIPTION, inputSchema: fabricExecInputSchemaJson(), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } }
     ] };
   });
@@ -23121,7 +23121,7 @@ var createKiroMcpServer = async (options) => {
           reason: "workspace identity is temporarily unverifiable"
         }));
         return { content: [{ type: "text", text: JSON.stringify({
-          product: "kiro-fabric-power",
+          product: "kiro-fabric-agent",
           version,
           executor: "quickjs",
           limits,
@@ -23132,7 +23132,7 @@ var createKiroMcpServer = async (options) => {
           },
           providers,
           tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
-          nativeKiroTools: { owner: "kiro", availability: "not-observed-by-power" }
+          nativeKiroTools: { owner: "kiro", availability: "declared-by-agent-profile" }
         }) }] };
       } catch (error) {
         return toolError("info_request_failed", error);
@@ -23254,7 +23254,7 @@ var createKiroMcpServer = async (options) => {
       try {
         await lifecycle(async () => {
           closing = true;
-          const reason = new Error("Power MCP server shutting down");
+          const reason = new Error("Agent MCP server shutting down");
           const drained = await drain([...active], reason);
           await closeRuntime(reason, drained);
         });

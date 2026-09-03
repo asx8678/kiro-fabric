@@ -1,71 +1,48 @@
 # Kiro Fabric
 
-A Kiro CLI v3 Power for bounded, checked TypeScript composition. `fabric_exec` is the only execution interface — strictly type-checked and run in QuickJS with no fallback; Kiro native tools keep ownership of files, shell, web, and subagents.
+Kiro Fabric is a **native Kiro CLI 3 custom agent** with native Kiro coding tools and one private stdio MCP backend. Selecting `kiro-fabric` starts that backend for the session; no Power activation or separate server command is required.
 
-## Prerequisites
+## Architecture
 
-- Node.js ≥ 24
-- pnpm 11.20.0 (`corepack prepare pnpm@11.20.0 --activate`)
-- Linux or macOS for checkout-local Power staging
-- Kiro CLI v3
+The profile exposes `read`, `write`, `shell`, `web`, `subagent`, `todo_list`, and `@fabric`. Fabric exposes exactly `fabric_info`, `fabric_workspace`, and `fabric_exec`. `fabric_exec` strictly type-checks TypeScript and runs it only in QuickJS. It has no filesystem, process, environment, timer, import, shell, native Kiro tool, or unrestricted network access. Side effects remain behind exact inner ActionRegistry approvals; allowing the three outer wrappers never approves a nested effect.
 
-## Quickstart
+## Requirements and commands
+
+Node.js 24 or newer and an authenticated Kiro CLI 3 installation are required.
 
 ```sh
 pnpm install
-pnpm run power:stage   # builds, installs, and registers the Power for Kiro IDE and CLI v3
+pnpm run agent:stage:local
+pnpm run agent:validate
+pnpm run agent:install
+kiro-cli agent validate --path "${KIRO_HOME:-$HOME/.kiro}/agents/kiro-fabric.json"
+kiro-cli agent list
+kiro-cli chat --agent kiro-fabric --v3
+kiro-cli agent set-default kiro-fabric   # explicit opt-in only
+pnpm run agent:update
+pnpm run agent:uninstall
+# permanent deletion:
+pnpm run agent:uninstall -- --purge-data
 ```
 
-Run `power:stage` while Kiro IDE and CLI sessions are closed. The command installs the validated source at `$KIRO_HOME/powers/kiro-fabric`, refreshes `$KIRO_HOME/powers/installed/kiro-fabric`, idempotently registers **Kiro Fabric** in Kiro's local `user-added` registry, and installs always-included guidance at `$KIRO_HOME/steering/kiro-fabric-power-always.md`. No IDE import step is required. Use `pnpm run power:stage:local` when only the checkout-local `.tmp/kiro-fabric-power` package is needed. Then start sessions with:
+Migrate an explicitly known legacy Power data root without home-directory scanning:
 
 ```sh
-kiro-cli --v3
+node scripts/install-agent-user.mjs .tmp/kiro-fabric-agent --migrate-power-data /absolute/legacy/PLUGIN_DATA
 ```
 
-## Tools
+## Locations and lifecycle
 
-| Tool | Purpose |
-| --- | --- |
-| `fabric_info` | Bounded health, limits, provider availability, workspace status |
-| `fabric_workspace` | Discover, select, attach, or detach the canonical workspace |
-| `fabric_exec` | Checked TypeScript composition over bounded providers |
+The global profile is `$KIRO_HOME/agents/kiro-fabric.json` (`KIRO_HOME` defaults to `~/.kiro`). Immutable generations are under `$KIRO_HOME/kiro-fabric/runtime/<digest>`, the exact skill under `$KIRO_HOME/kiro-fabric/skills/fabric-exec`, and durable config/memory/state under `$KIRO_HOME/kiro-fabric/data/fabric`. Traces are under that data tree. The MCP process lives only for the selected Kiro session and drains on cancellation, stdin close, or signals. Memory, state, and configuration survive process restarts; TTL artifacts do not promise cross-session survival.
 
-`fabric_exec` requires a TypeScript function body in `code`, checks it in an isolated compiler worker, and runs it in QuickJS. The guest has no filesystem, shell, environment, import, timer, or unrestricted network access. Mounted providers: `artifacts`, `memory`, `state`, and explicitly configured `mcp` federation. Use `payloads?: Record<string, string>` for named string input. Write, execute, and network calls require approval and fail closed when elicitation is unavailable.
+Single roots bind automatically after identity verification. Multiple roots require explicit `fabric_workspace` selection. Missing roots or form elicitation fails closed. Ambient MCP and Powers are disabled (`includeMcpJson: false`, `includePowers: false`); configured federation lives only in private `data/fabric/config/mcp.json`.
 
-## Configuration
+Native reads may follow Kiro policy. Native writes, shell, web, and subagents retain Kiro's normal policy. The exact Fabric wrappers are outer-allowed to avoid duplicate prompts, while nested Fabric write/execute/network effects still require exact form elicitation.
 
-Optional file: `${PLUGIN_DATA}/fabric/config/config.json`. Absent means secure defaults; if present it must be a private, current-user, non-symlink regular file ≤ 256 KiB. Unknown sections or fields are rejected.
+## Migration and troubleshooting
 
-| Section | Keys |
-| --- | --- |
-| `executor` | `timeoutMs`, `maxTimeoutMs`, `memoryLimitBytes`, source/input/output/nested-result bounds, provider/approval/audit quotas, `resultFormat` |
-| `approvals` | `read` / `write` / `execute` / `network`, each `allow` \| `ask` \| `deny` |
-| `mcp` | `enabled`, `disableOAuth`, `callTimeoutMs` |
-| `memory` | `enabled`, `maxEntries`, `maxValueChars` |
-| `state` | `enabled`, `maxEntries`, `maxValueChars`, `maxTotalChars` |
-| `artifacts` | `maxArtifacts`, `maxArtifactChars`, `maxTotalChars`, `ttlMs` |
-| `tracing` | `enabled` |
+The installer never edits Power registries or installs global steering. Explicit migration accepts only a private known directory and preserves compatible config/projects. Legacy workspace salts remain private compatibility identifiers so existing identity, memory, and state are not orphaned. Remove a digest-owned old steering file manually only after checking its ownership marker; modified/unowned files must be preserved.
 
-Federated MCP servers are declared in `${PLUGIN_DATA}/fabric/config/mcp.json`. See [docs/configuration.md](docs/configuration.md).
+If the agent is missing, validate the profile and inspect `agent list`; a checkout-local profile can shadow the global profile. If `@fabric` is missing or duplicated, verify `includePowers: false` and disable the legacy Power. Node mismatch, unsafe paths, modified ownership files, unavailable roots/elicitation, and MCP startup timeout all fail closed. Kiro CLI 2.21.0 currently rejects the top-level union in the preserved `fabric_workspace` schema before model execution; therefore authenticated real-client release qualification is **not yet passing**.
 
-## Tracing
-
-Optional execution tracing writes bounded JSONL spans (`init` / `eval` / `bridge` / `teardown`, microsecond monotonic timestamps, QuickJS heap snapshots) to `${PLUGIN_DATA}/fabric/traces/`. Enable with `KIRO_FABRIC_DEBUG=1` (overrides config) or `"tracing": { "enabled": true }`. Disabled means one boolean branch per hook and no allocations. See [docs/tracing.md](docs/tracing.md).
-
-## Execution flow
-
-```text
-MCP schema → TypeScript compiler worker → QuickJS → ActionRegistry → provider
-```
-
-One path, no textual, action-name, or manual fallback. The effective guest deadline is `min(maxTimeoutMs, max(executor default, action floor, invocation timeout))`; cancellation interrupts QuickJS, propagates to providers, and drains active leases before runtime replacement or shutdown.
-
-## Development
-
-```sh
-pnpm run test        # build + full suite
-pnpm run check       # typecheck, build, tests, dead-code lint, certify, SBOM
-pnpm run audit:deps  # live moderate-or-higher dependency advisory gate
-```
-
-See [docs/architecture.md](docs/architecture.md), [docs/configuration.md](docs/configuration.md), [docs/tracing.md](docs/tracing.md), [docs/release.md](docs/release.md), and [docs/audit.md](docs/audit.md).
+Tradeoff: native-agent selection provides a deterministic session-long prompt/tool/permission envelope and explicit default selection. It loses Power keyword activation/deactivation, Power context savings, Power MCP namespacing, and one-click Agent Plugins portability.

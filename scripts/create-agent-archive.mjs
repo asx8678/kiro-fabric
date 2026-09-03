@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { constants as zlibConstants, gzipSync } from "node:zlib";
 import { writeFileAtomic } from "./atomic-file.mjs";
-import { validatePowerPackage } from "./validate-power-package.mjs";
+import { validateAgentPackage } from "./validate-agent-package.mjs";
 
 const TAR_BLOCK_BYTES = 512;
 const TAR_NAME_BYTES = 100;
@@ -115,18 +115,18 @@ const sourceDateEpoch = (value) => {
  * @param {string} outputInput
  * @param {{ sourceDateEpoch?: string | number }} [options]
  */
-export const createPowerArchive = (packageInput, outputInput, options = {}) => {
+export const createAgentArchive = (packageInput, outputInput, options = {}) => {
   const modifiedAt = sourceDateEpoch(options.sourceDateEpoch);
   const requestedRoot = path.resolve(packageInput);
   const output = path.resolve(outputInput);
-  const evidence = validatePowerPackage(requestedRoot);
+  const evidence = validateAgentPackage(requestedRoot);
   if (pathContains(requestedRoot, output) || pathContains(evidence.root, output)) {
-    throw new Error("Power archive output must be outside the staged package");
+    throw new Error("Agent archive output must be outside the staged package");
   }
   const entries = collectEntries(evidence.root);
-  const verified = validatePowerPackage(evidence.root);
+  const verified = validateAgentPackage(evidence.root);
   if (verified.digest !== evidence.digest || verified.files !== evidence.files || verified.bytes !== evidence.bytes) {
-    throw new Error("Power package changed during archive creation");
+    throw new Error("Agent package changed during archive creation");
   }
   const chunks = [];
   for (const entry of entries) {
@@ -140,7 +140,7 @@ export const createPowerArchive = (packageInput, outputInput, options = {}) => {
   chunks.push(EMPTY_BLOCK, EMPTY_BLOCK);
   const tarBytes = Buffer.concat(chunks);
   const bytes = gzipSync(tarBytes, { level: zlibConstants.Z_BEST_COMPRESSION });
-  if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error("Power archive exceeds 80 MiB");
+  if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error("Agent archive exceeds 80 MiB");
   const digest = createHash("sha256").update(bytes).digest("hex");
   writeFileAtomic(output, bytes);
   return { output, digest, bytes: bytes.length, packageDigest: evidence.digest };
@@ -148,9 +148,9 @@ export const createPowerArchive = (packageInput, outputInput, options = {}) => {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const valueAfter = (flag) => { const index = process.argv.indexOf(flag); return index >= 0 ? process.argv[index + 1] : undefined; };
-  const result = createPowerArchive(
-    valueAfter("--package") ?? ".tmp/kiro-fabric-power",
-    valueAfter("--output") ?? ".tmp/kiro-fabric-power.tar.gz",
+  const result = createAgentArchive(
+    valueAfter("--package") ?? ".tmp/kiro-fabric-agent",
+    valueAfter("--output") ?? ".tmp/kiro-fabric-agent.tar.gz",
   );
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }

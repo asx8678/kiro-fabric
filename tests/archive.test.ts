@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
-import { createPowerArchive } from "../scripts/create-power-archive.mjs";
-import { validatePowerPackage } from "../scripts/validate-power-package.mjs";
+import { createAgentArchive } from "../scripts/create-agent-archive.mjs";
+import { validateAgentPackage } from "../scripts/validate-agent-package.mjs";
 
 const roots: string[] = [];
 afterEach(() => { while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
@@ -58,21 +58,21 @@ const parseTar = (bytes: Buffer): TarEntry[] => {
 const bytewise = (left: string, right: string): number =>
   Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
 
-describe("deterministic Power archive", () => {
+describe("deterministic Agent archive", () => {
   it("writes normalized USTAR bytes that extract to the exact staged package", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-archive-test-"));
     roots.push(root);
     const first = path.join(root, "first.tar.gz");
     const second = path.join(root, "second.tar.gz");
     const sourceDateEpoch = 1_700_000_000;
-    const firstResult = createPowerArchive(".tmp/kiro-fabric-power", first, { sourceDateEpoch });
-    const secondResult = createPowerArchive(".tmp/kiro-fabric-power", second, { sourceDateEpoch: String(sourceDateEpoch) });
+    const firstResult = createAgentArchive(".tmp/kiro-fabric-agent", first, { sourceDateEpoch });
+    const secondResult = createAgentArchive(".tmp/kiro-fabric-agent", second, { sourceDateEpoch: String(sourceDateEpoch) });
     const firstBytes = fs.readFileSync(first);
     expect(fs.readFileSync(second)).toEqual(firstBytes);
     expect(secondResult.digest).toBe(firstResult.digest);
     expect([...firstBytes.subarray(4, 8)]).toEqual([0, 0, 0, 0]);
 
-    const stageEvidence = validatePowerPackage(".tmp/kiro-fabric-power");
+    const stageEvidence = validateAgentPackage(".tmp/kiro-fabric-agent");
     const entries = parseTar(gunzipSync(firstBytes));
     expect(entries.map((entry) => entry.name)).toEqual(entries.map((entry) => entry.name).sort(bytewise));
     expect(entries.filter((entry) => entry.type === "0")).toHaveLength(stageEvidence.files);
@@ -89,9 +89,9 @@ describe("deterministic Power archive", () => {
     fs.mkdirSync(extracted, { mode: 0o700 });
     const unpack = spawnSync("tar", ["-xzf", first, "-C", extracted], { encoding: "utf8" });
     expect(unpack.status, unpack.stderr).toBe(0);
-    expect(validatePowerPackage(extracted).digest).toBe(firstResult.packageDigest);
+    expect(validateAgentPackage(extracted).digest).toBe(firstResult.packageDigest);
     const nestedOutput = path.join(extracted, "forbidden.tar.gz");
-    expect(() => createPowerArchive(extracted, nestedOutput)).toThrow("outside the staged package");
+    expect(() => createAgentArchive(extracted, nestedOutput)).toThrow("outside the staged package");
     expect(fs.existsSync(nestedOutput)).toBe(false);
   });
 
@@ -99,7 +99,7 @@ describe("deterministic Power archive", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-archive-epoch-"));
     roots.push(root);
     for (const sourceDateEpoch of ["-1", "1.5", "not-a-date", Number.MAX_SAFE_INTEGER]) {
-      expect(() => createPowerArchive(".tmp/kiro-fabric-power", path.join(root, `${String(sourceDateEpoch)}.tar.gz`), { sourceDateEpoch })).toThrow(/SOURCE_DATE_EPOCH|USTAR numeric field/u);
+      expect(() => createAgentArchive(".tmp/kiro-fabric-agent", path.join(root, `${String(sourceDateEpoch)}.tar.gz`), { sourceDateEpoch })).toThrow(/SOURCE_DATE_EPOCH|USTAR numeric field/u);
     }
   });
 });

@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { isPackedPackageFileAllowed } from "../scripts/package-policy.mjs";
-import { validatePowerPackage } from "../scripts/validate-power-package.mjs";
+import { validateAgentPackage } from "../scripts/validate-agent-package.mjs";
 
 const root = path.resolve(".");
 const files = (directory: string): string[] => {
@@ -12,7 +12,7 @@ const files = (directory: string): string[] => {
   visit(directory); return result;
 };
 
-describe("Power product boundary", () => {
+describe("Agent product boundary", () => {
   it("keeps the file-by-file audit complete and documented repository paths live", () => {
     const documentation = [
       ...files(path.join(root, "docs")).filter((file) => file.endsWith(".md")),
@@ -38,10 +38,10 @@ describe("Power product boundary", () => {
   });
 
   it("validates the exact staged package and sole closure", () => {
-    const result = validatePowerPackage(path.join(root, ".tmp", "kiro-fabric-power"));
+    const result = validateAgentPackage(path.join(root, ".tmp", "kiro-fabric-agent"));
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(root, "dist", "kiro-closure"))).toBe(false);
-    const closure = files(path.join(root, "dist", "kiro-power-closure")).map((file) => path.relative(root, file));
+    const closure = files(path.join(root, "dist", "kiro-agent-closure")).map((file) => path.relative(root, file));
     const removedEntries = ["agent-worker", "management-entry", `node-${"process"}-runtime`];
     expect(closure.some((file) => removedEntries.some((entry) => file.includes(entry)))).toBe(false);
   });
@@ -50,8 +50,7 @@ describe("Power product boundary", () => {
     const selectedRoots = [
       "src", "tests", "scripts", "docs", "skills", ".github", ".kiro",
       "AGENTS.md", "README.md", "STATUS.md", "SECURITY.md", "CHANGELOG.md",
-      "THIRD_PARTY_NOTICES.md", "package.json", "pnpm-lock.yaml", "plugin.json",
-      "mcp.json", "knip.json",
+      "THIRD_PARTY_NOTICES.md", "package.json", "pnpm-lock.yaml", "agent-product.json", "knip.json",
     ];
     const selected = selectedRoots.flatMap((entry) => {
       const target = path.join(root, entry);
@@ -61,7 +60,7 @@ describe("Power product boundary", () => {
     const forbidden = [
       `@earendil-works/${"pi"}-`, `@mariozechner/${"pi"}-`, `PI_CODING_${"AGENT"}_DIR`,
       `managed-${"main"}`, `internal-${"child"}`, `kiro-fabric-${"dev"}`,
-      `--${"agent"} kiro-fabric`, `node-${"process"}-runtime`, `fullCode${"Mode"}`,
+      `fullCode${"Mode"}`,
     ];
     for (const term of forbidden) expect(body).not.toContain(term);
     expect(body).not.toContain(String.fromCodePoint(960));
@@ -69,7 +68,7 @@ describe("Power product boundary", () => {
     expect(body).not.toContain(`.${"pi"}/`);
   });
 
-  it("keeps only the focused Power provider and release implementations", () => {
+  it("keeps only the focused Agent provider and release implementations", () => {
     for (const removed of [
       "src/providers/mcp-provider.ts",
       "src/providers/mcp-descriptor-cache.ts",
@@ -121,14 +120,15 @@ describe("Power product boundary", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
     expect(pkg.scripts["power:export:user"]).toBeUndefined();
     expect(fs.existsSync(path.join(root, "scripts/power-user-install.mjs"))).toBe(false);
-    expect(fs.existsSync(path.join(root, "scripts/run-kiro-power-real-driver.mjs"))).toBe(true);
+    expect(fs.existsSync(path.join(root, "scripts/run-kiro-agent-real-driver.mjs"))).toBe(true);
   });
 
   it("MCP certification reports exactly three tools", () => {
-    const result = spawnSync(process.execPath, ["scripts/certify-kiro-power.mjs"], { cwd: root, encoding: "utf8", timeout: 60_000 });
+    const result = spawnSync(process.execPath, ["scripts/certify-kiro-agent.mjs"], { cwd: root, encoding: "utf8", timeout: 60_000 });
     expect(result.status, result.stderr).toBe(0);
     const report = JSON.parse(result.stdout);
     expect(report.tools).toEqual(["fabric_info", "fabric_workspace", "fabric_exec"]);
-    expect(report.customAgentSelected).toBe(false);
+    expect(report.customAgentSelected).toBe(true);
+    expect(report.powerActivated).toBe(false);
   });
 });

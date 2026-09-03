@@ -1,0 +1,28 @@
+{
+  "$schema": "./docs/agent-product.schema.json",
+  "schemaVersion": 1,
+  "product": "kiro-fabric-agent",
+  "entrypoint": "src/kiro/mcp-entry.ts",
+  "outputBundle": "dist/kiro-agent-closure",
+  "runtimeAssets": {
+    "compilerWorker": "src/runtime/compiler-worker-entry.ts"
+  },
+  "tools": ["fabric_info", "fabric_workspace", "fabric_exec"],
+  "mountedProviders": ["artifacts", "memory", "state", "mcp"],
+  "bundledAgentResources": ["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md"],
+  "allowedPackageDependencies": [
+    "@jitl/quickjs-singlefile-mjs-release-sync",
+    "@modelcontextprotocol/sdk",
+    "mcporter",
+    "quickjs-emscripten-core",
+    "typebox",
+    "typescript"
+  ],
+  "forbiddenRuntimeModules": [
+    "src/actors/", "src/agents/", "src/capture/", "src/compaction/", "src/components/",
+    "src/residency/", "src/schema/", "src/ui/", "src/verification/", "src/worker/",
+    "src/worker.ts", "src/runtime/node-process-runtime.ts", "src/runtime/node-process-child-source.ts",
+    "src/kiro/acp-process.ts", "src/kiro/acp-worker.ts", "src/kiro/agent-worker-entry.ts",
+    "src/kiro/management-entry.ts"
+  ]
+}

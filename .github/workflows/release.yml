@@ -51,21 +51,21 @@ jobs:
         env: { TAG: "${{ github.ref_name }}" }
         run: test "$TAG" = "v$(node -p 'require(\"./package.json\").version')"
       - run: node scripts/assert-kiro-home-unchanged.mjs corepack pnpm run check
-      - run: corepack pnpm run power:archive
+      - run: corepack pnpm run agent:archive
       - name: Download exact-commit real-client evidence
         env: { GH_TOKEN: "${{ github.token }}", COMMIT: "${{ needs.verify-tag.outputs.commit }}" }
         run: |
-          run_id=$(gh run list --workflow "Real Kiro Power qualification" --commit "$COMMIT" --status success --json databaseId --jq '.[0].databaseId')
+          run_id=$(gh run list --workflow "Real Kiro Agent qualification" --commit "$COMMIT" --status success --json databaseId --jq '.[0].databaseId')
           test -n "$run_id"
           gh run download "$run_id" -n "real-client-${COMMIT}" -D "$RUNNER_TEMP/qualification"
       - run: |
           mkdir -p .tmp/release-assets
           node scripts/release-candidate-report.mjs --output .tmp/release-assets/release.json \
-            --archive .tmp/kiro-fabric-power.tar.gz --sbom .tmp/kiro-fabric-power.spdx.json \
+            --archive .tmp/kiro-fabric-agent.tar.gz --sbom .tmp/kiro-fabric-agent.spdx.json \
             --commit "${{ needs.verify-tag.outputs.commit }}" --tag "${{ github.ref_name }}" --require-release-ready \
             --qualification "$RUNNER_TEMP/qualification/real-client.json"
-          cp .tmp/kiro-fabric-power.tar.gz .tmp/release-assets/
-          cp .tmp/kiro-fabric-power.spdx.json .tmp/release-assets/
+          cp .tmp/kiro-fabric-agent.tar.gz .tmp/release-assets/
+          cp .tmp/kiro-fabric-agent.spdx.json .tmp/release-assets/
           cp "$RUNNER_TEMP/qualification/real-client.json" .tmp/release-assets/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -86,7 +86,7 @@ jobs:
       - uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631
         with:
           files: |
-            ${{ runner.temp }}/release/kiro-fabric-power.tar.gz
-            ${{ runner.temp }}/release/kiro-fabric-power.spdx.json
+            ${{ runner.temp }}/release/kiro-fabric-agent.tar.gz
+            ${{ runner.temp }}/release/kiro-fabric-agent.spdx.json
             ${{ runner.temp }}/release/release.json
             ${{ runner.temp }}/release/real-client.json

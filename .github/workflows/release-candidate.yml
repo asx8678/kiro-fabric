@@ -24,6 +24,6 @@ jobs:
           name: release-candidate-${{ github.sha }}
           path: |
             .tmp/release-candidate.json
-            .tmp/kiro-fabric-power.spdx.json
-            .tmp/kiro-fabric-power.tar.gz
+            .tmp/kiro-fabric-agent.spdx.json
+            .tmp/kiro-fabric-agent.tar.gz
           if-no-files-found: error

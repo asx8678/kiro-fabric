@@ -16,43 +16,52 @@ import "../chunks/chunk-AE4E2KSU.js";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-// src/kiro/power/launch-context.ts
+// src/kiro/power/agent-launch-context.ts
+import fs from "node:fs";
 import path from "node:path";
 var canonicalDirectory = (value, name) => {
-  if (!value) throw new Error(`Power launch is missing ${name}`);
+  if (!value) throw new Error(`Agent launch is missing ${name}`);
   if (!path.isAbsolute(value)) throw new Error(`${name} must be an absolute path`);
   try {
-    return inspectCanonicalPath(value, {
+    const inspected = inspectCanonicalPath(value, {
       kind: "directory",
       rejectFinalSymlink: true
-    }).canonicalPath;
+    });
+    const stats = fs.lstatSync(inspected.canonicalPath);
+    if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
+      throw new Error("directory is not owned by the current user");
+    }
+    if (process.platform !== "win32" && (stats.mode & 18) !== 0) {
+      throw new Error("directory is group/other writable");
+    }
+    return inspected.canonicalPath;
   } catch (error) {
     throw new Error(`${name} must be an existing directory: ${error.message}`);
   }
 };
-var resolveKiroPowerLaunchContext = (env = process.env) => {
-  const pluginRoot = canonicalDirectory(env.PLUGIN_ROOT, "PLUGIN_ROOT");
-  const pluginData = canonicalDirectory(env.PLUGIN_DATA, "PLUGIN_DATA");
-  if (pluginRoot === pluginData) throw new Error("PLUGIN_ROOT and PLUGIN_DATA must be different directories");
-  if (canonicalPathContains(pluginRoot, pluginData) || canonicalPathContains(pluginData, pluginRoot)) {
-    throw new Error("PLUGIN_ROOT and PLUGIN_DATA must not contain one another");
+var resolveKiroAgentLaunchContext = (env = process.env) => {
+  const runtimeRoot = canonicalDirectory(env.KIRO_FABRIC_RUNTIME_ROOT, "KIRO_FABRIC_RUNTIME_ROOT");
+  const dataRoot = canonicalDirectory(env.KIRO_FABRIC_DATA_ROOT, "KIRO_FABRIC_DATA_ROOT");
+  if (runtimeRoot === dataRoot) throw new Error("runtime and data roots must be different directories");
+  if (canonicalPathContains(runtimeRoot, dataRoot) || canonicalPathContains(dataRoot, runtimeRoot)) {
+    throw new Error("runtime and data roots must not contain one another");
   }
-  return { pluginRoot, pluginData };
+  return { runtimeRoot, dataRoot };
 };
 
 // src/kiro/mcp-entry.ts
 var PROCESS_SHUTDOWN_TIMEOUT_MS = 8e3;
 var startKiroMcpServer = async () => {
-  const launch = resolveKiroPowerLaunchContext();
-  const { createKiroMcpServer } = await import("../chunks/mcp-server-KY56SMS6.js");
-  return createKiroMcpServer({ pluginRoot: launch.pluginRoot, pluginData: launch.pluginData });
+  const launch = resolveKiroAgentLaunchContext();
+  const { createKiroMcpServer } = await import("../chunks/mcp-server-6JW3ZRFY.js");
+  return createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot });
 };
 var runKiroMcpProcess = async () => {
   let server;
   try {
     server = await startKiroMcpServer();
   } catch (error) {
-    process.stderr.write(`kiro-fabric Power MCP failed to start: ${error instanceof Error ? error.message : String(error)}
+    process.stderr.write(`kiro-fabric Agent MCP failed to start: ${error instanceof Error ? error.message : String(error)}
 `);
     return 1;
   }
@@ -81,7 +90,7 @@ var runKiroMcpProcess = async () => {
       void Promise.race([server.close(), timeout]).then(
         () => finish(code),
         (error) => {
-          process.stderr.write(`kiro-fabric Power MCP shutdown failed: ${error instanceof Error ? error.message : String(error)}
+          process.stderr.write(`kiro-fabric Agent MCP shutdown failed: ${error instanceof Error ? error.message : String(error)}
 `);
           finish(1);
         }

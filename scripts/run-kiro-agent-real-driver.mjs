@@ -25,7 +25,7 @@ const run = (executable, args, options = {}) => {
   if (result.status !== 0) throw new Error(`kiro-cli ${args.join(" ")} exited with status ${result.status ?? "unknown"}`);
   return Buffer.concat([result.stdout ?? Buffer.alloc(0), result.stderr ?? Buffer.alloc(0)]);
 };
-export const runRealKiroPowerDriver = ({ packageRoot, packageDigest, archiveDigest, commit, driverDigest, output, workspace }) => {
+export const runRealKiroAgentDriver = ({ packageRoot, packageDigest, archiveDigest, commit, driverDigest, output, workspace }) => {
   if (typeof workspace !== "string" || !path.isAbsolute(workspace)) throw new Error("Real-client qualification workspace must be absolute");
   const requestedWorkspace = path.resolve(workspace);
   const workspaceStats = fs.lstatSync(requestedWorkspace);
@@ -41,23 +41,23 @@ export const runRealKiroPowerDriver = ({ packageRoot, packageDigest, archiveDige
   const environment = { ...process.env, PWD: workspaceRoot };
   const versionRaw = run(executable, ["--version"], { cwd: workspaceRoot, env: environment });
   const nonce = randomBytes(24).toString("hex");
-  const prompt = `Import and enable the Kiro Power at ${packageRoot}. Using kiro-cli v3 only, list its MCP tools and invoke fabric_info, fabric_workspace, and fabric_exec. Then independently exercise native file-read, file-edit, shell, web, and subagent capabilities with every native file or shell effect confined to the empty qualification workspace at ${workspaceRoot}. Return one JSON object with qualificationNonce=${nonce}, powerActivated=true, tools=${JSON.stringify(REAL_CLIENT_TOOLS)}, customAgentSelected=false, and nativeCapabilities=${JSON.stringify(REAL_CLIENT_NATIVE_CAPABILITIES.map((name) => ({ name, observed: true })))}.\n`;
-  const sessionRaw = run(executable, ["--v3"], { input: Buffer.from(prompt), timeout: 45 * 60_000, cwd: workspaceRoot, env: environment });
+  const prompt = `Validate and select the installed kiro-fabric custom agent from ${packageRoot}. Using kiro-cli v3 only, list its MCP tools and invoke fabric_info, fabric_workspace, and fabric_exec. Then independently exercise native file-read, file-edit, shell, web, and subagent capabilities with every native file or shell effect confined to the empty qualification workspace at ${workspaceRoot}. Return one JSON object with qualificationNonce=${nonce}, powerActivated=false, tools=${JSON.stringify(REAL_CLIENT_TOOLS)}, customAgentSelected=true, and nativeCapabilities=${JSON.stringify(REAL_CLIENT_NATIVE_CAPABILITIES.map((name) => ({ name, observed: true })))}.\n`;
+  const sessionRaw = run(executable, ["chat", "--agent", "kiro-fabric", "--v3", "--no-interactive"], { input: Buffer.from(prompt), timeout: 45 * 60_000, cwd: workspaceRoot, env: environment });
   const afterStats = fs.statSync(executable); const after = fs.readFileSync(executable);
   if (stats.dev !== afterStats.dev || stats.ino !== afterStats.ino || hash(after) !== kiroDigest) throw new Error("kiro-cli changed during qualification");
   const text = sessionRaw.toString("utf8");
   const objects = [...text.matchAll(/\{[^\n]*\}/gu)].map((match) => { try { return JSON.parse(match[0]); } catch { return null; } }).filter(Boolean);
   const observation = objects.find((entry) => entry.qualificationNonce === nonce);
-  if (!observation || observation.powerActivated !== true || JSON.stringify(observation.tools) !== JSON.stringify(REAL_CLIENT_TOOLS) || observation.customAgentSelected !== false || JSON.stringify(observation.nativeCapabilities) !== JSON.stringify(REAL_CLIENT_NATIVE_CAPABILITIES.map((name) => ({ name, observed: true })))) throw new Error("Real Kiro output did not contain the exact nonce-bound qualification observations");
+  if (!observation || observation.powerActivated !== false || JSON.stringify(observation.tools) !== JSON.stringify(REAL_CLIENT_TOOLS) || observation.customAgentSelected !== true || JSON.stringify(observation.nativeCapabilities) !== JSON.stringify(REAL_CLIENT_NATIVE_CAPABILITIES.map((name) => ({ name, observed: true })))) throw new Error("Real Kiro output did not contain the exact nonce-bound qualification observations");
   const evidence = {
     packageDigest, archiveDigest, commit, sessionCommand: REAL_CLIENT_SESSION_COMMAND,
-    powerActivated: true, tools: REAL_CLIENT_TOOLS, customAgentSelected: false,
+    powerActivated: false, tools: REAL_CLIENT_TOOLS, customAgentSelected: true,
     driver: { digest: driverDigest, version: "repository-driver-v1" },
     kiro: { path: executable, digest: kiroDigest, version: versionRaw.toString("utf8").trim().slice(0, 256) },
     nativeCapabilities: observation.nativeCapabilities,
     transcript: [
       transcriptEntry("kiro-version", versionRaw),
-      transcriptEntry("power-activation", sessionRaw),
+      transcriptEntry("agent-selection", sessionRaw),
       transcriptEntry("mcp-tools-list", sessionRaw),
       transcriptEntry("native-capability-probes", sessionRaw),
     ],
@@ -71,7 +71,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!output) throw new Error("--output is required");
   if (!workspace) throw new Error("--workspace is required");
   const script = fs.readFileSync(fileURLToPath(import.meta.url));
-  runRealKiroPowerDriver({
+  runRealKiroAgentDriver({
     packageRoot: path.resolve(valueAfter(process.argv, "--package") ?? ""),
     packageDigest: valueAfter(process.argv, "--package-digest"), archiveDigest: valueAfter(process.argv, "--archive-digest"),
     commit: valueAfter(process.argv, "--commit"), driverDigest: hash(script), output: path.resolve(output), workspace: path.resolve(workspace),

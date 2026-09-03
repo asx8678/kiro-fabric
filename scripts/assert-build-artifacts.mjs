@@ -8,9 +8,9 @@ const required = [
   "dist/index.js",
   "dist/index.d.ts",
   "dist/runtime/compiler-worker-entry.js",
-  "dist/kiro-power-closure/kiro/mcp-entry.js",
-  "dist/kiro-power-closure/runtime/compiler-worker-entry.js",
-  "dist/kiro-power-closure/closure-manifest.json",
+  "dist/kiro-agent-closure/kiro/mcp-entry.js",
+  "dist/kiro-agent-closure/runtime/compiler-worker-entry.js",
+  "dist/kiro-agent-closure/closure-manifest.json",
 ];
 for (const file of required) {
   if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
@@ -19,8 +19,8 @@ for (const file of required) {
 }
 for (const forbidden of [
   "dist/kiro-closure",
-  "dist/kiro-power-closure/kiro/agent-worker-entry.js",
-  "dist/kiro-power-closure/kiro/management-entry.js",
+  "dist/kiro-agent-closure/kiro/agent-worker-entry.js",
+  "dist/kiro-agent-closure/kiro/management-entry.js",
 ]) {
   if (fs.existsSync(forbidden)) throw new Error(`Obsolete build artifact exists: ${forbidden}`);
 }
@@ -39,7 +39,7 @@ for (const file of files) {
   if (file.endsWith(".map")) throw new Error(`Production build contains a source map: ${file}`);
 }
 
-const closureRoot = path.resolve("dist/kiro-power-closure");
+const closureRoot = path.resolve("dist/kiro-agent-closure");
 const manifest = JSON.parse(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"), "utf8"));
 const actualClosureFiles = files
   .filter((file) => path.resolve(file).startsWith(`${closureRoot}${path.sep}`) && !file.endsWith("closure-manifest.json"))
@@ -72,8 +72,8 @@ for (const removed of ["agent", "managed", "extension", "node-process", "orchest
 for (const entry of [
   "dist/index.js",
   "dist/runtime/compiler-worker-entry.js",
-  "dist/kiro-power-closure/kiro/mcp-entry.js",
-  "dist/kiro-power-closure/runtime/compiler-worker-entry.js",
+  "dist/kiro-agent-closure/kiro/mcp-entry.js",
+  "dist/kiro-agent-closure/runtime/compiler-worker-entry.js",
 ]) {
   await import(`${pathToFileURL(path.resolve(entry)).href}?build-audit=${Date.now()}`);
 }

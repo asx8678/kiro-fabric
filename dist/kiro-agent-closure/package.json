@@ -1,5 +1,5 @@
 {
-  "name": "kiro-fabric-power-runtime",
+  "name": "kiro-fabric-agent-runtime",
   "version": "0.64.0",
   "type": "module",
   "private": true

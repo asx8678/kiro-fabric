@@ -6,15 +6,15 @@ import os from "node:os";
 import path from "node:path";
 import { isPackedPackageFileAllowed } from "./package-policy.mjs";
 import { assertRealClientEvidence } from "./real-client-evidence.mjs";
-import { digestPowerPackage, validatePowerPackage } from "./validate-power-package.mjs";
+import { digestAgentPackage, validateAgentPackage } from "./validate-agent-package.mjs";
 
 const valueAfter = (flag) => { const index = process.argv.indexOf(flag); return index >= 0 ? process.argv[index + 1] : undefined; };
 const output = path.resolve(valueAfter("--output") ?? ".tmp/release-candidate.json");
-const sbomPath = path.resolve(valueAfter("--sbom") ?? ".tmp/kiro-fabric-power.spdx.json");
-const archivePath = path.resolve(valueAfter("--archive") ?? ".tmp/kiro-fabric-power.tar.gz");
-const stage = path.resolve(".tmp/kiro-fabric-power");
-const packageResult = validatePowerPackage(stage);
-const packageDigest = digestPowerPackage(stage, { excludeOwner: true }).digest;
+const sbomPath = path.resolve(valueAfter("--sbom") ?? ".tmp/kiro-fabric-agent.spdx.json");
+const archivePath = path.resolve(valueAfter("--archive") ?? ".tmp/kiro-fabric-agent.tar.gz");
+const stage = path.resolve(".tmp/kiro-fabric-agent");
+const packageResult = validateAgentPackage(stage);
+const packageDigest = digestAgentPackage(stage, { excludeOwner: true }).digest;
 const sbomBytes = fs.readFileSync(sbomPath);
 const sbom = JSON.parse(sbomBytes.toString("utf8"));
 const sbomDigest = sbom.packages?.[0]?.checksums?.[0]?.checksumValue;
@@ -29,11 +29,11 @@ try {
   fs.mkdirSync(extracted, { mode: 0o700 });
   const unpack = spawnSync("tar", ["-xzf", snapshot, "-C", extracted], { encoding: "utf8" });
   if (unpack.error || unpack.status !== 0) throw unpack.error ?? new Error(`Release archive extraction failed: ${unpack.stderr}`);
-  if (validatePowerPackage(extracted).digest !== packageDigest) throw new Error("Release archive is not bound to the exact staged package");
+  if (validateAgentPackage(extracted).digest !== packageDigest) throw new Error("Release archive is not bound to the exact staged package");
 } finally { fs.rmSync(archiveTemporary, { recursive: true, force: true }); }
-const closureRoot = path.resolve("dist/kiro-power-closure");
+const closureRoot = path.resolve("dist/kiro-agent-closure");
 if (sbomDigest !== packageDigest) {
-  throw new Error("SBOM is not bound to the exact complete staged Power package");
+  throw new Error("SBOM is not bound to the exact complete staged Agent package");
 }
 const closureManifest = JSON.parse(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"), "utf8"));
 const sbomDependencies = (sbom.packages ?? []).slice(1)
@@ -46,7 +46,7 @@ if (sbom.spdxVersion !== "SPDX-2.3" ||
     sbom.packages?.[0]?.name !== "kiro-fabric" ||
     sbom.packages?.[0]?.versionInfo !== packageResult.version ||
     JSON.stringify(sbomDependencies) !== JSON.stringify(closureDependencies)) {
-  throw new Error("SBOM dependency inventory does not match the exact Power closure");
+  throw new Error("SBOM dependency inventory does not match the exact Agent closure");
 }
 const packed = spawnSync("pnpm", ["pack", "--dry-run", "--json", "--config.ignore-scripts=true"], { encoding: "utf8", timeout: 60_000 });
 if (packed.error) throw packed.error;
@@ -54,7 +54,7 @@ if (packed.status !== 0) throw new Error(`package dry-run failed: ${packed.stder
 const packedDocument = JSON.parse(packed.stdout);
 const packedFiles = (Array.isArray(packedDocument) ? packedDocument[0] : packedDocument).files.map((entry) => entry.path);
 if (packedFiles.some((file) => !isPackedPackageFileAllowed(file))) {
-  throw new Error("packed artifact contains a file outside the exact Power allowlist");
+  throw new Error("packed artifact contains a file outside the exact Agent allowlist");
 }
 for (const required of ["dist/index.js", "dist/runtime/compiler-worker-entry.js", "dist/index.d.ts"]) {
   if (!packedFiles.includes(required)) throw new Error(`packed artifact is missing ${required}`);

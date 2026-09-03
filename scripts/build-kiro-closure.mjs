@@ -7,16 +7,16 @@ import { build } from "esbuild";
 import { uniquePackageRecords } from "./package-identity.mjs";
 
 const root = path.resolve(".");
-const outdir = path.join(root, "dist", "kiro-power-closure");
-const product = JSON.parse(fs.readFileSync(path.join(root, "power-product.json"), "utf8"));
+const outdir = path.join(root, "dist", "kiro-agent-closure");
+const product = JSON.parse(fs.readFileSync(path.join(root, "agent-product.json"), "utf8"));
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-if (product.entrypoint !== "src/kiro/mcp-entry.ts") throw new Error("Power product entrypoint drifted");
+if (product.entrypoint !== "src/kiro/mcp-entry.ts") throw new Error("Agent product entrypoint drifted");
 const allowedDirect = new Set(product.allowedPackageDependencies);
 for (const dependency of Object.keys(pkg.dependencies ?? {})) {
-  if (!allowedDirect.has(dependency)) throw new Error(`Power dependency is not allowed by power-product.json: ${dependency}`);
+  if (!allowedDirect.has(dependency)) throw new Error(`Agent dependency is not allowed by agent-product.json: ${dependency}`);
 }
 for (const allowed of allowedDirect) {
-  if (!Object.hasOwn(pkg.dependencies ?? {}, allowed)) throw new Error(`Power manifest allows an unused direct dependency: ${allowed}`);
+  if (!Object.hasOwn(pkg.dependencies ?? {}, allowed)) throw new Error(`Agent manifest allows an unused direct dependency: ${allowed}`);
 }
 
 fs.rmSync(outdir, { recursive: true, force: true });
@@ -44,7 +44,7 @@ const inputs = Object.keys(result.metafile.inputs).map(normalize).sort();
 const sourceInputs = inputs.filter((input) => input.startsWith("src/"));
 for (const forbidden of product.forbiddenRuntimeModules) {
   const hit = sourceInputs.find((input) => forbidden.endsWith("/") ? input.startsWith(forbidden) : input === forbidden);
-  if (hit) throw new Error(`Power closure reached forbidden runtime module: ${hit}`);
+  if (hit) throw new Error(`Agent closure reached forbidden runtime module: ${hit}`);
 }
 const packageName = (input) => {
   const suffix = input.split("node_modules/").at(-1);
@@ -54,10 +54,10 @@ const packageName = (input) => {
 };
 const packageNames = [...new Set(inputs.map(packageName).filter(Boolean))].sort();
 for (const dependency of Object.keys(pkg.dependencies ?? {})) {
-  if (!packageNames.includes(dependency)) throw new Error(`Direct dependency is not reached by the Power closure: ${dependency}`);
+  if (!packageNames.includes(dependency)) throw new Error(`Direct dependency is not reached by the Agent closure: ${dependency}`);
 }
 const legacyHost = String.fromCodePoint(112, 105);
-if (packageNames.some((name) => name.startsWith(`@earendil-works/${legacyHost}-`) || name.startsWith(`@mariozechner/${legacyHost}-`))) throw new Error("Power closure reached a forbidden package");
+if (packageNames.some((name) => name.startsWith(`@earendil-works/${legacyHost}-`) || name.startsWith(`@mariozechner/${legacyHost}-`))) throw new Error("Agent closure reached a forbidden package");
 const discoveredPackageRecords = [];
 for (const input of inputs) {
   const name = packageName(input);
@@ -99,7 +99,7 @@ while (queue.length) {
   for (const match of text.matchAll(/<reference lib="([^"]+)"/gu)) queue.push(`lib.${match[1]}.d.ts`);
 }
 for (const name of [...libraries].sort()) fs.copyFileSync(path.join(tsLib, name), path.join(chunks, name));
-fs.writeFileSync(path.join(outdir, "package.json"), `${JSON.stringify({ name: "kiro-fabric-power-runtime", version: pkg.version, type: "module", private: true }, null, 2)}\n`);
+fs.writeFileSync(path.join(outdir, "package.json"), `${JSON.stringify({ name: "kiro-fabric-agent-runtime", version: pkg.version, type: "module", private: true }, null, 2)}\n`);
 
 const noticeParts = ["Kiro Fabric bundled third-party license notices\n"];
 for (const record of records) {
@@ -123,7 +123,7 @@ const kiroProviderFiles = new Set([
 const classify = (file) => file.startsWith("src/providers/") || kiroProviderFiles.has(file)
   ? "mounted-provider"
   : file.startsWith("src/kiro/")
-    ? "power-runtime"
+    ? "agent-runtime"
     : "checked-execution-kernel";
 const byClass = Object.groupBy(sourceInputs, classify);
 const evidenceDirectory = path.join(root, ".tmp");
@@ -132,7 +132,7 @@ const evidenceStats = fs.lstatSync(evidenceDirectory);
 if (!evidenceStats.isDirectory() || evidenceStats.isSymbolicLink()) throw new Error(".tmp must be a regular checkout-local directory");
 if (process.platform !== "win32" && typeof process.getuid === "function" && evidenceStats.uid !== process.getuid()) throw new Error(".tmp must be owned by the current user");
 fs.chmodSync(evidenceDirectory, 0o700);
-fs.writeFileSync(path.join(evidenceDirectory, "power-reachability.json"), `${JSON.stringify({
+fs.writeFileSync(path.join(evidenceDirectory, "agent-reachability.json"), `${JSON.stringify({
   schemaVersion: 1,
   entrypoints: [product.entrypoint, product.runtimeAssets.compilerWorker],
   sourceInputs,
@@ -143,14 +143,14 @@ fs.writeFileSync(path.join(evidenceDirectory, "power-reachability.json"), `${JSO
     "scripts/build.mjs",
     "scripts/build-kiro-closure.mjs",
     "scripts/assert-build-artifacts.mjs",
-    "scripts/build-power-dev.mjs",
-    "scripts/validate-power-package.mjs",
+    "scripts/build-agent-dev.mjs",
+    "scripts/validate-agent-package.mjs",
     "scripts/assert-kiro-home-unchanged.mjs",
-    "scripts/certify-kiro-power.mjs",
+    "scripts/certify-kiro-agent.mjs",
     "scripts/real-client-evidence.mjs",
-    "scripts/certify-kiro-power-real.mjs",
-    "scripts/generate-power-sbom.mjs",
-    "scripts/create-power-archive.mjs",
+    "scripts/certify-kiro-agent-real.mjs",
+    "scripts/generate-agent-sbom.mjs",
+    "scripts/create-agent-archive.mjs",
     "scripts/package-identity.mjs",
     "scripts/release-candidate-report.mjs",
   ],
@@ -199,4 +199,4 @@ for (const file of files.filter((file) => file.endsWith(".js") || file.endsWith(
 }
 const finalFiles = [...files, path.join(outdir, "closure-manifest.json")];
 const bytes = finalFiles.reduce((total, file) => total + fs.statSync(file).size, 0);
-console.log(`Power closure built: ${finalFiles.length} files, ${bytes} bytes, ${sourceInputs.length} source modules`);
+console.log(`Agent closure built: ${finalFiles.length} files, ${bytes} bytes, ${sourceInputs.length} source modules`);

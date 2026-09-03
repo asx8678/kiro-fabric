@@ -9,7 +9,7 @@ import {
 } from "../src/config.js";
 import { prepareKiroPowerDataPaths } from "../src/kiro/power/data-paths.js";
 
-describe("Power-only configuration", () => {
+describe("Agent-only configuration", () => {
   it("exposes only active configured-MCP settings", () => {
     expect(Object.keys(DEFAULT_FABRIC_POWER_CONFIG.mcp).sort()).toEqual([
       "callTimeoutMs",

@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { resolveKiroPowerLaunchContext } from "./power/launch-context.js";
+import { resolveKiroAgentLaunchContext } from "./power/agent-launch-context.js";
 
 const PROCESS_SHUTDOWN_TIMEOUT_MS = 8_000;
 
 export const startKiroMcpServer = async (): Promise<{ close(): Promise<void> }> => {
-  const launch = resolveKiroPowerLaunchContext();
+  const launch = resolveKiroAgentLaunchContext();
   const { createKiroMcpServer } = await import("./mcp-server.js");
-  return createKiroMcpServer({ pluginRoot: launch.pluginRoot, pluginData: launch.pluginData });
+  return createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot });
 };
 
 export const runKiroMcpProcess = async (): Promise<number> => {
   let server: { close(): Promise<void> };
   try { server = await startKiroMcpServer(); }
   catch (error) {
-    process.stderr.write(`kiro-fabric Power MCP failed to start: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`kiro-fabric Agent MCP failed to start: ${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
   }
   return new Promise<number>((resolve) => {
@@ -40,7 +40,7 @@ export const runKiroMcpProcess = async (): Promise<number> => {
       void Promise.race([server.close(), timeout]).then(
         () => finish(code),
         (error) => {
-          process.stderr.write(`kiro-fabric Power MCP shutdown failed: ${error instanceof Error ? error.message : String(error)}\n`);
+          process.stderr.write(`kiro-fabric Agent MCP shutdown failed: ${error instanceof Error ? error.message : String(error)}\n`);
           finish(1);
         },
       ).finally(() => { if (timer) clearTimeout(timer); });

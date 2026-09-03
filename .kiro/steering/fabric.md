@@ -1,3 +1,5 @@
-# Kiro Fabric repository
-
-Kiro Fabric is one Power for Kiro CLI v3. Keep Kiro native file, edit, shell, web, and subagent capabilities outside Fabric. The Power MCP surface is exactly `fabric_info`, `fabric_workspace`, and `fabric_exec`; do not add custom agents or alternate session modes. Work routed through Fabric must use `fabric_exec` with checked TypeScript—never add text, action-name, manual-command, or host-runtime fallbacks.
+---
+inclusion: fileMatch
+fileMatchPattern: "{src,scripts,tests,docs,skills}/**/*"
+---
+This repository ships one native Kiro custom agent, not a Power. Preserve the exact three-tool MCP contract, strict TypeScript-to-QuickJS boundary, approval-before-side-effect ordering, workspace identity binding, bounded shutdown, and deterministic Agent packaging. Build after changes.

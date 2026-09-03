@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "product": "kiro-fabric-power",
+  "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
   "compilerWorker": "runtime/compiler-worker-entry.js",
   "executor": "quickjs",
@@ -18,10 +18,10 @@
     "src/kiro/mcp-server.ts",
     "src/kiro/memory-provider.ts",
     "src/kiro/memory.ts",
+    "src/kiro/power/agent-launch-context.ts",
     "src/kiro/power/approver.ts",
     "src/kiro/power/artifacts-provider.ts",
     "src/kiro/power/data-paths.ts",
-    "src/kiro/power/launch-context.ts",
     "src/kiro/power/workspace-binding.ts",
     "src/kiro/power/workspace-context.ts",
     "src/kiro/projection.ts",
@@ -528,9 +528,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-KY56SMS6.js",
-      "bytes": 1002522,
-      "sha256": "0563657731d599445cec32d27618ad63922d95158f8c5b835a8891344f6601be"
+      "path": "chunks/mcp-server-6JW3ZRFY.js",
+      "bytes": 1002546,
+      "sha256": "5021adfa6d742222a03c8ec454012f17dc71d44a03e9555eaa0be2d6741e6182"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -549,13 +549,13 @@
     },
     {
       "path": "kiro/mcp-entry.js",
-      "bytes": 3950,
-      "sha256": "67fbd2e8eae46a42bab9a0fdb52e03ed9949fee085f9c6b5724e9d1adcd94521"
+      "bytes": 4391,
+      "sha256": "236cadeb8db34677a844e672e8223692f3a1db91bd0754db8c89da1a77b2fe06"
     },
     {
       "path": "package.json",
       "bytes": 104,
-      "sha256": "dafb58876d978db7dc541e8286acedb3798fe1061a59f9cd547b9bcba26a6f26"
+      "sha256": "ee5e99e81718885e5d6ddfe9d70473484c62256826c66601ecd37b481b324785"
     },
     {
       "path": "runtime/compiler-worker-entry.js",
@@ -568,5 +568,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "93136e95c685dac55b11eac0c517e82c93eb34b5611f79eaf68716b403fa7c5e"
+  "contentDigest": "4a9abdbc18859adf69423d622da4021bae85b2d78a6eda0acb93b7b9d48f5631"
 }
