@@ -428,6 +428,245 @@ describe("Agent MCP process lifecycle", () => {
       .map((entry) => entry.data?.runtimeGeneration)).toEqual([1, 2]);
   }, 30_000);
 
+  it("shares one durable workspace safely across two concurrent Fabric MCP processes", async () => {
+    const root = temporary();
+    const data = path.join(root, "data");
+    const workspace = path.join(root, "workspace");
+    fs.mkdirSync(data, { mode: 0o700 });
+    fs.mkdirSync(workspace, { mode: 0o700 });
+    const config = path.join(data, "fabric", "config");
+    fs.mkdirSync(config, { recursive: true, mode: 0o700 });
+    fs.chmodSync(path.join(data, "fabric"), 0o700);
+    fs.chmodSync(config, 0o700);
+    fs.writeFileSync(path.join(config, "config.json"), `${JSON.stringify({
+      approvals: { read: "allow", write: "allow", execute: "deny", network: "deny" },
+      mcp: { enabled: false },
+    })}\n`, { mode: 0o600 });
+
+    const first = launch({ root, dataRoot: data });
+    const second = launch({ root, dataRoot: data });
+    if (!first.stdin || !first.stdout || first.pid === undefined ||
+        !second.stdin || !second.stdout || second.pid === undefined) {
+      throw new Error("concurrent MCP test transports are unavailable");
+    }
+    const [firstClient, secondClient] = await Promise.all([
+      connectTransport(first.stdin, first.stdout, workspace),
+      connectTransport(second.stdin, second.stdout, workspace),
+    ]);
+    const call = (client: typeof firstClient, name: string, arguments_: Record<string, unknown>): Promise<unknown> =>
+      client.request("tools/call", { name, arguments: arguments_ });
+    const [firstInfo, secondInfo] = await Promise.all([
+      call(firstClient, "fabric_info", {}).then((value) => toolJson<FabricInfo>(value)),
+      call(secondClient, "fabric_info", {}).then((value) => toolJson<FabricInfo>(value)),
+    ]);
+    expect(firstInfo.lifecycle).toMatchObject({ pid: first.pid, runtimeGeneration: 1, runtimeActive: true });
+    expect(secondInfo.lifecycle).toMatchObject({ pid: second.pid, runtimeGeneration: 1, runtimeActive: true });
+    expect(firstInfo.lifecycle.pid).not.toBe(secondInfo.lifecycle.pid);
+    expect(firstInfo.lifecycle.mcpInstanceId).not.toBe(secondInfo.lifecycle.mcpInstanceId);
+
+    const token = `${Date.now()}-${process.pid}`;
+    const shared = {
+      memoryKeyA: `concurrent-memory-a-${token}`,
+      memoryKeyB: `concurrent-memory-b-${token}`,
+      memoryA: `memory-a-${token}`,
+      memoryB: `memory-b-${token}`,
+      stateKey: `concurrent-state-${token}`,
+      initialState: `state-initial-${token}`,
+      stateA: `state-a-${token}`,
+      stateB: `state-b-${token}`,
+    };
+    const memoryWrites = await Promise.all([
+      call(firstClient, "fabric_exec", {
+        code: "return await memory.set({ key: payloads.key, value: { nonce: payloads.nonce } })",
+        payloads: { key: shared.memoryKeyA, nonce: shared.memoryA },
+        resultFormat: "json",
+      }).then(toolResponse),
+      call(secondClient, "fabric_exec", {
+        code: "return await memory.set({ key: payloads.key, value: { nonce: payloads.nonce } })",
+        payloads: { key: shared.memoryKeyB, nonce: shared.memoryB },
+        resultFormat: "json",
+      }).then(toolResponse),
+    ]);
+    for (const result of memoryWrites) expect(result.isError, JSON.stringify(result)).not.toBe(true);
+
+    const initialState = toolResponse(await call(firstClient, "fabric_exec", {
+      code: "return await state.set({ key: payloads.key, value: { nonce: payloads.nonce }, expectedRevision: 0 })",
+      payloads: { key: shared.stateKey, nonce: shared.initialState },
+      resultFormat: "json",
+    }));
+    expect(initialState.isError, JSON.stringify(initialState)).not.toBe(true);
+
+    const casAttempts = await Promise.all([
+      call(firstClient, "fabric_exec", {
+        code: "return await state.set({ key: payloads.key, value: { nonce: payloads.nonce }, expectedRevision: 1 })",
+        payloads: { key: shared.stateKey, nonce: shared.stateA },
+        resultFormat: "json",
+      }).then(toolResponse),
+      call(secondClient, "fabric_exec", {
+        code: "return await state.set({ key: payloads.key, value: { nonce: payloads.nonce }, expectedRevision: 1 })",
+        payloads: { key: shared.stateKey, nonce: shared.stateB },
+        resultFormat: "json",
+      }).then(toolResponse),
+    ]);
+    expect(casAttempts.filter((result) => result.isError === true)).toHaveLength(1);
+    expect(casAttempts.filter((result) => result.isError !== true)).toHaveLength(1);
+    const losingResult = casAttempts.find((result) => result.isError === true)!;
+    expect(JSON.stringify(losingResult)).toContain("state revision conflict");
+    const winningState = casAttempts[0]!.isError === true ? shared.stateB : shared.stateA;
+    const losingState = winningState === shared.stateA ? shared.stateB : shared.stateA;
+
+    const verifyShared = `
+      const record = (value: JsonValue): JsonObject | undefined =>
+        typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
+      const nested = (value: JsonValue, outer: string, inner: string): JsonValue | undefined => {
+        const first = record(value)?.[outer];
+        return first === undefined ? undefined : record(first)?.[inner];
+      };
+      const memoryA = await memory.get({ key: payloads.memoryKeyA });
+      const memoryB = await memory.get({ key: payloads.memoryKeyB });
+      const stateValue = await state.get({ key: payloads.stateKey });
+      if (nested(memoryA, "value", "nonce") !== payloads.memoryA ||
+          nested(memoryB, "value", "nonce") !== payloads.memoryB ||
+          nested(stateValue, "value", "nonce") !== payloads.state ||
+          record(stateValue)?.revision !== 2) {
+        throw new Error("concurrent durable workspace contents are inconsistent");
+      }
+      return { verified: true };
+    `;
+    const verificationPayloads = {
+      memoryKeyA: shared.memoryKeyA,
+      memoryKeyB: shared.memoryKeyB,
+      memoryA: shared.memoryA,
+      memoryB: shared.memoryB,
+      stateKey: shared.stateKey,
+      state: winningState,
+    };
+    const visibility = await Promise.all([
+      call(firstClient, "fabric_exec", { code: verifyShared, payloads: verificationPayloads, resultFormat: "json" }).then(toolResponse),
+      call(secondClient, "fabric_exec", { code: verifyShared, payloads: verificationPayloads, resultFormat: "json" }).then(toolResponse),
+    ]);
+    for (const result of visibility) expect(result.isError, JSON.stringify(result)).not.toBe(true);
+
+    const projectRoots = fs.readdirSync(path.join(data, "fabric", "projects"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => path.join(data, "fabric", "projects", entry.name));
+    expect(projectRoots).toHaveLength(1);
+    const durableFiles = regularFileText(projectRoots[0]!);
+    expect(durableFiles).toContain(shared.memoryA);
+    expect(durableFiles).toContain(shared.memoryB);
+    expect(durableFiles).toContain(winningState);
+    expect(durableFiles).not.toContain(losingState);
+
+    first.stdin.end();
+    second.stdin.end();
+    await expect(Promise.all([exitOf(first), exitOf(second)])).resolves.toEqual([
+      { code: 0, signal: null },
+      { code: 0, signal: null },
+    ]);
+  }, 30_000);
+
+  it("restores exact durable workspace data in a new MCP process after abrupt MCP death", async () => {
+    if (process.platform === "win32") return;
+    const root = temporary();
+    const data = path.join(root, "data");
+    const workspace = path.join(root, "workspace");
+    fs.mkdirSync(data, { mode: 0o700 });
+    fs.mkdirSync(workspace, { mode: 0o700 });
+    const config = path.join(data, "fabric", "config");
+    fs.mkdirSync(config, { recursive: true, mode: 0o700 });
+    fs.chmodSync(path.join(data, "fabric"), 0o700);
+    fs.chmodSync(config, 0o700);
+    fs.writeFileSync(path.join(config, "config.json"), `${JSON.stringify({
+      approvals: { read: "allow", write: "allow", execute: "deny", network: "deny" },
+      mcp: { enabled: false },
+    })}\n`, { mode: 0o600 });
+
+    const token = `${Date.now()}-${process.pid}`;
+    const durable = {
+      memoryKey: `crash-memory-${token}`,
+      memory: `crash-memory-value-${token}`,
+      stateKey: `crash-state-${token}`,
+      state: `crash-state-value-${token}`,
+      newMemoryKey: `restart-memory-${token}`,
+      newMemory: `restart-memory-value-${token}`,
+      newStateKey: `restart-state-${token}`,
+      newState: `restart-state-value-${token}`,
+    };
+    const first = launch({ root, dataRoot: data });
+    if (!first.stdin || !first.stdout || first.pid === undefined) throw new Error("first MCP test transport is unavailable");
+    const firstClient = await connectTransport(first.stdin, first.stdout, workspace);
+    const firstCall = (name: string, arguments_: Record<string, unknown>): Promise<unknown> =>
+      firstClient.request("tools/call", { name, arguments: arguments_ });
+    const firstInfo = toolJson<FabricInfo>(await firstCall("fabric_info", {}));
+    const seeded = toolResponse(await firstCall("fabric_exec", {
+      code: `
+        await memory.set({ key: payloads.memoryKey, value: { nonce: payloads.memory } });
+        await state.set({ key: payloads.stateKey, value: { nonce: payloads.state }, expectedRevision: 0 });
+        return { seeded: true };
+      `,
+      payloads: durable,
+      resultFormat: "json",
+    }));
+    expect(seeded.isError, JSON.stringify(seeded)).not.toBe(true);
+    expect(first.kill("SIGKILL")).toBe(true);
+    await expect(exitOf(first)).resolves.toEqual({ code: null, signal: "SIGKILL" });
+
+    const restarted = launch({ root, dataRoot: data });
+    if (!restarted.stdin || !restarted.stdout || restarted.pid === undefined) throw new Error("restarted MCP test transport is unavailable");
+    const restartedClient = await connectTransport(restarted.stdin, restarted.stdout, workspace);
+    const restartedCall = (name: string, arguments_: Record<string, unknown>): Promise<unknown> =>
+      restartedClient.request("tools/call", { name, arguments: arguments_ });
+    const restartedInfo = toolJson<FabricInfo>(await restartedCall("fabric_info", {}));
+    expect(restartedInfo.lifecycle).toMatchObject({ pid: restarted.pid, runtimeGeneration: 1, runtimeActive: true });
+    expect(restartedInfo.lifecycle.pid).not.toBe(firstInfo.lifecycle.pid);
+    expect(restartedInfo.lifecycle.mcpInstanceId).not.toBe(firstInfo.lifecycle.mcpInstanceId);
+
+    const restored = toolResponse(await restartedCall("fabric_exec", {
+      code: `
+        const record = (value: JsonValue): JsonObject | undefined =>
+          typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
+        const nested = (value: JsonValue, outer: string, inner: string): JsonValue | undefined => {
+          const first = record(value)?.[outer];
+          return first === undefined ? undefined : record(first)?.[inner];
+        };
+        const memoryValue = await memory.get({ key: payloads.memoryKey });
+        const stateValue = await state.get({ key: payloads.stateKey });
+        if (nested(memoryValue, "value", "nonce") !== payloads.memory ||
+            nested(stateValue, "value", "nonce") !== payloads.state ||
+            record(stateValue)?.revision !== 1) {
+          throw new Error("durable workspace contents were not restored after abrupt death");
+        }
+        return { restored: true };
+      `,
+      payloads: durable,
+      resultFormat: "json",
+    }));
+    expect(restored.isError, JSON.stringify(restored)).not.toBe(true);
+
+    const extended = toolResponse(await restartedCall("fabric_exec", {
+      code: `
+        await memory.set({ key: payloads.memoryKey, value: { nonce: payloads.memory } });
+        await state.set({ key: payloads.stateKey, value: { nonce: payloads.state } });
+        return { extended: true };
+      `,
+      payloads: { memoryKey: durable.newMemoryKey, memory: durable.newMemory, stateKey: durable.newStateKey, state: durable.newState },
+      resultFormat: "json",
+    }));
+    expect(extended.isError, JSON.stringify(extended)).not.toBe(true);
+
+    const projectRoots = fs.readdirSync(path.join(data, "fabric", "projects"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => path.join(data, "fabric", "projects", entry.name));
+    expect(projectRoots).toHaveLength(1);
+    const durableFiles = regularFileText(projectRoots[0]!);
+    for (const nonce of [durable.memory, durable.state, durable.newMemory, durable.newState]) {
+      expect(durableFiles).toContain(nonce);
+    }
+
+    restarted.stdin.end();
+    await expect(exitOf(restarted)).resolves.toEqual({ code: 0, signal: null });
+  }, 30_000);
+
   it("does not leave the Fabric MCP or its real stdio descendant orphaned after abrupt parent death", async () => {
     if (process.platform === "win32") return;
     const root = temporary();

@@ -25,6 +25,13 @@ const options = {
 };
 
 describe("Kiro Agent profile generation", () => {
+  it("keeps Kiro conversation compaction separate from Fabric durable state", () => {
+    expect(AGENT_PROMPT).toContain("Kiro owns conversation history, automatic and manual context compaction, and chat resume.");
+    expect(AGENT_PROMPT).toContain("compaction is not a reason to start, reconnect, or replace Fabric");
+    expect(AGENT_PROMPT).toContain("never mirror the whole conversation");
+    expect(AGENT_PROMPT).toContain("Fabric memory/state is workspace-scoped and may be shared by concurrent Kiro chats");
+  });
+
   it("generates the global installed profile without optional steering", () => {
     const profile = generateAgentProfile(options);
     expect(profile).toEqual({

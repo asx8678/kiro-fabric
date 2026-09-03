@@ -17,3 +17,19 @@ The setting is global and workspace-overridable. Re-enable inheritance by deleti
 ```sh
 kiro-cli settings --delete chat.disableInheritingDefaultResources
 ```
+
+## Long-running chat context
+
+Kiro, not Fabric, owns conversation persistence and compaction. Kiro's documented default is automatic compaction as a conversation approaches its compaction threshold; `/compact` requests it immediately. Fabric installation does not change `chat.disableAutoCompaction`. Inspect the effective explicit value with:
+
+```sh
+kiro-cli settings chat.disableAutoCompaction --format json
+```
+
+`null` means no explicit override. A user who previously disabled automatic compaction can explicitly re-enable it with:
+
+```sh
+kiro-cli settings chat.disableAutoCompaction false
+```
+
+This setting does not control the Fabric MCP lifecycle. Within one active Kiro CLI process, ordinary turns and compaction must keep the same Fabric MCP PID/instance and the same runtime generation for an unchanged workspace. That invariant remains an authenticated exact-release-SHA qualification gate, not a behavior claimed from component tests alone. Fabric memory/state is global-data-root-backed and workspace-scoped; do not use it as a duplicate conversation transcript. TTL artifacts and in-memory values are intentionally ephemeral.

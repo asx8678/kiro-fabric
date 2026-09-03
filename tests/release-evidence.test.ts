@@ -10,7 +10,17 @@ import {
   transcriptEntry,
 } from "../scripts/real-client-evidence.mjs";
 import {
+  acpFormInteractionObserved,
+  acpPriorUserMessageObserved,
+  acpSessionLoadObserved,
+  acpUserPromptFacts,
   completedAcpCompactionNotifications,
+  completedAcpManualCompactions,
+  completedAcpFabricExecCalls,
+  acpToolDataContaining,
+  parseAcpJsonlFrames,
+  postCompactionVerificationCode,
+  qualificationValueDigest,
   resumeVerificationCode,
   sentinelVerificationCode,
 } from "../scripts/run-kiro-agent-real-driver.mjs";
@@ -58,6 +68,50 @@ const compactionAcpEvent = {
   sessionId,
   frameDigest: compactionFrameDigest,
 };
+const manualExchange = {
+  sessionId,
+  command: "/compact",
+  requestIdDigest: "a".repeat(64),
+  requestFrameDigest: "b".repeat(64),
+  startedFrameDigest: "c".repeat(64),
+  completedFrameDigest: compactionFrameDigest,
+  responseFrameDigest: "d".repeat(64),
+  responseResultDigest: "e".repeat(64),
+  responseSuccess: true,
+};
+const compactionSummary = { ...compactionAcpEvent, intervalStartOffset: 10, intervalEndOffset: 20, manualExchange };
+const contextFactDigest = "4".repeat(64);
+const contextSource = { sessionId, factDigest: contextFactDigest, frameDigest: "5".repeat(64) };
+const postCompactionResult = { verified: true, artifactVerified: true, contextCaptured: true };
+const resumeResult = { durableVerified: true, artifactUnavailable: true };
+const postCompactionCall = {
+  sessionId,
+  toolCallId: "post-compaction-tool-call",
+  expectedArgumentsDigest: "6".repeat(64),
+  observedArgumentsDigest: "6".repeat(64),
+  expectedResultDigest: qualificationValueDigest(postCompactionResult),
+  observedResultDigest: qualificationValueDigest(postCompactionResult),
+  observedContextFactDigest: contextFactDigest,
+  frameDigests: ["7".repeat(64), "8".repeat(64)],
+};
+const contextSeedCall = {
+  sessionId,
+  toolCallId: "context-seed-tool-call",
+  expectedArgumentsDigest: "e".repeat(64),
+  observedArgumentsDigest: "e".repeat(64),
+  expectedResultDigest: qualificationValueDigest({ verified: true }),
+  observedResultDigest: qualificationValueDigest({ verified: true }),
+  frameDigests: ["f".repeat(64)],
+};
+const resumeCall = {
+  sessionId,
+  toolCallId: "resume-tool-call",
+  expectedArgumentsDigest: "9".repeat(64),
+  observedArgumentsDigest: "9".repeat(64),
+  expectedResultDigest: qualificationValueDigest(resumeResult),
+  observedResultDigest: qualificationValueDigest(resumeResult),
+  frameDigests: ["0".repeat(64)],
+};
 const startup = (value: typeof interactiveIdentity): string => JSON.stringify({ ev: "agent.mcp.start", data: value });
 const transcriptPayload = (kind: string, index: number): string => {
   if (kind === "kiro-version") return "kiro-cli 2.21.0";
@@ -68,8 +122,13 @@ const transcriptPayload = (kind: string, index: number): string => {
   if (kind === "resume-mcp-startup") return startup(resumedIdentity);
   if (kind === "interactive-tools") return [...REAL_CLIENT_PROFILE_TOOLS, ...REAL_CLIENT_TOOLS].join("\n");
   if (kind === "form-probe-request") return "Risk: write\nApprove once";
+  if (kind === "resource-inheritance-setting" || kind === "automatic-compaction-setting") return "null";
   if (kind === "interactive-compaction") return "Compaction completed";
-  if (kind === "interactive-compaction-acp-event") return `${JSON.stringify(compactionAcpEvent)}\n`;
+  if (kind === "interactive-compaction-acp-event") return `${JSON.stringify(compactionSummary)}\n`;
+  if (kind === "interactive-context-source-acp-event") return `${JSON.stringify(contextSource)}\n`;
+  if (kind === "interactive-context-seed-acp-call") return `${JSON.stringify(contextSeedCall)}\n`;
+  if (kind === "interactive-post-compaction-acp-call") return `${JSON.stringify(postCompactionCall)}\n`;
+  if (kind === "resume-acp-call") return `${JSON.stringify(resumeCall)}\n`;
   if (["interactive-session-id", "interactive-post-compaction-session-id", "resume-session-id"].includes(kind)) return `Session ID: ${sessionId}`;
   return `raw-${index}`;
 };
@@ -78,13 +137,13 @@ const transcriptDigest = (kind: string) => transcript.find((entry) => entry.kind
 
 const valid = {
   kind: "kiro-fabric.real-client-qualification",
-  schemaVersion: 7,
+  schemaVersion: 8,
   ok: true,
   packageDigest: digest,
   archiveDigest,
   commit,
   tools: REAL_CLIENT_TOOLS,
-  driver: { digest: "e".repeat(64), version: "repository-driver-v5" },
+  driver: { digest: "e".repeat(64), version: "repository-driver-v6" },
   kiro: { path: executable, digest: "f".repeat(64), version: "kiro-cli 2.21.0", headlessEngineSelector: "--agent-engine", agentValidateSyntax: "--path" },
   installation: {
     releaseRoot: "/private/release",
@@ -130,7 +189,7 @@ const valid = {
       responseOutputDigest: transcriptDigest("form-probe-response"),
     },
     compaction: {
-      source: "kiro-acp-server-notification",
+      source: "kiro-acp-command-exchange",
       observed: true,
       eventCount: 1,
       method: compactionAcpEvent.method,
@@ -139,6 +198,9 @@ const valid = {
       frameDigest: compactionAcpEvent.frameDigest,
       acpRecordingDigest: "6".repeat(64),
       eventOutputDigest: transcriptDigest("interactive-compaction-acp-event"),
+      intervalStartOffset: 10,
+      intervalEndOffset: 20,
+      manualExchange,
     },
     conversationContinuity: {
       source: "kiro-acp-resume",
@@ -150,6 +212,37 @@ const valid = {
       acpPriorUserMessageObserved: false,
       interactiveRecordingDigest: "6".repeat(64),
       resumeRecordingDigest: "7".repeat(64),
+      compactedFact: {
+        source: "kiro-acp-precompact-prompt-to-fabric-exec",
+        observed: true,
+        factDigest: contextFactDigest,
+        preCompactionPromptFrameDigest: contextSource.frameDigest,
+        postCompactionToolCallId: postCompactionCall.toolCallId,
+        postCompactionArgumentsDigest: postCompactionCall.observedArgumentsDigest,
+        contextSeedToolCallId: contextSeedCall.toolCallId,
+        factAbsentFromPreCompactionToolData: true,
+        durableEffectObserved: true,
+        sourceOutputDigest: transcriptDigest("interactive-context-source-acp-event"),
+      },
+    },
+    fabricExecIntegrity: {
+      source: "kiro-acp-session-tool-call",
+      observed: true,
+      contextSeed: {
+        ...contextSeedCall,
+        acpRecordingDigest: "6".repeat(64),
+        outputDigest: transcriptDigest("interactive-context-seed-acp-call"),
+      },
+      postCompaction: {
+        ...postCompactionCall,
+        acpRecordingDigest: "6".repeat(64),
+        outputDigest: transcriptDigest("interactive-post-compaction-acp-call"),
+      },
+      resume: {
+        ...resumeCall,
+        acpRecordingDigest: "7".repeat(64),
+        outputDigest: transcriptDigest("resume-acp-call"),
+      },
     },
   },
   commands: {
@@ -164,6 +257,7 @@ const valid = {
       list: { executable, argv: ["agent", "list"] },
     })),
     inheritance: { executable, argv: ["settings", "chat.disableInheritingDefaultResources", "--format", "json"] },
+    autoCompaction: { executable, argv: ["settings", "chat.disableAutoCompaction", "--format", "json"] },
     formProbe: { executable, argv: ["--v3", "--agent", "kiro-fabric"] },
     headless: { executable, argv: ["chat", "--agent-engine", "v3", "--agent", "kiro-fabric", "--no-interactive", "--require-mcp-startup", "--output-format", "stream-json", "prompt"] },
     interactive: { executable, argv: ["--v3", "--agent", "kiro-fabric"] },
@@ -230,7 +324,12 @@ const valid = {
     interactive: { digest: "6".repeat(64), bytes: 100 },
     resume: { digest: "7".repeat(64), bytes: 100 },
   },
-  resources: { disableInheritingDefaultResources: null, defaultResourcesInherited: true },
+  resources: {
+    disableInheritingDefaultResources: null,
+    defaultResourcesInherited: true,
+    disableAutoCompaction: null,
+    autoCompactionEnabled: true,
+  },
   workspace: {
     path: "/private/workspace",
     finalDigest: workspaceDigest,
@@ -243,7 +342,7 @@ const valid = {
 
 describe("real-client release evidence", () => {
   it("type-checks nonce-bound same-process and resumed sentinel programs", () => {
-    for (const code of [sentinelVerificationCode(false), sentinelVerificationCode(true), resumeVerificationCode]) {
+    for (const code of [sentinelVerificationCode(false), sentinelVerificationCode(true), postCompactionVerificationCode, resumeVerificationCode]) {
       expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors).toEqual([]);
     }
   });
@@ -286,6 +385,185 @@ describe("real-client release evidence", () => {
     expect(completedAcpCompactionNotifications([completedFrame], ["87654321-4321-4321-8321-cba987654321"])).toEqual([]);
   });
 
+  it("end-binds manual compaction evidence so a later completion cannot qualify", () => {
+    const before = `${JSON.stringify({ direction: "client-to-server", message: { jsonrpc: "2.0", id: 1, method: "session/prompt" } })}\n`;
+    const started = `${JSON.stringify({ direction: "server-to-client", message: { jsonrpc: "2.0", method: "_kiro.dev/compaction/status", params: { sessionId, status: { type: "started" } } } })}\n`;
+    const completed = `${JSON.stringify({ direction: "server-to-client", message: { jsonrpc: "2.0", method: "_kiro.dev/compaction/status", params: { sessionId, status: { type: "completed" } } } })}\n`;
+    const bytes = Buffer.from(`${before}${started}${completed}`);
+    const start = Buffer.byteLength(before);
+    const manualEnd = start + Buffer.byteLength(started);
+    expect(completedAcpCompactionNotifications(parseAcpJsonlFrames(bytes, start, manualEnd), [sessionId])).toEqual([]);
+    expect(completedAcpCompactionNotifications(parseAcpJsonlFrames(bytes, start), [sessionId])).toHaveLength(1);
+    // Even an end offset inside the later frame drops that partial frame.
+    expect(completedAcpCompactionNotifications(parseAcpJsonlFrames(bytes, start, manualEnd + 20), [sessionId])).toEqual([]);
+  });
+
+  it("requires a causally paired manual slash-command exchange for compaction", () => {
+    const request = { direction: "client-to-server", message: { jsonrpc: "2.0", id: 40, method: "_kiro.dev/commands/execute", params: { sessionId, command: "/compact" } } };
+    const started = { direction: "server-to-client", message: { jsonrpc: "2.0", method: "_kiro.dev/compaction/status", params: { sessionId, status: { type: "started" } } } };
+    const completed = { direction: "server-to-client", message: { jsonrpc: "2.0", method: "_kiro.dev/compaction/status", params: { sessionId, status: { type: "completed" } } } };
+    const response = { direction: "server-to-client", message: { jsonrpc: "2.0", id: 40, result: { success: true } } };
+    expect(completedAcpManualCompactions([request, started, completed, response], sessionId)).toHaveLength(1);
+    expect(completedAcpManualCompactions([started, completed], sessionId)).toEqual([]);
+    expect(completedAcpManualCompactions([request, completed, response], sessionId)).toEqual([]);
+    expect(completedAcpManualCompactions([started, request, completed, response], sessionId)).toEqual([]);
+    expect(completedAcpManualCompactions([{ ...request, direction: "server-to-client" }, started, completed, response], sessionId)).toEqual([]);
+    const wrongCommand = structuredClone(request);
+    wrongCommand.message.params.command = "/clear";
+    expect(completedAcpManualCompactions([wrongCommand, started, completed, response], sessionId)).toEqual([]);
+    const failedResponse = structuredClone(response);
+    failedResponse.message.result.success = false;
+    expect(completedAcpManualCompactions([request, started, completed, failedResponse], sessionId)).toEqual([]);
+    const wrongIdType = { ...structuredClone(response), message: { ...response.message, id: "40" } };
+    expect(completedAcpManualCompactions([request, started, completed, wrongIdType], sessionId)).toEqual([]);
+  });
+
+  it("binds exact fabric_exec ACP input and normalized structural output", () => {
+    const expectedArguments = {
+      code: "return { verified: payloads.nonce === 'nonce-a' }",
+      payloads: { nonce: "nonce-a", key: "state-a", contextFact: "context-fact-a" },
+      resultFormat: "json",
+    };
+    const expectedResult = { verified: true, artifactVerified: true };
+    const call = {
+      direction: "server-to-client",
+      message: {
+        jsonrpc: "2.0",
+        method: "session/notification",
+        params: {
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call",
+            toolCallId: "call-1",
+            title: "@fabric/fabric_exec",
+            status: "in_progress",
+            rawInput: expectedArguments,
+          },
+        },
+      },
+    };
+    const completion = {
+      direction: "server-to-client",
+      message: {
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "call-1",
+            status: "completed",
+            rawOutput: { content: [{ type: "text", text: JSON.stringify(expectedResult) }] },
+          },
+        },
+      },
+    };
+    const matches = completedAcpFabricExecCalls([call, completion], { sessionId, expectedArguments, expectedResult });
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({
+      sessionId,
+      toolCallId: "call-1",
+      expectedArgumentsDigest: qualificationValueDigest(expectedArguments),
+      observedArgumentsDigest: qualificationValueDigest(expectedArguments),
+      expectedResultDigest: qualificationValueDigest(expectedResult),
+      observedResultDigest: qualificationValueDigest(expectedResult),
+      observedContextFactDigest: qualificationValueDigest(expectedArguments.payloads.contextFact),
+    });
+    expect(acpToolDataContaining([call, completion], expectedArguments.payloads.contextFact)).toHaveLength(1);
+
+    const mutatedInputs = [
+      { ...expectedArguments, code: `${expectedArguments.code} ` },
+      { ...expectedArguments, payloads: { ...expectedArguments.payloads, key: "state-b" } },
+      { ...expectedArguments, payloads: { ...expectedArguments.payloads, nonce: "nonce-b" } },
+      { ...expectedArguments, extra: true },
+    ];
+    for (const rawInput of mutatedInputs) {
+      const changed = structuredClone(call);
+      changed.message.params.update.rawInput = rawInput;
+      expect(completedAcpFabricExecCalls([changed, completion], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    }
+    for (const rawOutput of [
+      { content: [{ type: "text", text: JSON.stringify({ verified: false, artifactVerified: true }) }] },
+      { content: [{ type: "text", text: JSON.stringify({ ...expectedResult, extra: true }) }] },
+      { content: [{ type: "text", text: `prose ${JSON.stringify(expectedResult)}` }] },
+      { isError: true, content: [{ type: "text", text: JSON.stringify(expectedResult) }] },
+      { content: [{ type: "text", text: JSON.stringify(expectedResult) }, { type: "text", text: "duplicate" }] },
+    ]) {
+      const changed = structuredClone(completion);
+      changed.message.params.update.rawOutput = rawOutput;
+      expect(completedAcpFabricExecCalls([call, changed], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    }
+
+    const embedded = { direction: "client-to-server", message: { jsonrpc: "2.0", id: 9, method: "session/prompt", params: { sessionId, content: [{ type: "text", text: JSON.stringify(call) }] } } };
+    expect(completedAcpFabricExecCalls([embedded, completion], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    const otherTool = structuredClone(call);
+    otherTool.message.params.update.title = "read";
+    expect(completedAcpFabricExecCalls([otherTool, completion], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    const otherServerTitle = structuredClone(call);
+    otherServerTitle.message.params.update.title = "@evil/fabric_exec";
+    expect(completedAcpFabricExecCalls([otherServerTitle, completion], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    const otherServer = structuredClone(call);
+    Object.assign(otherServer.message.params.update, { name: "evil/fabric_exec" });
+    expect(completedAcpFabricExecCalls([otherServer, completion], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    const namedCall = structuredClone(call);
+    Object.assign(namedCall.message.params.update, { name: "fabric_exec" });
+    const contradictoryIdentity = structuredClone(completion);
+    Object.assign(contradictoryIdentity.message.params.update, { toolName: "read" });
+    expect(completedAcpFabricExecCalls([namedCall, contradictoryIdentity], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    const contradictoryTitle = structuredClone(completion);
+    Object.assign(contradictoryTitle.message.params.update, { title: "read" });
+    expect(completedAcpFabricExecCalls([call, contradictoryTitle], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    const failedUpdate = structuredClone(completion);
+    failedUpdate.message.params.update.status = "failed";
+    expect(completedAcpFabricExecCalls([call, failedUpdate, completion], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    const conflicting: unknown = {
+      ...structuredClone(completion),
+      message: {
+        ...completion.message,
+        params: {
+          ...completion.message.params,
+          update: {
+            ...completion.message.params.update,
+            rawInput: { ...expectedArguments, code: "different" },
+          },
+        },
+      },
+    };
+    expect(completedAcpFabricExecCalls([call, completion, conflicting], { sessionId, expectedArguments, expectedResult })).toEqual([]);
+    const secondCall = structuredClone(call);
+    const secondCompletion = structuredClone(completion);
+    secondCall.message.params.update.toolCallId = "call-2";
+    secondCompletion.message.params.update.toolCallId = "call-2";
+    expect(completedAcpFabricExecCalls([call, completion, secondCall, secondCompletion], { sessionId, expectedArguments, expectedResult })).toHaveLength(2);
+  });
+
+  it("recognizes a conversational fact only in a direct client prompt envelope", () => {
+    const fact = "context-0123456789abcdef0123456789abcdef";
+    const prompt = { direction: "client-to-server", message: { jsonrpc: "2.0", id: 8, method: "session/prompt", params: { sessionId, content: [{ type: "text", text: `remember ${fact}` }] } } };
+    expect(acpUserPromptFacts([prompt], sessionId, fact)).toHaveLength(1);
+    expect(acpUserPromptFacts([{ direction: "server-to-client", message: { jsonrpc: "2.0", method: "session/notification", params: { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify(prompt) } } } } }], sessionId, fact)).toEqual([]);
+    expect(acpToolDataContaining([{ direction: "server-to-client", message: { jsonrpc: "2.0", method: "session/notification", params: { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: fact } } } } }], fact)).toEqual([]);
+    expect(acpUserPromptFacts([prompt], "87654321-4321-4321-8321-cba987654321", fact)).toEqual([]);
+  });
+
+  it("does not accept model-prose for form, load, or prior-message ACP evidence", () => {
+    const formRequest = { direction: "server-to-client", message: { jsonrpc: "2.0", id: 12, method: "session/request_permission", params: { sessionId, options: [] } } };
+    const formResponse = { direction: "client-to-server", message: { jsonrpc: "2.0", id: 12, result: { outcome: "cancelled" } } };
+    expect(acpFormInteractionObserved([formRequest, formResponse])).toBe(true);
+    expect(acpFormInteractionObserved([formRequest, { ...formResponse, message: { ...formResponse.message, id: "12" } }])).toBe(false);
+    const loadRequest = { direction: "client-to-server", message: { jsonrpc: "2.0", id: 13, method: "session/load", params: { sessionId } } };
+    const loadResponse = { direction: "server-to-client", message: { jsonrpc: "2.0", id: 13, result: { sessionId } } };
+    expect(acpSessionLoadObserved([loadRequest, loadResponse], sessionId)).toBe(true);
+    expect(acpSessionLoadObserved([loadRequest, { ...loadResponse, message: { ...loadResponse.message, id: "13" } }], sessionId)).toBe(false);
+    const prior = { direction: "server-to-client", message: { jsonrpc: "2.0", method: "session/notification", params: { sessionId, update: { sessionUpdate: "user_message", content: [{ type: "text", text: "history-secret" }] } } } };
+    expect(acpPriorUserMessageObserved([prior], "history-secret")).toBe(true);
+
+    const prose = { direction: "server-to-client", message: { jsonrpc: "2.0", method: "session/notification", params: { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify({ formRequest, loadRequest, prior }) } } } } };
+    expect(acpFormInteractionObserved([prose])).toBe(false);
+    expect(acpSessionLoadObserved([prose], sessionId)).toBe(false);
+    expect(acpPriorUserMessageObserved([prose], "history-secret")).toBe(false);
+  });
+
   it("accepts only archive-installed, exact-command, lifecycle-bound qualification evidence", () => {
     expect(assertRealClientEvidence(valid, digest, { qualification: true, archiveDigest, commit })).toBe(valid);
     for (const patch of [
@@ -294,7 +572,7 @@ describe("real-client release evidence", () => {
       { commit: "7".repeat(40) },
       { tools: ["fabric_exec"] },
       { kind: "other" },
-      { schemaVersion: 6 },
+      { schemaVersion: 7 },
       { ok: false },
       { customAgentSelected: true },
       { powerActivated: false },
@@ -428,7 +706,7 @@ describe("real-client release evidence", () => {
     priorMessages.qualificationGates.conversationContinuity.acpSessionLoadObserved = false;
     priorMessages.qualificationGates.conversationContinuity.acpOriginalUserMessageObserved = true;
     priorMessages.qualificationGates.conversationContinuity.acpPriorUserMessageObserved = true;
-    expect(assertRealClientEvidence(priorMessages, digest, { qualification: true, archiveDigest, commit })).toBe(priorMessages);
+    expect(() => assertRealClientEvidence(priorMessages, digest, { qualification: true, archiveDigest, commit })).toThrow("conversation continuity");
 
     const wrongSession = structuredClone(valid);
     wrongSession.qualificationGates.conversationContinuity.sessionIdAfterResume = "87654321-4321-4321-8321-cba987654321";
@@ -437,6 +715,52 @@ describe("real-client release evidence", () => {
     const forgedRecording = structuredClone(valid);
     forgedRecording.qualificationGates.conversationContinuity.resumeRecordingDigest = "0".repeat(64);
     expect(() => assertRealClientEvidence(forgedRecording, digest, { qualification: true, archiveDigest, commit })).toThrow("recording/session-bound");
+
+    const noCompactedFact = structuredClone(valid);
+    // @ts-expect-error mutation fixture deliberately removes mandatory evidence.
+    delete noCompactedFact.qualificationGates.conversationContinuity.compactedFact;
+    expect(() => assertRealClientEvidence(noCompactedFact, digest, { qualification: true, archiveDigest, commit })).toThrow("compacted conversational fact");
+
+    for (const field of ["factDigest", "preCompactionPromptFrameDigest", "postCompactionArgumentsDigest", "sourceOutputDigest"] as const) {
+      const forgedFact = structuredClone(valid);
+      forgedFact.qualificationGates.conversationContinuity.compactedFact[field] = "f".repeat(64);
+      expect(() => assertRealClientEvidence(forgedFact, digest, { qualification: true, archiveDigest, commit })).toThrow(/compacted conversational fact/u);
+    }
+    const noFactEffect = structuredClone(valid);
+    noFactEffect.qualificationGates.conversationContinuity.compactedFact.durableEffectObserved = false;
+    expect(() => assertRealClientEvidence(noFactEffect, digest, { qualification: true, archiveDigest, commit })).toThrow("compacted conversational fact");
+  });
+
+  it("requires exact ACP-bound post-compaction and resume fabric_exec evidence", () => {
+    const missing = structuredClone(valid);
+    // @ts-expect-error mutation fixture deliberately removes mandatory evidence.
+    delete missing.qualificationGates.fabricExecIntegrity;
+    expect(() => assertRealClientEvidence(missing, digest, { qualification: true, archiveDigest, commit })).toThrow("fabric_exec integrity");
+
+    for (const phase of ["postCompaction", "resume"] as const) {
+      for (const field of ["observedArgumentsDigest", "observedResultDigest", "acpRecordingDigest", "outputDigest"] as const) {
+        const changed = structuredClone(valid);
+        changed.qualificationGates.fabricExecIntegrity[phase][field] = "f".repeat(64);
+        expect(() => assertRealClientEvidence(changed, digest, { qualification: true, archiveDigest, commit })).toThrow(/fabric_exec/u);
+      }
+      const noFrames = structuredClone(valid);
+      noFrames.qualificationGates.fabricExecIntegrity[phase].frameDigests = [];
+      expect(() => assertRealClientEvidence(noFrames, digest, { qualification: true, archiveDigest, commit })).toThrow(/fabric_exec/u);
+    }
+    const wrongFactDigest = structuredClone(valid);
+    wrongFactDigest.qualificationGates.fabricExecIntegrity.postCompaction.observedContextFactDigest = "0".repeat(64);
+    expect(() => assertRealClientEvidence(wrongFactDigest, digest, { qualification: true, archiveDigest, commit })).toThrow("compacted conversational fact");
+    const missingContextSeed = structuredClone(valid);
+    // @ts-expect-error mutation fixture deliberately removes mandatory evidence.
+    delete missingContextSeed.qualificationGates.fabricExecIntegrity.contextSeed;
+    expect(() => assertRealClientEvidence(missingContextSeed, digest, { qualification: true, archiveDigest, commit })).toThrow("fabric_exec integrity");
+    const reusedCall = structuredClone(valid);
+    reusedCall.qualificationGates.fabricExecIntegrity.resume = {
+      ...reusedCall.qualificationGates.fabricExecIntegrity.postCompaction,
+      acpRecordingDigest: reusedCall.recordings.resume.digest,
+      outputDigest: reusedCall.qualificationGates.fabricExecIntegrity.resume.outputDigest,
+    };
+    expect(() => assertRealClientEvidence(reusedCall, digest, { qualification: true, archiveDigest, commit })).toThrow("resume fabric_exec");
   });
 
   it("cannot qualify from terminal compaction prose without a bound completed ACP notification", () => {
@@ -452,6 +776,8 @@ describe("real-client release evidence", () => {
       ["status", "started"],
       ["sessionId", "87654321-4321-4321-8321-cba987654321"],
       ["frameDigest", "0".repeat(64)],
+      ["intervalStartOffset", 0],
+      ["intervalEndOffset", 10],
     ] as const) {
       const changed = structuredClone(valid);
       // @ts-expect-error mutation fixture deliberately assigns heterogeneous invalid evidence.
@@ -486,6 +812,16 @@ describe("real-client release evidence", () => {
     const formDrift = structuredClone(valid);
     formDrift.commands.formProbe.argv = ["chat", "--v3", "--agent", "kiro-fabric"];
     expect(() => assertRealClientEvidence(formDrift, digest, { qualification: true, archiveDigest, commit })).toThrow("form probe");
+
+    const autoCompactionDrift = structuredClone(valid);
+    autoCompactionDrift.commands.autoCompaction.argv = ["settings", "chat.disableAutoCompaction"];
+    expect(() => assertRealClientEvidence(autoCompactionDrift, digest, { qualification: true, archiveDigest, commit })).toThrow("automatic compaction");
+
+    const disabledAutoCompaction = structuredClone(valid);
+    // @ts-expect-error mutation fixture deliberately assigns an invalid setting value.
+    disabledAutoCompaction.resources.disableAutoCompaction = true;
+    disabledAutoCompaction.resources.autoCompactionEnabled = false;
+    expect(() => assertRealClientEvidence(disabledAutoCompaction, digest, { qualification: true, archiveDigest, commit })).toThrow("automatic-compaction setting");
   });
 
   it("rejects MCP/runtime identity changes across turns or compaction", () => {

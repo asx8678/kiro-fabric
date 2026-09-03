@@ -19,6 +19,7 @@ export const REAL_CLIENT_TRANSCRIPT_KINDS = [
   "agent-validation-nested",
   "agent-list-nested",
   "resource-inheritance-setting",
+  "automatic-compaction-setting",
   "form-probe-start",
   "form-probe-mcp-startup",
   "form-probe-trace-request",
@@ -32,16 +33,20 @@ export const REAL_CLIENT_TRANSCRIPT_KINDS = [
   "interactive-turn-1",
   "interactive-turn-2",
   "interactive-turn-3",
+  "interactive-context-seed-acp-call",
   "interactive-session-id",
   "interactive-compaction",
   "interactive-compaction-acp-event",
+  "interactive-context-source-acp-event",
   "interactive-post-compaction-session-id",
   "interactive-post-compaction",
+  "interactive-post-compaction-acp-call",
   "interactive-shutdown",
   "resume-start",
   "resume-mcp-startup",
   "resume-session-id",
   "resume-turn",
+  "resume-acp-call",
   "resume-shutdown",
   "headless-selection",
 ];
@@ -52,7 +57,21 @@ const MCP_INSTANCE_ID = /^fmcp_[a-f0-9]{32}$/u;
 const SESSION_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+/** @param {string} message @returns {never} */
 const fail = (message) => { throw new Error(`invalid real-client evidence: ${message}`); };
+
+/** @param {unknown} value @returns {unknown} */
+const canonicalValue = (value) => {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (typeof value === "object") {
+    const record = /** @type {Record<string, unknown>} */ (value);
+    return Object.fromEntries(Object.keys(record).sort().map((key) => [key, canonicalValue(record[key])]));
+  }
+  fail("qualification value is not canonical JSON");
+};
+const valueDigest = (value) => digest(Buffer.from(JSON.stringify(canonicalValue(value))));
 
 export const transcriptEntry = (kind, bytes) => {
   const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
@@ -108,9 +127,22 @@ const descendantPids = (value, label) => {
   return value;
 };
 
+const exactFabricExecEvidence = (value, label, sessionId, recordingDigest, expectedResult) => {
+  if (!value || value.sessionId !== sessionId || typeof value.toolCallId !== "string" ||
+      value.toolCallId.length < 1 || value.toolCallId.length > 256 ||
+      !SHA256.test(value.expectedArgumentsDigest ?? "") || value.observedArgumentsDigest !== value.expectedArgumentsDigest ||
+      value.expectedResultDigest !== valueDigest(expectedResult) || value.observedResultDigest !== value.expectedResultDigest ||
+      !Array.isArray(value.frameDigests) || value.frameDigests.length < 1 ||
+      value.frameDigests.some((frameDigest) => !SHA256.test(frameDigest)) || new Set(value.frameDigests).size !== value.frameDigests.length ||
+      value.acpRecordingDigest !== recordingDigest || !SHA256.test(value.outputDigest ?? "")) {
+    fail(`${label} fabric_exec evidence is incomplete`);
+  }
+  return value;
+};
+
 export const assertRealClientEvidence = (report, packageDigest, options = {}) => {
   if (!report || typeof report !== "object") fail("report must be an object");
-  if (options.qualification === true && (report.kind !== "kiro-fabric.real-client-qualification" || report.schemaVersion !== 7 || report.ok !== true)) fail("qualification identity is invalid");
+  if (options.qualification === true && (report.kind !== "kiro-fabric.real-client-qualification" || report.schemaVersion !== 8 || report.ok !== true)) fail("qualification identity is invalid");
   if (report.packageDigest !== packageDigest || !SHA256.test(report.packageDigest)) fail("package digest is invalid");
   if (!options.archiveDigest || report.archiveDigest !== options.archiveDigest || !SHA256.test(report.archiveDigest)) fail("archive digest is invalid");
   if (!options.commit || report.commit !== options.commit || !GIT_OBJECT_ID.test(report.commit)) fail("commit is invalid");
@@ -138,7 +170,7 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
   if (!kiro || typeof kiro.path !== "string" || !path.isAbsolute(kiro.path) || !SHA256.test(kiro.digest ?? "") ||
       typeof kiro.version !== "string" || !kiro.version || !["--agent-engine", "--engine", "--v3"].includes(kiro.headlessEngineSelector) ||
       !["--path", "positional"].includes(kiro.agentValidateSyntax)) fail("Kiro binary/help identity is incomplete");
-  if (!SHA256.test(report.driver?.digest ?? "") || report.driver?.version !== "repository-driver-v5") fail("driver identity is invalid");
+  if (!SHA256.test(report.driver?.digest ?? "") || report.driver?.version !== "repository-driver-v6") fail("driver identity is invalid");
 
   const gates = report.qualificationGates;
   const nativeVisibility = gates?.nativeToolVisibility;
@@ -154,21 +186,39 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
     fail("form elicitation gate is incomplete");
   }
   const compactionGate = gates?.compaction;
-  if (!compactionGate || compactionGate.source !== "kiro-acp-server-notification" || compactionGate.observed !== true ||
+  if (!compactionGate || compactionGate.source !== "kiro-acp-command-exchange" || compactionGate.observed !== true ||
       compactionGate.eventCount !== 1 || compactionGate.method !== "_kiro.dev/compaction/status" ||
       compactionGate.status !== "completed" || !SESSION_ID.test(compactionGate.sessionId ?? "") ||
       !SHA256.test(compactionGate.frameDigest ?? "") || !SHA256.test(compactionGate.acpRecordingDigest ?? "") ||
-      !SHA256.test(compactionGate.eventOutputDigest ?? "")) {
+      !SHA256.test(compactionGate.eventOutputDigest ?? "") || !Number.isSafeInteger(compactionGate.intervalStartOffset) ||
+      !Number.isSafeInteger(compactionGate.intervalEndOffset) || compactionGate.intervalStartOffset < 1 ||
+      compactionGate.intervalEndOffset <= compactionGate.intervalStartOffset ||
+      compactionGate.manualExchange?.sessionId !== compactionGate.sessionId || compactionGate.manualExchange?.command !== "/compact" ||
+      ![compactionGate.manualExchange?.requestIdDigest, compactionGate.manualExchange?.requestFrameDigest,
+        compactionGate.manualExchange?.startedFrameDigest, compactionGate.manualExchange?.completedFrameDigest,
+        compactionGate.manualExchange?.responseFrameDigest, compactionGate.manualExchange?.responseResultDigest].every((value) => SHA256.test(value ?? "")) ||
+      compactionGate.manualExchange.completedFrameDigest !== compactionGate.frameDigest ||
+      compactionGate.manualExchange.responseSuccess !== true) {
     fail("structural ACP compaction gate is incomplete");
   }
   const continuityGate = gates?.conversationContinuity;
   if (!continuityGate || continuityGate.source !== "kiro-acp-resume" || continuityGate.observed !== true ||
       !SESSION_ID.test(continuityGate.sessionIdBeforeResume ?? "") || continuityGate.sessionIdBeforeResume !== continuityGate.sessionIdAfterResume ||
-      (continuityGate.acpSessionLoadObserved !== true &&
-        !(continuityGate.acpOriginalUserMessageObserved === true && continuityGate.acpPriorUserMessageObserved === true)) ||
+      continuityGate.acpSessionLoadObserved !== true ||
       !SHA256.test(continuityGate.interactiveRecordingDigest ?? "") || !SHA256.test(continuityGate.resumeRecordingDigest ?? "")) {
     fail("conversation continuity gate is incomplete");
   }
+  const compactedFact = continuityGate.compactedFact;
+  if (!compactedFact || compactedFact.source !== "kiro-acp-precompact-prompt-to-fabric-exec" || compactedFact.observed !== true ||
+      !SHA256.test(compactedFact.factDigest ?? "") || !SHA256.test(compactedFact.preCompactionPromptFrameDigest ?? "") ||
+      typeof compactedFact.postCompactionToolCallId !== "string" || !compactedFact.postCompactionToolCallId ||
+      typeof compactedFact.contextSeedToolCallId !== "string" || !compactedFact.contextSeedToolCallId ||
+      !SHA256.test(compactedFact.postCompactionArgumentsDigest ?? "") || compactedFact.durableEffectObserved !== true ||
+      compactedFact.factAbsentFromPreCompactionToolData !== true ||
+      !SHA256.test(compactedFact.sourceOutputDigest ?? "")) fail("compacted conversational fact evidence is incomplete");
+  const fabricExecGate = gates?.fabricExecIntegrity;
+  if (!fabricExecGate || fabricExecGate.source !== "kiro-acp-session-tool-call" || fabricExecGate.observed !== true ||
+      !fabricExecGate.contextSeed || !fabricExecGate.postCompaction || !fabricExecGate.resume) fail("fabric_exec integrity gate is incomplete");
 
   const commands = report.commands;
   const installCommand = command(commands?.install, "archive installation");
@@ -195,6 +245,7 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
   if (!equal(headlessCommand.argv, ["chat", ...engineSequence, "--agent", "kiro-fabric", "--no-interactive", "--require-mcp-startup", "--output-format", "stream-json", headlessPrompt])) fail("headless command is not the exact supported positional-prompt argv");
   exactKiroCommand(commands?.resume, "resume", kiro.path, ["--v3", "--agent", "kiro-fabric", "--resume-id", report.lifecycle?.sessionId]);
   exactKiroCommand(commands?.inheritance, "resource inheritance", kiro.path, ["settings", "chat.disableInheritingDefaultResources", "--format", "json"]);
+  exactKiroCommand(commands?.autoCompaction, "automatic compaction", kiro.path, ["settings", "chat.disableAutoCompaction", "--format", "json"]);
   exactKiroCommand(commands?.version, "version", kiro.path, ["--version"]);
   exactKiroCommand(commands?.helpAll, "top-level help", kiro.path, ["--help-all"]);
   exactKiroCommand(commands?.chatHelp, "chat help", kiro.path, ["chat", "--help"]);
@@ -247,6 +298,9 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
   if (![interactive.compaction.sessionIdBefore, interactive.compaction.sessionIdAfter].includes(compactionGate.sessionId)) {
     fail("structural ACP compaction event is not session-bound");
   }
+  if (compactionGate.manualExchange.sessionId !== interactive.compaction.sessionIdBefore) {
+    fail("manual compaction command is not bound to the pre-compaction Kiro session");
+  }
   if (interactive.durableSentinels?.memory !== true || interactive.durableSentinels?.state !== true || interactive.ephemeralArtifact?.sameProcessReadable !== true || interactive.ephemeralArtifact?.removedAtShutdown !== true) fail("interactive sentinel evidence is incomplete");
 
   const resumed = lifecycle.resumed;
@@ -257,10 +311,41 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
       resumed.durableMemoryRestored !== true || resumed.durableStateRestored !== true || resumed.ephemeralArtifactUnavailable !== true || resumed.execSucceeded !== true) fail("resumed lifecycle is incomplete");
   if ([headlessIdentity.mcpInstanceId, interactiveIdentity.mcpInstanceId, resumedIdentity.mcpInstanceId, formIdentity.mcpInstanceId].some((value, index, values) => values.indexOf(value) !== index)) fail("separate Kiro processes reused an MCP instance identity");
 
-  if (report.resources?.disableInheritingDefaultResources !== null && report.resources?.disableInheritingDefaultResources !== false || report.resources?.defaultResourcesInherited !== true) fail("effective default-resource inheritance was not recorded");
+  if ((report.resources?.disableInheritingDefaultResources !== null && report.resources?.disableInheritingDefaultResources !== false) ||
+      report.resources?.defaultResourcesInherited !== true) fail("effective default-resource inheritance was not recorded");
+  if ((report.resources?.disableAutoCompaction !== null && report.resources?.disableAutoCompaction !== false) ||
+      report.resources?.autoCompactionEnabled !== true) fail("effective automatic-compaction setting was not recorded");
   for (const name of ["formProbe", "interactive", "resume"]) {
     const recording = report.recordings?.[name];
     if (!recording || !Number.isSafeInteger(recording.bytes) || recording.bytes < 1 || !SHA256.test(recording.digest ?? "")) fail(`${name} ACP recording identity is invalid`);
+  }
+  if (compactionGate.intervalEndOffset > report.recordings.interactive.bytes) fail("manual compaction interval exceeds its ACP recording");
+  const contextSeedCall = exactFabricExecEvidence(
+    fabricExecGate.contextSeed,
+    "context-seed",
+    interactive.compaction.sessionIdBefore,
+    report.recordings.interactive.digest,
+    { verified: true },
+  );
+  const postCompactionCall = exactFabricExecEvidence(
+    fabricExecGate.postCompaction,
+    "post-compaction",
+    lifecycle.sessionId,
+    report.recordings.interactive.digest,
+    { verified: true, artifactVerified: true, contextCaptured: true },
+  );
+  exactFabricExecEvidence(
+    fabricExecGate.resume,
+    "resume",
+    lifecycle.sessionId,
+    report.recordings.resume.digest,
+    { durableVerified: true, artifactUnavailable: true },
+  );
+  if (compactedFact.postCompactionToolCallId !== postCompactionCall.toolCallId ||
+      compactedFact.postCompactionArgumentsDigest !== postCompactionCall.observedArgumentsDigest ||
+      compactedFact.contextSeedToolCallId !== contextSeedCall.toolCallId ||
+      postCompactionCall.observedContextFactDigest !== compactedFact.factDigest) {
+    fail("compacted conversational fact is not bound to the post-compaction fabric_exec call");
   }
   if (formGate.acpRecordingDigest !== report.recordings.formProbe.digest ||
       compactionGate.acpRecordingDigest !== report.recordings.interactive.digest ||
@@ -307,9 +392,29 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
   const compactionEvent = parseTraceEvent("interactive-compaction-acp-event");
   if (compactionEvent?.method !== compactionGate.method || compactionEvent?.status !== compactionGate.status ||
       compactionEvent?.sessionId !== compactionGate.sessionId || compactionEvent?.frameDigest !== compactionGate.frameDigest ||
+      compactionEvent?.intervalStartOffset !== compactionGate.intervalStartOffset ||
+      compactionEvent?.intervalEndOffset !== compactionGate.intervalEndOffset ||
+      !equal(compactionEvent?.manualExchange, compactionGate.manualExchange) ||
       transcript.get("interactive-compaction-acp-event")?.digest !== compactionGate.eventOutputDigest) {
     fail("structural ACP compaction transcript is not event-bound");
   }
+  const contextSourceEvent = parseTraceEvent("interactive-context-source-acp-event");
+  if (contextSourceEvent?.sessionId !== interactive.compaction.sessionIdBefore ||
+      contextSourceEvent?.factDigest !== compactedFact.factDigest ||
+      contextSourceEvent?.frameDigest !== compactedFact.preCompactionPromptFrameDigest ||
+      transcript.get("interactive-context-source-acp-event")?.digest !== compactedFact.sourceOutputDigest) {
+    fail("compacted conversational fact source is not transcript-bound");
+  }
+  const exactCallTranscript = (kind, expected, label) => {
+    const observed = parseTraceEvent(kind);
+    const { acpRecordingDigest: _recordingDigest, outputDigest, ...summary } = expected;
+    if (valueDigest(observed) !== valueDigest(summary) || transcript.get(kind)?.digest !== outputDigest) {
+      fail(`${label} fabric_exec evidence is not transcript-bound`);
+    }
+  };
+  exactCallTranscript("interactive-context-seed-acp-call", contextSeedCall, "context-seed");
+  exactCallTranscript("interactive-post-compaction-acp-call", postCompactionCall, "post-compaction");
+  exactCallTranscript("resume-acp-call", fabricExecGate.resume, "resume");
   if (transcriptText("kiro-version").trim().slice(0, 256) !== kiro.version ||
       !transcriptText("interactive-session-id").includes(interactive.compaction.sessionIdBefore) ||
       !transcriptText("interactive-post-compaction-session-id").includes(lifecycle.sessionId) ||
@@ -328,6 +433,16 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
   if (/(?:compaction\s+failed|failed\s+to\s+compact|error\s+(?:during|while)\s+compact|unable\s+to\s+compact|compaction\s+cancelled)/iu.test(compactText) ||
       !/(?:compaction\s+(?:complete|completed|successful)|compacted|context\s+(?:was\s+)?summari[sz]ed)/iu.test(compactText)) {
     fail("successful compaction is absent from the bound TUI transcript");
+  }
+  let recordedInheritance;
+  let recordedAutoCompaction;
+  try {
+    recordedInheritance = JSON.parse(transcriptText("resource-inheritance-setting"));
+    recordedAutoCompaction = JSON.parse(transcriptText("automatic-compaction-setting"));
+  } catch { fail("Kiro settings transcripts are not structural JSON"); }
+  if (recordedInheritance !== report.resources.disableInheritingDefaultResources ||
+      recordedAutoCompaction !== report.resources.disableAutoCompaction) {
+    fail("Kiro settings are not transcript-bound");
   }
   if (transcript.get("interactive-tools")?.digest !== nativeVisibility.outputDigest ||
       transcript.get("form-probe-request")?.digest !== formGate.requestOutputDigest ||
