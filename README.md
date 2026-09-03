@@ -13,10 +13,10 @@ A Kiro CLI v3 Power for bounded, checked TypeScript composition. `fabric_exec` i
 
 ```sh
 pnpm install
-pnpm run power:stage   # builds and stages .tmp/kiro-fabric-power
+pnpm run power:stage   # builds, installs, and registers the Power for Kiro IDE and CLI v3
 ```
 
-Import `.tmp/kiro-fabric-power` through Kiro's supported Power import flow and enable **Kiro Fabric**. Copying or exporting the folder does not register a Power. Then start sessions with the only supported command:
+Run `power:stage` while Kiro IDE and CLI sessions are closed. The command installs the validated source at `$KIRO_HOME/powers/kiro-fabric`, refreshes `$KIRO_HOME/powers/installed/kiro-fabric`, and idempotently registers **Kiro Fabric** in Kiro's local `user-added` registry. No IDE import step is required. Use `pnpm run power:stage:local` when only the checkout-local `.tmp/kiro-fabric-power` package is needed. Then start sessions with:
 
 ```sh
 kiro-cli --v3

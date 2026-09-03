@@ -24,7 +24,7 @@ export const kiroPowerWorkspaceRequestSchema = Type.Union([
     path: Type.String({ minLength: 1, maxLength: 4096 }),
   }, { additionalProperties: false }),
   Type.Object({ action: Type.Literal("detach") }, { additionalProperties: false }),
-]);
+], { type: "object" });
 
 export type KiroPowerWorkspaceRequest =
   | { action: "status" }

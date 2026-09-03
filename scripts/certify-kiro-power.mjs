@@ -72,6 +72,9 @@ try {
   const listed = await request(2, "tools/list", {});
   const tools = listed.tools.map((tool) => tool.name);
   if (JSON.stringify(tools) !== JSON.stringify(["fabric_info", "fabric_workspace", "fabric_exec"])) throw new Error(`tool surface mismatch: ${JSON.stringify(tools)}`);
+  for (const tool of listed.tools) {
+    if (tool.inputSchema?.type !== "object") throw new Error(`tool input schema must declare an object root: ${tool.name}`);
+  }
   const info = JSON.parse(text(await call(3, "fabric_info", {})));
   if (info.product !== "kiro-fabric-power" || info.executor !== "quickjs") throw new Error("fabric_info identity mismatch");
   if (info.workspace?.status !== "bound" || info.workspace?.context !== "verified" || info.workspace?.verification !== "verified") {

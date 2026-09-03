@@ -21015,7 +21015,7 @@ var kiroPowerWorkspaceRequestSchema = typebox_exports.Union([
     path: typebox_exports.String({ minLength: 1, maxLength: 4096 })
   }, { additionalProperties: false }),
   typebox_exports.Object({ action: typebox_exports.Literal("detach") }, { additionalProperties: false })
-]);
+], { type: "object" });
 var idFor = (root) => createHash3("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
 var KiroPowerWorkspaceBinding = class {
   #pluginRoot;

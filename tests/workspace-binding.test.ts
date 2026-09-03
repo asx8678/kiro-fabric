@@ -2,8 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { Value } from "typebox/value";
 import { afterEach, describe, expect, it } from "vitest";
-import { KiroPowerWorkspaceBinding } from "../src/kiro/power/workspace-binding.js";
+import {
+  KiroPowerWorkspaceBinding,
+  kiroPowerWorkspaceRequestSchema,
+} from "../src/kiro/power/workspace-binding.js";
 import { CachedWorkspaceContextProvider } from "../src/kiro/power/workspace-context.js";
 
 const roots: string[] = [];
@@ -17,6 +21,14 @@ const fixture = () => {
 };
 
 describe("canonical workspace binding", () => {
+  it("publishes a strict MCP object schema while preserving action variants", () => {
+    expect(Reflect.get(kiroPowerWorkspaceRequestSchema, "type")).toBe("object");
+    expect(Value.Check(kiroPowerWorkspaceRequestSchema, { action: "status" })).toBe(true);
+    expect(Value.Check(kiroPowerWorkspaceRequestSchema, { action: "select", rootId: "root-1" })).toBe(true);
+    expect(Value.Check(kiroPowerWorkspaceRequestSchema, { action: "select" })).toBe(false);
+    expect(Value.Check(kiroPowerWorkspaceRequestSchema, { action: "status", rootId: "root-1" })).toBe(false);
+  });
+
   it("turns oversized client root inventories into unavailable context", async () => {
     const context = new CachedWorkspaceContextProvider({
       supported: () => true,
