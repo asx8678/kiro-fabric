@@ -30,6 +30,8 @@ export const installUserAgent=(stagingRoot=".tmp/kiro-fabric-agent",env=process.
   if(options.migratePowerData){const legacy=path.resolve(options.migratePowerData), legacyFabric=path.basename(legacy)==="fabric"?legacy:path.join(legacy,"fabric");assertOwnedDir(legacyFabric,true);if(fs.readdirSync(path.join(p.data,"fabric")).length)throw new Error("agent data is not empty; migration refused");for(const name of ["config","projects"]){const src=path.join(legacyFabric,name);if(lstat(src))copy(src,path.join(p.data,"fabric",name))}}
   const profile=generateAgentProfile({nodePath:fs.realpathSync(process.execPath),runtimeRoot:generation,dataRoot:p.data,skillPath:path.join(skillTarget,"SKILL.md")});const profileBytes=JSON.stringify(profile,null,2)+"\n";if(lstat(p.profile)&&!previous)throw new Error(`refusing to overwrite unowned profile: ${p.profile}`);atomic(p.profile,profileBytes);
   const manifest={schemaVersion:1,owner:OWNER,packageDigest:staged.digest,profileSha256:sha(profileBytes),skillSha256:sha(fs.readFileSync(path.join(skillTarget,"SKILL.md"))),runtime:generation};atomic(p.manifest,JSON.stringify(manifest,null,2)+"\n");
+  const leftoverPower=[path.join(kiroHome,"powers","kiro-fabric"),path.join(kiroHome,"powers","installed","kiro-fabric")].filter((candidate)=>lstat(candidate));
+  if(leftoverPower.length) console.error(`warning: leftover Kiro Fabric Power at ${leftoverPower.join(" and ")} may duplicate @fabric; disable or uninstall that Power`);
   return {root:p.base,profile:p.profile,runtime:generation,data:p.data,packageDigest:staged.digest};
  }finally{fs.rmSync(lock,{recursive:true,force:true})}
 };

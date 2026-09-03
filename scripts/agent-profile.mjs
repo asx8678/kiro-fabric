@@ -11,18 +11,23 @@ Use native Kiro tools for ordinary file reads, searches, edits, shell commands, 
 
 Await every provider call, return compact decision-relevant results, propagate failures, and never claim completion without verification. Treat denial, timeout, cancellation, unavailable capability, malformed output, and indeterminate effects as failures.`;
 
-export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPath }) => {
+export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPath, steeringPath }) => {
   for (const [name, value] of Object.entries({ nodePath, runtimeRoot, dataRoot, skillPath })) {
     if (typeof value !== "string" || !path.isAbsolute(value)) throw new Error(`${name} must be absolute`);
   }
+  if (steeringPath !== undefined && (typeof steeringPath !== "string" || !path.isAbsolute(steeringPath))) {
+    throw new Error("steeringPath must be absolute");
+  }
+  const resources = [`skill://${skillPath}`];
+  if (steeringPath) resources.push(`file://${steeringPath}`);
   return {
     name: AGENT_NAME,
     description: "Kiro Fabric coding agent with native Kiro tools and a bounded checked-TypeScript composition backend.",
     prompt: AGENT_PROMPT,
     includePowers: false,
     includeMcpJson: false,
-    resources: [`file://${skillPath}`],
-    mcpServers: { fabric: { command: nodePath, args: [path.join(runtimeRoot, "kiro", "mcp-entry.js")], cwd: runtimeRoot, env: {
+    resources,
+    mcpServers: { fabric: { command: nodePath, args: [path.join(runtimeRoot, "kiro", "mcp-entry.js")], env: {
       KIRO_FABRIC_RUNTIME_ROOT: runtimeRoot,
       KIRO_FABRIC_DATA_ROOT: dataRoot,
     } } },
