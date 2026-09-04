@@ -110,6 +110,68 @@ export const resolveKiroCli = (pathValue = process.env.PATH ?? "", explicit = pr
   throw new Error("A private, non-writable kiro-cli executable was not found on absolute PATH entries");
 };
 
+/** @param {string | undefined} requested @param {string | undefined} [apiKey] @returns {"api-key" | "subscription"} */
+export const resolveRealClientAuthMode = (requested, apiKey = process.env.KIRO_API_KEY) => {
+  const hasApiKey = typeof apiKey === "string" && apiKey.trim().length > 0;
+  const mode = requested ?? (hasApiKey ? "api-key" : "subscription");
+  if (mode !== "api-key" && mode !== "subscription") {
+    throw new Error("--auth-mode must be api-key or subscription");
+  }
+  if (mode === "api-key" && !hasApiKey) {
+    throw new Error("KIRO_API_KEY is required when --auth-mode api-key is selected");
+  }
+  return mode;
+};
+
+const boundedLoginValue = (name, value) => {
+  if (typeof value !== "string" || !value.trim() || value.length > 2_048 || /[\u0000-\u001f\u007f]/u.test(value)) {
+    throw new Error(`${name} must be a bounded non-empty string without control characters`);
+  }
+  return value.trim();
+};
+
+/** @param {{ license?: string, identityProvider?: string, region?: string }} [options] @returns {string[]} */
+export const subscriptionLoginArgv = ({ license = "free", identityProvider, region } = {}) => {
+  if (license !== "free" && license !== "pro") throw new Error("--subscription-license must be free or pro");
+  const provider = identityProvider === undefined ? undefined : boundedLoginValue("--identity-provider", identityProvider);
+  const selectedRegion = region === undefined ? undefined : boundedLoginValue("--region", region);
+  if (license === "free" && (provider !== undefined || selectedRegion !== undefined)) {
+    throw new Error("Identity provider and region are valid only with --subscription-license pro");
+  }
+  if ((provider === undefined) !== (selectedRegion === undefined)) {
+    throw new Error("--identity-provider and --region must be supplied together");
+  }
+  return [
+    "login", "--license", license, "--use-device-flow",
+    ...(provider === undefined ? [] : ["--identity-provider", provider, "--region", selectedRegion]),
+  ];
+};
+
+const runInherited = (executable, argv, options = {}) => {
+  const result = spawnSync(executable, argv, {
+    cwd: options.cwd,
+    env: options.cwd && options.env ? environmentAt(options.env, options.cwd) : options.env,
+    stdio: "inherit",
+    timeout: options.timeout ?? 15 * 60_000,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`${path.basename(executable)} ${argv[0] ?? "command"} exited ${result.status ?? result.signal ?? "unknown"}`);
+  }
+};
+
+const assertSubscriptionAuthenticated = (executable, cwd, environment) => {
+  const result = spawnSync(executable, ["whoami"], {
+    cwd,
+    env: environmentAt(environment, cwd),
+    stdio: "ignore",
+    timeout: 120_000,
+  });
+  if (result.error || result.status !== 0) {
+    throw new Error("Authenticated Kiro subscription session is unavailable in the isolated qualification home; rerun with --subscription-login");
+  }
+};
+
 const runSync = (executable, argv, options = {}) => {
   const result = spawnSync(executable, argv, {
     cwd: options.cwd,
@@ -1213,9 +1275,14 @@ const assertOneObservedMcpProcess = (observer, kiroPid, label) => {
   if (observed.length !== 1) throw new Error(`${label} observed ${observed.length} Fabric MCP processes instead of one`);
 };
 
-const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest, archiveDigest, commit, driverDigest, output, workspace, kiroHome, isolatedHome, installCwd }) => {
-  if (typeof process.env.KIRO_API_KEY !== "string" || process.env.KIRO_API_KEY.trim().length < 1) throw new Error("KIRO_API_KEY is required for real-client qualification");
-  const protectedCredential = Buffer.from(process.env.KIRO_API_KEY);
+const runRealKiroAgentDriverImplementation = async ({
+  packageRoot, packageDigest, archiveDigest, commit, driverDigest, output, workspace,
+  kiroHome, isolatedHome, installCwd, authMode, subscriptionLogin = false,
+  subscriptionLicense = "free", identityProvider, region,
+}) => {
+  const resolvedAuthMode = resolveRealClientAuthMode(authMode);
+  const apiKey = resolvedAuthMode === "api-key" ? process.env.KIRO_API_KEY : undefined;
+  const protectedValues = apiKey === undefined ? [] : [Buffer.from(apiKey)];
   const releaseRoot = assertPrivateDirectory(path.resolve(packageRoot));
   const releasePackage = validateAgentPackage(releaseRoot);
   if (releasePackage.digest !== packageDigest) throw new Error("extracted release package digest does not match the qualification input");
@@ -1230,7 +1297,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   const kiroBytes = fs.readFileSync(executable);
   const kiroDigest = hash(kiroBytes);
   const kiroStats = fs.statSync(executable);
-  const { KIRO_API_KEY: _protectedCredential, ...ambientEnvironment } = process.env;
+  const { KIRO_API_KEY: _ambientApiKey, ...ambientEnvironment } = process.env;
   const environment = {
     ...ambientEnvironment,
     HOME: homeRoot,
@@ -1242,7 +1309,18 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
     KIRO_LOG_NO_COLOR: "1",
     NO_COLOR: "1",
   };
-  const authenticatedEnvironment = { ...environment, KIRO_API_KEY: process.env.KIRO_API_KEY };
+  const authenticatedEnvironment = resolvedAuthMode === "api-key"
+    ? { ...environment, KIRO_API_KEY: apiKey }
+    : environment;
+  if (resolvedAuthMode === "subscription") {
+    if (subscriptionLogin) {
+      runInherited(executable, subscriptionLoginArgv({ license: subscriptionLicense, identityProvider, region }), {
+        cwd: workspaceRoot,
+        env: authenticatedEnvironment,
+      });
+    }
+    assertSubscriptionAuthenticated(executable, workspaceRoot, authenticatedEnvironment);
+  }
 
   const installer = path.join(releaseRoot, "scripts", "install-agent-user.mjs");
   const installResult = runSync(process.execPath, [installer, releaseRoot], { cwd: installerCwd, env: environment, timeout: 120_000 });
@@ -1281,8 +1359,8 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   const resolutionWorkspaceBeforeDigest = treeDigest(unrelatedDirectory);
   const resolutionRuns = [workspaceRoot, unrelatedDirectory, nestedDirectory].map((cwd) => {
     if (containsReleaseProfile(cwd)) throw new Error(`qualification context contains a shadowing profile: ${cwd}`);
-    const validation = runSync(executable, validateArgv, { cwd, env: authenticatedEnvironment, forbiddenValues: [protectedCredential] });
-    const listing = runSync(executable, listArgv, { cwd, env: authenticatedEnvironment, forbiddenValues: [protectedCredential] });
+    const validation = runSync(executable, validateArgv, { cwd, env: authenticatedEnvironment, forbiddenValues: protectedValues });
+    const listing = runSync(executable, listArgv, { cwd, env: authenticatedEnvironment, forbiddenValues: protectedValues });
     if (/(?:not logged in|login required|authentication (?:failed|required)|unauthenticated|validation failed)/iu.test(Buffer.concat([validation.combined, listing.combined]).toString("utf8"))) {
       throw new Error(`Kiro did not authenticate and validate/list the global agent from ${cwd}`);
     }
@@ -1294,7 +1372,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   const resolutionWorkspaceAfterDigest = treeDigest(unrelatedDirectory);
   if (resolutionWorkspaceAfterDigest !== resolutionWorkspaceBeforeDigest) throw new Error("Kiro validation/listing mutated an unrelated project directory");
   const inheritanceArgv = ["settings", "chat.disableInheritingDefaultResources", "--format", "json"];
-  const inheritance = runSync(executable, inheritanceArgv, { cwd: workspaceRoot, env: authenticatedEnvironment, forbiddenValues: [protectedCredential] });
+  const inheritance = runSync(executable, inheritanceArgv, { cwd: workspaceRoot, env: authenticatedEnvironment, forbiddenValues: protectedValues });
   let inheritanceValue;
   try { inheritanceValue = JSON.parse(inheritance.stdout.toString("utf8")); }
   catch { throw new Error("Kiro did not emit structural inheritance-setting output"); }
@@ -1302,7 +1380,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
     throw new Error("isolated qualification must exercise Kiro's default resource inheritance without mutating settings");
   }
   const autoCompactionArgv = ["settings", "chat.disableAutoCompaction", "--format", "json"];
-  const autoCompaction = runSync(executable, autoCompactionArgv, { cwd: workspaceRoot, env: authenticatedEnvironment, forbiddenValues: [protectedCredential] });
+  const autoCompaction = runSync(executable, autoCompactionArgv, { cwd: workspaceRoot, env: authenticatedEnvironment, forbiddenValues: protectedValues });
   let disableAutoCompactionValue;
   try { disableAutoCompactionValue = JSON.parse(autoCompaction.stdout.toString("utf8")); }
   catch { throw new Error("Kiro did not emit structural automatic-compaction-setting output"); }
@@ -1340,7 +1418,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   const formProbe = startPty(executable, interactiveArgv, {
     cwd: workspaceRoot,
     env: { ...authenticatedEnvironment, KIRO_ACP_RECORD_PATH: formRecord },
-    forbiddenValues: [protectedCredential],
+    forbiddenValues: protectedValues,
   });
   const formObserver = observeMcpProcesses(mcpEntry, formProbe.child.pid);
   const formStartCursor = formProbe.capture.cursor();
@@ -1411,7 +1489,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   if (!formTrace?.events.some((event) => event.ev === "runtime.stop" && event.data?.runtimeGeneration === 1)) {
     throw new Error("form-probe Fabric MCP did not record a graceful runtime drain");
   }
-  const formRecording = recordingEvidence(formRecord, [protectedCredential]);
+  const formRecording = recordingEvidence(formRecord, protectedValues);
   const formRecordingFrames = acpFrames(formRecord);
   if (!acpFormInteractionObserved(formRecordingFrames)) throw new Error("Kiro ACP recording did not contain a structural form-elicitation event");
   if (durableContains(installed.data, "memory", nonce)) throw new Error("declined form probe mutated durable memory");
@@ -1421,7 +1499,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   const knownBeforeInteractive = new Set(traceSessions(installed.data).map((entry) => entry.id));
   const interactiveRecord = path.join(homeRoot, "interactive-acp.jsonl");
   const interactiveEnvironment = { ...authenticatedEnvironment, KIRO_ACP_RECORD_PATH: interactiveRecord };
-  const interactive = startPty(executable, interactiveArgv, { cwd: workspaceRoot, env: interactiveEnvironment, forbiddenValues: [protectedCredential] });
+  const interactive = startPty(executable, interactiveArgv, { cwd: workspaceRoot, env: interactiveEnvironment, forbiddenValues: protectedValues });
   const interactiveObserver = observeMcpProcesses(mcpEntry, interactive.child.pid);
   const interactiveStart = interactive.capture.cursor();
   await maybeTrustWorkspace(interactive);
@@ -1839,7 +1917,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   const resumed = startPty(executable, resumeArgv, {
     cwd: workspaceRoot,
     env: { ...authenticatedEnvironment, KIRO_ACP_RECORD_PATH: resumeRecord },
-    forbiddenValues: [protectedCredential],
+    forbiddenValues: protectedValues,
   });
   const resumeObserver = observeMcpProcesses(mcpEntry, resumed.child.pid);
   const resumeStart = resumed.capture.cursor();
@@ -1908,7 +1986,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   const headlessArgv = ["chat", ...(selector === "--v3" ? ["--v3"] : [selector, "v3"]), "--agent", "kiro-fabric", "--no-interactive", "--require-mcp-startup", "--output-format", "stream-json", headlessPrompt];
   const knownBeforeHeadless = new Set(traceSessions(installed.data).map((entry) => entry.id));
   const headlessChild = trackQualificationChild(spawn(executable, headlessArgv, { cwd: workspaceRoot, env: environmentAt(authenticatedEnvironment, workspaceRoot), stdio: ["ignore", "pipe", "pipe"] }));
-  const headlessCapture = attachCapture(headlessChild, MAX_COMMAND_BYTES, [protectedCredential]);
+  const headlessCapture = attachCapture(headlessChild, MAX_COMMAND_BYTES, protectedValues);
   const headlessObserver = observeMcpProcesses(mcpEntry, headlessChild.pid);
   const headlessExit = await waitForExit(headlessChild);
   headlessObserver.stop();
@@ -1935,7 +2013,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   const autoCompactionFinal = runSync(executable, autoCompactionArgv, {
     cwd: workspaceRoot,
     env: authenticatedEnvironment,
-    forbiddenValues: [protectedCredential],
+    forbiddenValues: protectedValues,
   });
   let disableAutoCompactionValueAfter;
   try { disableAutoCompactionValueAfter = JSON.parse(autoCompactionFinal.stdout.toString("utf8")); }
@@ -1959,8 +2037,8 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
   const allSessions = traceSessions(installed.data, false);
   const relevantIds = new Set([formTrace.id, interactiveId, resumeTurn.trace.id, headlessTrace.id]);
   if (allSessions.length !== 4 || allSessions.some((entry) => !relevantIds.has(entry.id))) throw new Error("qualification observed an unexpected Fabric MCP startup");
-  const interactiveRecording = recordingEvidence(interactiveRecord, [protectedCredential]);
-  const resumeRecording = recordingEvidence(resumeRecord, [protectedCredential]);
+  const interactiveRecording = recordingEvidence(interactiveRecord, protectedValues);
+  const resumeRecording = recordingEvidence(resumeRecord, protectedValues);
   const interactiveRecordingFrames = acpFrames(interactiveRecord);
   const preCompactionRecordingFrames = acpFrames(interactiveRecord, 0, compactionRecordingOffset);
   const compactionRecordingFrames = acpFrames(interactiveRecord, compactionRecordingOffset, compactionRecordingEndOffset);
@@ -2132,7 +2210,13 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
     archiveDigest,
     commit,
     tools: REAL_CLIENT_TOOLS,
-    driver: { digest: driverDigest, version: "repository-driver-v8" },
+    driver: { digest: driverDigest, version: "repository-driver-v9" },
+    authentication: {
+      mode: resolvedAuthMode,
+      verification: resolvedAuthMode === "subscription" ? "kiro-cli-whoami" : "authenticated-kiro-commands",
+      isolatedHome: true,
+      subscriptionLoginPerformed: resolvedAuthMode === "subscription" && subscriptionLogin,
+    },
     kiro: {
       path: executable,
       digest: kiroDigest,
@@ -2442,7 +2526,7 @@ const runRealKiroAgentDriverImplementation = async ({ packageRoot, packageDigest
     ],
   };
   const evidenceBytes = Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`);
-  if (evidenceBytes.includes(protectedCredential)) throw new Error("qualification evidence contained a protected credential; evidence was suppressed");
+  if (protectedValues.some((value) => value.length > 0 && evidenceBytes.includes(value))) throw new Error("qualification evidence contained a protected credential; evidence was suppressed");
   fs.writeFileSync(output, evidenceBytes, { mode: 0o600, flag: "wx" });
 };
 
@@ -2477,5 +2561,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     kiroHome: path.resolve(kiroHome),
     isolatedHome: path.resolve(isolatedHome),
     installCwd: path.resolve(installCwd),
+    authMode: valueAfter(process.argv, "--auth-mode"),
+    subscriptionLogin: process.argv.includes("--subscription-login"),
+    subscriptionLicense: valueAfter(process.argv, "--subscription-license") ?? "free",
+    identityProvider: valueAfter(process.argv, "--identity-provider"),
+    region: valueAfter(process.argv, "--region"),
   });
 }

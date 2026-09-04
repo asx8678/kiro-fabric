@@ -25,7 +25,9 @@ import {
   parseAcpJsonlFrames,
   postCompactionVerificationCode,
   qualificationValueDigest,
+  resolveRealClientAuthMode,
   resumeVerificationCode,
+  subscriptionLoginArgv,
   sentinelVerificationCode,
 } from "../scripts/run-kiro-agent-real-driver.mjs";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
@@ -284,13 +286,14 @@ const transcriptDigest = (kind: string) => transcript.find((entry) => entry.kind
 
 const valid = {
   kind: "kiro-fabric.real-client-qualification",
-  schemaVersion: 10,
+  schemaVersion: 11,
   ok: true,
   packageDigest: digest,
   archiveDigest,
   commit,
   tools: REAL_CLIENT_TOOLS,
-  driver: { digest: "e".repeat(64), version: "repository-driver-v8" },
+  driver: { digest: "e".repeat(64), version: "repository-driver-v9" },
+  authentication: { mode: "subscription", verification: "kiro-cli-whoami", isolatedHome: true, subscriptionLoginPerformed: true },
   kiro: { path: executable, digest: "f".repeat(64), version: "kiro-cli 2.21.0", headlessEngineSelector: "--agent-engine", agentValidateSyntax: "--path" },
   installation: {
     releaseRoot: "/private/release",
@@ -534,6 +537,22 @@ const valid = {
 };
 
 describe("real-client release evidence", () => {
+  it("resolves explicit API-key and subscription authentication modes", () => {
+    expect(resolveRealClientAuthMode(undefined, "")).toBe("subscription");
+    expect(resolveRealClientAuthMode(undefined, "test-key")).toBe("api-key");
+    expect(resolveRealClientAuthMode("subscription", "test-key")).toBe("subscription");
+    expect(resolveRealClientAuthMode("api-key", "test-key")).toBe("api-key");
+    expect(() => resolveRealClientAuthMode("api-key", "")).toThrow("KIRO_API_KEY");
+    expect(() => resolveRealClientAuthMode("other", "")).toThrow("--auth-mode");
+  });
+
+  it("builds bounded isolated subscription device-login arguments", () => {
+    expect(subscriptionLoginArgv()).toEqual(["login", "--license", "free", "--use-device-flow"]);
+    expect(subscriptionLoginArgv({ license: "pro", identityProvider: "https://identity.example.test/start", region: "us-east-1" }))
+      .toEqual(["login", "--license", "pro", "--use-device-flow", "--identity-provider", "https://identity.example.test/start", "--region", "us-east-1"]);
+    expect(() => subscriptionLoginArgv({ license: "free", region: "us-east-1" })).toThrow("valid only");
+    expect(() => subscriptionLoginArgv({ license: "pro", region: "us-east-1" })).toThrow("supplied together");
+  });
   it("type-checks nonce-bound same-process and resumed sentinel programs", () => {
     for (const code of [sentinelVerificationCode(false), sentinelVerificationCode(true), postCompactionVerificationCode, resumeVerificationCode]) {
       expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors).toEqual([]);
@@ -798,14 +817,22 @@ describe("real-client release evidence", () => {
 
   it("accepts only archive-installed, exact-command, lifecycle-bound qualification evidence", () => {
     expect(assertRealClientEvidence(valid, digest, { qualification: true, archiveDigest, commit })).toBe(valid);
+    const apiKeyAuthenticated = {
+      ...valid,
+      authentication: { mode: "api-key", verification: "authenticated-kiro-commands", isolatedHome: true, subscriptionLoginPerformed: false },
+    };
+    expect(assertRealClientEvidence(apiKeyAuthenticated, digest, { qualification: true, archiveDigest, commit })).toBe(apiKeyAuthenticated);
     for (const patch of [
       { packageDigest: "9".repeat(64) },
       { archiveDigest: "8".repeat(64) },
       { commit: "7".repeat(40) },
       { tools: ["fabric_exec"] },
       { kind: "other" },
-      { schemaVersion: 9 },
+      { schemaVersion: 10 },
       { ok: false },
+      { authentication: undefined },
+      { authentication: { ...valid.authentication, mode: "other" } },
+      { authentication: { ...valid.authentication, isolatedHome: false } },
       { customAgentSelected: true },
       { powerActivated: false },
     ]) expect(() => assertRealClientEvidence({ ...valid, ...patch }, digest, { qualification: true, archiveDigest, commit })).toThrow();
