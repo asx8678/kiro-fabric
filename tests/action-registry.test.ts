@@ -15,6 +15,54 @@ const context = (approve: (action: ResolvedFabricAction, args: Record<string, un
 });
 
 describe("ActionRegistry security boundaries", () => {
+  it("returns complete digest-bound descriptors and deterministically ranks discovery fields", async () => {
+    const registry = new ActionRegistry();
+    registry.register({
+      name: "catalog",
+      description: "remote document operations",
+      async list() {
+        return [
+          {
+            name: "write",
+            description: "store a document",
+            inputSchema: { type: "object", properties: { body: { type: "string" } } },
+            outputSchema: { type: "object", properties: { saved: { type: "boolean" } } },
+            risk: "write",
+            namespace: "documents",
+            effect: { kind: "write", resources: ["document:*"] },
+          },
+          {
+            name: "read",
+            description: "retrieve content",
+            inputSchema: { type: "object", properties: { documentId: { type: "string" } } },
+            risk: "read",
+            namespace: "documents",
+          },
+        ];
+      },
+      async describe(name) { return (await this.list()).find((entry) => entry.name === name); },
+      async invoke() { return true; },
+    });
+
+    const descriptor = await registry.describe("catalog.write");
+    expect(descriptor).toMatchObject({
+      namespace: "documents",
+      outputSchema: { type: "object" },
+      effect: { kind: "write", resources: ["document:*"] },
+    });
+    expect(descriptor.descriptorDigest).toMatch(/^[a-f0-9]{64}$/u);
+    expect((await registry.describe("catalog.write")).descriptorDigest).toBe(descriptor.descriptorDigest);
+    expect((await registry.search("catalog write")).map((entry) => entry.ref)).toEqual([
+      "catalog.write",
+      "catalog.read",
+    ]);
+    expect((await registry.search("documentId")).map((entry) => entry.ref)).toEqual(["catalog.read"]);
+    expect((await registry.search("remote document")).map((entry) => entry.ref)).toEqual([
+      "catalog.write",
+      "catalog.read",
+    ]);
+  });
+
   it("bounds search queries and action references before provider work", async () => {
     const registry = new ActionRegistry();
     await expect(registry.search("x".repeat(2_001))).rejects.toThrow("query exceeds");

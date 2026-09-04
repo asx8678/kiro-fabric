@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { CURRENT_FABRIC_CONFIG_SCHEMA_VERSION } from "../../config.js";
 
 export interface KiroPowerDataPaths {
   root: string;
@@ -158,7 +159,7 @@ const migrateLegacyFabricConfiguration = (root: string, config: string): { migra
   const current = path.join(config, "config.json");
   const migrated: string[] = [];
   if (!fs.existsSync(current) && Object.keys(projected).length) {
-    writeJsonAtomic(current, projected, true);
+    writeJsonAtomic(current, { schemaVersion: CURRENT_FABRIC_CONFIG_SCHEMA_VERSION, ...projected }, true);
     migrated.push("config/fabric.json -> allowlisted config/config.json");
   }
   const quarantine = privateDirectory(path.join(root, "quarantine"), root);

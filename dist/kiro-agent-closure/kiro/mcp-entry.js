@@ -56,7 +56,7 @@ var processServerTask;
 var boundedError = (error) => (error instanceof Error ? error.message : String(error)).replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, 800) || "unknown failure";
 var startKiroMcpServer = () => processServerTask ??= (async () => {
   const launch = resolveKiroAgentLaunchContext();
-  const { createKiroMcpServer } = await import("../chunks/mcp-server-3MKOJ6OS.js");
+  const { createKiroMcpServer } = await import("../chunks/mcp-server-UUWINH7G.js");
   return createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot });
 })();
 var processIsAlive = (pid) => {

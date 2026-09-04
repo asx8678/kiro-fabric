@@ -14,6 +14,7 @@ export { ActionRegistry } from "./core/action-registry.js";
 export type {
   FabricActionDescriptor,
   FabricActionEffect,
+  FabricToolAnnotations,
   FabricProvider,
   FabricProviderStatus,
 } from "./protocol.js";
@@ -32,6 +33,7 @@ export type {
   FabricTracingConfig,
 } from "./config.js";
 export {
+  CURRENT_FABRIC_CONFIG_SCHEMA_VERSION,
   DEFAULT_FABRIC_CONFIG,
   loadFabricConfig,
   normalizeFabricConfig,

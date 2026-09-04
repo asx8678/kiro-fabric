@@ -9,6 +9,7 @@ import type {
 } from "../protocol.js";
 import { schemaValidationMessage } from "../schema-validation.js";
 import { fabricJsonText, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js";
+import { semanticDigest } from "./semantic-digest.js";
 
 export interface FabricCallAudit {
   ref: string;
@@ -33,13 +34,30 @@ export interface FabricRegistryInvocationContext extends FabricInvocationContext
 const providerName = /^[a-z][a-z0-9_-]{0,63}$/u;
 const MAX_ACTION_REFERENCE_CHARS = 512;
 const MAX_SEARCH_QUERY_CHARS = 2_000;
+const compareCodeUnits = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-const resolved = (provider: FabricProvider, descriptor: FabricActionDescriptor): ResolvedFabricAction => ({
-  ...structuredClone(descriptor),
-  provider: provider.name,
-  ref: `${provider.name}.${descriptor.name}`,
-});
+const resolved = (provider: FabricProvider, descriptor: FabricActionDescriptor): ResolvedFabricAction => {
+  const copied = structuredClone(descriptor);
+  const ref = `${provider.name}.${descriptor.name}`;
+  return {
+    ...copied,
+    provider: provider.name,
+    ref,
+    descriptorDigest: semanticDigest("kiro-fabric-action-descriptor-v1", {
+      provider: provider.name,
+      ref,
+      name: copied.name,
+      description: copied.description,
+      risk: copied.risk,
+      inputSchema: copied.inputSchema,
+      ...(copied.outputSchema === undefined ? {} : { outputSchema: copied.outputSchema }),
+      ...(copied.namespace === undefined ? {} : { namespace: copied.namespace }),
+      ...(copied.effect === undefined ? {} : { effect: copied.effect }),
+      ...(copied.annotations === undefined ? {} : { annotations: copied.annotations }),
+    }),
+  };
+};
 
 const boundedResult = (value: unknown, maximum: number): { value: unknown; chars: number; truncated: boolean } => {
   const text = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
@@ -59,6 +77,16 @@ const deepFreeze = <T>(value: T): T => {
   return Object.freeze(value);
 };
 const AUDIT_RESERVATION_BYTES = 2_048;
+const MAX_SEARCHABLE_DESCRIPTOR_CHARS = 32_000;
+
+const normalizedTerms = (value: string): string[] => [...new Set(
+  value.split(/[^\p{L}\p{N}_.$-]+/u).filter(Boolean).slice(0, 64),
+)];
+
+const boundedSearchField = (value: unknown): string => {
+  const text = typeof value === "string" ? value : fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
+  return text.slice(0, MAX_SEARCHABLE_DESCRIPTOR_CHARS).normalize("NFKC").toLowerCase();
+};
 
 export class ActionRegistry {
   readonly #providers = new Map<string, FabricProvider>();
@@ -83,13 +111,13 @@ export class ActionRegistry {
     return [
       ...[...this.#providers.values()].map((provider) => ({ name: provider.name, description: provider.description, available: true as const })),
       ...[...this.#unavailable].map(([name, reason]) => ({ name, description: reason, available: false as const, reason })),
-    ].sort((left, right) => left.name.localeCompare(right.name));
+    ].sort((left, right) => compareCodeUnits(left.name, right.name));
   }
 
   async list(): Promise<ResolvedFabricAction[]> {
     const lists = await Promise.all([...this.#providers.values()].map(async (provider) =>
       (await provider.list()).map((descriptor) => resolved(provider, descriptor))));
-    return lists.flat().sort((left, right) => left.ref.localeCompare(right.ref));
+    return lists.flat().sort((left, right) => compareCodeUnits(left.ref, right.ref));
   }
 
   async search(query: string, limit = 30): Promise<ResolvedFabricAction[]> {
@@ -97,9 +125,50 @@ export class ActionRegistry {
     const normalized = query.normalize("NFKC").trim().toLowerCase();
     if (!normalized) return [];
     if (normalized.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Normalized Fabric search query exceeds 2000 characters");
+    const terms = normalizedTerms(normalized);
     return (await this.list())
-      .filter((action) => `${action.ref} ${action.description}`.toLowerCase().includes(normalized))
-      .slice(0, Math.max(1, Math.min(100, Math.floor(limit))));
+      .map((action) => {
+        const providerDescription = this.#providers.get(action.provider)?.description ?? "";
+        const fields = {
+          ref: boundedSearchField(action.ref),
+          name: boundedSearchField(action.name),
+          description: boundedSearchField(action.description),
+          provider: boundedSearchField(action.provider),
+          providerDescription: boundedSearchField(providerDescription),
+          namespace: boundedSearchField(action.namespace ?? ""),
+          annotations: boundedSearchField(action.annotations ?? {}),
+          schema: boundedSearchField({ input: action.inputSchema, output: action.outputSchema ?? null }),
+        };
+        const tokens = Object.fromEntries(
+          Object.entries(fields).map(([name, field]) => [name, new Set(normalizedTerms(field))]),
+        ) as Record<keyof typeof fields, Set<string>>;
+        let score = 0;
+        if (fields.ref === normalized) score += 1_000;
+        if (fields.name === normalized) score += 800;
+        if (fields.ref.startsWith(normalized)) score += 300;
+        else if (fields.ref.includes(normalized)) score += 120;
+        if (fields.description.includes(normalized)) score += 40;
+        if (fields.providerDescription.includes(normalized)) score += 20;
+        if (fields.schema.includes(normalized)) score += 10;
+        let matched = 0;
+        for (const term of terms) {
+          if (!Object.values(tokens).some((field) => field.has(term))) continue;
+          matched += 1;
+          if (tokens.ref.has(term) || tokens.name.has(term)) score += 30;
+          if (tokens.provider.has(term)) score += 20;
+          if (tokens.description.has(term)) score += 8;
+          if (tokens.providerDescription.has(term)) score += 4;
+          if (tokens.namespace.has(term)) score += 6;
+          if (tokens.annotations.has(term)) score += 2;
+          if (tokens.schema.has(term)) score += 2;
+        }
+        if (terms.length > 0 && matched === terms.length) score += 15;
+        return { action, score };
+      })
+      .filter(({ score }) => score > 0)
+      .sort((left, right) => right.score - left.score || compareCodeUnits(left.action.ref, right.action.ref))
+      .slice(0, Math.max(1, Math.min(100, Math.floor(limit))))
+      .map(({ action }) => action);
   }
 
   async describe(ref: string): Promise<ResolvedFabricAction> {

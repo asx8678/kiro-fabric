@@ -81,7 +81,7 @@ try {
     runtimeDigest: packageEvidence.runtime.digest,
     skillDigest: packageEvidence.skill.digest,
   });
-  const qualification = { ...observed, kind: "kiro-fabric.real-client-qualification", schemaVersion: 8, ok: true };
+  const qualification = { ...observed, kind: "kiro-fabric.real-client-qualification", schemaVersion: 10, ok: true };
   writeFileAtomic(output, Buffer.from(`${JSON.stringify(qualification, null, 2)}\n`));
   console.log(output);
 } finally { fs.rmSync(temporary, { recursive: true, force: true }); }

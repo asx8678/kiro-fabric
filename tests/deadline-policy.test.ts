@@ -27,6 +27,12 @@ describe("deadline policy", () => {
     expect(exactActionTimeoutFloor("mcp.$call", 120_000)).toBe(
       120_000 + FABRIC_APPROVAL_TIMEOUT_MS * 2 + FABRIC_PROVIDER_TIMEOUT_GRACE_MS,
     );
+    expect(exactActionTimeoutFloor("mcp.$tools", 120_000)).toBe(
+      120_000 + FABRIC_APPROVAL_TIMEOUT_MS * 2 + FABRIC_PROVIDER_TIMEOUT_GRACE_MS,
+    );
+    expect(exactActionTimeoutFloor("mcp.$describe", 120_000)).toBe(
+      120_000 + FABRIC_APPROVAL_TIMEOUT_MS * 2 + FABRIC_PROVIDER_TIMEOUT_GRACE_MS,
+    );
     expect(exactActionTimeoutFloor("mcp.$call.extra", 120_000)).toBe(0);
     expect(exactActionTimeoutFloor("other.$call", 120_000)).toBe(0);
     expect(exactHostActionReference("mcp.$call", {})).toBe("mcp.$call");

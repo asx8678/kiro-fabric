@@ -7201,7 +7201,7 @@ var require_dist = __commonJS({
 });
 
 // src/kiro/mcp-server.ts
-import { randomBytes as randomBytes4 } from "node:crypto";
+import { randomBytes as randomBytes5 } from "node:crypto";
 import fs9, { readFileSync } from "node:fs";
 import path9 from "node:path";
 
@@ -18828,6 +18828,7 @@ var record2 = (value) => typeof value === "object" && value !== null && !Array.i
 var integer = (value, fallback, minimum, maximum) => typeof value === "number" && Number.isSafeInteger(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback;
 var bool = (value, fallback) => typeof value === "boolean" ? value : fallback;
 var approval = (value, fallback) => value === "allow" || value === "ask" || value === "deny" ? value : fallback;
+var CURRENT_FABRIC_CONFIG_SCHEMA_VERSION = 1;
 var FILE_CONFIG_KEYS = {
   executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
   approvals: ["read", "write", "execute", "network"],
@@ -18837,10 +18838,9 @@ var FILE_CONFIG_KEYS = {
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
   tracing: ["enabled"]
 };
-var assertFileConfigShape = (value) => {
-  const root = record2(value);
-  if (!root) throw new Error("configuration root must be an object");
+var assertFileConfigSections = (root) => {
   for (const [section, raw] of Object.entries(root)) {
+    if (section === "schemaVersion") continue;
     const allowed = FILE_CONFIG_KEYS[section];
     if (!allowed) throw new Error(`unknown configuration section: ${section}`);
     const fields = record2(raw);
@@ -18849,6 +18849,45 @@ var assertFileConfigShape = (value) => {
       if (!allowed.includes(field)) throw new Error(`unknown configuration field: ${section}.${field}`);
     }
   }
+};
+var assertFileConfigValues = (root, defaults) => {
+  const normalized = normalizeFabricConfig(root, defaults);
+  for (const [section, raw] of Object.entries(root)) {
+    if (section === "schemaVersion") continue;
+    const fields = raw;
+    for (const [field, value] of Object.entries(fields)) {
+      if (!Object.is(normalized[section]?.[field], value)) {
+        throw new Error(`invalid configuration value: ${section}.${field}`);
+      }
+    }
+  }
+};
+var CONFIG_MIGRATIONS = /* @__PURE__ */ new Map([
+  [0, (document) => ({ schemaVersion: 1, ...document })]
+]);
+var migrateFileConfig = (value, defaults) => {
+  const root = record2(value);
+  if (!root) throw new Error("configuration root must be an object");
+  assertFileConfigSections(root);
+  const declared = root.schemaVersion;
+  if (declared !== void 0 && (!Number.isSafeInteger(declared) || declared < 1)) {
+    throw new Error("configuration schemaVersion must be a positive safe integer");
+  }
+  let version = declared === void 0 ? 0 : declared;
+  if (version > CURRENT_FABRIC_CONFIG_SCHEMA_VERSION) {
+    throw new Error(`configuration schemaVersion ${version} is newer than supported version ${CURRENT_FABRIC_CONFIG_SCHEMA_VERSION}`);
+  }
+  let document = structuredClone(root);
+  while (version < CURRENT_FABRIC_CONFIG_SCHEMA_VERSION) {
+    const migration = CONFIG_MIGRATIONS.get(version);
+    if (!migration) throw new Error(`configuration migration from schemaVersion ${version} is unavailable`);
+    document = migration(document);
+    version += 1;
+    if (document.schemaVersion !== version) throw new Error(`configuration migration to schemaVersion ${version} is invalid`);
+  }
+  assertFileConfigSections(document);
+  assertFileConfigValues(document, defaults);
+  return document;
 };
 var normalizeFabricConfig = (input, defaults = DEFAULT_FABRIC_CONFIG) => {
   const root = record2(input) ?? {};
@@ -18914,41 +18953,52 @@ var normalizeFabricConfig = (input, defaults = DEFAULT_FABRIC_CONFIG) => {
   };
 };
 var MAX_CONFIG_BYTES = 256 * 1024;
+var sameConfigFile = (left, right) => left.isFile() && right.isFile() && !left.isSymbolicLink() && !right.isSymbolicLink() && left.nlink === 1n && right.nlink === 1n && left.dev === right.dev && left.ino === right.ino;
+var sameConfigVersion = (left, right) => sameConfigFile(left, right) && left.size === right.size && left.ctimeNs === right.ctimeNs && left.mtimeNs === right.mtimeNs;
+var readBoundedDescriptor = (descriptor2) => {
+  const buffer = Buffer.allocUnsafe(MAX_CONFIG_BYTES + 1);
+  let bytes = 0;
+  while (bytes < buffer.length) {
+    const count = fs.readSync(descriptor2, buffer, bytes, buffer.length - bytes, null);
+    if (count === 0) break;
+    bytes += count;
+  }
+  if (bytes > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
+  return buffer.subarray(0, bytes);
+};
 var loadFabricConfig = (configFile, defaults = DEFAULT_FABRIC_CONFIG) => {
   let descriptor2;
   let observed = false;
   try {
-    const lexicalStats = fs.lstatSync(configFile);
+    const lexicalStats = fs.lstatSync(configFile, { bigint: true });
     observed = true;
-    if (!lexicalStats.isFile() || lexicalStats.isSymbolicLink() || lexicalStats.nlink !== 1) {
+    if (!lexicalStats.isFile() || lexicalStats.isSymbolicLink() || lexicalStats.nlink !== 1n) {
       throw new Error("configuration must be a private regular file");
     }
     descriptor2 = fs.openSync(
       configFile,
       fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)
     );
-    const stats = fs.fstatSync(descriptor2);
-    if (!stats.isFile() || stats.nlink !== 1 || stats.dev !== lexicalStats.dev || stats.ino !== lexicalStats.ino) {
+    const stats = fs.fstatSync(descriptor2, { bigint: true });
+    if (!sameConfigFile(lexicalStats, stats)) {
       throw new Error("configuration changed while it was being opened");
     }
-    if (stats.size > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
+    if (stats.size > BigInt(MAX_CONFIG_BYTES)) throw new Error("configuration exceeds 262144 bytes");
     if (process.platform !== "win32") {
-      if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
+      if (typeof process.getuid === "function" && stats.uid !== BigInt(process.getuid())) {
         throw new Error("configuration must be owned by the current user");
       }
-      if ((stats.mode & 63) !== 0) throw new Error("configuration permissions must be private");
+      if ((stats.mode & 0o077n) !== 0n) throw new Error("configuration permissions must be private");
     }
-    const buffer = Buffer.allocUnsafe(MAX_CONFIG_BYTES + 1);
-    let bytes = 0;
-    while (bytes < buffer.length) {
-      const count = fs.readSync(descriptor2, buffer, bytes, buffer.length - bytes, null);
-      if (count === 0) break;
-      bytes += count;
+    const bytes = readBoundedDescriptor(descriptor2);
+    const afterRead = fs.fstatSync(descriptor2, { bigint: true });
+    const currentPath = fs.lstatSync(configFile, { bigint: true });
+    if (!sameConfigVersion(stats, afterRead) || !sameConfigVersion(stats, currentPath)) {
+      throw new Error("configuration changed while it was being read");
     }
-    if (bytes > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
-    const value = JSON.parse(buffer.subarray(0, bytes).toString("utf8"));
-    assertFileConfigShape(value);
-    return normalizeFabricConfig(value, defaults);
+    const value = JSON.parse(bytes.toString("utf8"));
+    const document = migrateFileConfig(value, defaults);
+    return normalizeFabricConfig(document, defaults);
   } catch (error) {
     if (error.code === "ENOENT" && !observed) {
       return normalizeFabricConfig(void 0, defaults);
@@ -19174,16 +19224,49 @@ var assertFabricJsonBudget = (value, maxChars = DEFAULT_FABRIC_JSON_CHARS) => {
   void fabricJsonText(value, maxChars);
 };
 
+// src/core/semantic-digest.ts
+import { createHash } from "node:crypto";
+var compareCodeUnits = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var sortJson = (value) => {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).sort(([left], [right]) => compareCodeUnits(left, right)).map(([key, child]) => [key, sortJson(child)])
+  );
+};
+var semanticDigest = (domain, value) => {
+  const bounded3 = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
+  const canonical = fabricJsonText(sortJson(JSON.parse(bounded3)), MAX_FABRIC_JSON_CHARS);
+  return createHash("sha256").update(domain).update("\0").update(canonical).digest("hex");
+};
+
 // src/core/action-registry.ts
 var providerName = /^[a-z][a-z0-9_-]{0,63}$/u;
 var MAX_ACTION_REFERENCE_CHARS = 512;
 var MAX_SEARCH_QUERY_CHARS = 2e3;
+var compareCodeUnits2 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var resolved = (provider, descriptor2) => ({
-  ...structuredClone(descriptor2),
-  provider: provider.name,
-  ref: `${provider.name}.${descriptor2.name}`
-});
+var resolved = (provider, descriptor2) => {
+  const copied = structuredClone(descriptor2);
+  const ref = `${provider.name}.${descriptor2.name}`;
+  return {
+    ...copied,
+    provider: provider.name,
+    ref,
+    descriptorDigest: semanticDigest("kiro-fabric-action-descriptor-v1", {
+      provider: provider.name,
+      ref,
+      name: copied.name,
+      description: copied.description,
+      risk: copied.risk,
+      inputSchema: copied.inputSchema,
+      ...copied.outputSchema === void 0 ? {} : { outputSchema: copied.outputSchema },
+      ...copied.namespace === void 0 ? {} : { namespace: copied.namespace },
+      ...copied.effect === void 0 ? {} : { effect: copied.effect },
+      ...copied.annotations === void 0 ? {} : { annotations: copied.annotations }
+    })
+  };
+};
 var boundedResult = (value, maximum) => {
   const text = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
   if (text.length <= maximum) return { value, chars: text.length, truncated: false };
@@ -19200,6 +19283,14 @@ var deepFreeze = (value) => {
   return Object.freeze(value);
 };
 var AUDIT_RESERVATION_BYTES = 2048;
+var MAX_SEARCHABLE_DESCRIPTOR_CHARS = 32e3;
+var normalizedTerms = (value) => [...new Set(
+  value.split(/[^\p{L}\p{N}_.$-]+/u).filter(Boolean).slice(0, 64)
+)];
+var boundedSearchField = (value) => {
+  const text = typeof value === "string" ? value : fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
+  return text.slice(0, MAX_SEARCHABLE_DESCRIPTOR_CHARS).normalize("NFKC").toLowerCase();
+};
 var ActionRegistry = class {
   #providers = /* @__PURE__ */ new Map();
   #unavailable = /* @__PURE__ */ new Map();
@@ -19221,18 +19312,56 @@ var ActionRegistry = class {
     return [
       ...[...this.#providers.values()].map((provider) => ({ name: provider.name, description: provider.description, available: true })),
       ...[...this.#unavailable].map(([name, reason]) => ({ name, description: reason, available: false, reason }))
-    ].sort((left, right) => left.name.localeCompare(right.name));
+    ].sort((left, right) => compareCodeUnits2(left.name, right.name));
   }
   async list() {
     const lists = await Promise.all([...this.#providers.values()].map(async (provider) => (await provider.list()).map((descriptor2) => resolved(provider, descriptor2))));
-    return lists.flat().sort((left, right) => left.ref.localeCompare(right.ref));
+    return lists.flat().sort((left, right) => compareCodeUnits2(left.ref, right.ref));
   }
   async search(query, limit = 30) {
     if (query.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Fabric search query exceeds 2000 characters");
     const normalized = query.normalize("NFKC").trim().toLowerCase();
     if (!normalized) return [];
     if (normalized.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Normalized Fabric search query exceeds 2000 characters");
-    return (await this.list()).filter((action) => `${action.ref} ${action.description}`.toLowerCase().includes(normalized)).slice(0, Math.max(1, Math.min(100, Math.floor(limit))));
+    const terms = normalizedTerms(normalized);
+    return (await this.list()).map((action) => {
+      const providerDescription = this.#providers.get(action.provider)?.description ?? "";
+      const fields = {
+        ref: boundedSearchField(action.ref),
+        name: boundedSearchField(action.name),
+        description: boundedSearchField(action.description),
+        provider: boundedSearchField(action.provider),
+        providerDescription: boundedSearchField(providerDescription),
+        namespace: boundedSearchField(action.namespace ?? ""),
+        annotations: boundedSearchField(action.annotations ?? {}),
+        schema: boundedSearchField({ input: action.inputSchema, output: action.outputSchema ?? null })
+      };
+      const tokens = Object.fromEntries(
+        Object.entries(fields).map(([name, field]) => [name, new Set(normalizedTerms(field))])
+      );
+      let score = 0;
+      if (fields.ref === normalized) score += 1e3;
+      if (fields.name === normalized) score += 800;
+      if (fields.ref.startsWith(normalized)) score += 300;
+      else if (fields.ref.includes(normalized)) score += 120;
+      if (fields.description.includes(normalized)) score += 40;
+      if (fields.providerDescription.includes(normalized)) score += 20;
+      if (fields.schema.includes(normalized)) score += 10;
+      let matched = 0;
+      for (const term of terms) {
+        if (!Object.values(tokens).some((field) => field.has(term))) continue;
+        matched += 1;
+        if (tokens.ref.has(term) || tokens.name.has(term)) score += 30;
+        if (tokens.provider.has(term)) score += 20;
+        if (tokens.description.has(term)) score += 8;
+        if (tokens.providerDescription.has(term)) score += 4;
+        if (tokens.namespace.has(term)) score += 6;
+        if (tokens.annotations.has(term)) score += 2;
+        if (tokens.schema.has(term)) score += 2;
+      }
+      if (terms.length > 0 && matched === terms.length) score += 15;
+      return { action, score };
+    }).filter(({ score }) => score > 0).sort((left, right) => right.score - left.score || compareCodeUnits2(left.action.ref, right.action.ref)).slice(0, Math.max(1, Math.min(100, Math.floor(limit)))).map(({ action }) => action);
   }
   async describe(ref) {
     if (ref.length > MAX_ACTION_REFERENCE_CHARS) throw new Error("Fabric action reference exceeds 512 characters");
@@ -19305,7 +19434,25 @@ type JsonPrimitive = null | boolean | number | string;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };
 type EmptyArgs = Record<string, never>;
-interface FabricActionSummary { ref: string; provider: string; name: string; description: string; risk: "read" | "write" | "execute" | "network"; inputSchema: JsonObject; }
+interface FabricActionSummary {
+  ref: string;
+  provider: string;
+  name: string;
+  description: string;
+  descriptorDigest: string;
+  risk: "read" | "write" | "execute" | "network";
+  inputSchema: JsonObject;
+  outputSchema?: JsonObject;
+  namespace?: string;
+  effect?: { kind: "none" | "read" | "write" | "emission"; resources?: readonly string[] };
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+}
 interface FabricTools {
   providers(): Promise<Array<{ name: string; description: string; available: boolean; reason?: string }>>;
   list(): Promise<FabricActionSummary[]>;
@@ -19329,10 +19476,39 @@ declare const state: Readonly<{
   list(args?: { limit?: number }): Promise<JsonValue>;
   delete(args: { key: string; expectedRevision?: number }): Promise<JsonValue>;
 }>;
+interface FabricMcpToolSummary {
+  server: string;
+  name: string;
+  ref: string;
+  description: string;
+  inputSchema: JsonObject;
+  outputSchema?: JsonObject;
+  descriptorDigest: string;
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+  stale: false;
+  transport: { kind: "stdio" | "http"; digest: string; configDigest: string | null };
+}
 declare const mcp: Readonly<{
   servers(args?: EmptyArgs): Promise<JsonValue>;
-  call(args: { server: string; tool: string; args?: JsonObject }): Promise<JsonValue>;
+  tools(args: { server: string }): Promise<FabricMcpToolSummary[]>;
+  describe(args: { server: string; tool: string }): Promise<FabricMcpToolSummary>;
+  call(args: { server: string; tool: string; args?: JsonObject; expectedDescriptorDigest?: string }): Promise<JsonValue>;
 }>;
+declare function parallel<T, R>(
+  items: readonly T[],
+  mapper: (item: T, index: number) => Promise<R> | R,
+  options?: number | { concurrency?: number },
+): Promise<R[]>;
+declare function parallel<T>(
+  tasks: ReadonlyArray<() => Promise<T> | T>,
+  options?: number | { concurrency?: number },
+): Promise<T[]>;
 declare function print(...values: unknown[]): void;
 `;
 
@@ -19719,7 +19895,9 @@ var GUEST_SETUP = `
 (() => {
   'use strict';
   const bridge = globalThis.__fabricHostCall;
+  const prepareHostCall = globalThis.__fabricPrepareHostCall;
   delete globalThis.__fabricHostCall;
+  delete globalThis.__fabricPrepareHostCall;
 
   // Capture every validator/promise primordial before guest code can mutate it.
   const apply = Reflect.apply;
@@ -19744,13 +19922,25 @@ var GUEST_SETUP = `
   const promiseThenMethod = Promise.prototype.then;
   const promiseResolveMethod = Promise.resolve;
   const promiseRaceMethod = Promise.race;
+  const promiseAllMethod = Promise.all;
   const SafePromise = Promise;
+  const SafeArray = Array;
   const SafeWeakSet = WeakSet;
   const SafeTypeError = TypeError;
+  const SafeRangeError = RangeError;
   const SafeError = Error;
+  const mathFloor = Math.floor;
+  const mathMin = Math.min;
   const promiseThen = (promise, fulfilled, rejected) => apply(promiseThenMethod, promise, [fulfilled, rejected]);
   const promiseResolve = (value) => apply(promiseResolveMethod, SafePromise, [value]);
   const promiseRace = (values) => apply(promiseRaceMethod, SafePromise, [values]);
+  const promiseAll = (values) => apply(promiseAllMethod, SafePromise, [values]);
+  const configuredParallelLimit = globalThis.__fabricMaxParallelConcurrency;
+  delete globalThis.__fabricMaxParallelConcurrency;
+  if (typeof configuredParallelLimit !== 'number' || !numberIsFinite(configuredParallelLimit) || configuredParallelLimit < 1) {
+    throw new SafeTypeError('Fabric parallel limit is invalid');
+  }
+  const maxParallelConcurrency = mathFloor(configuredParallelLimit);
 
   const codeGenerationDenied = function () { throw new SafeTypeError('Dynamic code generation is disabled'); };
   const constructors = [
@@ -19822,10 +20012,119 @@ var GUEST_SETUP = `
     return text;
   };
   const parseStrict = (text) => apply(jsonParse, JSON, [text]);
-  const call = (ref, args = {}) => promiseThen(bridge(ref, strictJsonText(args)), parseStrict);
+  // One execution-wide semaphore covers friendly APIs, tools.call, direct
+  // Promise.all fan-out, and nested parallel helpers alike. This queues excess
+  // bridge work before it reaches the host's fail-closed concurrency quota.
+  const hostCallWaiters = objectCreate(null);
+  let activeHostCalls = 0;
+  let hostWaiterHead = 0;
+  let hostWaiterTail = 0;
+  let hostCallsStopped = false;
+  let hostCallsStopReason;
+  const acquireHostCall = () => {
+    if (hostCallsStopped) {
+      return new SafePromise((_resolve, reject) => reject(hostCallsStopReason));
+    }
+    if (activeHostCalls < maxParallelConcurrency) {
+      activeHostCalls += 1;
+      return promiseResolve();
+    }
+    return new SafePromise((resolve, reject) => {
+      hostCallWaiters[hostWaiterTail++] = { resolve, reject };
+    });
+  };
+  const releaseHostCall = () => {
+    if (!hostCallsStopped && hostWaiterHead < hostWaiterTail) {
+      const waiter = hostCallWaiters[hostWaiterHead];
+      delete hostCallWaiters[hostWaiterHead++];
+      waiter.resolve();
+      return;
+    }
+    activeHostCalls -= 1;
+  };
+  const stopQueuedHostCalls = (reason) => {
+    if (hostCallsStopped) return;
+    hostCallsStopped = true;
+    hostCallsStopReason = reason;
+    while (hostWaiterHead < hostWaiterTail) {
+      const waiter = hostCallWaiters[hostWaiterHead];
+      delete hostCallWaiters[hostWaiterHead++];
+      waiter.reject(reason);
+    }
+  };
+  const call = (ref, args = {}) => {
+    // Snapshot and validate at API invocation, before a saturated semaphore
+    // can defer the bridge. Later guest mutation must not change exact args.
+    const argsText = strictJsonText(args);
+    prepareHostCall(ref, argsText);
+    return promiseThen(acquireHostCall(), () => {
+      let operation;
+      try {
+        operation = promiseThen(bridge(ref, argsText), parseStrict);
+      } catch (error) {
+        releaseHostCall();
+        throw error;
+      }
+      return promiseThen(operation, (value) => {
+        releaseHostCall();
+        return value;
+      }, (error) => {
+        releaseHostCall();
+        throw error;
+      });
+    });
+  };
+  const parallel = async (items, mapperOrOptions, maybeOptions) => {
+    if (!arrayIsArray(items)) throw new SafeTypeError('parallel expects an array');
+    const mapped = typeof mapperOrOptions === 'function';
+    if (!mapped) {
+      for (let index = 0; index < items.length; index++) {
+        if (typeof items[index] !== 'function') {
+          throw new SafeTypeError('parallel expects functions or an item mapper');
+        }
+      }
+    }
+    const itemCount = items.length;
+    if (itemCount === 0) return [];
+    const options = mapped ? maybeOptions : mapperOrOptions;
+    const requested = typeof options === 'number'
+      ? options
+      : options && typeof options === 'object' && options.concurrency !== undefined
+        ? options.concurrency
+        : maxParallelConcurrency;
+    if (typeof requested !== 'number' || !numberIsFinite(requested) || requested < 1) {
+      throw new SafeRangeError('parallel concurrency must be a positive finite number');
+    }
+    const concurrency = mathMin(itemCount, maxParallelConcurrency, mathFloor(requested));
+    const results = new SafeArray(itemCount);
+    const workers = new SafeArray(concurrency);
+    let cursor = 0;
+    let stopped = false;
+    for (let worker = 0; worker < concurrency; worker++) {
+      workers[worker] = (async () => {
+        while (!stopped && cursor < itemCount) {
+          const index = cursor++;
+          try {
+            results[index] = mapped
+              ? await apply(mapperOrOptions, undefined, [items[index], index])
+              : await apply(items[index], undefined, []);
+          } catch (error) {
+            stopped = true;
+            throw error;
+          }
+        }
+      })();
+    }
+    await promiseAll(workers);
+    return results;
+  };
   let rejectExecution;
   const executionGate = new SafePromise((_resolve, reject) => { rejectExecution = reject; });
-  const cancel = (message) => rejectExecution(new SafeError(message));
+  const cancel = (message) => {
+    const reason = new SafeError(message);
+    stopQueuedHostCalls(reason);
+    rejectExecution(reason);
+  };
   const run = (main) => promiseThen(promiseRace([promiseThen(promiseResolve(), main), executionGate]), strictJsonText);
   globalThis.tools = objectFreeze({
     providers: () => call("fabric.providers"),
@@ -19844,7 +20143,13 @@ var GUEST_SETUP = `
     get: (args) => call("state.get", args), set: (args) => call("state.set", args),
     list: (args = {}) => call("state.list", args), delete: (args) => call("state.delete", args),
   });
-  globalThis.mcp = objectFreeze({ servers: (args = {}) => call("mcp.$servers", args), call: (args) => call("mcp.$call", args) });
+  globalThis.mcp = objectFreeze({
+    servers: (args = {}) => call("mcp.$servers", args),
+    tools: (args) => call("mcp.$tools", args),
+    describe: (args) => call("mcp.$describe", args),
+    call: (args) => call("mcp.$call", args),
+  });
+  objectDefineProperty(globalThis, 'parallel', { value: parallel, writable: false, configurable: false });
   objectFreeze(globalThis.payloads);
   return objectFreeze({ run, cancel });
 })()
@@ -20027,6 +20332,15 @@ var QuickJsRuntime = class {
       });
       context.setProp(context.global, "__fabricHostCall", hostFunction);
       hostFunction.dispose();
+      const prepareHostFunction = context.newFunction("__fabricPrepareHostCall", (refHandle, argsHandle) => {
+        const ref = context.getString(refHandle);
+        const parsed = JSON.parse(context.getString(argsHandle));
+        const args = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+        assertFabricJsonBudget(args);
+        extendForExactAction(ref, args);
+      });
+      context.setProp(context.global, "__fabricPrepareHostCall", prepareHostFunction);
+      prepareHostFunction.dispose();
       const printFunction = context.newFunction("print", (...handles) => {
         let remaining = maxLogChars - logChars;
         if (remaining <= 0) return;
@@ -20053,6 +20367,9 @@ var QuickJsRuntime = class {
       );
       context.setProp(context.global, "payloads", payloadHandle);
       payloadHandle.dispose();
+      const parallelLimitHandle = context.newNumber(Math.max(1, Math.min(64, Math.floor(options.maxConcurrentHostCalls ?? 1))));
+      context.setProp(context.global, "__fabricMaxParallelConcurrency", parallelLimitHandle);
+      parallelLimitHandle.dispose();
       const setupSpan = tracer.enabled ? tracer.span("eval", "quickjs.eval.setup", execId, { sourceBytes: GUEST_SETUP.length }, parentSpanId) : void 0;
       const setup = context.evalCode(GUEST_SETUP, "kiro-fabric-setup.js");
       setupSpan?.end();
@@ -20185,7 +20502,7 @@ var traceJsonChars = (value) => {
   }
 };
 var effectiveFabricTimeout = (configuredMaximum, executorDefault, exactActionFloor, invocationTimeout) => Math.min(configuredMaximum, Math.max(executorDefault, exactActionFloor, invocationTimeout));
-var exactActionTimeoutFloor = (ref, mcpCallTimeoutMs) => ref === "mcp.$call" ? mcpCallTimeoutMs + FABRIC_APPROVAL_TIMEOUT_MS * MAX_MCP_APPROVAL_STAGES + FABRIC_PROVIDER_TIMEOUT_GRACE_MS : 0;
+var exactActionTimeoutFloor = (ref, mcpCallTimeoutMs) => ref === "mcp.$call" || ref === "mcp.$tools" || ref === "mcp.$describe" ? mcpCallTimeoutMs + FABRIC_APPROVAL_TIMEOUT_MS * MAX_MCP_APPROVAL_STAGES + FABRIC_PROVIDER_TIMEOUT_GRACE_MS : 0;
 var exactHostActionReference = (bridgeRef, args) => bridgeRef === "fabric.call" ? typeof args.ref === "string" ? args.ref : void 0 : bridgeRef;
 var FabricExecutionService = class {
   constructor(registry, config, cwd) {
@@ -20337,6 +20654,7 @@ var FabricExecutionService = class {
       maxInputBytes: this.config.executor.maxInputBytes,
       maxLogChars: this.config.executor.maxOutputChars,
       maxNestedResultChars: this.config.executor.maxNestedResultChars,
+      maxConcurrentHostCalls: this.config.executor.maxConcurrentProviderCalls,
       ...options.payloads ? { payloads: options.payloads } : {},
       ...options.signal ? { signal: options.signal } : {},
       ...checked.javascript ? { transpiledCode: checked.javascript } : {},
@@ -20549,7 +20867,7 @@ var KIRO_MCP_DRAIN_TIMEOUT_MS = 3e3;
 var kiroMcpOuterDeadlineMs = (guestMaximumMs, compilerTimeoutMs) => guestMaximumMs + compilerTimeoutMs + KIRO_MCP_DEADLINE_GRACE_MS;
 
 // src/kiro/power/approver.ts
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 import path2 from "node:path";
 var SECRET_KEY = /(?:apikey|authorization|authtoken|bearer|clientkey|clientsecret|cookie|credential|idtoken|passphrase|password|privatekey|refreshtoken|secret|session|token)/iu;
 var SECRET_VALUE = /^(?:(?:basic|bearer)\s+|gh[pousr]_|github_pat_|sk-[a-z0-9_-]{12,}|akia[0-9a-z]{12,}|eyj[a-z0-9_-]+\.[a-z0-9_-]+\.|-----begin\s)|(?:^|[?&])(?:api[_-]?key|password|secret|token)=/iu;
@@ -20560,7 +20878,7 @@ var APPROVAL_MESSAGE_CHARS = 1500;
 var fabricApprovalIdentity = (action, args) => {
   const canonical = fabricJsonText({ schemaVersion: 1, ref: action.ref, risk: action.risk, args });
   return {
-    digest: createHash("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex"),
+    digest: createHash2("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex"),
     chars: canonical.length
   };
 };
@@ -20658,7 +20976,7 @@ Preview: ${summarize(args, this.cwd)}`,
 };
 
 // src/kiro/power/data-paths.ts
-import { createHash as createHash2, randomBytes } from "node:crypto";
+import { createHash as createHash3, randomBytes } from "node:crypto";
 import fs3 from "node:fs";
 import path3 from "node:path";
 var isRecord4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20670,7 +20988,7 @@ var projectKiroPowerWorkspaceIdentity = (value) => {
   return Object.freeze({ schemaVersion: 1, canonicalPath: value.canonicalPath, deviceId: value.deviceId, fileId: value.fileId });
 };
 var sameIdentity = (left, right) => left.schemaVersion === right.schemaVersion && left.canonicalPath === right.canonicalPath && left.deviceId === right.deviceId && left.fileId === right.fileId;
-var kiroPowerMemoryNamespace = (identity) => `project:${createHash2("sha256").update(identity.canonicalPath).digest("hex")}`;
+var kiroPowerMemoryNamespace = (identity) => `project:${createHash3("sha256").update(identity.canonicalPath).digest("hex")}`;
 var assertCurrentUser = (stats, target) => {
   if (process.platform !== "win32" && typeof process.getuid === "function" && stats.uid !== process.getuid()) {
     throw new Error(`Fabric data path is owned by another user: ${target}`);
@@ -20764,7 +21082,7 @@ var privateJson = (target, initial) => writeJsonAtomic(target, initial, true);
 var copyFileAtomic = (source, target) => {
   privateFile(source);
   const bytes = fs3.readFileSync(source);
-  const sourceDigest = createHash2("sha256").update(bytes).digest("hex");
+  const sourceDigest = createHash3("sha256").update(bytes).digest("hex");
   const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.migration.tmp`;
   try {
     const descriptor2 = fs3.openSync(temporary, "wx", 384);
@@ -20774,13 +21092,13 @@ var copyFileAtomic = (source, target) => {
     } finally {
       fs3.closeSync(descriptor2);
     }
-    if (createHash2("sha256").update(fs3.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
+    if (createHash3("sha256").update(fs3.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
     try {
       fs3.linkSync(temporary, target);
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
       privateFile(target);
-      if (createHash2("sha256").update(fs3.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
+      if (createHash3("sha256").update(fs3.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
     }
     fs3.unlinkSync(temporary);
     fsyncDirectory(path3.dirname(target));
@@ -20834,7 +21152,7 @@ var migrateLegacyFabricConfiguration = (root, config) => {
   const current = path3.join(config, "config.json");
   const migrated = [];
   if (!fs3.existsSync(current) && Object.keys(projected).length) {
-    writeJsonAtomic(current, projected, true);
+    writeJsonAtomic(current, { schemaVersion: CURRENT_FABRIC_CONFIG_SCHEMA_VERSION, ...projected }, true);
     migrated.push("config/fabric.json -> allowlisted config/config.json");
   }
   const quarantine = privateDirectory(path3.join(root, "quarantine"), root);
@@ -20866,9 +21184,9 @@ var prepareKiroPowerDataPaths = (pluginData) => {
     projects: privateDirectory(path3.join(root, "projects"), root)
   };
 };
-var kiroPowerWorkspaceId = (identity, generation = 3) => createHash2("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0").update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
+var kiroPowerWorkspaceId = (identity, generation = 3) => createHash3("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0").update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
 var encodeName = (value) => encodeURIComponent(value).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
-var memoryNamespaceDirectory = (namespace) => `${encodeName(namespace)}-${createHash2("sha256").update(namespace).digest("hex").slice(0, 16)}`;
+var memoryNamespaceDirectory = (namespace) => `${encodeName(namespace)}-${createHash3("sha256").update(namespace).digest("hex").slice(0, 16)}`;
 var migrateCompatibleMemory = (sourceRoot, targetRoot, namespace) => {
   if (!fs3.existsSync(sourceRoot)) return false;
   assertPrivateDirectory(sourceRoot);
@@ -20999,7 +21317,7 @@ var prepareKiroPowerProjectPaths = (projects, rawIdentity) => {
 };
 
 // src/kiro/power/workspace-binding.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 import { existsSync } from "node:fs";
 import os2 from "node:os";
 import path4 from "node:path";
@@ -21027,7 +21345,7 @@ var kiroWorkspaceToolInputSchema = {
   required: ["action"],
   additionalProperties: false
 };
-var idFor = (root) => createHash3("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
+var idFor = (root) => createHash4("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
 var KiroPowerWorkspaceBinding = class {
   #pluginRoot;
   #pluginData;
@@ -21327,11 +21645,64 @@ var CachedWorkspaceContextProvider = class {
 };
 
 // src/kiro/projection.ts
+var MAX_FAILURE_PROGRESS_ENTRIES = 8;
+var MAX_FAILURE_PROGRESS_REF_CHARS = 512;
+var MAX_FAILURE_OUTPUT_CHARS = 2e4;
+var TRUNCATION_MARKER = "\n\n\u2026 middle omitted \u2026\n\n";
+var safePrefix = (value, maximum) => {
+  const bounded3 = value.slice(0, Math.max(0, maximum));
+  const last = bounded3.charCodeAt(bounded3.length - 1);
+  return last >= 55296 && last <= 56319 ? bounded3.slice(0, -1) : bounded3;
+};
+var safeSuffix = (value, maximum) => {
+  let start = Math.max(0, value.length - Math.max(0, maximum));
+  const first = value.charCodeAt(start);
+  if (first >= 56320 && first <= 57343 && start > 0) start += 1;
+  return value.slice(start);
+};
 var stringify = (value, format) => {
   if (format === "text" && typeof value === "string") return value;
   return JSON.stringify(value, null, format === "json" ? 2 : void 0) ?? "null";
 };
+var failureProgress = (result) => {
+  if (result.success) return "";
+  const completed = result.audits.filter(
+    (audit) => audit.endedAt !== void 0 && typeof audit.success === "boolean"
+  );
+  if (completed.length === 0) return "";
+  const edge = Math.floor(MAX_FAILURE_PROGRESS_ENTRIES / 2);
+  const sampled = completed.length <= MAX_FAILURE_PROGRESS_ENTRIES ? completed : [...completed.slice(0, edge), ...completed.slice(-edge)];
+  const summaries = sampled.map((audit) => ({
+    ref: audit.ref.length <= MAX_FAILURE_PROGRESS_REF_CHARS ? audit.ref : `${safePrefix(audit.ref, MAX_FAILURE_PROGRESS_REF_CHARS - 1)}\u2026`,
+    outcome: audit.success ? "succeeded" : "failed"
+  }));
+  const omitted = completed.length - summaries.length;
+  const succeeded = completed.filter((audit) => audit.success === true).length;
+  return [
+    `
+
+Completed nested calls before the outer failure (arguments and results omitted): ${JSON.stringify({ total: completed.length, succeeded, failed: completed.length - succeeded, sample: summaries, omitted })}.`,
+    "Inspect current state before retrying fabric_exec; completed calls may already have taken effect, and a blind retry can duplicate effects."
+  ].join("\n");
+};
+var truncateMiddle = (content, maximum) => {
+  if (content.length <= maximum) return content;
+  if (maximum <= 0) return "";
+  if (maximum <= TRUNCATION_MARKER.length + 1) {
+    if (maximum === 1) return safePrefix(content, 1);
+    const headChars2 = Math.ceil(maximum / 2);
+    return `${safePrefix(content, headChars2)}${safeSuffix(content, maximum - headChars2)}`;
+  }
+  const retainedChars = maximum - TRUNCATION_MARKER.length;
+  const headChars = Math.ceil(retainedChars / 2);
+  return `${safePrefix(content, headChars)}${TRUNCATION_MARKER}${safeSuffix(content, retainedChars - headChars)}`;
+};
+var truncateWithHint = (content, maximum, hint) => {
+  if (hint.length >= maximum) return safePrefix(hint, maximum);
+  return `${truncateMiddle(content, maximum - hint.length)}${hint}`;
+};
 var projectFabricExecutionText = (options) => {
+  const visibleMaximum = options.result.success ? options.maxOutputChars : Math.min(options.maxOutputChars, MAX_FAILURE_OUTPUT_CHARS);
   const value = options.result.success ? options.result.value : {
     status: options.result.status,
     error: options.result.error ?? "Fabric execution failed",
@@ -21345,24 +21716,25 @@ Normalization diagnostics: ${JSON.stringify(options.normalizationDiagnostics)}` 
   const logs = options.result.logs.length ? `
 
 Fabric logs: ${JSON.stringify(options.result.logs)}` : "";
-  const complete = `${body}${diagnostics}${logs}`;
-  if (complete.length <= options.maxOutputChars) return { text: complete, isError: !options.result.success };
+  const progress = failureProgress(options.result);
+  const complete = `${body}${diagnostics}${logs}${progress}`;
+  if (complete.length <= visibleMaximum) return { text: complete, isError: !options.result.success };
   try {
     const artifactId = options.writeArtifact(complete);
     const hint = `
 
-Output exceeded ${options.maxOutputChars} characters. Full result is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
+Output exceeded ${visibleMaximum} characters. Full result is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
     return {
-      text: `${complete.slice(0, Math.max(1, options.maxOutputChars - hint.length))}${hint}`,
+      text: truncateWithHint(complete, visibleMaximum, hint),
       isError: !options.result.success,
       artifactId
     };
   } catch {
     const hint = `
 
-Output exceeded ${options.maxOutputChars} characters and could not be retained within artifact bounds.`;
+Output exceeded ${visibleMaximum} characters and could not be retained within artifact bounds.`;
     return {
-      text: `${complete.slice(0, Math.max(1, options.maxOutputChars - hint.length))}${hint}`,
+      text: truncateWithHint(complete, visibleMaximum, hint),
       isError: true
     };
   }
@@ -21748,7 +22120,7 @@ var ArtifactStore = class {
 var createKiroArtifactStore = (options = {}) => new ArtifactStore(options);
 
 // src/kiro/mcp-provider.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5, randomBytes as randomBytes4 } from "node:crypto";
 import fs6 from "node:fs";
 import path7 from "node:path";
 var descriptors2 = [
@@ -21761,6 +22133,39 @@ var descriptors2 = [
     effect: { kind: "none" }
   },
   {
+    name: "$tools",
+    description: "Discover bounded schemas from one explicitly configured MCP server after approval",
+    inputSchema: {
+      type: "object",
+      properties: {
+        server: { type: "string", minLength: 1, maxLength: 256 },
+        transportSnapshot: { type: "object", additionalProperties: true }
+      },
+      required: ["server"],
+      additionalProperties: false
+    },
+    risk: "network",
+    namespace: "management",
+    effect: { kind: "emission" }
+  },
+  {
+    name: "$describe",
+    description: "Describe one configured MCP tool with its bounded schema after approval",
+    inputSchema: {
+      type: "object",
+      properties: {
+        server: { type: "string", minLength: 1, maxLength: 256 },
+        tool: { type: "string", minLength: 1, maxLength: 256 },
+        transportSnapshot: { type: "object", additionalProperties: true }
+      },
+      required: ["server", "tool"],
+      additionalProperties: false
+    },
+    risk: "network",
+    namespace: "management",
+    effect: { kind: "emission" }
+  },
+  {
     name: "$call",
     description: "Call one configured MCP tool after network approval",
     inputSchema: {
@@ -21769,6 +22174,7 @@ var descriptors2 = [
         server: { type: "string", minLength: 1, maxLength: 256 },
         tool: { type: "string", minLength: 1, maxLength: 256 },
         args: { type: "object", additionalProperties: true },
+        expectedDescriptorDigest: { type: "string", minLength: 64, maxLength: 64 },
         transportSnapshot: { type: "object", additionalProperties: true }
       },
       required: ["server", "tool"],
@@ -21781,30 +22187,163 @@ var descriptors2 = [
 ];
 var isRecord6 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var MCP_CLOSE_GRACE_MS = 1e3;
-var fileDigest = (file) => createHash4("sha256").update(fs6.readFileSync(file)).digest("hex");
+var MAX_MCP_TRANSPORT_FILE_BYTES = 512 * 1024 * 1024;
+var MAX_MCP_STDIO_ARGUMENTS = 256;
+var MAX_MCP_ARGUMENT_FILES = 32;
+var MAX_MCP_ARGUMENT_FILE_BYTES = 16 * 1024 * 1024;
+var MAX_MCP_ARGUMENT_FILES_TOTAL_BYTES = 64 * 1024 * 1024;
+var MAX_EXPLICIT_MCP_CONFIG_BYTES = 256 * 1024;
+var fileDigest = (file, maximumBytes = MAX_MCP_TRANSPORT_FILE_BYTES) => {
+  const descriptor2 = fs6.openSync(file, fs6.constants.O_RDONLY | (fs6.constants.O_NOFOLLOW ?? 0));
+  try {
+    const before = fs6.fstatSync(descriptor2, { bigint: true });
+    if (!before.isFile() || before.size > BigInt(maximumBytes)) {
+      throw new Error(`MCP transport file is not regular or exceeds ${maximumBytes} bytes`);
+    }
+    const digest = createHash5("sha256");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let position = 0;
+    while (position < Number(before.size)) {
+      const count = fs6.readSync(
+        descriptor2,
+        buffer,
+        0,
+        Math.min(buffer.length, Number(before.size) - position),
+        position
+      );
+      if (count === 0) throw new Error("MCP transport file changed while hashing");
+      digest.update(buffer.subarray(0, count));
+      position += count;
+    }
+    const after = fs6.fstatSync(descriptor2, { bigint: true });
+    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.ctimeNs !== after.ctimeNs || before.mtimeNs !== after.mtimeNs || before.nlink !== after.nlink) {
+      throw new Error("MCP transport file changed while hashing");
+    }
+    return digest.digest("hex");
+  } finally {
+    fs6.closeSync(descriptor2);
+  }
+};
+var sameFileIdentity = (left, right) => left.isFile() && right.isFile() && !left.isSymbolicLink() && !right.isSymbolicLink() && left.nlink === 1n && right.nlink === 1n && left.dev === right.dev && left.ino === right.ino;
+var sameFileVersion = (left, right) => sameFileIdentity(left, right) && left.size === right.size && left.ctimeNs === right.ctimeNs && left.mtimeNs === right.mtimeNs;
 var readExplicitMcpConfiguration = (configPath) => {
-  const stats = fs6.lstatSync(configPath);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 256 * 1024) {
+  const lexical = fs6.lstatSync(configPath, { bigint: true });
+  if (!lexical.isFile() || lexical.isSymbolicLink() || lexical.nlink !== 1n || lexical.size > BigInt(MAX_EXPLICIT_MCP_CONFIG_BYTES)) {
     throw new Error("MCP configuration is not a bounded unaliased regular file");
   }
-  if (process.platform !== "win32" && (typeof process.getuid === "function" && stats.uid !== process.getuid() || (stats.mode & 63) !== 0)) {
+  if (process.platform !== "win32" && (typeof process.getuid === "function" && lexical.uid !== BigInt(process.getuid()) || (lexical.mode & 0o077n) !== 0n)) {
     throw new Error("MCP configuration is not private to the current user");
   }
-  const parsed = JSON.parse(fs6.readFileSync(configPath, "utf8"));
+  const descriptor2 = fs6.openSync(configPath, fs6.constants.O_RDONLY | (fs6.constants.O_NOFOLLOW ?? 0));
+  let opened;
+  let after;
+  const buffer = Buffer.allocUnsafe(MAX_EXPLICIT_MCP_CONFIG_BYTES + 1);
+  let byteCount = 0;
+  try {
+    opened = fs6.fstatSync(descriptor2, { bigint: true });
+    if (!sameFileIdentity(lexical, opened)) throw new Error("MCP configuration changed while opening");
+    while (byteCount < buffer.length) {
+      const count = fs6.readSync(descriptor2, buffer, byteCount, buffer.length - byteCount, byteCount);
+      if (count === 0) break;
+      byteCount += count;
+    }
+    if (byteCount > MAX_EXPLICIT_MCP_CONFIG_BYTES) throw new Error("MCP configuration exceeds 262144 bytes");
+    after = fs6.fstatSync(descriptor2, { bigint: true });
+  } finally {
+    fs6.closeSync(descriptor2);
+  }
+  const current = fs6.lstatSync(configPath, { bigint: true });
+  if (!sameFileVersion(opened, after) || !sameFileVersion(opened, current)) {
+    throw new Error("MCP configuration changed while reading");
+  }
+  const bytes = Buffer.from(buffer.subarray(0, byteCount));
+  const parsed = JSON.parse(bytes.toString("utf8"));
   if (!isRecord6(parsed) || !isRecord6(parsed.mcpServers) || !Array.isArray(parsed.imports) || parsed.imports.length !== 0 || JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify(["imports", "mcpServers"])) {
     throw new Error("MCP configuration must contain only mcpServers and imports: []");
   }
   const names = Object.keys(parsed.mcpServers);
   if (names.length > 128 || names.some((name) => !name || name.length > 256)) throw new Error("MCP configuration server names exceed product bounds");
-  return { servers: parsed.mcpServers, names: new Set(names), digest: fileDigest(configPath) };
+  return {
+    names: new Set(names),
+    digest: createHash5("sha256").update(bytes).digest("hex"),
+    bytes,
+    stats: opened
+  };
 };
-var configuredEnvironment = (configPath, server) => {
-  if (!configPath) return {};
-  const entry = readExplicitMcpConfiguration(configPath).servers[server];
-  const environment = isRecord6(entry) && isRecord6(entry.env) ? entry.env : {};
-  const result = {};
-  for (const [key, value] of Object.entries(environment)) if (typeof value === "string") result[key] = value;
-  return result;
+var fsyncDirectory2 = (directory) => {
+  if (process.platform === "win32") return;
+  const descriptor2 = fs6.openSync(directory, "r");
+  try {
+    fs6.fsyncSync(descriptor2);
+  } finally {
+    fs6.closeSync(descriptor2);
+  }
+};
+var stageExplicitMcpConfiguration = (configPath, explicit) => {
+  const directory = path7.dirname(configPath);
+  const directoryStats = fs6.lstatSync(directory, { bigint: true });
+  if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink() || process.platform !== "win32" && (typeof process.getuid === "function" && directoryStats.uid !== BigInt(process.getuid()) || (directoryStats.mode & 0o077n) !== 0n)) {
+    throw new Error("MCP configuration directory is not private to the current user");
+  }
+  const stagedPath = path7.join(
+    directory,
+    `.kiro-fabric-mcp-snapshot-${process.pid}-${randomBytes4(16).toString("hex")}.json`
+  );
+  let descriptor2;
+  let createdStats;
+  try {
+    descriptor2 = fs6.openSync(
+      stagedPath,
+      fs6.constants.O_WRONLY | fs6.constants.O_CREAT | fs6.constants.O_EXCL | (fs6.constants.O_NOFOLLOW ?? 0),
+      384
+    );
+    createdStats = fs6.fstatSync(descriptor2, { bigint: true });
+    fs6.writeFileSync(descriptor2, explicit.bytes);
+    fs6.fsyncSync(descriptor2);
+    const writtenStats = fs6.fstatSync(descriptor2, { bigint: true });
+    fs6.closeSync(descriptor2);
+    descriptor2 = void 0;
+    fsyncDirectory2(directory);
+    const verified = readExplicitMcpConfiguration(stagedPath);
+    if (!sameFileIdentity(createdStats, writtenStats) || !sameFileIdentity(writtenStats, verified.stats) || verified.digest !== explicit.digest) {
+      throw new Error("staged MCP configuration changed while writing");
+    }
+    return { path: stagedPath, directory, digest: explicit.digest, stats: verified.stats };
+  } catch (error) {
+    if (descriptor2 !== void 0) fs6.closeSync(descriptor2);
+    if (createdStats !== void 0) {
+      try {
+        const current = fs6.lstatSync(stagedPath, { bigint: true });
+        if (sameFileIdentity(createdStats, current)) {
+          fs6.unlinkSync(stagedPath);
+          fsyncDirectory2(directory);
+        }
+      } catch {
+      }
+    }
+    throw error;
+  }
+};
+var removeStagedMcpConfiguration = (staged) => {
+  let verification;
+  try {
+    const verified = readExplicitMcpConfiguration(staged.path);
+    if (!sameFileIdentity(staged.stats, verified.stats) || verified.digest !== staged.digest) {
+      throw new Error("staged MCP configuration ownership changed while loading");
+    }
+  } catch (error) {
+    verification = error;
+  }
+  try {
+    const current = fs6.lstatSync(staged.path, { bigint: true });
+    if (sameFileIdentity(staged.stats, current)) {
+      fs6.unlinkSync(staged.path);
+      fsyncDirectory2(staged.directory);
+    }
+  } catch (error) {
+    if (verification === void 0) throw error;
+  }
+  if (verification !== void 0) throw verification;
 };
 var AMBIENT_MCPORTER_OPTIONS = [
   "MCPORTER_RECORD",
@@ -21834,11 +22373,21 @@ var executablePath = (command, cwd = process.cwd()) => {
   }
   throw new Error(`Configured MCP executable cannot be resolved: ${command}`);
 };
-var environmentDigest = () => createHash4("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
-var configDigest = (configPath) => configPath ? fileDigest(configPath) : null;
+var environmentDigest = () => createHash5("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
+var configDigest = (configPath) => configPath ? readExplicitMcpConfiguration(configPath).digest : null;
 var fileStatKey = (file) => {
   const stats = fs6.statSync(file, { bigint: true });
   return `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.mtimeNs}:${stats.size}:${stats.nlink}:${Number(stats.isSymbolicLink())}`;
+};
+var boundArgumentStatKey = (entry) => {
+  try {
+    return `${entry.argumentIndex}:${entry.argument}:${entry.resolvedPath}:${fileStatKey(entry.resolvedPath)}`;
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new Error(`Configured MCP stdio argument file disappeared after it was approved: ${entry.resolvedPath}`);
+    }
+    throw error;
+  }
 };
 var canonicalizeStdioTransport = (server) => {
   if (server.command.kind !== "stdio") return server;
@@ -21849,34 +22398,118 @@ var canonicalizeStdioTransport = (server) => {
     command: { ...server.command, command, cwd }
   };
 };
-var executeApproval = (name, description) => ({
-  name,
-  ref: `mcp.${name}`,
-  provider: "mcp",
-  description,
-  inputSchema: { type: "object", properties: {}, additionalProperties: false },
-  risk: "execute",
-  namespace: "management",
-  effect: { kind: "emission" }
-});
+var resolveStdioArgumentFiles = (arguments_, cwd) => {
+  if (arguments_.length > MAX_MCP_STDIO_ARGUMENTS) {
+    throw new Error(`Configured MCP stdio arguments exceed ${MAX_MCP_STDIO_ARGUMENTS} entries`);
+  }
+  const files = [];
+  let totalBytes = 0;
+  for (const [argumentIndex, argument] of arguments_.entries()) {
+    if (!argument || argument.includes("\0")) continue;
+    const candidate = path7.isAbsolute(argument) ? argument : path7.resolve(cwd, argument);
+    try {
+      const resolvedPath = fs6.realpathSync(candidate);
+      const stats = fs6.statSync(resolvedPath);
+      if (!stats.isFile()) continue;
+      if (stats.size > MAX_MCP_ARGUMENT_FILE_BYTES) {
+        throw new Error(`Configured MCP stdio argument file exceeds ${MAX_MCP_ARGUMENT_FILE_BYTES} bytes`);
+      }
+      if (files.length >= MAX_MCP_ARGUMENT_FILES) {
+        throw new Error(`Configured MCP stdio arguments exceed ${MAX_MCP_ARGUMENT_FILES} file inputs`);
+      }
+      totalBytes += stats.size;
+      if (totalBytes > MAX_MCP_ARGUMENT_FILES_TOTAL_BYTES) {
+        throw new Error(`Configured MCP stdio argument files exceed ${MAX_MCP_ARGUMENT_FILES_TOTAL_BYTES} bytes total`);
+      }
+      files.push({ argumentIndex, argument, resolvedPath });
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Configured MCP stdio")) throw error;
+    }
+  }
+  return files;
+};
+var executeApproval = (name, description) => {
+  const descriptor2 = {
+    name,
+    ref: `mcp.${name}`,
+    provider: "mcp",
+    description,
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    risk: "execute",
+    namespace: "management",
+    effect: { kind: "emission" }
+  };
+  return {
+    ...descriptor2,
+    descriptorDigest: semanticDigest("kiro-fabric-action-descriptor-v1", descriptor2)
+  };
+};
 var STDIO_APPROVAL = executeApproval("$stdio", "Start one explicitly configured stdio MCP server");
 var OAUTH_APPROVAL = executeApproval("$oauth", "Launch configured HTTP MCP authorization");
 var abortError2 = (signal) => signal.reason instanceof Error ? signal.reason : new Error(typeof signal.reason === "string" && signal.reason ? signal.reason : "MCP call cancelled");
+var MCP_ANNOTATION_KEYS = /* @__PURE__ */ new Set([
+  "title",
+  "readOnlyHint",
+  "destructiveHint",
+  "idempotentHint",
+  "openWorldHint"
+]);
+var normalizeToolAnnotations = (value, index) => {
+  if (value === void 0) return void 0;
+  if (!isRecord6(value) || Object.keys(value).some((key) => !MCP_ANNOTATION_KEYS.has(key)) || value.title !== void 0 && (typeof value.title !== "string" || value.title.length > 1e3) || ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"].some((key) => value[key] !== void 0 && typeof value[key] !== "boolean")) {
+    throw new Error(`Configured MCP tool annotations at index ${index} are malformed`);
+  }
+  return {
+    ...value.title === void 0 ? {} : { title: value.title },
+    ...value.readOnlyHint === void 0 ? {} : { readOnlyHint: value.readOnlyHint },
+    ...value.destructiveHint === void 0 ? {} : { destructiveHint: value.destructiveHint },
+    ...value.idempotentHint === void 0 ? {} : { idempotentHint: value.idempotentHint },
+    ...value.openWorldHint === void 0 ? {} : { openWorldHint: value.openWorldHint }
+  };
+};
 var normalizeServerTools = (value) => {
   if (!Array.isArray(value) || value.length > 1e3) throw new Error("Configured MCP tool list is malformed or exceeds product bounds");
   const tools = value.map((tool, index) => {
-    if (!isRecord6(tool) || typeof tool.name !== "string" || !tool.name || tool.name.length > 256 || tool.description !== void 0 && typeof tool.description !== "string") {
+    if (!isRecord6(tool) || typeof tool.name !== "string" || !tool.name || tool.name.length > 256 || tool.description !== void 0 && typeof tool.description !== "string" || !isRecord6(tool.inputSchema) || tool.outputSchema !== void 0 && !isRecord6(tool.outputSchema)) {
       throw new Error(`Configured MCP tool at index ${index} is malformed`);
     }
+    const annotations = normalizeToolAnnotations(tool.annotations, index);
     return {
       name: tool.name,
       ...tool.description === void 0 ? {} : { description: tool.description },
-      ...tool.inputSchema === void 0 ? {} : { inputSchema: tool.inputSchema },
-      ...tool.outputSchema === void 0 ? {} : { outputSchema: tool.outputSchema }
+      inputSchema: tool.inputSchema,
+      ...tool.outputSchema === void 0 ? {} : { outputSchema: tool.outputSchema },
+      ...annotations === void 0 ? {} : { annotations }
     };
   });
+  const names = /* @__PURE__ */ new Set();
+  for (const tool of tools) {
+    if (names.has(tool.name)) throw new Error(`Configured MCP tool list contains a duplicate name: ${tool.name}`);
+    names.add(tool.name);
+  }
   assertFabricJsonBudget(tools);
   return tools;
+};
+var projectRemoteTool = (server, tool, transport) => {
+  const descriptor2 = {
+    server,
+    name: tool.name,
+    ref: `${server}.${tool.name}`,
+    description: tool.description ?? "",
+    inputSchema: tool.inputSchema,
+    ...tool.outputSchema === void 0 ? {} : { outputSchema: tool.outputSchema },
+    ...tool.annotations === void 0 ? {} : { annotations: tool.annotations },
+    transport: {
+      kind: transport.kind,
+      digest: transport.digest,
+      configDigest: transport.configDigest
+    }
+  };
+  return {
+    ...descriptor2,
+    descriptorDigest: semanticDigest("kiro-fabric-remote-mcp-descriptor-v1", descriptor2),
+    stale: false
+  };
 };
 var normalizeMcpResult = (result) => {
   if (!isRecord6(result) || !Array.isArray(result.content)) {
@@ -21909,6 +22542,7 @@ var KiroMcpProvider = class {
   #loadedConfigDigest;
   #serverTails = /* @__PURE__ */ new Map();
   #snapshotCache = /* @__PURE__ */ new Map();
+  #argumentFileBindings = /* @__PURE__ */ new Map();
   #closed = false;
   constructor(cwd, config, runtimeFactory) {
     this.#cwd = cwd;
@@ -21921,18 +22555,27 @@ var KiroMcpProvider = class {
       if (this.#config.configPath) {
         const configPath = path7.resolve(this.#config.configPath);
         const explicit = readExplicitMcpConfiguration(configPath);
-        servers = await loadServerDefinitions({ rootDir: this.#cwd, configPath });
+        const staged = stageExplicitMcpConfiguration(configPath, explicit);
+        try {
+          servers = await loadServerDefinitions({ rootDir: this.#cwd, configPath: staged.path });
+          const stagedAfterLoad = readExplicitMcpConfiguration(staged.path);
+          if (!sameFileIdentity(staged.stats, stagedAfterLoad.stats) || stagedAfterLoad.digest !== staged.digest) {
+            throw new Error("staged MCP configuration changed while loading");
+          }
+          for (const server of servers) {
+            const sources = server.sources ?? (server.source ? [server.source] : []);
+            if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) => source.kind !== "local" || path7.resolve(source.path) !== staged.path)) {
+              throw new Error("mcporter loaded a server outside the explicit Fabric configuration snapshot");
+            }
+          }
+        } finally {
+          removeStagedMcpConfiguration(staged);
+        }
         const verified = readExplicitMcpConfiguration(configPath);
         if (verified.digest !== explicit.digest) throw new Error("MCP configuration changed while loading");
-        for (const server of servers) {
-          const sources = server.sources ?? (server.source ? [server.source] : []);
-          if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) => source.kind !== "local" || path7.resolve(source.path) !== configPath)) {
-            throw new Error("mcporter loaded a server outside the explicit Fabric configuration");
-          }
-        }
         if (servers.length !== explicit.names.size) throw new Error("mcporter did not load the exact Fabric server set");
         servers = servers.map(canonicalizeStdioTransport);
-        this.#loadedConfigDigest = verified.digest;
+        this.#loadedConfigDigest = explicit.digest;
       }
       return createRuntime({ rootDir: this.#cwd, servers, clientInfo: { name: "kiro-fabric", version: "1" } });
     });
@@ -21944,17 +22587,27 @@ var KiroMcpProvider = class {
     return descriptors2.find((entry) => entry.name === actionName);
   }
   async prepareArguments(actionName, args, context) {
-    if (actionName !== "$call") return { ...args };
+    if (actionName !== "$call" && actionName !== "$tools" && actionName !== "$describe") return { ...args };
     const server = typeof args.server === "string" ? args.server.trim() : "";
     const tool = typeof args.tool === "string" ? args.tool.trim() : "";
+    if (!server || (actionName === "$call" || actionName === "$describe") && !tool) {
+      throw new Error("MCP call requires non-empty server/tool strings");
+    }
+    if (actionName === "$call" && args.args !== void 0 && !isRecord6(args.args)) {
+      throw new Error("MCP call args must be an object when provided");
+    }
+    if (actionName === "$call" && args.expectedDescriptorDigest !== void 0 && (typeof args.expectedDescriptorDigest !== "string" || !/^[a-f0-9]{64}$/u.test(args.expectedDescriptorDigest))) {
+      throw new Error("MCP expectedDescriptorDigest must be a lowercase SHA-256 digest");
+    }
     const runtime = await this.#getRuntime(context.signal);
     throwIfAbortedOrExpired(context.signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
     if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
     return {
       server,
-      tool,
-      args: isRecord6(args.args) ? structuredClone(args.args) : {},
+      ...actionName === "$call" || actionName === "$describe" ? { tool } : {},
+      ...actionName === "$call" ? { args: args.args === void 0 ? {} : structuredClone(args.args) } : {},
+      ...actionName === "$call" && Object.hasOwn(args, "expectedDescriptorDigest") ? { expectedDescriptorDigest: args.expectedDescriptorDigest } : {},
       transportSnapshot: this.#transportSnapshot(runtime, server)
     };
   }
@@ -21977,11 +22630,14 @@ var KiroMcpProvider = class {
         };
       });
     }
-    if (actionName !== "$call") throw new Error(`Unknown MCP federation action: ${actionName}`);
+    if (actionName !== "$call" && actionName !== "$tools" && actionName !== "$describe") {
+      throw new Error(`Unknown MCP federation action: ${actionName}`);
+    }
     const server = typeof args.server === "string" ? args.server : "";
     const toolName = typeof args.tool === "string" ? args.tool : "";
     const toolArgs = args.args === void 0 ? {} : args.args;
-    if (!server || !toolName || !isRecord6(toolArgs)) {
+    const expectedDescriptorDigest = args.expectedDescriptorDigest;
+    if (!server || (actionName === "$call" || actionName === "$describe") && !toolName || actionName === "$call" && (!isRecord6(toolArgs) || expectedDescriptorDigest !== void 0 && (typeof expectedDescriptorDigest !== "string" || !/^[a-f0-9]{64}$/u.test(expectedDescriptorDigest)))) {
       throw new Error("MCP call requires non-empty server/tool strings and object args");
     }
     const runtime = await this.#getRuntime(signal);
@@ -22006,19 +22662,22 @@ var KiroMcpProvider = class {
       const rawTools = await this.#bounded(
         runtime,
         server,
-        runtime.listTools(server, {
-          includeSchema: true,
-          disableOAuth: this.#config.disableOAuth
-        }),
+        this.#listRawTools(runtime, server, discoveryBudget),
         signal,
         "tool discovery",
         discoveryBudget,
         lease
       );
       const tools = normalizeServerTools(rawTools);
-      const matches = tools.filter((tool) => tool.name === toolName);
+      const projected = tools.map((tool) => projectRemoteTool(server, tool, approvedTransport));
+      if (actionName === "$tools") return projected;
+      const matches = tools.map((tool, index) => ({ tool, projected: projected[index] })).filter(({ tool }) => tool.name === toolName);
       if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
-      this.#validateToolArguments(matches[0], toolArgs);
+      if (actionName === "$describe") return matches[0].projected;
+      if (expectedDescriptorDigest !== void 0 && matches[0].projected.descriptorDigest !== expectedDescriptorDigest) {
+        throw new Error(`MCP tool descriptor changed before invocation: ${server}.${toolName}`);
+      }
+      this.#validateToolArguments(matches[0].tool, toolArgs);
       throwIfAbortedOrExpired(signal, context.deadline);
       this.#assertTransportSnapshot(runtime, server, approvedTransport);
       const callBudget = this.#remainingCallBudget(actionDeadline);
@@ -22050,6 +22709,7 @@ var KiroMcpProvider = class {
     await Promise.allSettled([...this.#serverTails.values()]);
     this.#serverTails.clear();
     this.#snapshotCache.clear();
+    this.#argumentFileBindings.clear();
     if (runtime) {
       await runtime.close();
     } else if (creation) {
@@ -22060,15 +22720,34 @@ var KiroMcpProvider = class {
     const definition = runtime.getDefinition(server);
     const processEnvironmentDigest = environmentDigest();
     let executable;
+    let argumentFiles = [];
     if (definition.command.kind === "stdio") {
       executable = executablePath(definition.command.command, definition.command.cwd);
+      argumentFiles = this.#boundArgumentFiles(server, definition.command);
     }
-    const statKey = `${executable ? fileStatKey(executable) : "-"}|${this.#config.configPath ? fileStatKey(this.#config.configPath) : "-"}`;
+    const argumentStatKey = argumentFiles.map(boundArgumentStatKey).join("|");
+    const statKey = `${executable ? fileStatKey(executable) : "-"}|${argumentStatKey}|${this.#config.configPath ? fileStatKey(this.#config.configPath) : "-"}`;
     const cached = this.#snapshotCache.get(server);
     if (cached && cached.envDigest === processEnvironmentDigest && cached.statKey === statKey) return cached.snapshot;
-    const snapshot = this.#computeTransportSnapshot(runtime, server, processEnvironmentDigest, executable);
+    const snapshot = this.#computeTransportSnapshot(runtime, server, processEnvironmentDigest, executable, argumentFiles);
     this.#snapshotCache.set(server, { envDigest: processEnvironmentDigest, statKey, snapshot });
     return snapshot;
+  }
+  /**
+   * The bound argument-file set is frozen the first time a transport snapshot
+   * is resolved for a server on this runtime. Stdio servers routinely create
+   * files their own command line names (pid, log, or socket targets) once
+   * they start, and those appearances must not invalidate the approved
+   * transport or shift the approved digest; their literal argument strings
+   * remain bound either way. Files that existed at first resolution keep
+   * their full stat and byte binding for the lifetime of this runtime.
+   */
+  #boundArgumentFiles(server, command) {
+    const bound = this.#argumentFileBindings.get(server);
+    if (bound !== void 0) return bound;
+    const resolved2 = resolveStdioArgumentFiles(command.args ?? [], fs6.realpathSync(command.cwd ?? this.#cwd));
+    this.#argumentFileBindings.set(server, resolved2);
+    return resolved2;
   }
   #assertRuntimeConfigurationCurrent() {
     if (this.#loadedConfigDigest === void 0) return;
@@ -22076,11 +22755,11 @@ var KiroMcpProvider = class {
       throw new Error("MCP configuration changed after runtime loading; restart before calling a server");
     }
   }
-  #computeTransportSnapshot(runtime, server, processEnvironmentDigest, resolvedExecutable) {
+  #computeTransportSnapshot(runtime, server, processEnvironmentDigest, resolvedExecutable, resolvedArgumentFiles) {
     this.#assertRuntimeConfigurationCurrent();
     const definition = runtime.getDefinition(server);
     const base = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       server,
       processEnvironmentDigest,
       configDigest: configDigest(this.#config.configPath)
@@ -22088,7 +22767,17 @@ var KiroMcpProvider = class {
     const details = definition.command.kind === "stdio" ? (() => {
       const executable = resolvedExecutable ?? executablePath(definition.command.command, definition.command.cwd);
       const stats = fs6.statSync(executable, { bigint: true });
-      const configured = configuredEnvironment(this.#config.configPath, server);
+      const configured = definition.env ?? {};
+      const arguments_ = [...definition.command.args ?? []];
+      const argumentFiles = resolvedArgumentFiles.map((entry) => {
+        const argumentStats = fs6.statSync(entry.resolvedPath, { bigint: true });
+        return {
+          ...entry,
+          digest: fileDigest(entry.resolvedPath, MAX_MCP_ARGUMENT_FILE_BYTES),
+          device: String(argumentStats.dev),
+          file: String(argumentStats.ino)
+        };
+      });
       return {
         kind: "stdio",
         executable,
@@ -22096,12 +22785,13 @@ var KiroMcpProvider = class {
         executableDevice: String(stats.dev),
         executableFile: String(stats.ino),
         cwd: fs6.realpathSync(definition.command.cwd ?? this.#cwd),
-        arguments: [...definition.command.args ?? []],
-        configuredEnvironmentDigest: createHash4("sha256").update(JSON.stringify(Object.entries(configured).sort(([left], [right]) => left.localeCompare(right)))).digest("hex")
+        arguments: arguments_,
+        argumentFiles,
+        configuredEnvironmentDigest: createHash5("sha256").update(JSON.stringify(Object.entries(configured).sort(([left], [right]) => left.localeCompare(right)))).digest("hex")
       };
     })() : { kind: "http", endpoint: definition.command.url.href };
     const unsigned = { ...base, ...details };
-    return { ...unsigned, digest: createHash4("sha256").update("kiro-fabric-mcp-transport-v1\0").update(JSON.stringify(unsigned)).digest("hex") };
+    return { ...unsigned, digest: createHash5("sha256").update("kiro-fabric-mcp-transport-v2\0").update(JSON.stringify(unsigned)).digest("hex") };
   }
   #assertTransportSnapshot(runtime, server, approved) {
     if (!isRecord6(approved)) throw new Error("MCP call is missing its approved transport snapshot");
@@ -22121,6 +22811,33 @@ var KiroMcpProvider = class {
     });
     if (validation.status === "invalid") {
       throw new Error(`Invalid arguments for mcp.call: ${validation.message}`);
+    }
+  }
+  async #listRawTools(runtime, server, timeoutMs) {
+    try {
+      const connection = await runtime.connect(server, {
+        disableOAuth: this.#config.disableOAuth,
+        oauthTimeoutMs: timeoutMs
+      });
+      const response = await connection.client.listTools(void 0, {
+        timeout: timeoutMs,
+        resetTimeoutOnProgress: true,
+        maxTotalTimeout: timeoutMs
+      });
+      const tools = Array.isArray(response.tools) ? response.tools : [];
+      const definition = runtime.getDefinition(server);
+      return tools.filter((tool) => {
+        if (!isRecord6(tool) || typeof tool.name !== "string") return true;
+        if (definition.allowedTools !== void 0) return definition.allowedTools.includes(tool.name);
+        if (definition.blockedTools !== void 0) return !definition.blockedTools.includes(tool.name);
+        return true;
+      });
+    } catch (error) {
+      try {
+        await runtime.close(server);
+      } catch {
+      }
+      throw error;
     }
   }
   async #getRuntime(requestSignal) {
@@ -22209,7 +22926,7 @@ var KiroMcpProvider = class {
 };
 
 // src/kiro/memory-provider.ts
-import { createHash as createHash5 } from "node:crypto";
+import { createHash as createHash6 } from "node:crypto";
 import fs8 from "node:fs";
 
 // src/kiro/memory.ts
@@ -22826,7 +23543,7 @@ var KiroMemoryProvider = class {
   constructor(options) {
     this.#root = options.root;
     const canonicalWorkspace = fs8.realpathSync(options.cwd);
-    this.#namespace = options.namespace ?? `project:${createHash5("sha256").update(canonicalWorkspace).digest("hex")}`;
+    this.#namespace = options.namespace ?? `project:${createHash6("sha256").update(canonicalWorkspace).digest("hex")}`;
     this.#maxEntries = options.maxEntries;
     this.#maxValueChars = options.maxValueChars;
   }
@@ -22944,7 +23661,7 @@ var createKiroRuntime = (options) => {
 
 // src/kiro/mcp-server.ts
 var EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, workspace-scoped durable memory and state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
-var MCP_INSTANCE_ID = `fmcp_${randomBytes4(16).toString("hex")}`;
+var MCP_INSTANCE_ID = `fmcp_${randomBytes5(16).toString("hex")}`;
 var MCP_STARTED_AT = (/* @__PURE__ */ new Date()).toISOString();
 var MCP_PARENT_PID = process.ppid;
 var isRecord7 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -23041,7 +23758,7 @@ var createKiroMcpServer = async (options) => {
   const fabricApprover = new KiroPowerApprover({
     supported: () => supportsKiroElicitation(server.getClientCapabilities()),
     request: async ({ title: _title, message, signal, timeoutMs }) => {
-      const elicitationId = `form_${randomBytes4(8).toString("hex")}`;
+      const elicitationId = `form_${randomBytes5(8).toString("hex")}`;
       if (tracer.enabled) {
         tracer.event("eval", "approval.form.request", void 0, { elicitationId });
         tracer.flush();

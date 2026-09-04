@@ -70,6 +70,12 @@ const waitFor = async (id) => {
 const request = async (id, method, params) => { send({ jsonrpc: "2.0", id, method, params }); const frame = await waitFor(id); if (frame.error) throw new Error(JSON.stringify(frame.error)); return frame.result; };
 const call = (id, name, args) => request(id, "tools/call", { name, arguments: args });
 const text = (result) => result.content?.[0]?.text;
+const projectedJson = (result) => {
+  const value = text(result);
+  if (typeof value !== "string") throw new Error("Fabric result did not contain text");
+  const suffix = value.indexOf("\n\n");
+  return JSON.parse(suffix < 0 ? value : value.slice(0, suffix));
+};
 try {
   await request(1, "initialize", { protocolVersion: "2025-06-18", capabilities: { roots: { listChanged: true }, elicitation: { form: {} } }, clientInfo: { name: "fabric-component-certifier", version: "1" } });
   send({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
@@ -100,11 +106,15 @@ try {
     throw new Error("fabric_info provider set is incomplete");
   }
   const execution = await call(4, "fabric_exec", { code: "return { ok: true, value: payloads.value }", payloads: { value: "42" }, resultFormat: "json" });
-  const value = JSON.parse(text(execution));
+  const value = projectedJson(execution);
   if (execution.isError || value.ok !== true || value.value !== "42") throw new Error(`checked execution failed: ${text(execution)}`);
   const denied = await call(5, "fabric_exec", { code: "return await memory.set({ key: 'certification', value: true })", resultFormat: "json" });
-  const deniedValue = JSON.parse(text(denied));
-  if (!denied.isError || deniedValue.status !== "failed" || !String(deniedValue.error).includes("approval")) {
+  const deniedText = text(denied);
+  const deniedValue = projectedJson(denied);
+  if (!denied.isError || deniedValue.status !== "failed" || !String(deniedValue.error).includes("approval") ||
+      !deniedText.includes("Completed nested calls before the outer failure") ||
+      !deniedText.includes('"ref":"memory.set"') || !deniedText.includes('"outcome":"failed"') ||
+      !deniedText.includes("Inspect current state before retrying fabric_exec")) {
     throw new Error("approval absence did not fail closed at the approval boundary");
   }
   if (elicitationRequests !== 1) throw new Error(`expected one declined form elicitation, observed ${elicitationRequests}`);
@@ -126,7 +136,7 @@ try {
   let requestId = 10;
   for (const code of dynamicCodeProbes) {
     const probe = await call(requestId++, "fabric_exec", { code, payloads: { program: "return 42" }, resultFormat: "json" });
-    const probeValue = JSON.parse(text(probe));
+    const probeValue = projectedJson(probe);
     if (!probe.isError || !String(probeValue.error).includes("Dynamic code generation is disabled") || probeValue.audits?.length) {
       throw new Error(`dynamic code probe was not rejected before provider/approval activity: ${code}`);
     }
@@ -138,14 +148,14 @@ try {
     "const value = require('../package.json'); return value",
   ]) {
     const probe = await call(requestId++, "fabric_exec", { code, resultFormat: "json" });
-    const probeValue = JSON.parse(text(probe));
+    const probeValue = projectedJson(probe);
     if (!probe.isError || !JSON.stringify(probeValue.typeErrors ?? []).includes("Guest modules and external references are not allowed")) {
       throw new Error(`guest import was not rejected without host resolution: ${code}: ${JSON.stringify(probeValue)}`);
     }
   }
   for (const code of ["return 1n as any", "return new Map() as any", "return Number.NaN as any", "const x: any = {}; x.self = x; return x"]) {
     const probe = await call(requestId++, "fabric_exec", { code, resultFormat: "json" });
-    const probeValue = JSON.parse(text(probe));
+    const probeValue = projectedJson(probe);
     if (!probe.isError || !/non-JSON|unsupported exotic|non-finite|cycle/u.test(String(probeValue.error))) {
       throw new Error(`unsupported guest result was not rejected: ${code}`);
     }

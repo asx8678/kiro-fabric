@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import { generateAgentProfile } from "../scripts/agent-profile.mjs";
 import {
   assertRealClientEvidence as assertRealClientEvidenceRaw,
+  REAL_CLIENT_AUTOMATIC_COMPACTION_CYCLES,
+  REAL_CLIENT_AUTO_COMPACTION_PRESSURE_CHARS,
+  REAL_CLIENT_MANUAL_COMPACTION_CYCLES,
   REAL_CLIENT_NATIVE_TOOLS,
   REAL_CLIENT_PROFILE_TOOLS,
   REAL_CLIENT_TRANSCRIPT_KINDS,
@@ -15,6 +18,7 @@ import {
   acpSessionLoadObserved,
   acpUserPromptFacts,
   completedAcpCompactionNotifications,
+  completedAcpAutomaticCompactions,
   completedAcpManualCompactions,
   completedAcpFabricExecCalls,
   acpToolDataContaining,
@@ -80,6 +84,75 @@ const manualExchange = {
   responseSuccess: true,
 };
 const compactionSummary = { ...compactionAcpEvent, intervalStartOffset: 10, intervalEndOffset: 20, manualExchange };
+const seriesManualCycle = (index: number, start: number, end: number, frame: string) => ({
+  index,
+  command: "/compact",
+  eventCount: 1,
+  method: "_kiro.dev/compaction/status",
+  status: "completed",
+  sessionId,
+  frameDigest: frame,
+  intervalStartOffset: start,
+  intervalEndOffset: end,
+  manualExchange: index === 1 ? manualExchange : {
+    sessionId,
+    command: "/compact",
+    requestIdDigest: `${index}`.repeat(64),
+    requestFrameDigest: `${index + 1}`.repeat(64),
+    startedFrameDigest: `${index + 2}`.repeat(64),
+    completedFrameDigest: frame,
+    responseFrameDigest: `${index + 3}`.repeat(64),
+    responseResultDigest: `${index + 4}`.repeat(64),
+    responseSuccess: true,
+  },
+  sessionIdBefore: sessionId,
+  sessionIdAfter: sessionId,
+  sessionIdChanged: false,
+});
+const manualCompactionSeries = [
+  seriesManualCycle(1, 10, 20, compactionFrameDigest),
+  seriesManualCycle(2, 30, 40, "2".repeat(64)),
+  seriesManualCycle(3, 50, 60, "3".repeat(64)),
+];
+const automaticCompaction = {
+  trigger: "natural-context-pressure",
+  eventCount: 1,
+  method: "_kiro.dev/compaction/status",
+  status: "completed",
+  sessionId,
+  frameDigest: "8".repeat(64),
+  intervalStartOffset: 70,
+  intervalEndOffset: 80,
+  sessionIdBefore: sessionId,
+  sessionIdAfter: sessionId,
+  sessionIdChanged: false,
+  pressureTurns: 1,
+  totalPressureChars: REAL_CLIENT_AUTO_COMPACTION_PRESSURE_CHARS + 128,
+  pressureMarkerDigest: "9".repeat(64),
+  promptRequestIdDigest: "a".repeat(64),
+  promptFrameDigest: "b".repeat(64),
+  startedFrameDigest: "c".repeat(64),
+  completedFrameDigest: "8".repeat(64),
+  manualCommandAbsent: true,
+  toolCallsAbsent: true,
+  settingMutated: false,
+};
+const compactionSeriesSummary = {
+  manualCycleCount: REAL_CLIENT_MANUAL_COMPACTION_CYCLES,
+  automaticCycleCount: REAL_CLIENT_AUTOMATIC_COMPACTION_CYCLES,
+  manual: manualCompactionSeries,
+  automatic: automaticCompaction,
+};
+const automaticPressureSummary = {
+  attempts: [{
+    index: 1,
+    promptChars: REAL_CLIENT_AUTO_COMPACTION_PRESSURE_CHARS + 128,
+    pressureMarkerDigest: automaticCompaction.pressureMarkerDigest,
+    terminalBytes: 12,
+    terminalDigest: "d".repeat(64),
+  }],
+  event: automaticCompaction,
+};
 const contextFactDigest = "4".repeat(64);
 const contextSource = { sessionId, factDigest: contextFactDigest, frameDigest: "5".repeat(64) };
 const postCompactionResult = { verified: true, artifactVerified: true, contextCaptured: true };
@@ -112,6 +185,74 @@ const resumeCall = {
   observedResultDigest: qualificationValueDigest(resumeResult),
   frameDigests: ["0".repeat(64)],
 };
+const cycleCall = (kind: "manual" | "automatic", cycle: number, suffix: string, factDigest: string) => ({
+  kind,
+  cycle,
+  sessionId,
+  toolCallId: `${kind}-compaction-${cycle}-tool-call`,
+  expectedArgumentsDigest: suffix.repeat(64),
+  observedArgumentsDigest: suffix.repeat(64),
+  expectedResultDigest: qualificationValueDigest({ verified: true, artifactVerified: true, contextCaptured: true }),
+  observedResultDigest: qualificationValueDigest({ verified: true, artifactVerified: true, contextCaptured: true }),
+  observedContextFactDigest: factDigest,
+  frameDigests: [`${suffix === "a" ? "b" : suffix === "b" ? "c" : "d"}`.repeat(64)],
+});
+const cycleSeedCall = (kind: "manual" | "automatic", cycle: number, suffix: string) => ({
+  kind,
+  cycle,
+  sessionId,
+  toolCallId: `${kind}-compaction-${cycle}-context-seed-tool-call`,
+  expectedArgumentsDigest: suffix.repeat(64),
+  observedArgumentsDigest: suffix.repeat(64),
+  expectedResultDigest: qualificationValueDigest({ verified: true }),
+  observedResultDigest: qualificationValueDigest({ verified: true }),
+  frameDigests: [`${suffix === "d" ? "e" : suffix === "e" ? "f" : "0"}`.repeat(64)],
+});
+const cycleFactDigests = ["5".repeat(64), "6".repeat(64), "7".repeat(64)];
+const compactionCycleCalls = [
+  cycleCall("manual", 2, "a", cycleFactDigests[0]!),
+  cycleCall("manual", 3, "b", cycleFactDigests[1]!),
+  cycleCall("automatic", 1, "c", cycleFactDigests[2]!),
+];
+const compactionCycleContextSeeds = [
+  cycleSeedCall("manual", 2, "d"),
+  cycleSeedCall("manual", 3, "e"),
+  cycleSeedCall("automatic", 1, "f"),
+];
+const compactedFacts = [
+  {
+    kind: "manual",
+    cycle: 1,
+    source: "kiro-acp-precompact-prompt-to-fabric-exec",
+    observed: true,
+    factDigest: contextFactDigest,
+    preCompactionSessionId: sessionId,
+    preCompactionPromptFrameDigest: contextSource.frameDigest,
+    postCompactionToolCallId: postCompactionCall.toolCallId,
+    postCompactionArgumentsDigest: postCompactionCall.observedArgumentsDigest,
+    contextSeedToolCallId: contextSeedCall.toolCallId,
+    factAbsentFromPreCompactionToolData: true,
+    durableEffectObserved: true,
+  },
+  ...compactionCycleCalls.map((call, index) => ({
+    kind: call.kind,
+    cycle: call.cycle,
+    source: "kiro-acp-precompact-prompt-to-fabric-exec",
+    observed: true,
+    factDigest: cycleFactDigests[index]!,
+    preCompactionSessionId: sessionId,
+    preCompactionPromptFrameDigest: `${index + 6}`.repeat(64),
+    postCompactionToolCallId: call.toolCallId,
+    postCompactionArgumentsDigest: call.observedArgumentsDigest,
+    contextSeedToolCallId: compactionCycleContextSeeds[index]!.toolCallId,
+    factAbsentFromPreCompactionToolData: true,
+    durableEffectObserved: true,
+  })),
+];
+const compactionCycleCallSummary = {
+  contextSeeds: compactionCycleContextSeeds,
+  postCompactions: compactionCycleCalls,
+};
 const startup = (value: typeof interactiveIdentity): string => JSON.stringify({ ev: "agent.mcp.start", data: value });
 const transcriptPayload = (kind: string, index: number): string => {
   if (kind === "kiro-version") return "kiro-cli 2.21.0";
@@ -122,14 +263,20 @@ const transcriptPayload = (kind: string, index: number): string => {
   if (kind === "resume-mcp-startup") return startup(resumedIdentity);
   if (kind === "interactive-tools") return [...REAL_CLIENT_PROFILE_TOOLS, ...REAL_CLIENT_TOOLS].join("\n");
   if (kind === "form-probe-request") return "Risk: write\nApprove once";
-  if (kind === "resource-inheritance-setting" || kind === "automatic-compaction-setting") return "null";
+  if (kind === "resource-inheritance-setting" || kind === "automatic-compaction-setting" || kind === "automatic-compaction-setting-final") return "null";
   if (kind === "interactive-compaction") return "Compaction completed";
   if (kind === "interactive-compaction-acp-event") return `${JSON.stringify(compactionSummary)}\n`;
+  if (kind === "interactive-compaction-series-acp-events") return `${JSON.stringify(compactionSeriesSummary)}\n`;
   if (kind === "interactive-context-source-acp-event") return `${JSON.stringify(contextSource)}\n`;
   if (kind === "interactive-context-seed-acp-call") return `${JSON.stringify(contextSeedCall)}\n`;
   if (kind === "interactive-post-compaction-acp-call") return `${JSON.stringify(postCompactionCall)}\n`;
   if (kind === "resume-acp-call") return `${JSON.stringify(resumeCall)}\n`;
-  if (["interactive-session-id", "interactive-post-compaction-session-id", "resume-session-id"].includes(kind)) return `Session ID: ${sessionId}`;
+  if (["interactive-session-id", "interactive-post-compaction-session-id", "interactive-manual-compaction-2-session-id",
+    "interactive-manual-compaction-3-session-id", "interactive-automatic-compaction-session-id", "resume-session-id"].includes(kind)) return `Session ID: ${sessionId}`;
+  if (["interactive-manual-compaction-2", "interactive-manual-compaction-3"].includes(kind)) return "Compaction completed";
+  if (kind === "interactive-automatic-compaction-pressure") return `${JSON.stringify(automaticPressureSummary)}\n`;
+  if (kind === "interactive-compaction-cycle-context-sources") return `${JSON.stringify(compactedFacts)}\n`;
+  if (kind === "interactive-compaction-cycle-acp-calls") return `${JSON.stringify(compactionCycleCallSummary)}\n`;
   return `raw-${index}`;
 };
 const transcript = REAL_CLIENT_TRANSCRIPT_KINDS.map((kind, index) => transcriptEntry(kind, transcriptPayload(kind, index)));
@@ -137,13 +284,13 @@ const transcriptDigest = (kind: string) => transcript.find((entry) => entry.kind
 
 const valid = {
   kind: "kiro-fabric.real-client-qualification",
-  schemaVersion: 8,
+  schemaVersion: 10,
   ok: true,
   packageDigest: digest,
   archiveDigest,
   commit,
   tools: REAL_CLIENT_TOOLS,
-  driver: { digest: "e".repeat(64), version: "repository-driver-v6" },
+  driver: { digest: "e".repeat(64), version: "repository-driver-v8" },
   kiro: { path: executable, digest: "f".repeat(64), version: "kiro-cli 2.21.0", headlessEngineSelector: "--agent-engine", agentValidateSyntax: "--path" },
   installation: {
     releaseRoot: "/private/release",
@@ -202,6 +349,14 @@ const valid = {
       intervalEndOffset: 20,
       manualExchange,
     },
+    compactionSeries: {
+      source: "kiro-acp-repeated-manual-and-natural-automatic",
+      observed: true,
+      acpRecordingDigest: "6".repeat(64),
+      eventOutputDigest: transcriptDigest("interactive-compaction-series-acp-events"),
+      automaticPressureOutputDigest: transcriptDigest("interactive-automatic-compaction-pressure"),
+      ...compactionSeriesSummary,
+    },
     conversationContinuity: {
       source: "kiro-acp-resume",
       observed: true,
@@ -213,17 +368,11 @@ const valid = {
       interactiveRecordingDigest: "6".repeat(64),
       resumeRecordingDigest: "7".repeat(64),
       compactedFact: {
-        source: "kiro-acp-precompact-prompt-to-fabric-exec",
-        observed: true,
-        factDigest: contextFactDigest,
-        preCompactionPromptFrameDigest: contextSource.frameDigest,
-        postCompactionToolCallId: postCompactionCall.toolCallId,
-        postCompactionArgumentsDigest: postCompactionCall.observedArgumentsDigest,
-        contextSeedToolCallId: contextSeedCall.toolCallId,
-        factAbsentFromPreCompactionToolData: true,
-        durableEffectObserved: true,
+        ...compactedFacts[0],
         sourceOutputDigest: transcriptDigest("interactive-context-source-acp-event"),
       },
+      compactedFacts,
+      compactedFactsOutputDigest: transcriptDigest("interactive-compaction-cycle-context-sources"),
     },
     fabricExecIntegrity: {
       source: "kiro-acp-session-tool-call",
@@ -243,6 +392,17 @@ const valid = {
         acpRecordingDigest: "7".repeat(64),
         outputDigest: transcriptDigest("resume-acp-call"),
       },
+      continuityContextSeeds: compactionCycleContextSeeds.map((call) => ({
+        ...call,
+        acpRecordingDigest: "6".repeat(64),
+        outputDigest: transcriptDigest("interactive-compaction-cycle-acp-calls"),
+      })),
+      continuityChecks: compactionCycleCalls.map((call) => ({
+        ...call,
+        acpRecordingDigest: "6".repeat(64),
+        outputDigest: transcriptDigest("interactive-compaction-cycle-acp-calls"),
+      })),
+      continuityChecksOutputDigest: transcriptDigest("interactive-compaction-cycle-acp-calls"),
     },
   },
   commands: {
@@ -258,6 +418,7 @@ const valid = {
     })),
     inheritance: { executable, argv: ["settings", "chat.disableInheritingDefaultResources", "--format", "json"] },
     autoCompaction: { executable, argv: ["settings", "chat.disableAutoCompaction", "--format", "json"] },
+    autoCompactionFinal: { executable, argv: ["settings", "chat.disableAutoCompaction", "--format", "json"] },
     formProbe: { executable, argv: ["--v3", "--agent", "kiro-fabric"] },
     headless: { executable, argv: ["chat", "--agent-engine", "v3", "--agent", "kiro-fabric", "--no-interactive", "--require-mcp-startup", "--output-format", "stream-json", "prompt"] },
     interactive: { executable, argv: ["--v3", "--agent", "kiro-fabric"] },
@@ -289,13 +450,43 @@ const valid = {
       startupCount: 1,
       clientCapabilities: { roots: true, formElicitation: true },
       observedDescendantPids: [],
-      turns: [turn("turn-1"), turn("turn-2"), turn("turn-3"), turn("post-compaction")],
+      turns: [
+        turn("turn-1"),
+        turn("turn-2"),
+        turn("turn-3"),
+        turn("post-compaction"),
+        turn("manual-compaction-2-context-seed"),
+        turn("post-manual-compaction-2"),
+        turn("manual-compaction-3-context-seed"),
+        turn("post-manual-compaction-3"),
+        turn("automatic-compaction-context-seed"),
+        turn("post-automatic-compaction"),
+      ],
       compaction: {
         command: "/compact",
         completed: true,
         sessionIdBefore: sessionId,
         sessionIdAfter: sessionId,
         sessionIdChanged: false,
+        mcp: interactiveIdentity,
+      },
+      manualCompactions: manualCompactionSeries.map((cycle) => ({
+        index: cycle.index,
+        command: "/compact",
+        completed: true,
+        sessionIdBefore: cycle.sessionIdBefore,
+        sessionIdAfter: cycle.sessionIdAfter,
+        sessionIdChanged: cycle.sessionIdChanged,
+        mcp: interactiveIdentity,
+      })),
+      automaticCompaction: {
+        trigger: "natural-context-pressure",
+        completed: true,
+        pressureTurns: automaticCompaction.pressureTurns,
+        settingMutated: false,
+        sessionIdBefore: automaticCompaction.sessionIdBefore,
+        sessionIdAfter: automaticCompaction.sessionIdAfter,
+        sessionIdChanged: automaticCompaction.sessionIdChanged,
         mcp: interactiveIdentity,
       },
       durableSentinels: { memory: true, state: true },
@@ -328,7 +519,9 @@ const valid = {
     disableInheritingDefaultResources: null,
     defaultResourcesInherited: true,
     disableAutoCompaction: null,
+    disableAutoCompactionAfter: null,
     autoCompactionEnabled: true,
+    autoCompactionSettingMutated: false,
   },
   workspace: {
     path: "/private/workspace",
@@ -416,6 +609,45 @@ describe("real-client release evidence", () => {
     expect(completedAcpManualCompactions([request, started, completed, failedResponse], sessionId)).toEqual([]);
     const wrongIdType = { ...structuredClone(response), message: { ...response.message, id: "40" } };
     expect(completedAcpManualCompactions([request, started, completed, wrongIdType], sessionId)).toEqual([]);
+  });
+
+  it("recognizes natural automatic compaction only after a direct pressure prompt with no manual command or tool call", () => {
+    const marker = "kiro-auto-compact-0123456789abcdef";
+    const prompt = {
+      direction: "client-to-server",
+      message: { jsonrpc: "2.0", id: 41, method: "session/prompt", params: { sessionId, prompt: [{ type: "text", text: `pressure ${marker}` }] } },
+    };
+    const started = {
+      direction: "server-to-client",
+      message: { jsonrpc: "2.0", method: "_kiro.dev/compaction/status", params: { sessionId, status: { type: "started" } } },
+    };
+    const completed = {
+      direction: "server-to-client",
+      message: { jsonrpc: "2.0", method: "_kiro.dev/compaction/status", params: { sessionId, status: { type: "completed" } } },
+    };
+    const matches = completedAcpAutomaticCompactions([prompt, started, completed], sessionId, marker);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({
+      sessionId,
+      trigger: "natural-context-pressure",
+      manualCommandAbsent: true,
+      toolCallsAbsent: true,
+      pressureMarkerDigest: qualificationValueDigest(marker),
+    });
+    const manual = {
+      direction: "client-to-server",
+      message: { jsonrpc: "2.0", id: 42, method: "_kiro.dev/commands/execute", params: { sessionId, command: "/compact" } },
+    };
+    expect(completedAcpAutomaticCompactions([prompt, manual, started, completed], sessionId, marker)).toEqual([]);
+    const tool = {
+      direction: "server-to-client",
+      message: { jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "tool_call", toolCallId: "unexpected" } } },
+    };
+    expect(completedAcpAutomaticCompactions([prompt, tool, started, completed], sessionId, marker)).toEqual([]);
+    expect(completedAcpAutomaticCompactions([{
+      direction: "server-to-client",
+      message: { jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: JSON.stringify(prompt) } } } },
+    }, started, completed], sessionId, marker)).toEqual([]);
   });
 
   it("binds exact fabric_exec ACP input and normalized structural output", () => {
@@ -572,7 +804,7 @@ describe("real-client release evidence", () => {
       { commit: "7".repeat(40) },
       { tools: ["fabric_exec"] },
       { kind: "other" },
-      { schemaVersion: 7 },
+      { schemaVersion: 9 },
       { ok: false },
       { customAgentSelected: true },
       { powerActivated: false },
@@ -761,6 +993,67 @@ describe("real-client release evidence", () => {
       outputDigest: reusedCall.qualificationGates.fabricExecIntegrity.resume.outputDigest,
     };
     expect(() => assertRealClientEvidence(reusedCall, digest, { qualification: true, archiveDigest, commit })).toThrow("resume fabric_exec");
+
+    const changedCycleCall = structuredClone(valid);
+    changedCycleCall.qualificationGates.fabricExecIntegrity.continuityChecks[1]!.observedResultDigest = "f".repeat(64);
+    expect(() => assertRealClientEvidence(changedCycleCall, digest, { qualification: true, archiveDigest, commit })).toThrow("fabric_exec");
+
+    const reusedCycleCall = structuredClone(valid);
+    reusedCycleCall.qualificationGates.fabricExecIntegrity.continuityChecks[2]!.toolCallId =
+      reusedCycleCall.qualificationGates.fabricExecIntegrity.continuityChecks[1]!.toolCallId;
+    expect(() => assertRealClientEvidence(reusedCycleCall, digest, { qualification: true, archiveDigest, commit })).toThrow("reused a fabric_exec");
+  });
+
+  it("requires a distinct conversation-only fact and exact seed/result binding for every later compaction cycle", () => {
+    const missingFacts = structuredClone(valid);
+    // @ts-expect-error mutation fixture deliberately removes mandatory evidence.
+    delete missingFacts.qualificationGates.conversationContinuity.compactedFacts;
+    expect(() => assertRealClientEvidence(missingFacts, digest, { qualification: true, archiveDigest, commit })).toThrow("compaction-series conversational fact");
+
+    for (const index of [1, 2, 3]) {
+      const leaked = structuredClone(valid);
+      leaked.qualificationGates.conversationContinuity.compactedFacts[index]!.factAbsentFromPreCompactionToolData = false;
+      expect(() => assertRealClientEvidence(leaked, digest, { qualification: true, archiveDigest, commit })).toThrow("compaction-series conversational fact");
+
+      const notDurable = structuredClone(valid);
+      notDurable.qualificationGates.conversationContinuity.compactedFacts[index]!.durableEffectObserved = false;
+      expect(() => assertRealClientEvidence(notDurable, digest, { qualification: true, archiveDigest, commit })).toThrow("compaction-series conversational fact");
+
+      const wrongFact = structuredClone(valid);
+      wrongFact.qualificationGates.conversationContinuity.compactedFacts[index]!.factDigest = "0".repeat(64);
+      expect(() => assertRealClientEvidence(wrongFact, digest, { qualification: true, archiveDigest, commit })).toThrow(/conversational fact/u);
+
+      const wrongPostResult = structuredClone(valid);
+      wrongPostResult.qualificationGates.fabricExecIntegrity.continuityChecks[index - 1]!.observedResultDigest = "0".repeat(64);
+      expect(() => assertRealClientEvidence(wrongPostResult, digest, { qualification: true, archiveDigest, commit })).toThrow("fabric_exec");
+
+      const wrongSeedArguments = structuredClone(valid);
+      wrongSeedArguments.qualificationGates.fabricExecIntegrity.continuityContextSeeds[index - 1]!.observedArgumentsDigest = "0".repeat(64);
+      expect(() => assertRealClientEvidence(wrongSeedArguments, digest, { qualification: true, archiveDigest, commit })).toThrow("fabric_exec");
+    }
+
+    const reusedFact = structuredClone(valid);
+    reusedFact.qualificationGates.conversationContinuity.compactedFacts[2]!.factDigest =
+      reusedFact.qualificationGates.conversationContinuity.compactedFacts[1]!.factDigest;
+    expect(() => assertRealClientEvidence(reusedFact, digest, { qualification: true, archiveDigest, commit })).toThrow(/not unique/u);
+
+    const reusedSeedCall = structuredClone(valid);
+    reusedSeedCall.qualificationGates.fabricExecIntegrity.continuityContextSeeds[2]!.toolCallId =
+      reusedSeedCall.qualificationGates.fabricExecIntegrity.continuityContextSeeds[1]!.toolCallId;
+    expect(() => assertRealClientEvidence(reusedSeedCall, digest, { qualification: true, archiveDigest, commit })).toThrow("reused a fabric_exec");
+
+    const forgedSources = structuredClone(valid);
+    const sourcesIndex = REAL_CLIENT_TRANSCRIPT_KINDS.indexOf("interactive-compaction-cycle-context-sources");
+    forgedSources.transcript[sourcesIndex] = transcriptEntry(
+      "interactive-compaction-cycle-context-sources",
+      JSON.stringify(forgedSources.qualificationGates.conversationContinuity.compactedFacts.slice(0, 3)),
+    );
+    forgedSources.qualificationGates.conversationContinuity.compactedFactsOutputDigest = forgedSources.transcript[sourcesIndex]!.digest;
+    expect(() => assertRealClientEvidence(forgedSources, digest, { qualification: true, archiveDigest, commit })).toThrow("transcript-bound");
+
+    const changedSeedTurn = structuredClone(valid);
+    changedSeedTurn.lifecycle.interactive.turns[4]!.mcp = { ...interactiveIdentity, runtimeGeneration: 2 };
+    expect(() => assertRealClientEvidence(changedSeedTurn, digest, { qualification: true, archiveDigest, commit })).toThrow("manual-compaction-2-context-seed");
   });
 
   it("cannot qualify from terminal compaction prose without a bound completed ACP notification", () => {
@@ -800,6 +1093,53 @@ describe("real-client release evidence", () => {
     expect(() => assertRealClientEvidence(forgedEvent, digest, { qualification: true, archiveDigest, commit })).toThrow("event-bound");
   });
 
+  it("requires three ordered manual cycles and one natural automatic cycle in the same recording", () => {
+    const missing = structuredClone(valid);
+    // @ts-expect-error mutation fixture deliberately removes mandatory evidence.
+    delete missing.qualificationGates.compactionSeries;
+    expect(() => assertRealClientEvidence(missing, digest, { qualification: true, archiveDigest, commit })).toThrow("repeated compaction series");
+
+    const fewerManual = structuredClone(valid);
+    fewerManual.qualificationGates.compactionSeries.manual.pop();
+    fewerManual.qualificationGates.compactionSeries.manualCycleCount = 2;
+    expect(() => assertRealClientEvidence(fewerManual, digest, { qualification: true, archiveDigest, commit })).toThrow("repeated compaction series");
+
+    const overlapping = structuredClone(valid);
+    overlapping.qualificationGates.compactionSeries.manual[1]!.intervalStartOffset = 15;
+    expect(() => assertRealClientEvidence(overlapping, digest, { qualification: true, archiveDigest, commit })).toThrow("manual compaction series cycle 2");
+
+    for (const [field, value] of [
+      ["manualCommandAbsent", false],
+      ["toolCallsAbsent", false],
+      ["settingMutated", true],
+      ["trigger", "manual"],
+    ] as const) {
+      const forged = structuredClone(valid);
+      // @ts-expect-error mutation fixture deliberately assigns heterogeneous invalid evidence.
+      forged.qualificationGates.compactionSeries.automatic[field] = value;
+      expect(() => assertRealClientEvidence(forged, digest, { qualification: true, archiveDigest, commit })).toThrow("natural automatic compaction");
+    }
+
+    const changedIdentity = structuredClone(valid);
+    changedIdentity.lifecycle.interactive.automaticCompaction.mcp = { ...interactiveIdentity, runtimeGeneration: 2 };
+    expect(() => assertRealClientEvidence(changedIdentity, digest, { qualification: true, archiveDigest, commit })).toThrow("automatic compaction");
+
+    const changedPressureTranscript = structuredClone(valid);
+    const pressureIndex = REAL_CLIENT_TRANSCRIPT_KINDS.indexOf("interactive-automatic-compaction-pressure");
+    changedPressureTranscript.transcript[pressureIndex] = transcriptEntry("interactive-automatic-compaction-pressure", JSON.stringify({ attempts: [], event: automaticCompaction }));
+    changedPressureTranscript.qualificationGates.compactionSeries.automaticPressureOutputDigest = changedPressureTranscript.transcript[pressureIndex]!.digest;
+    expect(() => assertRealClientEvidence(changedPressureTranscript, digest, { qualification: true, archiveDigest, commit })).toThrow("pressure evidence");
+
+    const changedSeriesTranscript = structuredClone(valid);
+    const seriesIndex = REAL_CLIENT_TRANSCRIPT_KINDS.indexOf("interactive-compaction-series-acp-events");
+    changedSeriesTranscript.transcript[seriesIndex] = transcriptEntry("interactive-compaction-series-acp-events", JSON.stringify({
+      ...compactionSeriesSummary,
+      manualCycleCount: 2,
+    }));
+    changedSeriesTranscript.qualificationGates.compactionSeries.eventOutputDigest = changedSeriesTranscript.transcript[seriesIndex]!.digest;
+    expect(() => assertRealClientEvidence(changedSeriesTranscript, digest, { qualification: true, archiveDigest, commit })).toThrow("structurally bound");
+  });
+
   it("requires exact top-level help argv", () => {
     const missing = structuredClone(valid);
     // @ts-expect-error mutation fixture deliberately removes mandatory evidence.
@@ -817,11 +1157,21 @@ describe("real-client release evidence", () => {
     autoCompactionDrift.commands.autoCompaction.argv = ["settings", "chat.disableAutoCompaction"];
     expect(() => assertRealClientEvidence(autoCompactionDrift, digest, { qualification: true, archiveDigest, commit })).toThrow("automatic compaction");
 
+    const finalAutoCompactionDrift = structuredClone(valid);
+    finalAutoCompactionDrift.commands.autoCompactionFinal.argv = ["settings", "chat.disableAutoCompaction"];
+    expect(() => assertRealClientEvidence(finalAutoCompactionDrift, digest, { qualification: true, archiveDigest, commit })).toThrow("final automatic compaction");
+
     const disabledAutoCompaction = structuredClone(valid);
     // @ts-expect-error mutation fixture deliberately assigns an invalid setting value.
     disabledAutoCompaction.resources.disableAutoCompaction = true;
     disabledAutoCompaction.resources.autoCompactionEnabled = false;
     expect(() => assertRealClientEvidence(disabledAutoCompaction, digest, { qualification: true, archiveDigest, commit })).toThrow("automatic-compaction setting");
+
+    const mutatedAutoCompaction = structuredClone(valid);
+    // @ts-expect-error mutation fixture deliberately assigns an invalid setting value.
+    mutatedAutoCompaction.resources.disableAutoCompactionAfter = true;
+    mutatedAutoCompaction.resources.autoCompactionSettingMutated = true;
+    expect(() => assertRealClientEvidence(mutatedAutoCompaction, digest, { qualification: true, archiveDigest, commit })).toThrow("automatic-compaction setting");
   });
 
   it("rejects MCP/runtime identity changes across turns or compaction", () => {

@@ -7,6 +7,15 @@ export interface FabricActionEffect {
   resources?: readonly string[];
 }
 
+/** Bounded standard MCP ToolAnnotations. Hints never grant Fabric approval. */
+export interface FabricToolAnnotations {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
 export interface FabricActionDescriptor {
   name: string;
   description: string;
@@ -15,6 +24,7 @@ export interface FabricActionDescriptor {
   risk: FabricRisk;
   namespace?: string;
   effect?: FabricActionEffect;
+  annotations?: FabricToolAnnotations;
 }
 
 export interface FabricInvocationContext {
@@ -47,6 +57,8 @@ export interface FabricProvider {
 export interface ResolvedFabricAction extends FabricActionDescriptor {
   ref: string;
   provider: string;
+  /** Stable digest of the provider/ref and complete public descriptor semantics. */
+  descriptorDigest: string;
 }
 
 export interface FabricProviderStatus {

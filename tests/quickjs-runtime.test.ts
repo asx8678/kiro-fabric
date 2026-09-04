@@ -190,4 +190,133 @@ describe("QuickJS-only guest runtime", () => {
     const logs = await new QuickJsRuntime().execute("print('x'.repeat(100)); return true", async () => null, { ...defaults, maxLogChars: 10 });
     expect(logs.logs.join("").length).toBeLessThanOrEqual(10);
   });
+
+  it("provides ordered fan-out bounded by the configured host-call concurrency", async () => {
+    let active = 0;
+    let maximum = 0;
+    const result = await new QuickJsRuntime().execute(
+      `return await parallel([0, 1], async (group) =>
+        await parallel([3, 1, 2], async (value, index) =>
+          await tools.call({ ref: 'test.wait', args: { value, index: group * 3 + index } }),
+          { concurrency: 99 }),
+        { concurrency: 99 })`,
+      async (_ref, args) => {
+        const nested = args.args as Record<string, unknown>;
+        active += 1;
+        maximum = Math.max(maximum, active);
+        await new Promise((resolve) => setTimeout(resolve, Number(nested.value) + 5));
+        active -= 1;
+        return nested.index;
+      },
+      { ...defaults, maxConcurrentHostCalls: 2 },
+    );
+    expect(result).toMatchObject({ terminationReason: "completed", value: [[0, 1, 2], [3, 4, 5]] });
+    expect(maximum).toBe(2);
+  });
+
+  it("queues direct Promise.all bridge fan-out behind the execution-wide host-call cap", async () => {
+    let active = 0;
+    let maximum = 0;
+    const result = await new QuickJsRuntime().execute(
+      "return await Promise.all([0, 1, 2, 3].map((index) => tools.call({ ref: 'test.wait', args: { index } })))",
+      async (_ref, args) => {
+        active += 1;
+        maximum = Math.max(maximum, active);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        active -= 1;
+        return (args.args as Record<string, unknown>).index;
+      },
+      { ...defaults, maxConcurrentHostCalls: 2 },
+    );
+    expect(result).toMatchObject({ terminationReason: "completed", value: [0, 1, 2, 3] });
+    expect(maximum).toBe(2);
+  });
+
+  it("snapshots exact call arguments before a saturated host-call queue", async () => {
+    const result = await new QuickJsRuntime().execute(
+      `
+      const first = tools.call({ ref: "test.wait", args: { index: 0 } });
+      const mutable = { index: 1 };
+      const second = tools.call({ ref: "test.wait", args: mutable });
+      mutable.index = 99;
+      return await Promise.all([first, second]);
+      `,
+      async (_ref, args) => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return (args.args as Record<string, unknown>).index;
+      },
+      { ...defaults, maxConcurrentHostCalls: 1 },
+    );
+    expect(result).toMatchObject({ terminationReason: "completed", value: [0, 1] });
+  });
+
+  it("extends an exact queued action deadline before waiting for a host-call slot", async () => {
+    const result = await new QuickJsRuntime().execute(
+      `return await Promise.all([
+        tools.providers(),
+        tools.call({ ref: "mcp.$call", args: {} }),
+      ])`,
+      async (ref) => {
+        if (ref === "fabric.providers") await new Promise((resolve) => setTimeout(resolve, 40));
+        return ref;
+      },
+      {
+        ...defaults,
+        timeoutMs: 20,
+        maxTimeoutMs: 300,
+        maxConcurrentHostCalls: 1,
+        minimumTimeoutMsForHostCall: (ref, args) =>
+          ref === "fabric.call" && args.ref === "mcp.$call" ? 200 : undefined,
+      },
+    );
+    expect(result).toMatchObject({
+      terminationReason: "completed",
+      effectiveTimeoutMs: 200,
+      value: ["fabric.providers", "fabric.call"],
+    });
+  });
+
+  it("fails closed on malformed bounded parallel requests", async () => {
+    const result = await new QuickJsRuntime().execute(
+      "return await parallel([async () => 1], { concurrency: 0 })",
+      async () => null,
+      { ...defaults, maxConcurrentHostCalls: 2 },
+    );
+    expect(result.terminationReason).toBe("runtime_error");
+    expect(result.error).toContain("positive finite number");
+  });
+
+  it("keeps bounded parallel scheduling independent of guest-mutated primordials", async () => {
+    const result = await new QuickJsRuntime().execute(
+      `
+      Promise.all = (() => { throw new Error("forged Promise.all"); }) as any;
+      Math.min = (() => 99) as any;
+      Reflect.apply = (() => { throw new Error("forged Reflect.apply"); }) as any;
+      (globalThis as any).Array = function () { throw new Error("forged Array"); };
+      return await parallel([1, 2, 3], async (value) => value * 2, 99);
+      `,
+      async () => null,
+      { ...defaults, maxConcurrentHostCalls: 2 },
+    );
+    expect(result).toMatchObject({ terminationReason: "completed", value: [2, 4, 6] });
+  });
+
+  it("stops dequeuing bounded parallel work after the first failure", async () => {
+    const started: number[] = [];
+    const result = await new QuickJsRuntime().execute(
+      "return await parallel([0, 1, 2, 3], async (index) => tools.call({ ref: 'test.step', args: { index } }), 2)",
+      async (_ref, args) => {
+        const index = Number((args.args as Record<string, unknown>).index);
+        started.push(index);
+        if (index === 0) throw new Error("first failed");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return index;
+      },
+      { ...defaults, maxConcurrentHostCalls: 2 },
+    );
+    expect(result.terminationReason).toBe("runtime_error");
+    expect(result.error).toContain("first failed");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(started.sort()).toEqual([0, 1]);
+  });
 });

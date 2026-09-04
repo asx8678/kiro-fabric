@@ -35,6 +35,8 @@ export interface FabricSandboxOptions {
   maxInputBytes?: number;
   maxLogChars?: number;
   maxNestedResultChars?: number;
+  /** Maximum guest-to-host calls admitted concurrently across this execution. */
+  maxConcurrentHostCalls?: number;
   payloads?: Record<string, string>;
   signal?: AbortSignal;
   minimumTimeoutMsForHostCall?(ref: string, args: Record<string, unknown>): number | undefined;
@@ -65,7 +67,9 @@ const GUEST_SETUP = `
 (() => {
   'use strict';
   const bridge = globalThis.__fabricHostCall;
+  const prepareHostCall = globalThis.__fabricPrepareHostCall;
   delete globalThis.__fabricHostCall;
+  delete globalThis.__fabricPrepareHostCall;
 
   // Capture every validator/promise primordial before guest code can mutate it.
   const apply = Reflect.apply;
@@ -90,13 +94,25 @@ const GUEST_SETUP = `
   const promiseThenMethod = Promise.prototype.then;
   const promiseResolveMethod = Promise.resolve;
   const promiseRaceMethod = Promise.race;
+  const promiseAllMethod = Promise.all;
   const SafePromise = Promise;
+  const SafeArray = Array;
   const SafeWeakSet = WeakSet;
   const SafeTypeError = TypeError;
+  const SafeRangeError = RangeError;
   const SafeError = Error;
+  const mathFloor = Math.floor;
+  const mathMin = Math.min;
   const promiseThen = (promise, fulfilled, rejected) => apply(promiseThenMethod, promise, [fulfilled, rejected]);
   const promiseResolve = (value) => apply(promiseResolveMethod, SafePromise, [value]);
   const promiseRace = (values) => apply(promiseRaceMethod, SafePromise, [values]);
+  const promiseAll = (values) => apply(promiseAllMethod, SafePromise, [values]);
+  const configuredParallelLimit = globalThis.__fabricMaxParallelConcurrency;
+  delete globalThis.__fabricMaxParallelConcurrency;
+  if (typeof configuredParallelLimit !== 'number' || !numberIsFinite(configuredParallelLimit) || configuredParallelLimit < 1) {
+    throw new SafeTypeError('Fabric parallel limit is invalid');
+  }
+  const maxParallelConcurrency = mathFloor(configuredParallelLimit);
 
   const codeGenerationDenied = function () { throw new SafeTypeError('Dynamic code generation is disabled'); };
   const constructors = [
@@ -168,10 +184,119 @@ const GUEST_SETUP = `
     return text;
   };
   const parseStrict = (text) => apply(jsonParse, JSON, [text]);
-  const call = (ref, args = {}) => promiseThen(bridge(ref, strictJsonText(args)), parseStrict);
+  // One execution-wide semaphore covers friendly APIs, tools.call, direct
+  // Promise.all fan-out, and nested parallel helpers alike. This queues excess
+  // bridge work before it reaches the host's fail-closed concurrency quota.
+  const hostCallWaiters = objectCreate(null);
+  let activeHostCalls = 0;
+  let hostWaiterHead = 0;
+  let hostWaiterTail = 0;
+  let hostCallsStopped = false;
+  let hostCallsStopReason;
+  const acquireHostCall = () => {
+    if (hostCallsStopped) {
+      return new SafePromise((_resolve, reject) => reject(hostCallsStopReason));
+    }
+    if (activeHostCalls < maxParallelConcurrency) {
+      activeHostCalls += 1;
+      return promiseResolve();
+    }
+    return new SafePromise((resolve, reject) => {
+      hostCallWaiters[hostWaiterTail++] = { resolve, reject };
+    });
+  };
+  const releaseHostCall = () => {
+    if (!hostCallsStopped && hostWaiterHead < hostWaiterTail) {
+      const waiter = hostCallWaiters[hostWaiterHead];
+      delete hostCallWaiters[hostWaiterHead++];
+      waiter.resolve();
+      return;
+    }
+    activeHostCalls -= 1;
+  };
+  const stopQueuedHostCalls = (reason) => {
+    if (hostCallsStopped) return;
+    hostCallsStopped = true;
+    hostCallsStopReason = reason;
+    while (hostWaiterHead < hostWaiterTail) {
+      const waiter = hostCallWaiters[hostWaiterHead];
+      delete hostCallWaiters[hostWaiterHead++];
+      waiter.reject(reason);
+    }
+  };
+  const call = (ref, args = {}) => {
+    // Snapshot and validate at API invocation, before a saturated semaphore
+    // can defer the bridge. Later guest mutation must not change exact args.
+    const argsText = strictJsonText(args);
+    prepareHostCall(ref, argsText);
+    return promiseThen(acquireHostCall(), () => {
+      let operation;
+      try {
+        operation = promiseThen(bridge(ref, argsText), parseStrict);
+      } catch (error) {
+        releaseHostCall();
+        throw error;
+      }
+      return promiseThen(operation, (value) => {
+        releaseHostCall();
+        return value;
+      }, (error) => {
+        releaseHostCall();
+        throw error;
+      });
+    });
+  };
+  const parallel = async (items, mapperOrOptions, maybeOptions) => {
+    if (!arrayIsArray(items)) throw new SafeTypeError('parallel expects an array');
+    const mapped = typeof mapperOrOptions === 'function';
+    if (!mapped) {
+      for (let index = 0; index < items.length; index++) {
+        if (typeof items[index] !== 'function') {
+          throw new SafeTypeError('parallel expects functions or an item mapper');
+        }
+      }
+    }
+    const itemCount = items.length;
+    if (itemCount === 0) return [];
+    const options = mapped ? maybeOptions : mapperOrOptions;
+    const requested = typeof options === 'number'
+      ? options
+      : options && typeof options === 'object' && options.concurrency !== undefined
+        ? options.concurrency
+        : maxParallelConcurrency;
+    if (typeof requested !== 'number' || !numberIsFinite(requested) || requested < 1) {
+      throw new SafeRangeError('parallel concurrency must be a positive finite number');
+    }
+    const concurrency = mathMin(itemCount, maxParallelConcurrency, mathFloor(requested));
+    const results = new SafeArray(itemCount);
+    const workers = new SafeArray(concurrency);
+    let cursor = 0;
+    let stopped = false;
+    for (let worker = 0; worker < concurrency; worker++) {
+      workers[worker] = (async () => {
+        while (!stopped && cursor < itemCount) {
+          const index = cursor++;
+          try {
+            results[index] = mapped
+              ? await apply(mapperOrOptions, undefined, [items[index], index])
+              : await apply(items[index], undefined, []);
+          } catch (error) {
+            stopped = true;
+            throw error;
+          }
+        }
+      })();
+    }
+    await promiseAll(workers);
+    return results;
+  };
   let rejectExecution;
   const executionGate = new SafePromise((_resolve, reject) => { rejectExecution = reject; });
-  const cancel = (message) => rejectExecution(new SafeError(message));
+  const cancel = (message) => {
+    const reason = new SafeError(message);
+    stopQueuedHostCalls(reason);
+    rejectExecution(reason);
+  };
   const run = (main) => promiseThen(promiseRace([promiseThen(promiseResolve(), main), executionGate]), strictJsonText);
   globalThis.tools = objectFreeze({
     providers: () => call("fabric.providers"),
@@ -190,7 +315,13 @@ const GUEST_SETUP = `
     get: (args) => call("state.get", args), set: (args) => call("state.set", args),
     list: (args = {}) => call("state.list", args), delete: (args) => call("state.delete", args),
   });
-  globalThis.mcp = objectFreeze({ servers: (args = {}) => call("mcp.$servers", args), call: (args) => call("mcp.$call", args) });
+  globalThis.mcp = objectFreeze({
+    servers: (args = {}) => call("mcp.$servers", args),
+    tools: (args) => call("mcp.$tools", args),
+    describe: (args) => call("mcp.$describe", args),
+    call: (args) => call("mcp.$call", args),
+  });
+  objectDefineProperty(globalThis, 'parallel', { value: parallel, writable: false, configurable: false });
   objectFreeze(globalThis.payloads);
   return objectFreeze({ run, cancel });
 })()
@@ -380,6 +511,17 @@ export class QuickJsRuntime {
       });
       context.setProp(context.global, "__fabricHostCall", hostFunction);
       hostFunction.dispose();
+      const prepareHostFunction = context.newFunction("__fabricPrepareHostCall", (refHandle: any, argsHandle: any) => {
+        const ref = context.getString(refHandle);
+        const parsed: unknown = JSON.parse(context.getString(argsHandle));
+        const args = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+          ? parsed as Record<string, unknown>
+          : {};
+        assertFabricJsonBudget(args);
+        extendForExactAction(ref, args);
+      });
+      context.setProp(context.global, "__fabricPrepareHostCall", prepareHostFunction);
+      prepareHostFunction.dispose();
 
       const printFunction = context.newFunction("print", (...handles: any[]) => {
         let remaining = maxLogChars - logChars;
@@ -407,6 +549,9 @@ export class QuickJsRuntime {
       );
       context.setProp(context.global, "payloads", payloadHandle);
       payloadHandle.dispose();
+      const parallelLimitHandle = context.newNumber(Math.max(1, Math.min(64, Math.floor(options.maxConcurrentHostCalls ?? 1))));
+      context.setProp(context.global, "__fabricMaxParallelConcurrency", parallelLimitHandle);
+      parallelLimitHandle.dispose();
 
       const setupSpan = tracer.enabled ? tracer.span("eval", "quickjs.eval.setup", execId, { sourceBytes: GUEST_SETUP.length }, parentSpanId) : undefined;
       const setup = context.evalCode(GUEST_SETUP, "kiro-fabric-setup.js");

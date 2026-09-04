@@ -60,7 +60,7 @@ export const effectiveFabricTimeout = (
 ): number => Math.min(configuredMaximum, Math.max(executorDefault, exactActionFloor, invocationTimeout));
 
 export const exactActionTimeoutFloor = (ref: string, mcpCallTimeoutMs: number): number =>
-  ref === "mcp.$call"
+  ref === "mcp.$call" || ref === "mcp.$tools" || ref === "mcp.$describe"
     ? mcpCallTimeoutMs +
       FABRIC_APPROVAL_TIMEOUT_MS * MAX_MCP_APPROVAL_STAGES +
       FABRIC_PROVIDER_TIMEOUT_GRACE_MS
@@ -218,6 +218,7 @@ export class FabricExecutionService {
       maxInputBytes: this.config.executor.maxInputBytes,
       maxLogChars: this.config.executor.maxOutputChars,
       maxNestedResultChars: this.config.executor.maxNestedResultChars,
+      maxConcurrentHostCalls: this.config.executor.maxConcurrentProviderCalls,
       ...(options.payloads ? { payloads: options.payloads } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
       ...(checked.javascript ? { transpiledCode: checked.javascript } : {}),

@@ -128,6 +128,8 @@ const bool = (value: unknown, fallback: boolean): boolean =>
 const approval = (value: unknown, fallback: FabricApprovalMode): FabricApprovalMode =>
   value === "allow" || value === "ask" || value === "deny" ? value : fallback;
 
+export const CURRENT_FABRIC_CONFIG_SCHEMA_VERSION = 1;
+
 const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
   executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
   approvals: ["read", "write", "execute", "network"],
@@ -137,10 +139,9 @@ const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
   tracing: ["enabled"],
 };
-const assertFileConfigShape = (value: unknown): void => {
-  const root = record(value);
-  if (!root) throw new Error("configuration root must be an object");
+const assertFileConfigSections = (root: Record<string, unknown>): void => {
   for (const [section, raw] of Object.entries(root)) {
+    if (section === "schemaVersion") continue;
     const allowed = FILE_CONFIG_KEYS[section];
     if (!allowed) throw new Error(`unknown configuration section: ${section}`);
     const fields = record(raw);
@@ -149,6 +150,53 @@ const assertFileConfigShape = (value: unknown): void => {
       if (!allowed.includes(field)) throw new Error(`unknown configuration field: ${section}.${field}`);
     }
   }
+};
+
+const assertFileConfigValues = (root: Record<string, unknown>, defaults: FabricConfig): void => {
+  const normalized = normalizeFabricConfig(root, defaults) as unknown as Record<string, Record<string, unknown>>;
+  for (const [section, raw] of Object.entries(root)) {
+    if (section === "schemaVersion") continue;
+    const fields = raw as Record<string, unknown>;
+    for (const [field, value] of Object.entries(fields)) {
+      if (!Object.is(normalized[section]?.[field], value)) {
+        throw new Error(`invalid configuration value: ${section}.${field}`);
+      }
+    }
+  }
+};
+
+type FabricConfigDocument = Record<string, unknown> & { schemaVersion?: number };
+const CONFIG_MIGRATIONS = new Map<number, (document: FabricConfigDocument) => FabricConfigDocument>([
+  [0, (document) => ({ schemaVersion: 1, ...document })],
+]);
+
+const migrateFileConfig = (value: unknown, defaults: FabricConfig): FabricConfigDocument => {
+  const root = record(value);
+  if (!root) throw new Error("configuration root must be an object");
+  assertFileConfigSections(root);
+  const declared = root.schemaVersion;
+  if (declared !== undefined && (!Number.isSafeInteger(declared) || (declared as number) < 1)) {
+    throw new Error("configuration schemaVersion must be a positive safe integer");
+  }
+  let version = declared === undefined ? 0 : declared as number;
+  if (version > CURRENT_FABRIC_CONFIG_SCHEMA_VERSION) {
+    throw new Error(`configuration schemaVersion ${version} is newer than supported version ${CURRENT_FABRIC_CONFIG_SCHEMA_VERSION}`);
+  }
+  let document: FabricConfigDocument = structuredClone(root);
+  while (version < CURRENT_FABRIC_CONFIG_SCHEMA_VERSION) {
+    const migration = CONFIG_MIGRATIONS.get(version);
+    if (!migration) throw new Error(`configuration migration from schemaVersion ${version} is unavailable`);
+    document = migration(document);
+    version += 1;
+    if (document.schemaVersion !== version) throw new Error(`configuration migration to schemaVersion ${version} is invalid`);
+  }
+  assertFileConfigSections(document);
+  // File-backed configuration must be fully valid before it is accepted.
+  // Programmatic callers retain normalizeFabricConfig's clamping and fallback
+  // behavior, but persisted invalid values fail closed. Loading applies
+  // migrations in memory: the runtime never rewrites user config.
+  assertFileConfigValues(document, defaults);
+  return document;
 };
 
 export const normalizeFabricConfig = (
@@ -222,45 +270,61 @@ export const normalizeFabricConfig = (
 
 const MAX_CONFIG_BYTES = 256 * 1024;
 
+const sameConfigFile = (left: fs.BigIntStats, right: fs.BigIntStats): boolean =>
+  left.isFile() && right.isFile() && !left.isSymbolicLink() && !right.isSymbolicLink() &&
+  left.nlink === 1n && right.nlink === 1n && left.dev === right.dev && left.ino === right.ino;
+const sameConfigVersion = (left: fs.BigIntStats, right: fs.BigIntStats): boolean =>
+  sameConfigFile(left, right) && left.size === right.size &&
+  left.ctimeNs === right.ctimeNs && left.mtimeNs === right.mtimeNs;
+
+const readBoundedDescriptor = (descriptor: number): Buffer => {
+  const buffer = Buffer.allocUnsafe(MAX_CONFIG_BYTES + 1);
+  let bytes = 0;
+  while (bytes < buffer.length) {
+    const count = fs.readSync(descriptor, buffer, bytes, buffer.length - bytes, null);
+    if (count === 0) break;
+    bytes += count;
+  }
+  if (bytes > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
+  return buffer.subarray(0, bytes);
+};
+
 export const loadFabricConfig = (configFile: string, defaults = DEFAULT_FABRIC_CONFIG): FabricConfig => {
   let descriptor: number | undefined;
   let observed = false;
   try {
-    const lexicalStats = fs.lstatSync(configFile);
+    const lexicalStats = fs.lstatSync(configFile, { bigint: true });
     observed = true;
-    if (!lexicalStats.isFile() || lexicalStats.isSymbolicLink() || lexicalStats.nlink !== 1) {
+    if (!lexicalStats.isFile() || lexicalStats.isSymbolicLink() || lexicalStats.nlink !== 1n) {
       throw new Error("configuration must be a private regular file");
     }
     descriptor = fs.openSync(
       configFile,
       fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0),
     );
-    const stats = fs.fstatSync(descriptor);
-    if (!stats.isFile() || stats.nlink !== 1 ||
-        stats.dev !== lexicalStats.dev || stats.ino !== lexicalStats.ino) {
+    const stats = fs.fstatSync(descriptor, { bigint: true });
+    if (!sameConfigFile(lexicalStats, stats)) {
       throw new Error("configuration changed while it was being opened");
     }
-    if (stats.size > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
+    if (stats.size > BigInt(MAX_CONFIG_BYTES)) throw new Error("configuration exceeds 262144 bytes");
     if (process.platform !== "win32") {
-      if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
+      if (typeof process.getuid === "function" && stats.uid !== BigInt(process.getuid())) {
         throw new Error("configuration must be owned by the current user");
       }
-      if ((stats.mode & 0o077) !== 0) throw new Error("configuration permissions must be private");
+      if ((stats.mode & 0o077n) !== 0n) throw new Error("configuration permissions must be private");
     }
     // Read at most one byte beyond the limit from the verified descriptor.
     // This preserves the bound even if another same-user process grows the
     // file after fstat and avoids reopening a swapped pathname.
-    const buffer = Buffer.allocUnsafe(MAX_CONFIG_BYTES + 1);
-    let bytes = 0;
-    while (bytes < buffer.length) {
-      const count = fs.readSync(descriptor, buffer, bytes, buffer.length - bytes, null);
-      if (count === 0) break;
-      bytes += count;
+    const bytes = readBoundedDescriptor(descriptor);
+    const afterRead = fs.fstatSync(descriptor, { bigint: true });
+    const currentPath = fs.lstatSync(configFile, { bigint: true });
+    if (!sameConfigVersion(stats, afterRead) || !sameConfigVersion(stats, currentPath)) {
+      throw new Error("configuration changed while it was being read");
     }
-    if (bytes > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
-    const value: unknown = JSON.parse(buffer.subarray(0, bytes).toString("utf8"));
-    assertFileConfigShape(value);
-    return normalizeFabricConfig(value, defaults);
+    const value: unknown = JSON.parse(bytes.toString("utf8"));
+    const document = migrateFileConfig(value, defaults);
+    return normalizeFabricConfig(document, defaults);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT" && !observed) {
       return normalizeFabricConfig(undefined, defaults);

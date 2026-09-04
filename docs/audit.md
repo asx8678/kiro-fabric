@@ -27,6 +27,7 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 - `src/async-settlement.ts`
 - `src/config.ts`
 - `src/core/action-registry.ts`
+- `src/core/semantic-digest.ts`
 - `src/execution-service.ts`
 - `src/index.ts`
 - `src/kernel/fabric-exec-contract.ts`
@@ -86,7 +87,7 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 
 ## Release qualification
 
-Continuity evidence is fail-closed at the ACP boundary. The real-client evidence validator requires a bounded byte interval around the manual `/compact`, exactly one completed `_kiro.dev/compaction/status` notification in that interval, and a read-only record of `chat.disableAutoCompaction` showing automatic compaction remains enabled. It also binds the post-compaction and resume `fabric_exec` inputs and normalized outputs to completed ACP tool-call frames. A fresh cryptographically random fact appears in exactly one recorded pre-compaction user prompt, is prohibited from Fabric and native tools before compaction, is absent from the post-compaction prompt, and must be recalled into the structurally verified post-compaction call and durable state effect.
+Continuity evidence is fail-closed at the ACP boundary. The real-client evidence validator requires three ordered, non-overlapping manual `/compact` intervals, each with one direct command request, started/completed status sequence, successful matching response, unchanged MCP/runtime identity, and a subsequent exact Fabric sentinel check. It separately requires one naturally triggered automatic compaction after a unique bounded pressure prompt, with no manual command or tool call in that interval, followed by the same identity and sentinel checks. `chat.disableAutoCompaction` is read-only evidence and must show automatic compaction enabled; qualification never changes it. Every manual and automatic cycle receives a distinct cryptographically random fact in exactly one recorded pre-compaction user prompt. Each fact is prohibited from structural tool data before its compaction, absent from the post-compaction prompt, and required in that cycle's exact post-compaction call, normalized result, and durable state effect.
 
 Hermetic subprocess coverage separately verifies that two MCP processes can concurrently share one workspace's durable memory and compare-and-set state without corruption. Another test kills an MCP process abruptly, starts a distinct process, restores the exact durable memory/state, and successfully extends it. These tests cover component storage behavior only, not authenticated Kiro selection, compaction, process reuse, or resume behavior.
 

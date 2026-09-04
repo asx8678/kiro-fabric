@@ -24,8 +24,27 @@ const result = await tools.call({ ref: "memory.get", args: { key: "release" } })
 return { actions: actions.length, result };
 ```
 
+Use the bounded helper for independent calls instead of an unbounded `Promise.all`:
+
+```ts
+const keys = ["release", "owner", "status"];
+return await parallel(keys, async (key) => memory.get({ key }));
+```
+
+Inspect a configured downstream MCP server before calling it. Discovery itself is approval-gated and returns a live descriptor bound to the current transport/configuration digest:
+
+```ts
+const descriptor = await mcp.describe({ server: "reports", tool: "summarize" });
+return await mcp.call({
+  server: "reports",
+  tool: "summarize",
+  args: { report: payloads.report },
+  expectedDescriptorDigest: descriptor.descriptorDigest,
+});
+```
+
 The mounted namespaces are `artifacts`, `memory`, `state`, and `mcp`. Workspace-scoped providers remain unavailable until `fabric_workspace` has a verified binding. Write, execute, and network calls follow Fabric approval policy and fail closed when required elicitation is unavailable; batching work into one program does not merge approvals — each write/network action elicits separately. Cancellation and the effective deadline propagate through nested calls.
 
-Only the returned value re-enters context. Returned output is capped (`executor.maxOutputChars`, 50,000 chars by default) and spills to an artifact reference when exceeded, so filter, aggregate, and slice inside the program and return only the data the task needs.
+Nested call arguments and results do not enter context automatically. The returned value plus bounded diagnostics, guest logs, and failure progress re-enter context. Returned output is capped (`executor.maxOutputChars`, 50,000 chars by default) and spills to an artifact reference when exceeded, so filter, aggregate, and slice inside the program and return only the data the task needs.
 
 See [references/api.md](references/api.md) for the complete guest surface.
