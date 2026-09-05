@@ -1,0 +1,27 @@
+{
+  "id": "C015",
+  "command": [
+    "pnpm",
+    "exec",
+    "vitest",
+    "run",
+    "tests/mcp-process-lifecycle.test.ts",
+    "-t",
+    "stdio client reaches EOF|shares one durable workspace|restores exact durable workspace"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-sjp2ks3h/repo",
+  "environment": {
+    "PATH": "/home/adam/.pi/agent/bin:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/kiro-home",
+    "TMPDIR": "/tmp/kiro-fabric-audit-sjp2ks3h/tmp",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1"
+  },
+  "deadlineSeconds": 90,
+  "elapsedSeconds": 2.796,
+  "status": "passed",
+  "exitCode": 0,
+  "output": "\n RUN  v4.1.11 /tmp/kiro-fabric-audit-sjp2ks3h/repo\n\n\n Test Files  1 passed (1)\n      Tests  3 passed | 7 skipped (10)\n   Start at  09:36:37\n   Duration  2.32s (transform 33ms, setup 0ms, import 42ms, tests 2.20s, environment 0ms)\n\n"
+}

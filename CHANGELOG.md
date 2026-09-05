@@ -1,5 +1,8 @@
 # Unreleased
 
+- Report interpreter drift and a digest-bound action catalog in `fabric_info`, describe `fabric_workspace` action/field requirements in its schema, prune superseded runtime generations (keeping the current and previous) on install, share one esbuild option module between the library and closure builds, and document degraded-client operation plus archive-digest semantics.
+
+- Require explicit `--auth-mode subscription` or `KIRO_API_KEY` for real-client qualification, bind isolated device-flow login to a failing pre-login `whoami`, and stop claiming TUI transcripts omit identity.
 - Convert Kiro Fabric from a Power to one native Kiro CLI V3 custom agent with an agent-owned Fabric MCP backend.
 - Remove the discoverable checkout-local profile so it cannot shadow the user-global `kiro-fabric` agent; generate the absolute profile only during installation.
 - Advertise `fabric_workspace` without a top-level schema combinator while keeping the strict runtime union.

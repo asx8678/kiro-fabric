@@ -45,14 +45,14 @@ kiro-cli chat --agent-engine v3 --agent kiro-fabric --no-interactive \
   "<qualification prompt>"
 ```
 
-Real-client qualification supports subscription authentication directly. The following command performs Kiro's device-flow login inside a fresh private qualification home, verifies it with a silent `kiro-cli whoami`, and deletes that home after qualification; identity and login output are never written to evidence:
+Real-client qualification requires an explicit `--auth-mode subscription` or a present `KIRO_API_KEY` (which selects `api-key`). The following command performs Kiro's device-flow login inside a fresh private qualification home, requires `kiro-cli whoami` to fail before that login, verifies it after, and deletes that home after qualification. Device-flow login stdout is inherited by the operator terminal and is not captured; TUI/ACP transcripts are still embedded in evidence and may contain client-rendered identity.
 
 ```sh
 KIRO_CLI_PATH="/Applications/Kiro CLI.app/Contents/MacOS/kiro-cli" \
   pnpm run certify:agent:real -- --auth-mode subscription --subscription-login
 ```
 
-The default `--subscription-license free` selects Builder ID/social login (including a paid subscription on that identity). Identity Center users can pass `--subscription-license pro --identity-provider <URL> --region <REGION>`. If an authenticated subscription is already available to the isolated home/keychain, omit `--subscription-login`. API-key automation remains available with `--auth-mode api-key` and `KIRO_API_KEY`; its value is never printed, persisted, or uploaded. Release qualification must not use `--trust-all-tools`.
+The default `--subscription-license free` selects Builder ID/social login (including a paid subscription on that identity). Identity Center users can pass `--subscription-license pro --identity-provider <URL> --region <REGION>`. If an authenticated subscription is already available to the isolated home/keychain, omit `--subscription-login`; that path does not claim a measured pre-login failure. API-key automation remains available with `--auth-mode api-key` and `KIRO_API_KEY`; its value is never printed, persisted, or uploaded. Release qualification must not use `--trust-all-tools`.
 
 The current [official command reference](https://kiro.dev/docs/reference/cli-commands/) shows the validation path positionally, but the installed qualification client, `kiro-cli 2.21.0`, requires `agent validate --path <PATH>` in its own help. The [official headless page](https://kiro.dev/docs/cli/headless/) shows `--engine v3`, while this installed client's `chat --help` exposes `--agent-engine <v1|v2|v3>` and no `--engine`. Installed help is authoritative for this client, so the commands above use `--path` and `--agent-engine v3`. Its top-level `--help-all` confirms `--v3 --agent <AGENT>` for the interactive TUI. The Fabric wrappers are already narrowly allowed by the profile; no native tools are pre-trusted by this headless example.
 

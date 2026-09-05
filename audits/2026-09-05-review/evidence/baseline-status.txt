@@ -1,0 +1,36 @@
+ M CHANGELOG.md
+ M README.md
+ D dist/kiro-agent-closure/chunks/mcp-server-UUWINH7G.js
+ M dist/kiro-agent-closure/closure-manifest.json
+ M dist/kiro-agent-closure/kiro/mcp-entry.js
+ M docs/audit.md
+ M docs/configuration.md
+ M docs/release.md
+ M scripts/agent-profile.mjs
+ M scripts/build-kiro-closure.mjs
+ M scripts/build.mjs
+ M scripts/certify-kiro-agent-real.mjs
+ M scripts/install-agent-user.mjs
+ M scripts/real-client-evidence.mjs
+ M scripts/run-kiro-agent-real-driver.mjs
+ M skills/fabric-exec/SKILL.md
+ M src/kiro/mcp-server.ts
+ M src/kiro/memory.ts
+ M src/kiro/power/workspace-binding.ts
+ M src/providers/state-provider.ts
+ M tests/agent-profile.test.ts
+ M tests/agent-user-install.test.ts
+ M tests/archive.test.ts
+ M tests/artifacts-state.test.ts
+ M tests/mcp-process-lifecycle.test.ts
+ M tests/memory-security.test.ts
+ M tests/package-boundary.test.ts
+ M tests/release-evidence.test.ts
+?? audits/2026-09-05-review/AUDIT_NOTES.md
+?? audits/2026-09-05-review/evidence/C004.json
+?? audits/2026-09-05-review/evidence/baseline-files.json
+?? audits/2026-09-05-review/evidence/snapshot.py
+?? dist/kiro-agent-closure/chunks/mcp-server-KLLUFFHR.js
+?? scripts/esbuild-common.mjs
+?? src/kiro/info-catalog.ts
+?? tests/info-catalog.test.ts

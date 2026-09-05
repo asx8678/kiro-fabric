@@ -113,9 +113,11 @@ export const resolveKiroCli = (pathValue = process.env.PATH ?? "", explicit = pr
 /** @param {string | undefined} requested @param {string | undefined} [apiKey] @returns {"api-key" | "subscription"} */
 export const resolveRealClientAuthMode = (requested, apiKey = process.env.KIRO_API_KEY) => {
   const hasApiKey = typeof apiKey === "string" && apiKey.trim().length > 0;
-  const mode = requested ?? (hasApiKey ? "api-key" : "subscription");
+  const mode = requested ?? (hasApiKey ? "api-key" : undefined);
   if (mode !== "api-key" && mode !== "subscription") {
-    throw new Error("--auth-mode must be api-key or subscription");
+    throw new Error(requested === undefined
+      ? "pass --auth-mode subscription or set KIRO_API_KEY"
+      : "--auth-mode must be api-key or subscription");
   }
   if (mode === "api-key" && !hasApiKey) {
     throw new Error("KIRO_API_KEY is required when --auth-mode api-key is selected");
@@ -147,6 +149,34 @@ export const subscriptionLoginArgv = ({ license = "free", identityProvider, regi
   ];
 };
 
+/** @param {{ authMode?: string | undefined, subscriptionLogin?: boolean | undefined, subscriptionLicense?: string | undefined, identityProvider?: string | undefined, region?: string | undefined }} [flags] @param {string | undefined} [apiKey] */
+export const resolveRealClientAuthFlags = ({
+  authMode,
+  subscriptionLogin = false,
+  subscriptionLicense,
+  identityProvider,
+  region,
+} = {}, apiKey = process.env.KIRO_API_KEY) => {
+  const resolvedAuthMode = resolveRealClientAuthMode(authMode, apiKey);
+  if (subscriptionLogin && resolvedAuthMode !== "subscription") {
+    throw new Error("--subscription-login requires --auth-mode subscription");
+  }
+  if (resolvedAuthMode !== "subscription" && (subscriptionLicense !== undefined || identityProvider !== undefined || region !== undefined)) {
+    throw new Error("subscription login options require --auth-mode subscription");
+  }
+  const license = subscriptionLicense ?? "free";
+  if (resolvedAuthMode === "subscription") {
+    subscriptionLoginArgv({ license, identityProvider, region });
+  }
+  return {
+    authMode: resolvedAuthMode,
+    subscriptionLogin: resolvedAuthMode === "subscription" && Boolean(subscriptionLogin),
+    subscriptionLicense: resolvedAuthMode === "subscription" ? license : undefined,
+    identityProvider: resolvedAuthMode === "subscription" ? identityProvider : undefined,
+    region: resolvedAuthMode === "subscription" ? region : undefined,
+  };
+};
+
 const runInherited = (executable, argv, options = {}) => {
   const result = spawnSync(executable, argv, {
     cwd: options.cwd,
@@ -160,14 +190,25 @@ const runInherited = (executable, argv, options = {}) => {
   }
 };
 
+const UNAUTHENTICATED_WHOAMI = /not logged in|unauthenticated|login required/iu;
+
+/** @param {{ error?: Error | null, status?: number | null, stdout?: Buffer | null, stderr?: Buffer | null } | null | undefined} result */
+export const subscriptionWhoamiAuthenticated = (result) => {
+  if (!result || result.error || result.status !== 0) return false;
+  const combined = Buffer.concat([result.stdout ?? Buffer.alloc(0), result.stderr ?? Buffer.alloc(0)]).toString("utf8");
+  return !UNAUTHENTICATED_WHOAMI.test(combined);
+};
+
+const runSubscriptionWhoami = (executable, cwd, environment) => spawnSync(executable, ["whoami"], {
+  cwd,
+  env: environmentAt(environment, cwd),
+  encoding: "buffer",
+  maxBuffer: MAX_COMMAND_BYTES,
+  timeout: 120_000,
+});
+
 const assertSubscriptionAuthenticated = (executable, cwd, environment) => {
-  const result = spawnSync(executable, ["whoami"], {
-    cwd,
-    env: environmentAt(environment, cwd),
-    stdio: "ignore",
-    timeout: 120_000,
-  });
-  if (result.error || result.status !== 0) {
+  if (!subscriptionWhoamiAuthenticated(runSubscriptionWhoami(executable, cwd, environment))) {
     throw new Error("Authenticated Kiro subscription session is unavailable in the isolated qualification home; rerun with --subscription-login");
   }
 };
@@ -1278,9 +1319,13 @@ const assertOneObservedMcpProcess = (observer, kiroPid, label) => {
 const runRealKiroAgentDriverImplementation = async ({
   packageRoot, packageDigest, archiveDigest, commit, driverDigest, output, workspace,
   kiroHome, isolatedHome, installCwd, authMode, subscriptionLogin = false,
-  subscriptionLicense = "free", identityProvider, region,
+  subscriptionLicense, identityProvider, region,
 }) => {
-  const resolvedAuthMode = resolveRealClientAuthMode(authMode);
+  const resolvedAuth = resolveRealClientAuthFlags({
+    authMode, subscriptionLogin, subscriptionLicense, identityProvider, region,
+  });
+  const resolvedAuthMode = resolvedAuth.authMode;
+  const resolvedSubscriptionLogin = resolvedAuth.subscriptionLogin;
   const apiKey = resolvedAuthMode === "api-key" ? process.env.KIRO_API_KEY : undefined;
   const protectedValues = apiKey === undefined ? [] : [Buffer.from(apiKey)];
   const releaseRoot = assertPrivateDirectory(path.resolve(packageRoot));
@@ -1312,9 +1357,18 @@ const runRealKiroAgentDriverImplementation = async ({
   const authenticatedEnvironment = resolvedAuthMode === "api-key"
     ? { ...environment, KIRO_API_KEY: apiKey }
     : environment;
+  let preLoginUnauthenticated = false;
   if (resolvedAuthMode === "subscription") {
-    if (subscriptionLogin) {
-      runInherited(executable, subscriptionLoginArgv({ license: subscriptionLicense, identityProvider, region }), {
+    if (resolvedSubscriptionLogin) {
+      if (subscriptionWhoamiAuthenticated(runSubscriptionWhoami(executable, workspaceRoot, authenticatedEnvironment))) {
+        throw new Error("isolated subscription login requires whoami to fail before device flow");
+      }
+      preLoginUnauthenticated = true;
+      runInherited(executable, subscriptionLoginArgv({
+        license: resolvedAuth.subscriptionLicense,
+        identityProvider: resolvedAuth.identityProvider,
+        region: resolvedAuth.region,
+      }), {
         cwd: workspaceRoot,
         env: authenticatedEnvironment,
       });
@@ -2210,12 +2264,13 @@ const runRealKiroAgentDriverImplementation = async ({
     archiveDigest,
     commit,
     tools: REAL_CLIENT_TOOLS,
-    driver: { digest: driverDigest, version: "repository-driver-v9" },
+    driver: { digest: driverDigest, version: "repository-driver-v10" },
     authentication: {
       mode: resolvedAuthMode,
       verification: resolvedAuthMode === "subscription" ? "kiro-cli-whoami" : "authenticated-kiro-commands",
       isolatedHome: true,
-      subscriptionLoginPerformed: resolvedAuthMode === "subscription" && subscriptionLogin,
+      subscriptionLoginPerformed: resolvedSubscriptionLogin,
+      preLoginUnauthenticated,
     },
     kiro: {
       path: executable,
@@ -2561,10 +2616,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     kiroHome: path.resolve(kiroHome),
     isolatedHome: path.resolve(isolatedHome),
     installCwd: path.resolve(installCwd),
-    authMode: valueAfter(process.argv, "--auth-mode"),
-    subscriptionLogin: process.argv.includes("--subscription-login"),
-    subscriptionLicense: valueAfter(process.argv, "--subscription-license") ?? "free",
-    identityProvider: valueAfter(process.argv, "--identity-provider"),
-    region: valueAfter(process.argv, "--region"),
+    ...resolveRealClientAuthFlags({
+      authMode: valueAfter(process.argv, "--auth-mode"),
+      subscriptionLogin: process.argv.includes("--subscription-login"),
+      subscriptionLicense: valueAfter(process.argv, "--subscription-license"),
+      identityProvider: valueAfter(process.argv, "--identity-provider"),
+      region: valueAfter(process.argv, "--region"),
+    }),
   });
 }

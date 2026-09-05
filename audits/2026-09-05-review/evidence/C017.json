@@ -1,0 +1,23 @@
+{
+  "id": "C017",
+  "command": [
+    "pnpm",
+    "run",
+    "build"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-sjp2ks3h/repo",
+  "environment": {
+    "PATH": "/home/adam/.pi/agent/bin:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/kiro-home",
+    "TMPDIR": "/tmp/kiro-fabric-audit-sjp2ks3h/tmp",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1"
+  },
+  "deadlineSeconds": 120,
+  "elapsedSeconds": 2.936,
+  "status": "passed",
+  "exitCode": 0,
+  "output": "$ node scripts/build.mjs && node scripts/build-kiro-closure.mjs && node scripts/assert-build-artifacts.mjs\n\n  dist/index.js                          233.6kb\n  dist/chunks/chunk-2XQ2ATDI.js           13.6kb\n  dist/runtime/compiler-worker-entry.js    519b \n\n\u26a1 Done in 11ms\n\n  dist/kiro-agent-closure/chunks/chunk-AT66DL2P.js                     9.5mb \u26a0\ufe0f\n  dist/kiro-agent-closure/chunks/dist-SI6ZW2DE.js                      1.2mb \u26a0\ufe0f\n  dist/kiro-agent-closure/chunks/mcp-server-KLLUFFHR.js             1016.4kb\n  ...o-agent-closure/chunks/emscripten-module-Q67P5WYC-K2EI3T2U.js   813.2kb\n  dist/kiro-agent-closure/chunks/chunk-AEH4VBMI.js                   531.7kb\n  dist/kiro-agent-closure/chunks/webapi-BPKL2YBQ.js                  122.2kb\n  dist/kiro-agent-closure/chunks/chunk-YQ4ZVOWF.js                    53.9kb\n  dist/kiro-agent-closure/chunks/ffi-2CFDPMEQ.js                       7.4kb\n  dist/kiro-agent-closure/kiro/mcp-entry.js                            5.5kb\n  dist/kiro-agent-closure/chunks/chunk-DDMC62E6.js                     3.8kb\n  dist/kiro-agent-closure/chunks/chunk-AE4E2KSU.js                     2.2kb\n  dist/kiro-agent-closure/chunks/chunk-K2USGJPF.js                     2.2kb\n  dist/kiro-agent-closure/chunks/chunk-4KRLFCN5.js                     2.1kb\n  dist/kiro-agent-closure/runtime/compiler-worker-entry.js             902b \n  dist/kiro-agent-closure/chunks/chunk-G3LABT6U.js                     845b \n  dist/kiro-agent-closure/chunks/module-ES6BEMUI-2A2DOREW.js           638b \n  dist/kiro-agent-closure/chunks/launch-2BNCRUIP.js                    534b \n  ...iro-agent-closure/chunks/module-asyncify-2EFITU5U-74PVIWDG.js     506b \n\n\u26a1 Done in 366ms\nAgent closure built: 78 files, 14458219 bytes, 35 source modules\n"
+}

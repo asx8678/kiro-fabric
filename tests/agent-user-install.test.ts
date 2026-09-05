@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   installUserAgent,
   resolveKiroHome,
@@ -22,6 +22,7 @@ const temporary = (): string => {
   return root;
 };
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -108,6 +109,7 @@ describe("user-global Agent installation", () => {
     expect(profile.resources).toEqual([`skill://${path.join(result.root, "skills/fabric-exec/SKILL.md")}`]);
     expect(path.isAbsolute(profile.mcpServers.fabric.command)).toBe(true);
     expect(profile.mcpServers.fabric.command).toBe(fs.realpathSync(process.execPath));
+    expect(profile.mcpServers.fabric.env.KIRO_FABRIC_EXPECTED_NODE).toBe(fs.realpathSync(process.execPath));
     expect(path.isAbsolute(profile.mcpServers.fabric.args[0])).toBe(true);
     expect(fs.existsSync(profile.mcpServers.fabric.command)).toBe(true);
     expect(fs.existsSync(profile.mcpServers.fabric.args[0])).toBe(true);
@@ -169,6 +171,140 @@ describe("user-global Agent installation", () => {
     expect(fs.existsSync(first.runtime)).toBe(false);
     expect(fs.existsSync(updated.runtime)).toBe(false);
   });
+
+  it("prunes superseded runtime generations beyond the current and previous current", () => {
+    const { root, home, workspace } = fixture();
+    const env = { KIRO_HOME: path.join(root, "Kiro Home") };
+    const first = installUserAgent(stage(), env, home, { workspaceRoot: workspace });
+    const secondVariant = packageVariant(root, "0.64.1-test");
+    const second = installUserAgent(secondVariant, env, home, { workspaceRoot: workspace });
+    expect(fs.existsSync(first.runtime)).toBe(true);
+    const thirdVariant = packageVariant(root, "0.64.2-test");
+    const third = installUserAgent(thirdVariant, env, home, { workspaceRoot: workspace });
+    expect(third.packageDigest).not.toBe(second.packageDigest);
+    expect(fs.existsSync(first.runtime)).toBe(false);
+    expect(fs.existsSync(second.runtime)).toBe(true);
+    expect(fs.existsSync(third.runtime)).toBe(true);
+    const runtimeDirectory = path.join(third.root, "runtime");
+    expect(fs.readdirSync(runtimeDirectory).sort()).toEqual([second.packageDigest, third.packageDigest].sort());
+    const owner = JSON.parse(fs.readFileSync(path.join(third.root, "install-owner.json"), "utf8"));
+    expect(owner.runtimeGenerations.map((entry: { name: string }) => entry.name).sort())
+      .toEqual([second.packageDigest, third.packageDigest].sort());
+    expect(owner.currentRuntime).toBe(third.packageDigest);
+    expect(fs.readdirSync(third.root).some((name: string) => name.startsWith(".prune-holding-"))).toBe(false);
+    uninstallUserAgent(env, home, { workspaceRoot: workspace });
+    expect(fs.existsSync(second.runtime)).toBe(false);
+    expect(fs.existsSync(third.runtime)).toBe(false);
+  });
+
+  it("prunes multiple accumulated generations cumulatively and permits later updates and uninstall", () => {
+    const { root, home, workspace, kiroHome } = fixture();
+    const env = { KIRO_HOME: kiroHome };
+    const first = installUserAgent(stage(), env, home, { workspaceRoot: workspace });
+    const second = installUserAgent(packageVariant(root, "0.64.1-test"), env, home, { workspaceRoot: workspace });
+    const rename = fs.renameSync;
+    const fault = vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (from === first.runtime) throw new Error("defer one prune to accumulate generations");
+      rename(from, to);
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const third = installUserAgent(packageVariant(root, "0.64.2-test"), env, home, { workspaceRoot: workspace });
+    fault.mockRestore();
+    expect(fs.readdirSync(path.join(first.root, "runtime"))).toHaveLength(3);
+
+    const fourth = installUserAgent(packageVariant(root, "0.64.3-test"), env, home, { workspaceRoot: workspace });
+    expect(fs.existsSync(first.runtime)).toBe(false);
+    expect(fs.existsSync(second.runtime)).toBe(false);
+    const manifest = JSON.parse(fs.readFileSync(path.join(fourth.root, "install-owner.json"), "utf8"));
+    const retained = [third.packageDigest, fourth.packageDigest].sort();
+    expect(manifest.runtimeGenerations.map((record: { name: string }) => record.name).sort()).toEqual(retained);
+    expect(fs.readdirSync(path.join(fourth.root, "runtime")).sort()).toEqual(retained);
+    expect(fs.readdirSync(fourth.root).some(name => name.startsWith(".prune-holding-"))).toBe(false);
+
+    const fifth = installUserAgent(packageVariant(root, "0.64.4-test"), env, home, { workspaceRoot: workspace });
+    expect(fs.existsSync(third.runtime)).toBe(false);
+    uninstallUserAgent(env, home, { workspaceRoot: workspace });
+    expect(fs.existsSync(fourth.runtime)).toBe(false);
+    expect(fs.existsSync(fifth.runtime)).toBe(false);
+  });
+
+  it.each(["before publication", "after publication", "verification", "rollback"] as const)(
+    "keeps pruning recoverable when %s fails",
+    (failure) => {
+      const { root, home, workspace, kiroHome } = fixture();
+      const env = { KIRO_HOME: kiroHome };
+      const first = installUserAgent(stage(), env, home, { workspaceRoot: workspace });
+      installUserAgent(packageVariant(root, "0.64.1-test"), env, home, { workspaceRoot: workspace });
+      const thirdVariant = packageVariant(root, "0.64.2-test");
+      const manifestPath = path.join(first.root, "install-owner.json");
+      const rename = fs.renameSync;
+      const sync = fs.fsyncSync;
+      const read = fs.readFileSync;
+      let pruning = false;
+      let published = false;
+      let faults = 0;
+      let beforePrune: Buffer | undefined;
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+        if (from === first.runtime) beforePrune = read(manifestPath);
+        rename(from, to);
+        if (from === first.runtime) pruning = true;
+        if (pruning && to === manifestPath) published = true;
+      });
+      vi.spyOn(fs, "fsyncSync").mockImplementation((fd) => {
+        const shouldFail = pruning && (
+          (failure === "before publication" && !published && faults === 0) ||
+          (failure === "after publication" && published && faults === 0) ||
+          (failure === "rollback" && published && faults < 2)
+        );
+        if (shouldFail) {
+          faults += 1;
+          throw Object.assign(new Error(`injected ${failure} sync failure`), { code: "EIO" });
+        }
+        sync(fd);
+      });
+      vi.spyOn(fs, "readFileSync").mockImplementation((...args) => {
+        if (failure === "verification" && published && args[0] === manifestPath && faults === 0) {
+          faults += 1;
+          throw Object.assign(new Error("injected manifest verification failure"), { code: "EIO" });
+        }
+        return read(...args);
+      });
+      try {
+        if (failure === "rollback") {
+          expect(() => installUserAgent(thirdVariant, env, home, { workspaceRoot: workspace })).toThrow("recovery required");
+        } else {
+          installUserAgent(thirdVariant, env, home, { workspaceRoot: workspace });
+        }
+        expect(faults).toBe(failure === "rollback" ? 2 : 1);
+      } finally {
+        vi.restoreAllMocks();
+      }
+      expect(beforePrune).toBeDefined();
+      const holdings = fs.readdirSync(first.root).filter(name => name.startsWith(".prune-holding-"));
+      if (failure === "rollback") {
+        expect(holdings).toHaveLength(1);
+        const holding = path.join(first.root, holdings[0]!);
+        const recovery = path.join(holding, "recovery-manifest.json");
+        expect(fs.readFileSync(recovery)).toEqual(beforePrune);
+        expect(fs.statSync(recovery).mode & 0o777).toBe(0o600);
+        expect(fs.statSync(holding).mode & 0o777).toBe(0o700);
+        expect(fs.existsSync(path.join(holding, "runtime"))).toBe(true);
+        expect(fs.existsSync(first.runtime)).toBe(false);
+        // Exercise explicit recovery from the preserved bytes and tree.
+        fs.writeFileSync(manifestPath, fs.readFileSync(recovery), { mode: 0o600 });
+        fs.renameSync(path.join(holding, "runtime"), first.runtime);
+        fs.rmSync(holding, { recursive: true });
+      } else {
+        expect(holdings).toEqual([]);
+        expect(fs.readFileSync(manifestPath)).toEqual(beforePrune);
+        expect(fs.existsSync(first.runtime)).toBe(true);
+      }
+      // The restored installation must pass ownership checks on both paths.
+      installUserAgent(thirdVariant, env, home, { workspaceRoot: workspace });
+      uninstallUserAgent(env, home, { workspaceRoot: workspace });
+    },
+  );
 
   it("rejects empty, relative, broad, workspace-contained, symlinked, and unsafe homes before mutation", () => {
     const { root, home, workspace } = fixture();

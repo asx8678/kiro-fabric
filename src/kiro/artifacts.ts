@@ -76,13 +76,22 @@ class ArtifactStore implements KiroArtifactStore {
     let id: string;
     do id = `ka_${randomBytes(24).toString("hex")}`;
     while (this.#entries.has(id) || (this.#root !== undefined && fs.existsSync(path.join(this.#root, id))));
+    const now = this.#now();
     const file = this.#root ? path.join(this.#root, id) : undefined;
     if (file) {
       const descriptor = fs.openSync(file, "wx", 0o600);
-      try { fs.writeFileSync(descriptor, content); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
-      fs.chmodSync(file, 0o600);
+      try {
+        try {
+          fs.writeFileSync(descriptor, content);
+          fs.fchmodSync(descriptor, 0o600);
+          fs.fsyncSync(descriptor);
+        } finally { fs.closeSync(descriptor); }
+      } catch (error) {
+        try { fs.rmSync(file, { force: true }); }
+        catch (cleanup) { throw new AggregateError([error, cleanup], "artifact write and cleanup failed"); }
+        throw error;
+      }
     }
-    const now = this.#now();
     this.#entries.set(id, { content, createdAt: now, lastReadAt: now, ...(file ? { file } : {}) });
     this.#totalChars += content.length;
     return id;

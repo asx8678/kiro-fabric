@@ -1,0 +1,225 @@
+{
+  "method": "pi.read performed against original working tree; full means complete text read, not all behaviors verified. Searches/fovea are navigation only. IDs below group independent reads for compact reproducibility.",
+  "R001": {
+    "full": [
+      "AGENTS.md",
+      "README.md",
+      "package.json",
+      "vitest.config.ts",
+      "pnpm-workspace.yaml",
+      "tsconfig.json",
+      "tsconfig.build.json",
+      "tsconfig.scripts.json",
+      "knip.json",
+      "agent-product.json"
+    ]
+  },
+  "R002": {
+    "full": [
+      "docs/architecture.md",
+      "docs/configuration.md",
+      "docs/tracing.md",
+      "docs/release.md",
+      "SECURITY.md",
+      "STATUS.md"
+    ]
+  },
+  "R003": {
+    "full": [
+      "scripts/build.mjs",
+      "scripts/esbuild-common.mjs",
+      "scripts/build-kiro-closure.mjs",
+      "scripts/build-agent-dev.mjs",
+      "scripts/assert-build-artifacts.mjs",
+      "scripts/package-policy.mjs",
+      "scripts/validate-agent-package.mjs",
+      "scripts/agent-profile.mjs"
+    ]
+  },
+  "R004": {
+    "full": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/release.yml",
+      ".github/workflows/release-candidate.yml",
+      ".github/workflows/kiro-agent-real.yml"
+    ]
+  },
+  "R005": {
+    "full": [
+      "src/index.ts",
+      "src/execution-service.ts",
+      "src/core/action-registry.ts",
+      "src/async-settlement.ts",
+      "src/schema-validation.ts",
+      "src/kernel/fabric-exec-contract.ts",
+      "src/kiro/runtime.ts",
+      "src/providers/state-provider.ts",
+      "src/kiro/mcp-entry.ts",
+      "src/kiro/info-catalog.ts",
+      "src/kiro/power/approver.ts",
+      "src/kiro/artifacts.ts",
+      "src/kiro/projection.ts",
+      "src/kiro/memory-provider.ts",
+      "src/kiro/canonical-path.ts",
+      "src/kiro/power/workspace-context.ts",
+      "src/kiro/power/agent-launch-context.ts",
+      "src/runtime/guest-types.ts",
+      "src/trace/tracer.ts"
+    ]
+  },
+  "R006": {
+    "windows": {
+      "src/kiro/mcp-server.ts": [
+        [
+          1,
+          507
+        ]
+      ],
+      "src/config.ts": [
+        [
+          79,
+          199
+        ],
+        [
+          292,
+          336
+        ]
+      ],
+      "src/kiro/memory.ts": [
+        [
+          122,
+          216
+        ],
+        [
+          450,
+          497
+        ],
+        [
+          550,
+          741
+        ]
+      ],
+      "src/kiro/mcp-provider.ts": [
+        [
+          1,
+          83
+        ],
+        [
+          512,
+          737
+        ],
+        [
+          855,
+          996
+        ]
+      ],
+      "src/kiro/power/workspace-binding.ts": [
+        [
+          87,
+          334
+        ]
+      ],
+      "src/kiro/power/data-paths.ts": [
+        [
+          1,
+          125
+        ]
+      ],
+      "src/runtime/quickjs-runtime.ts": [
+        [
+          65,
+          179
+        ],
+        [
+          358,
+          668
+        ]
+      ],
+      "src/runtime/type-checker.ts": [
+        [
+          103,
+          196
+        ],
+        [
+          225,
+          347
+        ]
+      ],
+      "src/trace/trace-writer.ts": [
+        [
+          94,
+          166
+        ]
+      ],
+      "scripts/install-agent-user.mjs": [
+        [
+          440,
+          708
+        ],
+        [
+          810,
+          987
+        ]
+      ],
+      "pnpm-lock.yaml": [
+        [
+          1,
+          95
+        ]
+      ]
+    }
+  },
+  "R007": {
+    "full": [
+      "tests/artifacts-state.test.ts",
+      "tests/configuration.test.ts",
+      "tests/info-catalog.test.ts"
+    ],
+    "windows": {
+      "tests/mcp-federation.test.ts": [
+        [
+          1,
+          150
+        ]
+      ],
+      "tests/mcp-process-lifecycle.test.ts": [
+        [
+          1,
+          254
+        ],
+        [
+          440,
+          678
+        ]
+      ]
+    }
+  },
+  "R008": {
+    "windows": {
+      "node_modules/@modelcontextprotocol/sdk/dist/esm/types.d.ts": [
+        [
+          2416,
+          2464
+        ]
+      ],
+      "node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js": [
+        [
+          550,
+          592
+        ]
+      ],
+      "node_modules/@modelcontextprotocol/sdk/package.json": [
+        [
+          1,
+          25
+        ]
+      ]
+    }
+  },
+  "navigation": "Root/src/docs listings; git ls-files; fovea sketch/focus; grep for entry points, methods, pagination, process env, test side effects and skip/TODO markers. One compound grep failed due to regex escaping and returned no results; subsequent simple alternatives were used. Search-only paths are not represented as read.",
+  "R009": {
+    "full": [
+      "src/runtime/json-budget.ts"
+    ]
+  }
+}

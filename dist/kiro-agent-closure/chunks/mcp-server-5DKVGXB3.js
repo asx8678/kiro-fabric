@@ -32,11 +32,10 @@ import {
   sameCanonicalFilesystemIdentity
 } from "./chunk-4KRLFCN5.js";
 import {
+  FabricCompilerPool,
   assertFabricTranspiledWrapper,
-  shutdownFabricCompilerWorker,
-  transpileFabricCodeWithSourceMap,
-  typeCheckFabricCodeInWorker
-} from "./chunk-AT66DL2P.js";
+  transpileFabricCodeWithSourceMap
+} from "./chunk-CCXQPTKG.js";
 import "./chunk-G3LABT6U.js";
 import "./chunk-DDMC62E6.js";
 import "./chunk-YQ4ZVOWF.js";
@@ -7202,7 +7201,7 @@ var require_dist = __commonJS({
 
 // src/kiro/mcp-server.ts
 import { randomBytes as randomBytes5 } from "node:crypto";
-import fs9, { readFileSync } from "node:fs";
+import fs9, { readFileSync, realpathSync } from "node:fs";
 import path9 from "node:path";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
@@ -18797,6 +18796,7 @@ var DEFAULT_FABRIC_CONFIG = {
     maxNestedResultChars: 2e6,
     maxProviderCalls: 64,
     maxConcurrentProviderCalls: 8,
+    maxConcurrentExecutions: 4,
     maxApprovalRequests: 16,
     maxPendingApprovals: 2,
     maxAuditEntries: 64,
@@ -18830,7 +18830,7 @@ var bool = (value, fallback) => typeof value === "boolean" ? value : fallback;
 var approval = (value, fallback) => value === "allow" || value === "ask" || value === "deny" ? value : fallback;
 var CURRENT_FABRIC_CONFIG_SCHEMA_VERSION = 1;
 var FILE_CONFIG_KEYS = {
-  executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
+  executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxConcurrentExecutions", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
   approvals: ["read", "write", "execute", "network"],
   mcp: ["enabled", "disableOAuth", "callTimeoutMs"],
   memory: ["enabled", "maxEntries", "maxValueChars"],
@@ -18912,6 +18912,7 @@ var normalizeFabricConfig = (input, defaults = DEFAULT_FABRIC_CONFIG) => {
       maxNestedResultChars: integer(executor.maxNestedResultChars, defaults.executor.maxNestedResultChars, 1e3, 8e6),
       maxProviderCalls: integer(executor.maxProviderCalls, defaults.executor.maxProviderCalls, 1, 1e3),
       maxConcurrentProviderCalls: integer(executor.maxConcurrentProviderCalls, defaults.executor.maxConcurrentProviderCalls, 1, 64),
+      maxConcurrentExecutions: integer(executor.maxConcurrentExecutions, defaults.executor.maxConcurrentExecutions ?? 4, 1, 64),
       maxApprovalRequests: integer(executor.maxApprovalRequests, defaults.executor.maxApprovalRequests, 0, 1e3),
       maxPendingApprovals: integer(executor.maxPendingApprovals, defaults.executor.maxPendingApprovals, 1, 32),
       maxAuditEntries: integer(executor.maxAuditEntries, defaults.executor.maxAuditEntries, 1, 1e3),
@@ -19007,6 +19008,24 @@ var loadFabricConfig = (configFile, defaults = DEFAULT_FABRIC_CONFIG) => {
   } finally {
     if (descriptor2 !== void 0) fs.closeSync(descriptor2);
   }
+};
+
+// src/kiro/info-catalog.ts
+var MAX_INFO_CATALOG_BYTES = 2e4;
+var fabricInfoActions = (actions) => {
+  const summarized = actions.map(({ ref, risk, descriptorDigest }) => ({ ref, risk, descriptorDigest }));
+  if (Buffer.byteLength(JSON.stringify(summarized), "utf8") <= MAX_INFO_CATALOG_BYTES) return summarized;
+  const refsOnly = actions.map(({ ref, risk }) => ({ ref, risk }));
+  if (Buffer.byteLength(JSON.stringify(refsOnly), "utf8") <= MAX_INFO_CATALOG_BYTES) return refsOnly;
+  const refs = [];
+  let bytes = 2;
+  for (const { ref } of actions) {
+    const added = Buffer.byteLength(JSON.stringify(ref), "utf8") + (refs.length ? 1 : 0);
+    if (bytes + added > MAX_INFO_CATALOG_BYTES) break;
+    refs.push(ref);
+    bytes += added;
+  }
+  return refs;
 };
 
 // src/core/action-registry.ts
@@ -19789,6 +19808,7 @@ var BufferedTraceWriter = class {
 var createTraceWriter = (options) => new BufferedTraceWriter(options);
 
 // src/trace/tracer.ts
+var traceFailureMetadata = (errorKind) => ({ errorKind });
 var MAX_EVENT_CHARS = 6e3;
 var NOOP_SPAN = Object.freeze({ id: "", end: () => void 0 });
 var DISABLED_TRACER = Object.freeze({
@@ -20509,12 +20529,41 @@ var FabricExecutionService = class {
     this.registry = registry;
     this.config = config;
     this.cwd = cwd;
+    this.#compiler = new FabricCompilerPool(config.executor.maxConcurrentExecutions ?? 4);
   }
   registry;
   config;
   cwd;
   #runtime = new QuickJsRuntime();
+  #compiler;
+  #active = 0;
+  #executions = /* @__PURE__ */ new Set();
+  #closeController = new AbortController();
+  #closing;
   async execute(options) {
+    if (this.#closeController.signal.aborted || this.#active >= this.#compiler.maxWorkers) {
+      return {
+        status: "failed",
+        success: false,
+        logs: [],
+        audits: [],
+        elapsedMs: 0,
+        error: this.#closeController.signal.aborted ? "Fabric execution service is closed" : "Fabric execution concurrency limit reached",
+        effectiveTimeoutMs: effectiveFabricTimeout(this.config.executor.maxTimeoutMs, this.config.executor.timeoutMs, 0, options.timeoutMs ?? 0)
+      };
+    }
+    this.#active += 1;
+    const signal = options.signal ? AbortSignal.any([options.signal, this.#closeController.signal]) : this.#closeController.signal;
+    const execution = Promise.resolve().then(() => this.#execute({ ...options, signal }));
+    this.#executions.add(execution);
+    try {
+      return await execution;
+    } finally {
+      this.#active -= 1;
+      this.#executions.delete(execution);
+    }
+  }
+  async #execute(options) {
     const started = performance.now();
     const tracer = options.tracer ?? DISABLED_TRACER;
     const execId = options.execId;
@@ -20540,7 +20589,7 @@ var FabricExecutionService = class {
     const compileSpan = tracer.enabled ? tracer.span("eval", "compile", execId) : void 0;
     let checked;
     try {
-      checked = await typeCheckFabricCodeInWorker({
+      checked = await this.#compiler.check({
         code: options.code,
         declarations: fabricGuestDeclarations
       }, {
@@ -20630,7 +20679,7 @@ var FabricExecutionService = class {
               await options.approver.approve(action, exactArgs, signal);
               approvalSpan?.end({ approved: true });
             } catch (error) {
-              approvalSpan?.end({ approved: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 200) });
+              approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });
               throw error;
             } finally {
               pendingApprovals -= 1;
@@ -20640,7 +20689,7 @@ var FabricExecutionService = class {
         if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value), ...actionRef !== ref ? { actionRef } : {} };
         return value;
       } catch (error) {
-        if (bridgeSpan) bridgeEnd = { error: (error instanceof Error ? error.message : String(error)).slice(0, 200) };
+        if (bridgeSpan) bridgeEnd = { ok: false, ...traceFailureMetadata("provider_failed") };
         throw error;
       } finally {
         bridgeSpan?.end(bridgeEnd);
@@ -20702,9 +20751,15 @@ var FabricExecutionService = class {
       effectiveTimeoutMs: result.effectiveTimeoutMs
     };
   }
-  async close() {
-    await this.registry.close();
-    await shutdownFabricCompilerWorker();
+  close() {
+    return this.#closing ??= (async () => {
+      this.#closeController.abort(new Error("Fabric execution service is closed"));
+      try {
+        await Promise.all([this.#compiler.close(), Promise.allSettled([...this.#executions])]);
+      } finally {
+        await this.registry.close();
+      }
+    })();
   }
 };
 
@@ -21338,9 +21393,13 @@ var kiroPowerWorkspaceRequestSchema = typebox_exports.Union([
 var kiroWorkspaceToolInputSchema = {
   type: "object",
   properties: {
-    action: { type: "string", enum: ["status", "list", "select", "attach", "detach"] },
-    rootId: { type: "string", minLength: 1, maxLength: 64 },
-    path: { type: "string", minLength: 1, maxLength: 4096 }
+    action: {
+      type: "string",
+      enum: ["status", "list", "select", "attach", "detach"],
+      description: "status and list take no other fields; select requires rootId from list; attach requires an absolute path; detach takes no other fields."
+    },
+    rootId: { type: "string", minLength: 1, maxLength: 64, description: "Required only for action select: a rootId reported by action list." },
+    path: { type: "string", minLength: 1, maxLength: 4096, description: "Required only for action attach: an absolute filesystem path to bind manually." }
   },
   required: ["action"],
   additionalProperties: false
@@ -21785,6 +21844,15 @@ var privateRoot = (root) => {
   fs4.chmodSync(root, 448);
   return fs4.realpathSync(root);
 };
+var StateCommitAcknowledgementError = class extends Error {
+  constructor(revision, options) {
+    super(`State mutation committed at revision ${revision}; acknowledgement failed; read state before retrying`, options);
+    this.revision = revision;
+    this.name = "StateCommitAcknowledgementError";
+  }
+  revision;
+  committed = true;
+};
 var StateProvider = class {
   name = "state";
   description = "Workspace-bound atomic state";
@@ -21794,6 +21862,7 @@ var StateProvider = class {
   #maxEntries;
   #maxValueChars;
   #maxTotalChars;
+  #pendingLockCleanup;
   constructor(root, options = {}) {
     this.#root = privateRoot(root);
     this.#file = path5.join(this.#root, "state.json");
@@ -21828,39 +21897,47 @@ var StateProvider = class {
     if (actionName !== "set" && actionName !== "delete") {
       throw new Error(`Unknown state action: ${actionName}`);
     }
-    return this.#withMutationLock(context, () => {
-      const document = this.#read();
-      const key = args.key;
-      const current = document.entries[key];
-      if (args.expectedRevision !== void 0 && args.expectedRevision !== (current?.revision ?? 0)) {
-        throw new Error("state revision conflict");
-      }
-      if (actionName === "delete") {
-        if (!current) return { key, deleted: false, revision: document.revision };
-        delete document.entries[key];
+    let committedRevision;
+    try {
+      return await this.#withMutationLock(context, () => {
+        const document = this.#read();
+        const key = args.key;
+        const current = document.entries[key];
+        if (args.expectedRevision !== void 0 && args.expectedRevision !== (current?.revision ?? 0)) {
+          throw new Error("state revision conflict");
+        }
+        if (actionName === "delete") {
+          if (!current) return { key, deleted: false, revision: document.revision };
+          delete document.entries[key];
+          document.revision += 1;
+          this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
+          committedRevision = document.revision;
+          throwIfAbortedOrExpired(context.signal, context.deadline);
+          return { key, deleted: true, revision: document.revision };
+        }
+        const serialized = JSON.stringify(args.value);
+        if (serialized === void 0 || serialized.length > this.#maxValueChars) {
+          throw new Error("state value exceeds configured bounds");
+        }
+        if (!current && Object.keys(document.entries).length >= this.#maxEntries) {
+          throw new Error("state entry limit reached");
+        }
         document.revision += 1;
-        this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
+        document.entries[key] = {
+          revision: document.revision,
+          value: JSON.parse(serialized),
+          updatedAt: Date.now()
+        };
         throwIfAbortedOrExpired(context.signal, context.deadline);
-        return { key, deleted: true, revision: document.revision };
-      }
-      const serialized = JSON.stringify(args.value);
-      if (serialized === void 0 || serialized.length > this.#maxValueChars) {
-        throw new Error("state value exceeds configured bounds");
-      }
-      if (!current && Object.keys(document.entries).length >= this.#maxEntries) {
-        throw new Error("state entry limit reached");
-      }
-      document.revision += 1;
-      document.entries[key] = {
-        revision: document.revision,
-        value: JSON.parse(serialized),
-        updatedAt: Date.now()
-      };
-      throwIfAbortedOrExpired(context.signal, context.deadline);
-      this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
-      throwIfAbortedOrExpired(context.signal, context.deadline);
-      return { key, revision: document.revision };
-    });
+        this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
+        committedRevision = document.revision;
+        throwIfAbortedOrExpired(context.signal, context.deadline);
+        return { key, revision: document.revision };
+      });
+    } catch (error) {
+      if (committedRevision !== void 0) throw new StateCommitAcknowledgementError(committedRevision, { cause: error });
+      throw error;
+    }
   }
   #read() {
     let descriptor2;
@@ -21925,78 +22002,96 @@ var StateProvider = class {
     );
     const descriptor2 = fs4.openSync(temporary, "wx", 384);
     try {
-      fs4.writeFileSync(descriptor2, text);
-      fs4.fsyncSync(descriptor2);
-    } finally {
-      fs4.closeSync(descriptor2);
-    }
-    try {
+      try {
+        fs4.writeFileSync(descriptor2, text);
+        fs4.fchmodSync(descriptor2, 384);
+        fs4.fsyncSync(descriptor2);
+      } finally {
+        fs4.closeSync(descriptor2);
+      }
       beforeCommit();
       fs4.renameSync(temporary, this.#file);
-      fs4.chmodSync(this.#file, 384);
     } catch (error) {
-      fs4.rmSync(temporary, { force: true });
+      try {
+        fs4.rmSync(temporary, { force: true });
+      } catch (cleanup) {
+        throw new AggregateError([error, cleanup], "state write and temporary cleanup failed");
+      }
       throw error;
+    }
+  }
+  #releaseLock(identity) {
+    try {
+      const current = fs4.lstatSync(this.#lock);
+      if (current.isFile() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
+        fs4.rmSync(this.#lock);
+      }
+    } catch (error) {
+      if (errorCode2(error) !== "ENOENT") throw error;
     }
   }
   async #withMutationLock(context, operation) {
     const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
     let identity;
-    while (!identity) {
-      throwIfAbortedOrExpired(context.signal, context.deadline);
-      try {
-        const descriptor2 = fs4.openSync(this.#lock, "wx", 384);
-        try {
-          fs4.writeFileSync(descriptor2, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}
-`);
-          fs4.fsyncSync(descriptor2);
-          const stat = fs4.fstatSync(descriptor2);
-          identity = { dev: stat.dev, ino: stat.ino };
-        } finally {
-          fs4.closeSync(descriptor2);
+    try {
+      while (!identity) {
+        throwIfAbortedOrExpired(context.signal, context.deadline);
+        if (this.#pendingLockCleanup) {
+          this.#releaseLock(this.#pendingLockCleanup);
+          this.#pendingLockCleanup = void 0;
         }
-      } catch (error) {
-        if (errorCode2(error) !== "EEXIST") throw error;
-        let stat;
         try {
-          stat = fs4.lstatSync(this.#lock);
-        } catch (statError) {
-          if (errorCode2(statError) === "ENOENT") continue;
-          throw statError;
-        }
-        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("state mutation lock is foreign");
-        if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
-          let ownerPid = 0;
+          const descriptor2 = fs4.openSync(this.#lock, "wx", 384);
           try {
-            const owner = JSON.parse(fs4.readFileSync(this.#lock, "utf8"));
-            if (typeof owner.pid === "number") ownerPid = owner.pid;
-          } catch {
+            const stat = fs4.fstatSync(descriptor2);
+            identity = { dev: stat.dev, ino: stat.ino };
+            fs4.writeFileSync(descriptor2, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}
+`);
+            fs4.fsyncSync(descriptor2);
+          } finally {
+            fs4.closeSync(descriptor2);
           }
-          if (!processIsAlive(ownerPid)) {
-            const current = fs4.lstatSync(this.#lock);
-            if (current.dev === stat.dev && current.ino === stat.ino && current.isFile()) {
-              fs4.rmSync(this.#lock);
-              continue;
+        } catch (error) {
+          if (identity || errorCode2(error) !== "EEXIST") throw error;
+          let stat;
+          try {
+            stat = fs4.lstatSync(this.#lock);
+          } catch (statError) {
+            if (errorCode2(statError) === "ENOENT") continue;
+            throw statError;
+          }
+          if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("state mutation lock is foreign");
+          if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
+            let ownerPid = 0;
+            try {
+              const owner = JSON.parse(fs4.readFileSync(this.#lock, "utf8"));
+              if (typeof owner.pid === "number") ownerPid = owner.pid;
+            } catch {
+            }
+            if (!processIsAlive(ownerPid)) {
+              const current = fs4.lstatSync(this.#lock);
+              if (current.dev === stat.dev && current.ino === stat.ino && current.isFile()) {
+                fs4.rmSync(this.#lock);
+                continue;
+              }
             }
           }
+          if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
+          await delay(10);
         }
-        if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
-        await delay(10);
       }
-    }
-    try {
       throwIfAbortedOrExpired(context.signal, context.deadline);
       const result = operation();
       throwIfAbortedOrExpired(context.signal, context.deadline);
       return result;
     } finally {
-      try {
-        const current = fs4.lstatSync(this.#lock);
-        if (current.isFile() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
-          fs4.rmSync(this.#lock);
+      if (identity) {
+        try {
+          this.#releaseLock(identity);
+        } catch (error) {
+          this.#pendingLockCleanup = identity;
+          throw error;
         }
-      } catch (error) {
-        if (errorCode2(error) !== "ENOENT") throw error;
       }
     }
   }
@@ -22065,18 +22160,27 @@ var ArtifactStore = class {
     do
       id = `ka_${randomBytes3(24).toString("hex")}`;
     while (this.#entries.has(id) || this.#root !== void 0 && fs5.existsSync(path6.join(this.#root, id)));
+    const now = this.#now();
     const file = this.#root ? path6.join(this.#root, id) : void 0;
     if (file) {
       const descriptor2 = fs5.openSync(file, "wx", 384);
       try {
-        fs5.writeFileSync(descriptor2, content);
-        fs5.fsyncSync(descriptor2);
-      } finally {
-        fs5.closeSync(descriptor2);
+        try {
+          fs5.writeFileSync(descriptor2, content);
+          fs5.fchmodSync(descriptor2, 384);
+          fs5.fsyncSync(descriptor2);
+        } finally {
+          fs5.closeSync(descriptor2);
+        }
+      } catch (error) {
+        try {
+          fs5.rmSync(file, { force: true });
+        } catch (cleanup) {
+          throw new AggregateError([error, cleanup], "artifact write and cleanup failed");
+        }
+        throw error;
       }
-      fs5.chmodSync(file, 384);
     }
-    const now = this.#now();
     this.#entries.set(id, { content, createdAt: now, lastReadAt: now, ...file ? { file } : {} });
     this.#totalChars += content.length;
     return id;
@@ -22187,6 +22291,9 @@ var descriptors2 = [
 ];
 var isRecord6 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var MCP_CLOSE_GRACE_MS = 1e3;
+var MAX_MCP_DISCOVERY_PAGES = 100;
+var MAX_MCP_DISCOVERY_TOOLS = 1e3;
+var MAX_MCP_CURSOR_CHARS = 4096;
 var MAX_MCP_TRANSPORT_FILE_BYTES = 512 * 1024 * 1024;
 var MAX_MCP_STDIO_ARGUMENTS = 256;
 var MAX_MCP_ARGUMENT_FILES = 32;
@@ -22662,7 +22769,7 @@ var KiroMcpProvider = class {
       const rawTools = await this.#bounded(
         runtime,
         server,
-        this.#listRawTools(runtime, server, discoveryBudget),
+        this.#listRawTools(runtime, server, actionDeadline, signal),
         signal,
         "tool discovery",
         discoveryBudget,
@@ -22813,18 +22920,43 @@ var KiroMcpProvider = class {
       throw new Error(`Invalid arguments for mcp.call: ${validation.message}`);
     }
   }
-  async #listRawTools(runtime, server, timeoutMs) {
+  async #listRawTools(runtime, server, deadline, signal) {
     try {
+      throwIfAbortedOrExpired(signal);
+      this.#remainingCallBudget(deadline);
       const connection = await runtime.connect(server, {
         disableOAuth: this.#config.disableOAuth,
-        oauthTimeoutMs: timeoutMs
+        oauthTimeoutMs: this.#remainingCallBudget(deadline)
       });
-      const response = await connection.client.listTools(void 0, {
-        timeout: timeoutMs,
-        resetTimeoutOnProgress: true,
-        maxTotalTimeout: timeoutMs
-      });
-      const tools = Array.isArray(response.tools) ? response.tools : [];
+      const tools = [];
+      const cursors = /* @__PURE__ */ new Set();
+      let cursor;
+      for (let page = 0; ; page += 1) {
+        throwIfAbortedOrExpired(signal);
+        this.#remainingCallBudget(deadline);
+        if (page >= MAX_MCP_DISCOVERY_PAGES) throw new Error("Configured MCP discovery page limit exceeded");
+        const remaining = this.#remainingCallBudget(deadline);
+        const response = await connection.client.listTools(cursor === void 0 ? void 0 : { cursor }, {
+          timeout: remaining,
+          resetTimeoutOnProgress: true,
+          maxTotalTimeout: remaining,
+          ...signal ? { signal } : {}
+        });
+        throwIfAbortedOrExpired(signal);
+        this.#remainingCallBudget(deadline);
+        if (!Array.isArray(response.tools) || tools.length + response.tools.length > MAX_MCP_DISCOVERY_TOOLS) {
+          throw new Error("Configured MCP tool list is malformed or exceeds product bounds");
+        }
+        tools.push(...response.tools);
+        assertFabricJsonBudget(tools);
+        if (response.nextCursor === void 0) break;
+        if (typeof response.nextCursor !== "string" || response.nextCursor.length > MAX_MCP_CURSOR_CHARS) {
+          throw new Error("Configured MCP discovery cursor is malformed or exceeds product bounds");
+        }
+        if (cursors.has(response.nextCursor)) throw new Error("Configured MCP discovery cursor cycle");
+        cursors.add(response.nextCursor);
+        cursor = response.nextCursor;
+      }
       const definition = runtime.getDefinition(server);
       return tools.filter((tool) => {
         if (!isRecord6(tool) || typeof tool.name !== "string") return true;
@@ -23511,13 +23643,16 @@ ${JSON.stringify(entry.value)}`.toLowerCase();
       ).slice(0, capped).map(({ entry }) => entry);
     },
     async index() {
-      const entries = collectNamespaceEntries(namespaceRoot, memoryNamespace, maxValueChars).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-      if (entries.length > maxEntries) {
+      const files = listEntryFiles(namespaceRoot);
+      if (files.length > maxEntries) {
         throw new Error(
           `Kiro memory namespace ${JSON.stringify(memoryNamespace)} exceeds ${maxEntries} entries`
         );
       }
-      return entries.map((entry) => ({ key: entry.key, bytes: entry.bytes, updatedAt: entry.updatedAt }));
+      return files.map((file) => {
+        const { key, bytes, updatedAt } = readEntry(file, memoryNamespace, maxValueChars);
+        return { key, bytes, updatedAt };
+      }).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     }
   };
 };
@@ -23896,7 +24031,7 @@ var createKiroMcpServer = async (options) => {
     await syncWorkspace();
     return { tools: [
       { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable memory and state.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
+      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable memory and state. Actions: status and list take no other fields; select requires rootId from list; attach requires an absolute path; detach takes no other fields.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
       { name: "fabric_exec", description: EXEC_DESCRIPTION, inputSchema: fabricExecInputSchemaJson(), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } }
     ] };
   });
@@ -23928,6 +24063,9 @@ var createKiroMcpServer = async (options) => {
             formElicitation: supportsKiroElicitation(server.getClientCapabilities())
           }
         };
+        const expectedNode = process.env.KIRO_FABRIC_EXPECTED_NODE;
+        const interpreterInfo = expectedNode === void 0 ? { actual: realpathSync(process.execPath), expected: null, matches: "unknown" } : { actual: realpathSync(process.execPath), expected: expectedNode, matches: realpathSync(process.execPath) === expectedNode };
+        const actions = current && !workspaceBlocked ? fabricInfoActions(await current.registry.list()) : [];
         if (tracer.enabled) {
           tracer.event("eval", "tool.fabric_info", void 0, lifecycleInfo);
           tracer.flush();
@@ -23945,6 +24083,8 @@ var createKiroMcpServer = async (options) => {
           providers,
           tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
           lifecycle: lifecycleInfo,
+          interpreter: interpreterInfo,
+          actions,
           nativeKiroTools: { owner: "kiro", availability: "declared-by-agent-profile" }
         }) }] };
       } catch (error) {

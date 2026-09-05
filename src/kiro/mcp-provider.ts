@@ -81,6 +81,9 @@ const descriptors: readonly FabricActionDescriptor[] = [
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const MCP_CLOSE_GRACE_MS = 1_000;
+const MAX_MCP_DISCOVERY_PAGES = 100;
+const MAX_MCP_DISCOVERY_TOOLS = 1_000;
+const MAX_MCP_CURSOR_CHARS = 4_096;
 const MAX_MCP_TRANSPORT_FILE_BYTES = 512 * 1024 * 1024;
 const MAX_MCP_STDIO_ARGUMENTS = 256;
 const MAX_MCP_ARGUMENT_FILES = 32;
@@ -674,7 +677,7 @@ export class KiroMcpProvider implements FabricProvider {
       const rawTools = await this.#bounded(
         runtime,
         server,
-        this.#listRawTools(runtime, server, discoveryBudget),
+        this.#listRawTools(runtime, server, actionDeadline, signal),
         signal,
         "tool discovery",
         discoveryBudget,
@@ -867,18 +870,43 @@ export class KiroMcpProvider implements FabricProvider {
     }
   }
 
-  async #listRawTools(runtime: Runtime, server: string, timeoutMs: number): Promise<unknown> {
+  async #listRawTools(runtime: Runtime, server: string, deadline: number, signal?: AbortSignal): Promise<unknown> {
     try {
+      throwIfAbortedOrExpired(signal);
+      this.#remainingCallBudget(deadline);
       const connection = await runtime.connect(server, {
         disableOAuth: this.#config.disableOAuth,
-        oauthTimeoutMs: timeoutMs,
+        oauthTimeoutMs: this.#remainingCallBudget(deadline),
       });
-      const response = await connection.client.listTools(undefined, {
-        timeout: timeoutMs,
-        resetTimeoutOnProgress: true,
-        maxTotalTimeout: timeoutMs,
-      });
-      const tools: unknown[] = Array.isArray(response.tools) ? response.tools : [];
+      const tools: unknown[] = [];
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      for (let page = 0; ; page += 1) {
+        throwIfAbortedOrExpired(signal);
+        this.#remainingCallBudget(deadline);
+        if (page >= MAX_MCP_DISCOVERY_PAGES) throw new Error("Configured MCP discovery page limit exceeded");
+        const remaining = this.#remainingCallBudget(deadline);
+        const response = await connection.client.listTools(cursor === undefined ? undefined : { cursor }, {
+          timeout: remaining,
+          resetTimeoutOnProgress: true,
+          maxTotalTimeout: remaining,
+          ...(signal ? { signal } : {}),
+        });
+        throwIfAbortedOrExpired(signal);
+        this.#remainingCallBudget(deadline);
+        if (!Array.isArray(response.tools) || tools.length + response.tools.length > MAX_MCP_DISCOVERY_TOOLS) {
+          throw new Error("Configured MCP tool list is malformed or exceeds product bounds");
+        }
+        tools.push(...response.tools);
+        assertFabricJsonBudget(tools);
+        if (response.nextCursor === undefined) break;
+        if (typeof response.nextCursor !== "string" || response.nextCursor.length > MAX_MCP_CURSOR_CHARS) {
+          throw new Error("Configured MCP discovery cursor is malformed or exceeds product bounds");
+        }
+        if (cursors.has(response.nextCursor)) throw new Error("Configured MCP discovery cursor cycle");
+        cursors.add(response.nextCursor);
+        cursor = response.nextCursor;
+      }
       const definition = runtime.getDefinition(server);
       return tools.filter((tool) => {
         if (!isRecord(tool) || typeof tool.name !== "string") return true;

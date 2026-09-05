@@ -39,6 +39,9 @@ export interface FabricTracer {
   close(): void;
 }
 
+/** Routine failure metadata accepts a closed category set, never an exception. */
+export const traceFailureMetadata = (errorKind: "approval_failed" | "provider_failed") => ({ errorKind });
+
 const MAX_EVENT_CHARS = 6_000;
 
 const NOOP_SPAN: TraceSpan = Object.freeze({ id: "", end: () => undefined });

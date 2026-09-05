@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -193,6 +194,8 @@ interface FabricInfo {
     runtimeGeneration: number;
     runtimeActive: boolean;
   };
+  interpreter: { actual: string; expected: string | null; matches: boolean | "unknown" };
+  actions: Array<{ ref: string; risk?: string; descriptorDigest?: string } | string>;
 }
 
 interface TraceRecord {
@@ -312,6 +315,12 @@ describe("Agent MCP process lifecycle", () => {
     });
     expect(first.tracing.enabled).toBe(true);
     if (first.tracing.file === undefined) throw new Error("Fabric trace path was not reported");
+    expect(first.interpreter.actual).toBe(realpathSync(process.execPath));
+    expect(first.interpreter.expected).toBeNull();
+    expect(first.interpreter.matches).toBe("unknown");
+    expect(first.actions.length).toBeGreaterThan(0);
+    const refs = first.actions.map((entry) => typeof entry === "string" ? entry : entry.ref);
+    expect(refs).toContain("artifacts.read");
 
     const key = "workspace-switch-sentinel";
     const sentinels = {
@@ -673,7 +682,9 @@ describe("Agent MCP process lifecycle", () => {
     const data = path.join(root, "data");
     fs.mkdirSync(data, { mode: 0o700 });
     const relocatedRuntime = path.join(root, "release-runtime");
+    fs.mkdirSync(relocatedRuntime, { mode: 0o700 });
     fs.cpSync(stagedRuntime(), relocatedRuntime, { recursive: true });
+    fs.chmodSync(relocatedRuntime, 0o700);
     const config = path.join(data, "fabric", "config");
     fs.mkdirSync(config, { recursive: true, mode: 0o700 });
     fs.chmodSync(path.join(data, "fabric"), 0o700);

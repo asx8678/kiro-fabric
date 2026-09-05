@@ -5,8 +5,8 @@ import { fabricGuestDeclarations } from "./runtime/guest-types.js";
 import { assertFabricJsonBudget, fabricJsonText, MAX_FABRIC_JSON_CHARS } from "./runtime/json-budget.js";
 import { QuickJsRuntime, type FabricSandboxTerminationReason } from "./runtime/quickjs-runtime.js";
 import { fabricPayloadsLimitError, fabricSourceLimitError } from "./runtime/source-limit.js";
-import { DISABLED_TRACER, type FabricTracer } from "./trace/tracer.js";
-import { shutdownFabricCompilerWorker, typeCheckFabricCodeInWorker, type FabricTypeError } from "./runtime/type-checker.js";
+import { DISABLED_TRACER, traceFailureMetadata, type FabricTracer } from "./trace/tracer.js";
+import { FabricCompilerPool, type FabricTypeError } from "./runtime/type-checker.js";
 
 export const FABRIC_COMPILER_TIMEOUT_MS = 10_000;
 export const FABRIC_APPROVAL_TIMEOUT_MS = 30_000;
@@ -75,13 +75,37 @@ export const exactHostActionReference = (
 
 export class FabricExecutionService {
   readonly #runtime = new QuickJsRuntime();
+  readonly #compiler: FabricCompilerPool;
+  #active = 0;
+  readonly #executions = new Set<Promise<FabricExecutionResult>>();
+  readonly #closeController = new AbortController();
+  #closing: Promise<void> | undefined;
   constructor(
     readonly registry: ActionRegistry,
     readonly config: FabricConfig,
     readonly cwd: string,
-  ) {}
+  ) { this.#compiler = new FabricCompilerPool(config.executor.maxConcurrentExecutions ?? 4); }
 
   async execute(options: FabricExecutionOptions): Promise<FabricExecutionResult> {
+    if (this.#closeController.signal.aborted || this.#active >= this.#compiler.maxWorkers) {
+      return {
+        status: "failed", success: false, logs: [], audits: [], elapsedMs: 0,
+        error: this.#closeController.signal.aborted ? "Fabric execution service is closed" : "Fabric execution concurrency limit reached",
+        effectiveTimeoutMs: effectiveFabricTimeout(this.config.executor.maxTimeoutMs, this.config.executor.timeoutMs, 0, options.timeoutMs ?? 0),
+      };
+    }
+    this.#active += 1;
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, this.#closeController.signal])
+      : this.#closeController.signal;
+    // Register before any user callback runs, including timeout notifications.
+    const execution = Promise.resolve().then(() => this.#execute({ ...options, signal }));
+    this.#executions.add(execution);
+    try { return await execution; }
+    finally { this.#active -= 1; this.#executions.delete(execution); }
+  }
+
+  async #execute(options: FabricExecutionOptions): Promise<FabricExecutionResult> {
     const started = performance.now();
     const tracer = options.tracer ?? DISABLED_TRACER;
     const execId = options.execId;
@@ -109,7 +133,7 @@ export class FabricExecutionService {
     const compileSpan = tracer.enabled ? tracer.span("eval", "compile", execId) : undefined;
     let checked;
     try {
-      checked = await typeCheckFabricCodeInWorker({
+      checked = await this.#compiler.check({
         code: options.code,
         declarations: fabricGuestDeclarations,
       }, {
@@ -196,7 +220,7 @@ export class FabricExecutionService {
               await options.approver.approve(action, exactArgs, signal);
               approvalSpan?.end({ approved: true });
             } catch (error) {
-              approvalSpan?.end({ approved: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 200) });
+              approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });
               throw error;
             } finally { pendingApprovals -= 1; }
           },
@@ -204,7 +228,7 @@ export class FabricExecutionService {
         if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value), ...(actionRef !== ref ? { actionRef } : {}) };
         return value;
       } catch (error) {
-        if (bridgeSpan) bridgeEnd = { error: (error instanceof Error ? error.message : String(error)).slice(0, 200) };
+        if (bridgeSpan) bridgeEnd = { ok: false, ...traceFailureMetadata("provider_failed") };
         throw error;
       } finally {
         bridgeSpan?.end(bridgeEnd);
@@ -273,5 +297,12 @@ export class FabricExecutionService {
     };
   }
 
-  async close(): Promise<void> { await this.registry.close(); await shutdownFabricCompilerWorker(); }
+  close(): Promise<void> {
+    return this.#closing ??= (async () => {
+      this.#closeController.abort(new Error("Fabric execution service is closed"));
+      try {
+        await Promise.all([this.#compiler.close(), Promise.allSettled([...this.#executions])]);
+      } finally { await this.registry.close(); }
+    })();
+  }
 }

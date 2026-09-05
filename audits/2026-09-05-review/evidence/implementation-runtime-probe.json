@@ -1,0 +1,5 @@
+{
+  "command": "node audits/2026-09-05-review/evidence/implementation-runtime-probe.mjs",
+  "ok": true,
+  "output": "{\"status\":\"passed\",\"imports\":\"dist/index.js\",\"checks\":[\"public admission config\",\"real warm compiler survives unrelated close\",\"checked guest state write\",\"runtime reopen persistence\",\"revision-checked extension\"]}\n"
+}

@@ -1,0 +1,90 @@
+{
+  "src/": {
+    "files": 38,
+    "lines": 7222,
+    "bytes": 320994
+  },
+  "tests/": {
+    "files": 24,
+    "lines": 6334,
+    "bytes": 317630
+  },
+  "scripts/": {
+    "files": 21,
+    "lines": 6214,
+    "bytes": 336524
+  },
+  "docs/": {
+    "files": 7,
+    "lines": 279,
+    "bytes": 26298
+  },
+  ".github/": {
+    "files": 5,
+    "lines": 241,
+    "bytes": 9572
+  },
+  "dist/": {
+    "files": 78,
+    "lines": 303293,
+    "bytes": 14458219
+  },
+  "largest_non_generated": [
+    {
+      "path": "media/cover.jpg",
+      "bytes": 300475,
+      "lines": 2362,
+      "sha256": "cf6bc91e0b02fddc58ffd98b4b7f28848d8a9f78d9c56ce1e41b94cb06323179",
+      "binary": true
+    },
+    {
+      "path": "scripts/run-kiro-agent-real-driver.mjs",
+      "bytes": 141188,
+      "lines": 2627,
+      "sha256": "c9d6626c1b1137985f38ea0f3606bd9e7a1fe155da3ebb57b62e1fea9070c48c",
+      "binary": false
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "bytes": 89663,
+      "lines": 2783,
+      "sha256": "0cdbd8dee07a622d9bd6194b281cf5fc4190daea8705a2b0aef22798aff224e3",
+      "binary": false
+    },
+    {
+      "path": "tests/release-evidence.test.ts",
+      "bytes": 74381,
+      "lines": 1313,
+      "sha256": "960faca088fd85bb399ca483a3e25b1da9789a44204bc9935c71510a65fe7744",
+      "binary": false
+    },
+    {
+      "path": "scripts/real-client-evidence.mjs",
+      "bytes": 51180,
+      "lines": 737,
+      "sha256": "f487565cceb60d01eb02bda7de9dcbd5a822ce44a52cfaec57427ffdb28b88e2",
+      "binary": false
+    },
+    {
+      "path": "scripts/install-agent-user.mjs",
+      "bytes": 47741,
+      "lines": 987,
+      "sha256": "e18e77fbcda1ab23e0e041467297e174239f38e71637453022add310511da41e",
+      "binary": false
+    },
+    {
+      "path": "src/kiro/mcp-provider.ts",
+      "bytes": 45347,
+      "lines": 996,
+      "sha256": "bc10eef62d0e6482a1d9a76d9612153e186e821a0e4a63770cf44be5fe8ec7d3",
+      "binary": false
+    },
+    {
+      "path": "tests/agent-user-install.test.ts",
+      "bytes": 39017,
+      "lines": 687,
+      "sha256": "619e49628fa319c389d6ec8687633f8e46f8ae8e9d813ccd70ce34dad99f18be",
+      "binary": false
+    }
+  ]
+}

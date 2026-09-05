@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import { gzipSync, gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { generateAgentProfile } from "../scripts/agent-profile.mjs";
 import {
@@ -25,9 +27,11 @@ import {
   parseAcpJsonlFrames,
   postCompactionVerificationCode,
   qualificationValueDigest,
+  resolveRealClientAuthFlags,
   resolveRealClientAuthMode,
   resumeVerificationCode,
   subscriptionLoginArgv,
+  subscriptionWhoamiAuthenticated,
   sentinelVerificationCode,
 } from "../scripts/run-kiro-agent-real-driver.mjs";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
@@ -286,14 +290,14 @@ const transcriptDigest = (kind: string) => transcript.find((entry) => entry.kind
 
 const valid = {
   kind: "kiro-fabric.real-client-qualification",
-  schemaVersion: 11,
+  schemaVersion: 12,
   ok: true,
   packageDigest: digest,
   archiveDigest,
   commit,
   tools: REAL_CLIENT_TOOLS,
-  driver: { digest: "e".repeat(64), version: "repository-driver-v9" },
-  authentication: { mode: "subscription", verification: "kiro-cli-whoami", isolatedHome: true, subscriptionLoginPerformed: true },
+  driver: { digest: "e".repeat(64), version: "repository-driver-v10" },
+  authentication: { mode: "subscription", verification: "kiro-cli-whoami", isolatedHome: true, subscriptionLoginPerformed: true, preLoginUnauthenticated: true },
   kiro: { path: executable, digest: "f".repeat(64), version: "kiro-cli 2.21.0", headlessEngineSelector: "--agent-engine", agentValidateSyntax: "--path" },
   installation: {
     releaseRoot: "/private/release",
@@ -538,12 +542,38 @@ const valid = {
 
 describe("real-client release evidence", () => {
   it("resolves explicit API-key and subscription authentication modes", () => {
-    expect(resolveRealClientAuthMode(undefined, "")).toBe("subscription");
+    expect(() => resolveRealClientAuthMode(undefined, "")).toThrow("pass --auth-mode subscription or set KIRO_API_KEY");
     expect(resolveRealClientAuthMode(undefined, "test-key")).toBe("api-key");
     expect(resolveRealClientAuthMode("subscription", "test-key")).toBe("subscription");
     expect(resolveRealClientAuthMode("api-key", "test-key")).toBe("api-key");
     expect(() => resolveRealClientAuthMode("api-key", "")).toThrow("KIRO_API_KEY");
     expect(() => resolveRealClientAuthMode("other", "")).toThrow("--auth-mode");
+  });
+
+  it("rejects mixed subscription flags and requires an explicit mode without an API key", () => {
+    expect(resolveRealClientAuthFlags({ authMode: "subscription" }, "")).toEqual({
+      authMode: "subscription",
+      subscriptionLogin: false,
+      subscriptionLicense: "free",
+      identityProvider: undefined,
+      region: undefined,
+    });
+    expect(resolveRealClientAuthFlags({ authMode: "subscription", subscriptionLogin: true }, "test-key")).toMatchObject({
+      authMode: "subscription",
+      subscriptionLogin: true,
+    });
+    const apiKeyFlags = resolveRealClientAuthFlags({ authMode: "api-key" }, "test-key");
+    expect(apiKeyFlags).toEqual({
+      authMode: "api-key",
+      subscriptionLogin: false,
+      subscriptionLicense: undefined,
+      identityProvider: undefined,
+      region: undefined,
+    });
+    expect(resolveRealClientAuthFlags(apiKeyFlags, "test-key")).toEqual(apiKeyFlags);
+    expect(() => resolveRealClientAuthFlags({ subscriptionLogin: true }, "test-key")).toThrow("--subscription-login requires --auth-mode subscription");
+    expect(() => resolveRealClientAuthFlags({ authMode: "api-key", subscriptionLicense: "free" }, "test-key")).toThrow("subscription login options require --auth-mode subscription");
+    expect(() => resolveRealClientAuthFlags({}, "")).toThrow("pass --auth-mode subscription or set KIRO_API_KEY");
   });
 
   it("builds bounded isolated subscription device-login arguments", () => {
@@ -552,6 +582,17 @@ describe("real-client release evidence", () => {
       .toEqual(["login", "--license", "pro", "--use-device-flow", "--identity-provider", "https://identity.example.test/start", "--region", "us-east-1"]);
     expect(() => subscriptionLoginArgv({ license: "free", region: "us-east-1" })).toThrow("valid only");
     expect(() => subscriptionLoginArgv({ license: "pro", region: "us-east-1" })).toThrow("supplied together");
+    expect(() => subscriptionLoginArgv({ license: "pro", identityProvider: "", region: "us-east-1" })).toThrow("bounded non-empty string");
+    expect(() => subscriptionLoginArgv({ license: "pro", identityProvider: `https://x${String.fromCharCode(10)}inject`, region: "us-east-1" })).toThrow("control characters");
+    expect(() => subscriptionLoginArgv({ license: "pro", identityProvider: "x".repeat(2_049), region: "us-east-1" })).toThrow("bounded non-empty string");
+  });
+
+  it("treats whoami as unauthenticated on non-zero status or login-required output", () => {
+    expect(subscriptionWhoamiAuthenticated({ status: 0, stdout: Buffer.from("ok\n"), stderr: Buffer.alloc(0) })).toBe(true);
+    expect(subscriptionWhoamiAuthenticated({ status: 1, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) })).toBe(false);
+    expect(subscriptionWhoamiAuthenticated({ error: new Error("spawn"), status: 0, stdout: Buffer.from("ok\n"), stderr: Buffer.alloc(0) })).toBe(false);
+    expect(subscriptionWhoamiAuthenticated({ status: 0, stdout: Buffer.from("not logged in\n"), stderr: Buffer.alloc(0) })).toBe(false);
+    expect(subscriptionWhoamiAuthenticated({ status: 0, stdout: Buffer.alloc(0), stderr: Buffer.from("login required") })).toBe(false);
   });
   it("type-checks nonce-bound same-process and resumed sentinel programs", () => {
     for (const code of [sentinelVerificationCode(false), sentinelVerificationCode(true), postCompactionVerificationCode, resumeVerificationCode]) {
@@ -815,24 +856,61 @@ describe("real-client release evidence", () => {
     expect(acpPriorUserMessageObserved([prose], "history-secret")).toBe(false);
   });
 
+  it("promotes qualified compression bytes without weakening exact-archive binding", () => {
+    // Compression variants have identical uncompressed content; only the
+    // qualified transport bytes may satisfy this evidence record.
+    const content = Buffer.from("benign package-content fixture ".repeat(100));
+    const qualified = gzipSync(content, { level: 1 });
+    const rebuilt = gzipSync(content, { level: 9 });
+    expect(gunzipSync(qualified)).toEqual(gunzipSync(rebuilt));
+    const qualifiedDigest = createHash("sha256").update(qualified).digest("hex");
+    const rebuiltDigest = createHash("sha256").update(rebuilt).digest("hex");
+    expect(qualifiedDigest).not.toBe(rebuiltDigest);
+    const evidence = { ...valid, archiveDigest: qualifiedDigest };
+    expect(assertRealClientEvidence(evidence, digest, { qualification: true, archiveDigest: qualifiedDigest, commit })).toBe(evidence);
+    expect(() => assertRealClientEvidence(evidence, digest, { qualification: true, archiveDigest: rebuiltDigest, commit })).toThrow("archive digest");
+
+    const workflow = fs.readFileSync(".github/workflows/release.yml", "utf8");
+    expect(workflow).toContain("pnpm run check");
+    expect(workflow).not.toContain("pnpm run agent:archive");
+    expect(workflow).toContain('--archive "$RUNNER_TEMP/qualification/kiro-fabric-agent.tar.gz"');
+    expect(workflow).toContain('--sbom "$RUNNER_TEMP/qualification/kiro-fabric-agent.spdx.json"');
+    expect(workflow).toContain("--assets .tmp/release-assets");
+    expect(workflow).not.toContain("cp ");
+    expect(workflow).toContain("--require-release-ready");
+    // Release still independently compares archive contents with the fresh stage.
+    const report = fs.readFileSync("scripts/release-candidate-report.mjs", "utf8");
+    expect(report).toContain("validateReleaseArtifacts(stage, archivePath, sbomPath, closureRoot)");
+    expect(report).toContain("if (!report.releaseReady || !qualificationBytes)");
+    expect(report).toContain("writeReleaseAssetSnapshots(path.resolve(assets), artifacts, qualificationBytes)");
+  });
+
   it("accepts only archive-installed, exact-command, lifecycle-bound qualification evidence", () => {
     expect(assertRealClientEvidence(valid, digest, { qualification: true, archiveDigest, commit })).toBe(valid);
     const apiKeyAuthenticated = {
       ...valid,
-      authentication: { mode: "api-key", verification: "authenticated-kiro-commands", isolatedHome: true, subscriptionLoginPerformed: false },
+      authentication: { mode: "api-key", verification: "authenticated-kiro-commands", isolatedHome: true, subscriptionLoginPerformed: false, preLoginUnauthenticated: false },
     };
     expect(assertRealClientEvidence(apiKeyAuthenticated, digest, { qualification: true, archiveDigest, commit })).toBe(apiKeyAuthenticated);
+    const subscriptionWithoutLogin = {
+      ...valid,
+      authentication: { mode: "subscription", verification: "kiro-cli-whoami", isolatedHome: true, subscriptionLoginPerformed: false, preLoginUnauthenticated: false },
+    };
+    expect(assertRealClientEvidence(subscriptionWithoutLogin, digest, { qualification: true, archiveDigest, commit })).toBe(subscriptionWithoutLogin);
     for (const patch of [
       { packageDigest: "9".repeat(64) },
       { archiveDigest: "8".repeat(64) },
       { commit: "7".repeat(40) },
       { tools: ["fabric_exec"] },
       { kind: "other" },
-      { schemaVersion: 10 },
+      { schemaVersion: 11 },
       { ok: false },
       { authentication: undefined },
       { authentication: { ...valid.authentication, mode: "other" } },
       { authentication: { ...valid.authentication, isolatedHome: false } },
+      { authentication: { ...valid.authentication, preLoginUnauthenticated: false } },
+      { authentication: { mode: "api-key", verification: "authenticated-kiro-commands", isolatedHome: true, subscriptionLoginPerformed: true, preLoginUnauthenticated: false } },
+      { authentication: { ...valid.authentication, verification: "authenticated-kiro-commands" } },
       { customAgentSelected: true },
       { powerActivated: false },
     ]) expect(() => assertRealClientEvidence({ ...valid, ...patch }, digest, { qualification: true, archiveDigest, commit })).toThrow();

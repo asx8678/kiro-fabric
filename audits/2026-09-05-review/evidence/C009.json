@@ -1,0 +1,22 @@
+{
+  "id": "C009",
+  "command": [
+    "node",
+    "audit-state-io-probe.mjs"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-sjp2ks3h/repo",
+  "environment": {
+    "PATH": "/home/adam/.pi/agent/bin:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/kiro-home",
+    "TMPDIR": "/tmp/kiro-fabric-audit-sjp2ks3h/tmp",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1"
+  },
+  "deadlineSeconds": 30,
+  "elapsedSeconds": 0.368,
+  "status": "passed",
+  "exitCode": 0,
+  "output": "{\"scenario\":\"document fsync EIO after an existing commit\",\"operationRejected\":true,\"previousValuePreserved\":true,\"lockReleased\":true,\"temporaryFilesRemaining\":1,\"expectedTemporaryFilesRemaining\":0,\"defectObserved\":true}\n"
+}

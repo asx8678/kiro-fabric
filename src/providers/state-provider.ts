@@ -54,6 +54,16 @@ const privateRoot = (root: string): string => {
   return fs.realpathSync(root);
 };
 
+/** The mutation is visible, but a post-commit deadline or lock cleanup failed.
+ * Transport-level interruption can still lose this acknowledgement entirely. */
+export class StateCommitAcknowledgementError extends Error {
+  readonly committed = true;
+  constructor(readonly revision: number, options: ErrorOptions) {
+    super(`State mutation committed at revision ${revision}; acknowledgement failed; read state before retrying`, options);
+    this.name = "StateCommitAcknowledgementError";
+  }
+}
+
 export class StateProvider implements FabricProvider {
   readonly name = "state";
   readonly description = "Workspace-bound atomic state";
@@ -63,6 +73,7 @@ export class StateProvider implements FabricProvider {
   readonly #maxEntries: number;
   readonly #maxValueChars: number;
   readonly #maxTotalChars: number;
+  #pendingLockCleanup: { dev: number; ino: number } | undefined;
 
   constructor(root: string, options: {
     maxEntries?: number;
@@ -111,40 +122,48 @@ export class StateProvider implements FabricProvider {
     if (actionName !== "set" && actionName !== "delete") {
       throw new Error(`Unknown state action: ${actionName}`);
     }
-    return this.#withMutationLock(context, () => {
-      const document = this.#read();
-      const key = args.key as string;
-      const current = document.entries[key];
-      if (args.expectedRevision !== undefined && args.expectedRevision !== (current?.revision ?? 0)) {
-        throw new Error("state revision conflict");
-      }
-      if (actionName === "delete") {
-        if (!current) return { key, deleted: false, revision: document.revision };
-        delete document.entries[key];
-        document.revision += 1;
-        this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
-        throwIfAbortedOrExpired(context.signal, context.deadline);
-        return { key, deleted: true, revision: document.revision };
-      }
+    let committedRevision: number | undefined;
+    try {
+      return await this.#withMutationLock(context, () => {
+        const document = this.#read();
+        const key = args.key as string;
+        const current = document.entries[key];
+        if (args.expectedRevision !== undefined && args.expectedRevision !== (current?.revision ?? 0)) {
+          throw new Error("state revision conflict");
+        }
+        if (actionName === "delete") {
+          if (!current) return { key, deleted: false, revision: document.revision };
+          delete document.entries[key];
+          document.revision += 1;
+          this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
+          committedRevision = document.revision;
+          throwIfAbortedOrExpired(context.signal, context.deadline);
+          return { key, deleted: true, revision: document.revision };
+        }
 
-      const serialized = JSON.stringify(args.value);
-      if (serialized === undefined || serialized.length > this.#maxValueChars) {
-        throw new Error("state value exceeds configured bounds");
-      }
-      if (!current && Object.keys(document.entries).length >= this.#maxEntries) {
-        throw new Error("state entry limit reached");
-      }
-      document.revision += 1;
-      document.entries[key] = {
-        revision: document.revision,
-        value: JSON.parse(serialized) as unknown,
-        updatedAt: Date.now(),
-      };
-      throwIfAbortedOrExpired(context.signal, context.deadline);
-      this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
-      throwIfAbortedOrExpired(context.signal, context.deadline);
-      return { key, revision: document.revision };
-    });
+        const serialized = JSON.stringify(args.value);
+        if (serialized === undefined || serialized.length > this.#maxValueChars) {
+          throw new Error("state value exceeds configured bounds");
+        }
+        if (!current && Object.keys(document.entries).length >= this.#maxEntries) {
+          throw new Error("state entry limit reached");
+        }
+        document.revision += 1;
+        document.entries[key] = {
+          revision: document.revision,
+          value: JSON.parse(serialized) as unknown,
+          updatedAt: Date.now(),
+        };
+        throwIfAbortedOrExpired(context.signal, context.deadline);
+        this.#write(document, () => throwIfAbortedOrExpired(context.signal, context.deadline));
+        committedRevision = document.revision;
+        throwIfAbortedOrExpired(context.signal, context.deadline);
+        return { key, revision: document.revision };
+      });
+    } catch (error) {
+      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error });
+      throw error;
+    }
   }
 
   #read(): StateDocument {
@@ -216,75 +235,92 @@ export class StateProvider implements FabricProvider {
       `.state-${process.pid}-${randomBytes(8).toString("hex")}.tmp`,
     );
     const descriptor = fs.openSync(temporary, "wx", 0o600);
+    // The exclusive open establishes ownership before any later I/O can fail.
     try {
-      fs.writeFileSync(descriptor, text);
-      fs.fsyncSync(descriptor);
-    } finally {
-      fs.closeSync(descriptor);
-    }
-    try {
+      try {
+        fs.writeFileSync(descriptor, text);
+        fs.fchmodSync(descriptor, 0o600);
+        fs.fsyncSync(descriptor);
+      } finally {
+        fs.closeSync(descriptor);
+      }
       beforeCommit();
+      // Commit point. Permissions are already established on the inode.
       fs.renameSync(temporary, this.#file);
-      fs.chmodSync(this.#file, 0o600);
     } catch (error) {
-      fs.rmSync(temporary, { force: true });
+      try { fs.rmSync(temporary, { force: true }); }
+      catch (cleanup) { throw new AggregateError([error, cleanup], "state write and temporary cleanup failed"); }
       throw error;
+    }
+  }
+
+  #releaseLock(identity: { dev: number; ino: number }): void {
+    try {
+      const current = fs.lstatSync(this.#lock);
+      if (current.isFile() && !current.isSymbolicLink() &&
+          current.dev === identity.dev && current.ino === identity.ino) {
+        fs.rmSync(this.#lock);
+      }
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") throw error;
     }
   }
 
   async #withMutationLock<T>(context: FabricInvocationContext, operation: () => T): Promise<T> {
     const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
     let identity: { dev: number; ino: number } | undefined;
-    while (!identity) {
-      throwIfAbortedOrExpired(context.signal, context.deadline);
-      try {
-        const descriptor = fs.openSync(this.#lock, "wx", 0o600);
-        try {
-          fs.writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}\n`);
-          fs.fsyncSync(descriptor);
-          const stat = fs.fstatSync(descriptor);
-          identity = { dev: stat.dev, ino: stat.ino };
-        } finally {
-          fs.closeSync(descriptor);
+    try {
+      while (!identity) {
+        throwIfAbortedOrExpired(context.signal, context.deadline);
+        // Only a completed operation can leave this deferred responsibility.
+        // Retry before acquisition, including callers already waiting here.
+        if (this.#pendingLockCleanup) {
+          this.#releaseLock(this.#pendingLockCleanup);
+          this.#pendingLockCleanup = undefined;
         }
-      } catch (error) {
-        if (errorCode(error) !== "EEXIST") throw error;
-        let stat: fs.Stats;
-        try { stat = fs.lstatSync(this.#lock); }
-        catch (statError) { if (errorCode(statError) === "ENOENT") continue; throw statError; }
-        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("state mutation lock is foreign");
-        if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
-          let ownerPid = 0;
+        try {
+          const descriptor = fs.openSync(this.#lock, "wx", 0o600);
           try {
-            const owner = JSON.parse(fs.readFileSync(this.#lock, "utf8")) as { pid?: unknown };
-            if (typeof owner.pid === "number") ownerPid = owner.pid;
-          } catch { /* malformed stale locks are reclaimable after identity checks */ }
-          if (!processIsAlive(ownerPid)) {
-            const current = fs.lstatSync(this.#lock);
-            if (current.dev === stat.dev && current.ino === stat.ino && current.isFile()) {
-              fs.rmSync(this.#lock);
-              continue;
+            // Cleanup owns this inode before metadata writes or syncing can fail.
+            const stat = fs.fstatSync(descriptor);
+            identity = { dev: stat.dev, ino: stat.ino };
+            fs.writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}\n`);
+            fs.fsyncSync(descriptor);
+          } finally {
+            fs.closeSync(descriptor);
+          }
+        } catch (error) {
+          if (identity || errorCode(error) !== "EEXIST") throw error;
+          let stat: fs.Stats;
+          try { stat = fs.lstatSync(this.#lock); }
+          catch (statError) { if (errorCode(statError) === "ENOENT") continue; throw statError; }
+          if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("state mutation lock is foreign");
+          if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
+            let ownerPid = 0;
+            try {
+              const owner = JSON.parse(fs.readFileSync(this.#lock, "utf8")) as { pid?: unknown };
+              if (typeof owner.pid === "number") ownerPid = owner.pid;
+            } catch { /* malformed stale locks are reclaimable after identity checks */ }
+            if (!processIsAlive(ownerPid)) {
+              const current = fs.lstatSync(this.#lock);
+              if (current.dev === stat.dev && current.ino === stat.ino && current.isFile()) {
+                fs.rmSync(this.#lock);
+                continue;
+              }
             }
           }
+          if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
+          await delay(10);
         }
-        if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
-        await delay(10);
       }
-    }
-    try {
       throwIfAbortedOrExpired(context.signal, context.deadline);
       const result = operation();
       throwIfAbortedOrExpired(context.signal, context.deadline);
       return result;
     } finally {
-      try {
-        const current = fs.lstatSync(this.#lock);
-        if (current.isFile() && !current.isSymbolicLink() &&
-            current.dev === identity.dev && current.ino === identity.ino) {
-          fs.rmSync(this.#lock);
-        }
-      } catch (error) {
-        if (errorCode(error) !== "ENOENT") throw error;
+      if (identity) {
+        try { this.#releaseLock(identity); }
+        catch (error) { this.#pendingLockCleanup = identity; throw error; }
       }
     }
   }

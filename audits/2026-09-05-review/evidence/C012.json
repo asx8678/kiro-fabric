@@ -1,0 +1,25 @@
+{
+  "id": "C012",
+  "command": [
+    "pnpm",
+    "exec",
+    "vitest",
+    "run",
+    "tests/audit-pagination.test.ts"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-sjp2ks3h/repo",
+  "environment": {
+    "PATH": "/home/adam/.pi/agent/bin:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/kiro-home",
+    "TMPDIR": "/tmp/kiro-fabric-audit-sjp2ks3h/tmp",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1"
+  },
+  "deadlineSeconds": 30,
+  "elapsedSeconds": 0.821,
+  "status": "failed",
+  "exitCode": 1,
+  "output": "\n RUN  v4.1.11 /tmp/kiro-fabric-audit-sjp2ks3h/repo\n\nstdout | tests/audit-pagination.test.ts > audit: a configured paginated server exposes and invokes a second-page tool\n{\"mockOnly\":true,\"networkRequests\":0,\"discovered\":[\"first\"],\"cursors\":[null,null],\"downstreamCalls\":0,\"callFailure\":\"Unknown or ambiguous MCP tool: synthetic.second\"}\n\n \u276f tests/audit-pagination.test.ts (1 test | 1 failed) 16ms\n   \u00d7 audit: a configured paginated server exposes and invokes a second-page tool 16ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  tests/audit-pagination.test.ts > audit: a configured paginated server exposes and invokes a second-page tool\nAssertionError: expected [ 'first' ] to deeply equal [ 'first', 'second' ]\n\n- Expected\n+ Received\n\n  [\n    \"first\",\n-   \"second\",\n  ]\n\n \u276f tests/audit-pagination.test.ts:17:37\n     15|   try{await registry.invoke('mcp.$call',{server:'synthetic',tool:'seco\u2026\n     16|   console.log(JSON.stringify({mockOnly:true,networkRequests:0,discover\u2026\n     17|   expect(discovered.map(t=>t.name)).toEqual(['first','second']);\n       |                                     ^\n     18|   expect(failure).toBeUndefined(); expect(calls).toBe(1);\n     19|  }finally{await registry.close();}\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed (1)\n   Start at  09:35:25\n   Duration  264ms (transform 59ms, setup 0ms, import 163ms, tests 16ms, environment 0ms)\n\n"
+}

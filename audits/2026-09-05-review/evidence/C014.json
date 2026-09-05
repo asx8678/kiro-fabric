@@ -1,0 +1,22 @@
+{
+  "id": "C014",
+  "command": [
+    "node",
+    "scripts/build-agent-dev.mjs"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-sjp2ks3h/repo",
+  "environment": {
+    "PATH": "/home/adam/.pi/agent/bin:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/kiro-home",
+    "TMPDIR": "/tmp/kiro-fabric-audit-sjp2ks3h/tmp",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1"
+  },
+  "deadlineSeconds": 60,
+  "elapsedSeconds": 0.164,
+  "status": "passed",
+  "exitCode": 0,
+  "output": "{\"ok\":true,\"root\":\"/tmp/kiro-fabric-audit-sjp2ks3h/repo/.tmp/.kiro-fabric-agent-generation-4e7dff8bd9067a4b80c110a2979037af5d7f79b690ed7689466893925cb78455\",\"version\":\"0.64.0\",\"digest\":\"4e7dff8bd9067a4b80c110a2979037af5d7f79b690ed7689466893925cb78455\",\"files\":85,\"bytes\":14532977,\"generation\":\"/tmp/kiro-fabric-audit-sjp2ks3h/repo/.tmp/.kiro-fabric-agent-generation-4e7dff8bd9067a4b80c110a2979037af5d7f79b690ed7689466893925cb78455\"}\n/tmp/kiro-fabric-audit-sjp2ks3h/repo/.tmp/kiro-fabric-agent\n"
+}

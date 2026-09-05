@@ -48,6 +48,7 @@ describe("Kiro Agent profile generation", () => {
           env: {
             KIRO_FABRIC_RUNTIME_ROOT: options.runtimeRoot,
             KIRO_FABRIC_DATA_ROOT: options.dataRoot,
+            KIRO_FABRIC_EXPECTED_NODE: options.nodePath,
           },
           requestTimeout: FABRIC_MCP_REQUEST_TIMEOUT_MS,
         },

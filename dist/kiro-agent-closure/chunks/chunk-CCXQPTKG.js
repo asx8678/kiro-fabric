@@ -211724,117 +211724,133 @@ var transpileFabricCodeWithSourceMap = (code) => {
 var typeCheckFabricCode = (code, declarations) => checkerFor(declarations).check(code);
 var COMPILER_WORKER_IDLE_MS = 3e4;
 var COMPILER_WORKER_MAX_USES = 250;
-var pooledCompiler;
-var nextCompilerRequestId = 0;
 var defaultCompilerWorkerUrl = () => import.meta.url.endsWith(".ts") ? new URL("../../dist/runtime/compiler-worker-entry.js", import.meta.url) : new URL("../runtime/compiler-worker-entry.js", import.meta.url);
-var discardPooledCompiler = (state) => {
-  if (state.idleTimer) {
-    clearTimeout(state.idleTimer);
-    state.idleTimer = void 0;
+var FabricCompilerPool = class {
+  constructor(maxWorkers = 4) {
+    this.maxWorkers = maxWorkers;
+    if (!Number.isSafeInteger(maxWorkers) || maxWorkers < 1 || maxWorkers > 64) throw new Error("Invalid Fabric compiler worker limit");
   }
-  if (pooledCompiler === state) pooledCompiler = void 0;
-};
-var spawnCompilerWorker = (workerUrl) => {
-  const state = {
-    worker: new Worker(workerUrl ?? defaultCompilerWorkerUrl(), { resourceLimits: { maxOldGenerationSizeMb: COMPILER_MEMORY_MB, stackSizeMb: 4 } }),
-    uses: 0,
-    poolable: workerUrl === void 0,
-    idleTimer: void 0,
-    pending: void 0
-  };
-  state.worker.unref();
-  state.worker.on("message", (response) => {
-    const pending = state.pending;
-    if (!pending || pending.id !== response.id) return;
-    state.pending = void 0;
-    if (response.ok) pending.finish(void 0, response.result);
-    else pending.finish(new Error(`Fabric compiler failed: ${response.error}`));
-  });
-  state.worker.on("error", (error) => {
-    const pending = state.pending;
-    state.pending = void 0;
-    discardPooledCompiler(state);
-    pending?.finish(new Error(`Fabric compiler worker failed: ${error instanceof Error ? error.message : String(error)}`));
-    void state.worker.terminate().catch(() => void 0);
-  });
-  state.worker.on("exit", (code) => {
-    const pending = state.pending;
-    state.pending = void 0;
-    discardPooledCompiler(state);
-    if (pending) pending.finish(new Error(`Fabric compiler worker exited before replying (${code})`));
-  });
-  return state;
-};
-var acquireCompilerWorker = (workerUrl) => {
-  if (workerUrl === void 0 && pooledCompiler && pooledCompiler.pending === void 0) {
-    const state = pooledCompiler;
+  maxWorkers;
+  #workers = /* @__PURE__ */ new Set();
+  #idle;
+  #nextId = 0;
+  #closed = false;
+  #closing;
+  #detachIdle(state) {
     if (state.idleTimer) {
       clearTimeout(state.idleTimer);
       state.idleTimer = void 0;
     }
+    if (this.#idle === state) this.#idle = void 0;
+  }
+  #terminate(state) {
+    this.#detachIdle(state);
+    return state.termination ??= state.worker.terminate().catch(() => void 0).then(() => {
+      this.#workers.delete(state);
+    });
+  }
+  #acquire(workerUrl) {
+    if (workerUrl === void 0 && this.#idle) {
+      const state2 = this.#idle;
+      this.#detachIdle(state2);
+      return state2;
+    }
+    if (this.#workers.size >= this.maxWorkers) throw new Error("Fabric compiler concurrency limit reached");
+    const state = {
+      worker: new Worker(workerUrl ?? defaultCompilerWorkerUrl(), { resourceLimits: { maxOldGenerationSizeMb: COMPILER_MEMORY_MB, stackSizeMb: 4 } }),
+      uses: 0,
+      poolable: workerUrl === void 0,
+      idleTimer: void 0,
+      pending: void 0
+    };
+    this.#workers.add(state);
+    state.worker.unref();
+    state.worker.on("message", (response) => {
+      const pending = state.pending;
+      if (!pending || pending.id !== response.id) return;
+      if (response.ok) pending.finish(void 0, response.result);
+      else pending.finish(new Error(`Fabric compiler failed: ${response.error}`));
+    });
+    state.worker.on("error", (error) => {
+      state.pending?.finish(new Error(`Fabric compiler worker failed: ${error instanceof Error ? error.message : String(error)}`));
+      void this.#terminate(state);
+    });
+    state.worker.on("exit", (code) => {
+      this.#detachIdle(state);
+      state.pending?.finish(new Error(`Fabric compiler worker exited before replying (${code})`));
+      this.#workers.delete(state);
+    });
     return state;
   }
-  return spawnCompilerWorker(workerUrl);
-};
-var shutdownFabricCompilerWorker = async () => {
-  const state = pooledCompiler;
-  if (!state) return;
-  discardPooledCompiler(state);
-  await state.worker.terminate().catch(() => void 0);
-};
-var typeCheckFabricCodeInWorker = (request, options = {}) => new Promise((resolve, reject) => {
-  if (options.signal?.aborted) {
-    reject(options.signal.reason ?? new Error("Fabric compiler aborted"));
-    return;
+  check(request, options = {}) {
+    return new Promise((resolve, reject) => {
+      if (this.#closed) {
+        reject(new Error("Fabric compiler pool is closed"));
+        return;
+      }
+      if (options.signal?.aborted) {
+        reject(options.signal.reason ?? new Error("Fabric compiler aborted"));
+        return;
+      }
+      const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? DEFAULT_COMPILER_TIMEOUT_MS, 6e4));
+      const state = this.#acquire(options.workerUrl);
+      const id = ++this.#nextId;
+      let settled = false;
+      const finish = (error, result) => {
+        if (settled) return;
+        settled = true;
+        state.pending = void 0;
+        clearTimeout(timer);
+        options.signal?.removeEventListener("abort", onAbort);
+        const complete = () => {
+          if (error) reject(error);
+          else resolve(result);
+        };
+        if (error) {
+          void this.#terminate(state).then(complete);
+          return;
+        }
+        state.uses += 1;
+        if (!this.#closed && !this.#idle && state.poolable && state.uses < COMPILER_WORKER_MAX_USES) {
+          this.#idle = state;
+          state.idleTimer = setTimeout(() => {
+            void this.#terminate(state);
+          }, COMPILER_WORKER_IDLE_MS);
+          state.idleTimer.unref();
+          complete();
+        } else {
+          void this.#terminate(state).then(complete);
+        }
+      };
+      const onAbort = () => finish(options.signal?.reason instanceof Error ? options.signal.reason : new Error("Fabric compiler aborted"));
+      const timer = setTimeout(() => finish(new Error(`Fabric compiler timed out after ${timeoutMs}ms`)), timeoutMs);
+      state.pending = { id, finish };
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+      if (options.signal?.aborted) onAbort();
+      if (!settled) {
+        try {
+          state.worker.postMessage({ id, ...request });
+        } catch (error) {
+          finish(error instanceof Error ? error : new Error("Fabric compiler dispatch failed"));
+        }
+      }
+    });
   }
-  const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? DEFAULT_COMPILER_TIMEOUT_MS, 6e4));
-  const state = acquireCompilerWorker(options.workerUrl);
-  const id = ++nextCompilerRequestId;
-  let settled = false;
-  const finish = (error, result) => {
-    if (settled) return;
-    settled = true;
-    clearTimeout(timer);
-    options.signal?.removeEventListener("abort", onAbort);
-    const complete = () => {
-      if (error) reject(error);
-      else resolve(result);
-    };
-    if (error) {
-      discardPooledCompiler(state);
-      void state.worker.terminate().then(complete, complete);
-      return;
-    }
-    state.uses += 1;
-    if (state.poolable && state.uses < COMPILER_WORKER_MAX_USES) {
-      pooledCompiler = state;
-      state.idleTimer = setTimeout(() => {
-        discardPooledCompiler(state);
-        void state.worker.terminate().catch(() => void 0);
-      }, COMPILER_WORKER_IDLE_MS);
-      state.idleTimer.unref();
-      complete();
-      return;
-    }
-    discardPooledCompiler(state);
-    void state.worker.terminate().then(complete, complete);
-  };
-  const onAbort = () => finish(options.signal?.reason instanceof Error ? options.signal.reason : new Error("Fabric compiler aborted"));
-  const timer = setTimeout(() => finish(new Error(`Fabric compiler timed out after ${timeoutMs}ms`)), timeoutMs);
-  options.signal?.addEventListener("abort", onAbort, { once: true });
-  if (options.signal?.aborted) onAbort();
-  if (!settled) {
-    state.pending = { id, finish };
-    state.worker.postMessage({ id, ...request });
+  close() {
+    this.#closed = true;
+    return this.#closing ??= Promise.all([...this.#workers].map((state) => {
+      state.pending?.finish(new Error("Fabric compiler pool is closed"));
+      return this.#terminate(state);
+    })).then(() => void 0);
   }
-});
+};
+var standaloneCompilerPool = new FabricCompilerPool();
 
 export {
   assertFabricTranspiledWrapper,
   transpileFabricCodeWithSourceMap,
   typeCheckFabricCode,
-  shutdownFabricCompilerWorker,
-  typeCheckFabricCodeInWorker
+  FabricCompilerPool
 };
 /*! Bundled license information:
 

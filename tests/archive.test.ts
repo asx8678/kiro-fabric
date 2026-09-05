@@ -80,7 +80,18 @@ describe("deterministic Agent archive", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-archive-mode-test-"));
     roots.push(root);
     const packageRoot = path.join(root, "package");
+    fs.mkdirSync(packageRoot, { mode: 0o700 });
     fs.cpSync(evidence.root, packageRoot, { recursive: true, preserveTimestamps: true });
+    // fs.cpSync preserves file modes but creates directories with the umask
+    // default (group-writable under umask 002), which the package validator
+    // correctly rejects. Normalize directory modes explicitly.
+    const normalizeDirectoryModes = (directory: string): void => {
+      fs.chmodSync(directory, 0o700);
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (entry.isDirectory()) normalizeDirectoryModes(path.join(directory, entry.name));
+      }
+    };
+    normalizeDirectoryModes(packageRoot);
     const fileWithSafeButNonCanonicalMode = path.join(packageRoot, "skills", "fabric-exec", "SKILL.md");
     fs.chmodSync(fileWithSafeButNonCanonicalMode, 0o640);
     expect(validateAgentPackage(packageRoot).ok).toBe(true);

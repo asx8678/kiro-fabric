@@ -1,0 +1,23 @@
+{
+  "id": "C006",
+  "command": [
+    "pnpm",
+    "run",
+    "typecheck"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-sjp2ks3h/repo",
+  "environment": {
+    "PATH": "/home/adam/.pi/agent/bin:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/kiro-home",
+    "TMPDIR": "/tmp/kiro-fabric-audit-sjp2ks3h/tmp",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1"
+  },
+  "deadlineSeconds": 120,
+  "elapsedSeconds": 6.838,
+  "status": "passed",
+  "exitCode": 0,
+  "output": "! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-11.20.0.tgz\nRecreating /tmp/kiro-fabric-audit-sjp2ks3h/repo/node_modules\n? Verifying lockfile against supply-chain policies (301 entries)...\nLockfile is up to date, resolution step is skipped\nProgress: resolved 1, reused 0, downloaded 0, added 0\nPackages: +194\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nProgress: resolved 194, reused 0, downloaded 193, added 194, done\n\u2713 Lockfile passes supply-chain policies (301 entries in 1.3s)\n.../esbuild@0.28.2/node_modules/esbuild postinstall$ node install.js\n.../esbuild@0.28.2/node_modules/esbuild postinstall: Done\n\ndependencies:\n+ @jitl/quickjs-singlefile-mjs-release-sync 0.32.0\n+ @modelcontextprotocol/sdk 1.30.0\n+ mcporter 0.13.8\n+ quickjs-emscripten-core 0.32.0\n+ typebox 1.3.25\n+ typescript 6.0.3\n\ndevDependencies:\n+ @types/node 26.4.1\n+ esbuild 0.28.2\n+ knip 6.34.0\n+ vitest 4.1.11\n\nDone in 2.6s using pnpm v11.20.0\n$ tsc --noEmit && tsc --project tsconfig.scripts.json\n"
+}

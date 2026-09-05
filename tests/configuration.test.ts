@@ -16,6 +16,12 @@ import {
 import { prepareKiroPowerDataPaths } from "../src/kiro/power/data-paths.js";
 
 describe("Agent-only configuration", () => {
+  it("normalizes a finite per-service execution admission limit", () => {
+    expect(normalizeFabricConfig({}).executor.maxConcurrentExecutions).toBe(4);
+    expect(normalizeFabricConfig({ executor: { maxConcurrentExecutions: 2 } }).executor.maxConcurrentExecutions).toBe(2);
+    expect(normalizeFabricConfig({ executor: { maxConcurrentExecutions: 1000 } }).executor.maxConcurrentExecutions).toBe(64);
+    expect(normalizeFabricConfig({ executor: { maxConcurrentExecutions: 0 } }).executor.maxConcurrentExecutions).toBe(1);
+  });
   it("exposes only active configured-MCP settings", () => {
     expect(Object.keys(DEFAULT_FABRIC_CONFIG.mcp).sort()).toEqual([
       "callTimeoutMs",

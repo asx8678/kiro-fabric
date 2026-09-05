@@ -243,6 +243,22 @@ describe("Agent product boundary", () => {
     }
   });
 
+  it("ships a closure entry that matches the library server factory", () => {
+    const closureEntry = path.join(root, "dist", "kiro-agent-closure", "kiro", "mcp-entry.js");
+    expect(fs.existsSync(closureEntry), "run pnpm run build before this test").toBe(true);
+    const closureScript = `
+      import { pathToFileURL } from "node:url";
+      const entry = await import(pathToFileURL(${JSON.stringify(closureEntry)}).href);
+      if (typeof entry.startKiroMcpServer !== "function" || typeof entry.runKiroMcpProcess !== "function") process.exit(2);
+    `;
+    const imported = spawnSync(process.execPath, ["--input-type=module", "--eval", closureScript], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    expect(imported.status, imported.stderr).toBe(0);
+  });
+
   it("removes the user export subsystem", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
     expect(pkg.scripts["power:export:user"]).toBeUndefined();

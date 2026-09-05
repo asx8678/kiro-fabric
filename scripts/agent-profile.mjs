@@ -49,6 +49,7 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
     mcpServers: { fabric: { command: nodePath, args: [path.join(runtimeRoot, "kiro", "mcp-entry.js")], env: {
       KIRO_FABRIC_RUNTIME_ROOT: runtimeRoot,
       KIRO_FABRIC_DATA_ROOT: dataRoot,
+      KIRO_FABRIC_EXPECTED_NODE: nodePath,
     }, requestTimeout: FABRIC_MCP_REQUEST_TIMEOUT_MS } },
     tools: AGENT_TOOLS,
     allowedTools: FABRIC_TOOLS.map((name) => `@fabric/${name}`),

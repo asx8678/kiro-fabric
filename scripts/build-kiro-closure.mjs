@@ -5,6 +5,7 @@ import path from "node:path";
 import { builtinModules, createRequire } from "node:module";
 import { build } from "esbuild";
 import { uniquePackageRecords } from "./package-identity.mjs";
+import { sharedEsbuildOptions } from "./esbuild-common.mjs";
 
 const root = path.resolve(".");
 const outdir = path.join(root, "dist", "kiro-agent-closure");
@@ -30,17 +31,9 @@ const mcporterRequire = createRequire(import.meta.resolve("mcporter"));
 const jsoncParserEsm = mcporterRequire.resolve("jsonc-parser/lib/esm/main.js");
 const banner = `import { createRequire as __createRequire } from "node:module";\nimport { fileURLToPath as __fileURLToPath } from "node:url";\nimport { dirname as __dirnameOf } from "node:path";\nglobalThis.__filename = __fileURLToPath(import.meta.url);\nglobalThis.__dirname = __dirnameOf(globalThis.__filename);\nconst require = __createRequire(import.meta.url);\n`;
 const result = await build({
+  ...sharedEsbuildOptions,
   entryPoints: [product.entrypoint, product.runtimeAssets.compilerWorker],
   outdir,
-  outbase: "src",
-  entryNames: "[dir]/[name]",
-  chunkNames: "chunks/[name]-[hash]",
-  bundle: true,
-  platform: "node",
-  format: "esm",
-  target: "node24",
-  splitting: true,
-  sourcemap: false,
   metafile: true,
   alias: { "jsonc-parser": jsoncParserEsm },
   logLevel: "info",

@@ -1,0 +1,9 @@
+{
+  "id": "C018",
+  "cmd": "python3 audits/2026-09-05-review/evidence/validate-report.py",
+  "cwd": "/home/adam/projects/kiro-fabric",
+  "purpose": "Final report/source provenance, IDs, links and narrow redaction checks",
+  "ok": true,
+  "output": "{\n  \"utc\": \"2026-09-05T07:59:23.834358+00:00\",\n  \"citationsChecked\": 138,\n  \"findingDefinitions\": [\n    \"F-001\",\n    \"F-002\",\n    \"F-003\"\n  ],\n  \"commandIds\": [\n    \"C001\",\n    \"C002\",\n    \"C003\",\n    \"C004\",\n    \"C005\",\n    \"C006\",\n    \"C007\",\n    \"C008\",\n    \"C009\",\n    \"C010\",\n    \"C011\",\n    \"C012\",\n    \"C013\",\n    \"C014\",\n    \"C015\",\n    \"C016\",\n    \"C017\",\n    \"C018\"\n  ],\n  \"originalFilesChecked\": 193,\n  \"originalFilesChanged\": [],\n  \"ledgerEndsNormalized\": [\n    {\n      \"file\": \"src/kiro/power/workspace-binding.ts\",\n      \"requestedEnd\": 337,\n      \"actualEnd\": 334\n    },\n    {\n      \"file\": \"src/trace/trace-writer.ts\",\n      \"requestedEnd\": 174,\n      \"actualEnd\": 166\n    }\n  ],\n  \"formatOnlySensitiveLocationHits\": [],\n  \"problems\": [],\n  \"status\": \"passed\",\n  \"note\": \"Mechanical validation is not a complete secret scan or semantic proof.\"\n}\n",
+  "details": null
+}

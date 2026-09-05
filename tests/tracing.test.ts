@@ -290,6 +290,35 @@ describe("QuickJS trace hooks", () => {
     expect(end?.data?.resultChars).toBeGreaterThan(200);
   });
 
+  it.each(["approval", "provider"] as const)("keeps free-form %s errors out of routine traces", async (failure) => {
+    const marker = "benign-unique-error-marker-7319";
+    const file = path.join(temporary(), "trace.jsonl");
+    const tracer = createFabricTracer({ file });
+    const registry = new ActionRegistry();
+    registry.register({
+      name: "probe", description: "fixture",
+      async list() { return [{ name: "fail", description: "fixture", inputSchema: { type: "object" }, risk: "read", effect: { kind: "read" } }]; },
+      async describe() { return (await this.list())[0]; },
+      async invoke() { throw new Error(marker); },
+    });
+    const service = new FabricExecutionService(registry, normalizeFabricConfig({ executor: { timeoutMs: 5_000 } }), "/workspace");
+    try {
+      const result = await service.execute({
+        code: "return await tools.call({ ref: 'probe.fail', args: {} })",
+        approver: { async approve() { if (failure === "approval") throw new Error(marker); } },
+        tracer, execId: tracer.newExecutionId(),
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain(marker);
+    } finally { await service.close(); tracer.close(); }
+    expect(fs.readFileSync(file, "utf8")).not.toContain(marker);
+    const events = readEvents(file);
+    expect(events.find((event) => event.cat === "bridge")?.data).toMatchObject({ ok: false, errorKind: "provider_failed" });
+    expect(events.find((event) => event.ev === "approval.wait")?.data).toMatchObject(failure === "approval"
+      ? { approved: false, errorKind: "approval_failed" } : { approved: true });
+    expect(events.every((event) => event.data?.error === undefined)).toBe(true);
+  });
+
   it("emits exec.end on type-check failure with the error count", async () => {
     const file = path.join(temporary(), "trace.jsonl");
     const tracer = createFabricTracer({ file });

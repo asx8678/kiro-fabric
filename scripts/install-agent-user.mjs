@@ -671,7 +671,6 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
 
     atomicWrite(installPaths.manifest, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`), () => { state.manifestWritten = true; });
     options.onCommitStep?.("manifest");
-
     assertSameTree(generation, staged.runtime, "installed runtime generation");
     assertSameTree(skillTarget, staged.skill, "installed skill");
     validateInstalledAgentProfile(installPaths.profile, { ...profileOptions, installRoot: installPaths.base });
@@ -695,6 +694,70 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
     if (state.profileBackedUp) fs.unlinkSync(state.backupProfile);
     fs.rmSync(transaction, { recursive: true });
     transaction = undefined;
+
+    // Best-effort retention prune: keep the newly committed generation and the
+    // previously current one; remove other manifest-owned generations. Each
+    // pruned generation is moved out of the runtime directory first, then its
+    // manifest record is dropped and verified, and only then is the held tree
+    // deleted. Failed publication restores both the tree and manifest. Failed
+    // rollback stops pruning and preserves a private recovery manifest/tree;
+    // cleanup-only failures warn without rolling back the active installation.
+    const previousCurrent = previousRecord && !previousRecord.legacy ? previous?.currentRuntime : undefined;
+    const retained = new Set([manifest.currentRuntime, ...(previousCurrent !== undefined ? [previousCurrent] : [])]);
+    const superseded = runtimeGenerations
+      .map((record) => record.name)
+      .filter((name) => !retained.has(name) && HASH_PATTERN.test(name));
+    let committedManifest = installedManifest;
+    for (const name of superseded) {
+      const target = path.join(installPaths.runtime, name);
+      let recoveryRequired = false;
+      try {
+        const stats = lstat(target);
+        if (!stats?.isDirectory() || stats.isSymbolicLink() ||
+            (typeof process.getuid === "function" && stats.uid !== process.getuid())) continue;
+        const holding = path.join(installPaths.base, `.prune-holding-${name.slice(0, 12)}-${randomBytes(8).toString("hex")}`);
+        const heldRuntime = path.join(holding, "runtime");
+        fs.mkdirSync(holding, { mode: 0o700 });
+        let moved = false;
+        let published = false;
+        try {
+          // Persist recovery bytes before moving anything out of the owned tree.
+          atomicWrite(path.join(holding, "recovery-manifest.json"), committedManifest.bytes, () => {});
+          fs.renameSync(target, heldRuntime);
+          moved = true;
+          const prunedManifest = {
+            ...committedManifest.manifest,
+            runtimeGenerations: committedManifest.manifest.runtimeGenerations.filter((record) => record.name !== name),
+          };
+          atomicWrite(installPaths.manifest, Buffer.from(`${JSON.stringify(prunedManifest, null, 2)}\n`), () => { published = true; });
+          const reread = readManifest(installPaths);
+          if (!reread || JSON.stringify(reread.manifest) !== JSON.stringify(prunedManifest)) {
+            throw new Error(`pruned manifest verification failed for generation ${name}`);
+          }
+          committedManifest = reread;
+        } catch (pruneError) {
+          try {
+            if (published) {
+              atomicWrite(installPaths.manifest, committedManifest.bytes, () => {});
+              const restored = readManifest(installPaths);
+              if (!restored || !restored.bytes.equals(committedManifest.bytes)) {
+                throw new Error(`restored manifest verification failed for generation ${name}`);
+              }
+            }
+            if (moved) fs.renameSync(heldRuntime, target);
+          } catch (rollbackError) {
+            recoveryRequired = true;
+            throw new AggregateError([pruneError, rollbackError], `Runtime pruning rollback failed; recovery required at ${holding}`);
+          }
+          throw pruneError;
+        } finally {
+          if (!recoveryRequired) fs.rmSync(holding, { recursive: true, force: true });
+        }
+      } catch (pruneError) {
+        if (recoveryRequired) throw pruneError;
+        console.error(`warning: superseded runtime generation ${name} pruning or cleanup failed: ${pruneError instanceof Error ? pruneError.message : String(pruneError)}`);
+      }
+    }
 
     const leftoverPower = [
       path.join(kiroHome, "powers", "kiro-fabric"),
@@ -732,7 +795,7 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
       }
       throw error;
     }
-    throw new AggregateError([error], "Agent installation committed, but private backup cleanup failed");
+    throw new AggregateError([error], `Agent installation committed, but post-commit cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     if (!committed && rollbackCompleted && transaction && lstat(transaction)) fs.rmSync(transaction, { recursive: true, force: true });
     releaseLock(lock);

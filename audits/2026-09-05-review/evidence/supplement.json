@@ -1,0 +1,166 @@
+{
+  "retrievedAtUTC": "2026-09-05T07:37:32.079179+00:00",
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "originalFilesChangedSinceSnapshot": [],
+  "originalDistComparedWithFreshBuild": {
+    "denominatorFiles": 78,
+    "mismatches": []
+  },
+  "dependencies": [
+    {
+      "name": "@jitl/quickjs-singlefile-mjs-release-sync",
+      "group": "dependencies",
+      "declared": "0.32.0",
+      "originalInstalled": "0.32.0",
+      "disposableInstalled": "0.32.0",
+      "localLicenseDeclaration": "MIT",
+      "localEngines": {}
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "group": "dependencies",
+      "declared": "1.30.0",
+      "originalInstalled": "1.30.0",
+      "disposableInstalled": "1.30.0",
+      "localLicenseDeclaration": "MIT",
+      "localEngines": {
+        "node": ">=18"
+      }
+    },
+    {
+      "name": "mcporter",
+      "group": "dependencies",
+      "declared": "0.13.8",
+      "originalInstalled": "0.13.8",
+      "disposableInstalled": "0.13.8",
+      "localLicenseDeclaration": "MIT",
+      "localEngines": {
+        "node": ">=24"
+      }
+    },
+    {
+      "name": "quickjs-emscripten-core",
+      "group": "dependencies",
+      "declared": "0.32.0",
+      "originalInstalled": "0.32.0",
+      "disposableInstalled": "0.32.0",
+      "localLicenseDeclaration": "MIT",
+      "localEngines": {}
+    },
+    {
+      "name": "typebox",
+      "group": "dependencies",
+      "declared": "1.3.25",
+      "originalInstalled": "1.3.25",
+      "disposableInstalled": "1.3.25",
+      "localLicenseDeclaration": "MIT",
+      "localEngines": {}
+    },
+    {
+      "name": "typescript",
+      "group": "dependencies",
+      "declared": "6.0.3",
+      "originalInstalled": "6.0.3",
+      "disposableInstalled": "6.0.3",
+      "localLicenseDeclaration": "Apache-2.0",
+      "localEngines": {
+        "node": ">=14.17"
+      }
+    },
+    {
+      "name": "@types/node",
+      "group": "devDependencies",
+      "declared": "^26.4.1",
+      "originalInstalled": "26.4.1",
+      "disposableInstalled": "26.4.1",
+      "localLicenseDeclaration": "MIT",
+      "localEngines": {}
+    },
+    {
+      "name": "esbuild",
+      "group": "devDependencies",
+      "declared": "^0.28.2",
+      "originalInstalled": "0.28.2",
+      "disposableInstalled": "0.28.2",
+      "localLicenseDeclaration": "MIT",
+      "localEngines": {
+        "node": ">=18"
+      }
+    },
+    {
+      "name": "knip",
+      "group": "devDependencies",
+      "declared": "^6.34.0",
+      "originalInstalled": "6.34.0",
+      "disposableInstalled": "6.34.0",
+      "localLicenseDeclaration": "ISC",
+      "localEngines": {
+        "node": "^20.19.0 || >=22.12.0"
+      }
+    },
+    {
+      "name": "vitest",
+      "group": "devDependencies",
+      "declared": "^4.1.11",
+      "originalInstalled": "4.1.11",
+      "disposableInstalled": "4.1.11",
+      "localLicenseDeclaration": "MIT",
+      "localEngines": {
+        "node": "^20.0.0 || ^22.0.0 || >=24.0.0"
+      }
+    }
+  ],
+  "secretLocationScan": {
+    "method": "three format-only regexes in supplement.py; no values emitted; excludes binary, media, dist, ignored files, dependencies and history",
+    "filesScanned": 114,
+    "hits": []
+  },
+  "currentFileHistoryHotspots": [
+    [
+      "src/kiro/mcp-server.ts",
+      18
+    ],
+    [
+      "src/kiro/runtime.ts",
+      13
+    ],
+    [
+      "src/execution-service.ts",
+      12
+    ],
+    [
+      "src/kiro/power/workspace-binding.ts",
+      12
+    ],
+    [
+      "src/core/action-registry.ts",
+      11
+    ],
+    [
+      "src/kiro/mcp-provider.ts",
+      10
+    ],
+    [
+      "src/kiro/power/data-paths.ts",
+      10
+    ],
+    [
+      "src/config.ts",
+      9
+    ],
+    [
+      "scripts/build-kiro-closure.mjs",
+      9
+    ],
+    [
+      "scripts/real-client-evidence.mjs",
+      8
+    ]
+  ],
+  "binaryFiles": [
+    {
+      "path": "media/cover.jpg",
+      "bytes": 300475
+    }
+  ]
+}

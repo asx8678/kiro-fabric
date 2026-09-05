@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import fs, { readFileSync } from "node:fs";
+import fs, { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -11,6 +11,7 @@ import {
 import { Value } from "typebox/value";
 import { settleWithin } from "../async-settlement.js";
 import { loadFabricConfig } from "../config.js";
+import { fabricInfoActions } from "./info-catalog.js";
 import { FABRIC_COMPILER_TIMEOUT_MS, effectiveFabricTimeout } from "../execution-service.js";
 import {
   fabricExecInputSchema,
@@ -310,7 +311,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     await syncWorkspace();
     return { tools: [
       { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable memory and state.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
+      { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable memory and state. Actions: status and list take no other fields; select requires rootId from list; attach requires an absolute path; detach takes no other fields.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
       { name: "fabric_exec", description: EXEC_DESCRIPTION, inputSchema: fabricExecInputSchemaJson(), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } },
     ] };
   });
@@ -347,6 +348,11 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
             formElicitation: supportsKiroElicitation(server.getClientCapabilities()),
           },
         };
+        const expectedNode = process.env.KIRO_FABRIC_EXPECTED_NODE;
+        const interpreterInfo = expectedNode === undefined
+          ? { actual: realpathSync(process.execPath), expected: null, matches: "unknown" as const }
+          : { actual: realpathSync(process.execPath), expected: expectedNode, matches: realpathSync(process.execPath) === expectedNode };
+        const actions = current && !workspaceBlocked ? fabricInfoActions(await current.registry.list()) : [];
         if (tracer.enabled) {
           tracer.event("eval", "tool.fabric_info", undefined, lifecycleInfo);
           tracer.flush();
@@ -364,6 +370,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
           providers,
           tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
           lifecycle: lifecycleInfo,
+          interpreter: interpreterInfo,
+          actions,
           nativeKiroTools: { owner: "kiro", availability: "declared-by-agent-profile" },
         }) }] };
       } catch (error) { return toolError("info_request_failed", error); }

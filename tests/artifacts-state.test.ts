@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
@@ -11,7 +11,7 @@ import { StateProvider } from "../src/providers/state-provider.js";
 
 const roots: string[] = [];
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-private-")); roots.push(root); return root; };
-afterEach(() => { while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
 
 describe("private artifacts and state", () => {
   it("creates private bounded artifacts", () => {
@@ -94,6 +94,32 @@ describe("private artifacts and state", () => {
     expect(await provider.invoke("get", { key: "constructor" }, context)).toMatchObject({ value: "stored", revision: 3 });
     expect(({} as Record<string, unknown>).safe).toBeUndefined();
     expect(fs.statSync(path.join(root, "state.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it.each(["writeFileSync", "fsyncSync"] as const)("releases its state lock after %s fails during initialization", async (method) => {
+    const root = temporary();
+    const provider = new StateProvider(root);
+    const context = { cwd: root };
+    const fault = vi.spyOn(fs, method).mockImplementationOnce(() => {
+      throw Object.assign(new Error("injected lock initialization failure"), { code: "EIO" });
+    });
+    await expect(provider.invoke("set", { key: "first", value: 1 }, context)).rejects.toThrow("lock initialization failure");
+    fault.mockRestore();
+    expect(fs.existsSync(path.join(root, ".state-mutation.lock"))).toBe(false);
+    await expect(provider.invoke("set", { key: "first", value: 1 }, context)).resolves.toEqual({ key: "first", revision: 1 });
+  });
+
+  it("does not remove a replacement lock when initialization fails", async () => {
+    const root = temporary();
+    const provider = new StateProvider(root);
+    const lock = path.join(root, ".state-mutation.lock");
+    vi.spyOn(fs, "fsyncSync").mockImplementationOnce(() => {
+      fs.renameSync(lock, path.join(root, "original-lock"));
+      fs.writeFileSync(lock, "replacement", { mode: 0o600 });
+      throw new Error("injected lock replacement");
+    });
+    await expect(provider.invoke("set", { key: "first", value: 1 }, { cwd: root })).rejects.toThrow("lock replacement");
+    expect(fs.readFileSync(lock, "utf8")).toBe("replacement");
   });
 
   it("shares durable memory and state safely across independent runtimes for one workspace", async () => {

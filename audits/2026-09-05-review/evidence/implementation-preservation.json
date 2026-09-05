@@ -1,0 +1,38 @@
+{
+  "status": "passed",
+  "baselineFilesChecked": 193,
+  "changedBaselineFiles": [
+    ".github/workflows/release.yml",
+    "dist/kiro-agent-closure/chunks/chunk-AT66DL2P.js",
+    "dist/kiro-agent-closure/chunks/mcp-server-KLLUFFHR.js",
+    "dist/kiro-agent-closure/closure-manifest.json",
+    "dist/kiro-agent-closure/kiro/mcp-entry.js",
+    "dist/kiro-agent-closure/runtime/compiler-worker-entry.js",
+    "docs/audit.md",
+    "docs/configuration.md",
+    "docs/release.md",
+    "docs/tracing.md",
+    "scripts/release-candidate-report.mjs",
+    "src/config.ts",
+    "src/execution-service.ts",
+    "src/kiro/artifacts.ts",
+    "src/kiro/mcp-provider.ts",
+    "src/providers/state-provider.ts",
+    "src/runtime/type-checker.ts",
+    "src/trace/tracer.ts",
+    "tests/compiler-isolation.test.ts",
+    "tests/configuration.test.ts",
+    "tests/release-evidence.test.ts",
+    "tests/tracing.test.ts"
+  ],
+  "newImplementationFiles": [
+    "scripts/release-artifacts.mjs",
+    "tests/compiler-ownership.test.ts",
+    "tests/execution-admission.test.ts",
+    "tests/mcp-pagination.test.ts",
+    "tests/release-artifacts.test.ts",
+    "tests/storage-failure.test.ts"
+  ],
+  "unexpectedChanges": [],
+  "note": "Unrelated original files match the dirty baseline byte-for-byte. Intentional edits to shared user-dirty files were anchor-based; generated dist changes are expected. No Git staging or commits performed."
+}

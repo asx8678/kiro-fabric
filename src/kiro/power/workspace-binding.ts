@@ -35,9 +35,13 @@ export const kiroPowerWorkspaceRequestSchema = Type.Union([
 export const kiroWorkspaceToolInputSchema = {
   type: "object",
   properties: {
-    action: { type: "string", enum: ["status", "list", "select", "attach", "detach"] },
-    rootId: { type: "string", minLength: 1, maxLength: 64 },
-    path: { type: "string", minLength: 1, maxLength: 4096 },
+    action: {
+      type: "string",
+      enum: ["status", "list", "select", "attach", "detach"],
+      description: "status and list take no other fields; select requires rootId from list; attach requires an absolute path; detach takes no other fields.",
+    },
+    rootId: { type: "string", minLength: 1, maxLength: 64, description: "Required only for action select: a rootId reported by action list." },
+    path: { type: "string", minLength: 1, maxLength: 4096, description: "Required only for action attach: an absolute filesystem path to bind manually." },
   },
   required: ["action"],
   additionalProperties: false,

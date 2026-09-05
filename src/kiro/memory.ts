@@ -724,14 +724,18 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
     },
 
     async index(): Promise<Array<Pick<KiroMemoryEntry<T>, "key" | "bytes" | "updatedAt">>> {
-      const entries = collectNamespaceEntries<T>(namespaceRoot, memoryNamespace, maxValueChars)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-      if (entries.length > maxEntries) {
+      const files = listEntryFiles(namespaceRoot);
+      if (files.length > maxEntries) {
         throw new Error(
           `Kiro memory namespace ${JSON.stringify(memoryNamespace)} exceeds ${maxEntries} entries`,
         );
       }
-      return entries.map((entry) => ({ key: entry.key, bytes: entry.bytes, updatedAt: entry.updatedAt }));
+      // Validate each persisted entry, but do not retain its value while loading
+      // the remaining files: this API only returns metadata.
+      return files.map((file) => {
+        const { key, bytes, updatedAt } = readEntry<T>(file, memoryNamespace, maxValueChars);
+        return { key, bytes, updatedAt };
+      }).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     },
   };
 };

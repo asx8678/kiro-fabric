@@ -1,0 +1,22 @@
+{
+  "id": "C013",
+  "command": [
+    "node",
+    "audit-runtime-probe.mjs"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-sjp2ks3h/repo",
+  "environment": {
+    "PATH": "/home/adam/.pi/agent/bin:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-sjp2ks3h/kiro-home",
+    "TMPDIR": "/tmp/kiro-fabric-audit-sjp2ks3h/tmp",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1"
+  },
+  "deadlineSeconds": 30,
+  "elapsedSeconds": 1.043,
+  "status": "passed",
+  "exitCode": 0,
+  "output": "{\"builtLibrary\":true,\"checkedQuickJsRoundTrip\":true,\"exactApprovalCallbacks\":4,\"typeErrorPreventedDispatch\":true,\"closeReopenPersistence\":true,\"networkRequests\":0,\"scope\":\"same OS process; fresh runtime, not real Kiro or MCP transport\"}\n{\"artifactWriteRejected\":true,\"artifactFilesAfterClose\":1,\"expectedArtifactFilesAfterClose\":0,\"defectObserved\":true}\n"
+}

@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { openKiroMemory } from "../src/kiro/memory.js";
 
 const roots: string[] = [];
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-memory-")); roots.push(root); return root; };
-afterEach(() => { while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
 
 describe("Fabric memory confinement", () => {
   it("uses private files and preserves bounded values", async () => {
@@ -17,6 +17,28 @@ describe("Fabric memory confinement", () => {
     expect(entries).toHaveLength(1);
     const visit = (directory: string) => { for (const entry of fs.readdirSync(directory, { withFileTypes: true })) { const target = path.join(directory, entry.name); if (entry.isDirectory()) visit(target); else expect(fs.statSync(target).mode & 0o077).toBe(0); } };
     visit(root);
+  });
+
+  it("indexes only validated metadata in newest-first order", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const memory = openKiroMemory("workspace", temporary());
+    await expect(memory.index()).resolves.toEqual([]);
+    const first = await memory.set("first", { payload: "a".repeat(10_000) });
+    vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
+    const second = await memory.set("second", { payload: "b".repeat(10_000) });
+    await expect(memory.index()).resolves.toEqual([second, first].map(({ key, bytes, updatedAt }) => ({ key, bytes, updatedAt })));
+  });
+
+  it("rejects an oversized index before loading entry values", async () => {
+    const root = temporary();
+    const memory = openKiroMemory("workspace", root);
+    await memory.set("first", true);
+    await memory.set("second", true);
+    const bounded = openKiroMemory("workspace", root, { maxEntries: 1 });
+    const reads = vi.spyOn(fs, "readFileSync");
+    await expect(bounded.index()).rejects.toThrow("exceeds 1 entries");
+    expect(reads).not.toHaveBeenCalled();
   });
 
   it("reclaims capacity through an identity-checked delete", async () => {
@@ -53,6 +75,7 @@ describe("Fabric memory confinement", () => {
     persisted.value = "too-large";
     fs.writeFileSync(entryFile, JSON.stringify(persisted), { mode: 0o600 });
     await expect(memory.get("release")).rejects.toThrow("configured scope");
+    await expect(memory.index()).rejects.toThrow("configured scope");
   });
 
   it("fails closed on non-private entries and multiply-linked ownership markers", async () => {

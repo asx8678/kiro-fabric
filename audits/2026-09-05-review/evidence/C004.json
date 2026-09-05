@@ -1,0 +1,11 @@
+{
+  "id": "C004",
+  "cmd": "bwrap --ro-bind / / --unshare-net --die-with-parent -- /usr/bin/true",
+  "cwd": "/home/adam/projects/kiro-fabric",
+  "purpose": "Check read-only filesystem + network-isolated execution capability",
+  "ok": false,
+  "output": "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted\n",
+  "details": null,
+  "exitCode": 1,
+  "error": "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted\n\n\nCommand exited with code 1"
+}

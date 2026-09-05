@@ -16,7 +16,7 @@ const request = JSON.parse(payloads.request);
 return { id: request.id, normalized: String(request.value).trim() };
 ```
 
-Provider composition uses exact references:
+Provider composition uses exact references. `fabric_info` already returns the digest-bound action catalog (refs, risk classes, descriptor digests) for the bound workspace, so the first `fabric_exec` can compose calls directly instead of spending a round trip on discovery-only `tools.list()`:
 
 ```ts
 const actions = await tools.list();

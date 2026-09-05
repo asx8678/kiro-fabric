@@ -1,0 +1,87 @@
+$ pnpm run typecheck && pnpm run build && pnpm run test:built && pnpm run lint:dead && node scripts/certify-kiro-agent.mjs && pnpm run sbom:agent
+$ tsc --noEmit && tsc --project tsconfig.scripts.json
+$ node scripts/build.mjs && node scripts/build-kiro-closure.mjs && node scripts/assert-build-artifacts.mjs
+
+  dist/index.js                          238.0kb
+  dist/chunks/chunk-QAC76IRJ.js           14.2kb
+  dist/runtime/compiler-worker-entry.js    519b 
+
+⚡ Done in 12ms
+
+  dist/kiro-agent-closure/chunks/chunk-CCXQPTKG.js                     9.5mb ⚠️
+  dist/kiro-agent-closure/chunks/dist-SI6ZW2DE.js                      1.2mb ⚠️
+  dist/kiro-agent-closure/chunks/mcp-server-5DKVGXB3.js             1020.8kb
+  ...o-agent-closure/chunks/emscripten-module-Q67P5WYC-K2EI3T2U.js   813.2kb
+  dist/kiro-agent-closure/chunks/chunk-AEH4VBMI.js                   531.7kb
+  dist/kiro-agent-closure/chunks/webapi-BPKL2YBQ.js                  122.2kb
+  dist/kiro-agent-closure/chunks/chunk-YQ4ZVOWF.js                    53.9kb
+  dist/kiro-agent-closure/chunks/ffi-2CFDPMEQ.js                       7.4kb
+  dist/kiro-agent-closure/kiro/mcp-entry.js                            5.5kb
+  dist/kiro-agent-closure/chunks/chunk-DDMC62E6.js                     3.8kb
+  dist/kiro-agent-closure/chunks/chunk-AE4E2KSU.js                     2.2kb
+  dist/kiro-agent-closure/chunks/chunk-K2USGJPF.js                     2.2kb
+  dist/kiro-agent-closure/chunks/chunk-4KRLFCN5.js                     2.1kb
+  dist/kiro-agent-closure/runtime/compiler-worker-entry.js             902b 
+  dist/kiro-agent-closure/chunks/chunk-G3LABT6U.js                     845b 
+  dist/kiro-agent-closure/chunks/module-ES6BEMUI-2A2DOREW.js           638b 
+  dist/kiro-agent-closure/chunks/launch-2BNCRUIP.js                    534b 
+  ...iro-agent-closure/chunks/module-asyncify-2EFITU5U-74PVIWDG.js     506b 
+
+⚡ Done in 348ms
+Agent closure built: 78 files, 14463365 bytes, 35 source modules
+$ node scripts/build-agent-dev.mjs && vitest run
+{"ok":true,"root":"/home/adam/projects/kiro-fabric/.tmp/.kiro-fabric-agent-generation-0d8b999dd2085e68359b7c521f6a8911b4da1583a13935ef95c03fa205214dcb","version":"0.64.0","digest":"0d8b999dd2085e68359b7c521f6a8911b4da1583a13935ef95c03fa205214dcb","files":85,"bytes":14538123,"generation":"/home/adam/projects/kiro-fabric/.tmp/.kiro-fabric-agent-generation-0d8b999dd2085e68359b7c521f6a8911b4da1583a13935ef95c03fa205214dcb"}
+/home/adam/projects/kiro-fabric/.tmp/kiro-fabric-agent
+
+ RUN  v4.1.11 /home/adam/projects/kiro-fabric
+
+
+ Test Files  29 passed (29)
+      Tests  276 passed (276)
+   Start at  11:58:13
+   Duration  50.04s (transform 479ms, setup 0ms, import 4.27s, tests 43.61s, environment 2ms)
+
+$ knip
+{
+  "kind": "kiro-fabric.agent-certification",
+  "schemaVersion": 2,
+  "ok": true,
+  "packageDigest": "0d8b999dd2085e68359b7c521f6a8911b4da1583a13935ef95c03fa205214dcb",
+  "tools": [
+    "fabric_info",
+    "fabric_workspace",
+    "fabric_exec"
+  ],
+  "executor": "quickjs",
+  "lifecycle": {
+    "mcpInstanceId": "fmcp_c580a182a76438e91772536d419c0637",
+    "pid": 72462,
+    "parentPid": 72455,
+    "startedAt": "2026-09-05T09:59:04.896Z",
+    "runtimeGeneration": 1,
+    "runtimeActive": true,
+    "clientCapabilities": {
+      "roots": true,
+      "formElicitation": true
+    }
+  },
+  "scope": "component-mcp-only",
+  "checks": [
+    "package-digest",
+    "initialize",
+    "three-tools",
+    "workspace-binding",
+    "four-providers",
+    "checked-execution",
+    "dynamic-code-disabled",
+    "compiler-filesystem-isolation",
+    "strict-json-results",
+    "form-elicitation-decline",
+    "approval-boundary",
+    "idempotent-info",
+    "single-runtime-generation",
+    "bounded-shutdown"
+  ]
+}
+$ node scripts/generate-agent-sbom.mjs --output .tmp/kiro-fabric-agent.spdx.json
+{"output":"/home/adam/projects/kiro-fabric/.tmp/kiro-fabric-agent.spdx.json","packageDigest":"0d8b999dd2085e68359b7c521f6a8911b4da1583a13935ef95c03fa205214dcb","packages":29}

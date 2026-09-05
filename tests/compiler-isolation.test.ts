@@ -2,11 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { normalizeFabricConfig } from "../src/config.js";
+import { ActionRegistry } from "../src/core/action-registry.js";
+import { FabricExecutionService } from "../src/execution-service.js";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
-import { typeCheckFabricCode, typeCheckFabricCodeInWorker } from "../src/runtime/type-checker.js";
+import { shutdownFabricCompilerWorker, typeCheckFabricCode, typeCheckFabricCodeInWorker } from "../src/runtime/type-checker.js";
 
 const roots: string[] = [];
-afterEach(() => { while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(async () => { await shutdownFabricCompilerWorker(); while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
 
 const forbidden = [
   "import value from '/etc/passwd'; return value as any",
@@ -52,6 +55,20 @@ describe("closed guest TypeScript compiler host", () => {
     ).errors);
     expect(messages[0]).toEqual(messages[1]);
     expect(JSON.stringify(messages)).not.toContain("host secret");
+  });
+
+  it("keeps a real reused compiler alive while an unrelated service closes", async () => {
+    const config = normalizeFabricConfig({ executor: { timeoutMs: 5_000 } });
+    const a = new FabricExecutionService(new ActionRegistry(), config, "/workspace");
+    const b = new FabricExecutionService(new ActionRegistry(), config, "/workspace");
+    const options = { code: "return 42", approver: { async approve() {} } };
+    try {
+      expect((await b.execute(options)).value).toBe(42);
+      const compiling = b.execute(options);
+      await Promise.resolve(); // submit to the real reused worker before A closes
+      await a.close();
+      expect((await compiling).value).toBe(42);
+    } finally { await Promise.all([a.close(), b.close()]); }
   });
 
   it("terminates an aborted compiler worker before rejecting", async () => {

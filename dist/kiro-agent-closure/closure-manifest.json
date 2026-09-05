@@ -14,6 +14,7 @@
     "src/kiro/artifacts.ts",
     "src/kiro/canonical-path.ts",
     "src/kiro/deadlines.ts",
+    "src/kiro/info-catalog.ts",
     "src/kiro/mcp-entry.ts",
     "src/kiro/mcp-provider.ts",
     "src/kiro/mcp-server.ts",
@@ -199,9 +200,9 @@
       "sha256": "dd5c2650ca7bd1ecc4fb6e0100d212e1b18a4266f7d13ccd1e697521a7d0ddda"
     },
     {
-      "path": "chunks/chunk-AT66DL2P.js",
-      "bytes": 9990435,
-      "sha256": "2ff451a857e6604598109d52a8dffdfea3d10d20c1a085760a2154f507eb7e3f"
+      "path": "chunks/chunk-CCXQPTKG.js",
+      "bytes": 9991085,
+      "sha256": "949f39d72da79a078999dc49223957e3fb270417d8dc483227aeca13a5fd2a80"
     },
     {
       "path": "chunks/chunk-DDMC62E6.js",
@@ -529,9 +530,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-UUWINH7G.js",
-      "bytes": 1038858,
-      "sha256": "2e9bc4f1dee887497fd2bda3f9a9f1e96c1168b7770907ffd1f20a6963daf105"
+      "path": "chunks/mcp-server-5DKVGXB3.js",
+      "bytes": 1045291,
+      "sha256": "219309982b3554712e33c03a56ebe9b1706a64cb3d7736eff4be6409adcf8665"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -551,7 +552,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 5640,
-      "sha256": "c8b6744d76a9687f8306499aeebba77ec0a73fa2e832122e3052e34b88cbc96c"
+      "sha256": "e3db04ae6a0b2f37f43aa7d1b16e7c719691bb1d88144ed1d1804c5bb2900ab2"
     },
     {
       "path": "package.json",
@@ -561,7 +562,7 @@
     {
       "path": "runtime/compiler-worker-entry.js",
       "bytes": 902,
-      "sha256": "93c182545f62e3f04a2ecf06ba263c2676fc51e29968367ce6f343d934fe0918"
+      "sha256": "2e7a912de8362667be01c59267c0be82c5fd3fa07230e84f4298321cd50acfd0"
     },
     {
       "path": "THIRD_PARTY_NOTICES.txt",
@@ -569,5 +570,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "8e433d71c2fae0e62a88705cee638ce19aa029e7316e59fd688aaa0b8b2eaa29"
+  "contentDigest": "06c9b7c782734981e189535043a18aeac74ae173ddb6d6fa3f9c78a6fd82ad0d"
 }

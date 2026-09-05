@@ -1,0 +1,1353 @@
+[
+  {
+    "path": ".github/CODEOWNERS",
+    "bytes": 169,
+    "lines": 6,
+    "sha256": "ad3667d92f987871ae2f66cbd1739897096b3247395bacf7dcde25f519f6355a",
+    "binary": false
+  },
+  {
+    "path": ".github/workflows/ci.yml",
+    "bytes": 2215,
+    "lines": 58,
+    "sha256": "e4d3770085cd1b082e0f671d2a719851c19627d79efbc46329a20818d2c5f883",
+    "binary": false
+  },
+  {
+    "path": ".github/workflows/kiro-agent-real.yml",
+    "bytes": 2332,
+    "lines": 56,
+    "sha256": "88410b0dae950802474a6ceaeb349a81e0e197bd21dfb08a0dfe3e5d424d769a",
+    "binary": false
+  },
+  {
+    "path": ".github/workflows/release-candidate.yml",
+    "bytes": 910,
+    "lines": 29,
+    "sha256": "bd7bc4ce9ab07df48f126a4b717f876ebb84546fb28bbf018521d6d91da760ac",
+    "binary": false
+  },
+  {
+    "path": ".github/workflows/release.yml",
+    "bytes": 3946,
+    "lines": 92,
+    "sha256": "25f84e143db22f22dc39e8d964989c40edbbd458ce0314e97a511b8a650008f3",
+    "binary": false
+  },
+  {
+    "path": ".gitignore",
+    "bytes": 150,
+    "lines": 13,
+    "sha256": "c656a49eccd86f160a13615b21097425180aa66fb1b71ae62a939c7c6d6ad9f9",
+    "binary": false
+  },
+  {
+    "path": "AGENTS.md",
+    "bytes": 624,
+    "lines": 23,
+    "sha256": "850e9d930ff56acbe4549c15ecbd08ca4c9ccc0adc905ecd9ec09b706511ef1e",
+    "binary": false
+  },
+  {
+    "path": "CHANGELOG.md",
+    "bytes": 2016,
+    "lines": 23,
+    "sha256": "1c42d98da455157ec9fafc38df3c9cddfabc680456acede4c575c59482d5f6e6",
+    "binary": false
+  },
+  {
+    "path": "LICENSE",
+    "bytes": 1069,
+    "lines": 21,
+    "sha256": "d4b36fb8ee5da34042c850c094d0024b028174b5785ce7fae613c9456cbc84f9",
+    "binary": false
+  },
+  {
+    "path": "README.md",
+    "bytes": 10361,
+    "lines": 83,
+    "sha256": "4206e3cc705e07cfbe75f475c77e565f08dff6e42834ddc708dc142cabf49e41",
+    "binary": false
+  },
+  {
+    "path": "SECURITY.md",
+    "bytes": 790,
+    "lines": 5,
+    "sha256": "9cbf64e9033a9e9bd35b530379cd1b1605f4a516bd290d35fe785ee6daa41266",
+    "binary": false
+  },
+  {
+    "path": "STATUS.md",
+    "bytes": 1977,
+    "lines": 7,
+    "sha256": "2248cbafa1ded4c8ac9067c9ffabd0b3914fd2eae201852bf38ac38968325297",
+    "binary": false
+  },
+  {
+    "path": "THIRD_PARTY_NOTICES.md",
+    "bytes": 497,
+    "lines": 12,
+    "sha256": "d75641354a1018095b478032298a14b450707c5cc93e31509aa159f6a1463974",
+    "binary": false
+  },
+  {
+    "path": "agent-product.json",
+    "bytes": 1145,
+    "lines": 28,
+    "sha256": "d46040b7908c84abd5762da68098da53b82cc505afe10fc7366625a84f0215d8",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/THIRD_PARTY_NOTICES.txt",
+    "bytes": 101002,
+    "lines": 1324,
+    "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/chunk-4KRLFCN5.js",
+    "bytes": 2125,
+    "lines": 55,
+    "sha256": "d1a31c3d7c2e3be6d48671f398e5662fd9a12add757605711604c117c0eae4dc",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/chunk-AE4E2KSU.js",
+    "bytes": 2273,
+    "lines": 53,
+    "sha256": "a4ecab2ecd3943d4a6247b6ecf309443679247b47ff64a36d5359b88fbc32d94",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/chunk-AEH4VBMI.js",
+    "bytes": 544489,
+    "lines": 14558,
+    "sha256": "dd5c2650ca7bd1ecc4fb6e0100d212e1b18a4266f7d13ccd1e697521a7d0ddda",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/chunk-AT66DL2P.js",
+    "bytes": 9990435,
+    "lines": 211856,
+    "sha256": "2ff451a857e6604598109d52a8dffdfea3d10d20c1a085760a2154f507eb7e3f",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/chunk-DDMC62E6.js",
+    "bytes": 3911,
+    "lines": 85,
+    "sha256": "2438f3bf73cc5109366747ed22893f198998e5b7aa179bea5c0ff0e82684d62c",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/chunk-G3LABT6U.js",
+    "bytes": 845,
+    "lines": 16,
+    "sha256": "6dc6eeff440eb4fffa4714ec7c315318a60b4ac00f0917ed6217a3d64882e81d",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/chunk-K2USGJPF.js",
+    "bytes": 2206,
+    "lines": 75,
+    "sha256": "ff448fca423e2af9717928a0f77830b8542213a73948d1b921f28351a6e2145f",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/chunk-YQ4ZVOWF.js",
+    "bytes": 55146,
+    "lines": 1138,
+    "sha256": "11bd0e3eb0d9179ab54f88ac27465c1e382c7244d1c554a0f8616692efcc38b1",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/dist-SI6ZW2DE.js",
+    "bytes": 1254600,
+    "lines": 32356,
+    "sha256": "ab6584f2ad1c7a1b4d7a84ffe6ec9b7e3211855cb88d27d82a267dd311771d64",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/emscripten-module-Q67P5WYC-K2EI3T2U.js",
+    "bytes": 832676,
+    "lines": 2430,
+    "sha256": "fe5c85905872ad099900082a3dc487f7700d625c041c8e536b2b23a8ebfff35c",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/ffi-2CFDPMEQ.js",
+    "bytes": 7604,
+    "lines": 88,
+    "sha256": "3fc1eab2740db3b7ce5d26cd25b473f3aa2e4cfb53ad6b60f66ad286d6251844",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/launch-2BNCRUIP.js",
+    "bytes": 534,
+    "lines": 16,
+    "sha256": "745c50c5f672958a40bfdcf950a3c18743695ab97e0b38f81a3f7392ae029b85",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.decorators.d.ts",
+    "bytes": 13153,
+    "lines": 382,
+    "sha256": "1ce14b81c5cc821994aa8ec1d42b220dd41b27fcc06373bce3958af7421b77d4",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.decorators.legacy.d.ts",
+    "bytes": 1287,
+    "lines": 20,
+    "sha256": "b3a048b3e9302ef9a34ef4ebb9aecfb28b66abb3bce577206a79fee559c230da",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.collection.d.ts",
+    "bytes": 5305,
+    "lines": 150,
+    "sha256": "105ba8ff7ba746404fe1a2e189d1d3d2e0eb29a08c18dded791af02f29fb4711",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.core.d.ts",
+    "bytes": 22824,
+    "lines": 595,
+    "sha256": "eadcffda2aa84802c73938e589b9e58248d74c59cb7fcbca6474e3435ac15504",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.d.ts",
+    "bytes": 1202,
+    "lines": 26,
+    "sha256": "3f88bedbeb09c6f5a6645cb24c7c55f1aa22d19ae96c8e6959cbd8b85a707bc6",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.generator.d.ts",
+    "bytes": 2518,
+    "lines": 75,
+    "sha256": "00343ca5b2e3d48fa5df1db6e32ea2a59afab09590274a6cccb1dbae82e60c7c",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.iterable.d.ts",
+    "bytes": 18185,
+    "lines": 603,
+    "sha256": "ebd9f816d4002697cb2864bea1f0b70a103124e18a8cd9645eeccc09bdf80ab4",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.promise.d.ts",
+    "bytes": 3161,
+    "lines": 79,
+    "sha256": "2c1afac30a01772cd2a9a298a7ce7706b5892e447bb46bdbeef720f7b5da77ad",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.proxy.d.ts",
+    "bytes": 5212,
+    "lines": 126,
+    "sha256": "7b0225f483e4fa685625ebe43dd584bb7973bbd84e66a6ba7bbe175ee1048b4f",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.reflect.d.ts",
+    "bytes": 6454,
+    "lines": 142,
+    "sha256": "c0a4b8ac6ce74679c1da2b3795296f5896e31c38e888469a8e0f99dc3305de60",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.symbol.d.ts",
+    "bytes": 1610,
+    "lines": 44,
+    "sha256": "3084a7b5f569088e0146533a00830e206565de65cae2239509168b11434cd84f",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2015.symbol.wellknown.d.ts",
+    "bytes": 10971,
+    "lines": 324,
+    "sha256": "c5079c53f0f141a0698faa903e76cb41cd664e3efb01cc17a5c46ec2eb0bef42",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2016.array.include.d.ts",
+    "bytes": 5165,
+    "lines": 114,
+    "sha256": "32cafbc484dea6b0ab62cf8473182bbcb23020d70845b406f80b7526f38ae862",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2016.d.ts",
+    "bytes": 926,
+    "lines": 19,
+    "sha256": "7fe93b39b810eadd916be8db880dd7f0f7012a5cc6ffb62de8f62a2117fa6f1f",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2016.intl.d.ts",
+    "bytes": 1445,
+    "lines": 29,
+    "sha256": "fca4cdcb6d6c5ef18a869003d02c9f0fd95df8cfaf6eb431cd3376bc034cad36",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2017.arraybuffer.d.ts",
+    "bytes": 876,
+    "lines": 19,
+    "sha256": "b93ec88115de9a9dc1b602291b85baf825c85666bf25985cc5f698073892b467",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2017.d.ts",
+    "bytes": 1123,
+    "lines": 24,
+    "sha256": "bb0074cc08b84a2374af33d8bf044b80851ccc9e719a5e202eacf40db2c31600",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2017.date.d.ts",
+    "bytes": 1877,
+    "lines": 29,
+    "sha256": "f5c06dcc3fe849fcb297c247865a161f995cc29de7aa823afdd75aaaddc1419b",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2017.intl.d.ts",
+    "bytes": 1410,
+    "lines": 42,
+    "sha256": "c7b3542146734342e440a84b213384bfa188835537ddbda50d30766f0593aff9",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2017.object.d.ts",
+    "bytes": 2434,
+    "lines": 47,
+    "sha256": "b77e16112127a4b169ef0b8c3a4d730edf459c5f25fe52d5e436a6919206c4d7",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2017.sharedmemory.d.ts",
+    "bytes": 7170,
+    "lines": 133,
+    "sha256": "fbffd9337146eff822c7c00acbb78b01ea7ea23987f6c961eba689349e744f8c",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2017.string.d.ts",
+    "bytes": 2339,
+    "lines": 43,
+    "sha256": "a995c0e49b721312f74fdfb89e4ba29bd9824c770bbb4021d74d2bf560e4c6bd",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2017.typedarrays.d.ts",
+    "bytes": 1503,
+    "lines": 51,
+    "sha256": "ce6180fa19b1cccd07ee7f7dbb9a367ac19c0ed160573e4686425060b6df7f57",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2018.asyncgenerator.d.ts",
+    "bytes": 2653,
+    "lines": 75,
+    "sha256": "3f02e2476bccb9dbe21280d6090f0df17d2f66b74711489415a8aa4df73c9675",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2018.asynciterable.d.ts",
+    "bytes": 2218,
+    "lines": 51,
+    "sha256": "45e3ab34c1c013c8ab2dc1ba4c80c780744b13b5676800ae2e3be27ae862c40c",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2018.d.ts",
+    "bytes": 1049,
+    "lines": 22,
+    "sha256": "1a7daebe4f45fb03d9ec53d60008fbf9ac45a697fdc89e4ce218bc94b94f94d6",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2018.intl.d.ts",
+    "bytes": 2982,
+    "lines": 81,
+    "sha256": "805c86f6cca8d7702a62a844856dbaa2a3fd2abef0536e65d48732441dde5b5b",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2018.promise.d.ts",
+    "bytes": 1314,
+    "lines": 28,
+    "sha256": "e42e397f1a5a77994f0185fd1466520691456c772d06bf843e5084ceb879a0ad",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2018.regexp.d.ts",
+    "bytes": 1193,
+    "lines": 35,
+    "sha256": "f4c2b41f90c95b1c532ecc874bd3c111865793b23aebcc1c3cbbabcd5d76ffb0",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2019.array.d.ts",
+    "bytes": 3124,
+    "lines": 77,
+    "sha256": "ab26191cfad5b66afa11b8bf935ef1cd88fabfcb28d30b2dfa6fad877d050332",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2019.d.ts",
+    "bytes": 1032,
+    "lines": 22,
+    "sha256": "f94b133a3cb14a288803be545ac2683e0d0ff6661bcd37e31aaaec54fc382aed",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2019.intl.d.ts",
+    "bytes": 919,
+    "lines": 21,
+    "sha256": "689da16f46e647cef0d64b0def88910e818a5877ca5379ede156ca3afb780ac3",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2019.object.d.ts",
+    "bytes": 1434,
+    "lines": 31,
+    "sha256": "2088bc26531e38fb05eedac2951480db5309f6be3fa4a08d2221abb0f5b4200d",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2019.string.d.ts",
+    "bytes": 1489,
+    "lines": 35,
+    "sha256": "cb9d366c425fea79716a8fb3af0d78e6b22ebbab3bd64d25063b42dc9f531c1e",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2019.symbol.d.ts",
+    "bytes": 967,
+    "lines": 22,
+    "sha256": "500934a8089c26d57ebdb688fc9757389bb6207a3c8f0674d68efa900d2abb34",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2020.bigint.d.ts",
+    "bytes": 38258,
+    "lines": 763,
+    "sha256": "bc21cc8b6fee4f4c2440d08035b7ea3c06b3511314c8bab6bef7a92de58a2593",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2020.d.ts",
+    "bytes": 1162,
+    "lines": 25,
+    "sha256": "f59d0650799f8782fd74cf73c19223730c6d1b9198671b1c5b3a38e1188b5953",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2020.date.d.ts",
+    "bytes": 2917,
+    "lines": 40,
+    "sha256": "7ca53d13d2957003abb47922a71866ba7cb2068f8d154877c596d63c359fed25",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2020.intl.d.ts",
+    "bytes": 22399,
+    "lines": 472,
+    "sha256": "48915f327cd1dea4d7bd358d9dc7732f58f9e1626a29cc0c05c8c692419d9bb7",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2020.number.d.ts",
+    "bytes": 1548,
+    "lines": 26,
+    "sha256": "b7bf9377723203b5a6a4b920164df22d56a43f593269ba6ae1fdc97774b68855",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2020.promise.d.ts",
+    "bytes": 1764,
+    "lines": 45,
+    "sha256": "54725f8c4df3d900cb4dac84b64689ce29548da0b4e9b7c2de61d41c79293611",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2020.sharedmemory.d.ts",
+    "bytes": 5089,
+    "lines": 97,
+    "sha256": "e5594bc3076ac29e6c1ebda77939bc4c8833de72f654b6e376862c0473199323",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2020.string.d.ts",
+    "bytes": 2451,
+    "lines": 42,
+    "sha256": "2f3eb332c2d73e729f3364fcc0c2b375e72a121e8157d25a82d67a138c83a95c",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2020.symbol.wellknown.d.ts",
+    "bytes": 1566,
+    "lines": 39,
+    "sha256": "6f4427f9642ce8d500970e4e69d1397f64072ab73b97e476b4002a646ac743b1",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2021.d.ts",
+    "bytes": 997,
+    "lines": 21,
+    "sha256": "8a15b4607d9a499e2dbeed9ec0d3c0d7372c850b2d5f1fb259e8f6d41d468a84",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2021.intl.d.ts",
+    "bytes": 8206,
+    "lines": 164,
+    "sha256": "a917a49ac94cd26b754ab84e113369a75d1a47a710661d7cd25e961cc797065f",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2021.promise.d.ts",
+    "bytes": 2223,
+    "lines": 46,
+    "sha256": "db9709688f82c9e5f65a119c64d835f906efe5f559d08b11642d56eb85b79357",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2021.string.d.ts",
+    "bytes": 1553,
+    "lines": 31,
+    "sha256": "4b25b8c874acd1a4cf8444c3617e037d444d19080ac9f634b405583fd10ce1f7",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2021.weakref.d.ts",
+    "bytes": 3132,
+    "lines": 76,
+    "sha256": "37be57d7c90cf1f8112ee2636a068d8fd181289f82b744160ec56a7dc158a9f5",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2022.array.d.ts",
+    "bytes": 4637,
+    "lines": 119,
+    "sha256": "6d3261badeb7843d157ef3e6f5d1427d0eeb0af0cf9df84a62cfd29fd47ac86e",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2022.d.ts",
+    "bytes": 1069,
+    "lines": 23,
+    "sha256": "26e0fe14baee4e127f4365d1ae0b276f400562e45e19e35fd2d4c296684715e6",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2022.error.d.ts",
+    "bytes": 2340,
+    "lines": 73,
+    "sha256": "195daca651dde22f2167ac0d0a05e215308119a3100f5e6268e8317d05a92526",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2022.intl.d.ts",
+    "bytes": 7653,
+    "lines": 143,
+    "sha256": "8b11e4285cd2bb164a4dc09248bdec69e9842517db4ca47c1ba913011e44ff2f",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2022.object.d.ts",
+    "bytes": 1046,
+    "lines": 24,
+    "sha256": "0508571a52475e245b02bc50fa1394065a0a3d05277fbf5120c3784b85651799",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2022.regexp.d.ts",
+    "bytes": 1304,
+    "lines": 37,
+    "sha256": "fc611fea8d30ea72c6bbfb599c9b4d393ce22e2f5bfef2172534781e7d138104",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es2022.string.d.ts",
+    "bytes": 1116,
+    "lines": 23,
+    "sha256": "8f9af488f510c3015af3cc8c267a9e9d96c4dd38a1fdff0e11dc5a544711415b",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/lib.es5.d.ts",
+    "bytes": 218972,
+    "lines": 4599,
+    "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/mcp-server-KLLUFFHR.js",
+    "bytes": 1040795,
+    "lines": 24122,
+    "sha256": "b4624411cd3310df5d6990dd5a7d2a6bb6efd8f616f23ecaa208799f29d61a70",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/module-ES6BEMUI-2A2DOREW.js",
+    "bytes": 638,
+    "lines": 20,
+    "sha256": "d4594d2735ede173633af27de69840fd24a640aac77e280f739657ee17991426",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
+    "bytes": 506,
+    "lines": 15,
+    "sha256": "936d26da2e5996aff023829c7e8de3aaf173a796b3e315ff99345f35b43d0697",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/chunks/webapi-BPKL2YBQ.js",
+    "bytes": 125102,
+    "lines": 3788,
+    "sha256": "8d5c6015d366810a344cd1cd5711aff2d9315ac12830fd72068373c9360316c6",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/closure-manifest.json",
+    "bytes": 16760,
+    "lines": 574,
+    "sha256": "ac81b404b328cf13fd2c6dc3dd485d3041e71772e560a08e6250f169c775226e",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/kiro/mcp-entry.js",
+    "bytes": 5640,
+    "lines": 150,
+    "sha256": "2fdd9b993fd50b43bac90c6a03d299609aec99c074256442c83789bb1ea57c57",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/package.json",
+    "bytes": 104,
+    "lines": 6,
+    "sha256": "ee5e99e81718885e5d6ddfe9d70473484c62256826c66601ecd37b481b324785",
+    "binary": false
+  },
+  {
+    "path": "dist/kiro-agent-closure/runtime/compiler-worker-entry.js",
+    "bytes": 902,
+    "lines": 24,
+    "sha256": "93c182545f62e3f04a2ecf06ba263c2676fc51e29968367ce6f343d934fe0918",
+    "binary": false
+  },
+  {
+    "path": "docs/agent-product.schema.json",
+    "bytes": 1351,
+    "lines": 20,
+    "sha256": "e23183a328bd24dff675e85ae0566844d289db2236aa3179f528ffed35bb7274",
+    "binary": false
+  },
+  {
+    "path": "docs/architecture.md",
+    "bytes": 4724,
+    "lines": 25,
+    "sha256": "b028001fc1761c6b17735c09d9eb4ac0764bcea4d6bb9820d1ba212fe6a349c8",
+    "binary": false
+  },
+  {
+    "path": "docs/architecture/agent-reachability-baseline.json",
+    "bytes": 1446,
+    "lines": 47,
+    "sha256": "a49d183caac85f48a8d73aad3321174e2392fb418469d5bc5807529cdad3856d",
+    "binary": false
+  },
+  {
+    "path": "docs/audit.md",
+    "bytes": 5829,
+    "lines": 97,
+    "sha256": "af969e9f029c52f02f3c59188ae5fa62da07bbb401963a4372d115aca08d7ed8",
+    "binary": false
+  },
+  {
+    "path": "docs/configuration.md",
+    "bytes": 4295,
+    "lines": 43,
+    "sha256": "8f079803ee682ff12030ea355fe53e08e0af1b86e1fb9d031567b667b457f3a4",
+    "binary": false
+  },
+  {
+    "path": "docs/release.md",
+    "bytes": 8364,
+    "lines": 44,
+    "sha256": "8d6b641d2823cd25aa2a6ebca633b7e89907075fb6d5a7ad87c579cb25f5511e",
+    "binary": false
+  },
+  {
+    "path": "docs/tracing.md",
+    "bytes": 289,
+    "lines": 3,
+    "sha256": "d4f515db6958f26c3b290cd7f84f06ceb0694842bab75992411035c64af37840",
+    "binary": false
+  },
+  {
+    "path": "knip.json",
+    "bytes": 239,
+    "lines": 10,
+    "sha256": "c0c6bcd3f441a6a70f55279d6ae735e345ba890257ccc2c26d4d1e2ec8b05647",
+    "binary": false
+  },
+  {
+    "path": "media/cover.jpg",
+    "bytes": 300475,
+    "lines": 2362,
+    "sha256": "cf6bc91e0b02fddc58ffd98b4b7f28848d8a9f78d9c56ce1e41b94cb06323179",
+    "binary": true
+  },
+  {
+    "path": "package.json",
+    "bytes": 3196,
+    "lines": 88,
+    "sha256": "78a1fc60cd34fea5755e86606faa32dc826b6c6954c1dc11a305b24a8e776592",
+    "binary": false
+  },
+  {
+    "path": "pnpm-lock.yaml",
+    "bytes": 89663,
+    "lines": 2783,
+    "sha256": "0cdbd8dee07a622d9bd6194b281cf5fc4190daea8705a2b0aef22798aff224e3",
+    "binary": false
+  },
+  {
+    "path": "pnpm-workspace.yaml",
+    "bytes": 185,
+    "lines": 15,
+    "sha256": "15924c4d36d6d0345f3c2d43906e7cb68053a62b6ebd17d1f04e83d04cfad0bd",
+    "binary": false
+  },
+  {
+    "path": "scripts/agent-profile.mjs",
+    "bytes": 4018,
+    "lines": 58,
+    "sha256": "7adadd529ca6bd82bd34f924998a6bb18ba174ce46fa4653083bc17e595e6c55",
+    "binary": false
+  },
+  {
+    "path": "scripts/analyze-trace.mjs",
+    "bytes": 11140,
+    "lines": 234,
+    "sha256": "ada0dc25bd180493d1ba044dd559ffc49b0e65dda3bc3844759c7b7fa99d3c74",
+    "binary": false
+  },
+  {
+    "path": "scripts/assert-build-artifacts.mjs",
+    "bytes": 3279,
+    "lines": 79,
+    "sha256": "4b14fb0c09e3cae9fd9ea92fa407b63606315df09488037b4b9574001d3129bb",
+    "binary": false
+  },
+  {
+    "path": "scripts/assert-kiro-home-unchanged.mjs",
+    "bytes": 2684,
+    "lines": 62,
+    "sha256": "495414a432a5db7ddb26a8d303d9540aa095d5d6c109d91032141f057e5da9c5",
+    "binary": false
+  },
+  {
+    "path": "scripts/atomic-file.mjs",
+    "bytes": 1067,
+    "lines": 24,
+    "sha256": "16bacc417684de7124e0377f8554bb8b736b4207005295ab39961f840939a567",
+    "binary": false
+  },
+  {
+    "path": "scripts/build-agent-dev.mjs",
+    "bytes": 5525,
+    "lines": 130,
+    "sha256": "7c744de07ba77056c92b48e2101dae14cfc25d0fa8da6afa2dc626eaab803fb0",
+    "binary": false
+  },
+  {
+    "path": "scripts/build-kiro-closure.mjs",
+    "bytes": 10876,
+    "lines": 208,
+    "sha256": "505ff2bd2c0fa3a43b9d52973a2cc4fef53cb71d3cfdceba7355bac023c572f8",
+    "binary": false
+  },
+  {
+    "path": "scripts/build.mjs",
+    "bytes": 623,
+    "lines": 17,
+    "sha256": "20d112cba1da11b648659b5baf52b85caa8f250b3ab0d9f3077840fedeaff487",
+    "binary": false
+  },
+  {
+    "path": "scripts/certify-kiro-agent-real.mjs",
+    "bytes": 5397,
+    "lines": 97,
+    "sha256": "50434a0ce65e56985e70671f9530c581b6e7babd3c789495070e57077be47406",
+    "binary": false
+  },
+  {
+    "path": "scripts/certify-kiro-agent.mjs",
+    "bytes": 12467,
+    "lines": 204,
+    "sha256": "e2fde7612cba5d8aeddc5a8d58368cda0110d7849e7ca8d87c3309b562ca43b9",
+    "binary": false
+  },
+  {
+    "path": "scripts/create-agent-archive.mjs",
+    "bytes": 9732,
+    "lines": 207,
+    "sha256": "e94e6f2bd401eb86e1c4f6c2785a786c7619db7da6e679220f6b810f2990eac6",
+    "binary": false
+  },
+  {
+    "path": "scripts/esbuild-common.mjs",
+    "bytes": 612,
+    "lines": 17,
+    "sha256": "2d9e438a01527b138e758d562d9e579ac469f03c1a75cad2da28d703f38cd180",
+    "binary": false
+  },
+  {
+    "path": "scripts/generate-agent-sbom.mjs",
+    "bytes": 3106,
+    "lines": 56,
+    "sha256": "4c2762d620687fbaeefc5c7894e2eebdabb44ed63743933da6a652c87b462056",
+    "binary": false
+  },
+  {
+    "path": "scripts/install-agent-user.mjs",
+    "bytes": 47741,
+    "lines": 987,
+    "sha256": "e18e77fbcda1ab23e0e041467297e174239f38e71637453022add310511da41e",
+    "binary": false
+  },
+  {
+    "path": "scripts/package-identity.mjs",
+    "bytes": 1214,
+    "lines": 27,
+    "sha256": "93cb954e0bc3a5644148250577fb6a894869a2c1d50117fa6e2782738018596a",
+    "binary": false
+  },
+  {
+    "path": "scripts/package-policy.mjs",
+    "bytes": 2458,
+    "lines": 10,
+    "sha256": "98dc1d3a8baec600d944c62b74156ac2c8d8f4a51510e659a35b671c38ab0120",
+    "binary": false
+  },
+  {
+    "path": "scripts/real-client-evidence.mjs",
+    "bytes": 51180,
+    "lines": 737,
+    "sha256": "f487565cceb60d01eb02bda7de9dcbd5a822ce44a52cfaec57427ffdb28b88e2",
+    "binary": false
+  },
+  {
+    "path": "scripts/release-candidate-report.mjs",
+    "bytes": 7399,
+    "lines": 125,
+    "sha256": "e8be21a8f48823e8811af3378ce7265201b2973f7ef6452ddd02f1d513efa324",
+    "binary": false
+  },
+  {
+    "path": "scripts/run-agent-dev.mjs",
+    "bytes": 612,
+    "lines": 12,
+    "sha256": "9124ba25b62d14d71ee37ef8f53921886c3066a9d6ab48a075eec963247fca54",
+    "binary": false
+  },
+  {
+    "path": "scripts/run-kiro-agent-real-driver.mjs",
+    "bytes": 141188,
+    "lines": 2627,
+    "sha256": "c9d6626c1b1137985f38ea0f3606bd9e7a1fe155da3ebb57b62e1fea9070c48c",
+    "binary": false
+  },
+  {
+    "path": "scripts/validate-agent-package.mjs",
+    "bytes": 14206,
+    "lines": 296,
+    "sha256": "8d3161088a103d7ab2e15f334b4170212691dc46d799d44565344f36cb77e95b",
+    "binary": false
+  },
+  {
+    "path": "skills/fabric-exec/SKILL.md",
+    "bytes": 3105,
+    "lines": 50,
+    "sha256": "547ac481d64747b8cfaa84ce9a5ffcdfb0e5e80b64d70651fe23c38261db5f17",
+    "binary": false
+  },
+  {
+    "path": "skills/fabric-exec/references/api.md",
+    "bytes": 4333,
+    "lines": 53,
+    "sha256": "7abee0822ce5acf34695395aa2fb89d7c7a52908caf7d9592909af9f564dca8f",
+    "binary": false
+  },
+  {
+    "path": "src/async-settlement.ts",
+    "bytes": 2165,
+    "lines": 73,
+    "sha256": "dc07d70653491f03a220b7552207e86808946eb1793173d981bb9065f94097a8",
+    "binary": false
+  },
+  {
+    "path": "src/config.ts",
+    "bytes": 14657,
+    "lines": 336,
+    "sha256": "cdfc859cb5f1cfb96c439058f6cbac13f4fba399458b78e904bf129b1a85399d",
+    "binary": false
+  },
+  {
+    "path": "src/core/action-registry.ts",
+    "bytes": 12662,
+    "lines": 254,
+    "sha256": "9a47388af70b6c55a9fe086b621a305c8e0d59b82f42d190dc9c35560227bfb1",
+    "binary": false
+  },
+  {
+    "path": "src/core/semantic-digest.ts",
+    "bytes": 1016,
+    "lines": 21,
+    "sha256": "1c3938b582eca2dd8baf099c3de34ec168e8033a299a777a7e88b72cf84ef7ef",
+    "binary": false
+  },
+  {
+    "path": "src/execution-service.ts",
+    "bytes": 13779,
+    "lines": 277,
+    "sha256": "5a6845e0d64c7f18096ddec4559ec58d7cfdbfde5357facde6bdeecaaf3ba087",
+    "binary": false
+  },
+  {
+    "path": "src/index.ts",
+    "bytes": 1484,
+    "lines": 52,
+    "sha256": "dfc418ee9435d683707784b24561cf2d71f175284b6867219037e14fed5f65ce",
+    "binary": false
+  },
+  {
+    "path": "src/kernel/fabric-exec-contract.ts",
+    "bytes": 2450,
+    "lines": 57,
+    "sha256": "8a30a9031d79ebec936a31772c0f0096d0a47f57ce8253dfc8b205376adfe734",
+    "binary": false
+  },
+  {
+    "path": "src/kernel/index.ts",
+    "bytes": 301,
+    "lines": 10,
+    "sha256": "8c84614507755388b00e28bf3065211265c5daee617b2f658b10bf33fd41760c",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/artifacts.ts",
+    "bytes": 6349,
+    "lines": 129,
+    "sha256": "63d0d129223aa9c198925cfad97dd4c0f44db0dffa37eb943034afb889e743b6",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/canonical-path.ts",
+    "bytes": 3250,
+    "lines": 95,
+    "sha256": "7dfebc239c098467030f2b203aa67e56f65879591dbcf7f0c97bb303aa454906",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/deadlines.ts",
+    "bytes": 271,
+    "lines": 7,
+    "sha256": "2836a6a3223121d71eaf56e558cda39d6256dbc9c1cff1f6d282cc9c4e4b973a",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/info-catalog.ts",
+    "bytes": 1078,
+    "lines": 24,
+    "sha256": "1a5c0d879d37f414ea09680d4b16d54a3a16dca3877a98e555e092be31b6cf29",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/mcp-entry.ts",
+    "bytes": 4235,
+    "lines": 102,
+    "sha256": "6a7bf2648af69620653145132c60bf67732844c8d7152638a1479f7cfc437a84",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/mcp-provider.ts",
+    "bytes": 45347,
+    "lines": 996,
+    "sha256": "bc10eef62d0e6482a1d9a76d9612153e186e821a0e4a63770cf44be5fe8ec7d3",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/mcp-server.ts",
+    "bytes": 26098,
+    "lines": 507,
+    "sha256": "2b7fabcedf34fb8b8504572ada6efde5412d987257cb87331231f9c806ff8916",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/memory-provider.ts",
+    "bytes": 5107,
+    "lines": 69,
+    "sha256": "8c0d4b3231ad8b809f533fb159ec9a42799ad855c1137589971eb9588cfd7fc0",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/memory.ts",
+    "bytes": 27640,
+    "lines": 741,
+    "sha256": "44241714b8ef89f9c43a7800a19ace8601841f9b96280062a6a00278abfbba9b",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/power/agent-launch-context.ts",
+    "bytes": 1726,
+    "lines": 41,
+    "sha256": "8ff779309aa2cd388287f159a6629dfce9e03798ee4bd684a1c143e9748f5f08",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/power/approver.ts",
+    "bytes": 5349,
+    "lines": 115,
+    "sha256": "d96c8892e96723d2a6000b8c52494118a3b4f1fc4aaa70d8412c89029b571385",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/power/artifacts-provider.ts",
+    "bytes": 1476,
+    "lines": 25,
+    "sha256": "45dad4d3ba589d48d8063b937910ffe217f1db210d07c40e1cfde325c612a4a7",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/power/data-paths.ts",
+    "bytes": 18936,
+    "lines": 333,
+    "sha256": "ecd68ff4779eccf61056e24b2a3da319d5ccde2cf0a4f7a56655710bbd77a89f",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/power/workspace-binding.ts",
+    "bytes": 14067,
+    "lines": 334,
+    "sha256": "97127179ce198c0ce80dad71c1251541571a37fcf37573191f0a9526eea04034",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/power/workspace-context.ts",
+    "bytes": 4595,
+    "lines": 137,
+    "sha256": "a1a67d0e0995d046009f3f17512b16e66f5e95a3ca97edffa1da77735ef0ee23",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/projection.ts",
+    "bytes": 5271,
+    "lines": 113,
+    "sha256": "b4494b925b6b0566beba21a3d0f1b74fecc313baaccf4f49b342a8deba37abc3",
+    "binary": false
+  },
+  {
+    "path": "src/kiro/runtime.ts",
+    "bytes": 2730,
+    "lines": 68,
+    "sha256": "b27d817fd408dc470696f0fedc7e7cb78890d430c7ce5ee6ccfa2d006fc0c5bc",
+    "binary": false
+  },
+  {
+    "path": "src/protocol.ts",
+    "bytes": 2084,
+    "lines": 69,
+    "sha256": "8fd8ddb01695e6c902a0224101f779b0a4da125e0988b5a0748147cc81b2902d",
+    "binary": false
+  },
+  {
+    "path": "src/providers/state-provider.ts",
+    "bytes": 13559,
+    "lines": 294,
+    "sha256": "7df679d417af2a341046de8fcb7ba8f998c8864471b71963f5428b73fddd5a7b",
+    "binary": false
+  },
+  {
+    "path": "src/runtime/compiler-worker-entry.ts",
+    "bytes": 914,
+    "lines": 21,
+    "sha256": "cd97a07bc1e80f0306d23eac70c7aed21b5917a07bc41ef81e988b25d384d20d",
+    "binary": false
+  },
+  {
+    "path": "src/runtime/deadline.ts",
+    "bytes": 1331,
+    "lines": 31,
+    "sha256": "a97b2b0d78a10654fd12d732d461a11c1a8649868b601dbff16a7b4a8bcce959",
+    "binary": false
+  },
+  {
+    "path": "src/runtime/guest-stack-map.ts",
+    "bytes": 4601,
+    "lines": 133,
+    "sha256": "57c0b07c4e234984dedc2cfb637e577323cbf4bf26920b075ef93ff3714bde93",
+    "binary": false
+  },
+  {
+    "path": "src/runtime/guest-types.ts",
+    "bytes": 3235,
+    "lines": 82,
+    "sha256": "0a309f61d6aa7f35e44397197e9ec5c6ddbb0c3309fca94b71eb36f5f04d66ca",
+    "binary": false
+  },
+  {
+    "path": "src/runtime/json-budget.ts",
+    "bytes": 3932,
+    "lines": 97,
+    "sha256": "a6a19ee68375b30ade67445805e3554b81bdbfb22c420858c67da94bf782adda",
+    "binary": false
+  },
+  {
+    "path": "src/runtime/quickjs-runtime.ts",
+    "bytes": 31883,
+    "lines": 668,
+    "sha256": "f88b2db28ac6e8bec6a5143c5fea0422d747a05ef549efd64d60f4b3bc0ffb92",
+    "binary": false
+  },
+  {
+    "path": "src/runtime/source-limit.ts",
+    "bytes": 1861,
+    "lines": 39,
+    "sha256": "8693f177f72ac8f93c1bce0c13d0d988708c08784a35dda8871419d3873367a1",
+    "binary": false
+  },
+  {
+    "path": "src/runtime/type-checker.ts",
+    "bytes": 16737,
+    "lines": 347,
+    "sha256": "2f5fb49a1593cc9fb50c1ce68e79a019102873717981d3481de172caea7848f8",
+    "binary": false
+  },
+  {
+    "path": "src/schema-validation.ts",
+    "bytes": 7783,
+    "lines": 195,
+    "sha256": "2f5b3d0423d830e2bc40e99ed8d0637478ae33ce456ce5ae909676c25c770f66",
+    "binary": false
+  },
+  {
+    "path": "src/trace/trace-writer.ts",
+    "bytes": 5356,
+    "lines": 166,
+    "sha256": "bd539ccddbbc37a7040db14a6c322ba82d7169b05c33211ee7c522028074eaed",
+    "binary": false
+  },
+  {
+    "path": "src/trace/tracer.ts",
+    "bytes": 5679,
+    "lines": 164,
+    "sha256": "2916d736d0dedc828f513ee8682363b176a7bd64899e996a61c87c411451419f",
+    "binary": false
+  },
+  {
+    "path": "tests/action-registry.test.ts",
+    "bytes": 6994,
+    "lines": 151,
+    "sha256": "f22194f8d58ddba07ceac68bfd447cfb6b8e8c889564f7d792e9dfe087f83407",
+    "binary": false
+  },
+  {
+    "path": "tests/agent-profile.test.ts",
+    "bytes": 4073,
+    "lines": 97,
+    "sha256": "5f0c2f112a1d417b0b506b2333bee97110f2eabd2d1a71f93e23ce6c2b8016c5",
+    "binary": false
+  },
+  {
+    "path": "tests/agent-user-install.test.ts",
+    "bytes": 39017,
+    "lines": 687,
+    "sha256": "619e49628fa319c389d6ec8687633f8e46f8ae8e9d813ccd70ce34dad99f18be",
+    "binary": false
+  },
+  {
+    "path": "tests/approval-projection.test.ts",
+    "bytes": 8961,
+    "lines": 192,
+    "sha256": "ef54652d7356a89def19497184cb436d3450aaee91ade2ddc6bf965a81efccc9",
+    "binary": false
+  },
+  {
+    "path": "tests/archive.test.ts",
+    "bytes": 11040,
+    "lines": 210,
+    "sha256": "bb684f62d0a9946fec57c2edaf6368d56d5ca355c0b7b7505ad8da1714ff2786",
+    "binary": false
+  },
+  {
+    "path": "tests/artifacts-state.test.ts",
+    "bytes": 9489,
+    "lines": 185,
+    "sha256": "2ffb11fd819fdf96779de25427bf9ababc9c58edf5842a0968c413c6c7a66471",
+    "binary": false
+  },
+  {
+    "path": "tests/compiler-isolation.test.ts",
+    "bytes": 3137,
+    "lines": 63,
+    "sha256": "c977f61c75c7faa2f291be52a1ae844a6477189e825ecedb82dcf674217bff00",
+    "binary": false
+  },
+  {
+    "path": "tests/configuration.test.ts",
+    "bytes": 8010,
+    "lines": 187,
+    "sha256": "2a9c568110273b8b5e216de89cfe627477ec65453a1227586274eb54c118686b",
+    "binary": false
+  },
+  {
+    "path": "tests/deadline-policy.test.ts",
+    "bytes": 5370,
+    "lines": 117,
+    "sha256": "f650880dad5977b5bbb4a68f3a122f1c632eda1a3500558b93fa499da597c317",
+    "binary": false
+  },
+  {
+    "path": "tests/fabric-exec-contract.test.ts",
+    "bytes": 3626,
+    "lines": 73,
+    "sha256": "e0baa5cb8cfad8ee50991da5911e60736926586503fa62a4b462dcf2146a8454",
+    "binary": false
+  },
+  {
+    "path": "tests/hermetic-stage.test.ts",
+    "bytes": 4146,
+    "lines": 77,
+    "sha256": "828592e685da29e4bac0b9e62d637b9b09d8a61a9a28c0d3676b150546ff7262",
+    "binary": false
+  },
+  {
+    "path": "tests/info-catalog.test.ts",
+    "bytes": 2424,
+    "lines": 49,
+    "sha256": "9645df523f954d42fa06c954941162bacaa0edf82419d5a6e3f64241b5225f71",
+    "binary": false
+  },
+  {
+    "path": "tests/json-budget.test.ts",
+    "bytes": 1836,
+    "lines": 51,
+    "sha256": "85cd6ed3ffb1b70ca3e03709e581831d1dff374a99b62ba4037859fa49c1d444",
+    "binary": false
+  },
+  {
+    "path": "tests/mcp-federation.test.ts",
+    "bytes": 30859,
+    "lines": 724,
+    "sha256": "15f59284efa96f91ee9e98c00706b0d98a5d1eaf0a403fcb25b1b9f02799a9e2",
+    "binary": false
+  },
+  {
+    "path": "tests/mcp-process-lifecycle.test.ts",
+    "bytes": 36299,
+    "lines": 768,
+    "sha256": "b848af2ea8a2cc847e0ba83cb31c5cbaccba99992da74e8e47e4d4afbee261e5",
+    "binary": false
+  },
+  {
+    "path": "tests/memory-security.test.ts",
+    "bytes": 5628,
+    "lines": 111,
+    "sha256": "2204141187dff5dbe3f3c3363d3dbfd5827b868de1b796960cbfa74424a52e1b",
+    "binary": false
+  },
+  {
+    "path": "tests/migration.test.ts",
+    "bytes": 4030,
+    "lines": 74,
+    "sha256": "34d86af0963fd77c0bf2d8f1bdc36eb174111a2ec459a1974b11b928fafc2575",
+    "binary": false
+  },
+  {
+    "path": "tests/package-boundary.test.ts",
+    "bytes": 15167,
+    "lines": 282,
+    "sha256": "0f45c9f01317bf02c73aaa35e232864bb8cab072566eb567a49d44b3a5f00bee",
+    "binary": false
+  },
+  {
+    "path": "tests/quickjs-runtime.test.ts",
+    "bytes": 14791,
+    "lines": 322,
+    "sha256": "6409c3860f43fbd095f4fbd75f0afe19828328d40ebf31fa59fc6e6d24f16093",
+    "binary": false
+  },
+  {
+    "path": "tests/release-evidence.test.ts",
+    "bytes": 74381,
+    "lines": 1313,
+    "sha256": "960faca088fd85bb399ca483a3e25b1da9789a44204bc9935c71510a65fe7744",
+    "binary": false
+  },
+  {
+    "path": "tests/sbom-identity.test.ts",
+    "bytes": 2314,
+    "lines": 49,
+    "sha256": "0533607ef3fcfae6f79d2381ba146761bb3dc6180622f5f242d0c7270865cdcc",
+    "binary": false
+  },
+  {
+    "path": "tests/trace-analyze.test.ts",
+    "bytes": 5811,
+    "lines": 104,
+    "sha256": "5e68b440794306d9324bf46d1261e7ce25f190bebcf916148303583b8cd7b8f4",
+    "binary": false
+  },
+  {
+    "path": "tests/tracing.test.ts",
+    "bytes": 13293,
+    "lines": 314,
+    "sha256": "c7adaed35a93efe6d5b55da8b2078c66dd84d9dc6d51b730c386253462bf4b73",
+    "binary": false
+  },
+  {
+    "path": "tests/workspace-binding.test.ts",
+    "bytes": 6934,
+    "lines": 134,
+    "sha256": "1287ec05d17053cdbf559e769913dcfd81e30416ba2e4c61d38a0bd52c28b4bb",
+    "binary": false
+  },
+  {
+    "path": "tsconfig.build.json",
+    "bytes": 264,
+    "lines": 13,
+    "sha256": "c686feacf1aa9ff58bb756e62404cb140ef974c9ceb671054ad3cb33f51e974c",
+    "binary": false
+  },
+  {
+    "path": "tsconfig.json",
+    "bytes": 643,
+    "lines": 22,
+    "sha256": "efd3e11265c46f657fd78a9ab0426bbaf455ade35d5145b6b932f3b50d78cc62",
+    "binary": false
+  },
+  {
+    "path": "tsconfig.scripts.json",
+    "bytes": 481,
+    "lines": 20,
+    "sha256": "88dcbfd4262daf97e911e4c692747ada1b7c6ce95c977e53c9084391947a95d2",
+    "binary": false
+  },
+  {
+    "path": "vitest.config.ts",
+    "bytes": 260,
+    "lines": 12,
+    "sha256": "6c070134e1d954f812c072329c88b2c25bd78f0b6a056a67add4bf89c1d53cda",
+    "binary": false
+  }
+]

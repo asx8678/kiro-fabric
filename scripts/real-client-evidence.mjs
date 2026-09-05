@@ -162,7 +162,7 @@ const exactFabricExecEvidence = (value, label, sessionId, recordingDigest, expec
 
 export const assertRealClientEvidence = (report, packageDigest, options = {}) => {
   if (!report || typeof report !== "object") fail("report must be an object");
-  if (options.qualification === true && (report.kind !== "kiro-fabric.real-client-qualification" || report.schemaVersion !== 11 || report.ok !== true)) fail("qualification identity is invalid");
+  if (options.qualification === true && (report.kind !== "kiro-fabric.real-client-qualification" || report.schemaVersion !== 12 || report.ok !== true)) fail("qualification identity is invalid");
   if (report.packageDigest !== packageDigest || !SHA256.test(report.packageDigest)) fail("package digest is invalid");
   if (!options.archiveDigest || report.archiveDigest !== options.archiveDigest || !SHA256.test(report.archiveDigest)) fail("archive digest is invalid");
   if (!options.commit || report.commit !== options.commit || !GIT_OBJECT_ID.test(report.commit)) fail("commit is invalid");
@@ -172,10 +172,12 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
   const authentication = report.authentication;
   const apiKeyAuthentication = authentication?.mode === "api-key" &&
     authentication.verification === "authenticated-kiro-commands" &&
-    authentication.subscriptionLoginPerformed === false;
+    authentication.subscriptionLoginPerformed === false &&
+    authentication.preLoginUnauthenticated === false;
   const subscriptionAuthentication = authentication?.mode === "subscription" &&
     authentication.verification === "kiro-cli-whoami" &&
-    typeof authentication.subscriptionLoginPerformed === "boolean";
+    typeof authentication.subscriptionLoginPerformed === "boolean" &&
+    authentication.preLoginUnauthenticated === authentication.subscriptionLoginPerformed;
   if (authentication?.isolatedHome !== true || (!apiKeyAuthentication && !subscriptionAuthentication)) {
     fail("real-client authentication evidence is invalid");
   }
@@ -201,7 +203,7 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
   if (!kiro || typeof kiro.path !== "string" || !path.isAbsolute(kiro.path) || !SHA256.test(kiro.digest ?? "") ||
       typeof kiro.version !== "string" || !kiro.version || !["--agent-engine", "--engine", "--v3"].includes(kiro.headlessEngineSelector) ||
       !["--path", "positional"].includes(kiro.agentValidateSyntax)) fail("Kiro binary/help identity is incomplete");
-  if (!SHA256.test(report.driver?.digest ?? "") || report.driver?.version !== "repository-driver-v9") fail("driver identity is invalid");
+  if (!SHA256.test(report.driver?.digest ?? "") || report.driver?.version !== "repository-driver-v10") fail("driver identity is invalid");
 
   const gates = report.qualificationGates;
   const nativeVisibility = gates?.nativeToolVisibility;

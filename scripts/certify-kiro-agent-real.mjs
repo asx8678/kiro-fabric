@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { writeFileAtomic } from "./atomic-file.mjs";
 import { assertTrackedGitWorktreeClean } from "./package-identity.mjs";
 import { assertRealClientEvidence } from "./real-client-evidence.mjs";
+import { resolveRealClientAuthFlags } from "./run-kiro-agent-real-driver.mjs";
 import { validateAgentPackage } from "./validate-agent-package.mjs";
 
 const valueAfter = (flag) => { const index = process.argv.indexOf(flag); return index >= 0 ? process.argv[index + 1] : undefined; };
@@ -23,24 +24,13 @@ if (expectedCommit && expectedCommit !== commit) throw new Error("Real-client qu
 assertTrackedGitWorktreeClean();
 const driver = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "run-kiro-agent-real-driver.mjs");
 const driverDigest = hash(fs.readFileSync(driver));
-const hasApiKey = typeof process.env.KIRO_API_KEY === "string" && process.env.KIRO_API_KEY.trim().length > 0;
-const requestedAuthMode = valueAfter("--auth-mode");
-const authMode = requestedAuthMode ?? (hasApiKey ? "api-key" : "subscription");
-if (authMode !== "api-key" && authMode !== "subscription") throw new Error("--auth-mode must be api-key or subscription");
-if (authMode === "api-key" && !hasApiKey) throw new Error("KIRO_API_KEY is required when --auth-mode api-key is selected");
-const subscriptionLogin = hasFlag("--subscription-login");
-const subscriptionLicense = valueAfter("--subscription-license") ?? "free";
-const identityProvider = valueAfter("--identity-provider");
-const region = valueAfter("--region");
-if (subscriptionLogin && authMode !== "subscription") throw new Error("--subscription-login requires --auth-mode subscription");
-if (authMode !== "subscription" && (valueAfter("--subscription-license") !== undefined || identityProvider !== undefined || region !== undefined)) {
-  throw new Error("subscription login options require --auth-mode subscription");
-}
-if (subscriptionLicense !== "free" && subscriptionLicense !== "pro") throw new Error("--subscription-license must be free or pro");
-if (subscriptionLicense === "free" && (identityProvider !== undefined || region !== undefined)) {
-  throw new Error("Identity provider and region are valid only with --subscription-license pro");
-}
-if ((identityProvider === undefined) !== (region === undefined)) throw new Error("--identity-provider and --region must be supplied together");
+const { authMode, subscriptionLogin, subscriptionLicense, identityProvider, region } = resolveRealClientAuthFlags({
+  authMode: valueAfter("--auth-mode"),
+  subscriptionLogin: hasFlag("--subscription-login"),
+  subscriptionLicense: valueAfter("--subscription-license"),
+  identityProvider: valueAfter("--identity-provider"),
+  region: valueAfter("--region"),
+});
 const requestedWorkRoot = valueAfter("--work-root");
 let temporary;
 if (requestedWorkRoot) {
@@ -101,7 +91,7 @@ try {
     runtimeDigest: packageEvidence.runtime.digest,
     skillDigest: packageEvidence.skill.digest,
   });
-  const qualification = { ...observed, kind: "kiro-fabric.real-client-qualification", schemaVersion: 11, ok: true };
+  const qualification = { ...observed, kind: "kiro-fabric.real-client-qualification", schemaVersion: 12, ok: true };
   writeFileAtomic(output, Buffer.from(`${JSON.stringify(qualification, null, 2)}\n`));
   console.log(output);
 } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
