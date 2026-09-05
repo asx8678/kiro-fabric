@@ -3,6 +3,10 @@ import path from "node:path";
 export const AGENT_NAME = "kiro-fabric";
 export const AGENT_TOOLS = ["read", "write", "shell", "web", "subagent", "todo_list", "@fabric"];
 export const FABRIC_TOOLS = ["fabric_info", "fabric_workspace", "fabric_exec"];
+// Read-only native Kiro tools auto-approved in the installed profile. Mutating
+// tools (fs_write, execute_bash, web writes, subagents) intentionally remain
+// subject to the client approval flow.
+export const NATIVE_AUTO_APPROVED_TOOLS = ["fs_read"];
 // Keep this bound to the runtime deadline formula in tests: the maximum guest
 // deadline, plus compiler time, plus the outer MCP cancellation grace period,
 // then a positive client-response margin so Fabric's own deadline wins first.
@@ -52,7 +56,7 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
       KIRO_FABRIC_EXPECTED_NODE: nodePath,
     }, requestTimeout: FABRIC_MCP_REQUEST_TIMEOUT_MS } },
     tools: AGENT_TOOLS,
-    allowedTools: FABRIC_TOOLS.map((name) => `@fabric/${name}`),
+    allowedTools: [...FABRIC_TOOLS.map((name) => `@fabric/${name}`), ...NATIVE_AUTO_APPROVED_TOOLS],
     permissions: { rules: [{ capability: "mcp", match: FABRIC_TOOLS.map((name) => `fabric/${name}`), effect: "allow" }] },
   };
 };

@@ -8,6 +8,7 @@ import {
   FABRIC_MCP_INTERNAL_DEADLINE_MS,
   FABRIC_MCP_REQUEST_TIMEOUT_MS,
   FABRIC_TOOLS,
+  NATIVE_AUTO_APPROVED_TOOLS,
   generateAgentProfile,
 } from "../scripts/agent-profile.mjs";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
@@ -54,7 +55,7 @@ describe("Kiro Agent profile generation", () => {
         },
       },
       tools: AGENT_TOOLS,
-      allowedTools: FABRIC_TOOLS.map((name) => `@fabric/${name}`),
+      allowedTools: [...FABRIC_TOOLS.map((name) => `@fabric/${name}`), ...NATIVE_AUTO_APPROVED_TOOLS],
       permissions: {
         rules: [{
           capability: "mcp",
@@ -63,6 +64,9 @@ describe("Kiro Agent profile generation", () => {
         }],
       },
     });
+    expect(NATIVE_AUTO_APPROVED_TOOLS).toEqual(["fs_read"]);
+    expect(NATIVE_AUTO_APPROVED_TOOLS).not.toContain("fs_write");
+    expect(NATIVE_AUTO_APPROVED_TOOLS).not.toContain("execute_bash");
     expect(profile).not.toHaveProperty("model");
     expect(profile).not.toHaveProperty("chat");
   });
