@@ -33,6 +33,14 @@ describe("Kiro Agent profile generation", () => {
     expect(AGENT_PROMPT).toContain("Fabric memory/state is workspace-scoped and may be shared by concurrent Kiro chats");
   });
 
+  it("defaults the installed profile to code mode with a native-only carve-out", () => {
+    expect(AGENT_PROMPT).toContain("Default to code mode");
+    expect(AGENT_PROMPT).toContain("Use native Kiro tools only for capabilities the sandbox does not have");
+    expect(AGENT_PROMPT).toContain("Bind the workspace early so code mode is usable");
+    expect(AGENT_PROMPT).toContain("rather than making an empty fabric_exec call");
+    expect(AGENT_PROMPT).toContain("Never claim fabric_exec can invoke native Kiro tools");
+  });
+
   it("generates the global installed profile without optional steering", () => {
     const profile = generateAgentProfile(options);
     expect(profile).toEqual({
