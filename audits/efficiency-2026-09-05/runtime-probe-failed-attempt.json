@@ -1,0 +1,85 @@
+{
+  "rows": [
+    {
+      "name": "cold",
+      "timestamp": "2026-09-05T11:34:22.495Z",
+      "status": "succeeded",
+      "success": true,
+      "elapsedMs": 374.50185500000003,
+      "value": {
+        "length": 12000,
+        "sample": "xxxxxxxx"
+      },
+      "error": null,
+      "typeErrors": null,
+      "nestedCalls": 1
+    }
+  ],
+  "events": [
+    {
+      "cat": "eval",
+      "ev": "exec.start",
+      "data": {
+        "sourceBytes": 244,
+        "payloadKeys": 1,
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "compile",
+      "spanId": "span-1",
+      "durUs": 330093.75700000004,
+      "data": {
+        "errors": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "approval.wait",
+      "parentId": "span-3",
+      "spanId": "span-4",
+      "durUs": 47.60799999996834,
+      "data": {
+        "ref": "artifacts.read",
+        "risk": "read",
+        "approved": true
+      }
+    },
+    {
+      "cat": "bridge",
+      "ev": "artifacts.read",
+      "parentId": "span-2",
+      "spanId": "span-3",
+      "durUs": 3058.257000000026,
+      "data": {
+        "argsChars": 60,
+        "ok": true,
+        "resultChars": 12133
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "execute",
+      "spanId": "span-2",
+      "durUs": 43763.46599999999,
+      "data": {
+        "termination": "completed",
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.end",
+      "data": {
+        "status": "succeeded",
+        "elapsedMs": 374.01709,
+        "audits": 1,
+        "logs": 0,
+        "typeErrors": 0,
+        "resultChars": 36
+      }
+    }
+  ],
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   length: 12000,\n-   length: 120000,\n    sample: 'xxxxxxxx'\n  }\n"
+}

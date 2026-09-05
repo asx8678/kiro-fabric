@@ -1,0 +1,29 @@
+{
+  "id": "2e12e75f65274e0fb509a73851e5b0f2",
+  "name": "efficiency-context-glm",
+  "task": "Audit only /home/adam/projects/kiro-fabric at d33cbdca33fac6ce301a6da884f06ee5141534da. First verify exact git toplevel and commit, abort on mismatch, read AGENTS.md. No production edits, global config edits, dependency installs, commits, recursive delegation, network/model invocations or live benchmarks. You may write only your named report under audits/efficiency-2026-09-05/. Use bounded searches/reads, no whole repository audit. Read docs/architecture.md for evolved ownership: native Kiro coding/subagents, Fabric private stdio server exactly 3 tools, workspace durable state vs transient artifacts; no Pi project dependency. Run smallest relevant existing tests with pnpm exec vitest run <files> (no package-script rebuild); local tests not real Kiro proof. kiro-cli unavailable on PATH. Return concise findings <=700 words with path:line, root cause, frequency/cost driver, risk, measured vs unmeasured benefit, confidence and tests actually run. Save larger evidence/report in your named file. Unknown billing is unknown. Approved task constraints/approvals/isolation/recoverability may not weaken. Packet CONTEXT ONLY. Astra scope paths: scripts/agent-profile.mjs, skills/fabric-exec/SKILL.md, src/kiro/mcp-server.ts tool declarations/response construction only, src/kiro/info-catalog.ts, src/kiro/projection.ts, src/kernel/fabric-exec-contract.ts. Inspect always-on prompt/resource size, duplication, unconditional health/discovery, schema hydration/cache, broad list examples, output/error bounds, lost evidence/artifact retrieval. Distinguish application caching/provider caching. Build character/UTF8-byte ledger (NOT token/billing estimates), inspect stable prefixes and inherited resources. Catalog 20k-byte limit only action list, not full health. Reconcile skill digest guidance with tools.list example. Tests: agent-profile, info-catalog, approval-projection, fabric-exec-contract. Acceptance: evidence-backed per-layer verdicts and useful rejected hypotheses; no savings claims without matched trials. Report audits/efficiency-2026-09-05/context.md. Do not investigate lifecycle implementation or cost analyzer.",
+  "status": "failed",
+  "runner": "pi",
+  "transport": "process",
+  "cwd": "/home/adam/projects/kiro-fabric",
+  "model": "zro/glm-5.3",
+  "thinking": "high",
+  "startedAt": 1788607250811,
+  "updatedAt": 1788607251100,
+  "turns": 0,
+  "toolCalls": 0,
+  "text": "",
+  "usage": {
+    "input": 0,
+    "output": 0,
+    "cacheRead": 0,
+    "cacheWrite": 0,
+    "cost": 0
+  },
+  "exitCode": 1,
+  "stderr": "Error: Model \"zro/glm-5.3\" not found. Use --list-models to see available models.\n",
+  "finishedAt": 1788607251100,
+  "error": "Error: Model \"zro/glm-5.3\" not found. Use --list-models to see available models.",
+  "logFile": "/tmp/pi-fabric-runs-gOLfMv/2e12e75f65274e0fb509a73851e5b0f2/events.jsonl",
+  "sessionId": "118915"
+}

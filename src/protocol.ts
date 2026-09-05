@@ -1,5 +1,22 @@
 import type { FabricDeadline } from "./runtime/deadline.js";
 
+/** Internal, non-serializable proof that a trusted provider observed publication. */
+export const FABRIC_COMMIT_ACKNOWLEDGEMENT = Symbol("fabric.commitAcknowledgement");
+export interface FabricCommitAcknowledgement {
+  readonly version: 1;
+  readonly operation: "set" | "delete";
+}
+interface FabricCommittedError extends Error {
+  readonly [FABRIC_COMMIT_ACKNOWLEDGEMENT]: FabricCommitAcknowledgement;
+}
+export const fabricCommitAcknowledgement = (error: unknown): FabricCommitAcknowledgement | undefined => {
+  if (!(error instanceof Error)) return undefined;
+  const marker = (error as Partial<FabricCommittedError>)[FABRIC_COMMIT_ACKNOWLEDGEMENT];
+  return marker?.version === 1 && (marker.operation === "set" || marker.operation === "delete")
+    ? marker
+    : undefined;
+};
+
 export type FabricRisk = "read" | "write" | "execute" | "network";
 
 export interface FabricActionEffect {

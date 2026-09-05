@@ -1,0 +1,4 @@
+{"v":1,"ts":"2026-09-05T00:00:00.000Z","execId":"serial","seq":1,"monoUs":0,"cat":"eval","ev":"execute","spanId":"p","durUs":100}
+{"v":1,"ts":"2026-09-05T00:00:00.000Z","execId":"serial","seq":2,"monoUs":10,"cat":"bridge","ev":"probe","spanId":"c0","parentId":"p","durUs":20,"data":{"argsChars":4,"resultChars":1}}
+{"v":1,"ts":"2026-09-05T00:00:00.000Z","execId":"serial","seq":3,"monoUs":40,"cat":"bridge","ev":"probe","spanId":"c1","parentId":"p","durUs":30,"data":{"argsChars":4,"resultChars":1}}
+{"v":1,"ts":"2026-09-05T00:00:00.000Z","execId":"serial","seq":4,"monoUs":100,"cat":"eval","ev":"exec.end","data":{"status":"succeeded","elapsedMs":0.1}}

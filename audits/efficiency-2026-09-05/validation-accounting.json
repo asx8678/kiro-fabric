@@ -1,0 +1,1149 @@
+{
+  "terminalAssistantResponses": 42,
+  "routes": [
+    "openai-codex/gpt-6-astra"
+  ],
+  "total": {
+    "input": 170394,
+    "cacheRead": 786176,
+    "cacheWrite": 0,
+    "output": 16147,
+    "reasoning": 1787,
+    "totalTokens": 972717
+  },
+  "estimatedCost": 3.007089,
+  "providerBilledSpend": null,
+  "kiroClientUsage": null,
+  "kiroCredits": null,
+  "kiroPricing": null,
+  "costPerSuccessfulTask": null,
+  "scope": "Provided prior invocation metrics only; excludes this validation and parent. One request entry per terminal assistant message; no streaming update, tool message, turn aggregate, or final agent aggregate added. Reasoning is already within output. Costs are harness model-price estimates, not provider invoices. Extension-loading attribution follows incident record; rates independently recomputed.",
+  "invocations": [
+    {
+      "id": "09a9d9f343694f7abe3edfe5d0c9542a",
+      "requestedModel": "openai-codex/gpt-6-astra",
+      "status": "completed",
+      "requestCount": 8,
+      "sums": {
+        "input": 35741,
+        "cacheRead": 102784,
+        "cacheWrite": 0,
+        "output": 3014,
+        "reasoning": 132,
+        "totalTokens": 141539
+      },
+      "estimatedCost": 0.32051700000000005,
+      "estimatedRatesPerMillion": {
+        "input": [
+          5
+        ],
+        "cacheRead": [
+          0.5
+        ],
+        "cacheWrite": [],
+        "output": [
+          30
+        ]
+      },
+      "requests": [
+        {
+          "eventOffset": 4319,
+          "responseId": "resp_09be43d1a3f9e601016a9bfa4d908887d29e74147b014aae7a",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 3321,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "output": 113,
+            "reasoning": 0,
+            "totalTokens": 3434
+          },
+          "normalizedTotal": 3434,
+          "estimatedCost": {
+            "input": 0.016605,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "output": 0.0033900000000000002,
+            "total": 0.019995000000000002
+          }
+        },
+        {
+          "eventOffset": 16245,
+          "responseId": "resp_09be43d1a3f9e601016a9bfa580f3887d2a450c1518e3c14d7",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 281,
+            "cacheRead": 3200,
+            "cacheWrite": 0,
+            "output": 134,
+            "reasoning": 0,
+            "totalTokens": 3615
+          },
+          "normalizedTotal": 3615,
+          "estimatedCost": {
+            "input": 0.0014050000000000002,
+            "cacheRead": 0.0015999999999999999,
+            "cacheWrite": 0,
+            "output": 0.00402,
+            "total": 0.007025
+          }
+        },
+        {
+          "eventOffset": 157193,
+          "responseId": "resp_09be43d1a3f9e601016a9bfa61273887d2b2774b35c17aa368",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 6712,
+            "cacheRead": 3328,
+            "cacheWrite": 0,
+            "output": 144,
+            "reasoning": 0,
+            "totalTokens": 10184
+          },
+          "normalizedTotal": 10184,
+          "estimatedCost": {
+            "input": 0.03356,
+            "cacheRead": 0.001664,
+            "cacheWrite": 0,
+            "output": 0.00432,
+            "total": 0.039543999999999996
+          }
+        },
+        {
+          "eventOffset": 195499,
+          "responseId": "resp_09be43d1a3f9e601016a9bfa6a2e3c87d2bee61e577b0822e2",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 1762,
+            "cacheRead": 9856,
+            "cacheWrite": 0,
+            "output": 213,
+            "reasoning": 12,
+            "totalTokens": 11831
+          },
+          "normalizedTotal": 11831,
+          "estimatedCost": {
+            "input": 0.00881,
+            "cacheRead": 0.004928,
+            "cacheWrite": 0,
+            "output": 0.00639,
+            "total": 0.020128
+          }
+        },
+        {
+          "eventOffset": 319196,
+          "responseId": "resp_09be43d1a3f9e601016a9bfa74261c87d2a47a4bcf6fc0b035",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 6492,
+            "cacheRead": 11392,
+            "cacheWrite": 0,
+            "output": 247,
+            "reasoning": 25,
+            "totalTokens": 18131
+          },
+          "normalizedTotal": 18131,
+          "estimatedCost": {
+            "input": 0.03246,
+            "cacheRead": 0.005696,
+            "cacheWrite": 0,
+            "output": 0.00741,
+            "total": 0.045566
+          }
+        },
+        {
+          "eventOffset": 474189,
+          "responseId": "resp_09be43d1a3f9e601016a9bfa81498487d2a04f3f665058975e",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 7919,
+            "cacheRead": 17664,
+            "cacheWrite": 0,
+            "output": 341,
+            "reasoning": 56,
+            "totalTokens": 25924
+          },
+          "normalizedTotal": 25924,
+          "estimatedCost": {
+            "input": 0.039595000000000005,
+            "cacheRead": 0.008832,
+            "cacheWrite": 0,
+            "output": 0.01023,
+            "total": 0.05865700000000001
+          }
+        },
+        {
+          "eventOffset": 607259,
+          "responseId": "resp_09be43d1a3f9e601016a9bfa8f2e1487d2b929921df802a4f7",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 6827,
+            "cacheRead": 25344,
+            "cacheWrite": 0,
+            "output": 270,
+            "reasoning": 39,
+            "totalTokens": 32441
+          },
+          "normalizedTotal": 32441,
+          "estimatedCost": {
+            "input": 0.034135000000000006,
+            "cacheRead": 0.012672,
+            "cacheWrite": 0,
+            "output": 0.0081,
+            "total": 0.05490700000000001
+          }
+        },
+        {
+          "eventOffset": 674869,
+          "responseId": "resp_09be43d1a3f9e601016a9bfa9e341c87d295a2cc9d5d13a882",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 2427,
+            "cacheRead": 32000,
+            "cacheWrite": 0,
+            "output": 1552,
+            "reasoning": 0,
+            "totalTokens": 35979
+          },
+          "normalizedTotal": 35979,
+          "estimatedCost": {
+            "input": 0.012135000000000002,
+            "cacheRead": 0.016,
+            "cacheWrite": 0,
+            "output": 0.046560000000000004,
+            "total": 0.07469500000000001
+          }
+        }
+      ]
+    },
+    {
+      "id": "2e12e75f65274e0fb509a73851e5b0f2",
+      "requestedModel": "zro/glm-5.3",
+      "status": "failed",
+      "requestCount": 0,
+      "sums": {
+        "input": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reasoning": 0,
+        "totalTokens": 0
+      },
+      "estimatedCost": 0,
+      "estimatedRatesPerMillion": {
+        "input": [],
+        "cacheRead": [],
+        "cacheWrite": [],
+        "output": []
+      },
+      "requests": []
+    },
+    {
+      "id": "fb04c806b3bf418e8f529e867944644a",
+      "requestedModel": "zro/glm-5.3",
+      "status": "failed",
+      "requestCount": 0,
+      "sums": {
+        "input": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "reasoning": 0,
+        "totalTokens": 0
+      },
+      "estimatedCost": 0,
+      "estimatedRatesPerMillion": {
+        "input": [],
+        "cacheRead": [],
+        "cacheWrite": [],
+        "output": []
+      },
+      "requests": []
+    },
+    {
+      "id": "47f4d0267cd445debe2ca70ccca58c00",
+      "requestedModel": "zro/glm-5.3",
+      "status": "completed",
+      "requestCount": 11,
+      "sums": {
+        "input": 25808,
+        "cacheRead": 99968,
+        "cacheWrite": 0,
+        "output": 5654,
+        "reasoning": 447,
+        "totalTokens": 131430
+      },
+      "estimatedCost": 0.6407480000000001,
+      "estimatedRatesPerMillion": {
+        "input": [
+          10
+        ],
+        "cacheRead": [
+          1
+        ],
+        "cacheWrite": [],
+        "output": [
+          50
+        ]
+      },
+      "requests": [
+        {
+          "eventOffset": 9037,
+          "responseId": "resp_0b44ba041349d251016a9bfb3542bc87d2a71beba41fec22de",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 3683,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "output": 90,
+            "reasoning": 0,
+            "totalTokens": 3773
+          },
+          "normalizedTotal": 3773,
+          "estimatedCost": {
+            "input": 0.03683,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "output": 0.0045000000000000005,
+            "total": 0.041330000000000006
+          }
+        },
+        {
+          "eventOffset": 16767,
+          "responseId": "resp_0b44ba041349d251016a9bfb3f4f7487d2a684efc9ce0a904d",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 335,
+            "cacheRead": 3456,
+            "cacheWrite": 0,
+            "output": 19,
+            "reasoning": 0,
+            "totalTokens": 3810
+          },
+          "normalizedTotal": 3810,
+          "estimatedCost": {
+            "input": 0.00335,
+            "cacheRead": 0.003456,
+            "cacheWrite": 0,
+            "output": 0.00095,
+            "total": 0.007756
+          }
+        },
+        {
+          "eventOffset": 25443,
+          "responseId": "resp_0b44ba041349d251016a9bfb450dd087d28958847841f4d2ea",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 398,
+            "cacheRead": 3584,
+            "cacheWrite": 0,
+            "output": 20,
+            "reasoning": 0,
+            "totalTokens": 4002
+          },
+          "normalizedTotal": 4002,
+          "estimatedCost": {
+            "input": 0.00398,
+            "cacheRead": 0.003584,
+            "cacheWrite": 0,
+            "output": 0.001,
+            "total": 0.008564
+          }
+        },
+        {
+          "eventOffset": 52848,
+          "responseId": "resp_0b44ba041349d251016a9bfb4a3a5887d2b61c2b11461fd641",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 1054,
+            "cacheRead": 3840,
+            "cacheWrite": 0,
+            "output": 191,
+            "reasoning": 8,
+            "totalTokens": 5085
+          },
+          "normalizedTotal": 5085,
+          "estimatedCost": {
+            "input": 0.01054,
+            "cacheRead": 0.0038399999999999997,
+            "cacheWrite": 0,
+            "output": 0.009550000000000001,
+            "total": 0.023930000000000003
+          }
+        },
+        {
+          "eventOffset": 71955,
+          "responseId": "resp_0b44ba041349d251016a9bfb54ded887d2ba6675d1b2e52481",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 479,
+            "cacheRead": 4736,
+            "cacheWrite": 0,
+            "output": 118,
+            "reasoning": 0,
+            "totalTokens": 5333
+          },
+          "normalizedTotal": 5333,
+          "estimatedCost": {
+            "input": 0.00479,
+            "cacheRead": 0.004736,
+            "cacheWrite": 0,
+            "output": 0.0059,
+            "total": 0.015425999999999999
+          }
+        },
+        {
+          "eventOffset": 151400,
+          "responseId": "resp_0b44ba041349d251016a9bfb5c7c3087d28b9f738b6c9c3c7d",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 4055,
+            "cacheRead": 4992,
+            "cacheWrite": 0,
+            "output": 68,
+            "reasoning": 0,
+            "totalTokens": 9115
+          },
+          "normalizedTotal": 9115,
+          "estimatedCost": {
+            "input": 0.04055,
+            "cacheRead": 0.004992,
+            "cacheWrite": 0,
+            "output": 0.0034000000000000002,
+            "total": 0.048942
+          }
+        },
+        {
+          "eventOffset": 219508,
+          "responseId": "resp_0b44ba041349d251016a9bfb64c3b887d2ba2995886c91fae3",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 3711,
+            "cacheRead": 8832,
+            "cacheWrite": 0,
+            "output": 151,
+            "reasoning": 0,
+            "totalTokens": 12694
+          },
+          "normalizedTotal": 12694,
+          "estimatedCost": {
+            "input": 0.037110000000000004,
+            "cacheRead": 0.008832,
+            "cacheWrite": 0,
+            "output": 0.00755,
+            "total": 0.053492000000000005
+          }
+        },
+        {
+          "eventOffset": 344653,
+          "responseId": "resp_0b44ba041349d251016a9bfb6de1f087d2be470729d6d6ad82",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 6577,
+            "cacheRead": 12416,
+            "cacheWrite": 0,
+            "output": 216,
+            "reasoning": 160,
+            "totalTokens": 19209
+          },
+          "normalizedTotal": 19209,
+          "estimatedCost": {
+            "input": 0.06577000000000001,
+            "cacheRead": 0.012416,
+            "cacheWrite": 0,
+            "output": 0.0108,
+            "total": 0.08898600000000001
+          }
+        },
+        {
+          "eventOffset": 365401,
+          "responseId": "resp_0b44ba041349d251016a9bfb7d5f8c87d2a21c500a3bbb45cb",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 487,
+            "cacheRead": 18816,
+            "cacheWrite": 0,
+            "output": 653,
+            "reasoning": 83,
+            "totalTokens": 19956
+          },
+          "normalizedTotal": 19956,
+          "estimatedCost": {
+            "input": 0.00487,
+            "cacheRead": 0.018816,
+            "cacheWrite": 0,
+            "output": 0.03265,
+            "total": 0.056336
+          }
+        },
+        {
+          "eventOffset": 431847,
+          "responseId": "resp_0b44ba041349d251016a9bfb97366087d28806978cf3f1ad11",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 1394,
+            "cacheRead": 19072,
+            "cacheWrite": 0,
+            "output": 3367,
+            "reasoning": 142,
+            "totalTokens": 23833
+          },
+          "normalizedTotal": 23833,
+          "estimatedCost": {
+            "input": 0.013940000000000001,
+            "cacheRead": 0.019072,
+            "cacheWrite": 0,
+            "output": 0.16835,
+            "total": 0.201362
+          }
+        },
+        {
+          "eventOffset": 497495,
+          "responseId": "resp_0b44ba041349d251016a9bfc30cd5487d2be7dbf979e6209b3",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 3635,
+            "cacheRead": 20224,
+            "cacheWrite": 0,
+            "output": 761,
+            "reasoning": 54,
+            "totalTokens": 24620
+          },
+          "normalizedTotal": 24620,
+          "estimatedCost": {
+            "input": 0.03635,
+            "cacheRead": 0.020224,
+            "cacheWrite": 0,
+            "output": 0.03805,
+            "total": 0.09462399999999999
+          }
+        }
+      ]
+    },
+    {
+      "id": "7d7a5dc2f981451b8da5986ae6fe3555",
+      "requestedModel": "zro/glm-5.3",
+      "status": "completed",
+      "requestCount": 17,
+      "sums": {
+        "input": 68002,
+        "cacheRead": 539520,
+        "cacheWrite": 0,
+        "output": 6652,
+        "reasoning": 927,
+        "totalTokens": 614174
+      },
+      "estimatedCost": 1.5521399999999999,
+      "estimatedRatesPerMillion": {
+        "input": [
+          10
+        ],
+        "cacheRead": [
+          1
+        ],
+        "cacheWrite": [],
+        "output": [
+          50
+        ]
+      },
+      "requests": [
+        {
+          "eventOffset": 8719,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb354b0487d28e3820dcc2f4f0d2",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 3698,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "output": 37,
+            "reasoning": 0,
+            "totalTokens": 3735
+          },
+          "normalizedTotal": 3735,
+          "estimatedCost": {
+            "input": 0.036980000000000006,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "output": 0.00185,
+            "total": 0.03883
+          }
+        },
+        {
+          "eventOffset": 16433,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb3bc52487d28f472ffcefd05121",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 332,
+            "cacheRead": 3456,
+            "cacheWrite": 0,
+            "output": 19,
+            "reasoning": 0,
+            "totalTokens": 3807
+          },
+          "normalizedTotal": 3807,
+          "estimatedCost": {
+            "input": 0.0033200000000000005,
+            "cacheRead": 0.003456,
+            "cacheWrite": 0,
+            "output": 0.00095,
+            "total": 0.007726
+          }
+        },
+        {
+          "eventOffset": 25153,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb4063dc87d2af3d26acad1df864",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 395,
+            "cacheRead": 3584,
+            "cacheWrite": 0,
+            "output": 20,
+            "reasoning": 0,
+            "totalTokens": 3999
+          },
+          "normalizedTotal": 3999,
+          "estimatedCost": {
+            "input": 0.00395,
+            "cacheRead": 0.003584,
+            "cacheWrite": 0,
+            "output": 0.001,
+            "total": 0.008534
+          }
+        },
+        {
+          "eventOffset": 53027,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb443b4487d2b6b22ef538229139",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 1051,
+            "cacheRead": 3840,
+            "cacheWrite": 0,
+            "output": 173,
+            "reasoning": 24,
+            "totalTokens": 5064
+          },
+          "normalizedTotal": 5064,
+          "estimatedCost": {
+            "input": 0.01051,
+            "cacheRead": 0.0038399999999999997,
+            "cacheWrite": 0,
+            "output": 0.00865,
+            "total": 0.023
+          }
+        },
+        {
+          "eventOffset": 72238,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb4e4e8887d2873ab795a436eaac",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 471,
+            "cacheRead": 4736,
+            "cacheWrite": 0,
+            "output": 148,
+            "reasoning": 0,
+            "totalTokens": 5355
+          },
+          "normalizedTotal": 5355,
+          "estimatedCost": {
+            "input": 0.004710000000000001,
+            "cacheRead": 0.004736,
+            "cacheWrite": 0,
+            "output": 0.0074,
+            "total": 0.016846
+          }
+        },
+        {
+          "eventOffset": 227822,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb56175c87d2b8343999052395e1",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 7909,
+            "cacheRead": 4992,
+            "cacheWrite": 0,
+            "output": 134,
+            "reasoning": 0,
+            "totalTokens": 13035
+          },
+          "normalizedTotal": 13035,
+          "estimatedCost": {
+            "input": 0.07909000000000001,
+            "cacheRead": 0.004992,
+            "cacheWrite": 0,
+            "output": 0.0067,
+            "total": 0.090782
+          }
+        },
+        {
+          "eventOffset": 465678,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb5f60f887d29128c702f4e48687",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 13069,
+            "cacheRead": 12672,
+            "cacheWrite": 0,
+            "output": 255,
+            "reasoning": 0,
+            "totalTokens": 25996
+          },
+          "normalizedTotal": 25996,
+          "estimatedCost": {
+            "input": 0.13069,
+            "cacheRead": 0.012672,
+            "cacheWrite": 0,
+            "output": 0.012750000000000001,
+            "total": 0.156112
+          }
+        },
+        {
+          "eventOffset": 638402,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb6c386487d2864066c8809a4e8a",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 9814,
+            "cacheRead": 25600,
+            "cacheWrite": 0,
+            "output": 222,
+            "reasoning": 27,
+            "totalTokens": 35636
+          },
+          "normalizedTotal": 35636,
+          "estimatedCost": {
+            "input": 0.09814,
+            "cacheRead": 0.025599999999999998,
+            "cacheWrite": 0,
+            "output": 0.0111,
+            "total": 0.13484000000000002
+          }
+        },
+        {
+          "eventOffset": 810166,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb78b9ec87d29ac967e45ae3b3ce",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 9291,
+            "cacheRead": 35200,
+            "cacheWrite": 0,
+            "output": 150,
+            "reasoning": 85,
+            "totalTokens": 44641
+          },
+          "normalizedTotal": 44641,
+          "estimatedCost": {
+            "input": 0.09291,
+            "cacheRead": 0.035199999999999995,
+            "cacheWrite": 0,
+            "output": 0.007500000000000001,
+            "total": 0.13561
+          }
+        },
+        {
+          "eventOffset": 834789,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb8be8a487d2a2de083bccedf5d4",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 451,
+            "cacheRead": 44288,
+            "cacheWrite": 0,
+            "output": 310,
+            "reasoning": 17,
+            "totalTokens": 45049
+          },
+          "normalizedTotal": 45049,
+          "estimatedCost": {
+            "input": 0.00451,
+            "cacheRead": 0.044288,
+            "cacheWrite": 0,
+            "output": 0.0155,
+            "total": 0.064298
+          }
+        },
+        {
+          "eventOffset": 1018395,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfb98ecf887d2a9c41edf4e82b9f6",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 9092,
+            "cacheRead": 44544,
+            "cacheWrite": 0,
+            "output": 394,
+            "reasoning": 106,
+            "totalTokens": 54030
+          },
+          "normalizedTotal": 54030,
+          "estimatedCost": {
+            "input": 0.09092,
+            "cacheRead": 0.044544,
+            "cacheWrite": 0,
+            "output": 0.019700000000000002,
+            "total": 0.155164
+          }
+        },
+        {
+          "eventOffset": 1120303,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfbafb25487d2a091b3336bb2c4dd",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 5009,
+            "cacheRead": 53504,
+            "cacheWrite": 0,
+            "output": 118,
+            "reasoning": 83,
+            "totalTokens": 58631
+          },
+          "normalizedTotal": 58631,
+          "estimatedCost": {
+            "input": 0.05009,
+            "cacheRead": 0.053503999999999996,
+            "cacheWrite": 0,
+            "output": 0.0059,
+            "total": 0.10949400000000001
+          }
+        },
+        {
+          "eventOffset": 1132487,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfbc26cf087d2b73ac7b84561f89a",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 278,
+            "cacheRead": 58368,
+            "cacheWrite": 0,
+            "output": 315,
+            "reasoning": 262,
+            "totalTokens": 58961
+          },
+          "normalizedTotal": 58961,
+          "estimatedCost": {
+            "input": 0.0027800000000000004,
+            "cacheRead": 0.058367999999999996,
+            "cacheWrite": 0,
+            "output": 0.01575,
+            "total": 0.076898
+          }
+        },
+        {
+          "eventOffset": 1179003,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfbd6814887d29a0d1061216c50c3",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 2289,
+            "cacheRead": 58496,
+            "cacheWrite": 0,
+            "output": 425,
+            "reasoning": 255,
+            "totalTokens": 61210
+          },
+          "normalizedTotal": 61210,
+          "estimatedCost": {
+            "input": 0.02289,
+            "cacheRead": 0.058496,
+            "cacheWrite": 0,
+            "output": 0.02125,
+            "total": 0.102636
+          }
+        },
+        {
+          "eventOffset": 1226797,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfbeee27487d281087559e1dde79e",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 726,
+            "cacheRead": 60544,
+            "cacheWrite": 0,
+            "output": 3208,
+            "reasoning": 0,
+            "totalTokens": 64478
+          },
+          "normalizedTotal": 64478,
+          "estimatedCost": {
+            "input": 0.007260000000000001,
+            "cacheRead": 0.060544,
+            "cacheWrite": 0,
+            "output": 0.16040000000000001,
+            "total": 0.22820400000000002
+          }
+        },
+        {
+          "eventOffset": 1310641,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfc75a44487d2a9bc2df9fdb21459",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 3736,
+            "cacheRead": 61056,
+            "cacheWrite": 0,
+            "output": 183,
+            "reasoning": 68,
+            "totalTokens": 64975
+          },
+          "normalizedTotal": 64975,
+          "estimatedCost": {
+            "input": 0.037360000000000004,
+            "cacheRead": 0.061056,
+            "cacheWrite": 0,
+            "output": 0.00915,
+            "total": 0.107566
+          }
+        },
+        {
+          "eventOffset": 1329088,
+          "responseId": "resp_0079b13ba88ddb6a016a9bfc81bafc87d29e96c23ec7a75f43",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 391,
+            "cacheRead": 64640,
+            "cacheWrite": 0,
+            "output": 541,
+            "reasoning": 0,
+            "totalTokens": 65572
+          },
+          "normalizedTotal": 65572,
+          "estimatedCost": {
+            "input": 0.00391,
+            "cacheRead": 0.06464,
+            "cacheWrite": 0,
+            "output": 0.02705,
+            "total": 0.0956
+          }
+        }
+      ]
+    },
+    {
+      "id": "cf298533aafb4846b1bd92f8402d8d12",
+      "requestedModel": "zro/glm-5.3",
+      "status": "stopped",
+      "requestCount": 6,
+      "sums": {
+        "input": 40843,
+        "cacheRead": 43904,
+        "cacheWrite": 0,
+        "output": 827,
+        "reasoning": 281,
+        "totalTokens": 85574
+      },
+      "estimatedCost": 0.493684,
+      "estimatedRatesPerMillion": {
+        "input": [
+          10
+        ],
+        "cacheRead": [
+          1
+        ],
+        "cacheWrite": [],
+        "output": [
+          50
+        ]
+      },
+      "requests": [
+        {
+          "eventOffset": 7107,
+          "responseId": "resp_0cbb9827bd7093d7016a9bfcb12f8c87d287d7e6f8473b3698",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 3531,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "output": 38,
+            "reasoning": 0,
+            "totalTokens": 3569
+          },
+          "normalizedTotal": 3569,
+          "estimatedCost": {
+            "input": 0.03531,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "output": 0.0019,
+            "total": 0.03721
+          }
+        },
+        {
+          "eventOffset": 14986,
+          "responseId": "resp_0cbb9827bd7093d7016a9bfcb73c9c87d2a958f4734f876433",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 307,
+            "cacheRead": 3328,
+            "cacheWrite": 0,
+            "output": 19,
+            "reasoning": 0,
+            "totalTokens": 3654
+          },
+          "normalizedTotal": 3654,
+          "estimatedCost": {
+            "input": 0.0030700000000000002,
+            "cacheRead": 0.003328,
+            "cacheWrite": 0,
+            "output": 0.00095,
+            "total": 0.007348
+          }
+        },
+        {
+          "eventOffset": 26600,
+          "responseId": "resp_0cbb9827bd7093d7016a9bfcbc569887d2aea1c41dc7b254e9",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 370,
+            "cacheRead": 3456,
+            "cacheWrite": 0,
+            "output": 184,
+            "reasoning": 11,
+            "totalTokens": 4010
+          },
+          "normalizedTotal": 4010,
+          "estimatedCost": {
+            "input": 0.0037,
+            "cacheRead": 0.003456,
+            "cacheWrite": 0,
+            "output": 0.0092,
+            "total": 0.016356
+          }
+        },
+        {
+          "eventOffset": 50157,
+          "responseId": "resp_0cbb9827bd7093d7016a9bfcc69c9087d2a496971512c2ef20",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 608,
+            "cacheRead": 3584,
+            "cacheWrite": 0,
+            "output": 160,
+            "reasoning": 0,
+            "totalTokens": 4352
+          },
+          "normalizedTotal": 4352,
+          "estimatedCost": {
+            "input": 0.00608,
+            "cacheRead": 0.003584,
+            "cacheWrite": 0,
+            "output": 0.008,
+            "total": 0.017664
+          }
+        },
+        {
+          "eventOffset": 508742,
+          "responseId": "resp_0cbb9827bd7093d7016a9bfcd0b43487d2abe21cc8d1bbc964",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 25796,
+            "cacheRead": 3968,
+            "cacheWrite": 0,
+            "output": 144,
+            "reasoning": 10,
+            "totalTokens": 29908
+          },
+          "normalizedTotal": 29908,
+          "estimatedCost": {
+            "input": 0.25796,
+            "cacheRead": 0.003968,
+            "cacheWrite": 0,
+            "output": 0.007200000000000001,
+            "total": 0.26912800000000003
+          }
+        },
+        {
+          "eventOffset": 687289,
+          "responseId": "resp_0cbb9827bd7093d7016a9bfcd9dc2887d2a487ca61ddfbc91c",
+          "provider": "openai-codex",
+          "model": "gpt-6-astra",
+          "api": "openai-codex-responses",
+          "usage": {
+            "input": 10231,
+            "cacheRead": 29568,
+            "cacheWrite": 0,
+            "output": 282,
+            "reasoning": 260,
+            "totalTokens": 40081
+          },
+          "normalizedTotal": 40081,
+          "estimatedCost": {
+            "input": 0.10231000000000001,
+            "cacheRead": 0.029567999999999997,
+            "cacheWrite": 0,
+            "output": 0.014100000000000001,
+            "total": 0.145978
+          }
+        }
+      ]
+    }
+  ]
+}

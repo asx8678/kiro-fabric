@@ -1,0 +1,48 @@
+{
+  "root": "/home/adam/projects/kiro-fabric",
+  "head": "d33cbdca33fac6ce301a6da884f06ee5141534da",
+  "trackedDiffEmpty": true,
+  "validatorEnvironment": {
+    "provider": "openai-codex",
+    "model": "gpt-6-astra",
+    "sessionId": "01a07157-2a47-7631-825d-2593075f0cb7",
+    "terminalMetadataAuthoritative": true
+  },
+  "stagedRuntime": "/home/adam/projects/kiro-fabric/.tmp/.kiro-fabric-agent-generation-0d8b999dd2085e68359b7c521f6a8911b4da1583a13935ef95c03fa205214dcb/runtime",
+  "parentBuildStageLogGenerationMatches": true,
+  "tests": {
+    "sourceAndAnalyzer": {
+      "suites": 6,
+      "passed": 48,
+      "exit": 0,
+      "log": "validation-tests.log"
+    },
+    "stagedProcess": {
+      "suites": 1,
+      "passed": 3,
+      "skipped": 7,
+      "exit": 0,
+      "log": "validation-process-tests.log"
+    },
+    "parentReportedOnly": {
+      "suites": 14,
+      "passed": 131,
+      "log": "local-tests.log"
+    }
+  },
+  "inputSha256": {
+    "context.md": "288666256f7309658ee6dba3681207fe6835792ce0b226cbb72e7c6f629527b2",
+    "lifecycle.md": "b257322b861852ce46eefc38d89fec307635bfdbf415e4966568967f35845e71",
+    "acceptance.md": "7c323c64e7feef62d2785a28032940314f2a76c00a787c16816ee37a8bb02939",
+    "probe-analyzer.mjs": "4fcb030a2bf4b8f0ef9a28a18c83599e5fddbc9d86371147c404885534eaf1da",
+    "analyze-trace-candidate.mjs": "02e7af0d47bc39d3527614969e6a75ca38ad8c9f180fd2a84d5740c109f2d2e0",
+    "analyzer-probe-results.json": "c8768c496d96c5eb443f11298f983c029bfcab40906b2534db42377f7ed03363",
+    "audit-invocation-metrics.json": "36e25248734558a9ea948f5a233868c6556ce622db94029d13aa759a4a9c7ac2",
+    "trace-overlap.jsonl": "ee0acb7085ba3a41faefdc9041d21ecb13e0282e32685b034be0cf346bcde327",
+    "trace-serial.jsonl": "f1277d5beaf98e86ee5df62bc19b621fd4e0bde4c99d9242c28b8e558b56c76e",
+    "trace-outside-parent.jsonl": "847b0a803ad0ef3ab9e6fd88274fa13acbcc58878a393003ecf7a018201af2bf",
+    "build-before-tests.log": "d7dbd74279257e83a340b457379e174f3fc5c284eb6b87ee32a6f40e5ec8d800",
+    "local-tests.log": "410d776a9d83a1cd7b006b67100b3c987a91744ffb3f9826a0c3e3cfe2fdd89e"
+  },
+  "scope": "Audit artifacts only; no production/config edits or builds by validator. Parent final build responsibility. Standard existing test temporary fixtures created/cleaned by suites; deliberate persistent outputs restricted to validation.md and validation-*.json/.log."
+}

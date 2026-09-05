@@ -7,6 +7,7 @@ import type {
   FabricProviderStatus,
   ResolvedFabricAction,
 } from "../protocol.js";
+import { fabricCommitAcknowledgement, type FabricCommitAcknowledgement } from "../protocol.js";
 import { schemaValidationMessage } from "../schema-validation.js";
 import { fabricJsonText, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js";
 import { semanticDigest } from "./semantic-digest.js";
@@ -20,6 +21,8 @@ export interface FabricCallAudit {
   error?: string;
   resultChars?: number;
   resultTruncated?: boolean;
+  /** Trusted, bounded publication fact only; never includes arguments, keys, values, or causes. */
+  commitAcknowledgement?: FabricCommitAcknowledgement;
 }
 
 export interface FabricRegistryInvocationContext extends FabricInvocationContext {
@@ -240,6 +243,8 @@ export class ActionRegistry {
       audit.endedAt = Date.now();
       audit.success = false;
       audit.error = error instanceof Error ? error.message.slice(0, 1_000) : String(error).slice(0, 1_000);
+      const acknowledgement = fabricCommitAcknowledgement(error);
+      if (acknowledgement) audit.commitAcknowledgement = acknowledgement;
       throw error;
     } finally {
       this.#activeWrites.delete(nestedToolCallId);

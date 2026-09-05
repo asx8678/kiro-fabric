@@ -53,13 +53,17 @@ describe("analyze-trace", () => {
     const exec = report.executions[0]!;
     expect(exec.execId).toBe("exec_a");
     expect(exec.status).toBe("succeeded");
+    expect(exec.resultChars).toBe(512);
+    expect(exec.legacyResultChars).toBe(512);
+    expect(exec.resultValueChars).toBeNull();
+    expect(exec.projectionVisibleChars).toBeNull();
     expect(exec.bridgeCalls).toBe(1);
     expect(exec.bridgeArgsChars).toBe(120);
     expect(exec.bridgeResultChars).toBe(64);
     expect(exec.approvalWaitUs).toBe(200_000);
-    // execute self time subtracts the child quickjs.run span only (the
-    // bridge span is parented to execute but also nests under it).
-    const spans = exec.spans as Array<{ ev: string; selfUs: number; parent?: string }>;
+    // Child intervals overlap, so execute subtracts their union, not their sum.
+    const spans = exec.spans as Array<{ ev: string; selfUs: number | null; parent?: string }>;
+    expect(spans.find((span) => span.ev === "execute")?.selfUs).toBe(100_000);
     const runSpan = spans.find((span) => span.ev === "quickjs.run");
     expect(runSpan?.parent).toBe("execute");
     const approval = spans.find((span) => span.ev === "approval.wait");
@@ -87,12 +91,103 @@ describe("analyze-trace", () => {
     expect(report.anomalies).toContainEqual({ kind: "bridge-error", ref: "mcp.$call", error: "denied" });
   });
 
+  it("computes serial, overlapping, nested, and parent-clipped child union time", () => {
+    const events = [
+      { ...base, seq: 1, monoUs: 100, ev: "parent", spanId: "p", durUs: 100 },
+      { ...base, seq: 2, monoUs: 90, ev: "outside-left", spanId: "a", parentId: "p", durUs: 20 },
+      { ...base, seq: 3, monoUs: 110, ev: "serial", spanId: "b", parentId: "p", durUs: 20 },
+      { ...base, seq: 4, monoUs: 120, ev: "overlap", spanId: "c", parentId: "p", durUs: 30 },
+      { ...base, seq: 5, monoUs: 125, ev: "nested", spanId: "d", parentId: "p", durUs: 5 },
+      { ...base, seq: 6, monoUs: 190, ev: "outside-right", spanId: "e", parentId: "p", durUs: 20 },
+      { ...base, seq: 7, monoUs: 60, ev: "fully-outside", spanId: "f", parentId: "p", durUs: 10 },
+    ];
+    const report = JSON.parse(run(fixture(events), "--json")) as { executions: Array<{ spans: Array<{ ev: string; selfUs: number }> }>; spanTable: Array<{ ev: string; totalSelfUs: number }> };
+    // No execId means no execution view. The clipped child union is
+    // [100,150] plus [190,200]: 60us covered, 40us self.
+    expect(report.executions).toHaveLength(0);
+    expect(report.spanTable.find((row) => row.ev === "parent")?.totalSelfUs).toBe(40);
+  });
+
+  it("keeps malformed timing unknown and reports anomalies", () => {
+    const events = [
+      { ...base, seq: 1, monoUs: 10, ev: "exec.start", execId: "bad" },
+      { ...base, seq: 2, monoUs: 20, ev: "missing", execId: "bad", spanId: "m" },
+      { ...base, seq: 3, monoUs: 30, ev: "negative", execId: "bad", spanId: "n", durUs: -1 },
+      { ...base, seq: 4, monoUs: "nope", ev: "nonfinite", execId: "bad", spanId: "x", durUs: 4 },
+      { ...base, seq: 5, monoUs: Number.MAX_VALUE, ev: "overflow", execId: "bad", spanId: "o", durUs: Number.MAX_VALUE },
+    ];
+    const target = fixture(events);
+    const report = JSON.parse(run(target, "--json")) as { executions: Array<{ spans: Array<{ selfUs: number | null }> }>; spanTable: Array<{ totalUs: number | null }>; anomalies: Array<{ kind: string }> };
+    expect(report.executions[0]!.spans).toHaveLength(4);
+    expect(report.executions[0]!.spans.every((span) => span.selfUs === null)).toBe(true);
+    expect(report.spanTable.every((row) => row.totalUs === null)).toBe(true);
+    expect(report.anomalies.filter((a) => a.kind === "invalid-span-timing")).toHaveLength(4);
+    expect(run(target)).toContain("unknown");
+    const chrome = path.join(temporary(), "invalid-chrome.json");
+    run(target, "--chrome", chrome);
+    const trace = JSON.parse(fs.readFileSync(chrome, "utf8")) as { traceEvents: Array<{ name: string }> };
+    expect(trace.traceEvents.map((event) => event.name)).toEqual(["exec.start"]);
+  });
+
+  it("reports projection metadata separately, including failures and Unicode", () => {
+    const events = [
+      { ...base, seq: 1, monoUs: 1, ev: "exec.start", execId: "new" },
+      { ...base, seq: 2, monoUs: 2, ev: "exec.projection", execId: "new", data: { visibleChars: 2, visibleBytes: 4, isError: true, overflowed: true, artifactRetained: true } },
+      { ...base, seq: 3, monoUs: 3, ev: "exec.end", execId: "new", data: { status: "failed", resultChars: 0, resultValueChars: 7 } },
+      { ...base, seq: 4, monoUs: 4, ev: "exec.start", execId: "legacy" },
+      { ...base, seq: 5, monoUs: 5, ev: "exec.end", execId: "legacy", data: { status: "succeeded", resultChars: 9 } },
+      { ...base, seq: 6, monoUs: 6, ev: "exec.projection", execId: "invalid", data: { visibleChars: -1, visibleBytes: "4", isError: 0 } },
+    ];
+    const report = JSON.parse(run(fixture(events), "--json")) as { executionAttempts: number; executionFailures: number; executions: Array<Record<string, unknown>> };
+    expect(report.executionAttempts).toBe(3);
+    expect(report.executionFailures).toBe(1);
+    expect(report.executions.find((e) => e.execId === "new")).toMatchObject({ resultChars: 0, legacyResultChars: 0, resultValueChars: 7, projectionVisibleChars: 2, projectionVisibleBytes: 4, projectionIsError: true, projectionOverflowed: true, projectionArtifactRetained: true });
+    expect(report.executions.find((e) => e.execId === "legacy")).toMatchObject({ legacyResultChars: 9, resultValueChars: null, projectionVisibleChars: null });
+    expect(report.executions.find((e) => e.execId === "invalid")).toMatchObject({ attempts: 1, guestAttempts: 0, projectionVisibleChars: null, projectionVisibleBytes: null, projectionIsError: null });
+  });
+
+  it("counts projection-only request outcomes once and preserves unknown bridge sizes", () => {
+    const events = [
+      { ...base, seq: 1, monoUs: 1, ev: "exec.projection", execId: "early", data: { isError: true } },
+      { ...base, seq: 2, monoUs: 2, ev: "exec.start", execId: "both" },
+      { ...base, seq: 3, monoUs: 3, ev: "exec.projection", execId: "both", data: { isError: true } },
+      { ...base, seq: 4, monoUs: 4, ev: "exec.end", execId: "both", data: { status: "succeeded" } },
+      { ...base, seq: 5, monoUs: 5, ev: "zero", cat: "bridge", execId: "both", spanId: "z", durUs: 1, data: { actionRef: "tool", argsChars: 0, resultChars: 0 } },
+      { ...base, seq: 6, monoUs: 6, ev: "unknown", cat: "bridge", execId: "both", spanId: "u", durUs: 1, data: { actionRef: "tool", argsChars: -1 } },
+    ];
+    const report = JSON.parse(run(fixture(events), "--json")) as { executionAttempts: number; guestExecutionAttempts: number; executionFailures: number; executions: Array<Record<string, unknown>>; bridgeTable: Array<Record<string, unknown>>; anomalies: Array<Record<string, unknown>> };
+    expect(report).toMatchObject({ executionAttempts: 2, guestExecutionAttempts: 1, executionFailures: 2, executionUnknownOutcomes: 0 });
+    expect(report.executions.find((e) => e.execId === "early")).toMatchObject({ attempts: 1, guestAttempts: 0, failures: 1, requestStatus: "failed", guestStatus: null, status: "incomplete" });
+    expect(report.executions.find((e) => e.execId === "both")).toMatchObject({ attempts: 1, guestAttempts: 1, failures: 1, requestStatus: "failed", guestStatus: "succeeded", status: "succeeded", bridgeArgsChars: null, bridgeArgsCharsKnownCount: 1, bridgeArgsCharsUnknownCount: 1, bridgeResultChars: null, bridgeResultCharsKnownCount: 1, bridgeResultCharsUnknownCount: 1 });
+    expect(report.bridgeTable[0]).toMatchObject({ argsChars: null, argsCharsKnownCount: 1, argsCharsUnknownCount: 1, resultChars: null, resultCharsKnownCount: 1, resultCharsUnknownCount: 1 });
+    expect(report.anomalies).toContainEqual({ kind: "failed-execution", execId: "early", status: "failed" });
+  });
+
+  it("counts all request evidence, unknown outcomes, incomplete coverage, and unknown heap values", () => {
+    const events = [
+      { ...base, seq: 1, ev: "exec.end", execId: "end-only", data: { status: "failed" } },
+      { ...base, seq: 2, ev: "tool.fabric_exec", execId: "marker-only" },
+      { ...base, seq: 3, ev: "exec.start", execId: "missing" },
+      { ...base, seq: 4, ev: "exec.projection", execId: "known-zero", data: { visibleChars: 0, visibleBytes: 0, isError: false, overflowed: false, artifactRetained: false } },
+      { ...base, seq: 5, ev: "quickjs.memory", data: { usage: {} } },
+      { ...base, seq: 6, ev: "quickjs.memory", data: { usage: { memory_used_size: 10 } } },
+      { ...base, seq: 7, ev: "trace.truncated" },
+    ];
+    const report = JSON.parse(run(fixture(events), "--json")) as any;
+    expect(report).toMatchObject({ executionAttempts: 4, executionFailures: 1, executionUnknownOutcomes: 2, coverage: "incomplete-lower-bound" });
+    expect(report.executions.find((e: any) => e.execId === "end-only")).toMatchObject({ requestStatus: "failed", guestStatus: "failed" });
+    expect(report.executions.find((e: any) => e.execId === "marker-only")).toMatchObject({ requestStatus: "unknown", unknownOutcomes: 1 });
+    expect(report.executions.find((e: any) => e.execId === "known-zero")).toMatchObject({ requestStatus: "succeeded", projectionVisibleChars: 0, projectionVisibleBytes: 0 });
+    expect(report.memory).toMatchObject({ firstUsedBytes: null, lastUsedBytes: 10, deltaUsedBytes: null, maxUsedBytes: null, knownUsedBytesSnapshots: 1, unknownUsedBytesSnapshots: 1 });
+  });
+
   it("renders text by default and Chrome Trace with --chrome", () => {
     const target = fixture(sampleEvents);
     const text = run(target);
     expect(text).toContain("executions:");
     expect(text).toContain("memory.set");
     expect(text).toContain("bridge table");
+    expect(text).toContain("args=120 chars result=64 chars");
     const chrome = path.join(temporary(), "chrome.json");
     run(target, "--chrome", chrome);
     const parsed = JSON.parse(fs.readFileSync(chrome, "utf8")) as { traceEvents: Array<Record<string, unknown>> };

@@ -1,0 +1,3648 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-09-05",
+  "status": "partial_required_GLM_route_and_live_Kiro_blocked",
+  "environment": {
+    "commit": "d33cbdca33fac6ce301a6da884f06ee5141534da",
+    "initialDirtyWorktree": false,
+    "productionModified": false,
+    "nodeVersion": "24.20.0",
+    "pnpmVersion": "11.20.0",
+    "kiroFabricVersion": "0.64.0",
+    "mcpSdkVersion": "1.30.0",
+    "quickjsVersion": "0.32.0",
+    "auditPiFabricVersion": "0.82.8",
+    "auditZroExtensionVersion": "1.3.10",
+    "installedKiroVersion": null,
+    "activeKiroAgent": null,
+    "activeKiroModel": null,
+    "kiroExecutableOnPath": false,
+    "kiroCliPathEnvironmentConfigured": false,
+    "activeAuditModel": "openai-codex/gpt-6-astra",
+    "activeAuditThinking": "medium",
+    "builtStageDigest": "0d8b999dd2085e68359b7c521f6a8911b4da1583a13935ef95c03fa205214dcb"
+  },
+  "routes": {
+    "astra": {
+      "requested": "openai-codex/gpt-6-astra",
+      "terminalObserved": "openai-codex/gpt-6-astra",
+      "invocationThinking": "high",
+      "localSupportedLevels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "validation": "response_metadata_verified"
+    },
+    "glm": {
+      "requested": "zro/glm-5.3",
+      "catalogAvailable": true,
+      "localThinkingMap": {
+        "off": "none",
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "xhigh": "max"
+      },
+      "invocationThinking": "high",
+      "terminalObserved": "openai-codex/gpt-6-astra",
+      "validation": "blocked_mismatch",
+      "initialFailures": 2,
+      "recoveryRetries": 2,
+      "verifiedGlmRequests": 0,
+      "verifiedGlmRequestsDoesNotEstablishBilledZero": true,
+      "economicsStopped": true
+    },
+    "syntax": "agents.run/spawn({model: provider/id, thinking: high, recursive: false, extensions: boolean, tools, task})",
+    "modelSummaryIsNotResponseRouteProof": true,
+    "remoteBackendIdentityBeyondReturnedMetadata": null
+  },
+  "economicBaseline": {
+    "eligibleEndToEndTasksAttempted": 0,
+    "eligibleEndToEndTasksSucceeded": 0,
+    "costPerSuccessfullyCompletedTask": null,
+    "ratioStatus": "undefined_no_successful_comparable_tasks_and_cost_unobserved",
+    "successRate": null,
+    "kiro": {
+      "credits": null,
+      "inputTokens": null,
+      "cachedInputTokens": null,
+      "cacheWriteTokens": null,
+      "outputTokens": null,
+      "reasoningTokens": null,
+      "requestCount": null,
+      "compactions": null,
+      "billedSpend": null,
+      "currency": null,
+      "plan": null
+    },
+    "zro": {
+      "providerReportedUsage": null,
+      "providerBilledSpend": null,
+      "currency": null,
+      "plan": null
+    },
+    "otherVerifiedCharges": null,
+    "pricingSourcesUsed": [],
+    "authoritativeAccountPricingVerifiedAt": null,
+    "subscriptionMarginalCharges": null,
+    "subscriptionAllocation": null,
+    "balanceDeltaUsed": false,
+    "delayedBilling": null,
+    "unrelatedAccountActivity": null,
+    "paidBenchmarkRuns": 0,
+    "explicitLiveBenchmarkSpendCap": null,
+    "comparisonLimitation": "Local fixture comparison is synthetic, not an economic or quality benchmark."
+  },
+  "usageSemantics": {
+    "source": "agents.log terminal assistant message_end only; unmodified rawUsage retained",
+    "deduplication": "one terminal message per run/eventOffset; responseId retained; no streaming/turn/run aggregate double counting",
+    "input": "Harness normalized uncached input; cacheRead separately reported. Equality input+cacheRead+cacheWrite+output=totalTokens checked per observed terminal response. Not a universal provider convention.",
+    "reasoning": "Already included in output; retained separately, never added again.",
+    "cost": "Raw usage.cost and reportedAggregateUsage.cost are local harness price estimates, not invoice or provider billing reconciliation. Extension-loaded rates differ.",
+    "missing": "null means unobserved/unknown, never free. Initial failed launches have observed zero terminal messages; remote charges remain unknown.",
+    "tokensMethod": "No local text tokenizer estimate. Prompt inventory measures UTF16 code units and UTF8 bytes only.",
+    "coverage": "Full retained event log pagination for each child. Parent model messages and provider-side unseen retries/cancellation charges not captured.",
+    "timestamps": "Original terminal message epoch milliseconds; per-request end/latency not independently exposed. Run start/finish epoch preserved."
+  },
+  "auditOverhead": {
+    "separateFromProduct": true,
+    "parentUsage": null,
+    "parentBilledSpend": null,
+    "totalBilledSpend": null,
+    "configuredMonetaryLimitEstablished": null,
+    "concurrencyMaximumObserved": 2,
+    "recursiveDelegation": false,
+    "runBudget": "3 packets; 2 initial route failures and one recovery retry per context/lifecycle packet; economics stopped; separate Astra scope and independent validation",
+    "localProbeFailures": [
+      {
+        "attempt": 1,
+        "result": "fixture assertion after JsonValue compilation rejection",
+        "latencyMs": null,
+        "billedSpend": null
+      },
+      {
+        "attempt": 2,
+        "result": "same fixture rerun to preserve exact diagnostics; 4 type errors, zero nested calls",
+        "latencyMs": 307.405765,
+        "billedSpend": null
+      },
+      {
+        "attempt": 3,
+        "result": "runtime succeeded; fixture wrongly expected entire artifact instead of default12000-char page",
+        "latencyMs": 374.501855,
+        "billedSpend": null
+      }
+    ],
+    "additionalOverhead": "Overbroad tool catalog (~118k chars), oversized leaf reports, failed tool shapes/regex calls and lost intermediate outputs. Parent inference accounting unavailable.",
+    "runs": [
+      {
+        "id": "09a9d9f343694f7abe3edfe5d0c9542a",
+        "requestedModel": "openai-codex/gpt-6-astra",
+        "requestedThinking": "high",
+        "status": "completed",
+        "startedAt": 1788607051571,
+        "finishedAt": 1788607192634,
+        "reportedAggregateUsage": {
+          "input": 35741,
+          "output": 3014,
+          "cacheRead": 102784,
+          "cacheWrite": 0,
+          "cost": 0.32051700000000005
+        },
+        "turns": 8,
+        "toolCalls": 41,
+        "requests": [
+          {
+            "eventOffset": 4319,
+            "timestamp": 1788607051821,
+            "responseId": "resp_09be43d1a3f9e601016a9bfa4d908887d29e74147b014aae7a",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 3321,
+              "output": 113,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3434,
+              "cost": {
+                "input": 0.016605,
+                "output": 0.0033900000000000002,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0.019995000000000002
+              }
+            },
+            "runId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "requestCount": 1,
+            "inputTokens": 3321,
+            "cachedInputTokens": 0,
+            "cacheWriteTokens": 0,
+            "outputTokens": 113,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3321
+          },
+          {
+            "eventOffset": 16245,
+            "timestamp": 1788607061415,
+            "responseId": "resp_09be43d1a3f9e601016a9bfa580f3887d2a450c1518e3c14d7",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 281,
+              "output": 134,
+              "cacheRead": 3200,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3615,
+              "cost": {
+                "input": 0.0014050000000000002,
+                "output": 0.00402,
+                "cacheRead": 0.0015999999999999999,
+                "cacheWrite": 0,
+                "total": 0.007025
+              }
+            },
+            "runId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "requestCount": 1,
+            "inputTokens": 281,
+            "cachedInputTokens": 3200,
+            "cacheWriteTokens": 0,
+            "outputTokens": 134,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3481
+          },
+          {
+            "eventOffset": 157193,
+            "timestamp": 1788607070818,
+            "responseId": "resp_09be43d1a3f9e601016a9bfa61273887d2b2774b35c17aa368",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 6712,
+              "output": 144,
+              "cacheRead": 3328,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 10184,
+              "cost": {
+                "input": 0.03356,
+                "output": 0.00432,
+                "cacheRead": 0.001664,
+                "cacheWrite": 0,
+                "total": 0.039543999999999996
+              }
+            },
+            "runId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "requestCount": 1,
+            "inputTokens": 6712,
+            "cachedInputTokens": 3328,
+            "cacheWriteTokens": 0,
+            "outputTokens": 144,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 10040
+          },
+          {
+            "eventOffset": 195499,
+            "timestamp": 1788607079429,
+            "responseId": "resp_09be43d1a3f9e601016a9bfa6a2e3c87d2bee61e577b0822e2",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 1762,
+              "output": 213,
+              "cacheRead": 9856,
+              "cacheWrite": 0,
+              "reasoning": 12,
+              "totalTokens": 11831,
+              "cost": {
+                "input": 0.00881,
+                "output": 0.00639,
+                "cacheRead": 0.004928,
+                "cacheWrite": 0,
+                "total": 0.020128
+              }
+            },
+            "runId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "requestCount": 1,
+            "inputTokens": 1762,
+            "cachedInputTokens": 9856,
+            "cacheWriteTokens": 0,
+            "outputTokens": 213,
+            "reportedReasoningTokens": 12,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 11618
+          },
+          {
+            "eventOffset": 319196,
+            "timestamp": 1788607091556,
+            "responseId": "resp_09be43d1a3f9e601016a9bfa74261c87d2a47a4bcf6fc0b035",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 6492,
+              "output": 247,
+              "cacheRead": 11392,
+              "cacheWrite": 0,
+              "reasoning": 25,
+              "totalTokens": 18131,
+              "cost": {
+                "input": 0.03246,
+                "output": 0.00741,
+                "cacheRead": 0.005696,
+                "cacheWrite": 0,
+                "total": 0.045566
+              }
+            },
+            "runId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "requestCount": 1,
+            "inputTokens": 6492,
+            "cachedInputTokens": 11392,
+            "cacheWriteTokens": 0,
+            "outputTokens": 247,
+            "reportedReasoningTokens": 25,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 17884
+          },
+          {
+            "eventOffset": 474189,
+            "timestamp": 1788607102703,
+            "responseId": "resp_09be43d1a3f9e601016a9bfa81498487d2a04f3f665058975e",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 7919,
+              "output": 341,
+              "cacheRead": 17664,
+              "cacheWrite": 0,
+              "reasoning": 56,
+              "totalTokens": 25924,
+              "cost": {
+                "input": 0.039595000000000005,
+                "output": 0.01023,
+                "cacheRead": 0.008832,
+                "cacheWrite": 0,
+                "total": 0.05865700000000001
+              }
+            },
+            "runId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "requestCount": 1,
+            "inputTokens": 7919,
+            "cachedInputTokens": 17664,
+            "cacheWriteTokens": 0,
+            "outputTokens": 341,
+            "reportedReasoningTokens": 56,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 25583
+          },
+          {
+            "eventOffset": 607259,
+            "timestamp": 1788607117682,
+            "responseId": "resp_09be43d1a3f9e601016a9bfa8f2e1487d2b929921df802a4f7",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 6827,
+              "output": 270,
+              "cacheRead": 25344,
+              "cacheWrite": 0,
+              "reasoning": 39,
+              "totalTokens": 32441,
+              "cost": {
+                "input": 0.034135000000000006,
+                "output": 0.0081,
+                "cacheRead": 0.012672,
+                "cacheWrite": 0,
+                "total": 0.05490700000000001
+              }
+            },
+            "runId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "requestCount": 1,
+            "inputTokens": 6827,
+            "cachedInputTokens": 25344,
+            "cacheWriteTokens": 0,
+            "outputTokens": 270,
+            "reportedReasoningTokens": 39,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 32171
+          },
+          {
+            "eventOffset": 674869,
+            "timestamp": 1788607131742,
+            "responseId": "resp_09be43d1a3f9e601016a9bfa9e341c87d295a2cc9d5d13a882",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "stop",
+            "rawUsage": {
+              "input": 2427,
+              "output": 1552,
+              "cacheRead": 32000,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 35979,
+              "cost": {
+                "input": 0.012135000000000002,
+                "output": 0.046560000000000004,
+                "cacheRead": 0.016,
+                "cacheWrite": 0,
+                "total": 0.07469500000000001
+              }
+            },
+            "runId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "09a9d9f343694f7abe3edfe5d0c9542a",
+            "requestCount": 1,
+            "inputTokens": 2427,
+            "cachedInputTokens": 32000,
+            "cacheWriteTokens": 0,
+            "outputTokens": 1552,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 34427
+          }
+        ],
+        "eventTypes": {
+          "message_end": 50,
+          "message_start": 50,
+          "turn_end": 8,
+          "turn_start": 8,
+          "message_update": 140,
+          "tool_execution_start": 41,
+          "tool_execution_end": 41,
+          "tool_execution_update": 7,
+          "agent_end": 1,
+          "agent_settled": 1,
+          "worker_stderr": 1,
+          "response": 1,
+          "agent_start": 1
+        },
+        "logCoverageComplete": true,
+        "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+        "taskId": "09a9d9f343694f7abe3edfe5d0c9542a",
+        "latencyMs": 141063,
+        "observedModels": [
+          "openai-codex/gpt-6-astra"
+        ]
+      },
+      {
+        "id": "2e12e75f65274e0fb509a73851e5b0f2",
+        "requestedModel": "zro/glm-5.3",
+        "requestedThinking": "high",
+        "status": "failed",
+        "startedAt": 1788607250811,
+        "finishedAt": 1788607251100,
+        "reportedAggregateUsage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "cost": 0
+        },
+        "turns": 0,
+        "toolCalls": 0,
+        "requests": [],
+        "eventTypes": {
+          "worker_stderr": 1
+        },
+        "logCoverageComplete": true,
+        "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+        "taskId": "2e12e75f65274e0fb509a73851e5b0f2",
+        "latencyMs": 289,
+        "observedModels": []
+      },
+      {
+        "id": "fb04c806b3bf418e8f529e867944644a",
+        "requestedModel": "zro/glm-5.3",
+        "requestedThinking": "high",
+        "status": "failed",
+        "startedAt": 1788607250813,
+        "finishedAt": 1788607251105,
+        "reportedAggregateUsage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "cost": 0
+        },
+        "turns": 0,
+        "toolCalls": 0,
+        "requests": [],
+        "eventTypes": {
+          "worker_stderr": 1
+        },
+        "logCoverageComplete": true,
+        "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+        "taskId": "fb04c806b3bf418e8f529e867944644a",
+        "latencyMs": 292,
+        "observedModels": []
+      },
+      {
+        "id": "47f4d0267cd445debe2ca70ccca58c00",
+        "requestedModel": "zro/glm-5.3",
+        "requestedThinking": "high",
+        "status": "completed",
+        "startedAt": 1788607282605,
+        "finishedAt": 1788607571996,
+        "reportedAggregateUsage": {
+          "input": 25808,
+          "output": 5654,
+          "cacheRead": 99968,
+          "cacheWrite": 0,
+          "cost": 0.6407480000000001
+        },
+        "turns": 11,
+        "toolCalls": 19,
+        "requests": [
+          {
+            "eventOffset": 9037,
+            "timestamp": 1788607284273,
+            "responseId": "resp_0b44ba041349d251016a9bfb3542bc87d2a71beba41fec22de",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 3683,
+              "output": 90,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3773,
+              "cost": {
+                "input": 0.03683,
+                "output": 0.0045000000000000005,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0.041330000000000006
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 3683,
+            "cachedInputTokens": 0,
+            "cacheWriteTokens": 0,
+            "outputTokens": 90,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3683
+          },
+          {
+            "eventOffset": 16767,
+            "timestamp": 1788607292877,
+            "responseId": "resp_0b44ba041349d251016a9bfb3f4f7487d2a684efc9ce0a904d",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 335,
+              "output": 19,
+              "cacheRead": 3456,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3810,
+              "cost": {
+                "input": 0.00335,
+                "output": 0.00095,
+                "cacheRead": 0.003456,
+                "cacheWrite": 0,
+                "total": 0.007756
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 335,
+            "cachedInputTokens": 3456,
+            "cacheWriteTokens": 0,
+            "outputTokens": 19,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3791
+          },
+          {
+            "eventOffset": 25443,
+            "timestamp": 1788607298535,
+            "responseId": "resp_0b44ba041349d251016a9bfb450dd087d28958847841f4d2ea",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 398,
+              "output": 20,
+              "cacheRead": 3584,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 4002,
+              "cost": {
+                "input": 0.00398,
+                "output": 0.001,
+                "cacheRead": 0.003584,
+                "cacheWrite": 0,
+                "total": 0.008564
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 398,
+            "cachedInputTokens": 3584,
+            "cacheWriteTokens": 0,
+            "outputTokens": 20,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3982
+          },
+          {
+            "eventOffset": 52848,
+            "timestamp": 1788607303830,
+            "responseId": "resp_0b44ba041349d251016a9bfb4a3a5887d2b61c2b11461fd641",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 1054,
+              "output": 191,
+              "cacheRead": 3840,
+              "cacheWrite": 0,
+              "reasoning": 8,
+              "totalTokens": 5085,
+              "cost": {
+                "input": 0.01054,
+                "output": 0.009550000000000001,
+                "cacheRead": 0.0038399999999999997,
+                "cacheWrite": 0,
+                "total": 0.023930000000000003
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 1054,
+            "cachedInputTokens": 3840,
+            "cacheWriteTokens": 0,
+            "outputTokens": 191,
+            "reportedReasoningTokens": 8,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 4894
+          },
+          {
+            "eventOffset": 71955,
+            "timestamp": 1788607315259,
+            "responseId": "resp_0b44ba041349d251016a9bfb54ded887d2ba6675d1b2e52481",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 479,
+              "output": 118,
+              "cacheRead": 4736,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 5333,
+              "cost": {
+                "input": 0.00479,
+                "output": 0.0059,
+                "cacheRead": 0.004736,
+                "cacheWrite": 0,
+                "total": 0.015425999999999999
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 479,
+            "cachedInputTokens": 4736,
+            "cacheWriteTokens": 0,
+            "outputTokens": 118,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 5215
+          },
+          {
+            "eventOffset": 151400,
+            "timestamp": 1788607322013,
+            "responseId": "resp_0b44ba041349d251016a9bfb5c7c3087d28b9f738b6c9c3c7d",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 4055,
+              "output": 68,
+              "cacheRead": 4992,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 9115,
+              "cost": {
+                "input": 0.04055,
+                "output": 0.0034000000000000002,
+                "cacheRead": 0.004992,
+                "cacheWrite": 0,
+                "total": 0.048942
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 4055,
+            "cachedInputTokens": 4992,
+            "cacheWriteTokens": 0,
+            "outputTokens": 68,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 9047
+          },
+          {
+            "eventOffset": 219508,
+            "timestamp": 1788607330535,
+            "responseId": "resp_0b44ba041349d251016a9bfb64c3b887d2ba2995886c91fae3",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 3711,
+              "output": 151,
+              "cacheRead": 8832,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 12694,
+              "cost": {
+                "input": 0.037110000000000004,
+                "output": 0.00755,
+                "cacheRead": 0.008832,
+                "cacheWrite": 0,
+                "total": 0.053492000000000005
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 3711,
+            "cachedInputTokens": 8832,
+            "cacheWriteTokens": 0,
+            "outputTokens": 151,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 12543
+          },
+          {
+            "eventOffset": 344653,
+            "timestamp": 1788607339468,
+            "responseId": "resp_0b44ba041349d251016a9bfb6de1f087d2be470729d6d6ad82",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 6577,
+              "output": 216,
+              "cacheRead": 12416,
+              "cacheWrite": 0,
+              "reasoning": 160,
+              "totalTokens": 19209,
+              "cost": {
+                "input": 0.06577000000000001,
+                "output": 0.0108,
+                "cacheRead": 0.012416,
+                "cacheWrite": 0,
+                "total": 0.08898600000000001
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 6577,
+            "cachedInputTokens": 12416,
+            "cacheWriteTokens": 0,
+            "outputTokens": 216,
+            "reportedReasoningTokens": 160,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 18993
+          },
+          {
+            "eventOffset": 365401,
+            "timestamp": 1788607356791,
+            "responseId": "resp_0b44ba041349d251016a9bfb7d5f8c87d2a21c500a3bbb45cb",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 487,
+              "output": 653,
+              "cacheRead": 18816,
+              "cacheWrite": 0,
+              "reasoning": 83,
+              "totalTokens": 19956,
+              "cost": {
+                "input": 0.00487,
+                "output": 0.03265,
+                "cacheRead": 0.018816,
+                "cacheWrite": 0,
+                "total": 0.056336
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 487,
+            "cachedInputTokens": 18816,
+            "cacheWriteTokens": 0,
+            "outputTokens": 653,
+            "reportedReasoningTokens": 83,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 19303
+          },
+          {
+            "eventOffset": 431847,
+            "timestamp": 1788607379969,
+            "responseId": "resp_0b44ba041349d251016a9bfb97366087d28806978cf3f1ad11",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 1394,
+              "output": 3367,
+              "cacheRead": 19072,
+              "cacheWrite": 0,
+              "reasoning": 142,
+              "totalTokens": 23833,
+              "cost": {
+                "input": 0.013940000000000001,
+                "output": 0.16835,
+                "cacheRead": 0.019072,
+                "cacheWrite": 0,
+                "total": 0.201362
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 1394,
+            "cachedInputTokens": 19072,
+            "cacheWriteTokens": 0,
+            "outputTokens": 3367,
+            "reportedReasoningTokens": 142,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 20466
+          },
+          {
+            "eventOffset": 497495,
+            "timestamp": 1788607535452,
+            "responseId": "resp_0b44ba041349d251016a9bfc30cd5487d2be7dbf979e6209b3",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "stop",
+            "rawUsage": {
+              "input": 3635,
+              "output": 761,
+              "cacheRead": 20224,
+              "cacheWrite": 0,
+              "reasoning": 54,
+              "totalTokens": 24620,
+              "cost": {
+                "input": 0.03635,
+                "output": 0.03805,
+                "cacheRead": 0.020224,
+                "cacheWrite": 0,
+                "total": 0.09462399999999999
+              }
+            },
+            "runId": "47f4d0267cd445debe2ca70ccca58c00",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+            "requestCount": 1,
+            "inputTokens": 3635,
+            "cachedInputTokens": 20224,
+            "cacheWriteTokens": 0,
+            "outputTokens": 761,
+            "reportedReasoningTokens": 54,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 23859
+          }
+        ],
+        "eventTypes": {
+          "extension_ui_request": 167,
+          "turn_end": 11,
+          "turn_start": 11,
+          "message_start": 31,
+          "message_update": 79,
+          "message_end": 31,
+          "tool_execution_start": 19,
+          "tool_execution_end": 19,
+          "entry_appended": 11,
+          "tool_execution_update": 13,
+          "agent_end": 1,
+          "agent_settled": 1,
+          "response": 1,
+          "agent_start": 1
+        },
+        "logCoverageComplete": true,
+        "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+        "taskId": "47f4d0267cd445debe2ca70ccca58c00",
+        "latencyMs": 289391,
+        "observedModels": [
+          "openai-codex/gpt-6-astra"
+        ]
+      },
+      {
+        "id": "7d7a5dc2f981451b8da5986ae6fe3555",
+        "requestedModel": "zro/glm-5.3",
+        "requestedThinking": "high",
+        "status": "completed",
+        "startedAt": 1788607282616,
+        "finishedAt": 1788607641037,
+        "reportedAggregateUsage": {
+          "input": 68002,
+          "output": 6652,
+          "cacheRead": 539520,
+          "cacheWrite": 0,
+          "cost": 1.5521399999999999
+        },
+        "turns": 17,
+        "toolCalls": 49,
+        "requests": [
+          {
+            "eventOffset": 8719,
+            "timestamp": 1788607284289,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb354b0487d28e3820dcc2f4f0d2",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 3698,
+              "output": 37,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3735,
+              "cost": {
+                "input": 0.036980000000000006,
+                "output": 0.00185,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0.03883
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 3698,
+            "cachedInputTokens": 0,
+            "cacheWriteTokens": 0,
+            "outputTokens": 37,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3698
+          },
+          {
+            "eventOffset": 16433,
+            "timestamp": 1788607289274,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb3bc52487d28f472ffcefd05121",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 332,
+              "output": 19,
+              "cacheRead": 3456,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3807,
+              "cost": {
+                "input": 0.0033200000000000005,
+                "output": 0.00095,
+                "cacheRead": 0.003456,
+                "cacheWrite": 0,
+                "total": 0.007726
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 332,
+            "cachedInputTokens": 3456,
+            "cacheWriteTokens": 0,
+            "outputTokens": 19,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3788
+          },
+          {
+            "eventOffset": 25153,
+            "timestamp": 1788607293953,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb4063dc87d2af3d26acad1df864",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 395,
+              "output": 20,
+              "cacheRead": 3584,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3999,
+              "cost": {
+                "input": 0.00395,
+                "output": 0.001,
+                "cacheRead": 0.003584,
+                "cacheWrite": 0,
+                "total": 0.008534
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 395,
+            "cachedInputTokens": 3584,
+            "cacheWriteTokens": 0,
+            "outputTokens": 20,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3979
+          },
+          {
+            "eventOffset": 53027,
+            "timestamp": 1788607299625,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb443b4487d2b6b22ef538229139",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 1051,
+              "output": 173,
+              "cacheRead": 3840,
+              "cacheWrite": 0,
+              "reasoning": 24,
+              "totalTokens": 5064,
+              "cost": {
+                "input": 0.01051,
+                "output": 0.00865,
+                "cacheRead": 0.0038399999999999997,
+                "cacheWrite": 0,
+                "total": 0.023
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 1051,
+            "cachedInputTokens": 3840,
+            "cacheWriteTokens": 0,
+            "outputTokens": 173,
+            "reportedReasoningTokens": 24,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 4891
+          },
+          {
+            "eventOffset": 72238,
+            "timestamp": 1788607308051,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb4e4e8887d2873ab795a436eaac",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 471,
+              "output": 148,
+              "cacheRead": 4736,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 5355,
+              "cost": {
+                "input": 0.004710000000000001,
+                "output": 0.0074,
+                "cacheRead": 0.004736,
+                "cacheWrite": 0,
+                "total": 0.016846
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 471,
+            "cachedInputTokens": 4736,
+            "cacheWriteTokens": 0,
+            "outputTokens": 148,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 5207
+          },
+          {
+            "eventOffset": 227822,
+            "timestamp": 1788607316330,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb56175c87d2b8343999052395e1",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 7909,
+              "output": 134,
+              "cacheRead": 4992,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 13035,
+              "cost": {
+                "input": 0.07909000000000001,
+                "output": 0.0067,
+                "cacheRead": 0.004992,
+                "cacheWrite": 0,
+                "total": 0.090782
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 7909,
+            "cachedInputTokens": 4992,
+            "cacheWriteTokens": 0,
+            "outputTokens": 134,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 12901
+          },
+          {
+            "eventOffset": 465678,
+            "timestamp": 1788607325003,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb5f60f887d29128c702f4e48687",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 13069,
+              "output": 255,
+              "cacheRead": 12672,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 25996,
+              "cost": {
+                "input": 0.13069,
+                "output": 0.012750000000000001,
+                "cacheRead": 0.012672,
+                "cacheWrite": 0,
+                "total": 0.156112
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 13069,
+            "cachedInputTokens": 12672,
+            "cacheWriteTokens": 0,
+            "outputTokens": 255,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 25741
+          },
+          {
+            "eventOffset": 638402,
+            "timestamp": 1788607337886,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb6c386487d2864066c8809a4e8a",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 9814,
+              "output": 222,
+              "cacheRead": 25600,
+              "cacheWrite": 0,
+              "reasoning": 27,
+              "totalTokens": 35636,
+              "cost": {
+                "input": 0.09814,
+                "output": 0.0111,
+                "cacheRead": 0.025599999999999998,
+                "cacheWrite": 0,
+                "total": 0.13484000000000002
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 9814,
+            "cachedInputTokens": 25600,
+            "cacheWriteTokens": 0,
+            "outputTokens": 222,
+            "reportedReasoningTokens": 27,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 35414
+          },
+          {
+            "eventOffset": 810166,
+            "timestamp": 1788607350109,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb78b9ec87d29ac967e45ae3b3ce",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 9291,
+              "output": 150,
+              "cacheRead": 35200,
+              "cacheWrite": 0,
+              "reasoning": 85,
+              "totalTokens": 44641,
+              "cost": {
+                "input": 0.09291,
+                "output": 0.007500000000000001,
+                "cacheRead": 0.035199999999999995,
+                "cacheWrite": 0,
+                "total": 0.13561
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 9291,
+            "cachedInputTokens": 35200,
+            "cacheWriteTokens": 0,
+            "outputTokens": 150,
+            "reportedReasoningTokens": 85,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 44491
+          },
+          {
+            "eventOffset": 834789,
+            "timestamp": 1788607371516,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb8be8a487d2a2de083bccedf5d4",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 451,
+              "output": 310,
+              "cacheRead": 44288,
+              "cacheWrite": 0,
+              "reasoning": 17,
+              "totalTokens": 45049,
+              "cost": {
+                "input": 0.00451,
+                "output": 0.0155,
+                "cacheRead": 0.044288,
+                "cacheWrite": 0,
+                "total": 0.064298
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 451,
+            "cachedInputTokens": 44288,
+            "cacheWriteTokens": 0,
+            "outputTokens": 310,
+            "reportedReasoningTokens": 17,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 44739
+          },
+          {
+            "eventOffset": 1018395,
+            "timestamp": 1788607382932,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfb98ecf887d2a9c41edf4e82b9f6",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 9092,
+              "output": 394,
+              "cacheRead": 44544,
+              "cacheWrite": 0,
+              "reasoning": 106,
+              "totalTokens": 54030,
+              "cost": {
+                "input": 0.09092,
+                "output": 0.019700000000000002,
+                "cacheRead": 0.044544,
+                "cacheWrite": 0,
+                "total": 0.155164
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 9092,
+            "cachedInputTokens": 44544,
+            "cacheWriteTokens": 0,
+            "outputTokens": 394,
+            "reportedReasoningTokens": 106,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 53636
+          },
+          {
+            "eventOffset": 1120303,
+            "timestamp": 1788607405889,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfbafb25487d2a091b3336bb2c4dd",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 5009,
+              "output": 118,
+              "cacheRead": 53504,
+              "cacheWrite": 0,
+              "reasoning": 83,
+              "totalTokens": 58631,
+              "cost": {
+                "input": 0.05009,
+                "output": 0.0059,
+                "cacheRead": 0.053503999999999996,
+                "cacheWrite": 0,
+                "total": 0.10949400000000001
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 5009,
+            "cachedInputTokens": 53504,
+            "cacheWriteTokens": 0,
+            "outputTokens": 118,
+            "reportedReasoningTokens": 83,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 58513
+          },
+          {
+            "eventOffset": 1132487,
+            "timestamp": 1788607425661,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfbc26cf087d2b73ac7b84561f89a",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 278,
+              "output": 315,
+              "cacheRead": 58368,
+              "cacheWrite": 0,
+              "reasoning": 262,
+              "totalTokens": 58961,
+              "cost": {
+                "input": 0.0027800000000000004,
+                "output": 0.01575,
+                "cacheRead": 0.058367999999999996,
+                "cacheWrite": 0,
+                "total": 0.076898
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 278,
+            "cachedInputTokens": 58368,
+            "cacheWriteTokens": 0,
+            "outputTokens": 315,
+            "reportedReasoningTokens": 262,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 58646
+          },
+          {
+            "eventOffset": 1179003,
+            "timestamp": 1788607443965,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfbd6814887d29a0d1061216c50c3",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 2289,
+              "output": 425,
+              "cacheRead": 58496,
+              "cacheWrite": 0,
+              "reasoning": 255,
+              "totalTokens": 61210,
+              "cost": {
+                "input": 0.02289,
+                "output": 0.02125,
+                "cacheRead": 0.058496,
+                "cacheWrite": 0,
+                "total": 0.102636
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 2289,
+            "cachedInputTokens": 58496,
+            "cacheWriteTokens": 0,
+            "outputTokens": 425,
+            "reportedReasoningTokens": 255,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 60785
+          },
+          {
+            "eventOffset": 1226797,
+            "timestamp": 1788607470133,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfbeee27487d281087559e1dde79e",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 726,
+              "output": 3208,
+              "cacheRead": 60544,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 64478,
+              "cost": {
+                "input": 0.007260000000000001,
+                "output": 0.16040000000000001,
+                "cacheRead": 0.060544,
+                "cacheWrite": 0,
+                "total": 0.22820400000000002
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 726,
+            "cachedInputTokens": 60544,
+            "cacheWriteTokens": 0,
+            "outputTokens": 3208,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 61270
+          },
+          {
+            "eventOffset": 1310641,
+            "timestamp": 1788607604294,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfc75a44487d2a9bc2df9fdb21459",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 3736,
+              "output": 183,
+              "cacheRead": 61056,
+              "cacheWrite": 0,
+              "reasoning": 68,
+              "totalTokens": 64975,
+              "cost": {
+                "input": 0.037360000000000004,
+                "output": 0.00915,
+                "cacheRead": 0.061056,
+                "cacheWrite": 0,
+                "total": 0.107566
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 3736,
+            "cachedInputTokens": 61056,
+            "cacheWriteTokens": 0,
+            "outputTokens": 183,
+            "reportedReasoningTokens": 68,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 64792
+          },
+          {
+            "eventOffset": 1329088,
+            "timestamp": 1788607615385,
+            "responseId": "resp_0079b13ba88ddb6a016a9bfc81bafc87d29e96c23ec7a75f43",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "stop",
+            "rawUsage": {
+              "input": 391,
+              "output": 541,
+              "cacheRead": 64640,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 65572,
+              "cost": {
+                "input": 0.00391,
+                "output": 0.02705,
+                "cacheRead": 0.06464,
+                "cacheWrite": 0,
+                "total": 0.0956
+              }
+            },
+            "runId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+            "requestCount": 1,
+            "inputTokens": 391,
+            "cachedInputTokens": 64640,
+            "cacheWriteTokens": 0,
+            "outputTokens": 541,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 65031
+          }
+        ],
+        "eventTypes": {
+          "message_end": 68,
+          "message_start": 68,
+          "entry_appended": 17,
+          "extension_ui_request": 282,
+          "turn_end": 17,
+          "turn_start": 17,
+          "message_update": 193,
+          "tool_execution_start": 49,
+          "tool_execution_end": 49,
+          "tool_execution_update": 17,
+          "agent_end": 1,
+          "agent_settled": 1,
+          "response": 1,
+          "agent_start": 1
+        },
+        "logCoverageComplete": true,
+        "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+        "taskId": "7d7a5dc2f981451b8da5986ae6fe3555",
+        "latencyMs": 358421,
+        "observedModels": [
+          "openai-codex/gpt-6-astra"
+        ]
+      },
+      {
+        "id": "cf298533aafb4846b1bd92f8402d8d12",
+        "requestedModel": "zro/glm-5.3",
+        "requestedThinking": "high",
+        "status": "stopped",
+        "startedAt": 1788607662571,
+        "finishedAt": 1788607748850,
+        "reportedAggregateUsage": {
+          "input": 40843,
+          "output": 827,
+          "cacheRead": 43904,
+          "cacheWrite": 0,
+          "cost": 0.493684
+        },
+        "turns": 6,
+        "toolCalls": 18,
+        "requests": [
+          {
+            "eventOffset": 7107,
+            "timestamp": 1788607664077,
+            "responseId": "resp_0cbb9827bd7093d7016a9bfcb12f8c87d287d7e6f8473b3698",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 3531,
+              "output": 38,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3569,
+              "cost": {
+                "input": 0.03531,
+                "output": 0.0019,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0.03721
+              }
+            },
+            "runId": "cf298533aafb4846b1bd92f8402d8d12",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "cf298533aafb4846b1bd92f8402d8d12",
+            "requestCount": 1,
+            "inputTokens": 3531,
+            "cachedInputTokens": 0,
+            "cacheWriteTokens": 0,
+            "outputTokens": 38,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3531
+          },
+          {
+            "eventOffset": 14986,
+            "timestamp": 1788607668714,
+            "responseId": "resp_0cbb9827bd7093d7016a9bfcb73c9c87d2a958f4734f876433",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 307,
+              "output": 19,
+              "cacheRead": 3328,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3654,
+              "cost": {
+                "input": 0.0030700000000000002,
+                "output": 0.00095,
+                "cacheRead": 0.003328,
+                "cacheWrite": 0,
+                "total": 0.007348
+              }
+            },
+            "runId": "cf298533aafb4846b1bd92f8402d8d12",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "cf298533aafb4846b1bd92f8402d8d12",
+            "requestCount": 1,
+            "inputTokens": 307,
+            "cachedInputTokens": 3328,
+            "cacheWriteTokens": 0,
+            "outputTokens": 19,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3635
+          },
+          {
+            "eventOffset": 26600,
+            "timestamp": 1788607673686,
+            "responseId": "resp_0cbb9827bd7093d7016a9bfcbc569887d2aea1c41dc7b254e9",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 370,
+              "output": 184,
+              "cacheRead": 3456,
+              "cacheWrite": 0,
+              "reasoning": 11,
+              "totalTokens": 4010,
+              "cost": {
+                "input": 0.0037,
+                "output": 0.0092,
+                "cacheRead": 0.003456,
+                "cacheWrite": 0,
+                "total": 0.016356
+              }
+            },
+            "runId": "cf298533aafb4846b1bd92f8402d8d12",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "cf298533aafb4846b1bd92f8402d8d12",
+            "requestCount": 1,
+            "inputTokens": 370,
+            "cachedInputTokens": 3456,
+            "cacheWriteTokens": 0,
+            "outputTokens": 184,
+            "reportedReasoningTokens": 11,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3826
+          },
+          {
+            "eventOffset": 50157,
+            "timestamp": 1788607683815,
+            "responseId": "resp_0cbb9827bd7093d7016a9bfcc69c9087d2a496971512c2ef20",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 608,
+              "output": 160,
+              "cacheRead": 3584,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 4352,
+              "cost": {
+                "input": 0.00608,
+                "output": 0.008,
+                "cacheRead": 0.003584,
+                "cacheWrite": 0,
+                "total": 0.017664
+              }
+            },
+            "runId": "cf298533aafb4846b1bd92f8402d8d12",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "cf298533aafb4846b1bd92f8402d8d12",
+            "requestCount": 1,
+            "inputTokens": 608,
+            "cachedInputTokens": 3584,
+            "cacheWriteTokens": 0,
+            "outputTokens": 160,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 4192
+          },
+          {
+            "eventOffset": 508742,
+            "timestamp": 1788607694790,
+            "responseId": "resp_0cbb9827bd7093d7016a9bfcd0b43487d2abe21cc8d1bbc964",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 25796,
+              "output": 144,
+              "cacheRead": 3968,
+              "cacheWrite": 0,
+              "reasoning": 10,
+              "totalTokens": 29908,
+              "cost": {
+                "input": 0.25796,
+                "output": 0.007200000000000001,
+                "cacheRead": 0.003968,
+                "cacheWrite": 0,
+                "total": 0.26912800000000003
+              }
+            },
+            "runId": "cf298533aafb4846b1bd92f8402d8d12",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "cf298533aafb4846b1bd92f8402d8d12",
+            "requestCount": 1,
+            "inputTokens": 25796,
+            "cachedInputTokens": 3968,
+            "cacheWriteTokens": 0,
+            "outputTokens": 144,
+            "reportedReasoningTokens": 10,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 29764
+          },
+          {
+            "eventOffset": 687289,
+            "timestamp": 1788607703481,
+            "responseId": "resp_0cbb9827bd7093d7016a9bfcd9dc2887d2a487ca61ddfbc91c",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 10231,
+              "output": 282,
+              "cacheRead": 29568,
+              "cacheWrite": 0,
+              "reasoning": 260,
+              "totalTokens": 40081,
+              "cost": {
+                "input": 0.10231000000000001,
+                "output": 0.014100000000000001,
+                "cacheRead": 0.029567999999999997,
+                "cacheWrite": 0,
+                "total": 0.145978
+              }
+            },
+            "runId": "cf298533aafb4846b1bd92f8402d8d12",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "cf298533aafb4846b1bd92f8402d8d12",
+            "requestCount": 1,
+            "inputTokens": 10231,
+            "cachedInputTokens": 29568,
+            "cacheWriteTokens": 0,
+            "outputTokens": 282,
+            "reportedReasoningTokens": 260,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 39799
+          }
+        ],
+        "eventTypes": {
+          "extension_ui_request": 109,
+          "turn_end": 6,
+          "turn_start": 7,
+          "message_start": 26,
+          "message_update": 70,
+          "message_end": 25,
+          "tool_execution_start": 18,
+          "tool_execution_end": 18,
+          "entry_appended": 6,
+          "response": 1,
+          "agent_start": 1,
+          "tool_execution_update": 6
+        },
+        "logCoverageComplete": true,
+        "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+        "taskId": "cf298533aafb4846b1bd92f8402d8d12",
+        "latencyMs": 86279,
+        "observedModels": [
+          "openai-codex/gpt-6-astra"
+        ]
+      },
+      {
+        "id": "c74b68d98d5043cd8d7672f316f159c0",
+        "requestedModel": "openai-codex/gpt-6-astra",
+        "requestedThinking": "high",
+        "status": "completed",
+        "startedAt": 1788607932797,
+        "finishedAt": 1788608330402,
+        "reportedAggregateUsage": {
+          "input": 80679,
+          "output": 9427,
+          "cacheRead": 857216,
+          "cacheWrite": 0,
+          "cost": 2.135356
+        },
+        "turns": 22,
+        "toolCalls": 78,
+        "requests": [
+          {
+            "eventOffset": 7580,
+            "timestamp": 1788607933051,
+            "responseId": "resp_0b610743caf6da3f016a9bfdbe260487d2b98fae43c9004c0a",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 3764,
+              "output": 38,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3802,
+              "cost": {
+                "input": 0.03764,
+                "output": 0.0019,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0.03954
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 3764,
+            "cachedInputTokens": 0,
+            "cacheWriteTokens": 0,
+            "outputTokens": 38,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3764
+          },
+          {
+            "eventOffset": 15426,
+            "timestamp": 1788607937457,
+            "responseId": "resp_0b610743caf6da3f016a9bfdc3f0f487d29fd0e0c3615a4a35",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 3868,
+              "output": 97,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 3965,
+              "cost": {
+                "input": 0.038680000000000006,
+                "output": 0.00485,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0.043530000000000006
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 3868,
+            "cachedInputTokens": 0,
+            "cacheWriteTokens": 0,
+            "outputTokens": 97,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 3868
+          },
+          {
+            "eventOffset": 63149,
+            "timestamp": 1788607945662,
+            "responseId": "resp_0b610743caf6da3f016a9bfdcc2a2887d2acd3b2851800577c",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 5866,
+              "output": 299,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 53,
+              "totalTokens": 6165,
+              "cost": {
+                "input": 0.058660000000000004,
+                "output": 0.014950000000000001,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0.07361000000000001
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 5866,
+            "cachedInputTokens": 0,
+            "cacheWriteTokens": 0,
+            "outputTokens": 299,
+            "reportedReasoningTokens": 53,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 5866
+          },
+          {
+            "eventOffset": 251069,
+            "timestamp": 1788607959406,
+            "responseId": "resp_0b610743caf6da3f016a9bfdd9ec2487d2967ac3a2fdf6e59e",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 14964,
+              "output": 464,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "reasoning": 183,
+              "totalTokens": 15428,
+              "cost": {
+                "input": 0.14964000000000002,
+                "output": 0.023200000000000002,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0.17284000000000002
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 14964,
+            "cachedInputTokens": 0,
+            "cacheWriteTokens": 0,
+            "outputTokens": 464,
+            "reportedReasoningTokens": 183,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 14964
+          },
+          {
+            "eventOffset": 555574,
+            "timestamp": 1788607980201,
+            "responseId": "resp_0b610743caf6da3f016a9bfdeead6887d28fe136c8f38e12c5",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 17003,
+              "output": 277,
+              "cacheRead": 14720,
+              "cacheWrite": 0,
+              "reasoning": 25,
+              "totalTokens": 32000,
+              "cost": {
+                "input": 0.17003000000000001,
+                "output": 0.013850000000000001,
+                "cacheRead": 0.014719999999999999,
+                "cacheWrite": 0,
+                "total": 0.19860000000000003
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 17003,
+            "cachedInputTokens": 14720,
+            "cacheWriteTokens": 0,
+            "outputTokens": 277,
+            "reportedReasoningTokens": 25,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 31723
+          },
+          {
+            "eventOffset": 742074,
+            "timestamp": 1788607994525,
+            "responseId": "resp_0b610743caf6da3f016a9bfdfd0e4087d2b14d53502320f29b",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 9479,
+              "output": 383,
+              "cacheRead": 31488,
+              "cacheWrite": 0,
+              "reasoning": 20,
+              "totalTokens": 41350,
+              "cost": {
+                "input": 0.09479000000000001,
+                "output": 0.01915,
+                "cacheRead": 0.031487999999999995,
+                "cacheWrite": 0,
+                "total": 0.145428
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 9479,
+            "cachedInputTokens": 31488,
+            "cacheWriteTokens": 0,
+            "outputTokens": 383,
+            "reportedReasoningTokens": 20,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 40967
+          },
+          {
+            "eventOffset": 829074,
+            "timestamp": 1788608012965,
+            "responseId": "resp_0b610743caf6da3f016a9bfe0e701c87d2881a230b51d1ad34",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 4124,
+              "output": 768,
+              "cacheRead": 40832,
+              "cacheWrite": 0,
+              "reasoning": 199,
+              "totalTokens": 45724,
+              "cost": {
+                "input": 0.041240000000000006,
+                "output": 0.038400000000000004,
+                "cacheRead": 0.040832,
+                "cacheWrite": 0,
+                "total": 0.12047200000000002
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 4124,
+            "cachedInputTokens": 40832,
+            "cacheWriteTokens": 0,
+            "outputTokens": 768,
+            "reportedReasoningTokens": 199,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 44956
+          },
+          {
+            "eventOffset": 853612,
+            "timestamp": 1788608039472,
+            "responseId": "resp_0b610743caf6da3f016a9bfe29f9fc87d2b29df7c60a3f691b",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 954,
+              "output": 317,
+              "cacheRead": 44800,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 46071,
+              "cost": {
+                "input": 0.009540000000000002,
+                "output": 0.01585,
+                "cacheRead": 0.0448,
+                "cacheWrite": 0,
+                "total": 0.07019
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 954,
+            "cachedInputTokens": 44800,
+            "cacheWriteTokens": 0,
+            "outputTokens": 317,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 45754
+          },
+          {
+            "eventOffset": 911460,
+            "timestamp": 1788608053671,
+            "responseId": "resp_0b610743caf6da3f016a9bfe3809ec87d2b53cca531949ec2d",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 2554,
+              "output": 260,
+              "cacheRead": 45568,
+              "cacheWrite": 0,
+              "reasoning": 18,
+              "totalTokens": 48382,
+              "cost": {
+                "input": 0.025540000000000004,
+                "output": 0.013000000000000001,
+                "cacheRead": 0.045568,
+                "cacheWrite": 0,
+                "total": 0.084108
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 2554,
+            "cachedInputTokens": 45568,
+            "cacheWriteTokens": 0,
+            "outputTokens": 260,
+            "reportedReasoningTokens": 18,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 48122
+          },
+          {
+            "eventOffset": 961052,
+            "timestamp": 1788608065511,
+            "responseId": "resp_0b610743caf6da3f016a9bfe42690887d2a0187e12e9280dd5",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 2038,
+              "output": 316,
+              "cacheRead": 48000,
+              "cacheWrite": 0,
+              "reasoning": 144,
+              "totalTokens": 50354,
+              "cost": {
+                "input": 0.020380000000000002,
+                "output": 0.0158,
+                "cacheRead": 0.048,
+                "cacheWrite": 0,
+                "total": 0.08418
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 2038,
+            "cachedInputTokens": 48000,
+            "cacheWriteTokens": 0,
+            "outputTokens": 316,
+            "reportedReasoningTokens": 144,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 50038
+          },
+          {
+            "eventOffset": 1041977,
+            "timestamp": 1788608077444,
+            "responseId": "resp_0b610743caf6da3f016a9bfe4e2fd087d2bf159833c5743968",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 3881,
+              "output": 888,
+              "cacheRead": 49920,
+              "cacheWrite": 0,
+              "reasoning": 49,
+              "totalTokens": 54689,
+              "cost": {
+                "input": 0.038810000000000004,
+                "output": 0.0444,
+                "cacheRead": 0.04992,
+                "cacheWrite": 0,
+                "total": 0.13313
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 3881,
+            "cachedInputTokens": 49920,
+            "cacheWriteTokens": 0,
+            "outputTokens": 888,
+            "reportedReasoningTokens": 49,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 53801
+          },
+          {
+            "eventOffset": 1060285,
+            "timestamp": 1788608106271,
+            "responseId": "resp_0b610743caf6da3f016a9bfe6ce02087d2a871e78230bae08d",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 1087,
+              "output": 89,
+              "cacheRead": 53632,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 54808,
+              "cost": {
+                "input": 0.010870000000000001,
+                "output": 0.00445,
+                "cacheRead": 0.053632,
+                "cacheWrite": 0,
+                "total": 0.068952
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 1087,
+            "cachedInputTokens": 53632,
+            "cacheWriteTokens": 0,
+            "outputTokens": 89,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 54719
+          },
+          {
+            "eventOffset": 1073572,
+            "timestamp": 1788608114759,
+            "responseId": "resp_0b610743caf6da3f016a9bfe75710087d2a3f509b2ac7514da",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 394,
+              "output": 267,
+              "cacheRead": 54528,
+              "cacheWrite": 0,
+              "reasoning": 15,
+              "totalTokens": 55189,
+              "cost": {
+                "input": 0.00394,
+                "output": 0.01335,
+                "cacheRead": 0.054528,
+                "cacheWrite": 0,
+                "total": 0.07181799999999999
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 394,
+            "cachedInputTokens": 54528,
+            "cacheWriteTokens": 0,
+            "outputTokens": 267,
+            "reportedReasoningTokens": 15,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 54922
+          },
+          {
+            "eventOffset": 1128550,
+            "timestamp": 1788608129915,
+            "responseId": "resp_0b610743caf6da3f016a9bfe84143887d2aa88485f3e6a2222",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 2555,
+              "output": 1172,
+              "cacheRead": 54784,
+              "cacheWrite": 0,
+              "reasoning": 236,
+              "totalTokens": 58511,
+              "cost": {
+                "input": 0.025550000000000003,
+                "output": 0.058600000000000006,
+                "cacheRead": 0.054784,
+                "cacheWrite": 0,
+                "total": 0.138934
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 2555,
+            "cachedInputTokens": 54784,
+            "cacheWriteTokens": 0,
+            "outputTokens": 1172,
+            "reportedReasoningTokens": 236,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 57339
+          },
+          {
+            "eventOffset": 1149862,
+            "timestamp": 1788608171540,
+            "responseId": "resp_0b610743caf6da3f016a9bfeae34d087d2bf96c5a49928ba8f",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 1324,
+              "output": 89,
+              "cacheRead": 57216,
+              "cacheWrite": 0,
+              "reasoning": 0,
+              "totalTokens": 58629,
+              "cost": {
+                "input": 0.013240000000000002,
+                "output": 0.00445,
+                "cacheRead": 0.057215999999999996,
+                "cacheWrite": 0,
+                "total": 0.074906
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 1324,
+            "cachedInputTokens": 57216,
+            "cacheWriteTokens": 0,
+            "outputTokens": 89,
+            "reportedReasoningTokens": 0,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 58540
+          },
+          {
+            "eventOffset": 1154455,
+            "timestamp": 1788608181381,
+            "responseId": "resp_0b610743caf6da3f016a9bfeb7c65087d28f414d237ba66358",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "error",
+            "rawUsage": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "totalTokens": 0,
+              "cost": {
+                "input": 0,
+                "output": 0,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 0,
+            "cachedInputTokens": 0,
+            "cacheWriteTokens": 0,
+            "outputTokens": 0,
+            "reportedReasoningTokens": null,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 0
+          },
+          {
+            "eventOffset": 1433456,
+            "timestamp": 1788608189454,
+            "responseId": "resp_0b610743caf6da3f016a9bfebe2aa887d29f3010dd54ec30bc",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 152,
+              "output": 240,
+              "cacheRead": 58496,
+              "cacheWrite": 0,
+              "reasoning": 201,
+              "totalTokens": 58888,
+              "cost": {
+                "input": 0.00152,
+                "output": 0.012,
+                "cacheRead": 0.058496,
+                "cacheWrite": 0,
+                "total": 0.072016
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 152,
+            "cachedInputTokens": 58496,
+            "cacheWriteTokens": 0,
+            "outputTokens": 240,
+            "reportedReasoningTokens": 201,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 58648
+          },
+          {
+            "eventOffset": 1453662,
+            "timestamp": 1788608203256,
+            "responseId": "resp_0b610743caf6da3f016a9bfecc314087d296ec0801b89b1d76",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 689,
+              "output": 231,
+              "cacheRead": 58496,
+              "cacheWrite": 0,
+              "reasoning": 26,
+              "totalTokens": 59416,
+              "cost": {
+                "input": 0.00689,
+                "output": 0.011550000000000001,
+                "cacheRead": 0.058496,
+                "cacheWrite": 0,
+                "total": 0.076936
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 689,
+            "cachedInputTokens": 58496,
+            "cacheWriteTokens": 0,
+            "outputTokens": 231,
+            "reportedReasoningTokens": 26,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 59185
+          },
+          {
+            "eventOffset": 1498437,
+            "timestamp": 1788608219486,
+            "responseId": "resp_0b610743caf6da3f016a9bfedc199487d29ffd46f675d3ab23",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 1597,
+              "output": 1802,
+              "cacheRead": 59008,
+              "cacheWrite": 0,
+              "reasoning": 331,
+              "totalTokens": 62407,
+              "cost": {
+                "input": 0.01597,
+                "output": 0.0901,
+                "cacheRead": 0.059008,
+                "cacheWrite": 0,
+                "total": 0.165078
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 1597,
+            "cachedInputTokens": 59008,
+            "cacheWriteTokens": 0,
+            "outputTokens": 1802,
+            "reportedReasoningTokens": 331,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 60605
+          },
+          {
+            "eventOffset": 1531798,
+            "timestamp": 1788608277624,
+            "responseId": "resp_0b610743caf6da3f016a9bff1649ec87d2a49d51d6165a56c1",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 2018,
+              "output": 237,
+              "cacheRead": 60416,
+              "cacheWrite": 0,
+              "reasoning": 19,
+              "totalTokens": 62671,
+              "cost": {
+                "input": 0.02018,
+                "output": 0.011850000000000001,
+                "cacheRead": 0.060416,
+                "cacheWrite": 0,
+                "total": 0.092446
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 2018,
+            "cachedInputTokens": 60416,
+            "cacheWriteTokens": 0,
+            "outputTokens": 237,
+            "reportedReasoningTokens": 19,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 62434
+          },
+          {
+            "eventOffset": 1560909,
+            "timestamp": 1788608288247,
+            "responseId": "resp_0b610743caf6da3f016a9bff20f9b887d2a5a7101e48ea6fe8",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "toolUse",
+            "rawUsage": {
+              "input": 1127,
+              "output": 950,
+              "cacheRead": 62208,
+              "cacheWrite": 0,
+              "reasoning": 215,
+              "totalTokens": 64285,
+              "cost": {
+                "input": 0.01127,
+                "output": 0.0475,
+                "cacheRead": 0.062208,
+                "cacheWrite": 0,
+                "total": 0.120978
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 1127,
+            "cachedInputTokens": 62208,
+            "cacheWriteTokens": 0,
+            "outputTokens": 950,
+            "reportedReasoningTokens": 215,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 63335
+          },
+          {
+            "eventOffset": 1586831,
+            "timestamp": 1788608320256,
+            "responseId": "resp_0b610743caf6da3f016a9bff41047887d2a2ea222358617a3b",
+            "provider": "openai-codex",
+            "model": "gpt-6-astra",
+            "api": "openai-codex-responses",
+            "stopReason": "stop",
+            "rawUsage": {
+              "input": 1241,
+              "output": 243,
+              "cacheRead": 63104,
+              "cacheWrite": 0,
+              "reasoning": 113,
+              "totalTokens": 64588,
+              "cost": {
+                "input": 0.012410000000000001,
+                "output": 0.012150000000000001,
+                "cacheRead": 0.063104,
+                "cacheWrite": 0,
+                "total": 0.08766399999999999
+              }
+            },
+            "runId": "c74b68d98d5043cd8d7672f316f159c0",
+            "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+            "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+            "requestCount": 1,
+            "inputTokens": 1241,
+            "cachedInputTokens": 63104,
+            "cacheWriteTokens": 0,
+            "outputTokens": 243,
+            "reportedReasoningTokens": 113,
+            "billedSpend": null,
+            "credits": null,
+            "latencyMs": null,
+            "retries": null,
+            "normalizedPromptTokens": 64345
+          }
+        ],
+        "eventTypes": {
+          "message_update": 309,
+          "message_end": 102,
+          "tool_execution_start": 78,
+          "tool_execution_end": 78,
+          "message_start": 102,
+          "turn_end": 22,
+          "turn_start": 22,
+          "tool_execution_update": 22,
+          "agent_end": 2,
+          "auto_retry_start": 1,
+          "agent_start": 2,
+          "auto_retry_end": 1,
+          "agent_settled": 1,
+          "queue_update": 2,
+          "response": 2
+        },
+        "logCoverageComplete": true,
+        "parentId": "session:01a07148-c07d-74bc-8203-ca3482b81659",
+        "taskId": "c74b68d98d5043cd8d7672f316f159c0",
+        "latencyMs": 397605,
+        "observedModels": [
+          "openai-codex/gpt-6-astra"
+        ]
+      }
+    ],
+    "totals": {
+      "terminalAssistantResponses": 64,
+      "input": 251073,
+      "output": 25574,
+      "cacheRead": 1643392,
+      "cacheWrite": 0,
+      "reasoning": 3634,
+      "totalTokens": 1920039,
+      "harnessEstimatedNominalUsd": 5.142445,
+      "missingUsage": 0,
+      "normalizationMismatchCount": 0
+    }
+  },
+  "tests": [
+    {
+      "name": "parent_fresh_build_stage_targeted",
+      "files": 14,
+      "passed": 131,
+      "failed": 0,
+      "skipped": 0,
+      "durationSeconds": 15.26,
+      "log": "audits/efficiency-2026-09-05/local-tests.log",
+      "scope": "source+freshly_staged_local_MCP_not_live_Kiro"
+    },
+    {
+      "name": "independent_astra_targeted",
+      "files": 6,
+      "passed": 48,
+      "failed": 0,
+      "skipped": 0,
+      "durationSeconds": null,
+      "log": "audits/efficiency-2026-09-05/validation-tests.log"
+    },
+    {
+      "name": "independent_astra_process_selectors",
+      "files": 1,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 7,
+      "durationSeconds": null,
+      "log": "audits/efficiency-2026-09-05/validation-process-tests.log"
+    }
+  ],
+  "promptInventory": {
+    "method": "Node String.length UTF16 and Buffer.byteLength UTF8",
+    "actualKiroPayloadObserved": false,
+    "agentPrompt": {
+      "utf16Chars": 1567,
+      "utf8Bytes": 1569
+    },
+    "fullSkill": {
+      "utf16Chars": 3103,
+      "utf8Bytes": 3105
+    },
+    "skillBody": {
+      "utf16Chars": 2691,
+      "utf8Bytes": 2693
+    },
+    "threeToolDescriptions": {
+      "utf16Chars": 591
+    },
+    "hostSystemNativeSchemasStrictSteeringBootstrapTokens": null
+  },
+  "unperformedScenarios": [
+    "real Kiro ordinary turns and active model payload",
+    "two real compactions with full user-constraint/task-state ledger",
+    "same-process host resume support",
+    "new-host Kiro conversation resume",
+    "kill during actual checkpoint publication",
+    "native delegated worker failure/retry without duplicated completed work",
+    "Kiro credit attribution and provider billing reconciliation",
+    "paid baseline/candidate task pilot"
+  ],
+  "finalBuild": {
+    "command": "pnpm run build",
+    "startedAt": 1788609229366,
+    "finishedAt": 1788609232466,
+    "exitCode": 0,
+    "passed": true,
+    "log": "audits/efficiency-2026-09-05/final-build.log"
+  },
+  "localRuntimeProbe": {
+    "kind": "built-library-local-probe-not-Kiro",
+    "pid": 120972,
+    "baselineOnly": true,
+    "runtimeInstances": 1,
+    "guestExecutions": 8,
+    "assertionsPassed": true,
+    "sourceArtifactChars": 120000,
+    "largeNestedTextChars": 12000,
+    "compactReturnedJsonChars": 36,
+    "rows": [
+      {
+        "name": "cold",
+        "timestamp": "2026-09-05T11:35:13.371Z",
+        "status": "succeeded",
+        "success": true,
+        "elapsedMs": 352.506048,
+        "value": {
+          "length": 12000,
+          "sample": "xxxxxxxx"
+        },
+        "error": null,
+        "typeErrors": null,
+        "nestedCalls": 1
+      },
+      {
+        "name": "warm-1",
+        "timestamp": "2026-09-05T11:35:13.392Z",
+        "status": "succeeded",
+        "success": true,
+        "elapsedMs": 20.189069000000018,
+        "value": {
+          "length": 12000,
+          "sample": "xxxxxxxx"
+        },
+        "error": null,
+        "typeErrors": null,
+        "nestedCalls": 1
+      },
+      {
+        "name": "warm-2",
+        "timestamp": "2026-09-05T11:35:13.406Z",
+        "status": "succeeded",
+        "success": true,
+        "elapsedMs": 14.064565000000016,
+        "value": {
+          "length": 12000,
+          "sample": "xxxxxxxx"
+        },
+        "error": null,
+        "typeErrors": null,
+        "nestedCalls": 1
+      },
+      {
+        "name": "warm-3",
+        "timestamp": "2026-09-05T11:35:13.418Z",
+        "status": "succeeded",
+        "success": true,
+        "elapsedMs": 12.264679000000001,
+        "value": {
+          "length": 12000,
+          "sample": "xxxxxxxx"
+        },
+        "error": null,
+        "typeErrors": null,
+        "nestedCalls": 1
+      },
+      {
+        "name": "warm-4",
+        "timestamp": "2026-09-05T11:35:13.430Z",
+        "status": "succeeded",
+        "success": true,
+        "elapsedMs": 11.76234599999998,
+        "value": {
+          "length": 12000,
+          "sample": "xxxxxxxx"
+        },
+        "error": null,
+        "typeErrors": null,
+        "nestedCalls": 1
+      },
+      {
+        "name": "warm-5",
+        "timestamp": "2026-09-05T11:35:13.441Z",
+        "status": "succeeded",
+        "success": true,
+        "elapsedMs": 10.51255900000001,
+        "value": {
+          "length": 12000,
+          "sample": "xxxxxxxx"
+        },
+        "error": null,
+        "typeErrors": null,
+        "nestedCalls": 1
+      },
+      {
+        "name": "recoverable-failure",
+        "timestamp": "2026-09-05T11:35:13.449Z",
+        "status": "failed",
+        "success": false,
+        "elapsedMs": 8.464038999999957,
+        "value": null,
+        "error": "{\"message\":\"artifact is unavailable or expired\",\"name\":\"Error\",\"stack\":\"    at <anonymous> (kiro-fabric-setup.js:180:9)\\n\"}",
+        "typeErrors": null,
+        "nestedCalls": 1
+      },
+      {
+        "name": "recovered",
+        "timestamp": "2026-09-05T11:35:13.463Z",
+        "status": "succeeded",
+        "success": true,
+        "elapsedMs": 13.365575000000035,
+        "value": {
+          "length": 12000,
+          "sample": "xxxxxxxx"
+        },
+        "error": null,
+        "typeErrors": null,
+        "nestedCalls": 1
+      }
+    ],
+    "events": [
+      {
+        "cat": "eval",
+        "ev": "exec.start",
+        "data": {
+          "sourceBytes": 244,
+          "payloadKeys": 1,
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "compile",
+        "spanId": "span-1",
+        "durUs": 313590.133,
+        "data": {
+          "errors": 0
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "approval.wait",
+        "parentId": "span-3",
+        "spanId": "span-4",
+        "durUs": 33.544000000006235,
+        "data": {
+          "ref": "artifacts.read",
+          "risk": "read",
+          "approved": true
+        },
+        "execId": null
+      },
+      {
+        "cat": "bridge",
+        "ev": "artifacts.read",
+        "parentId": "span-2",
+        "spanId": "span-3",
+        "durUs": 2155.815000000075,
+        "data": {
+          "argsChars": 60,
+          "ok": true,
+          "resultChars": 12133
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "execute",
+        "spanId": "span-2",
+        "durUs": 38297.65199999997,
+        "data": {
+          "termination": "completed",
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.end",
+        "data": {
+          "status": "succeeded",
+          "elapsedMs": 352.03247899999997,
+          "audits": 1,
+          "logs": 0,
+          "typeErrors": 0,
+          "resultChars": 36
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.start",
+        "data": {
+          "sourceBytes": 244,
+          "payloadKeys": 1,
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "compile",
+        "spanId": "span-5",
+        "durUs": 15199.014000000034,
+        "data": {
+          "errors": 0
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "approval.wait",
+        "parentId": "span-7",
+        "spanId": "span-8",
+        "durUs": 7.627999999954227,
+        "data": {
+          "ref": "artifacts.read",
+          "risk": "read",
+          "approved": true
+        },
+        "execId": null
+      },
+      {
+        "cat": "bridge",
+        "ev": "artifacts.read",
+        "parentId": "span-6",
+        "spanId": "span-7",
+        "durUs": 447.9359999999133,
+        "data": {
+          "argsChars": 60,
+          "ok": true,
+          "resultChars": 12133
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "execute",
+        "spanId": "span-6",
+        "durUs": 4925.382000000013,
+        "data": {
+          "termination": "completed",
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.end",
+        "data": {
+          "status": "succeeded",
+          "elapsedMs": 20.156514000000016,
+          "audits": 1,
+          "logs": 0,
+          "typeErrors": 0,
+          "resultChars": 36
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.start",
+        "data": {
+          "sourceBytes": 244,
+          "payloadKeys": 1,
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "compile",
+        "spanId": "span-9",
+        "durUs": 9711.232999999993,
+        "data": {
+          "errors": 0
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "approval.wait",
+        "parentId": "span-11",
+        "spanId": "span-12",
+        "durUs": 11.625999999978376,
+        "data": {
+          "ref": "artifacts.read",
+          "risk": "read",
+          "approved": true
+        },
+        "execId": null
+      },
+      {
+        "cat": "bridge",
+        "ev": "artifacts.read",
+        "parentId": "span-10",
+        "spanId": "span-11",
+        "durUs": 539.831999999933,
+        "data": {
+          "argsChars": 60,
+          "ok": true,
+          "resultChars": 12133
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "execute",
+        "spanId": "span-10",
+        "durUs": 4260.225999999989,
+        "data": {
+          "termination": "completed",
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.end",
+        "data": {
+          "status": "succeeded",
+          "elapsedMs": 14.005712000000017,
+          "audits": 1,
+          "logs": 0,
+          "typeErrors": 0,
+          "resultChars": 36
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.start",
+        "data": {
+          "sourceBytes": 244,
+          "payloadKeys": 1,
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "compile",
+        "spanId": "span-13",
+        "durUs": 8999.404000000028,
+        "data": {
+          "errors": 0
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "approval.wait",
+        "parentId": "span-15",
+        "spanId": "span-16",
+        "durUs": 4.967999999962558,
+        "data": {
+          "ref": "artifacts.read",
+          "risk": "read",
+          "approved": true
+        },
+        "execId": null
+      },
+      {
+        "cat": "bridge",
+        "ev": "artifacts.read",
+        "parentId": "span-14",
+        "spanId": "span-15",
+        "durUs": 325.21300000007614,
+        "data": {
+          "argsChars": 60,
+          "ok": true,
+          "resultChars": 12133
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "execute",
+        "spanId": "span-14",
+        "durUs": 3200.6309999999303,
+        "data": {
+          "termination": "completed",
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.end",
+        "data": {
+          "status": "succeeded",
+          "elapsedMs": 12.23177499999997,
+          "audits": 1,
+          "logs": 0,
+          "typeErrors": 0,
+          "resultChars": 36
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.start",
+        "data": {
+          "sourceBytes": 244,
+          "payloadKeys": 1,
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "compile",
+        "spanId": "span-17",
+        "durUs": 8616.928000000029,
+        "data": {
+          "errors": 0
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "approval.wait",
+        "parentId": "span-19",
+        "spanId": "span-20",
+        "durUs": 9.85800000000836,
+        "data": {
+          "ref": "artifacts.read",
+          "risk": "read",
+          "approved": true
+        },
+        "execId": null
+      },
+      {
+        "cat": "bridge",
+        "ev": "artifacts.read",
+        "parentId": "span-18",
+        "spanId": "span-19",
+        "durUs": 413.39499999992313,
+        "data": {
+          "argsChars": 60,
+          "ok": true,
+          "resultChars": 12133
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "execute",
+        "spanId": "span-18",
+        "durUs": 3094.5919999999205,
+        "data": {
+          "termination": "completed",
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.end",
+        "data": {
+          "status": "succeeded",
+          "elapsedMs": 11.73339999999996,
+          "audits": 1,
+          "logs": 0,
+          "typeErrors": 0,
+          "resultChars": 36
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.start",
+        "data": {
+          "sourceBytes": 244,
+          "payloadKeys": 1,
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "compile",
+        "spanId": "span-21",
+        "durUs": 7707.957999999962,
+        "data": {
+          "errors": 0
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "approval.wait",
+        "parentId": "span-23",
+        "spanId": "span-24",
+        "durUs": 3.5980000000108703,
+        "data": {
+          "ref": "artifacts.read",
+          "risk": "read",
+          "approved": true
+        },
+        "execId": null
+      },
+      {
+        "cat": "bridge",
+        "ev": "artifacts.read",
+        "parentId": "span-22",
+        "spanId": "span-23",
+        "durUs": 329.5819999999594,
+        "data": {
+          "argsChars": 60,
+          "ok": true,
+          "resultChars": 12133
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "execute",
+        "spanId": "span-22",
+        "durUs": 2758.728000000019,
+        "data": {
+          "termination": "completed",
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.end",
+        "data": {
+          "status": "succeeded",
+          "elapsedMs": 10.487018999999918,
+          "audits": 1,
+          "logs": 0,
+          "typeErrors": 0,
+          "resultChars": 36
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.start",
+        "data": {
+          "sourceBytes": 46,
+          "payloadKeys": 1,
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "compile",
+        "spanId": "span-25",
+        "durUs": 4473.262999999974,
+        "data": {
+          "errors": 0
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "approval.wait",
+        "parentId": "span-27",
+        "spanId": "span-28",
+        "durUs": 6.039999999984502,
+        "data": {
+          "ref": "artifacts.read",
+          "risk": "read",
+          "approved": true
+        },
+        "execId": null
+      },
+      {
+        "cat": "bridge",
+        "ev": "artifacts.read",
+        "parentId": "span-26",
+        "spanId": "span-27",
+        "durUs": 509.2580000000453,
+        "data": {
+          "argsChars": 60,
+          "ok": false,
+          "errorKind": "provider_failed"
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "execute",
+        "spanId": "span-26",
+        "durUs": 3931.540000000041,
+        "data": {
+          "termination": "runtime_error",
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.end",
+        "data": {
+          "status": "failed",
+          "elapsedMs": 8.42612100000008,
+          "audits": 1,
+          "logs": 0,
+          "typeErrors": 0,
+          "resultChars": 0
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.start",
+        "data": {
+          "sourceBytes": 244,
+          "payloadKeys": 1,
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "compile",
+        "spanId": "span-29",
+        "durUs": 9716.58100000002,
+        "data": {
+          "errors": 0
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "approval.wait",
+        "parentId": "span-31",
+        "spanId": "span-32",
+        "durUs": 8.11399999997775,
+        "data": {
+          "ref": "artifacts.read",
+          "risk": "read",
+          "approved": true
+        },
+        "execId": null
+      },
+      {
+        "cat": "bridge",
+        "ev": "artifacts.read",
+        "parentId": "span-30",
+        "spanId": "span-31",
+        "durUs": 428.86700000008204,
+        "data": {
+          "argsChars": 60,
+          "ok": true,
+          "resultChars": 12133
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "execute",
+        "spanId": "span-30",
+        "durUs": 3590.6669999999394,
+        "data": {
+          "termination": "completed",
+          "effectiveTimeoutMs": 120000
+        },
+        "execId": null
+      },
+      {
+        "cat": "eval",
+        "ev": "exec.end",
+        "data": {
+          "status": "succeeded",
+          "elapsedMs": 13.331414999999993,
+          "audits": 1,
+          "logs": 0,
+          "typeErrors": 0,
+          "resultChars": 36
+        },
+        "execId": null
+      }
+    ],
+    "hostRequests": null,
+    "inputTokens": null,
+    "credits": null,
+    "billedSpend": null,
+    "warmStatistics": {
+      "n": 5,
+      "minMs": 10.51255900000001,
+      "maxMs": 20.189069000000018,
+      "medianMs": 12.264679000000001,
+      "meanMs": 13.758643600000005,
+      "independentSamples": false,
+      "runOrder": "cold then five warm; one intentional failure then recovery"
+    }
+  },
+  "analyzerComparison": {
+    "assertionsPassed": true,
+    "results": [
+      {
+        "name": "overlap",
+        "expectedSelfUs": 20,
+        "baselineSelfUs": -40,
+        "candidateSelfUs": 20,
+        "sampleCount": 1,
+        "synthetic": true
+      },
+      {
+        "name": "serial",
+        "expectedSelfUs": 50,
+        "baselineSelfUs": 50,
+        "candidateSelfUs": 50,
+        "sampleCount": 1,
+        "synthetic": true
+      },
+      {
+        "name": "outside-parent",
+        "expectedSelfUs": 90,
+        "baselineSelfUs": 70,
+        "candidateSelfUs": 90,
+        "sampleCount": 1,
+        "synthetic": true
+      }
+    ],
+    "unicode": {
+      "jsonString": "😀",
+      "utf16Chars": 4,
+      "utf8Bytes": 6
+    },
+    "latencyBenchmark": false,
+    "billingEvidence": false
+  }
+}

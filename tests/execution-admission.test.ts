@@ -2,8 +2,35 @@ import { describe, expect, it } from "vitest";
 import { normalizeFabricConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { FabricExecutionService } from "../src/execution-service.js";
+import type { FabricTracer } from "../src/trace/tracer.js";
 
 describe("execution admission across the real compiler and guest", () => {
+  it("traces explicit result value characters while preserving legacy resultChars", async () => {
+    const events: Array<{ ev: string; data?: Record<string, unknown> }> = [];
+    const tracer: FabricTracer = {
+      enabled: true, file: undefined, newExecutionId: () => "exec_test",
+      span: () => ({ id: "span", end() {} }),
+      event(_cat, ev, _execId, data) { events.push({ ev, ...(data ? { data } : {}) }); },
+      flush() {}, close() {},
+    };
+    const service = new FabricExecutionService(new ActionRegistry(), normalizeFabricConfig({ executor: { timeoutMs: 5_000, maxConcurrentExecutions: 1, maxSourceBytes: 100 } }), "/workspace");
+    const approve = { async approve() {} };
+    try {
+      await service.execute({ code: "return '漢😀'", approver: approve, tracer, execId: "success" });
+      await service.execute({ code: "return null", approver: approve, tracer, execId: "null" });
+      await service.execute({ code: "x".repeat(101), approver: approve, tracer, execId: "source" });
+      const ends = events.filter(({ ev }) => ev === "exec.end").map(({ data }) => data!);
+      expect(ends[0]).toMatchObject({ status: "succeeded", resultChars: 5, resultValueChars: 5 });
+      expect(ends[1]).toMatchObject({ status: "succeeded", resultChars: 4, resultValueChars: 4 });
+      expect(ends[2]).toMatchObject({ status: "failed", resultChars: 0, resultValueChars: null });
+
+      const busy = service.execute({ code: "while (true) {}", timeoutMs: 100, approver: approve });
+      const rejected = await service.execute({ code: "return 2", approver: approve, tracer, execId: "admission" });
+      expect(rejected.success).toBe(false);
+      expect(events.filter(({ ev }) => ev === "exec.end").at(-1)?.data).toMatchObject({ resultChars: 0, resultValueChars: null });
+      await busy;
+    } finally { await service.close(); }
+  });
   it.each(["provider", "approval"] as const)("cancels and drains an active %s before registry teardown", async (phase) => {
     let entered!: () => void; const waiting = new Promise<void>((resolve) => { entered = resolve; });
     let settled = false; let providerClosed = false;

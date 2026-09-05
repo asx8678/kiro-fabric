@@ -170,6 +170,43 @@ describe("Fabric approval and projection", () => {
     expect(result.isError).toBe(true);
   });
 
+  it("reports exact Unicode character and byte visibility", () => {
+    const result = projectFabricExecutionText({
+      result: { status: "succeeded", success: true, value: "A😀漢", logs: [], audits: [], elapsedMs: 1, effectiveTimeoutMs: 100 },
+      resultFormat: "text",
+      maxOutputChars: 100,
+      writeArtifact() { throw new Error("unexpected artifact"); },
+    });
+    expect(result).toMatchObject({ visibleChars: 4, visibleBytes: 8, overflowed: false, artifactRetained: false, isError: false });
+  });
+
+  it("includes diagnostics and logs in the retained failure projection", () => {
+    let retained = "";
+    const result = projectFabricExecutionText({
+      result: { status: "failed", success: false, error: "outer", logs: [`guest log ${"x".repeat(300)}`], audits: [], elapsedMs: 1, effectiveTimeoutMs: 100 },
+      resultFormat: "json", maxOutputChars: 180,
+      normalizationDiagnostics: [{ field: "resultFormat", repair: "defaulted" }],
+      writeArtifact(content) { retained = content; return "ka_test"; },
+    });
+    expect(retained).toContain("Normalization diagnostics");
+    expect(retained).toContain("guest log");
+    expect(result).toMatchObject({ isError: true, overflowed: true, artifactRetained: true, artifactId: "ka_test" });
+    expect(result.visibleChars).toBe(result.text.length);
+    expect(result.visibleBytes).toBe(Buffer.byteLength(result.text));
+  });
+
+  it("reports exact overflow flags when retention fails", () => {
+    const result = projectFabricExecutionText({
+      result: { status: "failed", success: false, error: "😀".repeat(500), logs: [], audits: [], elapsedMs: 1, effectiveTimeoutMs: 100 },
+      resultFormat: "json", maxOutputChars: 160,
+      writeArtifact() { throw new Error("full"); },
+    });
+    expect(result).toMatchObject({ isError: true, overflowed: true, artifactRetained: false });
+    expect(result.artifactId).toBeUndefined();
+    expect(result.visibleChars).toBe(result.text.length);
+    expect(result.visibleBytes).toBe(Buffer.byteLength(result.text));
+  });
+
   it("does not split UTF-16 surrogate pairs while projecting bounded output", () => {
     const result = projectFabricExecutionText({
       result: { status: "succeeded", success: true, value: `head-${"😀".repeat(500)}-tail`, logs: [], audits: [], elapsedMs: 1, effectiveTimeoutMs: 100 },

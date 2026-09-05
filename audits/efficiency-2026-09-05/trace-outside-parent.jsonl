@@ -1,0 +1,3 @@
+{"v":1,"ts":"2026-09-05T00:00:00.000Z","execId":"outside-parent","seq":1,"monoUs":0,"cat":"eval","ev":"execute","spanId":"p","durUs":100}
+{"v":1,"ts":"2026-09-05T00:00:00.000Z","execId":"outside-parent","seq":2,"monoUs":90,"cat":"bridge","ev":"probe","spanId":"c0","parentId":"p","durUs":30,"data":{"argsChars":4,"resultChars":1}}
+{"v":1,"ts":"2026-09-05T00:00:00.000Z","execId":"outside-parent","seq":3,"monoUs":100,"cat":"eval","ev":"exec.end","data":{"status":"succeeded","elapsedMs":0.1}}

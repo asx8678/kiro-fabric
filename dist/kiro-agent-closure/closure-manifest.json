@@ -28,6 +28,7 @@
     "src/kiro/power/workspace-context.ts",
     "src/kiro/projection.ts",
     "src/kiro/runtime.ts",
+    "src/protocol.ts",
     "src/providers/state-provider.ts",
     "src/runtime/compiler-worker-entry.ts",
     "src/runtime/deadline.ts",
@@ -530,9 +531,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-5DKVGXB3.js",
-      "bytes": 1045291,
-      "sha256": "219309982b3554712e33c03a56ebe9b1706a64cb3d7736eff4be6409adcf8665"
+      "path": "chunks/mcp-server-34KAOWSV.js",
+      "bytes": 1055680,
+      "sha256": "285a48c8033fee88eff74802a5c2850c9ea13ce2db08381fcf982136c7729911"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -552,7 +553,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 5640,
-      "sha256": "e3db04ae6a0b2f37f43aa7d1b16e7c719691bb1d88144ed1d1804c5bb2900ab2"
+      "sha256": "e62e376b61aa26dd6f39d4bf734d29bdb3b537d4dd675ac1f20cf0cc569fdb5e"
     },
     {
       "path": "package.json",
@@ -570,5 +571,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "06c9b7c782734981e189535043a18aeac74ae173ddb6d6fa3f9c78a6fd82ad0d"
+  "contentDigest": "8366bcbfe32efaf8e5e7a93e1e805fec41c24904b52aec923ad1e466b78a40b3"
 }

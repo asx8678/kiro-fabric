@@ -1,0 +1,72 @@
+{
+  "ledger": {
+    "prompt": {
+      "utf16Chars": 1567,
+      "utf8Bytes": 1569
+    },
+    "skill": {
+      "utf16Chars": 3103,
+      "utf8Bytes": 3105
+    },
+    "execDescription": {
+      "utf16Chars": 285,
+      "utf8Bytes": 285
+    },
+    "profileJSON": {
+      "utf16Chars": 2395,
+      "utf8Bytes": 2397
+    },
+    "hintLength": [
+      {
+        "budget": 500,
+        "utf16Chars": 208,
+        "utf8Bytes": 208
+      },
+      {
+        "budget": 1000,
+        "utf16Chars": 209,
+        "utf8Bytes": 209
+      },
+      {
+        "budget": 20000,
+        "utf16Chars": 210,
+        "utf8Bytes": 210
+      },
+      {
+        "budget": 50000,
+        "utf16Chars": 210,
+        "utf8Bytes": 210
+      },
+      {
+        "budget": 2000000,
+        "utf16Chars": 212,
+        "utf8Bytes": 212
+      }
+    ]
+  },
+  "timestampChecks": [
+    {
+      "name": "missing-parent",
+      "reportedSelfUs": 100,
+      "malformedLines": 0,
+      "anomalies": [],
+      "interpretation": "Unusable timestamps silently discard child coverage; exclusive time should be unknown or explicitly rejected, not accepted as measured 100us."
+    },
+    {
+      "name": "missing-children",
+      "reportedSelfUs": 100,
+      "malformedLines": 0,
+      "anomalies": [],
+      "interpretation": "Unusable timestamps silently discard child coverage; exclusive time should be unknown or explicitly rejected, not accepted as measured 100us."
+    },
+    {
+      "name": "invalid-parent",
+      "reportedSelfUs": 100,
+      "malformedLines": 0,
+      "anomalies": [],
+      "interpretation": "Unusable timestamps silently discard child coverage; exclusive time should be unknown or explicitly rejected, not accepted as measured 100us."
+    }
+  ],
+  "synthetic": true,
+  "performanceOrBillingBenchmark": false
+}

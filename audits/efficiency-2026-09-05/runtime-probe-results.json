@@ -1,0 +1,640 @@
+{
+  "kind": "built-library-local-probe-not-Kiro",
+  "pid": 120972,
+  "baselineOnly": true,
+  "runtimeInstances": 1,
+  "guestExecutions": 8,
+  "assertionsPassed": true,
+  "sourceArtifactChars": 120000,
+  "largeNestedTextChars": 12000,
+  "compactReturnedJsonChars": 36,
+  "rows": [
+    {
+      "name": "cold",
+      "timestamp": "2026-09-05T11:35:13.371Z",
+      "status": "succeeded",
+      "success": true,
+      "elapsedMs": 352.506048,
+      "value": {
+        "length": 12000,
+        "sample": "xxxxxxxx"
+      },
+      "error": null,
+      "typeErrors": null,
+      "nestedCalls": 1
+    },
+    {
+      "name": "warm-1",
+      "timestamp": "2026-09-05T11:35:13.392Z",
+      "status": "succeeded",
+      "success": true,
+      "elapsedMs": 20.189069000000018,
+      "value": {
+        "length": 12000,
+        "sample": "xxxxxxxx"
+      },
+      "error": null,
+      "typeErrors": null,
+      "nestedCalls": 1
+    },
+    {
+      "name": "warm-2",
+      "timestamp": "2026-09-05T11:35:13.406Z",
+      "status": "succeeded",
+      "success": true,
+      "elapsedMs": 14.064565000000016,
+      "value": {
+        "length": 12000,
+        "sample": "xxxxxxxx"
+      },
+      "error": null,
+      "typeErrors": null,
+      "nestedCalls": 1
+    },
+    {
+      "name": "warm-3",
+      "timestamp": "2026-09-05T11:35:13.418Z",
+      "status": "succeeded",
+      "success": true,
+      "elapsedMs": 12.264679000000001,
+      "value": {
+        "length": 12000,
+        "sample": "xxxxxxxx"
+      },
+      "error": null,
+      "typeErrors": null,
+      "nestedCalls": 1
+    },
+    {
+      "name": "warm-4",
+      "timestamp": "2026-09-05T11:35:13.430Z",
+      "status": "succeeded",
+      "success": true,
+      "elapsedMs": 11.76234599999998,
+      "value": {
+        "length": 12000,
+        "sample": "xxxxxxxx"
+      },
+      "error": null,
+      "typeErrors": null,
+      "nestedCalls": 1
+    },
+    {
+      "name": "warm-5",
+      "timestamp": "2026-09-05T11:35:13.441Z",
+      "status": "succeeded",
+      "success": true,
+      "elapsedMs": 10.51255900000001,
+      "value": {
+        "length": 12000,
+        "sample": "xxxxxxxx"
+      },
+      "error": null,
+      "typeErrors": null,
+      "nestedCalls": 1
+    },
+    {
+      "name": "recoverable-failure",
+      "timestamp": "2026-09-05T11:35:13.449Z",
+      "status": "failed",
+      "success": false,
+      "elapsedMs": 8.464038999999957,
+      "value": null,
+      "error": "{\"message\":\"artifact is unavailable or expired\",\"name\":\"Error\",\"stack\":\"    at <anonymous> (kiro-fabric-setup.js:180:9)\\n\"}",
+      "typeErrors": null,
+      "nestedCalls": 1
+    },
+    {
+      "name": "recovered",
+      "timestamp": "2026-09-05T11:35:13.463Z",
+      "status": "succeeded",
+      "success": true,
+      "elapsedMs": 13.365575000000035,
+      "value": {
+        "length": 12000,
+        "sample": "xxxxxxxx"
+      },
+      "error": null,
+      "typeErrors": null,
+      "nestedCalls": 1
+    }
+  ],
+  "events": [
+    {
+      "cat": "eval",
+      "ev": "exec.start",
+      "data": {
+        "sourceBytes": 244,
+        "payloadKeys": 1,
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "compile",
+      "spanId": "span-1",
+      "durUs": 313590.133,
+      "data": {
+        "errors": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "approval.wait",
+      "parentId": "span-3",
+      "spanId": "span-4",
+      "durUs": 33.544000000006235,
+      "data": {
+        "ref": "artifacts.read",
+        "risk": "read",
+        "approved": true
+      }
+    },
+    {
+      "cat": "bridge",
+      "ev": "artifacts.read",
+      "parentId": "span-2",
+      "spanId": "span-3",
+      "durUs": 2155.815000000075,
+      "data": {
+        "argsChars": 60,
+        "ok": true,
+        "resultChars": 12133
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "execute",
+      "spanId": "span-2",
+      "durUs": 38297.65199999997,
+      "data": {
+        "termination": "completed",
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.end",
+      "data": {
+        "status": "succeeded",
+        "elapsedMs": 352.03247899999997,
+        "audits": 1,
+        "logs": 0,
+        "typeErrors": 0,
+        "resultChars": 36
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.start",
+      "data": {
+        "sourceBytes": 244,
+        "payloadKeys": 1,
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "compile",
+      "spanId": "span-5",
+      "durUs": 15199.014000000034,
+      "data": {
+        "errors": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "approval.wait",
+      "parentId": "span-7",
+      "spanId": "span-8",
+      "durUs": 7.627999999954227,
+      "data": {
+        "ref": "artifacts.read",
+        "risk": "read",
+        "approved": true
+      }
+    },
+    {
+      "cat": "bridge",
+      "ev": "artifacts.read",
+      "parentId": "span-6",
+      "spanId": "span-7",
+      "durUs": 447.9359999999133,
+      "data": {
+        "argsChars": 60,
+        "ok": true,
+        "resultChars": 12133
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "execute",
+      "spanId": "span-6",
+      "durUs": 4925.382000000013,
+      "data": {
+        "termination": "completed",
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.end",
+      "data": {
+        "status": "succeeded",
+        "elapsedMs": 20.156514000000016,
+        "audits": 1,
+        "logs": 0,
+        "typeErrors": 0,
+        "resultChars": 36
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.start",
+      "data": {
+        "sourceBytes": 244,
+        "payloadKeys": 1,
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "compile",
+      "spanId": "span-9",
+      "durUs": 9711.232999999993,
+      "data": {
+        "errors": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "approval.wait",
+      "parentId": "span-11",
+      "spanId": "span-12",
+      "durUs": 11.625999999978376,
+      "data": {
+        "ref": "artifacts.read",
+        "risk": "read",
+        "approved": true
+      }
+    },
+    {
+      "cat": "bridge",
+      "ev": "artifacts.read",
+      "parentId": "span-10",
+      "spanId": "span-11",
+      "durUs": 539.831999999933,
+      "data": {
+        "argsChars": 60,
+        "ok": true,
+        "resultChars": 12133
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "execute",
+      "spanId": "span-10",
+      "durUs": 4260.225999999989,
+      "data": {
+        "termination": "completed",
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.end",
+      "data": {
+        "status": "succeeded",
+        "elapsedMs": 14.005712000000017,
+        "audits": 1,
+        "logs": 0,
+        "typeErrors": 0,
+        "resultChars": 36
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.start",
+      "data": {
+        "sourceBytes": 244,
+        "payloadKeys": 1,
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "compile",
+      "spanId": "span-13",
+      "durUs": 8999.404000000028,
+      "data": {
+        "errors": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "approval.wait",
+      "parentId": "span-15",
+      "spanId": "span-16",
+      "durUs": 4.967999999962558,
+      "data": {
+        "ref": "artifacts.read",
+        "risk": "read",
+        "approved": true
+      }
+    },
+    {
+      "cat": "bridge",
+      "ev": "artifacts.read",
+      "parentId": "span-14",
+      "spanId": "span-15",
+      "durUs": 325.21300000007614,
+      "data": {
+        "argsChars": 60,
+        "ok": true,
+        "resultChars": 12133
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "execute",
+      "spanId": "span-14",
+      "durUs": 3200.6309999999303,
+      "data": {
+        "termination": "completed",
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.end",
+      "data": {
+        "status": "succeeded",
+        "elapsedMs": 12.23177499999997,
+        "audits": 1,
+        "logs": 0,
+        "typeErrors": 0,
+        "resultChars": 36
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.start",
+      "data": {
+        "sourceBytes": 244,
+        "payloadKeys": 1,
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "compile",
+      "spanId": "span-17",
+      "durUs": 8616.928000000029,
+      "data": {
+        "errors": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "approval.wait",
+      "parentId": "span-19",
+      "spanId": "span-20",
+      "durUs": 9.85800000000836,
+      "data": {
+        "ref": "artifacts.read",
+        "risk": "read",
+        "approved": true
+      }
+    },
+    {
+      "cat": "bridge",
+      "ev": "artifacts.read",
+      "parentId": "span-18",
+      "spanId": "span-19",
+      "durUs": 413.39499999992313,
+      "data": {
+        "argsChars": 60,
+        "ok": true,
+        "resultChars": 12133
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "execute",
+      "spanId": "span-18",
+      "durUs": 3094.5919999999205,
+      "data": {
+        "termination": "completed",
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.end",
+      "data": {
+        "status": "succeeded",
+        "elapsedMs": 11.73339999999996,
+        "audits": 1,
+        "logs": 0,
+        "typeErrors": 0,
+        "resultChars": 36
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.start",
+      "data": {
+        "sourceBytes": 244,
+        "payloadKeys": 1,
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "compile",
+      "spanId": "span-21",
+      "durUs": 7707.957999999962,
+      "data": {
+        "errors": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "approval.wait",
+      "parentId": "span-23",
+      "spanId": "span-24",
+      "durUs": 3.5980000000108703,
+      "data": {
+        "ref": "artifacts.read",
+        "risk": "read",
+        "approved": true
+      }
+    },
+    {
+      "cat": "bridge",
+      "ev": "artifacts.read",
+      "parentId": "span-22",
+      "spanId": "span-23",
+      "durUs": 329.5819999999594,
+      "data": {
+        "argsChars": 60,
+        "ok": true,
+        "resultChars": 12133
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "execute",
+      "spanId": "span-22",
+      "durUs": 2758.728000000019,
+      "data": {
+        "termination": "completed",
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.end",
+      "data": {
+        "status": "succeeded",
+        "elapsedMs": 10.487018999999918,
+        "audits": 1,
+        "logs": 0,
+        "typeErrors": 0,
+        "resultChars": 36
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.start",
+      "data": {
+        "sourceBytes": 46,
+        "payloadKeys": 1,
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "compile",
+      "spanId": "span-25",
+      "durUs": 4473.262999999974,
+      "data": {
+        "errors": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "approval.wait",
+      "parentId": "span-27",
+      "spanId": "span-28",
+      "durUs": 6.039999999984502,
+      "data": {
+        "ref": "artifacts.read",
+        "risk": "read",
+        "approved": true
+      }
+    },
+    {
+      "cat": "bridge",
+      "ev": "artifacts.read",
+      "parentId": "span-26",
+      "spanId": "span-27",
+      "durUs": 509.2580000000453,
+      "data": {
+        "argsChars": 60,
+        "ok": false,
+        "errorKind": "provider_failed"
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "execute",
+      "spanId": "span-26",
+      "durUs": 3931.540000000041,
+      "data": {
+        "termination": "runtime_error",
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.end",
+      "data": {
+        "status": "failed",
+        "elapsedMs": 8.42612100000008,
+        "audits": 1,
+        "logs": 0,
+        "typeErrors": 0,
+        "resultChars": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.start",
+      "data": {
+        "sourceBytes": 244,
+        "payloadKeys": 1,
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "compile",
+      "spanId": "span-29",
+      "durUs": 9716.58100000002,
+      "data": {
+        "errors": 0
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "approval.wait",
+      "parentId": "span-31",
+      "spanId": "span-32",
+      "durUs": 8.11399999997775,
+      "data": {
+        "ref": "artifacts.read",
+        "risk": "read",
+        "approved": true
+      }
+    },
+    {
+      "cat": "bridge",
+      "ev": "artifacts.read",
+      "parentId": "span-30",
+      "spanId": "span-31",
+      "durUs": 428.86700000008204,
+      "data": {
+        "argsChars": 60,
+        "ok": true,
+        "resultChars": 12133
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "execute",
+      "spanId": "span-30",
+      "durUs": 3590.6669999999394,
+      "data": {
+        "termination": "completed",
+        "effectiveTimeoutMs": 120000
+      }
+    },
+    {
+      "cat": "eval",
+      "ev": "exec.end",
+      "data": {
+        "status": "succeeded",
+        "elapsedMs": 13.331414999999993,
+        "audits": 1,
+        "logs": 0,
+        "typeErrors": 0,
+        "resultChars": 36
+      }
+    }
+  ],
+  "hostRequests": null,
+  "inputTokens": null,
+  "credits": null,
+  "billedSpend": null
+}

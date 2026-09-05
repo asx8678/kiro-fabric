@@ -11,7 +11,7 @@ import {
 import { Value } from "typebox/value";
 import { settleWithin } from "../async-settlement.js";
 import { loadFabricConfig } from "../config.js";
-import { fabricInfoActions } from "./info-catalog.js";
+import { fabricInfoCatalog } from "./info-catalog.js";
 import { FABRIC_COMPILER_TIMEOUT_MS, effectiveFabricTimeout } from "../execution-service.js";
 import {
   fabricExecInputSchema,
@@ -317,9 +317,9 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-    await syncWorkspace();
     const name = request.params.name;
     if (name === "fabric_info") {
+      await syncWorkspace();
       if (Object.keys(request.params.arguments ?? {}).length) return toolError("invalid_info_arguments", "fabric_info accepts no arguments");
       try {
         const workspaceObservation = binding.workspaceObservation();
@@ -352,7 +352,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         const interpreterInfo = expectedNode === undefined
           ? { actual: realpathSync(process.execPath), expected: null, matches: "unknown" as const }
           : { actual: realpathSync(process.execPath), expected: expectedNode, matches: realpathSync(process.execPath) === expectedNode };
-        const actions = current && !workspaceBlocked ? fabricInfoActions(await current.registry.list()) : [];
+        const actionCatalog = fabricInfoCatalog(current && !workspaceBlocked ? await current.registry.list() : []);
         if (tracer.enabled) {
           tracer.event("eval", "tool.fabric_info", undefined, lifecycleInfo);
           tracer.flush();
@@ -371,13 +371,15 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
           tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
           lifecycle: lifecycleInfo,
           interpreter: interpreterInfo,
-          actions,
+          actions: actionCatalog.actions,
+          catalog: actionCatalog.catalog,
           nativeKiroTools: { owner: "kiro", availability: "declared-by-agent-profile" },
         }) }] };
       } catch (error) { return toolError("info_request_failed", error); }
     }
     if (name === "fabric_workspace") {
       try {
+        await syncWorkspace();
         const parsed = workspaceRequest(request.params.arguments ?? {});
         if (tracer.enabled) {
           tracer.event("eval", "tool.fabric_workspace", undefined, { action: parsed.action });
@@ -395,6 +397,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         if (parsed.action === "select" && unavailableWorkspace()) throw new Error("workspace roots are temporarily unverifiable");
         const mutation = await binding.prepareMutation(parsed, extra.signal);
         const result = await lifecycle(async () => {
+          if (closing) throw new Error("Agent MCP server is shutting down");
+          extra.signal.throwIfAborted();
           const before = binding.bindingIdentity();
           const committed = binding.commitMutation(mutation);
           if (before !== binding.bindingIdentity()) await closeRuntime(new Error("workspace binding changed"));
@@ -407,7 +411,29 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       }
     }
     if (name !== "fabric_exec") return toolError("unknown_tool", `Unknown tool: ${String(name)}`);
-    if (unavailableWorkspace()) return toolError("workspace_unavailable", "workspace roots are temporarily unverifiable");
+    const execId = tracer.enabled ? tracer.newExecutionId() : undefined;
+    if (tracer.enabled) tracer.event("eval", "tool.fabric_exec", execId);
+    const tracedError = (code: string, error: unknown, issues?: readonly unknown[]) => {
+      const response = toolError(code, error, issues);
+      if (tracer.enabled) {
+        const text = response.content[0]!.text;
+        tracer.event("eval", "exec.projection", execId, {
+          visibleChars: text.length,
+          visibleBytes: Buffer.byteLength(text, "utf8"),
+          isError: true,
+          overflowed: false,
+          artifactRetained: false,
+        });
+        tracer.flush();
+      }
+      return response;
+    };
+    try {
+      await syncWorkspace();
+    } catch (error) {
+      return tracedError("adapter_error", error);
+    }
+    if (unavailableWorkspace()) return tracedError("workspace_unavailable", "workspace roots are temporarily unverifiable");
     const normalized = prepareFabricExecArgumentsWithDiagnostics(request.params.arguments ?? {});
     const normalizedRecord = isRecord(normalized.value) ? normalized.value : undefined;
     const absoluteInputError = typeof normalizedRecord?.code === "string"
@@ -420,15 +446,13 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         )
       : undefined;
     if (absoluteInputError || absolutePayloadError) {
-      return toolError("invalid_exec_arguments", absoluteInputError ?? absolutePayloadError!);
+      return tracedError("invalid_exec_arguments", absoluteInputError ?? absolutePayloadError!);
     }
     if (!Value.Check(fabricExecInputSchema, normalized.value)) {
       const errors = [...Value.Errors(fabricExecInputSchema, normalized.value)].map((entry) => entry.message);
-      return toolError("invalid_exec_arguments", "Invalid fabric_exec arguments", errors);
+      return tracedError("invalid_exec_arguments", "Invalid fabric_exec arguments", errors);
     }
     const input = normalized.value as FabricExecInput;
-    const execId = tracer.enabled ? tracer.newExecutionId() : undefined;
-    if (tracer.enabled) tracer.event("eval", "tool.fabric_exec", execId);
     const controller = new AbortController();
     const cancel = (): void => controller.abort(extra.signal.reason ?? new Error("MCP request cancelled"));
     if (extra.signal.aborted) cancel(); else extra.signal.addEventListener("abort", cancel, { once: true });
@@ -442,14 +466,16 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       const remaining = Math.max(0, outerStarted + outerDeadline - performance.now());
       timer = setTimeout(() => controller.abort(new Error(`MCP request exceeded ${outerDeadline}ms`)), remaining);
     };
-    const initialConfig = loadFabricConfig(data.configFile);
-    scheduleOuterDeadline(effectiveFabricTimeout(
-      initialConfig.executor.maxTimeoutMs,
-      initialConfig.executor.timeoutMs,
-      0,
-      input.timeoutMs ?? 0,
-    ));
     try {
+      // Configuration I/O is part of the request lifetime: malformed/private
+      // config must use the same bounded response, telemetry, and cleanup path.
+      const initialConfig = loadFabricConfig(data.configFile);
+      scheduleOuterDeadline(effectiveFabricTimeout(
+        initialConfig.executor.maxTimeoutMs,
+        initialConfig.executor.timeoutMs,
+        0,
+        input.timeoutMs ?? 0,
+      ));
       const acquired = await acquireRuntime(controller);
       execution = acquired.execution;
       const current = acquired.current;
@@ -480,8 +506,18 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         writeArtifact: (content) => current.artifacts.write(content),
         normalizationDiagnostics: normalized.diagnostics,
       });
+      if (tracer.enabled) {
+        tracer.event("eval", "exec.projection", execId, {
+          visibleChars: projection.visibleChars,
+          visibleBytes: projection.visibleBytes,
+          isError: projection.isError,
+          overflowed: projection.overflowed,
+          artifactRetained: projection.artifactRetained,
+        });
+        tracer.flush();
+      }
       return { content: [{ type: "text" as const, text: projection.text }], ...(projection.isError ? { isError: true } : {}) };
-    } catch (error) { return toolError("adapter_error", error); }
+    } catch (error) { return tracedError("adapter_error", error); }
     finally {
       if (timer) clearTimeout(timer);
       if (execution) { active.delete(execution); execution.settle(); }

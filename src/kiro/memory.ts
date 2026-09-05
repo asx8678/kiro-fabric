@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { throwIfAborted } from "../async-settlement.js";
+import { FABRIC_COMMIT_ACKNOWLEDGEMENT } from "../protocol.js";
 
 const DEFAULT_MAX_NAMESPACE_ENTRIES = 128;
 const DEFAULT_MAX_NAMESPACE_BYTES = 256 * 1024;
@@ -55,6 +56,17 @@ export interface KiroMemoryBinding<T extends JsonValue = JsonValue> {
   search(query: string, limit?: number): Promise<KiroMemoryEntry<T>[]>;
   /** Metadata-only listing: key, size, and freshness without full values. */
   index(): Promise<Array<Pick<KiroMemoryEntry<T>, "key" | "bytes" | "updatedAt">>>;
+}
+
+/** Publication succeeded, but interruption or owned-lock cleanup prevented a reliable acknowledgement. */
+export class KiroMemoryCommitAcknowledgementError extends Error {
+  readonly committed = true;
+  readonly [FABRIC_COMMIT_ACKNOWLEDGEMENT]: { readonly version: 1; readonly operation: "set" | "delete" };
+  constructor(readonly operation: "set" | "delete", readonly key: string, options: ErrorOptions) {
+    super(`Kiro memory ${operation} for ${JSON.stringify(key)} committed; acknowledgement failed; read memory before retrying`, options);
+    this.name = "KiroMemoryCommitAcknowledgementError";
+    this[FABRIC_COMMIT_ACKNOWLEDGEMENT] = Object.freeze({ version: 1 as const, operation });
+  }
 }
 
 interface PersistedMemoryEntry<T extends JsonValue = JsonValue> {
@@ -119,34 +131,142 @@ const processIsAlive = (pid: number): boolean => {
   }
 };
 
+interface MutationLockIdentity {
+  directory: { dev: number; ino: number };
+  owner?: { dev: number; ino: number; token?: string };
+}
+interface PendingMutationLock {
+  identity?: MutationLockIdentity;
+  directoryDescriptor?: number | undefined;
+  ownerDescriptor?: number | undefined;
+}
+interface MutationLockState { pending: PendingMutationLock | undefined }
+
+const recoverPendingMutationLock = (lockPath: string, pending: PendingMutationLock): void => {
+  let identity = pending.identity;
+  if (!identity && pending.directoryDescriptor !== undefined) {
+    const stat = fs.fstatSync(pending.directoryDescriptor);
+    identity = { directory: { dev: stat.dev, ino: stat.ino } };
+    pending.identity = identity;
+  }
+  if (identity && !identity.owner && pending.ownerDescriptor !== undefined) {
+    const owner = fs.fstatSync(pending.ownerDescriptor);
+    identity.owner = { dev: owner.dev, ino: owner.ino };
+  }
+  if (!identity) throw new KiroMemoryScopeError("Kiro memory lock cleanup remains unresolved: ownership identity is unavailable");
+  releaseNamespaceMutationLock(lockPath, identity);
+  if (pending.ownerDescriptor !== undefined) {
+    const descriptor = pending.ownerDescriptor;
+    pending.ownerDescriptor = undefined;
+    fs.closeSync(descriptor);
+  }
+  if (pending.directoryDescriptor !== undefined) {
+    const descriptor = pending.directoryDescriptor;
+    pending.directoryDescriptor = undefined;
+    fs.closeSync(descriptor);
+  }
+};
+
+const releaseNamespaceMutationLock = (lockPath: string, identity: MutationLockIdentity): void => {
+  let current: fs.Stats;
+  try { current = fs.lstatSync(lockPath); }
+  catch (error) { if (errorCode(error) === "ENOENT") return; throw error; }
+  if (!current.isDirectory() || current.isSymbolicLink() ||
+      current.dev !== identity.directory.dev || current.ino !== identity.directory.ino) {
+    throw new KiroMemoryScopeError("Refusing to clean up a replacement Kiro memory mutation lock");
+  }
+  const ownerPath = path.join(lockPath, MUTATION_LOCK_OWNER);
+  try {
+    const owner = fs.lstatSync(ownerPath);
+    let ownerToken: unknown;
+    try { ownerToken = (JSON.parse(fs.readFileSync(ownerPath, "utf8")) as { token?: unknown }).token; }
+    catch { /* rejected by the identity check below */ }
+    if (!identity.owner || !owner.isFile() || owner.isSymbolicLink() ||
+        owner.dev !== identity.owner.dev || owner.ino !== identity.owner.ino ||
+        (identity.owner.token !== undefined && ownerToken !== identity.owner.token)) {
+      throw new KiroMemoryScopeError("Refusing to remove a foreign Kiro memory mutation lock owner");
+    }
+    fs.unlinkSync(ownerPath);
+  } catch (error) {
+    if (errorCode(error) !== "ENOENT") throw error;
+  }
+  fs.rmdirSync(lockPath);
+};
+
 const withNamespaceMutationLock = async <T>(
   namespaceRoot: string,
+  state: MutationLockState,
   operation: () => T | Promise<T>,
   signal?: AbortSignal,
   beforeCommit?: () => void,
 ): Promise<T> => {
   const lockPath = path.join(namespaceRoot, MUTATION_LOCK);
   const deadline = performance.now() + MUTATION_LOCK_TIMEOUT_MS;
-  let identity: { dev: number; ino: number } | undefined;
+  let identity: MutationLockIdentity | undefined;
+  let operationError: unknown;
   while (!identity) {
+    if (state.pending) {
+      const pending = state.pending;
+      recoverPendingMutationLock(lockPath, pending);
+      state.pending = undefined;
+    }
     throwIfAborted(signal);
     beforeCommit?.();
     try {
       fs.mkdirSync(lockPath, { mode: 0o700 });
-      const stat = fs.lstatSync(lockPath);
+      let stat: fs.Stats;
+      try { stat = fs.lstatSync(lockPath); }
+      catch (error) {
+        const pending: PendingMutationLock = {};
+        try {
+          pending.directoryDescriptor = fs.openSync(lockPath, fs.constants.O_RDONLY);
+          const evidence = fs.fstatSync(pending.directoryDescriptor);
+          pending.identity = { directory: { dev: evidence.dev, ino: evidence.ino } };
+        } catch { /* unresolved ownership is reported without pathname deletion */ }
+        state.pending = pending;
+        throw new AggregateError([error], "Kiro memory lock initialization failed; cleanup remains unresolved", { cause: error });
+      }
       if (!stat.isDirectory() || stat.isSymbolicLink()) {
         throw new KiroMemoryScopeError("Kiro memory mutation lock is not a real directory");
       }
-      identity = { dev: stat.dev, ino: stat.ino };
+      identity = { directory: { dev: stat.dev, ino: stat.ino } };
+      let ownerDescriptor: number | undefined;
       try {
-        fs.writeFileSync(
-          path.join(lockPath, MUTATION_LOCK_OWNER),
-          JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }),
-          { encoding: "utf8", mode: 0o600, flag: "wx" },
-        );
+        const ownerPath = path.join(lockPath, MUTATION_LOCK_OWNER);
+        const token = crypto.randomBytes(32).toString("hex");
+        try {
+          ownerDescriptor = fs.openSync(
+            ownerPath,
+            fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0),
+            0o600,
+          );
+          const owner = fs.fstatSync(ownerDescriptor);
+          identity.owner = { dev: owner.dev, ino: owner.ino };
+          fs.writeFileSync(ownerDescriptor, JSON.stringify({ pid: process.pid, acquiredAt: Date.now(), token }), "utf8");
+          identity.owner.token = token;
+        } finally {
+          if (ownerDescriptor !== undefined && identity.owner) {
+            const descriptor = ownerDescriptor;
+            ownerDescriptor = undefined;
+            fs.closeSync(descriptor);
+          }
+        }
       } catch (error) {
+        const cleanupIdentity = identity;
         identity = undefined;
-        try { fs.rmdirSync(lockPath); } catch {}
+        try {
+          releaseNamespaceMutationLock(lockPath, cleanupIdentity);
+          if (ownerDescriptor !== undefined) {
+            const descriptor = ownerDescriptor;
+            ownerDescriptor = undefined;
+            fs.closeSync(descriptor);
+          }
+        } catch (cleanup) {
+          state.pending = { identity: cleanupIdentity, ...(ownerDescriptor === undefined ? {} : { ownerDescriptor }) };
+          throw new AggregateError(
+            [error, cleanup], "Kiro memory lock initialization and cleanup failed", { cause: error },
+          );
+        }
         throw error;
       }
     } catch (error) {
@@ -207,19 +327,20 @@ const withNamespaceMutationLock = async <T>(
     throwIfAborted(signal);
     beforeCommit?.();
     return result;
+  } catch (error) {
+    operationError = error;
+    throw error;
   } finally {
     try {
-      const current = fs.lstatSync(lockPath);
-      if (
-        current.isDirectory() &&
-        !current.isSymbolicLink() &&
-        current.dev === identity.dev &&
-        current.ino === identity.ino
-      ) {
-        fs.rmSync(path.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
-        fs.rmdirSync(lockPath);
-      }
-    } catch {}
+      releaseNamespaceMutationLock(lockPath, identity);
+      state.pending = undefined;
+    } catch (cleanup) {
+      state.pending = { identity };
+      if (operationError !== undefined) throw new AggregateError(
+        [operationError, cleanup], "Kiro memory mutation and lock cleanup failed", { cause: operationError },
+      );
+      throw cleanup;
+    }
   }
 };
 
@@ -458,7 +579,26 @@ const readEntry = <T extends JsonValue>(
   };
 };
 
-const writeJsonAtomic = (filePath: string, content: string, beforeCommit?: () => void): void => {
+const isUnsupportedDirectorySync = (error: unknown, phase: "open" | "sync"): boolean => {
+  const code = errorCode(error);
+  if (code === "EINVAL" || code === "ENOTSUP" || code === "EOPNOTSUPP") return true;
+  return phase === "open" && process.platform === "win32" &&
+    (code === "EISDIR" || code === "EPERM" || code === "EACCES");
+};
+
+const syncDirectoryBestEffort = (directory: string): void => {
+  let descriptor: number | undefined;
+  try {
+    try { descriptor = fs.openSync(directory, "r"); }
+    catch (error) { if (isUnsupportedDirectorySync(error, "open")) return; throw error; }
+    try { fs.fsyncSync(descriptor); }
+    catch (error) { if (!isUnsupportedDirectorySync(error, "sync")) throw error; }
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+};
+
+const writeJsonAtomic = (filePath: string, content: string, beforeCommit?: () => void, afterCommit?: () => void): void => {
   const directory = path.dirname(filePath);
   const temporary = path.join(
     directory,
@@ -473,14 +613,8 @@ const writeJsonAtomic = (filePath: string, content: string, beforeCommit?: () =>
     descriptor = undefined;
     beforeCommit?.();
     fs.renameSync(temporary, filePath);
-    try {
-      const directoryDescriptor = fs.openSync(directory, "r");
-      try {
-        fs.fsyncSync(directoryDescriptor);
-      } finally {
-        fs.closeSync(directoryDescriptor);
-      }
-    } catch {}
+    afterCommit?.();
+    syncDirectoryBestEffort(directory);
   } catch (error) {
     if (descriptor !== undefined) fs.closeSync(descriptor);
     try {
@@ -588,6 +722,8 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
     return filePath;
   };
 
+  const lockState: MutationLockState = { pending: undefined };
+
   return {
     async get(key: string): Promise<KiroMemoryEntry<T> | null> {
       const filePath = resolveEntryPath(key);
@@ -604,85 +740,95 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
     },
 
     async set(key: string, value: T, signal?: AbortSignal, beforeCommit?: () => void): Promise<KiroMemoryEntry<T>> {
-      return withNamespaceMutationLock(namespaceRoot, () => {
-        const normalizedKey = normalizeKiroMemoryToken(key, "key");
-        const filePath = resolveEntryPath(normalizedKey);
-        let encodedValue: string | undefined;
-        try {
-          encodedValue = JSON.stringify(value);
-        } catch {
-          encodedValue = undefined;
-        }
-        if (encodedValue === undefined) {
-          throw new TypeError("Kiro memory values must be JSON-serializable");
-        }
-        if (encodedValue.length > maxValueChars) {
-          throw new Error(`Kiro memory value exceeds ${maxValueChars} configured characters`);
-        }
-        const normalizedValue = JSON.parse(encodedValue) as T;
-        const existing = lstatOrNull(filePath);
-        if (existing) {
-          if (!existing.isFile() || existing.isSymbolicLink()) {
-            throw new KiroMemoryScopeError(`Kiro memory entry must be a real file: ${filePath}`);
+      const normalizedKey = normalizeKiroMemoryToken(key, "key");
+      let published = false;
+      try {
+        return await withNamespaceMutationLock(namespaceRoot, lockState, () => {
+          const filePath = resolveEntryPath(normalizedKey);
+          let encodedValue: string | undefined;
+          try {
+            encodedValue = JSON.stringify(value);
+          } catch {
+            encodedValue = undefined;
           }
-          const previous = readEntry<T>(filePath, memoryNamespace, maxValueChars);
-          if (previous.namespace !== memoryNamespace || previous.key !== normalizedKey) {
-            throw new KiroMemoryScopeError(
-              `Refusing foreign Kiro memory entry collision for ${JSON.stringify(normalizedKey)}`,
-            );
+          if (encodedValue === undefined) {
+            throw new TypeError("Kiro memory values must be JSON-serializable");
           }
-        }
-        const entry: KiroMemoryEntry<T> = {
-          namespace: memoryNamespace,
-          key: normalizedKey,
-          value: normalizedValue,
-          updatedAt: new Date().toISOString(),
-          bytes: 0,
-        };
-        const content = JSON.stringify({
-          format: MEMORY_FORMAT,
-          owner: MEMORY_OWNER,
-          kind: "memory-entry",
-          namespace: entry.namespace,
-          key: entry.key,
-          value: entry.value,
-          updatedAt: entry.updatedAt,
-        });
-        entry.bytes = utf8Bytes(content);
-        assertEntryFits(namespaceRoot, entry, filePath, maxEntries, maxValueChars);
-        throwIfAborted(signal);
-        beforeCommit?.();
-        writeJsonAtomic(filePath, content, beforeCommit);
-        beforeCommit?.();
-        return entry;
-      }, signal, beforeCommit);
+          if (encodedValue.length > maxValueChars) {
+            throw new Error(`Kiro memory value exceeds ${maxValueChars} configured characters`);
+          }
+          const normalizedValue = JSON.parse(encodedValue) as T;
+          const existing = lstatOrNull(filePath);
+          if (existing) {
+            if (!existing.isFile() || existing.isSymbolicLink()) {
+              throw new KiroMemoryScopeError(`Kiro memory entry must be a real file: ${filePath}`);
+            }
+            const previous = readEntry<T>(filePath, memoryNamespace, maxValueChars);
+            if (previous.namespace !== memoryNamespace || previous.key !== normalizedKey) {
+              throw new KiroMemoryScopeError(
+                `Refusing foreign Kiro memory entry collision for ${JSON.stringify(normalizedKey)}`,
+              );
+            }
+          }
+          const entry: KiroMemoryEntry<T> = {
+            namespace: memoryNamespace,
+            key: normalizedKey,
+            value: normalizedValue,
+            updatedAt: new Date().toISOString(),
+            bytes: 0,
+          };
+          const content = JSON.stringify({
+            format: MEMORY_FORMAT,
+            owner: MEMORY_OWNER,
+            kind: "memory-entry",
+            namespace: entry.namespace,
+            key: entry.key,
+            value: entry.value,
+            updatedAt: entry.updatedAt,
+          });
+          entry.bytes = utf8Bytes(content);
+          assertEntryFits(namespaceRoot, entry, filePath, maxEntries, maxValueChars);
+          throwIfAborted(signal);
+          beforeCommit?.();
+          writeJsonAtomic(filePath, content, beforeCommit, () => { published = true; });
+          beforeCommit?.();
+          return entry;
+        }, signal, beforeCommit);
+      } catch (error) {
+        if (published) throw new KiroMemoryCommitAcknowledgementError("set", normalizedKey, { cause: error });
+        throw error;
+      }
     },
 
     async delete(key: string, signal?: AbortSignal, beforeCommit?: () => void): Promise<{ key: string; deleted: boolean }> {
-      return withNamespaceMutationLock(namespaceRoot, () => {
-        const normalizedKey = normalizeKiroMemoryToken(key, "key");
-        const filePath = resolveEntryPath(normalizedKey);
-        const before = lstatOrNull(filePath);
-        if (!before) return { key: normalizedKey, deleted: false };
-        if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) {
-          throw new KiroMemoryScopeError(`Kiro memory entry must be an unaliased real file: ${filePath}`);
-        }
-        const entry = readEntry<T>(filePath, memoryNamespace, maxValueChars);
-        if (entry.key !== normalizedKey) throw new KiroMemoryScopeError("Kiro memory entry identity mismatch");
-        throwIfAborted(signal);
-        const current = fs.lstatSync(filePath);
-        if (current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1) {
-          throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
-        }
-        beforeCommit?.();
-        fs.unlinkSync(filePath);
-        try {
-          const descriptor = fs.openSync(namespaceRoot, "r");
-          try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
-        } catch {}
-        beforeCommit?.();
-        return { key: normalizedKey, deleted: true };
-      }, signal, beforeCommit);
+      const normalizedKey = normalizeKiroMemoryToken(key, "key");
+      let published = false;
+      try {
+        return await withNamespaceMutationLock(namespaceRoot, lockState, () => {
+          const filePath = resolveEntryPath(normalizedKey);
+          const before = lstatOrNull(filePath);
+          if (!before) return { key: normalizedKey, deleted: false };
+          if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) {
+            throw new KiroMemoryScopeError(`Kiro memory entry must be an unaliased real file: ${filePath}`);
+          }
+          const entry = readEntry<T>(filePath, memoryNamespace, maxValueChars);
+          if (entry.key !== normalizedKey) throw new KiroMemoryScopeError("Kiro memory entry identity mismatch");
+          throwIfAborted(signal);
+          const current = fs.lstatSync(filePath);
+          if (current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1) {
+            throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
+          }
+          beforeCommit?.();
+          fs.unlinkSync(filePath);
+          published = true;
+          syncDirectoryBestEffort(namespaceRoot);
+          beforeCommit?.();
+          return { key: normalizedKey, deleted: true };
+        }, signal, beforeCommit);
+      } catch (error) {
+        if (published) throw new KiroMemoryCommitAcknowledgementError("delete", normalizedKey, { cause: error });
+        throw error;
+      }
     },
 
     async list(): Promise<KiroMemoryEntry<T>[]> {

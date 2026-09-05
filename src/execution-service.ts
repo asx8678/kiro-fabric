@@ -88,11 +88,16 @@ export class FabricExecutionService {
 
   async execute(options: FabricExecutionOptions): Promise<FabricExecutionResult> {
     if (this.#closeController.signal.aborted || this.#active >= this.#compiler.maxWorkers) {
-      return {
-        status: "failed", success: false, logs: [], audits: [], elapsedMs: 0,
+      const result = {
+        status: "failed" as const, success: false, logs: [], audits: [], elapsedMs: 0,
         error: this.#closeController.signal.aborted ? "Fabric execution service is closed" : "Fabric execution concurrency limit reached",
         effectiveTimeoutMs: effectiveFabricTimeout(this.config.executor.maxTimeoutMs, this.config.executor.timeoutMs, 0, options.timeoutMs ?? 0),
       };
+      if (options.tracer?.enabled) {
+        options.tracer.event("eval", "exec.end", options.execId, { status: "failed", elapsedMs: 0, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
+        options.tracer.flush();
+      }
+      return result;
     }
     this.#active += 1;
     const signal = options.signal
@@ -121,7 +126,14 @@ export class FabricExecutionService {
     options.onEffectiveTimeoutChange?.(effectiveTimeoutMs);
     const sourceError = fabricSourceLimitError(options.code, this.config.executor.maxSourceBytes)
       ?? fabricPayloadsLimitError(options.payloads, this.config.executor.maxInputBytes);
-    if (sourceError) return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: sourceError, effectiveTimeoutMs };
+    if (sourceError) {
+      const elapsedMs = performance.now() - started;
+      if (tracer.enabled) {
+        tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
+        tracer.flush();
+      }
+      return { status: "failed", success: false, logs: [], audits: [], elapsedMs, error: sourceError, effectiveTimeoutMs };
+    }
 
     if (tracer.enabled) {
       tracer.event("eval", "exec.start", execId, {
@@ -143,12 +155,12 @@ export class FabricExecutionService {
     } catch (error) {
       compileSpan?.end({ failed: true });
       const aborted = options.signal?.aborted === true;
-      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: aborted ? "aborted" : "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0 });
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: aborted ? "aborted" : "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
       return { status: aborted ? "aborted" : "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: aborted ? "Execution cancelled" : error instanceof Error ? error.message : String(error), effectiveTimeoutMs };
     }
     compileSpan?.end({ errors: checked.errors.length });
     if (checked.errors.length) {
-      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: checked.errors.length, resultChars: 0 });
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: checked.errors.length, resultChars: 0, resultValueChars: null });
       return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: "TypeScript validation failed", typeErrors: checked.errors, effectiveTimeoutMs };
     }
 
@@ -280,7 +292,8 @@ export class FabricExecutionService {
       }
     }
     if (tracer.enabled) {
-      tracer.event("eval", "exec.end", execId, { status, elapsedMs: performance.now() - started, audits: audits.length, logs: result.logs.length, typeErrors: 0, resultChars: status === "succeeded" ? traceJsonChars(result.value) : 0 });
+      const resultValueChars = status === "succeeded" ? traceJsonChars(result.value) : null;
+      tracer.event("eval", "exec.end", execId, { status, elapsedMs: performance.now() - started, audits: audits.length, logs: result.logs.length, typeErrors: 0, resultChars: resultValueChars ?? 0, resultValueChars });
       // Flush at each execution boundary so post-hoc analysis never waits
       // on the interval timer for the tail of a finished run.
       tracer.flush();

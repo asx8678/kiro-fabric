@@ -1,0 +1,36 @@
+{
+  "assertionsPassed": true,
+  "results": [
+    {
+      "name": "overlap",
+      "expectedSelfUs": 20,
+      "baselineSelfUs": -40,
+      "candidateSelfUs": 20,
+      "sampleCount": 1,
+      "synthetic": true
+    },
+    {
+      "name": "serial",
+      "expectedSelfUs": 50,
+      "baselineSelfUs": 50,
+      "candidateSelfUs": 50,
+      "sampleCount": 1,
+      "synthetic": true
+    },
+    {
+      "name": "outside-parent",
+      "expectedSelfUs": 90,
+      "baselineSelfUs": 70,
+      "candidateSelfUs": 90,
+      "sampleCount": 1,
+      "synthetic": true
+    }
+  ],
+  "unicode": {
+    "jsonString": "😀",
+    "utf16Chars": 4,
+    "utf8Bytes": 6
+  },
+  "latencyBenchmark": false,
+  "billingEvidence": false
+}

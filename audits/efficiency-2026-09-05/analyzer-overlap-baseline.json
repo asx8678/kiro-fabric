@@ -1,0 +1,74 @@
+{
+  "file": "audits/efficiency-2026-09-05/trace-overlap.jsonl",
+  "events": 4,
+  "malformedLines": 0,
+  "executions": [
+    {
+      "execId": "overlap",
+      "status": "succeeded",
+      "elapsedMs": 0.1,
+      "bridgeCalls": 2,
+      "bridgeTotalUs": 140,
+      "bridgeArgsChars": 8,
+      "bridgeResultChars": 2,
+      "approvals": 0,
+      "approvalWaitUs": 0,
+      "spans": [
+        {
+          "ev": "probe",
+          "ref": "probe",
+          "durUs": 80,
+          "selfUs": 80,
+          "parent": "execute"
+        },
+        {
+          "ev": "probe",
+          "ref": "probe",
+          "durUs": 60,
+          "selfUs": 60,
+          "parent": "execute"
+        },
+        {
+          "ev": "execute",
+          "ref": "execute",
+          "durUs": 100,
+          "selfUs": -40
+        }
+      ]
+    }
+  ],
+  "spanTable": [
+    {
+      "ev": "probe",
+      "count": 2,
+      "totalUs": 140,
+      "meanUs": 70,
+      "maxUs": 80,
+      "p95Us": 80,
+      "totalSelfUs": 140
+    },
+    {
+      "ev": "execute",
+      "count": 1,
+      "totalUs": 100,
+      "meanUs": 100,
+      "maxUs": 100,
+      "p95Us": 100,
+      "totalSelfUs": -40
+    }
+  ],
+  "bridgeTable": [
+    {
+      "ref": "probe",
+      "count": 2,
+      "totalUs": 140,
+      "meanUs": 70,
+      "maxUs": 80,
+      "p95Us": 80,
+      "argsChars": 8,
+      "resultChars": 2,
+      "errors": 0
+    }
+  ],
+  "anomalies": []
+}

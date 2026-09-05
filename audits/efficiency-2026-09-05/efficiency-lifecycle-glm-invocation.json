@@ -1,0 +1,29 @@
+{
+  "id": "fb04c806b3bf418e8f529e867944644a",
+  "name": "efficiency-lifecycle-glm",
+  "task": "Audit only /home/adam/projects/kiro-fabric at d33cbdca33fac6ce301a6da884f06ee5141534da. First verify exact git toplevel and commit, abort on mismatch, read AGENTS.md. No production edits, global config edits, dependency installs, commits, recursive delegation, network/model invocations or live benchmarks. You may write only your named report under audits/efficiency-2026-09-05/. Use bounded searches/reads, no whole repository audit. Read docs/architecture.md for evolved ownership: native Kiro coding/subagents, Fabric private stdio server exactly 3 tools, workspace durable state vs transient artifacts; no Pi project dependency. Run smallest relevant existing tests with pnpm exec vitest run <files> (no package-script rebuild); local tests not real Kiro proof. kiro-cli unavailable on PATH. Return concise findings <=700 words with path:line, root cause, frequency/cost driver, risk, measured vs unmeasured benefit, confidence and tests actually run. Save larger evidence/report in your named file. Unknown billing is unknown. Approved task constraints/approvals/isolation/recoverability may not weaken. Packet LIFECYCLE ONLY. Astra paths: src/kiro/mcp-entry.ts; src/kiro/mcp-server.ts lifecycle/binding/identity/drain; src/kiro/runtime.ts; src/kiro/power/workspace-binding.ts and workspace-context.ts; durable stores src/kiro/memory.ts src/providers/state.ts (locate actual paths); scripts/real-client-evidence.mjs and run-kiro-agent-real-driver.mjs. Verify distinct MCP instance/PID/start, runtime generation, guest context, workspace identity, host session and task identities. Matrix: ordinary calls, manual/auto compaction twice, same/new process resume, new session, crash, switch/concurrent workspaces, cancellation, TTL. Atomic writes/schema recovery/concurrent locks and no stale approval reuse; explicit transient misses. Tests: mcp-process-lifecycle, workspace-binding, artifacts-state, storage-failure, release-evidence where decisive. Local tests not live Kiro continuity; no fake billing. Report audits/efficiency-2026-09-05/lifecycle.md. Do not investigate compiler economics or model-visible volume.",
+  "status": "failed",
+  "runner": "pi",
+  "transport": "process",
+  "cwd": "/home/adam/projects/kiro-fabric",
+  "model": "zro/glm-5.3",
+  "thinking": "high",
+  "startedAt": 1788607250813,
+  "updatedAt": 1788607251105,
+  "turns": 0,
+  "toolCalls": 0,
+  "text": "",
+  "usage": {
+    "input": 0,
+    "output": 0,
+    "cacheRead": 0,
+    "cacheWrite": 0,
+    "cost": 0
+  },
+  "exitCode": 1,
+  "stderr": "Error: Model \"zro/glm-5.3\" not found. Use --list-models to see available models.\n",
+  "finishedAt": 1788607251105,
+  "error": "Error: Model \"zro/glm-5.3\" not found. Use --list-models to see available models.",
+  "logFile": "/tmp/pi-fabric-runs-gOLfMv/fb04c806b3bf418e8f529e867944644a/events.jsonl",
+  "sessionId": "118916"
+}

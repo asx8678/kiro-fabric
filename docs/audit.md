@@ -82,6 +82,8 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 - `tests/mcp-federation.test.ts`
 - `tests/mcp-pagination.test.ts`
 - `tests/memory-security.test.ts`
+- `tests/memory-recovery.test.ts`
+- `tests/memory-acknowledgement.test.ts`
 - `tests/mcp-process-lifecycle.test.ts`
 - `tests/migration.test.ts`
 - `tests/package-boundary.test.ts`
@@ -89,6 +91,7 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 - `tests/release-artifacts.test.ts`
 - `tests/release-evidence.test.ts`
 - `tests/sbom-identity.test.ts`
+- `tests/server-efficiency.test.ts`
 - `tests/storage-failure.test.ts`
 - `tests/trace-analyze.test.ts`
 - `tests/tracing.test.ts`

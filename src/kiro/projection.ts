@@ -1,7 +1,15 @@
 import type { FabricExecResultFormat } from "../kernel/fabric-exec-contract.js";
 import type { FabricExecutionResult } from "../execution-service.js";
 
-export interface KiroProjectionResult { text: string; isError: boolean; artifactId?: string }
+export interface KiroProjectionResult {
+  text: string;
+  isError: boolean;
+  artifactId?: string;
+  visibleChars: number;
+  visibleBytes: number;
+  overflowed: boolean;
+  artifactRetained: boolean;
+}
 const MAX_FAILURE_PROGRESS_ENTRIES = 8;
 const MAX_FAILURE_PROGRESS_REF_CHARS = 512;
 const MAX_FAILURE_OUTPUT_CHARS = 20_000;
@@ -40,12 +48,21 @@ const failureProgress = (result: FabricExecutionResult): string => {
       ? audit.ref
       : `${safePrefix(audit.ref, MAX_FAILURE_PROGRESS_REF_CHARS - 1)}…`,
     outcome: audit.success ? "succeeded" : "failed",
+    ...(audit.commitAcknowledgement ? {
+      commitAcknowledgement: { committed: true, operation: audit.commitAcknowledgement.operation },
+    } : {}),
   }));
   const omitted = completed.length - summaries.length;
   const succeeded = completed.filter((audit) => audit.success === true).length;
+  const committed = completed.filter((audit) => audit.commitAcknowledgement).length;
+  const sampledCommitted = summaries.some((summary) => summary.commitAcknowledgement !== undefined);
   return [
-    `\n\nCompleted nested calls before the outer failure (arguments and results omitted): ${JSON.stringify({ total: completed.length, succeeded, failed: completed.length - succeeded, sample: summaries, omitted })}.`,
-    "Inspect current state before retrying fabric_exec; completed calls may already have taken effect, and a blind retry can duplicate effects.",
+    `\n\nCompleted nested calls before the outer failure (arguments and results omitted): ${JSON.stringify({ total: completed.length, succeeded, failed: completed.length - succeeded, committed, sample: summaries, omitted })}.`,
+    committed > 0
+      ? sampledCommitted
+        ? "A listed memory mutation is known committed although acknowledgement failed; read that memory key before retrying."
+        : "A memory mutation is known committed although acknowledgement failed (not shown in the sample); read the affected memory key before retrying."
+      : "Inspect current state before retrying fabric_exec; completed calls may already have taken effect, and a blind retry can duplicate effects.",
   ].join("\n");
 };
 
@@ -94,20 +111,37 @@ export const projectFabricExecutionText = (options: {
     : "";
   const progress = failureProgress(options.result);
   const complete = `${body}${diagnostics}${logs}${progress}`;
-  if (complete.length <= visibleMaximum) return { text: complete, isError: !options.result.success };
+  if (complete.length <= visibleMaximum) return {
+    text: complete,
+    isError: !options.result.success,
+    visibleChars: complete.length,
+    visibleBytes: Buffer.byteLength(complete, "utf8"),
+    overflowed: false,
+    artifactRetained: false,
+  };
   try {
     const artifactId = options.writeArtifact(complete);
     const hint = `\n\nOutput exceeded ${visibleMaximum} characters. Full result is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
+    const text = truncateWithHint(complete, visibleMaximum, hint);
     return {
-      text: truncateWithHint(complete, visibleMaximum, hint),
+      text,
       isError: !options.result.success,
       artifactId,
+      visibleChars: text.length,
+      visibleBytes: Buffer.byteLength(text, "utf8"),
+      overflowed: true,
+      artifactRetained: true,
     };
   } catch {
     const hint = `\n\nOutput exceeded ${visibleMaximum} characters and could not be retained within artifact bounds.`;
+    const text = truncateWithHint(complete, visibleMaximum, hint);
     return {
-      text: truncateWithHint(complete, visibleMaximum, hint),
+      text,
       isError: true,
+      visibleChars: text.length,
+      visibleBytes: Buffer.byteLength(text, "utf8"),
+      overflowed: true,
+      artifactRetained: false,
     };
   }
 };

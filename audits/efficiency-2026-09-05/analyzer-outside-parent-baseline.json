@@ -1,0 +1,67 @@
+{
+  "file": "audits/efficiency-2026-09-05/trace-outside-parent.jsonl",
+  "events": 3,
+  "malformedLines": 0,
+  "executions": [
+    {
+      "execId": "outside-parent",
+      "status": "succeeded",
+      "elapsedMs": 0.1,
+      "bridgeCalls": 1,
+      "bridgeTotalUs": 30,
+      "bridgeArgsChars": 4,
+      "bridgeResultChars": 1,
+      "approvals": 0,
+      "approvalWaitUs": 0,
+      "spans": [
+        {
+          "ev": "execute",
+          "ref": "execute",
+          "durUs": 100,
+          "selfUs": 70
+        },
+        {
+          "ev": "probe",
+          "ref": "probe",
+          "durUs": 30,
+          "selfUs": 30,
+          "parent": "execute"
+        }
+      ]
+    }
+  ],
+  "spanTable": [
+    {
+      "ev": "execute",
+      "count": 1,
+      "totalUs": 100,
+      "meanUs": 100,
+      "maxUs": 100,
+      "p95Us": 100,
+      "totalSelfUs": 70
+    },
+    {
+      "ev": "probe",
+      "count": 1,
+      "totalUs": 30,
+      "meanUs": 30,
+      "maxUs": 30,
+      "p95Us": 30,
+      "totalSelfUs": 30
+    }
+  ],
+  "bridgeTable": [
+    {
+      "ref": "probe",
+      "count": 1,
+      "totalUs": 30,
+      "meanUs": 30,
+      "maxUs": 30,
+      "p95Us": 30,
+      "argsChars": 4,
+      "resultChars": 1,
+      "errors": 0
+    }
+  ],
+  "anomalies": []
+}

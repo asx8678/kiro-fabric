@@ -18756,8 +18756,8 @@ var MAX_FABRIC_PAYLOAD_KEYS = 128;
 var MAX_FABRIC_PAYLOAD_KEY_BYTES = 1024;
 var effectiveFabricSourceLimit = (value) => Number.isSafeInteger(value) ? Math.max(MIN_EXECUTOR_SOURCE_BYTES, Math.min(MAX_EXECUTOR_SOURCE_BYTES, value)) : DEFAULT_EXECUTOR_SOURCE_BYTES;
 var fabricSourceLimitError = (code, maximum) => {
-  const bytes = Buffer2.byteLength(code, "utf8");
-  return bytes > maximum ? `Fabric source exceeds ${maximum} bytes: received ${bytes}` : void 0;
+  const bytes2 = Buffer2.byteLength(code, "utf8");
+  return bytes2 > maximum ? `Fabric source exceeds ${maximum} bytes: received ${bytes2}` : void 0;
 };
 var fabricPayloadsLimitError = (payloads, maximum) => {
   if (payloads === void 0) return void 0;
@@ -18775,8 +18775,8 @@ var fabricPayloadsLimitError = (payloads, maximum) => {
 };
 var fabricTranspiledLimitError = (code) => {
   const maximum = MAX_EXECUTOR_SOURCE_BYTES * 4;
-  const bytes = Buffer2.byteLength(code, "utf8");
-  return bytes > maximum ? `Transpiled guest source exceeds ${maximum} bytes: received ${bytes}` : void 0;
+  const bytes2 = Buffer2.byteLength(code, "utf8");
+  return bytes2 > maximum ? `Transpiled guest source exceeds ${maximum} bytes: received ${bytes2}` : void 0;
 };
 
 // src/config.ts
@@ -18958,14 +18958,14 @@ var sameConfigFile = (left, right) => left.isFile() && right.isFile() && !left.i
 var sameConfigVersion = (left, right) => sameConfigFile(left, right) && left.size === right.size && left.ctimeNs === right.ctimeNs && left.mtimeNs === right.mtimeNs;
 var readBoundedDescriptor = (descriptor2) => {
   const buffer = Buffer.allocUnsafe(MAX_CONFIG_BYTES + 1);
-  let bytes = 0;
-  while (bytes < buffer.length) {
-    const count = fs.readSync(descriptor2, buffer, bytes, buffer.length - bytes, null);
+  let bytes2 = 0;
+  while (bytes2 < buffer.length) {
+    const count = fs.readSync(descriptor2, buffer, bytes2, buffer.length - bytes2, null);
     if (count === 0) break;
-    bytes += count;
+    bytes2 += count;
   }
-  if (bytes > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
-  return buffer.subarray(0, bytes);
+  if (bytes2 > MAX_CONFIG_BYTES) throw new Error("configuration exceeds 262144 bytes");
+  return buffer.subarray(0, bytes2);
 };
 var loadFabricConfig = (configFile, defaults = DEFAULT_FABRIC_CONFIG) => {
   let descriptor2;
@@ -18991,13 +18991,13 @@ var loadFabricConfig = (configFile, defaults = DEFAULT_FABRIC_CONFIG) => {
       }
       if ((stats.mode & 0o077n) !== 0n) throw new Error("configuration permissions must be private");
     }
-    const bytes = readBoundedDescriptor(descriptor2);
+    const bytes2 = readBoundedDescriptor(descriptor2);
     const afterRead = fs.fstatSync(descriptor2, { bigint: true });
     const currentPath = fs.lstatSync(configFile, { bigint: true });
     if (!sameConfigVersion(stats, afterRead) || !sameConfigVersion(stats, currentPath)) {
       throw new Error("configuration changed while it was being read");
     }
-    const value = JSON.parse(bytes.toString("utf8"));
+    const value = JSON.parse(bytes2.toString("utf8"));
     const document = migrateFileConfig(value, defaults);
     return normalizeFabricConfig(document, defaults);
   } catch (error) {
@@ -19012,24 +19012,53 @@ var loadFabricConfig = (configFile, defaults = DEFAULT_FABRIC_CONFIG) => {
 
 // src/kiro/info-catalog.ts
 var MAX_INFO_CATALOG_BYTES = 2e4;
-var fabricInfoActions = (actions) => {
-  const summarized = actions.map(({ ref, risk, descriptorDigest }) => ({ ref, risk, descriptorDigest }));
-  if (Buffer.byteLength(JSON.stringify(summarized), "utf8") <= MAX_INFO_CATALOG_BYTES) return summarized;
-  const refsOnly = actions.map(({ ref, risk }) => ({ ref, risk }));
-  if (Buffer.byteLength(JSON.stringify(refsOnly), "utf8") <= MAX_INFO_CATALOG_BYTES) return refsOnly;
-  const refs = [];
-  let bytes = 2;
-  for (const { ref } of actions) {
-    const added = Buffer.byteLength(JSON.stringify(ref), "utf8") + (refs.length ? 1 : 0);
-    if (bytes + added > MAX_INFO_CATALOG_BYTES) break;
-    refs.push(ref);
-    bytes += added;
+var recovery = () => ({
+  search: "tools.search({ query, limit })",
+  describe: "tools.describe({ ref })"
+});
+var bytes = (value) => Buffer.byteLength(JSON.stringify(value), "utf8");
+var packageCatalog = (actions, total, representation) => ({
+  actions,
+  catalog: {
+    total,
+    returned: actions.length,
+    complete: actions.length === total,
+    representation,
+    digestComplete: representation === "descriptors" && actions.length === total,
+    recovery: recovery()
   }
-  return refs;
+});
+var fabricInfoCatalog = (actions) => {
+  const summarized = actions.map(({ ref, risk, descriptorDigest }) => ({ ref, risk, descriptorDigest }));
+  let result = packageCatalog(summarized, actions.length, "descriptors");
+  if (bytes(result) <= MAX_INFO_CATALOG_BYTES) return result;
+  result = packageCatalog(actions.map(({ ref, risk }) => ({ ref, risk })), actions.length, "refs-risk");
+  if (bytes(result) <= MAX_INFO_CATALOG_BYTES) return result;
+  const refs = [];
+  let refsBytes = 2;
+  const emptyEnvelopeBytes = bytes(packageCatalog([], actions.length, "refs"));
+  for (const { ref } of actions) {
+    const encodedBytes = bytes(ref);
+    const candidateRefsBytes = refsBytes + encodedBytes + (refs.length ? 1 : 0);
+    const candidateCount = refs.length + 1;
+    const metadataAdjustment = String(candidateCount).length - 1 + (candidateCount === actions.length ? -1 : 0);
+    if (emptyEnvelopeBytes - 2 + candidateRefsBytes + metadataAdjustment > MAX_INFO_CATALOG_BYTES) break;
+    refs.push(ref);
+    refsBytes = candidateRefsBytes;
+  }
+  return packageCatalog(refs, actions.length, "refs");
 };
 
 // src/core/action-registry.ts
 import { randomUUID } from "node:crypto";
+
+// src/protocol.ts
+var FABRIC_COMMIT_ACKNOWLEDGEMENT = /* @__PURE__ */ Symbol("fabric.commitAcknowledgement");
+var fabricCommitAcknowledgement = (error) => {
+  if (!(error instanceof Error)) return void 0;
+  const marker = error[FABRIC_COMMIT_ACKNOWLEDGEMENT];
+  return marker?.version === 1 && (marker.operation === "set" || marker.operation === "delete") ? marker : void 0;
+};
 
 // src/schema-validation.ts
 var MAX_VALIDATION_MESSAGE_CHARS = 2e3;
@@ -19435,6 +19464,8 @@ var ActionRegistry = class {
       audit.endedAt = Date.now();
       audit.success = false;
       audit.error = error instanceof Error ? error.message.slice(0, 1e3) : String(error).slice(0, 1e3);
+      const acknowledgement = fabricCommitAcknowledgement(error);
+      if (acknowledgement) audit.commitAcknowledgement = acknowledgement;
       throw error;
     } finally {
       this.#activeWrites.delete(nestedToolCallId);
@@ -20542,7 +20573,7 @@ var FabricExecutionService = class {
   #closing;
   async execute(options) {
     if (this.#closeController.signal.aborted || this.#active >= this.#compiler.maxWorkers) {
-      return {
+      const result = {
         status: "failed",
         success: false,
         logs: [],
@@ -20551,6 +20582,11 @@ var FabricExecutionService = class {
         error: this.#closeController.signal.aborted ? "Fabric execution service is closed" : "Fabric execution concurrency limit reached",
         effectiveTimeoutMs: effectiveFabricTimeout(this.config.executor.maxTimeoutMs, this.config.executor.timeoutMs, 0, options.timeoutMs ?? 0)
       };
+      if (options.tracer?.enabled) {
+        options.tracer.event("eval", "exec.end", options.execId, { status: "failed", elapsedMs: 0, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
+        options.tracer.flush();
+      }
+      return result;
     }
     this.#active += 1;
     const signal = options.signal ? AbortSignal.any([options.signal, this.#closeController.signal]) : this.#closeController.signal;
@@ -20578,7 +20614,14 @@ var FabricExecutionService = class {
     let notifiedEffectiveTimeoutMs = effectiveTimeoutMs;
     options.onEffectiveTimeoutChange?.(effectiveTimeoutMs);
     const sourceError = fabricSourceLimitError(options.code, this.config.executor.maxSourceBytes) ?? fabricPayloadsLimitError(options.payloads, this.config.executor.maxInputBytes);
-    if (sourceError) return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: sourceError, effectiveTimeoutMs };
+    if (sourceError) {
+      const elapsedMs = performance.now() - started;
+      if (tracer.enabled) {
+        tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
+        tracer.flush();
+      }
+      return { status: "failed", success: false, logs: [], audits: [], elapsedMs, error: sourceError, effectiveTimeoutMs };
+    }
     if (tracer.enabled) {
       tracer.event("eval", "exec.start", execId, {
         sourceBytes: Buffer.byteLength(options.code, "utf8"),
@@ -20599,12 +20642,12 @@ var FabricExecutionService = class {
     } catch (error) {
       compileSpan?.end({ failed: true });
       const aborted = options.signal?.aborted === true;
-      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: aborted ? "aborted" : "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0 });
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: aborted ? "aborted" : "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
       return { status: aborted ? "aborted" : "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: aborted ? "Execution cancelled" : error instanceof Error ? error.message : String(error), effectiveTimeoutMs };
     }
     compileSpan?.end({ errors: checked.errors.length });
     if (checked.errors.length) {
-      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: checked.errors.length, resultChars: 0 });
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: checked.errors.length, resultChars: 0, resultValueChars: null });
       return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: "TypeScript validation failed", typeErrors: checked.errors, effectiveTimeoutMs };
     }
     const audits = [];
@@ -20737,7 +20780,8 @@ var FabricExecutionService = class {
       }
     }
     if (tracer.enabled) {
-      tracer.event("eval", "exec.end", execId, { status, elapsedMs: performance.now() - started, audits: audits.length, logs: result.logs.length, typeErrors: 0, resultChars: status === "succeeded" ? traceJsonChars(result.value) : 0 });
+      const resultValueChars = status === "succeeded" ? traceJsonChars(result.value) : null;
+      tracer.event("eval", "exec.end", execId, { status, elapsedMs: performance.now() - started, audits: audits.length, logs: result.logs.length, typeErrors: 0, resultChars: resultValueChars ?? 0, resultValueChars });
       tracer.flush();
     }
     return {
@@ -21098,13 +21142,13 @@ var fsyncDirectory = (directory) => {
   }
 };
 var writeJsonAtomic = (target, value, exclusive = false) => {
-  const bytes = `${JSON.stringify(value, null, 2)}
+  const bytes2 = `${JSON.stringify(value, null, 2)}
 `;
   if (exclusive) {
     try {
       const descriptor2 = fs3.openSync(target, "wx", 384);
       try {
-        fs3.writeFileSync(descriptor2, bytes);
+        fs3.writeFileSync(descriptor2, bytes2);
         fs3.fsyncSync(descriptor2);
       } finally {
         fs3.closeSync(descriptor2);
@@ -21117,7 +21161,7 @@ var writeJsonAtomic = (target, value, exclusive = false) => {
     try {
       const descriptor2 = fs3.openSync(temporary, "wx", 384);
       try {
-        fs3.writeFileSync(descriptor2, bytes);
+        fs3.writeFileSync(descriptor2, bytes2);
         fs3.fsyncSync(descriptor2);
       } finally {
         fs3.closeSync(descriptor2);
@@ -21136,13 +21180,13 @@ var writeJsonAtomic = (target, value, exclusive = false) => {
 var privateJson = (target, initial) => writeJsonAtomic(target, initial, true);
 var copyFileAtomic = (source, target) => {
   privateFile(source);
-  const bytes = fs3.readFileSync(source);
-  const sourceDigest = createHash3("sha256").update(bytes).digest("hex");
+  const bytes2 = fs3.readFileSync(source);
+  const sourceDigest = createHash3("sha256").update(bytes2).digest("hex");
   const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.migration.tmp`;
   try {
     const descriptor2 = fs3.openSync(temporary, "wx", 384);
     try {
-      fs3.writeFileSync(descriptor2, bytes);
+      fs3.writeFileSync(descriptor2, bytes2);
       fs3.fsyncSync(descriptor2);
     } finally {
       fs3.closeSync(descriptor2);
@@ -21733,15 +21777,20 @@ var failureProgress = (result) => {
   const sampled = completed.length <= MAX_FAILURE_PROGRESS_ENTRIES ? completed : [...completed.slice(0, edge), ...completed.slice(-edge)];
   const summaries = sampled.map((audit) => ({
     ref: audit.ref.length <= MAX_FAILURE_PROGRESS_REF_CHARS ? audit.ref : `${safePrefix(audit.ref, MAX_FAILURE_PROGRESS_REF_CHARS - 1)}\u2026`,
-    outcome: audit.success ? "succeeded" : "failed"
+    outcome: audit.success ? "succeeded" : "failed",
+    ...audit.commitAcknowledgement ? {
+      commitAcknowledgement: { committed: true, operation: audit.commitAcknowledgement.operation }
+    } : {}
   }));
   const omitted = completed.length - summaries.length;
   const succeeded = completed.filter((audit) => audit.success === true).length;
+  const committed = completed.filter((audit) => audit.commitAcknowledgement).length;
+  const sampledCommitted = summaries.some((summary) => summary.commitAcknowledgement !== void 0);
   return [
     `
 
-Completed nested calls before the outer failure (arguments and results omitted): ${JSON.stringify({ total: completed.length, succeeded, failed: completed.length - succeeded, sample: summaries, omitted })}.`,
-    "Inspect current state before retrying fabric_exec; completed calls may already have taken effect, and a blind retry can duplicate effects."
+Completed nested calls before the outer failure (arguments and results omitted): ${JSON.stringify({ total: completed.length, succeeded, failed: completed.length - succeeded, committed, sample: summaries, omitted })}.`,
+    committed > 0 ? sampledCommitted ? "A listed memory mutation is known committed although acknowledgement failed; read that memory key before retrying." : "A memory mutation is known committed although acknowledgement failed (not shown in the sample); read the affected memory key before retrying." : "Inspect current state before retrying fabric_exec; completed calls may already have taken effect, and a blind retry can duplicate effects."
   ].join("\n");
 };
 var truncateMiddle = (content, maximum) => {
@@ -21777,24 +21826,41 @@ Normalization diagnostics: ${JSON.stringify(options.normalizationDiagnostics)}` 
 Fabric logs: ${JSON.stringify(options.result.logs)}` : "";
   const progress = failureProgress(options.result);
   const complete = `${body}${diagnostics}${logs}${progress}`;
-  if (complete.length <= visibleMaximum) return { text: complete, isError: !options.result.success };
+  if (complete.length <= visibleMaximum) return {
+    text: complete,
+    isError: !options.result.success,
+    visibleChars: complete.length,
+    visibleBytes: Buffer.byteLength(complete, "utf8"),
+    overflowed: false,
+    artifactRetained: false
+  };
   try {
     const artifactId = options.writeArtifact(complete);
     const hint = `
 
 Output exceeded ${visibleMaximum} characters. Full result is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
+    const text = truncateWithHint(complete, visibleMaximum, hint);
     return {
-      text: truncateWithHint(complete, visibleMaximum, hint),
+      text,
       isError: !options.result.success,
-      artifactId
+      artifactId,
+      visibleChars: text.length,
+      visibleBytes: Buffer.byteLength(text, "utf8"),
+      overflowed: true,
+      artifactRetained: true
     };
   } catch {
     const hint = `
 
 Output exceeded ${visibleMaximum} characters and could not be retained within artifact bounds.`;
+    const text = truncateWithHint(complete, visibleMaximum, hint);
     return {
-      text: truncateWithHint(complete, visibleMaximum, hint),
-      isError: true
+      text,
+      isError: true,
+      visibleChars: text.length,
+      visibleBytes: Buffer.byteLength(text, "utf8"),
+      overflowed: true,
+      artifactRetained: false
     };
   }
 };
@@ -22363,8 +22429,8 @@ var readExplicitMcpConfiguration = (configPath) => {
   if (!sameFileVersion(opened, after) || !sameFileVersion(opened, current)) {
     throw new Error("MCP configuration changed while reading");
   }
-  const bytes = Buffer.from(buffer.subarray(0, byteCount));
-  const parsed = JSON.parse(bytes.toString("utf8"));
+  const bytes2 = Buffer.from(buffer.subarray(0, byteCount));
+  const parsed = JSON.parse(bytes2.toString("utf8"));
   if (!isRecord6(parsed) || !isRecord6(parsed.mcpServers) || !Array.isArray(parsed.imports) || parsed.imports.length !== 0 || JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify(["imports", "mcpServers"])) {
     throw new Error("MCP configuration must contain only mcpServers and imports: []");
   }
@@ -22372,8 +22438,8 @@ var readExplicitMcpConfiguration = (configPath) => {
   if (names.length > 128 || names.some((name) => !name || name.length > 256)) throw new Error("MCP configuration server names exceed product bounds");
   return {
     names: new Set(names),
-    digest: createHash5("sha256").update(bytes).digest("hex"),
-    bytes,
+    digest: createHash5("sha256").update(bytes2).digest("hex"),
+    bytes: bytes2,
     stats: opened
   };
 };
@@ -23085,6 +23151,19 @@ var KiroMemoryScopeError = class extends Error {
     this.name = "KiroMemoryScopeError";
   }
 };
+var KiroMemoryCommitAcknowledgementError = class extends Error {
+  constructor(operation, key, options) {
+    super(`Kiro memory ${operation} for ${JSON.stringify(key)} committed; acknowledgement failed; read memory before retrying`, options);
+    this.operation = operation;
+    this.key = key;
+    this.name = "KiroMemoryCommitAcknowledgementError";
+    this[FABRIC_COMMIT_ACKNOWLEDGEMENT] = Object.freeze({ version: 1, operation });
+  }
+  operation;
+  key;
+  committed = true;
+  [FABRIC_COMMIT_ACKNOWLEDGEMENT];
+};
 var utf8Bytes = (value) => Buffer.byteLength(value, "utf8");
 var normalizeKiroMemoryToken = (value, label) => {
   if (typeof value !== "string") throw new TypeError(`${label} must be a string`);
@@ -23122,31 +23201,129 @@ var processIsAlive2 = (pid) => {
     return errorCode3(error) === "EPERM";
   }
 };
-var withNamespaceMutationLock = async (namespaceRoot, operation, signal, beforeCommit) => {
+var recoverPendingMutationLock = (lockPath, pending) => {
+  let identity = pending.identity;
+  if (!identity && pending.directoryDescriptor !== void 0) {
+    const stat = fs7.fstatSync(pending.directoryDescriptor);
+    identity = { directory: { dev: stat.dev, ino: stat.ino } };
+    pending.identity = identity;
+  }
+  if (identity && !identity.owner && pending.ownerDescriptor !== void 0) {
+    const owner = fs7.fstatSync(pending.ownerDescriptor);
+    identity.owner = { dev: owner.dev, ino: owner.ino };
+  }
+  if (!identity) throw new KiroMemoryScopeError("Kiro memory lock cleanup remains unresolved: ownership identity is unavailable");
+  releaseNamespaceMutationLock(lockPath, identity);
+  if (pending.ownerDescriptor !== void 0) {
+    const descriptor2 = pending.ownerDescriptor;
+    pending.ownerDescriptor = void 0;
+    fs7.closeSync(descriptor2);
+  }
+  if (pending.directoryDescriptor !== void 0) {
+    const descriptor2 = pending.directoryDescriptor;
+    pending.directoryDescriptor = void 0;
+    fs7.closeSync(descriptor2);
+  }
+};
+var releaseNamespaceMutationLock = (lockPath, identity) => {
+  let current;
+  try {
+    current = fs7.lstatSync(lockPath);
+  } catch (error) {
+    if (errorCode3(error) === "ENOENT") return;
+    throw error;
+  }
+  if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== identity.directory.dev || current.ino !== identity.directory.ino) {
+    throw new KiroMemoryScopeError("Refusing to clean up a replacement Kiro memory mutation lock");
+  }
+  const ownerPath = path8.join(lockPath, MUTATION_LOCK_OWNER);
+  try {
+    const owner = fs7.lstatSync(ownerPath);
+    let ownerToken;
+    try {
+      ownerToken = JSON.parse(fs7.readFileSync(ownerPath, "utf8")).token;
+    } catch {
+    }
+    if (!identity.owner || !owner.isFile() || owner.isSymbolicLink() || owner.dev !== identity.owner.dev || owner.ino !== identity.owner.ino || identity.owner.token !== void 0 && ownerToken !== identity.owner.token) {
+      throw new KiroMemoryScopeError("Refusing to remove a foreign Kiro memory mutation lock owner");
+    }
+    fs7.unlinkSync(ownerPath);
+  } catch (error) {
+    if (errorCode3(error) !== "ENOENT") throw error;
+  }
+  fs7.rmdirSync(lockPath);
+};
+var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, beforeCommit) => {
   const lockPath = path8.join(namespaceRoot, MUTATION_LOCK);
   const deadline = performance.now() + MUTATION_LOCK_TIMEOUT_MS;
   let identity;
+  let operationError;
   while (!identity) {
+    if (state.pending) {
+      const pending = state.pending;
+      recoverPendingMutationLock(lockPath, pending);
+      state.pending = void 0;
+    }
     throwIfAborted(signal);
     beforeCommit?.();
     try {
       fs7.mkdirSync(lockPath, { mode: 448 });
-      const stat = fs7.lstatSync(lockPath);
+      let stat;
+      try {
+        stat = fs7.lstatSync(lockPath);
+      } catch (error) {
+        const pending = {};
+        try {
+          pending.directoryDescriptor = fs7.openSync(lockPath, fs7.constants.O_RDONLY);
+          const evidence = fs7.fstatSync(pending.directoryDescriptor);
+          pending.identity = { directory: { dev: evidence.dev, ino: evidence.ino } };
+        } catch {
+        }
+        state.pending = pending;
+        throw new AggregateError([error], "Kiro memory lock initialization failed; cleanup remains unresolved", { cause: error });
+      }
       if (!stat.isDirectory() || stat.isSymbolicLink()) {
         throw new KiroMemoryScopeError("Kiro memory mutation lock is not a real directory");
       }
-      identity = { dev: stat.dev, ino: stat.ino };
+      identity = { directory: { dev: stat.dev, ino: stat.ino } };
+      let ownerDescriptor;
       try {
-        fs7.writeFileSync(
-          path8.join(lockPath, MUTATION_LOCK_OWNER),
-          JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }),
-          { encoding: "utf8", mode: 384, flag: "wx" }
-        );
+        const ownerPath = path8.join(lockPath, MUTATION_LOCK_OWNER);
+        const token = crypto.randomBytes(32).toString("hex");
+        try {
+          ownerDescriptor = fs7.openSync(
+            ownerPath,
+            fs7.constants.O_WRONLY | fs7.constants.O_CREAT | fs7.constants.O_EXCL | (fs7.constants.O_NOFOLLOW ?? 0),
+            384
+          );
+          const owner = fs7.fstatSync(ownerDescriptor);
+          identity.owner = { dev: owner.dev, ino: owner.ino };
+          fs7.writeFileSync(ownerDescriptor, JSON.stringify({ pid: process.pid, acquiredAt: Date.now(), token }), "utf8");
+          identity.owner.token = token;
+        } finally {
+          if (ownerDescriptor !== void 0 && identity.owner) {
+            const descriptor2 = ownerDescriptor;
+            ownerDescriptor = void 0;
+            fs7.closeSync(descriptor2);
+          }
+        }
       } catch (error) {
+        const cleanupIdentity = identity;
         identity = void 0;
         try {
-          fs7.rmdirSync(lockPath);
-        } catch {
+          releaseNamespaceMutationLock(lockPath, cleanupIdentity);
+          if (ownerDescriptor !== void 0) {
+            const descriptor2 = ownerDescriptor;
+            ownerDescriptor = void 0;
+            fs7.closeSync(descriptor2);
+          }
+        } catch (cleanup) {
+          state.pending = { identity: cleanupIdentity, ...ownerDescriptor === void 0 ? {} : { ownerDescriptor } };
+          throw new AggregateError(
+            [error, cleanup],
+            "Kiro memory lock initialization and cleanup failed",
+            { cause: error }
+          );
         }
         throw error;
       }
@@ -23202,14 +23379,21 @@ var withNamespaceMutationLock = async (namespaceRoot, operation, signal, beforeC
     throwIfAborted(signal);
     beforeCommit?.();
     return result;
+  } catch (error) {
+    operationError = error;
+    throw error;
   } finally {
     try {
-      const current = fs7.lstatSync(lockPath);
-      if (current.isDirectory() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
-        fs7.rmSync(path8.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
-        fs7.rmdirSync(lockPath);
-      }
-    } catch {
+      releaseNamespaceMutationLock(lockPath, identity);
+      state.pending = void 0;
+    } catch (cleanup) {
+      state.pending = { identity };
+      if (operationError !== void 0) throw new AggregateError(
+        [operationError, cleanup],
+        "Kiro memory mutation and lock cleanup failed",
+        { cause: operationError }
+      );
+      throw cleanup;
     }
   }
 };
@@ -23412,7 +23596,30 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
     bytes: utf8Bytes(raw)
   };
 };
-var writeJsonAtomic2 = (filePath, content, beforeCommit) => {
+var isUnsupportedDirectorySync = (error, phase) => {
+  const code = errorCode3(error);
+  if (code === "EINVAL" || code === "ENOTSUP" || code === "EOPNOTSUPP") return true;
+  return phase === "open" && process.platform === "win32" && (code === "EISDIR" || code === "EPERM" || code === "EACCES");
+};
+var syncDirectoryBestEffort = (directory) => {
+  let descriptor2;
+  try {
+    try {
+      descriptor2 = fs7.openSync(directory, "r");
+    } catch (error) {
+      if (isUnsupportedDirectorySync(error, "open")) return;
+      throw error;
+    }
+    try {
+      fs7.fsyncSync(descriptor2);
+    } catch (error) {
+      if (!isUnsupportedDirectorySync(error, "sync")) throw error;
+    }
+  } finally {
+    if (descriptor2 !== void 0) fs7.closeSync(descriptor2);
+  }
+};
+var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
   const directory = path8.dirname(filePath);
   const temporary = path8.join(
     directory,
@@ -23427,15 +23634,8 @@ var writeJsonAtomic2 = (filePath, content, beforeCommit) => {
     descriptor2 = void 0;
     beforeCommit?.();
     fs7.renameSync(temporary, filePath);
-    try {
-      const directoryDescriptor = fs7.openSync(directory, "r");
-      try {
-        fs7.fsyncSync(directoryDescriptor);
-      } finally {
-        fs7.closeSync(directoryDescriptor);
-      }
-    } catch {
-    }
+    afterCommit?.();
+    syncDirectoryBestEffort(directory);
   } catch (error) {
     if (descriptor2 !== void 0) fs7.closeSync(descriptor2);
     try {
@@ -23511,6 +23711,7 @@ var openKiroMemory = (namespace, root, limits = {}) => {
     }
     return filePath;
   };
+  const lockState = { pending: void 0 };
   return {
     async get(key) {
       const filePath = resolveEntryPath(key);
@@ -23526,89 +23727,96 @@ var openKiroMemory = (namespace, root, limits = {}) => {
       return entry;
     },
     async set(key, value, signal, beforeCommit) {
-      return withNamespaceMutationLock(namespaceRoot, () => {
-        const normalizedKey = normalizeKiroMemoryToken(key, "key");
-        const filePath = resolveEntryPath(normalizedKey);
-        let encodedValue;
-        try {
-          encodedValue = JSON.stringify(value);
-        } catch {
-          encodedValue = void 0;
-        }
-        if (encodedValue === void 0) {
-          throw new TypeError("Kiro memory values must be JSON-serializable");
-        }
-        if (encodedValue.length > maxValueChars) {
-          throw new Error(`Kiro memory value exceeds ${maxValueChars} configured characters`);
-        }
-        const normalizedValue = JSON.parse(encodedValue);
-        const existing = lstatOrNull(filePath);
-        if (existing) {
-          if (!existing.isFile() || existing.isSymbolicLink()) {
-            throw new KiroMemoryScopeError(`Kiro memory entry must be a real file: ${filePath}`);
+      const normalizedKey = normalizeKiroMemoryToken(key, "key");
+      let published = false;
+      try {
+        return await withNamespaceMutationLock(namespaceRoot, lockState, () => {
+          const filePath = resolveEntryPath(normalizedKey);
+          let encodedValue;
+          try {
+            encodedValue = JSON.stringify(value);
+          } catch {
+            encodedValue = void 0;
           }
-          const previous = readEntry(filePath, memoryNamespace, maxValueChars);
-          if (previous.namespace !== memoryNamespace || previous.key !== normalizedKey) {
-            throw new KiroMemoryScopeError(
-              `Refusing foreign Kiro memory entry collision for ${JSON.stringify(normalizedKey)}`
-            );
+          if (encodedValue === void 0) {
+            throw new TypeError("Kiro memory values must be JSON-serializable");
           }
-        }
-        const entry = {
-          namespace: memoryNamespace,
-          key: normalizedKey,
-          value: normalizedValue,
-          updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-          bytes: 0
-        };
-        const content = JSON.stringify({
-          format: MEMORY_FORMAT,
-          owner: MEMORY_OWNER,
-          kind: "memory-entry",
-          namespace: entry.namespace,
-          key: entry.key,
-          value: entry.value,
-          updatedAt: entry.updatedAt
-        });
-        entry.bytes = utf8Bytes(content);
-        assertEntryFits(namespaceRoot, entry, filePath, maxEntries, maxValueChars);
-        throwIfAborted(signal);
-        beforeCommit?.();
-        writeJsonAtomic2(filePath, content, beforeCommit);
-        beforeCommit?.();
-        return entry;
-      }, signal, beforeCommit);
+          if (encodedValue.length > maxValueChars) {
+            throw new Error(`Kiro memory value exceeds ${maxValueChars} configured characters`);
+          }
+          const normalizedValue = JSON.parse(encodedValue);
+          const existing = lstatOrNull(filePath);
+          if (existing) {
+            if (!existing.isFile() || existing.isSymbolicLink()) {
+              throw new KiroMemoryScopeError(`Kiro memory entry must be a real file: ${filePath}`);
+            }
+            const previous = readEntry(filePath, memoryNamespace, maxValueChars);
+            if (previous.namespace !== memoryNamespace || previous.key !== normalizedKey) {
+              throw new KiroMemoryScopeError(
+                `Refusing foreign Kiro memory entry collision for ${JSON.stringify(normalizedKey)}`
+              );
+            }
+          }
+          const entry = {
+            namespace: memoryNamespace,
+            key: normalizedKey,
+            value: normalizedValue,
+            updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+            bytes: 0
+          };
+          const content = JSON.stringify({
+            format: MEMORY_FORMAT,
+            owner: MEMORY_OWNER,
+            kind: "memory-entry",
+            namespace: entry.namespace,
+            key: entry.key,
+            value: entry.value,
+            updatedAt: entry.updatedAt
+          });
+          entry.bytes = utf8Bytes(content);
+          assertEntryFits(namespaceRoot, entry, filePath, maxEntries, maxValueChars);
+          throwIfAborted(signal);
+          beforeCommit?.();
+          writeJsonAtomic2(filePath, content, beforeCommit, () => {
+            published = true;
+          });
+          beforeCommit?.();
+          return entry;
+        }, signal, beforeCommit);
+      } catch (error) {
+        if (published) throw new KiroMemoryCommitAcknowledgementError("set", normalizedKey, { cause: error });
+        throw error;
+      }
     },
     async delete(key, signal, beforeCommit) {
-      return withNamespaceMutationLock(namespaceRoot, () => {
-        const normalizedKey = normalizeKiroMemoryToken(key, "key");
-        const filePath = resolveEntryPath(normalizedKey);
-        const before = lstatOrNull(filePath);
-        if (!before) return { key: normalizedKey, deleted: false };
-        if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) {
-          throw new KiroMemoryScopeError(`Kiro memory entry must be an unaliased real file: ${filePath}`);
-        }
-        const entry = readEntry(filePath, memoryNamespace, maxValueChars);
-        if (entry.key !== normalizedKey) throw new KiroMemoryScopeError("Kiro memory entry identity mismatch");
-        throwIfAborted(signal);
-        const current = fs7.lstatSync(filePath);
-        if (current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1) {
-          throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
-        }
-        beforeCommit?.();
-        fs7.unlinkSync(filePath);
-        try {
-          const descriptor2 = fs7.openSync(namespaceRoot, "r");
-          try {
-            fs7.fsyncSync(descriptor2);
-          } finally {
-            fs7.closeSync(descriptor2);
+      const normalizedKey = normalizeKiroMemoryToken(key, "key");
+      let published = false;
+      try {
+        return await withNamespaceMutationLock(namespaceRoot, lockState, () => {
+          const filePath = resolveEntryPath(normalizedKey);
+          const before = lstatOrNull(filePath);
+          if (!before) return { key: normalizedKey, deleted: false };
+          if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) {
+            throw new KiroMemoryScopeError(`Kiro memory entry must be an unaliased real file: ${filePath}`);
           }
-        } catch {
-        }
-        beforeCommit?.();
-        return { key: normalizedKey, deleted: true };
-      }, signal, beforeCommit);
+          const entry = readEntry(filePath, memoryNamespace, maxValueChars);
+          if (entry.key !== normalizedKey) throw new KiroMemoryScopeError("Kiro memory entry identity mismatch");
+          throwIfAborted(signal);
+          const current = fs7.lstatSync(filePath);
+          if (current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1) {
+            throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
+          }
+          beforeCommit?.();
+          fs7.unlinkSync(filePath);
+          published = true;
+          syncDirectoryBestEffort(namespaceRoot);
+          beforeCommit?.();
+          return { key: normalizedKey, deleted: true };
+        }, signal, beforeCommit);
+      } catch (error) {
+        if (published) throw new KiroMemoryCommitAcknowledgementError("delete", normalizedKey, { cause: error });
+        throw error;
+      }
     },
     async list() {
       const entries = collectNamespaceEntries(namespaceRoot, memoryNamespace, maxValueChars).sort((left, right) => left.key.localeCompare(right.key));
@@ -23650,8 +23858,8 @@ ${JSON.stringify(entry.value)}`.toLowerCase();
         );
       }
       return files.map((file) => {
-        const { key, bytes, updatedAt } = readEntry(file, memoryNamespace, maxValueChars);
-        return { key, bytes, updatedAt };
+        const { key, bytes: bytes2, updatedAt } = readEntry(file, memoryNamespace, maxValueChars);
+        return { key, bytes: bytes2, updatedAt };
       }).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     }
   };
@@ -24036,9 +24244,9 @@ var createKiroMcpServer = async (options) => {
     ] };
   });
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-    await syncWorkspace();
     const name = request.params.name;
     if (name === "fabric_info") {
+      await syncWorkspace();
       if (Object.keys(request.params.arguments ?? {}).length) return toolError("invalid_info_arguments", "fabric_info accepts no arguments");
       try {
         const workspaceObservation = binding.workspaceObservation();
@@ -24065,7 +24273,7 @@ var createKiroMcpServer = async (options) => {
         };
         const expectedNode = process.env.KIRO_FABRIC_EXPECTED_NODE;
         const interpreterInfo = expectedNode === void 0 ? { actual: realpathSync(process.execPath), expected: null, matches: "unknown" } : { actual: realpathSync(process.execPath), expected: expectedNode, matches: realpathSync(process.execPath) === expectedNode };
-        const actions = current && !workspaceBlocked ? fabricInfoActions(await current.registry.list()) : [];
+        const actionCatalog = fabricInfoCatalog(current && !workspaceBlocked ? await current.registry.list() : []);
         if (tracer.enabled) {
           tracer.event("eval", "tool.fabric_info", void 0, lifecycleInfo);
           tracer.flush();
@@ -24084,7 +24292,8 @@ var createKiroMcpServer = async (options) => {
           tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
           lifecycle: lifecycleInfo,
           interpreter: interpreterInfo,
-          actions,
+          actions: actionCatalog.actions,
+          catalog: actionCatalog.catalog,
           nativeKiroTools: { owner: "kiro", availability: "declared-by-agent-profile" }
         }) }] };
       } catch (error) {
@@ -24093,6 +24302,7 @@ var createKiroMcpServer = async (options) => {
     }
     if (name === "fabric_workspace") {
       try {
+        await syncWorkspace();
         const parsed = workspaceRequest(request.params.arguments ?? {});
         if (tracer.enabled) {
           tracer.event("eval", "tool.fabric_workspace", void 0, { action: parsed.action });
@@ -24110,6 +24320,8 @@ var createKiroMcpServer = async (options) => {
         if (parsed.action === "select" && unavailableWorkspace()) throw new Error("workspace roots are temporarily unverifiable");
         const mutation = await binding.prepareMutation(parsed, extra.signal);
         const result = await lifecycle(async () => {
+          if (closing) throw new Error("Agent MCP server is shutting down");
+          extra.signal.throwIfAborted();
           const before = binding.bindingIdentity();
           const committed = binding.commitMutation(mutation);
           if (before !== binding.bindingIdentity()) await closeRuntime(new Error("workspace binding changed"));
@@ -24122,7 +24334,29 @@ var createKiroMcpServer = async (options) => {
       }
     }
     if (name !== "fabric_exec") return toolError("unknown_tool", `Unknown tool: ${String(name)}`);
-    if (unavailableWorkspace()) return toolError("workspace_unavailable", "workspace roots are temporarily unverifiable");
+    const execId = tracer.enabled ? tracer.newExecutionId() : void 0;
+    if (tracer.enabled) tracer.event("eval", "tool.fabric_exec", execId);
+    const tracedError = (code, error, issues) => {
+      const response = toolError(code, error, issues);
+      if (tracer.enabled) {
+        const text = response.content[0].text;
+        tracer.event("eval", "exec.projection", execId, {
+          visibleChars: text.length,
+          visibleBytes: Buffer.byteLength(text, "utf8"),
+          isError: true,
+          overflowed: false,
+          artifactRetained: false
+        });
+        tracer.flush();
+      }
+      return response;
+    };
+    try {
+      await syncWorkspace();
+    } catch (error) {
+      return tracedError("adapter_error", error);
+    }
+    if (unavailableWorkspace()) return tracedError("workspace_unavailable", "workspace roots are temporarily unverifiable");
     const normalized = prepareFabricExecArgumentsWithDiagnostics(request.params.arguments ?? {});
     const normalizedRecord = isRecord7(normalized.value) ? normalized.value : void 0;
     const absoluteInputError = typeof normalizedRecord?.code === "string" ? fabricSourceLimitError(normalizedRecord.code, MAX_EXECUTOR_SOURCE_BYTES) : void 0;
@@ -24131,15 +24365,13 @@ var createKiroMcpServer = async (options) => {
       MAX_EXECUTOR_SOURCE_BYTES
     ) : void 0;
     if (absoluteInputError || absolutePayloadError) {
-      return toolError("invalid_exec_arguments", absoluteInputError ?? absolutePayloadError);
+      return tracedError("invalid_exec_arguments", absoluteInputError ?? absolutePayloadError);
     }
     if (!value_exports.Check(fabricExecInputSchema, normalized.value)) {
       const errors = [...value_exports.Errors(fabricExecInputSchema, normalized.value)].map((entry) => entry.message);
-      return toolError("invalid_exec_arguments", "Invalid fabric_exec arguments", errors);
+      return tracedError("invalid_exec_arguments", "Invalid fabric_exec arguments", errors);
     }
     const input = normalized.value;
-    const execId = tracer.enabled ? tracer.newExecutionId() : void 0;
-    if (tracer.enabled) tracer.event("eval", "tool.fabric_exec", execId);
     const controller = new AbortController();
     const cancel = () => controller.abort(extra.signal.reason ?? new Error("MCP request cancelled"));
     if (extra.signal.aborted) cancel();
@@ -24154,14 +24386,14 @@ var createKiroMcpServer = async (options) => {
       const remaining = Math.max(0, outerStarted + outerDeadline - performance.now());
       timer = setTimeout(() => controller.abort(new Error(`MCP request exceeded ${outerDeadline}ms`)), remaining);
     };
-    const initialConfig = loadFabricConfig(data.configFile);
-    scheduleOuterDeadline(effectiveFabricTimeout(
-      initialConfig.executor.maxTimeoutMs,
-      initialConfig.executor.timeoutMs,
-      0,
-      input.timeoutMs ?? 0
-    ));
     try {
+      const initialConfig = loadFabricConfig(data.configFile);
+      scheduleOuterDeadline(effectiveFabricTimeout(
+        initialConfig.executor.maxTimeoutMs,
+        initialConfig.executor.timeoutMs,
+        0,
+        input.timeoutMs ?? 0
+      ));
       const acquired = await acquireRuntime(controller);
       execution = acquired.execution;
       const current = acquired.current;
@@ -24192,9 +24424,19 @@ var createKiroMcpServer = async (options) => {
         writeArtifact: (content) => current.artifacts.write(content),
         normalizationDiagnostics: normalized.diagnostics
       });
+      if (tracer.enabled) {
+        tracer.event("eval", "exec.projection", execId, {
+          visibleChars: projection.visibleChars,
+          visibleBytes: projection.visibleBytes,
+          isError: projection.isError,
+          overflowed: projection.overflowed,
+          artifactRetained: projection.artifactRetained
+        });
+        tracer.flush();
+      }
       return { content: [{ type: "text", text: projection.text }], ...projection.isError ? { isError: true } : {} };
     } catch (error) {
-      return toolError("adapter_error", error);
+      return tracedError("adapter_error", error);
     } finally {
       if (timer) clearTimeout(timer);
       if (execution) {

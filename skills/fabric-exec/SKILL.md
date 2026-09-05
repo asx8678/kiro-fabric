@@ -16,12 +16,10 @@ const request = JSON.parse(payloads.request);
 return { id: request.id, normalized: String(request.value).trim() };
 ```
 
-Provider composition uses exact references. `fabric_info` already returns the digest-bound action catalog (refs, risk classes, descriptor digests) for the bound workspace, so the first `fabric_exec` can compose calls directly instead of spending a round trip on discovery-only `tools.list()`:
+Provider composition uses exact references. `fabric_info` returns an `actions` array plus `catalog` completeness metadata for the bound workspace. When `catalog.complete` or `catalog.digestComplete` is false, recover targeted live descriptors with `tools.search` and `tools.describe`; describe downstream MCP tools again before calling because their freshness is transport-specific:
 
 ```ts
-const actions = await tools.list();
-const result = await tools.call({ ref: "memory.get", args: { key: "release" } });
-return { actions: actions.length, result };
+return await memory.get({ key: "release" });
 ```
 
 Use the bounded helper for independent calls instead of an unbounded `Promise.all`:
