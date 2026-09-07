@@ -136,3 +136,12 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `tests/memory-delete-ack.test.ts` — committed delete proof through cleanup/cancellation/deadline.
 - `tests/memory-lock-safety.test.ts` — unidentified/replacement/live/stale owner safety.
 - `tests/owned-file.test.ts` — explicit uncertain close without unsafe descriptor retry.
+
+## Verified audit remediation additions (current implementation)
+
+These additions do not rewrite historical findings or establish authenticated client qualification or economic savings.
+
+- `scripts/efficiency-baseline.mjs` — closed offline manifest/fixture/help probes with explicit measurement boundaries and null unobserved billing.
+- `tests/efficiency-baseline.test.ts` — offline restrictions, provenance, failure retention and expanded-help accounting.
+- `tests/approval-quotas.test.ts` — silent policy versus interactive quota accounting, unchanged provider/audit bounds, legacy compatibility and cancellation cleanup.
+- `docs/efficiency-baseline.md` — reproducible offline procedure and separately authorized future paid comparison.

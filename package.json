@@ -35,6 +35,8 @@
     "test": "pnpm run build && pnpm run test:built",
     "test:built": "node scripts/build-agent-dev.mjs && vitest run",
     "lint:dead": "knip",
+    "efficiency:manifest": "node scripts/efficiency-baseline.mjs manifest",
+    "efficiency:probe": "node scripts/efficiency-baseline.mjs probe",
     "agent:validate": "node scripts/validate-agent-package.mjs .tmp/kiro-fabric-agent",
     "agent:stage:local": "pnpm run build && node scripts/build-agent-dev.mjs",
     "agent:install": "pnpm run agent:stage:local && node scripts/install-agent-user.mjs .tmp/kiro-fabric-agent",

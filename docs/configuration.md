@@ -10,6 +10,19 @@ The Agent reads only `$KIRO_HOME/kiro-fabric/data/fabric/config/config.json`; co
 
 Configured MCP discovery follows opaque cursors, including empty strings, under one shared discovery/call deadline and the existing server lease. Enumeration is bounded to 100 pages, 1,000 cumulative tools **before** allow/block filtering, 4,096 characters per cursor, and the existing JSON budget. Cycles, malformed pages and exhausted limits fail the operation rather than returning a deceptively complete partial catalog. These are safety ceilings, not measured throughput targets.
 
+### Provider calls versus interactive approvals
+
+All limits below are **per execution**; configuration keys and defaults are unchanged:
+
+- `executor.maxProviderCalls`: **64** total host calls; `executor.maxConcurrentProviderCalls`: **8** simultaneous host calls. The guest semaphore queues excess parallel work; the host independently rejects excess concurrency.
+- `executor.maxApprovalRequests`: **16** admitted interactive approval attempts; `executor.maxPendingApprovals`: **2** simultaneous approval waits. Kiro evaluates explicit `allow`/`deny`/`ask` policy for every action. Silent allow and deny decisions consume neither approval counter, even when prompt budget is exhausted. Read risk alone does not grant permission.
+- An `ask` reserves both approval counters before elicitation begins. Failed admission opens no prompt and consumes neither counter. Once admitted, decline, cancellation, unavailable elicitation, or an exception still consumes the total attempt; the pending slot is released when the attempt and its cleanup settle. Existing deadlines and effect reservations remain in force.
+- Registry approvals and nested MCP stdio/OAuth approval stages share these same counters. Each interactive stage consumes one attempt; silent stages do not.
+
+Library approvers may implement `prepareApproval(action, canonicalArgs, signal)` to return an explicit allow/deny decision or an ask plan with a deferred `prompt()`. Preparation must not interact with the user; it must bind the deferred prompt to the exact canonical request and evaluate policy only once. The service reserves quota before invoking that prompt, without calling `approve()` again. Malformed plans fail closed. Existing custom approvers implementing only `approve()` remain compatible and conservatively charge every callback against both approval limits. Direct Kiro `approve()` callers remain supported, but execution-wide quota enforcement belongs to the execution service.
+
+Provider, audit, result, and deadline limits are independent of approval policy. In particular, `executor.maxAuditEntries` defaults to **64** and `executor.maxAuditBytes` to **64,000**; registry calls reserve **2,048 bytes** each, so the default audit byte budget permits only **31** audited calls even when all are silently allowed. A 64-call audited batch needs at least **131,072** audit bytes as well as sufficient provider and entry budgets; this change does not raise any defaults or bypass audits.
+
 ## State commit and retry semantics
 
 State publication occurs at atomic rename after private permissions and file sync have succeeded. Ordinary failures before publication remove only the operation-owned temporary file and leave the previous document intact. Artifact write failures likewise remove the new file without adding it to quota accounting. Cleanup itself can fail on an unavailable filesystem; such failures are reported, not presented as successful cleanup.

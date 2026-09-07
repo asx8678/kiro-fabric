@@ -3,6 +3,7 @@ import path from "node:path";
 import type { FabricApprovalConfig } from "../../config.js";
 import {
   FABRIC_APPROVAL_TIMEOUT_MS,
+  type FabricApprovalPlan,
   type FabricExecutionApprover,
 } from "../../execution-service.js";
 import type { ResolvedFabricAction } from "../../protocol.js";
@@ -104,21 +105,37 @@ const summarize = (args: Record<string, unknown>, cwd: string): string => {
 export class KiroPowerFabricApprover implements FabricExecutionApprover {
   constructor(readonly config: FabricApprovalConfig, readonly elicitation: KiroPowerApprover, readonly cwd: string) {}
   async approve(action: ResolvedFabricAction, args: Record<string, unknown>, signal?: AbortSignal): Promise<void> {
+    const plan = this.prepareApproval(action, args, signal);
+    if (plan.decision === "deny") throw new Error(plan.reason);
+    if (plan.decision === "ask") await plan.prompt();
+  }
+
+  prepareApproval(action: ResolvedFabricAction, args: Record<string, unknown>, signal?: AbortSignal): FabricApprovalPlan {
+    signal?.throwIfAborted();
     const mode = this.config[action.risk];
-    if (mode === "allow") return;
-    if (mode === "deny") throw new Error(`${action.ref} is denied by Fabric policy`);
+    if (mode === "allow") return { decision: "allow" };
+    if (mode === "deny") return { decision: "deny", reason: `${action.ref} is denied by Fabric policy` };
+    if (mode !== "ask") return { decision: "deny", reason: `${action.ref} has invalid Fabric approval policy` };
     const identity = fabricApprovalIdentity(action, args);
     const localReview = action.provider === "local" && (action.risk === "write" || action.risk === "execute")
       ? typeof args.review === "string" ? args.review : (() => { throw new Error("Local effect lacks canonical review material"); })()
       : undefined;
-    const approved = await this.elicitation.approveOnce({
+    // Capture review/identity now, without prompting or re-reading policy later.
+    const ref = action.ref;
+    const request = {
       risk: action.risk,
       provider: action.provider,
       action: action.name,
       summary: `Canonical request: sha256:${identity.digest} (${identity.chars} chars)\n${localReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
       ...(localReview === undefined ? {} : { reviewable: true }),
       ...(signal ? { signal } : {}),
-    });
-    if (!approved) throw new Error(`${action.ref} approval was denied or unavailable`);
+    };
+    return {
+      decision: "ask",
+      prompt: async () => {
+        const approved = await this.elicitation.approveOnce(request);
+        if (!approved) throw new Error(`${ref} approval was denied or unavailable`);
+      },
+    };
   }
 }

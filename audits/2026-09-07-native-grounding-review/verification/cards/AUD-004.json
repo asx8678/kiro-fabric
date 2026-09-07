@@ -1,0 +1,94 @@
+{
+  "id": "AUD-004",
+  "source": "both",
+  "aliases": [
+    "NAT-002",
+    "QWN-002",
+    "AST-002",
+    "CDX-003",
+    "GRK-014",
+    "GLM-004",
+    "AS2-001"
+  ],
+  "title": "Comparable economic baseline is absent",
+  "severity_claimed": "high",
+  "category": "performance",
+  "asset": "Product efficiency evidence",
+  "location": "tobechecked/astra.md:34; audits/2026-09-07-native-grounding-review/REVIEW.md:362",
+  "claim": "No comparable end-to-end economic baseline",
+  "evidence_cited": [
+    "No comparable end-to-end economic baseline",
+    "Primary efficiency metric is undefined (0 comparable tasks)"
+  ],
+  "proposed_fix": "Run authorized randomized native-versus-Fabric comparisons with quality, retries, cache categories and cost per completed task.",
+  "reporter_notes": "AST claims High; CDX/AS2 P1 normalized to high. Multiple reports share the same historical metrics, not independent benchmark runs.",
+  "source_occurrences": [
+    {
+      "file": "tobechecked/astra.md",
+      "lines": "34",
+      "original_claim": "No comparable end-to-end economic baseline"
+    },
+    {
+      "file": "audits/2026-09-07-native-grounding-review/REVIEW.md",
+      "lines": "362",
+      "original_claim": "Primary efficiency metric is undefined (0 comparable tasks)"
+    }
+  ],
+  "verified_location": "audits/efficiency-2026-09-05/kiro-fabric-efficiency-metrics.json:63–80; README.md:1–17; STATUS.md:17",
+  "code_or_config_excerpt": "eligibleEndToEndTasksAttempted:0; eligibleEndToEndTasksSucceeded:0; costPerSuccessfullyCompletedTask:null",
+  "trace_result": "reproduced",
+  "mitigations_already_present": [
+    "Historical metrics explicitly label ratio undefined rather than treating unknown cost as zero.",
+    "Current reports require spending authorization and comparable successful tasks."
+  ],
+  "contradictions": [
+    "The gap is real, but significant financial harm or a false advertised numeric saving was not demonstrated."
+  ],
+  "what_is_actually_true": "The recorded benchmark contains zero eligible tasks and null Kiro costs. Current product docs describe strict execution and disclose qualification gaps; they do not establish a numeric saving. Local CPU/file-size reductions are not a billed-task comparison.",
+  "impact_path": "Maintainers could prioritize changes using an unsupported economic hypothesis; no observed user billing loss was established.",
+  "classification": "REAL",
+  "score_components": {
+    "impact": 5,
+    "exploitability": 5,
+    "confidence": 20,
+    "fix_roi": 10,
+    "penalties": []
+  },
+  "score": 40,
+  "fix_now": "no",
+  "worth_finding": "no",
+  "already_mitigated": false,
+  "grounding_queries_used": [
+    "Kiro pricing credits usage cost per successful task benchmark"
+  ],
+  "grounding_sources": [
+    {
+      "title": "Kiro pricing",
+      "url": "https://kiro.dev/pricing/",
+      "quote": "Add-on credits ($0.04/credit)",
+      "note": "Official live pricing page actually browsed. Published credit pricing does not establish this workspace's measured usage. Kiro's published pricing explains why actual credits matter, while NIST's TEVV guidance supports documented metrics. Neither public page supplies the missing local baseline; the zero/null primary JSON proves that gap.",
+      "stance": "mixed",
+      "date": null,
+      "accessed_on": "2026-09-07"
+    },
+    {
+      "title": "NIST AI RMF Playbook — MEASURE",
+      "url": "https://airc.nist.gov/airmf-resources/playbook/measure/",
+      "quote": "Test sets, metrics, and details about the tools used during test, evaluation, validation, and verification (TEVV) are documented.",
+      "note": "Actually browsed MEASURE2.1 and1.3. The latter recommends independent assessors or internal experts outside front-line development. Kiro's published pricing explains why actual credits matter, while NIST's TEVV guidance supports documented metrics. Neither public page supplies the missing local baseline; the zero/null primary JSON proves that gap.",
+      "stance": "mixed",
+      "date": null,
+      "accessed_on": "2026-09-07"
+    }
+  ],
+  "grounded_fact": "Kiro's published pricing explains why actual credits matter, while NIST's TEVV guidance supports documented metrics. Neither public page supplies the missing local baseline; the zero/null primary JSON proves that gap.",
+  "reproduction_notes": "Read the actual economicBaseline JSON through its Kiro null fields; no authenticated task or invoice was run.",
+  "recommended_action": "schedule",
+  "suggested_fix": "Before making efficiency-driven architecture changes, establish an authorized, capped, reproducible benchmark with task-success and billing evidence.",
+  "residual_risk_if_ignored": "Economic design decisions remain unquantified, not proven harmful.",
+  "needs_human_poc": false,
+  "previously_adjudicated": true,
+  "queue_writeup_match": "Native audit explicitly adjudicates the undefined metric.",
+  "grounding_search_status": "Live Bing RSS query executed. Results were general official landing pages or irrelevant; irrelevant hits were discarded. Exact supporting authoritative pages were separately browsed, not inferred from search snippets.",
+  "grounding_search_url": "https://www.bing.com/search?format=rss&setlang=en-US&cc=US&q=Kiro%20pricing%20credits%20usage%20cost%20per%20successful%20task%20benchmark"
+}

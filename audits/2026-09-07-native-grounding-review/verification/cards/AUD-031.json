@@ -1,0 +1,97 @@
+{
+  "id": "AUD-031",
+  "source": "both",
+  "aliases": [
+    "GRK-021",
+    "NAT-037",
+    "QWN-037",
+    "AS2-011"
+  ],
+  "title": "API-help payload attribution and the audit's correction are both inaccurate in size",
+  "severity_claimed": "unset",
+  "category": "performance",
+  "asset": "src/kiro/bootstrap-provider.ts",
+  "location": "tobechecked/grok.md:18,49; audits/2026-09-07-native-grounding-review/REVIEW.md:118,355; tobechecked/qwen38max.md:181; tobechecked/astra2.md:112",
+  "claim": "API dump another 9,191 ch on the api help topic",
+  "evidence_cited": [
+    "const source = args.topic === \"api\" ? fabricGuestDeclarations : OVERVIEW; ${LOCAL_GUEST_DECLARATIONS}"
+  ],
+  "proposed_fix": "Correct audit accounting to expanded runtime content and actual page budget; do not replace working help based on the wrong payload size.",
+  "reporter_notes": "Canonical duplicate aliases are preserved; no model vote is treated as independent corroboration. P1/P2/P3 are mapped to high/medium/low for ordering, not CVSS.",
+  "source_occurrences": [
+    {
+      "file": "tobechecked/grok.md",
+      "lines": "18,49",
+      "original_claim": "API dump another 9,191 ch on the api help topic"
+    },
+    {
+      "file": "audits/2026-09-07-native-grounding-review/REVIEW.md",
+      "lines": "118,355",
+      "original_claim": "API dump another 9,191 ch on the api help topic"
+    },
+    {
+      "file": "tobechecked/qwen38max.md",
+      "lines": "181",
+      "original_claim": "API dump another 9,191 ch on the api help topic"
+    },
+    {
+      "file": "tobechecked/astra2.md",
+      "lines": "112",
+      "original_claim": "API dump another 9,191 ch on the api help topic"
+    }
+  ],
+  "verified_location": "src/kiro/bootstrap-provider.ts:25–33; src/runtime/guest-types.ts:1–4; src/providers/local-contract.ts",
+  "code_or_config_excerpt": "const source = args.topic === \"api\" ? fabricGuestDeclarations : OVERVIEW; ${LOCAL_GUEST_DECLARATIONS}",
+  "trace_result": "partially-reproduced",
+  "mitigations_already_present": [
+    "Explicit help calls, immutable declarations, bounded character paging and nextOffset."
+  ],
+  "contradictions": [
+    "Both9191-as-payload and3669-as-expanded-declarations are wrong in this inspected tree. A source-template count is not the runtime string. Payload bytes are not measured billed tokens."
+  ],
+  "what_is_actually_true": "Help serves expanded guest declarations, not references/api.md. Direct import measures6105characters and a default3290-character page. The native audit's3669-character correction also omits interpolated LOCAL_GUEST_DECLARATIONS. Model-facing help remains optional and paged.",
+  "impact_path": "Local coding/administrative workflow only. No remote attacker, credential disclosure, data corruption or measured financial loss was demonstrated.",
+  "classification": "PARTIAL",
+  "score_components": {
+    "impact": 5,
+    "exploitability": 5,
+    "confidence": 20,
+    "fix_roi": 10,
+    "penalties": []
+  },
+  "score": 40,
+  "fix_now": "no",
+  "worth_finding": "no",
+  "already_mitigated": false,
+  "grounding_queries_used": [
+    "Kiro skills on demand resources API reference"
+  ],
+  "grounding_sources": [
+    {
+      "title": "Kiro skills — progressive disclosure",
+      "url": "https://kiro.dev/docs/skills.md",
+      "date": null,
+      "quote": "At startup, Kiro loads only the name and description of each skill",
+      "stance": "mixed",
+      "note": "Official page actually browsed; supports the general behavior, while primary code/probes establish its application here."
+    },
+    {
+      "title": "Kiro custom agent configuration reference",
+      "url": "https://kiro.dev/docs/custom-agents/configuration-reference.md",
+      "date": null,
+      "quote": "The tools field lists all tools that the agent can potentially use.",
+      "stance": "mixed",
+      "note": "Official page actually browsed; supports the general behavior, while primary code/probes establish its application here."
+    }
+  ],
+  "grounded_fact": "The retrieved official sources establish skill/reference loading is progressive and must be measured at the served resource, not disk inventory. In this target, Help serves expanded guest declarations, not references/api.md. Direct import measures6105characters and a default3290-character page. The native audit's3669-character correction also omits interpolated LOCAL_GUEST_DECLARATIONS. Model-facing help remains optional and paged. No public documentation substitutes for the missing runtime/cost observations noted here.",
+  "reproduction_notes": "Imported fabricGuestDeclarations and invoked actual FabricBootstrapProvider:6105characters, page3290, truncated=true,nextOffset3290.",
+  "recommended_action": "accept-risk",
+  "suggested_fix": "Correct audit accounting to expanded runtime content and actual page budget; do not replace working help based on the wrong payload size.",
+  "residual_risk_if_ignored": "No demonstrated active security exposure. Preserve existing safeguards and avoid making unmeasured savings claims.",
+  "needs_human_poc": false,
+  "previously_adjudicated": true,
+  "queue_writeup_match": "Substantive source claim has a matching discussion/adjudication in the selected native audit.",
+  "grounding_search_status": "Live per-finding Bing RSS search executed. Kiro/Node/Vitest queries yielded broad official roots, while several technical queries returned irrelevant results. Irrelevant hits were excluded; exact grounding comes from independently browsed official pages.",
+  "grounding_search_url": "https://www.bing.com/search?format=rss&setlang=en-US&cc=US&q=Kiro%20skills%20on%20demand%20resources%20API%20reference"
+}

@@ -22,7 +22,11 @@ export interface FabricExecutorConfig {
   maxConcurrentProviderCalls: number;
   /** Per-service admission across compilation and guest execution; default 4. */
   maxConcurrentExecutions?: number;
+  /** Per-execution admitted interactive attempts; silent allow/deny cost no slots.
+   * Legacy approve-only hosts conservatively charge every approval callback. */
   maxApprovalRequests: number;
+  /** Simultaneous admitted prompts, held until their cleanup settles. Nested MCP
+   * approval stages share both counters with registry approvals. */
   maxPendingApprovals: number;
   maxAuditEntries: number;
   maxAuditBytes: number;

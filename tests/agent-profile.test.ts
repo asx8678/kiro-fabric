@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -12,6 +13,10 @@ import {
   generateAgentProfile,
 } from "../scripts/agent-profile.mjs";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
+import { FabricBootstrapProvider } from "../src/kiro/bootstrap-provider.js";
+import { LOCAL_GUEST_DECLARATIONS } from "../src/providers/local-contract.js";
+import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
+import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
 import { FABRIC_COMPILER_TIMEOUT_MS } from "../src/execution-service.js";
 import {
   KIRO_MCP_DEADLINE_GRACE_MS,
@@ -25,27 +30,117 @@ const options = {
   skillPath: path.resolve("/install/skills/fabric-exec/SKILL.md"),
 };
 
+const steering = readFileSync(new URL("../resources/steering/fabric.md", import.meta.url), "utf8");
+
+// Actual pre-cleanup standing strings: prompt 2766 + steering 1283 = 4049.
+// Only this explicit standing text is budgeted, not activation-loaded skills,
+// expanded runtime help, billed tokens, cache behavior or credits.
+const BASELINE_STANDING_CHARS = 4049;
+
+// Contract clauses, not whole sentences: tolerate punctuation and connective
+// prose changes while keeping obligations in the prompt even without steering.
+const promptContracts: Array<[string, RegExp]> = [
+  ["strict one-tool Code Mode", /strict\s+always-on\s+Code Mode/i],
+  ["no native fallback", /no native tools?[^.]*\bfallback/i],
+  ["conversation without dummy calls", /conversation[^.]*(?:without|no)[^.]*empty tool calls/i],
+  ["search before bounded reads", /search[^.]*before reading[^.]*located ranges/i],
+  ["independent batching and dependent sequencing", /batch independent[^.]*(?:sequence|sequential)[^.]*dependent[^.]*search\/read\/edit\/verify/i],
+  ["awaited compact output", /await calls[^.]*return compact results/i],
+  ["named edit payloads", /payloads for edit content/i],
+  ["local workspace namespace", /local\s+(?:handles|holds)[^.]*workspace files\/search\/shell/i],
+  ["configured MCP namespace", /mcp\s+(?:handles|calls)[^.]*explicitly configured external capabilities/i],
+  ["durable memory and revisioned state roles", /memory\s+(?:holds|stores)[^.]*durable facts[^.]*state\s+(?:holds|stores)[^.]*revisioned task progress/i],
+  ["create-only write default", /write[^.]*create-only unless\s+overwrite\s*:\s*true/i],
+  ["exact unique edit anchor", /edit[^.]*exact nonempty unique anchor unless\s+all\s*:\s*true/i],
+  ["single verified root auto-binding", /single verified root[^.]*auto(?:matically|-binds)/i],
+  ["separate workspace selection", /fabric\.workspace\(\{action:\s*["']select["'],\s*rootId\}\)[^.]*separate execution[^.]*workspace effects/i],
+  ["selection commits only on success", /pending selection[^.]*commits? only[^.]*successful (?:execution|settlement)/i],
+  ["no cwd substitution", /never[^.]*process cwd[^.]*workspace/i],
+  ["unavailable external capabilities stay unavailable", /web\/lsp\/delegation[^.]*explicitly configured available MCP capability[^.]*otherwise report unavailable/i],
+  ["nested approval is independent", /outer tool (?:allowance|permission)[^.]*(?:never|does not) approve[^.]*nested effects[^.]*each (?:nested )?action[^.]*Fabric approval policy/i],
+  ["no background guarantee", /no background job guarantee/i],
+  ["settle cannot swallow denial or cleanup failures", /denial[^.]*timeout[^.]*cancellation[^.]*uncertain cleanup[^.]*fail[^.]*settle\s*:\s*true/i],
+  ["partial-effect recovery, not automatic replay", /propagate failures[^.]*inspect partial (?:effects|progress)[^.]*before retrying[^.]*never[^.]*replay[^.]*effectful program/i],
+  ["verified completion", /verif(?:y|ication)[^.]*before[^.]*claim(?:ing)? completion/i],
+  ["Kiro compaction and resume ownership", /Kiro owns[^.]*history[^.]*automatic(?:\/| and )manual[^.]*compaction[^.]*chat resume/i],
+  ["continue Fabric after compaction", /after compaction[^.]*(?:keep|continue) using Fabric[^.]*(?:do not|never)[^.]*start[^.]*reconnect[^.]*replace/i],
+  ["workspace state shared across chats", /Fabric memory\/state[^.]*workspace-scoped[^.]*shared[^.]*concurrent Kiro chats/i],
+  ["intentional non-secret persistence only", /store only[^.]*intentional[^.]*non-secret[^.]*durable facts(?:\/| or )task state/i],
+  ["no conversation mirroring", /never mirror[^.]*(?:whole|entire) conversation/i],
+];
+
 describe("Kiro Agent profile generation", () => {
-  it("keeps Kiro conversation compaction separate from Fabric durable state", () => {
-    expect(AGENT_PROMPT).toContain("Kiro owns conversation history, automatic and manual context compaction, and chat resume.");
-    expect(AGENT_PROMPT).toContain("compaction is not a reason to start, reconnect, or replace Fabric");
-    expect(AGENT_PROMPT).toContain("never mirror the whole conversation");
-    expect(AGENT_PROMPT).toContain("Fabric memory/state is workspace-scoped and may be shared by concurrent Kiro chats");
+  it.each(promptContracts)("keeps the standing contract: %s", (_name, rule) => {
+    expect(AGENT_PROMPT).toMatch(rule);
   });
 
-  it("requires one model tool with useful first-call guidance and no native fallback", () => {
-    expect(AGENT_PROMPT).toContain("strict always-on Code Mode");
-    expect(AGENT_PROMPT).toContain("No native tools or fallback exist");
-    expect(AGENT_PROMPT).toContain('return await local.read({path:"README.md",limit:80});');
-    for (const name of ["info", "help", "workspace"]) expect(AGENT_PROMPT).toContain(`fabric.${name}(`);
-    expect(AGENT_PROMPT).toContain("do not make ritual or empty tool calls");
-    expect(AGENT_PROMPT).toContain("timeoutMs:180000");
-    expect(AGENT_PROMPT).not.toContain("@fabric/fabric_info");
-    expect(AGENT_PROMPT).not.toContain("@fabric/fabric_workspace");
+  it("reduces actual prompt plus steering characters by at least 25%", () => {
+    expect(AGENT_PROMPT.length).toBeGreaterThan(0);
+    expect(steering.length).toBeGreaterThan(0);
+    expect(AGENT_PROMPT.length + steering.length).toBeLessThanOrEqual(Math.floor(BASELINE_STANDING_CHARS * 0.75));
   });
 
-  it("documents bounded coding workflow and namespace roles", () => {
-    for (const text of ["Search before reading", "Batch independent", "steps sequential", "local handles", "mcp calls", "memory stores", "state stores", "one-based lines", "zero-based character paging", "900000", "no background job guarantee"]) expect(AGENT_PROMPT).toContain(text);
+  it("keeps a type-checked first-read input and native-free bootstrap examples", () => {
+    const code = AGENT_PROMPT.match(/\{\s*code:\s*'([^']+)'\s*\}/)?.[1];
+    expect(code).toBeDefined();
+    expect(code).toMatch(/return\s+await\s+local\.read\(/);
+    expect(code).toMatch(/path:\s*"README\.md"/);
+    expect(code).toMatch(/limit:\s*\d+/);
+    expect(typeCheckFabricCode(code!, fabricGuestDeclarations).errors).toEqual([]);
+    const bootstrap = AGENT_PROMPT.match(/return await fabric\.(?:info|help|workspace)\([^)]*\)/g) ?? [];
+    expect(bootstrap).toHaveLength(3);
+    for (const call of bootstrap) expect(typeCheckFabricCode(call, fabricGuestDeclarations).errors, call).toEqual([]);
+    expect(AGENT_PROMPT).toMatch(/fabric\.workspace\(\{action:\s*"list"\}\)/);
+    expect(AGENT_PROMPT).toMatch(/tools\.search\b[^.]*tools\.describe\b/);
+    expect(AGENT_PROMPT).toMatch(/immutable help[^.]*no native read/i);
+    expect(AGENT_PROMPT).toMatch(/fabric-exec skill\/help/i);
+    expect(AGENT_PROMPT.match(/@fabric\/\w+/g)).toEqual(["@fabric/fabric_exec"]);
+  });
+
+  it("keeps line versus character offsets and a shell deadline with outer cleanup headroom", () => {
+    expect(AGENT_PROMPT).toMatch(/local\.read offsets[^.]*one-based lines/i);
+    expect(AGENT_PROMPT).toMatch(/overview\/api[^.]*zero-based character offset\/limit paging/i);
+    expect(AGENT_PROMPT).toMatch(/shell[^.]*host \/bin\/sh/i);
+    const maximum = Number(AGENT_PROMPT.match(/timeoutMs\s*<=\s*(\d+)/)?.[1]);
+    const shell = Number(AGENT_PROMPT.match(/local\.shell\([^)]*timeoutMs:\s*(\d+)/)?.[1]);
+    const outer = Number(AGENT_PROMPT.match(/outer timeoutMs:\s*(\d+)/)?.[1]);
+    expect(maximum).toBe(FABRIC_MAX_GUEST_TIMEOUT_MS);
+    expect(shell).toBeGreaterThan(0);
+    expect(outer).toBeLessThanOrEqual(maximum);
+    expect(outer).toBeGreaterThan(shell + FABRIC_COMPILER_TIMEOUT_MS + KIRO_MCP_DEADLINE_GRACE_MS);
+    expect(AGENT_PROMPT).toMatch(/outer timeoutMs[^.]*overhead and cleanup/i);
+  });
+
+  it("retains nonduplicated installation and host-authority boundaries in steering", () => {
+    expect(steering).toMatch(/code, tools and resources[^.]*session's generation/i);
+    expect(steering).toMatch(/restart Kiro[^.]*update[^.]*not for compaction/i);
+    expect(steering).toMatch(/installation directory[^.]*not the coding workspace/i);
+    expect(steering).toMatch(/checked TypeScript[^.]*QuickJS/i);
+    expect(steering).toMatch(/approved shell[^.]*host authority[^.]*not filesystem confinement/i);
+  });
+
+  it("serves optional bounded API pages from expanded declarations, including local APIs", async () => {
+    // AUD-031: source-template/reference-file lengths are not runtime payloads.
+    const provider = new FabricBootstrapProvider();
+    expect(fabricGuestDeclarations).toContain(LOCAL_GUEST_DECLARATIONS);
+    expect(LOCAL_GUEST_DECLARATIONS.length).toBeGreaterThan(0);
+    expect(fabricGuestDeclarations.length).toBeGreaterThan(LOCAL_GUEST_DECLARATIONS.length);
+    let offset = 0;
+    let reconstructed = "";
+    do {
+      const page = await provider.invoke("help", { topic: "api", offset }, { cwd: "/not-a-workspace" }) as {
+        topic: string; text: string; truncated: boolean; nextOffset?: number;
+      };
+      expect(page.topic).toBe("api");
+      expect(page.text.length).toBeGreaterThan(0);
+      expect(page.text.length).toBeLessThanOrEqual(Math.floor((provider.maxResultChars - 256) / 6));
+      expect(page.text).toBe(fabricGuestDeclarations.slice(offset, offset + page.text.length));
+      reconstructed += page.text;
+      offset += page.text.length;
+      expect(page.truncated).toBe(offset < fabricGuestDeclarations.length);
+      expect(page.nextOffset).toBe(page.truncated ? offset : undefined);
+    } while (offset < fabricGuestDeclarations.length);
+    expect(reconstructed).toBe(fabricGuestDeclarations);
   });
 
   it("generates the global installed profile without optional steering", () => {

@@ -20976,16 +20976,30 @@ var FabricExecutionService = class {
           maxAuditBytes: this.config.executor.maxAuditBytes,
           maxResultChars: this.config.executor.maxNestedResultChars,
           approve: async (action, exactArgs) => {
-            approvalRequests += 1;
-            if (approvalRequests > this.config.executor.maxApprovalRequests) throw new Error("Fabric approval request quota exceeded");
-            pendingApprovals += 1;
-            if (pendingApprovals > this.config.executor.maxPendingApprovals) {
-              pendingApprovals -= 1;
-              throw new Error("Fabric pending approval quota exceeded");
+            throwIfAbortedOrExpired(signal, deadline);
+            const plan = options.approver.prepareApproval ? await options.approver.prepareApproval(action, exactArgs, signal) : { decision: "ask", prompt: () => options.approver.approve(action, exactArgs, signal) };
+            throwIfAbortedOrExpired(signal, deadline);
+            if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new Error("Invalid Fabric approval plan");
+            switch (plan.decision) {
+              case "allow":
+                return;
+              case "deny":
+                if (typeof plan.reason !== "string") throw new Error("Invalid Fabric approval plan");
+                throw new Error(plan.reason);
+              case "ask":
+                if (typeof plan.prompt !== "function") throw new Error("Invalid Fabric approval plan");
+                break;
+              default:
+                throw new Error("Invalid Fabric approval plan");
             }
+            if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new Error("Fabric approval request quota exceeded");
+            if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new Error("Fabric pending approval quota exceeded");
+            approvalRequests += 1;
+            pendingApprovals += 1;
             const approvalSpan = tracer.enabled ? tracer.span("eval", "approval.wait", execId, { ref: action.ref, risk: action.risk }, bridgeSpan?.id) : void 0;
             try {
-              await options.approver.approve(action, exactArgs, signal);
+              await plan.prompt();
+              throwIfAbortedOrExpired(signal, deadline);
               approvalSpan?.end({ approved: true });
             } catch (error) {
               approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });
@@ -21338,14 +21352,22 @@ var KiroPowerFabricApprover = class {
   elicitation;
   cwd;
   async approve(action, args, signal) {
+    const plan = this.prepareApproval(action, args, signal);
+    if (plan.decision === "deny") throw new Error(plan.reason);
+    if (plan.decision === "ask") await plan.prompt();
+  }
+  prepareApproval(action, args, signal) {
+    signal?.throwIfAborted();
     const mode = this.config[action.risk];
-    if (mode === "allow") return;
-    if (mode === "deny") throw new Error(`${action.ref} is denied by Fabric policy`);
+    if (mode === "allow") return { decision: "allow" };
+    if (mode === "deny") return { decision: "deny", reason: `${action.ref} is denied by Fabric policy` };
+    if (mode !== "ask") return { decision: "deny", reason: `${action.ref} has invalid Fabric approval policy` };
     const identity = fabricApprovalIdentity(action, args);
     const localReview = action.provider === "local" && (action.risk === "write" || action.risk === "execute") ? typeof args.review === "string" ? args.review : (() => {
       throw new Error("Local effect lacks canonical review material");
     })() : void 0;
-    const approved = await this.elicitation.approveOnce({
+    const ref = action.ref;
+    const request = {
       risk: action.risk,
       provider: action.provider,
       action: action.name,
@@ -21353,8 +21375,14 @@ var KiroPowerFabricApprover = class {
 ${localReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
       ...localReview === void 0 ? {} : { reviewable: true },
       ...signal ? { signal } : {}
-    });
-    if (!approved) throw new Error(`${action.ref} approval was denied or unavailable`);
+    };
+    return {
+      decision: "ask",
+      prompt: async () => {
+        const approved = await this.elicitation.approveOnce(request);
+        if (!approved) throw new Error(`${ref} approval was denied or unavailable`);
+      }
+    };
   }
 };
 

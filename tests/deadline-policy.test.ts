@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { normalizeFabricConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import type { FabricProvider } from "../src/protocol.js";
@@ -105,6 +105,40 @@ describe("deadline policy", () => {
     expect(approval.success).toBe(false);
     expect(approval.error).toMatch(/approval request quota exceeded|pending approval quota exceeded/u);
     expect(prompts).toBeLessThanOrEqual(2);
+  });
+
+  it.each(["cancel", "timeout"] as const)("never starts a deferred prompt after %s during approval preparation", async (mode) => {
+    const registry = new ActionRegistry();
+    const invoke = vi.fn(async () => true);
+    registry.register({
+      name: "local", description: "approval deadline fixture",
+      async list() { return []; },
+      async describe() { return { name: "read", description: "read", risk: "read", inputSchema: { type: "object" } }; },
+      invoke,
+    });
+    const service = new FabricExecutionService(registry, normalizeFabricConfig({ executor: { timeoutMs: 1_000, maxTimeoutMs: 1_000 } }), "/workspace");
+    const controller = new AbortController();
+    const prompt = vi.fn(async () => {});
+    const approve = vi.fn(async () => {});
+    try {
+      const result = await service.execute({
+        code: "return await tools.call({ ref: 'local.read' });", signal: controller.signal,
+        approver: {
+          approve,
+          async prepareApproval(_action, _args, signal) {
+            const aborted = new Promise<void>((resolve) => signal!.addEventListener("abort", () => resolve(), { once: true }));
+            if (mode === "cancel") controller.abort(new Error("cancelled during preparation"));
+            await aborted;
+            return { decision: "ask", prompt };
+          },
+        },
+      });
+      expect(result.status).toBe(mode === "cancel" ? "aborted" : "timed_out");
+      expect(prompt).not.toHaveBeenCalled();
+      expect(approve).not.toHaveBeenCalled();
+      expect(invoke).not.toHaveBeenCalled();
+      expect(result.audits[0]?.success).toBe(false);
+    } finally { controller.abort(); await service.close(); }
   });
 
   it("keeps the outer MCP envelope beyond compilation and the maximum guest deadline", () => {

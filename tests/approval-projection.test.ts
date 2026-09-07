@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
+import { fabricJsonText } from "../src/runtime/json-budget.js";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import type { FabricCallAudit } from "../src/core/action-registry.js";
 import { KiroPowerApprover, KiroPowerFabricApprover } from "../src/kiro/power/approver.js";
@@ -16,6 +18,39 @@ const action: ResolvedFabricAction = {
 };
 
 describe("Fabric approval and projection", () => {
+  it("prepares a deferred prompt with one policy evaluation and an immutable exact request identity", async () => {
+    let evaluations = 0;
+    const config = { ...DEFAULT_FABRIC_CONFIG.approvals, get write() { evaluations += 1; return "ask" as const; } };
+    const request = vi.fn(async (_options: { message: string }) => ({ action: "accept" as const, approved: true }));
+    const approver = new KiroPowerFabricApprover(config, new KiroPowerApprover({ supported: () => true, request }), "/workspace");
+    const args = { key: "exact", nested: { value: "before" } };
+    const canonical = fabricJsonText({ schemaVersion: 1, ref: action.ref, risk: action.risk, args });
+    const digest = createHash("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex");
+    const plan = approver.prepareApproval(action, args);
+    expect(evaluations).toBe(1);
+    expect(request).not.toHaveBeenCalled();
+    args.nested.value = "after";
+    expect(plan.decision).toBe("ask");
+    if (plan.decision !== "ask") throw new Error("expected ask");
+    await plan.prompt();
+    expect(evaluations).toBe(1);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]?.[0].message).toContain(`sha256:${digest} (${canonical.length} chars)`);
+    expect(request.mock.calls[0]?.[0].message).toContain("before");
+    expect(request.mock.calls[0]?.[0].message).not.toContain("after");
+  });
+
+  it("fails closed on malformed policy and malformed elicitation decisions", async () => {
+    const request = vi.fn(async () => ({ action: "accept" as const, approved: true }));
+    const config = { ...DEFAULT_FABRIC_CONFIG.approvals, write: "invalid" } as unknown as typeof DEFAULT_FABRIC_CONFIG.approvals;
+    await expect(new KiroPowerFabricApprover(config, new KiroPowerApprover({ supported: () => true, request }), "/workspace").approve(action, {})).rejects.toThrow("invalid Fabric approval policy");
+    expect(request).not.toHaveBeenCalled();
+    for (const result of [null, {}, { action: "accept" }, { action: "accept", approved: "true" }, { action: "unknown", approved: true }]) {
+      const bridge = new KiroPowerApprover({ supported: () => true, request: async () => result as unknown as { action: "accept"; approved: boolean } });
+      await expect(new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, bridge, "/workspace").approve(action, {})).rejects.toThrow("denied or unavailable");
+    }
+  });
+
   it("presents exact bounded local review material without silently authorizing a suffix", async () => {
     let message = "";
     const bridge = new KiroPowerApprover({ supported: () => true, async request(options) { message = options.message; return { action: "accept", approved: true }; } });

@@ -1,4 +1,5 @@
 import type { FabricConfig } from "./config.js";
+import { throwIfAbortedOrExpired } from "./async-settlement.js";
 import { LocalShellExitError, type LocalShellResult } from "./providers/local-shell.js";
 import { ActionRegistry, type FabricCallAudit } from "./core/action-registry.js";
 import type { FabricInvocationContext, ResolvedFabricAction } from "./protocol.js";
@@ -14,8 +15,19 @@ export const FABRIC_APPROVAL_TIMEOUT_MS = 30_000;
 export const FABRIC_PROVIDER_TIMEOUT_GRACE_MS = 2_000;
 const MAX_MCP_APPROVAL_STAGES = 2;
 
+/** A host policy decision for one exact canonical request, never guest input. */
+export type FabricApprovalPlan =
+  | { decision: "allow" }
+  | { decision: "deny"; reason: string }
+  | { decision: "ask"; prompt(): Promise<void> };
+
 export interface FabricExecutionApprover {
+  /** Legacy entry point; without prepareApproval every call reserves prompt budget. */
   approve(action: ResolvedFabricAction, args: Record<string, unknown>, signal?: AbortSignal): Promise<void>;
+  /** Evaluate policy once, without interaction. An ask plan must defer interaction
+   * until prompt() and bind it to these exact arguments and signal. The service
+   * invokes it once, only after reserving both approval quotas. */
+  prepareApproval?(action: ResolvedFabricAction, args: Record<string, unknown>, signal?: AbortSignal): FabricApprovalPlan | Promise<FabricApprovalPlan>;
 }
 
 export interface FabricExecutionOptions {
@@ -240,18 +252,36 @@ export class FabricExecutionService {
           maxAuditBytes: this.config.executor.maxAuditBytes,
           maxResultChars: this.config.executor.maxNestedResultChars,
           approve: async (action, exactArgs) => {
-            approvalRequests += 1;
-            if (approvalRequests > this.config.executor.maxApprovalRequests) throw new Error("Fabric approval request quota exceeded");
-            pendingApprovals += 1;
-            if (pendingApprovals > this.config.executor.maxPendingApprovals) {
-              pendingApprovals -= 1;
-              throw new Error("Fabric pending approval quota exceeded");
+            throwIfAbortedOrExpired(signal, deadline);
+            // The registry and nested MCP transport stages share this callback.
+            // Never infer permission from risk or re-evaluate a prepared policy.
+            const plan = options.approver.prepareApproval
+              ? await options.approver.prepareApproval(action, exactArgs, signal)
+              : { decision: "ask" as const, prompt: () => options.approver.approve(action, exactArgs, signal) };
+            throwIfAbortedOrExpired(signal, deadline);
+            if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new Error("Invalid Fabric approval plan");
+            switch (plan.decision) {
+              case "allow": return;
+              case "deny":
+                if (typeof plan.reason !== "string") throw new Error("Invalid Fabric approval plan");
+                throw new Error(plan.reason);
+              case "ask":
+                if (typeof plan.prompt !== "function") throw new Error("Invalid Fabric approval plan");
+                break;
+              default: throw new Error("Invalid Fabric approval plan");
             }
-            // Approval wait is frequently the dominant latency (user
-            // elicitation). Trace ref/risk only, never arguments.
+            // Reserve atomically before interaction. Rejected admission consumes
+            // neither counter; admitted attempts retain total usage on failure.
+            if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new Error("Fabric approval request quota exceeded");
+            if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new Error("Fabric pending approval quota exceeded");
+            approvalRequests += 1;
+            pendingApprovals += 1;
+            // Only actual approval waits (or conservative legacy calls) are
+            // traced here. Trace ref/risk only, never arguments.
             const approvalSpan = tracer.enabled ? tracer.span("eval", "approval.wait", execId, { ref: action.ref, risk: action.risk }, bridgeSpan?.id) : undefined;
             try {
-              await options.approver.approve(action, exactArgs, signal);
+              await plan.prompt();
+              throwIfAbortedOrExpired(signal, deadline);
               approvalSpan?.end({ approved: true });
             } catch (error) {
               approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });

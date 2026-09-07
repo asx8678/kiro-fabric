@@ -7,6 +7,7 @@ import { normalizeFabricConfig, type FabricMcpConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { FabricExecutionService } from "../src/execution-service.js";
 import { KiroMcpProvider } from "../src/kiro/mcp-provider.js";
+import { KiroPowerApprover, KiroPowerFabricApprover } from "../src/kiro/power/approver.js";
 import type { FabricInvocationContext } from "../src/protocol.js";
 
 const config: FabricMcpConfig = {
@@ -235,6 +236,45 @@ describe("configured Fabric MCP federation", () => {
         .rejects.toThrow("tool at index 0 is malformed");
     } finally {
       await provider.close();
+    }
+  });
+
+  it.each([
+    { network: "allow" as const, execute: "ask" as const, success: true, prompts: 1, connects: 1, error: undefined },
+    { network: "ask" as const, execute: "ask" as const, success: false, prompts: 1, connects: 0, error: "approval request quota exceeded" },
+    { network: "allow" as const, execute: "deny" as const, success: false, prompts: 0, connects: 0, error: "denied by Fabric policy" },
+  ])("shares the prompt budget with nested stdio approval: network=$network execute=$execute", async (scenario) => {
+    let prompts = 0;
+    let connects = 0;
+    const registry = new ActionRegistry();
+    registry.register(new KiroMcpProvider("/workspace", config, async () => fakeRuntime({
+      kind: "stdio",
+      onConnect: () => { connects += 1; },
+    })));
+    const executionConfig = normalizeFabricConfig({
+      executor: { maxApprovalRequests: 1, maxPendingApprovals: 1 },
+      approvals: { network: scenario.network, execute: scenario.execute },
+    });
+    const approver = new KiroPowerFabricApprover(executionConfig.approvals, new KiroPowerApprover({
+      supported: () => true,
+      async request() {
+        prompts += 1;
+        return { action: "accept", approved: true };
+      },
+    }), "/workspace");
+    const service = new FabricExecutionService(registry, executionConfig, "/workspace");
+    try {
+      const result = await service.execute({
+        code: 'return (await mcp.tools({ server: "configured" })).length;',
+        approver,
+      });
+      expect(result.success, JSON.stringify(result)).toBe(scenario.success);
+      expect(prompts).toBe(scenario.prompts);
+      expect(connects).toBe(scenario.connects);
+      if (scenario.success) expect(result.value).toBe(1);
+      else expect(result.error).toContain(scenario.error);
+    } finally {
+      await service.close();
     }
   });
 
