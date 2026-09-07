@@ -34,6 +34,7 @@ import {
   kiroWorkspaceToolInputSchema,
   type KiroPowerBoundWorkspace,
   type KiroPowerWorkspaceRequest,
+  type KiroPowerWorkspaceMutation,
 } from "./power/workspace-binding.js";
 import {
   CachedWorkspaceContextProvider,
@@ -49,7 +50,7 @@ import {
   type FabricTracer,
 } from "../trace/tracer.js";
 
-const EXEC_DESCRIPTION = "Execute bounded checked TypeScript for provider composition, artifacts, workspace-scoped durable memory and state, and configured MCP federation. Compose multiple provider calls in one program and return only the data needed. Use Kiro native tools for files, shell, web, and subagents.";
+const EXEC_DESCRIPTION = "The sole tool path: execute checked TypeScript using local coding, fabric bootstrap/help, artifacts, memory, state and configured MCP. Return compact evidence. No native-tool fallback; ordinary conversation needs no execution.";
 const MCP_INSTANCE_ID = `fmcp_${randomBytes(16).toString("hex")}`;
 const MCP_STARTED_AT = new Date().toISOString();
 const MCP_PARENT_PID = process.ppid;
@@ -269,14 +270,14 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       configFile: data.configFile,
       mcpConfigPath: data.mcpConfig,
       artifactsRoot: project?.artifacts ?? data.artifacts,
-      ...(project ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state } : {}),
+      ...(project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, workspaceRoot: workspace.canonicalPath, localLockRoot: path.join(path.dirname(project.state), "local-locks") } : {}),
     });
   };
   const runtimeForIdentity = async (): Promise<KiroRuntime> => {
     const observation = binding.workspaceObservation();
-    if (observation.status === "temporarily-unavailable") throw new Error("bound workspace is temporarily unverifiable");
-    const workspace = observation.status === "verified" ? observation.workspace : undefined;
-    const identity = binding.bindingIdentity();
+    const blocked = unavailableWorkspace() || observation.status === "temporarily-unavailable";
+    const workspace = !blocked && observation.status === "verified" ? observation.workspace : undefined;
+    const identity = blocked ? `<unavailable>:${binding.bindingIdentity()}` : binding.bindingIdentity();
     if (runtime && (runtimeIdentity === identity || runtimeIdentity === "<injected>")) return runtime;
     await closeRuntime(new Error("workspace binding changed"));
     runtime = await createRuntimeFor(workspace);
@@ -306,6 +307,41 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     workspaceSnapshot?.status === "temporarily-unavailable" &&
     binding.bindingSource() !== "manual";
 
+  // Shared internals: guest bootstrap does not MCP-call this same server or
+  // acquire another runtime lease while its existing lease is active.
+  const workspaceValue = (action: "status" | "list") => ({
+    ...(action === "list" ? binding.list() : binding.status()),
+    context: workspaceSnapshot?.status ?? "temporarily-unavailable",
+    verification: binding.workspaceObservation().status,
+  });
+  const infoValue = async (current: KiroRuntime | undefined, workspaceBlocked: boolean) => {
+    const lifecycleInfo = {
+      mcpInstanceId: MCP_INSTANCE_ID, pid: process.pid, parentPid: MCP_PARENT_PID,
+      startedAt: MCP_STARTED_AT, runtimeGeneration, runtimeActive: current !== undefined,
+      clientCapabilities: {
+        roots: (server.getClientCapabilities() as { roots?: unknown } | undefined)?.roots !== undefined,
+        formElicitation: supportsKiroElicitation(server.getClientCapabilities()),
+      },
+    };
+    const expectedNode = process.env.KIRO_FABRIC_EXPECTED_NODE;
+    const interpreter = expectedNode === undefined
+      ? { actual: realpathSync(process.execPath), expected: null, matches: "unknown" as const }
+      : { actual: realpathSync(process.execPath), expected: expectedNode, matches: realpathSync(process.execPath) === expectedNode };
+    const providers = current ? current.providers().map((provider) => workspaceBlocked && provider.name !== "fabric"
+      ? { ...provider, available: false, reason: "workspace identity is temporarily unverifiable" } : provider)
+      : ["fabric", "local", "artifacts", "memory", "state", "mcp"].map((name) => ({ name, description: "Provider awaits runtime", available: false, reason: "runtime unavailable" }));
+    const actionCatalog = fabricInfoCatalog(current && !workspaceBlocked ? await current.registry.list() : []);
+    if (tracer.enabled) { tracer.event("eval", "tool.fabric_info", undefined, lifecycleInfo); tracer.flush(); }
+    return {
+      product: "kiro-fabric-agent", version, executor: "quickjs",
+      limits: current?.service.config.executor ?? loadFabricConfig(data.configFile).executor,
+      workspace: workspaceValue("status"), providers,
+      tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
+      lifecycle: lifecycleInfo, interpreter, actions: actionCatalog.actions, catalog: actionCatalog.catalog,
+      nativeKiroTools: { owner: "kiro", availability: "not-exposed" },
+    };
+  };
+
   server.setNotificationHandler(RootsListChangedNotificationSchema, async () => { workspaceContext.invalidate(); await syncWorkspace(true); });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     await syncWorkspace();
@@ -322,59 +358,9 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       await syncWorkspace();
       if (Object.keys(request.params.arguments ?? {}).length) return toolError("invalid_info_arguments", "fabric_info accepts no arguments");
       try {
-        const workspaceObservation = binding.workspaceObservation();
-        const workspaceBlocked = unavailableWorkspace() || workspaceObservation.status === "temporarily-unavailable";
-        const current = workspaceBlocked ? runtime : await getRuntime();
-        const limits = current?.service.config.executor ?? loadFabricConfig(data.configFile).executor;
-        const providers = current
-          ? current.providers().map((provider) => workspaceBlocked
-              ? { ...provider, available: false, reason: "workspace identity is temporarily unverifiable" }
-              : provider)
-          : ["artifacts", "memory", "state", "mcp"].map((name) => ({
-              name,
-              description: "Provider unavailable until workspace identity can be verified",
-              available: false,
-              reason: "workspace identity is temporarily unverifiable",
-            }));
-        const lifecycleInfo = {
-          mcpInstanceId: MCP_INSTANCE_ID,
-          pid: process.pid,
-          parentPid: MCP_PARENT_PID,
-          startedAt: MCP_STARTED_AT,
-          runtimeGeneration,
-          runtimeActive: current !== undefined,
-          clientCapabilities: {
-            roots: (server.getClientCapabilities() as { roots?: unknown } | undefined)?.roots !== undefined,
-            formElicitation: supportsKiroElicitation(server.getClientCapabilities()),
-          },
-        };
-        const expectedNode = process.env.KIRO_FABRIC_EXPECTED_NODE;
-        const interpreterInfo = expectedNode === undefined
-          ? { actual: realpathSync(process.execPath), expected: null, matches: "unknown" as const }
-          : { actual: realpathSync(process.execPath), expected: expectedNode, matches: realpathSync(process.execPath) === expectedNode };
-        const actionCatalog = fabricInfoCatalog(current && !workspaceBlocked ? await current.registry.list() : []);
-        if (tracer.enabled) {
-          tracer.event("eval", "tool.fabric_info", undefined, lifecycleInfo);
-          tracer.flush();
-        }
-        return { content: [{ type: "text" as const, text: JSON.stringify({
-          product: "kiro-fabric-agent",
-          version,
-          executor: "quickjs",
-          limits,
-          workspace: {
-            ...binding.status(),
-            context: workspaceSnapshot?.status ?? "temporarily-unavailable",
-            verification: workspaceObservation.status,
-          },
-          providers,
-          tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
-          lifecycle: lifecycleInfo,
-          interpreter: interpreterInfo,
-          actions: actionCatalog.actions,
-          catalog: actionCatalog.catalog,
-          nativeKiroTools: { owner: "kiro", availability: "declared-by-agent-profile" },
-        }) }] };
+        const blocked = unavailableWorkspace() || binding.workspaceObservation().status === "temporarily-unavailable";
+        const current = blocked ? runtime : await getRuntime();
+        return { content: [{ type: "text" as const, text: JSON.stringify(await infoValue(current, blocked)) }] };
       } catch (error) { return toolError("info_request_failed", error); }
     }
     if (name === "fabric_workspace") {
@@ -433,7 +419,6 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     } catch (error) {
       return tracedError("adapter_error", error);
     }
-    if (unavailableWorkspace()) return tracedError("workspace_unavailable", "workspace roots are temporarily unverifiable");
     const normalized = prepareFabricExecArgumentsWithDiagnostics(request.params.arguments ?? {});
     const normalizedRecord = isRecord(normalized.value) ? normalized.value : undefined;
     const absoluteInputError = typeof normalizedRecord?.code === "string"
@@ -490,22 +475,63 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         fabricApprover,
         current.service.cwd,
       );
+      const pinnedIdentity = binding.bindingIdentity();
+      const workspaceVerified = !unavailableWorkspace() && binding.workspaceObservation().status === "verified";
+      let pendingMutation: KiroPowerWorkspaceMutation | undefined;
+      const bootstrap = {
+        info: () => infoValue(current, unavailableWorkspace() || binding.workspaceObservation().status === "temporarily-unavailable"),
+        workspace: async (args: Record<string, unknown>, signal?: AbortSignal) => {
+          const parsed = workspaceRequest(args);
+          if (tracer.enabled) { tracer.event("eval", "tool.fabric_workspace", execId, { action: parsed.action }); tracer.flush(); }
+          if (parsed.action === "status" || parsed.action === "list") return workspaceValue(parsed.action);
+          if (pendingMutation) throw new Error("Only one workspace transition is permitted per execution");
+          if (parsed.action === "select" && unavailableWorkspace()) throw new Error("workspace roots are temporarily unverifiable");
+          pendingMutation = await binding.prepareMutation(parsed, signal);
+          signal?.throwIfAborted();
+          if (binding.bindingIdentity() !== pinnedIdentity) throw new Error("Workspace changed during bootstrap preparation");
+          return { status: "pending", action: parsed.action, committed: false, nextExecutionRequired: true };
+        },
+      };
       const result = await current.service.execute({
         code: input.code,
         ...(input.payloads ? { payloads: input.payloads } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
         signal: controller.signal,
         approver,
+        bootstrap,
+        workspaceBound: workspaceVerified,
+        workspaceUnavailable: unavailableWorkspace() || binding.workspaceObservation().status === "temporarily-unavailable",
         onEffectiveTimeoutChange: scheduleOuterDeadline,
         ...(execId !== undefined ? { tracer, execId } : {}),
       });
       const projection = projectFabricExecutionText({
         result,
         resultFormat: input.resultFormat ?? current.service.config.executor.resultFormat,
-        maxOutputChars: current.service.config.executor.maxOutputChars,
+        maxOutputChars: current.service.config.executor.maxOutputChars - (pendingMutation ? 512 : 0),
         writeArtifact: (content) => current.artifacts.write(content),
         normalizationDiagnostics: normalized.diagnostics,
       });
+      if (pendingMutation && !projection.isError) {
+        // Release OUR lease before entering a transition that drains leases.
+        // The source program is already settled and cannot issue later calls.
+        active.delete(execution);
+        execution.settle();
+        execution = undefined;
+        const mutation = pendingMutation;
+        const transition = await lifecycle(async () => {
+          if (closing) throw new Error("Agent MCP server is shutting down");
+          controller.signal.throwIfAborted();
+          if (binding.bindingIdentity() !== pinnedIdentity) throw new Error("Workspace changed before deferred transition; list roots again");
+          await closeRuntime(new Error("workspace binding changed"));
+          controller.signal.throwIfAborted();
+          return binding.commitMutation(mutation);
+        });
+        const suffix = `\n\nWorkspace transition: ${JSON.stringify({ committed: true, ...transition, nextExecutionRequired: true })}`;
+        if (suffix.length > 512) throw new Error("Workspace transition committed but acknowledgement exceeds bounds; inspect fabric.workspace status before retrying");
+        projection.text += suffix;
+        projection.visibleChars = projection.text.length;
+        projection.visibleBytes = Buffer.byteLength(projection.text, "utf8");
+      }
       if (tracer.enabled) {
         tracer.event("eval", "exec.projection", execId, {
           visibleChars: projection.visibleChars,

@@ -4,7 +4,7 @@ import type { FabricDeadline } from "./runtime/deadline.js";
 export const FABRIC_COMMIT_ACKNOWLEDGEMENT = Symbol("fabric.commitAcknowledgement");
 export interface FabricCommitAcknowledgement {
   readonly version: 1;
-  readonly operation: "set" | "delete";
+  readonly operation: "set" | "delete" | "write" | "edit";
 }
 interface FabricCommittedError extends Error {
   readonly [FABRIC_COMMIT_ACKNOWLEDGEMENT]: FabricCommitAcknowledgement;
@@ -12,7 +12,7 @@ interface FabricCommittedError extends Error {
 export const fabricCommitAcknowledgement = (error: unknown): FabricCommitAcknowledgement | undefined => {
   if (!(error instanceof Error)) return undefined;
   const marker = (error as Partial<FabricCommittedError>)[FABRIC_COMMIT_ACKNOWLEDGEMENT];
-  return marker?.version === 1 && (marker.operation === "set" || marker.operation === "delete")
+  return marker?.version === 1 && ["set", "delete", "write", "edit"].includes(marker.operation)
     ? marker
     : undefined;
 };
@@ -50,6 +50,11 @@ export interface FabricInvocationContext {
   /** Host-only absolute monotonic deadline. Providers must check it at commit boundaries. */
   deadline?: FabricDeadline;
   approve?(action: ResolvedFabricAction, args: Record<string, unknown>): Promise<void>;
+  /** Per-execution Kiro bootstrap capability; never serialized into the guest. */
+  bootstrap?: {
+    info(): Promise<unknown>;
+    workspace(args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+  };
 }
 
 export interface FabricProvider {
@@ -62,6 +67,12 @@ export interface FabricProvider {
     args: Record<string, unknown>,
     context: FabricInvocationContext,
   ): Record<string, unknown> | Promise<Record<string, unknown>>;
+  /** Optional cross-process effect reservation, held through approval and cleanup. */
+  reserveInvocation?(
+    actionName: string,
+    args: Record<string, unknown>,
+    context: FabricInvocationContext,
+  ): Promise<() => void | Promise<void>>;
   effectResources?(
     actionName: string,
     args: Record<string, unknown>,

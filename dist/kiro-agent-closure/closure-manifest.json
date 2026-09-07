@@ -12,6 +12,7 @@
     "src/execution-service.ts",
     "src/kernel/fabric-exec-contract.ts",
     "src/kiro/artifacts.ts",
+    "src/kiro/bootstrap-provider.ts",
     "src/kiro/canonical-path.ts",
     "src/kiro/deadlines.ts",
     "src/kiro/info-catalog.ts",
@@ -29,6 +30,10 @@
     "src/kiro/projection.ts",
     "src/kiro/runtime.ts",
     "src/protocol.ts",
+    "src/providers/local-contract.ts",
+    "src/providers/local-path.ts",
+    "src/providers/local-provider.ts",
+    "src/providers/local-shell.ts",
     "src/providers/state-provider.ts",
     "src/runtime/compiler-worker-entry.ts",
     "src/runtime/deadline.ts",
@@ -531,9 +536,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-34KAOWSV.js",
-      "bytes": 1055680,
-      "sha256": "285a48c8033fee88eff74802a5c2850c9ea13ce2db08381fcf982136c7729911"
+      "path": "chunks/mcp-server-263OSNRC.js",
+      "bytes": 1109337,
+      "sha256": "eb92fd528c9fd533b1bb06eb94f0d3c31c57b4e05afa68f1b6601059466ca46a"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -553,7 +558,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 5640,
-      "sha256": "e62e376b61aa26dd6f39d4bf734d29bdb3b537d4dd675ac1f20cf0cc569fdb5e"
+      "sha256": "6878a0d7379fbd33486c080ccbfb868e2ec0cc6e7a81a5be2b096d5e8d7485b6"
     },
     {
       "path": "package.json",
@@ -571,5 +576,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "8366bcbfe32efaf8e5e7a93e1e805fec41c24904b52aec923ad1e466b78a40b3"
+  "contentDigest": "a4e8c60779dd4af64ea0212c8dd30c37169e1a3e2b92bd58ea98fa9d3ed15fe9"
 }

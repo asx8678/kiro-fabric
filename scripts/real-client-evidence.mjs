@@ -4,13 +4,140 @@ import { generateAgentProfile } from "./agent-profile.mjs";
 
 export const REAL_CLIENT_INTERACTIVE_COMMAND = ["kiro-cli", "--v3", "--agent", "kiro-fabric"];
 export const REAL_CLIENT_TOOLS = ["fabric_info", "fabric_workspace", "fabric_exec"];
-export const REAL_CLIENT_NATIVE_TOOLS = ["read", "write", "shell", "web", "subagent", "todo_list"];
-export const REAL_CLIENT_PROFILE_TOOLS = [...REAL_CLIENT_NATIVE_TOOLS, "@fabric"];
+export const REAL_CLIENT_NATIVE_TOOLS = [];
+export const REAL_CLIENT_MODEL_TOOLS = ["fabric_exec"];
+export const REAL_CLIENT_PROFILE_TOOLS = ["@fabric/fabric_exec"];
+
+// v13: nativeToolVisibility is a compatibility key for strict model inventory.
+// Accept only a complete newline-delimited inventory, never a presence scan.
+// Actual Kiro rendering is unverified: unknown syntax BLOCKS qualification.
+export const assertStrictToolInventory = (text) => {
+  const lines = text.trim().split(/\r?\n/u).map((line) => line.trim());
+  if (JSON.stringify(lines) !== JSON.stringify(REAL_CLIENT_PROFILE_TOOLS)) {
+    throw Object.assign(new Error("strict tool inventory is not exact and complete; inventoryStatus=unverified; real-client execution BLOCKED on extra tools or unverified /tools syntax"), { inventoryStatus: "unverified", gate: "nativeToolVisibility" });
+  }
+  return [...REAL_CLIENT_PROFILE_TOOLS];
+};
+// Shared exact coding contract: model output alone is never qualification.
+export const codingFixtureSpec = (nonce) => {
+  if (!/^[a-f0-9]{48}$/u.test(nonce ?? "")) throw new Error("invalid coding fixture nonce");
+  const directory = `qualification-coding-${nonce}`;
+  const source = `${directory}/sum.mjs`;
+  const before = "export const sum = (a, b) => a - b;\n";
+  const after = "export const sum = (a, b) => a + b;\n";
+  const test = `import { sum } from './sum.mjs';\nconst ok = sum(7, 5) === 12 && sum(-2, 3) === 1;\nconsole.log('${nonce}:' + (ok ? 'PASS' : 'FAIL'));\nprocess.exitCode = ok ? 0 : 1;\n`;
+  const shell = { command: `node ${directory}/test.mjs`, timeoutMs: 120000, settle: true };
+  const steps = (/** @type {Array<[string, Record<string, unknown>]>} */ ([
+    ['local.read', { path: source, offset: 1, limit: 20 }],
+    ['local.grep', { pattern: 'sum', path: directory, literal: true, limit: 20 }],
+    ['local.read', { path: source, offset: 1, limit: 20 }],
+    ['local.shell', shell],
+    ['local.edit', { path: source, oldText: 'a - b', newText: 'a + b' }],
+    ['local.read', { path: source, offset: 1, limit: 20 }],
+    ['local.shell', shell],
+  ])).map(([ref, args]) => ({ ref, input: { code: `return await ${ref}(${JSON.stringify(args)});`, resultFormat: 'json', timeoutMs: 180000 } }));
+  return { directory, source, before, after, test, steps };
+};
+
+export const assertCodingQualification = (gate) => {
+  if (!gate || gate.source !== 'kiro-acp-local-fixture' || gate.firstTurnSingleRead !== true) fail('coding qualification is missing or unverified');
+  if (!SESSION_ID.test(gate.sessionId ?? '') || !SHA256.test(gate.acpRecordingDigest ?? '')) fail('coding session/recording is unverified');
+  const spec = codingFixtureSpec(gate.nonce);
+  if (gate.beforeSha256 !== digest(spec.before) || gate.afterSha256 !== digest(spec.after) ||
+      gate.testSha256 !== digest(spec.test) || gate.beforeSha256 === gate.afterSha256 ||
+      !Array.isArray(gate.steps) || gate.steps.length !== spec.steps.length) fail('coding fixture hashes/steps are invalid');
+  const ids = new Set();
+  const execIds = new Set();
+  let previousSeq = -1;
+  for (const [index, step] of gate.steps.entries()) {
+    if (!MCP_INSTANCE_ID.test(step.mcpInstanceId ?? "") || step.mcpInstanceId !== gate.steps[0].mcpInstanceId ||
+        !Number.isSafeInteger(step.intervalStartSeq) || step.intervalStartSeq < previousSeq ||
+        !Number.isSafeInteger(step.intervalEndSeq) || step.intervalEndSeq <= step.intervalStartSeq ||
+        !Array.isArray(step.events) || step.events.some(event => !Number.isSafeInteger(event.seq) || event.seq <= step.intervalStartSeq || event.seq > step.intervalEndSeq)) fail("coding trace intervals are not ordered and lifecycle-bound");
+    previousSeq = step.intervalEndSeq;
+    const expected = spec.steps[index];
+    if (!equal(step.input, expected.input) || !step.result || !Array.isArray(step.events)) fail('coding exact input/result is absent');
+    const call = exactFabricExecEvidence(step.call, 'coding', gate.sessionId, gate.acpRecordingDigest, step.result);
+    if (call.expectedArgumentsDigest !== valueDigest(expected.input) || call.observedResultDigest !== valueDigest(step.result) ||
+        ids.has(call.toolCallId)) fail('coding ACP call is not bound to exact local input/output');
+    if (!Array.isArray(step.acpEvents) || !equal(step.acpEvents.map((frame) => digest(JSON.stringify(frame))), call.frameDigests)) fail('coding ACP frames are not digest-bound');
+    let inputSeen = false;
+    let resultSeen = false;
+    let named = false;
+    let completed = false;
+    for (const frame of step.acpEvents) {
+      const message = frame?.message;
+      const update = message?.params?.update;
+      if (frame.direction !== 'server-to-client' || message?.jsonrpc !== '2.0' || Object.hasOwn(message, 'id') ||
+          !['session/update', 'session/notification'].includes(message.method) || message.params.sessionId !== gate.sessionId ||
+          !['tool_call', 'tool_call_update'].includes(update?.sessionUpdate) || update.toolCallId !== call.toolCallId) fail('coding ACP envelope is invalid');
+      const identifiers = [update.name, update.toolName, update._meta?.name, update._meta?.toolName].filter((name) => typeof name === 'string');
+      if (!identifiers.length && typeof update.title === 'string') identifiers.push(update.title);
+      if (identifiers.some((name) => !/^(?:fabric_exec|@?fabric(?:\/|\.|:|___)fabric_exec)$/iu.test(name))) fail('coding ACP tool is not fabric_exec');
+      named ||= identifiers.length > 0;
+      if (Object.hasOwn(update, 'rawInput')) {
+        if (valueDigest(update.rawInput) !== valueDigest(step.input)) fail('coding ACP input is not exact');
+        inputSeen = true;
+      }
+      if (Object.hasOwn(update, 'rawOutput')) {
+        let output = update.rawOutput;
+        if (output?.isError === true) fail('coding ACP output failed');
+        if (Array.isArray(output?.content)) {
+          if (output.content.length !== 1 || output.content[0]?.type !== 'text') fail('coding ACP output is ambiguous');
+          output = output.content[0].text;
+        }
+        if (typeof output === 'string') { try { output = JSON.parse(output); } catch { fail('coding ACP output is not JSON'); } }
+        if (valueDigest(output) !== valueDigest(step.result)) fail('coding ACP output is not exact');
+        resultSeen = true;
+      }
+      if (update.status !== undefined && !['pending', 'in_progress', 'completed'].includes(update.status)) fail('coding ACP completion failed');
+      if (completed && update.status !== undefined && update.status !== 'completed') fail('coding ACP completion regressed');
+      completed ||= update.status === 'completed';
+    }
+    if (!named || !inputSeen || !resultSeen || !completed) fail('coding ACP completion is incomplete');
+    ids.add(call.toolCallId);
+    const outer = step.events.filter((event) => event.ev === 'tool.fabric_exec');
+    const bridges = step.events.filter((event) => event.cat === 'bridge');
+    const ends = step.events.filter((event) => event.ev === 'exec.end');
+    if (outer.length !== 1 || typeof outer[0].execId !== 'string' || bridges.length !== 1 || ends.length !== 1 ||
+        bridges[0].execId !== outer[0].execId || ends[0].execId !== outer[0].execId ||
+        (bridges[0].data?.actionRef ?? bridges[0].ev) !== expected.ref || bridges[0].data?.ok !== true ||
+        ends[0].data?.status !== 'succeeded' || execIds.has(outer[0].execId)) fail('coding nested local trace correlation is incomplete');
+    execIds.add(outer[0].execId);
+    if ([3, 4, 6].includes(index)) {
+      const requests = step.events.filter((event) => event.ev === 'approval.form.request');
+      const responses = step.events.filter((event) => event.ev === 'approval.form.response');
+      if (requests.length !== 1 || responses.length !== 1 || !requests[0].data?.elicitationId ||
+          responses[0].data?.elicitationId !== requests[0].data.elicitationId || responses[0].data?.approved !== true ||
+          responses[0].data?.action !== 'accept' || typeof step.review !== 'string' ||
+          !step.review.includes(spec.directory) || !step.review.includes('Approve once') ||
+          (index === 4 ? !step.review.includes('sum.mjs') || !step.review.includes('a - b') || !step.review.includes('a + b')
+            : !step.review.includes(`node ${spec.directory}/test.mjs`))) fail('coding fixture-only approval is unverified');
+    }
+  }
+  for (const index of [0, 2, 5]) {
+    const result = gate.steps[index].result;
+    const text = index === 5 ? spec.after : spec.before;
+    if (result.path !== spec.source || result.text !== text || result.sha256 !== digest(text) || result.truncated !== false) fail('coding read/hash verification failed');
+  }
+  if (!gate.steps[1].result.matches?.some((match) => match.path === spec.source && match.line === 1 && match.text === spec.before.trim())) fail('coding search did not locate fixture');
+  if (gate.steps[4].result.path !== spec.source || gate.steps[4].result.changed !== true || gate.steps[4].result.sha256 !== gate.afterSha256) fail('coding edit did not publish expected hash');
+  for (const [index, exitCode, suffix] of [[3, 1, 'FAIL'], [6, 0, 'PASS']]) {
+    const result = gate.steps[index].result;
+    if (result.exitCode !== exitCode || result.ok !== (exitCode === 0) || result.signal !== null ||
+        result.stdout !== `${gate.nonce}:${suffix}\n` || result.stderr !== '' || result.truncated !== false ||
+        result.stdoutTruncated !== false || result.stderrTruncated !== false ||
+        !equal(gate.probes?.[index === 3 ? 'before' : 'after'], { exitCode, stdout: result.stdout, stderr: result.stderr })) fail('coding fixture test exit/output is not independently verified');
+  }
+  return gate;
+};
+
 export const REAL_CLIENT_MANUAL_COMPACTION_CYCLES = 3;
 export const REAL_CLIENT_AUTOMATIC_COMPACTION_CYCLES = 1;
 export const REAL_CLIENT_AUTO_COMPACTION_PRESSURE_CHARS = 24_000;
 export const REAL_CLIENT_AUTO_COMPACTION_MAX_PRESSURE_TURNS = 12;
 export const REAL_CLIENT_TRANSCRIPT_KINDS = [
+  "coding-qualification",
   "archive-installation",
   "kiro-version",
   "kiro-help-all",
@@ -162,7 +289,7 @@ const exactFabricExecEvidence = (value, label, sessionId, recordingDigest, expec
 
 export const assertRealClientEvidence = (report, packageDigest, options = {}) => {
   if (!report || typeof report !== "object") fail("report must be an object");
-  if (options.qualification === true && (report.kind !== "kiro-fabric.real-client-qualification" || report.schemaVersion !== 12 || report.ok !== true)) fail("qualification identity is invalid");
+  if (options.qualification === true && (report.kind !== "kiro-fabric.real-client-qualification" || report.schemaVersion !== 13 || report.ok !== true)) fail("qualification identity is invalid");
   if (report.packageDigest !== packageDigest || !SHA256.test(report.packageDigest)) fail("package digest is invalid");
   if (!options.archiveDigest || report.archiveDigest !== options.archiveDigest || !SHA256.test(report.archiveDigest)) fail("archive digest is invalid");
   if (!options.commit || report.commit !== options.commit || !GIT_OBJECT_ID.test(report.commit)) fail("commit is invalid");
@@ -203,13 +330,14 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
   if (!kiro || typeof kiro.path !== "string" || !path.isAbsolute(kiro.path) || !SHA256.test(kiro.digest ?? "") ||
       typeof kiro.version !== "string" || !kiro.version || !["--agent-engine", "--engine", "--v3"].includes(kiro.headlessEngineSelector) ||
       !["--path", "positional"].includes(kiro.agentValidateSyntax)) fail("Kiro binary/help identity is incomplete");
-  if (!SHA256.test(report.driver?.digest ?? "") || report.driver?.version !== "repository-driver-v10") fail("driver identity is invalid");
+  if (!SHA256.test(report.driver?.digest ?? "") || report.driver?.version !== "repository-driver-v11") fail("driver identity is invalid");
 
   const gates = report.qualificationGates;
+  const codingGate = assertCodingQualification(gates?.coding);
   const nativeVisibility = gates?.nativeToolVisibility;
   if (!nativeVisibility || nativeVisibility.source !== "kiro-tui-/tools" || nativeVisibility.command !== "/tools" ||
       nativeVisibility.observed !== true || !equal(nativeVisibility.profileTools, REAL_CLIENT_PROFILE_TOOLS) ||
-      !equal(nativeVisibility.nativeTools, REAL_CLIENT_NATIVE_TOOLS) || !equal(nativeVisibility.fabricTools, REAL_CLIENT_TOOLS) ||
+      !equal(nativeVisibility.nativeTools, REAL_CLIENT_NATIVE_TOOLS) || !equal(nativeVisibility.fabricTools, REAL_CLIENT_MODEL_TOOLS) ||
       !SHA256.test(nativeVisibility.outputDigest ?? "")) fail("native tool visibility gate is incomplete");
   const formGate = gates?.formElicitation;
   if (!formGate || formGate.source !== "kiro-tui-form" || formGate.observed !== true || formGate.requestCount !== 1 ||
@@ -429,7 +557,7 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
         "post-automatic-compaction",
       ])) fail("interactive lifecycle is incomplete");
   for (const turn of interactive.turns) {
-    if (!sameIdentity(identity(turn.mcp, `interactive ${turn.name}`), interactiveIdentity) || turn.fabricInfoCalls < 1 || turn.fabricExecCalls !== 1 || turn.execSucceeded !== true) fail(`interactive ${turn.name} did not preserve one Fabric runtime`);
+    if (!sameIdentity(identity(turn.mcp, `interactive ${turn.name}`), interactiveIdentity) || turn.fabricInfoCalls < 1 || turn.fabricExecCalls !== 2 || turn.execSucceeded !== true) fail(`interactive ${turn.name} did not preserve one Fabric runtime`);
   }
   if (interactive.compaction?.command !== "/compact" || interactive.compaction.completed !== true ||
       !SESSION_ID.test(interactive.compaction.sessionIdBefore ?? "") ||
@@ -588,13 +716,14 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
     .replace(/\x1b\[[0-?]*[ -/]*[@-~]/gu, "")
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
     .replaceAll("\r", "\n");
-  const hasToolToken = (text, tool) => new RegExp(`(?:^|[^a-z0-9_])${tool.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:$|[^a-z0-9_])`, "imu").test(text);
+
   const parseTraceEvent = (kind) => {
     let event;
     try { event = JSON.parse(transcriptText(kind)); }
     catch { fail(`${kind} is not a structural trace event`); }
     return event;
   };
+  if (codingGate.steps[0].mcpInstanceId !== formIdentity.mcpInstanceId || !equal(parseTraceEvent("coding-qualification"), codingGate) || codingGate.acpRecordingDigest !== gates.formElicitation.acpRecordingDigest) fail("coding qualification is not transcript/recording-bound");
   const requireTraceStart = (kind, expected) => {
     const event = parseTraceEvent(kind);
     if (event?.ev !== "agent.mcp.start" || event.data?.pid !== expected.pid || event.data?.parentPid !== expected.parentPid ||
@@ -679,9 +808,7 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
     fail("version/session transcripts are not lifecycle-bound");
   }
   const toolsText = terminalText("interactive-tools");
-  if (![...REAL_CLIENT_NATIVE_TOOLS, ...REAL_CLIENT_TOOLS, "@fabric"].every((tool) => hasToolToken(toolsText, tool))) {
-    fail("native/Fabric tool evidence is absent from the bound TUI transcript");
-  }
+  assertStrictToolInventory(toolsText);
   const formRequestText = terminalText("form-probe-request");
   if (!/Approve once/iu.test(formRequestText) || !/Risk:\s*write/iu.test(formRequestText)) {
     fail("form prompt evidence is absent from the bound TUI transcript");

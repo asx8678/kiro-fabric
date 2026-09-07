@@ -95,7 +95,7 @@ describe("memory committed acknowledgement propagation", () => {
       effectiveTimeoutMs: 100,
     } satisfies FabricExecutionResult;
     const text = projected(result).text;
-    expect(text).toContain("A memory mutation is known committed although acknowledgement failed (not shown in the sample); read the affected memory key before retrying.");
-    expect(text).not.toContain("A listed memory mutation");
+    expect(text).toContain("A mutation is known committed although acknowledgement failed (not shown in the sample); inspect the affected file or durable key before retrying.");
+    expect(text).not.toContain("A listed mutation");
   });
 });

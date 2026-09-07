@@ -1,6 +1,20 @@
 # Agent architecture and security audit
 
+> Historical pre-migration audit: native-routing observations below are retained as evidence, not active requirements. Current strict tool visibility and qualification are recorded in [strict-code-mode-migration.md](strict-code-mode-migration.md).
+
 Kiro Fabric is one native custom-agent product. The selected agent owns one stdio MCP child; the child exposes exactly `fabric_info`, `fabric_workspace`, and `fabric_exec`. Native Kiro tools remain outside QuickJS. The repository contains no discoverable `.kiro/agents/kiro-fabric.*`; only the user-global installed profile has that name. The execution, approval, workspace, persistence, cancellation, and package boundaries are covered by the files below and the full test suite. Power-named source paths, documented deprecated API aliases, explicit migration messages, and the `kiro-fabric-power-workspace-v3` salt remain only for compatibility; active descriptions and primary APIs are Agent/Fabric-first.
+
+## Strict migration additions (current, not historical results)
+
+- `src/kiro/bootstrap-provider.ts` — checked health/workspace access and bounded immutable bundled help.
+- `src/providers/local-contract.ts` — host and guest coding contracts.
+- `src/providers/local-path.ts` — verified-root path checks and content/identity snapshots; documented OS-race limits.
+- `src/providers/local-provider.ts` — seven registry-backed coding actions and cross-process intent locks.
+- `src/providers/local-shell.ts` — bounded approved host process execution and process-group cleanup.
+- `tests/local-provider.test.ts` — local schemas, bounds, aliases, conflicts and approval snapshots.
+- `tests/local-shell.test.ts` — real process exits, streams, cancellation/deadlines and descendant cleanup.
+- `tests/strict-bootstrap.test.ts` — checked actual MCP bootstrap, local fixture coding and partial effects.
+- `tests/schema-validation.test.ts` — distinguishes property names from restricted schema keywords without admitting regex/combinator execution.
 
 ## Complete implementation inventory
 

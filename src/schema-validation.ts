@@ -15,12 +15,12 @@ const delegatedSchemaKeywords = new Set([
 ]);
 
 const walkLocallyBoundedSchema = (schema: Record<string, unknown>): boolean => {
-  const stack: Array<{ value: unknown; depth: number }> = [{ value: schema, depth: 0 }];
+  const stack: Array<{ value: unknown; depth: number; propertyMap?: boolean }> = [{ value: schema, depth: 0 }];
   const seen = new Set<object>();
   let nodes = 0;
   let stringChars = 0;
   while (stack.length > 0) {
-    const { value, depth } = stack.pop()!;
+    const { value, depth, propertyMap = false } = stack.pop()!;
     nodes += 1;
     if (nodes > 5_000 || depth > 32) return false;
     if (typeof value === "string") {
@@ -39,8 +39,10 @@ const walkLocallyBoundedSchema = (schema: Record<string, unknown>): boolean => {
       // Complex combinators and untrusted regular expressions can multiply
       // work or block the host event loop. Such external schemas remain
       // advisory and are delegated to the remote MCP server.
-      if (delegatedSchemaKeywords.has(key)) return false;
-      stack.push({ value: child, depth: depth + 1 });
+      // Keys in properties/$defs are instance/definition names, not schema
+      // keywords. A coding argument named "pattern" is not a regex schema.
+      if (!propertyMap && delegatedSchemaKeywords.has(key)) return false;
+      stack.push({ value: child, depth: depth + 1, propertyMap: !propertyMap && ["properties", "$defs", "definitions"].includes(key) });
     }
   }
   return true;

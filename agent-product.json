@@ -8,7 +8,7 @@
     "compilerWorker": "src/runtime/compiler-worker-entry.ts"
   },
   "tools": ["fabric_info", "fabric_workspace", "fabric_exec"],
-  "mountedProviders": ["artifacts", "memory", "state", "mcp"],
+  "mountedProviders": ["artifacts", "memory", "state", "mcp", "local", "fabric"],
   "bundledAgentResources": ["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md"],
   "allowedPackageDependencies": [
     "@jitl/quickjs-singlefile-mjs-release-sync",

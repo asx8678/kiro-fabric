@@ -8,6 +8,8 @@ import {
 import { FabricExecutionService } from "../execution-service.js";
 import type { FabricProviderStatus } from "../protocol.js";
 import { StateProvider } from "../providers/state-provider.js";
+import { LocalCodingProvider } from "../providers/local-provider.js";
+import { FabricBootstrapProvider } from "./bootstrap-provider.js";
 import { createKiroArtifactStore, type KiroArtifactStore } from "./artifacts.js";
 import { KiroMcpProvider } from "./mcp-provider.js";
 import { KiroMemoryProvider } from "./memory-provider.js";
@@ -18,6 +20,9 @@ export interface KiroRuntimeOptions {
   configFile: string;
   mcpConfigPath: string;
   artifactsRoot: string;
+  /** Only the binding authority may supply a verified root; cwd alone grants nothing. */
+  workspaceRoot?: string;
+  localLockRoot?: string;
   memoryRoot?: string;
   memoryNamespace?: string;
   stateRoot?: string;
@@ -40,6 +45,10 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   });
   const registry = new ActionRegistry();
   const artifacts = createKiroArtifactStore({ root: options.artifactsRoot, ...config.artifacts });
+  registry.register(new FabricBootstrapProvider(config.executor.maxNestedResultChars));
+  if (options.workspaceRoot && options.localLockRoot) {
+    registry.register(new LocalCodingProvider({ root: options.workspaceRoot, lockRoot: options.localLockRoot, maxResultChars: config.executor.maxNestedResultChars }));
+  } else registry.markUnavailable("local", "verified workspace binding is required");
   registry.register(new KiroPowerArtifactsProvider(artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));
   else registry.markUnavailable("mcp", "disabled by configuration");

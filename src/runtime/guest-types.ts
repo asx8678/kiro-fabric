@@ -1,4 +1,7 @@
+import { LOCAL_GUEST_DECLARATIONS } from "../providers/local-contract.js";
+
 export const fabricGuestDeclarations = `
+${LOCAL_GUEST_DECLARATIONS}
 type JsonPrimitive = null | boolean | number | string;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };
@@ -30,6 +33,15 @@ interface FabricTools {
   call(input: { ref: string; args?: JsonObject }): Promise<JsonValue>;
 }
 declare const tools: Readonly<FabricTools>;
+type FabricWorkspaceRequest =
+  | { action: "status" | "list" | "detach" }
+  | { action: "select"; rootId: string }
+  | { action: "attach"; path: string };
+declare const fabric: Readonly<{
+  info(): Promise<JsonObject>;
+  help(args: { topic: "overview" | "api"; offset?: number; limit?: number }): Promise<{ topic: string; text: string; truncated: boolean; nextOffset?: number }>;
+  workspace(args: FabricWorkspaceRequest): Promise<JsonObject>;
+}>;
 declare const payloads: Readonly<Record<string, string>>;
 declare const artifacts: Readonly<{ read(args: { id: string; offset?: number; limit?: number }): Promise<JsonValue> }>;
 declare const memory: Readonly<{

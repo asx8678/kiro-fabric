@@ -33,19 +33,26 @@ describe("Kiro Agent profile generation", () => {
     expect(AGENT_PROMPT).toContain("Fabric memory/state is workspace-scoped and may be shared by concurrent Kiro chats");
   });
 
-  it("defaults the installed profile to code mode with a native-only carve-out", () => {
-    expect(AGENT_PROMPT).toContain("Default to code mode");
-    expect(AGENT_PROMPT).toContain("Use native Kiro tools only for capabilities the sandbox does not have");
-    expect(AGENT_PROMPT).toContain("Bind the workspace early so code mode is usable");
-    expect(AGENT_PROMPT).toContain("rather than making an empty fabric_exec call");
-    expect(AGENT_PROMPT).toContain("Never claim fabric_exec can invoke native Kiro tools");
+  it("requires one model tool with useful first-call guidance and no native fallback", () => {
+    expect(AGENT_PROMPT).toContain("strict always-on Code Mode");
+    expect(AGENT_PROMPT).toContain("No native tools or fallback exist");
+    expect(AGENT_PROMPT).toContain('return await local.read({path:"README.md",limit:80});');
+    for (const name of ["info", "help", "workspace"]) expect(AGENT_PROMPT).toContain(`fabric.${name}(`);
+    expect(AGENT_PROMPT).toContain("do not make ritual or empty tool calls");
+    expect(AGENT_PROMPT).toContain("timeoutMs:180000");
+    expect(AGENT_PROMPT).not.toContain("@fabric/fabric_info");
+    expect(AGENT_PROMPT).not.toContain("@fabric/fabric_workspace");
+  });
+
+  it("documents bounded coding workflow and namespace roles", () => {
+    for (const text of ["Search before reading", "Batch independent", "steps sequential", "local handles", "mcp calls", "memory stores", "state stores", "one-based lines", "zero-based character paging", "900000", "no background job guarantee"]) expect(AGENT_PROMPT).toContain(text);
   });
 
   it("generates the global installed profile without optional steering", () => {
     const profile = generateAgentProfile(options);
     expect(profile).toEqual({
       name: "kiro-fabric",
-      description: "Kiro Fabric coding agent with native Kiro tools and a bounded checked-TypeScript composition backend.",
+      description: "Kiro Fabric coding agent with strict always-on checked-TypeScript Code Mode.",
       prompt: AGENT_PROMPT,
       includePowers: false,
       includeMcpJson: false,
@@ -63,16 +70,19 @@ describe("Kiro Agent profile generation", () => {
         },
       },
       tools: AGENT_TOOLS,
-      allowedTools: [...FABRIC_TOOLS.map((name) => `@fabric/${name}`), ...NATIVE_AUTO_APPROVED_TOOLS],
+      allowedTools: ["@fabric/fabric_exec"],
       permissions: {
         rules: [{
           capability: "mcp",
-          match: FABRIC_TOOLS.map((name) => `fabric/${name}`),
+          match: ["fabric/fabric_exec"],
           effect: "allow",
         }],
       },
     });
-    expect(NATIVE_AUTO_APPROVED_TOOLS).toEqual(["fs_read"]);
+    expect(NATIVE_AUTO_APPROVED_TOOLS).toEqual([]);
+    expect(AGENT_TOOLS).toEqual(["@fabric/fabric_exec"]);
+    expect(FABRIC_TOOLS).toEqual(["fabric_info", "fabric_workspace", "fabric_exec"]);
+    expect(profile).not.toHaveProperty("disableInheritingDefaultResources");
     expect(NATIVE_AUTO_APPROVED_TOOLS).not.toContain("fs_write");
     expect(NATIVE_AUTO_APPROVED_TOOLS).not.toContain("execute_bash");
     expect(profile).not.toHaveProperty("model");

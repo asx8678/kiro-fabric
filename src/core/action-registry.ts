@@ -23,6 +23,8 @@ export interface FabricCallAudit {
   resultTruncated?: boolean;
   /** Trusted, bounded publication fact only; never includes arguments, keys, values, or causes. */
   commitAcknowledgement?: FabricCommitAcknowledgement;
+  /** An invoked host command failed; its external effects cannot be rolled back. */
+  effectOutcome?: "uncertain";
 }
 
 export interface FabricRegistryInvocationContext extends FabricInvocationContext {
@@ -220,7 +222,14 @@ export class ActionRegistry {
     }
     context.audits.push(audit);
     auditBudget.bytes += AUDIT_RESERVATION_BYTES;
+    let releaseReservation: (() => void | Promise<void>) | undefined;
+    let invocationStarted = false;
+    let published: FabricCommitAcknowledgement | undefined;
     try {
+      // Provider-owned cross-process intent is acquired before human approval.
+      // Do not abort-race acquisition: a late lock must never be leaked.
+      releaseReservation = await provider.reserveInvocation?.(action.name, structuredClone(canonicalArgs), context);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
       // Approval cleanup remains part of the reservation lifetime. Racing the
       // promise would release write intent while an elicitation was still live.
       await context.approve(structuredClone(action), structuredClone(canonicalArgs));
@@ -230,10 +239,17 @@ export class ActionRegistry {
       // Await their settlement so a cooperative provider (notably configured
       // MCP, which closes its contacted server) finishes cleanup before the
       // registry reports cancellation to the guest.
+      invocationStarted = true;
       const value = await provider.invoke(action.name, invocationArgs, context);
+      if (provider.name === "local" && (action.name === "write" || action.name === "edit") && isRecord(value) && value.changed === true) {
+        published = { version: 1, operation: action.name };
+      }
       throwIfAbortedOrExpired(context.signal, context.deadline);
       const bounded = boundedResult(value, context.maxResultChars);
       throwIfAbortedOrExpired(context.signal, context.deadline);
+      const release = releaseReservation;
+      releaseReservation = undefined;
+      await release?.();
       audit.endedAt = Date.now();
       audit.success = true;
       audit.resultChars = bounded.chars;
@@ -243,11 +259,19 @@ export class ActionRegistry {
       audit.endedAt = Date.now();
       audit.success = false;
       audit.error = error instanceof Error ? error.message.slice(0, 1_000) : String(error).slice(0, 1_000);
-      const acknowledgement = fabricCommitAcknowledgement(error);
+      const acknowledgement = fabricCommitAcknowledgement(error) ?? published;
+      if (invocationStarted && provider.name === "local" && action.name === "shell") audit.effectOutcome = "uncertain";
       if (acknowledgement) audit.commitAcknowledgement = acknowledgement;
       throw error;
     } finally {
-      this.#activeWrites.delete(nestedToolCallId);
+      try { await releaseReservation?.(); }
+      catch (error) {
+        audit.endedAt = Date.now(); audit.success = false;
+        audit.error = "Effect reservation cleanup failed; inspect state before retrying";
+        if (published) audit.commitAcknowledgement = published;
+        if (invocationStarted && provider.name === "local" && action.name === "shell") audit.effectOutcome = "uncertain";
+        throw error;
+      } finally { this.#activeWrites.delete(nestedToolCallId); }
     }
   }
 

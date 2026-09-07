@@ -101,7 +101,7 @@ try {
     throw new Error("fabric_info did not prove canonical workspace binding");
   }
   const providers = info.providers?.map((provider) => provider.name).sort();
-  if (JSON.stringify(providers) !== JSON.stringify(["artifacts", "mcp", "memory", "state"]) ||
+  if (JSON.stringify(providers) !== JSON.stringify(["artifacts", "fabric", "local", "mcp", "memory", "state"]) ||
       info.providers.some((provider) => provider.available !== true)) {
     throw new Error("fabric_info provider set is incomplete");
   }
@@ -187,7 +187,7 @@ try {
     executor: "quickjs",
     lifecycle: info.lifecycle,
     scope: "component-mcp-only",
-    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "four-providers", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
+    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "six-providers", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
   };
   const serialized = `${JSON.stringify(report, null, 2)}\n`;
   if (jsonOutput) writeFileAtomic(jsonOutput, serialized);

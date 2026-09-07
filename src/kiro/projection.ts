@@ -48,6 +48,7 @@ const failureProgress = (result: FabricExecutionResult): string => {
       ? audit.ref
       : `${safePrefix(audit.ref, MAX_FAILURE_PROGRESS_REF_CHARS - 1)}…`,
     outcome: audit.success ? "succeeded" : "failed",
+    ...(audit.effectOutcome ? { effectOutcome: audit.effectOutcome } : {}),
     ...(audit.commitAcknowledgement ? {
       commitAcknowledgement: { committed: true, operation: audit.commitAcknowledgement.operation },
     } : {}),
@@ -55,13 +56,15 @@ const failureProgress = (result: FabricExecutionResult): string => {
   const omitted = completed.length - summaries.length;
   const succeeded = completed.filter((audit) => audit.success === true).length;
   const committed = completed.filter((audit) => audit.commitAcknowledgement).length;
+  const uncertain = completed.filter((audit) => audit.effectOutcome === "uncertain").length;
   const sampledCommitted = summaries.some((summary) => summary.commitAcknowledgement !== undefined);
   return [
     `\n\nCompleted nested calls before the outer failure (arguments and results omitted): ${JSON.stringify({ total: completed.length, succeeded, failed: completed.length - succeeded, committed, sample: summaries, omitted })}.`,
+    ...(uncertain > 0 ? ["Host command effects are uncertain; cancellation or failure is not rollback. Inspect the workspace and external state; never automatically retry the program."] : []),
     committed > 0
       ? sampledCommitted
-        ? "A listed memory mutation is known committed although acknowledgement failed; read that memory key before retrying."
-        : "A memory mutation is known committed although acknowledgement failed (not shown in the sample); read the affected memory key before retrying."
+        ? "A listed mutation is known committed although acknowledgement failed; inspect the affected file or durable key before retrying."
+        : "A mutation is known committed although acknowledgement failed (not shown in the sample); inspect the affected file or durable key before retrying."
       : "Inspect current state before retrying fabric_exec; completed calls may already have taken effect, and a blind retry can duplicate effects.",
   ].join("\n");
 };

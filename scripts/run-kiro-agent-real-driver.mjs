@@ -13,6 +13,10 @@ import {
   REAL_CLIENT_NATIVE_TOOLS,
   REAL_CLIENT_PROFILE_TOOLS,
   REAL_CLIENT_TOOLS,
+  REAL_CLIENT_MODEL_TOOLS,
+  assertStrictToolInventory,
+  codingFixtureSpec,
+  assertCodingQualification,
   transcriptEntry,
 } from "./real-client-evidence.mjs";
 import {
@@ -38,8 +42,8 @@ const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mil
 const errorText = (value) => value instanceof Error ? value.message : String(value);
 const commandRecord = (executable, argv) => ({ executable, argv });
 const environmentAt = (environment, cwd) => ({ ...environment, PWD: cwd });
-const regexEscape = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-const visibleToolToken = (text, tool) => new RegExp(`(?:^|[^a-z0-9_])${regexEscape(tool)}(?:$|[^a-z0-9_])`, "imu").test(text);
+
+
 
 const lstat = (target) => {
   try { return fs.lstatSync(target); }
@@ -458,7 +462,7 @@ const turnMetrics = (session, afterSeq) => {
   return {
     fabricInfoCalls: events.filter((event) => event.ev === "tool.fabric_info").length,
     fabricExecCalls: events.filter((event) => event.ev === "tool.fabric_exec").length,
-    execSucceeded: ends.length === 1 && ends[0]?.data?.status === "succeeded",
+    execSucceeded: ends.length === 2 && ends.every((event) => event.data?.status === "succeeded"),
     refs: events.map(bridgeRef).filter(Boolean),
   };
 };
@@ -1052,6 +1056,75 @@ const maybeTrustWorkspace = async (session) => {
   }
 };
 
+export const codingApprovalInputObserved = (frames, expectedInput) => {
+  const ids = new Set();
+  const sessions = new Set();
+  let named = false;
+  let inputSeen = false;
+  for (const frame of frames) {
+    const message = frame?.message;
+    const update = message?.params?.update;
+    if (!['tool_call', 'tool_call_update'].includes(update?.sessionUpdate)) continue;
+    if (frame.direction !== 'server-to-client' || message.jsonrpc !== '2.0' || Object.hasOwn(message, 'id') ||
+        !['session/update', 'session/notification'].includes(message.method) ||
+        typeof message.params.sessionId !== 'string' || !message.params.sessionId ||
+        typeof update.toolCallId !== 'string' || !update.toolCallId) return false;
+    ids.add(update.toolCallId);
+    sessions.add(message.params.sessionId);
+    const identity = structuralFabricExecIdentity(update);
+    if (identity.conflicted || (update.status !== undefined && !['pending', 'in_progress'].includes(update.status))) return false;
+    named ||= identity.matched;
+    if (Object.hasOwn(update, 'rawInput')) {
+      if (qualificationValueDigest(update.rawInput) !== qualificationValueDigest(expectedInput)) return false;
+      inputSeen = true;
+    }
+  }
+  return ids.size === 1 && sessions.size === 1 && named && inputSeen;
+};
+// A single product-model call, without manual bootstrap or synthetic returns.
+const runCodingStep = async ({ session, recordFile, dataRoot, excludedIds, spec, index }) => {
+  const expected = spec.steps[index];
+  const previous = traceSessions(dataRoot).find((entry) => !excludedIds.has(entry.id));
+  if (index === 0 && previous?.events.some((event) => event.ev === "tool.fabric_exec")) throw new Error("first-turn single read was not first; BLOCKED");
+  const afterSeq = Math.max(0, ...(previous?.events ?? []).map((event) => Number(event.seq) || 0));
+  const offset = lstat(recordFile)?.size ?? 0;
+  const cursor = session.capture.cursor();
+  session.send(`Use @fabric/fabric_exec exactly once with these exact arguments: ${JSON.stringify(expected.input)}. No setup, other tools, or hardcoded return. Report the actual result.`);
+  let review = '';
+  if ([3, 4, 6].includes(index)) {
+    review = await waitForTerminalText(session, cursor, /(?=[\s\S]*Approve once)(?=[\s\S]*Risk:\s*(?:write|execute))[\s\S]/iu);
+    // Approve only the complete canonical fixture command/diff, never a blanket grant.
+    if (!review.includes(spec.directory) || (index === 4
+      ? !review.includes('a - b') || !review.includes('a + b') || !review.includes('sum.mjs')
+      : !review.includes(`node ${spec.directory}/test.mjs`))) throw new Error('coding approval review is not the exact fixture effect; BLOCKED');
+    const pendingFrames = acpFrames(recordFile, offset);
+    if (!codingApprovalInputObserved(pendingFrames, expected.input)) {
+      throw new Error('coding pending model arguments are not exact; approval BLOCKED');
+    }
+    session.send('y');
+  }
+  const observed = await waitForTrace(dataRoot, (entry) => !excludedIds.has(entry.id) &&
+    entry.events.some((event) => event.seq > afterSeq && event.ev === 'exec.end'));
+  await waitForQuiet(session, cursor);
+  const finalTrace = traceSessions(dataRoot).find((entry) => entry.id === observed.id);
+  const events = finalTrace.events.filter((event) => event.seq > afterSeq);
+  const frames = acpFrames(recordFile, offset);
+  const candidates = [];
+  for (const frame of frames) {
+    const params = frame?.message?.params;
+    const update = params?.update;
+    if (!update || !Object.hasOwn(update, 'rawOutput')) continue;
+    const result = normalizedFabricExecOutput(update.rawOutput);
+    if (result === undefined) continue;
+    const calls = completedAcpFabricExecCalls(frames, { sessionId: params.sessionId, expectedArguments: expected.input, expectedResult: result });
+    for (const call of calls) if (!candidates.some((candidate) => candidate.call.toolCallId === call.toolCallId)) candidates.push({ call, result });
+  }
+  if (candidates.length !== 1) throw new Error('coding exact completed model call is unverified; BLOCKED');
+  const candidate = candidates[0];
+  const acpEvents = frames.filter((frame) => ["tool_call", "tool_call_update"].includes(frame?.message?.params?.update?.sessionUpdate));
+  if (JSON.stringify(acpEvents.map(frame => hash(Buffer.from(JSON.stringify(frame))))) !== JSON.stringify(candidate.call.frameDigests)) throw new Error("coding interval contains extra or unverified model tool events; BLOCKED");
+  return { mcpInstanceId: finalTrace.id, intervalStartSeq: afterSeq, intervalEndSeq: Math.max(...events.map(event => event.seq)), input: expected.input, result: candidate.result, call: { ...candidate.call, outputDigest: qualificationValueDigest(candidate.result), acpRecordingDigest: "" }, events, acpEvents, review };
+};
 const runInteractiveTurn = async ({ session, dataRoot, targetId = undefined, excludedIds, prompt, expectedRefs, name }) => {
   const before = targetId ? traceSessions(dataRoot).find((entry) => entry.id === targetId) : undefined;
   const afterSeq = before ? Math.max(0, ...before.events.map((event) => Number(event.seq) || 0)) : 0;
@@ -1065,7 +1138,7 @@ const runInteractiveTurn = async ({ session, dataRoot, targetId = undefined, exc
   await waitForQuiet(session, outputStart);
   observed = traceSessions(dataRoot).find((candidate) => candidate.id === observed.id) ?? observed;
   const metrics = turnMetrics(observed, afterSeq);
-  if (metrics.fabricExecCalls !== 1 || !metrics.execSucceeded || !expectedRefs.every((ref) => metrics.refs.includes(ref))) throw new Error(`${name} did not make the exact successful Fabric call`);
+  if (metrics.fabricExecCalls !== 2 || !metrics.execSucceeded || !expectedRefs.every((ref) => metrics.refs.includes(ref))) throw new Error(`${name} did not make the exact successful Fabric call`);
   assertSingleRuntime(observed);
   return {
     trace: observed,
@@ -1220,11 +1293,11 @@ const headlessSelector = (chatHelp) => {
 
 const validateSyntax = (help) => /--path(?:\s|[=<])/u.test(help) ? "--path" : "positional";
 
-const qualificationPrompt = (input) => `This is an objective Kiro Fabric qualification turn. Call @fabric/fabric_info once, then @fabric/fabric_workspace with ${JSON.stringify({ action: "status" })}, then @fabric/fabric_exec exactly once using these exact arguments: ${JSON.stringify(input)}. Do not use native file, shell, web, or subagent tools. Briefly summarize the returned tool result; do not make claims about process identity, agent selection, or qualification success.`;
+const qualificationPrompt = (input) => `This is an objective Kiro Fabric qualification turn. First call @fabric/fabric_exec with ${JSON.stringify({code: 'return {info: await fabric.info(), workspace: await fabric.workspace({action:"status"})};', resultFormat:"json"})}. Then call @fabric/fabric_exec exactly once using these exact arguments: ${JSON.stringify(input)}. Do not use native file, shell, web, or subagent tools. Briefly summarize the returned tool result; do not make claims about process identity, agent selection, or qualification success.`;
 
 const contextSeedPrompt = (input, fact, boundary = "manual compaction") => `Remember this exact, unpredictable conversational fact across the next ${boundary}: ${fact}. Do not write, send, or derive that fact through Fabric or any native tool. ${qualificationPrompt(input)}`;
 
-const postCompactionPrompt = ({ code, payloads, boundary = "/compact" }) => `This is the post-compaction Kiro Fabric qualification turn. Call @fabric/fabric_info once, then @fabric/fabric_workspace with ${JSON.stringify({ action: "status" })}, then @fabric/fabric_exec exactly once. Use this exact code: ${JSON.stringify(code)}. Use resultFormat "json". Use these exact payload fields: ${JSON.stringify(payloads)}, and add one further string field named contextFact whose value is the exact unpredictable conversational fact I asked you to remember before ${boundary}. Do not ask me to repeat it, do not use any tool to recover it, and do not repeat it in prose. Do not use native file, shell, web, or subagent tools. Briefly summarize only the returned tool result; do not make claims about process identity, agent selection, or qualification success.`;
+const postCompactionPrompt = ({ code, payloads, boundary = "/compact" }) => `This is the post-compaction Kiro Fabric qualification turn. First call @fabric/fabric_exec with ${JSON.stringify({code: 'return {info: await fabric.info(), workspace: await fabric.workspace({action:"status"})};', resultFormat:"json"})}. Then call @fabric/fabric_exec exactly once. Use this exact code: ${JSON.stringify(code)}. Use resultFormat "json". Use these exact payload fields: ${JSON.stringify(payloads)}, and add one further string field named contextFact whose value is the exact unpredictable conversational fact I asked you to remember before ${boundary}. Do not ask me to repeat it, do not use any tool to recover it, and do not repeat it in prose. Do not use native file, shell, web, or subagent tools. Briefly summarize only the returned tool result; do not make claims about process identity, agent selection, or qualification success.`;
 
 export const sentinelVerificationCode = (includeArtifact) => `
 const record = (value: JsonValue): JsonObject | undefined =>
@@ -1397,7 +1470,7 @@ const runRealKiroAgentDriverImplementation = async ({
   fs.mkdirSync(configDirectory, { recursive: true, mode: 0o700 });
   fs.chmodSync(configDirectory, 0o700);
   const configFile = path.join(configDirectory, "config.json");
-  const qualificationConfig = (write) => `${JSON.stringify({ approvals: { read: "allow", write, execute: "deny", network: "deny" }, tracing: { enabled: true } }, null, 2)}\n`;
+  const qualificationConfig = (write) => `${JSON.stringify({ approvals: { read: "allow", write, execute: write === "ask" ? "ask" : "deny", network: "deny" }, tracing: { enabled: true } }, null, 2)}\n`;
   fs.writeFileSync(configFile, qualificationConfig("ask"), { mode: 0o600, flag: "wx" });
 
   const version = runSync(executable, ["--version"], { cwd: workspaceRoot, env: environment });
@@ -1478,6 +1551,22 @@ const runRealKiroAgentDriverImplementation = async ({
   const formStartCursor = formProbe.capture.cursor();
   await maybeTrustWorkspace(formProbe);
   const formStartOutput = formProbe.capture.slice(formStartCursor);
+  const codingSpec = codingFixtureSpec(nonce);
+  const codingDirectory = path.join(workspaceRoot, codingSpec.directory);
+  fs.mkdirSync(codingDirectory, { mode: 0o700 });
+  fs.writeFileSync(path.join(workspaceRoot, codingSpec.source), codingSpec.before, { flag: 'wx', mode: 0o600 });
+  fs.writeFileSync(path.join(codingDirectory, 'test.mjs'), codingSpec.test, { flag: 'wx', mode: 0o600 });
+  const codingProbe = () => {
+    const result = spawnSync(process.execPath, [path.join(codingDirectory, 'test.mjs')], { cwd: workspaceRoot, encoding: 'utf8', timeout: 120000, maxBuffer: MAX_COMMAND_BYTES });
+    if (result.error || result.signal) throw new Error('coding independent test probe failed');
+    return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr };
+  };
+  const coding = { source: 'kiro-acp-local-fixture', nonce, firstTurnSingleRead: true,
+    beforeSha256: hash(fs.readFileSync(path.join(workspaceRoot, codingSpec.source))), afterSha256: '',
+    testSha256: hash(fs.readFileSync(path.join(codingDirectory, 'test.mjs'))),
+    sessionId: '', acpRecordingDigest: '', probes: { before: codingProbe(), after: undefined }, steps: [] };
+  coding.steps.push(await runCodingStep({ session: formProbe, recordFile: formRecord, dataRoot: installed.data, excludedIds: knownBeforeFormProbe, spec: codingSpec, index: 0 }));
+  coding.sessionId = coding.steps[0].call.sessionId;
   const formPromptCursor = formProbe.capture.cursor();
   formProbe.send(qualificationPrompt({
     code: "return await memory.set({ key: payloads.key, value: { probe: payloads.nonce } })",
@@ -1522,6 +1611,13 @@ const runRealKiroAgentDriverImplementation = async ({
       !["accept", "decline", "cancel"].includes(formResponse?.action) || formResponse.approved !== false) {
     throw new Error("form-elicitation request/response identity is incomplete");
   }
+  for (let index = 1; index < codingSpec.steps.length; index++) {
+    coding.steps.push(await runCodingStep({ session: formProbe, recordFile: formRecord, dataRoot: installed.data, excludedIds: knownBeforeFormProbe, spec: codingSpec, index }));
+  }
+  coding.afterSha256 = hash(fs.readFileSync(path.join(workspaceRoot, codingSpec.source)));
+  if (hash(fs.readFileSync(path.join(codingDirectory, 'test.mjs'))) !== coding.testSha256) throw new Error('coding fixture test was modified');
+  coding.probes.after = codingProbe();
+  fs.rmSync(codingDirectory, { recursive: true });
   const formProcess = validateObservedProcess(formObserver, formFinalTrace, {
     executable,
     requiredArgs: ["--v3", "--agent", "kiro-fabric"],
@@ -1544,6 +1640,9 @@ const runRealKiroAgentDriverImplementation = async ({
     throw new Error("form-probe Fabric MCP did not record a graceful runtime drain");
   }
   const formRecording = recordingEvidence(formRecord, protectedValues);
+  coding.acpRecordingDigest = formRecording.digest;
+  for (const step of coding.steps) step.call.acpRecordingDigest = formRecording.digest;
+  assertCodingQualification(coding);
   const formRecordingFrames = acpFrames(formRecord);
   if (!acpFormInteractionObserved(formRecordingFrames)) throw new Error("Kiro ACP recording did not contain a structural form-elicitation event");
   if (durableContains(installed.data, "memory", nonce)) throw new Error("declined form probe mutated durable memory");
@@ -1564,13 +1663,9 @@ const runRealKiroAgentDriverImplementation = async ({
   await waitForQuiet(interactive, toolsCursor, 120_000);
   const toolsOutput = interactive.capture.slice(toolsCursor);
   const toolsText = stripTerminal(toolsOutput);
-  const visibleNativeTools = REAL_CLIENT_NATIVE_TOOLS.filter((tool) => visibleToolToken(toolsText, tool));
-  const visibleFabricTools = REAL_CLIENT_TOOLS.filter((tool) => visibleToolToken(toolsText, tool));
-  if (JSON.stringify(visibleNativeTools) !== JSON.stringify(REAL_CLIENT_NATIVE_TOOLS) ||
-      JSON.stringify(visibleFabricTools) !== JSON.stringify(REAL_CLIENT_TOOLS) ||
-      !visibleToolToken(toolsText, "@fabric")) {
-    throw new Error("Kiro /tools did not expose the exact profile-native categories and Fabric tool set");
-  }
+  assertStrictToolInventory(toolsText);
+  const visibleNativeTools = [...REAL_CLIENT_NATIVE_TOOLS];
+  const visibleFabricTools = [...REAL_CLIENT_MODEL_TOOLS];
   interactive.sendRaw("\x1b");
   await waitForFreshQuiet(interactive);
 
@@ -2050,7 +2145,7 @@ const runRealKiroAgentDriverImplementation = async ({
   const headlessTrace = await waitForTrace(installed.data, (candidate) => {
     if (knownBeforeHeadless.has(candidate.id)) return false;
     const metrics = turnMetrics(candidate, 0);
-    return metrics.fabricInfoCalls >= 1 && metrics.fabricExecCalls === 1 && metrics.execSucceeded && candidate.events.some((event) => event.ev === "tool.fabric_workspace");
+    return metrics.fabricInfoCalls >= 1 && metrics.fabricExecCalls === 2 && metrics.execSucceeded && candidate.events.some((event) => event.ev === "tool.fabric_workspace");
   }, 30_000);
   assertSingleRuntime(headlessTrace);
   const headlessProcess = validateObservedProcess(headlessObserver, headlessTrace, {
@@ -2264,7 +2359,7 @@ const runRealKiroAgentDriverImplementation = async ({
     archiveDigest,
     commit,
     tools: REAL_CLIENT_TOOLS,
-    driver: { digest: driverDigest, version: "repository-driver-v10" },
+    driver: { digest: driverDigest, version: "repository-driver-v11" },
     authentication: {
       mode: resolvedAuthMode,
       verification: resolvedAuthMode === "subscription" ? "kiro-cli-whoami" : "authenticated-kiro-commands",
@@ -2299,6 +2394,7 @@ const runRealKiroAgentDriverImplementation = async ({
       releaseProfileAbsent: !containsReleaseProfile(releaseRoot),
     },
     qualificationGates: {
+      coding,
       nativeToolVisibility: {
         source: "kiro-tui-/tools",
         command: "/tools",
@@ -2533,6 +2629,7 @@ const runRealKiroAgentDriverImplementation = async ({
       transcriptEntry("agent-list-nested", resolutionRuns[2].listing.combined),
       transcriptEntry("resource-inheritance-setting", inheritance.combined),
       transcriptEntry("automatic-compaction-setting", autoCompaction.combined),
+      transcriptEntry("coding-qualification", JSON.stringify(coding)),
       transcriptEntry("form-probe-start", formStartOutput),
       transcriptEntry("form-probe-mcp-startup", JSON.stringify(formRequestTrace.start)),
       transcriptEntry("form-probe-trace-request", JSON.stringify(form.requests[0])),

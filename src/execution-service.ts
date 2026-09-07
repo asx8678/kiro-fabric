@@ -1,6 +1,6 @@
 import type { FabricConfig } from "./config.js";
 import { ActionRegistry, type FabricCallAudit } from "./core/action-registry.js";
-import type { ResolvedFabricAction } from "./protocol.js";
+import type { FabricInvocationContext, ResolvedFabricAction } from "./protocol.js";
 import { fabricGuestDeclarations } from "./runtime/guest-types.js";
 import { assertFabricJsonBudget, fabricJsonText, MAX_FABRIC_JSON_CHARS } from "./runtime/json-budget.js";
 import { QuickJsRuntime, type FabricSandboxTerminationReason } from "./runtime/quickjs-runtime.js";
@@ -23,6 +23,10 @@ export interface FabricExecutionOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   approver: FabricExecutionApprover;
+  bootstrap?: FabricInvocationContext["bootstrap"];
+  /** Kiro explicitly pins availability; omitted retains library-provider behavior. */
+  workspaceBound?: boolean;
+  workspaceUnavailable?: boolean;
   onEffectiveTimeoutChange?(timeoutMs: number): void;
   /** Optional tracer; when absent (or disabled) tracing adds one boolean
    * branch per hook and zero allocations. */
@@ -170,10 +174,14 @@ export class FabricExecutionService {
     let activeProviderCalls = 0;
     let approvalRequests = 0;
     let pendingApprovals = 0;
+    let workspaceCalls = false;
+    let switchRequested = false;
+    const localSettlements = new Set<Promise<unknown>>();
     const providerContext = (signal: AbortSignal, deadline: import("./runtime/deadline.js").FabricDeadline) => ({
       cwd: this.cwd,
       signal,
       deadline,
+      ...(options.bootstrap ? { bootstrap: options.bootstrap } : {}),
     });
     const executeSpan = tracer.enabled ? tracer.span("eval", "execute", execId) : undefined;
     const executeSpanId = executeSpan?.id;
@@ -210,7 +218,17 @@ export class FabricExecutionService {
         if (typeof actionRef !== "string" || typeof actionArgs !== "object" || actionArgs === null || Array.isArray(actionArgs)) {
           throw new Error("Fabric provider call requires an exact ref and object args");
         }
-        const value = await this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
+        const switching = actionRef === "fabric.workspace" && ["select", "attach", "detach"].includes(String((actionArgs as Record<string, unknown>).action));
+        if (switching) {
+          if (workspaceCalls || switchRequested) throw new Error("Workspace switch requires a separate bootstrap execution without workspace calls or another switch");
+          switchRequested = true;
+        } else if (!actionRef.startsWith("fabric.")) {
+          if (switchRequested) throw new Error("Workspace calls cannot follow a pending workspace switch; use the next execution");
+          const requiresWorkspace = /^(local|memory|state)\./u.test(actionRef);
+          if ((options.workspaceUnavailable === true || (options.workspaceBound === false && requiresWorkspace)) && actionRef !== "artifacts.read") throw new Error("Verified workspace binding is required; use fabric.workspace in a separate bootstrap execution");
+          workspaceCalls = true;
+        }
+        const invocation = this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
           ...context,
           audits,
           auditBudget,
@@ -237,6 +255,10 @@ export class FabricExecutionService {
             } finally { pendingApprovals -= 1; }
           },
         });
+        if (actionRef.startsWith("local.")) localSettlements.add(invocation);
+        let value: unknown;
+        try { value = await invocation; }
+        finally { localSettlements.delete(invocation); }
         if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value), ...(actionRef !== ref ? { actionRef } : {}) };
         return value;
       } catch (error) {
@@ -280,6 +302,9 @@ export class FabricExecutionService {
         return candidate;
       },
     });
+    // QuickJS may detach bridge promises on cancellation. Local host effects
+    // retain this execution lease until their bounded cleanup really settles.
+    await Promise.allSettled([...localSettlements]);
     executeSpan?.end({ termination: result.terminationReason, effectiveTimeoutMs: result.effectiveTimeoutMs });
     let status = statusFor(result.terminationReason);
     let outputError = result.error;

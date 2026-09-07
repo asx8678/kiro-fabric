@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { ActionRegistry } from "../src/core/action-registry.js";
+import { LocalCodingProvider } from "../src/providers/local-provider.js";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { generateAgentProfile } from "../scripts/agent-profile.mjs";
@@ -12,6 +17,10 @@ import {
   REAL_CLIENT_PROFILE_TOOLS,
   REAL_CLIENT_TRANSCRIPT_KINDS,
   REAL_CLIENT_TOOLS,
+  REAL_CLIENT_MODEL_TOOLS,
+  assertStrictToolInventory,
+  codingFixtureSpec,
+  assertCodingQualification,
   transcriptEntry,
 } from "../scripts/real-client-evidence.mjs";
 import {
@@ -23,6 +32,7 @@ import {
   completedAcpAutomaticCompactions,
   completedAcpManualCompactions,
   completedAcpFabricExecCalls,
+  codingApprovalInputObserved,
   acpToolDataContaining,
   parseAcpJsonlFrames,
   postCompactionVerificationCode,
@@ -69,7 +79,7 @@ const interactiveIdentity = identity(200, 101, "1");
 const headlessIdentity = identity(210, 100, "2");
 const resumedIdentity = identity(220, 102, "3");
 const formIdentity = identity(230, 103, "4");
-const turn = (name: string) => ({ name, mcp: interactiveIdentity, fabricInfoCalls: 1, fabricExecCalls: 1, execSucceeded: true });
+const turn = (name: string) => ({ name, mcp: interactiveIdentity, fabricInfoCalls: 1, fabricExecCalls: 2, execSucceeded: true });
 const sessionId = "12345678-1234-4123-8123-123456789abc";
 const compactionFrameDigest = "1".repeat(64);
 const compactionAcpEvent = {
@@ -259,15 +269,155 @@ const compactionCycleCallSummary = {
   contextSeeds: compactionCycleContextSeeds,
   postCompactions: compactionCycleCalls,
 };
+describe('mandatory fixture coding qualification', () => {
+  it('accepts the complete synthetic contract, never memory-only legacy evidence', () => {
+    expect(assertCodingQualification(codingEvidence)).toBe(codingEvidence);
+    expect(() => assertCodingQualification(undefined)).toThrow('coding qualification');
+    expect(() => assertRealClientEvidence({ ...valid, qualificationGates: { ...valid.qualificationGates, coding: undefined } }, digest, { archiveDigest, commit })).toThrow('coding qualification');
+  });
+  it('rejects hardcoded results, missing nested calls, drift, failed tests and broad/no approvals', () => {
+    const mutations: Array<(gate: typeof codingEvidence) => void> = [
+      gate => { gate.firstTurnSingleRead = false; },
+      gate => { gate.beforeSha256 = gate.afterSha256; },
+      gate => { gate.testSha256 = digest; },
+      gate => { gate.steps.pop(); },
+      gate => { gate.steps[0]!.input = { code: 'return true;' }; },
+      gate => { gate.steps[1]!.events = []; },
+      gate => { gate.steps[2]!.call.toolCallId = gate.steps[0]!.call.toolCallId; },
+      gate => { gate.steps[4]!.events[1]!.execId = 'unrelated'; },
+      gate => { gate.steps[4]!.review = '--trust-all'; },
+      gate => { gate.steps[4]!.events.pop(); },
+      gate => { gate.steps[6]!.result = { ...gate.steps[6]!.result, exitCode: 1 }; },
+      gate => { gate.probes.after.exitCode = 1; },
+      gate => { gate.steps[6]!.call.observedResultDigest = digest; },
+    ];
+    for (const mutate of mutations) {
+      const gate = structuredClone(codingEvidence);
+      mutate(gate);
+      expect(() => assertCodingQualification(gate)).toThrow();
+    }
+  });
+  it('approves only one exact pending fixture exec and blocks unknown or extra calls', () => {
+    const input = codingSpec.steps[4]!.input;
+    const frames = codingFrames(input, {}, 4);
+    frames[0]!.message.params.update.status = 'pending';
+    expect(codingApprovalInputObserved(frames, input)).toBe(true);
+    expect(codingApprovalInputObserved(frames, { code: 'return true;' })).toBe(false);
+    const other = structuredClone(frames[0]!);
+    other.message.params.update.toolCallId = 'extra';
+    expect(codingApprovalInputObserved([...frames, other], input)).toBe(false);
+    other.message.params.update.name = 'execute_bash';
+    expect(codingApprovalInputObserved([other], input)).toBe(false);
+    expect(codingApprovalInputObserved([], input)).toBe(false);
+    frames[0]!.message.params.update.status = 'completed';
+    expect(codingApprovalInputObserved(frames, input)).toBe(false);
+    expect(() => assertStrictToolInventory('Tools available: @fabric/fabric_exec')).toThrow('inventoryStatus=unverified');
+  });
+  it('rejects semantic failures even after ACP/result digests are rebound', () => {
+    for (const [index, patch] of [[0, { sha256: digest }], [1, { matches: [] }], [4, { changed: false }], [6, { exitCode: 1 }], [6, { stdout: 'PASS' }]] as const) {
+      const gate = structuredClone(codingEvidence);
+      const step = gate.steps[index]!;
+      step.result = { ...step.result, ...patch };
+      step.acpEvents = codingFrames(step.input, step.result, index);
+      Object.assign(step.call, { frameDigests: step.acpEvents.map(frame => bytesDigest(JSON.stringify(frame))), expectedResultDigest: qualificationValueDigest(step.result), observedResultDigest: qualificationValueDigest(step.result) });
+      expect(() => assertCodingQualification(gate)).toThrow();
+    }
+    for (const field of ['name', 'status'] as const) {
+      const gate = structuredClone(codingEvidence);
+      const step = gate.steps[0]!;
+      step.acpEvents[0]!.message.params.update[field] = field === 'name' ? 'memory.get' : 'failed';
+      step.call.frameDigests = step.acpEvents.map(frame => bytesDigest(JSON.stringify(frame)));
+      expect(() => assertCodingQualification(gate)).toThrow(/coding ACP/);
+    }
+  });
+  it('executes the fixture search/read/edit/test contract through the real local provider', async () => {
+    const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fabric-coding-contract-')));
+    const root = path.join(base, 'workspace');
+    fs.mkdirSync(root);
+    const provider = new LocalCodingProvider({ root, lockRoot: path.join(base, 'locks'), maxResultChars: 20000 });
+    const registry = new ActionRegistry(); registry.register(provider);
+    const directory = path.join(root, codingSpec.directory);
+    fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(root, codingSpec.source), codingSpec.before);
+    fs.writeFileSync(path.join(directory, 'test.mjs'), codingSpec.test);
+    const gate = structuredClone(codingEvidence);
+    const probe = () => {
+      const result = spawnSync(process.execPath, [path.join(directory, 'test.mjs')], { encoding: 'utf8' });
+      expect(result.error).toBeUndefined();
+      return { exitCode: result.status!, stdout: result.stdout, stderr: result.stderr };
+    };
+    try {
+      gate.probes.before = probe();
+      for (const [index, step] of codingSpec.steps.entries()) {
+        const args = JSON.parse(step.input.code.slice(`return await ${step.ref}(`.length, -2));
+        const result = await registry.invoke(step.ref, args, { cwd: root, maxResultChars: 20000, audits: [], approve: async (action, prepared) => {
+          if (action.risk === 'read') return;
+          expect(['local.edit', 'local.shell']).toContain(action.ref);
+          expect(String(prepared.review)).toContain(codingSpec.directory);
+        } });
+        gate.steps[index]!.result = result as Record<string, unknown>;
+        gate.steps[index]!.acpEvents = codingFrames(step.input, result, index);
+        gate.steps[index]!.call.frameDigests = gate.steps[index]!.acpEvents.map(frame => bytesDigest(JSON.stringify(frame)));
+        const resultDigest = qualificationValueDigest(result);
+        Object.assign(gate.steps[index]!.call, { expectedResultDigest: resultDigest, observedResultDigest: resultDigest, outputDigest: resultDigest });
+      }
+      gate.probes.after = probe();
+      gate.afterSha256 = bytesDigest(fs.readFileSync(path.join(root, codingSpec.source), 'utf8'));
+      expect(bytesDigest(fs.readFileSync(path.join(directory, 'test.mjs'), 'utf8'))).toBe(gate.testSha256);
+      expect(assertCodingQualification(gate)).toBe(gate);
+    } finally {
+      await provider.close();
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
+  it('typechecks every exact coding model program against the product guest API', async () => {
+    for (const step of codingSpec.steps) {
+      expect(typeCheckFabricCode(step.input.code, fabricGuestDeclarations).errors).toEqual([]);
+    }
+  });
+});
+const codingNonce = '6'.repeat(48);
+const codingSpec = codingFixtureSpec(codingNonce);
+const bytesDigest = (text: string) => createHash('sha256').update(text).digest('hex');
+const codingResults: Record<string, unknown>[] = codingSpec.steps.map((step: { ref: string }, index: number) => {
+  if (step.ref === 'local.read') {
+    const text = index === 5 ? codingSpec.after : codingSpec.before;
+    return { path: codingSpec.source, text, sha256: bytesDigest(text), truncated: false };
+  }
+  if (step.ref === 'local.grep') return { matches: [{ path: codingSpec.source, line: 1, text: codingSpec.before.trim() }], truncated: false };
+  if (step.ref === 'local.edit') return { path: codingSpec.source, changed: true, sha256: bytesDigest(codingSpec.after) };
+  return { ok: index === 6, exitCode: index === 6 ? 0 : 1, stdout: `${codingNonce}:${index === 6 ? 'PASS' : 'FAIL'}\n`, stderr: '', signal: null, truncated: false, stdoutTruncated: false, stderrTruncated: false };
+});
+const codingFrames = (input: unknown, result: unknown, index: number) => [{ direction: "server-to-client", message: { jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "tool_call", toolCallId: `coding-${index}`, name: "fabric_exec", status: "completed", rawInput: input, rawOutput: result } } } }];
+const codingEvidence = {
+  source: 'kiro-acp-local-fixture', nonce: codingNonce, firstTurnSingleRead: true, sessionId,
+  acpRecordingDigest: "9".repeat(64),
+  beforeSha256: bytesDigest(codingSpec.before), afterSha256: bytesDigest(codingSpec.after), testSha256: bytesDigest(codingSpec.test),
+  probes: { before: { exitCode: 1, stdout: `${codingNonce}:FAIL\n`, stderr: '' }, after: { exitCode: 0, stdout: `${codingNonce}:PASS\n`, stderr: '' } },
+  steps: codingSpec.steps.map((step: { ref: string; input: unknown }, index: number) => ({
+    mcpInstanceId: formIdentity.mcpInstanceId, intervalStartSeq: index * 10, intervalEndSeq: index * 10 + 9,
+    acpEvents: codingFrames(step.input, codingResults[index], index),
+    input: step.input, result: codingResults[index], review: `Approve once ${codingSpec.source} a - b a + b node ${codingSpec.directory}/test.mjs`,
+    call: { sessionId, toolCallId: `coding-${index}`, expectedArgumentsDigest: qualificationValueDigest(step.input), observedArgumentsDigest: qualificationValueDigest(step.input), expectedResultDigest: qualificationValueDigest(codingResults[index]), observedResultDigest: qualificationValueDigest(codingResults[index]), frameDigests: codingFrames(step.input, codingResults[index], index).map(frame => bytesDigest(JSON.stringify(frame))), acpRecordingDigest: "9".repeat(64), outputDigest: qualificationValueDigest(codingResults[index]) },
+    events: [
+      { ev: 'tool.fabric_exec', execId: `exec-${index}` },
+      { cat: 'bridge', ev: step.ref, execId: `exec-${index}`, data: { ok: true } },
+      { ev: 'exec.end', execId: `exec-${index}`, data: { status: 'succeeded' } },
+      ...([3, 4, 6].includes(index) ? [{ ev: 'approval.form.request', data: { elicitationId: `approve-${index}` } }, { ev: 'approval.form.response', data: { elicitationId: `approve-${index}`, action: 'accept', approved: true } }] : []),
+    ].map((event, order) => ({ ...event, seq: index * 10 + order + 1 })),
+  })),
+};
+
 const startup = (value: typeof interactiveIdentity): string => JSON.stringify({ ev: "agent.mcp.start", data: value });
 const transcriptPayload = (kind: string, index: number): string => {
+  if (kind === "coding-qualification") return JSON.stringify(codingEvidence);
   if (kind === "kiro-version") return "kiro-cli 2.21.0";
   if (kind === "form-probe-mcp-startup") return startup(formIdentity);
   if (kind === "form-probe-trace-request") return JSON.stringify({ ev: "approval.form.request", data: { elicitationId: `form_${"4".repeat(16)}` } });
   if (kind === "form-probe-trace-response") return JSON.stringify({ ev: "approval.form.response", data: { elicitationId: `form_${"4".repeat(16)}`, action: "decline", approved: false } });
   if (kind === "interactive-mcp-startup") return startup(interactiveIdentity);
   if (kind === "resume-mcp-startup") return startup(resumedIdentity);
-  if (kind === "interactive-tools") return [...REAL_CLIENT_PROFILE_TOOLS, ...REAL_CLIENT_TOOLS].join("\n");
+  if (kind === "interactive-tools") return REAL_CLIENT_PROFILE_TOOLS.join("\n");
   if (kind === "form-probe-request") return "Risk: write\nApprove once";
   if (kind === "resource-inheritance-setting" || kind === "automatic-compaction-setting" || kind === "automatic-compaction-setting-final") return "null";
   if (kind === "interactive-compaction") return "Compaction completed";
@@ -290,13 +440,13 @@ const transcriptDigest = (kind: string) => transcript.find((entry) => entry.kind
 
 const valid = {
   kind: "kiro-fabric.real-client-qualification",
-  schemaVersion: 12,
+  schemaVersion: 13,
   ok: true,
   packageDigest: digest,
   archiveDigest,
   commit,
   tools: REAL_CLIENT_TOOLS,
-  driver: { digest: "e".repeat(64), version: "repository-driver-v10" },
+  driver: { digest: "e".repeat(64), version: "repository-driver-v11" },
   authentication: { mode: "subscription", verification: "kiro-cli-whoami", isolatedHome: true, subscriptionLoginPerformed: true, preLoginUnauthenticated: true },
   kiro: { path: executable, digest: "f".repeat(64), version: "kiro-cli 2.21.0", headlessEngineSelector: "--agent-engine", agentValidateSyntax: "--path" },
   installation: {
@@ -319,13 +469,14 @@ const valid = {
     releaseProfileAbsent: true,
   },
   qualificationGates: {
+    coding: codingEvidence,
     nativeToolVisibility: {
       source: "kiro-tui-/tools",
       command: "/tools",
       observed: true,
       profileTools: REAL_CLIENT_PROFILE_TOOLS,
       nativeTools: REAL_CLIENT_NATIVE_TOOLS,
-      fabricTools: REAL_CLIENT_TOOLS,
+      fabricTools: REAL_CLIENT_MODEL_TOOLS,
       outputDigest: transcriptDigest("interactive-tools"),
     },
     formElicitation: {
@@ -541,6 +692,31 @@ const valid = {
 };
 
 describe("real-client release evidence", () => {
+  it("accepts only the complete strict inventory, never presence of expected tokens", () => {
+    expect(assertStrictToolInventory("@fabric/fabric_exec\n")).toEqual(["@fabric/fabric_exec"]);
+    for (const text of ["", "@fabric", "fabric_exec", "Tools: @fabric/fabric_exec", "@fabric/fabric_exec\n@fabric/fabric_exec",
+      "@fabric/fabric_exec\nfs_read", "@fabric/fabric_exec\n@other/unknown", "@fabric/fabric_exec\n@fabric/fabric_info",
+      "@fabric/fabric_exec\nunknown unparsed footer"]) {
+      expect(() => assertStrictToolInventory(text)).toThrow("BLOCKED");
+    }
+  });
+
+  it("requires the bootstrap plus effect exec, rejecting missing and extra executions", () => {
+    for (const count of [0, 1, 3]) {
+      const wrongCount = structuredClone(valid);
+      wrongCount.lifecycle.interactive.turns[0]!.fabricExecCalls = count;
+      expect(() => assertRealClientEvidence(wrongCount, digest, { qualification: true, archiveDigest, commit })).toThrow("did not preserve one Fabric runtime");
+    }
+  });
+
+  it("rejects extra tools even when the inventory transcript digest is rebound", () => {
+    const extra = structuredClone(valid);
+    const entry = transcriptEntry("interactive-tools", "@fabric/fabric_exec\n@other/unknown");
+    extra.transcript = extra.transcript.map((item) => item.kind === entry.kind ? entry : item);
+    extra.qualificationGates.nativeToolVisibility.outputDigest = entry.digest;
+    expect(() => assertRealClientEvidence(extra, digest, { qualification: true, archiveDigest, commit })).toThrow("strict tool inventory");
+  });
+
   it("resolves explicit API-key and subscription authentication modes", () => {
     expect(() => resolveRealClientAuthMode(undefined, "")).toThrow("pass --auth-mode subscription or set KIRO_API_KEY");
     expect(resolveRealClientAuthMode(undefined, "test-key")).toBe("api-key");
@@ -988,7 +1164,7 @@ describe("real-client release evidence", () => {
       .toThrow("archive installation evidence");
   });
 
-  it("cannot qualify without objective native-tool and real-TUI form evidence", () => {
+  it("cannot qualify without objective strict-tool and real-TUI form evidence", () => {
     const noNativeTools = structuredClone(valid);
     noNativeTools.qualificationGates.nativeToolVisibility.observed = false;
     expect(() => assertRealClientEvidence(noNativeTools, digest, { qualification: true, archiveDigest, commit })).toThrow("native tool visibility");

@@ -6,5 +6,6 @@
     "src/runtime/compiler-worker-entry.ts",
     "tests/**/*.test.ts"
   ],
-  "project": ["src/**/*.ts", "tests/**/*.ts"]
+  "project": ["src/**/*.ts", "tests/**/*.ts"],
+  "ignoreBinaries": ["rg", "mkfifo"]
 }

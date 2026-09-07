@@ -305,6 +305,16 @@ const GUEST_SETUP = `
     describe: (input) => call("fabric.describe", typeof input === "string" ? { ref: input } : input),
     call: (input) => call("fabric.call", input),
   });
+  globalThis.fabric = objectFreeze({
+    info: () => call("fabric.info"), help: (args) => call("fabric.help", args),
+    workspace: (args) => call("fabric.workspace", args),
+  });
+  globalThis.local = objectFreeze({
+    read: (args) => call("local.read", args), grep: (args) => call("local.grep", args),
+    find: (args) => call("local.find", args), list: (args = {}) => call("local.list", args),
+    write: (args) => call("local.write", args), edit: (args) => call("local.edit", args),
+    shell: (args) => call("local.shell", args),
+  });
   globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args) });
   globalThis.memory = objectFreeze({
     get: (args) => call("memory.get", args), set: (args) => call("memory.set", args),

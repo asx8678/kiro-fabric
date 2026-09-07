@@ -38,14 +38,19 @@ export class KiroPowerApprover {
     readonly adapter: KiroPowerElicitationAdapter,
     readonly timeoutMs = FABRIC_APPROVAL_TIMEOUT_MS,
   ) {}
-  async approveOnce(request: { risk: string; provider: string; action: string; summary: string; signal?: AbortSignal }): Promise<boolean> {
+  async approveOnce(request: { risk: string; provider: string; action: string; summary: string; reviewable?: boolean; signal?: AbortSignal }): Promise<boolean> {
     request.signal?.throwIfAborted();
     if (!this.adapter.supported()) return false;
     try {
       const header = `Risk: ${bounded(request.risk, 64)}\nAction: ${bounded(`${request.provider}.${request.action}`, 256)}\n`;
+      const review = request.reviewable
+        ? request.summary.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/gu, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`)
+        : bounded(request.summary, Math.max(0, APPROVAL_MESSAGE_CHARS - header.length));
+      // Exact local material must never acquire an invisible authorized suffix.
+      if (request.reviewable && header.length + review.length > 12_000) return false;
       const result = await this.adapter.request({
         title: "Approve one Fabric action",
-        message: `${header}${bounded(request.summary, Math.max(0, APPROVAL_MESSAGE_CHARS - header.length))}`,
+        message: `${header}${review}`,
         ...(request.signal ? { signal: request.signal } : {}),
         timeoutMs: this.timeoutMs,
       });
@@ -103,11 +108,15 @@ export class KiroPowerFabricApprover implements FabricExecutionApprover {
     if (mode === "allow") return;
     if (mode === "deny") throw new Error(`${action.ref} is denied by Fabric policy`);
     const identity = fabricApprovalIdentity(action, args);
+    const localReview = action.provider === "local" && (action.risk === "write" || action.risk === "execute")
+      ? typeof args.review === "string" ? args.review : (() => { throw new Error("Local effect lacks canonical review material"); })()
+      : undefined;
     const approved = await this.elicitation.approveOnce({
       risk: action.risk,
       provider: action.provider,
       action: action.name,
-      summary: `Canonical request: sha256:${identity.digest} (${identity.chars} chars)\nPreview: ${summarize(args, this.cwd)}`,
+      summary: `Canonical request: sha256:${identity.digest} (${identity.chars} chars)\n${localReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
+      ...(localReview === undefined ? {} : { reviewable: true }),
       ...(signal ? { signal } : {}),
     });
     if (!approved) throw new Error(`${action.ref} approval was denied or unavailable`);

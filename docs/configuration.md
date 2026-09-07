@@ -22,7 +22,7 @@ This is atomic publication and process-restart persistence, not a guarantee agai
 
 Fabric's fail-closed behavior assumes the Kiro client advertises MCP roots and answers form elicitations. Clients without those capabilities degrade, not crash:
 
-- **No MCP roots capability**: `fabric_workspace` reports an explicitly-empty root list. Bind the workspace manually with the `attach` action and an absolute `path`; manual attachment itself requires form elicitation, so a client with neither capability cannot bind a workspace at all and workspace-scoped providers stay unavailable.
+- **No MCP roots capability**: checked `fabric.workspace({action:"list"})` reports an explicitly-empty root list (operator endpoint `fabric_workspace` remains compatible). Bind the workspace manually with the `attach` action and an absolute `path`; manual attachment itself requires form elicitation, so a client with neither capability cannot bind a workspace at all and workspace-scoped providers stay unavailable.
 - **No form elicitation**: approval modes `read: "allow"`, `write: "ask"`, `execute: "ask"`, `network: "ask"` (the defaults) fail closed on every nested write/execute/network call. Set explicit `allow`/`deny` per risk in `data/fabric/config/config.json` (`approvals.write`, `approvals.execute`, `approvals.network`) to make the agent usable on such a client; that is a deliberate policy choice, not a workaround the installer performs for you.
 - **Transient failures** are never treated as removal: a failed roots refresh reports a temporarily-unavailable workspace using the last verified root set, and never unbinds silently.
 
@@ -39,6 +39,16 @@ The setting is global and workspace-overridable. Re-enable inheritance by deleti
 ```sh
 kiro-cli settings --delete chat.disableInheritingDefaultResources
 ```
+
+## Strict local coding and bootstrap
+
+The profile exposes only `@fabric/fabric_exec`; no configuration selects hybrid mode. A verified root is required for local coding. Unbound/unavailable sessions retain checked `fabric.info()`, `fabric.help()` and `fabric.workspace()` recovery; the backend data directory is never a project fallback. Select/attach/detach must run separately from workspace operations and commit only after successful guest settlement and lease release. Restart existing Kiro conversations after an upgrade to adopt the new profile inventory.
+
+`rg` (ripgrep) must be on the backend PATH for grep/find; missing executable fails clearly. No new npm dependency or search-engine fallback is supplied. Local read/search/write/result bounds are documented in the bundled API. Existing `executor.maxNestedResultChars` also bounds typed local results and canonical approval material. Oversized changes are rejected rather than approving an invisible diff suffix.
+
+Local write/edit/shell share a private workspace-data mutation lock across cooperating Fabric processes. Locks are fail-fast, never automatically broken as stale: after a crash/cleanup failure an operator must establish that no owner or descendants remain and inspect affected files before removing an abandoned local lock. Preserve memory/state files; never remove another live process's lock. External editors do not participate; snapshots detect ordinary conflicts but Node pathname checks are not race-proof OS isolation.
+
+Approved `/bin/sh` commands run with host OS authority; cwd does not confine filesystem/network access. The environment is allowlisted, not a sandbox. Process groups receive bounded TERM/KILL cleanup, including leftover children after leader exit. Deliberate process-group escape is unsupported; Linux zombie reaping belongs to host init. No background-job management is advertised. Denial, timeout, cancellation and uncertain cleanup are never ordinary settled success. Outer tool allowance never grants inner permissions.
 
 ## Long-running chat context
 

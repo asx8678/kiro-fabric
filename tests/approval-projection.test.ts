@@ -16,6 +16,21 @@ const action: ResolvedFabricAction = {
 };
 
 describe("Fabric approval and projection", () => {
+  it("presents exact bounded local review material without silently authorizing a suffix", async () => {
+    let message = "";
+    const bridge = new KiroPowerApprover({ supported: () => true, async request(options) { message = options.message; return { action: "accept", approved: true }; } });
+    const approver = new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, bridge, "/workspace");
+    const shell = { ...action, name: "shell", ref: "local.shell", provider: "local", risk: "execute" as const };
+    const review = 'Command: "printf x"\nCanonical cwd: "/workspace"';
+    await approver.approve(shell, { command: "printf x", cwd: "/workspace", review });
+    expect(message).toContain(review);
+    expect(message).toContain("sha256:");
+    await expect(approver.approve(shell, { command: "printf x", cwd: "/workspace" })).rejects.toThrow("lacks canonical review");
+    message = "";
+    await expect(approver.approve(shell, { review: "x".repeat(12000) })).rejects.toThrow("denied or unavailable");
+    expect(message).toBe("");
+  });
+
   it("enforces explicit policy denial without elicitation", async () => {
     let requested = false;
     const bridge = new KiroPowerApprover({ supported: () => true, async request() { requested = true; return { action: "accept", approved: true }; } });

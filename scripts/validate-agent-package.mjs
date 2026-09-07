@@ -10,7 +10,8 @@ import {
 
 const MAX_PACKAGE_FILES = 500;
 const MAX_PACKAGE_BYTES = 64 * 1024 * 1024;
-const AGENT_PRODUCT_SHA256 = "d46040b7908c84abd5762da68098da53b82cc505afe10fc7366625a84f0215d8";
+// Strict migration adds only the reviewed local and bootstrap providers.
+const AGENT_PRODUCT_SHA256 = "351d35494b24e12d6e3d0d719ec50155bdcf7824f47f59dcd8ae00ccd9e301d7";
 const SCRIPT_FILES = [
   "agent-profile.mjs",
   "install-agent-user.mjs",

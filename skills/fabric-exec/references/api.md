@@ -9,6 +9,39 @@
 
 No extra input fields are accepted. Type errors stop execution before QuickJS or any provider call.
 
+## Local and bootstrap facades
+
+All calls below run inside `fabric_exec`, cross the bounded JSON registry bridge, validate closed schemas and follow exact inner approval policy. There are no native Kiro tools. Paths default to the verified workspace, never process cwd. Missing/ambiguous roots allow bootstrap, not workspace effects.
+
+```ts
+fabric.info()
+fabric.help({topic: "overview", offset: 0, limit: 4000}) // or "api"; zero-based character paging
+fabric.workspace({action: "status"}) // or "list"
+fabric.workspace({action: "select", rootId: "root-id"})
+
+local.read({path: "README.md", offset: 1, limit: 80})
+local.grep({pattern: "TODO", path: "src", literal: true, ignoreCase: false, limit: 20})
+local.find({pattern: "**/*.ts", path: "src", limit: 20})
+local.list({path: "src", limit: 20})
+local.write({path: "note.txt", content: payloads.content})
+local.edit({path: "note.txt", oldText: payloads.old, newText: payloads.next})
+local.shell({command: "pnpm test", timeoutMs: 120000, settle: true})
+```
+
+For that shell example pass **outer `timeoutMs:180000`**. Await each call and return only needed results. Optional `cwd` is canonical/verified but not shell confinement. Shell `timeoutMs` is at most 900000. Provider-generated `review` carries the exact canonical command/cwd or diff for approval; it is not caller-supplied authorization. There is no background job guarantee.
+
+Search before reading unfamiliar files. Batch independent work; sequence dependent search/read/edit/test steps. `local` handles workspace coding, `mcp` configured external capabilities, `memory` intentional durable facts, and `state` revisioned task progress.
+
+- `read({path,offset?,limit?})`: one-based lines (offset defaults 1); returns UTF-8 text, path, truncation and optional nextOffset. Binary/invalid UTF-8, special files and oversized single lines reject rather than inventing continuation.
+- `grep({pattern,path?,glob?,literal?,ignoreCase?,limit?})`: `{matches:[{path,line,text}],truncated}`; line numbers are one-based, returned count is not total. `find({pattern,path?,limit?})`: `{paths,truncated}`. Search requires external `rg`; unavailable search fails, never falls back to native tools. Enumeration is deterministic and bounded, with ripgrep ignore rules and no config or shell interpolation; hidden files and symlink traversal are not enabled.
+- `list({path?,limit?})`: sorted bounded `{entries:[{path,type}],truncated}`.
+- `write({path,content,overwrite?})`: create-only unless `overwrite:true`. `edit({path,oldText,newText,all?})`: nonempty exact unique anchor unless `all:true`. Both return `{path,changed,sha256,...}` bounded verification metadata; changed identity/content before publication rejects. No implicit multi-operation transaction.
+- `shell({command,cwd?,timeoutMs?,settle?})`: `{ok,exitCode,signal,stdout,stderr,truncated,stdoutTruncated,stderrTruncated}`. Ordinary nonzero exits return data only with `settle:true`. Denial, spawn failure, cancellation, timeout and uncertain cleanup always fail. `/bin/sh` on supported POSIX hosts; bounded streams/deadline, process-group TERM/KILL cleanup, no managed background jobs. Deliberate process-group escape is not contained.
+
+Use `tools.describe({ref:"local.read"})` (and the other exact refs) for current numeric bounds/defaults and complete schemas; limits also depend on the configured bridge budget. Over-budget requests fail rather than authorizing invisible suffixes. Local path checks reject traversal, symlink components, multiply linked and special files. They are defense in depth, not race-proof OS isolation against same-user filesystem attackers. Write/edit/shell conflicts reject before approval; external editors do not obey Fabric locks.
+
+`fabric.help({topic:"overview"|"api",offset?,limit?})` pages immutable compiled help/declarations by zero-based character offset; it does not read a workspace or bundled file at request time. Workspace helpers return JSON objects. Selection returns `{status:"pending",committed:false,nextExecutionRequired:true}` in guest code. After successful settlement the MCP response carries bounded `Workspace transition` sideband evidence with `committed:true`; failure/cancellation does not commit. Never mix selection with workspace effects in either order. Compatibility attach/detach remain validated operator operations, not an ambient model tool. `fabric.info`/`fabric.help` remain usable for recovery without native reads.
+
 ## Globals
 
 ```ts

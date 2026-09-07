@@ -100,7 +100,9 @@ describe("user-global Agent installation", () => {
     expect(profile.model).toBeUndefined();
     expect(profile.includePowers).toBe(false);
     expect(profile.includeMcpJson).toBe(false);
-    expect(profile.tools).toEqual(["read", "write", "shell", "web", "subagent", "todo_list", "@fabric"]);
+    expect(profile.tools).toEqual(["@fabric/fabric_exec"]);
+    expect(profile.allowedTools).toEqual(["@fabric/fabric_exec"]);
+    expect(profile.permissions.rules).toEqual([{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "allow" }]);
     expect(Object.keys(profile.mcpServers)).toEqual(["fabric"]);
     expect(profile.mcpServers.fabric.requestTimeout).toBe(917_000);
     expect(profile.mcpServers.fabric.env.PLUGIN_ROOT).toBeUndefined();
