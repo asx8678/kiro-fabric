@@ -221,7 +221,9 @@ describe("LocalCodingProvider read contracts", () => {
     await expect(f.call("find", { pattern: "*" })).rejects.toThrow(/hardlink/);
     fs.unlinkSync(path.join(f.root, "y"));
     vi.stubEnv("PATH", path.join(f.base, "no-executable"));
-    await expect(f.call("find", { pattern: "*" })).rejects.toThrow(/requires external ripgrep/);
+    // Executable selection is pinned at startup, not repeated from changed PATH.
+    expect(await f.call("find", { pattern: "*" })).toEqual({ paths: ["x"], truncated: false });
+    expect(() => f.second()).toThrow(/ripgrep .*required.*not found/);
   });
   it.each([
     ["read", { path: 5 }], ["read", { path: "x", offset: 0 }], ["grep", { pattern: "x", literal: "yes" }],

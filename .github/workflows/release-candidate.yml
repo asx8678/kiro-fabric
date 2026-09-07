@@ -16,6 +16,12 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
       - run: npm install --global pnpm@11.20.0
+      - name: Provision ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+          command -v rg
+          rg --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm run audit:deps
       - run: node scripts/assert-kiro-home-unchanged.mjs pnpm run release:candidate

@@ -15,6 +15,17 @@ export interface LocalShellResult {
   stderrTruncated: boolean;
 }
 
+/** Only ordinary, fully reaped nonzero exits carry explicit diagnostic data. */
+export class LocalShellExitError extends Error {
+  readonly result: LocalShellResult;
+  constructor(result: LocalShellResult) {
+    super(`Local shell exited with code ${result.exitCode}`);
+    this.name = "LocalShellExitError";
+    this.result = result;
+    Object.defineProperty(this, "result", { enumerable: false });
+  }
+}
+
 // An allowlist, not a backend credential denylist. Never include ambient auth,
 // shell startup hooks, loader options, or language-runtime injection variables.
 function shellEnvironment(): NodeJS.ProcessEnv {
@@ -94,12 +105,31 @@ export async function runLocalShell(options: {
   child.on("exit", (code, signal) => { exited = true; result.exitCode = code; result.signal = signal; });
   child.on("close", () => { closed = true; });
   for (const name of ["stdout", "stderr"] as const) {
+    let head = "";
+    let tail = "";
+    let total = 0;
+    const headLimit = Math.ceil(streamLimit / 2);
+    const tailLimit = streamLimit - headLimit;
     child[name].setEncoding("utf8");
     child[name].on("error", () => { failure = "Local shell stream failed"; });
     child[name].on("data", (data: string) => {
-      const remaining = streamLimit - result[name].length;
-      result[name] += data.slice(0, remaining);
-      if (data.length > remaining) { result[`${name}Truncated`] = true; result.truncated = true; }
+      total += data.length;
+      const take = Math.min(headLimit - head.length, data.length);
+      head += data.slice(0, take);
+      if (tailLimit > 0) tail = (tail + data.slice(take)).slice(-tailLimit);
+      const truncated = total > streamLimit;
+      // Marker fits inside the stream bound, including tiny configured budgets.
+      const marker = "\n… truncated …\n";
+      if (!truncated) result[name] = head + tail;
+      else {
+        const room = Math.max(0, streamLimit - marker.length);
+        const prefix = Math.ceil(room / 2);
+        const suffix = room - prefix;
+        result[name] = streamLimit >= marker.length
+          ? head.slice(0, prefix) + marker + (suffix ? tail.slice(-suffix) : "")
+          : head + tail;
+        result[`${name}Truncated`] = true; result.truncated = true;
+      }
     });
   }
   const started = performance.now();
@@ -134,7 +164,7 @@ export async function runLocalShell(options: {
   if (!result.ok && !options.settle) {
     // Evidence is bounded and non-enumerable by default; errors do not repeat
     // command/cwd/environment or potentially secret command output in messages.
-    throw Object.defineProperty(new Error(`Local shell exited with code ${result.exitCode}`), "result", { value: result });
+    throw new LocalShellExitError(result);
   }
   return result;
 }

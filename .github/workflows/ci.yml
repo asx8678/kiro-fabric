@@ -19,6 +19,12 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
       - run: npm install --global pnpm@11.20.0
+      - name: Provision ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+          command -v rg
+          rg --version
       - run: pnpm install --frozen-lockfile
       - name: Dependency advisory audit
         run: pnpm run audit:deps
@@ -48,11 +54,16 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
       - run: npm install --global pnpm@11.20.0
+      - name: Provision ripgrep
+        run: |
+          brew list ripgrep >/dev/null 2>&1 || brew install ripgrep
+          command -v rg
+          rg --version
       - run: pnpm install --frozen-lockfile
       - name: Hermetic macOS local staging
         run: node scripts/assert-kiro-home-unchanged.mjs pnpm run agent:stage:local
       - name: Focused macOS staging, install, and archive tests
-        run: pnpm exec vitest run tests/hermetic-stage.test.ts tests/agent-user-install.test.ts tests/package-boundary.test.ts tests/archive.test.ts
-      - name: Verify cross-platform build reproducibility
+        run: pnpm exec vitest run tests/hermetic-stage.test.ts tests/agent-user-install.test.ts tests/package-boundary.test.ts tests/archive.test.ts tests/installer-executable-trust.test.ts tests/release-workflow.test.ts tests/local-provider.test.ts tests/local-shell.test.ts tests/strict-bootstrap.test.ts tests/workspace-binding.test.ts tests/mcp-process-lifecycle.test.ts tests/approval-projection.test.ts tests/local-executable.test.ts tests/local-lock-reliability.test.ts tests/local-diagnostics.test.ts tests/local-search-work.test.ts tests/state-reliability.test.ts tests/memory-delete-ack.test.ts tests/memory-lock-safety.test.ts tests/memory-acknowledgement.test.ts tests/agent-doctor.test.ts
+      - name: Verify staging left tracked build outputs reproducible
         run: test -z "$(git status --porcelain)"
       - run: git diff --check

@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { initializeOwnedFile, type OwnedFile } from "./owned-file.js";
+import { FABRIC_COMMIT_ACKNOWLEDGEMENT } from "../protocol.js";
 import { throwIfAbortedOrExpired } from "../async-settlement.js";
 import type {
   FabricActionDescriptor,
@@ -38,7 +40,11 @@ const delay = (milliseconds: number): Promise<void> =>
 const processIsAlive = (pid: number): boolean => {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; }
-  catch (error) { return errorCode(error) === "EPERM"; }
+  catch (error) {
+    if (errorCode(error) === "ESRCH") return false;
+    if (errorCode(error) === "EPERM") return true;
+    throw new Error("state lock owner liveness is uncertain", { cause: error });
+  }
 };
 
 const privateRoot = (root: string): string => {
@@ -58,9 +64,11 @@ const privateRoot = (root: string): string => {
  * Transport-level interruption can still lose this acknowledgement entirely. */
 export class StateCommitAcknowledgementError extends Error {
   readonly committed = true;
-  constructor(readonly revision: number, options: ErrorOptions) {
+  readonly [FABRIC_COMMIT_ACKNOWLEDGEMENT]: { readonly version: 1; readonly operation: "set" | "delete" };
+  constructor(readonly revision: number, options: ErrorOptions, operation: "set" | "delete" = "set") {
     super(`State mutation committed at revision ${revision}; acknowledgement failed; read state before retrying`, options);
     this.name = "StateCommitAcknowledgementError";
+    this[FABRIC_COMMIT_ACKNOWLEDGEMENT] = Object.freeze({ version: 1 as const, operation });
   }
 }
 
@@ -74,6 +82,7 @@ export class StateProvider implements FabricProvider {
   readonly #maxValueChars: number;
   readonly #maxTotalChars: number;
   #pendingLockCleanup: { dev: number; ino: number } | undefined;
+  #uncertainLock = false;
 
   constructor(root: string, options: {
     maxEntries?: number;
@@ -161,7 +170,7 @@ export class StateProvider implements FabricProvider {
         return { key, revision: document.revision };
       });
     } catch (error) {
-      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error });
+      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error }, actionName);
       throw error;
     }
   }
@@ -234,22 +243,33 @@ export class StateProvider implements FabricProvider {
       this.#root,
       `.state-${process.pid}-${randomBytes(8).toString("hex")}.tmp`,
     );
-    const descriptor = fs.openSync(temporary, "wx", 0o600);
-    // The exclusive open establishes ownership before any later I/O can fail.
+    const owned: OwnedFile = { created: false };
     try {
-      try {
+      initializeOwnedFile(temporary, owned, (descriptor) => {
         fs.writeFileSync(descriptor, text);
         fs.fchmodSync(descriptor, 0o600);
         fs.fsyncSync(descriptor);
-      } finally {
-        fs.closeSync(descriptor);
-      }
+      });
       beforeCommit();
-      // Commit point. Permissions are already established on the inode.
+      const current = fs.lstatSync(temporary);
+      if (!owned.identity || !current.isFile() || current.isSymbolicLink() ||
+          current.dev !== owned.identity.dev || current.ino !== owned.identity.ino) {
+        throw new Error("uncertain state temporary publication: replacement preserved");
+      }
       fs.renameSync(temporary, this.#file);
     } catch (error) {
-      try { fs.rmSync(temporary, { force: true }); }
-      catch (cleanup) { throw new AggregateError([error, cleanup], "state write and temporary cleanup failed"); }
+      if (owned.created) {
+        try {
+          if (!owned.identity) throw new Error("uncertain state temporary ownership; operator recovery required");
+          try {
+            const current = fs.lstatSync(temporary);
+            if (!current.isFile() || current.isSymbolicLink() || current.dev !== owned.identity.dev || current.ino !== owned.identity.ino) {
+              throw new Error("uncertain state temporary cleanup: replacement preserved");
+            }
+            fs.rmSync(temporary);
+          } catch (cleanup) { if (errorCode(cleanup) !== "ENOENT") throw cleanup; }
+        } catch (cleanup) { throw new AggregateError([error, cleanup], "state write and temporary cleanup failed", { cause: error }); }
+      }
       throw error;
     }
   }
@@ -260,15 +280,18 @@ export class StateProvider implements FabricProvider {
       if (current.isFile() && !current.isSymbolicLink() &&
           current.dev === identity.dev && current.ino === identity.ino) {
         fs.rmSync(this.#lock);
-      }
+      } else { throw new Error("uncertain state lock cleanup: replacement lock preserved"); }
     } catch (error) {
       if (errorCode(error) !== "ENOENT") throw error;
     }
   }
 
   async #withMutationLock<T>(context: FabricInvocationContext, operation: () => T): Promise<T> {
+    if (this.#uncertainLock) throw new Error("uncertain state lock ownership; operator recovery required");
     const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
     let identity: { dev: number; ino: number } | undefined;
+    let operationError: unknown;
+    let failed = false;
     try {
       while (!identity) {
         throwIfAbortedOrExpired(context.signal, context.deadline);
@@ -279,16 +302,19 @@ export class StateProvider implements FabricProvider {
           this.#pendingLockCleanup = undefined;
         }
         try {
-          const descriptor = fs.openSync(this.#lock, "wx", 0o600);
+          const owned: OwnedFile = { created: false };
           try {
-            // Cleanup owns this inode before metadata writes or syncing can fail.
-            const stat = fs.fstatSync(descriptor);
-            identity = { dev: stat.dev, ino: stat.ino };
-            fs.writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}\n`);
-            fs.fsyncSync(descriptor);
-          } finally {
-            fs.closeSync(descriptor);
-          }
+            initializeOwnedFile(this.#lock, owned, (descriptor) => {
+              fs.writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}\n`);
+              fs.fsyncSync(descriptor);
+            });
+          } catch (error) {
+            if (!owned.created) throw error;
+            if (!owned.identity) this.#uncertainLock = true;
+            throw new AggregateError([error], owned.identity
+              ? "state lock initialization failure; ownership cleanup required"
+              : "state lock initialization failure; uncertain ownership identity unavailable; operator recovery required", { cause: error });
+          } finally { identity = owned.identity; }
         } catch (error) {
           if (identity || errorCode(error) !== "EEXIST") throw error;
           let stat: fs.Stats;
@@ -300,7 +326,8 @@ export class StateProvider implements FabricProvider {
             try {
               const owner = JSON.parse(fs.readFileSync(this.#lock, "utf8")) as { pid?: unknown };
               if (typeof owner.pid === "number") ownerPid = owner.pid;
-            } catch { /* malformed stale locks are reclaimable after identity checks */ }
+            } catch (cause) { throw new Error("uncertain state lock owner; operator recovery required", { cause }); }
+            if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) throw new Error("uncertain state lock owner; operator recovery required");
             if (!processIsAlive(ownerPid)) {
               const current = fs.lstatSync(this.#lock);
               if (current.dev === stat.dev && current.ino === stat.ino && current.isFile()) {
@@ -317,10 +344,16 @@ export class StateProvider implements FabricProvider {
       const result = operation();
       throwIfAbortedOrExpired(context.signal, context.deadline);
       return result;
+    } catch (error) {
+      failed = true; operationError = error; throw error;
     } finally {
       if (identity) {
         try { this.#releaseLock(identity); }
-        catch (error) { this.#pendingLockCleanup = identity; throw error; }
+        catch (cleanup) {
+          this.#pendingLockCleanup = identity;
+          if (failed) throw new AggregateError([operationError, cleanup], "state mutation and lock cleanup failed; lock replacement or removal is uncertain", { cause: operationError });
+          throw cleanup;
+        }
       }
     }
   }

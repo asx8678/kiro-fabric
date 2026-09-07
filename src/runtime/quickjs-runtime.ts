@@ -1,6 +1,7 @@
 import releaseSyncVariant from "@jitl/quickjs-singlefile-mjs-release-sync";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
 import { runAbortable, settleWithin } from "../async-settlement.js";
+import { LocalShellExitError } from "../providers/local-shell.js";
 import { createGuestStackMap, remapGuestErrorText } from "./guest-stack-map.js";
 import {
   assertFabricJsonBudget,
@@ -343,6 +344,13 @@ const formatValue = (value: unknown, maxChars = 100_000): string => {
   catch { return "[value outside bounded JSON]"; }
 };
 
+const formatGuestFailure = (value: unknown): string => {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const { result: _diagnostic, ...message } = value as Record<string, unknown>;
+    return formatValue(message);
+  }
+  return formatValue(value);
+};
 const jsonHandle = (
   context: any,
   jsonObject: any,
@@ -484,8 +492,15 @@ export class QuickJsRuntime {
           if (closing || promise.alive === false) return;
           const raw = error instanceof Error ? error.message : String(error);
           const handle = context.newError(raw.slice(0, 4_096));
-          promise.reject(handle);
-          handle.dispose();
+          try {
+            // Explicit trusted shell diagnostics only; never serialize arbitrary
+            // error properties, approval data, causes, or cancellation reasons.
+            if (error instanceof LocalShellExitError) {
+              const diagnostic = jsonHandle(context, jsonObject, jsonParse, error.result, options.maxNestedResultChars);
+              try { context.setProp(handle, "result", diagnostic); } finally { diagnostic.dispose(); }
+            }
+            promise.reject(handle);
+          } finally { handle.dispose(); }
         };
         const raw = Promise.resolve().then(() => {
           deadline.throwIfExpired();
@@ -620,7 +635,7 @@ export class QuickJsRuntime {
       runSpan?.end();
       if (settled.error) {
         const deadlineExceeded = timedOut || interrupted || deadline.expired;
-        const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(settled.error)), stackMap, guestLineCount);
+        const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatGuestFailure(context.dump(settled.error)), stackMap, guestLineCount);
         settled.error.dispose();
         abortHost(new Error(error));
         return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };

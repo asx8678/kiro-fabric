@@ -44,24 +44,34 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
-      - run: corepack enable && corepack prepare pnpm@11.20.0 --activate
-      - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm run audit:deps
+      - run: npm install --global pnpm@11.20.0
+      - name: Provision ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+          command -v rg
+          rg --version
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run audit:deps
       - name: Bind tag to package version
         env: { TAG: "${{ github.ref_name }}" }
-        run: test "$TAG" = "v$(node -p 'require(\"./package.json\").version')"
-      - run: node scripts/assert-kiro-home-unchanged.mjs corepack pnpm run check
+        run: test "$TAG" = "v$(node -p 'require("./package.json").version')"
+      - run: node scripts/assert-kiro-home-unchanged.mjs pnpm run check
       - name: Download exact-commit real-client evidence
         env: { GH_TOKEN: "${{ github.token }}", COMMIT: "${{ needs.verify-tag.outputs.commit }}" }
         run: |
           run_id=$(gh run list --workflow "Real Kiro Agent qualification" --commit "$COMMIT" --status success --json databaseId --jq '.[0].databaseId')
           test -n "$run_id"
           gh run download "$run_id" -n "real-client-${COMMIT}" -D "$RUNNER_TEMP/qualification"
-      - run: |
+      - name: Promote exact qualified release assets
+        env:
+          COMMIT: ${{ needs.verify-tag.outputs.commit }}
+          TAG: ${{ github.ref_name }}
+        run: |
           mkdir -p .tmp/release-assets
           node scripts/release-candidate-report.mjs --output .tmp/release-assets/release.json \
             --archive "$RUNNER_TEMP/qualification/kiro-fabric-agent.tar.gz" --sbom "$RUNNER_TEMP/qualification/kiro-fabric-agent.spdx.json" \
-            --commit "${{ needs.verify-tag.outputs.commit }}" --tag "${{ github.ref_name }}" --require-release-ready \
+            --commit "$COMMIT" --tag "$TAG" --require-release-ready \
             --qualification "$RUNNER_TEMP/qualification/real-client.json" --assets .tmp/release-assets
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

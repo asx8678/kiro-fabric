@@ -17,7 +17,7 @@ Inside `fabric_exec`, capability discovery returns complete digest-bound descrip
 Node.js 24 or newer, a supported POSIX host, ripgrep (`rg`) for search, and an authenticated Kiro CLI with V3 harness support are required.
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm run agent:stage:local
 pnpm run agent:validate
 pnpm run agent:install
@@ -77,6 +77,12 @@ Fabric does not launch once per prompt. Its contract is one private stdio MCP pr
 Single roots bind automatically after identity verification. Multiple roots require explicit `fabric.workspace({action:"select",rootId})` inside a separate exec before workspace effects. Missing roots or form elicitation fails closed. Ambient MCP and Powers are disabled (`includeMcpJson: false`, `includePowers: false`); configured federation lives only in private `data/fabric/config/mcp.json`.
 
 All local reads, edits and shell commands route through the `local` facade and registry. Only the exec wrapper is outer-allowed; nested effects retain exact Fabric approval policy. Web/LSP/delegation require explicitly configured MCP capabilities, otherwise they are unavailable. There is no native fallback.
+
+## Doctor / health
+
+Run `node scripts/install-agent-user.mjs --doctor` from this checkout or the extracted archive. It is read-only and reports bounded `PASS`, `WARNING`, and `FAIL` checks for Node/executable trust, ripgrep, Kiro CLI availability, safe Kiro home, and the installed profile/runtime. Hard failures exit nonzero; no installation or permission repair is performed.
+
+In a running session, use `return await fabric.info();` for workspace binding, required roots/elicitation capabilities and provider status. Offline doctor cannot prove live client capabilities or configured MCP connectivity; MCP discovery remains approval-gated. Neither diagnostic substitutes for real-client release qualification.
 
 ## Migration and troubleshooting
 

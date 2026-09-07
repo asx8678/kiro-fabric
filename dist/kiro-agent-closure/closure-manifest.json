@@ -31,9 +31,11 @@
     "src/kiro/runtime.ts",
     "src/protocol.ts",
     "src/providers/local-contract.ts",
+    "src/providers/local-executable.ts",
     "src/providers/local-path.ts",
     "src/providers/local-provider.ts",
     "src/providers/local-shell.ts",
+    "src/providers/owned-file.ts",
     "src/providers/state-provider.ts",
     "src/runtime/compiler-worker-entry.ts",
     "src/runtime/deadline.ts",
@@ -536,9 +538,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-263OSNRC.js",
-      "bytes": 1109337,
-      "sha256": "eb92fd528c9fd533b1bb06eb94f0d3c31c57b4e05afa68f1b6601059466ca46a"
+      "path": "chunks/mcp-server-G3OZ3SOF.js",
+      "bytes": 1119237,
+      "sha256": "565f298b8ab46e947ebeba6b1a68d50a13b2f4cafbc010c7f7d4f0283711b6fc"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -558,7 +560,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 5640,
-      "sha256": "6878a0d7379fbd33486c080ccbfb868e2ec0cc6e7a81a5be2b096d5e8d7485b6"
+      "sha256": "ae7930923dc6669759178f829a829033635bce1b30babb1cdd6a447c6b06ce7a"
     },
     {
       "path": "package.json",
@@ -576,5 +578,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "a4e8c60779dd4af64ea0212c8dd30c37169e1a3e2b92bd58ea98fa9d3ed15fe9"
+  "contentDigest": "1866e7959b2db6fd8bda60270d5356cd4539408b70064f317f59f11a8f8f9c03"
 }

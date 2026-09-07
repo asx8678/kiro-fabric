@@ -38,7 +38,10 @@ describe("operation-owned storage failure cleanup", () => {
     const root = temporary(); const provider = new StateProvider(root); const context = { cwd: root };
     await provider.invoke("set", { key: "fixture", value: "old" }, context);
     inject(method, (file) => path.basename(file).startsWith(".state-") && file.endsWith(".tmp"));
-    await expect(provider.invoke("set", { key: "fixture", value: "new", expectedRevision: 1 }, context)).rejects.toThrow("owned-file failure");
+    await expect(provider.invoke("set", { key: "fixture", value: "new", expectedRevision: 1 }, context)).rejects.toMatchObject({
+      cause: expect.objectContaining({ message: "injected owned-file failure" }),
+      errors: expect.arrayContaining([expect.objectContaining({ message: "injected owned-file failure" })]),
+    });
     vi.restoreAllMocks();
     expect(fs.readdirSync(root)).toEqual(["state.json"]);
     await expect(provider.invoke("get", { key: "fixture" }, context)).resolves.toMatchObject({ value: "old", revision: 1 });

@@ -170,7 +170,7 @@ describe("Fabric memory commit recovery", () => {
     expect(fs.readFileSync(path.join(lock, "owner.json"), "utf8")).toBe("foreign");
   });
 
-  it("retains directory identity after mkdir metadata failure and recovers on the same instance", async () => {
+  it("keeps ownership unresolved after mkdir metadata failure", async () => {
     const root = temporary();
     const memory = openKiroMemory("workspace", root);
     const original = fs.lstatSync;
@@ -184,8 +184,11 @@ describe("Fabric memory commit recovery", () => {
     await expect(memory.set("first", 1)).rejects.toMatchObject({ cause: expect.objectContaining({ message: "metadata fault" }) });
     expect(lockDirectory(root)).not.toBe("");
     fault = false;
-    await expect(memory.set("second", 2)).resolves.toMatchObject({ value: 2 });
-    expect(lockDirectory(root)).toBe("");
+    // Incorrect former assumption: opening/statting the pathname after the failed
+    // initial lstat proves mkdir's inode. It could instead identify a replacement.
+    await expect(memory.set("second", 2)).rejects.toThrow(/ownership identity is unavailable/);
+    expect(lockDirectory(root)).not.toBe("");
+    await expect(memory.get("second")).resolves.toBeNull();
   });
 
   it.each(["write", "close"] as const)("cleans partial owner initialization after %s failure and preserves cause", async (phase) => {

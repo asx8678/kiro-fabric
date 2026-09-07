@@ -121,13 +121,15 @@ const errorCode = (error: unknown): string | undefined =>
 const delay = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+// Only ESRCH proves death; all other failures leave ownership uncertain.
 const processIsAlive = (pid: number): boolean => {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return errorCode(error) === "EPERM";
+    if (errorCode(error) === "ESRCH") return false;
+    if (errorCode(error) === "EPERM") return true;
+    throw new KiroMemoryScopeError("Kiro memory mutation lock owner liveness is unknown");
   }
 };
 
@@ -137,18 +139,12 @@ interface MutationLockIdentity {
 }
 interface PendingMutationLock {
   identity?: MutationLockIdentity;
-  directoryDescriptor?: number | undefined;
   ownerDescriptor?: number | undefined;
 }
 interface MutationLockState { pending: PendingMutationLock | undefined }
 
 const recoverPendingMutationLock = (lockPath: string, pending: PendingMutationLock): void => {
-  let identity = pending.identity;
-  if (!identity && pending.directoryDescriptor !== undefined) {
-    const stat = fs.fstatSync(pending.directoryDescriptor);
-    identity = { directory: { dev: stat.dev, ino: stat.ino } };
-    pending.identity = identity;
-  }
+  const identity = pending.identity;
   if (identity && !identity.owner && pending.ownerDescriptor !== undefined) {
     const owner = fs.fstatSync(pending.ownerDescriptor);
     identity.owner = { dev: owner.dev, ino: owner.ino };
@@ -160,14 +156,9 @@ const recoverPendingMutationLock = (lockPath: string, pending: PendingMutationLo
     pending.ownerDescriptor = undefined;
     fs.closeSync(descriptor);
   }
-  if (pending.directoryDescriptor !== undefined) {
-    const descriptor = pending.directoryDescriptor;
-    pending.directoryDescriptor = undefined;
-    fs.closeSync(descriptor);
-  }
 };
 
-const releaseNamespaceMutationLock = (lockPath: string, identity: MutationLockIdentity): void => {
+const releaseNamespaceMutationLock = (lockPath: string, identity: MutationLockIdentity, requireOwner = false): void => {
   let current: fs.Stats;
   try { current = fs.lstatSync(lockPath); }
   catch (error) { if (errorCode(error) === "ENOENT") return; throw error; }
@@ -188,7 +179,7 @@ const releaseNamespaceMutationLock = (lockPath: string, identity: MutationLockId
     }
     fs.unlinkSync(ownerPath);
   } catch (error) {
-    if (errorCode(error) !== "ENOENT") throw error;
+    if (errorCode(error) !== "ENOENT" || requireOwner) throw error;
   }
   fs.rmdirSync(lockPath);
 };
@@ -217,13 +208,9 @@ const withNamespaceMutationLock = async <T>(
       let stat: fs.Stats;
       try { stat = fs.lstatSync(lockPath); }
       catch (error) {
-        const pending: PendingMutationLock = {};
-        try {
-          pending.directoryDescriptor = fs.openSync(lockPath, fs.constants.O_RDONLY);
-          const evidence = fs.fstatSync(pending.directoryDescriptor);
-          pending.identity = { directory: { dev: evidence.dev, ino: evidence.ino } };
-        } catch { /* unresolved ownership is reported without pathname deletion */ }
-        state.pending = pending;
+        // A later pathname open/stat cannot prove which inode mkdir created.
+        // Keep this unresolved rather than adopting (and deleting) a replacement.
+        state.pending = {};
         throw new AggregateError([error], "Kiro memory lock initialization failed; cleanup remains unresolved", { cause: error });
       }
       if (!stat.isDirectory() || stat.isSymbolicLink()) {
@@ -282,34 +269,34 @@ const withNamespaceMutationLock = async <T>(
         throw new KiroMemoryScopeError("Kiro memory mutation lock is foreign");
       }
       if (Date.now() - stat.mtimeMs > STALE_MUTATION_LOCK_MS) {
-        let ownerPid: number | undefined;
+        const ownerPath = path.join(lockPath, MUTATION_LOCK_OWNER);
+        let ownerStat: fs.Stats;
+        let owner: { pid: number; token: string; acquiredAt: number };
         try {
-          const owner = JSON.parse(fs.readFileSync(path.join(lockPath, MUTATION_LOCK_OWNER), "utf8")) as { pid?: unknown };
-          if (typeof owner.pid === "number") ownerPid = owner.pid;
-        } catch {}
-        if (ownerPid !== undefined && processIsAlive(ownerPid)) {
+          ownerStat = fs.lstatSync(ownerPath);
+          if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) throw new Error("invalid owner file");
+          owner = JSON.parse(fs.readFileSync(ownerPath, "utf8"));
+          if (!owner || !Number.isSafeInteger(owner.pid) || owner.pid <= 0 ||
+              typeof owner.token !== "string" || !owner.token ||
+              !Number.isSafeInteger(owner.acquiredAt) || owner.acquiredAt <= 0) {
+            throw new Error("invalid owner metadata");
+          }
+        } catch {
+          throw new KiroMemoryScopeError("Kiro memory mutation lock owner is unreadable or malformed; ownership is uncertain");
+        }
+        if (processIsAlive(owner.pid)) {
           if (performance.now() >= deadline) {
             throw new KiroMemoryScopeError("Timed out waiting for a live Kiro memory mutation lock");
           }
           await delay(10);
           continue;
         }
-        try {
-          const current = fs.lstatSync(lockPath);
-          if (
-            !current.isDirectory() ||
-            current.isSymbolicLink() ||
-            current.dev !== stat.dev ||
-            current.ino !== stat.ino
-          ) continue;
-          fs.rmSync(path.join(lockPath, MUTATION_LOCK_OWNER), { force: true });
-          fs.rmdirSync(lockPath);
-        } catch {
-          if (performance.now() >= deadline) {
-            throw new KiroMemoryScopeError("Stale Kiro memory mutation lock is not reclaimable");
-          }
-          await delay(10);
-        }
+        // Revalidate the exact directory, owner inode and token through the
+        // same helper used for owned cleanup; never unconditionally remove a path.
+        releaseNamespaceMutationLock(lockPath, {
+          directory: { dev: stat.dev, ino: stat.ino },
+          owner: { dev: ownerStat.dev, ino: ownerStat.ino, token: owner.token },
+        }, true);
         continue;
       }
       if (performance.now() >= deadline) {

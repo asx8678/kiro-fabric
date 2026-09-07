@@ -21,10 +21,14 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
-      - run: corepack enable && corepack prepare pnpm@11.20.0 --activate
-      - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm run check
-      - run: corepack pnpm run agent:archive
+      - run: npm install --global pnpm@11.20.0
+      - name: Verify runner-provisioned ripgrep
+        run: |
+          command -v rg
+          rg --version
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run agent:archive
       - name: Preflight protected headless credential without logging it
         env:
           KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
@@ -37,7 +41,7 @@ jobs:
         env:
           KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
           KIRO_CLI_PATH: ${{ vars.KIRO_CLI_PATH }}
-        run: corepack pnpm run certify:agent:real -- --archive .tmp/kiro-fabric-agent.tar.gz --commit "${{ github.sha }}" --work-root "$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --output "$RUNNER_TEMP/real-client.json"
+        run: pnpm run certify:agent:real -- --archive .tmp/kiro-fabric-agent.tar.gz --commit "${{ github.sha }}" --work-root "$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --output "$RUNNER_TEMP/real-client.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: real-client-${{ github.sha }}

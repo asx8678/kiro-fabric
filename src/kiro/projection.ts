@@ -103,6 +103,7 @@ export const projectFabricExecutionText = (options: {
         status: options.result.status,
         error: options.result.error ?? "Fabric execution failed",
         ...(options.result.typeErrors ? { typeErrors: options.result.typeErrors } : {}),
+        ...(options.result.lastShellFailure ? { lastShellFailure: options.result.lastShellFailure } : {}),
         effectiveTimeoutMs: options.result.effectiveTimeoutMs,
       };
   const body = stringify(value, options.resultFormat);

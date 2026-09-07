@@ -1,5 +1,7 @@
 # Release
 
+CI explicitly provisions pinned pnpm and ripgrep on supported runners. Linux runs the full check; macOS also runs local coding, shell, ownership/acknowledgement, bootstrap, workspace and approval/projection suites. Configured jobs are not evidence that a platform run passed. Release shell regression tests execute the actual tag/version comparison, including mismatch and inert hostile tag values.
+
 Run `pnpm run check`, `pnpm run agent:archive`, and `pnpm pack --dry-run --json --config.ignore-scripts=true`. Agent staging, closure, archive, and SBOM are deterministic and digest-bound. Real-client evidence contains session-specific PIDs, timestamps, and transcripts; it is not reproducible output, but it is bound to the exact commit, archive, installed profile/runtime, Kiro binary, and qualification driver. `pnpm run certify:agent:real` is a separate authenticated user-owned Kiro gate; ordinary CI cannot claim it.
 
 A release requires objective profile validation/listing/selection, exactly one filtered model tool (`@fabric/fabric_exec`), roots and form elicitation, checked local fixture search/read/edit/test execution, durable memory/state across processes, denied side effects, compaction continuity, and verified shutdown. Raw backend compatibility endpoints are not the model inventory. Kiro binary path/version/digest are recorded before and after. Model-authored claims are not lifecycle evidence.

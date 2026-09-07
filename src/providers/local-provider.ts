@@ -12,6 +12,9 @@ import type { LocalProviderOptions, LocalReadResult, LocalGrepResult, LocalFindR
 import { LOCAL_MAX_FILE_BYTES, LocalNonTextError, LocalPaths, localHash, localIdentity, sameLocalIdentity } from "./local-path.js";
 import type { LocalPathSnapshot } from "./local-path.js";
 import { runLocalShell } from "./local-shell.js";
+import { initializeOwnedFile, type OwnedFile } from "./owned-file.js";
+import { FabricDeadline } from "../runtime/deadline.js";
+import { resolveSearchExecutable, verifySearchExecutable, searchEnvironment, type SearchExecutable } from "./local-executable.js";
 
 // Fabric's bounded JSON/schema walkers intentionally reject shared graphs.
 const jsonTree = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -43,12 +46,12 @@ const outputSchemas: Record<string, Record<string, unknown>> = {
 };
 const descriptions: Record<string, string> = {
   read: "Read valid UTF-8, one-based offset; default 200/max 2000 lines, <=2MiB file, bounded JSON. Oversized single lines fail. No traversal, symlinks, hardlinks or special files.",
-  grep: "Search with external rg, --no-config --sort path; respects ignore files, excludes hidden paths and symlinks. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Bounded enumeration and process output; no JS search fallback.",
-  find: "Glob file paths via external rg --files --no-config --sort path; respects ignore files, excludes hidden paths and symlinks. Default 100/max 1000 results. Unsafe files rejected. Enumeration <=10000 files/2MiB output.",
+  grep: "Search with external rg, --no-config --sort path; respects ignore files, excludes hidden paths and symlinks. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Pinned startup-validated executable. Selected candidates <=10000; batches <=32 text files/2MiB stop at requested prefix with truncated=true for unsearched files. Aggregate input <=32MiB; search <=10s; narrow path/glob on work limits. No JS search fallback.",
+  find: "Glob file paths via external rg --files --no-config --sort path; respects ignore files, excludes hidden paths and symlinks. Default 100/max 1000 results. Unsafe files rejected. Glob only narrows normal enumeration; selected candidates <=10000, raw process output <=2MiB; search <=10s. Narrow path/glob on work limits.",
   list: "Sorted direct children, including hidden entries; default 100/max 1000 results, at most 10000 scanned entries. Symlinks, hardlinks and special entries fail.",
   write: "Exact approved write, create-only unless overwrite=true; existing parent required. Snapshots bind identities/content and complete diff before approval; revalidated before publication. Path checks are defense in depth, not hostile-race isolation.",
   edit: "Exact approved edit; nonempty unique oldText unless all=true (nonoverlapping replacements). Existing parent required. Identity/hash conflict detection and complete actual diff; no multi-operation transaction or hostile-race isolation.",
-  shell: "Exact approved /bin/sh command in verified canonical cwd, not confinement. Workspace-wide lock, bounded output and deadline, TERM/KILL cleanup; no background jobs. Deliberate process-group escapes are not contained.",
+  shell: "Exact approved /bin/sh command in verified canonical cwd, not confinement. Workspace-wide lock, bounded head/tail output and deadline, TERM/KILL cleanup; ordinary nonzero exits expose error.result or return data with settle=true; no background jobs. Deliberate process-group escapes are not contained.",
 };
 const effectful = (name: string): boolean => ["write", "edit", "shell"].includes(name);
 interface Prepared {
@@ -79,9 +82,12 @@ export class LocalCodingProvider implements FabricProvider {
   readonly #pending = new Set<Promise<unknown>>();
   readonly #prepared = new Map<string, Prepared>();
   #closed = false;
+  #pendingRelease: (() => void) | undefined;
+  readonly #searchExecutable: SearchExecutable;
 
   constructor(options: LocalProviderOptions) {
     this.#paths = new LocalPaths(options.root);
+    this.#searchExecutable = resolveSearchExecutable();
     this.#budget = Math.min(20000, options.maxResultChars ?? 20000);
     if (!Number.isSafeInteger(this.#budget) || this.#budget < 256) throw new Error("local maxResultChars must be an integer >=256");
     if (!path.isAbsolute(options.lockRoot)) throw new Error("local lockRoot must be absolute");
@@ -218,43 +224,53 @@ export class LocalCodingProvider implements FabricProvider {
   async reserveInvocation(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<() => void> {
     this.#check(context);
     if (!effectful(name)) return () => {};
+    try { this.#pendingRelease?.(); }
+    catch (error) { throw new Error("local workspace lock unavailable; uncertain cleanup from previous invocation", { cause: error }); }
     const { token, entry } = this.#preparedEntry(name, args);
     if (entry.active) throw new Error("local invocation is already reserved");
     this.#verifyLockRoot();
     const lock = path.join(this.#lockRoot, `local-${localHash(this.#paths.root)}.lock`);
-    let fd: number;
-    try { fd = fs.openSync(lock, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600); }
-    catch (error) { throw new Error("local workspace lock unavailable; concurrent or uncertain owner (never automatically broken)", { cause: error }); }
-    const owned = localIdentity(fs.fstatSync(fd));
-    try { fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, token, root: this.#paths.root })); }
-    catch (error) {
-      fs.closeSync(fd);
-      this.#verifyLockRoot();
-      if (sameLocalIdentity(fs.lstatSync(lock), owned)) fs.unlinkSync(lock);
-      throw error;
-    }
-    fs.closeSync(fd);
-    entry.active = true;
+    const owned: OwnedFile = { created: false };
     let released = false;
-    return () => {
+    const release = (): void => {
       if (released) return;
-      released = true;
-      entry.active = false;
-      this.#prepared.delete(token);
       try {
         this.#verifyLockRoot();
-        const stat = fs.lstatSync(lock);
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || !sameLocalIdentity(stat, owned)) throw new Error("local lock ownership changed; refusing to release uncertain lock");
-        fs.unlinkSync(lock);
+        if (!owned.identity) throw new Error("uncertain local lock: ownership identity unavailable; operator recovery required");
+        try {
+          const stat = fs.lstatSync(lock);
+          if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || !sameLocalIdentity(stat, owned.identity)) throw new Error("local lock ownership changed; refusing to release uncertain lock");
+          fs.unlinkSync(lock);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+        released = true;
+        entry.active = false;
+        this.#prepared.delete(token);
+        if (this.#pendingRelease === release) this.#pendingRelease = undefined;
       } catch (error) {
+        this.#pendingRelease = release;
         if (entry.committed) {
           const failure = new Error("local mutation committed; lock release failed; inspect before retrying", { cause: error });
           Object.defineProperty(failure, FABRIC_COMMIT_ACKNOWLEDGEMENT, { value: { version: 1, operation: name } });
           throw failure;
         }
-        throw error;
+        throw new Error("uncertain local lock cleanup; ownership responsibility retained", { cause: error });
       }
     };
+    try {
+      initializeOwnedFile(lock, owned, (fd) => {
+        fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, token, root: this.#paths.root }));
+      });
+      this.#verifyLockRoot();
+    } catch (error) {
+      if (!owned.created) throw new Error("local workspace lock unavailable; concurrent or uncertain owner (never automatically broken)", { cause: error });
+      try { release(); }
+      catch (cleanup) { throw new AggregateError([error, cleanup], "local lock initialization failed; uncertain cleanup", { cause: error }); }
+      throw error;
+    }
+    entry.active = true;
+    return release;
   }
   invoke(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<unknown> {
     const pending = this.#invoke(name, args, context);
@@ -332,10 +348,11 @@ export class LocalCodingProvider implements FabricProvider {
   async #rg(args: string[], context: FabricInvocationContext): Promise<string> {
     this.#check(context);
     const signal = context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal;
+    verifySearchExecutable(this.#searchExecutable);
     const output = await new Promise<string>((resolve, reject) => {
-      execFile("rg", ["--no-config", "--sort", "path", ...args], { cwd: this.#paths.root, encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: Math.max(1, Math.min(10000, Math.floor(context.deadline?.remainingMs() ?? 10000))), killSignal: "SIGKILL", signal }, (error, stdout, stderr) => {
+      execFile(this.#searchExecutable.path, ["--no-config", "--sort", "path", ...args], { cwd: this.#paths.root, env: searchEnvironment(), encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: Math.max(1, Math.min(10000, Math.floor(context.deadline?.remainingMs() ?? 10000))), killSignal: "SIGKILL", signal }, (error, stdout, stderr) => {
         if (!error || (error.code === 1 && !error.killed)) resolve(stdout);
-        else if (error.code === "ENOENT") reject(new Error("local search requires external ripgrep (rg) on PATH"));
+        else if (error.code === "ENOENT") reject(new Error("ripgrep (rg) is required for local.grep/local.find but was not found"));
         else reject(new Error(`local rg failed or exceeded bounded work/output: ${String(error.code)} ${stderr.slice(0, 500)}`, { cause: error }));
       });
     });
@@ -343,21 +360,22 @@ export class LocalCodingProvider implements FabricProvider {
     return output;
   }
   async #search(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<LocalFindResult | LocalGrepResult> {
+    const searchMs = Math.max(1, Math.min(10000, context.deadline?.remainingMs() ?? 10000));
+    context = { ...context, deadline: new FabricDeadline(searchMs, searchMs) };
     const base = this.#paths.check((args.path as string | undefined) ?? ".");
     const glob = name === "find" ? args.pattern as string : args.glob as string | undefined;
     const enumeration = await this.#rg(["--files", "--null", "--", base.path], context);
     let files = enumeration.split("\0").filter(Boolean);
-    if (files.length > 10000) throw new Error("local search exceeds 10000-file work limit");
+    if (!glob && files.length > 10000) throw new Error("local search exceeded 10000-file work limit; narrow path or glob");
     if (glob) {
       // Positive rg globs can override hidden/ignore rules. Intersect with the
       // normal enumeration so a glob only narrows scope, never expands it.
       const filtered = await this.#rg(["--files", "--null", "--glob", glob, "--", base.path], context);
       const selected = new Set(filtered.split("\0").filter(Boolean));
-      if (selected.size > 10000) throw new Error("local glob enumeration exceeds 10000-file work limit");
       files = files.filter((file) => selected.has(file));
     }
-    if (files.length > 10000) throw new Error("local search exceeds 10000-file work limit");
-    const checked = files.map((file) => this.#paths.check(file));
+    if (files.length > 10000) throw new Error("local search exceeded 10000-file work limit; narrow path or glob");
+    const checked = files.map((file) => { this.#check(context); return this.#paths.check(file); });
     for (const file of checked) if (!file.stat?.isFile()) throw new Error("local search requires regular files");
     const limit = (args.limit as number | undefined) ?? 100;
     if (name === "find") {
@@ -373,29 +391,44 @@ export class LocalCodingProvider implements FabricProvider {
     if (!files.length) return result;
     const candidates = checked.filter((item) => item.stat!.size <= LOCAL_MAX_FILE_BYTES);
     if (candidates.length !== checked.length) result.truncated = true;
-    if (files.join("\0").length > 128000 || candidates.reduce((sum, item) => sum + item.stat!.size, 0) > 32 * 1024 * 1024) throw new Error("local.grep exceeds aggregate file/path work limit");
-    // Safety checks apply even to binary files. Only verified text files are
-    // passed to rg. Skipping nontext is enumeration policy, not a JS search.
-    const snapshots: LocalPathSnapshot[] = [];
-    for (const file of candidates) {
-      this.#check(context);
-      try { snapshots.push(this.#paths.read(file.path).snapshot); }
-      catch (error) { if (!(error instanceof LocalNonTextError)) throw error; }
-    }
-    if (!snapshots.length) return result;
-    const output = await this.#rg(["--json", "--max-count", String(limit + 1), ...(args.literal ? ["--fixed-strings"] : []), ...(args.ignoreCase ? ["--ignore-case"] : []), "--regexp", args.pattern as string, "--", ...snapshots.map((item) => item.path)], context);
-    for (const snapshot of snapshots) this.#paths.revalidate(snapshot);
-    for (const line of output.split("\n")) {
-      if (!line) continue;
-      const record = JSON.parse(line) as { type: string; data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } } };
-      if (record.type !== "match") continue;
-      if (result.matches.length >= limit) { result.truncated = true; break; }
-      const data = record.data;
-      if (typeof data?.path?.text !== "string" || !Number.isSafeInteger(data.line_number) || !data.line_number || typeof data.lines?.text !== "string") throw new Error("local rg returned unsupported non-UTF-8 match data");
-      const text = data.lines.text.replace(/\r?\n$/u, "");
-      result.matches.push({ path: this.#paths.relative(this.#paths.check(data.path.text).path), line: data.line_number, text: text.slice(0, 500) });
-      if (text.length > 500) result.truncated = true;
-      if (!this.#fits(result)) { result.matches.pop(); result.truncated = true; break; }
+    let searchedBytes = 0;
+    let searchedPathChars = 0;
+    let outputBytes = 0;
+    // Validate selected aliases above; snapshot/search bounded batches only.
+    // Revalidate consumed snapshots before exposing results. Disclose unsearched files.
+    for (let index = 0; index < candidates.length;) {
+      const snapshots: LocalPathSnapshot[] = [];
+      let batchBytes = 0;
+      while (index < candidates.length && snapshots.length < 32) {
+        const file = candidates[index]!;
+        if (snapshots.length && batchBytes + file.stat!.size > LOCAL_MAX_FILE_BYTES) break;
+        index++;
+        this.#check(context);
+        searchedBytes += file.stat!.size;
+        searchedPathChars += file.path.length + 1;
+        if (searchedBytes > 32 * 1024 * 1024 || searchedPathChars > 128000) throw new Error("local.grep exceeded aggregate search work limit; narrow path or glob");
+        batchBytes += file.stat!.size;
+        try { snapshots.push(this.#paths.read(file.path).snapshot); }
+        catch (error) { if (!(error instanceof LocalNonTextError)) throw error; }
+      }
+      if (!snapshots.length) continue;
+      const output = await this.#rg(["--json", "--max-count", String(limit - result.matches.length + 1), ...(args.literal ? ["--fixed-strings"] : []), ...(args.ignoreCase ? ["--ignore-case"] : []), "--regexp", args.pattern as string, "--", ...snapshots.map((item) => item.path)], context);
+      outputBytes += Buffer.byteLength(output);
+      if (outputBytes > 2 * 1024 * 1024) throw new Error("local rg exceeded bounded work/output; narrow path or glob");
+      for (const snapshot of snapshots) this.#paths.revalidate(snapshot);
+      for (const line of output.split("\n")) {
+        if (!line) continue;
+        const record = JSON.parse(line) as { type: string; data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } } };
+        if (record.type !== "match") continue;
+        if (result.matches.length >= limit) { result.truncated = true; return this.#bounded(result); }
+        const data = record.data;
+        if (typeof data?.path?.text !== "string" || !Number.isSafeInteger(data.line_number) || !data.line_number || typeof data.lines?.text !== "string") throw new Error("local rg returned unsupported non-UTF-8 match data");
+        const text = data.lines.text.replace(/\r?\n$/u, "");
+        result.matches.push({ path: this.#paths.relative(this.#paths.check(data.path.text).path), line: data.line_number, text: text.slice(0, 500) });
+        if (text.length > 500) result.truncated = true;
+        if (!this.#fits(result)) { result.matches.pop(); result.truncated = true; return this.#bounded(result); }
+      }
+      if (result.matches.length >= limit && index < candidates.length) { result.truncated = true; break; }
     }
     return this.#bounded(result);
   }
@@ -407,28 +440,29 @@ export class LocalCodingProvider implements FabricProvider {
     const sha256 = localHash(proposed);
     if (snapshot.file?.sha256 === sha256) return this.#bounded({ path: this.#paths.relative(snapshot.path), changed: false, sha256, bytes: Buffer.byteLength(proposed), identity: snapshot.file.identity });
     const temporary = path.join(path.dirname(snapshot.path), `.fabric-local-${randomUUID()}.tmp`);
-    const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
-    const owned = localIdentity(fs.fstatSync(fd));
+    const owned: OwnedFile = { created: false };
     let published = false;
+    let operationError: unknown;
     try {
-      try {
+      initializeOwnedFile(temporary, owned, (fd) => {
         fs.writeFileSync(fd, proposed, "utf8");
         fs.fchmodSync(fd, snapshot.file ? snapshot.file.mode & 0o777 : 0o600);
         fs.fsyncSync(fd);
-      } finally { fs.closeSync(fd); }
+      });
       this.#paths.revalidate(snapshot);
       this.#check(context);
-      if (!sameLocalIdentity(fs.lstatSync(temporary), owned)) throw new Error("local temporary file identity changed");
+      if (!sameLocalIdentity(fs.lstatSync(temporary), owned.identity!)) throw new Error("local temporary file identity changed");
       if (snapshot.file) fs.renameSync(temporary, snapshot.path);
       else { fs.linkSync(temporary, snapshot.path); }
       published = true;
       entry.committed = true;
       if (!snapshot.file) fs.unlinkSync(temporary);
       const actual = this.#paths.read(snapshot.path).snapshot.file!;
-      if (actual.sha256 !== sha256 || !sameLocalIdentity(actual.identity, owned)) throw new Error("local published verification conflict");
+      if (actual.sha256 !== sha256 || !sameLocalIdentity(actual.identity, owned.identity!)) throw new Error("local published verification conflict");
       this.#check(context);
       return this.#bounded({ path: this.#paths.relative(snapshot.path), changed: true, sha256, bytes: actual.size, identity: actual.identity });
     } catch (error) {
+      operationError = error;
       if (published) {
         const failure = new Error("local mutation committed; verification/acknowledgement failed; inspect file before retrying", { cause: error });
         Object.defineProperty(failure, FABRIC_COMMIT_ACKNOWLEDGEMENT, { value: { version: 1, operation: name } });
@@ -437,7 +471,14 @@ export class LocalCodingProvider implements FabricProvider {
       throw error;
     } finally {
       // Remove only our own temporary inode, never an attacker replacement.
-      try { if (sameLocalIdentity(fs.lstatSync(temporary), owned)) fs.unlinkSync(temporary); }
+      try {
+        if (owned.created) {
+          if (!owned.identity) throw new Error("uncertain local temporary file: ownership identity unavailable");
+          const current = fs.lstatSync(temporary);
+          if (!current.isFile() || current.isSymbolicLink() || !sameLocalIdentity(current, owned.identity)) throw new Error("local temporary file ownership changed; refusing cleanup");
+          fs.unlinkSync(temporary);
+        }
+      }
       catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
           if (published) {
@@ -445,6 +486,7 @@ export class LocalCodingProvider implements FabricProvider {
             Object.defineProperty(failure, FABRIC_COMMIT_ACKNOWLEDGEMENT, { value: { version: 1, operation: name } });
             throw failure;
           }
+          if (operationError) throw new AggregateError([operationError, error], "local mutation and temporary cleanup failed; uncertain file ownership", { cause: operationError });
           throw error;
         }
       }

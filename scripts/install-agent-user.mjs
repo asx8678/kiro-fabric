@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,10 +75,20 @@ const assertTrustedExecutable = (target) => {
   const absolute = path.resolve(target);
   const stats = fs.lstatSync(absolute);
   const currentUid = typeof process.getuid === "function" ? process.getuid() : undefined;
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 ||
-      (currentUid !== undefined && stats.uid !== currentUid && stats.uid !== 0) ||
-      (process.platform !== "win32" && ((stats.mode & 0o022) !== 0 || (stats.mode & 0o111) === 0))) {
-    throw new Error(`unsafe Node executable: ${absolute}`);
+  const reasons = [];
+  if (!stats.isFile()) reasons.push("not a regular file");
+  if (stats.isSymbolicLink()) reasons.push("symbolic link");
+  if (stats.nlink !== 1) reasons.push("link count must be 1");
+  if (currentUid !== undefined && stats.uid !== currentUid && stats.uid !== 0) reasons.push("owner must be current user or root");
+  if (process.platform !== "win32") {
+    if ((stats.mode & 0o020) !== 0) reasons.push("group-writable");
+    if ((stats.mode & 0o002) !== 0) reasons.push("world-writable");
+    if ((stats.mode & 0o111) === 0) reasons.push("no execute bits");
+  }
+  if (reasons.length > 0) {
+    // Bound and quote the path so unusual executable names cannot forge log lines.
+    const displayPath = JSON.stringify(absolute.length > 512 ? `${absolute.slice(0, 512)}…` : absolute);
+    throw new Error(`unsafe Node executable: ${displayPath}; ${reasons.join(", ")} (uid=${stats.uid}, currentUid=${currentUid ?? "unavailable"}, mode=${(stats.mode & 0o7777).toString(8)}, nlink=${stats.nlink})`);
   }
   return absolute;
 };
@@ -374,6 +385,8 @@ const inspectTarget = (kiroHome, installPaths, generationName) => {
   if (previous) {
     assertInstallationUnmodified(installPaths, previous);
     assertNoUnownedRuntimeGenerations(installPaths, previous);
+    // Read-only health validates existing ownership, not admission of an update.
+    if (generationName === undefined) return previous;
     if (!previous.legacy && !previous.manifest.runtimeGenerations.some((record) => record.name === generationName) &&
         previous.manifest.runtimeGenerations.length >= MAX_RUNTIME_GENERATIONS) {
       throw new Error("runtime generation count exceeds its update bound; no generation was removed");
@@ -387,7 +400,7 @@ const inspectTarget = (kiroHome, installPaths, generationName) => {
   }
   else {
     assertNoUnownedRuntimeGenerations(installPaths, undefined);
-    assertUnownedTargetsAbsent(installPaths, generationName);
+    if (generationName !== undefined) assertUnownedTargetsAbsent(installPaths, generationName);
   }
   return previous;
 };
@@ -947,11 +960,86 @@ export const uninstallUserAgent = (env = process.env, userHome = homedir(), opti
   };
 };
 
+// Offline diagnostics deliberately never acquire an install lock or initialize data.
+const doctorUserAgent = () => {
+  const checks = [];
+  const record = (id, status, message) => checks.push({ id, status, message });
+  const check = (id, action, success, failure) => {
+    try { const result = action(); record(id, "PASS", success); return result; }
+    catch { record(id, "FAIL", failure); return undefined; }
+  };
+  // Ignore empty/relative PATH entries: never resolve a tool from the workspace.
+  const executable = (name) => {
+    for (const directory of (process.env.PATH ?? "").split(path.delimiter).slice(0, 128)) {
+      if (!path.isAbsolute(directory)) continue;
+      const candidate = path.join(directory, name);
+      if (!lstat(candidate)) continue;
+      const resolved = assertTrustedExecutable(fs.realpathSync(candidate));
+      fs.accessSync(resolved, fs.constants.X_OK);
+      return resolved;
+    }
+    throw new Error("executable unavailable");
+  };
+  const nodePath = check("node", () => {
+    if (!/^v?(?:2[4-9]|[3-9]\d|\d{3,})\./u.test(process.version)) throw new Error("Node too old");
+    return assertTrustedExecutable(fs.realpathSync(process.execPath));
+  }, `Node ${process.version} (>=24); executable trust verified.`, "Use Node >=24 with a trusted executable; no permissions were changed.");
+  check("rg", () => {
+    const command = executable("rg");
+    const result = spawnSync(command, ["--no-config", "--version"], {
+      env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" },
+      cwd: path.parse(command).root, encoding: "utf8", timeout: 5000, maxBuffer: 4096,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (result.error || result.status !== 0 || !/^ripgrep \d+\.\d+/u.test(result.stdout)) throw new Error("rg version unavailable");
+    record("rg-version", "PASS", result.stdout.match(/^ripgrep \d+\.\d+(?:\.\d+)?/u)[0].slice(0, 200));
+  }, "Trusted absolute rg reports a ripgrep version with config disabled and a clean environment.",
+  "Install trusted ripgrep on an absolute PATH entry; version probe failed or executable is missing/unsafe.");
+  check("kiro-cli", () => executable("kiro-cli"),
+    "Trusted Kiro CLI available (not launched; v3/session support unverified).",
+    "Install a trusted kiro-cli on an absolute PATH entry to launch the Agent.");
+  const kiroHome = check("kiro-home", () => resolveKiroHome(process.env, homedir(), { workspaceRoot: process.cwd() }),
+    "KIRO_HOME passes installer safety checks.", "KIRO_HOME is unsafe or invalid; choose a safe absolute private location. No repair attempted.");
+  if (kiroHome) {
+    check("installation", () => {
+      const targets = paths(kiroHome);
+      const previous = inspectTarget(kiroHome, targets);
+      if (!previous || !nodePath) throw new Error("installation or Node unavailable");
+      const runtimeRoot = previous.legacy?.runtimeRoot ?? path.join(targets.runtime, previous.manifest.currentRuntime);
+      validateInstalledAgentProfile(targets.profile, {
+        nodePath, runtimeRoot, dataRoot: targets.data,
+        skillPath: path.join(targets.skills, "fabric-exec", "SKILL.md"), installRoot: targets.base,
+      });
+    }, "Owned profile, skill and runtime inventories and installed profile bindings are valid.",
+    "Installation missing, unsafe, modified, or incompatible with this Node. Review/reinstall explicitly; doctor changes nothing.");
+    const config = path.join(paths(kiroHome).data, "fabric", "config", "mcp.json");
+    check("mcp-file-safety", () => {
+      // Inspect metadata only; never parse config, credentials, or provider definitions.
+      let current = kiroHome;
+      for (const part of path.relative(kiroHome, config).split(path.sep)) {
+        current = path.join(current, part);
+        if (!lstat(current)) {
+          record("mcp-file-presence", "WARNING", "Default MCP config absent; no file was created. Explicit/session config is not inspected.");
+          return;
+        }
+        if (current === config) {
+          const stat = assertSafeFile(current, "MCP config");
+          if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) throw new Error("MCP config must be private");
+        }
+        else assertSafeDirectory(current, { private: true });
+      }
+      record("mcp-file-presence", "PASS", "Default MCP config present; contents were not read. Explicit/session config is not inspected.");
+    }, "No unsafe default MCP config path detected (metadata only).", "Default MCP config path is unsafe; review ownership, links and permissions manually.");
+  } else record("installation", "WARNING", "Installation/config checks skipped because KIRO_HOME is unsafe.");
+  record("live-session", "WARNING", "Offline checks cannot prove dynamic workspace binding, client roots/elicitation, or configured MCP connectivity. In a running Kiro Fabric session execute: return await fabric.info()");
+  return { mode: "doctor", ok: !checks.some((entry) => entry.status === "FAIL"), checks };
+};
 const parseArguments = (argv) => {
-  const options = { uninstall: false, purgeData: false, migratePowerData: undefined, packageRoot: undefined };
+  const options = { doctor: false, uninstall: false, purgeData: false, migratePowerData: undefined, packageRoot: undefined };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--uninstall") options.uninstall = true;
+    if (argument === "--doctor") options.doctor = true;
+    else if (argument === "--uninstall") options.uninstall = true;
     else if (argument === "--purge-data") options.purgeData = true;
     else if (argument === "--migrate-power-data") {
       const value = argv[index + 1];
@@ -961,6 +1049,9 @@ const parseArguments = (argv) => {
     } else if (argument.startsWith("--")) throw new Error(`unknown option: ${argument}`);
     else if (options.packageRoot === undefined) options.packageRoot = argument;
     else throw new Error("only one Agent package path may be supplied");
+  }
+  if (options.doctor && (options.uninstall || options.purgeData || options.migratePowerData !== undefined || options.packageRoot !== undefined)) {
+    throw new Error("--doctor cannot be combined with install/uninstall arguments");
   }
   if (options.uninstall && options.packageRoot !== undefined) throw new Error("uninstall does not accept an Agent package path");
   if (options.uninstall && options.migratePowerData !== undefined) throw new Error("uninstall cannot migrate Power data");
@@ -973,11 +1064,12 @@ const invokedAsMain = process.argv[1] !== undefined &&
 if (invokedAsMain) {
   try {
     const arguments_ = parseArguments(process.argv.slice(2));
-    const result = arguments_.uninstall
+    const result = arguments_.doctor ? doctorUserAgent() : arguments_.uninstall
       ? uninstallUserAgent(process.env, homedir(), { purgeData: arguments_.purgeData })
       : installUserAgent(arguments_.packageRoot ?? MODULE_ROOT, process.env, homedir(), { migratePowerData: arguments_.migratePowerData });
     process.stdout.write(`${JSON.stringify(result)}\n`);
-    if (!arguments_.uninstall) {
+    if (arguments_.doctor) process.exitCode = result.ok ? 0 : 1;
+    else if (!arguments_.uninstall) {
       process.stdout.write(`Validate: kiro-cli agent validate --path "${result.profile}"\nList: kiro-cli agent list\nLaunch: kiro-cli --v3 --agent kiro-fabric\nDefault (optional): kiro-cli agent set-default kiro-fabric\n`);
     }
   } catch (error) {

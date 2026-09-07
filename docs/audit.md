@@ -118,3 +118,21 @@ Continuity evidence is fail-closed at the ACP boundary. The real-client evidence
 Hermetic subprocess coverage separately verifies that two MCP processes can concurrently share one workspace's durable memory and compare-and-set state without corruption. Another test kills an MCP process abruptly, starts a distinct process, restores the exact durable memory/state, and successfully extends it. These tests cover component storage behavior only, not authenticated Kiro selection, compaction, process reuse, or resume behavior.
 
 Hermetic certification cannot claim authenticated-client behavior. `certify:agent:real` is designed to bind the extracted package digest, archive digest, Git commit, Kiro executable path/version/digest, exact argv, global profile, OS process observations, ACP recordings, Fabric traces, and per-phase transcripts. During the audit of starting SHA `5a95ec31edd2370619d472b8c775e14ad59d609e`, the installed Kiro 2.21.0 client selected and started the agent-owned MCP server but rejected the then-advertised `fabric_workspace` top-level union before model execution. The replacement non-combinator schema and complete lifecycle still require a fresh authenticated run on the exact final commit; agent selection, native-tool visibility, form elicitation, interactive compaction, shutdown, and resume remain blocked until that run produces objective evidence.
+
+## Reliability repair follow-up (current inventory; not historical qualification)
+
+This appended inventory records the later ownership, acknowledgement, prerequisite and diagnostics repairs. It does not change any historical audit result or claim authenticated release qualification. Baseline at `220f22abb55fbe898d6bbff37869b79830805667`: typecheck/build passed, 36 modules / 412 tests passed. Current verification is reported separately at handoff.
+
+- `src/providers/local-executable.ts` — pinned trusted ripgrep prerequisite and clean search environment.
+- `src/providers/owned-file.ts` — small exact-identity initialization and one-attempt descriptor-close primitive.
+- `tests/installer-executable-trust.test.ts` — precise Node trust rejection matrix.
+- `tests/release-workflow.test.ts` — actual shell tag comparison and platform prerequisite/coverage gates.
+- `tests/agent-doctor.test.ts` — bounded read-only offline diagnostics and update-capacity separation.
+- `tests/local-executable.test.ts` — missing, unsafe, replaced executables and environment isolation.
+- `tests/local-lock-reliability.test.ts` — acquisition/release faults and foreign inode protection.
+- `tests/local-diagnostics.test.ts` — shell head/tail, guest/projection diagnostics and local commit proof.
+- `tests/local-search-work.test.ts` — large roots, eligible glob intersection, consumed-work bounds and timeout.
+- `tests/state-reliability.test.ts` — exact ownership and common state commit acknowledgement.
+- `tests/memory-delete-ack.test.ts` — committed delete proof through cleanup/cancellation/deadline.
+- `tests/memory-lock-safety.test.ts` — unidentified/replacement/live/stale owner safety.
+- `tests/owned-file.test.ts` — explicit uncertain close without unsafe descriptor retry.

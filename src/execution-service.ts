@@ -1,4 +1,5 @@
 import type { FabricConfig } from "./config.js";
+import { LocalShellExitError, type LocalShellResult } from "./providers/local-shell.js";
 import { ActionRegistry, type FabricCallAudit } from "./core/action-registry.js";
 import type { FabricInvocationContext, ResolvedFabricAction } from "./protocol.js";
 import { fabricGuestDeclarations } from "./runtime/guest-types.js";
@@ -43,6 +44,8 @@ export interface FabricExecutionResult {
   elapsedMs: number;
   error?: string;
   typeErrors?: FabricTypeError[];
+  /** Last ordinary nonzero shell exit, separate from error text and telemetry. */
+  lastShellFailure?: LocalShellResult;
   effectiveTimeoutMs: number;
 }
 
@@ -177,6 +180,7 @@ export class FabricExecutionService {
     let workspaceCalls = false;
     let switchRequested = false;
     const localSettlements = new Set<Promise<unknown>>();
+    let lastShellFailure: LocalShellResult | undefined;
     const providerContext = (signal: AbortSignal, deadline: import("./runtime/deadline.js").FabricDeadline) => ({
       cwd: this.cwd,
       signal,
@@ -258,6 +262,10 @@ export class FabricExecutionService {
         if (actionRef.startsWith("local.")) localSettlements.add(invocation);
         let value: unknown;
         try { value = await invocation; }
+        catch (error) {
+          if (actionRef === "local.shell" && error instanceof LocalShellExitError) lastShellFailure = error.result;
+          throw error;
+        }
         finally { localSettlements.delete(invocation); }
         if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value), ...(actionRef !== ref ? { actionRef } : {}) };
         return value;
@@ -331,6 +339,7 @@ export class FabricExecutionService {
       audits,
       elapsedMs: performance.now() - started,
       ...(outputError ? { error: outputError } : {}),
+      ...(status === "failed" && lastShellFailure ? { lastShellFailure } : {}),
       effectiveTimeoutMs: result.effectiveTimeoutMs,
     };
   }

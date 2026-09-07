@@ -26,6 +26,8 @@ type LocalFindResult = { paths: string[]; truncated: boolean };
 type LocalListResult = { entries: { path: string; type: "file" | "directory" }[]; truncated: boolean };
 type LocalMutationResult = { path: string; changed: boolean; sha256: string; bytes: number; identity: LocalIdentity };
 type LocalShellResult = { ok: boolean; exitCode: number | null; signal: string | null; stdout: string; stderr: string; truncated: boolean; stdoutTruncated: boolean; stderrTruncated: boolean };
+/** Only ordinary nonzero local.shell rejections supply result. Hard failures do not. */
+interface Error { readonly result?: LocalShellResult }
 declare const local: {
   /** UTF-8, 1-based lines; default 200, max 2000. Files <=2MiB; oversized single lines fail. */
   read(args: { path: string; offset?: number; limit?: number }): Promise<LocalReadResult>;

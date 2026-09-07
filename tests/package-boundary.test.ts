@@ -192,6 +192,16 @@ describe("Agent product boundary", () => {
       // Reuse only the repository's lock, pinned resolution policy, and
       // populated content-addressable store. The extracted tarball remains a
       // clean unrelated tree and cannot resolve through checkout modules.
+      // pnpm pack strips development metadata including packageManager. A
+      // fresh Corepack home otherwise selects its ambient latest version for
+      // this unrelated tree. Restore only the fixture's provisioning pin,
+      // alongside its lock/workspace policy; shipped dependency bytes stay intact.
+      const packageManager = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).packageManager;
+      expect(packageManager).toBe("pnpm@11.20.0");
+      fs.writeFileSync(path.join(packageRoot, "package.json"), JSON.stringify({ ...extractedPackage, packageManager }));
+      const version = spawnSync("pnpm", ["--version"], { cwd: packageRoot, encoding: "utf8", timeout: 60_000 });
+      expect(version.status, version.stderr).toBe(0);
+      expect(version.stdout.trim()).toBe(packageManager.slice("pnpm@".length));
       fs.copyFileSync(path.join(root, "pnpm-lock.yaml"), path.join(packageRoot, "pnpm-lock.yaml"));
       fs.copyFileSync(path.join(root, "pnpm-workspace.yaml"), path.join(packageRoot, "pnpm-workspace.yaml"));
       const install = spawnSync("pnpm", [
