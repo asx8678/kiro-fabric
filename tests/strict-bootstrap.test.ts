@@ -32,7 +32,7 @@ const servers: Array<{ close(): Promise<void> }> = [];
 beforeEach(() => { wire.handlers.clear(); wire.approve = false; wire.elicitation = true; wire.forms.length = 0; wire.onForm = undefined; });
 afterEach(async () => { await Promise.all(servers.splice(0).map((server) => server.close())); vi.restoreAllMocks(); for (const root of temporary.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
-const fixture = async (rootCount = 1, unavailable = false) => {
+const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "data" | undefined = undefined) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "strict-bootstrap-")); temporary.push(base);
   const runtimeRoot = path.join(base, "runtime"); const dataRoot = path.join(base, "data");
   fs.mkdirSync(runtimeRoot); fs.mkdirSync(dataRoot);
@@ -43,7 +43,7 @@ const fixture = async (rootCount = 1, unavailable = false) => {
     roots: projects.slice(0, rootCount).map((root) => ({ uri: pathToFileURL(root).href, name: path.basename(root) })),
     revision: 1, observedAt: Date.now(),
   };
-  const server = await createKiroMcpServer({ runtimeRoot, dataRoot, version: "fixture", workspaceContext: {
+  const server = await createKiroMcpServer({ runtimeRoot, dataRoot, ...(launch ? { launchWorkspaceRoot: launch === "project" ? projects[0]! : dataRoot } : {}), version: "fixture", workspaceContext: {
     current: async () => snapshot, invalidate() {}, subscribe: () => ({ dispose() {} }),
   }, prepareRuntime: (options) => createKiroRuntime({ ...options, config: normalizeFabricConfig({
     executor: { timeoutMs: 5000, maxTimeoutMs: 180000 }, mcp: { enabled: false },
@@ -55,6 +55,30 @@ const fixture = async (rootCount = 1, unavailable = false) => {
 };
 
 describe("strict checked workspace bootstrap", () => {
+  it("automatically reads the launch project without roots or approval", async () => {
+    const f = await fixture(0, false, "project");
+    const response = await f.call('return await local.read({path:"fixture.txt"})');
+    expect(response.isError).not.toBe(true);
+    expect(f.value(response)).toMatchObject({ text: "source:project-a\n" });
+    expect(wire.forms).toHaveLength(0);
+  });
+  it("does not fall back after client roots are removed", async () => {
+    const f = await fixture(1, false, "project");
+    expect((await f.call('return await local.read({path:"fixture.txt"})')).isError).not.toBe(true);
+    f.snapshot({ status: "explicitly-empty", roots: [], revision: 2, observedAt: Date.now() });
+    expect((await f.call('return await local.read({path:"fixture.txt"})')).isError).toBe(true);
+  });
+  it("does not override ambiguous client roots", async () => {
+    const f = await fixture(2, false, "project");
+    expect((await f.call('return await local.read({path:"fixture.txt"})')).isError).toBe(true);
+    expect(f.value(await f.call('return await fabric.workspace({action:"list"})')).roots).toHaveLength(2);
+  });
+  it("never uses a launch fallback during roots failure or for data storage", async () => {
+    for (const [unavailable, launch] of [[true, "project"], [false, "data"]] as const) {
+      const f = await fixture(0, unavailable, launch);
+      expect((await f.call('return await local.read({path:"fixture.txt"})')).isError).toBe(true);
+    }
+  });
   it("first execution auto-binds the single verified root and reads through local", async () => {
     const f = await fixture();
     const response = await f.call('return await local.read({path:"fixture.txt"})');

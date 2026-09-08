@@ -7,6 +7,7 @@ export interface KiroAgentLaunchContext {
   runtimeRoot: string;
   dataRoot: string;
   managedGeneration?: ManagedGenerationContext;
+  launchWorkspaceRoot?: string;
 }
 
 const canonicalDirectory = (value: string | undefined, name: string): string => {
@@ -40,5 +41,9 @@ export const resolveKiroAgentLaunchContext = (
     throw new Error("runtime and data roots must not contain one another");
   }
   const managedGeneration = inferManagedGeneration(runtimeRoot, env);
-  return { runtimeRoot, dataRoot, ...(managedGeneration ? { managedGeneration } : {}) };
+  // Only an explicit launcher handoff may supply a project. Never infer it from
+  // the backend cwd, PWD, runtime directory, or model input.
+  const launchWorkspaceRoot = env.KIRO_FABRIC_LAUNCH_WORKSPACE === undefined ? undefined
+    : canonicalDirectory(env.KIRO_FABRIC_LAUNCH_WORKSPACE, "KIRO_FABRIC_LAUNCH_WORKSPACE");
+  return { runtimeRoot, dataRoot, ...(managedGeneration ? { managedGeneration } : {}), ...(launchWorkspaceRoot ? { launchWorkspaceRoot } : {}) };
 };

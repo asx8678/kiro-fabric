@@ -205,7 +205,7 @@ export async function runManager(argv, internal = {}) {
     if (owner?.status === "retired" && ["start", "update", "rollback"].includes(options.command)) throw new InstallerError("Fabric is retired; run install before this command", 4, "prerequisite");
     if (options.command === "start") {
       await inspectCompleteInstallation(home, { verifyGenerations: true }); const kiro = checkKiro();
-      return await new Promise((resolve, reject) => { const child = spawn(kiro.executable, ["--v3", "--agent", "kiro-fabric"], { cwd: process.cwd(), env: { ...process.env, KIRO_HOME: home }, stdio: "inherit" }); child.once("error", reject); child.once("exit", code => resolve(code ?? 1)); });
+      return await new Promise((resolve, reject) => { const child = spawn(kiro.executable, ["--v3", "--agent", "kiro-fabric"], { cwd: process.cwd(), env: { ...process.env, KIRO_HOME: home, KIRO_FABRIC_LAUNCH_WORKSPACE: fs.realpathSync(process.cwd()) }, stdio: "inherit" }); child.once("error", reject); child.once("exit", code => resolve(code ?? 1)); });
     }
     const mutating = ["install", "update", "rollback", "uninstall"].includes(options.command);
     if (mutating && (!process.stdin.isTTY || options.nonInteractive || options.json) && !options.yes) throw new InstallerError("Noninteractive mutation requires --yes and an explicit command", 2, "usage");

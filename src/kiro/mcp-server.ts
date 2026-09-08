@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import fs, { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -72,6 +73,8 @@ export interface KiroMcpServerOptions {
   runtimeRoot: string;
   dataRoot: string;
   kiroHome?: string;
+  /** Explicit user-selected project supplied by the installed start launcher; never MCP cwd. */
+  launchWorkspaceRoot?: string;
   managedSearch?: KiroRuntimeOptions["managedSearch"];
   version?: string;
   runtime?: KiroRuntime;
@@ -215,6 +218,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     load: async () => (await server.listRoots(undefined, { timeout: 2_000 })).roots,
   });
   let workspaceSnapshot: KiroWorkspaceSnapshot | undefined;
+  let clientRootsObserved = false;
   let runtime = options.runtime;
   let runtimeIdentity = runtime ? "<injected>" : "";
   let runtimeGeneration = runtime ? 1 : 0;
@@ -250,7 +254,13 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       workspaceSnapshot = snapshot;
       const before = binding.bindingIdentity();
       if (snapshot.status !== "temporarily-unavailable") {
-        binding.updateClientRoots(snapshot.roots);
+        if (snapshot.roots.length > 0) clientRootsObserved = true;
+        // Client roots always win. Once advertised, their removal must not
+        // silently reactivate the launch directory. Failures never use fallback.
+        const roots = !clientRootsObserved && snapshot.status === "explicitly-empty" && options.launchWorkspaceRoot
+          ? [{ uri: pathToFileURL(options.launchWorkspaceRoot).href }]
+          : snapshot.roots;
+        binding.updateClientRoots(roots);
       }
       const observation = binding.workspaceObservation();
       const contextBlocks = snapshot.status === "temporarily-unavailable" &&

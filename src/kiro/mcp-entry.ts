@@ -33,7 +33,7 @@ export const startKiroMcpServer = (): Promise<{ close(): Promise<void> }> =>
           validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
         }
         const { createKiroMcpServer } = await import("./mcp-server.js");
-        server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...(managedSearch ? { managedSearch } : {}) });
+        server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...(launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}), ...(managedSearch ? { managedSearch } : {}) });
       } finally { release?.(); }
       return server;
     } catch (error) {

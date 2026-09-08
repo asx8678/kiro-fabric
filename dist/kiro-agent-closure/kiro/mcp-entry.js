@@ -731,7 +731,8 @@ var resolveKiroAgentLaunchContext = (env = process.env) => {
     throw new Error("runtime and data roots must not contain one another");
   }
   const managedGeneration = inferManagedGeneration(runtimeRoot, env);
-  return { runtimeRoot, dataRoot, ...managedGeneration ? { managedGeneration } : {} };
+  const launchWorkspaceRoot = env.KIRO_FABRIC_LAUNCH_WORKSPACE === void 0 ? void 0 : canonicalDirectory(env.KIRO_FABRIC_LAUNCH_WORKSPACE, "KIRO_FABRIC_LAUNCH_WORKSPACE");
+  return { runtimeRoot, dataRoot, ...managedGeneration ? { managedGeneration } : {}, ...launchWorkspaceRoot ? { launchWorkspaceRoot } : {} };
 };
 
 // src/kiro/mcp-entry.ts
@@ -751,8 +752,8 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         const manifestHash = createHash4("sha256").update(readFileSync(path5.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-ADQ7O4NA.js");
-      server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...managedSearch ? { managedSearch } : {} });
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-RU3AN2Z7.js");
+      server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {} });
     } finally {
       release?.();
     }

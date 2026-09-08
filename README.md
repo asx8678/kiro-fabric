@@ -17,7 +17,7 @@ pnpm run agent:install
 
 # From your project:
 cd /path/to/your/project
-kiro-cli --v3 --agent kiro-fabric
+"$HOME/.kiro/kiro-fabric/bin/kiro-fabric" start
 ```
 
 ## Execution

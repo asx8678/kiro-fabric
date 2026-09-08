@@ -7206,6 +7206,7 @@ var require_dist = __commonJS({
 import { randomBytes as randomBytes5 } from "node:crypto";
 import fs12, { readFileSync, realpathSync } from "node:fs";
 import path11 from "node:path";
+import { pathToFileURL } from "node:url";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
 function isZ4Schema(s) {
@@ -25240,6 +25241,7 @@ var createKiroMcpServer = async (options) => {
     load: async () => (await server.listRoots(void 0, { timeout: 2e3 })).roots
   });
   let workspaceSnapshot;
+  let clientRootsObserved = false;
   let runtime = options.runtime;
   let runtimeIdentity = runtime ? "<injected>" : "";
   let runtimeGeneration = runtime ? 1 : 0;
@@ -25274,7 +25276,9 @@ var createKiroMcpServer = async (options) => {
       workspaceSnapshot = snapshot;
       const before = binding.bindingIdentity();
       if (snapshot.status !== "temporarily-unavailable") {
-        binding.updateClientRoots(snapshot.roots);
+        if (snapshot.roots.length > 0) clientRootsObserved = true;
+        const roots = !clientRootsObserved && snapshot.status === "explicitly-empty" && options.launchWorkspaceRoot ? [{ uri: pathToFileURL(options.launchWorkspaceRoot).href }] : snapshot.roots;
+        binding.updateClientRoots(roots);
       }
       const observation = binding.workspaceObservation();
       const contextBlocks = snapshot.status === "temporarily-unavailable" && binding.bindingSource() !== "manual";
