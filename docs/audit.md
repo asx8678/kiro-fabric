@@ -154,6 +154,8 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `scripts/release-download.mjs`
 - `scripts/release-trust.mjs`
 - `scripts/source-install.mjs`
+- `scripts/source-pull-hook.mjs` — explicit source-home post-merge activation with foreign-hook preservation.
+- `tests/source-pull-hook.test.ts` — source-home equality, hook failure reporting, preservation, and narrow macOS ancestry policy.
 - `src/installation/bundle-contract.mjs`
 - `src/installation/installer-lock.mjs`
 - `src/kiro/managed-generation.ts`

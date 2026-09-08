@@ -32,10 +32,10 @@ describe("explicit checkout source bootstrap", () => {
     }
   });
 
-  it("reaches frozen dependency installation before importing unavailable build dependencies", () => {
+  it.each([false, true])("reaches frozen dependency installation without build dependencies (checkout is home: %s)", inHome => {
     const { root, home, bin, env } = fixture();
     // A small disposable source fixture, not another checkout or repository clone.
-    const source = path.join(root, "source fixture"), record = path.join(root, "build-commands");
+    const source = inHome ? env.KIRO_HOME : path.join(root, "source fixture"), record = path.join(root, "build-commands");
     fs.mkdirSync(source, { mode: 0o700 });
     fs.cpSync(path.join(repository, "scripts"), path.join(source, "scripts"), { recursive: true });
     fs.mkdirSync(path.join(source, "src"), { mode: 0o700 });
@@ -51,7 +51,7 @@ describe("explicit checkout source bootstrap", () => {
     expect(result.status, result.stdout + result.stderr).toBe(4);
     expect(JSON.parse(result.stdout)).toMatchObject({ outcome: "source-build-failed", error: expect.stringContaining("intentional fixture build stop") });
     expect(fs.readFileSync(record, "utf8")).toBe("frozen-install\nbuild\n");
-    expect(fs.existsSync(env.KIRO_HOME)).toBe(false);
+    expect(fs.existsSync(env.KIRO_HOME)).toBe(inHome);
     expect(result.stderr).not.toContain("ERR_MODULE_NOT_FOUND");
   });
 });

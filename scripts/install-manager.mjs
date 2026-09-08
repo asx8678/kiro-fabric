@@ -63,6 +63,11 @@ export function selectedHome(options, context, env = process.env, home = os.home
   const selected = resolveKiroHome(env, home, options.kiroHome === undefined ? {} : { kiroHome: options.kiroHome });
   return { path: selected, source: options.kiroHome !== undefined ? "--kiro-home" : Object.hasOwn(env, "KIRO_HOME") ? "KIRO_HOME" : "current user home" };
 }
+export function trustedMacApplications(directory, stat, platform = process.platform) {
+  // macOS administrators already control installed applications. Do not extend
+  // this exception to descendants, other groups, or world-writable paths.
+  return platform === "darwin" && directory === "/Applications" && stat.uid === 0 && stat.gid === 80 && (stat.mode & 0o7777) === 0o775;
+}
 function assertKiroExecutable(executable) {
   const uid = process.getuid?.(), stat = fs.lstatSync(executable);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || (stat.mode & 0o022) || !(stat.mode & 0o111) || (uid !== undefined && stat.uid !== uid && stat.uid !== 0)) throw new InstallerError("Unsafe Kiro CLI executable", 4, "prerequisite");
@@ -71,7 +76,7 @@ function assertKiroExecutable(executable) {
     const parent = fs.lstatSync(directory);
     // Root-owned sticky temporary ancestry protects the private fixture child.
     const protectedSticky = parent.uid === 0 && (parent.mode & 0o1000) !== 0;
-    if (!parent.isDirectory() || parent.isSymbolicLink() || (uid !== undefined && parent.uid !== uid && parent.uid !== 0) || ((parent.mode & 0o022) !== 0 && !protectedSticky)) throw new InstallerError("Unsafe Kiro CLI directory ancestry", 4, "prerequisite");
+    if (!parent.isDirectory() || parent.isSymbolicLink() || (uid !== undefined && parent.uid !== uid && parent.uid !== 0) || ((parent.mode & 0o022) !== 0 && !protectedSticky && !trustedMacApplications(directory, parent))) throw new InstallerError(`Unsafe Kiro CLI directory ancestry: ${directory}`, 4, "prerequisite");
     const next = path.dirname(directory); if (next === directory) break; directory = next;
   }
 }

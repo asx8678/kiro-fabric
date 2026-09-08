@@ -8,6 +8,20 @@ coverage/
 *.log
 .DS_Store
 .kiro/
+# Runtime and private Kiro data when this checkout is the Kiro home.
+/kiro-fabric/
+/agents/
+/logs/
+/sessions/
+/session-index/
+/settings/
+/powers/
+/settings.json
+/auth.json
+/credentials.json
+/cache/
+/cache.db*
+/*.sqlite*
 .fabric/
 .pi/
 plugins/

@@ -182,6 +182,12 @@ export const resolveKiroHome = (env = process.env, userHome = homedir(), options
     const absolute = fs.realpathSync(path.resolve(candidate));
     assertNoPathOverlap(canonical, absolute, label);
   }
+  // Only explicit source builds may share the exact home. Nested checkouts and
+  // release/workspace overlaps retain the original fail-closed policy.
+  if (options.sourceRoot !== undefined) {
+    const source = fs.realpathSync(path.resolve(options.sourceRoot));
+    if (source !== canonical) assertNoPathOverlap(canonical, source, "source checkout");
+  }
   return canonical;
 };
 

@@ -15,7 +15,27 @@ The complete-generation installer is implemented for local source development. P
 
 Use Bash (the macOS system Bash is sufficient), Git, Node >=24, pnpm **11.20.0**, tar/gzip, and a trusted Kiro CLI >=2.21.1 with v3 support on PATH. Development also requires ripgrep. Authenticate Kiro separately if needed with `kiro-cli login`; do not run the installer with sudo. The source installer and generated release bootstrap select native ARM64 on Apple Silicon even when launched under Rosetta. Native macOS/ARM execution qualification is still pending.
 
-Keep the trusted checkout **outside** the chosen Kiro home. Cloning into `~/.kiro/kiro-fabric` and installing into `~/.kiro` is rejected. From a checkout containing `install.sh`, the same command works on Linux and macOS:
+The trusted checkout may be **exactly the selected Kiro home** or outside it. Nested overlaps such as `~/.kiro/kiro-fabric` remain rejected. Release packages and coding workspaces do not gain an overlap exception.
+
+### Pull-to-update checkout at `~/.kiro`
+
+For a new, absent home only (do not clone over existing Kiro data):
+
+```sh
+git clone https://github.com/asx8678/kiro-fabric.git "$HOME/.kiro"
+cd "$HOME/.kiro"
+bash ./install.sh --source --kiro-home "$HOME/.kiro" --enable-pull-hook
+# Subsequent source updates:
+git pull --ff-only origin main
+```
+
+`--enable-pull-hook` explicitly opts into executing the trusted checkout's installer after a Git merge/fast-forward. It installs an owned `.git/hooks/post-merge` only after successful activation. Existing hooks, custom `core.hooksPath`, symlinks and linked worktrees are refused rather than overwritten. This authorizes dependency installation/build and runtime activation on subsequent pulls. Git does not run this hook for an already-up-to-date pull, checkout, or rebase. On hook failure Git may still report a successful pull: look for `UPDATE NOT ACTIVATED`, then run `bash ./install.sh --source --kiro-home "$HOME/.kiro"` manually. Existing sessions retain their generation; restart for new code. To disable automation, remove only the verified Fabric `post-merge` hook; no global Git configuration is changed.
+
+If `.kiro` already contains data, stop Kiro and back it up before arranging the checkout. The installer does not migrate or overwrite that directory with a clone. Preserve settings, authentication, sessions and foreign profiles; reconcile source filename collisions manually. Never use `git clean -fdx` in a live Kiro home. `.gitignore` excludes known private/runtime paths but cannot anticipate every third-party credential filename; inspect staged files and never `git add -f` private data. Git-tracked source resources such as `skills/fabric-exec` remain source-owned.
+
+Without hook opt-in, updates require `git pull --ff-only` followed by the explicit source install command. Source acquisition inside the home stages its incoming bundle in a private temporary directory outside the home before managed activation, preserving the incoming-bundle isolation rule.
+
+From an external checkout containing `install.sh`, the same command works on Linux and macOS:
 
 ```sh
 cd /path/to/kiro-fabric
@@ -49,7 +69,7 @@ The selected global home is explicit --kiro-home, supplied KIRO_HOME, then the c
 "$HOME/.kiro/kiro-fabric/bin/kiro-fabric" uninstall
 ```
 
-For a custom location use `"$KIRO_HOME/kiro-fabric/bin/kiro-fabric"`. The launcher resolves its own installation, not a changed caller KIRO_HOME. `start` only invokes official Kiro with --v3 --agent kiro-fabric, preserving project cwd. Kiro itself and project-specific Git/Python/Java/Docker/etc. remain external prerequisites. Kiro executables (including a sibling `kiro-cli-chat`) and their directory ancestry must not be group/other-writable; unsafe prerequisites are rejected before execution. The installer does not change their permissions.
+For a custom location use `"$KIRO_HOME/kiro-fabric/bin/kiro-fabric"`. The launcher resolves its own installation, not a changed caller KIRO_HOME. `start` only invokes official Kiro with --v3 --agent kiro-fabric, preserving project cwd. Kiro itself and project-specific Git/Python/Java/Docker/etc. remain external prerequisites. Kiro executables (including a sibling `kiro-cli-chat`) and their directory ancestry must not be group/other-writable; unsafe prerequisites are rejected before execution. The narrow macOS exception is exactly `/Applications`, owned by root:admin (UID 0/GID 80), mode 0775; application descendants and executables remain strict. This explicitly trusts macOS administrators, who can already replace installed applications. The installer does not change their permissions.
 
 Installed management uses its private Node, not system Node/pnpm or the checkout. It always rejects --source; rebuild through the explicit checkout command. install/update accept --version or --from-archive, never both. Offline archives require exact `<archive>.release.json` and `<archive>.release.sig` signed sidecars; first-install bootstrap also requires matching embedded archive/member pins. No local archive bypasses production verification. Public update/discovery currently fails before networking because the production key is missing.
 
