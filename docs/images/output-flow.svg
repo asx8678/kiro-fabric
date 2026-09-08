@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="688" viewBox="0 0 1120 688" role="img" aria-labelledby="title desc">
+<title id="title">Return the evidence the model needs</title>
+<desc id="desc">Provider results enter the guest within nested budgets. The guest selects a return value, then Fabric formats the response. A response that fits is returned directly. Oversized responses use a head-and-tail preview and a full formatted-response artifact if retention succeeds. Failed retention is an explicit error; artifacts cannot restore provider-truncated data.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#64748b"/></marker></defs>
+<style>
+text{font-family:Arial,Helvetica,sans-serif;fill:#172554}
+.title{font-size:30px;font-weight:700;fill:#ffffff}
+.subtitle{font-size:18px;fill:#cbd5e1}
+.label{font-size:21px;font-weight:700}
+.body{font-size:18px;fill:#334155}
+.small{font-size:16px;fill:#475569}
+.eyebrow{font-size:15px;font-weight:700;letter-spacing:1.2px;fill:#475569}
+.line{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#arrow)}
+</style>
+<rect width="1120" height="688" rx="18" fill="#f8fafc"/>
+<path d="M18 0H1102Q1120 0 1120 18V110H0V18Q0 0 18 0Z" fill="#172554"/>
+<text x="32" y="46" class="title">Return the evidence the model needs</text>
+<text x="32" y="80" class="subtitle">Reduce in the guest first; visible-output limits are a second line of control.</text>
+<g data-card="true">
+<rect x="32" y="146" width="300" height="116" rx="12" fill="#eff6ff" stroke="#cbd5e1"/>
+<text x="50" y="179" class="label">Provider results</text>
+<text x="50" y="209" class="body">Provider and JSON bounds</text>
+<text x="50" y="235" class="body">Intermediate values stay in guest</text>
+</g>
+<g data-card="true">
+<rect x="410" y="146" width="300" height="116" rx="12" fill="#ecfdf5" stroke="#cbd5e1"/>
+<text x="428" y="179" class="label">Guest selects evidence</text>
+<text x="428" y="209" class="body">Filter · aggregate · extract</text>
+<text x="428" y="235" class="body">return the useful result</text>
+</g>
+<g data-card="true">
+<rect x="788" y="146" width="300" height="116" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="806" y="179" class="label">Format response</text>
+<text x="806" y="209" class="body">Value + logs + diagnostics</text>
+<text x="806" y="235" class="body">Apply visible-output budget</text>
+</g>
+<path d="M332 204H410" class="line"/>
+<path d="M710 204H788" class="line"/>
+<path d="M938 262V302H340V356" class="line"/>
+<path d="M704 302V356" class="line"/>
+<path d="M938 302H1066V356" class="line"/>
+<text x="73" y="332" class="eyebrow">FITS THE BUDGET</text>
+<text x="431" y="332" class="eyebrow">OVERFLOW · RETAINED</text>
+<text x="798" y="332" class="eyebrow">OVERFLOW · NOT RETAINED</text>
+<g data-card="true">
+<rect x="32" y="356" width="332" height="150" rx="12" fill="#ecfdf5" stroke="#cbd5e1"/>
+<text x="50" y="389" class="label">Direct response</text>
+<text x="50" y="419" class="body">Return the formatted result</text>
+<text x="50" y="445" class="body">No overflow artifact needed</text>
+</g>
+<g data-card="true">
+<rect x="394" y="356" width="332" height="150" rx="12" fill="#eff6ff" stroke="#cbd5e1"/>
+<text x="412" y="389" class="label">Preview + artifact</text>
+<text x="412" y="419" class="body">Keep head and tail visible</text>
+<text x="412" y="445" class="body">Retain full formatted response</text>
+<text x="412" y="471" class="body">Read more in bounded pages</text>
+</g>
+<g data-card="true">
+<rect x="756" y="356" width="332" height="150" rx="12" fill="#fee2e2" stroke="#cbd5e1"/>
+<text x="774" y="389" class="label">Explicit error</text>
+<text x="774" y="419" class="body">Keep a bounded preview</text>
+<text x="774" y="445" class="body">Report unavailable full result</text>
+<text x="774" y="471" class="body">Caller sees an error</text>
+</g>
+<rect x="32" y="544" width="1056" height="88" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="52" y="577" class="body">Default visible budget: 50,000 characters. Failure responses: at most 20,000 characters.</text>
+<text x="52" y="604" class="body">Artifacts have count, size, and idle-expiry limits. They are temporary and process-owned.</text>
+<text x="32" y="664" class="small">An artifact contains the projected response; it cannot recover data already truncated by a provider.</text>
+</svg>

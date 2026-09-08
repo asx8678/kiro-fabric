@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="748" viewBox="0 0 1120 748" role="img" aria-labelledby="title desc">
+<title id="title">Move routine coordination into code</title>
+<desc id="desc">In a workflow that issues one read per model exchange, four reads require four outer invocations. A Fabric program can express four reads in one execution, overlap independent I/O, reduce the data, and return one result. The four provider operations still occur; this is not a measured timing or cost comparison.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#64748b"/></marker></defs>
+<style>
+text{font-family:Arial,Helvetica,sans-serif;fill:#172554}
+.title{font-size:30px;font-weight:700;fill:#ffffff}
+.subtitle{font-size:18px;fill:#cbd5e1}
+.label{font-size:21px;font-weight:700}
+.body{font-size:18px;fill:#334155}
+.small{font-size:16px;fill:#475569}
+.eyebrow{font-size:15px;font-weight:700;letter-spacing:1.2px;fill:#475569}
+.line{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#arrow)}
+</style>
+<rect width="1120" height="748" rx="18" fill="#f8fafc"/>
+<path d="M18 0H1102Q1120 0 1120 18V110H0V18Q0 0 18 0Z" fill="#172554"/>
+<text x="32" y="46" class="title">Move routine coordination into code</text>
+<text x="32" y="80" class="subtitle">Illustrative workflow: inspect four already-known, independent files.</text>
+<rect x="32" y="140" width="1056" height="174" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="52" y="170" class="eyebrow">ILLUSTRATION · ONE READ PER OUTER INVOCATION</text>
+<g data-card="true">
+<rect x="52" y="190" width="214" height="98" rx="12" fill="#ede9fe" stroke="#cbd5e1"/>
+<text x="70" y="223" class="label">Model</text>
+<text x="70" y="253" class="body">Requests read 1</text>
+</g>
+<g data-card="true">
+<rect x="290" y="190" width="214" height="98" rx="12" fill="#eff6ff" stroke="#cbd5e1"/>
+<text x="308" y="223" class="label">Read 1</text>
+<text x="308" y="253" class="body">Returns content</text>
+</g>
+<g data-card="true">
+<rect x="528" y="190" width="214" height="98" rx="12" fill="#ede9fe" stroke="#cbd5e1"/>
+<text x="546" y="223" class="label">Model</text>
+<text x="546" y="253" class="body">Requests read 2</text>
+</g>
+<g data-card="true">
+<rect x="766" y="190" width="214" height="98" rx="12" fill="#eff6ff" stroke="#cbd5e1"/>
+<text x="784" y="223" class="label">Read 2 → …</text>
+<text x="784" y="253" class="body">Repeat for 3 and 4</text>
+</g>
+<path d="M266 239H290" class="line"/>
+<path d="M504 239H528" class="line"/>
+<path d="M742 239H766" class="line"/>
+<rect x="32" y="344" width="1056" height="296" rx="12" fill="#f0fdf4" stroke="#86efac"/>
+<text x="52" y="376" class="eyebrow">FABRIC · ONE OUTER INVOCATION CAN COORDINATE ALL FOUR READS</text>
+<g data-card="true">
+<rect x="52" y="422" width="216" height="132" rx="12" fill="#ede9fe" stroke="#cbd5e1"/>
+<text x="70" y="455" class="label">Model</text>
+<text x="70" y="485" class="body">Generates one</text>
+<text x="70" y="511" class="body">checked program</text>
+</g>
+<rect x="316" y="400" width="278" height="212" rx="12" fill="#eff6ff" stroke="#93c5fd"/>
+<text x="334" y="434" class="label">Bounded parallel reads</text>
+<rect x="334" y="454" width="112" height="50" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="358" y="485" class="body">Read 1</text>
+<rect x="462" y="454" width="112" height="50" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="486" y="485" class="body">Read 2</text>
+<rect x="334" y="524" width="112" height="50" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="358" y="555" class="body">Read 3</text>
+<rect x="462" y="524" width="112" height="50" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="486" y="555" class="body">Read 4</text>
+<g data-card="true">
+<rect x="642" y="422" width="194" height="132" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="660" y="455" class="label">Guest code</text>
+<text x="660" y="485" class="body">Filter / combine</text>
+<text x="660" y="511" class="body">Return evidence</text>
+</g>
+<g data-card="true">
+<rect x="884" y="422" width="180" height="132" rx="12" fill="#ede9fe" stroke="#cbd5e1"/>
+<text x="902" y="455" class="label">Kiro</text>
+<text x="902" y="485" class="body">Receives one</text>
+<text x="902" y="511" class="body">chosen result</text>
+</g>
+<path d="M268 486H316" class="line"/>
+<path d="M594 486H642" class="line"/>
+<path d="M836 486H884" class="line"/>
+<text x="52" y="676" class="body">What changes: outer coordination and visible intermediate data. Four provider operations still run.</text>
+<text x="52" y="705" class="body">What remains: type-checking, validation, approvals, deadlines, and resource limits.</text>
+<text x="32" y="724" class="small">Conceptual call structure only. No measured speedup, token savings, or cost reduction is implied.</text>
+</svg>

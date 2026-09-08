@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="730" viewBox="0 0 1120 730" role="img" aria-labelledby="title desc">
+<title id="title">Permission belongs to the exact action</title>
+<desc id="desc">Guest intent crosses into the host ActionRegistry, where arguments are canonicalized and validated, then audit and effect capacity is reserved. Explicit allow, ask, or deny policy decides whether the provider can run. An ask needs approval; deny does not execute. Approved shell commands have host authority. Earlier committed effects are not rolled back by a later failure.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#64748b"/></marker></defs>
+<style>
+text{font-family:Arial,Helvetica,sans-serif;fill:#172554}
+.title{font-size:30px;font-weight:700;fill:#ffffff}
+.subtitle{font-size:18px;fill:#cbd5e1}
+.label{font-size:21px;font-weight:700}
+.body{font-size:18px;fill:#334155}
+.small{font-size:16px;fill:#475569}
+.eyebrow{font-size:15px;font-weight:700;letter-spacing:1.2px;fill:#475569}
+.line{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#arrow)}
+</style>
+<rect width="1120" height="730" rx="18" fill="#f8fafc"/>
+<path d="M18 0H1102Q1120 0 1120 18V110H0V18Q0 0 18 0Z" fill="#172554"/>
+<text x="32" y="46" class="title">Permission belongs to the exact action</text>
+<text x="32" y="80" class="subtitle">Allowing fabric_exec opens the code interface; nested effects have their own policy.</text>
+<g data-card="true">
+<rect x="32" y="146" width="1056" height="90" rx="12" fill="#ede9fe" stroke="#cbd5e1"/>
+<text x="50" y="179" class="label">Guest request</text>
+<text x="50" y="209" class="body">Example: local.edit({ path, oldText, newText })</text>
+</g>
+<rect x="32" y="270" width="1056" height="190" rx="12" fill="#eff6ff" stroke="#93c5fd"/>
+<text x="52" y="302" class="eyebrow">HOST · ACTIONREGISTRY</text>
+<g data-card="true">
+<rect x="52" y="326" width="302" height="104" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="70" y="359" class="label">Prepare + validate</text>
+<text x="70" y="389" class="body">Canonical arguments</text>
+<text x="70" y="415" class="body">Exact descriptor schema</text>
+</g>
+<g data-card="true">
+<rect x="408" y="326" width="302" height="104" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="426" y="359" class="label">Reserve capacity</text>
+<text x="426" y="389" class="body">Audit budget + effect locks</text>
+<text x="426" y="415" class="body">Reject conflicting mutations</text>
+</g>
+<g data-card="true">
+<rect x="764" y="326" width="302" height="104" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="782" y="359" class="label">Evaluate policy</text>
+<text x="782" y="389" class="body">Allow · ask · deny</text>
+<text x="782" y="415" class="body">Bound to canonical arguments</text>
+</g>
+<path d="M560 236V254H330V326" class="line"/>
+<path d="M354 378H408" class="line"/>
+<path d="M710 378H764" class="line"/>
+<path d="M915 430V486H207V520" class="line"/>
+<path d="M560 486V520" class="line"/>
+<path d="M915 486V520" class="line"/>
+<g data-card="true">
+<rect x="32" y="520" width="328" height="130" rx="12" fill="#ecfdf5" stroke="#cbd5e1"/>
+<text x="50" y="553" class="label">ALLOW</text>
+<text x="50" y="583" class="body">Invoke the provider</text>
+<text x="50" y="609" class="body">Apply deadlines and result bounds</text>
+</g>
+<g data-card="true">
+<rect x="396" y="520" width="328" height="130" rx="12" fill="#fef3c7" stroke="#cbd5e1"/>
+<text x="414" y="553" class="label">ASK</text>
+<text x="414" y="583" class="body">Reserve a prompt slot</text>
+<text x="414" y="609" class="body">Invoke only after approval</text>
+</g>
+<g data-card="true">
+<rect x="760" y="520" width="328" height="130" rx="12" fill="#fee2e2" stroke="#cbd5e1"/>
+<text x="778" y="553" class="label">DENY</text>
+<text x="778" y="583" class="body">Return a failure</text>
+<text x="778" y="609" class="body">Do not invoke this action</text>
+</g>
+<text x="32" y="684" class="body">An approved shell runs with host OS authority. A later program failure is not a transaction rollback.</text>
+<text x="32" y="706" class="small">Guest isolation, approval policy, and host-process containment are different boundaries.</text>
+</svg>
