@@ -24,6 +24,20 @@ Port compatible Pi prompt/skill practices and all user working rules into Kiro; 
 
 Known new reported credits2.1425728728026536 plus one unknown; known conversation15.654861872802655 plus that unknown. Original total remains unknown. See [stopped-pilot report](steering-benchmark-2026-09-08.md) and its per-row JSON.
 
+## Late legacy-harness review reconciliation
+
+The delayed Astra review inspected the older temporary efficiency harness, not the committed guarded harness. Against `ad20c75`:
+
+- Raw answers, required schema, no-tools constraints and complete ACP/usage evidence now contribute to the same overall result. Missing usage invalidates the current row and blocks further admission. Negative oracle tests cover fenced/wrong/missing answers and incomplete evidence.
+- Inventory includes hidden files, directories, symlinks and basic permission bits. Collection caps retained stdout and stderr together and bounds process lifetime. These do not detect every escaped process, outside/transient effect, owner change or special permission bit.
+- Plans freeze paired arm/fixture/runtime/config identities with reversed second-repetition ordering. The actual cohort still stopped at20/102; there is no completed paired comparison to qualify either iteration causally.
+- Fixture execution records check counts, order, exits and source hashes instead of input substrings. They remain task-accessible and tamperable, not protected subprocess tracing. Inner effects and peak concurrency remain unmeasured. The GitHub case is no-tool policy advice, not an executed permission fixture.
+- The historical efficiency audit and JSON now label legacy success semantics explicitly. No historical numerical result, row, prompt, hash or charge was rescored.
+
+Still required before a further paid benchmark: reconcile the outstanding charge and review a real filesystem/network isolation design with a model-service controller inaccessible to task tools, protected audit logs, isolated validators, bounded inner effects, and expected-denial/local-fake Git/GitHub fixtures. PATH shims and prompt restrictions alone are insufficient. Portable isolation is not implemented; current live collection is POSIX-only.
+
+The proposed 14×2×4 design is a proposal, not a completed suite or new spending authorization. The working ceiling remains **40 conversation-total credits**, including the known **15.654861872802655** and the unresolved charge, not **39 additional credits**. No new paid request is admitted here. Two repetitions would remain descriptive evidence, not reliability qualification.
+
 ## Delivery gates
 
 - [x] Full `pnpm run check` passed: 70 test files, 1076 tests passed and 45 skipped, plus guidance parity, strict typecheck, fresh build, dead-code lint, component MCP certification and SBOM generation. The final component package digest is `1e39370234db63fd5c50337e9e2b3b8553c3b85655d395d9c2e8bddf878e1c88`.

@@ -1,6 +1,20 @@
 {
   "schemaVersion": 1,
   "kind": "kiro-fabric.efficiency-tuning",
+  "resultSemantics": {
+    "classification": "historical-limited-oracle-results",
+    "fullContractPassRate": null,
+    "overallScoresIncludeRequestedFinalFormat": false,
+    "agentExecutionOrderIndependentlyProven": false,
+    "exactlyOnceCommandExecutionIndependentlyProven": false,
+    "externalFilesystemNetworkContainmentProven": false,
+    "permissionComplianceProven": false,
+    "sameRowUsageAndTraceGatesUniformlyRequired": false,
+    "causalComparisonQualified": false,
+    "historicalMeasurementsUnchanged": true,
+    "laterProtocolReviewCommit": "ad20c75",
+    "laterReport": "audits/steering-benchmark-2026-09-08.md"
+  },
   "phases": {
     "pilot": {
       "root": "/tmp/kiro-fabric-efficiency-tuning-20260908",

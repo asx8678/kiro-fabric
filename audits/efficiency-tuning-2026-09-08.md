@@ -2,11 +2,13 @@
 
 ## Result and limits
 
-The installed candidate is **more efficient on the measured coding tasks**, not a guarantee of universal quality or instruction compliance. Six identical coding tasks all passed on both the old Fabric controls and the installed candidate:
+> Historical tuning cohort, not the current installed generation or live protocol. See [the later stopped pilot](steering-benchmark-2026-09-08.md) and [current acceptance ledger](steering-plan-2026-09-08.md). Counts and charges below are preserved, not retroactively rescored.
+
+The then-installed candidate used **fewer reported credits and model-visible calls in this retained-control comparison**. This is descriptive, not causal qualification or proof of full instruction compliance. Six identical coding tasks passed the limited legacy result oracles for both the old Fabric controls and that candidate:
 
 | Coding-only metric | Retained old Fabric controls | Installed candidate |
 | --- | ---: | ---: |
-| Task correctness/scope | 6/6 | 6/6 |
+| Limited legacy coding result oracles | 6/6 | 6/6 |
 | Kiro-reported credits | 1.2570 | 0.8961 |
 | Model-visible tool calls | 27 | 15 |
 | Compiler failures | 3 | 0 |
@@ -19,7 +21,15 @@ Observed reductions: **28.7% reported credits**, **44.4% outer tool calls**, **3
 
 **Comparison boundary:** only the first tuning pilot interleaved old/candidate runs. Subsequent candidate regressions reuse those retained controls, not new contemporaneous baseline inference. Fixture and prompt hashes match exactly. All runs requested Auto, but actual routed models/cache categories and settled charges remain unknown. One run per task per phase is not a general reliability or speed qualification.
 
-The installed candidate passed **7/8 task oracles**, not 8/8: all six coding tasks and the direct explanation passed; the complete 160-entry JSON output was correct but used one pure Fabric computation despite an explicit no-tools request. Its parser answer also remained prose instead of requested JSON. These failures remain visible. Steering is not enforcement.
+The then-installed candidate passed **7/8 limited legacy task oracles**, not a full-contract success rate: all six coding tasks and the direct explanation passed; the complete 160-entry JSON output was correct but used one pure Fabric computation despite an explicit no-tools request. Its parser answer also remained prose instead of requested JSON. These failures remain visible. Steering is not enforcement.
+
+## Legacy oracle limits
+
+The **6/6**, **7/8**, **28/32** and **24/24** counts are limited historical oracle results, not full-contract or safety pass rates. Final-format checks were separate from overall scoring, some answer validators removed fences, controller-run tests did not establish the agent's required before/after execution, and an input substring did not prove the exit-7 command ran exactly once. Explanation keywords were not a sound semantic rubric. Missing usage or required trace coverage was not uniformly a same-row failure gate, even though this cohort's captured records were separately reviewed.
+
+Workspace instructions and `--trust-all-tools` provided no filesystem/network containment. The old inventory omitted hidden fixture directories and permission metadata; neither it nor before/after snapshots could establish the absence of outside-workspace or reverted effects. Python validators executed candidate-controlled code. Complete task/permission compliance cannot be reconstructed from these metrics alone; its aggregate rate remains **unknown**, not an inferred adjusted percentage.
+
+The later guarded harness fixes several scoring, inventory and process-collection defects, but does not supply OS isolation or protected execution logs. Its GitHub case is no-tool policy advice, not an executed Git/GitHub permission test. New paid benchmarking is on hold pending usage reconciliation and an isolation/evidence design review; the late review's proposed 112-request/39-new-credit schedule is neither executed nor authorized.
 
 ## What the traces showed
 
@@ -74,12 +84,12 @@ The tiny command case is essentially unchanged, not meaningful evidence of a sav
 
 ## All experiment phases, including failures
 
-| Phase | Runs | Task oracles passed | Reported credits | Notes |
+| Phase | Runs | Limited legacy oracles passed | Reported credits | Notes |
 | --- | ---: | ---: | ---: | --- |
 | Interleaved old/candidate pilot | 16 | 13/16 | 2.5174 | Old failed both no-tool probes. Candidate failed general explanation, unnecessarily inspecting the empty workspace and asking for code. |
 | Routing-corrected candidate regression | 8 | 8/8 | 1.1212 | Both dialogue cases used zero tools; parser still not JSON and several outputs had fences. |
 | Always-on-guidance candidate regression, installed | 8 | 7/8 | 1.0819 | General explanation: 58 words, zero calls. All 160 JSON entries preserved, but one forbidden-by-request pure computation call. Five of six coding finals are raw JSON. |
-| **Total this tuning work** | **32** | **28/32** | **4.7205** | **24/24 coding task instances passed** across all phases. |
+| **Total this tuning work** | **32** | **28/32** | **4.7205** | **24/24 limited coding result oracles passed**; full-contract success is not established. |
 
 A previous spoken/commentary summary called the routing candidate “final”; the later user request to inspect original Pi Fabric led to the separate always-on-guidance phase. None of the earlier evidence or charges was replaced.
 
