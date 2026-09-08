@@ -100,7 +100,7 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
     maxAuditBytes: 64_000,
     resultFormat: "auto",
   },
-  approvals: { read: "allow", write: "ask", execute: "ask", network: "ask" },
+  approvals: { read: "allow", write: "allow", execute: "allow", network: "allow" },
   mcp: {
     enabled: true,
     disableOAuth: true,

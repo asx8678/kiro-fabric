@@ -42,7 +42,7 @@ declare const local: {
   write(args: { path: string; content: string; overwrite?: boolean }): Promise<LocalMutationResult>;
   /** Nonempty exact unique anchor unless all=true. Parent must already exist. */
   edit(args: { path: string; oldText: string; newText: string; all?: boolean }): Promise<LocalMutationResult>;
-  /** Approved /bin/sh execution; cwd is verified, NOT confinement. No managed background jobs. */
+  /** Approved /bin/sh; cwd is NOT confinement. Within one exec, shell/write/edit queue FIFO before preparation. Failure stops queued effects; settle handles ordinary nonzero exits. No background jobs. */
   shell(args: { command: string; cwd?: string; timeoutMs?: number; settle?: boolean }): Promise<LocalShellResult>;
 };
 `;

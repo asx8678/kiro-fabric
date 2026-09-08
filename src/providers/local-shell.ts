@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { readdir, readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { throwIfAbortedOrExpired } from "../async-settlement.js";
@@ -39,18 +40,38 @@ function shellEnvironment(): NodeJS.ProcessEnv {
   return env;
 }
 
-function sendGroup(pid: number, signal: NodeJS.Signals): void {
+async function sendGroup(pid: number, signal: NodeJS.Signals): Promise<void> {
   try { process.kill(-pid, signal); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw new Error("Local shell cleanup uncertain");
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return;
+    // Darwin can return EPERM for a group consisting only of reparented zombies.
+    // Never suppress a permission failure unless bounded observation proves it inert.
+    if (process.platform === "darwin" && code === "EPERM" && !(await groupAlive(pid))) return;
+    throw new Error("Local shell cleanup uncertain");
   }
 }
 
 async function groupAlive(pid: number): Promise<boolean> {
   try { process.kill(-pid, 0); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
-    throw new Error("Local shell cleanup uncertain");
+    if (process.platform !== "darwin" || (error as NodeJS.ErrnoException).code !== "EPERM") {
+      throw new Error("Local shell cleanup uncertain");
+    }
   }
-  if (process.platform !== "linux") return true;
+  if (process.platform === "darwin") {
+    // macOS kill(0) includes orphan zombies too. Query only kernel group/state
+    // fields with a bounded, absolute executable; no command text or ambient env.
+    const { stdout } = await promisify(execFile)("/bin/ps", ["-axo", "pgid=,stat="], {
+      encoding: "utf8", env: { LC_ALL: "C" }, timeout: 200, maxBuffer: 4 * 1024 * 1024,
+    });
+    if (!stdout.trim()) throw new Error("Local shell cleanup uncertain");
+    for (const line of stdout.trim().split("\n")) {
+      const match = /^\s*(\d+)\s+([A-Za-z+<>0-9-]+)\s*$/.exec(line);
+      if (!match) throw new Error("Local shell cleanup uncertain");
+      if (Number(match[1]) === pid && !match[2]!.startsWith("Z")) return true;
+    }
+    return false;
+  }
   // kill(0) also reports zombies. They cannot execute or hold streams. Node
   // reaps its direct child; orphan reaping belongs to the host's init/subreaper.
   // Never mistake a successful signal for observed termination.
@@ -144,10 +165,10 @@ export async function runLocalShell(options: {
   // descendants must not keep a reservation alive indefinitely.
   try {
     if (child.pid !== undefined) {
-      sendGroup(child.pid, "SIGTERM");
+      await sendGroup(child.pid, "SIGTERM");
       const termEnd = performance.now() + 200;
       while (await groupAlive(child.pid) && performance.now() < termEnd) await delay(10);
-      if (await groupAlive(child.pid)) sendGroup(child.pid, "SIGKILL");
+      if (await groupAlive(child.pid)) await sendGroup(child.pid, "SIGKILL");
       const killEnd = performance.now() + 500;
       while (await groupAlive(child.pid) && performance.now() < killEnd) await delay(10);
       if (await groupAlive(child.pid)) failure = "Local shell cleanup uncertain";

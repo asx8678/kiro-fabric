@@ -18,6 +18,27 @@ const action: ResolvedFabricAction = {
 };
 
 describe("Fabric approval and projection", () => {
+  it("allows default shell execution without elicitation but honors explicit ask/deny", async () => {
+    const request = vi.fn(async () => ({ action: "accept" as const, approved: true }));
+    const bridge = new KiroPowerApprover({ supported: () => false, request });
+    const shell = { ...action, name: "shell", ref: "local.shell", provider: "local", risk: "execute" as const };
+    const args = { command: "elixir --version", review: 'Command: "elixir --version"\nCanonical cwd: "/workspace"' };
+    const approver = new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, bridge, "/workspace");
+    await expect(approver.approve(shell, args)).resolves.toBeUndefined();
+    for (const execute of ["ask", "deny"] as const) {
+      const restricted = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, execute }, bridge, "/workspace");
+      await expect(restricted.approve(shell, args)).rejects.toThrow(/denied/);
+    }
+    for (const risk of ["read", "write", "network"] as const) {
+      const other = { ...action, risk };
+      await expect(approver.approve(other, {})).resolves.toBeUndefined();
+      for (const mode of ["ask", "deny"] as const) {
+        const restricted = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, [risk]: mode }, bridge, "/workspace");
+        await expect(restricted.approve(other, {})).rejects.toThrow(/denied/);
+      }
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
   it("prepares a deferred prompt with one policy evaluation and an immutable exact request identity", async () => {
     let evaluations = 0;
     const config = { ...DEFAULT_FABRIC_CONFIG.approvals, get write() { evaluations += 1; return "ask" as const; } };
@@ -47,14 +68,14 @@ describe("Fabric approval and projection", () => {
     expect(request).not.toHaveBeenCalled();
     for (const result of [null, {}, { action: "accept" }, { action: "accept", approved: "true" }, { action: "unknown", approved: true }]) {
       const bridge = new KiroPowerApprover({ supported: () => true, request: async () => result as unknown as { action: "accept"; approved: boolean } });
-      await expect(new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, bridge, "/workspace").approve(action, {})).rejects.toThrow("denied or unavailable");
+      await expect(new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, write: "ask" }, bridge, "/workspace").approve(action, {})).rejects.toThrow("denied or unavailable");
     }
   });
 
   it("presents exact bounded local review material without silently authorizing a suffix", async () => {
     let message = "";
     const bridge = new KiroPowerApprover({ supported: () => true, async request(options) { message = options.message; return { action: "accept", approved: true }; } });
-    const approver = new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, bridge, "/workspace");
+    const approver = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, execute: "ask" }, bridge, "/workspace");
     const shell = { ...action, name: "shell", ref: "local.shell", provider: "local", risk: "execute" as const };
     const review = 'Command: "printf x"\nCanonical cwd: "/workspace"';
     await approver.approve(shell, { command: "printf x", cwd: "/workspace", review });

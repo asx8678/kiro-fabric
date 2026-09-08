@@ -92,7 +92,7 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect(profile.resources).toEqual([`skill://${generation}/resources/skills/fabric-exec/SKILL.md`, `file://${generation}/resources/steering/fabric.md`]);
     expect(profile.mcpServers.fabric.command).toBe(path.join(generation, 'tools/node'));
     expect(profile.mcpServers.fabric.args).toEqual([path.join(generation, 'app/kiro/mcp-entry.js')]);
-    expect(profile.mcpServers.fabric.env).toEqual({ KIRO_FABRIC_RUNTIME_ROOT: path.join(generation, 'app'), KIRO_FABRIC_DATA_ROOT: installed.paths.data, KIRO_FABRIC_EXPECTED_NODE: path.join(generation, 'tools/node'), KIRO_FABRIC_BUNDLE_ROOT: generation, KIRO_FABRIC_RG: path.join(generation, 'tools/rg') });
+    expect(profile.mcpServers.fabric.env).toEqual({ KIRO_FABRIC_LAUNCH_WORKSPACE: '${KIRO_FABRIC_LAUNCH_WORKSPACE}', KIRO_FABRIC_RUNTIME_ROOT: path.join(generation, 'app'), KIRO_FABRIC_DATA_ROOT: installed.paths.data, KIRO_FABRIC_EXPECTED_NODE: path.join(generation, 'tools/node'), KIRO_FABRIC_BUNDLE_ROOT: generation, KIRO_FABRIC_RG: path.join(generation, 'tools/rg') });
     expect(await fs.readFile(installed.paths.launcher)).toEqual(completeGenerationLauncher(installed.digest));
     for (const executable of [installed.paths.launcher, profile.mcpServers.fabric.command, path.join(generation, 'tools/rg')]) expect((await fs.stat(executable)).mode & 0o777).toBe(0o700);
     const controls = async () => Promise.all([installed.paths.manifest, installed.paths.profile, installed.paths.launcher].map(file => fs.readFile(file)));

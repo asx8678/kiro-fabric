@@ -192,6 +192,9 @@ export class FabricExecutionService {
     let workspaceCalls = false;
     let switchRequested = false;
     const localSettlements = new Set<Promise<unknown>>();
+    // Per-execution FIFO: preserve workspace locks across separate executions,
+    // but never prepare a queued local mutation against a predecessor's old state.
+    let localEffectTail: Promise<unknown> = Promise.resolve();
     let lastShellFailure: LocalShellResult | undefined;
     const providerContext = (signal: AbortSignal, deadline: import("./runtime/deadline.js").FabricDeadline) => ({
       cwd: this.cwd,
@@ -244,7 +247,7 @@ export class FabricExecutionService {
           if ((options.workspaceUnavailable === true || (options.workspaceBound === false && requiresWorkspace)) && actionRef !== "artifacts.read") throw new Error("Verified workspace binding is required; use fabric.workspace in a separate bootstrap execution");
           workspaceCalls = true;
         }
-        const invocation = this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
+        const invoke = () => this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
           ...context,
           audits,
           auditBudget,
@@ -289,6 +292,16 @@ export class FabricExecutionService {
             } finally { pendingApprovals -= 1; }
           },
         });
+        const localEffect = actionRef === "local.shell" || actionRef === "local.write" || actionRef === "local.edit";
+        const invocation = localEffect
+          ? localEffectTail.then(invoke, () => { throw new Error("Local effect queue stopped after a failed predecessor; inspect state before a new execution"); })
+          : invoke();
+        if (localEffect) {
+          // Failure poisons this execution's remaining local effects, even if the
+          // guest catches it. Never run queued commands after uncertain cleanup.
+          localEffectTail = invocation;
+          void localEffectTail.catch(() => {});
+        }
         if (actionRef.startsWith("local.")) localSettlements.add(invocation);
         let value: unknown;
         try { value = await invocation; }

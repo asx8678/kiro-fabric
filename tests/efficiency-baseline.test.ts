@@ -32,6 +32,13 @@ const sourceHelp = async () => {
 };
 
 describe("offline efficiency preparation", () => {
+  it("runs the CLI through a symlink rather than silently exiting", () => {
+    const linked = path.join(root, "linked-cli.mjs");
+    fs.symlinkSync(script, linked);
+    const result = spawnSync(process.execPath, [linked, "--help"], { encoding: "utf8", timeout: 10000 });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Offline C1:");
+  });
   it.each([[], ["--network"], ["probe", "--command", "touch /tmp/not-allowed"], ["manifest", "--output", "/tmp/output"], ["probe", "--config", "https://example.com"], ["probe", "--home", "/home/user"], ["probe", "--runtime", "/tmp/code.mjs"], ["manifest", "probe"]].map((args) => [args]))("rejects unsupported input %j before work", (args) => {
     expect(() => parseArgs(args)).toThrow(/usage/);
     const result = run(...args);

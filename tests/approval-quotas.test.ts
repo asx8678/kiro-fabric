@@ -21,7 +21,8 @@ const fixture = (options: {
   const config = normalizeFabricConfig({
     // Isolate approval/provider quotas from the independent 2,048-byte audit reservations.
     executor: { maxAuditBytes: 200_000, ...options.executor },
-    approvals: options.approvals ?? {},
+    // Interactive quota tests explicitly opt into prompts, independently of product defaults.
+    approvals: { read: "allow", write: "ask", execute: "ask", network: "ask", ...options.approvals },
   });
   const registry = new ActionRegistry();
   const actions: FabricActionDescriptor[] = ["read", "write", "execute", "network"].map((risk) => ({

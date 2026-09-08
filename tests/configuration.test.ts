@@ -16,6 +16,16 @@ import {
 import { prepareKiroPowerDataPaths } from "../src/kiro/power/data-paths.js";
 
 describe("Agent-only configuration", () => {
+  it("defaults all risk categories to allow", () => {
+    expect(normalizeFabricConfig({}).approvals).toEqual({ read: "allow", write: "allow", execute: "allow", network: "allow" });
+  });
+  it.each(["ask", "deny"] as const)("preserves explicit execute=%s policy", (execute) => {
+    expect(normalizeFabricConfig({ schemaVersion: 1, approvals: { execute } }).approvals.execute).toBe(execute);
+    expect(normalizeFabricConfig({ approvals: { execute } }).approvals.execute).toBe(execute);
+    for (const risk of ["read", "write", "execute", "network"] as const) {
+      expect(normalizeFabricConfig({ approvals: { [risk]: execute } }).approvals[risk]).toBe(execute);
+    }
+  });
   it("normalizes a finite per-service execution admission limit", () => {
     expect(normalizeFabricConfig({}).executor.maxConcurrentExecutions).toBe(4);
     expect(normalizeFabricConfig({ executor: { maxConcurrentExecutions: 2 } }).executor.maxConcurrentExecutions).toBe(2);

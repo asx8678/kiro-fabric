@@ -256,6 +256,6 @@ export async function main(args = process.argv.slice(2)) {
   return report.identityStableDuringProbe === false || report.tasks.some((task) => [task.fixtureProbe, task.runtimeProbe].some((row) => row.status === "failed")) ? 1 : 0;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && fs.existsSync(process.argv[1]) && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().then((code) => { process.exitCode = code; }, (error) => { process.stderr.write(`${String(error)}\n`); process.exitCode = 2; });
 }

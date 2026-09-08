@@ -2,6 +2,8 @@
 
 A coding agent for **Kiro CLI v3**. The model writes TypeScript; Fabric checks it, runs it in QuickJS, and controls access to files, shell commands, memory, and configured MCP tools.
 
+**Approval defaults:** read, write, execute, and network actions are allowed without confirmation. Shell commands run with host authority. Set explicit `ask` or `deny` policies to restrict them; see [configuration](docs/configuration.md#clients-without-roots-or-elicitation).
+
 ## Start
 
 Requires an authenticated Kiro CLI with v3 support, Node ≥24, pnpm 11.20.0, Bash, and ripgrep for local development.

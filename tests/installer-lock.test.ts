@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { acquireInstallationLock, inspectInstallationLock, installationLockAvailability, inspectInstallationProcesses } from "../scripts/installer-lock.mjs";
 
+import { hasDirectoryFdTraversal } from "./installer-capability-fixture.js";
+const recoveryIt = it.skipIf(!hasDirectoryFdTraversal);
 const modulePath = fileURLToPath(new URL("../src/installation/installer-lock.mjs", import.meta.url));
 const fixtures: string[] = [];
 const children: ChildProcess[] = [];
@@ -116,7 +118,7 @@ describe("installation lock gate 0b", () => {
     expect(fs.readFileSync(ownerPath(base), "utf8")).toBe("{");
   });
 
-  it("recovers a real SIGKILL fully initialized owner into exact retained quarantine", async () => {
+  recoveryIt("recovers a real SIGKILL fully initialized owner into exact retained quarantine", async () => {
     const base = fixture();
     await deadOwner(base);
     const old = readOwner(base);
@@ -132,7 +134,7 @@ describe("installation lock gate 0b", () => {
     expect(again.recovered).toEqual([]); again();
   });
 
-  it("concurrent real subprocess reclaimers admit exactly one manager", async () => {
+  recoveryIt("concurrent real subprocess reclaimers admit exactly one manager", async () => {
     const base = fixture();
     await deadOwner(base);
     const contenders = await Promise.all(Array.from({ length: 6 }, () => launch(base)));
@@ -146,7 +148,7 @@ describe("installation lock gate 0b", () => {
     expect(quarantine(base)).toHaveLength(2);
   });
 
-  it("a live recovery claim excludes competitors; SIGKILL permits a chained exact successor", async () => {
+  recoveryIt("a live recovery claim excludes competitors; SIGKILL permits a chained exact successor", async () => {
     const base = fixture();
     await deadOwner(base);
     const reclaimer = await launch(base, "recovery-claim-initialized");
@@ -161,7 +163,8 @@ describe("installation lock gate 0b", () => {
     release();
   });
 
-  it.each(["lock-created", "owner-created", "recovery-claim-created"])("preserves unknown partial state after real SIGKILL at %s", async phase => {
+  it.for(["lock-created", "owner-created", "recovery-claim-created"])("preserves unknown partial state after real SIGKILL at %s", async (phase, context) => {
+    if (phase === "recovery-claim-created" && !hasDirectoryFdTraversal) context.skip();
     const base = fixture();
     if (phase.startsWith("recovery")) await deadOwner(base);
     const child = await launch(base, phase);
@@ -174,7 +177,7 @@ describe("installation lock gate 0b", () => {
     expect(quarantine(base)).toEqual([]);
   });
 
-  it("bounds repeated killed reclaimers without deleting exhausted evidence", async () => {
+  recoveryIt("bounds repeated killed reclaimers without deleting exhausted evidence", async () => {
     const base = fixture();
     await deadOwner(base);
     for (let index = 0; index < 16; index++) {
@@ -204,7 +207,7 @@ describe("installation lock gate 0b", () => {
     expect(fs.existsSync(path.join(base, "durable-data"))).toBe(true);
   });
 
-  it("recovers after a reclaimer dies immediately following quarantine, retaining evidence", async () => {
+  recoveryIt("recovers after a reclaimer dies immediately following quarantine, retaining evidence", async () => {
     const base = fixture();
     await deadOwner(base);
     const child = await launch(base, "recovery-quarantined");
@@ -274,6 +277,16 @@ describe("installation lock gate 0b", () => {
     expect(quarantine(base)).toEqual([]);
   });
 
+  it.skipIf(hasDirectoryFdTraversal)("preserves a real stale lock when native directory-FD traversal is unsupported", async () => {
+    const base = fixture();
+    await deadOwner(base);
+    const before = fs.readFileSync(ownerPath(base));
+    expect(() => acquireInstallationLock(base, { recover: true })).toThrow("directory-FD traversal unavailable");
+    expect(fs.readFileSync(ownerPath(base))).toEqual(before);
+    expect(fs.readdirSync(target(base))).toEqual(["owner.json"]);
+    expect(quarantine(base)).toEqual([]);
+  });
+
   it("refuses recovery when kernel directory-FD traversal is unavailable, with no pathname fallback", async () => {
     const base = fixture();
     await deadOwner(base);
@@ -297,7 +310,7 @@ describe("installation lock gate 0b", () => {
     if (before !== null) expect(fs.readdirSync("/proc/self/fd").length).toBe(before);
   });
 
-  it("pins claim creation inside the exact stale inode when a competing manager replaces its pathname", async () => {
+  recoveryIt("pins claim creation inside the exact stale inode when a competing manager replaces its pathname", async () => {
     const base = fixture();
     await deadOwner(base);
     let winner: ReturnType<typeof acquireInstallationLock> | undefined;
@@ -312,7 +325,7 @@ describe("installation lock gate 0b", () => {
     winner!();
   });
 
-  it("preserves a replacement immediately before stale quarantine", async () => {
+  recoveryIt("preserves a replacement immediately before stale quarantine", async () => {
     const base = fixture();
     await deadOwner(base);
     expect(() => acquireInstallationLock(base, { recover: true, onPhase(phase) {

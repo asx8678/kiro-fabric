@@ -16,6 +16,10 @@ const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-cert-"));
 const pluginData = path.join(temporary, "data");
 const workspace = path.join(temporary, "workspace");
 fs.mkdirSync(pluginData, { mode: 0o700 });
+// Certification explicitly tests declined approval rather than relying on product defaults.
+const configDirectory = path.join(pluginData, "fabric", "config");
+fs.mkdirSync(configDirectory, { recursive: true, mode: 0o700 });
+fs.writeFileSync(path.join(configDirectory, "config.json"), JSON.stringify({ schemaVersion: 1, approvals: { write: "ask" } }), { mode: 0o600 });
 fs.mkdirSync(workspace, { mode: 0o700 });
 const entry = path.join(pluginRoot, "runtime", "kiro", "mcp-entry.js");
 const child = spawn(process.execPath, [entry], {

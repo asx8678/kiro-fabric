@@ -18807,7 +18807,7 @@ var DEFAULT_FABRIC_CONFIG = {
     maxAuditBytes: 64e3,
     resultFormat: "auto"
   },
-  approvals: { read: "allow", write: "ask", execute: "ask", network: "ask" },
+  approvals: { read: "allow", write: "allow", execute: "allow", network: "allow" },
   mcp: {
     enabled: true,
     disableOAuth: true,
@@ -19054,7 +19054,8 @@ var fabricInfoCatalog = (actions) => {
 };
 
 // src/providers/local-shell.ts
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { readdir, readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 var LocalShellExitError = class extends Error {
@@ -19076,11 +19077,14 @@ function shellEnvironment() {
   }
   return env;
 }
-function sendGroup(pid, signal) {
+async function sendGroup(pid, signal) {
   try {
     process.kill(-pid, signal);
   } catch (error) {
-    if (error.code !== "ESRCH") throw new Error("Local shell cleanup uncertain");
+    const code2 = error.code;
+    if (code2 === "ESRCH") return;
+    if (process.platform === "darwin" && code2 === "EPERM" && !await groupAlive(pid)) return;
+    throw new Error("Local shell cleanup uncertain");
   }
 }
 async function groupAlive(pid) {
@@ -19088,9 +19092,25 @@ async function groupAlive(pid) {
     process.kill(-pid, 0);
   } catch (error) {
     if (error.code === "ESRCH") return false;
-    throw new Error("Local shell cleanup uncertain");
+    if (process.platform !== "darwin" || error.code !== "EPERM") {
+      throw new Error("Local shell cleanup uncertain");
+    }
   }
-  if (process.platform !== "linux") return true;
+  if (process.platform === "darwin") {
+    const { stdout } = await promisify(execFile)("/bin/ps", ["-axo", "pgid=,stat="], {
+      encoding: "utf8",
+      env: { LC_ALL: "C" },
+      timeout: 200,
+      maxBuffer: 4 * 1024 * 1024
+    });
+    if (!stdout.trim()) throw new Error("Local shell cleanup uncertain");
+    for (const line of stdout.trim().split("\n")) {
+      const match = /^\s*(\d+)\s+([A-Za-z+<>0-9-]+)\s*$/.exec(line);
+      if (!match) throw new Error("Local shell cleanup uncertain");
+      if (Number(match[1]) === pid && !match[2].startsWith("Z")) return true;
+    }
+    return false;
+  }
   for (const entry of await readdir("/proc")) {
     if (!/^\d+$/.test(entry)) continue;
     let stat;
@@ -19186,10 +19206,10 @@ async function runLocalShell(options) {
   }
   try {
     if (child.pid !== void 0) {
-      sendGroup(child.pid, "SIGTERM");
+      await sendGroup(child.pid, "SIGTERM");
       const termEnd = performance.now() + 200;
       while (await groupAlive(child.pid) && performance.now() < termEnd) await delay(10);
-      if (await groupAlive(child.pid)) sendGroup(child.pid, "SIGKILL");
+      if (await groupAlive(child.pid)) await sendGroup(child.pid, "SIGKILL");
       const killEnd = performance.now() + 500;
       while (await groupAlive(child.pid) && performance.now() < killEnd) await delay(10);
       if (await groupAlive(child.pid)) failure = "Local shell cleanup uncertain";
@@ -19690,7 +19710,7 @@ declare const local: {
   write(args: { path: string; content: string; overwrite?: boolean }): Promise<LocalMutationResult>;
   /** Nonempty exact unique anchor unless all=true. Parent must already exist. */
   edit(args: { path: string; oldText: string; newText: string; all?: boolean }): Promise<LocalMutationResult>;
-  /** Approved /bin/sh execution; cwd is verified, NOT confinement. No managed background jobs. */
+  /** Approved /bin/sh; cwd is NOT confinement. Within one exec, shell/write/edit queue FIFO before preparation. Failure stops queued effects; settle handles ordinary nonzero exits. No background jobs. */
   shell(args: { command: string; cwd?: string; timeoutMs?: number; settle?: boolean }): Promise<LocalShellResult>;
 };
 `;
@@ -20914,6 +20934,7 @@ var FabricExecutionService = class {
     let workspaceCalls = false;
     let switchRequested = false;
     const localSettlements = /* @__PURE__ */ new Set();
+    let localEffectTail = Promise.resolve();
     let lastShellFailure;
     const providerContext = (signal, deadline) => ({
       cwd: this.cwd,
@@ -20972,7 +20993,7 @@ var FabricExecutionService = class {
           if ((options.workspaceUnavailable === true || options.workspaceBound === false && requiresWorkspace) && actionRef !== "artifacts.read") throw new Error("Verified workspace binding is required; use fabric.workspace in a separate bootstrap execution");
           workspaceCalls = true;
         }
-        const invocation = this.registry.invoke(actionRef, actionArgs, {
+        const invoke = () => this.registry.invoke(actionRef, actionArgs, {
           ...context,
           audits,
           auditBudget,
@@ -21013,6 +21034,15 @@ var FabricExecutionService = class {
             }
           }
         });
+        const localEffect = actionRef === "local.shell" || actionRef === "local.write" || actionRef === "local.edit";
+        const invocation = localEffect ? localEffectTail.then(invoke, () => {
+          throw new Error("Local effect queue stopped after a failed predecessor; inspect state before a new execution");
+        }) : invoke();
+        if (localEffect) {
+          localEffectTail = invocation;
+          void localEffectTail.catch(() => {
+          });
+        }
         if (actionRef.startsWith("local.")) localSettlements.add(invocation);
         let value;
         try {
@@ -22555,7 +22585,7 @@ var StateProvider = class {
 import fs7 from "node:fs";
 import path7 from "node:path";
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { execFile } from "node:child_process";
+import { execFile as execFile2 } from "node:child_process";
 
 // src/providers/local-path.ts
 import fs6 from "node:fs";
@@ -23014,7 +23044,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     const signal = context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal;
     verifySearchExecutable(this.#searchExecutable);
     const output = await new Promise((resolve, reject) => {
-      execFile(this.#searchExecutable.path, ["--no-config", "--sort", "path", ...args], { cwd: this.#paths.root, env: searchEnvironment(), encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: Math.max(1, Math.min(1e4, Math.floor(context.deadline?.remainingMs() ?? 1e4))), killSignal: "SIGKILL", signal }, (error, stdout, stderr) => {
+      execFile2(this.#searchExecutable.path, ["--no-config", "--sort", "path", ...args], { cwd: this.#paths.root, env: searchEnvironment(), encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: Math.max(1, Math.min(1e4, Math.floor(context.deadline?.remainingMs() ?? 1e4))), killSignal: "SIGKILL", signal }, (error, stdout, stderr) => {
         if (!error || error.code === 1 && !error.killed) resolve(stdout);
         else if (error.code === "ENOENT") reject(new Error("ripgrep (rg) is required for local.grep/local.find but was not found"));
         else reject(new Error(`local rg failed or exceeded bounded work/output: ${String(error.code)} ${stderr.slice(0, 500)}`, { cause: error }));

@@ -46,6 +46,8 @@ const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "
   const server = await createKiroMcpServer({ runtimeRoot, dataRoot, ...(launch ? { launchWorkspaceRoot: launch === "project" ? projects[0]! : dataRoot } : {}), version: "fixture", workspaceContext: {
     current: async () => snapshot, invalidate() {}, subscribe: () => ({ dispose() {} }),
   }, prepareRuntime: (options) => createKiroRuntime({ ...options, config: normalizeFabricConfig({
+    // These fixtures exercise interactive approval, independently of product defaults.
+    approvals: { write: "ask", execute: "ask", network: "ask" },
     executor: { timeoutMs: 5000, maxTimeoutMs: 180000 }, mcp: { enabled: false },
   }) }) });
   servers.push(server);

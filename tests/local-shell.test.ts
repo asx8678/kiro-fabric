@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import childProcess, { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,7 +42,13 @@ async function live(pid: number) {
       return !["Z", "X"].includes(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0]!);
     } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
   }
-  try { process.kill(pid, 0); return true; } catch { return false; }
+  try {
+    const state = execFileSync("/bin/ps", ["-p", String(pid), "-o", "stat="], { encoding: "utf8", timeout: 1000 }).trim();
+    return state.length > 0 && !state.startsWith("Z");
+  } catch (error) {
+    if ((error as { status?: number }).status === 1) return false;
+    throw error;
+  }
 }
 
 describe.skipIf(process.platform !== "linux" && process.platform !== "darwin")("local host shell", () => {
@@ -90,6 +97,20 @@ describe.skipIf(process.platform !== "linux" && process.platform !== "darwin")("
     const child = await recorded(cwd, "child");
     await expect(task).rejects.toThrow("timed out"); expect(await live(child)).toBe(false);
     await expect(run({ command: "kill -TERM $$", cwd, settle: true })).rejects.toThrow("abnormally");
+  });
+  it.runIf(process.platform === "darwin").each(["live group", "unavailable process evidence"])("fails closed on EPERM with %s", async (mode) => {
+    const { cwd } = await fixture();
+    const kill = process.kill;
+    vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+      if (pid < 0) throw Object.assign(new Error("permission denied"), { code: "EPERM" });
+      return kill(pid, signal);
+    });
+    if (mode === "unavailable process evidence") {
+      vi.spyOn(childProcess, "execFile").mockImplementation(() => { throw new Error("SECRET_PROBE_FAILURE"); });
+    }
+    try {
+      await expect(run({ command: "echo $$ > group; sleep 60 & sleep 0.1", cwd })).rejects.toThrow(/^Local shell cleanup uncertain$/);
+    } finally { vi.restoreAllMocks(); }
   });
   it("pre-abort and pre-expired deadline execute nothing", async () => {
     const { cwd, controller } = await fixture(); controller.abort("SECRET_REASON");

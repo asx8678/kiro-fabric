@@ -10,6 +10,25 @@ import { doctorInstallation, managerErrorResult } from '../scripts/install-manag
 async function setup(){const root=await fs.mkdtemp(path.join(tmpdir(),'managed-test-')),bundle=await fixture();const kiroHome=path.join(root,'home/.kiro');await fs.mkdir(path.join(root,'home'),{mode:0o700});return {root,bundle,kiroHome,opts:{kiroHome,userHome:path.join(root,'home'),env:{},provenance:'source',validateCandidate:async(candidateRoot:string,context:any)=>{expect(candidateRoot).toContain('/runtime/.candidate-');const candidate=await validateBundle(candidateRoot);expect(context.profile.mcpServers.fabric.env.KIRO_FABRIC_BUNDLE_ROOT).toBe(path.join(path.dirname(candidateRoot),candidate.digest));}},async cleanup(){await fs.rm(root,{recursive:true,force:true});await fs.rm(bundle,{recursive:true,force:true});}};}
 async function change(bundle:string,value:string){const old=(await validateBundle(bundle)).manifest;await fs.writeFile(path.join(bundle,'app/main.js'),value);const m=await createBundleManifest(bundle,old);await fs.writeFile(path.join(bundle,'bundle-manifest.json'),canonical(m)+'\n');return m.digest;}
 
+test('upgrades a hash-verified profile predating explicit workspace forwarding', async () => {
+ const f = await setup();
+ try {
+  const a = await installCompleteGeneration(f.bundle, f.opts);
+  const profile = JSON.parse(await fs.readFile(a.paths.profile, 'utf8'));
+  delete profile.mcpServers.fabric.env.KIRO_FABRIC_LAUNCH_WORKSPACE;
+  const oldBytes = JSON.stringify(profile, null, 2) + '\n';
+  await fs.writeFile(a.paths.profile, oldBytes);
+  const owner = JSON.parse(await fs.readFile(a.paths.manifest, 'utf8'));
+  owner.profileSha256 = installerSafety.hash(oldBytes);
+  await fs.writeFile(a.paths.manifest, JSON.stringify(owner, null, 2) + '\n');
+  expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('active');
+  await change(f.bundle, 'workspace forwarding upgrade');
+  await installCompleteGeneration(f.bundle, f.opts);
+  const updated = JSON.parse(await fs.readFile(a.paths.profile, 'utf8'));
+  expect(updated.mcpServers.fabric.env.KIRO_FABRIC_LAUNCH_WORKSPACE).toBe('${KIRO_FABRIC_LAUNCH_WORKSPACE}');
+ } finally { await f.cleanup(); }
+});
+
 test('install, no-op, two upgrades retain every exact resource; rollback preserves live data',async()=>{const f=await setup();try{const a=await installCompleteGeneration(f.bundle,f.opts);const data=path.join(a.paths.data,'fabric/user-state');await fs.writeFile(data,'durable',{mode:0o600});const oldSkill=await fs.readFile(path.join(a.paths.runtime,a.digest,'resources/skills/fabric-exec/SKILL.md'));expect((await installCompleteGeneration(f.bundle,f.opts)).noop).toBe(true);await change(f.bundle,'second');const b=await installCompleteGeneration(f.bundle,f.opts);await change(f.bundle,'third');const c=await installCompleteGeneration(f.bundle,f.opts);expect((await inspectCompleteInstallation(f.kiroHome)).generations).toHaveLength(3);const rollback=await rollbackCompleteGeneration(f.kiroHome,{validateCandidate:f.opts.validateCandidate});expect(rollback.owner.currentRuntime).toBe(b.digest);expect(rollback.owner.previousRuntime).toBe(c.digest);expect(await fs.readFile(data,'utf8')).toBe('durable');expect(await fs.readFile(path.join(a.paths.runtime,a.digest,'resources/skills/fabric-exec/SKILL.md'))).toEqual(oldSkill);}finally{await f.cleanup();}});
 test('retirement is idempotent, retains maintenance and trust, install reactivates',async()=>{const f=await setup();try{const a=await installCompleteGeneration(f.bundle,f.opts);const launcher=await fs.readFile(a.paths.launcher);await retireCompleteInstallation(f.kiroHome);expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('retired');await expect(fs.stat(a.paths.profile)).rejects.toThrow();expect(await fs.readFile(a.paths.launcher)).toEqual(launcher);expect((await retireCompleteInstallation(f.kiroHome)).noop).toBe(true);await expect(rollbackCompleteGeneration(f.kiroHome)).rejects.toThrow(/install first/);await expect(retireCompleteInstallation(f.kiroHome,{purgeData:true})).rejects.toThrow(/preserved/);await installCompleteGeneration(f.bundle,f.opts);expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('active');}finally{await f.cleanup();}});
 test.each(['profile','launcher','resource','foreign-generation','owner-field'])('modified %s blocks retirement and preserves conflict',async kind=>{const f=await setup();try{const a=await installCompleteGeneration(f.bundle,f.opts);const target=kind==='profile'?a.paths.profile:kind==='launcher'?a.paths.launcher:kind==='resource'?path.join(a.paths.runtime,a.digest,'resources/steering/fabric.md'):kind==='owner-field'?a.paths.manifest:path.join(a.paths.runtime,'a'.repeat(64));if(kind==='foreign-generation')await fs.mkdir(target,{mode:0o700});else if(kind==='owner-field'){const o=JSON.parse(await fs.readFile(target,'utf8'));o.unknown=true;await fs.writeFile(target,JSON.stringify(o));}else await fs.appendFile(target,'foreign');await expect(retireCompleteInstallation(f.kiroHome)).rejects.toThrow();expect(await fs.stat(target)).toBeTruthy();}finally{await f.cleanup();}});

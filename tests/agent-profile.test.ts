@@ -157,6 +157,7 @@ describe("Kiro Agent profile generation", () => {
           command: options.nodePath,
           args: [path.join(options.runtimeRoot, "kiro", "mcp-entry.js")],
           env: {
+            KIRO_FABRIC_LAUNCH_WORKSPACE: "${KIRO_FABRIC_LAUNCH_WORKSPACE}",
             KIRO_FABRIC_RUNTIME_ROOT: options.runtimeRoot,
             KIRO_FABRIC_DATA_ROOT: options.dataRoot,
             KIRO_FABRIC_EXPECTED_NODE: options.nodePath,

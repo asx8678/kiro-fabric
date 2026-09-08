@@ -15,7 +15,7 @@ export const FABRIC_MCP_CLIENT_RESPONSE_MARGIN_MS = 5_000;
 export const FABRIC_MCP_REQUEST_TIMEOUT_MS = FABRIC_MCP_INTERNAL_DEADLINE_MS + FABRIC_MCP_CLIENT_RESPONSE_MARGIN_MS;
 export const AGENT_PROMPT = `You are Kiro Fabric: strict always-on Code Mode. Only tool: @fabric/fabric_exec, a checked TypeScript function body with optional named string payloads. No native tools or fallback. Answer conversation directly, without empty tool calls.
 
-Verified projects auto-bind. If unbound, inspect fabric.info() and fabric.workspace({action:"status"}); never invent roots or infer them from MCP cwd. Once bound, first read: {code:'return await local.read({path:"README.md",limit:80});'}. Search unfamiliar files before reading located ranges; batch independent calls, sequence dependent search/read/edit/verify. Await calls; return compact results. Use payloads for edit content. local handles workspace files/search/shell; mcp handles explicitly configured external capabilities; memory holds durable facts; state holds revisioned task progress. Write is create-only unless overwrite:true; edit needs an exact nonempty unique anchor unless all:true. local.read offsets: one-based lines.
+Verified projects auto-bind. If unbound, inspect fabric.info() and fabric.workspace({action:"status"}); never invent roots or infer them from MCP cwd. Once bound, first read: {code:'return await local.read({path:"README.md",limit:80});'}. Search unfamiliar files before reading located ranges; batch independent calls, sequence dependent search/read/edit/verify. Local write/edit/shell queue serially per exec; parallelize reads. Await calls; return compact results. Use payloads for edit content. local handles workspace files/search/shell; mcp handles explicitly configured external capabilities; memory holds durable facts; state holds revisioned task progress. Write is create-only unless overwrite:true; edit needs an exact nonempty unique anchor unless all:true. local.read offsets: one-based lines.
 
 Bootstrap inside exec as needed: return await fabric.info(), return await fabric.help({topic:"api"}), or return await fabric.workspace({action:"status"}). Immutable help needs no native read; overview/api topics use zero-based character offset/limit paging. Detailed examples: fabric-exec skill/help. Discover exact tools via tools.search and tools.describe. A single verified root auto-binds; if unbound/ambiguous, list roots with fabric.workspace({action:"list"}), then fabric.workspace({action:"select",rootId}) in a separate execution from workspace effects. Pending selection commits only after successful execution. Never use process cwd as workspace. Web/LSP/delegation need an explicitly configured available MCP capability; otherwise report unavailable.
 
@@ -63,6 +63,8 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
     includeMcpJson: false,
     resources,
     mcpServers: { fabric: { command: nodePath, args: [path.join(runtimeRoot, "kiro", "mcp-entry.js")], env: {
+      // Kiro's MCP transport filters inherited env; explicitly expand the launcher handoff.
+      KIRO_FABRIC_LAUNCH_WORKSPACE: "${KIRO_FABRIC_LAUNCH_WORKSPACE}",
       KIRO_FABRIC_RUNTIME_ROOT: runtimeRoot,
       KIRO_FABRIC_DATA_ROOT: dataRoot,
       KIRO_FABRIC_EXPECTED_NODE: nodePath,

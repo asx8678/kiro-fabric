@@ -4,6 +4,13 @@
 
 Kiro Fabric is one native custom-agent product. The selected agent owns one stdio MCP child; the child exposes exactly `fabric_info`, `fabric_workspace`, and `fabric_exec`. Native Kiro tools remain outside QuickJS. The repository contains no discoverable `.kiro/agents/kiro-fabric.*`; only the user-global installed profile has that name. The execution, approval, workspace, persistence, cancellation, and package boundaries are covered by the files below and the full test suite. Power-named source paths, documented deprecated API aliases, explicit migration messages, and the `kiro-fabric-power-workspace-v3` salt remain only for compatibility; active descriptions and primary APIs are Agent/Fabric-first.
 
+- `tests/installer-capability-fixture.ts` — native inode-anchored directory traversal probe for crash-recovery qualification.
+
+## Workspace handoff and local effect scheduling coverage
+
+- `tests/agent-launch-context.test.ts` — explicit workspace interpolation, missing handoff and unsafe-root validation.
+- `tests/local-effect-queue.test.ts` — real Code Mode FIFO ordering, preparation after commit, parallel reads, failure/cancellation/deadline handling and cross-execution conflicts.
+
 ## Strict migration additions (current, not historical results)
 
 - `src/kiro/bootstrap-provider.ts` — checked health/workspace access and bounded immutable bundled help.

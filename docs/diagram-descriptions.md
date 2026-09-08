@@ -38,8 +38,10 @@ Actions can be discovered on demand using `tools.search` and `tools.describe`. C
 
 Default risk policy:
 
-- Read: allow.
-- Write, execute, and network: ask.
+- Read, write, execute, and network: allow without confirmation.
+- Explicit per-risk `ask` or `deny` configuration overrides these defaults.
+
+Execute allows all shell commands without confirmation, including commands that modify files or access the network. These effects are not blocked by the separate write/network provider policies.
 
 Interactive budgets admit at most **16 attempts** and **two simultaneous waits** per execution. Silent allow/deny decisions consume neither counter. Decline or cancellation still consumes an admitted attempt.
 

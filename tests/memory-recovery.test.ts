@@ -1,10 +1,21 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KiroMemoryCommitAcknowledgementError, openKiroMemory } from "../src/kiro/memory.js";
 
 const roots: string[] = [];
+// Track actual opens rather than relying on Linux-only /proc symlink lookup.
+const openedPaths = new Map<number, string>();
+beforeEach(() => {
+  openedPaths.clear();
+  const open = fs.openSync;
+  vi.spyOn(fs, "openSync").mockImplementation((target, flags, mode) => {
+    const fd = open(target, flags, mode);
+    openedPaths.set(fd, String(target));
+    return fd;
+  });
+});
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-memory-recovery-")); roots.push(root); return root; };
 const lockDirectory = (root: string): string => {
   let found = "";
@@ -207,7 +218,7 @@ describe("Fabric memory commit recovery", () => {
       let fail = true;
       vi.spyOn(fs, "closeSync").mockImplementation((descriptor) => {
         if (fail) {
-          const target = process.platform === "linux" ? fs.readlinkSync(`/proc/self/fd/${descriptor}`) : "";
+          const target = openedPaths.get(descriptor) ?? "";
           if (target.endsWith(`${path.sep}owner.json`)) { fail = false; throw failure; }
         }
         return original(descriptor);
@@ -225,7 +236,7 @@ describe("Fabric memory commit recovery", () => {
     const original = fs.fstatSync;
     let fault = true;
     vi.spyOn(fs, "fstatSync").mockImplementation((descriptor, options) => {
-      const target = process.platform === "linux" ? fs.readlinkSync(`/proc/self/fd/${descriptor}`) : "";
+      const target = openedPaths.get(descriptor) ?? "";
       if (fault && target.endsWith(`${path.sep}owner.json`)) throw Object.assign(new Error("owner metadata fault"), { code: "EIO" });
       return original(descriptor, options as never);
     });
@@ -246,7 +257,7 @@ describe("Fabric memory commit recovery", () => {
     let fail = true;
     vi.spyOn(fs, "closeSync").mockImplementation((descriptor) => {
       calls.push(descriptor);
-      const target = process.platform === "linux" ? fs.readlinkSync(`/proc/self/fd/${descriptor}`) : "";
+      const target = openedPaths.get(descriptor) ?? "";
       original(descriptor);
       if (fail && target.endsWith(`${path.sep}owner.json`)) { fail = false; throw failure; }
     });

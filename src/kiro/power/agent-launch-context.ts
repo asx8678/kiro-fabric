@@ -43,7 +43,9 @@ export const resolveKiroAgentLaunchContext = (
   const managedGeneration = inferManagedGeneration(runtimeRoot, env);
   // Only an explicit launcher handoff may supply a project. Never infer it from
   // the backend cwd, PWD, runtime directory, or model input.
-  const launchWorkspaceRoot = env.KIRO_FABRIC_LAUNCH_WORKSPACE === undefined ? undefined
-    : canonicalDirectory(env.KIRO_FABRIC_LAUNCH_WORKSPACE, "KIRO_FABRIC_LAUNCH_WORKSPACE");
+  const handoff = env.KIRO_FABRIC_LAUNCH_WORKSPACE;
+  // Kiro leaves an unset interpolation literal unchanged. It supplies no authority.
+  const launchWorkspaceRoot = handoff === undefined || handoff === "${KIRO_FABRIC_LAUNCH_WORKSPACE}" ? undefined
+    : canonicalDirectory(handoff, "KIRO_FABRIC_LAUNCH_WORKSPACE");
   return { runtimeRoot, dataRoot, ...(managedGeneration ? { managedGeneration } : {}), ...(launchWorkspaceRoot ? { launchWorkspaceRoot } : {}) };
 };

@@ -24,6 +24,10 @@ Provider composition uses exact references. `fabric.info()` returns an `actions`
 return await memory.get({ key: "release" });
 ```
 
+Within one Code Mode execution, `local.shell`, `local.write`, and `local.edit` are queued FIFO in host-call arrival order, including calls through `tools.call`. Even `cat`/`find` shell commands are treated as potential writes; no command-text safety guessing occurs. Their preparation, approval, execution and cleanup complete before the next local effect starts. A failed predecessor stops the remaining local effects in that execution, even when caught. `settle:true` permits continuation only for ordinary nonzero shell exits. Cancellation/deadline never starts queued effects. Other executions/processes still fail fast on conflicting workspace locks.
+
+Prefer `local.read`, `local.list`, `local.find`, and `local.grep` for parallel inspection. Reads/searches are not queued; explicitly await a write before a read that depends on it. Queue wait consumes the outer execution deadline and existing provider-call/concurrency budgets. Shell timeout applies when that command runs; allow outer timeout headroom for the entire batch.
+
 Use the bounded helper for independent calls instead of an unbounded `Promise.all`:
 
 ```ts
