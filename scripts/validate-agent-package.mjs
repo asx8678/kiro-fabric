@@ -10,8 +10,8 @@ import {
 
 const MAX_PACKAGE_FILES = 500;
 const MAX_PACKAGE_BYTES = 64 * 1024 * 1024;
-// Strict migration adds only the reviewed local and bootstrap providers.
-const AGENT_PRODUCT_SHA256 = "351d35494b24e12d6e3d0d719ec50155bdcf7824f47f59dcd8ae00ccd9e301d7";
+// Pin the reviewed product authority, including the closed guidance inventory.
+const AGENT_PRODUCT_SHA256 = "c7ee916f31929a9d7ead7edc4095f68e83c649fbd87af44c18929f5869e570d2";
 const SCRIPT_FILES = [
   "agent-profile.mjs",
   "install-agent-user.mjs",
@@ -218,7 +218,7 @@ export const validateAgentPackage = (input) => {
   if (product.schemaVersion !== 1 || product.product !== "kiro-fabric-agent" ||
       product.entrypoint !== "src/kiro/mcp-entry.ts" || product.outputBundle !== "dist/kiro-agent-closure" ||
       JSON.stringify(product.tools) !== JSON.stringify(FABRIC_TOOLS) ||
-      JSON.stringify(product.bundledAgentResources) !== JSON.stringify(["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md"])) {
+      JSON.stringify(product.bundledAgentResources) !== JSON.stringify(["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md"])) {
     fail("agent product contract drifted");
   }
 
@@ -236,7 +236,7 @@ export const validateAgentPackage = (input) => {
   assertExactNames(fs.readdirSync(path.join(root, "skills")), ["fabric-exec"], "skills root");
   const skillFiles = walkPackage(path.join(root, "skills", "fabric-exec"))
     .map((file) => normalize(path.relative(path.join(root, "skills", "fabric-exec"), file)));
-  assertExactNames(skillFiles, ["SKILL.md", "references/api.md"], "skill");
+  assertExactNames(skillFiles, ["SKILL.md", "references/api.md", "references/recipes.md", "references/workflow.md"], "skill");
 
   const skill = snapshotTree(path.join(root, "skills", "fabric-exec"));
   assertExactNames(skill.directories.map((entry) => entry.path), [".", "references"], "skill directory");

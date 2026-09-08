@@ -1,3 +1,3 @@
 # Installation boundaries
 
-Code, tools and resources stay bound to this session's generation; restart Kiro to adopt an update (not for compaction). The installation directory is not the coding workspace. Checked TypeScript runs in QuickJS; approved shell commands retain host authority, not filesystem confinement.
+Code, tools and resources bind to this session's generation; restart Kiro for updates, not for compaction. Installation directory: not the coding workspace. Checked TypeScript: QuickJS; approved shell retains host authority, not filesystem confinement.

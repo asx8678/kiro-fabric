@@ -2,12 +2,15 @@ import { Value } from "typebox/value";
 import { throwIfAbortedOrExpired } from "../async-settlement.js";
 import type { FabricActionDescriptor, FabricInvocationContext, FabricProvider } from "../protocol.js";
 import { fabricGuestDeclarations } from "../runtime/guest-types.js";
+import { BUNDLED_GUIDANCE } from "./generated-guidance.js";
 import { kiroPowerWorkspaceRequestSchema, kiroWorkspaceToolInputSchema } from "./power/workspace-binding.js";
 
-const OVERVIEW = `Your only tool is fabric_exec. All supported tool work runs in checked TypeScript. Use local.read/grep/find/list/write/edit/shell for coding, mcp for explicitly configured external tools, and memory/state only for intentional durable facts. Search before large reads; batch independent calls; sequence read-dependent edits and verification. Return compact evidence, not intermediate results. Use payloads for long strings. Shell settle:true returns ordinary nonzero exits, never denial/cancellation/timeout. Approved shell has host OS authority; cwd is not confinement. No native fallback exists. Web/LSP/delegation require suitable configured MCP tools or are unavailable. Conversation needs no empty execution. Single verified roots bind automatically. Use fabric.workspace({action:'list'}) and a separate fabric.workspace({action:'select',rootId}) execution only when selection is needed. A switch is pending until the host confirms the transition after guest settlement; do not mix it with workspace calls. fabric.help({topic:'api',offset,limit}) pages the immutable bundled declarations (zero-based character offsets). Read offsets are one-based lines. Programs are not transactions; never blindly retry after effects or uncertain termination.`;
+const OVERVIEW = `Your only tool is fabric_exec. All supported tool work runs in checked TypeScript. Use local.read/grep/find/list/write/edit/shell for coding, mcp for explicitly configured external tools, and memory/state only for intentional durable facts. Search before large reads; batch independent calls; sequence read-dependent edits and verification. Return compact evidence, not intermediate results. Use payloads for long strings. Shell settle:true returns ordinary nonzero exits, never denial/cancellation/timeout. Approved shell has host OS authority; cwd is not confinement. No native fallback exists. Web/LSP/delegation require suitable configured MCP tools or are unavailable. Conversation needs no empty execution. Single verified roots bind automatically. Use fabric.workspace({action:'list'}) and a separate fabric.workspace({action:'select',rootId}) execution only when selection is needed. A switch is pending until the host confirms the transition after guest settlement; do not mix it with workspace calls. fabric.help({topic:'api',offset,limit}) pages immutable declarations; topics skill/guide/recipes/workflow serve bundled task instructions (zero-based UTF-16 offsets). Read offsets are one-based lines. Programs are not transactions; never blindly retry after effects or uncertain termination.`;
+const DOCUMENTS: Readonly<Record<string, string>> = Object.freeze({ overview: OVERVIEW, api: fabricGuestDeclarations, ...BUNDLED_GUIDANCE });
+const HELP_SCHEMA = { type: "object", properties: { topic: { type: "string", enum: Object.keys(DOCUMENTS) }, offset: { type: "integer", minimum: 0, maximum: 100000 }, limit: { type: "integer", minimum: 1, maximum: 16000 } }, required: ["topic"], additionalProperties: false };
 const descriptors: FabricActionDescriptor[] = [
   { name: "info", description: "Bounded health, lifecycle and workspace status through Code Mode", risk: "read", effect: { kind: "none" }, inputSchema: { type: "object", properties: {}, additionalProperties: false } },
-  { name: "help", description: "Read only immutable bundled API instructions; zero-based character paging", risk: "read", effect: { kind: "none" }, inputSchema: { type: "object", properties: { topic: { type: "string", enum: ["overview", "api"] }, offset: { type: "integer", minimum: 0, maximum: 100000 }, limit: { type: "integer", minimum: 1, maximum: 16000 } }, required: ["topic"], additionalProperties: false } },
+  { name: "help", description: "Read only immutable bundled API instructions; zero-based character paging", risk: "read", effect: { kind: "none" }, inputSchema: HELP_SCHEMA },
   // Selecting a client-verified root is an explicit bootstrap operation, not a
   // filesystem write. Manual attach retains its existing exact elicitation.
   { name: "workspace", description: "Inspect roots or prepare a separate, deferred workspace transition", risk: "read", effect: { kind: "none" }, inputSchema: kiroWorkspaceToolInputSchema },
@@ -22,7 +25,9 @@ export class FabricBootstrapProvider implements FabricProvider {
   async invoke(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<unknown> {
     throwIfAbortedOrExpired(context.signal, context.deadline);
     if (name === "help") {
-      const source = args.topic === "api" ? fabricGuestDeclarations : OVERVIEW;
+      if (!Value.Check(HELP_SCHEMA, args)) throw new Error("Invalid fabric.help topic/arguments");
+      if (!Number.isSafeInteger(this.maxResultChars) || this.maxResultChars < 262) throw new Error("Nested result budget too small for bounded help");
+      const source = DOCUMENTS[String(args.topic)]!;
       const offset = typeof args.offset === "number" ? args.offset : 0;
       // JSON escaping can multiply characters by six. Leave metadata margin.
       const size = Math.max(1, Math.min(typeof args.limit === "number" ? args.limit : 8000, Math.floor((this.maxResultChars - 256) / 6)));

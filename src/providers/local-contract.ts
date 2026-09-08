@@ -30,13 +30,13 @@ type LocalShellResult = { ok: boolean; exitCode: number | null; signal: string |
 /** Only ordinary nonzero local.shell rejections supply result. Hard failures do not. */
 interface Error { readonly result?: LocalShellResult }
 declare const local: {
-  /** UTF-8, 1-based lines; default 200, max 2000. Files <=2MiB; oversized single lines fail. */
+  /** UTF-8 whole lines; 1-based, default 200/max 2000, files <=2MiB. truncated means unread suffix; nextOffset is the next line. Stop at requested end. Oversized single lines fail. */
   read(args: { path: string; offset?: number; limit?: number }): Promise<LocalReadResult>;
   /** Requires rg. Respects ignore files; excludes hidden paths/symlinks. Skips binary/invalid UTF-8; >2MiB skipped with truncated=true. Default 100/max 1000 matches; text <=500 chars. */
   grep(args: { pattern: string; path?: string; glob?: string; literal?: boolean; ignoreCase?: boolean; limit?: number }): Promise<LocalGrepResult>;
   /** rg glob enumeration with the same ignore/hidden/no-follow semantics as grep. */
   find(args: { pattern: string; path?: string; limit?: number }): Promise<LocalFindResult>;
-  /** Sorted direct children, including hidden entries. Unsafe entries are rejected. Default 100/max 1000. */
+  /** Sorted direct children, including hidden entries. Only path/limit; no depth. Use find for nested files. Unsafe entries are rejected. Default 100/max 1000. */
   list(args?: { path?: string; limit?: number }): Promise<LocalListResult>;
   /** Create-only unless overwrite=true. Parent must already exist. Exact approval binds snapshots and proposed content. */
   write(args: { path: string; content: string; overwrite?: boolean }): Promise<LocalMutationResult>;

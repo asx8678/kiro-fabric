@@ -23,6 +23,23 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 - `tests/strict-bootstrap.test.ts` — checked actual MCP bootstrap, local fixture coding and partial effects.
 - `tests/schema-validation.test.ts` — distinguishes property names from restricted schema keywords without admitting regex/combinator execution.
 
+## Compiled guidance and guarded benchmark additions
+
+- `src/kiro/generated-guidance.ts` — immutable canonical skill/guide/recipe/workflow strings; no runtime file reads.
+- `scripts/generate-agent-guidance.mjs` — bounded UTF-8 source validation and deterministic checked guidance generation.
+- `tests/guidance.test.ts` — byte parity, closed help topics, paging/progress, cancellation, Unicode and public guest declarations.
+- `scripts/steering-benchmark.mjs` — explicit opt-in live benchmark CLI; initialization/selftests do not invoke a model.
+- `scripts/steering-benchmark/cases.mjs` — deterministic benign fixtures and explicit output/source contracts.
+- `scripts/steering-benchmark/core.mjs` — bounded inventories, hashing and scope checks; no OS-sandbox claim.
+- `scripts/steering-benchmark/oracles.mjs` — raw output, actual filesystem and execution evidence validation, with independent disposable Python probes.
+- `scripts/steering-benchmark/plan.mjs` — paired schedules, immutable identities, live CLI settings and conservative spend admission.
+- `scripts/steering-benchmark/runner.mjs` — exactly-once rows, retention of every failure/charge and stop-on-unknown behavior.
+- `scripts/steering-benchmark/stream.mjs` — bounded process collection and strict ACP/usage accounting.
+- `scripts/steering-benchmark/selftest.mjs` — explicitly synthetic offline oracle qualification, excluded from measured results.
+- `tests/steering-benchmark.test.ts` — contract negatives, source/config drift, process bounds, interrupted rows and credit gates.
+
+Benchmark scripts are development tooling, not installed model capabilities. The stopped live pilot and its limitations are recorded separately in the audits directory.
+
 ## Complete implementation inventory
 
 - `scripts/agent-profile.mjs`

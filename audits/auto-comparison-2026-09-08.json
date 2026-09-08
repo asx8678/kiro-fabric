@@ -1,0 +1,820 @@
+{
+  "kind": "kiro-fabric.auto-comparison",
+  "schemaVersion": 1,
+  "identity": {
+    "cliVersion": "kiro-cli 2.21.1",
+    "node": "v24.20.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "profileSha256": "1136e967c49d0b3dc038c28fe9d76436daa6c7cbe85226cc830ded39de5926ae",
+    "configSha256": "2b6385f38f6f89e96dc1a6783627d64a9a9f4a8f43261fd667f759dc8b5856a9",
+    "kasSha256": "7e102d154413a7b92ed1abae0ab32d5761debfefdff4d626075e20d63f9da0cb",
+    "installedGeneration": "944750594b95db4e8b35d3a1fe080478bb502ff6eca81b95b7719539d3b1ddb1",
+    "profileTools": [
+      "@fabric/fabric_exec"
+    ],
+    "waitForReady": true,
+    "requestedModel": "auto",
+    "actualRoutedModel": null,
+    "cacheUsage": null,
+    "settledBilling": null
+  },
+  "design": "six tasks, two rounds, fresh sessions and fixtures; counterbalanced agent order; no product tuning between arms",
+  "approvalMode": "--trust-all-tools for both arms; no global setting change; Fabric inner policies unchanged",
+  "scoredRuns": 24,
+  "pairedTaskInstances": 12,
+  "perTask": [
+    {
+      "task": "read24",
+      "default": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.3430988459369817,
+        "meanWallSeconds": 19.501195874999997,
+        "toolCalls": 48
+      },
+      "fabric": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.2120283182421227,
+        "meanWallSeconds": 21.209654833499997,
+        "toolCalls": 8
+      },
+      "creditReductionPercent": 38.20197276878431,
+      "wallTimeChangePercent": 8.760790719969114
+    },
+    {
+      "task": "targeted-edit",
+      "default": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.2830832189883914,
+        "meanWallSeconds": 18.172719979,
+        "toolCalls": 8
+      },
+      "fabric": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.2774289118573797,
+        "meanWallSeconds": 29.476528958499998,
+        "toolCalls": 17
+      },
+      "creditReductionPercent": 1.997401029710466,
+      "wallTimeChangePercent": 62.20207537761233
+    },
+    {
+      "task": "duration-bug",
+      "default": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.34839844601990055,
+        "meanWallSeconds": 23.919556270499996,
+        "toolCalls": 10
+      },
+      "fabric": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.24328871824212273,
+        "meanWallSeconds": 26.655014833499997,
+        "toolCalls": 12
+      },
+      "creditReductionPercent": 30.16940201041366,
+      "wallTimeChangePercent": 11.436075703350923
+    },
+    {
+      "task": "rename-api",
+      "default": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.308510506053068,
+        "meanWallSeconds": 20.1447029165,
+        "toolCalls": 14
+      },
+      "fabric": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.14399907081260363,
+        "meanWallSeconds": 16.8794216035,
+        "toolCalls": 8
+      },
+      "creditReductionPercent": 53.32441910816683,
+      "wallTimeChangePercent": -16.20913113752347
+    },
+    {
+      "task": "nonzero-output",
+      "default": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.1601491063018242,
+        "meanWallSeconds": 9.4444182505,
+        "toolCalls": 2
+      },
+      "fabric": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.052554983416252074,
+        "meanWallSeconds": 8.2942527085,
+        "toolCalls": 2
+      },
+      "creditReductionPercent": 67.18371733077011,
+      "wallTimeChangePercent": -12.178257161992045
+    },
+    {
+      "task": "invoice-join",
+      "default": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.6260089004145937,
+        "meanWallSeconds": 33.473606853999996,
+        "toolCalls": 53
+      },
+      "fabric": {
+        "successes": 2,
+        "attempts": 2,
+        "meanCredits": 0.400592275456053,
+        "meanWallSeconds": 32.14891233350001,
+        "toolCalls": 10
+      },
+      "creditReductionPercent": 36.00853355427559,
+      "wallTimeChangePercent": -3.957429882826302
+    }
+  ],
+  "aggregate": {
+    "default": {
+      "attempts": 12,
+      "successes": 12,
+      "reportedCredits": 4.138498047429519,
+      "reportedCreditsPerSuccess": 0.34487483728579327,
+      "totalWallSeconds": 249.312400291,
+      "toolCalls": 135,
+      "toolFailures": 4,
+      "failures": []
+    },
+    "fabric": {
+      "attempts": 12,
+      "successes": 12,
+      "reportedCredits": 2.659784556053068,
+      "reportedCreditsPerSuccess": 0.22164871300442235,
+      "totalWallSeconds": 269.327570542,
+      "toolCalls": 57,
+      "toolFailures": 11,
+      "failures": []
+    }
+  },
+  "creditReductionPercent": 35.730679933385524,
+  "wallTimeChangePercent": 8.02814871127071,
+  "modelVisibleToolCallReductionPercent": 57.77777777777777,
+  "cheaperPairs": 11,
+  "fasterPairs": 6,
+  "errorKinds": {
+    "default": {
+      "expectedNonzero": 4,
+      "compiler": 0,
+      "other": 0
+    },
+    "fabric": {
+      "expectedNonzero": 4,
+      "compiler": 7,
+      "other": 0
+    }
+  },
+  "budget": {
+    "scoredReportedCredits": 6.798282603482587,
+    "calibrationReportedCredits": 1.5263859971807632,
+    "thisRequestReportedCredits": 8.324668600663351,
+    "settledAccountDebit": null
+  },
+  "verification": {
+    "all24OraclesPassed": true,
+    "pairedFixtureAndPromptHashesMatch": true,
+    "orderCounterbalanced": true,
+    "autoObservedBothArms": true,
+    "installedProfileAndConfigUnchanged": true,
+    "harnessUnchanged": true,
+    "traceCoverage": [
+      {
+        "run": 1,
+        "file": "fabric-33864-mtsw6vom.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 1,
+        "file": "fabric-33870-mtsw6vwu.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 4
+      },
+      {
+        "run": 2,
+        "file": "fabric-33983-mtsw7hi2.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 2,
+        "file": "fabric-33989-mtsw7hqc.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 8
+      },
+      {
+        "run": 5,
+        "file": "fabric-34317-mtsw97cw.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 5,
+        "file": "fabric-34323-mtsw97l5.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 6
+      },
+      {
+        "run": 6,
+        "file": "fabric-34500-mtswbcxr.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 6,
+        "file": "fabric-34506-mtswbd5u.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 4
+      },
+      {
+        "run": 9,
+        "file": "fabric-34811-mtswcknn.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 9,
+        "file": "fabric-34817-mtswckw7.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 1
+      },
+      {
+        "run": 10,
+        "file": "fabric-34917-mtswcwwo.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 10,
+        "file": "fabric-34923-mtswcx52.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 5
+      },
+      {
+        "run": 12,
+        "file": "fabric-35178-mtswey4u.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 12,
+        "file": "fabric-35184-mtsweyd3.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 4
+      },
+      {
+        "run": 15,
+        "file": "fabric-35479-mtswgdcf.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 15,
+        "file": "fabric-35486-mtswgdkl.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 9
+      },
+      {
+        "run": 16,
+        "file": "fabric-35615-mtswh748.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 16,
+        "file": "fabric-35621-mtswh7cb.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 6
+      },
+      {
+        "run": 19,
+        "file": "fabric-35971-mtswj2qn.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 19,
+        "file": "fabric-35977-mtswj2yp.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 4
+      },
+      {
+        "run": 20,
+        "file": "fabric-36092-mtswjn0z.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 20,
+        "file": "fabric-36098-mtswjn94.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 1
+      },
+      {
+        "run": 23,
+        "file": "fabric-36383-mtswkvah.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 0
+      },
+      {
+        "run": 23,
+        "file": "fabric-36389-mtswkvil.jsonl",
+        "coverage": "complete-observed-records",
+        "executionAttempts": 5
+      }
+    ]
+  },
+  "limitations": [
+    "Six synthetic tasks, two rounds each; not proof of general superiority.",
+    "Auto routing/revision and cache accounting were not exposed; actual underlying model equality is unknown.",
+    "Fresh sessions do not imply cold provider/OS caches.",
+    "Reported turn credits are not settled account billing.",
+    "All tools auto-approved for both headless arms on controlled fixtures; no global policy changes.",
+    "Initial approval-mismatched runs excluded from scored comparison, retained and charged as calibration.",
+    "Tool-call counts are model-visible ACP calls, not equivalent units of host work.",
+    "Transient helper files removed before validation and out-of-workspace effects are not proven absent by final snapshots."
+  ],
+  "runs": [
+    {
+      "index": 0,
+      "task": "read24",
+      "round": 0,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.34355337131011604,
+      "wallSeconds": 20.027316625,
+      "toolCalls": 24,
+      "toolFailures": 0
+    },
+    {
+      "index": 1,
+      "task": "read24",
+      "round": 0,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.20294077081260364,
+      "wallSeconds": 20.284378291999996,
+      "toolCalls": 4,
+      "toolFailures": 2
+    },
+    {
+      "index": 2,
+      "task": "targeted-edit",
+      "round": 0,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.2562933157545605,
+      "wallSeconds": 27.973309958,
+      "toolCalls": 8,
+      "toolFailures": 1
+    },
+    {
+      "index": 3,
+      "task": "targeted-edit",
+      "round": 0,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.28248904212271975,
+      "wallSeconds": 18.337425708,
+      "toolCalls": 4,
+      "toolFailures": 0
+    },
+    {
+      "index": 4,
+      "task": "duration-bug",
+      "round": 0,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.33918463466003324,
+      "wallSeconds": 23.755878457999998,
+      "toolCalls": 5,
+      "toolFailures": 1
+    },
+    {
+      "index": 5,
+      "task": "duration-bug",
+      "round": 0,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.23936659635157545,
+      "wallSeconds": 25.813113917,
+      "toolCalls": 6,
+      "toolFailures": 1
+    },
+    {
+      "index": 6,
+      "task": "rename-api",
+      "round": 0,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.14399907081260363,
+      "wallSeconds": 17.431243665999997,
+      "toolCalls": 4,
+      "toolFailures": 0
+    },
+    {
+      "index": 7,
+      "task": "rename-api",
+      "round": 0,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.3132271213930349,
+      "wallSeconds": 19.748274166999998,
+      "toolCalls": 7,
+      "toolFailures": 0
+    },
+    {
+      "index": 8,
+      "task": "nonzero-output",
+      "round": 0,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.1601491063018242,
+      "wallSeconds": 9.487047209,
+      "toolCalls": 1,
+      "toolFailures": 1
+    },
+    {
+      "index": 9,
+      "task": "nonzero-output",
+      "round": 0,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.052554983416252074,
+      "wallSeconds": 8.457563875,
+      "toolCalls": 1,
+      "toolFailures": 1
+    },
+    {
+      "index": 10,
+      "task": "invoice-join",
+      "round": 0,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.44674995621890545,
+      "wallSeconds": 34.393810917,
+      "toolCalls": 5,
+      "toolFailures": 0
+    },
+    {
+      "index": 11,
+      "task": "invoice-join",
+      "round": 0,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.6799887300165837,
+      "wallSeconds": 35.999834666999995,
+      "toolCalls": 27,
+      "toolFailures": 0
+    },
+    {
+      "index": 12,
+      "task": "read24",
+      "round": 1,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.22111586567164176,
+      "wallSeconds": 22.134931375,
+      "toolCalls": 4,
+      "toolFailures": 2
+    },
+    {
+      "index": 13,
+      "task": "read24",
+      "round": 1,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.3426443205638474,
+      "wallSeconds": 18.975075125,
+      "toolCalls": 24,
+      "toolFailures": 0
+    },
+    {
+      "index": 14,
+      "task": "targeted-edit",
+      "round": 1,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.283677395854063,
+      "wallSeconds": 18.00801425,
+      "toolCalls": 4,
+      "toolFailures": 0
+    },
+    {
+      "index": 15,
+      "task": "targeted-edit",
+      "round": 1,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.298564507960199,
+      "wallSeconds": 30.979747959,
+      "toolCalls": 9,
+      "toolFailures": 2
+    },
+    {
+      "index": 16,
+      "task": "duration-bug",
+      "round": 1,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.24721084013266997,
+      "wallSeconds": 27.49691575,
+      "toolCalls": 6,
+      "toolFailures": 1
+    },
+    {
+      "index": 17,
+      "task": "duration-bug",
+      "round": 1,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.3576122573797678,
+      "wallSeconds": 24.083234083,
+      "toolCalls": 5,
+      "toolFailures": 1
+    },
+    {
+      "index": 18,
+      "task": "rename-api",
+      "round": 1,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.30379389071310114,
+      "wallSeconds": 20.541131666000002,
+      "toolCalls": 7,
+      "toolFailures": 0
+    },
+    {
+      "index": 19,
+      "task": "rename-api",
+      "round": 1,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.14399907081260363,
+      "wallSeconds": 16.327599540999998,
+      "toolCalls": 4,
+      "toolFailures": 0
+    },
+    {
+      "index": 20,
+      "task": "nonzero-output",
+      "round": 1,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.052554983416252074,
+      "wallSeconds": 8.130941542,
+      "toolCalls": 1,
+      "toolFailures": 1
+    },
+    {
+      "index": 21,
+      "task": "nonzero-output",
+      "round": 1,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.1601491063018242,
+      "wallSeconds": 9.401789292000002,
+      "toolCalls": 1,
+      "toolFailures": 1
+    },
+    {
+      "index": 22,
+      "task": "invoice-join",
+      "round": 1,
+      "arm": "default",
+      "ok": true,
+      "credits": 0.5720290708126036,
+      "wallSeconds": 30.947379041,
+      "toolCalls": 26,
+      "toolFailures": 0
+    },
+    {
+      "index": 23,
+      "task": "invoice-join",
+      "round": 1,
+      "arm": "fabric",
+      "ok": true,
+      "credits": 0.35443459469320066,
+      "wallSeconds": 29.90401375,
+      "toolCalls": 5,
+      "toolFailures": 0
+    }
+  ],
+  "plan": {
+    "harnessSha256": "12ba3e67c875a1f8b5057ee8f78baf774015640cd18b731422edd70c4297f143",
+    "createdAt": "2026-09-08T16:36:27.339Z",
+    "runs": [
+      {
+        "index": 0,
+        "task": "read24",
+        "round": 0,
+        "arm": "default",
+        "fixtureSha256": "c6555d626f95b1a089c6fcb7fc3b8a2bf6e9d9430ade5e625de10220c6305f66",
+        "promptSha256": "a4e669779e74bf52bc55dd80f16db4f8ca4cefe233b5f5cd6310cf2ef0357dce"
+      },
+      {
+        "index": 1,
+        "task": "read24",
+        "round": 0,
+        "arm": "fabric",
+        "fixtureSha256": "c6555d626f95b1a089c6fcb7fc3b8a2bf6e9d9430ade5e625de10220c6305f66",
+        "promptSha256": "a4e669779e74bf52bc55dd80f16db4f8ca4cefe233b5f5cd6310cf2ef0357dce"
+      },
+      {
+        "index": 2,
+        "task": "targeted-edit",
+        "round": 0,
+        "arm": "fabric",
+        "fixtureSha256": "34c68df377a9a4f29cee5d6f552518003db73bc35db43a50bd01563cb7f1802e",
+        "promptSha256": "6d4ea8dadbcfa3c51d1c34de8f4bc81df9afd82d8ecdcbd2c12dace44115f7bb"
+      },
+      {
+        "index": 3,
+        "task": "targeted-edit",
+        "round": 0,
+        "arm": "default",
+        "fixtureSha256": "34c68df377a9a4f29cee5d6f552518003db73bc35db43a50bd01563cb7f1802e",
+        "promptSha256": "6d4ea8dadbcfa3c51d1c34de8f4bc81df9afd82d8ecdcbd2c12dace44115f7bb"
+      },
+      {
+        "index": 4,
+        "task": "duration-bug",
+        "round": 0,
+        "arm": "default",
+        "fixtureSha256": "9856da0ea1e80b95e279aabf7dd5ab7c85ef90968ce239ae4635daeab20a4086",
+        "promptSha256": "aeea4b9ce930e1e269305ff42a2b4f71dcf2207ab73bd6291c3b8ec7cd8916d2"
+      },
+      {
+        "index": 5,
+        "task": "duration-bug",
+        "round": 0,
+        "arm": "fabric",
+        "fixtureSha256": "9856da0ea1e80b95e279aabf7dd5ab7c85ef90968ce239ae4635daeab20a4086",
+        "promptSha256": "aeea4b9ce930e1e269305ff42a2b4f71dcf2207ab73bd6291c3b8ec7cd8916d2"
+      },
+      {
+        "index": 6,
+        "task": "rename-api",
+        "round": 0,
+        "arm": "fabric",
+        "fixtureSha256": "39ee0b08a8b17ccf3e5868fbc3e5ebb62890e40796a61036cb52b8d817b90e20",
+        "promptSha256": "dec5a406f880200c33f4ba238631146e427bd52acaaa79a21febd60196972b63"
+      },
+      {
+        "index": 7,
+        "task": "rename-api",
+        "round": 0,
+        "arm": "default",
+        "fixtureSha256": "39ee0b08a8b17ccf3e5868fbc3e5ebb62890e40796a61036cb52b8d817b90e20",
+        "promptSha256": "dec5a406f880200c33f4ba238631146e427bd52acaaa79a21febd60196972b63"
+      },
+      {
+        "index": 8,
+        "task": "nonzero-output",
+        "round": 0,
+        "arm": "default",
+        "fixtureSha256": "d9404648f413e0140cc41967b9af76a3a0bde36b0b7708a6fdfab18f42e49b29",
+        "promptSha256": "2619e97e62954fdae8196f0018cc9d5934b963e5b004e096f434ce0cb2116ed6"
+      },
+      {
+        "index": 9,
+        "task": "nonzero-output",
+        "round": 0,
+        "arm": "fabric",
+        "fixtureSha256": "d9404648f413e0140cc41967b9af76a3a0bde36b0b7708a6fdfab18f42e49b29",
+        "promptSha256": "2619e97e62954fdae8196f0018cc9d5934b963e5b004e096f434ce0cb2116ed6"
+      },
+      {
+        "index": 10,
+        "task": "invoice-join",
+        "round": 0,
+        "arm": "fabric",
+        "fixtureSha256": "1ab57dafd327702738058f261ca5c2684317b4724b4eb39cdf4bbb94105e6d9b",
+        "promptSha256": "1e76e7a2f5dca588c292b1fa17eb810c491852555d6bebd12d9240c22c55605a"
+      },
+      {
+        "index": 11,
+        "task": "invoice-join",
+        "round": 0,
+        "arm": "default",
+        "fixtureSha256": "1ab57dafd327702738058f261ca5c2684317b4724b4eb39cdf4bbb94105e6d9b",
+        "promptSha256": "1e76e7a2f5dca588c292b1fa17eb810c491852555d6bebd12d9240c22c55605a"
+      },
+      {
+        "index": 12,
+        "task": "read24",
+        "round": 1,
+        "arm": "fabric",
+        "fixtureSha256": "301435656917461a3713bd7ee056d7759b8fa41eac94e7893d8167265127fbf8",
+        "promptSha256": "a4e669779e74bf52bc55dd80f16db4f8ca4cefe233b5f5cd6310cf2ef0357dce"
+      },
+      {
+        "index": 13,
+        "task": "read24",
+        "round": 1,
+        "arm": "default",
+        "fixtureSha256": "301435656917461a3713bd7ee056d7759b8fa41eac94e7893d8167265127fbf8",
+        "promptSha256": "a4e669779e74bf52bc55dd80f16db4f8ca4cefe233b5f5cd6310cf2ef0357dce"
+      },
+      {
+        "index": 14,
+        "task": "targeted-edit",
+        "round": 1,
+        "arm": "default",
+        "fixtureSha256": "0f0dbacdd44200f2aaf553f28ac407b1fa1d065c75a7528d39b68ff83a63c80a",
+        "promptSha256": "6d4ea8dadbcfa3c51d1c34de8f4bc81df9afd82d8ecdcbd2c12dace44115f7bb"
+      },
+      {
+        "index": 15,
+        "task": "targeted-edit",
+        "round": 1,
+        "arm": "fabric",
+        "fixtureSha256": "0f0dbacdd44200f2aaf553f28ac407b1fa1d065c75a7528d39b68ff83a63c80a",
+        "promptSha256": "6d4ea8dadbcfa3c51d1c34de8f4bc81df9afd82d8ecdcbd2c12dace44115f7bb"
+      },
+      {
+        "index": 16,
+        "task": "duration-bug",
+        "round": 1,
+        "arm": "fabric",
+        "fixtureSha256": "9856da0ea1e80b95e279aabf7dd5ab7c85ef90968ce239ae4635daeab20a4086",
+        "promptSha256": "aeea4b9ce930e1e269305ff42a2b4f71dcf2207ab73bd6291c3b8ec7cd8916d2"
+      },
+      {
+        "index": 17,
+        "task": "duration-bug",
+        "round": 1,
+        "arm": "default",
+        "fixtureSha256": "9856da0ea1e80b95e279aabf7dd5ab7c85ef90968ce239ae4635daeab20a4086",
+        "promptSha256": "aeea4b9ce930e1e269305ff42a2b4f71dcf2207ab73bd6291c3b8ec7cd8916d2"
+      },
+      {
+        "index": 18,
+        "task": "rename-api",
+        "round": 1,
+        "arm": "default",
+        "fixtureSha256": "d30eb7eb518e7ecb39e6dd11b626f101fcee0885a1e4c6f053519176a95774a3",
+        "promptSha256": "dec5a406f880200c33f4ba238631146e427bd52acaaa79a21febd60196972b63"
+      },
+      {
+        "index": 19,
+        "task": "rename-api",
+        "round": 1,
+        "arm": "fabric",
+        "fixtureSha256": "d30eb7eb518e7ecb39e6dd11b626f101fcee0885a1e4c6f053519176a95774a3",
+        "promptSha256": "dec5a406f880200c33f4ba238631146e427bd52acaaa79a21febd60196972b63"
+      },
+      {
+        "index": 20,
+        "task": "nonzero-output",
+        "round": 1,
+        "arm": "fabric",
+        "fixtureSha256": "629c1665acaad26fdd1917707aa1df3088f027922fabfd9cfce82fc060379735",
+        "promptSha256": "2619e97e62954fdae8196f0018cc9d5934b963e5b004e096f434ce0cb2116ed6"
+      },
+      {
+        "index": 21,
+        "task": "nonzero-output",
+        "round": 1,
+        "arm": "default",
+        "fixtureSha256": "629c1665acaad26fdd1917707aa1df3088f027922fabfd9cfce82fc060379735",
+        "promptSha256": "2619e97e62954fdae8196f0018cc9d5934b963e5b004e096f434ce0cb2116ed6"
+      },
+      {
+        "index": 22,
+        "task": "invoice-join",
+        "round": 1,
+        "arm": "default",
+        "fixtureSha256": "f34e0772e8a768c04f8b22d233411e04348c926bc433bcc26ea7b69d04c211b4",
+        "promptSha256": "1e76e7a2f5dca588c292b1fa17eb810c491852555d6bebd12d9240c22c55605a"
+      },
+      {
+        "index": 23,
+        "task": "invoice-join",
+        "round": 1,
+        "arm": "fabric",
+        "fixtureSha256": "f34e0772e8a768c04f8b22d233411e04348c926bc433bcc26ea7b69d04c211b4",
+        "promptSha256": "1e76e7a2f5dca588c292b1fa17eb810c491852555d6bebd12d9240c22c55605a"
+      }
+    ]
+  },
+  "evidence": {
+    "scored": "/tmp/kiro-fabric-auto-ab-v2-20260908",
+    "calibration": "/tmp/kiro-fabric-auto-ab-20260908",
+    "billingBoundary": "Kiro-reported turn credits, not settled account debit"
+  }
+}

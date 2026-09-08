@@ -39,7 +39,7 @@ type FabricWorkspaceRequest =
   | { action: "attach"; path: string };
 declare const fabric: Readonly<{
   info(): Promise<JsonObject>;
-  help(args: { topic: "overview" | "api"; offset?: number; limit?: number }): Promise<{ topic: string; text: string; truncated: boolean; nextOffset?: number }>;
+  help(args: { topic: "overview" | "api" | "skill" | "guide" | "recipes" | "workflow"; offset?: number; limit?: number }): Promise<{ topic: string; text: string; truncated: boolean; nextOffset?: number }>;
   workspace(args: FabricWorkspaceRequest): Promise<JsonObject>;
 }>;
 declare const payloads: Readonly<Record<string, string>>;

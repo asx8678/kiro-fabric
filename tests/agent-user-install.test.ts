@@ -89,6 +89,15 @@ const fixture = (): { root: string; home: string; workspace: string; kiroHome: s
 };
 
 describe("user-global Agent installation", () => {
+  it("stages all canonical guidance and still rejects extra skill files", () => {
+    const variant = packageVariant(temporary(), "0.64.1");
+    for (const relative of ["SKILL.md", "references/api.md", "references/recipes.md", "references/workflow.md"]) {
+      expect(fs.readFileSync(path.join(variant, "skills/fabric-exec", relative), "utf8")).toBe(fs.readFileSync(path.resolve("skills/fabric-exec", relative), "utf8"));
+    }
+    expect(() => validateAgentPackage(variant)).not.toThrow();
+    fs.writeFileSync(path.join(variant, "skills/fabric-exec/references/unreviewed.md"), "unexpected", { mode: 0o600 });
+    expect(() => validateAgentPackage(variant)).toThrow("skill inventory drifted");
+  });
   it("defaults to HOME/.kiro and installs a fully bound absolute global profile", () => {
     const { home, workspace, kiroHome } = fixture();
     const result = installUserAgent(stage(), {}, home, { workspaceRoot: workspace });
@@ -104,6 +113,7 @@ describe("user-global Agent installation", () => {
     expect(profile.allowedTools).toEqual(["@fabric/fabric_exec"]);
     expect(profile.permissions.rules).toEqual([{ capability: "mcp", match: ["fabric/fabric_exec"], effect: "allow" }]);
     expect(Object.keys(profile.mcpServers)).toEqual(["fabric"]);
+    expect(profile.mcpServers.fabric.waitForReady).toBe(true);
     expect(profile.mcpServers.fabric.requestTimeout).toBe(917_000);
     expect(profile.mcpServers.fabric.env.PLUGIN_ROOT).toBeUndefined();
     expect(profile.mcpServers.fabric.env.PLUGIN_DATA).toBeUndefined();

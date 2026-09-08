@@ -10,6 +10,32 @@ import { doctorInstallation, managerErrorResult } from '../scripts/install-manag
 async function setup(){const root=await fs.mkdtemp(path.join(tmpdir(),'managed-test-')),bundle=await fixture();const kiroHome=path.join(root,'home/.kiro');await fs.mkdir(path.join(root,'home'),{mode:0o700});return {root,bundle,kiroHome,opts:{kiroHome,userHome:path.join(root,'home'),env:{},provenance:'source',validateCandidate:async(candidateRoot:string,context:any)=>{expect(candidateRoot).toContain('/runtime/.candidate-');const candidate=await validateBundle(candidateRoot);expect(context.profile.mcpServers.fabric.env.KIRO_FABRIC_BUNDLE_ROOT).toBe(path.join(path.dirname(candidateRoot),candidate.digest));}},async cleanup(){await fs.rm(root,{recursive:true,force:true});await fs.rm(bundle,{recursive:true,force:true});}};}
 async function change(bundle:string,value:string){const old=(await validateBundle(bundle)).manifest;await fs.writeFile(path.join(bundle,'app/main.js'),value);const m=await createBundleManifest(bundle,old);await fs.writeFile(path.join(bundle,'bundle-manifest.json'),canonical(m)+'\n');return m.digest;}
 
+test('upgrades a hash-verified pre-readiness profile without accepting profile tampering', async () => {
+ const f = await setup();
+ try {
+  const installed = await installCompleteGeneration(f.bundle, f.opts);
+  const profile = JSON.parse(await fs.readFile(installed.paths.profile, 'utf8'));
+  expect(profile.mcpServers.fabric.waitForReady).toBe(true);
+  delete profile.mcpServers.fabric.waitForReady;
+  const oldBytes = JSON.stringify(profile, null, 2) + '\n';
+  await fs.writeFile(installed.paths.profile, oldBytes);
+  await expect(inspectCompleteInstallation(f.kiroHome)).rejects.toThrow(/modified profile/);
+  // A real old install's ownership record already hashes its pre-readiness profile.
+  const owner = JSON.parse(await fs.readFile(installed.paths.manifest, 'utf8'));
+  owner.profileSha256 = installerSafety.hash(oldBytes);
+  await fs.writeFile(installed.paths.manifest, JSON.stringify(owner, null, 2) + '\n');
+  expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('active');
+  await change(f.bundle, 'headless readiness upgrade');
+  await installCompleteGeneration(f.bundle, f.opts);
+  const upgradedBytes = await fs.readFile(installed.paths.profile, 'utf8');
+  const upgraded = JSON.parse(upgradedBytes);
+  expect(upgraded.mcpServers.fabric.waitForReady).toBe(true);
+  expect(upgraded.tools).toEqual(['@fabric/fabric_exec']);
+  expect(upgraded.allowedTools).toEqual(['@fabric/fabric_exec']);
+  expect((await inspectCompleteInstallation(f.kiroHome)).owner.profileSha256).toBe(installerSafety.hash(upgradedBytes));
+ } finally { await f.cleanup(); }
+});
+
 test('upgrades a hash-verified profile predating explicit workspace forwarding', async () => {
  const f = await setup();
  try {

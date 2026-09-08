@@ -108,6 +108,18 @@ describe("LocalCodingProvider read contracts", () => {
     f.put("empty", "");
     expect(await f.call("read", { path: "empty" })).toMatchObject({ text: "", truncated: false });
   });
+  it("returns an entire requested CRLF range even when the file suffix is unread", async () => {
+    const f = fixture();
+    const selected = ["  START 雪  ", "LONG:" + "x".repeat(9000) + ":END", "line 43", "\tSTOP\t"];
+    f.put("range.txt", [...Array.from({ length: 40 }, (_, i) => String(i)), ...selected, "unrequested suffix"].join("\r\n") + "\r\n");
+    const r = await f.call("read", { path: "range.txt", offset: 41, limit: 4 }) as LocalReadResult;
+    expect(r.truncated).toBe(true); expect(r.nextOffset).toBe(45);
+    expect(r.text).toBe(selected.join("\r\n") + "\r\n");
+    expect(r.text.replace(/\r?\n$/, "").split(/\r?\n/)).toEqual(selected);
+    expect((await f.provider.describe("read"))?.description).toContain("truncated means unread file suffix");
+    expect(LOCAL_GUEST_DECLARATIONS).toContain("Stop at requested end");
+  });
+
   it("defaults to 200 lines, accepts at most 2000, and never previews instead of typed output", async () => {
     const f = fixture(); f.put("many", "x\n".repeat(2001));
     expect(await f.call("read", { path: "many" })).toMatchObject({ text: "x\n".repeat(200), truncated: true, nextOffset: 201 });

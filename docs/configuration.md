@@ -42,6 +42,8 @@ Fabric's fail-closed behavior assumes the Kiro client advertises MCP roots and a
 
 The generated agent profile deliberately omits `model`; `--v3` selects Kiro's V3 harness and is not a model name. The inline `mcpServers.fabric.requestTimeout` is 917000 ms: Fabric's 900000 ms maximum guest deadline plus the 10000 ms compiler allowance, 2000 ms outer cancellation grace, and a positive 5000 ms client-response margin. This keeps Kiro's client deadline strictly later than Fabric's own maximum request envelope.
 
+The generated `mcpServers.fabric.waitForReady` is **true**. Kiro V3 connects MCP servers asynchronously and snapshots the model's tools at turn start; without this flag a headless first prompt can run before `fabric_exec` is registered, even with `--require-mcp-startup`. The flag uses Kiro's readiness barrier, not an arbitrary sleep, and does not expand tool visibility or approve nested effects. A disconnected/failed server still cannot execute tools; readiness is not proof of task success. Refresh an existing installation with `pnpm run agent:update` from the source checkout (or the normal release update) and start a new conversation. Do not manually edit the integrity-tracked installed profile. Local CLI 2.21.1 V3 headless verification confirmed a real `fabric_exec` result after enabling this flag; release qualification remains separate.
+
 By default, [Kiro custom agents inherit](https://kiro.dev/docs/custom-agents/configuration-reference/#disabling-default-resource-inheritance) default steering, skills, and `AGENTS.md`. Fabric preserves that Kiro default and its installer does not write Kiro settings. A user who wants only the resources named by custom-agent profiles can explicitly set:
 
 ```sh
@@ -53,6 +55,21 @@ The setting is global and workspace-overridable. Re-enable inheritance by deleti
 ```sh
 kiro-cli settings --delete chat.disableInheritingDefaultResources
 ```
+
+## Efficient output, working rules and immutable skills
+
+The **always-on agent prompt** distinguishes tool routing from tool necessity: user tool bans include pure computation, formatting and verification, and override workflow advice. Default to solution, verification and blockers in **120 words or fewer** only if no other format/detail requirement is specified. Requested JSON keeps permitted evidence inside its schema, without fences or post-test prose. For JSON-only requests, suppress visible assistant commentary before/between tool calls: Kiro includes it in `finalText`. Recheck the entire final text without calling tools.
+
+Standing guidance includes plain comments, Git history/edit/staging preservation, commitlint, PR templates, noninteractive commands, no disk/home/ancestor scans, reading supplied files, and explicit permission for GitHub comment mutations. Detailed review-reply/resolution and file-backed Markdown procedures are in workflow help. `gh api` uses `--input`, not `--body-file`. `local.read` reads UTF-8 text, not images/PDFs; unavailable capabilities are blockers, not permission to guess.
+
+Exact local API/result shapes stay beside the tool. Known paths need no ritual listing/help; unknown layouts require discovery. For permitted tool work, keep known-schema data pipelines in one bounded execution. Parallelize independent reads, sequence dependencies, retain per-effect approvals and stop for missing evidence or model judgment. Never replay effects to repair presentation.
+
+`fabric.help({topic,offset?,limit?})` exposes fixed immutable topics without workspace binding: `overview` for bootstrap; `api` for TypeScript declarations (unchanged meaning); `skill` for SKILL.md; `guide` for API prose; `recipes` for executable examples; `workflow` for coding/Git/GitHub procedures. Follow `nextOffset` on required truncated content. Offsets are zero-based UTF-16 characters, not bytes/lines. Help accepts no path/URI, reads no file at request time, executes no example and grants no approval.
+
+`scripts/generate-agent-guidance.mjs` embeds canonical Markdown; `pnpm run guidance:check` detects stale generated source. Bundles include matching strings and Markdown in one verified generation. Skill access therefore does not depend on optional resource activation or external-workspace shell reads. Detailed help is task-loaded. The standing-character ceiling is 5,200 after adding the user's rules; characters are not tokens, and the input trade-off needs live measurement.
+
+Update normally and start a **new Kiro conversation** to adopt prompt, descriptions and help together. `resources/steering/fabric.md` retains nonduplicated installation boundaries. Never edit integrity-tracked installed files or duplicate global steering. This is **model guidance**, not a hard output cap, no-tools switch, JSON decoder or perfect-success guarantee. Inventory, approvals, timeout/call/output limits and native exclusion are unchanged; normal resource inheritance remains. See [turn contracts](turn-contracts.md) for the client enforcement boundary.
+
 
 ## Strict local coding and bootstrap
 

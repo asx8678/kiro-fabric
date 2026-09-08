@@ -1,5 +1,15 @@
 # Unreleased
 
+- Tighten JSON-only steering after live v3 evidence showed inter-tool commentary entering `finalText`; clarify complete whole-line ranges and CRLF handling without changing read semantics or permissions. Add a frozen Auto comparison harness with strict oracles, exact-once admission, live settings checks and fail-closed usage/budget gates. Retain its stopped 20/102-request pilot, oracle limitations and unresolved native charge; no completed broad-comparison or perfect-compliance claim.
+
+- Port explicit tool/output precedence and safe coding/Git/GitHub working rules into standing Kiro guidance. Add fixed `fabric.help` topics for compiled skill, API prose, recipes and workflow. Generate immutable help from canonical Markdown and check parity; preserve single-tool, workspace, per-effect approval and non-replay boundaries. Clarify that steering, stream-json and tool result formatting do not enforce the final assistant answer.
+
+- Advertise exact hot local APIs beside `fabric_exec` to avoid read-result/search/edit guesses. Skip ritual discovery for known paths, compose deterministic data pipelines in guest, and ship concise-answer Kiro steering with explicit completeness/verification exceptions. Add executable Unicode/whitespace, decoy, edit, truncation and nonzero-command recipes; retain strict tools, workspace and approval boundaries.
+
+- Wait for Fabric MCP readiness before Kiro V3 builds the first prompt's tool inventory. Fix headless `fabric_exec` unavailability with `mcpServers.fabric.waitForReady: true`, retaining the exact one-tool surface, nested approval policy, and hash-verified upgrade checks.
+
+- Start Fabric workspace inspection with bounded directory listing instead of assuming a root README. Document shallow `local.list` arguments and discovery-before-read sequencing; cover absent, root, and nested READMEs while retaining strict rejection of unsupported `depth`.
+
 - Fix macOS shell cleanup for inert zombie groups without suppressing live-process or observation failures; make memory fault injection portable, canonicalize test temporary roots, and make efficiency CLI entry detection symlink-safe. Qualify crash-recovery success tests by native directory-FD capability and verify unsupported hosts preserve locks/journals.
 
 - Serialize local shell/write/edit calls within each Code Mode execution before argument preparation, including concurrent `Promise.all` and generic `tools.call`. Keep reads parallel, stop queued effects after failure/cancellation, and retain cross-execution/process conflict protection.

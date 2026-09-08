@@ -1,0 +1,775 @@
+{
+  "schemaVersion": 1,
+  "status": "stopped: native range timeout with missing terminal usage; no further Kiro inference",
+  "plannedRequests": 102,
+  "executedRequests": 20,
+  "notExecutedRequests": 82,
+  "cliVersion": "kiro-cli 2.21.1",
+  "requestedModel": "auto",
+  "actualRoutedModel": null,
+  "cacheUsage": null,
+  "settledBilling": null,
+  "priorConversationReportedCredits": 13.512289,
+  "knownConversationReportedCredits": 15.654861872802655,
+  "conversationReportedCredits": null,
+  "creditCeiling": 40,
+  "reserveCredits": 5,
+  "originalPlannedNewCredits": 20,
+  "allExecuted": {
+    "attempts": 20,
+    "strictPasses": 12,
+    "knownReportedCredits": 2.1425728728026536,
+    "unknownChargeAttempts": 1,
+    "reportedCredits": null,
+    "wallMs": 343141.383292,
+    "modelToolCalls": 68
+  },
+  "comparisonExcludingDefectiveExplanation": {
+    "old": {
+      "attempts": 4,
+      "strictPasses": 3,
+      "knownReportedCredits": 0.5153942278606964,
+      "unknownChargeAttempts": 0,
+      "reportedCredits": 0.5153942278606964,
+      "wallMs": 47689.35349899999,
+      "modelToolCalls": 3
+    },
+    "pass1": {
+      "attempts": 4,
+      "strictPasses": 3,
+      "knownReportedCredits": 0.4685180286898839,
+      "unknownChargeAttempts": 0,
+      "reportedCredits": 0.4685180286898839,
+      "wallMs": 42194.284791,
+      "modelToolCalls": 3
+    },
+    "pass2": {
+      "attempts": 4,
+      "strictPasses": 3,
+      "knownReportedCredits": 0.46122873532338304,
+      "unknownChargeAttempts": 0,
+      "reportedCredits": 0.46122873532338304,
+      "wallMs": 45952.57262500001,
+      "modelToolCalls": 3
+    },
+    "native": {
+      "attempts": 4,
+      "strictPasses": 3,
+      "knownReportedCredits": 0.5697083011608624,
+      "unknownChargeAttempts": 1,
+      "reportedCredits": null,
+      "wallMs": 183985.93221,
+      "modelToolCalls": 59
+    }
+  },
+  "read24Snapshot": [
+    {
+      "arm": "native",
+      "strictPass": true,
+      "credits": 0.3447416873963516,
+      "wallMs": 18142.019709,
+      "modelToolCalls": 24,
+      "reportedCreditReductionVsNativePercent": 0
+    },
+    {
+      "arm": "old",
+      "strictPass": true,
+      "credits": 0.10444566368159204,
+      "wallMs": 10321.056208000002,
+      "modelToolCalls": 1,
+      "reportedCreditReductionVsNativePercent": 69.70321040358829
+    },
+    {
+      "arm": "pass1",
+      "strictPass": true,
+      "credits": 0.10492477064676616,
+      "wallMs": 10308.349291000006,
+      "modelToolCalls": 1,
+      "reportedCreditReductionVsNativePercent": 69.56423476394559
+    },
+    {
+      "arm": "pass2",
+      "strictPass": true,
+      "credits": 0.0916262631840796,
+      "wallMs": 10481.864375000005,
+      "modelToolCalls": 1,
+      "reportedCreditReductionVsNativePercent": 73.42176286364337
+    }
+  ],
+  "arms": {
+    "old": {
+      "profileDigest": "3e160bde0bfd8d710d1a1f2d477016a8471fa14b5738042c9b62a319124eaa86",
+      "promptSha256": "dd39fc80b812a450672b2d67b127de448af2afb1a04db2c21a3a45ca7d8d5b8d",
+      "promptChars": 3216,
+      "standingChars": 3496,
+      "runtimeTreeDigest": "f4b16dbc1d6f0d5c00135c7027126bc7c437c84f93e3a30e719c425fa3ec6a4e",
+      "strictTools": [
+        "@fabric/fabric_exec"
+      ],
+      "waitForReady": true
+    },
+    "pass1": {
+      "profileDigest": "d02d55af60968193176a1a78fa2fef03950ccd1241c6e3e2ac4f46c4283b45b7",
+      "promptSha256": "5221beffdd149590dc47f9353e1cb98e16d6918775c87091dc07929c02237160",
+      "promptChars": 4877,
+      "standingChars": 5157,
+      "runtimeTreeDigest": "226006c1978a5b580968bc097329cc191662deaa456d482395be7274526a4bb7",
+      "strictTools": [
+        "@fabric/fabric_exec"
+      ],
+      "waitForReady": true
+    },
+    "pass2": {
+      "profileDigest": "d6cdefd7e56132880db930f87d2ca414777679da9d75781d17015d16afa51bb8",
+      "promptSha256": "5221beffdd149590dc47f9353e1cb98e16d6918775c87091dc07929c02237160",
+      "promptChars": 4877,
+      "standingChars": 5157,
+      "runtimeTreeDigest": "a5380fb5a7ce29a502d479fe3968fab5fe9c43cbeb02734e036b9fbbb175c593",
+      "strictTools": [
+        "@fabric/fabric_exec"
+      ],
+      "waitForReady": true
+    }
+  },
+  "harnessIdentity": [
+    {
+      "file": "steering-benchmark.mjs",
+      "hash": "b3841205903e0b0b387f65616ccc856c9d1709377badacb0f237b2bbf11bc08f"
+    },
+    {
+      "file": "steering-benchmark/cases.mjs",
+      "hash": "68e34e3d3503ecc1d54fca75c48a2020b73b4ff9225e471bfbd09b2f6644552a"
+    },
+    {
+      "file": "steering-benchmark/core.mjs",
+      "hash": "06dd6d814de8eadf2027c0d5255b100a5245c934c591f0df79d86177ed0fedd2"
+    },
+    {
+      "file": "steering-benchmark/oracles.mjs",
+      "hash": "482baedd709a8690b16bb6c80f7631d3db24041f131ff841d4d637532b0a429b"
+    },
+    {
+      "file": "steering-benchmark/plan.mjs",
+      "hash": "838ba5fb407424f0383b0569d52832f74146a4b02ad9ff855c841c871293534e"
+    },
+    {
+      "file": "steering-benchmark/runner.mjs",
+      "hash": "29656eeee3c0997c46ec79fda5c71058a78098afa1505930bda012e9f6304f14"
+    },
+    {
+      "file": "steering-benchmark/selftest.mjs",
+      "hash": "2d94f57379ab6936e93281585a4161d2fb1ade4e92c5467d270e1cac86b5ed10"
+    },
+    {
+      "file": "steering-benchmark/stream.mjs",
+      "hash": "b889d8447f8fb0d53f3f56ad262a1aa123a70303e0ff6bccbaeaa9faf9be25c2"
+    }
+  ],
+  "environmentDigest": "777925413f54fd9b5414fa3fafb14b72e5adb8e4d26cbe49e443be717b01af83",
+  "liveCliSettingsSnapshotted": true,
+  "cliSettings": {},
+  "limits": {
+    "maxCalls": 40,
+    "timeoutMs": 150000,
+    "maxOutputBytes": 8388608
+  },
+  "limitations": [
+    "Benign disposable-workspace benchmark, not OS containment: agents can tamper with audit files, traces, or controller-accessible files. No network-prevention claim.",
+    "No trust-all-tools, adversarial injections, Git/GitHub execution, installed-profile changes, or automatic retries. Existing tool approval policy applies; denial is recorded as failure.",
+    "ACP outer calls and fixture command records are counted; unobserved inner effects, escaped processes, transient/outside-workspace writes, routed Auto model, caches and settled billing are not independently proven.",
+    "Local spend admission and cancellation are not provider-enforced charge ceilings. Unknown charges remain unknown, never zero.",
+    "POSIX process groups required for live collection; Windows live runs fail preflight. Two repetitions give descriptive comparisons, not causal or reliability proof.",
+    "Only one repetition of five cases executed. Reverse-order repetitions and coding cases did not run; no completed broad comparison or universal superiority claim.",
+    "Free-form explanation rubric was over-constrained. All four raw failures remain; manual semantic review is separate.",
+    "Range JSON-suffix diagnostics never repair the whole-answer score.",
+    "Automatic fetch_cloud_config startup excluded from model tool calls. Inner effects and peak concurrency unavailable.",
+    "Missing native usage was not estimated or substituted. Its exact local v3 session remains in_progress with no credit/turn-completion record.",
+    "Post-benchmark guidance changes are offline-tested, not live-validated. Future v2 makes literal prose/rename byte contracts explicit and schedules range stress last."
+  ],
+  "rows": [
+    {
+      "index": 0,
+      "arm": "old",
+      "case": "explain",
+      "round": 0,
+      "seed": "9dca7ff6a98855267c76228ae7f9382ce815a7e4c1b97dc9ee9d1e6a4ad5644a",
+      "hashes": {
+        "prompt": "f0c6189702c8831a0ee816aa708c78c42454696a9777651fc51f00cd1d8408be",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "61713b84f208957606c04e2fb95ba7092484ee264a06f33321f8b579bb8fc7b7"
+      },
+      "strictPass": false,
+      "stopReason": null,
+      "credits": 0.024704193864013263,
+      "wallMs": 6257.590208,
+      "modelToolCalls": 0,
+      "observedMode": "steering-old",
+      "requestedModel": "auto",
+      "checks": [
+        {
+          "check": "answer",
+          "error": "explanation rubric"
+        }
+      ],
+      "finalTextSha256": "8613c087d44d5fae5dff678d0d88375d56c0eaf99054e2d8953ab346addd905a",
+      "finalTextChars": 188,
+      "trace": "runs/0000/client.jsonl",
+      "explanationAudit": {
+        "rawAnswer": "Tests should run after a targeted code edit because they verify the expected behavior holds and catch regressions in surrounding code, but do not prove the implementation is fully correct.",
+        "manualSemanticReview": "Valid one-sentence explanation, all three requested propositions present.",
+        "oracleDefect": "v1 required literal wording not requested by its prompt; raw failure retained, case excluded uniformly from comparison."
+      }
+    },
+    {
+      "index": 1,
+      "arm": "pass1",
+      "case": "explain",
+      "round": 0,
+      "seed": "9dca7ff6a98855267c76228ae7f9382ce815a7e4c1b97dc9ee9d1e6a4ad5644a",
+      "hashes": {
+        "prompt": "f0c6189702c8831a0ee816aa708c78c42454696a9777651fc51f00cd1d8408be",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "61713b84f208957606c04e2fb95ba7092484ee264a06f33321f8b579bb8fc7b7"
+      },
+      "strictPass": false,
+      "stopReason": null,
+      "credits": 0.02498953731343284,
+      "wallMs": 5906.940417,
+      "modelToolCalls": 0,
+      "observedMode": "steering-pass1",
+      "requestedModel": "auto",
+      "checks": [
+        {
+          "check": "answer",
+          "error": "explanation rubric"
+        }
+      ],
+      "finalTextSha256": "5edce8b583351624365103944fdb02f0533cb1ab85ec4144a8185856762ecadd",
+      "finalTextChars": 138,
+      "trace": "runs/0001/client.jsonl",
+      "explanationAudit": {
+        "rawAnswer": "Tests should run after a targeted code edit because they verify the expected behavior and catch regressions, but do not prove correctness.",
+        "manualSemanticReview": "Valid one-sentence explanation, all three requested propositions present.",
+        "oracleDefect": "v1 required literal wording not requested by its prompt; raw failure retained, case excluded uniformly from comparison."
+      }
+    },
+    {
+      "index": 2,
+      "arm": "pass2",
+      "case": "explain",
+      "round": 0,
+      "seed": "9dca7ff6a98855267c76228ae7f9382ce815a7e4c1b97dc9ee9d1e6a4ad5644a",
+      "hashes": {
+        "prompt": "f0c6189702c8831a0ee816aa708c78c42454696a9777651fc51f00cd1d8408be",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "61713b84f208957606c04e2fb95ba7092484ee264a06f33321f8b579bb8fc7b7"
+      },
+      "strictPass": false,
+      "stopReason": null,
+      "credits": 0.01520907097844113,
+      "wallMs": 5754.371875000001,
+      "modelToolCalls": 0,
+      "observedMode": "steering-pass2",
+      "requestedModel": "auto",
+      "checks": [
+        {
+          "check": "answer",
+          "error": "explanation rubric"
+        }
+      ],
+      "finalTextSha256": "25cf664502d5ae333cd30fadb36e23a7dad4a39304e32dac55b621188ba8079d",
+      "finalTextChars": 163,
+      "trace": "runs/0002/client.jsonl",
+      "explanationAudit": {
+        "rawAnswer": "Tests should run after a targeted edit because they verify the expected behavior holds and catch regressions in related code, but do not prove overall correctness.",
+        "manualSemanticReview": "Valid one-sentence explanation, all three requested propositions present.",
+        "oracleDefect": "v1 required literal wording not requested by its prompt; raw failure retained, case excluded uniformly from comparison."
+      }
+    },
+    {
+      "index": 3,
+      "arm": "native",
+      "case": "explain",
+      "round": 0,
+      "seed": "9dca7ff6a98855267c76228ae7f9382ce815a7e4c1b97dc9ee9d1e6a4ad5644a",
+      "hashes": {
+        "prompt": "f0c6189702c8831a0ee816aa708c78c42454696a9777651fc51f00cd1d8408be",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "61713b84f208957606c04e2fb95ba7092484ee264a06f33321f8b579bb8fc7b7"
+      },
+      "strictPass": false,
+      "stopReason": null,
+      "credits": 0.0628207776119403,
+      "wallMs": 5400.337667,
+      "modelToolCalls": 0,
+      "observedMode": "vibe",
+      "requestedModel": "auto",
+      "checks": [
+        {
+          "check": "answer",
+          "error": "explanation rubric"
+        }
+      ],
+      "finalTextSha256": "d55d9780c2475a610f166435adb6a8f7d6fdbfd5711246f2d510dfcab59d0b2f",
+      "finalTextChars": 184,
+      "trace": "runs/0003/client.jsonl",
+      "explanationAudit": {
+        "rawAnswer": "Tests should run after a targeted code edit because they verify the expected behavior holds and catch regressions in related code, but do not prove the implementation is fully correct.",
+        "manualSemanticReview": "Valid one-sentence explanation, all three requested propositions present.",
+        "oracleDefect": "v1 required literal wording not requested by its prompt; raw failure retained, case excluded uniformly from comparison."
+      }
+    },
+    {
+      "index": 4,
+      "arm": "pass1",
+      "case": "json160",
+      "round": 0,
+      "seed": "042a17a6b1248516d575473b9d0d34388e4e316f4c1cb040615d4c2c1a0a7bfc",
+      "hashes": {
+        "prompt": "d1a50d242074e29ba97d877bfed3f2c9a4e653c353acc40bb2623f18d71fff61",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "284decdbc6ed3c539dea5b4640bfea1b001506e7d397f10b4cb39bd55661cead"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.12070877412935324,
+      "wallMs": 9346.585208999997,
+      "modelToolCalls": 0,
+      "observedMode": "steering-pass1",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "74be36136b4f92d17aaef2448f54b7ca61eeeda897f328e85d1802b8c53e9615",
+      "finalTextChars": 3361,
+      "trace": "runs/0004/client.jsonl"
+    },
+    {
+      "index": 5,
+      "arm": "pass2",
+      "case": "json160",
+      "round": 0,
+      "seed": "042a17a6b1248516d575473b9d0d34388e4e316f4c1cb040615d4c2c1a0a7bfc",
+      "hashes": {
+        "prompt": "d1a50d242074e29ba97d877bfed3f2c9a4e653c353acc40bb2623f18d71fff61",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "284decdbc6ed3c539dea5b4640bfea1b001506e7d397f10b4cb39bd55661cead"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.11797743084577111,
+      "wallMs": 9360.045666999999,
+      "modelToolCalls": 0,
+      "observedMode": "steering-pass2",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "74be36136b4f92d17aaef2448f54b7ca61eeeda897f328e85d1802b8c53e9615",
+      "finalTextChars": 3361,
+      "trace": "runs/0005/client.jsonl"
+    },
+    {
+      "index": 6,
+      "arm": "native",
+      "case": "json160",
+      "round": 0,
+      "seed": "042a17a6b1248516d575473b9d0d34388e4e316f4c1cb040615d4c2c1a0a7bfc",
+      "hashes": {
+        "prompt": "d1a50d242074e29ba97d877bfed3f2c9a4e653c353acc40bb2623f18d71fff61",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "284decdbc6ed3c539dea5b4640bfea1b001506e7d397f10b4cb39bd55661cead"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.1652770991708126,
+      "wallMs": 9666.179666999997,
+      "modelToolCalls": 0,
+      "observedMode": "vibe",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "74be36136b4f92d17aaef2448f54b7ca61eeeda897f328e85d1802b8c53e9615",
+      "finalTextChars": 3361,
+      "trace": "runs/0006/client.jsonl"
+    },
+    {
+      "index": 7,
+      "arm": "old",
+      "case": "json160",
+      "round": 0,
+      "seed": "042a17a6b1248516d575473b9d0d34388e4e316f4c1cb040615d4c2c1a0a7bfc",
+      "hashes": {
+        "prompt": "d1a50d242074e29ba97d877bfed3f2c9a4e653c353acc40bb2623f18d71fff61",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "284decdbc6ed3c539dea5b4640bfea1b001506e7d397f10b4cb39bd55661cead"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.12015156019900496,
+      "wallMs": 9238.85479099999,
+      "modelToolCalls": 0,
+      "observedMode": "steering-old",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "74be36136b4f92d17aaef2448f54b7ca61eeeda897f328e85d1802b8c53e9615",
+      "finalTextChars": 3361,
+      "trace": "runs/0007/client.jsonl"
+    },
+    {
+      "index": 8,
+      "arm": "pass2",
+      "case": "microcalc",
+      "round": 0,
+      "seed": "058f004970b0479cb14921383ffc887305692c4e710d7142e54d125c6008e553",
+      "hashes": {
+        "prompt": "4e77589f36cfd8432e173e291655e5cfe7d14443c7dfd407a6409bf1f4ff1738",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "c65ae779cc0b4103246767d80d99c0f2e47269ca6a5bdb59345e0971f37938aa"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.022631637313432835,
+      "wallMs": 4679.3042080000005,
+      "modelToolCalls": 0,
+      "observedMode": "steering-pass2",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "6b546c1e35d87dc616dd4343016d99d003fa15dd023693df6a9521585f5d9d9d",
+      "finalTextChars": 15,
+      "trace": "runs/0008/client.jsonl"
+    },
+    {
+      "index": 9,
+      "arm": "native",
+      "case": "microcalc",
+      "round": 0,
+      "seed": "058f004970b0479cb14921383ffc887305692c4e710d7142e54d125c6008e553",
+      "hashes": {
+        "prompt": "4e77589f36cfd8432e173e291655e5cfe7d14443c7dfd407a6409bf1f4ff1738",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "c65ae779cc0b4103246767d80d99c0f2e47269ca6a5bdb59345e0971f37938aa"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.059689514593698166,
+      "wallMs": 4866.3838749999995,
+      "modelToolCalls": 0,
+      "observedMode": "vibe",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "6b546c1e35d87dc616dd4343016d99d003fa15dd023693df6a9521585f5d9d9d",
+      "finalTextChars": 15,
+      "trace": "runs/0009/client.jsonl"
+    },
+    {
+      "index": 10,
+      "arm": "old",
+      "case": "microcalc",
+      "round": 0,
+      "seed": "058f004970b0479cb14921383ffc887305692c4e710d7142e54d125c6008e553",
+      "hashes": {
+        "prompt": "4e77589f36cfd8432e173e291655e5cfe7d14443c7dfd407a6409bf1f4ff1738",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "c65ae779cc0b4103246767d80d99c0f2e47269ca6a5bdb59345e0971f37938aa"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.021572930845771148,
+      "wallMs": 4579.982666,
+      "modelToolCalls": 0,
+      "observedMode": "steering-old",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "6b546c1e35d87dc616dd4343016d99d003fa15dd023693df6a9521585f5d9d9d",
+      "finalTextChars": 15,
+      "trace": "runs/0010/client.jsonl"
+    },
+    {
+      "index": 11,
+      "arm": "pass1",
+      "case": "microcalc",
+      "round": 0,
+      "seed": "058f004970b0479cb14921383ffc887305692c4e710d7142e54d125c6008e553",
+      "hashes": {
+        "prompt": "4e77589f36cfd8432e173e291655e5cfe7d14443c7dfd407a6409bf1f4ff1738",
+        "fixtures": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "oracle": "c65ae779cc0b4103246767d80d99c0f2e47269ca6a5bdb59345e0971f37938aa"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.012427159701492538,
+      "wallMs": 4518.906082999998,
+      "modelToolCalls": 0,
+      "observedMode": "steering-pass1",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "6b546c1e35d87dc616dd4343016d99d003fa15dd023693df6a9521585f5d9d9d",
+      "finalTextChars": 15,
+      "trace": "runs/0011/client.jsonl"
+    },
+    {
+      "index": 12,
+      "arm": "native",
+      "case": "read24",
+      "round": 0,
+      "seed": "12d1a8aba57974fe750ff82a8cfba74c4399e1a1a0f3d4152c6bdfb85608e775",
+      "hashes": {
+        "prompt": "ce1291b51f20cdef2918ee0d433f71b98ecf06e4a6b7b7fa066d97a85e42cab5",
+        "fixtures": "66604c859b659248e6eca5ee74ce5ff2d8f7987d9ad2a80b28af9386f4ef5464",
+        "oracle": "b865e5837c0ce9acdee5f7345a66623afb964cf1d8c3d81f4c2133fa72b25d96"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.3447416873963516,
+      "wallMs": 18142.019709,
+      "modelToolCalls": 24,
+      "observedMode": "vibe",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "7a0a33be9f797d53307728340470e76f443174f963f405945fb5bee4013093b6",
+      "finalTextChars": 730,
+      "trace": "runs/0012/client.jsonl"
+    },
+    {
+      "index": 13,
+      "arm": "old",
+      "case": "read24",
+      "round": 0,
+      "seed": "12d1a8aba57974fe750ff82a8cfba74c4399e1a1a0f3d4152c6bdfb85608e775",
+      "hashes": {
+        "prompt": "ce1291b51f20cdef2918ee0d433f71b98ecf06e4a6b7b7fa066d97a85e42cab5",
+        "fixtures": "66604c859b659248e6eca5ee74ce5ff2d8f7987d9ad2a80b28af9386f4ef5464",
+        "oracle": "b865e5837c0ce9acdee5f7345a66623afb964cf1d8c3d81f4c2133fa72b25d96"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.10444566368159204,
+      "wallMs": 10321.056208000002,
+      "modelToolCalls": 1,
+      "observedMode": "steering-old",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "892b33817f32fd43e78616d5c6824e9501bf9a4b267d62aad36226c0a7691aa6",
+      "finalTextChars": 707,
+      "trace": "runs/0013/client.jsonl"
+    },
+    {
+      "index": 14,
+      "arm": "pass1",
+      "case": "read24",
+      "round": 0,
+      "seed": "12d1a8aba57974fe750ff82a8cfba74c4399e1a1a0f3d4152c6bdfb85608e775",
+      "hashes": {
+        "prompt": "ce1291b51f20cdef2918ee0d433f71b98ecf06e4a6b7b7fa066d97a85e42cab5",
+        "fixtures": "66604c859b659248e6eca5ee74ce5ff2d8f7987d9ad2a80b28af9386f4ef5464",
+        "oracle": "b865e5837c0ce9acdee5f7345a66623afb964cf1d8c3d81f4c2133fa72b25d96"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.10492477064676616,
+      "wallMs": 10308.349291000006,
+      "modelToolCalls": 1,
+      "observedMode": "steering-pass1",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "892b33817f32fd43e78616d5c6824e9501bf9a4b267d62aad36226c0a7691aa6",
+      "finalTextChars": 707,
+      "trace": "runs/0014/client.jsonl"
+    },
+    {
+      "index": 15,
+      "arm": "pass2",
+      "case": "read24",
+      "round": 0,
+      "seed": "12d1a8aba57974fe750ff82a8cfba74c4399e1a1a0f3d4152c6bdfb85608e775",
+      "hashes": {
+        "prompt": "ce1291b51f20cdef2918ee0d433f71b98ecf06e4a6b7b7fa066d97a85e42cab5",
+        "fixtures": "66604c859b659248e6eca5ee74ce5ff2d8f7987d9ad2a80b28af9386f4ef5464",
+        "oracle": "b865e5837c0ce9acdee5f7345a66623afb964cf1d8c3d81f4c2133fa72b25d96"
+      },
+      "strictPass": true,
+      "stopReason": null,
+      "credits": 0.0916262631840796,
+      "wallMs": 10481.864375000005,
+      "modelToolCalls": 1,
+      "observedMode": "steering-pass2",
+      "requestedModel": "auto",
+      "checks": [],
+      "finalTextSha256": "892b33817f32fd43e78616d5c6824e9501bf9a4b267d62aad36226c0a7691aa6",
+      "finalTextChars": 707,
+      "trace": "runs/0015/client.jsonl"
+    },
+    {
+      "index": 16,
+      "arm": "old",
+      "case": "range",
+      "round": 0,
+      "seed": "e0a87c5ba7525c06568cd6b473ff9484649c9142e58c77678ffb275bcff12455",
+      "hashes": {
+        "prompt": "695ad22647b3f60191f82eeee43362deb2b93ad78a613f5e9e771c672e56be77",
+        "fixtures": "29911145375560395659362f7716bc096f1f08d9dfcad421e516c1cae073c443",
+        "oracle": "dca2e3cb3d1c0e0c9032a4aa00bdc96cb1e7bfc38bfc9b884086841fce88abe4"
+      },
+      "strictPass": false,
+      "stopReason": null,
+      "credits": 0.26922407313432833,
+      "wallMs": 23549.459834,
+      "modelToolCalls": 2,
+      "observedMode": "steering-old",
+      "requestedModel": "auto",
+      "checks": [
+        {
+          "check": "answer",
+          "error": "Unexpected token 'T', \"The long l\"... is not valid JSON"
+        }
+      ],
+      "finalTextSha256": "6f92d80a996a92c051879d851dac9c589cf3f49975f097a9482b8b32101776cc",
+      "finalTextChars": 9221,
+      "trace": "runs/0016/client.jsonl",
+      "rangeDiagnostic": {
+        "diagnosticOnly": true,
+        "rawStillFails": true,
+        "visiblePrefix": "The long line was truncated. Fetching its continuation:",
+        "suffixLineLengths": [
+          11,
+          9113,
+          21,
+          6
+        ],
+        "expectedLineLengths": [
+          11,
+          9009,
+          21,
+          6
+        ],
+        "longLineLengthDelta": 104,
+        "allDataExactAfterRemovingPrefix": false,
+        "scoreWasNotRepaired": true
+      }
+    },
+    {
+      "index": 17,
+      "arm": "pass1",
+      "case": "range",
+      "round": 0,
+      "seed": "e0a87c5ba7525c06568cd6b473ff9484649c9142e58c77678ffb275bcff12455",
+      "hashes": {
+        "prompt": "695ad22647b3f60191f82eeee43362deb2b93ad78a613f5e9e771c672e56be77",
+        "fixtures": "29911145375560395659362f7716bc096f1f08d9dfcad421e516c1cae073c443",
+        "oracle": "dca2e3cb3d1c0e0c9032a4aa00bdc96cb1e7bfc38bfc9b884086841fce88abe4"
+      },
+      "strictPass": false,
+      "stopReason": null,
+      "credits": 0.23045732421227197,
+      "wallMs": 18020.444208,
+      "modelToolCalls": 2,
+      "observedMode": "steering-pass1",
+      "requestedModel": "auto",
+      "checks": [
+        {
+          "check": "answer",
+          "error": "Unexpected token 'T', \"The read r\"... is not valid JSON"
+        }
+      ],
+      "finalTextSha256": "d13da7c7c77195ab8f7cc987e3ba05d6c77bdcdb00a8eca80b825ada3cf70c75",
+      "finalTextChars": 9260,
+      "trace": "runs/0017/client.jsonl",
+      "rangeDiagnostic": {
+        "diagnosticOnly": true,
+        "rawStillFails": true,
+        "visiblePrefix": "The read returned all 4 lines and was not truncated at the content level (truncated flag reflects the file continuing beyond line 44, not the requested range — nextOffset:45 confirms all 4 lines were returned). Stripping CRLF terminators:",
+        "suffixLineLengths": [
+          11,
+          8969,
+          21,
+          6
+        ],
+        "expectedLineLengths": [
+          11,
+          9009,
+          21,
+          6
+        ],
+        "longLineLengthDelta": -40,
+        "allDataExactAfterRemovingPrefix": false,
+        "scoreWasNotRepaired": true
+      }
+    },
+    {
+      "index": 18,
+      "arm": "pass2",
+      "case": "range",
+      "round": 0,
+      "seed": "e0a87c5ba7525c06568cd6b473ff9484649c9142e58c77678ffb275bcff12455",
+      "hashes": {
+        "prompt": "695ad22647b3f60191f82eeee43362deb2b93ad78a613f5e9e771c672e56be77",
+        "fixtures": "29911145375560395659362f7716bc096f1f08d9dfcad421e516c1cae073c443",
+        "oracle": "dca2e3cb3d1c0e0c9032a4aa00bdc96cb1e7bfc38bfc9b884086841fce88abe4"
+      },
+      "strictPass": false,
+      "stopReason": null,
+      "credits": 0.22899340398009949,
+      "wallMs": 21431.358375000003,
+      "modelToolCalls": 2,
+      "observedMode": "steering-pass2",
+      "requestedModel": "auto",
+      "checks": [
+        {
+          "check": "answer",
+          "error": "Unexpected token 'T', \"The result\"... is not valid JSON"
+        }
+      ],
+      "finalTextSha256": "a5d50c0107cfd051aad886731895f5bf86792f0fda1fad452432ca9bbea9f3e4",
+      "finalTextChars": 9286,
+      "trace": "runs/0018/client.jsonl",
+      "rangeDiagnostic": {
+        "diagnosticOnly": true,
+        "rawStillFails": true,
+        "visiblePrefix": "The result was not truncated for the 4-line content itself — `truncated:true` here means the file has more lines beyond offset 44, not that any of the 4 lines were cut. All 4 lines are complete. Stripping `\\r\\n` terminators:",
+        "suffixLineLengths": [
+          11,
+          9009,
+          21,
+          6
+        ],
+        "expectedLineLengths": [
+          11,
+          9009,
+          21,
+          6
+        ],
+        "longLineLengthDelta": 0,
+        "allDataExactAfterRemovingPrefix": true,
+        "scoreWasNotRepaired": true
+      }
+    },
+    {
+      "index": 19,
+      "arm": "native",
+      "case": "range",
+      "round": 0,
+      "seed": "e0a87c5ba7525c06568cd6b473ff9484649c9142e58c77678ffb275bcff12455",
+      "hashes": {
+        "prompt": "695ad22647b3f60191f82eeee43362deb2b93ad78a613f5e9e771c672e56be77",
+        "fixtures": "29911145375560395659362f7716bc096f1f08d9dfcad421e516c1cae073c443",
+        "oracle": "dca2e3cb3d1c0e0c9032a4aa00bdc96cb1e7bfc38bfc9b884086841fce88abe4"
+      },
+      "strictPass": false,
+      "stopReason": "wall-time-limit",
+      "credits": null,
+      "wallMs": 151311.348959,
+      "modelToolCalls": 35,
+      "observedMode": "vibe",
+      "requestedModel": "auto",
+      "checks": [
+        {
+          "check": "events-and-usage",
+          "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'expected exactly one runFinished',\n+   'missing turn completion/usage'\n+ ]\n- []\n"
+        },
+        {
+          "check": "answer",
+          "error": "Unexpected end of JSON input"
+        }
+      ],
+      "finalTextSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "finalTextChars": 0,
+      "trace": "runs/0019/client.jsonl"
+    }
+  ]
+}

@@ -51,7 +51,7 @@ import {
   type FabricTracer,
 } from "../trace/tracer.js";
 
-const EXEC_DESCRIPTION = "The sole tool path: execute checked TypeScript using local coding, fabric bootstrap/help, artifacts, memory, state and configured MCP. Return compact evidence. No native-tool fallback; ordinary conversation needs no execution.";
+const EXEC_DESCRIPTION = "Checked TypeScript function body; await calls. Hot local APIs: local.read({path,offset?,limit?})->{text:string,truncated,nextOffset?} (not a string/array; first line: r.text.split(/\\r?\\n/,1)[0]); read returns whole lines: nextOffset past requested end means range complete even if truncated; local.grep({pattern,path?,glob?,literal?,limit?})->{matches:[{path,line,text}],truncated}; local.find({pattern,path?,limit?})->{paths,truncated}; local.list({path?,limit?})->{entries,truncated}; local.edit({path,oldText,newText,all?}); local.write({path,content,overwrite?}); local.shell({command,timeoutMs?,settle:true})->{ok,exitCode,stdout,stderr,truncated}. Check truncation; grep, not search. Bootstrap/help: fabric; other providers: artifacts,memory,state,configured mcp. Return compact evidence; no native fallback or dummy conversation calls.";
 const MCP_INSTANCE_ID = `fmcp_${randomBytes(16).toString("hex")}`;
 const MCP_STARTED_AT = new Date().toISOString();
 const MCP_PARENT_PID = process.ppid;
