@@ -1,71 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="788" viewBox="0 0 1120 788" role="img" aria-labelledby="title desc">
-<title id="title">Separate conversation, execution, and durable data</title>
-<desc id="desc">Kiro owns conversation history and compaction. A private Fabric backend caches the verified workspace runtime and a bounded compiler pool, while each fabric_exec uses a fresh QuickJS context. Workspace memory and state live separately on disk. A new Kiro process is intended to start a new backend and reopen durable data; exact compaction and resume behavior still require real-client qualification.</desc>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#64748b"/></marker></defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1638" viewBox="0 0 640 1638" role="img" aria-labelledby="title desc">
+<title id="title">What survives between calls</title>
+<desc id="desc">Kiro owns conversation history, compaction, and chat resume. Fabric caches a runtime for a verified workspace and can reuse a bounded compiler worker. Every fabric_exec creates a fresh QuickJS guest whose variables end with the call. Memory and revisioned state are durable and shared by chats bound to the same workspace. Overflow artifacts are temporary and process-owned, with a default one-hour idle expiry. Same-process compaction and new-process resume still need authenticated real-client qualification. A full text description is in docs/diagram-descriptions.md, Lifetimes.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
-text{font-family:Arial,Helvetica,sans-serif;fill:#172554}
-.title{font-size:30px;font-weight:700;fill:#ffffff}
-.subtitle{font-size:18px;fill:#cbd5e1}
-.label{font-size:21px;font-weight:700}
-.body{font-size:18px;fill:#334155}
-.small{font-size:16px;fill:#475569}
-.eyebrow{font-size:15px;font-weight:700;letter-spacing:1.2px;fill:#475569}
-.line{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#arrow)}
+text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
+.title { font-size:36px; font-weight:700; fill:#ffffff; }
+.subtitle { font-size:30px; fill:#ffffff; }
+.label { font-size:32px; font-weight:700; }
+.body { font-size:30px; }
+.arrow { stroke:#334155; stroke-width:4; fill:none; marker-end:url(#arrow); }
 </style>
-<rect width="1120" height="788" rx="18" fill="#f8fafc"/>
-<path d="M18 0H1102Q1120 0 1120 18V110H0V18Q0 0 18 0Z" fill="#172554"/>
-<text x="32" y="46" class="title">Separate conversation, execution, and durable data</text>
-<text x="32" y="80" class="subtitle">Different lifetimes keep reuse, guest isolation, and persistence explicit.</text>
-<g data-card="true">
-<rect x="32" y="146" width="306" height="290" rx="12" fill="#ede9fe" stroke="#cbd5e1"/>
-<text x="50" y="179" class="label">Kiro CLI process</text>
-<text x="50" y="209" class="body">Conversation and replies</text>
-<text x="50" y="235" class="body">Saved history / summary</text>
-<text x="50" y="261" class="body">Compaction and chat resume</text>
+<rect width="640" height="1638" fill="#f8fafc"/>
+<rect width="640" height="126" fill="#172554"/>
+<text x="24" y="51" class="title">What survives between calls</text>
+<text x="24" y="97" class="subtitle">Different owners and lifetimes</text>
+<g data-card="true"><rect x="24" y="156" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="204" class="label">Kiro owns the conversation</text>
+<text x="46" y="254" class="body">Saved history and summaries.</text>
+<text x="46" y="296" class="body">Context compaction.</text>
+<text x="46" y="338" class="body">Chat resume.</text>
 </g>
-<rect x="394" y="146" width="694" height="290" rx="12" fill="#eff6ff" stroke="#93c5fd"/>
-<text x="414" y="180" class="label">Fabric backend process</text>
-<text x="414" y="212" class="body">Cached runtime for the verified workspace</text>
-<g data-card="true">
-<rect x="414" y="238" width="302" height="168" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="432" y="271" class="label">Compiler pool</text>
-<text x="432" y="301" class="body">Bounded worker reuse</text>
-<text x="432" y="327" class="body">At most one idle worker</text>
-<text x="432" y="353" class="body">Idle expiry: 30 seconds</text>
+<g data-card="true"><rect x="24" y="412" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="460" class="label">Fabric retains a runtime</text>
+<text x="46" y="510" class="body">Bound to a verified workspace.</text>
+<text x="46" y="552" class="body">Compiler reuse has limits.</text>
+<text x="46" y="594" class="body">Workspace changes can replace it.</text>
 </g>
-<g data-card="true">
-<rect x="742" y="238" width="326" height="168" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="760" y="271" class="label">Fresh guest per call</text>
-<text x="760" y="301" class="body">Call A → QuickJS A</text>
-<text x="760" y="327" class="body">Call B → QuickJS B</text>
-<text x="760" y="353" class="body">Variables end with each call</text>
+<g data-card="true"><rect x="24" y="668" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="716" class="label">Each call gets a fresh guest</text>
+<text x="46" y="766" class="body">A new QuickJS context.</text>
+<text x="46" y="808" class="body">Variables end with that call.</text>
+<text x="46" y="850" class="body">Guest state is not reused.</text>
 </g>
-<path d="M338 284H394" class="line"/>
-<g data-card="true">
-<rect x="32" y="492" width="306" height="170" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="50" y="525" class="label">Installed runtime</text>
-<text x="50" y="555" class="body">Versioned code and resources</text>
-<text x="50" y="581" class="body">Separate from durable data</text>
-<text x="50" y="607" class="body">Restart Kiro after an update</text>
+<g data-card="true"><rect x="24" y="924" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="972" class="label">Memory and state persist</text>
+<text x="46" y="1022" class="body">Intentional workspace facts.</text>
+<text x="46" y="1064" class="body">Revisioned task progress.</text>
+<text x="46" y="1106" class="body">Shared by chats in that workspace.</text>
 </g>
-<g data-card="true">
-<rect x="394" y="492" width="328" height="170" rx="12" fill="#ecfdf5" stroke="#cbd5e1"/>
-<text x="412" y="525" class="label">Workspace memory</text>
-<text x="412" y="555" class="body">Intentional durable facts</text>
-<text x="412" y="581" class="body">Shared by chats using</text>
-<text x="412" y="607" class="body">the same verified workspace</text>
+<g data-card="true"><rect x="24" y="1180" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="1228" class="label">Artifacts are temporary</text>
+<text x="46" y="1278" class="body">Process-owned overflow data.</text>
+<text x="46" y="1320" class="body">Default idle expiry: 1 hour.</text>
+<text x="46" y="1362" class="body">Do not rely on IDs after restart.</text>
 </g>
-<g data-card="true">
-<rect x="760" y="492" width="328" height="170" rx="12" fill="#ecfdf5" stroke="#cbd5e1"/>
-<text x="778" y="525" class="label">Workspace state</text>
-<text x="778" y="555" class="body">Revisioned task progress</text>
-<text x="778" y="581" class="body">Reopen after process restart</text>
-<text x="778" y="607" class="body">Check state before retrying</text>
+<g data-card="true"><rect x="24" y="1436" width="592" height="170" rx="12" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="1484" class="body">Compaction / resume behavior</text>
+<text x="46" y="1526" class="body">still needs real-client qualification.</text>
+<text x="46" y="1568" class="body">Restart Kiro after an agent update.</text>
 </g>
-<path d="M338 574H368V416H394" class="line"/>
-<path d="M558 436V492" class="line"/>
-<path d="M923 436V492" class="line"/>
-<text x="32" y="704" class="body">Temporary artifacts are scratch data, even when file-backed. They are not durable session memory.</text>
-<text x="32" y="734" class="body">A workspace change can replace the inner runtime without changing the Fabric backend PID.</text>
-<text x="32" y="764" class="small">Same-process compaction and new-process resume remain authenticated real-client qualification gates.</text>
 </svg>

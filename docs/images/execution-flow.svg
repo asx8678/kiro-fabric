@@ -1,84 +1,58 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="778" viewBox="0 0 1120 778" role="img" aria-labelledby="title desc">
-<title id="title">From a prompt to workspace actions</title>
-<desc id="desc">Kiro sends fabric_exec over stdio to its private Fabric backend. TypeScript is checked before a fresh QuickJS context runs. Provider calls cross JSON validation and approval policy. Local coding, durable data, and configured MCP tools return data to the guest; a bounded response goes back to Kiro.</desc>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#64748b"/></marker></defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1692" viewBox="0 0 640 1692" role="img" aria-labelledby="title desc">
+<title id="title">One request, step by step</title>
+<desc id="desc">Follow steps 1 through 6 from top to bottom. Kiro sends TypeScript through fabric_exec over stdio MCP. Fabric verifies the workspace, admits the request, checks types in a compiler worker, then runs a fresh QuickJS guest. Each action crosses JSON validation, schemas, effect reservations, and approval policy. The guest selects a bounded result for Kiro. A full text description is in docs/diagram-descriptions.md, Execution.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
-text{font-family:Arial,Helvetica,sans-serif;fill:#172554}
-.title{font-size:30px;font-weight:700;fill:#ffffff}
-.subtitle{font-size:18px;fill:#cbd5e1}
-.label{font-size:21px;font-weight:700}
-.body{font-size:18px;fill:#334155}
-.small{font-size:16px;fill:#475569}
-.eyebrow{font-size:15px;font-weight:700;letter-spacing:1.2px;fill:#475569}
-.line{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#arrow)}
+text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
+.title { font-size:36px; font-weight:700; fill:#ffffff; }
+.subtitle { font-size:30px; fill:#ffffff; }
+.label { font-size:32px; font-weight:700; }
+.body { font-size:30px; }
+.arrow { stroke:#334155; stroke-width:4; fill:none; marker-end:url(#arrow); }
 </style>
-<rect width="1120" height="778" rx="18" fill="#f8fafc"/>
-<path d="M18 0H1102Q1120 0 1120 18V110H0V18Q0 0 18 0Z" fill="#172554"/>
-<text x="32" y="46" class="title">From a prompt to workspace actions</text>
-<text x="32" y="80" class="subtitle">Kiro decides what to do. Fabric executes the tool program.</text>
-<g data-card="true">
-<rect x="32" y="142" width="236" height="116" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="50" y="175" class="label">You</text>
-<text x="50" y="205" class="body">Describe the task</text>
-<text x="50" y="231" class="body">Review requested effects</text>
+<rect width="640" height="1692" fill="#f8fafc"/>
+<rect width="640" height="126" fill="#172554"/>
+<text x="24" y="51" class="title">One request, step by step</text>
+<text x="24" y="97" class="subtitle">Kiro → Fabric → tools → Kiro</text>
+<g data-card="true"><rect x="24" y="156" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="204" class="label">1. Kiro submits a program</text>
+<text x="46" y="254" class="body">Agent: kiro-fabric</text>
+<text x="46" y="296" class="body">Only tool: @fabric/fabric_exec</text>
+<text x="46" y="338" class="body">Private backend over stdio MCP.</text>
 </g>
-<g data-card="true">
-<rect x="324" y="142" width="414" height="116" rx="12" fill="#ede9fe" stroke="#cbd5e1"/>
-<text x="342" y="175" class="label">Kiro CLI v3 · kiro-fabric</text>
-<text x="342" y="205" class="body">Model writes a TypeScript function body</text>
-<text x="342" y="231" class="body">One visible tool: @fabric/fabric_exec</text>
+<path d="M320 380 V406" class="arrow"/>
+<g data-card="true"><rect x="24" y="412" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="460" class="label">2. Bind and admit</text>
+<text x="46" y="510" class="body">Verify the workspace root.</text>
+<text x="46" y="552" class="body">Up to 4 executions per service.</text>
+<text x="46" y="594" class="body">Excess executions are rejected.</text>
 </g>
-<g data-card="true">
-<rect x="794" y="142" width="294" height="116" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="812" y="175" class="label">Kiro continues</text>
-<text x="812" y="205" class="body">Interpret the response</text>
-<text x="812" y="231" class="body">Answer or plan another step</text>
+<path d="M320 636 V662" class="arrow"/>
+<g data-card="true"><rect x="24" y="668" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="716" class="label">3. Check TypeScript</text>
+<text x="46" y="766" class="body">Compile against Fabric APIs.</text>
+<text x="46" y="808" class="body">Restrict compiler file access.</text>
+<text x="46" y="850" class="body">Type errors stop execution.</text>
 </g>
-<path d="M268 200H324" class="line"/>
-<rect x="32" y="308" width="1056" height="262" rx="16" fill="#eff6ff" stroke="#93c5fd"/>
-<text x="52" y="340" class="eyebrow">FABRIC · ONE PRIVATE STDIO MCP BACKEND</text>
-<g data-card="true">
-<rect x="56" y="366" width="278" height="124" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="74" y="399" class="label">1 · Check TypeScript</text>
-<text x="74" y="429" class="body">Bounded compiler worker</text>
-<text x="74" y="455" class="body">Types and wrapper validated</text>
+<path d="M320 892 V918" class="arrow"/>
+<g data-card="true"><rect x="24" y="924" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="972" class="label">4. Run fresh QuickJS</text>
+<text x="46" y="1022" class="body">New guest context for each call.</text>
+<text x="46" y="1064" class="body">No direct files, shell, or network.</text>
+<text x="46" y="1106" class="body">Host calls use a JSON bridge.</text>
 </g>
-<g data-card="true">
-<rect x="390" y="366" width="304" height="124" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="408" y="399" class="label">2 · Run in QuickJS</text>
-<text x="408" y="429" class="body">Fresh context for every call</text>
-<text x="408" y="455" class="body">Only the Fabric guest APIs</text>
+<path d="M320 1148 V1174" class="arrow"/>
+<g data-card="true"><rect x="24" y="1180" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="1228" class="label">5. Gate every action</text>
+<text x="46" y="1278" class="body">Validate the argument schema.</text>
+<text x="46" y="1320" class="body">Reserve effects; apply approvals.</text>
+<text x="46" y="1362" class="body">Invoke local, data, or MCP tools.</text>
 </g>
-<g data-card="true">
-<rect x="750" y="366" width="314" height="124" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="768" y="399" class="label">3 · Gate provider calls</text>
-<text x="768" y="429" class="body">JSON + schemas + policy</text>
-<text x="768" y="455" class="body">Reserve effects and audits</text>
+<path d="M320 1404 V1430" class="arrow"/>
+<g data-card="true"><rect x="24" y="1436" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="46" y="1484" class="label">6. Return useful evidence</text>
+<text x="46" y="1534" class="body">Guest filters and combines data.</text>
+<text x="46" y="1576" class="body">Fabric bounds the visible result.</text>
+<text x="46" y="1618" class="body">Kiro answers or continues.</text>
 </g>
-<path d="M440 258V284H44V427H56" class="line"/>
-<text x="214" y="279" class="small">code + optional payloads</text>
-<path d="M334 427H390" class="line"/>
-<path d="M694 427H750" class="line"/>
-<path d="M1034 366V258" class="line"/>
-<text x="836" y="293" class="small">bounded response</text>
-<text x="56" y="535" class="body">Provider results return to the guest, which can filter, combine, and choose what Kiro sees.</text>
-<path d="M907 490V598H195V628" class="line"/>
-<path d="M560 598V628" class="line"/>
-<path d="M907 598H925V628" class="line"/>
-<g data-card="true">
-<rect x="32" y="628" width="326" height="100" rx="12" fill="#ecfdf5" stroke="#cbd5e1"/>
-<text x="50" y="661" class="label">Local coding</text>
-<text x="50" y="691" class="body">Files · search · edits · shell</text>
-</g>
-<g data-card="true">
-<rect x="397" y="628" width="326" height="100" rx="12" fill="#ecfdf5" stroke="#cbd5e1"/>
-<text x="415" y="661" class="label">Memory + state</text>
-<text x="415" y="691" class="body">Durable facts and task progress</text>
-</g>
-<g data-card="true">
-<rect x="762" y="628" width="326" height="100" rx="12" fill="#ecfdf5" stroke="#cbd5e1"/>
-<text x="780" y="661" class="label">Configured MCP</text>
-<text x="780" y="691" class="body">Explicit external tools and services</text>
-</g>
-<text x="32" y="754" class="small">The outer execution tool is allowed; every inner action still follows Fabric policy.</text>
 </svg>

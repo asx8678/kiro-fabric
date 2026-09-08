@@ -18,6 +18,7 @@
     "dist/**/*.d.ts",
     "!dist/kiro-agent-closure/**/*",
     "docs/architecture.md",
+    "docs/diagram-descriptions.md",
     "docs/images/execution-flow.svg",
     "docs/images/sessions-and-storage.svg",
     "docs/images/efficiency-flow.svg",
