@@ -1,46 +1,72 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1382" viewBox="0 0 640 1382" role="img" aria-labelledby="title desc">
-<title id="title">Where efficiency comes from</title>
-<desc id="desc">Four independent file reads can be expressed in one outer execution while still making four provider calls. Independent I/O can overlap under an eight-call concurrency cap. Guest code filters intermediate data before returning evidence. A bounded compiler pool reuses one idle worker for up to 30 seconds, recycling at 250 uses. Every guest is still fresh. End-to-end savings have not been established. A full text description is in docs/diagram-descriptions.md, Efficiency.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1140" viewBox="0 0 640 1140" role="img" aria-labelledby="title desc">
+<title id="title">Batching, concurrency, and reuse</title>
+<desc id="desc">One fabric_exec request branches into four provider reads and joins their results inside the guest. The guest filters results and returns one response. All reads still incur checks. Default concurrency is eight host calls, with a shared queue covering parallel and Promise.all. There are 64 host-call slots but the default audit budget admits only 31 audited calls. One idle compiler per service is reused for 30 seconds and recycled after 250 uses. Discovery is on demand. End-to-end savings have not been established. See docs/diagram-descriptions.md, Efficiency.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
 text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
-.title { font-size:36px; font-weight:700; fill:#ffffff; }
-.subtitle { font-size:30px; fill:#ffffff; }
-.label { font-size:32px; font-weight:700; }
-.body { font-size:30px; }
-.arrow { stroke:#334155; stroke-width:4; fill:none; marker-end:url(#arrow); }
+.title { font-size:32px; font-weight:700; fill:#ffffff; }
+.subtitle { font-size:24px; fill:#ffffff; }
+.label { font-size:27px; font-weight:700; }
+.body { font-size:24px; }
+.arrow { stroke:#334155; stroke-width:3; fill:none; marker-end:url(#arrow); }
+.connector { stroke:#334155; stroke-width:3; fill:none; }
 </style>
-<rect width="640" height="1382" fill="#f8fafc"/>
-<rect width="640" height="126" fill="#172554"/>
-<text x="24" y="51" class="title">Where efficiency comes from</text>
-<text x="24" y="97" class="subtitle">Less coordination and less output</text>
-<g data-card="true"><rect x="24" y="156" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="204" class="label">1. Batch routine tool work</text>
-<text x="46" y="254" class="body">Example: 1 exec → 4 file reads.</text>
-<text x="46" y="296" class="body">Four provider calls still happen.</text>
-<text x="46" y="338" class="body">Fewer model/tool exchanges.</text>
+<rect width="640" height="1140" fill="#f8fafc"/>
+<rect width="640" height="100" fill="#172554"/>
+<text x="24" y="43" class="title">Batching, concurrency, and reuse</text>
+<text x="24" y="79" class="subtitle">Example: inspect four known, independent files</text>
+<g data-card="true"><rect x="24" y="122" width="592" height="124" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="159" class="label">1. One outer request → four reads</text>
+<text x="44" y="199" class="body">Kiro submits one deterministic fabric_exec.</text>
+<text x="44" y="229" class="body">Each read still receives validation and policy.</text>
 </g>
-<g data-card="true"><rect x="24" y="412" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="460" class="label">2. Overlap independent I/O</text>
-<text x="46" y="510" class="body">Default: up to 8 host calls at once.</text>
-<text x="46" y="552" class="body">Extra parallel work waits.</text>
-<text x="46" y="594" class="body">Dependent steps stay sequential.</text>
+<path d="M320 246 V270" class="arrow"/>
+<path d="M94 270 H550" class="connector"/>
+<path d="M94 270 V294" class="arrow"/>
+<g data-card="true"><rect x="32" y="294" width="124" height="60" rx="8" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
+<text x="54" y="333" class="body">Read 1</text>
 </g>
-<g data-card="true"><rect x="24" y="668" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="716" class="label">3. Reduce data in code</text>
-<text x="46" y="766" class="body">Filter and combine in the guest.</text>
-<text x="46" y="808" class="body">Return only the needed fields.</text>
-<text x="46" y="850" class="body">Intermediate data stays local.</text>
+<path d="M94 354 V374" class="connector"/>
+<path d="M246 270 V294" class="arrow"/>
+<g data-card="true"><rect x="184" y="294" width="124" height="60" rx="8" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
+<text x="206" y="333" class="body">Read 2</text>
 </g>
-<g data-card="true"><rect x="24" y="924" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="972" class="label">4. Reuse the compiler</text>
-<text x="46" y="1022" class="body">At most 1 warm idle worker.</text>
-<text x="46" y="1064" class="body">Idle expiry: 30 seconds.</text>
-<text x="46" y="1106" class="body">Recycle worker after 250 uses.</text>
+<path d="M246 354 V374" class="connector"/>
+<path d="M398 270 V294" class="arrow"/>
+<g data-card="true"><rect x="336" y="294" width="124" height="60" rx="8" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
+<text x="358" y="333" class="body">Read 3</text>
 </g>
-<g data-card="true"><rect x="24" y="1180" width="592" height="170" rx="12" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="1228" class="body">Each call still gets a fresh guest.</text>
-<text x="46" y="1270" class="body">Compilation and checks add cost.</text>
-<text x="46" y="1312" class="body">Savings are not yet benchmarked.</text>
+<path d="M398 354 V374" class="connector"/>
+<path d="M550 270 V294" class="arrow"/>
+<g data-card="true"><rect x="488" y="294" width="124" height="60" rx="8" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
+<text x="510" y="333" class="body">Read 4</text>
+</g>
+<path d="M550 354 V374" class="connector"/>
+<path d="M94 374 H550" class="connector"/>
+<path d="M320 374 V398" class="arrow"/>
+<g data-card="true"><rect x="24" y="402" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="439" class="label">2. Combine data before returning</text>
+<text x="44" y="479" class="body">map / filter / aggregate inside the guest.</text>
+<text x="44" y="509" class="body">Return selected evidence instead of raw data.</text>
+<text x="44" y="539" class="body">One result for Kiro; fewer outer exchanges.</text>
+</g>
+<g data-card="true"><rect x="24" y="580" width="592" height="184" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="617" class="label">3. Bound concurrency and total work</text>
+<text x="44" y="657" class="body">Default: 8 simultaneous host calls per execution.</text>
+<text x="44" y="687" class="body">One queue covers parallel and Promise.all.</text>
+<text x="44" y="717" class="body">64 host-call slots; audit budget fits 31 audited calls.</text>
+<text x="44" y="747" class="body">Dependent steps stay ordered; conflicts reject.</text>
+</g>
+<g data-card="true"><rect x="24" y="788" width="592" height="184" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="825" class="label">4. Reuse compiler setup</text>
+<text x="44" y="865" class="body">At most 1 warm idle compiler per service.</text>
+<text x="44" y="895" class="body">Idle expiry: 30 s. Recycle after 250 uses.</text>
+<text x="44" y="925" class="body">Reuse stable declarations; check every program.</text>
+<text x="44" y="955" class="body">Each execution still gets a fresh QuickJS context.</text>
+</g>
+<g data-card="true"><rect x="24" y="996" width="592" height="120" rx="10" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="1032" class="body">Discover actions with tools.search / describe.</text>
+<text x="44" y="1062" class="body">MCP discovery still follows approval policy.</text>
+<text x="44" y="1092" class="body">Costs remain; savings are not yet established.</text>
 </g>
 </svg>

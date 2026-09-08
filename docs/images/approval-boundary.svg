@@ -1,53 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1596" viewBox="0 0 640 1596" role="img" aria-labelledby="title desc">
-<title id="title">Every effect is checked</title>
-<desc id="desc">An allowed fabric_exec request does not approve its nested effects. The ActionRegistry prepares and freezes canonical arguments, checks their schema, and reserves audit and effect capacity before evaluating allow, ask, or deny policy. Read defaults to allow; write, execute, and network default to ask. The default audit budget admits at most 31 audited calls. Approved shell commands have host authority, and later failures do not undo earlier effects. A full text description is in docs/diagram-descriptions.md, Permissions.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1156" viewBox="0 0 640 1156" role="img" aria-labelledby="title desc">
+<title id="title">Approvals bind the exact action</title>
+<desc id="desc">The registry prepares arguments, validates the descriptor schema, and freezes the canonical request. Audit capacity and effect resources are reserved before allow, ask, or deny policy is evaluated. Defaults allow read and ask for write, execute, and network. Each execution admits up to 16 interactive attempts and two simultaneous waits; silent decisions consume neither. Audit bytes admit at most 31 audited calls by default. Approved shell commands have host authority and failures do not roll back earlier effects. See docs/diagram-descriptions.md, Permissions.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
 text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
-.title { font-size:36px; font-weight:700; fill:#ffffff; }
-.subtitle { font-size:30px; fill:#ffffff; }
-.label { font-size:32px; font-weight:700; }
-.body { font-size:30px; }
-.arrow { stroke:#334155; stroke-width:4; fill:none; marker-end:url(#arrow); }
+.title { font-size:32px; font-weight:700; fill:#ffffff; }
+.subtitle { font-size:24px; fill:#ffffff; }
+.label { font-size:27px; font-weight:700; }
+.body { font-size:24px; }
+.arrow { stroke:#334155; stroke-width:3; fill:none; marker-end:url(#arrow); }
+.connector { stroke:#334155; stroke-width:3; fill:none; }
 </style>
-<rect width="640" height="1596" fill="#f8fafc"/>
-<rect width="640" height="126" fill="#172554"/>
-<text x="24" y="51" class="title">Every effect is checked</text>
-<text x="24" y="97" class="subtitle">Outer allowance ≠ inner approval</text>
-<g data-card="true"><rect x="24" y="156" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="204" class="label">1. Fix the exact request</text>
-<text x="46" y="254" class="body">Resolve the action descriptor.</text>
-<text x="46" y="296" class="body">Prepare and freeze arguments.</text>
-<text x="46" y="338" class="body">Validate the input schema.</text>
+<rect width="640" height="1156" fill="#f8fafc"/>
+<rect width="640" height="100" fill="#172554"/>
+<text x="24" y="43" class="title">Approvals bind the exact action</text>
+<text x="24" y="79" class="subtitle">Outer tool allowance does not approve inner effects</text>
+<g data-card="true"><rect x="24" y="122" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="159" class="label">1. Prepare a canonical request</text>
+<text x="44" y="199" class="body">Resolve the action and descriptor schema.</text>
+<text x="44" y="229" class="body">Prepare arguments, validate, then freeze them.</text>
+<text x="44" y="259" class="body">Approval and invocation use the same request.</text>
 </g>
-<path d="M320 380 V406" class="arrow"/>
-<g data-card="true"><rect x="24" y="412" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="460" class="label">2. Reserve before prompting</text>
-<text x="46" y="510" class="body">Reserve affected resources.</text>
-<text x="46" y="552" class="body">Reject conflicting writes.</text>
-<text x="46" y="594" class="body">Reserve audit capacity.</text>
+<path d="M320 280 V296" class="arrow"/>
+<g data-card="true"><rect x="24" y="300" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="337" class="label">2. Reserve before asking</text>
+<text x="44" y="377" class="body">Calculate affected resources; reserve write intent.</text>
+<text x="44" y="407" class="body">Conflicting mutations are rejected before prompts.</text>
+<text x="44" y="437" class="body">Reserve audit capacity and provider-owned locks.</text>
 </g>
-<path d="M320 636 V662" class="arrow"/>
-<g data-card="true"><rect x="24" y="668" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="716" class="label">3. Apply the action policy</text>
-<text x="46" y="766" class="body">ALLOW → run the action.</text>
-<text x="46" y="808" class="body">ASK → run only after approval.</text>
-<text x="46" y="850" class="body">DENY → return a failure.</text>
+<path d="M320 458 V474" class="arrow"/>
+<g data-card="true"><rect x="24" y="478" width="592" height="184" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="515" class="label">3. Apply policy to this action</text>
+<text x="44" y="555" class="body">ALLOW → invoke. DENY → reject without invoking.</text>
+<text x="44" y="585" class="body">ASK → reserve prompt quota, then request approval.</text>
+<text x="44" y="615" class="body">Defaults: read = allow;</text>
+<text x="44" y="645" class="body">write / execute / network = ask.</text>
 </g>
-<g data-card="true"><rect x="24" y="924" width="592" height="176" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="972" class="label">Default policy</text>
-<text x="46" y="1022" class="body">Read: allow.</text>
-<text x="46" y="1064" class="body">Write / execute / network: ask.</text>
+<g data-card="true"><rect x="24" y="686" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="723" class="label">Interactive approval budgets</text>
+<text x="44" y="763" class="body">16 admitted attempts; 2 simultaneous waits.</text>
+<text x="44" y="793" class="body">Silent allow / deny decisions use neither counter.</text>
+<text x="44" y="823" class="body">Decline or cancellation still spends an attempt.</text>
 </g>
-<g data-card="true"><rect x="24" y="1138" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="1186" class="label">Default audit ceiling</text>
-<text x="46" y="1236" class="body">64,000 bytes per execution.</text>
-<text x="46" y="1278" class="body">2,048 bytes per audited call.</text>
-<text x="46" y="1320" class="body">At most 31 audited calls.</text>
+<g data-card="true"><rect x="24" y="864" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="901" class="label">Audit budget can be tighter</text>
+<text x="44" y="941" class="body">64,000 bytes ÷ 2,048 per audited call → 31 calls.</text>
+<text x="44" y="971" class="body">The separate host-call ceiling is 64.</text>
+<text x="44" y="1001" class="body">64 audited calls need at least 131,072 audit bytes.</text>
 </g>
-<g data-card="true"><rect x="24" y="1394" width="592" height="170" rx="12" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="1442" class="body">Shell runs with host OS authority.</text>
-<text x="46" y="1484" class="body">Failure does not undo prior effects.</text>
-<text x="46" y="1526" class="body">Inspect state before retrying.</text>
+<g data-card="true"><rect x="24" y="1042" width="592" height="90" rx="10" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="1078" class="body">Approved shell commands use host OS authority.</text>
+<text x="44" y="1108" class="body">Failure is not rollback. Inspect effects before retry.</text>
 </g>
 </svg>

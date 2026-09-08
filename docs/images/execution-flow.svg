@@ -1,58 +1,62 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1692" viewBox="0 0 640 1692" role="img" aria-labelledby="title desc">
-<title id="title">One request, step by step</title>
-<desc id="desc">Follow steps 1 through 6 from top to bottom. Kiro sends TypeScript through fabric_exec over stdio MCP. Fabric verifies the workspace, admits the request, checks types in a compiler worker, then runs a fresh QuickJS guest. Each action crosses JSON validation, schemas, effect reservations, and approval policy. The guest selects a bounded result for Kiro. A full text description is in docs/diagram-descriptions.md, Execution.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1280" viewBox="0 0 640 1280" role="img" aria-labelledby="title desc">
+<title id="title">Execution: from request to result</title>
+<desc id="desc">Follow six steps vertically: Kiro submits code and optional payloads, resultFormat, and timeoutMs; Fabric verifies roots and admits at most four executions per service by default; a restricted compiler checks the program; fresh QuickJS executes with a default 64 MiB guest heap and bounded JSON host bridge; the registry validates canonical arguments and reserves effects before applying approval policy; the guest selects evidence for a bounded response. See docs/diagram-descriptions.md, Execution, for the full text.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
 text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
-.title { font-size:36px; font-weight:700; fill:#ffffff; }
-.subtitle { font-size:30px; fill:#ffffff; }
-.label { font-size:32px; font-weight:700; }
-.body { font-size:30px; }
-.arrow { stroke:#334155; stroke-width:4; fill:none; marker-end:url(#arrow); }
+.title { font-size:32px; font-weight:700; fill:#ffffff; }
+.subtitle { font-size:24px; fill:#ffffff; }
+.label { font-size:27px; font-weight:700; }
+.body { font-size:24px; }
+.arrow { stroke:#334155; stroke-width:3; fill:none; marker-end:url(#arrow); }
+.connector { stroke:#334155; stroke-width:3; fill:none; }
 </style>
-<rect width="640" height="1692" fill="#f8fafc"/>
-<rect width="640" height="126" fill="#172554"/>
-<text x="24" y="51" class="title">One request, step by step</text>
-<text x="24" y="97" class="subtitle">Kiro → Fabric → tools → Kiro</text>
-<g data-card="true"><rect x="24" y="156" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="204" class="label">1. Kiro submits a program</text>
-<text x="46" y="254" class="body">Agent: kiro-fabric</text>
-<text x="46" y="296" class="body">Only tool: @fabric/fabric_exec</text>
-<text x="46" y="338" class="body">Private backend over stdio MCP.</text>
+<rect width="640" height="1280" fill="#f8fafc"/>
+<rect width="640" height="100" fill="#172554"/>
+<text x="24" y="43" class="title">Execution: from request to result</text>
+<text x="24" y="79" class="subtitle">Kiro → TypeScript → checked actions → Kiro</text>
+<g data-card="true"><rect x="24" y="122" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="159" class="label">1. Kiro calls @fabric/fabric_exec</text>
+<text x="44" y="199" class="body">Agent: kiro-fabric · one model-visible tool.</text>
+<text x="44" y="229" class="body">Input: code, payloads?, resultFormat?, timeoutMs?</text>
+<text x="44" y="259" class="body">A private stdio MCP backend receives the request.</text>
 </g>
-<path d="M320 380 V406" class="arrow"/>
-<g data-card="true"><rect x="24" y="412" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="460" class="label">2. Bind and admit</text>
-<text x="46" y="510" class="body">Verify the workspace root.</text>
-<text x="46" y="552" class="body">Up to 4 executions per service.</text>
-<text x="46" y="594" class="body">Excess executions are rejected.</text>
+<path d="M320 280 V296" class="arrow"/>
+<g data-card="true"><rect x="24" y="300" width="592" height="184" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="337" class="label">2. Verify workspace and admit</text>
+<text x="44" y="377" class="body">Client roots → verified workspace identity.</text>
+<text x="44" y="407" class="body">One root: auto-bind. Multiple roots: select first.</text>
+<text x="44" y="437" class="body">Default: 4 admitted executions per service.</text>
+<text x="44" y="467" class="body">Excess requests fail; no admission queue.</text>
 </g>
-<path d="M320 636 V662" class="arrow"/>
-<g data-card="true"><rect x="24" y="668" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="716" class="label">3. Check TypeScript</text>
-<text x="46" y="766" class="body">Compile against Fabric APIs.</text>
-<text x="46" y="808" class="body">Restrict compiler file access.</text>
-<text x="46" y="850" class="body">Type errors stop execution.</text>
+<path d="M320 488 V504" class="arrow"/>
+<g data-card="true"><rect x="24" y="508" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="545" class="label">3. Type-check before tool effects</text>
+<text x="44" y="585" class="body">Compile against generated Fabric declarations.</text>
+<text x="44" y="615" class="body">Worker host restricts file and module access.</text>
+<text x="44" y="645" class="body">Invalid types or wrapper → no guest execution.</text>
 </g>
-<path d="M320 892 V918" class="arrow"/>
-<g data-card="true"><rect x="24" y="924" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="972" class="label">4. Run fresh QuickJS</text>
-<text x="46" y="1022" class="body">New guest context for each call.</text>
-<text x="46" y="1064" class="body">No direct files, shell, or network.</text>
-<text x="46" y="1106" class="body">Host calls use a JSON bridge.</text>
+<path d="M320 666 V682" class="arrow"/>
+<g data-card="true"><rect x="24" y="686" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="723" class="label">4. Run JavaScript in fresh QuickJS</text>
+<text x="44" y="763" class="body">Guest heap: 64 MiB default; no ambient host I/O.</text>
+<text x="44" y="793" class="body">Bounded JSON bridge → shared host-call queue.</text>
+<text x="44" y="823" class="body">Base timeout: 120 s; configured maximum: 900 s.</text>
 </g>
-<path d="M320 1148 V1174" class="arrow"/>
-<g data-card="true"><rect x="24" y="1180" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="1228" class="label">5. Gate every action</text>
-<text x="46" y="1278" class="body">Validate the argument schema.</text>
-<text x="46" y="1320" class="body">Reserve effects; apply approvals.</text>
-<text x="46" y="1362" class="body">Invoke local, data, or MCP tools.</text>
+<path d="M320 844 V860" class="arrow"/>
+<g data-card="true"><rect x="24" y="864" width="592" height="184" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="901" class="label">5. Resolve and gate provider calls</text>
+<text x="44" y="941" class="body">Canonical args → schema → effect reservations.</text>
+<text x="44" y="971" class="body">Apply allow / ask / deny to each action.</text>
+<text x="44" y="1001" class="body">Local coding, memory/state, or configured MCP.</text>
+<text x="44" y="1031" class="body">Bounded JSON results return to the guest.</text>
 </g>
-<path d="M320 1404 V1430" class="arrow"/>
-<g data-card="true"><rect x="24" y="1436" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="1484" class="label">6. Return useful evidence</text>
-<text x="46" y="1534" class="body">Guest filters and combines data.</text>
-<text x="46" y="1576" class="body">Fabric bounds the visible result.</text>
-<text x="46" y="1618" class="body">Kiro answers or continues.</text>
+<path d="M320 1052 V1068" class="arrow"/>
+<g data-card="true"><rect x="24" y="1072" width="592" height="184" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="1109" class="label">6. Project the selected evidence</text>
+<text x="44" y="1149" class="body">Guest returns a value; logs also count as output.</text>
+<text x="44" y="1179" class="body">Visible response: 50,000 characters by default.</text>
+<text x="44" y="1209" class="body">Overflow → head/tail + artifact when retained.</text>
+<text x="44" y="1239" class="body">Later failure can leave earlier effects committed.</text>
 </g>
 </svg>

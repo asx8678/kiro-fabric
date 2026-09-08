@@ -1,52 +1,54 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1638" viewBox="0 0 640 1638" role="img" aria-labelledby="title desc">
-<title id="title">What survives between calls</title>
-<desc id="desc">Kiro owns conversation history, compaction, and chat resume. Fabric caches a runtime for a verified workspace and can reuse a bounded compiler worker. Every fabric_exec creates a fresh QuickJS guest whose variables end with the call. Memory and revisioned state are durable and shared by chats bound to the same workspace. Overflow artifacts are temporary and process-owned, with a default one-hour idle expiry. Same-process compaction and new-process resume still need authenticated real-client qualification. A full text description is in docs/diagram-descriptions.md, Lifetimes.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1186" viewBox="0 0 640 1186" role="img" aria-labelledby="title desc">
+<title id="title">Processes, guests, and durable data</title>
+<desc id="desc">Kiro owns conversation saving, compaction, and resume. The private Fabric MCP backend caches the verified workspace runtime; workspace changes can replace the runtime without changing PID. fabric.info exposes process and runtime identity. Each execution has a fresh QuickJS context. Durable workspace memory and revisioned state are shared across chats bound to that workspace; expectedRevision detects stale state updates. Overflow artifacts are process-owned and temporary. Same-process compaction and new-process resume require real-client qualification. See docs/diagram-descriptions.md, Lifetimes.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
 text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
-.title { font-size:36px; font-weight:700; fill:#ffffff; }
-.subtitle { font-size:30px; fill:#ffffff; }
-.label { font-size:32px; font-weight:700; }
-.body { font-size:30px; }
-.arrow { stroke:#334155; stroke-width:4; fill:none; marker-end:url(#arrow); }
+.title { font-size:32px; font-weight:700; fill:#ffffff; }
+.subtitle { font-size:24px; fill:#ffffff; }
+.label { font-size:27px; font-weight:700; }
+.body { font-size:24px; }
+.arrow { stroke:#334155; stroke-width:3; fill:none; marker-end:url(#arrow); }
+.connector { stroke:#334155; stroke-width:3; fill:none; }
 </style>
-<rect width="640" height="1638" fill="#f8fafc"/>
-<rect width="640" height="126" fill="#172554"/>
-<text x="24" y="51" class="title">What survives between calls</text>
-<text x="24" y="97" class="subtitle">Different owners and lifetimes</text>
-<g data-card="true"><rect x="24" y="156" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="204" class="label">Kiro owns the conversation</text>
-<text x="46" y="254" class="body">Saved history and summaries.</text>
-<text x="46" y="296" class="body">Context compaction.</text>
-<text x="46" y="338" class="body">Chat resume.</text>
+<rect width="640" height="1186" fill="#f8fafc"/>
+<rect width="640" height="100" fill="#172554"/>
+<text x="24" y="43" class="title">Processes, guests, and durable data</text>
+<text x="24" y="79" class="subtitle">The lifetime determines what can be reused</text>
+<g data-card="true"><rect x="24" y="122" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="159" class="label">Kiro CLI process · conversation owner</text>
+<text x="44" y="199" class="body">Kiro saves history and compacted summaries.</text>
+<text x="44" y="229" class="body">Kiro controls compaction and chat resume.</text>
+<text x="44" y="259" class="body">Fabric memory does not mirror the conversation.</text>
 </g>
-<g data-card="true"><rect x="24" y="412" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="460" class="label">Fabric retains a runtime</text>
-<text x="46" y="510" class="body">Bound to a verified workspace.</text>
-<text x="46" y="552" class="body">Compiler reuse has limits.</text>
-<text x="46" y="594" class="body">Workspace changes can replace it.</text>
+<g data-card="true"><rect x="24" y="300" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="337" class="label">Fabric backend · workspace runtime</text>
+<text x="44" y="377" class="body">Private stdio MCP transport; verified workspace.</text>
+<text x="44" y="407" class="body">Root changes can replace runtime, keeping the PID.</text>
+<text x="44" y="437" class="body">fabric.info(): PID, mcpInstanceId, runtime generation.</text>
 </g>
-<g data-card="true"><rect x="24" y="668" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="716" class="label">Each call gets a fresh guest</text>
-<text x="46" y="766" class="body">A new QuickJS context.</text>
-<text x="46" y="808" class="body">Variables end with that call.</text>
-<text x="46" y="850" class="body">Guest state is not reused.</text>
+<g data-card="true"><rect x="24" y="478" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="515" class="label">One execution · fresh QuickJS guest</text>
+<text x="44" y="555" class="body">All guest variables end with the call.</text>
+<text x="44" y="585" class="body">Compiler reuse does not preserve guest state.</text>
+<text x="44" y="615" class="body">Every new program is checked again.</text>
 </g>
-<g data-card="true"><rect x="24" y="924" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="972" class="label">Memory and state persist</text>
-<text x="46" y="1022" class="body">Intentional workspace facts.</text>
-<text x="46" y="1064" class="body">Revisioned task progress.</text>
-<text x="46" y="1106" class="body">Shared by chats in that workspace.</text>
+<g data-card="true"><rect x="24" y="656" width="592" height="184" rx="10" fill="#f0fdf4" stroke="#334155" stroke-width="2"/>
+<text x="44" y="693" class="label">Across restarts · memory and state</text>
+<text x="44" y="733" class="body">Intentional facts + revisioned task progress.</text>
+<text x="44" y="763" class="body">Chats in the same verified workspace share data.</text>
+<text x="44" y="793" class="body">expectedRevision detects stale state updates.</text>
+<text x="44" y="823" class="body">Stored under kiro-fabric/data/fabric/.</text>
 </g>
-<g data-card="true"><rect x="24" y="1180" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="1228" class="label">Artifacts are temporary</text>
-<text x="46" y="1278" class="body">Process-owned overflow data.</text>
-<text x="46" y="1320" class="body">Default idle expiry: 1 hour.</text>
-<text x="46" y="1362" class="body">Do not rely on IDs after restart.</text>
+<g data-card="true"><rect x="24" y="864" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="901" class="label">Temporary · overflow artifacts</text>
+<text x="44" y="941" class="body">Process-owned data, even when stored in files.</text>
+<text x="44" y="971" class="body">Default idle expiry: 1 hour; quota eviction applies.</text>
+<text x="44" y="1001" class="body">Artifact IDs are not reliable across restarts.</text>
 </g>
-<g data-card="true"><rect x="24" y="1436" width="592" height="170" rx="12" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="1484" class="body">Compaction / resume behavior</text>
-<text x="46" y="1526" class="body">still needs real-client qualification.</text>
-<text x="46" y="1568" class="body">Restart Kiro after an agent update.</text>
+<g data-card="true"><rect x="24" y="1042" width="592" height="120" rx="10" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="1078" class="body">Same-process compaction / new-process resume</text>
+<text x="44" y="1108" class="body">still require authenticated real-client qualification.</text>
+<text x="44" y="1138" class="body">Restart Kiro after an installed agent update.</text>
 </g>
 </svg>

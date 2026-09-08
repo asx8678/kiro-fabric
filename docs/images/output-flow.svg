@@ -1,52 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1596" viewBox="0 0 640 1596" role="img" aria-labelledby="title desc">
-<title id="title">How output stays bounded</title>
-<desc id="desc">Provider results cross a bounded JSON bridge, with a default nested result budget of two million characters. Guest code selects evidence. The formatted visible response has a default 50,000-character budget and an additional 20,000-character ceiling for failures. If output fits it is returned directly. Oversized output gets a head-and-tail preview and a temporary artifact when retention succeeds. Failed retention is reported as an error. Artifacts cannot recover provider-truncated data. A full text description is in docs/diagram-descriptions.md, Output.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1096" viewBox="0 0 640 1096" role="img" aria-labelledby="title desc">
+<title id="title">Result budgets and overflow</title>
+<desc id="desc">Nested results have a two-million-character default budget. Guest code selects evidence. The visible formatted result includes value, logs, and diagnostics, with a 50,000-character default budget and a 20,000-character failure ceiling. If it fits, it is returned directly. If overflow retention succeeds, a head-and-tail preview includes a paged artifact hint. If retention fails, the bounded response is an error. Artifact defaults are 32 entries, two million characters each, eight million total, and one-hour idle expiry. See docs/diagram-descriptions.md, Output.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
 text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
-.title { font-size:36px; font-weight:700; fill:#ffffff; }
-.subtitle { font-size:30px; fill:#ffffff; }
-.label { font-size:32px; font-weight:700; }
-.body { font-size:30px; }
-.arrow { stroke:#334155; stroke-width:4; fill:none; marker-end:url(#arrow); }
+.title { font-size:32px; font-weight:700; fill:#ffffff; }
+.subtitle { font-size:24px; fill:#ffffff; }
+.label { font-size:27px; font-weight:700; }
+.body { font-size:24px; }
+.arrow { stroke:#334155; stroke-width:3; fill:none; marker-end:url(#arrow); }
+.connector { stroke:#334155; stroke-width:3; fill:none; }
 </style>
-<rect width="640" height="1596" fill="#f8fafc"/>
-<rect width="640" height="126" fill="#172554"/>
-<text x="24" y="51" class="title">How output stays bounded</text>
-<text x="24" y="97" class="subtitle">Two limits, then overflow handling</text>
-<g data-card="true"><rect x="24" y="156" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="204" class="label">1. Bound nested results</text>
-<text x="46" y="254" class="body">Default: 2,000,000 characters.</text>
-<text x="46" y="296" class="body">Provider limits also apply.</text>
-<text x="46" y="338" class="body">Guest code selects evidence.</text>
+<rect width="640" height="1096" fill="#f8fafc"/>
+<rect width="640" height="100" fill="#172554"/>
+<text x="24" y="43" class="title">Result budgets and overflow</text>
+<text x="24" y="79" class="subtitle">Nested data and visible responses have separate limits</text>
+<g data-card="true"><rect x="24" y="122" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="159" class="label">1. Provider → guest JSON bridge</text>
+<text x="44" y="199" class="body">Nested result budget: 2,000,000 characters.</text>
+<text x="44" y="229" class="body">Provider-specific bounds and truncation also apply.</text>
+<text x="44" y="259" class="body">Guest code filters, transforms, and selects evidence.</text>
 </g>
-<path d="M320 380 V406" class="arrow"/>
-<g data-card="true"><rect x="24" y="412" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="460" class="label">2. Bound the visible response</text>
-<text x="46" y="510" class="body">Default: 50,000 characters.</text>
-<text x="46" y="552" class="body">Failure ceiling: 20,000 characters.</text>
-<text x="46" y="594" class="body">Value, logs, and diagnostics count.</text>
+<path d="M320 280 V296" class="arrow"/>
+<g data-card="true"><rect x="24" y="300" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="337" class="label">2. Guest → formatted MCP response</text>
+<text x="44" y="377" class="body">Value + logs + diagnostics share the output budget.</text>
+<text x="44" y="407" class="body">Default: 50,000 chars; failure ceiling: 20,000.</text>
+<text x="44" y="437" class="body">These are UTF-16 code units, not billed tokens.</text>
 </g>
-<g data-card="true"><rect x="24" y="668" width="592" height="176" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="716" class="label">Case A: output fits</text>
-<text x="46" y="766" class="body">Return the formatted response.</text>
-<text x="46" y="808" class="body">No overflow artifact needed.</text>
+<g data-card="true"><rect x="24" y="478" width="592" height="124" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="515" class="label">Case A · Fits the visible budget</text>
+<text x="44" y="555" class="body">Return the formatted response directly.</text>
+<text x="44" y="585" class="body">No overflow artifact is created.</text>
 </g>
-<g data-card="true"><rect x="24" y="882" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="930" class="label">Case B: overflow retained</text>
-<text x="46" y="980" class="body">Return a head-and-tail preview.</text>
-<text x="46" y="1022" class="body">Keep full response in an artifact.</text>
-<text x="46" y="1064" class="body">Read more in bounded pages.</text>
+<g data-card="true"><rect x="24" y="626" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="663" class="label">Case B · Overflow retained</text>
+<text x="44" y="703" class="body">Head-and-tail preview + artifact ID + read hint.</text>
+<text x="44" y="733" class="body">Full formatted response retained temporarily.</text>
+<text x="44" y="763" class="body">artifacts.read({ id, offset, limit }) pages the data.</text>
 </g>
-<g data-card="true"><rect x="24" y="1138" width="592" height="218" rx="12" fill="#ffffff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="1186" class="label">Case C: retention fails</text>
-<text x="46" y="1236" class="body">Return a bounded preview.</text>
-<text x="46" y="1278" class="body">Report missing full response.</text>
-<text x="46" y="1320" class="body">Mark the response as an error.</text>
+<g data-card="true"><rect x="24" y="804" width="592" height="124" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="841" class="label">Case C · Overflow cannot be retained</text>
+<text x="44" y="881" class="body">Return bounded preview and missing-result notice.</text>
+<text x="44" y="911" class="body">Mark the caller-visible response as an error.</text>
 </g>
-<g data-card="true"><rect x="24" y="1394" width="592" height="170" rx="12" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
-<text x="46" y="1442" class="body">Artifacts are temporary.</text>
-<text x="46" y="1484" class="body">They cannot restore data already</text>
-<text x="46" y="1526" class="body">truncated by a provider.</text>
+<g data-card="true"><rect x="24" y="952" width="592" height="120" rx="10" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
+<text x="44" y="988" class="body">Artifact defaults: 32 entries; 2M chars each; 8M total.</text>
+<text x="44" y="1018" class="body">Idle expiry: 1 hour; reads refresh last-read time.</text>
+<text x="44" y="1048" class="body">Artifacts cannot restore provider-truncated data.</text>
 </g>
 </svg>

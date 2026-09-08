@@ -18,7 +18,7 @@ kiro-cli --v3 --agent kiro-fabric
 
 ## Execution
 
-Diagrams use large text and a vertical reading order. Open an image to zoom, or use its text version.
+Open any diagram to zoom, or use its text version.
 
 [![Six execution steps: submit code, bind workspace, check TypeScript, run QuickJS, approve actions, and return evidence.](docs/images/execution-flow.svg)](docs/images/execution-flow.svg)
 
