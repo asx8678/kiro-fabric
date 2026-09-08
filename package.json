@@ -18,6 +18,8 @@
     "dist/**/*.d.ts",
     "!dist/kiro-agent-closure/**/*",
     "docs/architecture.md",
+    "docs/images/execution-flow.svg",
+    "docs/images/sessions-and-storage.svg",
     "docs/audit.md",
     "docs/configuration.md",
     "docs/release.md",

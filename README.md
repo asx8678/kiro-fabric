@@ -1,93 +1,64 @@
 # Kiro Fabric
 
-Kiro Fabric is a **native Kiro CLI V3 custom agent** with strict always-on Code Mode and one private stdio MCP backend. When Kiro selects `kiro-fabric`, it starts the inline backend; no Power activation or separately started server is required.
+A custom agent for **Kiro CLI v3** that turns tool work into checked TypeScript. Kiro handles the conversation; Fabric runs code, checks permissions, and connects it to your workspace and configured MCP tools.
 
-## Architecture
+## Start
 
-The profile exposes exactly `tools:["@fabric/fabric_exec"]`, with only that outer tool allowed and no native permissions. Raw stdio MCP and the `agent-product.json` `tools` field retain `fabric_info`, `fabric_workspace`, and `fabric_exec` for compatibility/operators; they are not the filtered model inventory. Checked TypeScript runs only in QuickJS with no ambient host APIs. Registry-backed `local` provides read/grep/find/list/write/edit/shell; `fabric` provides info/help/workspace bootstrap. Side effects remain behind exact inner ActionRegistry approvals: outer allowance never approves a nested effect.
-
-Start useful work directly: `return await local.read({path:"README.md",limit:80});`. When needed use `return await fabric.info();`, `return await fabric.help({topic:"api"});` or `return await fabric.workspace({action:"status"});` inside exec. Help is immutable bundled content, not a native read. Conversation needs no ritual tool call. See the [guest API](skills/fabric-exec/references/api.md).
-
-**Cutover:** deploy the strict profile only after the matching local/bootstrap runtime is complete and independently verified; restart old sessions to adopt the one-tool inventory. No live installation is implied by source changes. Real-client execution remains **BLOCKED**: the complete filtered `/tools` rendering has not been observed for this migration. Evidence v13 retains the legacy `nativeToolVisibility` key solely for compatibility; its semantics are now an exact complete one-tool inventory, empty native tools, and rejection of any extra or unrecognized inventory content. The driver fails closed on unknown rendering rather than treating token presence as proof. All archive/commit binding, elicitation, three manual and one natural automatic compaction, shutdown and new-process resume gates remain required.
-
-Inside `fabric_exec`, capability discovery returns complete digest-bound descriptors, configured downstream MCP schema inspection remains network/execute approval-gated, and `parallel` limits fan-out to the configured host-call concurrency. If a later guest step fails after nested calls have settled, Fabric adds a bounded ref/outcome progress summary and warns the agent to inspect state before retrying; that added summary excludes nested-call arguments, results, IDs, and error text. Oversized visible output retains deterministic head and tail context while the complete result is kept only in its private TTL artifact when capacity permits.
-
-## Requirements and commands
-
-Node.js 24 or newer, a supported POSIX host, ripgrep (`rg`) for search, and an authenticated Kiro CLI with V3 harness support are required.
+Requires Kiro CLI with v3 support and separate Kiro authentication. To install from this checkout, you also need **Node ≥24**, **pnpm 11.20.0**, ripgrep (`rg`), and a supported POSIX host.
 
 ```sh
+# From this repository, as your normal user:
 pnpm install --frozen-lockfile
-pnpm run agent:stage:local
-pnpm run agent:validate
 pnpm run agent:install
-kiro-cli agent validate --path "${KIRO_HOME:-$HOME/.kiro}/agents/kiro-fabric.json"
-kiro-cli agent list
+
+# From the project you want to work on:
+cd /path/to/your/project
 kiro-cli --v3 --agent kiro-fabric
-kiro-cli agent set-default kiro-fabric   # explicit opt-in only
-kiro-cli --v3                            # only after that explicit opt-in
-pnpm run agent:update
-pnpm run agent:uninstall
-# permanent deletion:
-pnpm run agent:uninstall -- --purge-data
 ```
 
-The GitHub release archive is self-installing and does not depend on this checkout or its `.tmp` tree. Extract it into a private directory, then run its bundled installer from any unrelated working directory:
+Export `KIRO_HOME` before installation and launch to use a custom Kiro home.
+
+**Status:** source installation is available. Public signed releases and authenticated real-client qualification remain blocked; compaction/resume behavior still needs verification. See [configuration](docs/configuration.md) and [release gates](docs/release.md).
+
+## How it works
+
+![Kiro sends checked TypeScript to Fabric; sandboxed code reaches local tools, durable data, and configured MCP services through schema validation and approval policy.](docs/images/execution-flow.svg)
+
+The model sees one tool: `@fabric/fabric_exec`. Each call gets a fresh QuickJS context with no direct filesystem, shell, or network access. Provider calls cross Fabric’s validated bridge; allowing the outer tool does **not** approve nested effects.
+
+For example, Kiro can send this function body to `fabric_exec`:
+
+```ts
+const files = await local.find({ pattern: "src/**/*.ts", limit: 20 });
+return files;
+```
+
+| Inside Fabric | Purpose |
+| --- | --- |
+| `local` | Read, search, edit, write, and run shell commands |
+| `tools`, `mcp` | Discover capabilities and call explicitly configured MCP tools |
+| `memory`, `state` | Store durable facts and revisioned task progress |
+| `fabric` | Inspect runtime, read API help, and select a workspace |
+
+A single verified workspace root binds automatically; multiple roots require explicit selection. Web, LSP, and delegation need configured MCP capabilities. [Guest API →](skills/fabric-exec/references/api.md)
+
+## Sessions and storage
+
+![Kiro owns conversation history; Fabric uses a fresh sandbox per call and persists workspace memory and state separately from installed runtime generations.](docs/images/sessions-and-storage.svg)
+
+Kiro owns history and compaction. Fabric stores intentional workspace facts and task state; temporary artifacts are not durable memory. Restart Kiro after installing an updated generation. The intended same-process lifecycle through compaction remains a real-client qualification gate.
+
+## Maintain
 
 ```sh
-mkdir -p /absolute/private/kiro-fabric-agent
-chmod 700 /absolute/private/kiro-fabric-agent
-tar -xzf kiro-fabric-agent.tar.gz -C /absolute/private/kiro-fabric-agent
-node /absolute/private/kiro-fabric-agent/scripts/install-agent-user.mjs
+# Update from this checkout:
+pnpm install --frozen-lockfile
+pnpm run agent:install
+
+# Development:
+pnpm install --frozen-lockfile
+pnpm run build
+pnpm run check  # Required before committing
 ```
 
-The interactive TUI and headless runner have different V3 selectors. For a noninteractive structural check, pass the prompt positionally and grant only the capabilities the check needs:
-
-```sh
-kiro-cli chat --agent-engine v3 --agent kiro-fabric --no-interactive \
-  --require-mcp-startup --output-format stream-json \
-  "<qualification prompt>"
-```
-
-Real-client qualification requires an explicit `--auth-mode subscription` or a present `KIRO_API_KEY` (which selects `api-key`). The following command performs Kiro's device-flow login inside a fresh private qualification home, requires `kiro-cli whoami` to fail before that login, verifies it after, and deletes that home after qualification. Device-flow login stdout is inherited by the operator terminal and is not captured; TUI/ACP transcripts are still embedded in evidence and may contain client-rendered identity.
-
-```sh
-KIRO_CLI_PATH="/Applications/Kiro CLI.app/Contents/MacOS/kiro-cli" \
-  pnpm run certify:agent:real -- --auth-mode subscription --subscription-login
-```
-
-The default `--subscription-license free` selects Builder ID/social login (including a paid subscription on that identity). Identity Center users can pass `--subscription-license pro --identity-provider <URL> --region <REGION>`. If an authenticated subscription is already available to the isolated home/keychain, omit `--subscription-login`; that path does not claim a measured pre-login failure. API-key automation remains available with `--auth-mode api-key` and `KIRO_API_KEY`; its value is never printed, persisted, or uploaded. Release qualification must not use `--trust-all-tools`.
-
-The current [official command reference](https://kiro.dev/docs/reference/cli-commands/) shows the validation path positionally, but the installed qualification client, `kiro-cli 2.21.0`, requires `agent validate --path <PATH>` in its own help. The [official headless page](https://kiro.dev/docs/cli/headless/) shows `--engine v3`, while this installed client's `chat --help` exposes `--agent-engine <v1|v2|v3>` and no `--engine`. Installed help is authoritative for this client, so the commands above use `--path` and `--agent-engine v3`. Its top-level `--help-all` confirms `--v3 --agent <AGENT>` for the interactive TUI. Only `@fabric/fabric_exec` is narrowly outer-allowed; no native tools are exposed.
-
-Migrate an explicitly known legacy Power data root without home-directory scanning:
-
-```sh
-node scripts/install-agent-user.mjs .tmp/kiro-fabric-agent --migrate-power-data /absolute/legacy/PLUGIN_DATA
-```
-
-## Locations and lifecycle
-
-The global profile is `$KIRO_HOME/agents/kiro-fabric.json` (`KIRO_HOME` defaults to `~/.kiro`). Immutable generations are under `$KIRO_HOME/kiro-fabric/runtime/<digest>`, the exact skill under `$KIRO_HOME/kiro-fabric/skills/fabric-exec`, and durable config/memory/state under `$KIRO_HOME/kiro-fabric/data/fabric`. Traces are under that data tree. Installation and normal use do not create a project `.kiro/agents/kiro-fabric.*`, `.fabric`, runtime, data, memory, state, or log path. Memory, state, and configuration are durable; TTL artifacts and in-process values are not durable session memory.
-
-For a long-running `kiro-cli --v3 --agent kiro-fabric` process, Kiro owns conversation auto-save and context compaction. Kiro normally compacts automatically as a conversation approaches its compaction threshold, and `/compact` triggers it manually. To inspect whether automatic compaction was explicitly disabled, run `kiro-cli settings chat.disableAutoCompaction --format json`; to explicitly keep it enabled, run `kiro-cli settings chat.disableAutoCompaction false`. The Fabric installer never changes this user setting. Release qualification leaves the setting untouched, completes three structurally bound manual `/compact` cycles, and then applies bounded opaque conversation pressure until the client itself emits one automatic started-to-completed ACP compaction sequence with no `/compact` command. If the installed client exposes no supported threshold override and does not naturally emit that sequence within the bound, the real-client gate fails instead of simulating compaction.
-
-Fabric does not launch once per prompt. Its contract is one private stdio MCP process and one runtime for the unchanged workspace throughout ordinary turns and Kiro compactions, even if Kiro represents compaction as a new logical chat session inside the same CLI process. `fabric.info()` inside exec (raw operator endpoint: `fabric_info`) exposes the PID, `mcpInstanceId`, start time, and runtime generation so this can be checked objectively. The authenticated gate requires three separate manual `/compact` cycles plus one naturally triggered automatic compaction, with an exact Fabric sentinel check and unchanged process/runtime identity after every cycle. Every cycle also receives a fresh random conversation-only fact before compaction; the fact is excluded from tool input, omitted from the post-compaction prompt, and must be recalled by Kiro into an exact ACP-bound `fabric_exec` call that persists a matching durable state effect. Kiro retains its saved conversation state or compacted summary; Fabric memory/state retains only intentional workspace-scoped durable data. The required resume behavior is a new Fabric PID in the later CLI process while Kiro restores that saved conversation state and Fabric restores durable memory/state. These behaviors remain release-blocking real-client gates rather than unverified guarantees.
-
-Single roots bind automatically after identity verification. Multiple roots require explicit `fabric.workspace({action:"select",rootId})` inside a separate exec before workspace effects. Missing roots or form elicitation fails closed. Ambient MCP and Powers are disabled (`includeMcpJson: false`, `includePowers: false`); configured federation lives only in private `data/fabric/config/mcp.json`.
-
-All local reads, edits and shell commands route through the `local` facade and registry. Only the exec wrapper is outer-allowed; nested effects retain exact Fabric approval policy. Web/LSP/delegation require explicitly configured MCP capabilities, otherwise they are unavailable. There is no native fallback.
-
-## Doctor / health
-
-Run `node scripts/install-agent-user.mjs --doctor` from this checkout or the extracted archive. It is read-only and reports bounded `PASS`, `WARNING`, and `FAIL` checks for Node/executable trust, ripgrep, Kiro CLI availability, safe Kiro home, and the installed profile/runtime. Hard failures exit nonzero; no installation or permission repair is performed.
-
-In a running session, use `return await fabric.info();` for workspace binding, required roots/elicitation capabilities and provider status. Offline doctor cannot prove live client capabilities or configured MCP connectivity; MCP discovery remains approval-gated. Neither diagnostic substitutes for real-client release qualification.
-
-## Migration and troubleshooting
-
-The installer never edits Power registries or installs global steering. Explicit migration accepts only a private known directory and preserves compatible config/projects. Legacy workspace salts remain private compatibility identifiers so existing identity, memory, and state are not orphaned. Remove a digest-owned old steering file manually only after checking its ownership marker; modified/unowned files must be preserved.
-
-If the agent is missing, validate the global profile and inspect `agent list`. This repository intentionally contains no `.kiro/agents/kiro-fabric.*`, so it cannot shadow the installed global agent. If `@fabric/fabric_exec` is missing or extra tools appear, verify `includePowers: false` and disable any leftover Power under `$KIRO_HOME/powers/kiro-fabric` or `$KIRO_HOME/powers/installed/kiro-fabric`. Node mismatch, unsafe paths, modified ownership files, unavailable roots/elicitation, and MCP startup timeout all fail closed. Authenticated real-client release qualification is **not passing** until the interactive lifecycle, compaction, shutdown, and resume gate succeeds on the exact release commit.
-
-[Kiro custom agents inherit default resources](https://kiro.dev/docs/custom-agents/configuration-reference/#disabling-default-resource-inheritance)—steering, skills, and `AGENTS.md`—unless the user has explicitly enabled `chat.disableInheritingDefaultResources`. The installer does not change that global or workspace-overridable setting. To opt into a profile-only resource set, run `kiro-cli settings chat.disableInheritingDefaultResources true`; remove it with `kiro-cli settings --delete chat.disableInheritingDefaultResources`. This inheritance means the complete prompt envelope depends on the user's Kiro settings and workspace resources.
+[Architecture](docs/architecture.md) · [Configuration](docs/configuration.md) · [Security](SECURITY.md) · [MIT license](LICENSE)
