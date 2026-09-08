@@ -10,12 +10,15 @@
     "src/core/action-registry.ts",
     "src/core/semantic-digest.ts",
     "src/execution-service.ts",
+    "src/installation/bundle-contract.mjs",
+    "src/installation/installer-lock.mjs",
     "src/kernel/fabric-exec-contract.ts",
     "src/kiro/artifacts.ts",
     "src/kiro/bootstrap-provider.ts",
     "src/kiro/canonical-path.ts",
     "src/kiro/deadlines.ts",
     "src/kiro/info-catalog.ts",
+    "src/kiro/managed-generation.ts",
     "src/kiro/mcp-entry.ts",
     "src/kiro/mcp-provider.ts",
     "src/kiro/mcp-server.ts",
@@ -193,9 +196,9 @@
   ],
   "files": [
     {
-      "path": "chunks/chunk-4KRLFCN5.js",
-      "bytes": 2125,
-      "sha256": "d1a31c3d7c2e3be6d48671f398e5662fd9a12add757605711604c117c0eae4dc"
+      "path": "chunks/chunk-762YYRNE.js",
+      "bytes": 6351,
+      "sha256": "12c662f81f2039cf0f67d47791a73f2434fac18a1b02d734ce9d19a47d550445"
     },
     {
       "path": "chunks/chunk-AE4E2KSU.js",
@@ -538,9 +541,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-5VFFPJF2.js",
-      "bytes": 1122053,
-      "sha256": "8f681df9b446d95a02762b4be36548b73697f432b62950e32db9ef12deb4bc48"
+      "path": "chunks/mcp-server-ADQ7O4NA.js",
+      "bytes": 1120378,
+      "sha256": "aa54d737111f765bef90f35bf570d53fe17844cfb8fe12c71fb66dd621ce2821"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -559,8 +562,8 @@
     },
     {
       "path": "kiro/mcp-entry.js",
-      "bytes": 5640,
-      "sha256": "aa01a5f91ec6e365b36ff79dd5f1b5835a0a9af34a67bd5ac0e333a96440365f"
+      "bytes": 46604,
+      "sha256": "5174f06e44c801b0231521631689cb524ece310fbd1ea532a6d7e99704785530"
     },
     {
       "path": "package.json",
@@ -578,5 +581,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "6718c9664868f6127af64ef2449c55c85643353911e2440b48fea7ee8e211850"
+  "contentDigest": "870176d3462bc55868c2739bf73b7aedd5b4b9d3fe5dcb6bcfb5615c7961a04d"
 }

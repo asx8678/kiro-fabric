@@ -1,10 +1,12 @@
 import fs from "node:fs";
+import { inferManagedGeneration, type ManagedGenerationContext } from "../managed-generation.js";
 import path from "node:path";
 import { canonicalPathContains, inspectCanonicalPath } from "../canonical-path.js";
 
 export interface KiroAgentLaunchContext {
   runtimeRoot: string;
   dataRoot: string;
+  managedGeneration?: ManagedGenerationContext;
 }
 
 const canonicalDirectory = (value: string | undefined, name: string): string => {
@@ -37,5 +39,6 @@ export const resolveKiroAgentLaunchContext = (
   if (canonicalPathContains(runtimeRoot, dataRoot) || canonicalPathContains(dataRoot, runtimeRoot)) {
     throw new Error("runtime and data roots must not contain one another");
   }
-  return { runtimeRoot, dataRoot };
+  const managedGeneration = inferManagedGeneration(runtimeRoot, env);
+  return { runtimeRoot, dataRoot, ...(managedGeneration ? { managedGeneration } : {}) };
 };

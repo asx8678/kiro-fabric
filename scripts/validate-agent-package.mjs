@@ -285,7 +285,7 @@ export const validateInstalledAgentProfile = (profilePath, options) => {
   return { ok: true, profile, sha256: hash(fs.readFileSync(absoluteProfile)) };
 };
 
-const invokedAsMain = process.argv[1] !== undefined &&
+const invokedAsMain = path.basename(fileURLToPath(import.meta.url)) === "validate-agent-package.mjs" && process.argv[1] !== undefined &&
   fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
 if (invokedAsMain) {
   try {

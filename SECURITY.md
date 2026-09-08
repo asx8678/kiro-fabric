@@ -1,6 +1,10 @@
 # Security
 
-Report vulnerabilities privately to the repository maintainers. The model sees only `@fabric/fabric_exec`; native tools, ambient MCP and Powers are disabled. Raw operator compatibility endpoints are not model permissions. Strict semantic TypeScript checking precedes QuickJS execution with no ambient host imports, process/environment/filesystem/shell/timers or unrestricted network.
+Report vulnerabilities privately to the repository maintainers. Installed generation hashes, private modes and ownership records detect drift; they are not publisher signatures or an OS sandbox. Production archive acquisition requires release-pinned bootstrap hashes before downloaded execution and Ed25519 metadata for updates. The production trust root is currently absent, so distribution fails closed; explicit trusted-checkout builds record development provenance, never signature-verified release provenance.
+
+Activation uses validated journals and exact prior/current control identities; post-commit errors preserve committed truth and must not be blindly retried. Unknown locks/recovery bytes, modified resources and unsafe inactive-process assumptions preserve material rather than authorize deletion. Existing sessions retain their complete generation. Purge is disabled until safe inactivity is qualified; no installer action changes shared Kiro settings, authentication or default-agent selection.
+
+ The model sees only `@fabric/fabric_exec`; native tools, ambient MCP and Powers are disabled. Raw operator compatibility endpoints are not model permissions. Strict semantic TypeScript checking precedes QuickJS execution with no ambient host imports, process/environment/filesystem/shell/timers or unrestricted network.
 
 Registry-backed local files and `/bin/sh` are explicit host capabilities, not sandbox APIs. Exact provider/action/arguments/risk/workspace policy remains authoritative; outer exec allowance grants no nested approval. Network and stdio execution approvals remain distinct. Independent bounds cover source, input/output, nested results, heap, deadlines, provider calls, approvals, audit and shutdown.
 

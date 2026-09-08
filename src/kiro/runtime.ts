@@ -1,3 +1,4 @@
+import type { ManagedSearchExecutable } from "../providers/local-executable.js";
 import { ActionRegistry } from "../core/action-registry.js";
 import {
   DEFAULT_FABRIC_CONFIG,
@@ -23,6 +24,7 @@ export interface KiroRuntimeOptions {
   /** Only the binding authority may supply a verified root; cwd alone grants nothing. */
   workspaceRoot?: string;
   localLockRoot?: string;
+  managedSearch?: ManagedSearchExecutable;
   memoryRoot?: string;
   memoryNamespace?: string;
   stateRoot?: string;
@@ -47,7 +49,7 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   const artifacts = createKiroArtifactStore({ root: options.artifactsRoot, ...config.artifacts });
   registry.register(new FabricBootstrapProvider(config.executor.maxNestedResultChars));
   if (options.workspaceRoot && options.localLockRoot) {
-    registry.register(new LocalCodingProvider({ root: options.workspaceRoot, lockRoot: options.localLockRoot, maxResultChars: config.executor.maxNestedResultChars }));
+    registry.register(new LocalCodingProvider({ root: options.workspaceRoot, lockRoot: options.localLockRoot, maxResultChars: config.executor.maxNestedResultChars, ...(options.managedSearch ? { managedSearch: options.managedSearch } : {}) }));
   } else registry.markUnavailable("local", "verified workspace binding is required");
   registry.register(new KiroPowerArtifactsProvider(artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));

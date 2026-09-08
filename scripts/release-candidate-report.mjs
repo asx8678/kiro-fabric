@@ -8,12 +8,16 @@ import { isPackedPackageFileAllowed } from "./package-policy.mjs";
 import { assertRealClientEvidence } from "./real-client-evidence.mjs";
 import { validateReleaseArtifacts, writeReleaseAssetSnapshots } from "./release-artifacts.mjs";
 
+import { assertProductionBootstrapReady } from "./generate-installer-bootstrap.mjs";
 const valueAfter = (flag) => { const index = process.argv.indexOf(flag); return index >= 0 ? process.argv[index + 1] : undefined; };
 const output = path.resolve(valueAfter("--output") ?? ".tmp/release-candidate.json");
 const sbomPath = path.resolve(valueAfter("--sbom") ?? ".tmp/kiro-fabric-agent.spdx.json");
 const archivePath = path.resolve(valueAfter("--archive") ?? ".tmp/kiro-fabric-agent.tar.gz");
 const stage = path.resolve(".tmp/kiro-fabric-agent");
 const closureRoot = path.resolve("dist/kiro-agent-closure");
+// Legacy authenticated evidence remains useful, but cannot qualify the installer.
+// Fail before reading/extracting artifacts or packing when promotion is requested.
+if (process.argv.includes("--require-release-ready") || process.argv.includes("--assets")) assertProductionBootstrapReady();
 const artifacts = validateReleaseArtifacts(stage, archivePath, sbomPath, closureRoot);
 const { packageResult, packageDigest, sbomDigest, sbomFileDigest, archiveDigest } = artifacts;
 const packed = spawnSync("pnpm", ["pack", "--dry-run", "--json", "--config.ignore-scripts=true"], { encoding: "utf8", timeout: 60_000 });
@@ -74,7 +78,12 @@ const reportBody = {
   kind: "kiro-fabric.release-candidate",
   schemaVersion: 2,
   ok: packageResult.ok && typeof sbomDigest === "string",
-  releaseReady: packageResult.ok && typeof sbomDigest === "string" && realClient.status === "passed",
+  releaseReady: false,
+  installer: {
+    status: "BLOCKED",
+    evidence: "Legacy Agent archive/evidence is not complete-bundle qualification. Production trust root, signed final-byte metadata, pinned bootstrap and four-target native exact-artifact qualification are required.",
+    targets: Object.fromEntries(["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"].map(target => [target, "PENDING"])),
+  },
   version: packageResult.version,
   tag,
   commit,

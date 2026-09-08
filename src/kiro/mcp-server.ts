@@ -72,6 +72,7 @@ export interface KiroMcpServerOptions {
   runtimeRoot: string;
   dataRoot: string;
   kiroHome?: string;
+  managedSearch?: KiroRuntimeOptions["managedSearch"];
   version?: string;
   runtime?: KiroRuntime;
   prepareRuntime?: (options: KiroRuntimeOptions) => KiroRuntime | Promise<KiroRuntime>;
@@ -84,7 +85,8 @@ export const installedKiroHomeFor = (runtimeRoot: string, dataRoot: string): str
   const data = inspectCanonicalPath(dataRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
   const installRoot = path.dirname(data);
   if (path.basename(data) !== "data" || path.basename(installRoot) !== "kiro-fabric") return undefined;
-  if (!/^[a-f0-9]{64}$/u.test(path.basename(runtime)) || path.dirname(runtime) !== path.join(installRoot, "runtime")) {
+  const generation = path.basename(runtime) === "app" ? path.dirname(runtime) : runtime;
+  if (!/^[a-f0-9]{64}$/u.test(path.basename(generation)) || path.dirname(generation) !== path.join(installRoot, "runtime")) {
     throw new Error("installed Agent data root does not match its digest-named runtime layout");
   }
   return inspectCanonicalPath(path.dirname(installRoot), {
@@ -270,6 +272,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       configFile: data.configFile,
       mcpConfigPath: data.mcpConfig,
       artifactsRoot: project?.artifacts ?? data.artifacts,
+      ...(options.managedSearch ? { managedSearch: options.managedSearch } : {}),
       ...(project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, workspaceRoot: workspace.canonicalPath, localLockRoot: path.join(path.dirname(project.state), "local-locks") } : {}),
     });
   };

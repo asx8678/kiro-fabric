@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
+import path from "node:path";
+import { acquireInstallationLock } from "../installation/installer-lock.mjs";
+import { managedInstallationBase, validateManagedAdmission, validateManagedGeneration } from "./managed-generation.js";
 import { fileURLToPath } from "node:url";
 import { resolveKiroAgentLaunchContext } from "./power/agent-launch-context.js";
 
@@ -18,8 +22,24 @@ const boundedError = (error: unknown): string =>
 export const startKiroMcpServer = (): Promise<{ close(): Promise<void> }> =>
   processServerTask ??= (async () => {
     const launch = resolveKiroAgentLaunchContext();
-    const { createKiroMcpServer } = await import("./mcp-server.js");
-    return createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot });
+    const base = launch.managedGeneration ? managedInstallationBase(launch.managedGeneration.bundleRoot) : undefined;
+    const release = base ? acquireInstallationLock(base, { recover: false }) : undefined;
+    let server: { close(): Promise<void> } | undefined;
+    try {
+      try {
+        const managedSearch = launch.managedGeneration ? await validateManagedGeneration(launch.managedGeneration, launch.dataRoot) : undefined;
+        if (launch.managedGeneration && base) {
+          const manifestHash = createHash("sha256").update(readFileSync(path.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
+          validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
+        }
+        const { createKiroMcpServer } = await import("./mcp-server.js");
+        server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...(managedSearch ? { managedSearch } : {}) });
+      } finally { release?.(); }
+      return server;
+    } catch (error) {
+      await server?.close();
+      throw error;
+    }
   })();
 
 const processIsAlive = (pid: number): boolean => {

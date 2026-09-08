@@ -87,7 +87,7 @@ export class LocalCodingProvider implements FabricProvider {
 
   constructor(options: LocalProviderOptions) {
     this.#paths = new LocalPaths(options.root);
-    this.#searchExecutable = resolveSearchExecutable();
+    this.#searchExecutable = resolveSearchExecutable(options.managedSearch);
     this.#budget = Math.min(20000, options.maxResultChars ?? 20000);
     if (!Number.isSafeInteger(this.#budget) || this.#budget < 256) throw new Error("local maxResultChars must be an integer >=256");
     if (!path.isAbsolute(options.lockRoot)) throw new Error("local lockRoot must be absolute");

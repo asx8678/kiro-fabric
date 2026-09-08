@@ -1,6 +1,7 @@
+import type { ManagedSearchExecutable } from "./local-executable.js";
 import type { FabricDeadline } from "../runtime/deadline.js";
 
-export interface LocalProviderOptions { root: string; lockRoot: string; maxResultChars?: number }
+export interface LocalProviderOptions { root: string; lockRoot: string; maxResultChars?: number; managedSearch?: ManagedSearchExecutable }
 export interface LocalReadArguments { path: string; offset?: number; limit?: number }
 export interface LocalGrepArguments { pattern: string; path?: string; glob?: string; literal?: boolean; ignoreCase?: boolean; limit?: number }
 export interface LocalFindArguments { pattern: string; path?: string; limit?: number }

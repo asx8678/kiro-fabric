@@ -38,12 +38,70 @@ jobs:
           node scripts/build-agent-dev.mjs
           pnpm run agent:archive
           cmp "$RUNNER_TEMP/first.tar.gz" .tmp/kiro-fabric-agent.tar.gz
-          mkdir "$RUNNER_TEMP/first" "$RUNNER_TEMP/second"
-          tar -xzf "$RUNNER_TEMP/first.tar.gz" -C "$RUNNER_TEMP/first"
-          tar -xzf .tmp/kiro-fabric-agent.tar.gz -C "$RUNNER_TEMP/second"
-          diff -r "$RUNNER_TEMP/first" "$RUNNER_TEMP/second"
+          # Exact compressed-byte equality above is stronger than extracted-tree equality.
+          # Do not add an unvalidated system-tar consumer for this redundant comparison.
           test -z "$(git status --porcelain)"
       - run: git diff --check
+
+  installer-native-contracts:
+    # Hosted runner availability is not qualification. Unscheduled targets remain PENDING.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x64, runner: ubuntu-24.04, os: Linux, arch: x86_64 }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm, os: Linux, arch: aarch64 }
+          - { target: darwin-arm64, runner: macos-15, os: Darwin, arch: arm64 }
+          - { target: darwin-x64, runner: macos-15-intel, os: Darwin, arch: x86_64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: 24 }
+      - name: Assert actual native target
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+          EXPECTED_OS: ${{ matrix.os }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "$EXPECTED_OS"
+          test "$(uname -m)" = "$EXPECTED_ARCH"
+          node -e 'if (`${process.platform}-${process.arch}` !== process.env.EXPECTED_TARGET) process.exit(1)'
+          if [ "$EXPECTED_OS" = Darwin ]; then
+            test "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" != 1
+          else
+            getconf GNU_LIBC_VERSION
+          fi
+      - run: npm install --global pnpm@11.20.0
+      - run: pnpm install --frozen-lockfile
+      - name: Isolated native installer contract tests
+        run: |
+          set -euo pipefail
+          umask 022
+          root=$(mktemp -d "$RUNNER_TEMP/installer-contracts.XXXXXX")
+          trap 'rm -rf -- "$root"' EXIT
+          mkdir "$root/home" "$root/kiro" "$root/tmp"
+          HOME="$root/home" KIRO_HOME="$root/kiro" TMPDIR="$root/tmp" ./node_modules/.bin/vitest run tests/installer-platform.test.ts tests/bundle-archive.test.ts tests/release-trust.test.ts tests/installer-bootstrap.test.ts tests/source-bootstrap.test.ts tests/private-tools.test.ts
+      - name: Build and exercise the complete native bundle
+        run: |
+          set -euo pipefail
+          umask 022
+          root=$(mktemp -d "$RUNNER_TEMP/installer-bundle.XXXXXX")
+          trap 'rm -rf -- "$root"' EXIT
+          mkdir "$root/home" "$root/kiro" "$root/tmp"
+          export HOME="$root/home" KIRO_HOME="$root/kiro" TMPDIR="$root/tmp"
+          pnpm run agent:bundle
+          archive=$(node -p 'JSON.parse(require("fs").readFileSync(".tmp/complete-bundle.json","utf8")).archive')
+          cp "$archive" "$root/first.tar.gz"
+          node scripts/build-complete-bundle.mjs
+          cmp "$root/first.tar.gz" "$archive"
+          ./node_modules/.bin/vitest run tests/installed-independence.test.ts tests/installer-lock.test.ts tests/install-transaction.test.ts tests/managed-installation.test.ts
+      - name: Report qualification remains pending
+        if: always()
+        run: echo 'Installer native exact-artifact/client/signing qualification PENDING; contract tests do not qualify production binaries. Unavailable runners are PENDING, never PASS.' >> "$GITHUB_STEP_SUMMARY"
 
   macos-stage:
     runs-on: macos-latest

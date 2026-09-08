@@ -158,9 +158,10 @@ const assertNoPathOverlap = (left, right, label) => {
 export const resolveKiroHome = (env = process.env, userHome = homedir(), options = {}) => {
   if (typeof userHome !== "string" || !path.isAbsolute(userHome)) throw new Error("HOME must be an absolute path");
   const explicit = Object.prototype.hasOwnProperty.call(env, "KIRO_HOME");
-  const raw = explicit ? env.KIRO_HOME : path.join(userHome, ".kiro");
+  const raw = options.kiroHome !== undefined ? options.kiroHome : explicit ? env.KIRO_HOME : path.join(userHome, ".kiro");
   if (typeof raw !== "string" || raw.trim() === "") throw new Error("KIRO_HOME must not be empty");
   if (!path.isAbsolute(raw)) throw new Error("KIRO_HOME must be an absolute path");
+  if (/[\u0000-\u001f\u007f]/u.test(raw)) throw new Error("KIRO_HOME must not contain control characters");
   const target = path.normalize(raw);
   assertNotDangerouslyBroad(target, path.resolve(userHome));
   assertNoUnsafeSymlinkComponents(target);
@@ -170,7 +171,9 @@ export const resolveKiroHome = (env = process.env, userHome = homedir(), options
   assertCurrentUser(fs.lstatSync(existing), `nearest KIRO_HOME ancestor ${existing}`);
   if (lstat(target)) assertSafeDirectory(target);
   const canonical = path.join(fs.realpathSync(existing), ...missing.map((entry) => path.basename(entry)));
-  assertNotDangerouslyBroad(canonical, fs.realpathSync(userHome));
+  const homeAncestor = nearestExistingDirectory(userHome);
+  const canonicalUserHome = path.join(fs.realpathSync(homeAncestor.existing), ...homeAncestor.missing.map(entry => path.basename(entry)));
+  assertNotDangerouslyBroad(canonical, canonicalUserHome);
   for (const [label, candidate] of Object.entries({
     workspace: options.workspaceRoot,
     "release package": options.packageRoot,
@@ -510,7 +513,9 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
   if (!/^v?(?:2[4-9]|[3-9]\d|\d{3,})\./u.test(process.version)) throw new Error("Node.js >=24 is required");
 
   const staged = validateAgentPackage(stagingRoot);
-  const workspaceRoot = options.workspaceRoot ?? process.cwd();
+  // Invocation cwd is not an authorized coding workspace. Only an explicit
+  // workspace role participates in the installer overlap check.
+  const workspaceRoot = options.workspaceRoot;
   const kiroHome = resolveKiroHome(env, userHome, { workspaceRoot, packageRoot: staged.root });
   const installPaths = paths(kiroHome);
   const generationName = staged.digest;
@@ -821,7 +826,9 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
 };
 
 export const uninstallUserAgent = (env = process.env, userHome = homedir(), options = {}) => {
-  const workspaceRoot = options.workspaceRoot ?? process.cwd();
+  // Invocation cwd is not an authorized coding workspace. Only an explicit
+  // workspace role participates in the installer overlap check.
+  const workspaceRoot = options.workspaceRoot;
   const kiroHome = resolveKiroHome(env, userHome, { workspaceRoot });
   const installPaths = paths(kiroHome);
   if (!lstat(installPaths.base)) throw new Error("Kiro Fabric Agent is not installed");
@@ -960,6 +967,14 @@ export const uninstallUserAgent = (env = process.env, userHome = homedir(), opti
   };
 };
 
+// Versioned complete-generation activation reuses these existing ownership/path
+// predicates rather than creating a weaker destination policy.
+export const installerSafety = Object.freeze({
+  paths, lstat, hash, assertSafeDirectory, assertSafeFile, assertNoUnsafeSymlinkComponents,
+  assertNoPathOverlap, ensureDirectory, atomicWrite, assertSameTree,
+  readLegacyInstallation: (kiroHome) => inspectTarget(kiroHome, paths(kiroHome)),
+});
+
 // Offline diagnostics deliberately never acquire an install lock or initialize data.
 const doctorUserAgent = () => {
   const checks = [];
@@ -998,7 +1013,7 @@ const doctorUserAgent = () => {
   check("kiro-cli", () => executable("kiro-cli"),
     "Trusted Kiro CLI available (not launched; v3/session support unverified).",
     "Install a trusted kiro-cli on an absolute PATH entry to launch the Agent.");
-  const kiroHome = check("kiro-home", () => resolveKiroHome(process.env, homedir(), { workspaceRoot: process.cwd() }),
+  const kiroHome = check("kiro-home", () => resolveKiroHome(process.env, homedir()),
     "KIRO_HOME passes installer safety checks.", "KIRO_HOME is unsafe or invalid; choose a safe absolute private location. No repair attempted.");
   if (kiroHome) {
     check("installation", () => {
@@ -1059,7 +1074,7 @@ const parseArguments = (argv) => {
   return options;
 };
 
-const invokedAsMain = process.argv[1] !== undefined &&
+const invokedAsMain = path.basename(fileURLToPath(import.meta.url)) === "install-agent-user.mjs" && process.argv[1] !== undefined &&
   fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
 if (invokedAsMain) {
   try {

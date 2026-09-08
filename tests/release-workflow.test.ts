@@ -30,6 +30,48 @@ const fixture = () => {
   return { root, env: { PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? "/usr/bin:/bin"}`, HOME: home, KIRO_HOME: kiroHome } };
 };
 
+describe("installer production fail-closed gates", () => {
+  it.each(["--require-release-ready", "--assets"])("blocks %s before any legacy artifact read or promotion", flag => {
+    const { root, env } = fixture();
+    const script = new URL("../scripts/release-candidate-report.mjs", import.meta.url);
+    const result = spawnSync(process.execPath, [script.pathname, flag, path.join(root, "assets"), "--archive", path.join(root, "missing.tar.gz")], { cwd: root, env, encoding: "utf8", timeout: 10_000 });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Production release trust root unavailable: distribution BLOCKED");
+    expect(result.stderr).not.toContain("ENOENT");
+    expect(fs.existsSync(path.join(root, "assets"))).toBe(false);
+  });
+
+  it("places the bootstrap readiness gate before evidence download and promotion", () => {
+    const gate = step(release, "Require production installer signing and native qualification readiness");
+    expect(run(gate)).toBe("node scripts/generate-installer-bootstrap.mjs");
+    expect(release.indexOf(gate)).toBeLessThan(release.indexOf("      - name: Download exact-commit real-client evidence"));
+  });
+
+  it("requires complete native bundle execution and byte comparison, not just filename selection", () => {
+    const ci = workflow("ci");
+    const body = run(step(ci, "Build and exercise the complete native bundle"));
+    for (const required of ["pnpm run agent:bundle", "node scripts/build-complete-bundle.mjs", 'cmp "$root/first.tar.gz" "$archive"', "tests/installed-independence.test.ts", "tests/installer-lock.test.ts", "tests/install-transaction.test.ts", "tests/managed-installation.test.ts"]) expect(body).toContain(required);
+    expect(body).toContain('export HOME="$root/home" KIRO_HOME="$root/kiro"');
+    expect(ci.indexOf("Assert actual native target")).toBeLessThan(ci.indexOf("Build and exercise the complete native bundle"));
+  });
+  it("asserts actual OS, kernel arch and Node arch, rejecting mismatches", () => {
+    const ci = workflow("ci");
+    for (const target of ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"]) expect(ci).toContain(`target: ${target}, runner:`);
+    expect(ci).toContain("Unscheduled targets remain PENDING");
+    const command = run(step(ci, "Assert actual native target"));
+    const { root, env } = fixture();
+    for (const expected of [
+      { EXPECTED_OS: "wrong", EXPECTED_ARCH: "wrong", EXPECTED_TARGET: "wrong" },
+      { EXPECTED_OS: os.type(), EXPECTED_ARCH: os.machine(), EXPECTED_TARGET: "wrong" },
+      { EXPECTED_OS: os.type(), EXPECTED_ARCH: os.machine(), EXPECTED_TARGET: `${process.platform}-${process.arch}` },
+    ]) {
+      const result = spawnSync("bash", ["--noprofile", "--norc", "-euc", command], { cwd: root, env: { ...env, ...expected }, encoding: "utf8", timeout: 10_000 });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(expected.EXPECTED_TARGET === "wrong" ? 1 : 0);
+    }
+  });
+});
+
 describe("actual release workflow shell regression", () => {
   it.each([
     ["v1.2.3", 0],

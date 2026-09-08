@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { captureLegacyArtifact, LEGACY_ARCHIVE_LIMITS, extractLegacyAgentArchiveBytes } from "./bundle-archive.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,20 +11,16 @@ import { validateAgentPackage } from "./validate-agent-package.mjs";
 export const validateReleaseArtifacts = (stage, archivePath, sbomPath, closureRoot) => {
   const packageResult = validateAgentPackage(stage);
   const packageDigest = packageResult.digest;
-  const sbomBytes = fs.readFileSync(sbomPath);
+  const sbomBytes = captureLegacyArtifact(sbomPath, LEGACY_ARCHIVE_LIMITS.sbom);
   const sbom = JSON.parse(sbomBytes.toString("utf8"));
   const sbomDigest = sbom.packages?.[0]?.checksums?.[0]?.checksumValue;
   const sbomFileDigest = createHash("sha256").update(sbomBytes).digest("hex");
-  const archiveBytes = fs.readFileSync(archivePath);
+  const archiveBytes = captureLegacyArtifact(archivePath, LEGACY_ARCHIVE_LIMITS.archive);
   const archiveDigest = createHash("sha256").update(archiveBytes).digest("hex");
   const archiveTemporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-release-archive-"));
   try {
-    const snapshot = path.join(archiveTemporary, "package.tar.gz");
     const extracted = path.join(archiveTemporary, "package");
-    fs.writeFileSync(snapshot, archiveBytes, { mode: 0o600 });
-    fs.mkdirSync(extracted, { mode: 0o700 });
-    const unpack = spawnSync("tar", ["-xzf", snapshot, "-C", extracted], { encoding: "utf8" });
-    if (unpack.error || unpack.status !== 0) throw unpack.error ?? new Error(`Release archive extraction failed: ${unpack.stderr}`);
+    extractLegacyAgentArchiveBytes(archiveBytes, extracted);
     if (validateAgentPackage(extracted).digest !== packageDigest) throw new Error("Release archive is not bound to the exact staged package");
   } finally { fs.rmSync(archiveTemporary, { recursive: true, force: true }); }
   if (sbomDigest !== packageDigest) {

@@ -57,6 +57,8 @@ jobs:
         env: { TAG: "${{ github.ref_name }}" }
         run: test "$TAG" = "v$(node -p 'require("./package.json").version')"
       - run: node scripts/assert-kiro-home-unchanged.mjs pnpm run check
+      - name: Require production installer signing and native qualification readiness
+        run: node scripts/generate-installer-bootstrap.mjs
       - name: Download exact-commit real-client evidence
         env: { GH_TOKEN: "${{ github.token }}", COMMIT: "${{ needs.verify-tag.outputs.commit }}" }
         run: |

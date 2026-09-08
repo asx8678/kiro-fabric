@@ -1,5 +1,13 @@
 # Status
 
+## Complete-generation installer
+
+Source-build installation and installed management now use matching application/private Node/private ripgrep/manager/steering/skills generations with schema-3 ownership and journaled activation. Linux component tests include actual abrupt-process-death recovery and installed-bundle read/search without system Node/ripgrep or acquisition files. Fake-client command-contract coverage is not authenticated Kiro evidence. The actual local Kiro 2.21.1 version/validation-help probes pass with isolated, credential-free homes; resource loading and authenticated execution remain untested.
+
+Production signed discovery/bootstrap distribution remains BLOCKED while the production trust root and exact-artifact qualification are absent. Native macOS/ARM qualification is pending; purge intentionally refuses while complete inactivity cannot be established. No real-home installation, authentication, commit or release was performed. See [installer details](docs/installer.md) and the final verification handoff for executed check results.
+
+## Strict runtime and client qualification
+
 The repository now builds and tests one native `kiro-fabric` custom-agent package. Power manifests, registry mutation, activation, and global steering installation are removed. Core QuickJS, compiler, provider, approval, workspace, persistence, cancellation, tracing, federation, and security behavior is retained.
 
 Continuity qualification now requires three causally bound manual `/compact` cycles and one naturally triggered automatic cycle in the same interactive Kiro process. Every cycle must retain one OS-observed MCP PID/instance/runtime and is followed by an exact ACP-bound Fabric sentinel check. Every cycle has its own fresh random conversation-only fact, supplied in exactly one recorded pre-compaction user prompt, excluded from structural tool data, omitted from the post-compaction prompt, and required in the exact post-compaction `fabric_exec` input/result plus a matching durable state effect. The automatic path records `chat.disableAutoCompaction` read-only, leaves it enabled without mutation, and uses bounded opaque conversation pressure; absence of a direct automatic ACP started/completed sequence blocks the gate. Resume separately binds durable restoration in a new MCP process. These are implemented gates and component tests, not authenticated real-Kiro lifecycle results.

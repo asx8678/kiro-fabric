@@ -30,15 +30,28 @@ Kiro owns history, automatic/manual context compaction and chat resume. After co
  * @property {string} dataRoot
  * @property {string} skillPath
  * @property {string} [steeringPath]
+ * @property {string} [bundleRoot]
+ * @property {string} [rgPath]
  */
 
 /** @param {AgentProfileOptions} options */
-export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPath, steeringPath }) => {
+export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPath, steeringPath, bundleRoot, rgPath }) => {
   for (const [name, value] of Object.entries({ nodePath, runtimeRoot, dataRoot, skillPath })) {
     if (typeof value !== "string" || !path.isAbsolute(value)) throw new Error(`${name} must be absolute`);
   }
   if (steeringPath !== undefined && (typeof steeringPath !== "string" || !path.isAbsolute(steeringPath))) {
     throw new Error("steeringPath must be absolute");
+  }
+  for (const value of [nodePath, runtimeRoot, dataRoot, skillPath, steeringPath, bundleRoot, rgPath]) {
+    if (value !== undefined && /[\u0000-\u001f\u007f]/u.test(value)) throw new Error("profile paths must not contain control characters");
+  }
+  if (bundleRoot !== undefined || rgPath !== undefined) {
+    if (!bundleRoot || !path.isAbsolute(bundleRoot) || rgPath !== path.join(bundleRoot, "tools", "rg") ||
+        nodePath !== path.join(bundleRoot, "tools", "node") || runtimeRoot !== path.join(bundleRoot, "app") ||
+        skillPath !== path.join(bundleRoot, "resources", "skills", "fabric-exec", "SKILL.md") ||
+        steeringPath !== path.join(bundleRoot, "resources", "steering", "fabric.md")) {
+      throw new Error("profile must bind one complete generation");
+    }
   }
   const resources = [`skill://${skillPath}`];
   if (steeringPath) resources.push(`file://${steeringPath}`);
@@ -53,6 +66,7 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
       KIRO_FABRIC_RUNTIME_ROOT: runtimeRoot,
       KIRO_FABRIC_DATA_ROOT: dataRoot,
       KIRO_FABRIC_EXPECTED_NODE: nodePath,
+      ...(bundleRoot ? { KIRO_FABRIC_BUNDLE_ROOT: bundleRoot, KIRO_FABRIC_RG: rgPath } : {}),
     }, requestTimeout: FABRIC_MCP_REQUEST_TIMEOUT_MS } },
     tools: AGENT_TOOLS,
     allowedTools: [...AGENT_TOOLS],

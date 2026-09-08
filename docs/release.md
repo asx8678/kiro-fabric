@@ -1,5 +1,15 @@
 # Release
 
+## Complete installer distribution gate
+
+Complete installer distribution is currently BLOCKED. Production readiness is checked before legacy artifact reads/promotion; legacy candidate reports cannot become installer release-ready even when their historical authenticated evidence is valid. Genuine production trust/signing, signed final-byte metadata, release-pinned bootstrap artifacts and complete-bundle exact-client qualification are required. The existing annotated-tag, commit, signature and captured-archive gates are retained; no newly compressed artifact inherits qualification.
+
+CI declares all four native targets and asserts observed OS, kernel/Node architecture, Rosetta exclusion and glibc before running contracts. Each declared native job also builds the actual private-tool bundle, compares two generated archive byte streams and exercises installed independence, locking and transactions. Runner labels are configuration, not evidence of availability or successful execution; unavailable/unexecuted targets remain PENDING. This local task did not dispatch any workflow.
+
+Use `pnpm run agent:bundle` for the complete development bundle and binary-aware SBOM. `pnpm run sbom:agent` and the legacy Agent archive remain compatibility/application-closure evidence, not complete installer supply-chain qualification. Production signing credentials are not stored or provisioned by source builds; test keys are never a production fallback. See [installer trust and operational limits](installer.md).
+
+## Existing application and authenticated-client gates
+
 CI explicitly provisions pinned pnpm and ripgrep on supported runners. Linux runs the full check; macOS also runs local coding, shell, ownership/acknowledgement, bootstrap, workspace and approval/projection suites. Configured jobs are not evidence that a platform run passed. Release shell regression tests execute the actual tag/version comparison, including mismatch and inert hostile tag values.
 
 Run `pnpm run check`, `pnpm run agent:archive`, and `pnpm pack --dry-run --json --config.ignore-scripts=true`. Agent staging, closure, archive, and SBOM are deterministic and digest-bound. Real-client evidence contains session-specific PIDs, timestamps, and transcripts; it is not reproducible output, but it is bound to the exact commit, archive, installed profile/runtime, Kiro binary, and qualification driver. `pnpm run certify:agent:real` is a separate authenticated user-owned Kiro gate; ordinary CI cannot claim it.

@@ -61,6 +61,17 @@ describe("release artifact content validation and snapshot promotion", () => {
     expect(() => validateReleaseArtifacts(stage, archive, wrong, closure)).toThrow("SBOM dependency inventory");
   });
 
+  it("rejects bounded archive/SBOM inputs and malicious legacy headers before promotion", () => {
+    const huge = path.join(root, "oversized");
+    fs.writeFileSync(huge, ""); fs.truncateSync(huge, 80 * 1024 * 1024 + 1);
+    expect(() => validateReleaseArtifacts(stage, huge, sbom, closure)).toThrow("size bound");
+    expect(() => validateReleaseArtifacts(stage, archive, huge, closure)).toThrow("size bound");
+    const bad = gunzipSync(qualifiedBytes); bad[156] = 50;
+    bad.fill(32, 148, 156);
+    bad.write(bad.subarray(0, 512).reduce((sum, byte) => sum + byte, 0).toString(8).padStart(6, "0") + "\0 ", 148);
+    const malicious = path.join(root, "malicious.tar.gz"); fs.writeFileSync(malicious, gzipSync(bad));
+    expect(() => validateReleaseArtifacts(stage, malicious, sbom, closure)).toThrow("USTAR header");
+  });
   it("writes captured archive/SBOM bytes without rereading subsequently changed input files", () => {
     const artifacts = validateReleaseArtifacts(stage, archive, sbom, closure);
     // This tests the snapshot writer, not authenticated qualification. The CLI

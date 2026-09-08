@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { captureLegacyArtifact, LEGACY_ARCHIVE_LIMITS, extractLegacyAgentArchiveBytes } from "./bundle-archive.mjs";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -44,7 +45,6 @@ if (requestedWorkRoot) {
 } else {
   temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-agent-real-"));
 }
-const archiveSnapshot = path.join(temporary, "package.tar.gz");
 const extracted = path.join(temporary, "package");
 const workspace = path.join(temporary, "workspace");
 const isolatedHome = path.join(temporary, "home");
@@ -52,17 +52,13 @@ const kiroHome = path.join(isolatedHome, ".kiro");
 const installCwd = path.join(temporary, "installer-cwd");
 const evidence = path.join(temporary, "driver-evidence.json");
 try {
-  const archiveBytes = fs.readFileSync(archive);
-  fs.writeFileSync(archiveSnapshot, archiveBytes, { mode: 0o600, flag: "wx" });
+  const archiveBytes = captureLegacyArtifact(archive, LEGACY_ARCHIVE_LIMITS.archive);
   const archiveDigest = hash(archiveBytes);
-  fs.mkdirSync(extracted, { mode: 0o700 });
+  extractLegacyAgentArchiveBytes(archiveBytes, extracted);
   fs.mkdirSync(workspace, { mode: 0o700 });
   fs.mkdirSync(isolatedHome, { mode: 0o700 });
   fs.mkdirSync(kiroHome, { mode: 0o700 });
   fs.mkdirSync(installCwd, { mode: 0o700 });
-  const unpack = spawnSync("tar", ["-xzf", archiveSnapshot, "-C", extracted], { encoding: "utf8" });
-  if (unpack.error) throw unpack.error;
-  if (unpack.status !== 0) throw new Error(`Agent archive extraction failed: ${unpack.stderr}`);
   const packageEvidence = validateAgentPackage(extracted);
   const packageDigest = packageEvidence.digest;
   const result = spawnSync(process.execPath, [

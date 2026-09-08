@@ -137,6 +137,45 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `tests/memory-lock-safety.test.ts` — unidentified/replacement/live/stale owner safety.
 - `tests/owned-file.test.ts` — explicit uncertain close without unsafe descriptor retry.
 
+## Complete-generation installer additions (current implementation)
+
+- `scripts/build-complete-bundle.mjs`
+- `scripts/build-private-tools.mjs`
+- `scripts/bundle-archive.mjs`
+- `scripts/bundle-contract.mjs`
+- `scripts/generate-bundle-sbom.mjs`
+- `scripts/generate-installer-bootstrap.mjs`
+- `scripts/install-manager.mjs`
+- `scripts/install-transaction.mjs`
+- `scripts/installer-lock.mjs`
+- `scripts/installer-platform.mjs`
+- `scripts/installer-smoke.mjs`
+- `scripts/managed-installation.mjs`
+- `scripts/release-download.mjs`
+- `scripts/release-trust.mjs`
+- `scripts/source-install.mjs`
+- `src/installation/bundle-contract.mjs`
+- `src/installation/installer-lock.mjs`
+- `src/kiro/managed-generation.ts`
+- `tests/bundle-archive.test.ts`
+- `tests/bundle-contract.test.ts`
+- `tests/bundle-fixture.ts`
+- `tests/install-manager-cli.test.ts`
+- `tests/installed-independence.test.ts`
+- `tests/source-bootstrap.test.ts`
+- `tests/legacy-archive.test.ts`
+- `tests/install-transaction.test.ts`
+- `tests/installer-bootstrap.test.ts`
+- `tests/installer-home.test.ts`
+- `tests/installer-lock.test.ts`
+- `tests/installer-platform.test.ts`
+- `tests/managed-generation.test.ts`
+- `tests/managed-installation.test.ts`
+- `tests/private-tools.test.ts`
+- `tests/release-download.test.ts`
+- `tests/release-fixture.ts`
+- `tests/release-trust.test.ts`
+
 ## Verified audit remediation additions (current implementation)
 
 These additions do not rewrite historical findings or establish authenticated client qualification or economic savings.

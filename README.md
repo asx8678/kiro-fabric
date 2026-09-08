@@ -6,6 +6,10 @@ A coding agent for **Kiro CLI v3**. The model writes TypeScript; Fabric checks i
 
 Requires an authenticated Kiro CLI with v3 support, Node ≥24, pnpm 11.20.0, Bash, and ripgrep for local development.
 
+Source installation targets Linux (glibc ≥2.28, kernel ≥4.18) and macOS ≥13.5, on x64 or ARM64, including Apple Silicon. Native macOS/ARM qualification remains pending; platform support is not production certification. Keep the checkout outside the selected Kiro home (normally `~/.kiro`). See [installation and platform requirements](docs/installer.md).
+
+If `bash ./install.sh` reports “No such file or directory”, your checkout does not contain the installer. Confirm the repository revision and obtain a revision containing `install.sh`; changing operating systems or creating an empty script will not fix a missing file.
+
 ```sh
 # From this repository:
 pnpm install --frozen-lockfile

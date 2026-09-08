@@ -192,6 +192,34 @@ describe("Kiro Agent profile generation", () => {
     ]);
   });
 
+  it("binds executable, runtime and unchanged resource URIs to one complete generation", () => {
+    const bundleRoot = path.resolve("/install/generations/fixture");
+    const complete = {
+      ...options, bundleRoot,
+      nodePath: path.join(bundleRoot, "tools", "node"),
+      rgPath: path.join(bundleRoot, "tools", "rg"),
+      runtimeRoot: path.join(bundleRoot, "app"),
+      skillPath: path.join(bundleRoot, "resources", "skills", "fabric-exec", "SKILL.md"),
+      steeringPath: path.join(bundleRoot, "resources", "steering", "fabric.md"),
+    };
+    const profile = generateAgentProfile(complete);
+    expect(profile.resources).toEqual([`skill://${complete.skillPath}`, `file://${complete.steeringPath}`]);
+    expect(profile.mcpServers.fabric.env).toMatchObject({
+      KIRO_FABRIC_BUNDLE_ROOT: bundleRoot,
+      KIRO_FABRIC_RG: complete.rgPath,
+      KIRO_FABRIC_EXPECTED_NODE: complete.nodePath,
+      KIRO_FABRIC_RUNTIME_ROOT: complete.runtimeRoot,
+    });
+    for (const key of ["nodePath", "rgPath", "runtimeRoot", "skillPath", "steeringPath", "bundleRoot"] as const) {
+      expect(() => generateAgentProfile({ ...complete, [key]: path.resolve("/other-generation") })).toThrow(/complete generation/);
+    }
+    for (const key of ["steeringPath", "rgPath", "bundleRoot"] as const) {
+      const incomplete: Parameters<typeof generateAgentProfile>[0] = { ...complete };
+      delete incomplete[key];
+      expect(() => generateAgentProfile(incomplete)).toThrow(/complete generation/);
+    }
+  });
+
   it("rejects relative executable and resource paths", () => {
     for (const key of ["nodePath", "runtimeRoot", "dataRoot", "skillPath"] as const) {
       expect(() => generateAgentProfile({ ...options, [key]: "relative/path" })).toThrow(`${key} must be absolute`);
