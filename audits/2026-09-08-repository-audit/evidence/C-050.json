@@ -1,0 +1,33 @@
+{
+  "id": "C-050",
+  "command": [
+    "rg",
+    "-n",
+    "node_modules|pnpm.*install|renameSync|rename\\(",
+    "tests/source-bootstrap.test.ts",
+    "tests/package-boundary.test.ts",
+    "tests/archive.test.ts",
+    "tests/private-tools.test.ts",
+    "tests/installed-independence.test.ts",
+    "scripts/source-install.mjs",
+    "tests/release-workflow.test.ts"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-a9qfi1km/repo",
+  "status": "passed",
+  "exit": 0,
+  "elapsed_seconds": 0.008,
+  "output": "tests/release-workflow.test.ts:53:    for (const required of [\"pnpm run agent:bundle\", \"node scripts/build-complete-bundle.mjs\", 'cmp \"$root/first.tar.gz\" \"$archive\"', \"tests/installed-independence.test.ts\", \"tests/installer-lock.test.ts\", \"tests/install-transaction.test.ts\", \"tests/managed-installation.test.ts\"]) expect(body).toContain(required);\ntests/release-workflow.test.ts:133:      expect(job.indexOf(\"rg --version\")).toBeLessThan(job.indexOf(\"pnpm install --frozen-lockfile\"));\ntests/package-boundary.test.ts:12:  const visit = (current: string) => { for (const entry of fs.readdirSync(current, { withFileTypes: true })) { if ([\".git\", \"node_modules\", \".tmp\"].includes(entry.name)) continue; const target = path.join(current, entry.name); if (entry.isDirectory()) visit(target); else result.push(target); } };\ntests/package-boundary.test.ts:186:      const modulesState = fs.readFileSync(path.join(root, \"node_modules\", \".modules.yaml\"), \"utf8\");\ntests/package-boundary.test.ts:222:      const installedModules = fs.realpathSync(path.join(packageRoot, \"node_modules\"));\ntests/package-boundary.test.ts:224:      expect(installedModules.startsWith(`${fs.realpathSync(path.join(root, \"node_modules\"))}${path.sep}`)).toBe(false);\ntests/source-bootstrap.test.ts:44:    expect(fs.existsSync(path.join(source, \"node_modules\"))).toBe(false);\ntests/source-bootstrap.test.ts:47:    executable(path.join(bin, \"pnpm\"), 'case \"$*\" in\\n  --version) printf \"%s\\\\n\" \"11.20.0\" ;;\\n  \"install --frozen-lockfile\") printf \"%s\\\\n\" \"frozen-install\" >> \"$SOURCE_BOOTSTRAP_RECORD\" ;;\\n  \"run build\") printf \"%s\\\\n\" \"build\" >> \"$SOURCE_BOOTSTRAP_RECORD\"; printf \"%s\\\\n\" \"intentional fixture build stop\" >&2; exit 72 ;;\\n  *) exit 91 ;;\\nesac');\n",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-kiro",
+    "TMPDIR": "/tmp/kiro-fabric-audit-a9qfi1km/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null"
+  },
+  "timeout_seconds": 15
+}

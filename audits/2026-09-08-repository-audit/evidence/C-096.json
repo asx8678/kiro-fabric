@@ -1,0 +1,28 @@
+{
+  "id": "C-096",
+  "command": [
+    "node",
+    "-e",
+    "const fs=require(\"node:fs\"),cp=require(\"node:child_process\"); const d=JSON.parse(fs.readFileSync(\"node_modules/.modules.yaml\",\"utf8\")); const s=d.storeDir; const path=cp.spawnSync(\"pnpm\",[\"store\",\"path\",\"--store-dir\",s],{encoding:\"utf8\",timeout:10000}); console.log(JSON.stringify({metadataStore:s,topEntries:fs.readdirSync(s),resolvedStore:path.stdout.trim(),status:path.status,error:path.stderr}));"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-a9qfi1km/repo",
+  "status": "passed",
+  "exit": 0,
+  "elapsed_seconds": 0.325,
+  "output": "{\"metadataStore\":\"/tmp/kiro-fabric-audit-a9qfi1km/private-pnpm-store\",\"topEntries\":[\"file+..+pack+kiro-fabric-0.63.0.tgz\",\"files\",\"index.db\",\"index.db-shm\",\"index.db-wal\",\"links\",\"projects\",\"v11\"],\"resolvedStore\":\"/tmp/kiro-fabric-audit-a9qfi1km/private-pnpm-store/v11\",\"status\":0,\"error\":\"\"}\n",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-kiro",
+    "TMPDIR": "/tmp/kiro-fabric-audit-a9qfi1km/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "pnpm_config_verify_deps_before_run": "false",
+    "NODE_OPTIONS": "--require=/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/package-registry-guard.cjs"
+  },
+  "timeout_seconds": 30
+}

@@ -1,0 +1,26 @@
+{
+  "id": "C-048",
+  "command": [
+    "node",
+    "/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/probes/storage-faults.mjs"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-a9qfi1km/repo",
+  "status": "failed",
+  "exit": 1,
+  "elapsed_seconds": 0.019,
+  "output": "node:internal/modules/cjs/loader:1564\n  const err = new Error(message);\n              ^\n\nError: Cannot find module 'esbuild'\nRequire stack:\n- /tmp/kiro-fabric-audit-a9qfi1km/repo/package.json\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)\n    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)\n    at Module._load (node:internal/modules/cjs/loader:1341:5)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n    at Module.require (node:internal/modules/cjs/loader:1674:12)\n    at require (node:internal/modules/helpers:157:16)\n    at file:///home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/probes/storage-faults.mjs:9:15\n    at ModuleJob.run (node:internal/modules/esm/module_job:561:25) {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [ '/tmp/kiro-fabric-audit-a9qfi1km/repo/package.json' ]\n}\n\nNode.js v24.20.0\n",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-kiro",
+    "TMPDIR": "/tmp/kiro-fabric-audit-a9qfi1km/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "NODE_OPTIONS": "--require=/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/network-guard.cjs"
+  },
+  "timeout_seconds": 30
+}

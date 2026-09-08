@@ -204,6 +204,13 @@ const stageExplicitMcpConfiguration = (
   );
   let descriptor: number | undefined;
   let createdStats: fs.BigIntStats | undefined;
+  const close = (): void => {
+    if (descriptor === undefined) return;
+    const fd = descriptor;
+    // A throwing close may already have released the descriptor. Never retry it.
+    descriptor = undefined;
+    fs.closeSync(fd);
+  };
   try {
     descriptor = fs.openSync(
       stagedPath,
@@ -214,8 +221,7 @@ const stageExplicitMcpConfiguration = (
     fs.writeFileSync(descriptor, explicit.bytes);
     fs.fsyncSync(descriptor);
     const writtenStats = fs.fstatSync(descriptor, { bigint: true });
-    fs.closeSync(descriptor);
-    descriptor = undefined;
+    close();
     fsyncDirectory(directory);
     const verified = readExplicitMcpConfiguration(stagedPath);
     if (!sameFileIdentity(createdStats, writtenStats) || !sameFileIdentity(writtenStats, verified.stats) ||
@@ -224,7 +230,12 @@ const stageExplicitMcpConfiguration = (
     }
     return { path: stagedPath, directory, digest: explicit.digest, stats: verified.stats };
   } catch (error) {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
+    const errors: unknown[] = [error];
+    // Recover identity only while the descriptor is still definitely ours.
+    if (createdStats === undefined && descriptor !== undefined) {
+      try { createdStats = fs.fstatSync(descriptor, { bigint: true }); } catch (cleanup) { errors.push(cleanup); }
+    }
+    try { close(); } catch (cleanup) { errors.push(cleanup); }
     if (createdStats !== undefined) {
       try {
         const current = fs.lstatSync(stagedPath, { bigint: true });
@@ -232,8 +243,11 @@ const stageExplicitMcpConfiguration = (
           fs.unlinkSync(stagedPath);
           fsyncDirectory(directory);
         }
-      } catch { /* retain the staging error and preserve anything unowned */ }
+      } catch (cleanup) {
+        if ((cleanup as NodeJS.ErrnoException).code !== "ENOENT") errors.push(cleanup);
+      }
     }
+    if (errors.length > 1) throw new AggregateError(errors, "MCP configuration staging and cleanup failed", { cause: error });
     throw error;
   }
 };

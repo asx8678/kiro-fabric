@@ -1,0 +1,31 @@
+{
+  "id": "C-059",
+  "command": [
+    "rg",
+    "--files",
+    "src",
+    "scripts",
+    "tests",
+    ".github/workflows",
+    "docs"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-a9qfi1km/repo",
+  "status": "passed",
+  "exit": 0,
+  "elapsed_seconds": 0.008,
+  "output": "docs/audit.md\ndocs/efficiency-baseline.md\ndocs/installer.md\ndocs/configuration.md\ndocs/tracing.md\ndocs/architecture.md\ndocs/architecture/agent-reachability-baseline.json\ndocs/agent-product.schema.json\ndocs/release.md\ndocs/strict-code-mode-migration.md\nscripts/esbuild-common.mjs\nscripts/certify-kiro-agent.mjs\nscripts/analyze-trace.mjs\nscripts/validate-agent-package.mjs\nscripts/run-agent-dev.mjs\nscripts/assert-kiro-home-unchanged.mjs\nscripts/release-candidate-report.mjs\nscripts/efficiency-baseline.mjs\nscripts/bundle-archive.mjs\nscripts/release-artifacts.mjs\nscripts/build-complete-bundle.mjs\nscripts/generate-installer-bootstrap.mjs\nscripts/agent-profile.mjs\nscripts/installer-lock.mjs\nscripts/installer-smoke.mjs\nscripts/create-agent-archive.mjs\nscripts/build-private-tools.mjs\nscripts/atomic-file.mjs\nscripts/installer-platform.mjs\nscripts/bundle-contract.mjs\nscripts/managed-installation.mjs\nscripts/build-agent-dev.mjs\nscripts/generate-agent-sbom.mjs\nscripts/certify-kiro-agent-real.mjs\nscripts/package-identity.mjs\nscripts/release-trust.mjs\nscripts/package-policy.mjs\nscripts/assert-build-artifacts.mjs\nscripts/run-kiro-agent-real-driver.mjs\nscripts/install-agent-user.mjs\nscripts/install-manager.mjs\nscripts/source-install.mjs\nscripts/install-transaction.mjs\nscripts/build-kiro-closure.mjs\nscripts/real-client-evidence.mjs\nscripts/release-download.mjs\nscripts/generate-bundle-sbom.mjs\nscripts/build.mjs\nsrc/kiro/mcp-server.ts\nsrc/kiro/artifacts.ts\nsrc/kiro/memory.ts\nsrc/kiro/info-catalog.ts\nsrc/kiro/mcp-entry.ts\nsrc/kiro/bootstrap-provider.ts\nsrc/kiro/canonical-path.ts\nsrc/kiro/deadlines.ts\nsrc/kiro/mcp-provider.ts\nsrc/kiro/managed-generation.ts\nsrc/kiro/projection.ts\nsrc/kiro/runtime.ts\nsrc/kiro/memory-provider.ts\nsrc/kiro/power/workspace-context.ts\nsrc/kiro/power/artifacts-provider.ts\nsrc/kiro/power/workspace-binding.ts\nsrc/kiro/power/approver.ts\nsrc/kiro/power/agent-launch-context.ts\nsrc/kiro/power/data-paths.ts\nsrc/providers/local-executable.ts\nsrc/providers/local-shell.ts\nsrc/providers/local-provider.ts\nsrc/providers/local-contract.ts\nsrc/providers/owned-file.ts\nsrc/providers/local-path.ts\nsrc/providers/state-provider.ts\nsrc/kernel/index.ts\nsrc/kernel/fabric-exec-contract.ts\nsrc/protocol.ts\nsrc/execution-service.ts\nsrc/installation/installer-lock.mjs\nsrc/installation/bundle-contract.mjs\nsrc/runtime/compiler-worker-entry.ts\nsrc/runtime/type-checker.ts\nsrc/runtime/guest-stack-map.ts\nsrc/runtime/source-limit.ts\nsrc/runtime/quickjs-runtime.ts\nsrc/runtime/deadline.ts\nsrc/runtime/guest-types.ts\nsrc/runtime/json-budget.ts\nsrc/index.ts\nsrc/async-settlement.ts\nsrc/schema-validation.ts\nsrc/config.ts\nsrc/core/semantic-digest.ts\nsrc/core/action-registry.ts\ntests/local-provider.test.ts\ntests/install-manager-cli.test.ts\ntests/archive.test.ts\ntests/legacy-archive.test.ts\ntests/installer-home.test.ts\ntests/hermetic-stage.test.ts\ntests/local-diagnostics.test.ts\ntests/memory-security.test.ts\ntests/release-trust.test.ts\ntests/owned-file.test.ts\ntests/info-catalog.test.ts\ntests/memory-delete-ack.test.ts\ntests/artifacts-state.test.ts\ntests/local-shell.test.ts\ntests/release-workflow.test.ts\ntests/state-reliability.test.ts\ntests/installer-lock.test.ts\ntests/migration.test.ts\ntests/json-budget.test.ts\ntests/deadline-policy.test.ts\ntests/private-tools.test.ts\ntests/server-efficiency.test.ts\ntests/workspace-binding.test.ts\ntests/installer-bootstrap.test.ts\ntests/mcp-federation.test.ts\ntests/bundle-archive.test.ts\ntests/agent-user-install.test.ts\ntests/local-lock-reliability.test.ts\ntests/action-registry.test.ts\ntests/local-executable.test.ts\ntests/fabric-exec-contract.test.ts\ntests/managed-generation.test.ts\ntests/agent-profile.test.ts\ntests/schema-validation.test.ts\ntests/strict-bootstrap.test.ts\nsrc/trace/tracer.ts\nsrc/trace/trace-writer.ts\ntests/release-artifacts.test.ts\ntests/trace-analyze.test.ts\ntests/memory-recovery.test.ts\ntests/efficiency-baseline.test.ts\ntests/install-transaction.test.ts\ntests/quickjs-runtime.test.ts\ntests/sbom-identity.test.ts\ntests/configuration.test.ts\ntests/release-fixture.ts\ntests/installer-executable-trust.test.ts\ntests/approval-quotas.test.ts\ntests/execution-admission.test.ts\ntests/tracing.test.ts\ntests/local-search-work.test.ts\ntests/source-bootstrap.test.ts\ntests/compiler-isolation.test.ts\ntests/memory-lock-safety.test.ts\ntests/package-boundary.test.ts\ntests/installer-platform.test.ts\ntests/release-evidence.test.ts\ntests/managed-installation.test.ts\ntests/mcp-pagination.test.ts\ntests/bundle-contract.test.ts\ntests/storage-failure.test.ts\ntests/agent-doctor.test.ts\ntests/memory-acknowledgement.test.ts\ntests/bundle-fixture.ts\ntests/installed-independence.test.ts\ntests/release-download.test.ts\ntests/mcp-process-lifecycle.test.ts\ntests/approval-projection.test.ts\ntests/compiler-ownership.test.ts\n.github/workflows/release-candidate.yml\n.github/workflows/kiro-agent-real.yml\n.github/workflows/ci.yml\n.github/workflows/release.yml\n",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-kiro",
+    "TMPDIR": "/tmp/kiro-fabric-audit-a9qfi1km/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "pnpm_config_verify_deps_before_run": "false"
+  },
+  "timeout_seconds": 30
+}

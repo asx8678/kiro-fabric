@@ -1,0 +1,28 @@
+{
+  "id": "I-007",
+  "phase": "user-authorized fixes after baseline audit",
+  "command": [
+    "python3",
+    "/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/verify-implementation.py"
+  ],
+  "cwd": "/home/adam/projects/kiro-fabric",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-fix-check-9t7vgr12/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-fix-check-9t7vgr12/kiro",
+    "TMPDIR": "/tmp/kiro-fabric-fix-check-9t7vgr12/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-fix-check-9t7vgr12/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "pnpm_config_verify_deps_before_run": "false",
+    "NODE_OPTIONS": "--require=/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/package-registry-guard.cjs"
+  },
+  "timeout_seconds": 90,
+  "status": "passed",
+  "exit": 0,
+  "elapsed_seconds": 0.076,
+  "output": "{\n  \"ok\": true,\n  \"whole_tree_unchanged_outside_implementation\": false,\n  \"authored_changes\": [\n    \"src/kiro/artifacts.ts\",\n    \"src/kiro/mcp-provider.ts\",\n    \"src/kiro/memory.ts\",\n    \"tests/storage-failure.test.ts\"\n  ],\n  \"concurrent_audit_additions\": [\n    \"audits/2026-09-08-code-quality-fanout/REPORT.md\",\n    \"audits/2026-09-08-code-quality-fanout/coverage.json\",\n    \"audits/2026-09-08-code-quality-fanout/findings.json\",\n    \"audits/2026-09-08-code-quality-fanout/reviews.json\",\n    \"audits/2026-09-08-code-quality-fanout/snapshot.sha256\",\n    \"audits/2026-09-08-code-quality-fanout/verification.json\"\n  ],\n  \"generated_changes\": [\n    \"dist/kiro-agent-closure/chunks/mcp-server-2DOXZQEJ.js\",\n    \"dist/kiro-agent-closure/chunks/mcp-server-5B4J7MAC.js\",\n    \"dist/kiro-agent-closure/closure-manifest.json\",\n    \"dist/kiro-agent-closure/kiro/mcp-entry.js\"\n  ],\n  \"unexpected_changes\": [],\n  \"method\": \"Compare original audit baseline hashes, modes, symlink/absence records and current tracked/untracked file inventory. Check the four authorized source/test files and generated dist; report six separately observed additions from another audit. Those files were absent from the baseline and were not written by this task. Whole-tree preservation is false when these concurrent additions exist; no files are restored or removed.\"\n}\n"
+}

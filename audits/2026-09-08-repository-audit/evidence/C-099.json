@@ -1,0 +1,30 @@
+{
+  "id": "C-099",
+  "command": [
+    "pnpm",
+    "exec",
+    "vitest",
+    "run",
+    "tests/package-boundary.test.ts"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-a9qfi1km/repo",
+  "status": "passed",
+  "exit": 0,
+  "elapsed_seconds": 4.717,
+  "output": "\n RUN  v4.1.11 /tmp/kiro-fabric-audit-a9qfi1km/repo\n\n \u2713 tests/package-boundary.test.ts (9 tests) 3971ms\n     \u2713 publishes an honest library-only npm artifact with every relative runtime dependency  2514ms\n     \u2713 MCP certification reports exactly three tools  1254ms\n\n Test Files  1 passed (1)\n      Tests  9 passed (9)\n   Start at  01:35:57\n   Duration  4.13s (transform 47ms, setup 0ms, import 63ms, tests 3.97s, environment 0ms)\n\n",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-kiro",
+    "TMPDIR": "/tmp/kiro-fabric-audit-a9qfi1km/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "pnpm_config_verify_deps_before_run": "false",
+    "NODE_OPTIONS": "--require=/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/package-registry-guard.cjs"
+  },
+  "timeout_seconds": 120
+}

@@ -1,0 +1,27 @@
+{
+  "id": "C-098",
+  "command": [
+    "python3",
+    "/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/probes/correct-pnpm-store.py"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-a9qfi1km/repo",
+  "status": "passed",
+  "exit": 0,
+  "elapsed_seconds": 0.023,
+  "output": "{\"action\": \"Preserve the v11 suffix of the already copied pnpm store; move only audit-owned temporary files\", \"before\": \"/tmp/kiro-fabric-audit-a9qfi1km/private-pnpm-store\", \"after\": \"/tmp/kiro-fabric-audit-a9qfi1km/corrected-pnpm-store/v11\", \"repositoryInputsChanged\": false, \"reason\": \"C-096 and C-097 show pnpm appends /v11 unless the supplied store path already ends in v11\"}\n",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-kiro",
+    "TMPDIR": "/tmp/kiro-fabric-audit-a9qfi1km/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "pnpm_config_verify_deps_before_run": "false",
+    "NODE_OPTIONS": "--require=/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/network-guard.cjs"
+  },
+  "timeout_seconds": 30
+}

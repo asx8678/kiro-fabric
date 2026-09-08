@@ -124,9 +124,10 @@ class ArtifactStore implements KiroArtifactStore {
   #remove(id: string): void {
     const entry = this.#entries.get(id);
     if (!entry) return;
+    // Keep ownership and quota until deletion succeeds so sweep/close can retry.
+    if (entry.file) fs.rmSync(entry.file, { force: true });
     this.#entries.delete(id);
     this.#totalChars -= entry.content.length;
-    if (entry.file) fs.rmSync(entry.file, { force: true });
   }
   close(): void {
     if (this.#closed) return;

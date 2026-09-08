@@ -1,0 +1,13 @@
+{
+  "id": "C-055",
+  "command": [
+    "audits/2026-09-08-repository-audit/audit.py",
+    "C-055",
+    "restore-dependencies"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-a9qfi1km/repo",
+  "status": "passed",
+  "exit": 0,
+  "elapsed_seconds": 0.385,
+  "output": "{\"action\": \"Restore independent copy of existing dependencies; preserve interrupted setup in .tmp\", \"automatic_dependency_setup\": \"disabled in subsequent run commands via pnpm_config_verify_deps_before_run=false\"}"
+}

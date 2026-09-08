@@ -1,0 +1,25 @@
+{
+  "id": "C-053",
+  "command": [
+    "node",
+    "/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/probes/process-inspection.mjs"
+  ],
+  "cwd": "/tmp/kiro-fabric-audit-a9qfi1km/repo",
+  "status": "passed",
+  "exit": 0,
+  "elapsed_seconds": 0.022,
+  "output": "[\n  {\n    \"pid\": 365732,\n    \"cwd\": \"/home/adam/projects/kiro-fabric\",\n    \"argv\": [\n      \"python3\",\n      \"audits/2026-09-08-repository-audit/audit.py\",\n      \"C-025\",\n      \"run\",\n      \"900\",\n      \"--network-guard\",\n      \"pnpm\"\n    ]\n  },\n  {\n    \"pid\": 365749,\n    \"cwd\": \"/tmp/kiro-fabric-audit-a9qfi1km/repo\",\n    \"argv\": [\n      \"node\",\n      \"/home/adam/.local/bin/pnpm\",\n      \"run\",\n      \"check\"\n    ]\n  },\n  {\n    \"pid\": 365761,\n    \"cwd\": \"/tmp/kiro-fabric-audit-a9qfi1km/repo\",\n    \"argv\": [\n      \"/home/adam/.local/node-v24.20.0/bin/node\",\n      \"/tmp/kiro-fabric-audit-a9qfi1km/cache/node/corepack/v1/pnpm/11.20.0/bin/pnpm.mjs\",\n      \"install\"\n    ]\n  },\n  {\n    \"pid\": 368973,\n    \"cwd\": \"/tmp/kiro-fabric-audit-a9qfi1km/repo\",\n    \"argv\": [\n      \"node\",\n      \"/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/probes/process-inspection.mjs\"\n    ]\n  }\n]\n",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-home",
+    "KIRO_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/synthetic-kiro",
+    "TMPDIR": "/tmp/kiro-fabric-audit-a9qfi1km/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-audit-a9qfi1km/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null"
+  },
+  "timeout_seconds": 15
+}

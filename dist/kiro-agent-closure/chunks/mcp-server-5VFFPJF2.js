@@ -23388,9 +23388,9 @@ var ArtifactStore = class {
   #remove(id) {
     const entry = this.#entries.get(id);
     if (!entry) return;
+    if (entry.file) fs9.rmSync(entry.file, { force: true });
     this.#entries.delete(id);
     this.#totalChars -= entry.content.length;
-    if (entry.file) fs9.rmSync(entry.file, { force: true });
   }
   close() {
     if (this.#closed) return;
@@ -23575,6 +23575,12 @@ var stageExplicitMcpConfiguration = (configPath, explicit) => {
   );
   let descriptor2;
   let createdStats;
+  const close = () => {
+    if (descriptor2 === void 0) return;
+    const fd = descriptor2;
+    descriptor2 = void 0;
+    fs10.closeSync(fd);
+  };
   try {
     descriptor2 = fs10.openSync(
       stagedPath,
@@ -23585,8 +23591,7 @@ var stageExplicitMcpConfiguration = (configPath, explicit) => {
     fs10.writeFileSync(descriptor2, explicit.bytes);
     fs10.fsyncSync(descriptor2);
     const writtenStats = fs10.fstatSync(descriptor2, { bigint: true });
-    fs10.closeSync(descriptor2);
-    descriptor2 = void 0;
+    close();
     fsyncDirectory2(directory);
     const verified = readExplicitMcpConfiguration(stagedPath);
     if (!sameFileIdentity(createdStats, writtenStats) || !sameFileIdentity(writtenStats, verified.stats) || verified.digest !== explicit.digest) {
@@ -23594,7 +23599,19 @@ var stageExplicitMcpConfiguration = (configPath, explicit) => {
     }
     return { path: stagedPath, directory, digest: explicit.digest, stats: verified.stats };
   } catch (error) {
-    if (descriptor2 !== void 0) fs10.closeSync(descriptor2);
+    const errors = [error];
+    if (createdStats === void 0 && descriptor2 !== void 0) {
+      try {
+        createdStats = fs10.fstatSync(descriptor2, { bigint: true });
+      } catch (cleanup) {
+        errors.push(cleanup);
+      }
+    }
+    try {
+      close();
+    } catch (cleanup) {
+      errors.push(cleanup);
+    }
     if (createdStats !== void 0) {
       try {
         const current = fs10.lstatSync(stagedPath, { bigint: true });
@@ -23602,9 +23619,11 @@ var stageExplicitMcpConfiguration = (configPath, explicit) => {
           fs10.unlinkSync(stagedPath);
           fsyncDirectory2(directory);
         }
-      } catch {
+      } catch (cleanup) {
+        if (cleanup.code !== "ENOENT") errors.push(cleanup);
       }
     }
+    if (errors.length > 1) throw new AggregateError(errors, "MCP configuration staging and cleanup failed", { cause: error });
     throw error;
   }
 };
@@ -24721,22 +24740,46 @@ var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
     `.${path11.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
   );
   let descriptor2;
+  let createdStats;
+  const close = () => {
+    if (descriptor2 === void 0) return;
+    const fd = descriptor2;
+    descriptor2 = void 0;
+    fs11.closeSync(fd);
+  };
   try {
     descriptor2 = fs11.openSync(temporary, "wx", 384);
+    createdStats = fs11.fstatSync(descriptor2);
     fs11.writeFileSync(descriptor2, content, "utf8");
     fs11.fsyncSync(descriptor2);
-    fs11.closeSync(descriptor2);
-    descriptor2 = void 0;
+    close();
     beforeCommit?.();
     fs11.renameSync(temporary, filePath);
     afterCommit?.();
     syncDirectoryBestEffort(directory);
   } catch (error) {
-    if (descriptor2 !== void 0) fs11.closeSync(descriptor2);
-    try {
-      fs11.rmSync(temporary, { force: true });
-    } catch {
+    const errors = [error];
+    if (createdStats === void 0 && descriptor2 !== void 0) {
+      try {
+        createdStats = fs11.fstatSync(descriptor2);
+      } catch (cleanup) {
+        errors.push(cleanup);
+      }
     }
+    try {
+      close();
+    } catch (cleanup) {
+      errors.push(cleanup);
+    }
+    try {
+      const current = lstatOrNull(temporary);
+      if (createdStats && current?.isFile() && !current.isSymbolicLink() && current.dev === createdStats.dev && current.ino === createdStats.ino) {
+        fs11.rmSync(temporary, { force: true });
+      }
+    } catch (cleanup) {
+      errors.push(cleanup);
+    }
+    if (errors.length > 1) throw new AggregateError(errors, "Kiro memory write and temporary cleanup failed", { cause: error });
     throw error;
   }
 };

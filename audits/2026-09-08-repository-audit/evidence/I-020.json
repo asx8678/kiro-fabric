@@ -1,0 +1,28 @@
+{
+  "id": "I-020",
+  "phase": "user-authorized fixes after baseline audit",
+  "command": [
+    "python3",
+    "/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/validate-report.py"
+  ],
+  "cwd": "/home/adam/projects/kiro-fabric",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-fix-check-cs2vvm5b/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-fix-check-cs2vvm5b/kiro",
+    "TMPDIR": "/tmp/kiro-fabric-fix-check-cs2vvm5b/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-fix-check-cs2vvm5b/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "pnpm_config_verify_deps_before_run": "false",
+    "NODE_OPTIONS": "--require=/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/package-registry-guard.cjs"
+  },
+  "timeout_seconds": 90,
+  "status": "passed",
+  "exit": 0,
+  "elapsed_seconds": 0.183,
+  "output": "{\n  \"ok\": true,\n  \"report_sha256\": \"35cf54b2faaff9185b3d7091644cec7119906403be3ddc69cbaa84eb93d1713f\",\n  \"word_count_approximate\": 9475,\n  \"numbered_sections\": 11,\n  \"source_citations\": 171,\n  \"unique_source_files_cited\": 51,\n  \"command_references\": 84,\n  \"local_links\": 42,\n  \"findings\": [\n    \"F-001\",\n    \"F-002\"\n  ],\n  \"feature_rows\": 17,\n  \"redaction_screen_candidates\": [],\n  \"pending_wrapper_record\": null,\n  \"method\": \"Source paths/ranges checked against pre-audit manifest and snapshot bytes; command IDs and local links checked; pending wrapper record is written after this command returns. Finding headings and feature statuses checked. High-specificity redaction screening, not exhaustive privacy detection. No semantic truth or coverage percentage is inferred.\",\n  \"errors\": [],\n  \"warnings\": []\n}\n"
+}

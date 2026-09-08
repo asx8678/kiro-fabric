@@ -1,0 +1,28 @@
+{
+  "id": "I-005",
+  "phase": "user-authorized fixes after baseline audit",
+  "command": [
+    "python3",
+    "/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/verify-implementation.py"
+  ],
+  "cwd": "/home/adam/projects/kiro-fabric",
+  "environment": {
+    "PATH": "/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.codex/tmp/arg0/codex-arg0MvN6qW:/home/adam/.codex/packages/standalone/releases/0.153.4-x86_64-unknown-linux-musl/codex-path:/home/adam/.local/bin:/home/adam/.bun/bin:/home/adam/.cache/cliresearch-toolchains/cargo/bin:/home/adam/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+    "HOME": "/tmp/kiro-fabric-fix-check-pe7l6iwg/home",
+    "KIRO_HOME": "/tmp/kiro-fabric-fix-check-pe7l6iwg/kiro",
+    "TMPDIR": "/tmp/kiro-fabric-fix-check-pe7l6iwg/tmp",
+    "XDG_CACHE_HOME": "/tmp/kiro-fabric-fix-check-pe7l6iwg/cache",
+    "LANG": "C.UTF-8",
+    "CI": "true",
+    "NO_COLOR": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "pnpm_config_verify_deps_before_run": "false",
+    "NODE_OPTIONS": "--require=/home/adam/projects/kiro-fabric/audits/2026-09-08-repository-audit/package-registry-guard.cjs"
+  },
+  "timeout_seconds": 90,
+  "status": "failed",
+  "exit": 1,
+  "elapsed_seconds": 0.071,
+  "output": "{\n  \"ok\": false,\n  \"authored_changes\": [\n    \"audits/2026-09-08-code-quality-fanout/REPORT.md\",\n    \"audits/2026-09-08-code-quality-fanout/coverage.json\",\n    \"audits/2026-09-08-code-quality-fanout/findings.json\",\n    \"audits/2026-09-08-code-quality-fanout/reviews.json\",\n    \"audits/2026-09-08-code-quality-fanout/snapshot.sha256\",\n    \"audits/2026-09-08-code-quality-fanout/verification.json\",\n    \"src/kiro/artifacts.ts\",\n    \"src/kiro/mcp-provider.ts\",\n    \"src/kiro/memory.ts\",\n    \"tests/storage-failure.test.ts\"\n  ],\n  \"generated_changes\": [\n    \"dist/kiro-agent-closure/chunks/mcp-server-2DOXZQEJ.js\",\n    \"dist/kiro-agent-closure/chunks/mcp-server-5B4J7MAC.js\",\n    \"dist/kiro-agent-closure/closure-manifest.json\",\n    \"dist/kiro-agent-closure/kiro/mcp-entry.js\"\n  ],\n  \"unexpected_changes\": [\n    \"audits/2026-09-08-code-quality-fanout/REPORT.md\",\n    \"audits/2026-09-08-code-quality-fanout/coverage.json\",\n    \"audits/2026-09-08-code-quality-fanout/findings.json\",\n    \"audits/2026-09-08-code-quality-fanout/reviews.json\",\n    \"audits/2026-09-08-code-quality-fanout/snapshot.sha256\",\n    \"audits/2026-09-08-code-quality-fanout/verification.json\"\n  ],\n  \"method\": \"Compare original audit baseline hashes, modes, symlink/absence records and current tracked/untracked file inventory; permit only four authorized source/test files plus generated dist and designated audit output.\"\n}\n"
+}

@@ -1,0 +1,19 @@
+{
+  "id": "C-058",
+  "command": [
+    "python3",
+    "audits/2026-09-08-repository-audit/audit.py",
+    "C-058",
+    "read",
+    "src/providers/mcp-provider.ts:1:400",
+    "src/kiro/power/config.ts",
+    "src/kiro/power/agent-launch-context.ts",
+    "src/kiro/power/workspace-binding.ts"
+  ],
+  "cwd": "/home/adam/projects/kiro-fabric",
+  "status": "failed",
+  "exit": 1,
+  "elapsed_seconds": null,
+  "output": "FileNotFoundError: disposable repo/src/providers/mcp-provider.ts does not exist. No source was read. Corrected paths were inspected in C-061.",
+  "provenance": "Reconstructed from the original command transcript, 2026-09-07T22:54:12.298Z. The logger failed before persisting this ID; this is not a rerun."
+}

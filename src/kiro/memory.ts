@@ -592,21 +592,39 @@ const writeJsonAtomic = (filePath: string, content: string, beforeCommit?: () =>
     `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
   );
   let descriptor: number | undefined;
+  let createdStats: fs.Stats | undefined;
+  const close = (): void => {
+    if (descriptor === undefined) return;
+    const fd = descriptor;
+    // A throwing close may already have released the descriptor. Never retry it.
+    descriptor = undefined;
+    fs.closeSync(fd);
+  };
   try {
     descriptor = fs.openSync(temporary, "wx", 0o600);
+    createdStats = fs.fstatSync(descriptor);
     fs.writeFileSync(descriptor, content, "utf8");
     fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
+    close();
     beforeCommit?.();
     fs.renameSync(temporary, filePath);
     afterCommit?.();
     syncDirectoryBestEffort(directory);
   } catch (error) {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
+    const errors: unknown[] = [error];
+    // Recover identity only while the descriptor is still definitely ours.
+    if (createdStats === undefined && descriptor !== undefined) {
+      try { createdStats = fs.fstatSync(descriptor); } catch (cleanup) { errors.push(cleanup); }
+    }
+    try { close(); } catch (cleanup) { errors.push(cleanup); }
     try {
-      fs.rmSync(temporary, { force: true });
-    } catch {}
+      const current = lstatOrNull(temporary);
+      if (createdStats && current?.isFile() && !current.isSymbolicLink() &&
+          current.dev === createdStats.dev && current.ino === createdStats.ino) {
+        fs.rmSync(temporary, { force: true });
+      }
+    } catch (cleanup) { errors.push(cleanup); }
+    if (errors.length > 1) throw new AggregateError(errors, "Kiro memory write and temporary cleanup failed", { cause: error });
     throw error;
   }
 };

@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
+import { openKiroMemory } from "../src/kiro/memory.js";
+import { KiroMcpProvider } from "../src/kiro/mcp-provider.js";
 import { StateCommitAcknowledgementError, StateProvider } from "../src/providers/state-provider.js";
 
 const roots: string[] = [];
@@ -33,7 +35,236 @@ const inject = (method: "write" | "permissions" | "sync" | "close", matches: (fi
   }
 };
 
+const temporaryWriter = async (kind: "memory" | "mcp") => {
+  const root = temporary();
+  const matches = (file: string) => kind === "memory"
+    ? path.basename(file).startsWith(".fixture.json.") && file.endsWith(".tmp")
+    : path.basename(file).startsWith(".kiro-fabric-mcp-snapshot-");
+  const remaining = () => fs.readdirSync(root, { recursive: true, encoding: "utf8" }).map((file) => path.join(root, file)).filter(matches);
+  if (kind === "memory") {
+    const memory = openKiroMemory("workspace", root);
+    await memory.set("fixture", "old");
+    return {
+      root, matches, remaining,
+      write: () => memory.set("fixture", "new"),
+      async verifyPreserved() { await expect(memory.get("fixture")).resolves.toMatchObject({ value: "old" }); },
+      async close() {},
+    };
+  }
+  const configPath = path.join(root, "mcp.json");
+  const config = JSON.stringify({ imports: [], mcpServers: {} });
+  fs.writeFileSync(configPath, config, { mode: 0o600 });
+  const provider = new KiroMcpProvider(root, { enabled: true, configPath, disableOAuth: true, callTimeoutMs: 1_000 });
+  return {
+    root, matches, remaining,
+    write: () => provider.invoke("$servers", {}, { cwd: root }),
+    async verifyPreserved() { expect(fs.readFileSync(configPath, "utf8")).toBe(config); },
+    close: () => provider.close(),
+  };
+};
+
+const failTemporaryClose = (matches: (file: string) => boolean, afterClose?: (file: string) => void) => {
+  const files = new Map<number, string>();
+  const open = fs.openSync, close = fs.closeSync;
+  const failure = Object.assign(new Error("temporary close completed then failed"), { code: "EIO" });
+  let attempts = 0;
+  vi.spyOn(fs, "openSync").mockImplementation((file, flags, mode) => {
+    const fd = open(file, flags, mode);
+    // Track subsequent reuse too; closing a different file is not a retry.
+    files.set(fd, String(file));
+    return fd;
+  });
+  vi.spyOn(fs, "closeSync").mockImplementation((fd) => {
+    const file = files.get(fd);
+    if (file !== undefined && matches(file)) {
+      attempts += 1;
+      close(fd);
+      afterClose?.(file);
+      throw failure;
+    }
+    close(fd);
+  });
+  return { failure, isTemporary: (fd: number) => matches(files.get(fd) ?? ""), attempts: () => attempts };
+};
+
+const failTemporaryIdentity = (matches: (file: string) => boolean, persistent: boolean, beforeFailure?: (file: string) => void) => {
+  const files = new Map<number, string>();
+  const open = fs.openSync, stat = fs.fstatSync, close = fs.closeSync;
+  const failure = Object.assign(new Error("temporary identity unavailable"), { code: "EIO" });
+  const retryFailure = Object.assign(new Error("temporary identity still unavailable"), { code: "EIO" });
+  let attempts = 0, closes = 0;
+  vi.spyOn(fs, "openSync").mockImplementation((...args) => {
+    const fd = open(...args);
+    files.set(fd, String(args[0]));
+    return fd;
+  });
+  vi.spyOn(fs, "fstatSync").mockImplementation((...args) => {
+    const file = files.get(args[0]);
+    if (file !== undefined && matches(file)) {
+      attempts += 1;
+      if (attempts === 1) { beforeFailure?.(file); throw failure; }
+      if (persistent) throw retryFailure;
+    }
+    return stat(...args);
+  });
+  vi.spyOn(fs, "closeSync").mockImplementation((fd) => {
+    if (matches(files.get(fd) ?? "")) closes += 1;
+    close(fd);
+    files.delete(fd);
+  });
+  return { failure, retryFailure, attempts: () => attempts, closes: () => closes };
+};
+
+describe.each(["memory", "mcp"] as const)("%s temporary write ownership", (kind) => {
+  it.each(["owned pathname", "foreign replacement"] as const)("recovers identity before closing after a transient metadata failure with %s", async (pathname) => {
+    const fixture = await temporaryWriter(kind);
+    const foreign = path.join(fixture.root, "foreign");
+    fs.writeFileSync(foreign, "foreign content", { mode: 0o600 });
+    let replacement: string | undefined;
+    const fault = failTemporaryIdentity(fixture.matches, false, pathname === "foreign replacement" ? (file) => {
+      fs.renameSync(file, path.join(fixture.root, "original-owned-file"));
+      fs.renameSync(foreign, file);
+      replacement = file;
+    } : undefined);
+    try {
+      await expect(fixture.write()).rejects.toBe(fault.failure);
+      expect(fault.attempts()).toBe(2);
+      expect(fault.closes()).toBe(1);
+      vi.restoreAllMocks();
+      if (pathname === "foreign replacement") {
+        expect(replacement).toBeDefined();
+        expect(fs.readFileSync(replacement!, "utf8")).toBe("foreign content");
+      } else expect(fixture.remaining()).toEqual([]);
+      await fixture.verifyPreserved();
+      await fixture.write();
+      expect(fixture.remaining()).toEqual(replacement ? [replacement] : []);
+    } finally { vi.restoreAllMocks(); await fixture.close(); }
+  });
+
+  it("bounds metadata recovery and reports unresolved identity without deleting an unverified file", async () => {
+    const fixture = await temporaryWriter(kind);
+    const fault = failTemporaryIdentity(fixture.matches, true);
+    try {
+      await expect(fixture.write()).rejects.toMatchObject({ cause: fault.failure, errors: [fault.failure, fault.retryFailure] });
+      expect(fault.attempts()).toBe(2);
+      expect(fault.closes()).toBe(1);
+      const remaining = fixture.remaining();
+      expect(remaining).toHaveLength(1);
+      vi.restoreAllMocks();
+      expect(fs.readFileSync(remaining[0]!, "utf8")).toBe("");
+      await fixture.verifyPreserved();
+      await fixture.write();
+      expect(fixture.remaining()).toEqual(remaining);
+    } finally { vi.restoreAllMocks(); await fixture.close(); }
+  });
+
+  it("preserves the close error, removes owned residue and permits a later write", async () => {
+    const fixture = await temporaryWriter(kind);
+    const fault = failTemporaryClose(fixture.matches);
+    try {
+      await expect(fixture.write()).rejects.toBe(fault.failure);
+      expect(fault.attempts()).toBe(1);
+      expect(fixture.remaining()).toEqual([]);
+      vi.restoreAllMocks();
+      await fixture.verifyPreserved();
+      await fixture.write();
+      expect(fixture.remaining()).toEqual([]);
+    } finally { vi.restoreAllMocks(); await fixture.close(); }
+  });
+
+  it("cleans the temporary file even when both writing and closing fail", async () => {
+    const fixture = await temporaryWriter(kind);
+    const fault = failTemporaryClose(fixture.matches);
+    const failure = new Error("primary temporary write failure"), write = fs.writeFileSync;
+    vi.spyOn(fs, "writeFileSync").mockImplementation((file, data, options) => {
+      if (typeof file === "number" && fault.isTemporary(file)) throw failure;
+      write(file, data, options);
+    });
+    try {
+      await expect(fixture.write()).rejects.toMatchObject({ cause: failure, errors: [failure, fault.failure] });
+      expect(fault.attempts()).toBe(1);
+      expect(fixture.remaining()).toEqual([]);
+      vi.restoreAllMocks();
+      await fixture.verifyPreserved();
+      await fixture.write();
+    } finally { vi.restoreAllMocks(); await fixture.close(); }
+  });
+
+  it("retains both the primary close error and a failed temporary cleanup", async () => {
+    const fixture = await temporaryWriter(kind);
+    const fault = failTemporaryClose(fixture.matches);
+    const cleanup = new Error("temporary removal failed"), remove = fs.rmSync, unlink = fs.unlinkSync;
+    vi.spyOn(fs, "rmSync").mockImplementation((file, options) => {
+      if (fixture.matches(String(file))) throw cleanup;
+      remove(file, options);
+    });
+    vi.spyOn(fs, "unlinkSync").mockImplementation((file) => {
+      if (fixture.matches(String(file))) throw cleanup;
+      unlink(file);
+    });
+    try {
+      await expect(fixture.write()).rejects.toMatchObject({ cause: fault.failure, errors: [fault.failure, cleanup] });
+      expect(fault.attempts()).toBe(1);
+      expect(fixture.remaining()).toHaveLength(1);
+      vi.restoreAllMocks();
+      await fixture.verifyPreserved();
+    } finally { vi.restoreAllMocks(); await fixture.close(); }
+  });
+
+  it("preserves a foreign replacement at the temporary pathname after close fails", async () => {
+    const fixture = await temporaryWriter(kind);
+    const foreign = path.join(fixture.root, "foreign");
+    fs.writeFileSync(foreign, "foreign content", { mode: 0o600 });
+    let replacement: string | undefined;
+    const fault = failTemporaryClose(fixture.matches, (file) => {
+      // Keep the old inode alive so the replacement has a distinct identity.
+      fs.renameSync(file, path.join(fixture.root, "original-owned-file"));
+      fs.renameSync(foreign, file);
+      replacement = file;
+    });
+    try {
+      await expect(fixture.write()).rejects.toBe(fault.failure);
+      expect(fault.attempts()).toBe(1);
+      vi.restoreAllMocks();
+      expect(replacement).toBeDefined();
+      expect(fs.readFileSync(replacement!, "utf8")).toBe("foreign content");
+      await fixture.verifyPreserved();
+    } finally { vi.restoreAllMocks(); await fixture.close(); }
+  });
+});
+
 describe("operation-owned storage failure cleanup", () => {
+  it.each(["expiry", "count eviction", "size eviction", "close"] as const)("retries artifact deletion after %s fails without losing ownership or quota", (operation) => {
+    const root = temporary(); let now = 1_000;
+    const store = createKiroArtifactStore({ root, ttlMs: 100, now: () => now, maxArtifacts: operation === "count eviction" ? 1 : 3, maxTotalChars: 6 });
+    const id = store.write("old");
+    const other = createKiroArtifactStore({ root });
+    const otherId = other.write("other store");
+    const failure = new Error("artifact deletion failed"), remove = fs.rmSync;
+    vi.spyOn(fs, "rmSync").mockImplementation((file, options) => {
+      if (String(file) === path.join(root, id)) throw failure;
+      remove(file, options);
+    });
+    if (operation === "expiry") now += 101;
+    const attempt = () => {
+      if (operation === "expiry") store.read(id);
+      else if (operation === "close") store.close();
+      else store.write(operation === "size eviction" ? "next" : "new");
+    };
+    try {
+      expect(attempt).toThrow(failure);
+      // A persistent failure must not silently free a slot, quota, or shutdown.
+      expect(attempt).toThrow(failure);
+      expect(fs.readFileSync(path.join(root, id), "utf8")).toBe("old");
+      expect(fs.readdirSync(root).sort()).toEqual([id, otherId].sort());
+      vi.restoreAllMocks();
+      store.close();
+      expect(fs.existsSync(path.join(root, id))).toBe(false);
+      expect(other.read(otherId).text).toBe("other store");
+      expect(fs.readdirSync(root)).toEqual([otherId]);
+    } finally { vi.restoreAllMocks(); store.close(); other.close(); }
+  });
+
   it.each(["write", "permissions", "sync", "close"] as const)("preserves old state and cleans its temporary file after %s failure", async (method) => {
     const root = temporary(); const provider = new StateProvider(root); const context = { cwd: root };
     await provider.invoke("set", { key: "fixture", value: "old" }, context);

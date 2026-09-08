@@ -1,0 +1,2242 @@
+{
+  "method": "All non-generated, non-prior-audit regular baseline files. Recorded line ranges are extracted from successful numbered source reads. Orientation rg/cat reads are separately in C-010/C-012/C-013/C-014; search inventory is not promoted to static tracing. Tests executed in C-056 do not imply every assertion or production path was reviewed.",
+  "files": [
+    {
+      "path": ".github/CODEOWNERS",
+      "sha256": "ad3667d92f987871ae2f66cbd1739897096b3247395bacf7dcde25f519f6355a",
+      "physical_lines": 6,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "d172d0a8ce3f4a541bb9a286100771d3b797b7377d234067c9c90fad4b0d9242",
+      "physical_lines": 127,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-065",
+          "start": 1,
+          "end": 127
+        },
+        {
+          "command": "C-095",
+          "start": 1,
+          "end": 127
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": ".github/workflows/kiro-agent-real.yml",
+      "sha256": "c8d3483899413c7940255a413d0983c38413c3fbc97793d8fe57b749b27ddfcd",
+      "physical_lines": 60,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-095",
+          "start": 1,
+          "end": 60
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": ".github/workflows/release-candidate.yml",
+      "sha256": "221a83a248f96b1f4ab98fe33544a0ff77bcdd4d4b5f75c8132e10250407320a",
+      "physical_lines": 35,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-095",
+          "start": 1,
+          "end": 35
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "sha256": "4e13c5a79b4052cca10f4e6938dc8487832a8a7afb5ffdbf567d19eda7cdbb33",
+      "physical_lines": 100,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-065",
+          "start": 1,
+          "end": 85
+        },
+        {
+          "command": "C-095",
+          "start": 1,
+          "end": 85
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "c656a49eccd86f160a13615b21097425180aa66fb1b71ae62a939c7c6d6ad9f9",
+      "physical_lines": 13,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "850e9d930ff56acbe4549c15ecbd08ca4c9ccc0adc905ecd9ec09b706511ef1e",
+      "physical_lines": 23,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "1c42d98da455157ec9fafc38df3c9cddfabc680456acede4c575c59482d5f6e6",
+      "physical_lines": 23,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "INSTALLER_PLAN.md",
+      "sha256": "b83d577309af05ffe68f286d751b7810ca37976c66165410967d104aabacbc4a",
+      "physical_lines": 259,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "d4b36fb8ee5da34042c850c094d0024b028174b5785ce7fae613c9456cbc84f9",
+      "physical_lines": 21,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "README.md",
+      "sha256": "44b1fc3ad3eb5ffa01eabf763ae22b19b1761bb1499b1edbab0f368110044f67",
+      "physical_lines": 154,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-017",
+          "start": 1,
+          "end": 90
+        },
+        {
+          "command": "C-091",
+          "start": 1,
+          "end": 75
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "4c8936f25dd10596e6d0ef2cbdce14c7e26e050c5f08f1035f0e8c95f88fc190",
+      "physical_lines": 13,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "STATUS.md",
+      "sha256": "59fa8809d8a7bcd3bf22958b0674d6543fecaa21d1d5268be9ef45e8156a90a4",
+      "physical_lines": 17,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "d75641354a1018095b478032298a14b450707c5cc93e31509aa159f6a1463974",
+      "physical_lines": 12,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "agent-product.json",
+      "sha256": "351d35494b24e12d6e3d0d719ec50155bdcf7824f47f59dcd8ae00ccd9e301d7",
+      "physical_lines": 28,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "build-toolchain.json",
+      "sha256": "484695a1135197fd6fcab79ddb3c62fcba90fe1c7b41a2a55c41b7a155e8b676",
+      "physical_lines": 235,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-091",
+          "start": 1,
+          "end": 235
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/agent-product.schema.json",
+      "sha256": "1a8bdb797dc1baaaa6e53ac4ebedfe3e494da07b4ae315a300be2a20375fe053",
+      "physical_lines": 20,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/architecture.md",
+      "sha256": "58d7f841e83ac220e225d65b2a8dbff603b00c92766fad7bea354aace285b143",
+      "physical_lines": 25,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-017",
+          "start": 1,
+          "end": 25
+        },
+        {
+          "command": "C-091",
+          "start": 1,
+          "end": 25
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/architecture/agent-reachability-baseline.json",
+      "sha256": "a49d183caac85f48a8d73aad3321174e2392fb418469d5bc5807529cdad3856d",
+      "physical_lines": 47,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/audit.md",
+      "sha256": "9344a7bbc44d3307db09b008d951eaa1cc6e7d5e6f7abb248f512be5de3ca233",
+      "physical_lines": 186,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/configuration.md",
+      "sha256": "d12954d1534d908117007f7c9093cb4ab20224746fdcf7cdac7e46a80a23e7ed",
+      "physical_lines": 88,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/efficiency-baseline.md",
+      "sha256": "e137d51dcdac74b094edf308c92ec729189724935430e547cc13853f3ccb1f97",
+      "physical_lines": 73,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/installer.md",
+      "sha256": "3f68261f23b428ed2c9eaa337308ae4a177df424b3b91a0072d14d58f3e996c1",
+      "physical_lines": 57,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-068",
+          "start": 1,
+          "end": 57
+        },
+        {
+          "command": "C-091",
+          "start": 1,
+          "end": 57
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/release.md",
+      "sha256": "479d5d2340b5afcd4bf0c8c439b58f32fb9d8108e920ed7fc62845ab00538054",
+      "physical_lines": 60,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-068",
+          "start": 1,
+          "end": 60
+        },
+        {
+          "command": "C-091",
+          "start": 1,
+          "end": 60
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/strict-code-mode-migration.md",
+      "sha256": "b55d1ed79fa1bece39f566a2c7217e46637b3fa0e265616b448e73f623bd7bfe",
+      "physical_lines": 104,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "docs/tracing.md",
+      "sha256": "74f9c0ca7b96ccade567eae3220bb95df21cd3d78d9142ab85c68d265301c212",
+      "physical_lines": 17,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-091",
+          "start": 1,
+          "end": 17
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "install.sh",
+      "sha256": "2c390acd1e77a37d9e8e4984bed70fde0d5f250e87372edcce1bde780492141f",
+      "physical_lines": 31,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "knip.json",
+      "sha256": "b4a95f687b2e35e643b9cd69ecf6d23635c5678d7d6d4c992c564348ad63a224",
+      "physical_lines": 11,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "media/cover.jpg",
+      "sha256": "cf6bc91e0b02fddc58ffd98b4b7f28848d8a9f78d9c56ce1e41b94cb06323179",
+      "physical_lines": 2362,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "package.json",
+      "sha256": "13f1a7c6d38f5ab6c96bb800c7a87ae189b494259f11f1aa65a76b375590c807",
+      "physical_lines": 94,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "0cdbd8dee07a622d9bd6194b281cf5fc4190daea8705a2b0aef22798aff224e3",
+      "physical_lines": 2783,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "sha256": "15924c4d36d6d0345f3c2d43906e7cb68053a62b6ebd17d1f04e83d04cfad0bd",
+      "physical_lines": 15,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "resources/steering/fabric.md",
+      "sha256": "09003cc0f427ab67088abded95efc12a6ad5e5285c7bd31dde46717f650b9d87",
+      "physical_lines": 3,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/agent-profile.mjs",
+      "sha256": "de2d5533355fef41b520a3d610d01af38c8e898fb1cb606134e5e17f593a436a",
+      "physical_lines": 75,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-087",
+          "start": 1,
+          "end": 70
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/analyze-trace.mjs",
+      "sha256": "936ee9ab1bb24180994bbc9823759a2bcd9f39cdf84e7c10d249a88ae6823377",
+      "physical_lines": 254,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/assert-build-artifacts.mjs",
+      "sha256": "4b14fb0c09e3cae9fd9ea92fa407b63606315df09488037b4b9574001d3129bb",
+      "physical_lines": 79,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-022",
+          "start": 1,
+          "end": 79
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/assert-kiro-home-unchanged.mjs",
+      "sha256": "495414a432a5db7ddb26a8d303d9540aa095d5d6c109d91032141f057e5da9c5",
+      "physical_lines": 62,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/atomic-file.mjs",
+      "sha256": "16bacc417684de7124e0377f8554bb8b736b4207005295ab39961f840939a567",
+      "physical_lines": 24,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/build-agent-dev.mjs",
+      "sha256": "7c744de07ba77056c92b48e2101dae14cfc25d0fa8da6afa2dc626eaab803fb0",
+      "physical_lines": 130,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/build-complete-bundle.mjs",
+      "sha256": "37d948d272035219df0e1e06b14f1f73e736635816b4f259a5f804f82fd0372b",
+      "physical_lines": 120,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-087",
+          "start": 1,
+          "end": 45
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/build-kiro-closure.mjs",
+      "sha256": "505ff2bd2c0fa3a43b9d52973a2cc4fef53cb71d3cfdceba7355bac023c572f8",
+      "physical_lines": 208,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/build-private-tools.mjs",
+      "sha256": "b2b73b58955a7bcdab500c9a752bbf8150a9a3a42d3ed1422427b70e80efccd1",
+      "physical_lines": 63,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/build.mjs",
+      "sha256": "20d112cba1da11b648659b5baf52b85caa8f250b3ab0d9f3077840fedeaff487",
+      "physical_lines": 17,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/bundle-archive.mjs",
+      "sha256": "8eaaaf2b401368a8f45caa9ec578bdc333b1bae5a1ec039231535006fd363aac",
+      "physical_lines": 134,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-054",
+          "start": 1,
+          "end": 134
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/bundle-contract.mjs",
+      "sha256": "bd6a752ac9ac60c63d8311f8e648b6fd847a1f6fd23c50540e3386735610f957",
+      "physical_lines": 2,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/certify-kiro-agent-real.mjs",
+      "sha256": "edf0244fe7413cc2c44ff5492d9eaeb2dda0047e3e4bb42989acdddbcf46fd62",
+      "physical_lines": 93,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/certify-kiro-agent.mjs",
+      "sha256": "32a015a86b67f86afbb4889c3ee6058b3226a864a8b595974f854336f23cd899",
+      "physical_lines": 204,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-017",
+          "start": 1,
+          "end": 204
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/create-agent-archive.mjs",
+      "sha256": "e94e6f2bd401eb86e1c4f6c2785a786c7619db7da6e679220f6b810f2990eac6",
+      "physical_lines": 207,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/efficiency-baseline.mjs",
+      "sha256": "391bfc57fc52802938ff1d1729ec82d04989bc8bdbc7456f5551795d63eccc65",
+      "physical_lines": 261,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-072",
+          "start": 1,
+          "end": 175
+        },
+        {
+          "command": "C-077",
+          "start": 175,
+          "end": 261
+        },
+        {
+          "command": "C-078",
+          "start": 124,
+          "end": 173
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/esbuild-common.mjs",
+      "sha256": "2d9e438a01527b138e758d562d9e579ac469f03c1a75cad2da28d703f38cd180",
+      "physical_lines": 17,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/generate-agent-sbom.mjs",
+      "sha256": "4c2762d620687fbaeefc5c7894e2eebdabb44ed63743933da6a652c87b462056",
+      "physical_lines": 56,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-022",
+          "start": 1,
+          "end": 56
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/generate-bundle-sbom.mjs",
+      "sha256": "b7975e4aa3a139aa62cf2bfb357e5e9d4106f37505bbc286cc09c4746d7d75b5",
+      "physical_lines": 25,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/generate-installer-bootstrap.mjs",
+      "sha256": "423bd1d1dc91e8e0b5d1edfffdfb0eefc57adbb39033cbd3d60e14b35eef3f67",
+      "physical_lines": 192,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-068",
+          "start": 1,
+          "end": 170
+        },
+        {
+          "command": "C-104",
+          "start": 178,
+          "end": 192
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/install-agent-user.mjs",
+      "sha256": "86e081c97bd020095fb061a4ca500e87ad1ad240d50ac42e290e2d1c8b974f2c",
+      "physical_lines": 1094,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/install-manager.mjs",
+      "sha256": "5a7595a957df7b0950e61cb38f5cf651403d151bd928df10e75cbc4aefcc3c0c",
+      "physical_lines": 290,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-051",
+          "start": 1,
+          "end": 174
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/install-transaction.mjs",
+      "sha256": "43bdce0d4ba3532fd8f550535f1eb1a88e2f9f9bb2a52661bf495547737bc67e",
+      "physical_lines": 76,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-046",
+          "start": 1,
+          "end": 76
+        },
+        {
+          "command": "C-049",
+          "start": 1,
+          "end": 47
+        },
+        {
+          "command": "C-071",
+          "start": 47,
+          "end": 76
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/installer-lock.mjs",
+      "sha256": "f68725d607134e38a291a120d84259077ef6cd5712ee2e24cef5f7e9fe260b8c",
+      "physical_lines": 2,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-071",
+          "start": 1,
+          "end": 2
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/installer-platform.mjs",
+      "sha256": "5c3f97c1da2fe3a87ff067570bf518c0490e54a9ae127036acdb90fcb56e0b99",
+      "physical_lines": 35,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/installer-smoke.mjs",
+      "sha256": "2a823b8923a982fdf21ee8b99f8f85a7d2f544e86ec46fd863c82e53fab9d9be",
+      "physical_lines": 65,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/managed-installation.mjs",
+      "sha256": "d5bbf7716d2b132e886fdd07da2483c278c3fd81b3f3c3801e3332152f00eadb",
+      "physical_lines": 195,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-045",
+          "start": 1,
+          "end": 112
+        },
+        {
+          "command": "C-046",
+          "start": 112,
+          "end": 195
+        },
+        {
+          "command": "C-049",
+          "start": 132,
+          "end": 193
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/package-identity.mjs",
+      "sha256": "93cb954e0bc3a5644148250577fb6a894869a2c1d50117fa6e2782738018596a",
+      "physical_lines": 27,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/package-policy.mjs",
+      "sha256": "119f652832d0a23208b15435eb4effcc0e96ffb444fc59732f53f24b0939f8b0",
+      "physical_lines": 10,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-022",
+          "start": 1,
+          "end": 10
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/real-client-evidence.mjs",
+      "sha256": "f2b8dbfc3baa16903d3d4998c8b9581e5810476708f31a2749ed96df81bcfafc",
+      "physical_lines": 864,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/release-artifacts.mjs",
+      "sha256": "58cc30edb059cc60f690b3bf9bc4fe74fc0e6ed38d6935233ea75e93d71598d7",
+      "physical_lines": 52,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/release-candidate-report.mjs",
+      "sha256": "91468470c99ed2733fd4d15e381deefb331d0a9ba2744ad8cbdc8464747dbd83",
+      "physical_lines": 107,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/release-download.mjs",
+      "sha256": "8bd1859222d6c332831ee09a7d9105271df5b856c3b0eafc937742e9238e6c59",
+      "physical_lines": 110,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-054",
+          "start": 1,
+          "end": 110
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/release-trust.mjs",
+      "sha256": "aa542fa083a7aa77091aedabf67ef993539e08ecd43d8b749624ca774d053d26",
+      "physical_lines": 62,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-054",
+          "start": 1,
+          "end": 62
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/run-agent-dev.mjs",
+      "sha256": "9124ba25b62d14d71ee37ef8f53921886c3066a9d6ab48a075eec963247fca54",
+      "physical_lines": 12,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/run-kiro-agent-real-driver.mjs",
+      "sha256": "c252437a886b3b03de3ce56fdbddb020da0b31d7e5b71328671cc0c9438d5c06",
+      "physical_lines": 2724,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/source-install.mjs",
+      "sha256": "324619bb3d7821589ca9cbed1d38c2934522a4c673331eb4ebf23a7b280da3c0",
+      "physical_lines": 39,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-051",
+          "start": 1,
+          "end": 39
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "scripts/validate-agent-package.mjs",
+      "sha256": "9e5708357cb5035c48dafe1a1e1492054afb197d2b1ea03b9a062312bfb37a60",
+      "physical_lines": 297,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "skills/fabric-exec/SKILL.md",
+      "sha256": "a7f42f8c2ac4d4b916b293de9dbfe5e924866d3d62f00994ddc3efa408e6710c",
+      "physical_lines": 50,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "skills/fabric-exec/references/api.md",
+      "sha256": "74d0fae68217bf89c583f9cd7aef90e145579fe978394cac9920732f793e2fc8",
+      "physical_lines": 86,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/async-settlement.ts",
+      "sha256": "dc07d70653491f03a220b7552207e86808946eb1793173d981bb9065f94097a8",
+      "physical_lines": 73,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-023",
+          "start": 1,
+          "end": 73
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/config.ts",
+      "sha256": "5dd51a4f31a956bfbe28da80da3abbe4cd403f409414a125352ad5c98dee5be6",
+      "physical_lines": 344,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-061",
+          "start": 1,
+          "end": 240
+        },
+        {
+          "command": "C-073",
+          "start": 260,
+          "end": 344
+        },
+        {
+          "command": "C-092",
+          "start": 65,
+          "end": 144
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/core/action-registry.ts",
+      "sha256": "7828a837aa0d45eca3a7daa416a2266ebb1036138afe5c1d328bb1095207d998",
+      "physical_lines": 283,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-024",
+          "start": 1,
+          "end": 283
+        },
+        {
+          "command": "C-027",
+          "start": 228,
+          "end": 260
+        },
+        {
+          "command": "C-092",
+          "start": 65,
+          "end": 252
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/core/semantic-digest.ts",
+      "sha256": "1c3938b582eca2dd8baf099c3de34ec168e8033a299a777a7e88b72cf84ef7ef",
+      "physical_lines": 21,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/execution-service.ts",
+      "sha256": "ed3d1dc2596062064551a939c556220f72ef0c25d9d4f24d91c513a9694bb219",
+      "physical_lines": 385,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-023",
+          "start": 1,
+          "end": 300
+        },
+        {
+          "command": "C-026",
+          "start": 301,
+          "end": 385
+        },
+        {
+          "command": "C-070",
+          "start": 1,
+          "end": 385
+        },
+        {
+          "command": "C-092",
+          "start": 55,
+          "end": 150
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "d8163a6d2d34dae87d02cada2d73a123415be70f8296abc296389df82a128dbf",
+      "physical_lines": 59,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-047",
+          "start": 1,
+          "end": 59
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/installation/bundle-contract.mjs",
+      "sha256": "e5e1915f0854de6bc4e24ada4bd0de71d33edffbc72ff71d3ee9a5f88e67ff5d",
+      "physical_lines": 197,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/installation/installer-lock.mjs",
+      "sha256": "b658f6908515d67595b50983a70f301c067747732d60607537233e056ad52b65",
+      "physical_lines": 479,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kernel/fabric-exec-contract.ts",
+      "sha256": "8a30a9031d79ebec936a31772c0f0096d0a47f57ce8253dfc8b205376adfe734",
+      "physical_lines": 57,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kernel/index.ts",
+      "sha256": "8c84614507755388b00e28bf3065211265c5daee617b2f658b10bf33fd41760c",
+      "physical_lines": 10,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-086",
+          "start": 1,
+          "end": 10
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/artifacts.ts",
+      "sha256": "bc939c322af9a3357f5f65df54e922b8b387be4d9b15937adbc69db876c961c6",
+      "physical_lines": 138,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-043",
+          "start": 1,
+          "end": 138
+        },
+        {
+          "command": "C-060",
+          "start": 1,
+          "end": 138
+        },
+        {
+          "command": "C-093",
+          "start": 44,
+          "end": 138
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/bootstrap-provider.ts",
+      "sha256": "79827ef4da4dbffa6028aad73388dbf34b21bf35c2229651a476e76aa5a62d91",
+      "physical_lines": 52,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/canonical-path.ts",
+      "sha256": "7dfebc239c098467030f2b203aa67e56f65879591dbcf7f0c97bb303aa454906",
+      "physical_lines": 95,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/deadlines.ts",
+      "sha256": "2836a6a3223121d71eaf56e558cda39d6256dbc9c1cff1f6d282cc9c4e4b973a",
+      "physical_lines": 7,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/info-catalog.ts",
+      "sha256": "a36563a00c099fbadd53be6cea3becdaf9a64c14a076e49fd46a811e069a8669",
+      "physical_lines": 72,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/managed-generation.ts",
+      "sha256": "9e15c571d2fb0658e2b02f9acc1fae6f54b4ba6fa2825a40e72d3874485ecfc1",
+      "physical_lines": 100,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-071",
+          "start": 1,
+          "end": 100
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/mcp-entry.ts",
+      "sha256": "8bdc2497d7e4f7610b9589682b80d3dbed0f2070ed200ae91eb4fc3b3667a8f4",
+      "physical_lines": 122,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-027",
+          "start": 1,
+          "end": 122
+        },
+        {
+          "command": "C-086",
+          "start": 1,
+          "end": 100
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/mcp-provider.ts",
+      "sha256": "573fda719e59c58aabac3862558213dfe1639a6a7bc5a065828bdea8fd6e19e5",
+      "physical_lines": 1024,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-061",
+          "start": 1,
+          "end": 280
+        },
+        {
+          "command": "C-062",
+          "start": 281,
+          "end": 590
+        },
+        {
+          "command": "C-064",
+          "start": 550,
+          "end": 815
+        },
+        {
+          "command": "C-065",
+          "start": 816,
+          "end": 1024
+        },
+        {
+          "command": "C-066",
+          "start": 265,
+          "end": 720
+        },
+        {
+          "command": "C-093",
+          "start": 188,
+          "end": 238
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/mcp-server.ts",
+      "sha256": "35b4d1ef75254dc3c7d5e397af47a2331fcf9b3f8dd5ff2c4c67d4b285ec6e8a",
+      "physical_lines": 572,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-028",
+          "start": 1,
+          "end": 220
+        },
+        {
+          "command": "C-029",
+          "start": 221,
+          "end": 572
+        },
+        {
+          "command": "C-070",
+          "start": 335,
+          "end": 450
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/memory-provider.ts",
+      "sha256": "8c0d4b3231ad8b809f533fb159ec9a42799ad855c1137589971eb9588cfd7fc0",
+      "physical_lines": 69,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-040",
+          "start": 1,
+          "end": 69
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/memory.ts",
+      "sha256": "345cb95fe8b440a8cdb4eccca398498c7cbd41ecd4420b8bdc88afcb89829b69",
+      "physical_lines": 874,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-040",
+          "start": 1,
+          "end": 160
+        },
+        {
+          "command": "C-041",
+          "start": 161,
+          "end": 360
+        },
+        {
+          "command": "C-042",
+          "start": 361,
+          "end": 590
+        },
+        {
+          "command": "C-043",
+          "start": 588,
+          "end": 874
+        },
+        {
+          "command": "C-060",
+          "start": 320,
+          "end": 390
+        },
+        {
+          "command": "C-064",
+          "start": 505,
+          "end": 575
+        },
+        {
+          "command": "C-066",
+          "start": 587,
+          "end": 665
+        },
+        {
+          "command": "C-086",
+          "start": 1,
+          "end": 95
+        },
+        {
+          "command": "C-093",
+          "start": 588,
+          "end": 782
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/power/agent-launch-context.ts",
+      "sha256": "27909d9a7489ca886d69913dc2ac8aa63197c82e3c827a187e4dc5823d8412d3",
+      "physical_lines": 44,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-061",
+          "start": 1,
+          "end": 44
+        },
+        {
+          "command": "C-073",
+          "start": 1,
+          "end": 44
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/power/approver.ts",
+      "sha256": "b34de9452c34c9c8499feca23c458fa7a150429de4aad387fc028f028618e1da",
+      "physical_lines": 141,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-026",
+          "start": 1,
+          "end": 141
+        },
+        {
+          "command": "C-092",
+          "start": 60,
+          "end": 141
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/power/artifacts-provider.ts",
+      "sha256": "45dad4d3ba589d48d8063b937910ffe217f1db210d07c40e1cfde325c612a4a7",
+      "physical_lines": 25,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/power/data-paths.ts",
+      "sha256": "ecd68ff4779eccf61056e24b2a3da319d5ccde2cf0a4f7a56655710bbd77a89f",
+      "physical_lines": 333,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-040",
+          "start": 1,
+          "end": 333
+        },
+        {
+          "command": "C-086",
+          "start": 1,
+          "end": 155
+        },
+        {
+          "command": "C-087",
+          "start": 197,
+          "end": 333
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/power/workspace-binding.ts",
+      "sha256": "97127179ce198c0ce80dad71c1251541571a37fcf37573191f0a9526eea04034",
+      "physical_lines": 334,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-061",
+          "start": 1,
+          "end": 334
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/power/workspace-context.ts",
+      "sha256": "a1a67d0e0995d046009f3f17512b16e66f5e95a3ca97edffa1da77735ef0ee23",
+      "physical_lines": 137,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-073",
+          "start": 1,
+          "end": 130
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/projection.ts",
+      "sha256": "d7c9946dd1e10ba4b581c670e4ad5903dd427dc2fd0b4f58f165512be80d6f19",
+      "physical_lines": 151,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/kiro/runtime.ts",
+      "sha256": "8cc18dd04a53a0694f643f1d36f5d6b499d4bade028b56d59c47e5e53609cd72",
+      "physical_lines": 79,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-027",
+          "start": 1,
+          "end": 79
+        },
+        {
+          "command": "C-092",
+          "start": 1,
+          "end": 79
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/protocol.ts",
+      "sha256": "ebd8e8123a673c2fb02df2a6bc16c238af5cc076313871b6761a248398146bec",
+      "physical_lines": 97,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/providers/local-contract.ts",
+      "sha256": "8d905453de6a0089c56f6870362c86dd1be682b5afe306165874fa2fe26c0712",
+      "physical_lines": 48,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-034",
+          "start": 1,
+          "end": 48
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/providers/local-executable.ts",
+      "sha256": "919bb2f1340fd104613e208f09106494b6ae865fc610c42eb0bcde8e2bc610f2",
+      "physical_lines": 91,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/providers/local-path.ts",
+      "sha256": "447f6192c8567cec2dbb2c20b714d7387a609bec0821ee83765e1f8b344b413b",
+      "physical_lines": 113,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-034",
+          "start": 1,
+          "end": 113
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/providers/local-provider.ts",
+      "sha256": "58ae4d2cc67f39bfa477c3947d4be8f2dbca61434c2d23c4f202be94c6a9f426",
+      "physical_lines": 503,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-035",
+          "start": 1,
+          "end": 235
+        },
+        {
+          "command": "C-037",
+          "start": 235,
+          "end": 503
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/providers/local-shell.ts",
+      "sha256": "cf13a3c759f8757805b45b45dc3d15e944d7ceb63ac7d06c404f5250b685cf8a",
+      "physical_lines": 170,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-036",
+          "start": 1,
+          "end": 170
+        },
+        {
+          "command": "C-088",
+          "start": 1,
+          "end": 107
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/providers/owned-file.ts",
+      "sha256": "ff3786b92f110c3c91ddcea9bd9b6c9cd704a69f463ce521e2a0c3c1c6dac926",
+      "physical_lines": 36,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-047",
+          "start": 1,
+          "end": 36
+        },
+        {
+          "command": "C-060",
+          "start": 1,
+          "end": 36
+        },
+        {
+          "command": "C-093",
+          "start": 1,
+          "end": 36
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/providers/state-provider.ts",
+      "sha256": "8cc39b42b9cc56bbbe4cb10e96b61dea91384805e7511d7d68c3421c3cc0eaab",
+      "physical_lines": 360,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-038",
+          "start": 1,
+          "end": 340
+        },
+        {
+          "command": "C-039",
+          "start": 110,
+          "end": 360
+        },
+        {
+          "command": "C-086",
+          "start": 1,
+          "end": 90
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/runtime/compiler-worker-entry.ts",
+      "sha256": "cd97a07bc1e80f0306d23eac70c7aed21b5917a07bc41ef81e988b25d384d20d",
+      "physical_lines": 21,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-030",
+          "start": 1,
+          "end": 21
+        },
+        {
+          "command": "C-088",
+          "start": 1,
+          "end": 21
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/runtime/deadline.ts",
+      "sha256": "a97b2b0d78a10654fd12d732d461a11c1a8649868b601dbff16a7b4a8bcce959",
+      "physical_lines": 31,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/runtime/guest-stack-map.ts",
+      "sha256": "57c0b07c4e234984dedc2cfb637e577323cbf4bf26920b075ef93ff3714bde93",
+      "physical_lines": 133,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/runtime/guest-types.ts",
+      "sha256": "ce919800945eeeab0fc12fb9a0f441e9238ddc9410e5f880aca1d40f50956eb2",
+      "physical_lines": 94,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/runtime/json-budget.ts",
+      "sha256": "a6a19ee68375b30ade67445805e3554b81bdbfb22c420858c67da94bf782adda",
+      "physical_lines": 97,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/runtime/quickjs-runtime.ts",
+      "sha256": "48e1e0a05ec14fe950040e2901f95629ff9a4280b44106f033de28118346d5ef",
+      "physical_lines": 693,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-031",
+          "start": 1,
+          "end": 170
+        },
+        {
+          "command": "C-032",
+          "start": 171,
+          "end": 355
+        },
+        {
+          "command": "C-033",
+          "start": 354,
+          "end": 540
+        },
+        {
+          "command": "C-034",
+          "start": 541,
+          "end": 693
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/runtime/source-limit.ts",
+      "sha256": "8693f177f72ac8f93c1bce0c13d0d988708c08784a35dda8871419d3873367a1",
+      "physical_lines": 39,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/runtime/type-checker.ts",
+      "sha256": "d18535736dfe5c6e80987de03a98c0844c02d225f611f3f06ebb6ebc2e66504c",
+      "physical_lines": 350,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-030",
+          "start": 1,
+          "end": 270
+        },
+        {
+          "command": "C-031",
+          "start": 120,
+          "end": 350
+        },
+        {
+          "command": "C-088",
+          "start": 175,
+          "end": 263
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/schema-validation.ts",
+      "sha256": "674af71999fa1a3e8656cf1933f20e618c0a17e21f221d47df2e5b580019c0c1",
+      "physical_lines": 197,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/trace/trace-writer.ts",
+      "sha256": "bd539ccddbbc37a7040db14a6c322ba82d7169b05c33211ee7c522028074eaed",
+      "physical_lines": 166,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-062",
+          "start": 1,
+          "end": 166
+        },
+        {
+          "command": "C-067",
+          "start": 1,
+          "end": 74
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "src/trace/tracer.ts",
+      "sha256": "8ada50f19289d2875c11767bed6db819e0817a9138139186cabb4f9b75e06e61",
+      "physical_lines": 167,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-062",
+          "start": 1,
+          "end": 167
+        },
+        {
+          "command": "C-067",
+          "start": 1,
+          "end": 167
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/action-registry.test.ts",
+      "sha256": "f22194f8d58ddba07ceac68bfd447cfb6b8e8c889564f7d792e9dfe087f83407",
+      "physical_lines": 151,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/agent-doctor.test.ts",
+      "sha256": "aa9f217f26b0198ad182371b2ced9e8bdfd23759a7e322af34ec62d736a80b00",
+      "physical_lines": 131,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/agent-profile.test.ts",
+      "sha256": "7f9009a212941403076d6523f4428cad14a33d4a91a24b40ac11e166093ccdba",
+      "physical_lines": 242,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/agent-user-install.test.ts",
+      "sha256": "1ad5f1f34cbad1612466ca52ec8c7b3da613ce5222a663165ace6da3a882515d",
+      "physical_lines": 689,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/approval-projection.test.ts",
+      "sha256": "854b9bc2cca4904a63ca923c939b7a30a0b0919d8d71014f053c7d4b4e07d9d6",
+      "physical_lines": 279,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/approval-quotas.test.ts",
+      "sha256": "819d92350299158f4a1db3fae82c915718bfe2623d20937f2d3ed8f1d8c63ee3",
+      "physical_lines": 446,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/archive.test.ts",
+      "sha256": "bb684f62d0a9946fec57c2edaf6368d56d5ca355c0b7b7505ad8da1714ff2786",
+      "physical_lines": 210,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/artifacts-state.test.ts",
+      "sha256": "2ffb11fd819fdf96779de25427bf9ababc9c58edf5842a0968c413c6c7a66471",
+      "physical_lines": 185,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-072",
+          "start": 1,
+          "end": 150
+        },
+        {
+          "command": "C-093",
+          "start": 44,
+          "end": 83
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/bundle-archive.test.ts",
+      "sha256": "14263d7db23942b608cb776b882f43719638e943320cd3633ffd0c73f26e4578",
+      "physical_lines": 15,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/bundle-contract.test.ts",
+      "sha256": "cffec6090285acdcb04f58beb8d6f406f4d25c3056c359f4c510524ac7f9b8e7",
+      "physical_lines": 57,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/bundle-fixture.ts",
+      "sha256": "44ca05234f2cd927d3ca630dad099a16441b0dcd968962b043d0692f5ef5db59",
+      "physical_lines": 23,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/compiler-isolation.test.ts",
+      "sha256": "510f6e37e6697a1d4923cdf262943eb1e5bef603232f9713c9e20ae831d2c81f",
+      "physical_lines": 80,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/compiler-ownership.test.ts",
+      "sha256": "f504a62f0b890fbcda76c44c0dcdc6909322f0f54e7d864ef5b97ea18b05790a",
+      "physical_lines": 119,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/configuration.test.ts",
+      "sha256": "6b744b25183f9c88c1c699b46955ce9f2d5163b11890512bb6ca9f240e5f3184",
+      "physical_lines": 193,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/deadline-policy.test.ts",
+      "sha256": "01c0c47fe3659cd5fbfc6010189cbfb584486b37fb1f69fbbcf0710006749d4c",
+      "physical_lines": 151,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/efficiency-baseline.test.ts",
+      "sha256": "395bc8913c23c540b813c97047ddeafbe49bbd28f0825f110ceca73cab6dff20",
+      "physical_lines": 148,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/execution-admission.test.ts",
+      "sha256": "13974994bc2fbb724ed136d7cd8b86d3c9391a40a9acdb685a4537c0d39db79f",
+      "physical_lines": 114,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/fabric-exec-contract.test.ts",
+      "sha256": "e0baa5cb8cfad8ee50991da5911e60736926586503fa62a4b462dcf2146a8454",
+      "physical_lines": 73,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/hermetic-stage.test.ts",
+      "sha256": "828592e685da29e4bac0b9e62d637b9b09d8a61a9a28c0d3676b150546ff7262",
+      "physical_lines": 77,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/info-catalog.test.ts",
+      "sha256": "333b8840338918b64e9fa7b01d39477b6a003a395e47db6f60c801aff2cfe1a8",
+      "physical_lines": 49,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/install-manager-cli.test.ts",
+      "sha256": "d6454e4de941e86f2d71a5dedfda90be05e475a49415175687aa6ed5b02ff736",
+      "physical_lines": 52,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/install-transaction.test.ts",
+      "sha256": "b51b428d0b1dde5a98cc8b7d4f5701fd92c69dc2e7851d8a3ab669dee6fc0afc",
+      "physical_lines": 39,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/installed-independence.test.ts",
+      "sha256": "e81a74c03ecd995ce14a1cf1395e1fdf4718c87fc9c805fa93b5dbbc929bf5da",
+      "physical_lines": 156,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-022",
+          "start": 1,
+          "end": 130
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/installer-bootstrap.test.ts",
+      "sha256": "c611613b43942cf0ca710f30801bf7704aba7d9c446b6798eeb05eb6a4e70c8d",
+      "physical_lines": 140,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/installer-executable-trust.test.ts",
+      "sha256": "c7f8dc30b51f22ed545a20d8406ce8616bf30dc9c5ad34ed030771d28ab555eb",
+      "physical_lines": 72,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/installer-home.test.ts",
+      "sha256": "8c35573b176807366d422cfe64ba7e0c5a462dcc035b9d8c410109c9303318d7",
+      "physical_lines": 45,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/installer-lock.test.ts",
+      "sha256": "75476daed5881373e1f8f4eced3ca6f770bf68e41f731c78746bc45f1b32c7a4",
+      "physical_lines": 443,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-077",
+          "start": 345,
+          "end": 443
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/installer-platform.test.ts",
+      "sha256": "5b76002e66fe6ed1bb289bdb709d6c4028b00d86b59444d3c78f1475a313790f",
+      "physical_lines": 20,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/json-budget.test.ts",
+      "sha256": "85cd6ed3ffb1b70ca3e03709e581831d1dff374a99b62ba4037859fa49c1d444",
+      "physical_lines": 51,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/legacy-archive.test.ts",
+      "sha256": "dcd2a8f4f1d18565c60979eac89eeb2484295c9c7c33453da3906766fd302212",
+      "physical_lines": 50,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/local-diagnostics.test.ts",
+      "sha256": "05a4abc91aa99b93351a095b1701877b16dd99696b0b74be5351428b0e24a418",
+      "physical_lines": 59,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/local-executable.test.ts",
+      "sha256": "c662ef74018faf97d068d08f98971be035826d7fd73327791549df6066d740f2",
+      "physical_lines": 36,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/local-lock-reliability.test.ts",
+      "sha256": "d1be1868fd1918491c473b44691d2b8763fa98e6f3fd47e7bcce6cde0935e48d",
+      "physical_lines": 69,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/local-provider.test.ts",
+      "sha256": "3f5d8f758b365e09a324caf4d21c30fe30807b0ac59dfc924eed84f2049561e4",
+      "physical_lines": 462,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/local-search-work.test.ts",
+      "sha256": "73bcc3f21002a18dcf77f338fcc2205218aea7c7d2a6e945d9107adce06147a5",
+      "physical_lines": 52,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/local-shell.test.ts",
+      "sha256": "1a209003a44ea5738728f6cc04e39eff27c33849632b3572e8c38d12ef8545ce",
+      "physical_lines": 102,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-077",
+          "start": 39,
+          "end": 67
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/managed-generation.test.ts",
+      "sha256": "81d12cbcb677092b330cf5bb32ae2794a61de894d806b52247e529471c2e1425",
+      "physical_lines": 84,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/managed-installation.test.ts",
+      "sha256": "0563d845d864c1445644226e04b014c258437d52ea229e96a48f3511cd681e46",
+      "physical_lines": 68,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/mcp-federation.test.ts",
+      "sha256": "3f109082f6082d9ccca3b263f102e4fe91b63e3a6f3c0a6b52f8990f133f7fdd",
+      "physical_lines": 764,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/mcp-pagination.test.ts",
+      "sha256": "1a854a41a745efb13d0aa800d42aa3e229a7e771dd72ae12f7a1a27b3cfb9084",
+      "physical_lines": 107,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/mcp-process-lifecycle.test.ts",
+      "sha256": "b848af2ea8a2cc847e0ba83cb31c5cbaccba99992da74e8e47e4d4afbee261e5",
+      "physical_lines": 768,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/memory-acknowledgement.test.ts",
+      "sha256": "e7edf4e76e898dd4aaaafabcdfbd456ff2ebfbd178cf553ff401fbc5dc71b7b3",
+      "physical_lines": 101,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-072",
+          "start": 1,
+          "end": 101
+        },
+        {
+          "command": "C-078",
+          "start": 1,
+          "end": 65
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/memory-delete-ack.test.ts",
+      "sha256": "c04827ff694a670650a9f606580a50e61e37a78e622c6759c8a61a510f4261c3",
+      "physical_lines": 50,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/memory-lock-safety.test.ts",
+      "sha256": "dfef1628dd5571c87ce2bff13d20237e8e7160fa45be3a967d05c2adeac79d00",
+      "physical_lines": 130,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/memory-recovery.test.ts",
+      "sha256": "c035acc5a7ef63c2005690dcf537ba9b2398de2bda793df9e44f19a5b248dc63",
+      "physical_lines": 269,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/memory-security.test.ts",
+      "sha256": "2204141187dff5dbe3f3c3363d3dbfd5827b868de1b796960cbfa74424a52e1b",
+      "physical_lines": 111,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/migration.test.ts",
+      "sha256": "34d86af0963fd77c0bf2d8f1bdc36eb174111a2ec459a1974b11b928fafc2575",
+      "physical_lines": 74,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/owned-file.test.ts",
+      "sha256": "7ea98136cac20138d7f276e853e026a2cbafde0ae1b3e73aa8afd3bc8f5f6205",
+      "physical_lines": 20,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/package-boundary.test.ts",
+      "sha256": "7b9f10378785b969b689588baad6dfb3b47b7c8f648501ee02b7336da6cec7b5",
+      "physical_lines": 292,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-078",
+          "start": 175,
+          "end": 248
+        },
+        {
+          "command": "C-104",
+          "start": 237,
+          "end": 267
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/private-tools.test.ts",
+      "sha256": "0f31ef6f5b187e6efb7a68404eb210016027ba78752b7037024892aae906f1cc",
+      "physical_lines": 29,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/quickjs-runtime.test.ts",
+      "sha256": "6409c3860f43fbd095f4fbd75f0afe19828328d40ebf31fa59fc6e6d24f16093",
+      "physical_lines": 322,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/release-artifacts.test.ts",
+      "sha256": "80409908df0f93b9731170e7165d9ae19d7d998d2a9439366c145b5d33b09558",
+      "physical_lines": 89,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-022",
+          "start": 1,
+          "end": 65
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/release-download.test.ts",
+      "sha256": "c5791d7fa57b88fee605587d92f649df2f0e472991c2bc8e93edb3cbc064d5ab",
+      "physical_lines": 70,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-022",
+          "start": 1,
+          "end": 50
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/release-evidence.test.ts",
+      "sha256": "e70e7f4857895f31eb6c6f494de2e35e922fc90b0e42feba9d4a571d4cf99805",
+      "physical_lines": 1520,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/release-fixture.ts",
+      "sha256": "eaaf634a27e724a01c51f6b5fa873d2cdf2db3c005ef68887c39528c98c47f93",
+      "physical_lines": 9,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/release-trust.test.ts",
+      "sha256": "917a570c977789b9da9c6c6c6fda3173530481ab8e945dbf2a717fc360c2fcc6",
+      "physical_lines": 19,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/release-workflow.test.ts",
+      "sha256": "51850b07d73b20318fd7379197cbfc2df9bd856b86e677973a10f74ef02f18ef",
+      "physical_lines": 147,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/sbom-identity.test.ts",
+      "sha256": "0533607ef3fcfae6f79d2381ba146761bb3dc6180622f5f242d0c7270865cdcc",
+      "physical_lines": 49,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/schema-validation.test.ts",
+      "sha256": "5bcdb756258001d1b9b02645d21c74256a4fffa85a26b77af6a78c53ae2ea538",
+      "physical_lines": 27,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/server-efficiency.test.ts",
+      "sha256": "c6cd420eae4795224df7979123fa852669af97c0356da79818581ba292a14c03",
+      "physical_lines": 213,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/source-bootstrap.test.ts",
+      "sha256": "cb8dd79d8a1acbd0d8545ccde7623b84076b6a2283fb95e10564bda81063f92a",
+      "physical_lines": 57,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-022",
+          "start": 1,
+          "end": 57
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/state-reliability.test.ts",
+      "sha256": "77512bb0a463afcc296b1e307628b241737acaa5a97368bffd40969f1e867ae1",
+      "physical_lines": 130,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/storage-failure.test.ts",
+      "sha256": "34dd0b87aa54dea8e497984af6a757f6ec9414c47fb984136e459bd1855eaa58",
+      "physical_lines": 106,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [
+        {
+          "command": "C-047",
+          "start": 1,
+          "end": 106
+        },
+        {
+          "command": "C-093",
+          "start": 90,
+          "end": 106
+        }
+      ],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/strict-bootstrap.test.ts",
+      "sha256": "e28186c2f34150b70466c21dbf4c55b0132cb47049a8e4d067a000f759f04bb2",
+      "physical_lines": 204,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/trace-analyze.test.ts",
+      "sha256": "f88d53f16f1588d3eecd737c10183c4c846ffe75aeb7736948ebab67358d4bc4",
+      "physical_lines": 199,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/tracing.test.ts",
+      "sha256": "79699eb73f2b66b9d6eeb5f7d913e5fe8498ddc95ab823807d6e7c19befeac84",
+      "physical_lines": 343,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tests/workspace-binding.test.ts",
+      "sha256": "1287ec05d17053cdbf559e769913dcfd81e30416ba2e4c61d38a0bd52c28b4bb",
+      "physical_lines": 134,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tsconfig.build.json",
+      "sha256": "c686feacf1aa9ff58bb756e62404cb140ef974c9ceb671054ad3cb33f51e974c",
+      "physical_lines": 13,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "efd3e11265c46f657fd78a9ab0426bbaf455ade35d5145b6b932f3b50d78cc62",
+      "physical_lines": 22,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "tsconfig.scripts.json",
+      "sha256": "88dcbfd4262daf97e911e4c692747ada1b7c6ce95c977e53c9084391947a95d2",
+      "physical_lines": 20,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    },
+    {
+      "path": "vitest.config.ts",
+      "sha256": "6c070134e1d954f812c072329c88b2c25bd78f0b6a056a67add4bf89c1d53cda",
+      "physical_lines": 12,
+      "inventory": "baseline manifest; C-007/C-015/C-016/C-059 as applicable",
+      "recorded_source_reads": [],
+      "depth": "See report component ledger; extracted ranges alone do not establish an end-to-end review"
+    }
+  ]
+}
