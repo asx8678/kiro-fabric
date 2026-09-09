@@ -172,6 +172,8 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `scripts/install-manager.mjs`
 - `scripts/install-transaction.mjs`
 - `scripts/installer-configuration-backup.mjs` — pre-mutation Kiro configuration backup with hash-verified, containment-checked restore.
+- `scripts/installer-home-preparation.mjs` — read-only directory/profile preflight, inode-checked private permissions, and explicit checksum-verified Pi Fabric profile preservation under the installation lock.
+- `scripts/installer-shell-integration.mjs` — backed-up bash/zsh workspace handoff, explicit opt-out, owned-block updates/removal, and interrupted-operation recovery without inferring backend cwd.
 - `scripts/installer-lock.mjs`
 - `scripts/installer-platform.mjs`
 - `scripts/installer-smoke.mjs`
@@ -197,6 +199,8 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `tests/install-transaction.test.ts`
 - `tests/installer-bootstrap.test.ts`
 - `tests/installer-home.test.ts`
+- `tests/installer-home-preparation.test.ts` — private directory preparation, legacy ownership verification, durable profile preservation, activation, and conflict/lock refusal coverage.
+- `tests/installer-shell-integration.test.ts` — fresh-terminal bash/zsh execution, per-project handoff, argv/exit preservation, shell conflicts, backups, and uninstall/crash recovery.
 - `tests/installer-lock.test.ts`
 - `tests/pinned-recovery.test.ts` — real child cwd pinning under pathname replacement, claim/control identity checks, canonical bounds and Node environment isolation.
 - `tests/installer-platform.test.ts`

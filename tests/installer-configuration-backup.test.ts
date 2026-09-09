@@ -3,7 +3,8 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { build } from "esbuild";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createConfigurationBackup,
@@ -178,5 +179,28 @@ describe("configuration backup", () => {
     fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
     const output = execFileSync(process.execPath, [module, "restore", backup.path, destination], { encoding: "utf8" });
     expect(output).toContain("Restored 3 files");
+  });
+
+  it("keeps the backup CLI inactive inside bundled manager commands", async () => {
+    const root = temporary(), manager = path.join(root, "install-manager.mjs");
+    await build({ entryPoints: [path.resolve("scripts/install-manager.mjs")], outfile: manager, bundle: true, platform: "node", format: "esm", target: "node24", logLevel: "silent" });
+    const kiroHome = temporary();
+    const doctor = spawnSync(process.execPath, [manager, "doctor", "--kiro-home", kiroHome, "--json"], {
+      env: { HOME: root, PATH: "", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 10000,
+    });
+    expect(doctor.status).toBe(5); // Fabric and Kiro are absent in this fixture.
+    expect(JSON.parse(doctor.stdout)).toMatchObject({ command: "doctor", outcome: "diagnostic-failure" });
+    expect(doctor.stderr).toBe("");
+
+    seedConfiguration(kiroHome);
+    const backup = backupOf(kiroHome, "install"), destination = temporary();
+    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    const restored = spawnSync(process.execPath, [manager, "restore", "--backup", backup.path, "--kiro-home", destination, "--yes", "--non-interactive", "--json"], {
+      env: { HOME: root, PATH: "", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 10000,
+    });
+    expect(restored.status, restored.stdout + restored.stderr).toBe(0);
+    expect(JSON.parse(restored.stdout)).toMatchObject({ command: "restore", outcome: "restored", restored: 3 });
+    expect(restored.stderr).toBe("");
+    expect(fs.readFileSync(path.join(destination, "settings/global.json"), "utf8")).toBe('{"theme":"dark"}\n');
   });
 });

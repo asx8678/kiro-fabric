@@ -51,7 +51,7 @@
     "comparison:report": "node scripts/agent-comparison.mjs report",
     "agent:validate": "node scripts/validate-agent-package.mjs .tmp/kiro-fabric-agent",
     "agent:stage:local": "pnpm run build && node scripts/build-agent-dev.mjs",
-    "agent:install": "bash ./install.sh --source",
+    "agent:install": "bash ./install.sh --source --migrate-pi-fabric",
     "agent:update": "pnpm run agent:install",
     "agent:uninstall": "node scripts/install-manager.mjs uninstall",
     "agent:doctor": "node scripts/install-manager.mjs doctor",

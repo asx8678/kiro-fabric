@@ -5,16 +5,16 @@ import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { extractBundleArchiveBytes } from '../scripts/bundle-archive.mjs';
-import { canonical, createBundleManifest, validateBundle } from '../scripts/bundle-contract.mjs';
+import { canonical, createBundleManifest, validateBundle, sha256 } from '../scripts/bundle-contract.mjs';
 import { installCompleteGeneration, completeGenerationLauncher } from '../scripts/managed-installation.mjs';
 import { smokeCandidate } from '../scripts/installer-smoke.mjs';
 
 type Backend = { command: string; args: string[]; env: Record<string, string> };
 
 // Raw MCP transport deliberately launches the installed profile, not source or a test backend.
-async function checkedReadGrep(backend: Backend, cwd: string, env: Record<string, string>) {
+async function checkedReadGrep(backend: Backend, cwd: string, env: Record<string, string>, handoff?: string) {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(backend.command, backend.args, { cwd, env: { ...env, ...backend.env }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(backend.command, backend.args, { cwd, env: { ...env, ...backend.env, ...(handoff ? { KIRO_FABRIC_LAUNCH_WORKSPACE: handoff } : {}) }, stdio: ['pipe', 'pipe', 'pipe'] });
     let buffer = '', stderr = '', passed = false, failure: Error | undefined;
     const fail = (error: Error) => { failure ??= error; child.kill('SIGTERM'); };
     const timeout = setTimeout(() => fail(new Error('Installed MCP timed out')), 40_000);
@@ -30,7 +30,7 @@ async function checkedReadGrep(backend: Backend, cwd: string, env: Record<string
         if (!line.trim()) continue;
         try {
           const frame = JSON.parse(line);
-          if (frame.method === 'roots/list') send({ jsonrpc: '2.0', id: frame.id, result: { roots: [{ uri: pathToFileURL(cwd).href, name: 'independence' }] } });
+          if (frame.method === 'roots/list') send({ jsonrpc: '2.0', id: frame.id, result: { roots: handoff ? [] : [{ uri: pathToFileURL(cwd).href, name: 'independence' }] } });
           else if (frame.method === 'elicitation/create') send({ jsonrpc: '2.0', id: frame.id, result: { action: 'decline' } });
           else if (frame.id === 1 && !frame.method) {
             expect(frame.error).toBeUndefined();
@@ -78,12 +78,36 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect(bundle.digest).toBe(staged.digest);
     expect(bundle.manifest.target).toBe(`${process.platform}-${process.arch}`);
     const fake = path.join(bin, 'kiro-cli');
-    await fs.writeFile(fake, '#!/bin/sh\ncase "$*" in\n  --version) printf "kiro-cli 2.21.1\\n" ;;\n  "agent validate --help") printf "%s\\n" "--path" ;;\n  "--v3 --agent kiro-fabric") printf "%s\\n" "$PWD" "$HOME" "$KIRO_HOME" "$@" > "$FAKE_KIRO_CAPTURE" ;;\n  *) exit 91 ;;\nesac\n', { mode: 0o700 });
-    const env = { HOME: home, KIRO_HOME: kiroHome, TMPDIR: temporary, PATH: bin, LANG: 'C', LC_ALL: 'C', FAKE_KIRO_CAPTURE: path.join(root, 'client-contract') };
+    await fs.writeFile(fake, '#!/bin/sh\ncase "$*" in\n  --version) printf "kiro-cli 2.21.1\\n" ;;\n  "agent validate --help") printf "%s\\n" "--path" ;;\n  "--v3 --agent kiro-fabric"|"--agent kiro-fabric --v3") printf "%s\\n" "$PWD" "$HOME" "$KIRO_HOME" "$@" > "$FAKE_KIRO_CAPTURE"; printf "%s\\n" "$KIRO_FABRIC_LAUNCH_WORKSPACE" > "$FAKE_KIRO_CAPTURE.workspace" ;;\n  *) exit 91 ;;\nesac\n', { mode: 0o700 });
+    const env = { HOME: home, SHELL: '/bin/bash', KIRO_HOME: kiroHome, TMPDIR: temporary, PATH: bin, LANG: 'C', LC_ALL: 'C', FAKE_KIRO_CAPTURE: path.join(root, 'client-contract') };
     expect(await fs.readdir(bin)).toEqual(['kiro-cli']);
     expect(Object.hasOwn(env, 'NODE_PATH')).toBe(false);
     const opts = { kiroHome, userHome: home, env: {}, provenance: 'source', validateCandidate: smokeCandidate };
-    const installed = await installCompleteGeneration(bundleRoot, opts);
+    // Reproduce an ordinary existing Kiro home with the older Pi Fabric profile.
+    await fs.mkdir(kiroHome, { mode: 0o755 }); await fs.chmod(kiroHome, 0o755);
+    await fs.mkdir(path.join(kiroHome, 'agents'), { mode: 0o755 }); await fs.chmod(path.join(kiroHome, 'agents'), 0o755);
+    const oldRoot = path.join(kiroHome, '.kiro-fabric'), oldProfile = '{"name":"kiro-fabric","description":"old Pi Fabric"}\n';
+    await fs.mkdir(oldRoot, { mode: 0o700 });
+    await fs.writeFile(path.join(kiroHome, 'agents/kiro-fabric.json'), oldProfile, { mode: 0o600 });
+    await fs.writeFile(path.join(oldRoot, 'install.json'), JSON.stringify({ format: 1, owner: 'kiro-fabric', scope: 'user', profile: { path: 'agents/kiro-fabric.json', installedSha256: sha256(oldProfile) } }), { mode: 0o600 });
+    const managerModule = new URL('../scripts/install-manager.mjs', import.meta.url).href;
+    const preparation = spawnSync(process.execPath, ['--input-type=module', '-e', `import {runManager} from ${JSON.stringify(managerModule)}; process.exitCode = await runManager(['install','--kiro-home',process.argv[1],'--migrate-pi-fabric','--yes','--non-interactive','--json'], {context:{kind:'bootstrap'},sourceBundle:process.argv[2]});`, kiroHome, bundleRoot], { cwd, env, encoding: 'utf8', timeout: 90_000, maxBuffer: 1024 * 1024 });
+    expect(preparation.status, preparation.stdout + preparation.stderr).toBe(0);
+    expect(preparation.stderr).toBe('');
+    const installed = JSON.parse(preparation.stdout);
+    expect(installed.outcome).toBe('activated');
+    expect(installed.warnings).toContainEqual(expect.stringContaining(`Launch from your project directory with: ${installed.commands.start}`));
+    expect(installed.warnings).toContainEqual(expect.stringContaining('Bare kiro-cli --v3 may supply zero workspace roots'));
+    expect(installed.shellIntegration).toMatchObject({ status: 'configured', file: path.join(home, '.bashrc') });
+    const shell = spawnSync('/bin/bash', ['--norc', '-c', '. "$HOME/.bashrc"; kiro-cli --v3'], { cwd, env, encoding: 'utf8' });
+    expect(shell.status, shell.stderr).toBe(0);
+    expect((await fs.readFile(env.FAKE_KIRO_CAPTURE, 'utf8')).trimEnd().split('\n')).toEqual([cwd, home, kiroHome, '--agent', 'kiro-fabric', '--v3']);
+    const shellWorkspace = (await fs.readFile(env.FAKE_KIRO_CAPTURE + '.workspace', 'utf8')).trimEnd();
+    expect(shellWorkspace).toBe(cwd);
+    expect(installed.homePreparation.permissions).toHaveLength(2);
+    expect(await fs.readFile(installed.homePreparation.legacyProfileBackup, 'utf8')).toBe(oldProfile);
+    expect((await fs.stat(kiroHome)).mode & 0o777).toBe(0o700);
+    expect((await fs.stat(path.join(kiroHome, 'agents'))).mode & 0o777).toBe(0o700);
     const generation = path.join(installed.paths.runtime, installed.digest);
     const profileBytes = await fs.readFile(installed.paths.profile);
     const profile = JSON.parse(profileBytes.toString());
@@ -101,7 +125,6 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect(await controls()).toEqual(beforeNoop);
     // Exercise the real source frontend's presentation on a verified same-bundle no-op.
     // This trusted developer API call occurs before the acquisition fixtures are removed.
-    const managerModule = new URL('../scripts/install-manager.mjs', import.meta.url).href;
     const noOp = spawnSync(process.execPath, ['--input-type=module', '-e', `import { runManager } from ${JSON.stringify(managerModule)}; process.exitCode = await runManager(['install','--kiro-home',process.argv[1],'--yes','--non-interactive','--json'], {context:{kind:'bootstrap'},sourceBundle:process.argv[2]});`, kiroHome, bundleRoot], { cwd, env, encoding: 'utf8', timeout: 90_000, maxBuffer: 1024 * 1024 });
     expect(noOp.status, noOp.stdout + noOp.stderr).toBe(0);
     expect(JSON.parse(noOp.stdout)).toMatchObject({ committed: false, outcome: 'noop', restartRequired: false });
@@ -136,6 +159,8 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     await fs.writeFile(path.join(cwd, 'probe.txt'), 'independence-sentinel\n', { mode: 0o600 });
     // A cached retained-generation profile must still launch its own private tools.
     await checkedReadGrep(profile.mcpServers.fabric, cwd, env);
+    // Same failure mode as bare Kiro: zero client roots; use the shell-captured handoff.
+    await checkedReadGrep(profile.mcpServers.fabric, cwd, env, shellWorkspace);
     // Fixture setup leaves a real SIGKILL stale owner. Reclamation below MUST
     // run the installed bundled manager/private Node, with acquisition files gone.
     const lockModule = new URL('../scripts/installer-lock.mjs', import.meta.url).href;
@@ -152,7 +177,10 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     await fs.writeFile(rg, `#!/bin/sh\nprintf executed > '${marker}'\n`);
     try { run(['doctor', '--json'], 5); await expect(fs.stat(marker)).rejects.toMatchObject({ code: 'ENOENT' }); }
     finally { await fs.writeFile(rg, originalRg); }
-    expect(JSON.parse(run(['uninstall', '--yes', '--non-interactive', '--json'])).status).toBe('retired');
+    const retired = JSON.parse(run(['uninstall', '--yes', '--non-interactive', '--json']));
+    expect(retired.status).toBe('retired');
+    expect(retired.shellIntegration.status).toBe('removed');
+    await expect(fs.stat(path.join(home, '.bashrc'))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(fs.stat(installed.paths.profile)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(JSON.parse(run(['doctor', '--json'])).outcome).toBe('retired');
     run(['start'], 4);

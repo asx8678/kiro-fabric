@@ -32,7 +32,7 @@ For a new, absent home only (do not clone over existing Kiro data):
 ```sh
 git clone https://github.com/asx8678/kiro-fabric.git "$HOME/.kiro"
 cd "$HOME/.kiro"
-bash ./install.sh --source --kiro-home "$HOME/.kiro" --enable-pull-hook
+bash ./install.sh --source --kiro-home "$HOME/.kiro" --migrate-pi-fabric --enable-pull-hook
 # Subsequent source updates:
 git pull --ff-only origin main
 ```
@@ -47,50 +47,90 @@ From an external checkout containing `install.sh`, the same command works on Lin
 
 ```sh
 cd /path/to/kiro-fabric
-bash ./install.sh --source --kiro-home "$HOME/.kiro"
-"$HOME/.kiro/kiro-fabric/bin/kiro-fabric" doctor
+bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --migrate-pi-fabric
+"${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" doctor
 cd /path/to/your/project
-kiro-cli --v3 --agent kiro-fabric
+"${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start
 ```
+
+The install command works for any username on Linux or macOS: it uses `KIRO_HOME`
+when set, otherwise `$HOME/.kiro`. After confirmation, installation changes the
+selected home and its existing `agents` directory from ordinary user-owned modes
+such as 0755/0750 to private mode 0700. Missing directories are created privately.
+No manual `chmod` or `sudo` is needed. Foreign ownership, writable-by-others
+directories, and symlinks are rejected before building; other directory/file
+permissions are preserved. Doctor never adjusts permissions.
+
+`--migrate-pi-fabric` also handles an older Pi Fabric profile using
+`.kiro-fabric/install.json`. The record must identify a user installation and its
+profile checksum must match. A complete configuration backup is required before
+the verified profile is copied durably to `kiro-fabric/legacy-profiles/` and removed
+from the active profile path under the installation lock. Old runtimes and other
+agents remain in place. Unknown or modified profiles are preserved and rejected.
+The option does nothing when migration is unnecessary. If later activation fails,
+the error reports the saved profile path; keep that backup when retrying.
 
 The source command already performs frozen dependency installation and a build. A fresh clone only contains committed/published files: `No such file or directory` for `install.sh` means the checkout is missing the installer, not that macOS needs a different command. Obtain a revision containing the installer and its companion scripts; copying only `install.sh` is insufficient. These local changes do not reach another computer until explicitly transferred or committed and pushed.
 
 From the existing trusted checkout:
 
 ```sh
-bash ./install.sh --source
+bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --migrate-pi-fabric
+# equivalent package command (includes the migration option):
+pnpm run agent:install --kiro-home "${KIRO_HOME:-$HOME/.kiro}"
 # automation, using a disposable or explicitly intended home:
-bash ./install.sh --source --kiro-home /absolute/kiro-home --yes --non-interactive --json
+bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --migrate-pi-fabric --yes --non-interactive --json
 ```
 
 Source mode requires developer Node >=24 and pnpm 11.20.0, installs frozen dependencies and builds the current checkout including local changes. It never clones/resets. Local-source provenance records Git HEAD, dirty state and a source-input digest. Default `bash ./install.sh` fails clearly until a genuine release-pinned bootstrap is generated.
 
-The selected global home is explicit --kiro-home, supplied KIRO_HOME, then the current user's home/.kiro. Empty/relative/control-bearing and unsafe destinations fail. Invocation cwd is not coding-workspace authority. No shell/default-agent/settings/authentication changes occur.
+The selected global home is explicit --kiro-home, supplied KIRO_HOME, then the current user's home/.kiro. Empty/relative/control-bearing and unsafe destinations fail. Invocation cwd is not coding-workspace authority. Install/update configure a backed-up bash/zsh workspace-handoff block by default (opt out with --no-shell-integration). No default-agent setting or authentication changes occur.
 
-### Optional: use `kiro-cli --v3` directly from zsh
+### Troubleshooting: `Verified workspace binding is required` / `explicitly-empty`
 
-The installed `kiro-fabric start` command already supplies the workspace handoff.
-If you prefer typing `kiro-cli --v3`, add this function once to `~/.zshrc`
-(preserve existing content and reconcile any existing function with this name):
+This means Fabric has no authorized project directory, not that installation failed.
+Exit the current Kiro session, then run from the project you want to review:
 
-```zsh
-kiro-cli() {
-  local arg
-  for arg in "$@"; do
-    if [[ "$arg" == "--v3" ]]; then
-      KIRO_FABRIC_LAUNCH_WORKSPACE="$(pwd -P)" command kiro-cli "$@"
-      return $?
-    fi
-  done
-  command kiro-cli "$@"
-}
+```sh
+"${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start
 ```
 
-Run `source ~/.zshrc`, change to your project, and start a **new** session with
-`kiro-cli --v3 --agent kiro-fabric`. If Fabric is already your default agent,
-`kiro-cli --v3` is sufficient. This does not alter your default agent or the
-Kiro executable. Each invocation supplies its own canonical folder; no global
-project path is stored. The source installer does not edit shell startup files.
+The launcher selects the Fabric agent and supplies the canonical project path.
+A bare `kiro-cli --v3` can return zero MCP roots even when launched inside a project.
+`fabric.workspace` status/list now return recovery guidance in that case; listing
+roots again cannot create a missing handoff. Do not disable workspace checks or
+set a fixed project directory in the global agent profile. An already healthy
+installation with the handoff entry does not need reinstalling to use `start`.
+
+### Automatic shell setup: `kiro-cli --v3`
+
+Install and update now configure the current user's bash (`~/.bashrc`) or zsh
+(`${ZDOTDIR:-$HOME}/.zshrc`) automatically, based on `SHELL`. **Open a new terminal**
+after installation, change to your project, and run `kiro-cli --v3`. No manual
+function, environment export, or workspace attachment is required. An installer
+subprocess cannot change the shell that launched it; existing terminals/sessions
+must be restarted. Bash login profiles must source `.bashrc` to load its setup.
+
+The managed function selects `kiro-fabric` and the installed Kiro home when no
+agent is specified. Explicit `--agent`/`-a` selections and non-v3 invocations are
+preserved. Each v3 invocation passes its own canonical working directory; no
+project path is stored globally and the official executable is never replaced.
+
+Before changing a startup file, the installer saves a private sibling backup
+(`.bashrc.kiro-fabric-backup-*` or `.zshrc.kiro-fabric-backup-*`). Updates do not
+append duplicates. Uninstall removes only the exact owned block, preserving
+later user edits and the original backup. Modified blocks, symlinks, hardlinks,
+unsafe permissions, and existing `kiro-cli` definitions are preserved and reported
+as conflicts rather than overwritten. Definitions loaded indirectly at shell
+startup also take precedence, with a warning. Shell setup is a recoverable
+post-activation step: failure reports backend commit truth and exit 7.
+
+Use `--no-shell-integration` with install/update/uninstall to leave startup files
+untouched. Unsupported/missing `SHELL` produces an explicit warning instead of
+guessing. In these cases use the installed `kiro-fabric start` launcher. Changing
+shells after installation does not migrate an existing recorded integration.
+The shell backup is separate from Kiro configuration backups; do not restore an
+entire old rc over newer user edits when removing the managed block is sufficient.
 
 When upgrading an older installation, rerun the source installer rather than
 editing `~/.kiro/agents/kiro-fabric.json` manually: profile bytes are managed and
@@ -109,6 +149,8 @@ integrity-checked. Restart existing Kiro processes to use the new profile.
 For a custom location use `"$KIRO_HOME/kiro-fabric/bin/kiro-fabric"`. The launcher resolves its own installation, not a changed caller KIRO_HOME. `start` invokes official Kiro with --v3 --agent kiro-fabric, preserving project cwd and explicitly passing its canonical project directory through KIRO_FABRIC_LAUNCH_WORKSPACE. Use this launcher from your project for automatic workspace binding when Kiro supplies no initial roots; no manual attachment is needed. Client roots retain precedence, and reserved home/runtime/data roots are rejected. Bare kiro-cli does not provide this handoff. The generated profile explicitly expands `${KIRO_FABRIC_LAUNCH_WORKSPACE}` into the MCP server environment, because Kiro filters inherited variables. To use the bare CLI with the same explicit authority, run `KIRO_FABRIC_LAUNCH_WORKSPACE="$(pwd -P)" kiro-cli --v3 --agent kiro-fabric` or wrap that invocation in your shell. Do not hard-code a project path into the global profile: concurrent sessions need independent handoffs. Local authenticated Kiro CLI 2.21.1 v3 smoke verified binding on macOS ARM64; full release qualification remains separate. Kiro itself and project-specific Git/Python/Java/Docker/etc. remain external prerequisites. Kiro executables (including a sibling `kiro-cli-chat`) and their directory ancestry must not be group/other-writable; unsafe prerequisites are rejected before execution. The narrow macOS exception is exactly `/Applications`, owned by root:admin (UID 0/GID 80), mode 0775; application descendants and executables remain strict. This explicitly trusts macOS administrators, who can already replace installed applications. The installer does not change their permissions.
 
 Before any client execution (including help/version probes), `start` requires a verified active complete installation. Absent, legacy, or retired installations return prerequisite exit 4; pending transaction/candidate evidence returns recovery exit 7. Integrity failures remain exit 5. This preflight is read-only: it never repairs an interrupted installation, removes evidence, or initializes data.
+
+Kiro CLI binaries may have hard-link aliases, including `kiro-cli-chat`. These are accepted when the shared file and its executable path pass the ownership and permission checks. Fabric does not modify these external binaries. A failed sibling check reports the path and underlying reason; Fabric-managed files still require a single link.
 
 Installed management uses its private Node, not system Node/pnpm or the checkout. It always rejects --source; rebuild through the explicit checkout command. install/update accept --version or --from-archive, never both. Offline archives require exact `<archive>.release.json` and `<archive>.release.sig` signed sidecars; first-install bootstrap also requires matching embedded archive/member pins. No local archive bypasses production verification. Public update/discovery currently fails before networking because the production key is missing.
 

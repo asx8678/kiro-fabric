@@ -197,8 +197,19 @@ describe("Agent-only configuration", () => {
       const count = originalRead(descriptor, buffer, offset, Math.min(length, 16), position);
       if (!injected) {
         injected = true;
-        fs.writeFileSync(file, replacement, { mode: 0o600 });
-        fs.utimesSync(file, fixedTime, fixedTime);
+        // WSL/filesystems with coarse ctime ticks can otherwise make this
+        // same-size, restored-mtime rewrite invisible to a version-stat check.
+        // Establish an actual ctime transition before testing its rejection.
+        const before = fs.fstatSync(descriptor, { bigint: true }).ctimeNs;
+        const deadline = Date.now() + 1_000;
+        const pause = new Int32Array(new SharedArrayBuffer(4));
+        do {
+          fs.writeFileSync(file, replacement, { mode: 0o600 });
+          fs.utimesSync(file, fixedTime, fixedTime);
+          if (fs.fstatSync(descriptor, { bigint: true }).ctimeNs !== before) break;
+          Atomics.wait(pause, 0, 0, 10);
+        } while (Date.now() < deadline);
+        expect(fs.fstatSync(descriptor, { bigint: true }).ctimeNs, "fixture must advance ctime").not.toBe(before);
       }
       return count;
     };

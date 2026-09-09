@@ -263,7 +263,9 @@ export function restoreConfigurationBackup(backupPath, kiroHome) {
   return { restored: restoredFiles.length, directories: manifest.directories.length, symlinks: manifest.symlinks.length, managedSkipped: managedSkipped.map(file => file.path) };
 }
 
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
+// Bundling into install-manager.mjs gives every module the manager's URL.
+// Only the standalone backup script may dispatch these positional CLI commands.
+if (path.basename(fileURLToPath(import.meta.url)) === "installer-configuration-backup.mjs" && process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
   const [command, first, second] = process.argv.slice(2);
   if (command === "list" && first) {
     for (const backup of listConfigurationBackups(path.resolve(first))) process.stdout.write(`${JSON.stringify(backup)}\n`);

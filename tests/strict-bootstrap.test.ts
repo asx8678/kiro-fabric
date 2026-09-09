@@ -232,6 +232,24 @@ describe("strict checked workspace bootstrap", () => {
     expect(fs.readFileSync(target, "utf8")).toBe("\nsecond=new\ndecoy:first=new\n");
   });
 
+  it("explains how to recover from bare CLI empty roots without granting access", async () => {
+    const f = await fixture(0);
+    expect((await f.call('return await local.list({path:".",limit:100});')).isError).toBe(true);
+    for (const action of ["status", "list"]) {
+      const response = await f.call(`return await fabric.workspace({action:"${action}"});`);
+      expect(response.isError).not.toBe(true);
+      expect(f.value(response)).toMatchObject({ status: "unbound", context: "explicitly-empty", recovery: {
+        command: 'KIRO_FABRIC_LAUNCH_WORKSPACE="$(pwd -P)" kiro-cli --v3 --agent kiro-fabric',
+        instruction: expect.stringContaining("Do not execute it inside fabric_exec"),
+      } });
+    }
+    expect((await f.call('return await local.read({path:"fixture.txt"});')).isError).toBe(true);
+    expect(wire.forms).toHaveLength(0);
+  });
+  it.each([[0, false, "project"], [1, false, undefined], [0, true, undefined]] as const)("does not suggest empty-root recovery for bound or unavailable context (%s, %s, %s)", async (count, unavailable, launch) => {
+    const f = await fixture(count, unavailable, launch);
+    expect(f.value(await f.call('return await fabric.workspace({action:"status"});'))).not.toHaveProperty("recovery");
+  });
   it("automatically reads the launch project without roots or approval", async () => {
     const f = await fixture(0, false, "project");
     const response = await f.call('return await local.read({path:"fixture.txt"})');

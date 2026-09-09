@@ -8,6 +8,8 @@ import { runManager, parseManagerArguments, checkKiro } from "./install-manager.
 import { configurePullHook } from "./source-pull-hook.mjs";
 import { resolveKiroHome } from "./install-agent-user.mjs";
 import { detectInstallerPlatform, assertUnprivilegedInstaller, compareVersions } from "./installer-platform.mjs";
+import { planInstallationPreparation } from "./installer-home-preparation.mjs";
+import { planShellIntegration } from "./installer-shell-integration.mjs";
 
 const args = process.argv.slice(2), json = args.includes("--json");
 try {
@@ -24,6 +26,8 @@ try {
   if (enableHook) configurePullHook(root, kiroHome, false);
   if ((!process.stdin.isTTY || options.json || options.nonInteractive) && !options.yes) throw new Error("Noninteractive source installation requires --yes");
   checkKiro();
+  planInstallationPreparation(kiroHome, options);
+  planShellIntegration(kiroHome, { disabled: options.noShellIntegration });
   const pnpm = spawnSync("pnpm", ["--version"], { cwd: root, encoding: "utf8", timeout: 10000, maxBuffer: 4096 });
   if (pnpm.status !== 0 || pnpm.stdout.trim() !== "11.20.0") throw new Error("Source mode requires the pinned developer pnpm 11.20.0");
   const before = sourceProvenance(root);

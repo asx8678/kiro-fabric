@@ -326,6 +326,13 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     ...(action === "list" ? binding.list() : binding.status()),
     context: workspaceSnapshot?.status ?? "temporarily-unavailable",
     verification: binding.workspaceObservation().status,
+    ...(workspaceSnapshot?.status === "explicitly-empty" && binding.workspaceObservation().status === "unbound" ? {
+      recovery: {
+        reason: "Kiro supplied no workspace roots. Bare kiro-cli does not supply Fabric's explicit launch workspace handoff.",
+        instruction: "Ask the user to start a new session from their project directory with the installed kiro-fabric start launcher, or run this shell command. Do not execute it inside fabric_exec or infer a project from the backend cwd.",
+        command: 'KIRO_FABRIC_LAUNCH_WORKSPACE="$(pwd -P)" kiro-cli --v3 --agent kiro-fabric',
+      },
+    } : {}),
   });
   const infoValue = async (current: KiroRuntime | undefined, workspaceBlocked: boolean) => {
     const lifecycleInfo = {

@@ -14,6 +14,8 @@ import { inspectInstallationLock, inspectInstallationProcesses } from "./install
 import { detectInstallerPlatform, assertUnprivilegedInstaller, compareVersions } from "./installer-platform.mjs";
 import { createConfigurationBackup, restoreConfigurationBackup } from "./installer-configuration-backup.mjs";
 import { smokeCandidate } from "./installer-smoke.mjs";
+import { planInstallationPreparation, applyInstallationPermissions, preservePiFabricProfile } from "./installer-home-preparation.mjs";
+import { planShellIntegration, applyShellIntegration } from "./installer-shell-integration.mjs";
 
 const commands = ["install", "update", "doctor", "rollback", "uninstall", "start", "restore"];
 const display = value => String(value).replace(/[\u0000-\u001f\u007f]/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`).slice(0, 2000);
@@ -22,9 +24,9 @@ export class InstallerError extends Error {
   constructor(message, exitCode = 5, outcome = "conflict") { super(message); this.exitCode = exitCode; this.outcome = outcome; }
 }
 export function parseManagerArguments(argv) {
-  const result = { command: undefined, kiroHome: undefined, archive: undefined, version: undefined, backup: undefined, yes: false, nonInteractive: false, json: false, noColor: false, purgeData: false };
+  const result = { command: undefined, kiroHome: undefined, archive: undefined, version: undefined, backup: undefined, yes: false, nonInteractive: false, json: false, noColor: false, purgeData: false, migratePiFabric: false, noShellIntegration: false };
   const seen = new Set();
-  const names = { "--kiro-home": "kiroHome", "--from-archive": "archive", "--version": "version", "--backup": "backup", "--yes": "yes", "--non-interactive": "nonInteractive", "--json": "json", "--no-color": "noColor", "--purge-data": "purgeData" };
+  const names = { "--kiro-home": "kiroHome", "--from-archive": "archive", "--version": "version", "--backup": "backup", "--yes": "yes", "--non-interactive": "nonInteractive", "--json": "json", "--no-color": "noColor", "--purge-data": "purgeData", "--migrate-pi-fabric": "migratePiFabric", "--no-shell-integration": "noShellIntegration" };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === "--source") throw new InstallerError("Installed management never builds source. Run bash /path/to/checkout/install.sh --source explicitly.", 2, "usage");
@@ -43,10 +45,11 @@ export function parseManagerArguments(argv) {
   }
   if (result.archive && result.version) throw new InstallerError("--from-archive and --version are mutually exclusive", 2, "usage");
   if (result.version && !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(result.version)) throw new InstallerError("--version requires an exact stable release version", 2, "usage");
-  const allowed = { doctor: ["kiroHome", "json", "noColor", "nonInteractive"], start: ["kiroHome", "noColor"], rollback: ["kiroHome", "yes", "json", "noColor", "nonInteractive"], uninstall: ["kiroHome", "yes", "json", "noColor", "nonInteractive", "purgeData"], restore: ["kiroHome", "backup", "yes", "json", "noColor", "nonInteractive"] };
+  const allowed = { doctor: ["kiroHome", "json", "noColor", "nonInteractive"], start: ["kiroHome", "noColor"], rollback: ["kiroHome", "yes", "json", "noColor", "nonInteractive"], uninstall: ["kiroHome", "yes", "json", "noColor", "nonInteractive", "purgeData", "noShellIntegration"], restore: ["kiroHome", "backup", "yes", "json", "noColor", "nonInteractive"] };
   if (result.command && allowed[result.command] && [...seen].some(name => !allowed[result.command].includes(name))) throw new InstallerError(`${result.command} does not accept those operation options`, 2, "usage");
   if (result.backup && result.command !== "restore") throw new InstallerError("--backup applies only to restore", 2, "usage");
   if (result.purgeData && result.command !== "uninstall") throw new InstallerError("--purge-data applies only to uninstall", 2, "usage");
+  if (result.migratePiFabric && result.command !== "install") throw new InstallerError("--migrate-pi-fabric applies only to install", 2, "usage");
   return result;
 }
 export function managerContext(script = fileURLToPath(import.meta.url)) {
@@ -72,13 +75,22 @@ export function trustedMacApplications(directory, stat, platform = process.platf
 }
 function assertKiroExecutable(executable) {
   const uid = process.getuid?.(), stat = fs.lstatSync(executable);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || (stat.mode & 0o022) || !(stat.mode & 0o111) || (uid !== undefined && stat.uid !== uid && stat.uid !== 0)) throw new InstallerError("Unsafe Kiro CLI executable", 4, "prerequisite");
+  // Kiro's externally managed binaries may have hard-link aliases. Fabric only
+  // executes them; ownership and write permissions protect the shared inode.
+  const reasons = [];
+  if (!stat.isFile()) reasons.push("not a regular file");
+  if (stat.isSymbolicLink()) reasons.push("symbolic link");
+  if (uid !== undefined && stat.uid !== uid && stat.uid !== 0) reasons.push("owner must be current user or root");
+  if (stat.mode & 0o020) reasons.push("group-writable");
+  if (stat.mode & 0o002) reasons.push("world-writable");
+  if (!(stat.mode & 0o111)) reasons.push("no execute bits");
+  if (reasons.length) throw new InstallerError(`Unsafe Kiro CLI executable: ${display(executable)}; ${reasons.join(", ")}`, 4, "prerequisite");
   let directory = path.dirname(executable);
   for (;;) {
     const parent = fs.lstatSync(directory);
     // Root-owned sticky temporary ancestry protects the private fixture child.
     const protectedSticky = parent.uid === 0 && (parent.mode & 0o1000) !== 0;
-    if (!parent.isDirectory() || parent.isSymbolicLink() || (uid !== undefined && parent.uid !== uid && parent.uid !== 0) || ((parent.mode & 0o022) !== 0 && !protectedSticky && !trustedMacApplications(directory, parent))) throw new InstallerError(`Unsafe Kiro CLI directory ancestry: ${directory}`, 4, "prerequisite");
+    if (!parent.isDirectory() || parent.isSymbolicLink() || (uid !== undefined && parent.uid !== uid && parent.uid !== 0) || ((parent.mode & 0o022) !== 0 && !protectedSticky && !trustedMacApplications(directory, parent))) throw new InstallerError(`Unsafe Kiro CLI directory ancestry: ${display(directory)}`, 4, "prerequisite");
     const next = path.dirname(directory); if (next === directory) break; directory = next;
   }
 }
@@ -99,7 +111,7 @@ export function checkKiro(env = process.env) {
   const sibling = path.join(path.dirname(executable), "kiro-cli-chat");
   if (installerSafety.lstat(sibling)) {
     try { assertKiroExecutable(fs.realpathSync(sibling)); }
-    catch { throw new InstallerError("Unsafe or unavailable Kiro CLI sibling executable", 4, "prerequisite"); }
+    catch (error) { throw new InstallerError(`Unsafe or unavailable Kiro CLI sibling executable: ${display(sibling)}; ${display(error.message)}`, 4, "prerequisite"); }
   }
   const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-client-preflight-")));
   fs.chmodSync(temporary, 0o700);
@@ -187,7 +199,7 @@ export async function runManager(argv, internal = {}) {
   try { options = parseManagerArguments(argv); }
   catch (error) { return presentError(error, argv.includes("--json")); }
   const context = internal.context ?? managerContext();
-  let home;
+  let home, homePreparation;
   try {
     assertUnprivilegedInstaller();
     const platform = detectInstallerPlatform();
@@ -222,8 +234,13 @@ export async function runManager(argv, internal = {}) {
     const mutating = ["install", "update", "rollback", "uninstall"].includes(options.command);
     if (mutating && (!process.stdin.isTTY || options.nonInteractive || options.json) && !options.yes) throw new InstallerError("Noninteractive mutation requires --yes and an explicit command", 2, "usage");
     const kiro = ["install", "update", "rollback"].includes(options.command) ? checkKiro() : undefined;
+    const preparation = ["install", "update"].includes(options.command) ? planInstallationPreparation(home, options) : undefined;
+    const shellPlan = ["install", "update", "uninstall"].includes(options.command) ? planShellIntegration(home, { remove: options.command === "uninstall", disabled: options.noShellIntegration }) : undefined;
     if (!options.yes) {
       process.stderr.write(`Kiro Fabric\nSystem        ${platform.target}\nKiro CLI      ${kiro ? `Found (${kiro.version})` : "Not required for removal"}\nKiro home     ${display(home)} (${selected.source})\nOperation     ${options.command}\nExisting agents, settings, projects and durable data will be preserved.\n`);
+      if (shellPlan?.status === "planned") process.stderr.write(`Shell workspace handoff will be ${shellPlan.remove ? "removed from" : "configured in"} ${display(shellPlan.file)}; existing content is backed up and preserved. Open a new terminal after installation.\n`);
+      if (preparation?.permissions.length) process.stderr.write("Kiro home and agents directories will be restricted to the current user (0700).\n");
+      if (preparation?.legacy) process.stderr.write("The verified old Pi Fabric profile will be backed up and replaced.\n");
       if (!["", "y", "yes"].includes(await ask("Continue? [Y/n]: "))) throw new InstallerError("Cancelled; no installation changes", 3, "cancelled");
     }
     if (options.purgeData && !options.nonInteractive && process.stdin.isTTY) {
@@ -242,6 +259,7 @@ export async function runManager(argv, internal = {}) {
       const inspection = inspectInstallationProcesses({ retainedNodePaths: owner?.runtimeGenerations?.map(generation => path.join(home, "kiro-fabric", "runtime", generation.name, "tools", "node")) ?? [] });
       throw new InstallerError(inspection.reason, 7, "recovery-required");
     }
+    if (preparation) homePreparation = { permissions: applyInstallationPermissions(preparation), legacyProfileBackup: null };
     if (mutating) {
       // Fail closed before any mutation when the prior configuration cannot be
       // captured completely. The backup is durable and private; restore is the
@@ -282,13 +300,24 @@ export async function runManager(argv, internal = {}) {
         const bundle = await validateBundle(bundleRoot);
         if (bundle.manifest.target !== platform.target) throw new InstallerError("Bundle target does not match this system", 4, "prerequisite");
         if (releaseMetadata && (bundle.digest !== releaseMetadata.bundleDigest || bundle.version !== releaseMetadata.version || bundle.manifest.provenance.kind !== "release" || bundle.manifest.provenance.sourceCommit !== releaseMetadata.sourceCommit)) throw new InstallerError("Signed release does not match complete bundle identity/provenance");
+        if (preparation?.legacy) homePreparation.legacyProfileBackup = preservePiFabricProfile(home, preparation.legacy, configurationBackup);
         result = await installCompleteGeneration(bundle.root, { kiroHome: home, provenance: internal.sourceBundle ? "source" : "release", ...(releaseMetadata ? { releaseMetadata } : {}), onPhase: phase, validateCandidate: smokeCandidate });
       } finally { if (temporary) fs.rmSync(temporary, { recursive: true, force: true }); }
     }
     const output = { schemaVersion: 1, ...result, command: options.command, kiroHome: selected, platform, restartRequired: result.restartRequired === true, configurationBackup: configurationBackup ? { path: configurationBackup.path, files: configurationBackup.files, directories: configurationBackup.directories, symlinks: configurationBackup.symlinks, skipped: configurationBackup.skipped, manifestSha256: configurationBackup.manifestSha256 } : null, warnings: [...(result.warnings ?? []), ...(configurationBackup ? [`Prior Kiro configuration backed up to ${configurationBackup.path} (${configurationBackup.files} files); restore with: ${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} restore --backup ${shellQuote(configurationBackup.path)}`] : []), "Authenticated Kiro session and resource loading not tested"], commands: { start: `${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} start`, update: `${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} update`, doctor: `${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} doctor` } };
+    if (shellPlan) {
+      try { output.shellIntegration = applyShellIntegration(home, shellPlan); }
+      catch (error) { throw Object.assign(new Error(`Backend ${options.command} completed, but shell setup failed: ${error.message}. Startup content and backups are preserved; rerun the operation after resolving the conflict.`), { committed: result.committed === true, recoveryRequired: true }); }
+      if (output.shellIntegration.status === "skipped") output.warnings.push(output.shellIntegration.reason);
+    }
+    if (["install", "update", "rollback"].includes(options.command)) output.warnings.push(`Launch from your project directory with: ${output.commands.start}. Bare kiro-cli --v3 may supply zero workspace roots without the managed shell handoff. Open a new terminal after shell setup.`);
+    if (homePreparation) output.homePreparation = homePreparation;
     try { logOutcome(home, output); } catch { output.warnings.push("Operation completed; installer log could not be safely updated"); }
     present(output, options); return output.outcome === "committed-cleanup-required" ? 7 : 0;
-  } catch (error) { return presentError(error, options.json, home); }
+  } catch (error) {
+    if (homePreparation?.legacyProfileBackup) error.legacyProfileBackup = homePreparation.legacyProfileBackup;
+    return presentError(error, options.json, home);
+  }
 }
 function present(result, options) {
   if (options.json) { process.stdout.write(`${JSON.stringify(result)}\n`); return; }
@@ -297,8 +326,12 @@ function present(result, options) {
   if (result.version) process.stdout.write(`Version: ${display(result.version)}\nGeneration: ${display(result.generation ?? result.digest)}\n`);
   if (result.dataRoot) process.stdout.write(`Data: ${display(result.dataRoot)}\n`);
   if (result.configurationBackup) process.stdout.write(`Prior configuration backup: ${display(result.configurationBackup.path)}\n`);
+  if (result.homePreparation?.legacyProfileBackup) process.stdout.write(`Prior Pi Fabric profile: ${display(result.homePreparation.legacyProfileBackup)}\n`);
+  for (const directory of result.homePreparation?.permissions ?? []) process.stdout.write(`Directory permissions: ${display(directory.path)} (${directory.previousMode} -> ${directory.mode})\n`);
   for (const [name, command] of Object.entries(result.commands ?? {})) process.stdout.write(`${name}: ${command}\n`);
   for (const warning of result.warnings ?? []) process.stdout.write(`WARNING: ${display(warning)}\n`);
+  if (result.shellIntegration?.status === "configured") process.stdout.write(`Shell configured: ${display(result.shellIntegration.file)}\nShell backup: ${display(result.shellIntegration.backup)}\nOpen a new terminal, cd to your project, and run: kiro-cli --v3\n`);
+  if (result.shellIntegration?.status === "removed") process.stdout.write("Shell integration removed; open a new terminal to unload the function.\n");
   if (result.restartRequired) process.stdout.write("Restart the Kiro session to adopt this generation. Existing sessions keep their files.\n");
 }
 export function managerErrorResult(error, home = null) {
@@ -312,11 +345,12 @@ export function managerErrorResult(error, home = null) {
   else if (detail.code === "PREREQUISITE" || detail.code === "INSTALL_LOCK_UNSUPPORTED") code = 4;
   else if (["offline", "rate-limited", "no-release", "trust-root blocked"].includes(detail.code) || /^Production release trust root unavailable:/i.test(message)) code = 8;
   else if (detail.code === "INSTALL_LOCK_RECOVERY_REQUIRED" || /^recovery-required:/i.test(message)) code = 7;
-  return { schemaVersion: 1, committed: detail.committed === true, dataPreserved: detail.dataPreserved !== false, outcome: detail.committed === true ? "committed-cleanup-required" : detail.outcome ?? (code === 7 ? "recovery-required" : code === 8 ? "discovery-unavailable" : "failed"), kiroHome: home, error: display(message), exitCode: code };
+  return { schemaVersion: 1, committed: detail.committed === true, dataPreserved: detail.dataPreserved !== false, outcome: detail.committed === true ? "committed-cleanup-required" : detail.outcome ?? (code === 7 ? "recovery-required" : code === 8 ? "discovery-unavailable" : "failed"), kiroHome: home, error: display(message), exitCode: code, ...(detail.legacyProfileBackup ? { legacyProfileBackup: detail.legacyProfileBackup } : {}) };
 }
 function presentError(error, json, home) {
   const result = managerErrorResult(error, home ?? null);
   if (json) process.stdout.write(`${JSON.stringify(result)}\n`); else process.stderr.write(`Kiro Fabric: ${result.error}\n`);
+  if (!json && result.legacyProfileBackup) process.stderr.write(`Prior Pi Fabric profile preserved at: ${display(result.legacyProfileBackup)}\n`);
   return result.exitCode;
 }
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) process.exitCode = await runManager(process.argv.slice(2));
