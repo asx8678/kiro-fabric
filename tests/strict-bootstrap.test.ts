@@ -33,7 +33,7 @@ const servers: Array<{ close(): Promise<void> }> = [];
 beforeEach(() => { wire.handlers.clear(); wire.approve = false; wire.elicitation = true; wire.forms.length = 0; wire.onForm = undefined; });
 afterEach(async () => { await Promise.all(servers.splice(0).map((server) => server.close())); vi.restoreAllMocks(); for (const root of temporary.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
-const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "data" | undefined = undefined) => {
+const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "data" | undefined = undefined, execute?: "allow" | "ask" | "deny") => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "strict-bootstrap-")); temporary.push(base);
   const runtimeRoot = path.join(base, "runtime"); const dataRoot = path.join(base, "data");
   fs.mkdirSync(runtimeRoot); fs.mkdirSync(dataRoot);
@@ -47,7 +47,8 @@ const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "
   const server = await createKiroMcpServer({ runtimeRoot, dataRoot, ...(launch ? { launchWorkspaceRoot: launch === "project" ? projects[0]! : dataRoot } : {}), version: "fixture", workspaceContext: {
     current: async () => snapshot, invalidate() {}, subscribe: () => ({ dispose() {} }),
   }, prepareRuntime: (options) => createKiroRuntime({ ...options, config: normalizeFabricConfig({
-    // Exercise product approval defaults through the real compiler/registry/approver.
+    // Exercise product approval defaults, or an explicit execute restriction.
+    ...(execute ? { approvals: { execute } } : {}),
     executor: { timeoutMs: 5000, maxTimeoutMs: 180000 }, mcp: { enabled: false },
   }) }) });
   servers.push(server);
@@ -110,7 +111,7 @@ describe("strict checked workspace bootstrap", () => {
   });
 
   it("executes the documented local recipes with complete first lines, decoys, exact edits and settled failures", async () => {
-    const f = await fixture(); wire.approve = true;
+    const f = await fixture(1, false, undefined, "ask"); wire.approve = true;
     const root = f.projects[0]!;
     const skill = fs.readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
     const recipes = [...skill.matchAll(/```ts\n(\/\/ Recipe:[\s\S]*?)\n```/g)].map(match => match[1]!);
@@ -175,7 +176,7 @@ describe("strict checked workspace bootstrap", () => {
   });
 
   it("keeps quiet command results small without hiding failure, warning or omission evidence", async () => {
-    const f = await fixture(); wire.approve = true;
+    const f = await fixture(1, false, undefined, "ask"); wire.approve = true;
     const source = fs.readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
     const code = source.match(/```ts\n(\/\/ Recipe: quiet command status[\s\S]*?)\n```/)![1]!;
     const cases = [
@@ -309,7 +310,7 @@ describe("strict checked workspace bootstrap", () => {
     expect(badPath.isError).toBe(true);
     const info = await f.call("return await fabric.info()"); expect(info.isError).not.toBe(true);
     const status = await f.call('return await fabric.workspace({action:"status"})'); expect(f.value(status).status).toBe("unbound");
-    for (const code of ['return await local.read({path:"private.txt"})', 'return await tools.call({ref:"local.read",args:{path:"private.txt"}})', 'return await state.get({key:"x"})']) {
+    for (const code of ['return await local.read({path:"private.txt"})', 'return await tools.call({ref:"local.read",args:{path:"private.txt"}})', 'return await state.get({key:"x"})', 'return await local.shell({command:"printf forbidden"})']) {
       const response = await f.call(code); expect(response.isError).toBe(true); expect(response.content[0].text).toMatch(/Verified workspace|verified workspace/);
       expect(response.content[0].text).not.toContain("NOT-A-PROJECT");
     }
@@ -369,7 +370,7 @@ describe("strict checked workspace bootstrap", () => {
     expect(f.value(read).text).toBe("source:project-a\n");
   });
 
-  it.each([true, false])("default local effects fail closed despite allowed outer execution (elicitation=%s)", async (elicitation) => {
+  it.each([true, false])("default shell works while direct writes still need approval (elicitation=%s)", async (elicitation) => {
     const f = await fixture(); wire.elicitation = elicitation;
     const read = await f.call('return await local.read({path:"fixture.txt"})');
     expect(f.value(read).text).toBe("source:project-a\n");
@@ -379,11 +380,20 @@ describe("strict checked workspace bootstrap", () => {
     const edit = await f.call('return await local.edit({path:"fixture.txt",oldText:"source",newText:"changed"})');
     expect(edit.isError).toBe(true); expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toContain("source:");
     const shell = await f.call('return await local.shell({command:"printf altered > fixture.txt",settle:true})');
-    expect(shell.isError).toBe(true); expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toContain("source:");
-    if (elicitation) {
-      expect(wire.forms.join("\n")).toContain("printf altered");
-      expect(wire.forms.join("\n")).toContain("fixture.txt");
-    } else expect(wire.forms).toHaveLength(0);
+    expect(shell.isError, shell.content[0].text).not.toBe(true);
+    expect(f.value(shell)).toMatchObject({ ok: true, exitCode: 0 });
+    expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toBe("altered");
+    expect(wire.forms).toHaveLength(elicitation ? 2 : 0);
+    expect(wire.forms.join("\n")).not.toContain("printf altered");
+  });
+
+  it.each([["ask", true], ["ask", false], ["deny", true], ["deny", false]] as const)("explicit execute=%s remains restrictive (elicitation=%s)", async (execute, elicitation) => {
+    const f = await fixture(1, false, undefined, execute); wire.elicitation = elicitation;
+    const response = await f.call('return await local.shell({command:"printf altered > fixture.txt",settle:true})');
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain("denied");
+    expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toBe("source:project-a\n");
+    expect(wire.forms).toHaveLength(execute === "ask" && elicitation ? 1 : 0);
   });
 
   it("local argument type errors prevent ALL earlier source effects and dynamic malformed args are rejected", async () => {
@@ -415,7 +425,7 @@ describe("strict checked workspace bootstrap", () => {
     expect(response.isError, response.content[0].text).not.toBe(true);
     expect(f.value(response)).toEqual({ packageName: "strict-fixture", inspectedMatches: 1, searchTruncated: false, changed: true, testsPassed: true, failureEvidence: "", testOutputTruncated: false });
     expect(fs.readFileSync(path.join(root, "src/example.js"), "utf8")).toContain("return 3");
-    expect(wire.forms).toHaveLength(2);
+    expect(wire.forms).toHaveLength(1);
     expect(response.content[0].text.length).toBeLessThan(500);
   });
 
@@ -427,7 +437,7 @@ describe("strict checked workspace bootstrap", () => {
     expect(response.content[0].text).toContain('"ref":"local.edit","outcome":"succeeded"');
     expect(response.content[0].text).toContain('"effectOutcome":"uncertain"');
     expect(response.content[0].text).toContain("never automatically retry");
-    expect(wire.forms).toHaveLength(2);
+    expect(wire.forms).toHaveLength(1);
   });
 
   it("keeps bounded intermediate content inside execution and validates fresh guest contexts", async () => {

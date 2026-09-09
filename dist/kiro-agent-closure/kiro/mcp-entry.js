@@ -918,7 +918,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         const manifestHash = createHash4("sha256").update(readFileSync(path5.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-22SI5BM7.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-R2JV77S3.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {} });
     } finally {
       release?.();

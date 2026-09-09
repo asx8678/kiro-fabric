@@ -18,13 +18,13 @@ const action: ResolvedFabricAction = {
 };
 
 describe("Fabric approval and projection", () => {
-  it("requires default effect approval without weakening explicit policies", async () => {
+  it("allows default execution without weakening explicit policies or other risk categories", async () => {
     const request = vi.fn(async () => ({ action: "accept" as const, approved: true }));
     const bridge = new KiroPowerApprover({ supported: () => false, request });
     const shell = { ...action, name: "shell", ref: "local.shell", provider: "local", risk: "execute" as const };
     const args = { command: "elixir --version", review: 'Command: "elixir --version"\nCanonical cwd: "/workspace"' };
     const approver = new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, bridge, "/workspace");
-    await expect(approver.approve(shell, args)).rejects.toThrow("denied or unavailable");
+    await expect(approver.approve(shell, args)).resolves.toBeUndefined();
     await expect(new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, execute: "allow" }, bridge, "/workspace").approve(shell, args)).resolves.toBeUndefined();
     for (const execute of ["ask", "deny"] as const) {
       const restricted = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, execute }, bridge, "/workspace");
@@ -42,11 +42,11 @@ describe("Fabric approval and projection", () => {
     }
     expect(request).not.toHaveBeenCalled();
   });
-  it.each(["write", "execute", "network"] as const)("prompts exactly once before permitting default %s risk", async (risk) => {
+  it.each(["write", "execute", "network"] as const)("prompts only for default ask policy (%s risk)", async (risk) => {
     const request = vi.fn(async () => ({ action: "accept" as const, approved: true }));
     const approver = new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, new KiroPowerApprover({ supported: () => true, request }), "/workspace");
     await expect(approver.approve({ ...action, risk }, {})).resolves.toBeUndefined();
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledTimes(risk === "execute" ? 0 : 1);
   });
   it("prepares a deferred prompt with one policy evaluation and an immutable exact request identity", async () => {
     let evaluations = 0;

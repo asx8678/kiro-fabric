@@ -12,7 +12,7 @@ import { smokeCandidate } from '../scripts/installer-smoke.mjs';
 type Backend = { command: string; args: string[]; env: Record<string, string> };
 
 // Raw MCP transport deliberately launches the installed profile, not source or a test backend.
-async function checkedReadGrep(backend: Backend, cwd: string, env: Record<string, string>, { handoff, roots = 'client', sentinel = 'independence-sentinel' }: { handoff?: string; roots?: 'client' | 'empty' | 'unsupported'; sentinel?: string } = {}) {
+async function checkedLocalTools(backend: Backend, cwd: string, env: Record<string, string>, { handoff, roots = 'client', sentinel = 'independence-sentinel' }: { handoff?: string; roots?: 'client' | 'empty' | 'unsupported'; sentinel?: string } = {}) {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(backend.command, backend.args, { cwd, env: { ...env, ...backend.env, ...(handoff ? { KIRO_FABRIC_LAUNCH_WORKSPACE: handoff } : {}) }, stdio: ['pipe', 'pipe', 'pipe'] });
     let buffer = '', stderr = '', passed = false, failure: Error | undefined;
@@ -38,12 +38,13 @@ async function checkedReadGrep(backend: Backend, cwd: string, env: Record<string
             send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
           } else if (frame.id === 2 && !frame.method) {
             expect(frame.result.tools.map((tool: { name: string }) => tool.name).sort()).toEqual(['fabric_exec', 'fabric_info', 'fabric_workspace']);
-            send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'fabric_exec', arguments: { code: 'return {read: await local.read({path:"probe.txt",limit:1}), grep: await local.grep({pattern:payloads.sentinel,path:"."})};', payloads: { sentinel } } } });
+            send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'fabric_exec', arguments: { code: 'return {read: await local.read({path:"probe.txt",limit:1}), grep: await local.grep({pattern:payloads.sentinel,path:"."}), shell: await local.shell({command:"printf shell-enabled"})};', payloads: { sentinel } } } });
           } else if (frame.id === 3 && !frame.method) {
             expect(frame.error).toBeUndefined();
             expect(frame.result.isError, JSON.stringify(frame.result)).not.toBe(true);
             const result = JSON.stringify(frame.result);
             expect(result).toContain('read'); expect(result).toContain('grep');
+            expect(result).toContain('shell-enabled');
             expect(result.split(sentinel).length - 1).toBeGreaterThanOrEqual(2);
             passed = true; child.stdin.end();
           }
@@ -120,7 +121,7 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect(await fs.readFile(installed.paths.launcher)).toEqual(completeGenerationLauncher(installed.digest));
     // A fresh install must work without either a shell handoff or roots capability.
     await fs.writeFile(path.join(cwd, 'probe.txt'), 'independence-sentinel\n', { mode: 0o600 });
-    await checkedReadGrep(profile.mcpServers.fabric, cwd, env, { roots: 'unsupported' });
+    await checkedLocalTools(profile.mcpServers.fabric, cwd, env, { roots: 'unsupported' });
     for (const executable of [installed.paths.launcher, profile.mcpServers.fabric.command, path.join(generation, 'tools/rg')]) expect((await fs.stat(executable)).mode & 0o777).toBe(0o700);
     const controls = async () => Promise.all([installed.paths.manifest, installed.paths.profile, installed.paths.launcher].map(file => fs.readFile(file)));
     const beforeNoop = await controls();
@@ -161,9 +162,9 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     await fs.writeFile(data, 'preserve across rollback and retirement', { mode: 0o600 });
     await fs.writeFile(path.join(cwd, 'probe.txt'), 'independence-sentinel\n', { mode: 0o600 });
     // A cached retained-generation profile must still launch its own private tools.
-    await checkedReadGrep(profile.mcpServers.fabric, cwd, env);
+    await checkedLocalTools(profile.mcpServers.fabric, cwd, env);
     // Explicit launcher handoff still works; direct launches need neither it nor roots.
-    await checkedReadGrep(profile.mcpServers.fabric, cwd, env, { handoff: shellWorkspace, roots: 'empty' });
+    await checkedLocalTools(profile.mcpServers.fabric, cwd, env, { handoff: shellWorkspace, roots: 'empty' });
     const updatedProfile = JSON.parse(await fs.readFile(installed.paths.profile, 'utf8'));
     const secondProject = path.join(root, "another project ' ü");
     await fs.mkdir(secondProject, { mode: 0o700 });
@@ -171,8 +172,8 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     await fs.writeFile(path.join(secondProject, 'probe.txt'), secondSentinel + '\n', { mode: 0o600 });
     // Startup admission is deliberately fail-fast under the installation lock.
     // Launch separately to test per-project binding, not simultaneous admission.
-    await checkedReadGrep(updatedProfile.mcpServers.fabric, cwd, env, { roots: 'empty' });
-    await checkedReadGrep(updatedProfile.mcpServers.fabric, secondProject, env, { roots: 'unsupported', sentinel: secondSentinel });
+    await checkedLocalTools(updatedProfile.mcpServers.fabric, cwd, env, { roots: 'empty' });
+    await checkedLocalTools(updatedProfile.mcpServers.fabric, secondProject, env, { roots: 'unsupported', sentinel: secondSentinel });
     // Fixture setup leaves a real SIGKILL stale owner. Reclamation below MUST
     // run the installed bundled manager/private Node, with acquisition files gone.
     const lockModule = new URL('../scripts/installer-lock.mjs', import.meta.url).href;
@@ -183,7 +184,7 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect((await fs.readdir(installed.paths.base)).filter(name => name.startsWith('.install-lock-quarantine-'))).toHaveLength(1);
     expect(rollback.digest).toBe(installed.digest);
     expect(await fs.readFile(installed.paths.profile)).toEqual(profileBytes);
-    await checkedReadGrep(profile.mcpServers.fabric, cwd, env);
+    await checkedLocalTools(profile.mcpServers.fabric, cwd, env);
     expect((await validateBundle(path.join(installed.paths.runtime, next.digest))).digest).toBe(next.digest);
     const rg = path.join(generation, 'tools/rg'), originalRg = await fs.readFile(rg), marker = path.join(root, 'corrupt-executed');
     await fs.writeFile(rg, `#!/bin/sh\nprintf executed > '${marker}'\n`);

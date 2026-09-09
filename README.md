@@ -25,5 +25,10 @@ for `kiro-cli --v3`; open a new terminal to load that shortcut.
 `--no-shell-integration` leaves shell files untouched without disabling workspace
 binding. Existing Kiro sessions must restart after an update.
 
+Shell execution is enabled by default (`approvals.execute: "allow"`). Commands
+have host access, including writes and network access. Explicit `ask`/`deny`
+overrides are preserved; direct write/network approvals remain `ask`. See
+[approval configuration](docs/configuration.md#clients-without-roots-or-elicitation).
+
 For unattended installation, add `--yes --non-interactive`. See
 [installation details](docs/installer.md) for prerequisites and recovery.

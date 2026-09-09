@@ -100,8 +100,10 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
     maxAuditBytes: 64_000,
     resultFormat: "auto",
   },
-  // Host effects require explicit consent; clients without elicitation fail closed.
-  approvals: { read: "allow", write: "ask", execute: "ask", network: "ask" },
+  // Shell execution is enabled without client elicitation. Shell commands retain
+  // host authority; write/network policies do not confine their effects.
+  // Explicit ask/deny overrides remain authoritative.
+  approvals: { read: "allow", write: "ask", execute: "allow", network: "ask" },
   mcp: {
     enabled: true,
     disableOAuth: true,

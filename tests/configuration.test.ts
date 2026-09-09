@@ -16,8 +16,8 @@ import {
 import { prepareKiroPowerDataPaths } from "../src/kiro/power/data-paths.js";
 
 describe("Agent-only configuration", () => {
-  it("allows reads but requires consent for host effects by default", () => {
-    const expected = { read: "allow", write: "ask", execute: "ask", network: "ask" };
+  it("allows reads and execution while direct writes and network still require consent by default", () => {
+    const expected = { read: "allow", write: "ask", execute: "allow", network: "ask" };
     expect(DEFAULT_FABRIC_CONFIG.approvals).toEqual(expected);
     expect(normalizeFabricConfig({}).approvals).toEqual(expected);
     expect(normalizeFabricConfig({ approvals: { write: "deny" } }).approvals).toEqual({ ...expected, write: "deny" });
@@ -38,7 +38,7 @@ describe("Agent-only configuration", () => {
       const bytes = JSON.stringify({ schemaVersion, approvals: { write: "allow", network: "deny" } });
       fs.writeFileSync(file, bytes, { mode: 0o600 });
       const before = fs.statSync(file, { bigint: true });
-      expect(loadFabricConfig(file).approvals).toEqual({ read: "allow", write: "allow", execute: "ask", network: "deny" });
+      expect(loadFabricConfig(file).approvals).toEqual({ read: "allow", write: "allow", execute: "allow", network: "deny" });
       expect(fs.readFileSync(file, "utf8")).toBe(bytes);
       const after = fs.statSync(file, { bigint: true });
       expect([after.ino, after.mtimeNs, after.ctimeNs]).toEqual([before.ino, before.mtimeNs, before.ctimeNs]);
