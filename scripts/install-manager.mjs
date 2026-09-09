@@ -12,18 +12,19 @@ import { discoverRelease } from "./release-download.mjs";
 import { installCompleteGeneration, inspectCompleteInstallation, rollbackCompleteGeneration, retireCompleteInstallation } from "./managed-installation.mjs";
 import { inspectInstallationLock, inspectInstallationProcesses } from "./installer-lock.mjs";
 import { detectInstallerPlatform, assertUnprivilegedInstaller, compareVersions } from "./installer-platform.mjs";
+import { createConfigurationBackup, restoreConfigurationBackup } from "./installer-configuration-backup.mjs";
 import { smokeCandidate } from "./installer-smoke.mjs";
 
-const commands = ["install", "update", "doctor", "rollback", "uninstall", "start"];
+const commands = ["install", "update", "doctor", "rollback", "uninstall", "start", "restore"];
 const display = value => String(value).replace(/[\u0000-\u001f\u007f]/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`).slice(0, 2000);
 export const shellQuote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
 export class InstallerError extends Error {
   constructor(message, exitCode = 5, outcome = "conflict") { super(message); this.exitCode = exitCode; this.outcome = outcome; }
 }
 export function parseManagerArguments(argv) {
-  const result = { command: undefined, kiroHome: undefined, archive: undefined, version: undefined, yes: false, nonInteractive: false, json: false, noColor: false, purgeData: false };
+  const result = { command: undefined, kiroHome: undefined, archive: undefined, version: undefined, backup: undefined, yes: false, nonInteractive: false, json: false, noColor: false, purgeData: false };
   const seen = new Set();
-  const names = { "--kiro-home": "kiroHome", "--from-archive": "archive", "--version": "version", "--yes": "yes", "--non-interactive": "nonInteractive", "--json": "json", "--no-color": "noColor", "--purge-data": "purgeData" };
+  const names = { "--kiro-home": "kiroHome", "--from-archive": "archive", "--version": "version", "--backup": "backup", "--yes": "yes", "--non-interactive": "nonInteractive", "--json": "json", "--no-color": "noColor", "--purge-data": "purgeData" };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === "--source") throw new InstallerError("Installed management never builds source. Run bash /path/to/checkout/install.sh --source explicitly.", 2, "usage");
@@ -34,7 +35,7 @@ export function parseManagerArguments(argv) {
     const name = names[arg];
     if (!name || seen.has(name)) throw new InstallerError(`Unknown or duplicate option: ${display(arg)}`, 2, "usage");
     seen.add(name);
-    if (["kiroHome", "archive", "version"].includes(name)) {
+    if (["kiroHome", "archive", "version", "backup"].includes(name)) {
       const value = argv[++index];
       if (!value || value.startsWith("--") || /[\u0000-\u001f\u007f]/u.test(value)) throw new InstallerError(`${arg} requires a safe value`, 2, "usage");
       result[name] = value;
@@ -42,8 +43,9 @@ export function parseManagerArguments(argv) {
   }
   if (result.archive && result.version) throw new InstallerError("--from-archive and --version are mutually exclusive", 2, "usage");
   if (result.version && !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(result.version)) throw new InstallerError("--version requires an exact stable release version", 2, "usage");
-  const allowed = { doctor: ["kiroHome", "json", "noColor", "nonInteractive"], start: ["kiroHome", "noColor"], rollback: ["kiroHome", "yes", "json", "noColor", "nonInteractive"], uninstall: ["kiroHome", "yes", "json", "noColor", "nonInteractive", "purgeData"] };
+  const allowed = { doctor: ["kiroHome", "json", "noColor", "nonInteractive"], start: ["kiroHome", "noColor"], rollback: ["kiroHome", "yes", "json", "noColor", "nonInteractive"], uninstall: ["kiroHome", "yes", "json", "noColor", "nonInteractive", "purgeData"], restore: ["kiroHome", "backup", "yes", "json", "noColor", "nonInteractive"] };
   if (result.command && allowed[result.command] && [...seen].some(name => !allowed[result.command].includes(name))) throw new InstallerError(`${result.command} does not accept those operation options`, 2, "usage");
+  if (result.backup && result.command !== "restore") throw new InstallerError("--backup applies only to restore", 2, "usage");
   if (result.purgeData && result.command !== "uninstall") throw new InstallerError("--purge-data applies only to uninstall", 2, "usage");
   return result;
 }
@@ -230,17 +232,31 @@ export async function runManager(argv, internal = {}) {
     if (options.purgeData && (!process.stdin.isTTY || options.json) && !options.nonInteractive) throw new InstallerError("Noninteractive purge requires --purge-data --yes --non-interactive", 2, "usage");
     const shownPhases = new Set();
     const phase = name => {
-      const label = ({ "candidate-journal-synced": "Preparing installation", "before-candidate-validation": "Validating backend", "candidate-validated": "Backend smoke passed", "generation-published": "Configuring agent", "journal-synced": "Activating installation", "owner-committed": "Installation committed" })[name] ?? (/^(Checking|Verifying)/u.test(name) ? name : undefined);
+      const label = ({ "candidate-journal-synced": "Preparing installation", "before-candidate-validation": "Validating backend", "candidate-validated": "Backend smoke passed", "generation-published": "Configuring agent", "journal-synced": "Activating installation", "owner-committed": "Installation committed", "before-configuration-backup": "Backing up existing configuration" })[name] ?? (/^(Checking|Verifying)/u.test(name) ? name : undefined);
       if (label && !options.json && !shownPhases.has(label)) { shownPhases.add(label); process.stderr.write(`${label}\n`); }
     };
+    let configurationBackup;
+    if (options.command === "uninstall" && options.purgeData) {
+      // Refused before any work: taking a configuration backup for an operation
+      // that always aborts would silently rotate the retention window.
+      const inspection = inspectInstallationProcesses({ retainedNodePaths: owner?.runtimeGenerations?.map(generation => path.join(home, "kiro-fabric", "runtime", generation.name, "tools", "node")) ?? [] });
+      throw new InstallerError(inspection.reason, 7, "recovery-required");
+    }
+    if (mutating) {
+      // Fail closed before any mutation when the prior configuration cannot be
+      // captured completely. The backup is durable and private; restore is the
+      // explicit `restore --backup <path>` manager command.
+      phase("before-configuration-backup");
+      configurationBackup = createConfigurationBackup(home, { command: options.command });
+    }
     let result;
     if (options.command === "rollback") result = await rollbackCompleteGeneration(home, { onPhase: phase, validateCandidate: smokeCandidate });
     else if (options.command === "uninstall") {
-      if (options.purgeData) {
-        const inspection = inspectInstallationProcesses({ retainedNodePaths: owner?.runtimeGenerations?.map(generation => path.join(home, "kiro-fabric", "runtime", generation.name, "tools", "node")) ?? [] });
-        throw new InstallerError(inspection.reason, 7, "recovery-required");
-      }
       result = await retireCompleteInstallation(home, { onPhase: phase });
+    } else if (options.command === "restore") {
+      if (!options.backup) throw new InstallerError("restore requires --backup <backup-directory>", 2, "usage");
+      const restored = restoreConfigurationBackup(path.resolve(options.backup), home);
+      result = { outcome: "restored", restored: restored.restored, directories: restored.directories, symlinks: restored.symlinks, managedSkipped: restored.managedSkipped, dataPreserved: true, restartRequired: false };
     } else {
       if (options.command === "update" && !owner) throw new InstallerError("Fabric is not installed; use install", 4, "prerequisite");
       let temporary, bundleRoot, releaseMetadata;
@@ -269,7 +285,7 @@ export async function runManager(argv, internal = {}) {
         result = await installCompleteGeneration(bundle.root, { kiroHome: home, provenance: internal.sourceBundle ? "source" : "release", ...(releaseMetadata ? { releaseMetadata } : {}), onPhase: phase, validateCandidate: smokeCandidate });
       } finally { if (temporary) fs.rmSync(temporary, { recursive: true, force: true }); }
     }
-    const output = { schemaVersion: 1, ...result, command: options.command, kiroHome: selected, platform, restartRequired: result.restartRequired === true, warnings: [...(result.warnings ?? []), "Authenticated Kiro session and resource loading not tested"], commands: { start: `${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} start`, update: `${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} update`, doctor: `${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} doctor` } };
+    const output = { schemaVersion: 1, ...result, command: options.command, kiroHome: selected, platform, restartRequired: result.restartRequired === true, configurationBackup: configurationBackup ? { path: configurationBackup.path, files: configurationBackup.files, directories: configurationBackup.directories, symlinks: configurationBackup.symlinks, skipped: configurationBackup.skipped, manifestSha256: configurationBackup.manifestSha256 } : null, warnings: [...(result.warnings ?? []), ...(configurationBackup ? [`Prior Kiro configuration backed up to ${configurationBackup.path} (${configurationBackup.files} files); restore with: ${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} restore --backup ${shellQuote(configurationBackup.path)}`] : []), "Authenticated Kiro session and resource loading not tested"], commands: { start: `${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} start`, update: `${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} update`, doctor: `${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} doctor` } };
     try { logOutcome(home, output); } catch { output.warnings.push("Operation completed; installer log could not be safely updated"); }
     present(output, options); return output.outcome === "committed-cleanup-required" ? 7 : 0;
   } catch (error) { return presentError(error, options.json, home); }
@@ -280,6 +296,7 @@ function present(result, options) {
   for (const check of result.checks ?? []) process.stdout.write(`${check.status} ${display(check.id)}: ${display(typeof check.detail === "string" ? check.detail : JSON.stringify(check.detail))}\n`);
   if (result.version) process.stdout.write(`Version: ${display(result.version)}\nGeneration: ${display(result.generation ?? result.digest)}\n`);
   if (result.dataRoot) process.stdout.write(`Data: ${display(result.dataRoot)}\n`);
+  if (result.configurationBackup) process.stdout.write(`Prior configuration backup: ${display(result.configurationBackup.path)}\n`);
   for (const [name, command] of Object.entries(result.commands ?? {})) process.stdout.write(`${name}: ${command}\n`);
   for (const warning of result.warnings ?? []) process.stdout.write(`WARNING: ${display(warning)}\n`);
   if (result.restartRequired) process.stdout.write("Restart the Kiro session to adopt this generation. Existing sessions keep their files.\n");

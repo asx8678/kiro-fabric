@@ -171,6 +171,7 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `scripts/generate-installer-bootstrap.mjs`
 - `scripts/install-manager.mjs`
 - `scripts/install-transaction.mjs`
+- `scripts/installer-configuration-backup.mjs` — pre-mutation Kiro configuration backup with hash-verified, containment-checked restore.
 - `scripts/installer-lock.mjs`
 - `scripts/installer-platform.mjs`
 - `scripts/installer-smoke.mjs`
@@ -180,6 +181,7 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `scripts/source-install.mjs`
 - `scripts/source-pull-hook.mjs` — explicit source-home post-merge activation with foreign-hook preservation.
 - `tests/source-pull-hook.test.ts` — source-home equality, hook failure reporting, preservation, and narrow macOS ancestry policy.
+- `tests/installer-configuration-backup.test.ts` — backup manifest, retention, skip and fail-closed restore coverage.
 - `src/installation/bundle-contract.mjs`
 - `src/installation/installer-lock.mjs`
 - `src/installation/pinned-recovery.mjs` — embedded bounded child for macOS inode-pinned claim inspection, exclusive empty creation and exact publication; no parent cwd mutation or pathname recovery fallback.
