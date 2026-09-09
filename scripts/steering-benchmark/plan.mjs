@@ -8,7 +8,7 @@ import { object, readJson, regularText, digest, sha, inventory, limitations } fr
 
 export const ARMS = ['old', 'pass1', 'pass2', 'fabric', 'native'];
 /** @typedef {{profile:string,runtimePaths:string[],configPaths:string[]}} ArmConfig */
-/** @typedef {{cli:string,python:string,runtimePaths:string[],cliConfigPaths:string[],arms:Record<string,ArmConfig>,nativeMode:string,repetitions:number,seed:string,plannedCredits:number,creditCeiling:number,priorCredits:number,reserveCredits:number,maxCalls:number,timeoutMs:number,maxOutputBytes:number,env:Record<string,string>,snapshotCliSettings?:boolean,cases?:string[],model?:string,nativeTrustTools?:string[],nativeWorkspacePermissions?:boolean,runIndices?:number[],singleRunCreditLimit?:number}} Config */
+/** @typedef {{cli:string,python:string,runtimePaths:string[],cliConfigPaths:string[],arms:Record<string,ArmConfig>,nativeMode:string,repetitions:number,seed:string,plannedCredits:number,creditCeiling:number,priorCredits:number,reserveCredits:number,maxCalls:number,timeoutMs:number,maxOutputBytes:number,env:Record<string,string>,snapshotCliSettings?:boolean,cases?:string[],model?:string,effort?:string,nativeTrustTools?:string[],nativeWorkspacePermissions?:boolean,runIndices?:number[],singleRunCreditLimit?:number}} Config */
 /** @typedef {{index:number,caseId:string,round:number,seed:string,arm:string,qualification:boolean,hashes:ReturnType<typeof caseHashes>,sourceIndex?:number}} Run */
 /** @param {unknown} value @param {string} name */
 function text(value, name) { assert.ok(typeof value === 'string' && value.length > 0 && !/[\x00-\x1f]/.test(value), 'invalid ' + name); return String(value); }
@@ -31,6 +31,8 @@ export function parseConfig(value, base) {
   assert.ok(Object.keys(arms).every(a => ARMS.includes(a) && a !== 'native'), 'unknown Fabric arm; native is implicit');
   const cases = raw.cases === undefined ? CASES : raw.cases;
   assert.ok(Array.isArray(cases) && cases.length > 0 && cases.every(c => typeof c === 'string' && ALL_CASES.includes(c)) && new Set(cases).size === cases.length, 'invalid/duplicate cases');
+  const effort = raw.effort === undefined ? undefined : text(raw.effort, 'effort');
+  assert.ok(effort === undefined || ['low', 'medium', 'high', 'xhigh', 'max'].includes(effort), 'invalid effort');
   const nativeTrustTools = raw.nativeTrustTools ?? ['fs_read', 'fs_write', 'shell'];
   assert.ok(Array.isArray(nativeTrustTools) && nativeTrustTools.length > 0 && nativeTrustTools.every(t => ['fs_read', 'fs_write', 'shell', 'str_replace', 'execute_bash'].includes(t)) && new Set(nativeTrustTools).size === nativeTrustTools.length, 'invalid native fixture tools');
   const runIndices = raw.runIndices === undefined ? undefined : /** @type {number[]} */ (raw.runIndices);
@@ -43,7 +45,7 @@ export function parseConfig(value, base) {
   const config = {
     cli: executable(text(raw.cli ?? 'kiro-cli', 'CLI'), env.PATH), python: executable(text(raw.python ?? 'python3', 'Python'), env.PATH),
     runtimePaths: paths(raw.runtimePaths, base), cliConfigPaths: paths(raw.cliConfigPaths, base), arms: parsedArms,
-    snapshotCliSettings: raw.snapshotCliSettings === true, cases, ...(runIndices === undefined ? {} : { runIndices }), singleRunCreditLimit, nativeTrustTools, nativeWorkspacePermissions: raw.nativeWorkspacePermissions === true, model: text(raw.model ?? 'auto', 'model'),
+    snapshotCliSettings: raw.snapshotCliSettings === true, cases, ...(effort === undefined ? {} : { effort }), ...(runIndices === undefined ? {} : { runIndices }), singleRunCreditLimit, nativeTrustTools, nativeWorkspacePermissions: raw.nativeWorkspacePermissions === true, model: text(raw.model ?? 'auto', 'model'),
     nativeMode: text(raw.nativeMode ?? 'vibe', 'native mode'), repetitions: number(raw.repetitions, 2, 2, 20), seed: text(raw.seed ?? 'steering-v1', 'seed'),
     plannedCredits: number(raw.plannedCredits, 20, 0.8, 40), creditCeiling: number(raw.creditCeiling, 40, 5.8, 40), priorCredits: number(raw.priorCredits, 0, 0, 40), reserveCredits: number(raw.reserveCredits, 5, 5, 39),
     maxCalls: number(raw.maxCalls, 40, 1, 40), timeoutMs: number(raw.timeoutMs, 150000, 10, 150000), maxOutputBytes: number(raw.maxOutputBytes, 8 * 1024 * 1024, 128, 8 * 1024 * 1024), env
@@ -114,7 +116,7 @@ export function identity(config) {
   const roots = Object.values(profiles).map(p => fs.realpathSync(p.dataRoot)); assert.equal(new Set(roots).size, roots.length, 'arm data roots must be isolated');
   const paths = [...new Set([config.cli, config.python, process.execPath, ...config.runtimePaths, ...config.cliConfigPaths, ...Object.values(config.arms).flatMap(a => [...a.runtimePaths, ...a.configPaths])])].sort();
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([k]) => !['_', 'SHLVL', 'PWD', 'OLDPWD'].includes(k)));
-  return { artifacts: paths.map(artifact), profiles, cliSettings: cliSettings(config), node: process.version, platform: process.platform, arch: process.arch, environmentDigest: digest({ ...inherited, ...config.env }), harness: harnessIdentity(), requestedModel: config.model ?? 'auto', actualRoutedModel: null, cacheUsage: null, settledBilling: null };
+  return { artifacts: paths.map(artifact), profiles, cliSettings: cliSettings(config), node: process.version, platform: process.platform, arch: process.arch, environmentDigest: digest({ ...inherited, ...config.env }), harness: harnessIdentity(), requestedModel: config.model ?? 'auto', requestedEffort: config.effort ?? null, actualRoutedModel: null, cacheUsage: null, settledBilling: null };
 }
 /** @param {string} manifest */
 export function createPlan(manifest) {

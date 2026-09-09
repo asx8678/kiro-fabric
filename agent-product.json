@@ -9,7 +9,7 @@
   },
   "tools": ["fabric_info", "fabric_workspace", "fabric_exec"],
   "mountedProviders": ["artifacts", "memory", "state", "mcp", "local", "fabric"],
-  "bundledAgentResources": ["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md"],
+  "bundledAgentResources": ["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md", "skills/fabric-exec/references/review.md"],
   "allowedPackageDependencies": [
     "@jitl/quickjs-singlefile-mjs-release-sync",
     "@modelcontextprotocol/sdk",

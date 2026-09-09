@@ -73,6 +73,17 @@ describe("compiled task guidance", () => {
     expect(guide).toContain("never count automatic fixture approvals as human interaction");
   });
 
+  it("ships actionable review guidance and checked discovery examples without promising model wins", () => {
+    const review = BUNDLED_GUIDANCE.review;
+    for (const clause of ["coverage ledger", "pipeline -> script", "environment override", "totalLines", "scope", "truncated:false", "try to falsify", "counterexamples", "uninspected scope", "does not authorize edits"]) expect(review).toContain(clause);
+    const examples = [...review.matchAll(/```ts\n([\s\S]*?)\n```/g)].map(m => m[1]!);
+    expect(examples.length).toBeGreaterThan(0);
+    for (const code of examples) expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors).toEqual([]);
+    expect(BUNDLED_GUIDANCE.skill).toContain('fabric.help({topic:"review"})');
+    expect(BUNDLED_GUIDANCE.guide).toContain("scope:{path,glob?,hidden,ignoreFiles:true}");
+    expect(BUNDLED_GUIDANCE.workflow).toContain("reviews/audits are exempt");
+  });
+
   it("matches every canonical Markdown byte and the checked generated source", () => {
     for (const [topic, file] of Object.entries(GUIDANCE_FILES)) {
       expect(BUNDLED_GUIDANCE[topic as keyof typeof BUNDLED_GUIDANCE]).toBe(fs.readFileSync(path.join(root, file), "utf8"));

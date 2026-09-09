@@ -14,9 +14,13 @@ Keep a small acceptance ledger in working context, not a new repository file by 
 4. Run the smallest targeted tests and direct behavioral probes covering the ledger. Inspect nonzero exits with local.shell settle:true and preserve relevant diagnostics. A build alone is not completion. Escalate for failures, changed dependencies or cross-cutting risk; do not rerun unchanged passing checks unless repository rules require it. Follow required checks/builds without overriding tool bans or read-only constraints.
 5. Stop when each requirement has evidence or an explicit blocker. Distinguish passed, failed and not-run checks; an execution succeeding is not proof that its returned checks passed. Inspect partial effects before recovery, never replay them blindly.
 
+## Repository reviews
+
+For audits, code review or project-improvement requests, apply [review guidance](review.md) via fabric.help({topic:"review"}). A coding acceptance ledger alone does not establish review coverage: trace high-risk scripts, overrides and consumers; record incomplete reads and unresolved leads. Correctness and coverage precede reducing calls.
+
 ## Concise reporting
 
-Reduce narration, not verification. Default to outcome, concrete check results and unresolved blockers in <=120 words; explicit detail or complete output requests override this. No opening pleasantries, repeated plan/recap, raw diffs or successful-command log dumps unless requested. Progress updates should mark meaningful milestones, plan changes or blockers, not each tool call; JSON-only rules above still suppress them.
+Reduce narration, not verification. For routine outcomes default to concrete check results and unresolved blockers in <=120 words; reviews/audits are exempt, and explicit detail or complete output requests override this. Keep each finding concise without limiting the number of supported findings. No opening pleasantries, repeated plan/recap, raw diffs or successful-command log dumps unless requested. Progress updates should mark meaningful milestones, plan changes or blockers, not each tool call; JSON-only rules above still suppress them.
 
 Choose the needed return shape before execution. Keep intermediate records and routine logs in guest variables; return only decision-relevant evidence such as changed paths, check names/status, failure diagnostics and truncation/omission flags. Inspect relevant output before reducing it. Preserve warnings and uncertainty; do not translate an exit-zero build into "all tests passed". Report only checks actually run, identifying delegated evidence as reported rather than independently verified. Do not claim live model-quality or token-cost improvements from static prompt tests.
 

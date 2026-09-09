@@ -241,3 +241,13 @@ These entries extend the implementation inventory; observed statistics are descr
 - `tests/agent-comparison.test.ts` / `tests/native-fixture-policy.test.ts` — fixture discrimination, held-out rejection, pairing, continuation selection, credit bounds and permission cleanup regression.
 - `docs/agent-comparison.md` — runnable labs, checked-TypeScript Code Mode examples, live-plan consent and interpretation rules.
 - `audits/agent-comparison-2026-09-09.md` — completed 54-attempt comparison record with full charge ledger.
+
+## Review coverage improvements (current implementation)
+
+These entries document later changes, not a revision to historical results or evidence of live model superiority.
+
+- `scripts/steering-benchmark/reviews.mjs` — seeded read-only infrastructure fixtures, source-line/caller-consumer evidence grading, false-positive controls and independent Node qualification.
+- `tests/review-benchmark.test.ts` — recall/precision, duplicate/forged evidence rejection, read-only scope, failure-inclusive cost and equal-model/effort regression.
+- `tests/local-review-coverage.test.ts` — hidden CI discovery, ignore/VCS/alias safeguards, bounded scope metadata and whole-file line/continuation checks.
+- `skills/fabric-exec/references/review.md` — task-loaded coverage ledger, risk-prioritized reference tracing, falsification and explicit partial-review reporting.
+- Existing local read/search contracts add total line counts and search scope; all-files manifests avoid a redundant ripgrep launch. Permission and execution budgets are unchanged.

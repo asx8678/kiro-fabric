@@ -6,6 +6,7 @@ import { AUDIT, HELP_CODE } from './cases.mjs';
 import { object, sha, canonical, inventory, checkScope, regularText, putFiles, errorText } from './core.mjs';
 import { collect } from './stream.mjs';
 import { BUG_CASES, probeProject } from './projects.mjs';
+import { REVIEW_CASES, scoreReview } from './reviews.mjs';
 
 /** @typedef {import('./cases.mjs').Case} Case */
 /** @typedef {import('./stream.mjs').Evidence} Evidence */
@@ -44,9 +45,10 @@ export function containsStructured(value, expected, depth = 0) {
 export function validateAnswer(s, text, evidence) {
   if (!s.json) {
     assert.equal(text, s.expected, "exact requested sentence");
-    return;
+    return undefined;
   }
   const answer = JSON.parse(text); // Raw JSON only: no Markdown repair or fence stripping.
+  if (REVIEW_CASES.includes(s.id)) return scoreReview(s, answer);
   if (s.id !== 'fabric-help') assert.deepEqual(answer, s.expected, 'exact answer/schema');
   else {
     const help = object(answer); assert.deepEqual(Object.keys(help).sort(), help.truncated === true ? ['nextOffset', 'text', 'topic', 'truncated'] : ['text', 'topic', 'truncated'], 'help schema');
@@ -57,6 +59,7 @@ export function validateAnswer(s, text, evidence) {
     assert.equal(object(call.input).code, HELP_CODE, 'only immutable help program allowed');
     assert.ok(containsStructured(call.output, answer), 'help result not observed');
   }
+  return undefined;
 }
 /** Independently re-run immutable tests in a disposable copy, never append controller runs to agent audit.
  * These tests execute candidate-controlled Python, not a security sandbox.
@@ -78,15 +81,15 @@ export async function probePython(s, sources, python) {
     return { exit: result.code, stdout: result.stdout, stderr: result.stderr };
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
-/** @typedef {{ok:boolean,failures:{check:string,error:string}[],audit:Record<string,unknown>[]|null,probe:unknown,afterDigest:string|null}} Validation */
-/** @param {{spec:Case,workspace:string,before:Record<string,import('./core.mjs').Entry>,evidence:Evidence,arm:string,expectedMode:string,expectedModel?:string,python:string,processOk:boolean,probe?:typeof probePython}} options @returns {Promise<Validation>} */
+/** @typedef {{ok:boolean,failures:{check:string,error:string}[],audit:Record<string,unknown>[]|null,probe:unknown,afterDigest:string|null,review?:import('./reviews.mjs').ReviewScore|null}} Validation */
+/** @param {{spec:Case,workspace:string,before:Record<string,import('./core.mjs').Entry>,evidence:Evidence,arm:string,expectedMode:string,expectedModel?:string,expectedEffort?:string,python:string,processOk:boolean,probe?:typeof probePython}} options @returns {Promise<Validation>} */
 export async function validate(options) {
   const { spec: s, workspace, before, evidence, arm } = options;
   /** @type {Validation} */ const result = { ok: false, failures: [], audit: null, probe: null, afterDigest: null };
   /** @param {string} name @param {()=>unknown} fn */
   function check(name, fn) { try { fn(); } catch (error) { result.failures.push({ check: name, error: errorText(error) }); } }
   check('events-and-usage', () => { assert.deepEqual(evidence.failures, []); assert.ok(evidence.credits !== null && Number.isFinite(evidence.credits), 'missing usage'); assert.ok(options.processOk, 'client process incomplete'); });
-  check('identity', () => { assert.equal(evidence.model, options.expectedModel ?? 'auto', 'requested model mismatch'); assert.equal(evidence.mode, options.expectedMode, 'arm mode mismatch'); });
+  check('identity', () => { assert.equal(evidence.model, options.expectedModel ?? 'auto', 'requested model mismatch'); assert.equal(evidence.mode, options.expectedMode, 'arm mode mismatch'); if (options.expectedEffort !== undefined) assert.equal(evidence.effort, options.expectedEffort, 'requested effort missing or mismatched'); });
   const calls = evidence.calls.filter(c => !c.system);
   check('calls', () => {
     if (s.noTools) assert.equal(calls.length, 0, 'tools forbidden');
@@ -94,7 +97,13 @@ export async function validate(options) {
     if (arm !== 'native') assert.ok(calls.every(c => c.origin === 'fabric' && /fabric_exec/.test(c.title)), 'non-Fabric routing');
     assert.ok(!s.qualification || arm !== 'native', 'native help must be excluded from schedule');
   });
-  check('answer', () => validateAnswer(s, evidence.finalText, evidence));
+  check('answer', () => {
+    const score = validateAnswer(s, evidence.finalText, evidence);
+    if (score) {
+      result.review = score;
+      assert.ok(score.truePositives === score.expected && score.falsePositives === 0 && score.duplicates === 0, 'review recall/precision');
+    }
+  });
   check('scope', () => { const after = inventory(workspace); checkScope(before, after, s.allowed); result.afterDigest = sha(canonical(after)); });
   /** @type {Record<string,string>} */ const sources = {};
   check('filesystem-data', () => {

@@ -16,6 +16,7 @@ import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { fabricJsonText } from "../src/runtime/json-budget.js";
 
 const fixtures: { base: string; providers: LocalCodingProvider[] }[] = [];
+const searchScope = (glob?: string) => ({ path: ".", ...(glob ? { glob } : {}), hidden: false, ignoreFiles: true });
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 function fixture(budget = 20000) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-local-test-")));
@@ -181,15 +182,15 @@ describe("LocalCodingProvider read contracts", () => {
     f.put(".gitignore", "ignored.txt\n"); f.put("ignored.txt", "Hello.[x]\n"); f.put(".hidden.txt", "Hello.[x]\n");
     f.put("b.txt", "nothing\nHello.[x]\n"); f.put("a.txt", "HELLO.[x]\n"); f.put("c.md", "Hello.[x]\n");
     const [found, matches] = await Promise.all([f.call("find", { pattern: "*.txt" }), f.call("grep", { pattern: "hello.[x]", literal: true, ignoreCase: true, glob: "*.txt" })]);
-    expect(found).toEqual({ paths: ["a.txt", "b.txt"], truncated: false });
-    expect(matches).toEqual({ matches: [{ path: "a.txt", line: 1, text: "HELLO.[x]" }, { path: "b.txt", line: 2, text: "Hello.[x]" }], truncated: false });
-    expect(await f.call("grep", { pattern: "no-match", literal: true })).toEqual({ matches: [], truncated: false });
+    expect(found).toEqual({ scope: searchScope("*.txt"), paths: ["a.txt", "b.txt"], truncated: false });
+    expect(matches).toEqual({ scope: searchScope("*.txt"), matches: [{ path: "a.txt", line: 1, text: "HELLO.[x]" }, { path: "b.txt", line: 2, text: "Hello.[x]" }], truncated: false });
+    expect(await f.call("grep", { pattern: "no-match", literal: true })).toEqual({ scope: searchScope(), matches: [], truncated: false });
   });
   it("bounds find and grep counts, record text and small-budget result shapes", async () => {
     const f = fixture(512);
     for (let index = 0; index < 12; index++) f.put(`${String(index).padStart(2, "0")}.txt`, "match\n".repeat(10));
     const found = await f.call("find", { pattern: "*.txt", limit: 2 }) as LocalFindResult;
-    expect(found).toEqual({ paths: ["00.txt", "01.txt"], truncated: true });
+    expect(found).toEqual({ scope: searchScope("*.txt"), paths: ["00.txt", "01.txt"], truncated: true });
     const matches = await f.call("grep", { pattern: "match", limit: 1000 }) as LocalGrepResult;
     expect(matches.matches.length).toBeGreaterThan(0); expect(matches.truncated).toBe(true);
     expect(JSON.stringify(matches).length).toBeLessThanOrEqual(512);
@@ -203,7 +204,7 @@ describe("LocalCodingProvider read contracts", () => {
   });
   it("skips binary/invalid UTF-8 search content without relaxing alias checks and flags oversized omissions", async () => {
     const f = fixture(); f.put("text", "needle\n"); f.put("image", Buffer.from([0, 1, 2])); f.put("invalid", Buffer.from([0xff, 0xfe]));
-    expect(await f.call("grep", { pattern: "needle" })).toEqual({ matches: [{ path: "text", line: 1, text: "needle" }], truncated: false });
+    expect(await f.call("grep", { pattern: "needle" })).toEqual({ scope: searchScope(), matches: [{ path: "text", line: 1, text: "needle" }], truncated: false });
     f.put("oversized", Buffer.alloc(2 * 1024 * 1024 + 1));
     expect(await f.call("grep", { pattern: "needle" })).toMatchObject({ matches: [{ path: "text", line: 1, text: "needle" }], truncated: true });
     fs.linkSync(path.join(f.root, "image"), path.join(f.root, "image-alias"));
@@ -214,7 +215,7 @@ describe("LocalCodingProvider read contracts", () => {
     const config = path.join(f.base, "rg-config"); fs.writeFileSync(config, "--invalid-config-option\n");
     vi.stubEnv("RIPGREP_CONFIG_PATH", config);
     fs.symlinkSync(path.join(f.root, "text"), path.join(f.root, "alias"));
-    expect(await f.call("find", { pattern: "*" })).toEqual({ paths: ["text"], truncated: false });
+    expect(await f.call("find", { pattern: "*" })).toEqual({ scope: searchScope("*"), paths: ["text"], truncated: false });
     f.put("a", `needle${"x".repeat(1200000)}\n`); f.put("b", `needle${"x".repeat(1200000)}\n`);
     await expect(f.call("grep", { pattern: "needle" })).rejects.toThrow(/bounded work\/output/);
   });
@@ -234,7 +235,7 @@ describe("LocalCodingProvider read contracts", () => {
     fs.unlinkSync(path.join(f.root, "y"));
     vi.stubEnv("PATH", path.join(f.base, "no-executable"));
     // Executable selection is pinned at startup, not repeated from changed PATH.
-    expect(await f.call("find", { pattern: "*" })).toEqual({ paths: ["x"], truncated: false });
+    expect(await f.call("find", { pattern: "*" })).toEqual({ scope: searchScope("*"), paths: ["x"], truncated: false });
     expect(() => f.second()).toThrow(/ripgrep .*required.*not found/);
   });
   it.each([

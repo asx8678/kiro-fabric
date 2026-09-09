@@ -21,7 +21,7 @@ For bounded ranges, `local.read` returns whole lines. `truncated:true` may only 
 
 ```ts
 // Recipe: discover then read without a model round trip
-const hits = await local.grep({pattern:'"id": "example"', path:".", literal:true, limit:10});
+const hits = await local.grep({pattern:'"id": "example"', path:".", hidden:true, literal:true, limit:10});
 if (hits.truncated) throw new Error("Incomplete search: narrow path/pattern");
 const matches = [...hits.matches].sort((a,b) => a.path.localeCompare(b.path) || a.line-b.line);
 const windows: Array<{path:string; start:number; end:number}> = [];
@@ -33,7 +33,7 @@ for (const match of matches) {
 }
 return await parallel(windows, async (range) => {
   const r = await local.read({path:range.path, offset:range.start, limit:range.end-range.start+1});
-  return {path:range.path, offset:range.start, text:r.text, truncated:r.truncated};
+  return {path:range.path, offset:range.start, text:r.text, totalLines:r.totalLines, nextOffset:r.nextOffset ?? null, truncated:r.truncated};
 });
 ```
 

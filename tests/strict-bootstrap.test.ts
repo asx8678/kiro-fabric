@@ -74,12 +74,28 @@ describe("strict checked workspace bootstrap", () => {
     const discovery = await f.call('return await local.find({pattern:"README*",path:".",limit:20});');
     expect(discovery.isError, discovery.content[0].text).not.toBe(true);
     const found = f.value(discovery);
-    expect(found).toEqual({ paths: expectedPath ? [expectedPath] : [], truncated: false });
+    expect(found).toEqual({ scope: { path: ".", glob: "README*", hidden: false, ignoreFiles: true }, paths: expectedPath ? [expectedPath] : [], truncated: false });
     for (const discoveredPath of found.paths) {
       const read = await f.call('return await local.read({path:payloads.path,limit:80});', { path: discoveredPath });
       expect(read.isError, read.content[0].text).not.toBe(true);
       expect(f.value(read)).toMatchObject({ path: expectedPath, text: "# Discovered project\n", truncated: false });
     }
+    expect(wire.forms).toHaveLength(0);
+  });
+
+  it("serves review guidance and hidden-aware coverage through the sole checked model tool", async () => {
+    const f = await fixture();
+    const root = f.projects[0]!;
+    fs.mkdirSync(path.join(root, ".ci"));
+    fs.writeFileSync(path.join(root, ".ci/check.yml"), "script: check.mjs\n");
+    fs.writeFileSync(path.join(root, "check.mjs"), "// first\n// second\n");
+    const response = await f.call('const help = await fabric.help({topic:"review",limit:16000}); const files = await local.find({pattern:"**/*",hidden:true,limit:200}); const references = await local.grep({pattern:"script:",hidden:true}); const read = await local.read({path:"check.mjs",limit:1}); return {help,files,references,read};');
+    expect(response.isError, response.content[0].text).not.toBe(true);
+    const result = f.value(response);
+    expect(result.help.text).toContain("coverage ledger");
+    expect(result.files).toMatchObject({ paths: expect.arrayContaining([".ci/check.yml", "check.mjs"]), scope: { path: ".", hidden: true, ignoreFiles: true }, truncated: false });
+    expect(result.references.matches).toEqual([{ path: ".ci/check.yml", line: 1, text: "script: check.mjs" }]);
+    expect(result.read).toMatchObject({ text: "// first\n", totalLines: 2, truncated: true, nextOffset: 2 });
     expect(wire.forms).toHaveLength(0);
   });
 
@@ -103,7 +119,11 @@ describe("strict checked workspace bootstrap", () => {
     const description = listing.tools.find((tool: { name: string }) => tool.name === "fabric_exec").description;
     expect(description).toContain("text:string");
     expect(description).toContain("not a string/array");
-    expect(description).toContain("local.grep({pattern,path?,glob?,literal?,limit?})");
+    expect(description).toContain("totalLines");
+    expect(description).toContain("scope,truncated");
+    expect(description).toContain("ignore rules still apply");
+    expect(description).toContain("fabric.help({topic:'review'})");
+    expect(description).toContain("local.grep({pattern,path?,glob?,literal?,hidden?,limit?})");
     expect(description).toContain("local.edit({path,oldText,newText,all?})");
     expect(description).toContain("settle:true");
     expect(description).toContain("stdout,stderr");
@@ -125,7 +145,7 @@ describe("strict checked workspace bootstrap", () => {
     fs.writeFileSync(path.join(root, "decoy.json"), '{"id": "other", "description": "example"}\n');
     const search = await f.call(recipes[1]!);
     expect(search.isError, search.content[0].text).not.toBe(true);
-    expect(f.value(search)).toEqual([{ path: "config café.json", offset: 1, text: '{"id": "example", "retryLimit": 3}\n', truncated: false }]);
+    expect(f.value(search)).toEqual([{ path: "config café.json", offset: 1, text: '{"id": "example", "retryLimit": 3}\n', totalLines: 1, nextOffset: null, truncated: false }]);
     const distant = Array.from({ length: 450 }, (_, i) => `quiet line ${i + 1}`);
     for (const line of [400, 401, 420]) distant[line - 1] = `{"id": "example", "where":${line}}`;
     fs.writeFileSync(path.join(root, "far.txt"), distant.join("\n") + "\n");

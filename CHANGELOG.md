@@ -1,5 +1,9 @@
 # Unreleased
 
+- Make repository reviews coverage-led rather than brevity-led: exempt audits from the routine 120-word default, follow high-risk scripts/overrides/consumers, falsify suspected defects, and report unreviewed scope. Ship task-loaded `fabric.help({topic:"review"})` guidance without adding model tools or raising execution budgets.
+- Add `hidden:true` to local grep/find with explicit search `scope`, retaining ignore rules, VCS exclusions and path protections. Include `totalLines` in reads and optimize recursive all-files manifests to one ripgrep launch. These additive result fields change exact serialized result shapes; `truncated:false` is not whole-repository completeness.
+- Add a seeded, read-only infrastructure-review comparison case with independent defect qualification, false-positive/duplicate controls, precision/recall and failure-inclusive credits per grounded finding. Add identical CLI effort selection with observed-setting checks. Offline tests do not establish live model-quality or cost superiority.
+
 - Save the 2026-09-09 coding-readiness investigation and observed Kiro CLI 2.21.2 v3 missing `_kiro/mcp/elicitation` UI handler. Ship bounded-read/glob-search reminders and approval-readiness troubleshooting in compiled help, with regression coverage. Keep per-effect approval safeguards unchanged; healthy installation and passing component tests do not establish successful live shell/edit approval.
 
 - Tighten JSON-only steering after live v3 evidence showed inter-tool commentary entering `finalText`; clarify complete whole-line ranges and CRLF handling without changing read semantics or permissions. Add a frozen Auto comparison harness with strict oracles, exact-once admission, live settings checks and fail-closed usage/budget gates. Retain its stopped 20/102-request pilot, oracle limitations and unresolved native charge; no completed broad-comparison or perfect-compliance claim.

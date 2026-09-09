@@ -15,7 +15,7 @@ export { LocalCodingProvider } from "./providers/local-provider.js";
 export type {
   LocalProviderOptions, LocalReadArguments, LocalGrepArguments, LocalFindArguments,
   LocalListArguments, LocalWriteArguments, LocalEditArguments, LocalShellArguments,
-  LocalIdentity, LocalReadResult, LocalGrepResult, LocalFindResult, LocalListResult,
+  LocalIdentity, LocalReadResult, LocalSearchScope, LocalGrepResult, LocalFindResult, LocalListResult,
   LocalMutationResult, LocalShellResult, LocalShellOptions,
 } from "./providers/local-contract.js";
 export type {

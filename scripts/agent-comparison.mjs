@@ -4,7 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { BUG_CASES, makeBugCase, probeProject } from './steering-benchmark/projects.mjs';
-import { caseHashes } from './steering-benchmark/cases.mjs';
+import { caseHashes, makeCase } from './steering-benchmark/cases.mjs';
+import { REVIEW_CASES, makeReviewCase, probeReviewFixture, scoreReview } from './steering-benchmark/reviews.mjs';
 import { putFiles, save } from './steering-benchmark/core.mjs';
 import { loadPlan, rows, privateOutput } from './steering-benchmark/runner.mjs';
 import { comparisonMetrics, comparisonMarkdown, comparisonCsv } from './steering-benchmark/metrics.mjs';
@@ -14,7 +15,7 @@ node scripts/agent-comparison.mjs selftest
 node scripts/agent-comparison.mjs report --out /private/live-results --dest /private/new-report
 No inference in these commands. Live plans use scripts/steering-benchmark.mjs.
 fixtures never exports held-out tests or reference solutions into agent workspaces.
-selftest proves buggy fixtures fail and reference repairs pass; these are NOT agent statistics.`;
+selftest proves buggy fixtures fail, reference repairs pass, and review defects are reproducible; these are NOT agent statistics.`;
 /** @param {string[]} argv */
 export async function main(argv) {
   const [action, ...rest] = argv;
@@ -26,8 +27,8 @@ export async function main(argv) {
   if (action === 'fixtures') {
     assert.ok(args.out, '--out required'); fs.mkdirSync(args.out, { mode: 0o700 }); const root = privateOutput(args.out), seed = args.seed ?? 'tinyshop-v1';
     const tasks = [];
-    for (const id of BUG_CASES) { const spec = makeBugCase(id, seed), workspace = path.join(root, id); fs.mkdirSync(workspace, { mode: 0o700 }); putFiles(workspace, spec.files); fs.writeFileSync(path.join(root, id + '-prompt.txt'), spec.prompt + '\n', { mode: 0o600, flag: 'wx' }); tasks.push({ id, workspace, hashes: caseHashes(spec) }); }
-    const manifest = { fixtureVersion: 'tinyshop-v1', seed, inferenceRequests: 0, tasks }; save(path.join(root, 'fixtures.json'), manifest); return manifest;
+    for (const id of [...BUG_CASES, ...REVIEW_CASES]) { const spec = makeCase(id, seed), workspace = path.join(root, id); fs.mkdirSync(workspace, { mode: 0o700 }); putFiles(workspace, spec.files); fs.writeFileSync(path.join(root, id + '-prompt.txt'), spec.prompt + '\n', { mode: 0o600, flag: 'wx' }); tasks.push({ id, workspace, hashes: caseHashes(spec) }); }
+    const manifest = { fixtureVersion: 'tinyshop-and-review-v2', seed, inferenceRequests: 0, tasks }; save(path.join(root, 'fixtures.json'), manifest); return manifest;
   }
   if (action === 'selftest') {
     let rejectedBuggy = 0, acceptedReference = 0;
@@ -36,7 +37,14 @@ export async function main(argv) {
       await assert.rejects(probeProject(spec, {}), /public project contract/); rejectedBuggy++;
       assert.equal((await probeProject(spec, spec.solution)).ok, true); acceptedReference++;
     }
-    return { rejectedBuggy, acceptedReference, inferenceRequests: 0, syntheticEvidenceOnly: true };
+    let qualifiedReviews = 0;
+    for (const seed of ['review-v1', 'review-v2']) {
+      const spec = makeReviewCase('review-infra', seed);
+      assert.equal((await probeReviewFixture(spec)).ok, true);
+      assert.equal(scoreReview(spec, { findings: [] }).recall, 0);
+      qualifiedReviews++;
+    }
+    return { rejectedBuggy, acceptedReference, qualifiedReviews, inferenceRequests: 0, syntheticEvidenceOnly: true };
   }
   assert.ok(args.out && args.dest, '--out and --dest required');
   const plan = loadPlan(args.out), observations = rows(privateOutput(args.out)), report = comparisonMetrics(plan, observations);

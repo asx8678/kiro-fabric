@@ -30,5 +30,13 @@ have host access, including writes and network access. Explicit `ask`/`deny`
 overrides are preserved; direct write/network approvals remain `ask`. See
 [approval configuration](docs/configuration.md#clients-without-roots-or-elicitation).
 
+## Evidence-led reviews
+
+Repository reviews now use a coverage ledger and an on-demand `fabric.help({topic:"review"})` workflow: follow scripts, environment overrides and configuration consumers; verify suspected defects and report uninspected scope. Routine answer brevity does not limit audits. This is agent guidance, not a guarantee that a model will find every defect.
+
+`local.find` and `local.grep` accept `hidden:true` for CI/dotfiles while retaining ignore rules, VCS exclusions and path safety. Search results report their `scope`; reads report `totalLines` alongside continuation flags. Recursive all-files manifests use one ripgrep pass rather than repeated shallow directory listings.
+
+The [comparison lab](docs/agent-comparison.md) includes a seeded read-only review fixture with precision/recall and credits-per-grounded-finding reporting. Offline regression tests are not evidence that Fabric outperforms default Kiro; use matched live trials before making that claim.
+
 For unattended installation, add `--yes --non-interactive`. See
 [installation details](docs/installer.md) for prerequisites and recovery.

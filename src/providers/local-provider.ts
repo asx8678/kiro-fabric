@@ -25,11 +25,13 @@ const integer = { type: "integer", minimum: 0 };
 const identitySchema = object({ dev: integer, ino: integer }, ["dev", "ino"]);
 const pathSchema = { type: "string", minLength: 1, maxLength: 4096 };
 const count = { type: "integer", minimum: 1, maximum: 1000 };
+const searchScopeSchema = object({ path: string, glob: string, hidden: boolean, ignoreFiles: { const: true } }, ["path", "hidden", "ignoreFiles"]);
+const VCS_METADATA = new Set([".git", ".hg", ".svn"]);
 const metadataSchema = object({ token: { type: "string", minLength: 36, maxLength: 36 }, beforeSha256: { type: ["string", "null"] }, afterSha256: string, identity: { ...identitySchema, type: ["object", "null"] }, parentIdentity: identitySchema }, ["token"]);
 const rawSchemas: Record<string, Record<string, unknown>> = {
   read: object({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2000 } }, ["path"]),
-  grep: object({ pattern: { type: "string", maxLength: 2000 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2000 }, literal: boolean, ignoreCase: boolean, limit: count }, ["pattern"]),
-  find: object({ pattern: { type: "string", minLength: 1, maxLength: 2000 }, path: pathSchema, limit: count }, ["pattern"]),
+  grep: object({ pattern: { type: "string", maxLength: 2000 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2000 }, literal: boolean, ignoreCase: boolean, hidden: boolean, limit: count }, ["pattern"]),
+  find: object({ pattern: { type: "string", minLength: 1, maxLength: 2000 }, path: pathSchema, hidden: boolean, limit: count }, ["pattern"]),
   list: object({ path: pathSchema, limit: count }),
   write: object({ path: pathSchema, content: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, overwrite: boolean }, ["path", "content"]),
   edit: object({ path: pathSchema, oldText: { type: "string", minLength: 1, maxLength: LOCAL_MAX_FILE_BYTES }, newText: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, all: boolean }, ["path", "oldText", "newText"]),
@@ -37,17 +39,17 @@ const rawSchemas: Record<string, Record<string, unknown>> = {
 };
 const mutationOutput = object({ path: string, changed: boolean, sha256: string, bytes: integer, identity: identitySchema }, ["path", "changed", "sha256", "bytes", "identity"]);
 const outputSchemas: Record<string, Record<string, unknown>> = {
-  read: object({ path: string, text: string, truncated: boolean, nextOffset: { type: "integer", minimum: 1 }, sha256: string, identity: identitySchema }, ["path", "text", "truncated", "sha256", "identity"]),
-  grep: object({ matches: { type: "array", maxItems: 1000, items: object({ path: string, line: { type: "integer", minimum: 1 }, text: { type: "string", maxLength: 500 } }, ["path", "line", "text"]) }, truncated: boolean }, ["matches", "truncated"]),
-  find: object({ paths: { type: "array", maxItems: 1000, items: string }, truncated: boolean }, ["paths", "truncated"]),
+  read: object({ path: string, text: string, totalLines: integer, truncated: boolean, nextOffset: { type: "integer", minimum: 1 }, sha256: string, identity: identitySchema }, ["path", "text", "totalLines", "truncated", "sha256", "identity"]),
+  grep: object({ scope: searchScopeSchema, matches: { type: "array", maxItems: 1000, items: object({ path: string, line: { type: "integer", minimum: 1 }, text: { type: "string", maxLength: 500 } }, ["path", "line", "text"]) }, truncated: boolean }, ["scope", "matches", "truncated"]),
+  find: object({ scope: searchScopeSchema, paths: { type: "array", maxItems: 1000, items: string }, truncated: boolean }, ["scope", "paths", "truncated"]),
   list: object({ entries: { type: "array", maxItems: 1000, items: object({ path: string, type: { enum: ["file", "directory"] } }, ["path", "type"]) }, truncated: boolean }, ["entries", "truncated"]),
   write: mutationOutput, edit: mutationOutput,
   shell: object({ ok: boolean, exitCode: { type: ["integer", "null"] }, signal: { type: ["string", "null"] }, stdout: string, stderr: string, truncated: boolean, stdoutTruncated: boolean, stderrTruncated: boolean }, ["ok", "exitCode", "signal", "stdout", "stderr", "truncated", "stdoutTruncated", "stderrTruncated"]),
 };
 const descriptions: Record<string, string> = {
-  read: "Read valid UTF-8, one-based offset; default 200/max 2000 lines, <=2MiB file, bounded JSON. Whole lines only; truncated means unread file suffix. nextOffset is the next one-based line; stop at the requested end. Oversized single lines fail. No traversal, symlinks, hardlinks or special files.",
-  grep: "Search with external rg, --no-config --sort path; respects ignore files, excludes hidden paths and symlinks. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Pinned startup-validated executable. Selected candidates <=10000; batches <=32 text files/2MiB stop at requested prefix with truncated=true for unsearched files. Aggregate input <=32MiB; search <=10s; narrow path/glob on work limits. No JS search fallback.",
-  find: "Glob file paths via external rg --files --no-config --sort path; respects ignore files, excludes hidden paths and symlinks. Default 100/max 1000 results. Unsafe files rejected. Glob only narrows normal enumeration; selected candidates <=10000, raw process output <=2MiB; search <=10s. Narrow path/glob on work limits.",
+  read: "Read valid UTF-8, one-based offset; default 200/max 2000 lines, <=2MiB file, bounded JSON. Whole lines only; totalLines counts the whole file; truncated means unread file suffix. nextOffset is the next one-based line; stop at the requested end. Oversized single lines fail. No traversal, symlinks, hardlinks or special files.",
+  grep: "Search with external rg, --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Pinned startup-validated executable. Selected candidates <=10000; batches <=256 text files/2MiB stop at requested prefix with truncated=true for unsearched files. Aggregate input <=32MiB; search <=10s; narrow path/glob on work limits. No JS search fallback.",
+  find: "Glob file paths via external rg --files --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 results. Unsafe files rejected. Glob only narrows normal enumeration; selected candidates <=10000, raw process output <=2MiB; search <=10s. Narrow path/glob on work limits.",
   list: "Sorted direct children, including hidden entries; only path/limit, no depth. Use local.find for nested files. Default 100/max 1000 results, at most 10000 scanned entries. Symlinks, hardlinks and special entries fail.",
   write: "Exact approved write, create-only unless overwrite=true; existing parent required. Snapshots bind identities/content and complete diff before approval; revalidated before publication. Path checks are defense in depth, not hostile-race isolation.",
   edit: "Exact approved edit; nonempty unique oldText unless all=true (nonoverlapping replacements). Existing parent required. Identity/hash conflict detection and complete actual diff; no multi-operation transaction or hostile-race isolation.",
@@ -304,7 +306,7 @@ export class LocalCodingProvider implements FabricProvider {
     if (text.endsWith("\n")) lines.pop();
     const start = ((args.offset as number | undefined) ?? 1) - 1;
     const end = Math.min(lines.length, start + ((args.limit as number | undefined) ?? 200));
-    const result: LocalReadResult = { path: this.#paths.relative(snapshot.path), text: "", truncated: false, sha256: snapshot.file!.sha256, identity: snapshot.file!.identity };
+    const result: LocalReadResult = { path: this.#paths.relative(snapshot.path), text: "", totalLines: lines.length, truncated: false, sha256: snapshot.file!.sha256, identity: snapshot.file!.identity };
     this.#bounded(result);
     for (let index = start; index < end; index++) {
       const previous = result.text;
@@ -364,13 +366,20 @@ export class LocalCodingProvider implements FabricProvider {
     context = { ...context, deadline: new FabricDeadline(searchMs, searchMs) };
     const base = this.#paths.check((args.path as string | undefined) ?? ".");
     const glob = name === "find" ? args.pattern as string : args.glob as string | undefined;
-    const enumeration = await this.#rg(["--files", "--null", "--", base.path], context);
+    const relative = this.#paths.relative(base.path) || ".";
+    if (relative.split("/").some(part => VCS_METADATA.has(part))) throw new Error("local search excludes VCS metadata");
+    const scope = { path: relative, ...(glob ? { glob } : {}), hidden: args.hidden === true, ignoreFiles: true as const };
+    // Opting into dotfiles does not opt into repository internals or ignored data.
+    const enumerationArgs = ["--files", "--null", ...(scope.hidden ? ["--hidden"] : []),
+      ...[...VCS_METADATA].flatMap(name => ["--glob", `!**/${name}`, "--glob", `!**/${name}/**`])];
+    const enumeration = await this.#rg([...enumerationArgs, "--", base.path], context);
     let files = enumeration.split("\0").filter(Boolean);
     if (!glob && files.length > 10000) throw new Error("local search exceeded 10000-file work limit; narrow path or glob");
-    if (glob) {
+    if (glob && glob !== "**/*") {
+      // The all-files manifest needs no second rg launch or executable hash.
       // Positive rg globs can override hidden/ignore rules. Intersect with the
       // normal enumeration so a glob only narrows scope, never expands it.
-      const filtered = await this.#rg(["--files", "--null", "--glob", glob, "--", base.path], context);
+      const filtered = await this.#rg([...enumerationArgs, "--glob", glob, "--", base.path], context);
       const selected = new Set(filtered.split("\0").filter(Boolean));
       files = files.filter((file) => selected.has(file));
     }
@@ -379,7 +388,7 @@ export class LocalCodingProvider implements FabricProvider {
     for (const file of checked) if (!file.stat?.isFile()) throw new Error("local search requires regular files");
     const limit = (args.limit as number | undefined) ?? 100;
     if (name === "find") {
-      const result: LocalFindResult = { paths: [], truncated: false };
+      const result: LocalFindResult = { scope, paths: [], truncated: false };
       for (const file of checked) {
         if (result.paths.length >= limit) { result.truncated = true; break; }
         result.paths.push(this.#paths.relative(file.path));
@@ -387,8 +396,8 @@ export class LocalCodingProvider implements FabricProvider {
       }
       return this.#bounded(result);
     }
-    const result: LocalGrepResult = { matches: [], truncated: false };
-    if (!files.length) return result;
+    const result: LocalGrepResult = { scope, matches: [], truncated: false };
+    if (!files.length) return this.#bounded(result);
     const candidates = checked.filter((item) => item.stat!.size <= LOCAL_MAX_FILE_BYTES);
     if (candidates.length !== checked.length) result.truncated = true;
     let searchedBytes = 0;

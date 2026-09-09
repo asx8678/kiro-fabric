@@ -4,11 +4,11 @@ import assert from 'node:assert/strict';
 import { object, digest, errorText } from './core.mjs';
 
 /** @typedef {{id:string, input:unknown, output:unknown, title:string, origin:string, status:string, system:boolean}} Call */
-/** @typedef {{failures:string[],events:unknown[],calls:Call[],usage:Record<string,unknown>[],credits:number|null,finalText:string,mode:string|null,model:string|null,requestIds:string[],sessionId:string|null}} Evidence */
+/** @typedef {{failures:string[],events:unknown[],calls:Call[],usage:Record<string,unknown>[],credits:number|null,finalText:string,mode:string|null,model:string|null,effort?:string|null,requestIds:string[],sessionId:string|null}} Evidence */
 /** Validate the observed ACP stream, without inferring missing events or usage.
  * @param {unknown[]} events @returns {Evidence} */
 export function analyzeEvents(events) {
-  /** @type {Evidence} */ const out = { failures: [], events, calls: [], usage: [], credits: null, finalText: '', mode: null, model: null, requestIds: [], sessionId: null };
+  /** @type {Evidence} */ const out = { failures: [], events, calls: [], usage: [], credits: null, finalText: '', mode: null, model: null, effort: null, requestIds: [], sessionId: null };
   /** @type {Map<string,Record<string,unknown>>} */ const calls = new Map();
   const completions = new Set(), requests = new Set();
   let finished = 0, turns = 0, invalidUsage = false;
@@ -25,7 +25,7 @@ export function analyzeEvents(events) {
       const u = object(data.update);
       if (u.sessionUpdate === 'config_option_update') {
         assert.ok(Array.isArray(u.configOptions), 'config options missing');
-        for (const rawOption of u.configOptions) { const c = object(rawOption); if (c.id === 'mode') out.mode = String(c.currentValue); if (c.id === 'model') out.model = String(c.currentValue); }
+        for (const rawOption of u.configOptions) { const c = object(rawOption); if (c.id === 'mode') out.mode = String(c.currentValue); if (c.id === 'model') out.model = String(c.currentValue); if (c.id === 'effort') out.effort = String(c.currentValue); }
       }
       if (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update') {
         assert.ok(typeof u.toolCallId === 'string' && u.toolCallId, 'call id missing'); const id = String(u.toolCallId);

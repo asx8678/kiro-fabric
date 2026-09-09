@@ -7,6 +7,7 @@ export const GUIDANCE_FILES = Object.freeze({
   guide: "skills/fabric-exec/references/api.md",
   recipes: "skills/fabric-exec/references/recipes.md",
   workflow: "skills/fabric-exec/references/workflow.md",
+  review: "skills/fabric-exec/references/review.md",
 });
 
 /** @param {string} root */

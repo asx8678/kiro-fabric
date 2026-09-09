@@ -32,7 +32,7 @@ export async function init(manifest, output) {
   assert.ok(versions.every(v => v.code === 0 && !v.stopReason && !v.spawnError), 'version preflight failed; retain directory, initialize elsewhere');
   fs.mkdirSync(path.join(root, 'results'), { mode: 0o700 }); fs.mkdirSync(path.join(root, 'runs'), { mode: 0o700 });
   const frozen = { ...plan, versions }; save(path.join(root, 'plan.json'), { plan: frozen, sha256: digest(frozen) });
-  return { output: root, runs: plan.runs.length, model: 'auto', plannedCredits: plan.config.plannedCredits, reserveCredits: plan.config.reserveCredits, liveRequests: 0 };
+  return { output: root, runs: plan.runs.length, model: plan.config.model ?? 'auto', effort: plan.config.effort ?? null, plannedCredits: plan.config.plannedCredits, reserveCredits: plan.config.reserveCredits, liveRequests: 0 };
 }
 /** @param {string} root @returns {Row[]} */
 export function rows(root) {
@@ -48,6 +48,7 @@ function updateRow(root, row) {
 /** @param {Plan} plan @param {import('./plan.mjs').Run} item @param {string} workspace @param {string} prompt */
 export function commandFor(plan, item, workspace, prompt) {
   const args = ['chat', '--v3', '--model', plan.config.model ?? 'auto', '--no-interactive', '--output-format', 'stream-json'];
+  if (plan.config.effort) args.push('--effort', plan.config.effort);
   if (item.arm !== 'native') args.push('--agent', 'steering-' + item.arm, '--require-mcp-startup');
   else args.push('--trust-tools=' + (plan.config.nativeTrustTools ?? ['fs_read', 'fs_write', 'shell']).join(','));
   args.push(prompt); return { executable: plan.config.cli, args, cwd: workspace };
@@ -85,7 +86,7 @@ export async function runOne(output, index, signal) {
       row.stopReason = result.stopReason ?? (result.spawnError || result.code !== 0 ? 'client-failure' : row.evidence.failures.length ? 'incomplete-events' : row.credits === null ? 'missing-usage' : row.credits > plan.config.singleRunCreditLimit ? 'single-run-credit-limit' : null);
       // Persist charge evidence before running any oracle or candidate-code probe.
       updateRow(root, row);
-      row.validation = await validate({ spec, workspace, before, evidence: row.evidence, arm: item.arm, expectedMode: item.arm === 'native' ? plan.config.nativeMode : 'steering-' + item.arm, expectedModel: plan.config.model ?? 'auto', python: plan.config.python, processOk: !row.stopReason && result.code === 0 && !stream.malformed });
+      row.validation = await validate({ spec, workspace, before, evidence: row.evidence, arm: item.arm, expectedMode: item.arm === 'native' ? plan.config.nativeMode : 'steering-' + item.arm, expectedModel: plan.config.model ?? 'auto', expectedEffort: plan.config.effort, python: plan.config.python, processOk: !row.stopReason && result.code === 0 && !stream.malformed });
       row.ok = row.validation.ok;
       if (row.validation.failures.some(f => f.check === 'scope' || f.check === 'identity')) row.stopReason ??= 'scope-or-identity-failure';
       try { verifyPlan(plan); } catch (error) { row.stopReason ??= 'post-run-drift'; row.ok = false; row.error = errorText(error); }

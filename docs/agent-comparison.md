@@ -23,7 +23,7 @@ node scripts/agent-comparison.mjs selftest
 pnpm run comparison:selftest
 ```
 
-The output directory must not already exist. The exporter creates nine complete projects, their task prompts and a hash manifest. No reference solutions or held-out tests are exported into the agent workspaces. To inspect the all-bugs example:
+The output directory must not already exist. The exporter creates nine bug-repair projects plus one read-only infrastructure-review project, their task prompts and a hash manifest. No reference solutions or held-out tests are exported into the agent workspaces. To inspect the all-bugs example:
 
 ```sh
 cd /tmp/my-new-tinyshop-lab/bug-checkout
@@ -113,6 +113,16 @@ return lines;
 
 One outer tool call can contain multiple inner effects. **One call is not one read, one model request or one unit of cost.** Preserve ordinary failure evidence rather than rerunning a failed effectful program blindly.
 
+## Read-only infrastructure review
+
+The exported `review-infra` task is a structured review, not a repair task. It contains hidden CI configuration, a referenced maintenance script, per-environment overrides, an alert renderer, validator scripts, and a long exemptions file with relevant evidence beyond line 200. Five seeded defects have a controller-held oracle; three harmless configurations are false-positive controls. Paths, line offsets and schedule values vary by seed. No credentials, services, dependency installation or network calls are needed.
+
+The output schema uses finding categories plus exact file/line/source evidence, including caller/consumer evidence for cross-file defects. Categories include decoys; the prompt does not disclose which apply or how many defects exist. The grader counts unique grounded findings and reports partial recall, false positives and duplicates. It enforces read-only scope and raw JSON separately. This constrained fixture is not a semantic judge for arbitrary natural-language reviews, nor proof that source citations establish a model's private investigation process.
+
+`node scripts/agent-comparison.mjs selftest` independently executes the fixture's credential mapping, renderer and invalid-input validators, checks expiration against a fixed review date, and qualifies the hidden/tail evidence. Synthetic/reference runs never enter live agent statistics.
+
+For a future operator-approved comparison, select `"cases":["review-infra"]`, pin the same available model and `"effort":"low"`, and use repeated order-balanced runs in fresh workspaces. Existing manifest identity, spend-reserve and permission requirements still apply. Compare precision and recall before credits per grounded finding; a cheap partial review must not win by omitting defects. Include timeouts, failures and unknown telemetry rather than silently dropping them. Do not treat a single pair as evidence of a magnitude improvement.
+
 ## Live plan and consent
 
 Use `node scripts/steering-benchmark.mjs --help` for all options. Live runs require an authenticated native Kiro CLI, a private standalone Fabric bundle/profile/data root and explicit operator spend approval. Do not copy credentials into a fixture or disable approval globally.
@@ -140,7 +150,7 @@ Relevant manifest fields (identity paths omitted here; the real manifest require
 }
 ```
 
-`arms.fabric` names the snapshotted Fabric profile, complete bundle root and preinitialized private config paths; native is implicit. Legacy `old`, `pass1`, `pass2` arm names remain supported. `model` is passed identically to both agents and checked against returned session configuration. `auto` does **not** identify the actual routed model/revision; use an available explicit model ID for a tighter future experiment.
+`arms.fabric` names the snapshotted Fabric profile, complete bundle root and preinitialized private config paths; native is implicit. Legacy `old`, `pass1`, `pass2` arm names remain supported. `model` is passed identically to both agents and checked against returned session configuration. `auto` does **not** identify the actual routed model/revision; use an available explicit model ID for a tighter future experiment. Optional `effort` (low/medium/high/xhigh/max) is passed identically with `--effort` and checked against the returned ACP `effort` configuration option. If the client omits that evidence or reports a mismatch, the trial fails identity qualification; do not infer equal effort from model identity alone.
 
 ### Current native v3 shell policy
 
@@ -176,6 +186,7 @@ Reports are `comparison.json`, `comparison.md` and `attempts.csv`. Raw attempts 
 
 - **Strict pass**: process/usage/model/routing, exact output format/answer, allowed filesystem changes and independent checks all pass.
 - **Independent project repair**: for TinyShop only, both public and held-out tests pass and all non-answer validity checks pass. An extra-prose/JSON failure remains a strict failure; the repair count is a separate quality dimension, not a retroactive relabeling. It proves controller-observed behavior, not that every claimed model-side test was executed.
+- **Grounded review quality**: the `review-infra` oracle counts unique source-backed findings, false positives, duplicates, precision and recall. Scores remain visible for partial reviews even when strict answer validation fails. Routing/identity/process/scope failures or unparseable answers remain unscored, not zero-cost successes. Credits per verified finding include all review-attempt charges; incomplete scores or charges yield `null`.
 - **Credits per success**: all comparable attempt credits, including failures, divided by successes. Unknown charge coverage or no successes yields `null`.
 - **Latency**: end-to-end CLI wall time, including startup/tool work, with median and p90. Report coverage; interrupted attempts are not dropped to make the agent look fast.
 - **Outer calls and traffic**: observed non-system ACP tool calls and serialized argument/result UTF-16 characters. These are not inner effect counts, prompt tokens, model round trips or wire sizes. Automatic cloud-config startup is excluded from model tool calls.

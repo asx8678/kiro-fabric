@@ -91,7 +91,7 @@ const fixture = (): { root: string; home: string; workspace: string; kiroHome: s
 describe("user-global Agent installation", () => {
   it("stages all canonical guidance and still rejects extra skill files", () => {
     const variant = packageVariant(temporary(), "0.64.1");
-    for (const relative of ["SKILL.md", "references/api.md", "references/recipes.md", "references/workflow.md"]) {
+    for (const relative of ["SKILL.md", "references/api.md", "references/recipes.md", "references/workflow.md", "references/review.md"]) {
       expect(fs.readFileSync(path.join(variant, "skills/fabric-exec", relative), "utf8")).toBe(fs.readFileSync(path.resolve("skills/fabric-exec", relative), "utf8"));
     }
     expect(() => validateAgentPackage(variant)).not.toThrow();

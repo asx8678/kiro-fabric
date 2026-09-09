@@ -35,7 +35,7 @@ const steering = readFileSync(new URL("../resources/steering/fabric.md", import.
 // Budget explicit standing text, not task-loaded help, tokens or billing.
 // The former 3500-character ceiling did not include the user's repository rules.
 // Keep detailed procedures/recipes off the hot path and measure the input trade-off.
-const MAX_STANDING_CHARS = 5200;
+const MAX_STANDING_CHARS = 6400;
 
 // Contract clauses, not whole sentences: tolerate punctuation and connective
 // prose changes while keeping obligations in the prompt even without steering.
@@ -122,6 +122,11 @@ describe("Kiro Agent profile generation", () => {
     expect(AGENT_PROMPT).toContain("Kiro concatenates it into finalText");
   });
 
+  it("makes review coverage mandatory without a findings quota or a brevity cutoff", () => {
+    for (const clause of ["Correctness and coverage before speed", "do not stop early to save calls", "reviews/audits are exempt", 'fabric.help({topic:"review"})', "coverage ledger", "environment overrides", "Listing is not inspection", "try to disprove", "Report uninspected scope", "never invent findings", "hidden:true", "totalLines", "zero matches is not whole-repo absence"]) expect(AGENT_PROMPT).toContain(clause);
+    expect(typeCheckFabricCode('return await local.find({pattern:"**/*",hidden:true,limit:200});', fabricGuestDeclarations).errors).toEqual([]);
+  });
+
   it("keeps proportional quality gates and quiet progress always on", () => {
     const prompt = generateAgentProfile(options).prompt;
     for (const rule of [/acceptance ledger/i, /trace[^.]*before editing/i, /public symbols, registrations and configuration/i,
@@ -135,8 +140,8 @@ describe("Kiro Agent profile generation", () => {
   it("budgets the activated skill separately from standing text and on-demand help", () => {
     const skill = readFileSync(new URL("../skills/fabric-exec/SKILL.md", import.meta.url), "utf8");
     // Character budgets are input-growth guards, not token, billing or model-quality measurements.
-    expect(skill.length).toBeLessThanOrEqual(10000);
-    expect(AGENT_PROMPT.length + steering.length + skill.length).toBeLessThanOrEqual(MAX_STANDING_CHARS + 10000);
+    expect(skill.length).toBeLessThanOrEqual(10400);
+    expect(AGENT_PROMPT.length + steering.length + skill.length).toBeLessThanOrEqual(MAX_STANDING_CHARS + 10400);
   });
 
   it("type-checks every documented local recipe", () => {
@@ -165,6 +170,7 @@ describe("Kiro Agent profile generation", () => {
     expect(typeCheckFabricCode(code!, fabricGuestDeclarations).errors).toEqual([]);
     const bootstrap = AGENT_PROMPT.match(/return await fabric\.(?:info|help|workspace)\([^)]*\)/g) ?? [];
     expect(bootstrap).toHaveLength(3);
+    expect(typeCheckFabricCode('return await fabric.help({topic:"review"});', fabricGuestDeclarations).errors).toEqual([]);
     for (const call of bootstrap) expect(typeCheckFabricCode(call, fabricGuestDeclarations).errors, call).toEqual([]);
     expect(AGENT_PROMPT).toMatch(/fabric\.workspace\(\{action:\s*"list"\}\)/);
     expect(AGENT_PROMPT).toMatch(/tools\.search\b[^.]*tools\.describe\b/);
