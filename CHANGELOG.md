@@ -1,5 +1,7 @@
 # Unreleased
 
+- Save the 2026-09-09 coding-readiness investigation and observed Kiro CLI 2.21.2 v3 missing `_kiro/mcp/elicitation` UI handler. Ship bounded-read/glob-search reminders and approval-readiness troubleshooting in compiled help, with regression coverage. Keep per-effect approval safeguards unchanged; healthy installation and passing component tests do not establish successful live shell/edit approval.
+
 - Tighten JSON-only steering after live v3 evidence showed inter-tool commentary entering `finalText`; clarify complete whole-line ranges and CRLF handling without changing read semantics or permissions. Add a frozen Auto comparison harness with strict oracles, exact-once admission, live settings checks and fail-closed usage/budget gates. Retain its stopped 20/102-request pilot, oracle limitations and unresolved native charge; no completed broad-comparison or perfect-compliance claim.
 
 - Port explicit tool/output precedence and safe coding/Git/GitHub working rules into standing Kiro guidance. Add fixed `fabric.help` topics for compiled skill, API prose, recipes and workflow. Generate immutable help from canonical Markdown and check parity; preserve single-tool, workspace, per-effect approval and non-replay boundaries. Clarify that steering, stream-json and tool result formatting do not enforce the final assistant answer.
@@ -14,7 +16,8 @@
 
 - Serialize local shell/write/edit calls within each Code Mode execution before argument preparation, including concurrent `Promise.all` and generic `tools.call`. Keep reads parallel, stop queued effects after failure/cancellation, and retain cross-execution/process conflict protection.
 
-- Change default read/write/execute/network approval policy to `allow` without confirmation. Explicit `ask`/`deny` settings remain authoritative; missing approval fields adopt these defaults on restart. Document host-authority implications and opt-out configuration.
+- Require confirmation by default for write, execute and network effects; keep reads allowed. Missing/declined elicitation fails closed. Explicit existing policies are preserved, including operator-selected `allow`; omitted categories adopt safe defaults after update/restart. Document shell host authority and migration from permissive settings.
+- Implement macOS stale-lock recovery through an embedded, bounded private-Node child with a kernel-pinned cwd, inode/hash checks and separate exclusive-create/publication phases. Preserve partial claims and uncertain process evidence; retain Linux FD anchoring. Exercise native SIGKILL/concurrent reclamation and installed-bundle recovery without acquisition files. Report recoverability only after an actual capability check; unsupported recovery preserves evidence and returns exit 7. Surface blocked signing in doctor and retain authenticated-client and four-target release qualification requirements.
 - Forward the launcher workspace explicitly through Kiro's filtered MCP environment, preserving integrity-checked upgrades from older profiles.
 
 - Report interpreter drift and a digest-bound action catalog in `fabric_info`, describe `fabric_workspace` action/field requirements in its schema, prune superseded runtime generations (keeping the current and previous) on install, share one esbuild option module between the library and closure builds, and document degraded-client operation plus archive-digest semantics.

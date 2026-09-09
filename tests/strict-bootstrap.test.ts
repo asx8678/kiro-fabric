@@ -47,8 +47,7 @@ const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "
   const server = await createKiroMcpServer({ runtimeRoot, dataRoot, ...(launch ? { launchWorkspaceRoot: launch === "project" ? projects[0]! : dataRoot } : {}), version: "fixture", workspaceContext: {
     current: async () => snapshot, invalidate() {}, subscribe: () => ({ dispose() {} }),
   }, prepareRuntime: (options) => createKiroRuntime({ ...options, config: normalizeFabricConfig({
-    // These fixtures exercise interactive approval, independently of product defaults.
-    approvals: { write: "ask", execute: "ask", network: "ask" },
+    // Exercise product approval defaults through the real compiler/registry/approver.
     executor: { timeoutMs: 5000, maxTimeoutMs: 180000 }, mcp: { enabled: false },
   }) }) });
   servers.push(server);
@@ -344,14 +343,21 @@ describe("strict checked workspace bootstrap", () => {
     expect(f.value(read).text).toBe("source:project-a\n");
   });
 
-  it("a denied local edit/shell never takes effect despite allowed outer execution", async () => {
-    const f = await fixture();
+  it.each([true, false])("default local effects fail closed despite allowed outer execution (elicitation=%s)", async (elicitation) => {
+    const f = await fixture(); wire.elicitation = elicitation;
+    const read = await f.call('return await local.read({path:"fixture.txt"})');
+    expect(f.value(read).text).toBe("source:project-a\n");
+    const write = await f.call('return await local.write({path:"denied.txt",content:"must not exist"})');
+    expect(write.isError).toBe(true);
+    expect(fs.existsSync(path.join(f.projects[0]!, "denied.txt"))).toBe(false);
     const edit = await f.call('return await local.edit({path:"fixture.txt",oldText:"source",newText:"changed"})');
     expect(edit.isError).toBe(true); expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toContain("source:");
     const shell = await f.call('return await local.shell({command:"printf altered > fixture.txt",settle:true})');
     expect(shell.isError).toBe(true); expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toContain("source:");
-    expect(wire.forms.join("\n")).toContain("printf altered");
-    expect(wire.forms.join("\n")).toContain("fixture.txt");
+    if (elicitation) {
+      expect(wire.forms.join("\n")).toContain("printf altered");
+      expect(wire.forms.join("\n")).toContain("fixture.txt");
+    } else expect(wire.forms).toHaveLength(0);
   });
 
   it("local argument type errors prevent ALL earlier source effects and dynamic malformed args are rejected", async () => {

@@ -18,26 +18,35 @@ const action: ResolvedFabricAction = {
 };
 
 describe("Fabric approval and projection", () => {
-  it("allows default shell execution without elicitation but honors explicit ask/deny", async () => {
+  it("requires default effect approval without weakening explicit policies", async () => {
     const request = vi.fn(async () => ({ action: "accept" as const, approved: true }));
     const bridge = new KiroPowerApprover({ supported: () => false, request });
     const shell = { ...action, name: "shell", ref: "local.shell", provider: "local", risk: "execute" as const };
     const args = { command: "elixir --version", review: 'Command: "elixir --version"\nCanonical cwd: "/workspace"' };
     const approver = new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, bridge, "/workspace");
-    await expect(approver.approve(shell, args)).resolves.toBeUndefined();
+    await expect(approver.approve(shell, args)).rejects.toThrow("denied or unavailable");
+    await expect(new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, execute: "allow" }, bridge, "/workspace").approve(shell, args)).resolves.toBeUndefined();
     for (const execute of ["ask", "deny"] as const) {
       const restricted = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, execute }, bridge, "/workspace");
       await expect(restricted.approve(shell, args)).rejects.toThrow(/denied/);
     }
     for (const risk of ["read", "write", "network"] as const) {
       const other = { ...action, risk };
-      await expect(approver.approve(other, {})).resolves.toBeUndefined();
+      if (risk === "read") await expect(approver.approve(other, {})).resolves.toBeUndefined();
+      else await expect(approver.approve(other, {})).rejects.toThrow("denied or unavailable");
+      await expect(new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, [risk]: "allow" }, bridge, "/workspace").approve(other, {})).resolves.toBeUndefined();
       for (const mode of ["ask", "deny"] as const) {
         const restricted = new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, [risk]: mode }, bridge, "/workspace");
         await expect(restricted.approve(other, {})).rejects.toThrow(/denied/);
       }
     }
     expect(request).not.toHaveBeenCalled();
+  });
+  it.each(["write", "execute", "network"] as const)("prompts exactly once before permitting default %s risk", async (risk) => {
+    const request = vi.fn(async () => ({ action: "accept" as const, approved: true }));
+    const approver = new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, new KiroPowerApprover({ supported: () => true, request }), "/workspace");
+    await expect(approver.approve({ ...action, risk }, {})).resolves.toBeUndefined();
+    expect(request).toHaveBeenCalledTimes(1);
   });
   it("prepares a deferred prompt with one policy evaluation and an immutable exact request identity", async () => {
     let evaluations = 0;

@@ -182,11 +182,13 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `tests/source-pull-hook.test.ts` — source-home equality, hook failure reporting, preservation, and narrow macOS ancestry policy.
 - `src/installation/bundle-contract.mjs`
 - `src/installation/installer-lock.mjs`
+- `src/installation/pinned-recovery.mjs` — embedded bounded child for macOS inode-pinned claim inspection, exclusive empty creation and exact publication; no parent cwd mutation or pathname recovery fallback.
 - `src/kiro/managed-generation.ts`
 - `tests/bundle-archive.test.ts`
 - `tests/bundle-contract.test.ts`
 - `tests/bundle-fixture.ts`
 - `tests/install-manager-cli.test.ts`
+- `tests/install-manager-start.test.ts` — read-only active-generation launch admission, prerequisite/recovery/integrity exit codes, legacy refusal, and workspace/child-exit preservation.
 - `tests/installed-independence.test.ts`
 - `tests/source-bootstrap.test.ts`
 - `tests/legacy-archive.test.ts`
@@ -194,6 +196,7 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `tests/installer-bootstrap.test.ts`
 - `tests/installer-home.test.ts`
 - `tests/installer-lock.test.ts`
+- `tests/pinned-recovery.test.ts` — real child cwd pinning under pathname replacement, claim/control identity checks, canonical bounds and Node environment isolation.
 - `tests/installer-platform.test.ts`
 - `tests/managed-generation.test.ts`
 - `tests/managed-installation.test.ts`

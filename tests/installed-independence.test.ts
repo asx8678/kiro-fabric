@@ -136,7 +136,14 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     await fs.writeFile(path.join(cwd, 'probe.txt'), 'independence-sentinel\n', { mode: 0o600 });
     // A cached retained-generation profile must still launch its own private tools.
     await checkedReadGrep(profile.mcpServers.fabric, cwd, env);
+    // Fixture setup leaves a real SIGKILL stale owner. Reclamation below MUST
+    // run the installed bundled manager/private Node, with acquisition files gone.
+    const lockModule = new URL('../scripts/installer-lock.mjs', import.meta.url).href;
+    const dead = spawnSync(profile.mcpServers.fabric.command, ['--input-type=module', '-e', `import {acquireInstallationLock} from ${JSON.stringify(lockModule)}; acquireInstallationLock(process.argv[1], {onPhase(phase) {if (phase === 'owner-initialized') process.kill(process.pid, 'SIGKILL');}});`, installed.paths.base], { cwd, env, encoding: 'utf8', timeout: 10000 });
+    expect(dead.error).toBeUndefined(); expect(dead.signal, dead.stderr).toBe('SIGKILL');
+    expect(JSON.parse(run(['doctor', '--json'], 7)).outcome).toBe('recovery-required');
     const rollback = JSON.parse(run(['rollback', '--yes', '--non-interactive', '--json']));
+    expect((await fs.readdir(installed.paths.base)).filter(name => name.startsWith('.install-lock-quarantine-'))).toHaveLength(1);
     expect(rollback.digest).toBe(installed.digest);
     expect(await fs.readFile(installed.paths.profile)).toEqual(profileBytes);
     await checkedReadGrep(profile.mcpServers.fabric, cwd, env);

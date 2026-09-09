@@ -1,10 +1,18 @@
 # Status
 
+## Readiness remediation
+
+**2026-09-09 local observation:** Kiro CLI 2.21.2 v3 reaches Fabric reads but its approval UI reports `No handler registered for method: _kiro/mcp/elicitation`. The official updater offered no newer version on that date. Human-approved shell/edit checks remain **BLOCKED**, even when installation doctor and profile validation pass. Preserve `ask` policies. See the [saved diagnosis, evidence and retest ledger](docs/coding-readiness-2026-09-09.md).
+
+Missing approval settings now allow reads but ask before write, execute and network effects. Missing/declined elicitation fails closed; existing explicit policies are not rewritten. Restart after updating to adopt the defaults, and review any existing explicit `allow` settings. See [configuration](docs/configuration.md#clients-without-roots-or-elicitation).
+
+Stale-lock diagnostics check actual inode-pinned capability before reporting recoverability; unsupported recovery preserves evidence and returns recovery exit 7. macOS recovery now uses an embedded, bounded child with a kernel-pinned cwd and exact inode/hash checks. Native ARM64 component tests exercise real SIGKILL, competing reclaimers and transaction replay; partial/uncertain controls remain preserved. Doctor explicitly warns when signed distribution is blocked. Component recovery is not authenticated release qualification. The remaining operator-owned gates and required evidence are listed in the [release checklist](docs/release.md#remaining-readiness-checklist).
+
 ## Complete-generation installer
 
-Source-build installation and installed management now use matching application/private Node/private ripgrep/manager/steering/skills generations with schema-3 ownership and journaled activation. Linux component tests include actual abrupt-process-death recovery and installed-bundle read/search without system Node/ripgrep or acquisition files. Fake-client command-contract coverage is not authenticated Kiro evidence. The actual local Kiro 2.21.1 version/validation-help probes pass with isolated, credential-free homes; resource loading and authenticated execution remain untested.
+Source-build installation and installed management now use matching application/private Node/private ripgrep/manager/steering/skills generations with schema-3 ownership and journaled activation. Linux component tests include actual abrupt-process-death recovery and installed-bundle read/search without system Node/ripgrep or acquisition files. Fake-client command-contract coverage is not authenticated Kiro evidence. The earlier Kiro 2.21.1 version/validation-help probes passed with isolated, credential-free homes. Subsequent local Kiro 2.21.2 v3 review evidence confirms reads but exposes a missing client approval handler; see the dated readiness report above. Full authenticated release qualification remains unverified.
 
-Production signed discovery/bootstrap distribution remains BLOCKED while the production trust root and exact-artifact qualification are absent. Native macOS/ARM qualification is pending; purge intentionally refuses while complete inactivity cannot be established. No real-home installation, authentication, commit or release was performed. See [installer details](docs/installer.md) and the final verification handoff for executed check results.
+Production signed discovery/bootstrap distribution remains BLOCKED while the production trust root and exact-artifact qualification are absent. Native macOS/ARM qualification is pending; purge intentionally refuses while complete inactivity cannot be established. A subsequent operator-authorized source installation into the real Kiro home has been performed; this is not signed-release or authenticated coding qualification. No new login, commit or release was performed for the readiness investigation. See [installer details](docs/installer.md) and the final verification handoff for executed check results.
 
 ## Strict runtime and client qualification
 

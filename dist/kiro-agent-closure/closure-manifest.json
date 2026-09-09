@@ -12,6 +12,7 @@
     "src/execution-service.ts",
     "src/installation/bundle-contract.mjs",
     "src/installation/installer-lock.mjs",
+    "src/installation/pinned-recovery.mjs",
     "src/kernel/fabric-exec-contract.ts",
     "src/kiro/artifacts.ts",
     "src/kiro/bootstrap-provider.ts",
@@ -543,9 +544,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-QUQF4IBB.js",
-      "bytes": 1160776,
-      "sha256": "aae914e7e64430ab9def0c968cf1662b2621c17748ab77989406fe9bc1d2d4e7"
+      "path": "chunks/mcp-server-64G3VYJS.js",
+      "bytes": 1162408,
+      "sha256": "71d8ce9443c32cc20b0d871dea857051bed0a2c3f6f5e91442d294a672389300"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -564,8 +565,8 @@
     },
     {
       "path": "kiro/mcp-entry.js",
-      "bytes": 48053,
-      "sha256": "cf1ecfc70be1f126ac8d90d085f3325f0d66b4e4a71312080247bc89d292260f"
+      "bytes": 56006,
+      "sha256": "bfa81bc40309a01fbef6b5d5d219f2c86219a5bfa65d7f3dd2df16b1ccea5764"
     },
     {
       "path": "package.json",
@@ -583,5 +584,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "b6bebeb33b2150dc07119345ccdc8a55e9e0deacbcc9812c6f2ad19b7cff94c8"
+  "contentDigest": "7a520fbb8b727f05cdcd15cbcab279a1abfc0fb396fbdf419cfeb67f325f87ca"
 }

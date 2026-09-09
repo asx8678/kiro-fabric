@@ -67,6 +67,7 @@ test('precommit candidate failure reports recovery and doctor preserves its evid
  expect(diagnostic.outcome).toBe('recovery-required');
  expect(diagnostic.checks.find(check=>check.id==='installation')).toMatchObject({status:'FAIL',detail:expect.stringContaining('Interrupted installation requires recovery')});
  expect(diagnostic.checks.find(check=>check.id==='transaction-journal')).toMatchObject({status:'FAIL'});
+ expect(diagnostic.checks.find(check=>check.id==='signed-distribution')).toMatchObject({status:'WARNING',detail:expect.stringContaining('BLOCKED')});
  expect(await fs.readFile(journal)).toEqual(before);expect((await fs.stat(journal)).mtimeMs).toBe(modified);
  await installCompleteGeneration(f.bundle,f.opts);expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('active');
  }finally{await f.cleanup();}});

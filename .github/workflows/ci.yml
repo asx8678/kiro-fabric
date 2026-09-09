@@ -107,7 +107,7 @@ jobs:
           cp "$archive" "$root/first.tar.gz"
           node scripts/build-complete-bundle.mjs
           cmp "$root/first.tar.gz" "$archive"
-          ./node_modules/.bin/vitest run tests/installed-independence.test.ts tests/installer-lock.test.ts tests/install-transaction.test.ts tests/managed-installation.test.ts
+          ./node_modules/.bin/vitest run tests/installed-independence.test.ts tests/installer-lock.test.ts tests/pinned-recovery.test.ts tests/install-transaction.test.ts tests/managed-installation.test.ts
       - name: Report qualification remains pending
         if: always()
         run: echo 'Installer native exact-artifact/client/signing qualification PENDING; contract tests do not qualify production binaries. Unavailable runners are PENDING, never PASS.' >> "$GITHUB_STEP_SUMMARY"

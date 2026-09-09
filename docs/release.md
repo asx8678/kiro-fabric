@@ -8,6 +8,17 @@ CI declares all four native targets and asserts observed OS, kernel/Node archite
 
 Use `pnpm run agent:bundle` for the complete development bundle and binary-aware SBOM. `pnpm run sbom:agent` and the legacy Agent archive remain compatibility/application-closure evidence, not complete installer supply-chain qualification. Production signing credentials are not stored or provisioned by source builds; test keys are never a production fallback. See [installer trust and operational limits](installer.md).
 
+## Remaining readiness checklist
+
+Do not convert a BLOCKED status to PASS by inserting a fixture key, accepting unsigned archives, weakening evidence validation, or relabeling component tests. Close the remaining items with independent evidence:
+
+1. **Local safety:** update/restart to adopt confirmation defaults and review existing explicit `allow` settings. Run `pnpm run check` and `pnpm run audit:deps`. A build/test pass is component evidence only.
+2. **Authenticated Kiro:** review and commit the intended changes first (the qualification command requires a clean tracked worktree). Run `pnpm run agent:archive`, then the isolated subscription/API-key qualification command below with the user's explicit authentication authorization. Never copy the ordinary Kiro home or credentials into fixtures. Keep the exact archive, report and transcripts private until reviewed for sensitive data. Qualification must cover tool filtering, accepted/denied effects, roots, coding, compaction, shutdown and resume; a successful headless smoke is not enough. This legacy application-archive gate does not qualify the complete installer bundle.
+3. **Publisher trust:** a maintainer must provision an Ed25519 release-signing key under controlled secret storage, review/pin only its public key in `scripts/release-trust.mjs`, and sign final-byte release metadata using the existing domain/schema contract. Do not commit a private key or use test keys. Key provisioning alone does not unblock distribution: signed metadata/SBOM identities, pinned bootstrap members, and complete-bundle qualification must all match the exact archive being promoted.
+4. **Native recovery/platforms:** execute the configured jobs on actual Linux x64/ARM64 and macOS x64/ARM64 hosts. Preserve observed architecture and exact-artifact results; runner labels are not evidence. macOS recovery now uses the embedded inode-pinned child and has local ARM64 abrupt-death/concurrency component coverage. Run the same tests (including `tests/pinned-recovery.test.ts` and installed-bundle recovery) on all declared native targets before claiming release qualification. Keep unsupported/uncertain recovery and purge fail-closed.
+
+These steps require maintainer-controlled credentials, infrastructure and release decisions. Source builds do not create those prerequisites, authenticate users or publish releases automatically.
+
 ## Existing application and authenticated-client gates
 
 CI explicitly provisions pinned pnpm and ripgrep on supported runners. Linux runs the full check; macOS also runs local coding, shell, ownership/acknowledgement, bootstrap, workspace and approval/projection suites. Configured jobs are not evidence that a platform run passed. Release shell regression tests execute the actual tag/version comparison, including mismatch and inert hostile tag values.

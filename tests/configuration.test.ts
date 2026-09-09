@@ -16,15 +16,33 @@ import {
 import { prepareKiroPowerDataPaths } from "../src/kiro/power/data-paths.js";
 
 describe("Agent-only configuration", () => {
-  it("defaults all risk categories to allow", () => {
-    expect(normalizeFabricConfig({}).approvals).toEqual({ read: "allow", write: "allow", execute: "allow", network: "allow" });
+  it("allows reads but requires consent for host effects by default", () => {
+    const expected = { read: "allow", write: "ask", execute: "ask", network: "ask" };
+    expect(DEFAULT_FABRIC_CONFIG.approvals).toEqual(expected);
+    expect(normalizeFabricConfig({}).approvals).toEqual(expected);
+    expect(normalizeFabricConfig({ approvals: { write: "deny" } }).approvals).toEqual({ ...expected, write: "deny" });
   });
-  it.each(["ask", "deny"] as const)("preserves explicit execute=%s policy", (execute) => {
+  it.each(["allow", "ask", "deny"] as const)("preserves explicit execute=%s policy", (execute) => {
     expect(normalizeFabricConfig({ schemaVersion: 1, approvals: { execute } }).approvals.execute).toBe(execute);
     expect(normalizeFabricConfig({ approvals: { execute } }).approvals.execute).toBe(execute);
     for (const risk of ["read", "write", "execute", "network"] as const) {
       expect(normalizeFabricConfig({ approvals: { [risk]: execute } }).approvals[risk]).toBe(execute);
     }
+  });
+  it.each([undefined, 1])("loads schema %s policies without rewriting explicit consent", (schemaVersion) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-safe-defaults-"));
+    const file = path.join(root, "config.json");
+    try {
+      expect(loadFabricConfig(file).approvals).toEqual(DEFAULT_FABRIC_CONFIG.approvals);
+      expect(fs.existsSync(file)).toBe(false);
+      const bytes = JSON.stringify({ schemaVersion, approvals: { write: "allow", network: "deny" } });
+      fs.writeFileSync(file, bytes, { mode: 0o600 });
+      const before = fs.statSync(file, { bigint: true });
+      expect(loadFabricConfig(file).approvals).toEqual({ read: "allow", write: "allow", execute: "ask", network: "deny" });
+      expect(fs.readFileSync(file, "utf8")).toBe(bytes);
+      const after = fs.statSync(file, { bigint: true });
+      expect([after.ino, after.mtimeNs, after.ctimeNs]).toEqual([before.ino, before.mtimeNs, before.ctimeNs]);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
   it("normalizes a finite per-service execution admission limit", () => {
     expect(normalizeFabricConfig({}).executor.maxConcurrentExecutions).toBe(4);

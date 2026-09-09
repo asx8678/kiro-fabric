@@ -14,6 +14,8 @@ describe("installed manager command contract", () => {
     expect(managerErrorResult(new Error("modified file /fixture/blocked"))).toMatchObject({ exitCode: 5 });
     expect(managerErrorResult(Object.assign(new Error("invalid signed content"), { code: "invalid-release" }))).toMatchObject({ exitCode: 5 });
     expect(managerErrorResult(Object.assign(new Error("busy"), { code: "INSTALL_LOCK_BUSY" }))).toMatchObject({ exitCode: 6 });
+    expect(managerErrorResult(Object.assign(new Error("unsupported pristine startup"), { code: "INSTALL_LOCK_UNSUPPORTED" }))).toMatchObject({ exitCode: 4 });
+    expect(managerErrorResult(Object.assign(new Error("unsupported stale-lock recovery"), { code: "INSTALL_LOCK_UNSUPPORTED", recoveryRequired: true }))).toMatchObject({ exitCode: 7, outcome: "recovery-required", dataPreserved: true });
   });
   it.each(["install", "update", "doctor", "rollback", "uninstall", "start"])("registers %s", command => expect(parseManagerArguments([command]).command).toBe(command));
   it.each([["doctor", "--yes"], ["doctor", "--from-archive", "/fixture"], ["update", "--purge-data"], ["update", "--from-archive", "/fixture", "--version", "1.0.0"], ["install", "--source"], ["doctor", "--json", "--json"], ["start", "--json"], ["install", "--version", "main"], ["doctor", "--kiro-home"], ["install", "update"]])("rejects invalid options %j", (...argv) => expect(() => parseManagerArguments(argv)).toThrow());

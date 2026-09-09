@@ -100,7 +100,8 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
     maxAuditBytes: 64_000,
     resultFormat: "auto",
   },
-  approvals: { read: "allow", write: "allow", execute: "allow", network: "allow" },
+  // Host effects require explicit consent; clients without elicitation fail closed.
+  approvals: { read: "allow", write: "ask", execute: "ask", network: "ask" },
   mcp: {
     enabled: true,
     disableOAuth: true,

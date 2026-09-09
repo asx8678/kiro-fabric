@@ -60,6 +60,19 @@ describe("compiled task guidance", () => {
     expect(BUNDLED_GUIDANCE.recipes).not.toMatch(/\b(?:pi|agents|extensions)\./);
   });
 
+  it("retains bounded discovery and live approval readiness guidance", () => {
+    const guide = BUNDLED_GUIDANCE.guide;
+    expect(guide).toContain("default 200/max 2000 lines per call");
+    expect(guide).toContain("pattern` is a glob, not a regular expression");
+    expect(guide).toContain("**/*_test.exs");
+    expect(guide).toContain("No handler registered for method: _kiro/mcp/elicitation");
+    expect(guide).toContain("do not assume every client/version is affected");
+    expect(guide).toContain("preserve `ask` policies");
+    expect(guide).toContain("not live coding-readiness evidence");
+    expect(guide).toContain("explicitly human-approved shell command and file edit");
+    expect(guide).toContain("never count automatic fixture approvals as human interaction");
+  });
+
   it("matches every canonical Markdown byte and the checked generated source", () => {
     for (const [topic, file] of Object.entries(GUIDANCE_FILES)) {
       expect(BUNDLED_GUIDANCE[topic as keyof typeof BUNDLED_GUIDANCE]).toBe(fs.readFileSync(path.join(root, file), "utf8"));

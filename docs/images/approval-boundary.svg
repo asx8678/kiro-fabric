@@ -33,7 +33,7 @@ text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
 <text x="44" y="515" class="label">3. Apply policy to this action</text>
 <text x="44" y="555" class="body">ALLOW → invoke. DENY → reject without invoking.</text>
 <text x="44" y="585" class="body">ASK → reserve prompt quota, then request approval.</text>
-<text x="44" y="615" class="body">Defaults: all risk categories = allow.</text>
+<text x="44" y="615" class="body">Defaults: read = allow; write / execute / network = ask.</text>
 <text x="44" y="645" class="body">Explicit ask / deny settings take precedence.</text>
 </g>
 <g data-card="true"><rect x="24" y="686" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>

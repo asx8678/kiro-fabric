@@ -28,7 +28,7 @@ describe("Agent product boundary", () => {
     }
     const audit = fs.readFileSync(path.join(root, "docs", "audit.md"), "utf8");
     const audited = [
-      ...files(path.join(root, "src")).filter((file) => file.endsWith(".ts")),
+      ...files(path.join(root, "src")).filter((file) => /\.(?:ts|mjs)$/u.test(file)),
       ...files(path.join(root, "scripts")).filter((file) => file.endsWith(".mjs")),
       ...files(path.join(root, "tests")).filter((file) => file.endsWith(".test.ts")),
     ];

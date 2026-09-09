@@ -8,9 +8,10 @@ import { canonical, createBundleManifest, validateBundle } from '../scripts/bund
 import { installCompleteGeneration, inspectCompleteInstallation, retireCompleteInstallation, rollbackCompleteGeneration } from '../scripts/managed-installation.mjs';
 import { readTransaction, recoverInstallTransaction } from '../scripts/install-transaction.mjs';
 import { acquireInstallationLock } from '../scripts/installer-lock.mjs';
-import { hasDirectoryFdTraversal } from './installer-capability-fixture.js';
-// Successful crash recovery requires the same inode-anchored capability as production.
-const recoveryTest = test.skipIf(!hasDirectoryFdTraversal);
+import { hasInstallationRecovery } from './installer-capability-fixture.js';
+import { doctorInstallation, managerErrorResult } from '../scripts/install-manager.mjs';
+// Successful crash recovery requires the same inode-pinned capability as production.
+const recoveryTest = test.skipIf(!hasInstallationRecovery);
 const moduleURL=new URL('../scripts/managed-installation.mjs',import.meta.url).href;
 async function setup(){const root=await fs.mkdtemp(path.join(tmpdir(),'transaction-test-')),bundle=await fixture(),userHome=path.join(root,'home'),kiroHome=path.join(root,'home/.kiro');await fs.mkdir(userHome,{mode:0o700});const opts={kiroHome,userHome,env:{},provenance:'source',validateCandidate:async()=>{}};return {root,bundle,userHome,kiroHome,opts,async cleanup(){await fs.rm(root,{recursive:true,force:true});await fs.rm(bundle,{recursive:true,force:true});}};}
 async function upgrade(bundle:string){const old=(await validateBundle(bundle)).manifest;await fs.writeFile(bundle+'/app/main.js','next-generation');const m=await createBundleManifest(bundle,old);await fs.writeFile(bundle+'/bundle-manifest.json',canonical(m)+'\n');return m.digest;}
@@ -22,13 +23,18 @@ const phases=['candidate-journal-synced','copied:app/main.js','copied:tools/node
 recoveryTest.each(phases)('real SIGKILL at %s: next mutation reconciles actual owner and replay is idempotent',async phase=>{const f=await setup();try{const old=await installCompleteGeneration(f.bundle,f.opts);await fs.writeFile(old.paths.data+'/fabric/sentinel','keep',{mode:0o600});const next=await upgrade(f.bundle);const killed=await killAt(f,phase);expect(killed.error).toBe('');expect(killed.signal).toBe('SIGKILL');const result=await installCompleteGeneration(f.bundle,f.opts);expect(result.owner.currentRuntime).toBe(next);expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('active');expect((await installCompleteGeneration(f.bundle,f.opts)).noop).toBe(true);expect(await fs.readFile(old.paths.data+'/fabric/sentinel','utf8')).toBe('keep');expect(await fs.readFile(old.paths.runtime+'/'+old.digest+'/app/main.js','utf8')).toBe('fixture app/main.js');}finally{await f.cleanup();}},15000);
 recoveryTest.each(['profile-published','owner-committed'])('retirement death at %s replays through same engine',async phase=>{const f=await setup();try{const a=await installCompleteGeneration(f.bundle,f.opts);expect((await killAt(f,phase,'retire')).signal).toBe('SIGKILL');await retireCompleteInstallation(f.kiroHome);expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('retired');expect(await fs.stat(a.paths.launcher)).toBeTruthy();}finally{await f.cleanup();}},15000);
 recoveryTest('foreign controls after precommit death are preserved with journal evidence',async()=>{const f=await setup();try{const a=await installCompleteGeneration(f.bundle,f.opts);await upgrade(f.bundle);expect((await killAt(f,'profile-published')).signal).toBe('SIGKILL');await fs.writeFile(a.paths.profile,'foreign');await expect(installCompleteGeneration(f.bundle,f.opts)).rejects.toThrow(/conflicting profile/);expect(await fs.readFile(a.paths.profile,'utf8')).toBe('foreign');expect(readTransaction(f.kiroHome)).not.toBeNull();}finally{await f.cleanup();}});
-test.skipIf(hasDirectoryFdTraversal)('unsupported native recovery preserves crashed transaction and controls',async()=>{
+test.skipIf(hasInstallationRecovery)('unsupported native recovery preserves crashed transaction and controls',async()=>{
  const f=await setup();try{
   const installed=await installCompleteGeneration(f.bundle,f.opts);await upgrade(f.bundle);
   expect((await killAt(f,'profile-published')).signal).toBe('SIGKILL');
   const controls=[installed.paths.profile,installed.paths.manifest,installed.paths.journal,path.join(installed.paths.base,'.install-lock','owner.json')];
   const before=await Promise.all(controls.map(p=>fs.readFile(p)));
-  await expect(installCompleteGeneration(f.bundle,f.opts)).rejects.toMatchObject({code:'INSTALL_LOCK_UNSUPPORTED'});
+  const diagnostic=await doctorInstallation(f.kiroHome,{PATH:''});
+  expect(diagnostic.outcome).toBe('recovery-required');
+  expect(diagnostic.checks.find(check=>check.id==='transaction-lock')).toMatchObject({status:'FAIL',detail:expect.stringContaining('Automatic lock recovery unavailable')});
+  const failure=await installCompleteGeneration(f.bundle,f.opts).catch(error=>error);
+  expect(failure).toMatchObject({code:'INSTALL_LOCK_UNSUPPORTED',recoveryRequired:true});
+  expect(managerErrorResult(failure)).toMatchObject({exitCode:7,outcome:'recovery-required',dataPreserved:true});
   expect(await Promise.all(controls.map(p=>fs.readFile(p)))).toEqual(before);
  }finally{await f.cleanup();}
 });

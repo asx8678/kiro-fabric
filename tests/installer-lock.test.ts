@@ -2,13 +2,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
-import { spawn, type ChildProcess } from "node:child_process";
+import childProcess, { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { acquireInstallationLock, inspectInstallationLock, installationLockAvailability, inspectInstallationProcesses } from "../scripts/installer-lock.mjs";
 
-import { hasDirectoryFdTraversal } from "./installer-capability-fixture.js";
-const recoveryIt = it.skipIf(!hasDirectoryFdTraversal);
+import { hasInstallationRecovery } from "./installer-capability-fixture.js";
+const recoveryIt = it.skipIf(!hasInstallationRecovery);
 const modulePath = fileURLToPath(new URL("../src/installation/installer-lock.mjs", import.meta.url));
 const fixtures: string[] = [];
 const children: ChildProcess[] = [];
@@ -17,6 +17,21 @@ const fixture = () => {
   fs.chmodSync(base, 0o700);
   fixtures.push(base);
   return base;
+};
+const blockRecoveryCapability = () => {
+  if (process.platform === "darwin") {
+    const actual = childProcess.execFileSync;
+    vi.spyOn(childProcess, "execFileSync").mockImplementation(((file: string, ...args: unknown[]) => {
+      if (file === process.execPath) throw Object.assign(new Error("fixture: helper unavailable"), { code: "ENOSYS" });
+      return (actual as Function)(file, ...args);
+    }) as typeof childProcess.execFileSync);
+  } else {
+    const actual = fs.statSync;
+    vi.spyOn(fs, "statSync").mockImplementation(((file: fs.PathLike, ...args: unknown[]) => {
+      if (/^\/proc\/self\/fd\//u.test(String(file))) throw Object.assign(new Error("fixture: no directory traversal"), { code: "ENOTDIR" });
+      return (actual as Function)(file, ...args);
+    }) as typeof fs.statSync);
+  }
 };
 const target = (base: string) => path.join(base, ".install-lock");
 const ownerPath = (base: string) => path.join(target(base), "owner.json");
@@ -109,13 +124,30 @@ describe("installation lock gate 0b", () => {
     await deadOwner(base);
     const before = fs.readFileSync(ownerPath(base));
     const stat = fs.statSync(ownerPath(base));
-    for (let i = 0; i < 3; i++) expect(inspectInstallationLock(base).status).toBe("stale");
+    for (let i = 0; i < 3; i++) {
+      const inspection = inspectInstallationLock(base);
+      expect(inspection).toMatchObject({ status: "stale", available: false, recoverable: hasInstallationRecovery });
+      if (!hasInstallationRecovery) expect(inspection.reason).toContain("Automatic lock recovery unavailable");
+    }
     expect(fs.readFileSync(ownerPath(base))).toEqual(before);
     expect(fs.statSync(ownerPath(base)).mtimeMs).toBe(stat.mtimeMs);
     expect(fs.readdirSync(target(base))).toEqual(["owner.json"]);
     fs.writeFileSync(ownerPath(base), "{");
     expect(inspectInstallationLock(base).status).toBe("recovery-required");
     expect(fs.readFileSync(ownerPath(base), "utf8")).toBe("{");
+  });
+
+  it("reports recovery rather than setup failure when directory-FD traversal is unavailable", async () => {
+    const base = fixture();
+    await deadOwner(base);
+    const before = fs.readFileSync(ownerPath(base));
+    blockRecoveryCapability();
+    expect(inspectInstallationLock(base)).toMatchObject({ status: "stale", recoverable: false, reason: expect.stringContaining("Automatic lock recovery unavailable") });
+    try { acquireInstallationLock(base, { recover: true }); throw new Error("unexpected recovery"); }
+    catch (error) { expect(error).toMatchObject({ code: "INSTALL_LOCK_UNSUPPORTED", recoveryRequired: true }); }
+    expect(fs.readFileSync(ownerPath(base))).toEqual(before);
+    expect(fs.readdirSync(target(base))).toEqual(["owner.json"]);
+    expect(quarantine(base)).toEqual([]);
   });
 
   recoveryIt("recovers a real SIGKILL fully initialized owner into exact retained quarantine", async () => {
@@ -164,7 +196,7 @@ describe("installation lock gate 0b", () => {
   });
 
   it.for(["lock-created", "owner-created", "recovery-claim-created"])("preserves unknown partial state after real SIGKILL at %s", async (phase, context) => {
-    if (phase === "recovery-claim-created" && !hasDirectoryFdTraversal) context.skip();
+    if (phase === "recovery-claim-created" && !hasInstallationRecovery) context.skip();
     const base = fixture();
     if (phase.startsWith("recovery")) await deadOwner(base);
     const child = await launch(base, phase);
@@ -277,11 +309,11 @@ describe("installation lock gate 0b", () => {
     expect(quarantine(base)).toEqual([]);
   });
 
-  it.skipIf(hasDirectoryFdTraversal)("preserves a real stale lock when native directory-FD traversal is unsupported", async () => {
+  it.skipIf(hasInstallationRecovery)("preserves a real stale lock when native directory-FD traversal is unsupported", async () => {
     const base = fixture();
     await deadOwner(base);
     const before = fs.readFileSync(ownerPath(base));
-    expect(() => acquireInstallationLock(base, { recover: true })).toThrow("directory-FD traversal unavailable");
+    expect(() => acquireInstallationLock(base, { recover: true })).toThrow(/(?:directory-FD traversal|pinned-directory recovery helper) unavailable/);
     expect(fs.readFileSync(ownerPath(base))).toEqual(before);
     expect(fs.readdirSync(target(base))).toEqual(["owner.json"]);
     expect(quarantine(base)).toEqual([]);
@@ -290,12 +322,8 @@ describe("installation lock gate 0b", () => {
   it("refuses recovery when kernel directory-FD traversal is unavailable, with no pathname fallback", async () => {
     const base = fixture();
     await deadOwner(base);
-    const stat = fs.statSync;
-    vi.spyOn(fs, "statSync").mockImplementation(((file: fs.PathLike, options: unknown) => {
-      if (/^\/(proc\/self\/fd|dev\/fd)\//u.test(String(file))) throw Object.assign(new Error("unsupported"), { code: "ENOTDIR" });
-      return stat(file, options as fs.StatOptions);
-    }) as typeof fs.statSync);
-    expect(() => acquireInstallationLock(base, { recover: true })).toThrow("directory-FD traversal unavailable");
+    blockRecoveryCapability();
+    expect(() => acquireInstallationLock(base, { recover: true })).toThrow(/(?:directory-FD traversal|pinned-directory recovery helper) unavailable/);
     expect(fs.readdirSync(target(base))).toEqual(["owner.json"]);
     expect(quarantine(base)).toEqual([]);
   });
@@ -317,7 +345,7 @@ describe("installation lock gate 0b", () => {
     expect(() => acquireInstallationLock(base, { recover: true, onPhase(phase) {
       if (phase !== "recovery-before-claim") return;
       winner = acquireInstallationLock(base, { recover: true, transactionId: "winner" });
-    } })).toThrow("busy");
+    } })).toThrow(/busy|pinned recovery operation failed/);
     expect(winner).toBeDefined();
     expect(readOwner(base).transactionId).toBe("winner");
     expect(fs.readdirSync(target(base))).toEqual(["owner.json"]);

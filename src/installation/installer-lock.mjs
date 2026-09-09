@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { runPinnedRecovery } from "./pinned-recovery.mjs";
 
 // Cooperating-process crash recovery, NOT an OS sandbox against hostile same-user
 // mutation. The caller validates home ancestry and reconciles its transaction
@@ -224,8 +225,8 @@ const assertSnapshot = (base, expected) => {
 // Pin the original directory BEFORE opening a recovery claim. A lagging
 // contender must not write into a freshly acquired replacement .install-lock
 // after another contender quarantines the stale one. Node has no openat API;
-// the kernel FD directory path provides that capability, or recovery is refused.
-// macOS /dev/fd traversal still requires native qualification (no pathname fallback).
+// Linux uses a kernel FD directory path. macOS uses a separate child with a
+// kernel-pinned cwd and inode-checked relative operations (never parent chdir).
 const inOwnedDirectory = (target, expected, action) => {
   const fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
   try {
@@ -255,7 +256,23 @@ export function inspectInstallationLock(base) {
     const state = snapshot(base, root);
     const states = [state.owner, ...state.claims].map(record => incarnationState(record.value.process));
     const status = states.includes("live") ? "busy" : states.includes("uncertain") ? "recovery-required" : "stale";
-    return { status, available: false, owner: state.owner.value, claims: state.claims.length, recoverable: status === "stale" };
+    /** @type {InstallationLockInspection} */
+    const inspection = { status, available: false, owner: state.owner.value, claims: state.claims.length, recoverable: status === "stale" };
+    if (status === "stale") {
+      if (state.claims.length >= MAX_CLAIMS) return { ...inspection, recoverable: false, reason: "Recovery claim capacity reached; preserve lock and transaction evidence for operator review." };
+      try {
+        // A dead owner alone is insufficient: prove the same pinned-directory
+        // capability recovery needs, without creating a claim or replaying data.
+        if (process.platform === "darwin") {
+          runPinnedRecovery(path.join(base, LOCK), state);
+          assertSnapshot(base, state);
+        } else inOwnedDirectory(path.join(base, LOCK), state, () => assertSnapshot(base, state));
+      } catch (error) {
+        if (errorCode(error) !== "INSTALL_LOCK_UNSUPPORTED") throw error;
+        return { ...inspection, recoverable: false, reason: "Automatic lock recovery unavailable: inode-pinned recovery capability is unsupported; preserve lock and transaction evidence for operator review." };
+      }
+    }
+    return inspection;
   } catch (error) {
     return { status: errorCode(error) === "INSTALL_LOCK_UNSUPPORTED" ? "unsupported" : "recovery-required", available: false, reason: "Lock identity or process evidence unavailable; preserve existing material." };
   }
@@ -444,12 +461,22 @@ export function acquireInstallationLock(base, { recover = false, transactionId, 
       owner: binding(stale.owner), previous: binding(records[records.length - 1]), index, quarantine: quarantineName(stale.owner.value) };
     assertSnapshot(base, stale);
     try {
-      inOwnedDirectory(target, stale, (anchored) => {
+      if (process.platform === "darwin") {
         onPhase("recovery-before-claim");
-        writeControl(path.join(anchored, claimName(index)), value, () => onPhase("recovery-claim-created"));
-      });
+        const created = runPinnedRecovery(target, stale, { operation: "create" });
+        onPhase("recovery-claim-created");
+        runPinnedRecovery(target, stale, { operation: "publish", created, text: `${JSON.stringify(value)}\n` });
+      } else {
+        inOwnedDirectory(target, stale, (anchored) => {
+          onPhase("recovery-before-claim");
+          writeControl(path.join(anchored, claimName(index)), value, () => onPhase("recovery-claim-created"));
+        });
+      }
     } catch (error) {
       if (errorCode(error) === "EEXIST") fail("installation lock recovery busy", "INSTALL_LOCK_BUSY");
+      // Unlike an unsupported pristine startup, this failure has known stale
+      // installation evidence. The manager must report recovery, not retryable setup.
+      if (errorCode(error) === "INSTALL_LOCK_UNSUPPORTED") throw Object.assign(error, { recoveryRequired: true });
       throw error;
     }
     // Claims remain if this process dies or throws after initialization. A live

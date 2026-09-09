@@ -7,7 +7,7 @@ import { createInterface } from "node:readline/promises";
 import { resolveKiroHome, installerSafety } from "./install-agent-user.mjs";
 import { validateBundle, sha256 } from "./bundle-contract.mjs";
 import { extractBundleArchive } from "./bundle-archive.mjs";
-import { verifyReleaseSidecarsCaptured } from "./release-trust.mjs";
+import { PRODUCTION_TRUST_ROOT, verifyReleaseSidecarsCaptured } from "./release-trust.mjs";
 import { discoverRelease } from "./release-download.mjs";
 import { installCompleteGeneration, inspectCompleteInstallation, rollbackCompleteGeneration, retireCompleteInstallation } from "./managed-installation.mjs";
 import { inspectInstallationLock, inspectInstallationProcesses } from "./installer-lock.mjs";
@@ -142,8 +142,11 @@ export async function doctorInstallation(home, env = process.env) {
     return result.owner.status;
   });
   checks.push({ id: "transaction-journal", status: installationStatus === "recovery-required" ? "FAIL" : installationStatus === "unknown" ? "NOT TESTED" : "PASS", detail: installationStatus === "recovery-required" ? "Pending transaction evidence; no replay attempted" : installationStatus === "unknown" ? "Installation evidence could not be verified" : "No pending transaction journal" });
-  const lock = fs.existsSync(path.join(home, "kiro-fabric")) ? inspectInstallationLock(path.join(home, "kiro-fabric")) : { status: "absent" };
-  checks.push({ id: "transaction-lock", status: lock.status === "absent" ? "PASS" : lock.status === "busy" ? "WARNING" : "FAIL", detail: lock.status });
+  /** @type {import("./installer-lock.mjs").InstallationLockInspection} */
+  const lock = fs.existsSync(path.join(home, "kiro-fabric")) ? inspectInstallationLock(path.join(home, "kiro-fabric")) : { status: "absent", available: true };
+  checks.push({ id: "transaction-lock", status: lock.status === "absent" ? "PASS" : lock.status === "busy" ? "WARNING" : "FAIL", detail: lock.reason ?? (lock.status === "stale" ? "Dead installation lock; a subsequent explicit mutation may recover it after verification. Doctor never replays transactions." : lock.status) });
+  if (["stale", "recovery-required", "unsupported"].includes(lock.status)) installationStatus = "recovery-required";
+  checks.push({ id: "signed-distribution", status: PRODUCTION_TRUST_ROOT ? "NOT TESTED" : "WARNING", detail: PRODUCTION_TRUST_ROOT ? "Configured trust root is not exact-artifact signature or native-client qualification evidence" : "Production trust root is absent; signed install/update distribution is BLOCKED. Local source builds are not signed releases." });
   await check("kiro-cli", () => checkKiro(env));
   const owner = await currentOwner(home).catch(() => undefined);
   if (owner?.schemaVersion === 3 && checks.some(check => check.id === "installation" && check.status === "PASS")) {
@@ -201,12 +204,19 @@ export async function runManager(argv, internal = {}) {
       const result = { schemaVersion: 1, command: "doctor", kiroHome: selected, platform, ...(await doctorInstallation(home)) };
       present(result, options); return result.outcome === "recovery-required" ? 7 : result.checks.some(check => check.status === "FAIL") ? 5 : 0;
     }
-    const owner = await currentOwner(home);
-    if (owner?.status === "retired" && ["start", "update", "rollback"].includes(options.command)) throw new InstallerError("Fabric is retired; run install before this command", 4, "prerequisite");
     if (options.command === "start") {
-      await inspectCompleteInstallation(home, { verifyGenerations: true }); const kiro = checkKiro();
+      // Inspection can return a non-active state without throwing. Admit only
+      // verified active ownership, before any client execution; never repair here.
+      const installation = await inspectCompleteInstallation(home, { verifyGenerations: true });
+      if (installation.status === "recovery-required") throw new InstallerError("Interrupted installation requires recovery; journal/candidate evidence is preserved", 7, "recovery-required");
+      if (installation.status === "legacy") throw new InstallerError("Legacy installation requires explicit verified migration before starting", 4, "prerequisite");
+      if (installation.status === "retired") throw new InstallerError("Fabric is retired; run install before this command", 4, "prerequisite");
+      if (installation.status !== "active" || !installation.owner) throw new InstallerError("Fabric is not installed; run install before starting", 4, "prerequisite");
+      const kiro = checkKiro();
       return await new Promise((resolve, reject) => { const child = spawn(kiro.executable, ["--v3", "--agent", "kiro-fabric"], { cwd: process.cwd(), env: { ...process.env, KIRO_HOME: home, KIRO_FABRIC_LAUNCH_WORKSPACE: fs.realpathSync(process.cwd()) }, stdio: "inherit" }); child.once("error", reject); child.once("exit", code => resolve(code ?? 1)); });
     }
+    const owner = await currentOwner(home);
+    if (owner?.status === "retired" && ["update", "rollback"].includes(options.command)) throw new InstallerError("Fabric is retired; run install before this command", 4, "prerequisite");
     const mutating = ["install", "update", "rollback", "uninstall"].includes(options.command);
     if (mutating && (!process.stdin.isTTY || options.nonInteractive || options.json) && !options.yes) throw new InstallerError("Noninteractive mutation requires --yes and an explicit command", 2, "usage");
     const kiro = ["install", "update", "rollback"].includes(options.command) ? checkKiro() : undefined;

@@ -23,6 +23,135 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
+
+// src/installation/pinned-recovery.mjs
+import childProcess from "node:child_process";
+function pinnedRecoveryChild(fs4, createHash5, request) {
+  const fail2 = (message) => {
+    throw Object.assign(new Error(message), { code: "INSTALL_LOCK_RECOVERY_REQUIRED" });
+  };
+  const id = (s) => ({ dev: String(s.dev), ino: String(s.ino) });
+  const same2 = (a, b) => a?.dev === b?.dev && a?.ino === b?.ino;
+  const identity2 = (v) => v && [v.dev, v.ino].every((s) => typeof s === "string" && /^(0|[1-9][0-9]{0,24})$/u.test(s));
+  const record2 = (v) => v && identity2(v.file) && typeof v.hash === "string" && /^[a-f0-9]{64}$/u.test(v.hash);
+  const safe = (s, directory2) => {
+    if ((directory2 ? !s.isDirectory() : !s.isFile()) || s.isSymbolicLink() || typeof process.getuid !== "function" || s.uid !== BigInt(process.getuid()) || (s.mode & 0o7777n) !== (directory2 ? 0o700n : 0o600n) || !directory2 && (s.nlink !== 1n || s.size > 4096n)) fail2("unsafe pinned recovery file");
+    return s;
+  };
+  const stat = (name, directory2 = false) => safe(fs4.lstatSync(name, { bigint: true }), directory2);
+  const directory = () => {
+    if (!same2(id(stat(".", true)), request.lock) || !same2(id(stat("..", true)), request.root)) fail2("pinned recovery directory replaced");
+  };
+  if (!request || !["inspect", "create", "publish"].includes(request.operation) || !identity2(request.root) || !identity2(request.lock) || !record2(request.owner) || !Array.isArray(request.claims) || request.claims.length > 16 || !request.claims.every(record2)) fail2("invalid pinned recovery request");
+  if (request.operation !== "inspect" && request.claims.length >= 16) fail2("recovery claim capacity reached");
+  const claimName2 = (index) => `claim-${String(index).padStart(2, "0")}.json`;
+  const target = claimName2(request.claims.length);
+  const names = ["owner.json", ...request.claims.map((_, i) => claimName2(i)), ...request.operation === "publish" ? [target] : []].sort();
+  const inspect = () => {
+    directory();
+    const dir = fs4.opendirSync(".");
+    const observed = [];
+    try {
+      let entry;
+      while (entry = dir.readSync()) {
+        observed.push(entry.name);
+        if (observed.length > 17) fail2("pinned recovery entry bound");
+      }
+    } finally {
+      dir.closeSync();
+    }
+    if (JSON.stringify(observed.sort()) !== JSON.stringify(names)) fail2("pinned recovery entries changed");
+    for (const [name, expected] of [["owner.json", request.owner], ...request.claims.map((c, i) => [claimName2(i), c])]) {
+      const before = stat(name);
+      if (!same2(id(before), expected.file)) fail2("pinned recovery control replaced");
+      const fd2 = fs4.openSync(name, fs4.constants.O_RDONLY | fs4.constants.O_NOFOLLOW | fs4.constants.O_NONBLOCK);
+      try {
+        if (!same2(id(safe(fs4.fstatSync(fd2, { bigint: true }), false)), expected.file)) fail2("pinned recovery read identity changed");
+        const bytes = Buffer.alloc(4097);
+        let count = 0;
+        while (count < bytes.length) {
+          const n = fs4.readSync(fd2, bytes, count, bytes.length - count, null);
+          if (!n) break;
+          count += n;
+        }
+        const after = stat(name);
+        if (count > 4096 || BigInt(count) !== before.size || !same2(id(after), expected.file) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.size !== after.size || createHash5("sha256").update(bytes.subarray(0, count)).digest("hex") !== expected.hash) fail2("pinned recovery control changed");
+      } finally {
+        fs4.closeSync(fd2);
+      }
+    }
+    directory();
+  };
+  inspect();
+  if (request.operation === "inspect") return { ok: true };
+  if (request.operation === "publish") {
+    if (!identity2(request.created) || typeof request.text !== "string" || Buffer.byteLength(request.text) > 4096 || request.text !== `${JSON.stringify(JSON.parse(request.text))}
+`) fail2("invalid pinned recovery publication");
+    const before = stat(target);
+    if (!same2(id(before), request.created) || before.size !== 0n) fail2("pinned recovery pending claim replaced");
+  }
+  const fd = fs4.openSync(target, fs4.constants.O_WRONLY | fs4.constants.O_NOFOLLOW | fs4.constants.O_NONBLOCK | (request.operation === "create" ? fs4.constants.O_CREAT | fs4.constants.O_EXCL : 0), 384);
+  try {
+    if (request.operation === "create") fs4.fchmodSync(fd, 384);
+    const opened = safe(fs4.fstatSync(fd, { bigint: true }), false);
+    if (opened.size !== 0n || request.operation === "publish" && !same2(id(opened), request.created)) fail2("pinned recovery write identity changed");
+    directory();
+    if (request.operation === "publish") fs4.writeFileSync(fd, request.text);
+    fs4.fsyncSync(fd);
+    if (!same2(id(stat(target)), id(opened))) fail2("pinned recovery claim replaced after write");
+    const directoryFd = fs4.openSync(".", fs4.constants.O_RDONLY | fs4.constants.O_DIRECTORY | fs4.constants.O_NOFOLLOW);
+    try {
+      fs4.fsyncSync(directoryFd);
+    } finally {
+      fs4.closeSync(directoryFd);
+    }
+    return { ok: true, file: id(opened) };
+  } finally {
+    fs4.closeSync(fd);
+  }
+}
+var childSource = `"use strict";
+const fs = require("node:fs");
+try {
+  const bytes = Buffer.alloc(32769); let count = 0;
+  while (count < bytes.length) { const n = fs.readSync(0, bytes, count, bytes.length - count, null); if (!n) break; count += n; }
+  if (count > 32768) throw new Error("pinned recovery request bound");
+  const result = (${pinnedRecoveryChild.toString()})(fs, require("node:crypto").createHash, JSON.parse(bytes.subarray(0,count).toString("utf8")));
+  process.stdout.write(JSON.stringify(result));
+} catch(error) {
+  process.stdout.write(JSON.stringify({ok:false,code:error.code === "EEXIST" ? "INSTALL_LOCK_BUSY" : "INSTALL_LOCK_RECOVERY_REQUIRED",message:String(error.message).slice(0,400)}));
+}`;
+function runPinnedRecovery(target, expected, { operation = "inspect", created, text } = {}) {
+  const bind = (entry) => ({ file: entry.file, hash: entry.hash });
+  const input = JSON.stringify({ operation, root: expected.root, lock: expected.lock, owner: bind(expected.owner), claims: expected.claims.map(bind), ...created ? { created } : {}, ...text === void 0 ? {} : { text } });
+  if (Buffer.byteLength(input) > 32768) throw Object.assign(new Error("pinned recovery request bound"), { code: "INSTALL_LOCK_RECOVERY_REQUIRED" });
+  let output;
+  try {
+    output = childProcess.execFileSync(process.execPath, ["--input-type=commonjs", "-e", childSource], {
+      cwd: target,
+      input,
+      encoding: "utf8",
+      timeout: 2e3,
+      killSignal: "SIGKILL",
+      maxBuffer: 4096,
+      env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" },
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+  } catch {
+    throw Object.assign(new Error("pinned-directory recovery helper unavailable; preserve lock"), { code: "INSTALL_LOCK_UNSUPPORTED" });
+  }
+  let result;
+  try {
+    result = JSON.parse(output);
+  } catch {
+  }
+  if (result?.ok !== true || operation !== "inspect" && (!result.file || ![result.file.dev, result.file.ino].every((s) => typeof s === "string" && /^(0|[1-9][0-9]{0,24})$/u.test(s)))) {
+    throw Object.assign(new Error(result?.code === "INSTALL_LOCK_BUSY" ? "installation lock recovery busy" : "pinned recovery operation failed; preserve lock"), { code: result?.code === "INSTALL_LOCK_BUSY" ? "INSTALL_LOCK_BUSY" : "INSTALL_LOCK_RECOVERY_REQUIRED" });
+  }
+  return result.file;
+}
+
+// src/installation/installer-lock.mjs
 var LOCK = ".install-lock";
 var MAX_CONTROL = 4096;
 var MAX_CLAIMS = 16;
@@ -356,12 +485,21 @@ function acquireInstallationLock(base, { recover = false, transactionId, onPhase
     };
     assertSnapshot(base, stale);
     try {
-      inOwnedDirectory(target, stale, (anchored) => {
+      if (process.platform === "darwin") {
         onPhase("recovery-before-claim");
-        writeControl(path.join(anchored, claimName(index)), value, () => onPhase("recovery-claim-created"));
-      });
+        const created2 = runPinnedRecovery(target, stale, { operation: "create" });
+        onPhase("recovery-claim-created");
+        runPinnedRecovery(target, stale, { operation: "publish", created: created2, text: `${JSON.stringify(value)}
+` });
+      } else {
+        inOwnedDirectory(target, stale, (anchored) => {
+          onPhase("recovery-before-claim");
+          writeControl(path.join(anchored, claimName(index)), value, () => onPhase("recovery-claim-created"));
+        });
+      }
     } catch (error) {
       if (errorCode(error) === "EEXIST") fail("installation lock recovery busy", "INSTALL_LOCK_BUSY");
+      if (errorCode(error) === "INSTALL_LOCK_UNSUPPORTED") throw Object.assign(error, { recoveryRequired: true });
       throw error;
     }
     const claimed = snapshot(base, root);
@@ -775,7 +913,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         const manifestHash = createHash4("sha256").update(readFileSync(path5.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-QUQF4IBB.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-64G3VYJS.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {} });
     } finally {
       release?.();

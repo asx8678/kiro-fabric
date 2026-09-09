@@ -2,7 +2,7 @@
 
 A coding agent for **Kiro CLI v3**. The model writes TypeScript; Fabric checks it, runs it in QuickJS, and controls access to files, shell commands, memory, and configured MCP tools.
 
-**Approval defaults:** read, write, execute, and network actions are allowed without confirmation. Shell commands run with host authority. Set explicit `ask` or `deny` policies to restrict them; see [configuration](docs/configuration.md#clients-without-roots-or-elicitation).
+**Approval defaults:** reads are allowed; writes, shell execution, and network actions require confirmation. Without client form elicitation those effects fail closed. Approved shell commands still run with host authority, not in an OS sandbox. Existing explicit policies are preserved; see [configuration](docs/configuration.md#clients-without-roots-or-elicitation).
 
 ## Start
 
