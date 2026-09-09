@@ -47,6 +47,19 @@ describe("compiled task guidance", () => {
     for (const clause of ["repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies", "resolveReviewThread", "only after the reply succeeds", "No pleasantries", ".github/PULL_REQUEST_TEMPLATE.md", "GIT_EDITOR=true", "EDITOR=true", "--no-edit", "gh api has no --body-file", "--input", "uncommitted edits"]) expect(workflow).toContain(clause);
   });
 
+  it("keeps concise reporting evidence-led and distinguishes API catalogues from programs", () => {
+    for (const rule of [/Reduce narration, not verification/i, /passed, failed and not-run checks/i,
+      /unless repository rules require it/i, /Preserve warnings and uncertainty/i,
+      /identifying delegated evidence as reported/i, /Do not claim live model-quality or token-cost improvements/i]) {
+      expect(BUNDLED_GUIDANCE.workflow).toMatch(rule);
+    }
+    expect(BUNDLED_GUIDANCE.skill).toContain("no routine tool narration or repeated recap");
+    expect(BUNDLED_GUIDANCE.guide).toContain("Call-shape catalogue, not an executable program");
+    expect(BUNDLED_GUIDANCE.recipes).toContain("stdoutOmitted");
+    expect(BUNDLED_GUIDANCE.recipes).toContain("not required acceptance evidence or requested output");
+    expect(BUNDLED_GUIDANCE.recipes).not.toMatch(/\b(?:pi|agents|extensions)\./);
+  });
+
   it("matches every canonical Markdown byte and the checked generated source", () => {
     for (const [topic, file] of Object.entries(GUIDANCE_FILES)) {
       expect(BUNDLED_GUIDANCE[topic as keyof typeof BUNDLED_GUIDANCE]).toBe(fs.readFileSync(path.join(root, file), "utf8"));

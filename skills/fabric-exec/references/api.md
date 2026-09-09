@@ -13,6 +13,8 @@ No extra input fields are accepted. Type errors stop execution before QuickJS or
 
 All calls below run inside `fabric_exec`, cross the bounded JSON registry bridge, validate closed schemas and follow exact inner approval policy. There are no native Kiro tools. Paths default to the verified workspace, never process cwd. Missing/ambiguous roots allow bootstrap, not workspace effects.
 
+Call-shape catalogue, not an executable program: await each selected call inside fabric_exec. Workspace selection must be its own execution, separate from all workspace effects. Use the tagged [recipes](recipes.md) for complete executable programs.
+
 ```ts
 fabric.info()
 fabric.help({topic: "overview", offset: 0, limit: 4000}) // topics: api, skill, guide, recipes, workflow; zero-based UTF-16 paging

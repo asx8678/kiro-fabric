@@ -122,10 +122,27 @@ describe("Kiro Agent profile generation", () => {
     expect(AGENT_PROMPT).toContain("Kiro concatenates it into finalText");
   });
 
+  it("keeps proportional quality gates and quiet progress always on", () => {
+    const prompt = generateAgentProfile(options).prompt;
+    for (const rule of [/acceptance ledger/i, /trace[^.]*before editing/i, /public symbols, registrations and configuration/i,
+      /targeted tests and behavioral probes/i, /build alone is not completion/i, /failures or cross-cutting risk/i,
+      /unchanged passing checks/i, /explicitly blocked/i, /progress only for milestones, plan changes or blockers/i,
+      /No tool narration\/repeated recap/i, /decisions, evidence and truncation flags, not logs/i, /inspect failures/i]) {
+      expect(prompt).toMatch(rule);
+    }
+  });
+
+  it("budgets the activated skill separately from standing text and on-demand help", () => {
+    const skill = readFileSync(new URL("../skills/fabric-exec/SKILL.md", import.meta.url), "utf8");
+    // Character budgets are input-growth guards, not token, billing or model-quality measurements.
+    expect(skill.length).toBeLessThanOrEqual(10000);
+    expect(AGENT_PROMPT.length + steering.length + skill.length).toBeLessThanOrEqual(MAX_STANDING_CHARS + 10000);
+  });
+
   it("type-checks every documented local recipe", () => {
     const skill = readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
     const recipes = [...skill.matchAll(/```ts\n(\/\/ Recipe:[\s\S]*?)\n```/g)].map(match => match[1]!);
-    expect(recipes).toHaveLength(6);
+    expect(recipes).toHaveLength(7);
     for (const code of recipes) expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors, code).toEqual([]);
   });
 

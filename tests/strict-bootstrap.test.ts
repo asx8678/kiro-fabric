@@ -115,7 +115,7 @@ describe("strict checked workspace bootstrap", () => {
     const root = f.projects[0]!;
     const skill = fs.readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
     const recipes = [...skill.matchAll(/```ts\n(\/\/ Recipe:[\s\S]*?)\n```/g)].map(match => match[1]!);
-    expect(recipes).toHaveLength(6);
+    expect(recipes).toHaveLength(7);
     fs.writeFileSync(path.join(root, "one.txt"), "  café 🛰 full first line  \r\nsecond\r\n");
     fs.writeFileSync(path.join(root, "two.txt"), "\nnot the first line\n");
     const read = await f.call(recipes[0]!);
@@ -162,7 +162,7 @@ describe("strict checked workspace bootstrap", () => {
     fs.writeFileSync(path.join(root, "same.txt"), "first=old\nsecond=old\nkeep=this\n");
     const multi = await f.call(recipes[3]!, { path: "same.txt", oldFirst: "first=old", newFirst: "first=new", oldSecond: "second=old", newSecond: "second=new" });
     expect(multi.isError, multi.content[0].text).not.toBe(true);
-    expect(f.value(multi)).toEqual({ path: "same.txt", firstPresent: true, secondPresent: true });
+    expect(f.value(multi)).toEqual({ path: "same.txt", verified: true, verifiedSha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
     expect(fs.readFileSync(path.join(root, "same.txt"), "utf8")).toBe("first=new\nsecond=new\nkeep=this\n");
     for (const [file, group, amount] of [["a.json", "café", 20], ["b.json", "café", -3], ["c.json", "other", -2]]) {
       fs.writeFileSync(path.join(root, String(file)), JSON.stringify({ group, amount }));
@@ -173,6 +173,64 @@ describe("strict checked workspace bootstrap", () => {
     expect(JSON.parse(fs.readFileSync(path.join(root, "totals.json"), "utf8"))).toEqual({ totals: { café: 17, other: -2 } });
     wire.approve = false;
     expect((await f.call(recipes[4]!, { command: "printf must-be-denied" })).isError).toBe(true);
+  });
+
+  it("keeps quiet command results small without hiding failure, warning or omission evidence", async () => {
+    const f = await fixture(); wire.approve = true;
+    const source = fs.readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
+    const code = source.match(/```ts\n(\/\/ Recipe: quiet command status[\s\S]*?)\n```/)![1]!;
+    const cases = [
+      { command: "printf routine-success-log", expected: { ok: true, exitCode: 0, stdoutOmitted: true, truncated: false } },
+      { command: "true", expected: { ok: true, exitCode: 0, stdoutOmitted: false, truncated: false } },
+      { command: "printf routine; printf warning >&2", expected: { ok: true, exitCode: 0, stderr: "warning", stdoutOmitted: true, truncated: false } },
+      { command: "printf failure-context; printf diagnostic >&2; exit 7", expected: { ok: false, exitCode: 7, stdout: "failure-context", stderr: "diagnostic", stdoutOmitted: false, truncated: false } },
+    ];
+    for (const { command, expected } of cases) {
+      const response = await f.call(code, { command });
+      expect(response.isError, response.content[0].text).not.toBe(true);
+      expect(f.value(response)).toEqual(expected);
+      expect(response.content[0].text.length).toBeLessThan(300);
+    }
+    for (const exit of [0, 7]) {
+      const response = await f.call(code, { command: `i=0; while [ $i -lt 400 ]; do printf 'noise-' >&2; i=$((i+1)); done; exit ${exit}` });
+      expect(response.isError, response.content[0].text).not.toBe(true);
+      expect(f.value(response)).toMatchObject({ ok: exit === 0, exitCode: exit, stdoutOmitted: false, truncated: true });
+      expect(f.value(response).stderr.length).toBe(1200);
+    }
+    const timed = await f.call(code.replace("timeoutMs:120000", "timeoutMs:5"), { command: "sleep 60" });
+    expect(timed.isError).toBe(true);
+    wire.approve = false;
+    expect((await f.call(code, { command: "printf must-be-denied" })).isError).toBe(true);
+  });
+
+  it("verifies same-file edits against expected bytes, not replacement-text decoys", async () => {
+    const f = await fixture(); wire.approve = true;
+    const source = fs.readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
+    const code = source.match(/```ts\n(\/\/ Recipe: sequential same-file edits[\s\S]*?)\n```/)![1]!;
+    const target = path.join(f.projects[0]!, "same.txt");
+    const original = "first=old\nsecond=old\ndecoy:first=new\n";
+    const payloads = { path: "same.txt", oldFirst: "first=old", newFirst: "first=new", oldSecond: "second=old", newSecond: "second=new", intervening: original };
+    fs.writeFileSync(target, original);
+    const between = code.replace("const change = await local.edit", "await local.write({path,content:payloads.intervening,overwrite:true}); const change = await local.edit");
+    const conflict = await f.call(between, payloads);
+    expect(conflict.isError).toBe(true);
+    expect(conflict.content[0].text).toContain("Final bytes differ from expected edits");
+    // Both replacements occur in the final file, but the first target was reverted.
+    expect(fs.readFileSync(target, "utf8")).toBe("first=old\nsecond=new\ndecoy:first=new\n");
+    fs.writeFileSync(target, original);
+    const after = code.replace("const r = await local.read", "await local.write({path,content:payloads.intervening,overwrite:true}); const r = await local.read");
+    const stale = await f.call(after, payloads);
+    expect(stale.isError).toBe(true);
+    expect(stale.content[0].text).toContain("File changed after edit");
+    fs.writeFileSync(target, original);
+    const missing = await f.call(code, { ...payloads, oldSecond: "absent" });
+    expect(missing.isError).toBe(true);
+    expect(missing.content[0].text).toContain("unique nonempty anchor");
+    expect(fs.readFileSync(target, "utf8")).toBe(original);
+    const deletion = await f.call(code, { ...payloads, newFirst: "" });
+    expect(deletion.isError, deletion.content[0].text).not.toBe(true);
+    expect(f.value(deletion)).toMatchObject({ verified: true });
+    expect(fs.readFileSync(target, "utf8")).toBe("\nsecond=new\ndecoy:first=new\n");
   });
 
   it("automatically reads the launch project without roots or approval", async () => {

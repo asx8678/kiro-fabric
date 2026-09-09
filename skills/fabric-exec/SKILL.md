@@ -19,6 +19,10 @@ Code Mode governs routing when a tool is needed, not an obligation to call a too
 
 Choose the requested final format before work. For JSON-only output, emit no visible assistant commentary before or between tool calls: Kiro concatenates that text into finalText, even when the last message alone is valid JSON. For JSON, keep permitted status, explanation, verification and blockers inside one valid JSON value; no prose, fences, post-test Markdown summary or extra fields contrary to an exact schema. Complete requested output overrides the default brevity limit. Before sending, recheck format without tools. No steering rule is a constrained decoder or a hard no-tools switch.
 
+Default to a short outcome with concrete check results and unresolved blockers, not a transcript. Progress is only for meaningful milestones, plan changes or blockers; no routine tool narration or repeated recap. Requested detail and exact formats still win.
+
+For coding, keep an acceptance ledger of concrete checks, trace the affected path before editing, and verify public symbols, registrations and configuration. Use targeted tests and behavioral probes, escalating for failures or cross-cutting risk; do not rerun unchanged passing checks unless required. A build alone is not completion. Stop when the ledger is satisfied or explicitly blocked.
+
 ## Hot local recipes and workflow
 
 read returns an object with text:string, not content, lines or a bare string. text[0] is one character, not the first line. Use `text.split(/\r?\n/,1)[0]` for a complete first line, preserving whitespace. Search is local.grep, not local.search; edit fields are oldText/newText. Use targeted tools.describe on uncertainty, not guessed options or a full API dump.
@@ -67,4 +71,4 @@ The mounted namespaces are `local`, `fabric`, `artifacts`, `memory`, `state`, an
 
 Nested call arguments and results do not enter context automatically. The returned value plus bounded diagnostics, guest logs, and failure progress re-enter context. Returned output is capped (`executor.maxOutputChars`, 50,000 chars by default) and spills to an artifact reference when exceeded, so filter, aggregate, and slice inside the program and return only the data the task needs.
 
-Use `fabric.help({topic:"api"})` for declarations, `fabric.help({topic:"guide"})` for the bundled [API reference](references/api.md), `fabric.help({topic:"recipes"})` for [executable recipes](references/recipes.md), and `fabric.help({topic:"workflow"})` for [coding/Git/GitHub procedures](references/workflow.md). Local shell is an approved host capability, not ambient QuickJS access. Request outer `timeoutMs:180000` when using `local.shell({command:"pnpm test",timeoutMs:120000})`, leaving cleanup time. Never retry a whole effectful program automatically.
+Local shell is an approved host capability. Request outer `timeoutMs:180000` for `local.shell({command:"pnpm test",timeoutMs:120000})`, leaving cleanup time. Never automatically retry an effectful program.

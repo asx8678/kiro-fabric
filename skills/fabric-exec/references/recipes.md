@@ -50,16 +50,25 @@ return {path, changed:change.changed, verifiedSha256:r.sha256, text:r.text, trun
 
 ## Multiple known edits in one file
 
-There is no edits-array overload or multi-edit transaction. Sequence known anchors in one execution; each edit retains its own approval and snapshot checks. If a later edit fails, inspect earlier effects before recovery.
+There is no edits-array overload or multi-edit transaction. For a file that fits one bounded read, compute the exact expected bytes from the inspected snapshot, then sequence unique anchors. Each edit retains its own approval and snapshot checks. If a later edit fails, inspect earlier effects before recovery. Final bytes and the last edit hash detect conflicting final state, not all transient external writes.
 
 ```ts
 // Recipe: sequential same-file edits
 const path = payloads.path;
+const before = await local.read({path, limit:2000});
+if (before.truncated) throw new Error("Incomplete input: narrow/read remaining lines");
+const replaceOnce = (text:string, oldText:string, newText:string):string => {
+  const parts = text.split(oldText);
+  if (!oldText || parts.length !== 2) throw new Error("Expected a unique nonempty anchor");
+  return parts[0] + newText + parts[1];
+};
+const expected = replaceOnce(replaceOnce(before.text, payloads.oldFirst, payloads.newFirst), payloads.oldSecond, payloads.newSecond);
 await local.edit({path, oldText:payloads.oldFirst, newText:payloads.newFirst});
-await local.edit({path, oldText:payloads.oldSecond, newText:payloads.newSecond});
+const change = await local.edit({path, oldText:payloads.oldSecond, newText:payloads.newSecond});
 const r = await local.read({path, limit:2000});
-if (r.truncated) throw new Error("Incomplete verification: read remaining lines");
-return {path, firstPresent:r.text.includes(payloads.newFirst), secondPresent:r.text.includes(payloads.newSecond)};
+if (r.sha256 !== change.sha256) throw new Error("File changed after edit; inspect before recovery");
+if (r.truncated || r.text !== expected) throw new Error("Final bytes differ from expected edits");
+return {path, verified:true, verifiedSha256:r.sha256};
 ```
 
 ## Expected nonzero commands
@@ -99,5 +108,21 @@ const saved = await local.read({path:payloads.outputPath, limit:2000});
 if (saved.truncated || saved.text !== content) throw new Error("Report verification failed");
 return {path:payloads.outputPath, groups:totals.size, verified:true};
 ```
+
+## Quiet check results
+
+Use this only for a known command whose stdout is routine logs, not required acceptance evidence or requested output. Inspect/parse stdout instead when it contains test counts, warnings or other decision-relevant data. Always retain stderr, even on exit zero. `ok` reports the command exit, not task correctness; disclose omitted stdout separately from truncation. A truncated result is not complete diagnostic evidence.
+
+```ts
+// Recipe: quiet command status with failure evidence
+const r = await local.shell({command:payloads.command, timeoutMs:120000, settle:true});
+return {ok:r.ok, exitCode:r.exitCode,
+  ...(r.ok ? {} : {stdout:r.stdout.slice(-1200)}),
+  ...(r.stderr ? {stderr:r.stderr.slice(-1200)} : {}),
+  stdoutOmitted:r.ok && r.stdout.length > 0,
+  truncated:r.truncated || (!r.ok && r.stdout.length > 1200) || r.stderr.length > 1200};
+```
+
+Use outer timeoutMs:180000; denial, timeout, cancellation and uncertain cleanup still fail. Do not use `print` to leak the omitted logs back into context.
 
 Return requested output or compact evidence, not raw records to copy into another execution. Do not use persistent memory/state as scratch storage. parallel preserves input order and bounds concurrency; overlapping writes and commands are not independent fan-out.
