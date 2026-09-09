@@ -79,6 +79,9 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
     mcpServers: { fabric: { command: nodePath, args: [path.join(runtimeRoot, "kiro", "mcp-entry.js")], env: {
       // Kiro's MCP transport filters inherited env; explicitly expand the launcher handoff.
       KIRO_FABRIC_LAUNCH_WORKSPACE: "${KIRO_FABRIC_LAUNCH_WORKSPACE}",
+      // Kiro v3 starts stdio MCP servers in the session's directory even when
+      // it advertises no roots. Authorize that per-launch path, not a fixed project.
+      KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd",
       KIRO_FABRIC_RUNTIME_ROOT: runtimeRoot,
       KIRO_FABRIC_DATA_ROOT: dataRoot,
       KIRO_FABRIC_EXPECTED_NODE: nodePath,

@@ -33,6 +33,7 @@ const canonicalDirectory = (value: string | undefined, name: string): string => 
 
 export const resolveKiroAgentLaunchContext = (
   env: NodeJS.ProcessEnv = process.env,
+  launchDirectory: () => string = () => process.cwd(),
 ): KiroAgentLaunchContext => {
   const runtimeRoot = canonicalDirectory(env.KIRO_FABRIC_RUNTIME_ROOT, "KIRO_FABRIC_RUNTIME_ROOT");
   const dataRoot = canonicalDirectory(env.KIRO_FABRIC_DATA_ROOT, "KIRO_FABRIC_DATA_ROOT");
@@ -41,11 +42,20 @@ export const resolveKiroAgentLaunchContext = (
     throw new Error("runtime and data roots must not contain one another");
   }
   const managedGeneration = inferManagedGeneration(runtimeRoot, env);
-  // Only an explicit launcher handoff may supply a project. Never infer it from
-  // the backend cwd, PWD, runtime directory, or model input.
+  const source = env.KIRO_FABRIC_WORKSPACE_SOURCE;
+  if (source !== undefined && source !== "launch-cwd") {
+    throw new Error("KIRO_FABRIC_WORKSPACE_SOURCE must be launch-cwd when set");
+  }
   const handoff = env.KIRO_FABRIC_LAUNCH_WORKSPACE;
   // Kiro leaves an unset interpolation literal unchanged. It supplies no authority.
-  const launchWorkspaceRoot = handoff === undefined || handoff === "${KIRO_FABRIC_LAUNCH_WORKSPACE}" ? undefined
-    : canonicalDirectory(handoff, "KIRO_FABRIC_LAUNCH_WORKSPACE");
+  const explicit = handoff !== undefined && handoff !== "${KIRO_FABRIC_LAUNCH_WORKSPACE}";
+  // The installed profile explicitly authorizes Kiro's per-session MCP launch
+  // directory. Capture it once at startup, never from PWD, model input, or a
+  // later runtime cwd. Unconfigured/library launches remain explicit-only.
+  // Client roots still take precedence in syncWorkspace; reserved roots are
+  // rejected by the workspace binding before any project effects are enabled.
+  const launchWorkspaceRoot = explicit
+    ? canonicalDirectory(handoff, "KIRO_FABRIC_LAUNCH_WORKSPACE")
+    : source === "launch-cwd" ? canonicalDirectory(launchDirectory(), "MCP launch directory") : undefined;
   return { runtimeRoot, dataRoot, ...(managedGeneration ? { managedGeneration } : {}), ...(launchWorkspaceRoot ? { launchWorkspaceRoot } : {}) };
 };

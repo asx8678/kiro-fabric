@@ -883,7 +883,7 @@ var canonicalDirectory = (value, name) => {
     throw new Error(`${name} must be an existing directory: ${error.message}`);
   }
 };
-var resolveKiroAgentLaunchContext = (env = process.env) => {
+var resolveKiroAgentLaunchContext = (env = process.env, launchDirectory = () => process.cwd()) => {
   const runtimeRoot = canonicalDirectory(env.KIRO_FABRIC_RUNTIME_ROOT, "KIRO_FABRIC_RUNTIME_ROOT");
   const dataRoot = canonicalDirectory(env.KIRO_FABRIC_DATA_ROOT, "KIRO_FABRIC_DATA_ROOT");
   if (runtimeRoot === dataRoot) throw new Error("runtime and data roots must be different directories");
@@ -891,8 +891,13 @@ var resolveKiroAgentLaunchContext = (env = process.env) => {
     throw new Error("runtime and data roots must not contain one another");
   }
   const managedGeneration = inferManagedGeneration(runtimeRoot, env);
+  const source = env.KIRO_FABRIC_WORKSPACE_SOURCE;
+  if (source !== void 0 && source !== "launch-cwd") {
+    throw new Error("KIRO_FABRIC_WORKSPACE_SOURCE must be launch-cwd when set");
+  }
   const handoff = env.KIRO_FABRIC_LAUNCH_WORKSPACE;
-  const launchWorkspaceRoot = handoff === void 0 || handoff === "${KIRO_FABRIC_LAUNCH_WORKSPACE}" ? void 0 : canonicalDirectory(handoff, "KIRO_FABRIC_LAUNCH_WORKSPACE");
+  const explicit = handoff !== void 0 && handoff !== "${KIRO_FABRIC_LAUNCH_WORKSPACE}";
+  const launchWorkspaceRoot = explicit ? canonicalDirectory(handoff, "KIRO_FABRIC_LAUNCH_WORKSPACE") : source === "launch-cwd" ? canonicalDirectory(launchDirectory(), "MCP launch directory") : void 0;
   return { runtimeRoot, dataRoot, ...managedGeneration ? { managedGeneration } : {}, ...launchWorkspaceRoot ? { launchWorkspaceRoot } : {} };
 };
 
@@ -913,7 +918,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         const manifestHash = createHash4("sha256").update(readFileSync(path5.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-DO5DAGTC.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-22SI5BM7.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {} });
     } finally {
       release?.();

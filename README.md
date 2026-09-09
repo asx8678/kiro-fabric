@@ -9,15 +9,21 @@ are supported. The migration option preserves and replaces an old Pi Fabric
 profile only when its recorded ownership and checksum match; it does nothing
 when migration is unnecessary.
 
-After installation, **open a new terminal**, change to your project, and run:
+After installation, start a new Kiro session from your project:
 
 ```sh
 kiro-cli --v3
 ```
 
-The installer configures a backed-up bash/zsh shell handoff automatically; no
-manual workspace binding or environment export is needed. Use
-`--no-shell-integration` to opt out and use `kiro-fabric start` instead.
+The installed Fabric profile binds Kiro's launch directory automatically, even
+when Kiro supplies no MCP roots. No manual workspace binding or environment
+export is needed. If Fabric isn't already selected, use
+`kiro-cli --v3 --agent kiro-fabric` (works in existing terminals too).
+
+The installer also configures a backed-up bash/zsh shortcut that selects Fabric
+for `kiro-cli --v3`; open a new terminal to load that shortcut.
+`--no-shell-integration` leaves shell files untouched without disabling workspace
+binding. Existing Kiro sessions must restart after an update.
 
 For unattended installation, add `--yes --non-interactive`. See
 [installation details](docs/installer.md) for prerequisites and recovery.

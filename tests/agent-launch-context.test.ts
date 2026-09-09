@@ -15,24 +15,56 @@ const fixture = () => {
     KIRO_FABRIC_DATA_ROOT: path.join(root, "data"),
   } };
 };
+const unexpectedCwd = (): never => { throw new Error("cwd must not be consulted"); };
 
-describe("explicit Kiro launcher workspace handoff", () => {
-  it.each([undefined, "${KIRO_FABRIC_LAUNCH_WORKSPACE}"])("does not infer a workspace from absent/unexpanded handoff %s", (handoff) => {
+describe("Kiro launch workspace authority", () => {
+  it.each([undefined, "${KIRO_FABRIC_LAUNCH_WORKSPACE}"])("unconfigured launches do not infer a workspace from absent/unexpanded handoff %s", (handoff) => {
     const { env, project } = fixture();
-    expect(resolveKiroAgentLaunchContext({ ...env, PWD: project, KIRO_FABRIC_LAUNCH_WORKSPACE: handoff }).launchWorkspaceRoot).toBeUndefined();
+    expect(resolveKiroAgentLaunchContext({ ...env, PWD: project, KIRO_FABRIC_LAUNCH_WORKSPACE: handoff }, unexpectedCwd).launchWorkspaceRoot).toBeUndefined();
   });
-  it("accepts an expanded absolute project path with spaces", () => {
+  it.each([undefined, "${KIRO_FABRIC_LAUNCH_WORKSPACE}"])("the installed profile captures Kiro's launch directory without a handoff (%s)", handoff => {
     const { env, project } = fixture();
-    expect(resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_LAUNCH_WORKSPACE: project }).launchWorkspaceRoot).toBe(project);
+    let calls = 0;
+    const launch = resolveKiroAgentLaunchContext({ ...env, PWD: "/stale-shell-directory", KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd", KIRO_FABRIC_LAUNCH_WORKSPACE: handoff }, () => { calls++; return project; });
+    expect(launch.launchWorkspaceRoot).toBe(project);
+    expect(calls).toBe(1);
   });
-  it.each(["", "relative", "${OTHER_VARIABLE}"])("rejects invalid explicit handoff %s", (handoff) => {
+  it("keeps independent session launch directories instead of pinning the install path", () => {
+    const a = fixture(), b = fixture();
+    const env = { ...a.env, KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd" };
+    expect(resolveKiroAgentLaunchContext(env, () => a.project).launchWorkspaceRoot).toBe(a.project);
+    expect(resolveKiroAgentLaunchContext(env, () => b.project).launchWorkspaceRoot).toBe(b.project);
+  });
+  it.each([undefined, "launch-cwd"])("an expanded absolute handoff with spaces wins over cwd (source %s)", source => {
+    const { env, project } = fixture();
+    expect(resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_WORKSPACE_SOURCE: source, KIRO_FABRIC_LAUNCH_WORKSPACE: project }, unexpectedCwd).launchWorkspaceRoot).toBe(project);
+  });
+  it.each(["", "relative", "${OTHER_VARIABLE}"])("rejects invalid explicit handoff %s instead of using cwd", (handoff) => {
     const { env } = fixture();
-    expect(() => resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_LAUNCH_WORKSPACE: handoff })).toThrow(/KIRO_FABRIC_LAUNCH_WORKSPACE/);
+    for (const source of [undefined, "launch-cwd"]) {
+      expect(() => resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_WORKSPACE_SOURCE: source, KIRO_FABRIC_LAUNCH_WORKSPACE: handoff }, unexpectedCwd)).toThrow(/KIRO_FABRIC_LAUNCH_WORKSPACE/);
+    }
   });
-  it("still rejects a writable project directory", () => {
+  it.each(["", "cwd", "${PWD}", "/some/project"])("rejects an unknown workspace source %s", source => {
+    const { env } = fixture();
+    expect(() => resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_WORKSPACE_SOURCE: source }, unexpectedCwd)).toThrow(/KIRO_FABRIC_WORKSPACE_SOURCE/);
+  });
+  it.each(["relative", "/nonexistent-fabric-launch-directory"])("rejects invalid launch directories %s", cwd => {
+    const { env } = fixture();
+    expect(() => resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd" }, () => cwd)).toThrow(/MCP launch directory/);
+  });
+  it("does not hide a missing launch directory by falling back to PWD", () => {
+    const { env, project } = fixture();
+    expect(() => resolveKiroAgentLaunchContext({ ...env, PWD: project, KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd" }, () => { throw new Error("cwd disappeared"); })).toThrow("cwd disappeared");
+  });
+  it("still rejects writable and symlinked workspace directories", () => {
     if (process.platform === "win32") return;
     const { env, project } = fixture();
+    const link = project + "-alias";
+    fs.symlinkSync(project, link);
+    expect(() => resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd" }, () => link)).toThrow(/symlink/i);
     fs.chmodSync(project, 0o777);
     expect(() => resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_LAUNCH_WORKSPACE: project })).toThrow(/writable/);
+    expect(() => resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd" }, () => project)).toThrow(/writable/);
   });
 });

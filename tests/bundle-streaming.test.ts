@@ -21,6 +21,9 @@ it.each([0, 65536, 65537, 2 * 1024 * 1024])("hashes %i-byte inventory members in
 it.each(["grow", "shrink", "same-size"])("rejects %s mutation while streaming an inventory member", async mutation => {
   const root = await fixture(); roots.push(root); const previous = await validateBundle(root);
   const target = path.join(root, "app/main.js"); await fs.writeFile(target, Buffer.alloc(150000, 37));
+  // Same-size writes can share a filesystem timestamp tick. Give the capture a
+  // distinct initial mtime so this fixture deterministically changes metadata.
+  await fs.utimes(target, 1_600_000_000, 1_600_000_000);
   const open = fs.open;
   vi.spyOn(fs, "open").mockImplementation(async (...args) => {
     const handle = await open(...args);

@@ -84,32 +84,40 @@ bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --migrate-pi-
 
 Source mode requires developer Node >=24 and pnpm 11.20.0, installs frozen dependencies and builds the current checkout including local changes. It never clones/resets. Local-source provenance records Git HEAD, dirty state and a source-input digest. Default `bash ./install.sh` fails clearly until a genuine release-pinned bootstrap is generated.
 
-The selected global home is explicit --kiro-home, supplied KIRO_HOME, then the current user's home/.kiro. Empty/relative/control-bearing and unsafe destinations fail. Invocation cwd is not coding-workspace authority. Install/update configure a backed-up bash/zsh workspace-handoff block by default (opt out with --no-shell-integration). No default-agent setting or authentication changes occur.
+The selected global home is explicit --kiro-home, supplied KIRO_HOME, then the current user's home/.kiro. Empty/relative/control-bearing and unsafe destinations fail. Installer cwd is never stored as the coding workspace. The generated profile explicitly authorizes Kiro's per-session MCP launch directory when client roots are absent. Install/update also configure a backed-up bash/zsh default-agent/workspace-handoff block (opt out with --no-shell-integration). No default-agent setting or authentication changes occur.
 
 ### Troubleshooting: `Verified workspace binding is required` / `explicitly-empty`
 
-This means Fabric has no authorized project directory, not that installation failed.
-Exit the current Kiro session, then run from the project you want to review:
+This means Fabric has no usable authorized project directory. Older profiles
+required a shell/launcher handoff that bare Kiro did not supply. Update through
+the installer and restart the Kiro session from your project. The updated profile
+sets `KIRO_FABRIC_WORKSPACE_SOURCE=launch-cwd`: Kiro starts the MCP server in its
+session directory, which Fabric captures once and verifies. No fixed project path
+or shell reload is needed for `kiro-cli --v3 --agent kiro-fabric`.
+
+For older installations, this launcher remains a workaround:
 
 ```sh
 "${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start
 ```
 
-The launcher selects the Fabric agent and supplies the canonical project path.
-A bare `kiro-cli --v3` can return zero MCP roots even when launched inside a project.
-`fabric.workspace` status/list now return recovery guidance in that case; listing
-roots again cannot create a missing handoff. Do not disable workspace checks or
-set a fixed project directory in the global agent profile. An already healthy
-installation with the handoff entry does not need reinstalling to use `start`.
+The launcher selects Fabric and supplies an explicit canonical project path,
+which takes precedence over the profile's launch-directory source. Client MCP
+roots still take precedence over either launch source; ambiguous, removed, or
+temporarily unavailable roots never silently fall back. Home, Kiro/Fabric storage,
+unsafe, and overly broad directories remain rejected. `fabric.workspace`
+status/list return recovery guidance when unbound. Do not disable workspace
+checks or hard-code a project path in the global profile.
 
 ### Automatic shell setup: `kiro-cli --v3`
 
-Install and update now configure the current user's bash (`~/.bashrc`) or zsh
+Install and update configure the current user's bash (`~/.bashrc`) or zsh
 (`${ZDOTDIR:-$HOME}/.zshrc`) automatically, based on `SHELL`. **Open a new terminal**
-after installation, change to your project, and run `kiro-cli --v3`. No manual
-function, environment export, or workspace attachment is required. An installer
-subprocess cannot change the shell that launched it; existing terminals/sessions
-must be restarted. Bash login profiles must source `.bashrc` to load its setup.
+to load the default-agent shortcut, then change to your project and run
+`kiro-cli --v3`. This shortcut is optional for workspace binding: selecting Fabric
+with `kiro-cli --v3 --agent kiro-fabric` works without it, including in an existing
+terminal. Already-running Kiro sessions must restart to load an updated profile.
+Bash login profiles must source `.bashrc` to load the shortcut.
 
 The managed function selects `kiro-fabric` and the installed Kiro home when no
 agent is specified. Explicit `--agent`/`-a` selections and non-v3 invocations are
@@ -127,7 +135,8 @@ post-activation step: failure reports backend commit truth and exit 7.
 
 Use `--no-shell-integration` with install/update/uninstall to leave startup files
 untouched. Unsupported/missing `SHELL` produces an explicit warning instead of
-guessing. In these cases use the installed `kiro-fabric start` launcher. Changing
+guessing. In these cases use `kiro-cli --v3 --agent kiro-fabric` or the installed
+`kiro-fabric start` launcher. Changing
 shells after installation does not migrate an existing recorded integration.
 The shell backup is separate from Kiro configuration backups; do not restore an
 entire old rc over newer user edits when removing the managed block is sufficient.
@@ -146,7 +155,7 @@ integrity-checked. Restart existing Kiro processes to use the new profile.
 "$HOME/.kiro/kiro-fabric/bin/kiro-fabric" uninstall
 ```
 
-For a custom location use `"$KIRO_HOME/kiro-fabric/bin/kiro-fabric"`. The launcher resolves its own installation, not a changed caller KIRO_HOME. `start` invokes official Kiro with --v3 --agent kiro-fabric, preserving project cwd and explicitly passing its canonical project directory through KIRO_FABRIC_LAUNCH_WORKSPACE. Use this launcher from your project for automatic workspace binding when Kiro supplies no initial roots; no manual attachment is needed. Client roots retain precedence, and reserved home/runtime/data roots are rejected. Bare kiro-cli does not provide this handoff. The generated profile explicitly expands `${KIRO_FABRIC_LAUNCH_WORKSPACE}` into the MCP server environment, because Kiro filters inherited variables. To use the bare CLI with the same explicit authority, run `KIRO_FABRIC_LAUNCH_WORKSPACE="$(pwd -P)" kiro-cli --v3 --agent kiro-fabric` or wrap that invocation in your shell. Do not hard-code a project path into the global profile: concurrent sessions need independent handoffs. Local authenticated Kiro CLI 2.21.1 v3 smoke verified binding on macOS ARM64; full release qualification remains separate. Kiro itself and project-specific Git/Python/Java/Docker/etc. remain external prerequisites. Kiro executables (including a sibling `kiro-cli-chat`) and their directory ancestry must not be group/other-writable; unsafe prerequisites are rejected before execution. The narrow macOS exception is exactly `/Applications`, owned by root:admin (UID 0/GID 80), mode 0775; application descendants and executables remain strict. This explicitly trusts macOS administrators, who can already replace installed applications. The installer does not change their permissions.
+For a custom location use `"$KIRO_HOME/kiro-fabric/bin/kiro-fabric"`. The launcher resolves its own installation, not a changed caller KIRO_HOME. `start` invokes official Kiro with --v3 --agent kiro-fabric, preserving project cwd and explicitly passing its canonical project directory through KIRO_FABRIC_LAUNCH_WORKSPACE. Use this launcher from your project for automatic workspace binding when Kiro supplies no initial roots; no manual attachment is needed. Client roots retain precedence, and reserved home/runtime/data roots are rejected. Bare Kiro need not provide this variable: the generated profile authorizes its per-session MCP launch directory through `KIRO_FABRIC_WORKSPACE_SOURCE=launch-cwd`. It also expands `${KIRO_FABRIC_LAUNCH_WORKSPACE}` into the MCP environment for explicit overrides, because Kiro filters inherited variables. The latter remains useful for older profiles or hosts whose MCP launch directory differs from the project. Do not hard-code a project path into the global profile: concurrent sessions need independent handoffs. Local authenticated Kiro CLI 2.21.1 v3 smoke verified binding on macOS ARM64; full release qualification remains separate. Kiro itself and project-specific Git/Python/Java/Docker/etc. remain external prerequisites. Kiro executables (including a sibling `kiro-cli-chat`) and their directory ancestry must not be group/other-writable; unsafe prerequisites are rejected before execution. The narrow macOS exception is exactly `/Applications`, owned by root:admin (UID 0/GID 80), mode 0775; application descendants and executables remain strict. This explicitly trusts macOS administrators, who can already replace installed applications. The installer does not change their permissions.
 
 Before any client execution (including help/version probes), `start` requires a verified active complete installation. Absent, legacy, or retired installations return prerequisite exit 4; pending transaction/candidate evidence returns recovery exit 7. Integrity failures remain exit 5. This preflight is read-only: it never repairs an interrupted installation, removes evidence, or initializes data.
 

@@ -257,6 +257,14 @@ describe("strict checked workspace bootstrap", () => {
     expect(f.value(response)).toMatchObject({ text: "source:project-a\n" });
     expect(wire.forms).toHaveLength(0);
   });
+  it("prefers client roots over a different authorized launch directory", async () => {
+    const f = await fixture(1, false, "project");
+    f.snapshot({ status: "verified", roots: [{ uri: pathToFileURL(f.projects[1]!).href }], revision: 2, observedAt: Date.now() });
+    const response = await f.call('return await local.read({path:"fixture.txt"})');
+    expect(response.isError).not.toBe(true);
+    expect(f.value(response)).toMatchObject({ text: "source:project-b\n" });
+    expect(wire.forms).toHaveLength(0);
+  });
   it("does not fall back after client roots are removed", async () => {
     const f = await fixture(1, false, "project");
     expect((await f.call('return await local.read({path:"fixture.txt"})')).isError).not.toBe(true);

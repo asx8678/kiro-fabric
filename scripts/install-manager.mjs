@@ -310,7 +310,7 @@ export async function runManager(argv, internal = {}) {
       catch (error) { throw Object.assign(new Error(`Backend ${options.command} completed, but shell setup failed: ${error.message}. Startup content and backups are preserved; rerun the operation after resolving the conflict.`), { committed: result.committed === true, recoveryRequired: true }); }
       if (output.shellIntegration.status === "skipped") output.warnings.push(output.shellIntegration.reason);
     }
-    if (["install", "update", "rollback"].includes(options.command)) output.warnings.push(`Launch from your project directory with: ${output.commands.start}. Bare kiro-cli --v3 may supply zero workspace roots without the managed shell handoff. Open a new terminal after shell setup.`);
+    if (["install", "update", "rollback"].includes(options.command)) output.warnings.push(`Launch from your project directory with: ${output.commands.start}. The updated Fabric profile binds Kiro's per-session launch directory when no MCP roots are supplied; kiro-cli --v3 --agent kiro-fabric works without shell setup. Open a new terminal only to load the optional default-agent shell shortcut.`);
     if (homePreparation) output.homePreparation = homePreparation;
     try { logOutcome(home, output); } catch { output.warnings.push("Operation completed; installer log could not be safely updated"); }
     present(output, options); return output.outcome === "committed-cleanup-required" ? 7 : 0;

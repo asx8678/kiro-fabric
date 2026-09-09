@@ -544,9 +544,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-DO5DAGTC.js",
-      "bytes": 1163023,
-      "sha256": "245c16f6e09b94a23d1e6ef892f6f0d6de24f81d7e9755d3f22d6c2a1f2ebb8b"
+      "path": "chunks/mcp-server-22SI5BM7.js",
+      "bytes": 1163134,
+      "sha256": "dba259490f6abf54e0660a8dd22f132e1685623b35c75bdb682ebabc014b0bfd"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -565,8 +565,8 @@
     },
     {
       "path": "kiro/mcp-entry.js",
-      "bytes": 56006,
-      "sha256": "c3e0f59423b0d22f6aad0097f651234f1078af19bd042dcf61b7856bda10507d"
+      "bytes": 56354,
+      "sha256": "db6221f8f920c514f27a775fd7954d8f197fde18fb025e5fd4ec0b11ff776c8a"
     },
     {
       "path": "package.json",
@@ -584,5 +584,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "c50de281aa13f78d20dd7d52194cf2f127920e2872764540276aa4dfaa875c5e"
+  "contentDigest": "e8aea0510c696acda504524c84413a3b8288855c0935010edb535701dcc34d93"
 }

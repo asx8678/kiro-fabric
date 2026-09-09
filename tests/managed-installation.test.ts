@@ -36,14 +36,16 @@ test('upgrades a hash-verified pre-readiness profile without accepting profile t
  } finally { await f.cleanup(); }
 });
 
-test('upgrades a hash-verified profile predating explicit workspace forwarding', async () => {
+test.each([false, true])('upgrades hash-verified profiles predating direct CLI binding (old forwarding: %s)', async forwarding => {
  const f = await setup();
  try {
   const a = await installCompleteGeneration(f.bundle, f.opts);
   const profile = JSON.parse(await fs.readFile(a.paths.profile, 'utf8'));
-  delete profile.mcpServers.fabric.env.KIRO_FABRIC_LAUNCH_WORKSPACE;
+  delete profile.mcpServers.fabric.env.KIRO_FABRIC_WORKSPACE_SOURCE;
+  if (!forwarding) delete profile.mcpServers.fabric.env.KIRO_FABRIC_LAUNCH_WORKSPACE;
   const oldBytes = JSON.stringify(profile, null, 2) + '\n';
   await fs.writeFile(a.paths.profile, oldBytes);
+  await expect(inspectCompleteInstallation(f.kiroHome)).rejects.toThrow(/modified profile/);
   const owner = JSON.parse(await fs.readFile(a.paths.manifest, 'utf8'));
   owner.profileSha256 = installerSafety.hash(oldBytes);
   await fs.writeFile(a.paths.manifest, JSON.stringify(owner, null, 2) + '\n');
@@ -52,6 +54,15 @@ test('upgrades a hash-verified profile predating explicit workspace forwarding',
   await installCompleteGeneration(f.bundle, f.opts);
   const updated = JSON.parse(await fs.readFile(a.paths.profile, 'utf8'));
   expect(updated.mcpServers.fabric.env.KIRO_FABRIC_LAUNCH_WORKSPACE).toBe('${KIRO_FABRIC_LAUNCH_WORKSPACE}');
+  expect(updated.mcpServers.fabric.env.KIRO_FABRIC_WORKSPACE_SOURCE).toBe('launch-cwd');
+  const currentOwner = JSON.parse(await fs.readFile(a.paths.manifest, 'utf8'));
+  // Even a hash-verified control cannot substitute an arbitrary workspace source.
+  updated.mcpServers.fabric.env.KIRO_FABRIC_WORKSPACE_SOURCE = '${PWD}';
+  const forged = JSON.stringify(updated, null, 2) + '\n';
+  await fs.writeFile(a.paths.profile, forged);
+  currentOwner.profileSha256 = installerSafety.hash(forged);
+  await fs.writeFile(a.paths.manifest, JSON.stringify(currentOwner, null, 2) + '\n');
+  await expect(inspectCompleteInstallation(f.kiroHome)).rejects.toThrow(/profile generation binding/);
  } finally { await f.cleanup(); }
 });
 

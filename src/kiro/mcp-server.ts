@@ -328,8 +328,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     verification: binding.workspaceObservation().status,
     ...(workspaceSnapshot?.status === "explicitly-empty" && binding.workspaceObservation().status === "unbound" ? {
       recovery: {
-        reason: "Kiro supplied no workspace roots. Bare kiro-cli does not supply Fabric's explicit launch workspace handoff.",
-        instruction: "Ask the user to start a new session from their project directory with the installed kiro-fabric start launcher, or run this shell command. Do not execute it inside fabric_exec or infer a project from the backend cwd.",
+        reason: "Kiro supplied no usable workspace roots or authorized launch directory. The profile may predate direct CLI workspace binding, or the launch directory may be reserved.",
+        instruction: "Ask the user to start a new session from a project directory outside Kiro/Fabric storage. Update older installations, use the installed kiro-fabric start launcher, or run this shell command. Do not execute it inside fabric_exec or infer a project from the backend cwd.",
         command: 'KIRO_FABRIC_LAUNCH_WORKSPACE="$(pwd -P)" kiro-cli --v3 --agent kiro-fabric',
       },
     } : {}),
