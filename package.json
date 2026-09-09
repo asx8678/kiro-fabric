@@ -27,6 +27,7 @@
     "docs/audit.md",
     "docs/configuration.md",
     "docs/installer.md",
+    "docs/linux-validation.md",
     "docs/release.md",
     "docs/tracing.md",
     "README.md",

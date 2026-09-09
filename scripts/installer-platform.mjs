@@ -20,7 +20,11 @@ export function detectInstallerPlatform(observation = {}) {
     libcVersion = observation.glibc ?? header?.glibcVersionRuntime;
     osVersion = observation.osVersion ?? os.release();
     if (!libcVersion) throw Object.assign(new Error("Unsupported Linux libc: this bundle requires glibc; musl is not qualified"), { code: "PREREQUISITE" });
-    if (compareVersions(libcVersion, "2.28") < 0 || compareVersions(osVersion, "4.18") < 0) throw Object.assign(new Error("Linux requires glibc >=2.28 and kernel >=4.18"), { code: "PREREQUISITE" });
+    // Linux LOCALVERSION suffixes are not semver (e.g. Raspberry Pi's +rpt).
+    // Keep the general Node/Kiro/libc version comparator unchanged.
+    const kernel = /^(\d+\.\d+(?:\.\d+)?)(?:\.\d+)*(?:[-+][A-Za-z0-9._+-]*)?$/u.exec(String(osVersion));
+    if (!kernel) throw Object.assign(new Error("Unsupported Linux kernel version"), { code: "PREREQUISITE" });
+    if (compareVersions(libcVersion, "2.28") < 0 || compareVersions(kernel[1], "4.18") < 0) throw Object.assign(new Error("Linux requires glibc >=2.28 and kernel >=4.18"), { code: "PREREQUISITE" });
   } else {
     rosetta = observation.rosetta ?? (arch === "x64" && (() => { try { return systemValue("/usr/sbin/sysctl", ["-in", "sysctl.proc_translated"]) === "1"; } catch { return false; } })());
     if (rosetta) selectedArch = "arm64";

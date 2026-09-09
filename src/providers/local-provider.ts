@@ -395,17 +395,19 @@ export class LocalCodingProvider implements FabricProvider {
     let searchedPathChars = 0;
     let outputBytes = 0;
     // Validate selected aliases above; snapshot/search bounded batches only.
+    // Amortize rg launch + executable hashing over up to 256 small files, still
+    // capped at 2MiB per batch and 128000 UTF-8 argv bytes across the search.
     // Revalidate consumed snapshots before exposing results. Disclose unsearched files.
     for (let index = 0; index < candidates.length;) {
       const snapshots: LocalPathSnapshot[] = [];
       let batchBytes = 0;
-      while (index < candidates.length && snapshots.length < 32) {
+      while (index < candidates.length && snapshots.length < 256) {
         const file = candidates[index]!;
         if (snapshots.length && batchBytes + file.stat!.size > LOCAL_MAX_FILE_BYTES) break;
         index++;
         this.#check(context);
         searchedBytes += file.stat!.size;
-        searchedPathChars += file.path.length + 1;
+        searchedPathChars += Buffer.byteLength(file.path) + 1;
         if (searchedBytes > 32 * 1024 * 1024 || searchedPathChars > 128000) throw new Error("local.grep exceeded aggregate search work limit; narrow path or glob");
         batchBytes += file.stat!.size;
         try { snapshots.push(this.#paths.read(file.path).snapshot); }

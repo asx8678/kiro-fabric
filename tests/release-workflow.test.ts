@@ -54,6 +54,13 @@ describe("installer production fail-closed gates", () => {
     expect(body).toContain('export HOME="$root/home" KIRO_HOME="$root/kiro"');
     expect(ci.indexOf("Assert actual native target")).toBeLessThan(ci.indexOf("Build and exercise the complete native bundle"));
   });
+  it("runs Linux cleanup, search and startup regressions on every native target", () => {
+    const ci = workflow("ci");
+    const body = run(step(ci, "Isolated native installer and runtime contract tests"));
+    for (const file of ["local-process-group", "local-shell", "local-search-work", "local-executable", "local-provider", "bundle-contract", "bundle-streaming", "managed-generation", "managed-generation-efficiency"]) expect(body).toContain(`tests/${file}.test.ts`);
+    expect(ci.indexOf("Provision ripgrep for native runtime contracts")).toBeLessThan(ci.indexOf("Isolated native installer and runtime contract tests"));
+    expect(body).toContain('HOME="$root/home" KIRO_HOME="$root/kiro"');
+  });
   it("asserts actual OS, kernel arch and Node arch, rejecting mismatches", () => {
     const ci = workflow("ci");
     for (const target of ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"]) expect(ci).toContain(`target: ${target}, runner:`);

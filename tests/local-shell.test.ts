@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { runLocalShell } from "../src/providers/local-shell.js";
+import * as processGroup from "../src/providers/local-process-group.js";
 import { FabricDeadline } from "../src/runtime/deadline.js";
 
 const roots: string[] = [];
@@ -110,6 +111,19 @@ describe.skipIf(process.platform !== "linux" && process.platform !== "darwin")("
     }
     try {
       await expect(run({ command: "echo $$ > group; sleep 60 & sleep 0.1", cwd })).rejects.toThrow(/^Local shell cleanup uncertain$/);
+    } finally { vi.restoreAllMocks(); }
+  });
+  it("still sends SIGKILL when TERM process inspection fails", async () => {
+    const { cwd } = await fixture();
+    const kill = vi.spyOn(process, "kill");
+    vi.spyOn(processGroup, "localProcessGroupAlive").mockRejectedValue(new Error("unreadable evidence"));
+    try {
+      const task = run({ command: "echo $$ > group; sh -c 'trap \"\" TERM; echo $$ > child; while :; do :; done' & sleep 0.1; exit 0", cwd });
+      const child = await recorded(cwd, "child"), group = await recorded(cwd, "group");
+      await expect(task).rejects.toThrow(/^Local shell cleanup uncertain$/);
+      expect(kill.mock.calls).toContainEqual([-group, "SIGKILL"]);
+      for (let i = 0; i < 100 && await live(child); i++) await delay(10);
+      expect(await live(child)).toBe(false);
     } finally { vi.restoreAllMocks(); }
   });
   it("pre-abort and pre-expired deadline execute nothing", async () => {

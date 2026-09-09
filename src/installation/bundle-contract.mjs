@@ -134,23 +134,46 @@ export function checkManifest(m){
 }
 /** @param {import('node:fs').Stats} s */
 function owned(s){if(typeof process.getuid!=='function'||s.uid!==process.getuid())throw Error('File ownership mismatch');}
-/** Read an owned regular file through a no-follow handle; reject inode mutation.
+/** Capture through an owned no-follow handle, then check both inode and name.
  * This is capture, not a promise that the caller's pathname remains unchanged.
- * @param {string} file @param {number} max */
-export async function readRegular(file,max){
+ * @template T
+ * @param {string} file @param {number} max
+ * @param {(handle: import('node:fs/promises').FileHandle, size: number) => Promise<{value:T,length:number}>} consume */
+async function captureRegular(file,max,consume){
  const before=await lstat(file);owned(before);
  if(!before.isFile()||before.nlink!==1||before.size>max)throw Error('Unsafe or oversized file: '+file);
  const handle=await open(file,constants.O_RDONLY|constants.O_NOFOLLOW);
  try{
   const s=await handle.stat();owned(s);
   if(!s.isFile()||s.nlink!==1||s.size>max||s.ino!==before.ino||s.dev!==before.dev)throw Error('File changed');
-  // Allocate only the measured bound, plus one byte to detect growth.
-  const buffer=Buffer.alloc(s.size+1);let length=0;
-  while(length<buffer.length){const r=await handle.read(buffer,length,buffer.length-length,null);if(!r.bytesRead)break;length+=r.bytesRead;}
+  const {value,length}=await consume(handle,s.size);
   const after=await handle.stat(),named=await lstat(file);
   if(length!==s.size||s.ino!==named.ino||s.dev!==named.dev||s.mtimeMs!==after.mtimeMs||s.ctimeMs!==after.ctimeMs||s.mode!==after.mode||s.uid!==after.uid||after.nlink!==1)throw Error('File changed');
-  return buffer.subarray(0,length);
+  return value;
  }finally{await handle.close();}
+}
+/** Read bounded metadata bytes; large inventory members use streaming hashes.
+ * @param {string} file @param {number} max */
+export async function readRegular(file,max){
+ return captureRegular(file,max,async(handle,size)=>{
+  const buffer=Buffer.alloc(size+1);let length=0;
+  while(length<buffer.length){const r=await handle.read(buffer,length,buffer.length-length,null);if(!r.bytesRead)break;length+=r.bytesRead;}
+  return {value:buffer.subarray(0,length),length};
+ });
+}
+/** Hash large binaries without allocating a Node-executable-sized buffer.
+ * Read one extra byte to detect growth; retain the same capture trust checks.
+ * @param {string} file @param {number} max */
+async function hashRegular(file,max){
+ return captureRegular(file,max,async(handle,size)=>{
+  const buffer=Buffer.alloc(Math.min(size+1,64*1024)),hash=createHash('sha256');let length=0;
+  while(length<=size){
+   const r=await handle.read(buffer,0,Math.min(buffer.length,size+1-length),null);
+   if(!r.bytesRead)break;
+   length+=r.bytesRead;hash.update(buffer.subarray(0,r.bytesRead));
+  }
+  return {value:{size:length,sha256:hash.digest('hex')},length};
+ });
 }
 /** Reject symlink components; ancestors may be shared (e.g. /tmp), bundle root may not.
  * @param {string} root */
@@ -174,7 +197,7 @@ async function scan(root){
     if(!s.isFile()||s.nlink!==1||(s.mode&4095)!==mode)throw Error('File mode/type');
     if(p==='bundle-manifest.json')continue;
     total+=s.size;if(total>LIMITS.bytes)throw Error('Bundle byte bound');
-    const b=await readRegular(path.join(root,p),LIMITS.file);inventory.push({path:p,role,type:'file',mode,size:b.length,sha256:sha256(b)});
+    const digest=await hashRegular(path.join(root,p),LIMITS.file);inventory.push({path:p,role,type:'file',mode,...digest});
    }
   }
  }

@@ -12,6 +12,8 @@ Successful stale-lock reclamation requires inode-anchored directory-FD traversal
 
 ### Linux and macOS source prerequisites
 
+See [Linux validation](linux-validation.md) for kernel suffix support, bounded cleanup/search/startup contracts and reproducible native checks. Contract coverage is not release qualification.
+
 | System | Architectures | Minimum system |
 | --- | --- | --- |
 | Linux | x64, ARM64 | glibc 2.28, kernel 4.18; musl/Alpine is not supported |

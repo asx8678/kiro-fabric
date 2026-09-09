@@ -145,7 +145,7 @@ describe("Agent product boundary", () => {
       "src/index.ts", "docs/unlisted.md", "dist/chunks/nested/chunk.js",
       "dist/../src/escape.d.ts", "skills/fabric-exec/../secret", "dist\\index.d.ts",
     ]) expect(isPackedPackageFileAllowed(unexpected), unexpected).toBe(false);
-    for (const required of ["dist/index.js", "dist/index.d.ts", "dist/runtime/compiler-worker-entry.js"]) {
+    for (const required of ["dist/index.js", "dist/index.d.ts", "dist/runtime/compiler-worker-entry.js", "docs/linux-validation.md"]) {
       expect(included.has(required), required).toBe(true);
     }
     expect([...included].some((file) => /^dist\/chunks\/[^/]+\.js$/u.test(file))).toBe(true);

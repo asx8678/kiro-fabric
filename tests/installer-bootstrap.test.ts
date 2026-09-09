@@ -7,6 +7,7 @@ import { signedRelease } from './release-fixture.js';
 import { canonical, createBundleManifest, sha256, compatibilityFor } from '../scripts/bundle-contract.mjs';
 import { createBundleArchive } from '../scripts/bundle-archive.mjs';
 import { generateInstallerBootstrap, assertProductionBootstrapReady } from '../scripts/generate-installer-bootstrap.mjs';
+import { detectInstallerPlatform } from '../scripts/installer-platform.mjs';
 
 async function bootstrapFixture(target='linux-x64'){
  const root=await fixture(),temp=await mkdtemp(tmpdir()+'/bootstrap-test-');
@@ -127,7 +128,14 @@ test('platform mapping and upstream system floors reject unsupported hosts befor
   for(const [env,message] of [
    [{FIXTURE_OS:'FreeBSD'},'unsupported platform'],[{FIXTURE_ARCH:'riscv64'},'unsupported platform'],[{FIXTURE_LIBC:'musl 1.2'},'unsupported libc'],[{FIXTURE_LIBC:'glibc 2.27'},'unsupported glibc'],[{FIXTURE_KERNEL:'4.17.0'},'unsupported kernel'],[{FIXTURE_OS:'Darwin',FIXTURE_MACOS:'13.4'},'unsupported macOS'],[{FIXTURE_ARCH:'aarch64'},'unsupported target'],[{FIXTURE_OS:'Darwin',FIXTURE_ARCH:'arm64'},'unsupported target'],
   ] as [Record<string,string>,string][]){const r=f.run(['--from-archive',f.temp+'/bundle.tar.gz'],env);expect(r.stderr).toContain(message);expect(r.stderr).not.toContain('STATE CREATED');}
-  const floors=f.run(['--from-archive',f.temp+'/bundle.tar.gz'],{FIXTURE_LIBC:'glibc 2.28',FIXTURE_KERNEL:'4.18.0'});expect(floors.stderr).toContain('STATE CREATED');
+  for(const kernel of ['4.18.0','4.18+local','6.12.25+rpt-rpi-2712','6.12.0+','6.6.87.2-microsoft-standard-WSL2']){
+   expect(detectInstallerPlatform({platform:'linux',arch:'x64',glibc:'2.28',osVersion:kernel}).target).toBe('linux-x64');
+   const floors=f.run(['--from-archive',f.temp+'/bundle.tar.gz'],{FIXTURE_LIBC:'glibc 2.28',FIXTURE_KERNEL:kernel});expect(floors.stderr,kernel).toContain('STATE CREATED');
+  }
+  for(const kernel of ['4.17.99+local','6','6.12.','6.12..0','6.12.abc','6.12.0 vendor']){
+   expect(()=>detectInstallerPlatform({platform:'linux',arch:'x64',glibc:'2.28',osVersion:kernel})).toThrow();
+   const rejected=f.run(['--from-archive',f.temp+'/bundle.tar.gz'],{FIXTURE_KERNEL:kernel});expect(rejected.stderr,kernel).toContain('unsupported kernel');expect(rejected.stderr,kernel).not.toContain('STATE CREATED');
+  }
  }finally{await f.cleanup();}
 });
 test('portable shasum fallback works without sha256sum',async()=>{

@@ -19054,9 +19054,101 @@ var fabricInfoCatalog = (actions) => {
 };
 
 // src/providers/local-shell.ts
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
+
+// src/providers/local-process-group.ts
+import { execFile } from "node:child_process";
+import { opendir, readFile } from "node:fs/promises";
 import { promisify } from "node:util";
-import { readdir, readFile } from "node:fs/promises";
+var uncertain = () => new Error("Local shell cleanup uncertain");
+var PROC_BATCH = 8;
+var PROC_ENTRY_LIMIT = 32768;
+async function localProcessGroupAlive(pid, end) {
+  try {
+    process.kill(-pid, 0);
+  } catch (error) {
+    const code2 = error.code;
+    if (code2 === "ESRCH") return false;
+    if (process.platform !== "darwin" || code2 !== "EPERM") throw uncertain();
+  }
+  const probeEnd = Math.min(end, performance.now() + 200);
+  const remaining = probeEnd - performance.now();
+  if (remaining <= 0) throw uncertain();
+  const controller = new AbortController();
+  const check = () => {
+    if (controller.signal.aborted || performance.now() >= probeEnd) throw uncertain();
+  };
+  let timer;
+  const timeout = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(uncertain());
+    }, remaining);
+  });
+  const observe = async () => {
+    if (process.platform === "darwin") {
+      const { stdout } = await promisify(execFile)("/bin/ps", ["-axo", "pgid=,stat="], {
+        encoding: "utf8",
+        env: { LC_ALL: "C" },
+        timeout: Math.max(1, Math.floor(remaining)),
+        signal: controller.signal,
+        maxBuffer: 4 * 1024 * 1024
+      });
+      check();
+      if (!stdout.trim()) throw uncertain();
+      for (const line of stdout.trim().split("\n")) {
+        check();
+        const match = /^\s*(\d+)\s+([A-Za-z+<>0-9-]+)\s*$/.exec(line);
+        if (!match) throw uncertain();
+        if (Number(match[1]) === pid && !match[2].startsWith("Z")) return true;
+      }
+      return false;
+    }
+    if (process.platform !== "linux") throw uncertain();
+    const live = async (entry) => {
+      check();
+      let stat;
+      try {
+        stat = await readFile(`/proc/${entry}/stat`, { encoding: "utf8", signal: controller.signal });
+      } catch (error) {
+        if (["ENOENT", "ESRCH"].includes(error.code ?? "")) return false;
+        throw uncertain();
+      }
+      check();
+      const close = stat.lastIndexOf(")");
+      const fields = stat.slice(close + 2).trim().split(/\s+/u);
+      if (!stat.startsWith(`${entry} (`) || close < 0 || !/^[A-Za-z]$/u.test(fields[0] ?? "") || !/^\d+$/u.test(fields[1] ?? "") || !/^\d+$/u.test(fields[2] ?? "")) throw uncertain();
+      return Number(fields[2]) === pid && !["Z", "X", "x"].includes(fields[0]);
+    };
+    if (await live(String(pid))) return true;
+    check();
+    const directory = await opendir("/proc");
+    let count2 = 0;
+    let batch = [];
+    for await (const entry of directory) {
+      check();
+      if (++count2 > PROC_ENTRY_LIMIT) throw uncertain();
+      if (!/^\d+$/u.test(entry.name) || entry.name === String(pid)) continue;
+      batch.push(entry.name);
+      if (batch.length === PROC_BATCH) {
+        if ((await Promise.all(batch.map(live))).some(Boolean)) return true;
+        batch = [];
+      }
+    }
+    check();
+    return (await Promise.all(batch.map(live))).some(Boolean);
+  };
+  try {
+    return await Promise.race([observe(), timeout]);
+  } catch {
+    throw uncertain();
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+}
+
+// src/providers/local-shell.ts
 import { setTimeout as delay } from "node:timers/promises";
 var LocalShellExitError = class extends Error {
   result;
@@ -19077,53 +19169,15 @@ function shellEnvironment() {
   }
   return env;
 }
-async function sendGroup(pid, signal) {
+async function sendGroup(pid, signal, end) {
   try {
     process.kill(-pid, signal);
   } catch (error) {
     const code2 = error.code;
     if (code2 === "ESRCH") return;
-    if (process.platform === "darwin" && code2 === "EPERM" && !await groupAlive(pid)) return;
+    if (process.platform === "darwin" && code2 === "EPERM" && !await localProcessGroupAlive(pid, end)) return;
     throw new Error("Local shell cleanup uncertain");
   }
-}
-async function groupAlive(pid) {
-  try {
-    process.kill(-pid, 0);
-  } catch (error) {
-    if (error.code === "ESRCH") return false;
-    if (process.platform !== "darwin" || error.code !== "EPERM") {
-      throw new Error("Local shell cleanup uncertain");
-    }
-  }
-  if (process.platform === "darwin") {
-    const { stdout } = await promisify(execFile)("/bin/ps", ["-axo", "pgid=,stat="], {
-      encoding: "utf8",
-      env: { LC_ALL: "C" },
-      timeout: 200,
-      maxBuffer: 4 * 1024 * 1024
-    });
-    if (!stdout.trim()) throw new Error("Local shell cleanup uncertain");
-    for (const line of stdout.trim().split("\n")) {
-      const match = /^\s*(\d+)\s+([A-Za-z+<>0-9-]+)\s*$/.exec(line);
-      if (!match) throw new Error("Local shell cleanup uncertain");
-      if (Number(match[1]) === pid && !match[2].startsWith("Z")) return true;
-    }
-    return false;
-  }
-  for (const entry of await readdir("/proc")) {
-    if (!/^\d+$/.test(entry)) continue;
-    let stat;
-    try {
-      stat = await readFile(`/proc/${entry}/stat`, "utf8");
-    } catch (error) {
-      if (error.code === "ENOENT" || error.code === "ESRCH") continue;
-      throw new Error("Local shell cleanup uncertain");
-    }
-    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    if (Number(fields[2]) === pid && fields[0] !== "Z" && fields[0] !== "X") return true;
-  }
-  return false;
 }
 async function runLocalShell(options) {
   if (process.platform !== "linux" && process.platform !== "darwin") throw new Error("Local shell requires Linux or macOS");
@@ -19206,13 +19260,28 @@ async function runLocalShell(options) {
   }
   try {
     if (child.pid !== void 0) {
-      await sendGroup(child.pid, "SIGTERM");
+      let alive = true;
       const termEnd = performance.now() + 200;
-      while (await groupAlive(child.pid) && performance.now() < termEnd) await delay(10);
-      if (await groupAlive(child.pid)) await sendGroup(child.pid, "SIGKILL");
-      const killEnd = performance.now() + 500;
-      while (await groupAlive(child.pid) && performance.now() < killEnd) await delay(10);
-      if (await groupAlive(child.pid)) failure = "Local shell cleanup uncertain";
+      try {
+        await sendGroup(child.pid, "SIGTERM", termEnd);
+        while (performance.now() < termEnd) {
+          alive = await localProcessGroupAlive(child.pid, termEnd);
+          if (!alive) break;
+          await delay(Math.min(10, Math.max(0, termEnd - performance.now())));
+        }
+      } catch {
+        alive = true;
+      }
+      if (alive) {
+        const killEnd = performance.now() + 500;
+        await sendGroup(child.pid, "SIGKILL", killEnd);
+        while (performance.now() < killEnd) {
+          alive = await localProcessGroupAlive(child.pid, killEnd);
+          if (!alive) break;
+          await delay(Math.min(10, Math.max(0, killEnd - performance.now())));
+        }
+        if (alive) failure = "Local shell cleanup uncertain";
+      }
     }
     const closeEnd = performance.now() + 500;
     while (!closed && performance.now() < closeEnd) await delay(10);
@@ -22132,13 +22201,13 @@ var failureProgress = (result) => {
   const omitted = completed.length - summaries.length;
   const succeeded = completed.filter((audit) => audit.success === true).length;
   const committed = completed.filter((audit) => audit.commitAcknowledgement).length;
-  const uncertain = completed.filter((audit) => audit.effectOutcome === "uncertain").length;
+  const uncertain2 = completed.filter((audit) => audit.effectOutcome === "uncertain").length;
   const sampledCommitted = summaries.some((summary) => summary.commitAcknowledgement !== void 0);
   return [
     `
 
 Completed nested calls before the outer failure (arguments and results omitted): ${JSON.stringify({ total: completed.length, succeeded, failed: completed.length - succeeded, committed, sample: summaries, omitted })}.`,
-    ...uncertain > 0 ? ["Host command effects are uncertain; cancellation or failure is not rollback. Inspect the workspace and external state; never automatically retry the program."] : [],
+    ...uncertain2 > 0 ? ["Host command effects are uncertain; cancellation or failure is not rollback. Inspect the workspace and external state; never automatically retry the program."] : [],
     committed > 0 ? sampledCommitted ? "A listed mutation is known committed although acknowledgement failed; inspect the affected file or durable key before retrying." : "A mutation is known committed although acknowledgement failed (not shown in the sample); inspect the affected file or durable key before retrying." : "Inspect current state before retrying fabric_exec; completed calls may already have taken effect, and a blind retry can duplicate effects."
   ].join("\n");
 };
@@ -23099,13 +23168,13 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     for (let index = 0; index < candidates.length; ) {
       const snapshots = [];
       let batchBytes = 0;
-      while (index < candidates.length && snapshots.length < 32) {
+      while (index < candidates.length && snapshots.length < 256) {
         const file = candidates[index];
         if (snapshots.length && batchBytes + file.stat.size > LOCAL_MAX_FILE_BYTES) break;
         index++;
         this.#check(context);
         searchedBytes += file.stat.size;
-        searchedPathChars += file.path.length + 1;
+        searchedPathChars += Buffer.byteLength(file.path) + 1;
         if (searchedBytes > 32 * 1024 * 1024 || searchedPathChars > 128e3) throw new Error("local.grep exceeded aggregate search work limit; narrow path or glob");
         batchBytes += file.stat.size;
         try {

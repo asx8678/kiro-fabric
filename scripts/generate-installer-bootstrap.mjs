@@ -98,7 +98,11 @@ if [ "$os" = Linux ]; then
   libc=$(getconf GNU_LIBC_VERSION 2>/dev/null) || fail 'unsupported libc: glibc >=2.28 required'
   case "$libc" in 'glibc '*) libc=\${libc#glibc } ;; *) fail 'unsupported libc: glibc required' ;; esac
   version_floor "$libc" 2 28 || fail 'unsupported glibc: >=2.28 required'
-  kernel=$(uname -r); kernel=\${kernel%%-*}
+  kernel=$(uname -r)
+  # Match installer-platform.mjs: numeric components plus Linux LOCALVERSION,
+  # including +rpt suffixes and WSL fourth components, not arbitrary garbage.
+  [[ "$kernel" =~ ^[0-9]+\\.[0-9]+(\\.[0-9]+)*([-+][A-Za-z0-9._+-]*)?$ ]] || fail 'unsupported kernel version'
+  kernel=\${kernel%%[-+]*}
   version_floor "$kernel" 4 18 || fail 'unsupported kernel: >=4.18 required'
 else
   command -v sw_vers >/dev/null 2>&1 || fail 'missing prerequisite: sw_vers'

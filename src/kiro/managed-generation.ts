@@ -80,6 +80,11 @@ export function validateManagedAdmission(bundleRoot: string, dataRoot: string, m
 
 /** Must run under the installation admission lock for installed generations. */
 export async function validateManagedGeneration(context: ManagedGenerationContext, dataRoot: string): Promise<ManagedSearchExecutable> {
+  if (context.expectedNode !== path.join(context.bundleRoot, "tools", "node")) throw new Error("managed generation containment mismatch");
+  // Bracket the full cryptographic inventory capture with nanosecond metadata.
+  // Its verified Node digest is reusable only if the named file stayed unchanged;
+  // never cache this evidence across admissions or trust size/mtime alone.
+  const beforeNode = fs.lstatSync(context.expectedNode, { bigint: true });
   const bundle = await validateBundle(context.bundleRoot);
   if (bundle.root !== context.bundleRoot || context.expectedNode !== path.join(bundle.root, "tools", "node") || context.rg !== path.join(bundle.root, "tools", "rg")) throw new Error("managed generation containment mismatch");
   const base = managedInstallationBase(bundle.root);
@@ -90,10 +95,11 @@ export async function validateManagedGeneration(context: ManagedGenerationContex
   if (typeof tools.node?.version !== "string" || typeof tools.rg?.version !== "string" || !/^\d+\.\d+\.\d+$/u.test(tools.node.version) || !/^\d+\.\d+\.\d+$/u.test(tools.rg.version)) throw new Error("managed tool version identity missing");
   const node = bundle.inventory.find((entry: { path: string }) => entry.path === "tools/node");
   const rg = bundle.inventory.find((entry: { path: string }) => entry.path === "tools/rg");
-  const stat = fs.lstatSync(context.expectedNode);
-  if (!node || !rg || fs.realpathSync(process.execPath) !== context.expectedNode || fs.realpathSync(context.expectedNode) !== context.expectedNode ||
-      !stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o7777) !== 0o700 || (process.getuid && stat.uid !== process.getuid()) ||
-      createHash("sha256").update(fs.readFileSync(context.expectedNode)).digest("hex") !== node.sha256 || process.version !== `v${tools.node.version}`) throw new Error("managed Node executable identity mismatch");
+  const stat = fs.lstatSync(context.expectedNode, { bigint: true });
+  const unchanged = (["dev", "ino", "size", "mode", "uid", "gid", "nlink", "mtimeNs", "ctimeNs"] as const).every(key => beforeNode[key] === stat[key]);
+  if (!node || !rg || !unchanged || fs.realpathSync(process.execPath) !== context.expectedNode || fs.realpathSync(context.expectedNode) !== context.expectedNode ||
+      !stat.isFile() || stat.nlink !== 1n || (stat.mode & 0o7777n) !== 0o700n || (process.getuid && stat.uid !== BigInt(process.getuid())) ||
+      stat.size !== BigInt(node.size) || process.version !== `v${tools.node.version}`) throw new Error("managed Node executable identity mismatch");
   const managedSearch: ManagedSearchExecutable = { generationRoot: bundle.root, path: context.rg, sha256: rg.sha256, mode: 0o700, version: `ripgrep ${tools.rg.version}` };
   resolveSearchExecutable(managedSearch);
   return managedSearch;

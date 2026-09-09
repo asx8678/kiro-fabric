@@ -77,14 +77,23 @@ jobs:
           fi
       - run: npm install --global pnpm@11.20.0
       - run: pnpm install --frozen-lockfile
-      - name: Isolated native installer contract tests
+      - name: Provision ripgrep for native runtime contracts
+        run: |
+          if [ "$(uname -s)" = Linux ]; then
+            sudo apt-get update
+            sudo apt-get install --yes ripgrep
+          else
+            brew list ripgrep >/dev/null 2>&1 || brew install ripgrep
+          fi
+          rg --version
+      - name: Isolated native installer and runtime contract tests
         run: |
           set -euo pipefail
           umask 022
           root=$(mktemp -d "$RUNNER_TEMP/installer-contracts.XXXXXX")
           trap 'rm -rf -- "$root"' EXIT
           mkdir "$root/home" "$root/kiro" "$root/tmp"
-          HOME="$root/home" KIRO_HOME="$root/kiro" TMPDIR="$root/tmp" ./node_modules/.bin/vitest run tests/installer-platform.test.ts tests/bundle-archive.test.ts tests/release-trust.test.ts tests/installer-bootstrap.test.ts tests/source-bootstrap.test.ts tests/private-tools.test.ts
+          HOME="$root/home" KIRO_HOME="$root/kiro" TMPDIR="$root/tmp" ./node_modules/.bin/vitest run tests/installer-platform.test.ts tests/bundle-archive.test.ts tests/release-trust.test.ts tests/installer-bootstrap.test.ts tests/source-bootstrap.test.ts tests/private-tools.test.ts tests/local-process-group.test.ts tests/local-shell.test.ts tests/local-search-work.test.ts tests/local-executable.test.ts tests/local-provider.test.ts tests/bundle-contract.test.ts tests/bundle-streaming.test.ts tests/managed-generation.test.ts tests/managed-generation-efficiency.test.ts
       - name: Build and exercise the complete native bundle
         run: |
           set -euo pipefail

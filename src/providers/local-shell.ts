@@ -1,6 +1,5 @@
-import { execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
-import { readdir, readFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { localProcessGroupAlive as groupAlive } from "./local-process-group.js";
 import { setTimeout as delay } from "node:timers/promises";
 import { throwIfAbortedOrExpired } from "../async-settlement.js";
 import type { FabricDeadline } from "../runtime/deadline.js";
@@ -40,52 +39,15 @@ function shellEnvironment(): NodeJS.ProcessEnv {
   return env;
 }
 
-async function sendGroup(pid: number, signal: NodeJS.Signals): Promise<void> {
+async function sendGroup(pid: number, signal: NodeJS.Signals, end: number): Promise<void> {
   try { process.kill(-pid, signal); } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ESRCH") return;
     // Darwin can return EPERM for a group consisting only of reparented zombies.
     // Never suppress a permission failure unless bounded observation proves it inert.
-    if (process.platform === "darwin" && code === "EPERM" && !(await groupAlive(pid))) return;
+    if (process.platform === "darwin" && code === "EPERM" && !(await groupAlive(pid, end))) return;
     throw new Error("Local shell cleanup uncertain");
   }
-}
-
-async function groupAlive(pid: number): Promise<boolean> {
-  try { process.kill(-pid, 0); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
-    if (process.platform !== "darwin" || (error as NodeJS.ErrnoException).code !== "EPERM") {
-      throw new Error("Local shell cleanup uncertain");
-    }
-  }
-  if (process.platform === "darwin") {
-    // macOS kill(0) includes orphan zombies too. Query only kernel group/state
-    // fields with a bounded, absolute executable; no command text or ambient env.
-    const { stdout } = await promisify(execFile)("/bin/ps", ["-axo", "pgid=,stat="], {
-      encoding: "utf8", env: { LC_ALL: "C" }, timeout: 200, maxBuffer: 4 * 1024 * 1024,
-    });
-    if (!stdout.trim()) throw new Error("Local shell cleanup uncertain");
-    for (const line of stdout.trim().split("\n")) {
-      const match = /^\s*(\d+)\s+([A-Za-z+<>0-9-]+)\s*$/.exec(line);
-      if (!match) throw new Error("Local shell cleanup uncertain");
-      if (Number(match[1]) === pid && !match[2]!.startsWith("Z")) return true;
-    }
-    return false;
-  }
-  // kill(0) also reports zombies. They cannot execute or hold streams. Node
-  // reaps its direct child; orphan reaping belongs to the host's init/subreaper.
-  // Never mistake a successful signal for observed termination.
-  for (const entry of await readdir("/proc")) {
-    if (!/^\d+$/.test(entry)) continue;
-    let stat: string;
-    try { stat = await readFile(`/proc/${entry}/stat`, "utf8"); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error as NodeJS.ErrnoException).code === "ESRCH") continue;
-      throw new Error("Local shell cleanup uncertain");
-    }
-    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    if (Number(fields[2]) === pid && fields[0] !== "Z" && fields[0] !== "X") return true;
-  }
-  return false;
 }
 
 /** Approved HOST execution, NOT filesystem/environment isolation or background
@@ -165,13 +127,29 @@ export async function runLocalShell(options: {
   // descendants must not keep a reservation alive indefinitely.
   try {
     if (child.pid !== undefined) {
-      await sendGroup(child.pid, "SIGTERM");
+      let alive = true;
       const termEnd = performance.now() + 200;
-      while (await groupAlive(child.pid) && performance.now() < termEnd) await delay(10);
-      if (await groupAlive(child.pid)) await sendGroup(child.pid, "SIGKILL");
-      const killEnd = performance.now() + 500;
-      while (await groupAlive(child.pid) && performance.now() < killEnd) await delay(10);
-      if (await groupAlive(child.pid)) failure = "Local shell cleanup uncertain";
+      try {
+        await sendGroup(child.pid, "SIGTERM", termEnd);
+        while (performance.now() < termEnd) {
+          alive = await groupAlive(child.pid, termEnd);
+          if (!alive) break;
+          await delay(Math.min(10, Math.max(0, termEnd - performance.now())));
+        }
+      } catch {
+        // Failed observation is not termination, and must not bypass SIGKILL.
+        alive = true;
+      }
+      if (alive) {
+        const killEnd = performance.now() + 500;
+        await sendGroup(child.pid, "SIGKILL", killEnd);
+        while (performance.now() < killEnd) {
+          alive = await groupAlive(child.pid, killEnd);
+          if (!alive) break;
+          await delay(Math.min(10, Math.max(0, killEnd - performance.now())));
+        }
+        if (alive) failure = "Local shell cleanup uncertain";
+      }
     }
     const closeEnd = performance.now() + 500;
     while (!closed && performance.now() < closeEnd) await delay(10);

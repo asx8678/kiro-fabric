@@ -210,3 +210,13 @@ These additions do not rewrite historical findings or establish authenticated cl
 - `tests/efficiency-baseline.test.ts` — offline restrictions, provenance, failure retention and expanded-help accounting.
 - `tests/approval-quotas.test.ts` — silent policy versus interactive quota accounting, unchanged provider/audit bounds, legacy compatibility and cancellation cleanup.
 - `docs/efficiency-baseline.md` — reproducible offline procedure and separately authorized future paid comparison.
+
+## Linux compatibility and efficiency follow-up (current implementation)
+
+These entries extend the implementation inventory, not historical native or release qualification.
+
+- `src/providers/local-process-group.ts` — bounded process-group evidence: live-leader fast path, streaming Linux proc inspection, deadlines and fail-closed visibility errors.
+- `tests/local-process-group.test.ts` — simulated Linux process evidence, bounded concurrency/entry counts, malformed/unreadable observations and stalled-I/O deadlines.
+- `tests/bundle-streaming.test.ts` — bounded hash buffers, exact inventory SHA-256 and concurrent grow/shrink/rewrite rejection.
+- `tests/managed-generation-efficiency.test.ts` — one cryptographic Node capture per admission and invalidation on intervening identity/content changes.
+- `docs/linux-validation.md` — reproducible native contract checks and explicit performance/security qualification limits.

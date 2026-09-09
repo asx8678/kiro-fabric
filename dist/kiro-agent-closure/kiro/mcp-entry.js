@@ -541,7 +541,7 @@ function checkManifest(m) {
 function owned(s) {
   if (typeof process.getuid !== "function" || s.uid !== process.getuid()) throw Error("File ownership mismatch");
 }
-async function readRegular(file, max) {
+async function captureRegular(file, max, consume) {
   const before = await lstat(file);
   owned(before);
   if (!before.isFile() || before.nlink !== 1 || before.size > max) throw Error("Unsafe or oversized file: " + file);
@@ -550,19 +550,38 @@ async function readRegular(file, max) {
     const s = await handle.stat();
     owned(s);
     if (!s.isFile() || s.nlink !== 1 || s.size > max || s.ino !== before.ino || s.dev !== before.dev) throw Error("File changed");
-    const buffer = Buffer.alloc(s.size + 1);
+    const { value, length } = await consume(handle, s.size);
+    const after = await handle.stat(), named = await lstat(file);
+    if (length !== s.size || s.ino !== named.ino || s.dev !== named.dev || s.mtimeMs !== after.mtimeMs || s.ctimeMs !== after.ctimeMs || s.mode !== after.mode || s.uid !== after.uid || after.nlink !== 1) throw Error("File changed");
+    return value;
+  } finally {
+    await handle.close();
+  }
+}
+async function readRegular(file, max) {
+  return captureRegular(file, max, async (handle, size) => {
+    const buffer = Buffer.alloc(size + 1);
     let length = 0;
     while (length < buffer.length) {
       const r = await handle.read(buffer, length, buffer.length - length, null);
       if (!r.bytesRead) break;
       length += r.bytesRead;
     }
-    const after = await handle.stat(), named = await lstat(file);
-    if (length !== s.size || s.ino !== named.ino || s.dev !== named.dev || s.mtimeMs !== after.mtimeMs || s.ctimeMs !== after.ctimeMs || s.mode !== after.mode || s.uid !== after.uid || after.nlink !== 1) throw Error("File changed");
-    return buffer.subarray(0, length);
-  } finally {
-    await handle.close();
-  }
+    return { value: buffer.subarray(0, length), length };
+  });
+}
+async function hashRegular(file, max) {
+  return captureRegular(file, max, async (handle, size) => {
+    const buffer = Buffer.alloc(Math.min(size + 1, 64 * 1024)), hash2 = createHash2("sha256");
+    let length = 0;
+    while (length <= size) {
+      const r = await handle.read(buffer, 0, Math.min(buffer.length, size + 1 - length), null);
+      if (!r.bytesRead) break;
+      length += r.bytesRead;
+      hash2.update(buffer.subarray(0, r.bytesRead));
+    }
+    return { value: { size: length, sha256: hash2.digest("hex") }, length };
+  });
 }
 async function checkRoot(root) {
   const absolute = path2.resolve(root);
@@ -600,8 +619,8 @@ async function scan(root) {
         if (p === "bundle-manifest.json") continue;
         total += s.size;
         if (total > LIMITS.bytes) throw Error("Bundle byte bound");
-        const b = await readRegular(path2.join(root, p), LIMITS.file);
-        inventory.push({ path: p, role, type: "file", mode, size: b.length, sha256: sha256(b) });
+        const digest = await hashRegular(path2.join(root, p), LIMITS.file);
+        inventory.push({ path: p, role, type: "file", mode, ...digest });
       }
     }
   }
@@ -680,6 +699,8 @@ function validateManagedAdmission(bundleRoot, dataRoot, manifestSha256) {
   if (owner.releaseStateSha256 !== null && hashBytes(readControl(path3.join(base, "release-state.json"))) !== owner.releaseStateSha256) throw new Error("managed release state identity mismatch");
 }
 async function validateManagedGeneration(context, dataRoot) {
+  if (context.expectedNode !== path3.join(context.bundleRoot, "tools", "node")) throw new Error("managed generation containment mismatch");
+  const beforeNode = fs2.lstatSync(context.expectedNode, { bigint: true });
   const bundle = await validateBundle(context.bundleRoot);
   if (bundle.root !== context.bundleRoot || context.expectedNode !== path3.join(bundle.root, "tools", "node") || context.rg !== path3.join(bundle.root, "tools", "rg")) throw new Error("managed generation containment mismatch");
   const base = managedInstallationBase(bundle.root);
@@ -690,8 +711,9 @@ async function validateManagedGeneration(context, dataRoot) {
   if (typeof tools.node?.version !== "string" || typeof tools.rg?.version !== "string" || !/^\d+\.\d+\.\d+$/u.test(tools.node.version) || !/^\d+\.\d+\.\d+$/u.test(tools.rg.version)) throw new Error("managed tool version identity missing");
   const node = bundle.inventory.find((entry) => entry.path === "tools/node");
   const rg = bundle.inventory.find((entry) => entry.path === "tools/rg");
-  const stat = fs2.lstatSync(context.expectedNode);
-  if (!node || !rg || fs2.realpathSync(process.execPath) !== context.expectedNode || fs2.realpathSync(context.expectedNode) !== context.expectedNode || !stat.isFile() || stat.nlink !== 1 || (stat.mode & 4095) !== 448 || process.getuid && stat.uid !== process.getuid() || createHash3("sha256").update(fs2.readFileSync(context.expectedNode)).digest("hex") !== node.sha256 || process.version !== `v${tools.node.version}`) throw new Error("managed Node executable identity mismatch");
+  const stat = fs2.lstatSync(context.expectedNode, { bigint: true });
+  const unchanged = ["dev", "ino", "size", "mode", "uid", "gid", "nlink", "mtimeNs", "ctimeNs"].every((key) => beforeNode[key] === stat[key]);
+  if (!node || !rg || !unchanged || fs2.realpathSync(process.execPath) !== context.expectedNode || fs2.realpathSync(context.expectedNode) !== context.expectedNode || !stat.isFile() || stat.nlink !== 1n || (stat.mode & 0o7777n) !== 0o700n || process.getuid && stat.uid !== BigInt(process.getuid()) || stat.size !== BigInt(node.size) || process.version !== `v${tools.node.version}`) throw new Error("managed Node executable identity mismatch");
   const managedSearch = { generationRoot: bundle.root, path: context.rg, sha256: rg.sha256, mode: 448, version: `ripgrep ${tools.rg.version}` };
   resolveSearchExecutable(managedSearch);
   return managedSearch;
@@ -753,7 +775,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         const manifestHash = createHash4("sha256").update(readFileSync(path5.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-EYA7EWWQ.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-QUQF4IBB.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {} });
     } finally {
       release?.();
