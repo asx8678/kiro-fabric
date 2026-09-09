@@ -333,7 +333,7 @@ describe('portable plans, drift refusal and spend gates', () => {
     expect(commandFor(plan, native, root, 'benign').args).toContain('--trust-tools=fs_read,fs_write,shell');
     expect(commandFor(plan, fabric, root, 'benign').args.some(arg => arg.startsWith('--trust-tools'))).toBe(false);
     for (const item of [native, fabric]) { const args = commandFor(plan, item, root, 'benign').args; expect(args).toContain('auto'); expect(args).toContain('stream-json'); expect(args).not.toContain('--trust-all-tools'); }
-    expect(ARMS).toEqual(['old', 'pass1', 'pass2', 'native']);
+    expect(ARMS).toEqual(['old', 'pass1', 'pass2', 'fabric', 'native']);
   });
   it('revalidates live CLI settings and fails closed on malformed or oversized projections', () => {
     const f = manifestFixture(), cli = path.join(f.directory, 'fake-cli.mjs'), settings = path.join(f.directory, 'live-settings.json');

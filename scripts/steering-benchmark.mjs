@@ -14,13 +14,13 @@ node scripts/steering-benchmark.mjs summary --out /private/new-output
 node scripts/steering-benchmark.mjs selftest [--python python3] [--out /private/new-selftest]
 Manifest JSON: {cli,python,runtimePaths:[CLI runtime artifact paths],cliConfigPaths:[CLI config files],
  arms:{old:{profile,runtimePaths:[complete bundle root],configPaths:[private config files]},pass1:{...},pass2:{...}},
- nativeMode:"vibe",snapshotCliSettings:true,repetitions:2,seed:"steering-v1",plannedCredits:20,creditCeiling:40,priorCredits:0,reserveCredits:5,
+ nativeMode:"vibe",nativeWorkspacePermissions:true,nativeTrustTools:["fs_read","fs_write","str_replace","execute_bash","shell"],model:"auto",cases:["read24","bug-money"],snapshotCliSettings:true,repetitions:2,seed:"steering-v1",plannedCredits:20,creditCeiling:40,priorCredits:0,reserveCredits:5,
  maxCalls:40,timeoutMs:150000,maxOutputBytes:8388608,env:{}}
 All identity paths are required, relative paths resolve against the manifest directory; CLI/Python names resolve on PATH.
-Fabric arms may be any subset of old/pass1/pass2; native is always included. Set priorCredits to account for earlier conversation spend.
+Fabric arms may be any subset of old/pass1/pass2/fabric; native is always included. Optional cases selects from the legacy 13 contracts plus nine TinyShop bug cases; omission preserves the legacy schedule. model defaults to auto. Set priorCredits to account for earlier conversation spend.
 Each standalone Fabric profile must bind one complete bundle and a separate preinitialized private data/config root.
 plan/init do no inference (init probes --version). snapshotCliSettings:true also revalidates the bounded read-only CLI settings projection before/after each run; otherwise cliSettings:null explicitly leaves that check unavailable. run is opt-in paid work, sequential, no retries or trust-all-tools.
-run defaults to one attempt; --count is bounded by the remaining plan. Native uses no --agent and trusts only fs_read,fs_write,shell for benign fixture work.
+run defaults to one attempt; --count is bounded by the remaining plan. Native uses no --agent. nativeTrustTools explicitly selects benign fixture tools; current v3 uses separate tool and capability gates: include str_replace, execute_bash and shell as well as fs_read/fs_write. Omission preserves the older fs_read,fs_write,shell allowlist. nativeWorkspacePermissions:true separately creates a temporary HOME/.kiro/workspace-roots/<workspace-hash>/permissions.json for Node/fixture-Python/cd commands, verifies it and removes it after the trial. It never overwrites existing policy or changes global rules; interrupted runs retain the exact policy path in their durable row for manual inspection.
 Long-line output stress runs last across all repetitions so it cannot preempt the broad coding matrix. The prose case requests an exact supplied sentence, not free-form semantic grading. Rename explicitly preserves all other source bytes.
 No OS isolation or network blocking is claimed. Audit files are tamperable evidence, not protected execution logs.`;
 

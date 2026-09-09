@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { AUDIT, HELP_CODE } from './cases.mjs';
 import { object, sha, canonical, inventory, checkScope, regularText, putFiles, errorText } from './core.mjs';
 import { collect } from './stream.mjs';
+import { BUG_CASES, probeProject } from './projects.mjs';
 
 /** @typedef {import('./cases.mjs').Case} Case */
 /** @typedef {import('./stream.mjs').Evidence} Evidence */
@@ -78,14 +79,14 @@ export async function probePython(s, sources, python) {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
 /** @typedef {{ok:boolean,failures:{check:string,error:string}[],audit:Record<string,unknown>[]|null,probe:unknown,afterDigest:string|null}} Validation */
-/** @param {{spec:Case,workspace:string,before:Record<string,import('./core.mjs').Entry>,evidence:Evidence,arm:string,expectedMode:string,python:string,processOk:boolean,probe?:typeof probePython}} options @returns {Promise<Validation>} */
+/** @param {{spec:Case,workspace:string,before:Record<string,import('./core.mjs').Entry>,evidence:Evidence,arm:string,expectedMode:string,expectedModel?:string,python:string,processOk:boolean,probe?:typeof probePython}} options @returns {Promise<Validation>} */
 export async function validate(options) {
   const { spec: s, workspace, before, evidence, arm } = options;
   /** @type {Validation} */ const result = { ok: false, failures: [], audit: null, probe: null, afterDigest: null };
   /** @param {string} name @param {()=>unknown} fn */
   function check(name, fn) { try { fn(); } catch (error) { result.failures.push({ check: name, error: errorText(error) }); } }
   check('events-and-usage', () => { assert.deepEqual(evidence.failures, []); assert.ok(evidence.credits !== null && Number.isFinite(evidence.credits), 'missing usage'); assert.ok(options.processOk, 'client process incomplete'); });
-  check('identity', () => { assert.equal(evidence.model, 'auto', 'Auto not explicit'); assert.equal(evidence.mode, options.expectedMode, 'arm mode mismatch'); });
+  check('identity', () => { assert.equal(evidence.model, options.expectedModel ?? 'auto', 'requested model mismatch'); assert.equal(evidence.mode, options.expectedMode, 'arm mode mismatch'); });
   const calls = evidence.calls.filter(c => !c.system);
   check('calls', () => {
     if (s.noTools) assert.equal(calls.length, 0, 'tools forbidden');
@@ -99,7 +100,7 @@ export async function validate(options) {
   check('filesystem-data', () => {
     for (const name of s.sources) sources[name] = regularText(path.join(workspace, name));
     for (const [name, expected] of Object.entries(s.solution)) {
-      if (s.id === 'parser') continue; // Behavior, not implementation text, is the parser oracle.
+      if (s.id === 'parser' || BUG_CASES.includes(s.id)) continue; // Behavior, not implementation text.
       const actual = regularText(path.join(workspace, name));
       if (s.id === 'invoice') assert.deepEqual(JSON.parse(actual), JSON.parse(expected), 'invoice data');
       else assert.equal(actual, expected, 'saved file bytes: ' + name);
@@ -111,10 +112,10 @@ export async function validate(options) {
     result.audit = text.trim() ? text.trimEnd().split('\n').map(line => object(JSON.parse(line))) : [];
     validateAudit(s, text, sources);
   });
-  if (s.id === 'parser' || s.id === 'rename-api') {
+  if (s.id === 'parser' || s.id === 'rename-api' || BUG_CASES.includes(s.id)) {
     if (!options.processOk || result.failures.some(f => f.check === 'scope' || f.check === 'filesystem-data')) result.failures.push({ check: 'independent-tests', error: 'probe skipped: incomplete process or unsafe/missing fixture files' });
     else {
-      try { result.probe = await (options.probe ?? probePython)(s, sources, options.python); }
+      try { result.probe = BUG_CASES.includes(s.id) ? await probeProject(s, sources) : await (options.probe ?? probePython)(s, sources, options.python); }
       catch (error) { result.failures.push({ check: 'independent-tests', error: errorText(error) }); }
     }
   }

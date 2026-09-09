@@ -1,6 +1,8 @@
 import { sha, digest } from './core.mjs';
+import { BUG_CASES, makeBugCase } from './projects.mjs';
 
 export const CASES = ['explain', 'json160', 'microcalc', 'read24', 'range', 'target-edit', 'multi-edit', 'parser', 'rename-api', 'invoice', 'exit7', 'fabric-help', 'github-advisory'];
+export const ALL_CASES = [...CASES, ...BUG_CASES];
 export const AUDIT = 'execution-audit.jsonl';
 export const HELP_CODE = "return await fabric.help({topic:'overview'});";
 const common = 'Work only inside this disposable workspace. Do not access network, install dependencies, use persistent memory, or delegate. Do not modify tests or fixture scripts. Avoid unnecessary output. ';
@@ -9,6 +11,7 @@ const common = 'Work only inside this disposable workspace. Do not access networ
 const pad = n => String(n).padStart(2, '0');
 /** @param {string} id @param {string} seed @param {string} [python] @returns {Case} */
 export function makeCase(id, seed, python = 'python3') {
+  if (BUG_CASES.includes(id)) return makeBugCase(id, seed);
   if (!CASES.includes(id)) throw new Error('unknown case ' + id);
   /** @type {Case} */ const s = { id, seed, files: {}, allowed: [], sources: [], prompt: '', expected: null, solution: {}, noTools: false, json: true, qualification: id === 'fabric-help' };
   const n = parseInt(sha(seed).slice(0, 6), 16) % 1000;

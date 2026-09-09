@@ -5,10 +5,11 @@ import { makeCase, caseHashes } from './cases.mjs';
 import { createPlan, verifyPlan, budgetGate, ARMS } from './plan.mjs';
 import { collect, eventCollector, analyzeEvents } from './stream.mjs';
 import { validate } from './oracles.mjs';
+import { createNativeFixturePolicy, removeNativeFixturePolicy } from './native-policy.mjs';
 import { object, readJson, save, digest, putFiles, inventory, errorText } from './core.mjs';
 
 /** @typedef {import('./plan.mjs').Plan} Plan */
-/** @typedef {{index:number,arm:string,caseId:string,qualification:boolean,state:string,credits:number|null,stopReason:string|null,ok:boolean,startedAt:string,finishedAt?:string,validation?:import('./oracles.mjs').Validation,evidence?:import('./stream.mjs').Evidence,process?:Omit<import('./stream.mjs').Collected,'stdout'|'stderr'>,error?:string,command?:{executable:string,args:string[],cwd:string},budget?:{spent:number,projected:number|null}}} Row */
+/** @typedef {{index:number,arm:string,caseId:string,qualification:boolean,state:string,credits:number|null,stopReason:string|null,ok:boolean,startedAt:string,finishedAt?:string,validation?:import('./oracles.mjs').Validation,evidence?:import('./stream.mjs').Evidence,process?:Omit<import('./stream.mjs').Collected,'stdout'|'stderr'>,error?:string,command?:{executable:string,args:string[],cwd:string},budget?:{spent:number,projected:number|null},nativePermission?:ReturnType<typeof createNativeFixturePolicy>}} Row */
 /** @param {string} output */
 export function privateOutput(output) { const root = fs.realpathSync(output), st = fs.lstatSync(output); assert.ok(st.isDirectory() && !st.isSymbolicLink() && (st.mode & 0o077) === 0, 'output must be a private non-symlink directory'); return root; }
 /** @param {string} output @returns {Plan} */
@@ -46,9 +47,9 @@ function updateRow(root, row) {
 }
 /** @param {Plan} plan @param {import('./plan.mjs').Run} item @param {string} workspace @param {string} prompt */
 export function commandFor(plan, item, workspace, prompt) {
-  const args = ['chat', '--v3', '--model', 'auto', '--no-interactive', '--output-format', 'stream-json'];
+  const args = ['chat', '--v3', '--model', plan.config.model ?? 'auto', '--no-interactive', '--output-format', 'stream-json'];
   if (item.arm !== 'native') args.push('--agent', 'steering-' + item.arm, '--require-mcp-startup');
-  else args.push('--trust-tools=fs_read,fs_write,shell');
+  else args.push('--trust-tools=' + (plan.config.nativeTrustTools ?? ['fs_read', 'fs_write', 'shell']).join(','));
   args.push(prompt); return { executable: plan.config.cli, args, cwd: workspace };
 }
 /** Exactly-once admission: a durable started row is written before spawn. An interrupted/unknown row blocks continuation.
@@ -72,21 +73,30 @@ export async function runOne(output, index, signal) {
         const snapshot = plan.identity.profiles[item.arm];
         putFiles(workspace, { [`.kiro/agents/steering-${item.arm}.json`]: JSON.stringify({ ...snapshot.profile, name: 'steering-' + item.arm }) + '\n' });
       }
+      if (item.arm === 'native' && plan.config.nativeWorkspacePermissions) {
+        row.nativePermission = createNativeFixturePolicy(workspace, plan.config.python); updateRow(root, row);
+      }
       const before = inventory(workspace); save(path.join(base, 'before.json'), before);
       row.command = commandFor(plan, item, workspace, spec.prompt); save(path.join(base, 'command.json'), row.command);
       const stream = eventCollector(plan.config.maxCalls);
       const result = await collect({ ...row.command, env: { ...process.env, ...plan.config.env, KIRO_FABRIC_LAUNCH_WORKSPACE: workspace }, maxOutputBytes: plan.config.maxOutputBytes, timeoutMs: plan.config.timeoutMs, stdoutPath: path.join(base, 'client.jsonl'), stderrPath: path.join(base, 'stderr.log'), signal, onLine: stream.onLine });
       const { stdout: _stdout, stderr: _stderr, ...metrics } = result; row.process = metrics;
       row.evidence = analyzeEvents(stream.events); row.credits = row.evidence.credits;
-      row.stopReason = result.stopReason ?? (result.spawnError || result.code !== 0 ? 'client-failure' : row.evidence.failures.length ? 'incomplete-events' : row.credits === null ? 'missing-usage' : row.credits > 0.8 ? 'single-run-credit-limit' : null);
+      row.stopReason = result.stopReason ?? (result.spawnError || result.code !== 0 ? 'client-failure' : row.evidence.failures.length ? 'incomplete-events' : row.credits === null ? 'missing-usage' : row.credits > plan.config.singleRunCreditLimit ? 'single-run-credit-limit' : null);
       // Persist charge evidence before running any oracle or candidate-code probe.
       updateRow(root, row);
-      row.validation = await validate({ spec, workspace, before, evidence: row.evidence, arm: item.arm, expectedMode: item.arm === 'native' ? plan.config.nativeMode : 'steering-' + item.arm, python: plan.config.python, processOk: !row.stopReason && result.code === 0 && !stream.malformed });
+      row.validation = await validate({ spec, workspace, before, evidence: row.evidence, arm: item.arm, expectedMode: item.arm === 'native' ? plan.config.nativeMode : 'steering-' + item.arm, expectedModel: plan.config.model ?? 'auto', python: plan.config.python, processOk: !row.stopReason && result.code === 0 && !stream.malformed });
       row.ok = row.validation.ok;
       if (row.validation.failures.some(f => f.check === 'scope' || f.check === 'identity')) row.stopReason ??= 'scope-or-identity-failure';
       try { verifyPlan(plan); } catch (error) { row.stopReason ??= 'post-run-drift'; row.ok = false; row.error = errorText(error); }
     } catch (error) { row.error = errorText(error); row.stopReason ??= 'execution-error'; row.ok = false; }
-    finally { row.state = 'finished'; row.finishedAt = new Date().toISOString(); updateRow(root, row); }
+    finally {
+      if (row.nativePermission) {
+        try { removeNativeFixturePolicy(row.nativePermission); }
+        catch (error) { row.stopReason ??= 'native-policy-cleanup-failure'; row.ok = false; row.error = errorText(error); }
+      }
+      row.state = 'finished'; row.finishedAt = new Date().toISOString(); updateRow(root, row);
+    }
     if (next >= 7) {
       row.budget = { spent: previous.reduce((n, r) => n + Number(r.credits), 0) + (row.credits ?? 0), projected: row.credits === null || previous.some(r => r.credits === null) ? null : (previous.reduce((n, r) => n + Number(r.credits), 0) + row.credits) / (next + 1) * plan.runs.length };
       updateRow(root, row);

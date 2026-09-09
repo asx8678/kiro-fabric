@@ -1,0 +1,382 @@
+{
+  "schemaVersion": 1,
+  "plannedAttempts": 54,
+  "executedAttempts": 54,
+  "chargeLedger": {
+    "knownReceiptCredits": 19.617552844278606,
+    "unknownChargeAttempts": 1,
+    "diagnosticPilotAttempts": 10,
+    "matrixAttempts": 55,
+    "note": "Unknown charges remain unknown, never zero. Ledger includes every paid attempt: three diagnostic pilots, the quota-rejected attempt, and the stress-continuation stop."
+  },
+  "overall": {
+    "fabric": {
+      "attempts": 26,
+      "strictPasses": 8,
+      "repairs": 18,
+      "bugAttempts": 18,
+      "bugCredits": 4.071012320232173,
+      "creditsPerStrictPass": 0.6782714792081261,
+      "creditsPerRepair": 0.2261673511240096,
+      "totalCredits": 5.426171833665009,
+      "medianSeconds": 18.664817479,
+      "p90Seconds": 27.3500458955,
+      "calls": 113
+    },
+    "native": {
+      "attempts": 26,
+      "strictPasses": 2,
+      "repairs": 17,
+      "bugAttempts": 18,
+      "bugCredits": 7.351297536981758,
+      "creditsPerStrictPass": 5.574989871890548,
+      "creditsPerRepair": 0.4324292668812799,
+      "totalCredits": 11.149979743781095,
+      "medianSeconds": 18.051408479,
+      "p90Seconds": 42.3507523335,
+      "calls": 265
+    }
+  },
+  "perCase": [
+    {
+      "caseId": "bug-money",
+      "fabric": {
+        "credits": 0.3243631097844113,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          15.441,
+          16.814
+        ]
+      },
+      "native": {
+        "credits": 0.6307361147595356,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          19.644,
+          16.86
+        ]
+      },
+      "creditRatioFabricOverNative": 0.5142611976612007
+    },
+    {
+      "caseId": "bug-page",
+      "fabric": {
+        "credits": 0.3920635255389717,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          20.835,
+          18.536
+        ]
+      },
+      "native": {
+        "credits": 0.6256456527363184,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          17.622,
+          17.607
+        ]
+      },
+      "creditRatioFabricOverNative": 0.6266542791822273
+    },
+    {
+      "caseId": "bug-config",
+      "fabric": {
+        "credits": 0.36741058291873957,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          20.989,
+          19.894
+        ]
+      },
+      "native": {
+        "credits": 0.5667614868988391,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          15.055,
+          16.975
+        ]
+      },
+      "creditRatioFabricOverNative": 0.6482631431594054
+    },
+    {
+      "caseId": "bug-cache",
+      "fabric": {
+        "credits": 0.3315600721393035,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          17.089,
+          17.71
+        ]
+      },
+      "native": {
+        "credits": 0.626504060199005,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          45.836,
+          18.039
+        ]
+      },
+      "creditRatioFabricOverNative": 0.5292225433207657
+    },
+    {
+      "caseId": "bug-inventory",
+      "fabric": {
+        "credits": 0.3889617577114427,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          17.234,
+          19.243
+        ]
+      },
+      "native": {
+        "credits": 0.6539765271973467,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          18.668,
+          18.95
+        ]
+      },
+      "creditRatioFabricOverNative": 0.594764095553032
+    },
+    {
+      "caseId": "bug-retry",
+      "fabric": {
+        "credits": 0.3659384268656716,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          17.843,
+          18.794
+        ]
+      },
+      "native": {
+        "credits": 0.5804770134328359,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          17.794,
+          14.142
+        ]
+      },
+      "creditRatioFabricOverNative": 0.6304098498260561
+    },
+    {
+      "caseId": "bug-csv",
+      "fabric": {
+        "credits": 0.432932123548922,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          20.832,
+          21.602
+        ]
+      },
+      "native": {
+        "credits": 0.6152872371475955,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          18.975,
+          17.684
+        ]
+      },
+      "creditRatioFabricOverNative": 0.7036260422952183
+    },
+    {
+      "caseId": "bug-batch",
+      "fabric": {
+        "credits": 0.4214539533996683,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          24.928,
+          20.719
+        ]
+      },
+      "native": {
+        "credits": 0.6084645426202322,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          18.013,
+          17.055
+        ]
+      },
+      "creditRatioFabricOverNative": 0.6926516236833788
+    },
+    {
+      "caseId": "read24",
+      "fabric": {
+        "credits": 0.2057946991708126,
+        "strict": 2,
+        "repaired": 0,
+        "attempts": 2,
+        "seconds": [
+          9.72,
+          9.737
+        ]
+      },
+      "native": {
+        "credits": 1.0359311686567163,
+        "strict": 1,
+        "repaired": 0,
+        "attempts": 2,
+        "seconds": [
+          25.767,
+          30.194
+        ]
+      },
+      "creditRatioFabricOverNative": 0.19865673067609788
+    },
+    {
+      "caseId": "parser",
+      "fabric": {
+        "credits": 0.364224887893864,
+        "strict": 2,
+        "repaired": 0,
+        "attempts": 2,
+        "seconds": [
+          17.704,
+          16.147
+        ]
+      },
+      "native": {
+        "credits": 0.716100348424544,
+        "strict": 0,
+        "repaired": 0,
+        "attempts": 2,
+        "seconds": [
+          24.293,
+          17.307
+        ]
+      },
+      "creditRatioFabricOverNative": 0.5086226933071275
+    },
+    {
+      "caseId": "multi-edit",
+      "fabric": {
+        "credits": 0.1546165941956882,
+        "strict": 2,
+        "repaired": 0,
+        "attempts": 2,
+        "seconds": [
+          9.986,
+          9.686
+        ]
+      },
+      "native": {
+        "credits": 0.5943092726368159,
+        "strict": 1,
+        "repaired": 0,
+        "attempts": 2,
+        "seconds": [
+          18.058,
+          18.045
+        ]
+      },
+      "creditRatioFabricOverNative": 0.2601618405004676
+    },
+    {
+      "caseId": "invoice",
+      "fabric": {
+        "credits": 0.630523332172471,
+        "strict": 2,
+        "repaired": 0,
+        "attempts": 2,
+        "seconds": [
+          29.772,
+          22.809
+        ]
+      },
+      "native": {
+        "credits": 1.4523414170812603,
+        "strict": 0,
+        "repaired": 0,
+        "attempts": 2,
+        "seconds": [
+          35.211,
+          38.866
+        ]
+      },
+      "creditRatioFabricOverNative": 0.4341426366808573
+    },
+    {
+      "caseId": "bug-checkout",
+      "fabric": {
+        "credits": 1.0463287683250413,
+        "strict": 0,
+        "repaired": 2,
+        "attempts": 2,
+        "seconds": [
+          40.764,
+          42.04
+        ]
+      },
+      "native": {
+        "credits": 2.44344490199005,
+        "strict": 0,
+        "repaired": 1,
+        "attempts": 2,
+        "seconds": [
+          80.039,
+          55.258
+        ]
+      },
+      "creditRatioFabricOverNative": 0.4282186872611143
+    }
+  ],
+  "qualification": [
+    {
+      "arm": "fabric",
+      "round": 0,
+      "ok": false,
+      "credits": 0.08436663349917081,
+      "failure": "Unexpected token '`', \"```json\n{\n\"... is not valid JSON"
+    },
+    {
+      "arm": "fabric",
+      "round": 1,
+      "ok": false,
+      "credits": 0.07714573797678274,
+      "failure": "Unexpected token '`', \"```json\n{\n\"... is not valid JSON"
+    }
+  ],
+  "strata": {
+    "preLoginAttempts": 44,
+    "postReloginAttempts": 10
+  },
+  "limitations": [
+    "Single-machine, single-day, two-repetition descriptive comparison; not causal proof of universal savings.",
+    "Credits are client-reported usage, not provider-enforced billing or settled currency.",
+    "Auto model routing is not pinned; actual routed model/revision unknown.",
+    "Strict JSON compliance failed frequently for both agents due to extra prose; repair quality is reported separately.",
+    "One native read24 attempt and one native invoice attempt had optional shell calls denied; their charges and failures are retained.",
+    "Native bug-checkout round 0 exceeded the 0.8 per-run bound (1.406 credits) and failed independent tests; the bound was raised to 2 only for the declared stress continuation."
+  ]
+}

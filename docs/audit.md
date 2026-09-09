@@ -220,3 +220,15 @@ These entries extend the implementation inventory, not historical native or rele
 - `tests/bundle-streaming.test.ts` — bounded hash buffers, exact inventory SHA-256 and concurrent grow/shrink/rewrite rejection.
 - `tests/managed-generation-efficiency.test.ts` — one cryptographic Node capture per admission and invalidation on intervening identity/content changes.
 - `docs/linux-validation.md` — reproducible native contract checks and explicit performance/security qualification limits.
+
+## Agent comparison tooling (current implementation)
+
+These entries extend the implementation inventory; observed statistics are descriptive, not release qualification.
+
+- `scripts/steering-benchmark/projects.mjs` — dependency-free TinyShop bug catalog: eight seeded bug classes plus an all-bugs project, public reproductions, controller-held edge-case checks and bounded Node probes.
+- `scripts/steering-benchmark/native-policy.mjs` — opt-in workspace-scoped native shell consent: exclusive per-workspace policy creation, identity recording and verified cleanup without touching global rules.
+- `scripts/steering-benchmark/metrics.mjs` — coverage-aware statistics separating strict compliance, independent repair quality, latency and outer-call traffic; unknown telemetry stays null.
+- `scripts/agent-comparison.mjs` — offline example export, oracle selftest and report generation; no inference in any command.
+- `tests/agent-comparison.test.ts` / `tests/native-fixture-policy.test.ts` — fixture discrimination, held-out rejection, pairing, continuation selection, credit bounds and permission cleanup regression.
+- `docs/agent-comparison.md` — runnable labs, checked-TypeScript Code Mode examples, live-plan consent and interpretation rules.
+- `audits/agent-comparison-2026-09-09.md` — completed 54-attempt comparison record with full charge ledger.
