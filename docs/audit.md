@@ -43,6 +43,9 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 
 ## Complete implementation inventory
 
+- `src/kiro/first-prompt-guidance.ts` — initial investigation instructions and a checked discovery/read example.
+- `src/kiro/first-prompt-hook.ts` — per-session, at-most-once prompt context through the profile's submit hook; private markers contain no prompt text.
+- `tests/first-prompt.test.ts` — separate/concurrent/resumed sessions, actual built hook processes, literal arguments, private state boundaries and executable starter example.
 - `scripts/agent-profile.mjs`
 - `scripts/analyze-trace.mjs`
 - `scripts/assert-build-artifacts.mjs`

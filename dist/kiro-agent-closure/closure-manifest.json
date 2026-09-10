@@ -18,6 +18,8 @@
     "src/kiro/bootstrap-provider.ts",
     "src/kiro/canonical-path.ts",
     "src/kiro/deadlines.ts",
+    "src/kiro/first-prompt-guidance.ts",
+    "src/kiro/first-prompt-hook.ts",
     "src/kiro/generated-guidance.ts",
     "src/kiro/info-catalog.ts",
     "src/kiro/managed-generation.ts",
@@ -253,6 +255,11 @@
       "path": "chunks/ffi-2CFDPMEQ.js",
       "bytes": 7604,
       "sha256": "3fc1eab2740db3b7ce5d26cd25b473f3aa2e4cfb53ad6b60f66ad286d6251844"
+    },
+    {
+      "path": "chunks/first-prompt-hook-HN2GL36J.js",
+      "bytes": 12183,
+      "sha256": "833b98be2d102e544b7d8f35b05ccc21d5a8c8a5f46cfcf8504abdd9ad72a499"
     },
     {
       "path": "chunks/launch-2BNCRUIP.js",
@@ -545,9 +552,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-Y62FL65H.js",
-      "bytes": 1185089,
-      "sha256": "276251f96223bcbffc179f6ece844107aba33d74968432c979dd282c96634de5"
+      "path": "chunks/mcp-server-H6JQOPZU.js",
+      "bytes": 1185104,
+      "sha256": "c7c6eba69b933d916b6a664d87a4c28bdf40412702b2c7333073eed87b704677"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -566,8 +573,8 @@
     },
     {
       "path": "kiro/mcp-entry.js",
-      "bytes": 56354,
-      "sha256": "4fa4841c58977a56956f41faa87a1768867cf4036e1e53ae67e3b37dfcce528d"
+      "bytes": 56605,
+      "sha256": "5b474a9ddd60d59733ec5da0b86d6d9f7ccff870490d2ba9e4fcc2bf2aa69a2d"
     },
     {
       "path": "package.json",
@@ -585,5 +592,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "f3354287bd3bfa43c9af5769113cc43c78fd13fb8526d1bdff35a8730a807101"
+  "contentDigest": "ce3fbcbda1b7f17a5540779c765c676c1f347dc47f82526535a56dba9e348900"
 }

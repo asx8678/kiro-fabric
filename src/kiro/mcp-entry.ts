@@ -119,4 +119,10 @@ export const runKiroMcpProcess = async (): Promise<number> => {
 
 const invoked = process.argv[1] ? realpathSync(process.argv[1]) : "";
 const self = realpathSync(fileURLToPath(import.meta.url));
-if (invoked === self) process.exit(await runKiroMcpProcess());
+if (invoked === self) {
+  if (process.argv[2] === "--first-prompt-hook") {
+    const { runFirstPromptHook } = await import("./first-prompt-hook.js");
+    process.exit(await runFirstPromptHook(process.argv.length === 4 ? process.argv[3] : undefined));
+  }
+  process.exit(await runKiroMcpProcess());
+}

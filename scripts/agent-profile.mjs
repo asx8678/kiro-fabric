@@ -73,6 +73,10 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
   }
   const resources = [`skill://${skillPath}`];
   if (steeringPath) resources.push(`file://${steeringPath}`);
+  // Kiro replaces ${WORKSPACE_ROOT} in command text before invoking the shell.
+  // Split literal dollars across quoted words so installed paths stay literal.
+  const shellQuote = value => "'" + value.replaceAll("'", "'\\''").replaceAll("$", () => "$''") + "'";
+  const firstPromptCommand = [nodePath, path.join(runtimeRoot, "kiro", "mcp-entry.js"), "--first-prompt-hook", dataRoot].map(shellQuote).join(" ");
   return {
     name: AGENT_NAME,
     description: "Kiro Fabric coding agent with strict always-on checked-TypeScript Code Mode.",
@@ -80,6 +84,7 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
     includePowers: false,
     includeMcpJson: false,
     resources,
+    hooks: [{ name: "Fabric initial investigation", trigger: "UserPromptSubmit", action: { type: "command", command: firstPromptCommand }, timeout: 5 }],
     // V3 snapshots the model tool set at turn start. Headless prompts can arrive
     // before async MCP discovery completes; wait for Fabric without adding tools or trust.
     mcpServers: { fabric: { command: nodePath, args: [path.join(runtimeRoot, "kiro", "mcp-entry.js")], env: {

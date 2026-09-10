@@ -34,6 +34,8 @@ overrides are preserved; direct write/network approvals remain `ask`. See
 
 Repository reviews now use a coverage ledger and an on-demand `fabric.help({topic:"review"})` workflow: follow scripts, environment overrides and configuration consumers; verify suspected defects and report uninspected scope. Routine answer brevity does not limit audits. This is agent guidance, not a guarantee that a model will find every defect.
 
+In a new Fabric chat, a short first message such as `review this project` receives a substantial investigation block automatically. The block includes a tested discovery/read program and is appended once per session, including across resume. Later messages receive no fresh copy. Kiro may retain it in conversation history; it does not force Auto to select a particular model. See [first-message context](docs/configuration.md#first-message-investigation-context).
+
 `local.find` and `local.grep` accept `hidden:true` for CI/dotfiles while retaining ignore rules, VCS exclusions and path safety. Search results report their `scope`; reads report `totalLines` alongside continuation flags. Recursive all-files manifests use one ripgrep pass rather than repeated shallow directory listings.
 
 The [comparison lab](docs/agent-comparison.md) includes a seeded read-only review fixture with precision/recall and credits-per-grounded-finding reporting. Offline regression tests are not evidence that Fabric outperforms default Kiro; use matched live trials before making that claim.

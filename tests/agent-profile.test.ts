@@ -235,6 +235,7 @@ describe("Kiro Agent profile generation", () => {
       includePowers: false,
       includeMcpJson: false,
       resources: [`skill://${options.skillPath}`],
+      hooks: [{ name: "Fabric initial investigation", trigger: "UserPromptSubmit", action: { type: "command", command: `'${options.nodePath}' '${path.join(options.runtimeRoot, "kiro", "mcp-entry.js")}' '--first-prompt-hook' '${options.dataRoot}'` }, timeout: 5 }],
       mcpServers: {
         fabric: {
           command: options.nodePath,
