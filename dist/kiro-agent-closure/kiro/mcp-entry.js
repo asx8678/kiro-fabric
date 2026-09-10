@@ -1015,7 +1015,7 @@ var invoked = process.argv[1] ? realpathSync(process.argv[1]) : "";
 var self = realpathSync(fileURLToPath(import.meta.url));
 if (invoked === self) {
   if (process.argv[2] === "--first-prompt-hook") {
-    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-HN2GL36J.js");
+    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-F5B5NOJB.js");
     process.exit(await runFirstPromptHook(process.argv.length === 4 ? process.argv[3] : void 0));
   }
   process.exit(await runKiroMcpProcess());

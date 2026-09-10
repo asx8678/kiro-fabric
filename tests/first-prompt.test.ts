@@ -9,6 +9,7 @@ import { generateAgentProfile } from "../scripts/agent-profile.mjs";
 import { createKiroRuntime, type KiroRuntime } from "../src/kiro/runtime.js";
 import { normalizeFabricConfig } from "../src/config.js";
 import { projectFabricExecutionText } from "../src/kiro/projection.js";
+import type { LocalFindResult, LocalReadManyResult } from "../src/providers/local-contract.js";
 
 const fixtures: string[] = [];
 const runtimes: KiroRuntime[] = [];
@@ -39,6 +40,31 @@ function processProbe(command: string, args: string[], input: string, cwd: strin
   });
 }
 const hook = (data: string, input: unknown, cwd: string) => processProbe(process.execPath, [entry, "--first-prompt-hook", data], JSON.stringify(input), cwd);
+
+type StarterResult = {
+  manifest: LocalFindResult;
+  packets?: { area: string; evidence?: LocalReadManyResult; deferred?: string[]; error?: string; unread?: string[] }[];
+  narrowDiscovery?: boolean;
+};
+const readApprover = {
+  prepareApproval(action: { risk: string }) { expect(action.risk).toBe("read"); return { decision: "allow" as const }; },
+  async approve() { throw new Error("Unexpected approval"); },
+};
+async function starter(f: ReturnType<typeof fixture>) {
+  const runtime = createKiroRuntime({ cwd: f.workspace, workspaceRoot: f.workspace, localLockRoot: path.join(f.data, "locks"), artifactsRoot: path.join(f.data, "artifacts"), configFile: path.join(f.data, "config.json"), mcpConfigPath: path.join(f.data, "mcp.json"), config: normalizeFabricConfig({ executor: { timeoutMs: 10000 }, mcp: { enabled: false }, memory: { enabled: false }, state: { enabled: false } }) });
+  runtimes.push(runtime);
+  const result = await runtime.service.execute({ code: FIRST_PROMPT_PROGRAM, approver: readApprover });
+  expect(result.success, JSON.stringify({ error: result.error, typeErrors: result.typeErrors })).toBe(true);
+  const projection = projectFabricExecutionText({ result, resultFormat: "auto", maxOutputChars: 50000, writeArtifact() { throw new Error("Unexpected spill"); } });
+  expect(projection.overflowed).toBe(false);
+  expect(JSON.parse(projection.text)).toEqual(result.value);
+  return { runtime, value: result.value as StarterResult };
+}
+function put(f: ReturnType<typeof fixture>, file: string, source = "fixture\n") {
+  const target = path.join(f.workspace, file);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, source);
+}
 
 describe("first submitted prompt context", () => {
   it("emits once per session without persisting user text, and isolates concurrent chat identities", () => {
@@ -138,20 +164,73 @@ describe("first submitted prompt context", () => {
       fs.writeFileSync(path.join(f.workspace, ".azure-pipelines", "test-pipeline.yml"), "run: validate\n");
       fs.writeFileSync(path.join(f.workspace, "secret.xml"), "DO-NOT-AUTOREAD");
     }
-    const runtime = createKiroRuntime({ cwd: f.workspace, workspaceRoot: f.workspace, localLockRoot: path.join(f.data, "locks"), artifactsRoot: path.join(f.data, "artifacts"), configFile: path.join(f.data, "config.json"), mcpConfigPath: path.join(f.data, "mcp.json"), config: normalizeFabricConfig({ executor: { timeoutMs: 10000 }, mcp: { enabled: false }, memory: { enabled: false }, state: { enabled: false } }) });
-    runtimes.push(runtime);
-    const result = await runtime.service.execute({ code: FIRST_PROMPT_PROGRAM, approver: {
-      prepareApproval(action) { expect(action.risk).toBe("read"); return { decision: "allow" as const }; },
-      async approve() { throw new Error("Unexpected approval"); },
-    } });
-    expect(result.success, result.error).toBe(true);
-    expect(result.value).toMatchObject({ manifest: { scope: { hidden: true }, truncated: false }, evidence: { complete: true, remaining: [] }, deferredCandidates: [] });
-    const value = result.value as { evidence: { files: { path: string; source: string }[] } };
-    expect(value.evidence.files.map(file => file.path)).toEqual(entrypoints ? ["README.md", ".azure-pipelines/test-pipeline.yml"] : []);
-    if (entrypoints) expect(value.evidence.files[1]!.source).toBe("1: run: validate");
-    expect(JSON.stringify(result.value)).not.toContain("DO-NOT-AUTOREAD");
-    const projection = projectFabricExecutionText({ result, resultFormat: "auto", maxOutputChars: 50000, writeArtifact() { throw new Error("Unexpected spill"); } });
-    expect(projection.overflowed).toBe(false);
-    expect(JSON.parse(projection.text)).toEqual(result.value);
+    const { value } = await starter(f);
+    expect(value.manifest).toMatchObject({ scope: { hidden: true }, truncated: false });
+    const files = value.packets!.flatMap(packet => {
+      expect(packet).toMatchObject({ evidence: { complete: true, remaining: [] }, deferred: [] });
+      return packet.evidence!.files;
+    });
+    expect(files.map(file => file.path)).toEqual(entrypoints ? ["README.md", ".azure-pipelines/test-pipeline.yml"] : []);
+    if (entrypoints) expect(files[1]!.source).toBe("1: run: validate");
+    expect(JSON.stringify(value)).not.toContain("DO-NOT-AUTOREAD");
+  });
+
+  it("keeps executable and environment evidence visible despite long documentation and retains exact continuations", async () => {
+    const f = fixture();
+    put(f, "README.md", Array.from({ length: 180 }, (_, i) => "line-" + (i + 1) + " " + "detail ".repeat(15)).join("\n") + "\n");
+    for (let i = 0; i < 12; i++) put(f, "docs/topic-" + i + "/README.md");
+    for (const file of ["AGENTS.md", "package.json", ".github/workflows/ci.yml", ".azure-pipelines/release-pipeline.yml", "chart/Chart.yaml", "chart/values.yaml", "configurations/common/deployment.yaml", "configurations/envs/prod/deployment.yaml", "configurations/envs/staging/deployment.yaml", "chart/templates/service.yaml", "validations/check.ps1"]) put(f, file);
+    put(f, "scripts/cleanup.ps1", "# Long executable\n".repeat(400));
+    put(f, "chart/templates/secret.yaml", "DO-NOT-AUTOREAD");
+    put(f, "secrets/values.yaml", "DO-NOT-AUTOREAD");
+    const { runtime, value } = await starter(f);
+    const packets = value.packets!;
+    expect(packets.every(packet => packet.evidence && !packet.error)).toBe(true);
+    const files = packets.flatMap(packet => packet.evidence!.files);
+    const delivered = files.map(file => file.path);
+    expect(delivered).toEqual(expect.arrayContaining(["package.json", ".github/workflows/ci.yml", ".azure-pipelines/release-pipeline.yml", "chart/Chart.yaml", "chart/values.yaml", "configurations/common/deployment.yaml", "configurations/envs/prod/deployment.yaml", "configurations/envs/staging/deployment.yaml", "scripts/cleanup.ps1", "chart/templates/service.yaml", "validations/check.ps1"]));
+    expect(new Set(delivered).size).toBe(delivered.length);
+    expect(JSON.stringify(value)).not.toContain("DO-NOT-AUTOREAD");
+    const docs = packets.find(packet => packet.area === "guidance")!;
+    expect(docs.deferred!.length).toBeGreaterThan(0);
+    const prefix = docs.evidence!.files.find(file => file.path === "README.md")!;
+    expect(prefix.truncated).toBe(true);
+    expect(docs.evidence!.remaining[0]).toMatchObject({ path: "README.md", offset: prefix.nextOffset, expectedSha256: prefix.sha256 });
+    const continuation = await runtime.service.execute({ code: "return await local.readMany({windows:" + JSON.stringify(docs.evidence!.remaining) + "});", approver: readApprover });
+    expect(continuation.success, continuation.error).toBe(true);
+    const continued = continuation.value as unknown as LocalReadManyResult;
+    expect(continued.complete).toBe(true);
+    expect(continued.files[0]!.startLine).toBe(prefix.endLine! + 1);
+    expect(continued.files[0]!.nextOffset).toBe(161);
+    const suffix = await runtime.service.execute({ code: "return await local.readMany({windows:" + JSON.stringify([{ path: "README.md", offset: continued.files[0]!.nextOffset, expectedSha256: prefix.sha256 }]) + "});", approver: readApprover });
+    expect(suffix.success, suffix.error).toBe(true);
+    expect(suffix.value).toMatchObject({ files: [{ startLine: 161, endLine: 180, truncated: false }], complete: true });
+  });
+
+  it("finds source without documentation or a recognized build manifest", async () => {
+    const f = fixture(); put(f, "server.py", "def main(): pass\n");
+    const { value } = await starter(f);
+    expect(value.packets).toMatchObject([{ area: "implementation", evidence: { files: [{ path: "server.py", source: "1: def main(): pass" }] } }]);
+  });
+
+  it("retains a failed area's unread paths without discarding other source packets", async () => {
+    const f = fixture();
+    put(f, "README.md", "x".repeat(30000));
+    put(f, "src/index.ts", "export const available = true;\n");
+    const { value } = await starter(f);
+    expect(value.packets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ area: "guidance", error: expect.any(String), unread: ["README.md"] }),
+      expect.objectContaining({ area: "implementation", evidence: expect.objectContaining({ files: [expect.objectContaining({ path: "src/index.ts" })] }) }),
+    ]));
+  });
+
+  it("retains truncated discovery and requests narrowing when path metadata leaves no source budget", async () => {
+    const f = fixture();
+    for (let i = 0; i < 201; i++) put(f, "docs/" + String(i).padStart(3, "0") + "-" + "x".repeat(155) + "/README.md");
+    const { value } = await starter(f);
+    expect(value).toMatchObject({ manifest: { truncated: true }, narrowDiscovery: true });
+    expect(value.manifest.paths.length).toBeGreaterThan(0);
+    expect(value.manifest.paths.length).toBeLessThanOrEqual(200);
+    expect(value).not.toHaveProperty("packets");
   });
 });

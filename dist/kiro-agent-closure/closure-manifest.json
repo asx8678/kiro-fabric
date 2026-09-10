@@ -257,9 +257,9 @@
       "sha256": "3fc1eab2740db3b7ce5d26cd25b473f3aa2e4cfb53ad6b60f66ad286d6251844"
     },
     {
-      "path": "chunks/first-prompt-hook-HN2GL36J.js",
-      "bytes": 12183,
-      "sha256": "833b98be2d102e544b7d8f35b05ccc21d5a8c8a5f46cfcf8504abdd9ad72a499"
+      "path": "chunks/first-prompt-hook-F5B5NOJB.js",
+      "bytes": 9811,
+      "sha256": "3bb84d97f8e7770b15c54877756503a1d95c9d2c9902382f5855268382f2b6a9"
     },
     {
       "path": "chunks/launch-2BNCRUIP.js",
@@ -574,7 +574,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 56605,
-      "sha256": "5b474a9ddd60d59733ec5da0b86d6d9f7ccff870490d2ba9e4fcc2bf2aa69a2d"
+      "sha256": "1ee561af2f1b805dc5a5bf7233e89ba51a075e03c1edb7e3eac0510b0dfe1e9c"
     },
     {
       "path": "package.json",
@@ -592,5 +592,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "ce3fbcbda1b7f17a5540779c765c676c1f347dc47f82526535a56dba9e348900"
+  "contentDigest": "ea6b6a472f1e7d8b4d9a629794b3e929c0947fbf08ed735b49e9a1f7837aadb5"
 }
