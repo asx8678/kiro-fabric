@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { LocalCodingProvider } from "../src/providers/local-provider.js";
-import type { LocalReadManyResult, LocalReadWindow } from "../src/providers/local-contract.js";
+import type { LocalReadManyResult, LocalReadWindow, LocalReadResult } from "../src/providers/local-contract.js";
 import { schemaValidationMessage } from "../src/schema-validation.js";
 
 const fixtures: { base: string; provider: LocalCodingProvider }[] = [];
@@ -13,25 +13,63 @@ afterEach(async () => {
     await provider.close(); fs.rmSync(base, { recursive: true, force: true });
   }
 });
-function fixture(budget = 20000) {
+function fixture(budget = 20000, maxReadManyChars?: number) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-read-many-")));
   const root = path.join(base, "workspace"); fs.mkdirSync(root);
-  const provider = new LocalCodingProvider({ root, lockRoot: path.join(base, "locks"), maxResultChars: budget });
+  const provider = new LocalCodingProvider({ root, lockRoot: path.join(base, "locks"), maxResultChars: budget, ...(maxReadManyChars === undefined ? {} : { maxReadManyChars }) });
   const registry = new ActionRegistry(); registry.register(provider);
   fixtures.push({ base, provider });
-  const call = async (windows: LocalReadWindow[], maxChars = 16000) => {
-    const result = await registry.invoke("local.readMany", { windows, maxChars }, {
+  const context = {
       cwd: "/untrusted-cwd", audits: [], maxResultChars: budget,
-      approve: async action => { expect(action.risk).toBe("read"); },
-    }) as LocalReadManyResult;
+      approve: async (action: { risk: string }) => { expect(action.risk).toBe("read"); },
+  };
+  const call = async (windows: LocalReadWindow[], maxChars?: number) => {
+    const result = await registry.invoke("local.readMany", { windows, ...(maxChars === undefined ? {} : { maxChars }) }, context) as LocalReadManyResult;
     expect(schemaValidationMessage((await provider.describe("readMany"))!.outputSchema!, { ...result })).toBeUndefined();
-    expect(JSON.stringify(result).length).toBeLessThanOrEqual(Math.min(maxChars, budget));
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(Math.min(maxChars ?? 32000, budget, maxReadManyChars ?? 40000));
     return result;
   };
-  return { root, base, call };
+  return { root, base, call, read: (file: string) => registry.invoke("local.read", { path: file, limit: 2000 }, context) as Promise<LocalReadResult> };
 }
 
 describe("bounded numbered source batches", () => {
+  it("delivers a related source batch in one default call instead of two at the former 16000 cap", async () => {
+    const f = fixture(2_000_000);
+    const lines = Array.from({ length: 220 }, (_, i) => `route(${i}, { target: "worker-${i}", retry: false, description: "${"configuration ".repeat(4)}" });`);
+    fs.writeFileSync(path.join(f.root, "routes"), lines.join("\n") + "\n");
+    fs.writeFileSync(path.join(f.root, "caller"), "dispatch(request, routes);\n");
+    const windows = [{ path: "routes", limit: 2000 }, { path: "caller" }];
+    const full = await f.call(windows);
+    expect(full.complete).toBe(true);
+    expect(JSON.stringify(full).length).toBeGreaterThan(20000);
+    expect(full.files.map(file => file.source).join("\n")).toBe(lines.map((line, i) => `${i + 1}: ${line}`).join("\n") + "\n1: dispatch(request, routes);");
+    const first = await f.call(windows, 16000);
+    expect(first.complete).toBe(false);
+    const second = await f.call(first.remaining, 16000);
+    expect(second.complete).toBe(true);
+    expect([...first.files, ...second.files].map(file => file.source).join("\n")).toBe(full.files.map(file => file.source).join("\n"));
+    const single = await f.read("routes");
+    expect(JSON.stringify(single).length).toBeLessThanOrEqual(20000);
+    expect(single.truncated).toBe(true);
+  });
+
+  it("permits an explicit 40000 batch while keeping the default and smaller runtime caps", async () => {
+    for (const [nested, visible] of [[2_000_000, 40000], [19000, 40000], [2_000_000, 8000]] as const) {
+      const f = fixture(nested, visible);
+      fs.writeFileSync(path.join(f.root, "large"), 'unicode 🛰 "quoted" \\ '.repeat(3).concat("\n").repeat(460));
+      const defaultPage = await f.call([{ path: "large", limit: 2000 }]);
+      const largePage = await f.call([{ path: "large", limit: 2000 }], 40000);
+      if (nested > 40000 && visible === 40000) {
+        expect(defaultPage.complete).toBe(false);
+        expect(largePage.complete).toBe(true);
+        expect(JSON.stringify(largePage).length).toBeGreaterThan(32000);
+      } else {
+        expect(largePage.complete).toBe(false);
+        expect(largePage.files[0]!.nextOffset).toBe(defaultPage.files[0]!.nextOffset);
+      }
+    }
+  });
+
   it("preserves requested ranges, indentation, CRLF, Unicode and empty/EOF evidence", async () => {
     const f = fixture();
     fs.writeFileSync(path.join(f.root, "rules"), "first\r\n\r\n  café 🛰\r\nlast");
@@ -87,5 +125,6 @@ describe("bounded numbered source batches", () => {
       await expect(f.call(windows)).rejects.toThrow();
     }
     await expect(f.call([{ path: "huge" }], 1000)).rejects.toThrow("single line");
+    await expect(f.call([{ path: "huge" }], 40001)).rejects.toThrow();
   });
 });

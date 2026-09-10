@@ -22,7 +22,7 @@ Trace pipeline -> script -> argument mapping -> selected objects -> actions -> r
 
 ## Read source without losing coverage
 
-Use local.readMany for numbered source, hashes and bounded batches. For observed files supply payloads.windows as JSON [{"path":"scripts/task.ts","limit":2000}].
+Before writing a tool program choose the question, related source needed to distinguish causes, and what result changes the next action. Use local.readMany to gather callers, implementation and config/tests together, then assess the evidence. Supply observed files in payloads.windows as JSON [{"path":"scripts/task.ts","limit":2000}].
 
 ```ts
 // Recipe: numbered review evidence
@@ -31,9 +31,9 @@ return await local.readMany({
 });
 ```
 
-The result has files, remaining and complete. Each file has path, startLine/endLine, totalLines, source, sha256, truncated and optional nextOffset. Pass remaining verbatim to the next readMany call; it includes hashes for partially delivered ranges and fails if the source changed. Do not repeat the original batch prefix. complete means the requested ranges were delivered, not the whole file/repo or that they were understood. For a bounded requested range, stop at its end; for whole-file review, follow any further file nextOffset. Default 200/max 2000 lines per window; default aggregate budget 16000 characters.
+Each file has path, startLine/endLine, totalLines, source, sha256, truncated and optional nextOffset. Continue remaining verbatim; hashes guard partial ranges against source changes. Do not repeat the original prefix. complete covers requested ranges, not the whole file/repo or understanding. Stop at a bounded range's end; for whole-file review follow further file nextOffset. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars up to 40000, clamped to runtime budgets. Lower maxChars when returning other data; do not concatenate pages past the visible output cap.
 
-Read related callers/consumers together, then reason. For long structured data use bounded parsing: return exceptions, totals and redacted locations. Inspect security/config field names, consumers and signature/allowlist presence without returning credentials. A signed URL in source proves storage, not validity, permissions or successful abuse. Do not skip an area because it may contain secrets or extrapolate one inspected file to every environment.
+For long structured data use bounded parsing: return exceptions, totals and redacted locations. Inspect security/config fields, consumers and signature/allowlist presence without returning credentials. A signed URL proves storage, not validity, permissions or successful abuse. Do not skip sensitive areas or extrapolate one file to every environment.
 
 For generic dynamic JSON keys use const out: JsonObject = {}; not an untyped {} or Record<string, unknown>. Compiler hints explain repairs. Do not drop evidence metadata to bypass a type error.
 

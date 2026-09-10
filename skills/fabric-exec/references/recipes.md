@@ -19,10 +19,11 @@ For bounded ranges, `local.read` returns whole lines. `truncated:true` may only 
 
 ## Discover then read
 
+When the search term and context size are already justified, locate and read matching windows in one program. Merge overlaps and preserve search scope; zero hits is only absence within that scope. Yield for model judgment when selecting causes or fixes, not merely to copy paths into a read. For known paths use readMany directly. Its default is 32000 aggregate JSON chars (maxChars up to 40000, clamped to runtime budgets); lower it when also returning substantial search results. Never concatenate continuation pages past the visible cap.
+
 ```ts
 // Recipe: discover then read without a model round trip
-const hits = await local.grep({pattern:'"id": "example"', path:".", hidden:true, literal:true, limit:10});
-if (hits.truncated) throw new Error("Incomplete search: narrow path/pattern");
+const hits = await local.grep({pattern:payloads.symbol, path:payloads.path, hidden:true, literal:true, limit:10});
 const matches = [...hits.matches].sort((a,b) => a.path.localeCompare(b.path) || a.line-b.line);
 const windows: Array<{path:string; start:number; end:number}> = [];
 for (const match of matches) {
@@ -31,11 +32,13 @@ for (const match of matches) {
   if (previous && previous.path === range.path && range.start <= previous.end+1) previous.end = Math.max(previous.end,range.end);
   else windows.push(range);
 }
-return await parallel(windows, async (range) => {
-  const r = await local.read({path:range.path, offset:range.start, limit:range.end-range.start+1});
-  return {path:range.path, offset:range.start, text:r.text, totalLines:r.totalLines, nextOffset:r.nextOffset ?? null, truncated:r.truncated};
-});
+const evidence = windows.length ? await local.readMany({windows:windows.map(range => ({
+  path:range.path, offset:range.start, limit:range.end-range.start+1,
+}))}) : {files:[], remaining:[], complete:true};
+return {search:hits, evidence};
 ```
+
+If search.truncated, narrow the search before making absence claims; partial hits remain useful evidence. Continue evidence.remaining verbatim. evidence.complete covers the selected windows, not search completeness. Prefer source windows to guessed field extraction until the schema is known.
 
 ## Exact edit and verification
 

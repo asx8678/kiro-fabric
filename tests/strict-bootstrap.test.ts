@@ -143,19 +143,23 @@ describe("strict checked workspace bootstrap", () => {
     expect(f.value(read)).toEqual(["  café 🛰 full first line  ", ""]);
     fs.writeFileSync(path.join(root, "config café.json"), '{"id": "example", "retryLimit": 3}\n');
     fs.writeFileSync(path.join(root, "decoy.json"), '{"id": "other", "description": "example"}\n');
-    const search = await f.call(recipes[1]!);
+    const searchInput = { symbol: '"id": "example"', path: "." };
+    const search = await f.call(recipes[1]!, searchInput);
     expect(search.isError, search.content[0].text).not.toBe(true);
-    expect(f.value(search)).toEqual([{ path: "config café.json", offset: 1, text: '{"id": "example", "retryLimit": 3}\n', totalLines: 1, nextOffset: null, truncated: false }]);
+    expect(f.value(search)).toEqual({
+      search: { scope: { path: ".", hidden: true, ignoreFiles: true }, matches: [{ path: "config café.json", line: 1, text: '{"id": "example", "retryLimit": 3}' }], truncated: false },
+      evidence: { complete: true, remaining: [], files: [{ path: "config café.json", startLine: 1, endLine: 1, source: '1: {"id": "example", "retryLimit": 3}', totalLines: 1, sha256: expect.stringMatching(/^[a-f0-9]{64}$/u), truncated: false }] },
+    });
     const distant = Array.from({ length: 450 }, (_, i) => `quiet line ${i + 1}`);
     for (const line of [400, 401, 420]) distant[line - 1] = `{"id": "example", "where":${line}}`;
     fs.writeFileSync(path.join(root, "far.txt"), distant.join("\n") + "\n");
-    const farSearch = await f.call(recipes[1]!);
+    const farSearch = await f.call(recipes[1]!, searchInput);
     expect(farSearch.isError, farSearch.content[0].text).not.toBe(true);
-    const ranges = (f.value(farSearch) as Array<{ path: string; offset: number; text: string; truncated: boolean }>).filter(r => r.path === "far.txt");
-    expect(ranges.map(r => r.offset)).toEqual([397, 417]);
-    expect(ranges[0]!.text).toContain('"where":400');
-    expect(ranges[0]!.text).toContain('"where":401');
-    expect(ranges[1]!.text).toContain('"where":420');
+    const ranges = (f.value(farSearch).evidence.files as Array<{ path: string; startLine: number; source: string; truncated: boolean }>).filter(r => r.path === "far.txt");
+    expect(ranges.map(r => r.startLine)).toEqual([397, 417]);
+    expect(ranges[0]!.source).toContain('"where":400');
+    expect(ranges[0]!.source).toContain('"where":401');
+    expect(ranges[1]!.source).toContain('"where":420');
     expect(ranges.every(r => r.truncated)).toBe(true);
     const edit = await f.call(recipes[2]!, { path: "config café.json", oldText: '"retryLimit": 3', newText: '"retryLimit": 7' });
     expect(edit.isError, edit.content[0].text).not.toBe(true);

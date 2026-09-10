@@ -118,6 +118,30 @@ for (const d of ["scripts"]) out[d] = await local.list({path:d}); return out;`, 
     } });
   });
 
+  it("composes search and numbered overlapping source reads in one shipped program", async () => {
+    const { root, service } = fixture();
+    fs.mkdirSync(path.join(root, ".ci"));
+    const lines = ["pipeline:", "  run: dispatch(record)", "  retry: dispatch(failed)", "  policy: conditional", "end"];
+    fs.writeFileSync(path.join(root, ".ci/check.yml"), lines.join("\n"));
+    const guide = fs.readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
+    const code = [...guide.matchAll(/```ts\n([\s\S]*?)\n```/g)].map(m => m[1]!).find(c => c.includes("// Recipe: discover then read without a model round trip"))!;
+    const result = await service.execute({ code, payloads: { symbol: "dispatch", path: "." }, approver });
+    expect(result.success, result.error).toBe(true);
+    expect(result.audits.map(audit => audit.ref)).toEqual(["local.grep", "local.readMany"]);
+    expect(result.value).toMatchObject({
+      search: { scope: { path: ".", hidden: true, ignoreFiles: true }, truncated: false, matches: [{ line: 2 }, { line: 3 }] },
+      evidence: { complete: true, remaining: [], files: [{ path: ".ci/check.yml", startLine: 1, endLine: 5, totalLines: 5, source: lines.map((line, i) => `${i + 1}: ${line}`).join("\n") }] },
+    });
+    const absent = await service.execute({ code, payloads: { symbol: "not-present", path: "." }, approver });
+    expect(absent.success, absent.error).toBe(true);
+    expect(absent.audits.map(audit => audit.ref)).toEqual(["local.grep"]);
+    expect(absent.value).toMatchObject({ search: { scope: { path: ".", hidden: true, ignoreFiles: true }, matches: [], truncated: false }, evidence: { files: [], remaining: [], complete: true } });
+    fs.writeFileSync(path.join(root, ".ci/many.yml"), "dispatch(record)\n".repeat(20));
+    const partial = await service.execute({ code, payloads: { symbol: "dispatch", path: "." }, approver });
+    expect(partial.success, partial.error).toBe(true);
+    expect(partial.value).toMatchObject({ search: { truncated: true }, evidence: { complete: true, remaining: [] } });
+  });
+
   it("reproduces the URL background operator without losing captured stdout or contacting a service", async () => {
     const { service } = fixture();
     const script = `curl() { printf '%s\\n' "$@" >&2; printf '{"id":123}'; }

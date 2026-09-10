@@ -49,7 +49,15 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   const artifacts = createKiroArtifactStore({ root: options.artifactsRoot, ...config.artifacts });
   registry.register(new FabricBootstrapProvider(config.executor.maxNestedResultChars));
   if (options.workspaceRoot && options.localLockRoot) {
-    registry.register(new LocalCodingProvider({ root: options.workspaceRoot, lockRoot: options.localLockRoot, maxResultChars: config.executor.maxNestedResultChars, ...(options.managedSearch ? { managedSearch: options.managedSearch } : {}) }));
+    registry.register(new LocalCodingProvider({
+      root: options.workspaceRoot,
+      lockRoot: options.localLockRoot,
+      maxResultChars: config.executor.maxNestedResultChars,
+      // Leave visible headroom for formatting/metadata without raising shell or search caps.
+      // Composing several results or logs can still overflow; the projection retains that evidence.
+      maxReadManyChars: Math.floor(config.executor.maxOutputChars * 0.8),
+      ...(options.managedSearch ? { managedSearch: options.managedSearch } : {}),
+    }));
   } else registry.markUnavailable("local", "verified workspace binding is required");
   registry.register(new KiroPowerArtifactsProvider(artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));

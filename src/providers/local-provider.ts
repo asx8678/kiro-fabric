@@ -32,7 +32,7 @@ const metadataSchema = object({ token: { type: "string", minLength: 36, maxLengt
 const readWindowSchema = object({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2000 }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]);
 const rawSchemas: Record<string, Record<string, unknown>> = {
   read: object({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2000 } }, ["path"]),
-  readMany: object({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1000, maximum: 20000 } }, ["windows"]),
+  readMany: object({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1000, maximum: 40000 } }, ["windows"]),
   grep: object({ pattern: { type: "string", maxLength: 2000 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2000 }, literal: boolean, ignoreCase: boolean, hidden: boolean, limit: count }, ["pattern"]),
   find: object({ pattern: { type: "string", minLength: 1, maxLength: 2000 }, path: pathSchema, hidden: boolean, limit: count }, ["pattern"]),
   list: object({ path: pathSchema, limit: count }),
@@ -52,7 +52,7 @@ const outputSchemas: Record<string, Record<string, unknown>> = {
 };
 const descriptions: Record<string, string> = {
   read: "Read valid UTF-8, one-based offset; default 200/max 2000 lines, <=2MiB file, bounded JSON. Whole lines only; totalLines counts the whole file; truncated means unread file suffix. nextOffset is the next one-based line; stop at the requested end. Oversized single lines fail. No traversal, symlinks, hardlinks or special files.",
-  readMany: "Read 1..32 numbered source windows with line ranges and hashes. Default 200/max 2000 lines per window, 16000 aggregate JSON chars (maxChars may lower/raise within provider limit). Return files plus remaining requests; continue remaining verbatim in the next call. Hash conflicts reject changed-file continuations. complete covers requested windows, not the entire repository or model understanding. Same read path protections as read; no hidden persistent ledger.",
+  readMany: "Read 1..32 numbered source windows with line ranges and hashes. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars 1000..40000, clamped to runtime budgets. Read related callers/implementations/configs together; lower maxChars when returning other data. Return files plus remaining requests; continue remaining verbatim. Hash conflicts reject changed-file continuations. complete covers requested windows, not the repo or understanding. Same path protections as read; no hidden persistent ledger.",
   grep: "Search with external rg, --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Pinned startup-validated executable. Selected candidates <=10000; batches <=256 text files/2MiB stop at requested prefix with truncated=true for unsearched files. Aggregate input <=32MiB; search <=10s; narrow path/glob on work limits. No JS search fallback.",
   find: "Glob file paths via external rg --files --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 results. Unsafe files rejected. Glob only narrows normal enumeration; selected candidates <=10000, raw process output <=2MiB; search <=10s. Narrow path/glob on work limits.",
   list: "Sorted direct children, including hidden entries; only path/limit, no depth. Use local.find for nested files. Default 100/max 1000 results, at most 10000 scanned entries. Symlinks, hardlinks and special entries fail.",
@@ -74,7 +74,8 @@ interface Prepared {
 /** Independent POSIX local coding provider. Cooperating runtimes share lockRoot.
  * Never breaks stale/uncertain locks; recovery requires operator investigation.
  * Bounds: <=2MiB/file, <=10000 enumeration entries, <=32MiB grep input,
- * <=2MiB rg stdout/stderr, 10s rg timeout, result JSON <=min(20000,budget).
+ * <=2MiB rg stdout/stderr, 10s rg timeout, result JSON <=min(20000,budget),
+ * except readMany <=min(40000,budget,visible source allowance).
  * Search ignore files may affect enumeration; explicit roots must be safe.
  * Node pathname revalidation does not close malicious same-user TOCTOU races. */
 export class LocalCodingProvider implements FabricProvider {
@@ -84,6 +85,7 @@ export class LocalCodingProvider implements FabricProvider {
   readonly #lockRoot: string;
   readonly #lockIdentity: ReturnType<typeof localIdentity>;
   readonly #budget: number;
+  readonly #readManyBudget: number;
   readonly #descriptors: FabricActionDescriptor[];
   readonly #controller = new AbortController();
   readonly #pending = new Set<Promise<unknown>>();
@@ -97,6 +99,8 @@ export class LocalCodingProvider implements FabricProvider {
     this.#searchExecutable = resolveSearchExecutable(options.managedSearch);
     this.#budget = Math.min(20000, options.maxResultChars ?? 20000);
     if (!Number.isSafeInteger(this.#budget) || this.#budget < 256) throw new Error("local maxResultChars must be an integer >=256");
+    if (options.maxReadManyChars !== undefined && (!Number.isSafeInteger(options.maxReadManyChars) || options.maxReadManyChars < 256)) throw new Error("local maxReadManyChars must be an integer >=256");
+    this.#readManyBudget = Math.min(40000, options.maxResultChars ?? 40000, options.maxReadManyChars ?? 40000);
     if (!path.isAbsolute(options.lockRoot)) throw new Error("local lockRoot must be absolute");
     // Check existing canonical ancestry before creating any private data.
     let existing = path.resolve(options.lockRoot);
@@ -143,9 +147,9 @@ export class LocalCodingProvider implements FabricProvider {
       throw new Error("local.readMany expectedSha256 must be a lowercase SHA-256 digest");
     }
   }
-  #fits(value: unknown): boolean { return JSON.stringify(value).length <= this.#budget; }
-  #bounded<T>(value: T): T {
-    if (!this.#fits(value)) throw new Error("local typed result metadata exceeds configured result budget");
+  #fits(value: unknown, budget = this.#budget): boolean { return JSON.stringify(value).length <= budget; }
+  #bounded<T>(value: T, budget = this.#budget): T {
+    if (!this.#fits(value, budget)) throw new Error("local typed result metadata exceeds configured result budget");
     return value;
   }
   async prepareArguments(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<Record<string, unknown>> {
@@ -321,38 +325,39 @@ export class LocalCodingProvider implements FabricProvider {
     if (name === "read") return this.#read(args);
     if (name === "readMany") {
       const windows = (args.windows as LocalReadWindow[]).map(window => ({ ...window, path: this.#paths.relative(this.#paths.check(window.path).path) }));
-      return this.#bounded(readManyWindows(windows, Math.min(this.#budget, (args.maxChars as number | undefined) ?? 16000), window => {
+      const budget = Math.min(this.#readManyBudget, (args.maxChars as number | undefined) ?? 32000);
+      return this.#bounded(readManyWindows(windows, budget, window => {
         this.#check(context);
-        return this.#read({ ...window });
-      }));
+        return this.#read({ ...window }, budget);
+      }), budget);
     }
     if (name === "list") return this.#list(args);
     if (name === "find" || name === "grep") return await this.#search(name, args, context);
     throw new Error(`Unknown local action: ${name}`);
   }
-  #read(args: Record<string, unknown>): LocalReadResult {
+  #read(args: Record<string, unknown>, budget = this.#budget): LocalReadResult {
     const { text, snapshot } = this.#paths.read(args.path as string);
     const lines = text === "" ? [] : text.split("\n");
     if (text.endsWith("\n")) lines.pop();
     const start = ((args.offset as number | undefined) ?? 1) - 1;
     const end = Math.min(lines.length, start + ((args.limit as number | undefined) ?? 200));
     const result: LocalReadResult = { path: this.#paths.relative(snapshot.path), text: "", totalLines: lines.length, truncated: false, sha256: snapshot.file!.sha256, identity: snapshot.file!.identity };
-    this.#bounded(result);
+    this.#bounded(result, budget);
     for (let index = start; index < end; index++) {
       const previous = result.text;
       result.text += lines[index]! + (index < lines.length - 1 || text.endsWith("\n") ? "\n" : "");
       result.truncated = index + 1 < lines.length;
       if (result.truncated) result.nextOffset = index + 2;
       else delete result.nextOffset;
-      if (!this.#fits(result)) {
+      if (!this.#fits(result, budget)) {
         if (index === start) throw new Error("local.read single line exceeds configured character budget");
         result.text = previous;
         result.truncated = true;
         result.nextOffset = index + 1;
-        return this.#bounded(result);
+        return this.#bounded(result, budget);
       }
     }
-    return this.#bounded(result);
+    return this.#bounded(result, budget);
   }
   #list(args: Record<string, unknown>): LocalListResult {
     const directory = this.#paths.directory((args.path as string | undefined) ?? ".");

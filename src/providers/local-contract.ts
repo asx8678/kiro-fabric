@@ -1,7 +1,14 @@
 import type { ManagedSearchExecutable } from "./local-executable.js";
 import type { FabricDeadline } from "../runtime/deadline.js";
 
-export interface LocalProviderOptions { root: string; lockRoot: string; maxResultChars?: number; managedSearch?: ManagedSearchExecutable }
+export interface LocalProviderOptions {
+  root: string;
+  lockRoot: string;
+  maxResultChars?: number;
+  /** Optional visible-output allowance for source batches; other local limits stay unchanged. */
+  maxReadManyChars?: number;
+  managedSearch?: ManagedSearchExecutable;
+}
 export interface LocalReadArguments { path: string; offset?: number; limit?: number }
 export interface LocalReadWindow extends LocalReadArguments { expectedSha256?: string }
 export interface LocalReadManyArguments { windows: LocalReadWindow[]; maxChars?: number }
@@ -43,7 +50,7 @@ interface Error { readonly result?: LocalShellResult }
 declare const local: {
   /** UTF-8 whole lines; 1-based, default 200/max 2000, files <=2MiB. totalLines is the whole-file count. truncated means unread suffix; nextOffset is the next line. Stop at requested end. Oversized single lines fail. */
   read(args: { path: string; offset?: number; limit?: number }): Promise<LocalReadResult>;
-  /** Numbered source and hashes, bounded across 1..32 windows. Default 200/max 2000 lines per window, 16000 chars overall. Continue remaining verbatim; hash conflicts fail. complete covers requested ranges, not the repo or understanding. */
+  /** Numbered source and hashes across 1..32 windows. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars 1000..40000, clamped to runtime budgets. Continue remaining verbatim; hash conflicts fail. complete covers requested ranges, not the repo or understanding. */
   readMany(args: { windows: LocalReadWindow[]; maxChars?: number }): Promise<LocalReadManyResult>;
   /** Requires rg. hidden:true includes dotfiles; default false. Ignore files still apply; VCS metadata/symlinks excluded. scope describes enumeration, not whole-repo completeness. Skips binary/invalid UTF-8; >2MiB skipped with truncated=true. Default 100/max 1000 matches; text <=500 chars. */
   grep(args: { pattern: string; path?: string; glob?: string; literal?: boolean; ignoreCase?: boolean; hidden?: boolean; limit?: number }): Promise<LocalGrepResult>;

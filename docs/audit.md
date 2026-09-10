@@ -252,5 +252,7 @@ These entries document later changes, not a revision to historical results or ev
 - `tests/local-review-coverage.test.ts` — hidden CI discovery, ignore/VCS/alias safeguards, bounded scope metadata and whole-file line/continuation checks.
 - `tests/review-execution.test.ts` — real compiler/guest execution of dictionary repairs, no effects on validation failure, visible diagnostic hints and numbered source with range/EOF metadata.
 - `tests/local-read-many.test.ts` — aggregate source budgets, complete continuations, changed-file rejection and unsafe-path controls.
+- `tests/source-packets.test.ts` — checked runtime and visible projection of related source batches, complete evidence with fewer calls, and nested/visible budget clamps.
 - `skills/fabric-exec/references/review.md` — task-loaded coverage ledger, risk-prioritized reference tracing, falsification and explicit partial-review reporting.
 - Existing local read/search contracts add total line counts and search scope; all-files manifests avoid a redundant ripgrep launch. Permission and execution budgets are unchanged.
+- `audits/source-batch-probe-2026-09-10.mjs` — read-only before/after measurement of fixed review source groups; full line/hash equality and no inference.
