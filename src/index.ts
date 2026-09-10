@@ -14,6 +14,7 @@ export { ActionRegistry } from "./core/action-registry.js";
 export { LocalCodingProvider } from "./providers/local-provider.js";
 export type {
   LocalProviderOptions, LocalReadArguments, LocalGrepArguments, LocalFindArguments,
+  LocalReadWindow, LocalReadManyArguments, LocalSourceWindow, LocalReadManyResult, LocalShellInput,
   LocalListArguments, LocalWriteArguments, LocalEditArguments, LocalShellArguments,
   LocalIdentity, LocalReadResult, LocalSearchScope, LocalGrepResult, LocalFindResult, LocalListResult,
   LocalMutationResult, LocalShellResult, LocalShellOptions,

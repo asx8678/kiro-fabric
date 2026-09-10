@@ -312,6 +312,7 @@ const GUEST_SETUP = `
   });
   globalThis.local = objectFreeze({
     read: (args) => call("local.read", args), grep: (args) => call("local.grep", args),
+    readMany: (args) => call("local.readMany", args),
     find: (args) => call("local.find", args), list: (args = {}) => call("local.list", args),
     write: (args) => call("local.write", args), edit: (args) => call("local.edit", args),
     shell: (args) => call("local.shell", args),

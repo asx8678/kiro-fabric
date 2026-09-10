@@ -8,7 +8,8 @@ import { canonicalPathContains } from "../kiro/canonical-path.js";
 import { fabricJsonText, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js";
 import { FABRIC_COMMIT_ACKNOWLEDGEMENT } from "../protocol.js";
 import type { FabricActionDescriptor, FabricInvocationContext, FabricProvider } from "../protocol.js";
-import type { LocalProviderOptions, LocalReadResult, LocalGrepResult, LocalFindResult, LocalListResult, LocalShellResult } from "./local-contract.js";
+import type { LocalProviderOptions, LocalReadResult, LocalReadWindow, LocalShellInput, LocalGrepResult, LocalFindResult, LocalListResult, LocalShellResult } from "./local-contract.js";
+import { readManyWindows } from "./local-read-many.js";
 import { LOCAL_MAX_FILE_BYTES, LocalNonTextError, LocalPaths, localHash, localIdentity, sameLocalIdentity } from "./local-path.js";
 import type { LocalPathSnapshot } from "./local-path.js";
 import { runLocalShell } from "./local-shell.js";
@@ -28,18 +29,21 @@ const count = { type: "integer", minimum: 1, maximum: 1000 };
 const searchScopeSchema = object({ path: string, glob: string, hidden: boolean, ignoreFiles: { const: true } }, ["path", "hidden", "ignoreFiles"]);
 const VCS_METADATA = new Set([".git", ".hg", ".svn"]);
 const metadataSchema = object({ token: { type: "string", minLength: 36, maxLength: 36 }, beforeSha256: { type: ["string", "null"] }, afterSha256: string, identity: { ...identitySchema, type: ["object", "null"] }, parentIdentity: identitySchema }, ["token"]);
+const readWindowSchema = object({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2000 }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]);
 const rawSchemas: Record<string, Record<string, unknown>> = {
   read: object({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2000 } }, ["path"]),
+  readMany: object({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1000, maximum: 20000 } }, ["windows"]),
   grep: object({ pattern: { type: "string", maxLength: 2000 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2000 }, literal: boolean, ignoreCase: boolean, hidden: boolean, limit: count }, ["pattern"]),
   find: object({ pattern: { type: "string", minLength: 1, maxLength: 2000 }, path: pathSchema, hidden: boolean, limit: count }, ["pattern"]),
   list: object({ path: pathSchema, limit: count }),
   write: object({ path: pathSchema, content: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, overwrite: boolean }, ["path", "content"]),
   edit: object({ path: pathSchema, oldText: { type: "string", minLength: 1, maxLength: LOCAL_MAX_FILE_BYTES }, newText: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, all: boolean }, ["path", "oldText", "newText"]),
-  shell: object({ command: { type: "string", minLength: 1, maxLength: 8000 }, cwd: pathSchema, timeoutMs: { type: "integer", minimum: 1, maximum: 900000 }, settle: boolean }, ["command"]),
+  shell: object({ command: { type: "string", minLength: 1, maxLength: 8000 }, script: { type: "string", minLength: 1, maxLength: 8000 }, interpreter: { enum: ["bash", "sh"] }, args: { type: "array", maxItems: 64, items: { type: "string", maxLength: 8000 } }, cwd: pathSchema, timeoutMs: { type: "integer", minimum: 1, maximum: 900000 }, settle: boolean }),
 };
 const mutationOutput = object({ path: string, changed: boolean, sha256: string, bytes: integer, identity: identitySchema }, ["path", "changed", "sha256", "bytes", "identity"]);
 const outputSchemas: Record<string, Record<string, unknown>> = {
   read: object({ path: string, text: string, totalLines: integer, truncated: boolean, nextOffset: { type: "integer", minimum: 1 }, sha256: string, identity: identitySchema }, ["path", "text", "totalLines", "truncated", "sha256", "identity"]),
+  readMany: object({ files: { type: "array", maxItems: 32, items: object({ path: string, startLine: { type: "integer", minimum: 1 }, endLine: { type: ["integer", "null"] }, totalLines: integer, sha256: string, source: string, truncated: boolean, nextOffset: { type: "integer", minimum: 1 } }, ["path", "startLine", "endLine", "totalLines", "sha256", "source", "truncated"]) }, remaining: { type: "array", maxItems: 32, items: readWindowSchema }, complete: boolean }, ["files", "remaining", "complete"]),
   grep: object({ scope: searchScopeSchema, matches: { type: "array", maxItems: 1000, items: object({ path: string, line: { type: "integer", minimum: 1 }, text: { type: "string", maxLength: 500 } }, ["path", "line", "text"]) }, truncated: boolean }, ["scope", "matches", "truncated"]),
   find: object({ scope: searchScopeSchema, paths: { type: "array", maxItems: 1000, items: string }, truncated: boolean }, ["scope", "paths", "truncated"]),
   list: object({ entries: { type: "array", maxItems: 1000, items: object({ path: string, type: { enum: ["file", "directory"] } }, ["path", "type"]) }, truncated: boolean }, ["entries", "truncated"]),
@@ -48,12 +52,13 @@ const outputSchemas: Record<string, Record<string, unknown>> = {
 };
 const descriptions: Record<string, string> = {
   read: "Read valid UTF-8, one-based offset; default 200/max 2000 lines, <=2MiB file, bounded JSON. Whole lines only; totalLines counts the whole file; truncated means unread file suffix. nextOffset is the next one-based line; stop at the requested end. Oversized single lines fail. No traversal, symlinks, hardlinks or special files.",
+  readMany: "Read 1..32 numbered source windows with line ranges and hashes. Default 200/max 2000 lines per window, 16000 aggregate JSON chars (maxChars may lower/raise within provider limit). Return files plus remaining requests; continue remaining verbatim in the next call. Hash conflicts reject changed-file continuations. complete covers requested windows, not the entire repository or model understanding. Same read path protections as read; no hidden persistent ledger.",
   grep: "Search with external rg, --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Pinned startup-validated executable. Selected candidates <=10000; batches <=256 text files/2MiB stop at requested prefix with truncated=true for unsearched files. Aggregate input <=32MiB; search <=10s; narrow path/glob on work limits. No JS search fallback.",
   find: "Glob file paths via external rg --files --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 results. Unsafe files rejected. Glob only narrows normal enumeration; selected candidates <=10000, raw process output <=2MiB; search <=10s. Narrow path/glob on work limits.",
   list: "Sorted direct children, including hidden entries; only path/limit, no depth. Use local.find for nested files. Default 100/max 1000 results, at most 10000 scanned entries. Symlinks, hardlinks and special entries fail.",
   write: "Exact approved write, create-only unless overwrite=true; existing parent required. Snapshots bind identities/content and complete diff before approval; revalidated before publication. Path checks are defense in depth, not hostile-race isolation.",
   edit: "Exact approved edit; nonempty unique oldText unless all=true (nonoverlapping replacements). Existing parent required. Identity/hash conflict detection and complete actual diff; no multi-operation transaction or hostile-race isolation.",
-  shell: "Exact approved /bin/sh command in verified canonical cwd, not confinement. Workspace-wide lock, bounded head/tail output and deadline, TERM/KILL cleanup; ordinary nonzero exits expose error.result or return data with settle=true; no background jobs. Deliberate process-group escapes are not contained.",
+  shell: "Exact approved host command OR literal script in verified canonical cwd, not confinement. command uses /bin/sh; script uses interpreter bash/sh (default sh), args become positional $1... without outer expansion or scratch files. Workspace-wide lock, bounded head/tail output and deadline, TERM/KILL cleanup; ordinary nonzero exits expose error.result or return data with settle=true; no background jobs or network isolation. Deliberate process-group escapes are not contained.",
 };
 const effectful = (name: string): boolean => ["write", "edit", "shell"].includes(name);
 interface Prepared {
@@ -127,6 +132,16 @@ export class LocalCodingProvider implements FabricProvider {
     if (!prepared && (Object.prototype.hasOwnProperty.call(args, "_localPreparation") || Object.prototype.hasOwnProperty.call(args, "review"))) throw new Error("Caller-injected local preparation metadata is forbidden");
     const invalid = schemaValidationMessage(jsonTree(schema), args);
     if (invalid) throw new Error(`Invalid arguments for local.${name}: ${invalid}`);
+    // Keep the generic schema walker bounded; enforce these trusted, constant
+    // semantic constraints here rather than introducing delegated combinators.
+    if (name === "shell" && ((typeof args.command === "string") === (typeof args.script === "string") ||
+        (typeof args.command === "string" && (args.interpreter !== undefined || args.args !== undefined)))) {
+      throw new Error("local.shell requires exactly one of command or script; interpreter/args require script");
+    }
+    if (name === "readMany" && (args.windows as LocalReadWindow[]).some(window =>
+      window.expectedSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(window.expectedSha256))) {
+      throw new Error("local.readMany expectedSha256 must be a lowercase SHA-256 digest");
+    }
   }
   #fits(value: unknown): boolean { return JSON.stringify(value).length <= this.#budget; }
   #bounded<T>(value: T): T {
@@ -138,6 +153,10 @@ export class LocalCodingProvider implements FabricProvider {
     this.#check(context);
     const canonical = structuredClone(args);
     if (!effectful(name)) {
+      if (name === "readMany") {
+        canonical.windows = (args.windows as LocalReadWindow[]).map(window => ({ ...window, path: this.#paths.check(window.path).path }));
+        return canonical;
+      }
       canonical.path = this.#paths.check((args.path as string | undefined) ?? ".").path;
       return canonical;
     }
@@ -150,8 +169,11 @@ export class LocalCodingProvider implements FabricProvider {
       canonical.cwd = directory.path;
       canonical.timeoutMs = args.timeoutMs ?? 30000;
       canonical.settle = args.settle ?? false;
-      if ((args.command as string).includes("\0")) throw new Error("local shell command must not contain NUL");
-      review = `Command: ${JSON.stringify(args.command)}\nCanonical cwd: ${JSON.stringify(directory.path)}\nTimeout ms: ${canonical.timeoutMs}\nSettle ordinary nonzero: ${canonical.settle}`;
+      const shellValues = [args.command ?? args.script, ...((args.args as string[] | undefined) ?? [])];
+      if (shellValues.some(value => (value as string).includes("\0"))) throw new Error("local shell input must not contain NUL");
+      const sourceReview = typeof args.command === "string" ? `Command: ${JSON.stringify(args.command)}`
+        : `Interpreter: ${args.interpreter ?? "sh"}\nScript: ${JSON.stringify(args.script)}\nArguments: ${JSON.stringify(args.args ?? [])}`;
+      review = `${sourceReview}\nCanonical cwd: ${JSON.stringify(directory.path)}\nTimeout ms: ${canonical.timeoutMs}\nSettle ordinary nonzero: ${canonical.settle}`;
       metadata = { token, identity: directory.identity, parentIdentity: directory.parents.at(-1)!.identity };
       entry = { name, signature: "", directory, active: false };
     } else {
@@ -289,13 +311,21 @@ export class LocalCodingProvider implements FabricProvider {
       if (name === "shell") {
         if (JSON.stringify(this.#paths.directory(args.cwd as string)) !== JSON.stringify(entry.directory)) throw new Error("local shell approval cwd identity conflict");
         this.#check(context);
-        const result: LocalShellResult = await runLocalShell({ command: args.command as string, cwd: args.cwd as string, maxOutputChars: this.#budget, signal: context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal, ...(typeof args.timeoutMs === "number" ? { timeoutMs: args.timeoutMs } : {}), ...(typeof args.settle === "boolean" ? { settle: args.settle } : {}), ...(context.deadline ? { deadline: context.deadline } : {}) });
+        const input: LocalShellInput = typeof args.command === "string" ? { command: args.command } : { script: args.script as string, interpreter: (args.interpreter ?? "sh") as "bash" | "sh", args: (args.args ?? []) as string[] };
+        const result: LocalShellResult = await runLocalShell({ ...input, cwd: args.cwd as string, maxOutputChars: this.#budget, signal: context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal, ...(typeof args.timeoutMs === "number" ? { timeoutMs: args.timeoutMs } : {}), ...(typeof args.settle === "boolean" ? { settle: args.settle } : {}), ...(context.deadline ? { deadline: context.deadline } : {}) });
         this.#check(context);
         return this.#bounded(result);
       }
       return this.#publish(name, entry, context);
     }
     if (name === "read") return this.#read(args);
+    if (name === "readMany") {
+      const windows = (args.windows as LocalReadWindow[]).map(window => ({ ...window, path: this.#paths.relative(this.#paths.check(window.path).path) }));
+      return this.#bounded(readManyWindows(windows, Math.min(this.#budget, (args.maxChars as number | undefined) ?? 16000), window => {
+        this.#check(context);
+        return this.#read({ ...window });
+      }));
+    }
     if (name === "list") return this.#list(args);
     if (name === "find" || name === "grep") return await this.#search(name, args, context);
     throw new Error(`Unknown local action: ${name}`);

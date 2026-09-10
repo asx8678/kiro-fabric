@@ -103,17 +103,16 @@ export function validateHelpPages(value) {
       assert.equal(page.nextOffset, offset + page.text.length);
     } else assert.equal(page.nextOffset, undefined);
   };
-  const pageBudget = Math.floor((20000 - 256) / 6);
   for (const [index, page] of value.pages.entries()) {
-    checkPage(page, expanded.length, pageBudget);
+    checkPage(page, expanded.length, 16000);
     assert.equal(page.truncated, index < value.pages.length - 1);
     expanded += page.text;
     assert.ok(expanded.length <= 100000);
   }
   assert.ok(expanded.includes("declare const local:") && expanded.includes("declare const fabric:"));
   assert.ok(!expanded.includes("${LOCAL_GUEST_DECLARATIONS}"));
-  checkPage(value.defaultPage, 0, pageBudget);
-  assert.equal(value.defaultPage.text, expanded.slice(0, Math.min(8000, pageBudget)));
+  checkPage(value.defaultPage, 0, 8000);
+  assert.equal(value.defaultPage.text, expanded.slice(0, value.defaultPage.text.length));
   assert.equal(value.defaultPage.truncated, value.defaultPage.text.length < expanded.length);
   return {
     expandedChars: expanded.length, expandedBytes: Buffer.byteLength(expanded), expandedSha256: sha256(expanded),

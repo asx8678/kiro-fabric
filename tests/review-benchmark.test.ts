@@ -16,6 +16,67 @@ type Row = Parameters<typeof detailedStats>[0][number];
 const answer = (spec: ReturnType<typeof makeReviewCase>) => structuredClone(spec.expected) as { findings: Finding[] };
 
 describe('read-only infrastructure review benchmark', () => {
+  it.each(['boundaries-v1', 'boundaries-v2'])('qualifies exact contracts and rejects unsupported consequences: %s', async seed => {
+    const spec = makeReviewCase('review-boundaries', seed);
+    expect(makeCase('review-boundaries', seed)).toEqual(spec);
+    expect(CASES).not.toContain('review-boundaries');
+    expect(ALL_CASES).toContain('review-boundaries');
+    expect(await probeReviewFixture(spec)).toEqual({ ok: true, defects: 3, falsePositiveControls: 5 });
+    expect(scoreReview(spec, spec.expected)).toMatchObject({ truePositives: 3, falsePositives: 0, precision: 1, recall: 1 });
+    for (const [kind, file] of [
+      ['lost-response', 'scripts/latest.sh'], ['always-fallback', 'scripts/latest.sh'],
+      ['disabled-cleanup', 'scripts/enabled.mjs'], ['unwired-validation', 'scripts/validate-config.mjs'],
+      ['live-credential', 'config/connector.json'],
+    ]) {
+      const noisy = answer(spec);
+      noisy.findings.push({ kind: kind!, evidence: [{ path: file!, line: 1, text: spec.files[file!]!.split('\n')[0]! }] });
+      expect(scoreReview(spec, noisy)).toMatchObject({ truePositives: 3, falsePositives: 1, precision: 0.75 });
+    }
+    const incomplete = answer(spec); incomplete.findings[1]!.evidence.pop();
+    expect(scoreReview(spec, incomplete)).toMatchObject({ truePositives: 2, falsePositives: 1, recall: 2 / 3 });
+  });
+
+  it('grades boundary reviews through the live validation path and detects modified evidence', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'review-boundary-validation-'));
+    try {
+      const trial = await solvedTrial(root, 'review-boundaries', process.execPath);
+      expect((await validate(trial)).review).toMatchObject({ expected: 3, truePositives: 3, recall: 1 });
+      fs.appendFileSync(path.join(trial.workspace, 'scripts/latest.sh'), '\n# changed\n');
+      expect((await validate(trial)).failures.some(f => f.check === 'scope')).toBe(true);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it.each(['contracts-v1', 'contracts-v2'])('qualifies cleanup defects and reachable-input controls: %s', async seed => {
+    const spec = makeReviewCase('review-contracts', seed);
+    expect(makeCase('review-contracts', seed)).toEqual(spec);
+    expect(CASES).not.toContain('review-contracts');
+    expect(ALL_CASES).toContain('review-contracts');
+    expect(caseHashes(spec).fixtures).not.toBe(caseHashes(makeReviewCase('review-contracts', seed + '-other')).fixtures);
+    expect(await probeReviewFixture(spec)).toEqual({ ok: true, defects: 2, falsePositiveControls: 3 });
+    expect(scoreReview(spec, spec.expected)).toMatchObject({ truePositives: 2, falsePositives: 0, precision: 1, recall: 1 });
+    for (const [kind, file, line] of [
+      ['selector-case', 'scripts/rollout.mjs', 3],
+      ['disabled-cleanup', 'scripts/enabled.mjs', 1],
+      ['validation-exit', 'scripts/validator.mjs', 1],
+    ] as const) {
+      const noisy = answer(spec);
+      noisy.findings.push({ kind, evidence: [{ path: file, line, text: spec.files[file]!.split('\n')[line - 1]! }] });
+      expect(scoreReview(spec, noisy)).toMatchObject({ truePositives: 2, falsePositives: 1, precision: 2 / 3 });
+    }
+    const incomplete = answer(spec); incomplete.findings[0]!.evidence.pop();
+    expect(scoreReview(spec, incomplete)).toMatchObject({ truePositives: 1, falsePositives: 1, recall: 0.5 });
+  });
+
+  it('grades the contract case through the live validation path without modifying its files', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'review-contract-validation-'));
+    try {
+      const trial = await solvedTrial(root, 'review-contracts', process.execPath);
+      const graded = await validate(trial);
+      expect(graded.ok, JSON.stringify(graded.failures)).toBe(true);
+      expect(graded.review).toMatchObject({ expected: 2, truePositives: 2, recall: 1 });
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
   it.each(['review-v1', 'review-v2'])('qualifies real defect semantics and seeded evidence: %s', async seed => {
     const spec = makeReviewCase('review-infra', seed);
     expect(makeCase('review-infra', seed)).toEqual(spec);

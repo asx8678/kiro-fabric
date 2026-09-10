@@ -23,7 +23,7 @@ node scripts/agent-comparison.mjs selftest
 pnpm run comparison:selftest
 ```
 
-The output directory must not already exist. The exporter creates nine bug-repair projects plus one read-only infrastructure-review project, their task prompts and a hash manifest. No reference solutions or held-out tests are exported into the agent workspaces. To inspect the all-bugs example:
+The output directory must not already exist. The exporter creates nine bug-repair projects plus three read-only review projects, their task prompts and a version-4 hash manifest. No reference solutions or held-out tests are exported into the agent workspaces. To inspect the all-bugs example:
 
 ```sh
 cd /tmp/my-new-tinyshop-lab/bug-checkout
@@ -121,7 +121,13 @@ The output schema uses finding categories plus exact file/line/source evidence, 
 
 `node scripts/agent-comparison.mjs selftest` independently executes the fixture's credential mapping, renderer and invalid-input validators, checks expiration against a fixed review date, and qualifies the hidden/tail evidence. Synthetic/reference runs never enter live agent statistics.
 
+The separate `review-contracts` case tests whether reviewers inspect referenced cleanup code and disprove attractive false positives. It contains two defects (protected-version selection and misleading dry-run logs), with controls for upstream name validation, runtime-supplied settings and a validator whose caller correctly fails. Independent Node probes exercise both valid/invalid inputs and both flag states. It uses distinct fixtures and categories, preserving existing `review-infra` prompt/fixture hashes.
+
+`review-boundaries` tests exact configuration keys, permission-target tuples and an unquoted shell query. Five controls challenge unsupported claims about lost responses, unconditional fallback, disabled cleanup, absent validation callers and live credentials. Node and Bash probes exercise the actual consumers, a non-default setting, hidden CI entrypoint and success/failure response bodies through the same path. Earlier fixture/prompt hashes are unchanged. All three review cases remain opt-in for paid plans; offline selftest qualifies each with two seeds. The oracle grades the enumerated claims and exact evidence; it is not a semantic judge of arbitrary prose or production behavior.
+
 For a future operator-approved comparison, select `"cases":["review-infra"]`, pin the same available model and `"effort":"low"`, and use repeated order-balanced runs in fresh workspaces. Existing manifest identity, spend-reserve and permission requirements still apply. Compare precision and recall before credits per grounded finding; a cheap partial review must not win by omitting defects. Include timeouts, failures and unknown telemetry rather than silently dropping them. Do not treat a single pair as evidence of a magnitude improvement.
+
+For coverage and precision, select `"cases":["review-infra","review-contracts","review-boundaries"]`. Record compiler failures, verification commands and uninspected scope alongside graded outcomes. Check the installed profile and bundled guidance against the candidate before admission: building this checkout does not refresh a separately installed generation or a running Kiro session.
 
 ## Live plan and consent
 

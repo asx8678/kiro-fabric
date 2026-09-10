@@ -1,0 +1,287 @@
+{
+  "repoHead": "ac47b816009541e48bbab437e7645a73b0f977cc",
+  "bash": [
+    {
+      "input": "{\"id\":123}",
+      "exit": 0,
+      "stdout": "##vso[task.setvariable variable=BUILDID]123",
+      "stderr": [
+        "--silent",
+        "--show-error",
+        "--header",
+        "Content-Type: application/json",
+        "--request",
+        "GET",
+        "--url",
+        "https://anyone:FIXTURE@dev.azure.com/fixture/pau/_apis/build/latest/3714?branchName=refs/heads/master",
+        "bash: line 7: api-version=7.0-preview.1: command not found"
+      ]
+    },
+    {
+      "input": "{}",
+      "exit": 0,
+      "stdout": "##vso[task.setvariable variable=BUILDID]latest",
+      "stderr": [
+        "--silent",
+        "--show-error",
+        "--header",
+        "Content-Type: application/json",
+        "--request",
+        "GET",
+        "--url",
+        "https://anyone:FIXTURE@dev.azure.com/fixture/pau/_apis/build/latest/3714?branchName=refs/heads/master",
+        "bash: line 7: api-version=7.0-preview.1: command not found"
+      ]
+    },
+    {
+      "input": "<html>error</html>",
+      "exit": 0,
+      "stdout": "##vso[task.setvariable variable=BUILDID]latest",
+      "stderr": [
+        "--silent",
+        "--show-error",
+        "--header",
+        "Content-Type: application/json",
+        "--request",
+        "GET",
+        "--url",
+        "https://anyone:FIXTURE@dev.azure.com/fixture/pau/_apis/build/latest/3714?branchName=refs/heads/master",
+        "bash: line 7: api-version=7.0-preview.1: command not found",
+        "jq: parse error: Invalid numeric literal at line 2, column 0"
+      ]
+    }
+  ],
+  "helm": [
+    {
+      "environment": "dev",
+      "exit": 0,
+      "kinds": [
+        "PodDisruptionBudget",
+        "ServiceAccount",
+        "Secret",
+        "ConfigMap",
+        "ClusterRole",
+        "ClusterRoleBinding",
+        "Service",
+        "Deployment",
+        "Ingress",
+        "Ingress",
+        "ServiceMonitor"
+      ],
+      "cronSchedules": []
+    },
+    {
+      "environment": "staging",
+      "exit": 0,
+      "kinds": [
+        "PodDisruptionBudget",
+        "ServiceAccount",
+        "Secret",
+        "ConfigMap",
+        "ClusterRole",
+        "ClusterRoleBinding",
+        "Service",
+        "Deployment",
+        "CronJob",
+        "CronJob",
+        "Ingress",
+        "Ingress",
+        "ServiceMonitor"
+      ],
+      "cronSchedules": [
+        "*/3 * * * *",
+        "* 13 * * 0-4"
+      ]
+    },
+    {
+      "environment": "prod",
+      "exit": 0,
+      "kinds": [
+        "PodDisruptionBudget",
+        "ServiceAccount",
+        "Secret",
+        "ConfigMap",
+        "ClusterRole",
+        "ClusterRoleBinding",
+        "Service",
+        "Deployment",
+        "CronJob",
+        "CronJob",
+        "Ingress",
+        "Ingress",
+        "ServiceMonitor"
+      ],
+      "cronSchedules": [
+        "*/3 * * * *",
+        "* 13 * * 0-4"
+      ]
+    },
+    {
+      "input": "restartPolicy=OnFailure",
+      "policies": [
+        "Never",
+        "Never"
+      ]
+    },
+    {
+      "input": "RestartPolicy=OnFailure",
+      "policies": [
+        "OnFailure",
+        "Never"
+      ]
+    }
+  ],
+  "costs": [
+    {
+      "arm": "default",
+      "credits": 13.37,
+      "seconds": 300
+    },
+    {
+      "arm": "fabric-old",
+      "credits": 3.76,
+      "seconds": 112
+    },
+    {
+      "arm": "fabric-prior",
+      "credits": 6.21,
+      "seconds": 212
+    },
+    {
+      "arm": "fabric-latest",
+      "credits": 5.34,
+      "seconds": 134
+    }
+  ],
+  "provenance": {
+    "costs": "user-supplied transcript footers; not independently measured",
+    "bash": "extracted pipeline script; curl stub and dummy macros; no network",
+    "helm": "offline render of actual checkout plus temporary non-default override",
+    "limits": [
+      "No service credentials used",
+      "No application or cluster requests",
+      "No PowerShell runtime",
+      "No same-model matched evaluation"
+    ]
+  },
+  "blindForwardTest": {
+    "caseId": "review-boundaries",
+    "seed": "blind-boundaries-20260910-v1",
+    "hashes": {
+      "prompt": "6f70685608908cea8fc5416e5d1e32481fcf53d3586f8ba1a8849b97bac9a4bb",
+      "fixtures": "65bd22f0f9f50e29a27e386c4bd4d66b5b23f5fda417f0fe2cee49fae1639d18",
+      "oracle": "0105a48cd4003df71f44b4a92c486c4d2271ab16d65270ca93214841d7e1c6ad"
+    },
+    "score": {
+      "expected": 3,
+      "reported": 3,
+      "truePositives": 3,
+      "falsePositives": 0,
+      "duplicates": 0,
+      "missed": [],
+      "precision": 1,
+      "recall": 1
+    },
+    "fixtureUnchanged": true,
+    "answer": {
+      "findings": [
+        {
+          "kind": "permission-target",
+          "evidence": [
+            {
+              "path": "README.md",
+              "line": 4,
+              "text": "The worker must be able to read the resource declared in config/target.json using config/permissions.json. scripts/access.mjs implements the authorization contract."
+            },
+            {
+              "path": "config/target.json",
+              "line": 2,
+              "text": "  \"group\": \"snapshots.example.io\","
+            },
+            {
+              "path": "config/permissions.json",
+              "line": 3,
+              "text": "    \"legacy.example.io\""
+            },
+            {
+              "path": "scripts/access.mjs",
+              "line": 2,
+              "text": "  return rule.groups.includes(request.group) && rule.resources.includes(request.resource) && rule.verbs.includes(request.verb);"
+            }
+          ]
+        },
+        {
+          "kind": "config-key-case",
+          "evidence": [
+            {
+              "path": "README.md",
+              "line": 3,
+              "text": "config/worker-2dd3ff98.json configures the worker through scripts/render-2dd3ff98.mjs. backoffSecs sets the retry delay; the default is 30 seconds."
+            },
+            {
+              "path": "config/worker-2dd3ff98.json",
+              "line": 2,
+              "text": "  \"backoffSecs\": 7"
+            },
+            {
+              "path": "scripts/render-2dd3ff98.mjs",
+              "line": 2,
+              "text": "  return {retryDelay: config.BackoffSecs ?? 30};"
+            }
+          ]
+        },
+        {
+          "kind": "unquoted-query",
+          "evidence": [
+            {
+              "path": "README.md",
+              "line": 6,
+              "text": "Run scripts/latest.sh with Bash. Its fetch function is an inert transport stub: the first argument is the response body. Its default synthetic response has an id. The URL's format-version parameter selects the response contract."
+            },
+            {
+              "path": "scripts/latest.sh",
+              "line": 3,
+              "text": "response=$(fetch --url https://build.invalid/latest?branch=main&format-version=1)"
+            },
+            {
+              "path": "scripts/latest.sh",
+              "line": 4,
+              "text": "transport_status=$?"
+            }
+          ]
+        }
+      ]
+    },
+    "diagnostics": "Reviewed all 11 files returned by recursive hidden-file discovery, including the README, hidden CI caller, renderer, authorization consumer, maintenance predicate, transport script and validator. Discovery and source reads were untruncated; discovery/search retain Fabric ignore rules.\n\nOne grep failed with an unclosed-group regex error after escaping was lost; retrying with a simpler pattern succeeded. The initial behavioral probe exited 0 but its console.log summary was absent. An inert shell probe correctly reported exit 23; a Node probe reported its intended exit 17 but omitted console.log output. Repeating the behavioral probe with fs.writeSync produced explicit results and passed all assertions. No timeouts or approval denials occurred.\n\nVerified offline: configured backoff 7 and an override of 11 both render 30; authorization rejects the declared target and accepts an in-memory matching-group control; maintenance accepts runtime true; the configured validator exits 0 for its input and 1 for a missing input. Bash execution of the unchanged transport script returns IDs 123 and 456 for valid responses and falls back only for missing/malformed IDs. All four transport cases omit format-version from the printed fetch arguments, print a command-not-found error and report transport=127, while the overall script exits 0.\n\nSkeptical pass rejected lost-response, always-fallback, disabled-cleanup, unwired-validation and live-credential: responses survive, fallback is conditional, runtime enablement works, hidden CI references validation, and the connector contains the README-declared synthetic marker. The final answer contains three deduplicated defects with exact source-line evidence.\n\nNo fixture files were edited, and no network, installation, persistent memory, delegation or external services were used. Deployment and production CI execution were not tested; assessment follows the supplied README contracts and offline reachable behavior. The cause of missing console.log capture remains undiagnosed.\n",
+    "scope": "Codex subagent with candidate profile and real checked Fabric bridge; not Claude in Kiro; no matched default arm"
+  },
+  "validation": {
+    "focused": {
+      "files": 5,
+      "passed": 107
+    },
+    "full": {
+      "files": 84,
+      "passed": 1311,
+      "skipped": 4,
+      "check": "pnpm run check",
+      "exitCode": 0
+    },
+    "fixtureSelftest": {
+      "rejectedBuggy": 18,
+      "acceptedReference": 18,
+      "qualifiedReviews": 6,
+      "inferenceRequests": 0
+    },
+    "oldReviewHashesPreserved": true
+  },
+  "installation": {
+    "generation": "cf4bec4d865a0487c71980f867b9697767f8b098d8b9d5c9f517d5d7fdff3d45",
+    "profile": "/home/adam/.kiro/agents/kiro-fabric.json",
+    "backendSmoke": true,
+    "doctor": "healthy",
+    "installedMcpSmoke": true,
+    "authenticatedKiroModelTested": false,
+    "restartRequired": true
+  }
+}

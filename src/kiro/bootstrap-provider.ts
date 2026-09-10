@@ -29,11 +29,24 @@ export class FabricBootstrapProvider implements FabricProvider {
       if (!Number.isSafeInteger(this.maxResultChars) || this.maxResultChars < 262) throw new Error("Nested result budget too small for bounded help");
       const source = DOCUMENTS[String(args.topic)]!;
       const offset = typeof args.offset === "number" ? args.offset : 0;
-      // JSON escaping can multiply characters by six. Leave metadata margin.
-      const size = Math.max(1, Math.min(typeof args.limit === "number" ? args.limit : 8000, Math.floor((this.maxResultChars - 256) / 6)));
-      const text = source.slice(offset, offset + size);
-      const truncated = offset + text.length < source.length;
-      return { topic: args.topic, text, truncated, ...(truncated ? { nextOffset: offset + text.length } : {}) };
+      // Measure the actual envelope. At smaller configured budgets a worst-case
+      // /6 allowance splits ordinary help long before the actual envelope fills.
+      const page = (size: number) => {
+        const text = source.slice(offset, offset + size);
+        const truncated = offset + text.length < source.length;
+        return { topic: args.topic, text, truncated, ...(truncated ? { nextOffset: offset + text.length } : {}) };
+      };
+      let high = Math.min(typeof args.limit === "number" ? args.limit : 8000, Math.max(0, source.length - offset));
+      const full = page(high);
+      if (JSON.stringify(full).length <= this.maxResultChars) return full;
+      let low = 0;
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        if (JSON.stringify(page(mid)).length <= this.maxResultChars) low = mid;
+        else high = mid - 1;
+      }
+      if (low === 0) throw new Error("Nested result budget too small for help progress");
+      return page(low);
     }
     if (!context.bootstrap) throw new Error("Kiro bootstrap context is unavailable in this library execution");
     if (name === "workspace") {

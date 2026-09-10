@@ -123,7 +123,7 @@ describe("Kiro Agent profile generation", () => {
   });
 
   it("makes review coverage mandatory without a findings quota or a brevity cutoff", () => {
-    for (const clause of ["Correctness and coverage before speed", "do not stop early to save calls", "reviews/audits are exempt", 'fabric.help({topic:"review"})', "coverage ledger", "environment overrides", "Listing is not inspection", "try to disprove", "Report uninspected scope", "never invent findings", "hidden:true", "totalLines", "zero matches is not whole-repo absence"]) expect(AGENT_PROMPT).toContain(clause);
+    for (const clause of ["Correctness and coverage before speed", "do not stop early to save calls", "reviews/audits are exempt", 'fabric.help({topic:"review"})', "coverage ledger", "local.readMany", "Trace callers", "Try to disprove", "unreviewed scope", "conditional risks", "hidden:true", "totalLines", "zero matches is not whole-repo absence"]) expect(AGENT_PROMPT).toContain(clause);
     expect(typeCheckFabricCode('return await local.find({pattern:"**/*",hidden:true,limit:200});', fabricGuestDeclarations).errors).toEqual([]);
   });
 
@@ -215,7 +215,8 @@ describe("Kiro Agent profile generation", () => {
       };
       expect(page.topic).toBe("api");
       expect(page.text.length).toBeGreaterThan(0);
-      expect(page.text.length).toBeLessThanOrEqual(Math.floor((provider.maxResultChars - 256) / 6));
+      expect(page.text.length).toBeLessThanOrEqual(8000);
+      expect(JSON.stringify(page).length).toBeLessThanOrEqual(provider.maxResultChars);
       expect(page.text).toBe(fabricGuestDeclarations.slice(offset, offset + page.text.length));
       reconstructed += page.text;
       offset += page.text.length;

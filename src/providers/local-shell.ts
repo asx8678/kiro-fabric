@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { localProcessGroupAlive as groupAlive } from "./local-process-group.js";
 import { setTimeout as delay } from "node:timers/promises";
 import { throwIfAbortedOrExpired } from "../async-settlement.js";
-import type { FabricDeadline } from "../runtime/deadline.js";
+import type { LocalShellOptions } from "./local-contract.js";
 
 export interface LocalShellResult {
   ok: boolean;
@@ -55,10 +55,7 @@ async function sendGroup(pid: number, signal: NodeJS.Signals, end: number): Prom
  * Deliberate setsid/process-group escape is not contained. Cleanup has a separate
  * bounded grace even after cancellation/deadline, and must be awaited by close.
  */
-export async function runLocalShell(options: {
-  command: string; cwd: string; timeoutMs?: number; settle?: boolean;
-  maxOutputChars?: number; signal?: AbortSignal; deadline?: FabricDeadline;
-}): Promise<LocalShellResult> {
+export async function runLocalShell(options: LocalShellOptions): Promise<LocalShellResult> {
   if (process.platform !== "linux" && process.platform !== "darwin") throw new Error("Local shell requires Linux or macOS");
   const timeout = options.timeoutMs ?? 30_000;
   const budget = options.maxOutputChars ?? 24_000;
@@ -76,7 +73,12 @@ export async function runLocalShell(options: {
   const streamLimit = Math.floor((budget - 256) / 12);
   let child;
   try {
-    child = spawn("/bin/sh", ["-c", options.command], {
+    const isScript = typeof options.script === "string";
+    const executable = isScript && options.interpreter === "bash" ? "bash" : "/bin/sh";
+    const args = isScript
+      ? [...(executable === "bash" ? ["--noprofile", "--norc"] : []), "-c", options.script!, "fabric-script", ...(options.args ?? [])]
+      : ["-c", options.command!];
+    child = spawn(executable, args, {
       cwd: options.cwd, env: shellEnvironment(), detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });

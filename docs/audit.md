@@ -16,7 +16,8 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 - `src/kiro/bootstrap-provider.ts` — checked health/workspace access and bounded immutable bundled help.
 - `src/providers/local-contract.ts` — host and guest coding contracts.
 - `src/providers/local-path.ts` — verified-root path checks and content/identity snapshots; documented OS-race limits.
-- `src/providers/local-provider.ts` — seven registry-backed coding actions and cross-process intent locks.
+- `src/providers/local-provider.ts` — registry-backed coding actions and cross-process intent locks.
+- `src/providers/local-read-many.ts` — numbered source batches with bounded, hash-checked continuations.
 - `src/providers/local-shell.ts` — bounded approved host process execution and process-group cleanup.
 - `tests/local-provider.test.ts` — local schemas, bounds, aliases, conflicts and approval snapshots.
 - `tests/local-shell.test.ts` — real process exits, streams, cancellation/deadlines and descendant cleanup.
@@ -246,8 +247,10 @@ These entries extend the implementation inventory; observed statistics are descr
 
 These entries document later changes, not a revision to historical results or evidence of live model superiority.
 
-- `scripts/steering-benchmark/reviews.mjs` — seeded read-only infrastructure fixtures, source-line/caller-consumer evidence grading, false-positive controls and independent Node qualification.
+- `scripts/steering-benchmark/reviews.mjs` — seeded read-only infrastructure, cleanup and boundary fixtures; source-line/caller-consumer grading; independent Node/Bash qualification of defects and false-positive controls.
 - `tests/review-benchmark.test.ts` — recall/precision, duplicate/forged evidence rejection, read-only scope, failure-inclusive cost and equal-model/effort regression.
 - `tests/local-review-coverage.test.ts` — hidden CI discovery, ignore/VCS/alias safeguards, bounded scope metadata and whole-file line/continuation checks.
+- `tests/review-execution.test.ts` — real compiler/guest execution of dictionary repairs, no effects on validation failure, visible diagnostic hints and numbered source with range/EOF metadata.
+- `tests/local-read-many.test.ts` — aggregate source budgets, complete continuations, changed-file rejection and unsafe-path controls.
 - `skills/fabric-exec/references/review.md` — task-loaded coverage ledger, risk-prioritized reference tracing, falsification and explicit partial-review reporting.
 - Existing local read/search contracts add total line counts and search scope; all-files manifests avoid a redundant ripgrep launch. Permission and execution budgets are unchanged.

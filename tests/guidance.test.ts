@@ -124,6 +124,12 @@ describe("compiled task guidance", () => {
     }
   });
 
+  it("delivers the complete review procedure on the default first call", async () => {
+    const result = await new FabricBootstrapProvider().invoke("help", { topic: "review" }, { cwd: "/none" });
+    expect(result).toEqual({ topic: "review", text: BUNDLED_GUIDANCE.review, truncated: false });
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(20000);
+  });
+
   it("preserves surrogate boundaries at the minimum budget and reconstructs overview", async () => {
     const provider = new FabricBootstrapProvider(262);
     const index = BUNDLED_GUIDANCE.recipes.indexOf("🛰");

@@ -40,6 +40,7 @@
     "src/providers/local-path.ts",
     "src/providers/local-process-group.ts",
     "src/providers/local-provider.ts",
+    "src/providers/local-read-many.ts",
     "src/providers/local-shell.ts",
     "src/providers/owned-file.ts",
     "src/providers/state-provider.ts",
@@ -214,14 +215,14 @@
       "sha256": "dd5c2650ca7bd1ecc4fb6e0100d212e1b18a4266f7d13ccd1e697521a7d0ddda"
     },
     {
-      "path": "chunks/chunk-CCXQPTKG.js",
-      "bytes": 9991085,
-      "sha256": "949f39d72da79a078999dc49223957e3fb270417d8dc483227aeca13a5fd2a80"
-    },
-    {
       "path": "chunks/chunk-DDMC62E6.js",
       "bytes": 3911,
       "sha256": "2438f3bf73cc5109366747ed22893f198998e5b7aa179bea5c0ff0e82684d62c"
+    },
+    {
+      "path": "chunks/chunk-FIOHS7MS.js",
+      "bytes": 9992026,
+      "sha256": "bb037bf9729cae75b93d7b82dd2272ae8229316ed7cc54b690c1b839639b2054"
     },
     {
       "path": "chunks/chunk-G3LABT6U.js",
@@ -544,9 +545,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-W6NF4MGY.js",
-      "bytes": 1172672,
-      "sha256": "224a57da5fec0e1afc2f1f219ed4e5a0c97662fee7e0bb581fc7ab2a4d39ee02"
+      "path": "chunks/mcp-server-M2UMOCI2.js",
+      "bytes": 1183320,
+      "sha256": "b89e3c62677c18e11c8366dba0ec4acd40da0afdc723aa16407fce608c6cebf1"
     },
     {
       "path": "chunks/module-asyncify-2EFITU5U-74PVIWDG.js",
@@ -566,7 +567,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 56354,
-      "sha256": "36742c16a6c469d56fcd8b7022a5636d43191c6397661ec834228ea63230c559"
+      "sha256": "3365624ad95838a172143fbc797b137e6839aaa6029c56913718e9b01fd9f022"
     },
     {
       "path": "package.json",
@@ -576,7 +577,7 @@
     {
       "path": "runtime/compiler-worker-entry.js",
       "bytes": 902,
-      "sha256": "2e7a912de8362667be01c59267c0be82c5fd3fa07230e84f4298321cd50acfd0"
+      "sha256": "eac019cffa95642050d3b9efb6fcf562a534dc417b3d9f5d9aac4682de984ef2"
     },
     {
       "path": "THIRD_PARTY_NOTICES.txt",
@@ -584,5 +585,5 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     }
   ],
-  "contentDigest": "2c9078f32dbbee421fb56f27e1bbd564de43216592f2de5b96e6081b1bfe5878"
+  "contentDigest": "f74cdbe6df5aeb3f61a6bc9e297cecd2481bd4366fbf7affb150a24ccf580247"
 }

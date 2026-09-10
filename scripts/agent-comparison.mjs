@@ -28,7 +28,7 @@ export async function main(argv) {
     assert.ok(args.out, '--out required'); fs.mkdirSync(args.out, { mode: 0o700 }); const root = privateOutput(args.out), seed = args.seed ?? 'tinyshop-v1';
     const tasks = [];
     for (const id of [...BUG_CASES, ...REVIEW_CASES]) { const spec = makeCase(id, seed), workspace = path.join(root, id); fs.mkdirSync(workspace, { mode: 0o700 }); putFiles(workspace, spec.files); fs.writeFileSync(path.join(root, id + '-prompt.txt'), spec.prompt + '\n', { mode: 0o600, flag: 'wx' }); tasks.push({ id, workspace, hashes: caseHashes(spec) }); }
-    const manifest = { fixtureVersion: 'tinyshop-and-review-v2', seed, inferenceRequests: 0, tasks }; save(path.join(root, 'fixtures.json'), manifest); return manifest;
+    const manifest = { fixtureVersion: 'tinyshop-and-review-v4', seed, inferenceRequests: 0, tasks }; save(path.join(root, 'fixtures.json'), manifest); return manifest;
   }
   if (action === 'selftest') {
     let rejectedBuggy = 0, acceptedReference = 0;
@@ -38,8 +38,8 @@ export async function main(argv) {
       assert.equal((await probeProject(spec, spec.solution)).ok, true); acceptedReference++;
     }
     let qualifiedReviews = 0;
-    for (const seed of ['review-v1', 'review-v2']) {
-      const spec = makeReviewCase('review-infra', seed);
+    for (const seed of ['review-v1', 'review-v2']) for (const id of REVIEW_CASES) {
+      const spec = makeReviewCase(id, seed);
       assert.equal((await probeReviewFixture(spec)).ok, true);
       assert.equal(scoreReview(spec, { findings: [] }).recall, 0);
       qualifiedReviews++;

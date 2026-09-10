@@ -6,6 +6,8 @@ export interface FabricTypeError {
   line: number;
   column: number;
   message: string;
+  code?: number;
+  hint?: string;
 }
 
 export interface FabricTypeCheckResult {
@@ -29,6 +31,12 @@ const MAX_DIAGNOSTIC_MESSAGE_CHARS = 4_096;
 const COMPILER_MEMORY_MB = 128;
 const FORBIDDEN_MODULE_MESSAGE = "Guest modules and external references are not allowed";
 const GUEST_WRAPPER_INTEGRITY_MESSAGE = "Guest code must remain inside the generated Fabric wrapper";
+
+const diagnosticHint = (code: number, message: string): string | undefined => {
+  if (code === 7053) return 'The object has no compatible index signature. For keyed JSON results use const out: JsonObject = {}; or a specific record such as Record<string, LocalListResult>. Record<string, unknown> cannot be returned as JsonValue. Independent reads can instead return await parallel(paths, path => local.read({path})).';
+  if (code === 2322 && /\bJson(?:Value|Object)\b/u.test(message)) return 'Fabric returns JSON. Preserve inferred result types, or build a JsonObject / Record<string, JsonValue> from JSON-compatible values. Narrow unknown values first; do not use any, type assertions or JSON round-tripping to hide a mismatch. For independent reads: return await parallel(paths, path => local.read({path}));';
+  return undefined;
+};
 
 const compilerOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2022,
@@ -174,9 +182,11 @@ class FabricTypeChecker {
     const errors = diagnostics.map((diagnostic) => {
       const flattened = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
       const message = flattened.length > MAX_DIAGNOSTIC_MESSAGE_CHARS ? `${flattened.slice(0, MAX_DIAGNOSTIC_MESSAGE_CHARS)}…[truncated]` : flattened;
-      if (!diagnostic.file || diagnostic.start === undefined) return { line: 0, column: 0, message };
+      const hint = diagnosticHint(diagnostic.code, message);
+      const detail = { message, code: diagnostic.code, ...(hint ? { hint } : {}) };
+      if (!diagnostic.file || diagnostic.start === undefined) return { line: 0, column: 0, ...detail };
       const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
-      return { line: Math.max(1, position.line), column: position.character + 1, message };
+      return { line: Math.max(1, position.line), column: position.character + 1, ...detail };
     });
     if (errors.length > 0) return { errors };
 

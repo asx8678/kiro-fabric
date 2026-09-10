@@ -58,9 +58,11 @@ describe("LocalCodingProvider read contracts", () => {
   it("returns every public result through the real checked JsonValue wrapper without weakening types", () => {
     const samples = [
       'return await local.read({path:"x"});', 'return await local.grep({pattern:"x"});',
+      'return await local.readMany({windows:[{path:"x"}]});',
       'return await local.find({pattern:"*"});', 'return await local.list();',
       'return await local.write({path:"x",content:"x"});', 'return await local.edit({path:"x",oldText:"x",newText:"y"});',
       'return await local.shell({command:"true"});',
+      'return await local.shell({script:"printf hello",interpreter:"bash",args:["literal"]});',
     ];
     for (const code of samples) expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors, code).toEqual([]);
     for (const code of ['return await local.read({path:1});', 'return await local.write({path:"x",content:"x",review:"forged"});', 'return await local.shell({command:"true",settle:"yes"});']) {
@@ -70,7 +72,7 @@ describe("LocalCodingProvider read contracts", () => {
   it("keeps public descriptors JSON trees and validates representative raw and prepared calls", async () => {
     const f = fixture(); f.put("x", "x");
     const args: Record<string, Record<string, unknown>> = {
-      read: { path: "x" }, grep: { pattern: "x" }, find: { pattern: "*" }, list: {},
+      read: { path: "x" }, readMany: { windows: [{ path: "x" }] }, grep: { pattern: "x" }, find: { pattern: "*" }, list: {},
       write: { path: "new", content: "x" }, edit: { path: "x", oldText: "x", newText: "y" }, shell: { command: "true" },
     };
     const descriptors = await f.provider.list();
@@ -82,10 +84,10 @@ describe("LocalCodingProvider read contracts", () => {
       expect(schemaValidationMessage(descriptor.inputSchema, prepared)).toBeUndefined();
     }
   });
-  it("registers exactly seven closed typed descriptors and a shared write resource", async () => {
+  it("registers closed typed descriptors and a shared write resource", async () => {
     const f = fixture();
     const descriptors = await f.provider.list();
-    expect(descriptors.map((item) => item.name)).toEqual(["read", "grep", "find", "list", "write", "edit", "shell"]);
+    expect(descriptors.map((item) => item.name)).toEqual(["read", "readMany", "grep", "find", "list", "write", "edit", "shell"]);
     for (const descriptor of descriptors) {
       expect(descriptor.inputSchema.additionalProperties).toBe(false);
       expect(descriptor.outputSchema?.additionalProperties).toBe(false);
@@ -433,6 +435,26 @@ describe("LocalCodingProvider exact effects and lock lifetime", () => {
     await expect(f.call("shell", { command: "exit 7" })).rejects.toThrow(/code 7/);
     fs.mkdirSync(path.join(f.root, "cwd"));
     await expect(f.call("shell", { command: "true", cwd: "cwd" }, f.context(async () => { fs.renameSync(path.join(f.root, "cwd"), path.join(f.root, "old-cwd")); fs.mkdirSync(path.join(f.root, "cwd")); }))).rejects.toThrow(/cwd identity/);
+  });
+  it("validates script alternatives before approval and binds literal scripts/argv to approval", async () => {
+    const f = fixture();
+    const invalid = [{}, { command: "true", script: "true" }, { command: "true", args: [] },
+      { script: "true", interpreter: "zsh" }, { script: "true", args: ["nul\0value"] }];
+    for (const args of invalid) {
+      const approved = vi.fn();
+      await expect(f.call("shell", args, f.context(approved))).rejects.toThrow();
+      expect(approved).not.toHaveBeenCalled();
+    }
+    const script = 'printf "%s" "$1"';
+    const input = "'$(touch unexpected)`touch unexpected`\nsecond line";
+    expect(await f.call("shell", { script, interpreter: "bash", args: [input] }, f.context(async (action, args) => {
+      expect(action.risk).toBe("execute");
+      expect(args.review).toContain(`Script: ${JSON.stringify(script)}`);
+      expect(args.review).toContain(`Arguments: ${JSON.stringify([input])}`);
+      expect(args.cwd).toBe(f.root);
+    }))).toMatchObject({ ok: true, stdout: input });
+    await expect(f.call("shell", { script: "touch denied", interpreter: "bash" }, f.context(async () => { throw new Error("denied"); }))).rejects.toThrow("denied");
+    expect(fs.readdirSync(f.root)).toEqual([]);
   });
   it("holds the lock across pending approval even when closed, and never starts a late effect", async () => {
     const f = fixture(); const entered = deferred(); const finish = deferred();

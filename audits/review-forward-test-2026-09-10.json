@@ -1,0 +1,303 @@
+{
+  "kind": "blind-guidance-forward-test-not-kiro-comparison",
+  "date": "2026-09-10",
+  "seed": "forward-20260910-literal-v2",
+  "reviewer": "Independent Codex subagent, without expected findings or parent conversation",
+  "interface": "Built Fabric library through checked TypeScript bridge; not Kiro CLI or its model",
+  "guidance": "skills/fabric-exec/references/review.md",
+  "scores": {
+    "review-infra": {
+      "expected": 5,
+      "reported": 5,
+      "truePositives": 5,
+      "falsePositives": 0,
+      "duplicates": 0,
+      "missed": [],
+      "precision": 1,
+      "recall": 1,
+      "fixturesUnchanged": true,
+      "oracle": {
+        "ok": true,
+        "defects": 5,
+        "falsePositiveControls": 3
+      }
+    },
+    "review-contracts": {
+      "expected": 2,
+      "reported": 2,
+      "truePositives": 2,
+      "falsePositives": 0,
+      "duplicates": 0,
+      "missed": [],
+      "precision": 1,
+      "recall": 1,
+      "fixturesUnchanged": true,
+      "oracle": {
+        "ok": true,
+        "defects": 2,
+        "falsePositiveControls": 3
+      }
+    }
+  },
+  "answer": {
+    "review-infra": {
+      "findings": [
+        {
+          "kind": "environment-key-mismatch",
+          "evidence": [
+            {
+              "path": "scripts/cleanup-c69e2e6d.mjs",
+              "line": 8,
+              "text": "  return config.environments.map((env, index) => ({env, key: config.apiKeys[index]}));"
+            },
+            {
+              "path": ".azure-pipelines/maintenance-c69e2e6d.json",
+              "line": 2,
+              "text": "  \"script\": \"scripts/cleanup-c69e2e6d.mjs\","
+            },
+            {
+              "path": ".azure-pipelines/maintenance-c69e2e6d.json",
+              "line": 4,
+              "text": "    \"staging\","
+            },
+            {
+              "path": ".azure-pipelines/maintenance-c69e2e6d.json",
+              "line": 5,
+              "text": "    \"production\""
+            },
+            {
+              "path": ".azure-pipelines/maintenance-c69e2e6d.json",
+              "line": 8,
+              "text": "    \"development-label\","
+            },
+            {
+              "path": ".azure-pipelines/maintenance-c69e2e6d.json",
+              "line": 9,
+              "text": "    \"staging-label\","
+            },
+            {
+              "path": ".azure-pipelines/maintenance-c69e2e6d.json",
+              "line": 10,
+              "text": "    \"production-label\""
+            }
+          ]
+        },
+        {
+          "kind": "cron-frequency",
+          "evidence": [
+            {
+              "path": "config/environments/production-c69e2e6d.json",
+              "line": 2,
+              "text": "  \"schedule\": \"* 15 * * 0-4\","
+            },
+            {
+              "path": "scripts/render.mjs",
+              "line": 8,
+              "text": "  return [{kind: \"CronJob\", schedule: config.schedule, image: config.image}];"
+            },
+            {
+              "path": "README.md",
+              "line": 6,
+              "text": "Notifications must run once at 15:00 Monday through Friday."
+            }
+          ]
+        },
+        {
+          "kind": "unused-alerts",
+          "evidence": [
+            {
+              "path": "scripts/render.mjs",
+              "line": 8,
+              "text": "  return [{kind: \"CronJob\", schedule: config.schedule, image: config.image}];"
+            },
+            {
+              "path": "config/environments/production-c69e2e6d.json",
+              "line": 9,
+              "text": "  \"alerts\": {"
+            },
+            {
+              "path": "config/environments/production-c69e2e6d.json",
+              "line": 10,
+              "text": "    \"enabled\": true,"
+            },
+            {
+              "path": "README.md",
+              "line": 5,
+              "text": "scripts/render.mjs consumes config/environments/production-c69e2e6d.json and must emit both CronJob and PrometheusRule resources when alerts are enabled."
+            }
+          ]
+        },
+        {
+          "kind": "validation-exit",
+          "evidence": [
+            {
+              "path": "scripts/validate-c69e2e6d.mjs",
+              "line": 8,
+              "text": "  JSON.parse(process.argv[2]);"
+            },
+            {
+              "path": "scripts/validate-c69e2e6d.mjs",
+              "line": 10,
+              "text": "} catch {"
+            },
+            {
+              "path": "scripts/validate-c69e2e6d.mjs",
+              "line": 11,
+              "text": "  console.log(false);"
+            },
+            {
+              "path": "scripts/validate-c69e2e6d.mjs",
+              "line": 12,
+              "text": "}"
+            },
+            {
+              "path": "README.md",
+              "line": 7,
+              "text": "Validation runs node scripts/validate-c69e2e6d.mjs with JSON text as its only argument; malformed JSON must exit nonzero."
+            }
+          ]
+        },
+        {
+          "kind": "expired-exemption",
+          "evidence": [
+            {
+              "path": "config/exemptions-c69e2e6d.json",
+              "line": 368,
+              "text": "    \"id\": \"EX-c69e2e6d-73\","
+            },
+            {
+              "path": "config/exemptions-c69e2e6d.json",
+              "line": 370,
+              "text": "    \"expires\": \"2029-01-01\""
+            },
+            {
+              "path": "README.md",
+              "line": 3,
+              "text": "Review date: 2030-06-15."
+            },
+            {
+              "path": "README.md",
+              "line": 8,
+              "text": "The exemptions in config/exemptions-c69e2e6d.json are invalid when expires is before the review date."
+            }
+          ]
+        }
+      ]
+    },
+    "review-contracts": {
+      "findings": [
+        {
+          "kind": "protected-version",
+          "evidence": [
+            {
+              "path": "scripts/cleanup-c69e2e6d.mjs",
+              "line": 5,
+              "text": "  const candidates = response.related.filter(item => response.version !== \"master\" && item.ageDays > 30);"
+            },
+            {
+              "path": "scripts/cleanup-c69e2e6d.mjs",
+              "line": 7,
+              "text": "    deleted: force ? candidates.map(item => item.id) : [],"
+            },
+            {
+              "path": ".ci/maintenance-c69e2e6d.json",
+              "line": 2,
+              "text": "  \"script\": \"scripts/cleanup-c69e2e6d.mjs\","
+            },
+            {
+              "path": ".ci/maintenance-c69e2e6d.json",
+              "line": 3,
+              "text": "  \"input\": \"config/response.json\","
+            },
+            {
+              "path": "config/response.json",
+              "line": 7,
+              "text": "      \"id\": \"protected\","
+            },
+            {
+              "path": "config/response.json",
+              "line": 9,
+              "text": "      \"version\": \"master\","
+            },
+            {
+              "path": "config/response.json",
+              "line": 10,
+              "text": "      \"ageDays\": 90"
+            },
+            {
+              "path": "README.md",
+              "line": 4,
+              "text": "Cleanup must preserve related artifacts whose version is master, even when older than 30 days. In dry runs it must report proposed removals, never claim completed deletion. deleted is a pure list of intended effects; no real service is contacted."
+            }
+          ]
+        },
+        {
+          "kind": "dry-run-reporting",
+          "evidence": [
+            {
+              "path": "scripts/cleanup-c69e2e6d.mjs",
+              "line": 7,
+              "text": "    deleted: force ? candidates.map(item => item.id) : [],"
+            },
+            {
+              "path": "scripts/cleanup-c69e2e6d.mjs",
+              "line": 8,
+              "text": "    logs: candidates.map(item => item.name + \":\" + item.version + \" removed.\"),"
+            },
+            {
+              "path": ".ci/maintenance-c69e2e6d.json",
+              "line": 2,
+              "text": "  \"script\": \"scripts/cleanup-c69e2e6d.mjs\","
+            },
+            {
+              "path": ".ci/maintenance-c69e2e6d.json",
+              "line": 3,
+              "text": "  \"input\": \"config/response.json\","
+            },
+            {
+              "path": ".ci/maintenance-c69e2e6d.json",
+              "line": 4,
+              "text": "  \"force\": false"
+            },
+            {
+              "path": "config/response.json",
+              "line": 15,
+              "text": "      \"version\": \"release-old\","
+            },
+            {
+              "path": "config/response.json",
+              "line": 16,
+              "text": "      \"ageDays\": 90"
+            },
+            {
+              "path": "README.md",
+              "line": 4,
+              "text": "Cleanup must preserve related artifacts whose version is master, even when older than 30 days. In dry runs it must report proposed removals, never claim completed deletion. deleted is a pure list of intended effects; no real service is contacted."
+            }
+          ]
+        }
+      ]
+    },
+    "diagnostics": {
+      "toolErrors": [
+        "My initial checked programs used console.log instead of returning a value. Both were rejected because console is unavailable and the program requires a return. Retrying with return succeeded.",
+        "fabric.help({topic:\"local\"}) was rejected by TypeScript because local is not a supported topic. topic:\"api\" succeeded."
+      ],
+      "confusingBehavior": [
+        "local.shell preserved Node exit codes but returned empty stdout and stderr for direct Node execution in both command and literal-script modes. Bash builtin output was captured normally.",
+        "Capturing Node output inside a Bash variable and printing it with printf restored the output. The wrapper saved and returned the Node exit status; stderr was intentionally combined into stdout. All reported execution verification used this wrapper."
+      ],
+      "verification": [
+        "Infra: observed incorrect environment/key pairings, a sole CronJob resource with alerts enabled, one expired exemption among 80 against the fixed review date, and malformed JSON printing false while exiting 0. Cron frequency and weekday mismatch were established from the rendered expression and README contract.",
+        "Contracts: the active dry run produced completed-removal logs with an empty deletion list. The force=true branch included the protected artifact in intended deletions. Mixed-case release names were rejected, runtime true enabled cleanup, and the actual validator entrypoint exited 1 for malformed JSON and 0 for valid JSON."
+      ],
+      "coverage": "Inspected all 11 enumerated infra files and all 8 contracts files, with no unread suffixes or unresolved relevant leads. Ignored vendor examples were excluded under the infra README contract. No fixture changes, network access, installation, credentials, persistent memory, or delegation."
+    }
+  },
+  "clarification": "Direct asynchronous Node output disappeared only under the surrounding Codex sandbox. The identical probe outside it preserved stdout, stderr and exit 9. Fixture verification used an explicit capture wrapper retaining exit status.",
+  "limitations": [
+    "No default-agent arm or measured Kiro credit usage.",
+    "The bridge did not apply the Kiro standing prompt or MCP tool description.",
+    "This tests guidance and API usability on synthetic fixtures; it does not prove general model superiority."
+  ]
+}

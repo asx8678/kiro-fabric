@@ -66,6 +66,17 @@ describe.skipIf(process.platform !== "linux" && process.platform !== "darwin")("
     expect(JSON.stringify(result).length).toBeLessThanOrEqual(1024);
     expect(JSON.stringify(await run({ command: "printf x", cwd, maxOutputChars: 256 })).length).toBeLessThanOrEqual(256);
   });
+  it("captures asynchronous child-runtime stdout/stderr and exit status in both input forms", async () => {
+    const { cwd } = await fixture();
+    const script = 'console.log("node stdout"); console.error("node stderr"); process.exitCode = 9;';
+    const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+    for (const input of [
+      { command: `${quote(process.execPath)} -e ${quote(script)}` },
+      { script: '"$1" -e "$2"', interpreter: "bash" as const, args: [process.execPath, script] },
+    ]) {
+      expect(await run({ ...input, cwd, settle: true })).toMatchObject({ ok: false, exitCode: 9, stdout: "node stdout\n", stderr: "node stderr\n", truncated: false });
+    }
+  });
   it("rejects invalid bounds and spawn failures without command/cwd evidence", async () => {
     const { cwd } = await fixture();
     for (const timeoutMs of [0, 900001, NaN, 1.5]) await expect(run({ command: "true", cwd, timeoutMs })).rejects.toThrow("timeoutMs");
