@@ -341,6 +341,9 @@ const GUEST_SETUP = `
     get: (args) => call("state.get", args), set: (args) => call("state.set", args),
     list: (args = {}) => call("state.list", args), delete: (args) => call("state.delete", args),
   });
+  globalThis.web = objectFreeze({
+    search: (args) => call("web.search", args), open: (args) => call("web.open", args),
+  });
   globalThis.mcp = objectFreeze({
     servers: (args = {}) => call("mcp.$servers", args),
     tools: (args) => call("mcp.$tools", args),

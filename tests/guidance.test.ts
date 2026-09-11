@@ -31,6 +31,19 @@ const workingRules = [
 ];
 
 describe("compiled task guidance", () => {
+  it("advertises browser-backed grounding without changing authorization or trusting page instructions", async () => {
+    for (const text of [AGENT_PROMPT, BUNDLED_GUIDANCE.skill, BUNDLED_GUIDANCE.guide]) {
+      expect(text).toContain("web.search"); expect(text).toContain("web.open");
+      expect(text).toContain("primary sources"); expect(text).toContain("untrusted evidence");
+      expect(text).not.toContain("Web/LSP/delegation");
+    }
+    const provider = new FabricBootstrapProvider();
+    const overview = await provider.invoke("help", { topic: "overview" }, { cwd: root });
+    expect(JSON.stringify(overview)).toContain("web.search");
+    expect(AGENT_PROMPT).toContain("normal network approval");
+    const code = BUNDLED_GUIDANCE.guide.split("## Browser-backed web grounding")[1]!.match(/```ts\n([\s\S]*?)```/)![1]!;
+    expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors).toEqual([]);
+  });
   it("ships a finding proof gate and does not confuse validation with correctness", () => {
     for (const clause of ["Finding-evidence gate", "concrete trigger", "observable consequence", "counterexample checked", "suspected/unverified", "maintenance concern", "missed saves", "snapshot semantics", "loop has no iterations", "variable groups", "renders correctly"])
       expect(BUNDLED_GUIDANCE.review + BUNDLED_GUIDANCE.recipes).toContain(clause);

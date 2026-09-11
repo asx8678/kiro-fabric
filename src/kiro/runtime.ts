@@ -2,6 +2,7 @@ import path from "node:path";
 import { ReviewProvider } from "../providers/review-provider.js";
 import { ProbeProvider } from "../providers/probe-provider.js";
 import type { ManagedSearchExecutable } from "../providers/local-executable.js";
+import { WebProvider, type BrowserHarnessExecutable } from "../providers/web-provider.js";
 import { ActionRegistry } from "../core/action-registry.js";
 import {
   DEFAULT_FABRIC_CONFIG,
@@ -30,6 +31,7 @@ export interface KiroRuntimeOptions {
   /** Explicit retained probe storage outside source; defaults beside local locks. */
   probesRoot?: string;
   managedSearch?: ManagedSearchExecutable;
+  browserHarnessExecutable?: BrowserHarnessExecutable;
   memoryRoot?: string;
   memoryNamespace?: string;
   stateRoot?: string;
@@ -71,6 +73,17 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   registry.register(new KiroPowerArtifactsProvider(artifacts, config.artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));
   else registry.markUnavailable("mcp", "disabled by configuration");
+  if (config.web.enabled) {
+    try {
+      registry.register(new WebProvider({
+        ...(options.browserHarnessExecutable ? { executable: options.browserHarnessExecutable } : { executablePath: config.web.command }),
+        searchTimeoutMs: config.web.searchTimeoutMs,
+        openTimeoutMs: config.web.openTimeoutMs,
+      }));
+    } catch (error) {
+      registry.markUnavailable("web", error instanceof Error ? error.message : "browser-harness-js is unavailable");
+    }
+  } else registry.markUnavailable("web", "disabled by configuration");
   if (options.memoryRoot && config.memory.enabled) {
     registry.register(new KiroMemoryProvider({
       cwd: options.cwd,

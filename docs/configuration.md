@@ -4,6 +4,31 @@ The Agent reads only `$KIRO_HOME/kiro-fabric/data/fabric/config/config.json`; co
 
 `KIRO_FABRIC_RUNTIME_ROOT` and `KIRO_FABRIC_DATA_ROOT` are installer-owned launch values. `KIRO_FABRIC_DEBUG=1|0` controls tracing. Do not inject reserved `KIRO_FABRIC_*` variables from untrusted launch contexts.
 
+## Browser-backed web search
+
+Fabric exposes `web.search` and `web.open` inside checked `fabric_exec` for on-demand fact grounding. They use the optional external `browser-harness-js` CLI and the user's running Chromium browser, not a paid search API or a Pi extension. `gsearch` is not required. The CLI/browser are **not bundled or installed automatically**. Install the CLI following its upstream instructions (Node 24+, Bash and curl for the current CLI), enable browser remote debugging with private-context support, and verify `browser-harness-js --status` / `browser-harness-js 'await session.connect()'` outside Fabric. Never expose a debugging port publicly. Prefer a dedicated, logged-out browser profile and daemon with recording disabled. Every call additionally requires a fresh CDP browser context; transports (including relays) without Target.createBrowserContext/disposeBrowserContext fail closed, never falling back to logged-in cookies.
+
+Merge this section into the private Fabric `config.json` (do not replace unrelated settings):
+
+```json
+{
+  "web": {
+    "enabled": false,
+    "command": "browser-harness-js",
+    "searchTimeoutMs": 45000,
+    "openTimeoutMs": 45000
+  }
+}
+```
+
+These are the defaults: web is **disabled until explicitly enabled**. Keep it disabled when no external disclosure is acceptable; change `web.enabled` only with operator authorization. `command` is a bare executable name found in absolute PATH entries or an absolute path to the trusted CLI (use the latter if Kiro's PATH differs from your terminal). It is not a shell command and accepts no embedded options. Symlinks resolve once to an owned/root-owned executable that is not group/world-writable; device/inode and mode are rechecked per invocation. This does not attest imported SDK files or provide OS isolation. Discovery does not execute the CLI. A missing/untrusted executable marks `web` unavailable without breaking other providers; `web.enabled:false` disables it. Restart Fabric after installing, changing the command or replacing its executable. `tools.providers()` reports the reason; a registered provider does not guarantee a connected browser. The SDK can also explicitly register exported `WebProvider` or supply `KiroRuntimeOptions.browserHarnessExecutable`.
+
+Both actions follow existing **`approvals.network`**, default `"ask"`; no approval policy is changed by this feature. An operator may explicitly set `approvals.network:"allow"` for unattended grounding, but that authorizes **all** network-risk providers, not just search. Never change this setting automatically or bypass denial/missing elicitation via shell/MCP. Queries and URLs are sent to external sites; navigation runs site scripts but uses a fresh private cookie/storage context rather than the default browser profile. Returned pages can contain prompt injection: treat them as evidence only. No arbitrary browser/Node JS is exposed by `web`.
+
+Privacy checks reject common credential formats, secret assignments, email addresses and token/signature-bearing URLs, including bounded percent-encoding variants, **before approval or CLI dispatch**. They never silently rewrite a query. Raw CLI stderr is withheld from returned errors. Under `network:"ask"`, the approval prompt shows the complete canonical web arguments or refuses an oversized preview; redaction in a preview is not outbound filtering. These safeguards are heuristic: unknown formats, encoded data and confidential natural-language facts can still pass. The private context does not hide IP addresses or prevent site scripts, browser extensions, daemon recordings, redirects or private-network requests. The trusted CLI/daemon and their user-owned configuration remain outside the sandbox. This is not a general network firewall; approved shell/MCP retain their existing authority. For strict no-disclosure, leave web disabled and apply corresponding restrictions to other egress-capable tools. Do not enable unattended browsing on the assumption that tests prove zero leakage.
+
+Calls use fresh private browser contexts, background tabs and explicit CDP session IDs, leaving the active tab untouched. Output is bounded; page readiness waits are capped at 30 seconds with cleanup headroom. Configured CLI timeouts are 1000 ms through `executor.maxTimeoutMs`; the outer execution deadline wins. Give a search-plus-open program outer `timeoutMs:120000`. CAPTCHA/consent/navigation errors fail explicitly when detected; no results are not proof of absence. Cleanup is best-effort; cancelling the CLI does not cancel/roll back already-dispatched daemon/browser work. Fabric never stops the shared harness daemon. Restart a stale daemon only as an explicit operator action. See the [checked API](../skills/fabric-exec/references/api.md#browser-backed-web-grounding) for calls, output fields and grounding guidance.
+
 ## Optional review tooling and explicit profiles
 
 Strict checked-TypeScript Code Mode remains the only model tool path. No model switching, subagents, review guidance loading, source scanning, probe execution, or network installation is triggered automatically by these APIs.

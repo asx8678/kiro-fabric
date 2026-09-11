@@ -42,6 +42,13 @@ export interface FabricMcpConfig {
   callTimeoutMs: number;
 }
 
+export interface FabricWebConfig {
+  enabled: boolean;
+  command: string;
+  searchTimeoutMs: number;
+  openTimeoutMs: number;
+}
+
 export interface FabricMemoryConfig {
   enabled: boolean;
   maxEntries: number;
@@ -70,6 +77,7 @@ export interface FabricConfig {
   executor: FabricExecutorConfig;
   approvals: FabricApprovalConfig;
   mcp: FabricMcpConfig;
+  web: FabricWebConfig;
   memory: FabricMemoryConfig;
   state: FabricStateConfig;
   artifacts: FabricArtifactsConfig;
@@ -109,6 +117,12 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
     disableOAuth: true,
     callTimeoutMs: 120_000,
   },
+  web: {
+    enabled: false,
+    command: "browser-harness-js",
+    searchTimeoutMs: 45_000,
+    openTimeoutMs: 45_000,
+  },
   memory: { enabled: true, maxEntries: 128, maxValueChars: 16_000 },
   state: {
     enabled: true,
@@ -135,6 +149,8 @@ const integer = (value: unknown, fallback: number, minimum: number, maximum: num
     : fallback;
 const bool = (value: unknown, fallback: boolean): boolean =>
   typeof value === "boolean" ? value : fallback;
+const boundedString = (value: unknown, fallback: string, maximum: number): string =>
+  typeof value === "string" && value.trim().length > 0 && !value.includes("\0") && value.length <= maximum ? value : fallback;
 const approval = (value: unknown, fallback: FabricApprovalMode): FabricApprovalMode =>
   value === "allow" || value === "ask" || value === "deny" ? value : fallback;
 
@@ -144,6 +160,7 @@ const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
   executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxConcurrentExecutions", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
   approvals: ["read", "write", "execute", "network"],
   mcp: ["enabled", "disableOAuth", "callTimeoutMs"],
+  web: ["enabled", "command", "searchTimeoutMs", "openTimeoutMs"],
   memory: ["enabled", "maxEntries", "maxValueChars"],
   state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
@@ -217,6 +234,7 @@ export const normalizeFabricConfig = (
   const executor = record(root.executor) ?? {};
   const approvals = record(root.approvals) ?? {};
   const mcp = record(root.mcp) ?? {};
+  const web = record(root.web) ?? {};
   const memory = record(root.memory) ?? {};
   const state = record(root.state) ?? {};
   const artifacts = record(root.artifacts) ?? {};
@@ -255,6 +273,12 @@ export const normalizeFabricConfig = (
       ...(typeof mcp.configPath === "string" && mcp.configPath ? { configPath: mcp.configPath } : defaults.mcp.configPath ? { configPath: defaults.mcp.configPath } : {}),
       disableOAuth: bool(mcp.disableOAuth, defaults.mcp.disableOAuth),
       callTimeoutMs: integer(mcp.callTimeoutMs, defaults.mcp.callTimeoutMs, 1_000, maxTimeoutMs),
+    },
+    web: {
+      enabled: bool(web.enabled, defaults.web.enabled),
+      command: boundedString(web.command, defaults.web.command, 4_096),
+      searchTimeoutMs: integer(web.searchTimeoutMs, defaults.web.searchTimeoutMs, 1_000, maxTimeoutMs),
+      openTimeoutMs: integer(web.openTimeoutMs, defaults.web.openTimeoutMs, 1_000, maxTimeoutMs),
     },
     memory: {
       enabled: bool(memory.enabled, defaults.memory.enabled),

@@ -96,6 +96,21 @@ describe("Fabric approval and projection", () => {
     expect(message).toBe("");
   });
 
+  it("shows exact web queries and URLs including the full suffix, or refuses oversized approval", async () => {
+    let message = "";
+    const bridge = new KiroPowerApprover({ supported: () => true, async request(options) { message = options.message; return { action: "accept", approved: true }; } });
+    const approver = new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, bridge, "/workspace");
+    const web = { ...action, provider: "web", ref: "web.open", name: "open", risk: "network" as const };
+    const url = "https://example.com/source?query=" + "x".repeat(1600) + "&suffix=visible";
+    await approver.approve(web, { url });
+    expect(message).toContain(url); expect(message).toContain("Exact web arguments");
+    await approver.approve({ ...web, name: "search", ref: "web.search" }, { query: "public documentation" });
+    expect(message).toContain("public documentation");
+    message = "";
+    await expect(approver.approve(web, { url: "x".repeat(12000) })).rejects.toThrow("denied or unavailable");
+    expect(message).toBe("");
+  });
+
   it("enforces explicit policy denial without elicitation", async () => {
     let requested = false;
     const bridge = new KiroPowerApprover({ supported: () => true, async request() { requested = true; return { action: "accept", approved: true }; } });

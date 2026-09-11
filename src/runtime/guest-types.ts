@@ -79,6 +79,13 @@ declare const state: Readonly<{
   list(args?: { limit?: number }): Promise<JsonValue>;
   delete(args: { key: string; expectedRevision?: number }): Promise<JsonValue>;
 }>;
+type WebSearchResult = { title: string; url: string; snippet: string };
+type WebSearchOutput = { source: "google"; query: string; results: WebSearchResult[] };
+type WebOpenOutput = { url: string; finalUrl: string; title: string; text: string; chars: number; truncated: boolean; selector: string };
+declare const web: Readonly<{
+  search(args: { query: string; limit?: number }): Promise<WebSearchOutput>;
+  open(args: { url: string; selector?: string; wait?: "networkIdle" | "almostIdle" | "load"; settleMs?: number; maxChars?: number }): Promise<WebOpenOutput>;
+}>;
 interface FabricMcpToolSummary {
   server: string;
   name: string;

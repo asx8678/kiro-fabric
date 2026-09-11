@@ -6,6 +6,14 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 
 - `tests/installer-capability-fixture.ts` — native inode-anchored directory traversal probe for crash-recovery qualification.
 
+## Browser-backed fact grounding
+
+- `src/providers/web-provider.ts` — opt-in trusted CLI discovery, bounded execution, closed contracts, private-context requests and withheld raw diagnostics.
+- `src/providers/web-privacy.ts` — bounded heuristic secret/PII and token-URL rejection before dispatch; not semantic DLP.
+- `src/providers/web-snippets.ts` — fixed JSON-escaped CDP recipes, per-call tabs, deadline cleanup, search extraction and bounded page text.
+- `tests/web-provider.test.ts` — executable trust, process bounds, configuration, checked guest/runtime registration and denied-before-launch controls.
+- `tests/web-snippets.test.ts` — actual generated JS with deterministic CDP/DOM fixtures, isolated parallel tabs, error paths and late-creation cleanup.
+
 ## Review reliability and explicit profiles
 
 These additions preserve Code Mode and ordinary approvals. Structural evidence accounting is not semantic validation or proof of live-agent superiority.

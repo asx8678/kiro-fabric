@@ -30,6 +30,21 @@ have host access, including writes and network access. Explicit `ask`/`deny`
 overrides are preserved; direct write/network approvals remain `ask`. See
 [approval configuration](docs/configuration.md#clients-without-roots-or-elicitation).
 
+## Internet grounding
+
+Fabric can search and read sources whenever facts need verification:
+
+```ts
+const hits = await web.search({ query: "latest TypeScript release", limit: 3 });
+const first = hits.results[0];
+return first ? await web.open({ url: first.url, maxChars: 12000 }) : hits;
+```
+
+Run inside `fabric_exec` with `timeoutMs:120000`. Requires the optional
+`browser-harness-js` CLI and a Chromium connection supporting private contexts; no search API key. Web is opt-in (disabled by default). Known secrets are rejected, but arbitrary confidential prose cannot be reliably detected.
+The agent is guided to verify primary sources and cite URLs. Existing network
+approvals still apply. See [setup and privacy](docs/configuration.md#browser-backed-web-search).
+
 ## Evidence-led reviews
 
 Repository reviews now use a coverage ledger and an on-demand `fabric.help({topic:"review"})` workflow: follow scripts, environment overrides and configuration consumers; verify suspected defects and report uninspected scope. Routine answer brevity does not limit audits. This is agent guidance, not a guarantee that a model will find every defect.

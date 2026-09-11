@@ -20,6 +20,8 @@ export { ReviewProvider } from "./providers/review-provider.js";
 export { buildRunProvenance, parseRunProvenanceDeclaration } from "./kiro/run-provenance.js";
 export type { RunProvenanceInput, RunProvenanceConfiguredInput, RunProvenanceObservedInput, RunProvenanceManifest } from "./kiro/run-provenance.js";
 export { ProbeProvider, ProbeRunExitError } from "./providers/probe-provider.js";
+export { WebProvider, browserHarnessEnvironment, resolveBrowserHarnessExecutable, verifyBrowserHarnessExecutable } from "./providers/web-provider.js";
+export type { BrowserHarnessExecutable, WebOpenOutput, WebSearchOutput, WebSearchResult } from "./providers/web-provider.js";
 export { PROBE_ACTION_DESCRIPTORS, PROBE_GUEST_DECLARATIONS } from "./providers/probe-contract.js";
 export { REVIEW_GUEST_DECLARATIONS } from "./providers/review-contract.js";
 export type * from "./providers/review-contract.js";
@@ -48,6 +50,7 @@ export type {
   FabricArtifactsConfig,
   FabricExecutorConfig,
   FabricMcpConfig,
+  FabricWebConfig,
   FabricMemoryConfig,
   FabricConfig,
   /** @deprecated Use FabricConfig. */

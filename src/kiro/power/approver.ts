@@ -120,14 +120,21 @@ export class KiroPowerFabricApprover implements FabricExecutionApprover {
     const localReview = action.provider === "local" && (action.risk === "write" || action.risk === "execute")
       ? typeof args.review === "string" ? args.review : (() => { throw new Error("Local effect lacks canonical review material"); })()
       : undefined;
+    // Web previews must show the exact outbound query/URL, not a redacted
+    // URL whose hidden parameters could be mistaken for a harmless request.
+    // Provider preparation rejects recognized secrets before this point.
+    const webReview = action.provider === "web" && (action.name === "search" || action.name === "open")
+      ? `Exact web arguments (sent to external sites): ${fabricJsonText(args)}`
+      : undefined;
+    const exactReview = localReview ?? webReview;
     // Capture review/identity now, without prompting or re-reading policy later.
     const ref = action.ref;
     const request = {
       risk: action.risk,
       provider: action.provider,
       action: action.name,
-      summary: `Canonical request: sha256:${identity.digest} (${identity.chars} chars)\n${localReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
-      ...(localReview === undefined ? {} : { reviewable: true }),
+      summary: `Canonical request: sha256:${identity.digest} (${identity.chars} chars)\n${exactReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
+      ...(exactReview === undefined ? {} : { reviewable: true }),
       ...(signal ? { signal } : {}),
     };
     return {
