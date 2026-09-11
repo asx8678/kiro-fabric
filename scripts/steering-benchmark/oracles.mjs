@@ -7,6 +7,7 @@ import { object, sha, canonical, inventory, checkScope, regularText, putFiles, e
 import { collect } from './stream.mjs';
 import { BUG_CASES, probeProject } from './projects.mjs';
 import { REVIEW_CASES, scoreReview } from './reviews.mjs';
+import { REVIEW_REGRESSION_CASES, scoreReviewRegressions } from './review-regressions.mjs';
 
 /** @typedef {import('./cases.mjs').Case} Case */
 /** @typedef {import('./stream.mjs').Evidence} Evidence */
@@ -48,6 +49,7 @@ export function validateAnswer(s, text, evidence) {
     return undefined;
   }
   const answer = JSON.parse(text); // Raw JSON only: no Markdown repair or fence stripping.
+  if (REVIEW_REGRESSION_CASES.includes(s.id)) return scoreReviewRegressions(s, answer);
   if (REVIEW_CASES.includes(s.id)) return scoreReview(s, answer);
   if (s.id !== 'fabric-help') assert.deepEqual(answer, s.expected, 'exact answer/schema');
   else {
@@ -101,7 +103,13 @@ export async function validate(options) {
     const score = validateAnswer(s, evidence.finalText, evidence);
     if (score) {
       result.review = score;
+      if (REVIEW_REGRESSION_CASES.includes(s.id)) {
+        const regression = /** @type {import('./review-regressions.mjs').RegressionDiagnostics} */ (score['regressions']);
+        assert.ok(regression.violations === 0 && regression.scenarioCoverage === 1, 'controlled review regression scenarios');
+      }
       assert.ok(score.truePositives === score.expected && score.falsePositives === 0 && score.duplicates === 0, 'review recall/precision');
+      assert.ok(!score.quality || score.quality.violations === 0, 'controlled review claim adherence');
+      assert.ok(!score.calibration || (score.calibration.violations === 0 && score.calibration.validatedRecall === 1), 'controlled review severity/calibration');
     }
   });
   check('scope', () => { const after = inventory(workspace); checkScope(before, after, s.allowed); result.afterDigest = sha(canonical(after)); });

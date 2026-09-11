@@ -1,6 +1,9 @@
+import { createCheckpointJournal, fabricFailureMetadata, FabricCompilerTimeoutError, FabricRepairError } from "./core/repair-error.js";
+import type { FabricFailureMetadata, FabricCheckpointHandle } from "./protocol.js";
 import type { FabricConfig } from "./config.js";
 import { throwIfAbortedOrExpired } from "./async-settlement.js";
 import { LocalShellExitError, type LocalShellResult } from "./providers/local-shell.js";
+import { ProbeRunExitError } from "./providers/probe-provider.js";
 import { ActionRegistry, type FabricCallAudit } from "./core/action-registry.js";
 import type { FabricInvocationContext, ResolvedFabricAction } from "./protocol.js";
 import { fabricGuestDeclarations } from "./runtime/guest-types.js";
@@ -55,6 +58,8 @@ export interface FabricExecutionResult {
   audits: FabricCallAudit[];
   elapsedMs: number;
   error?: string;
+  failure?: FabricFailureMetadata;
+  checkpoints?: FabricCheckpointHandle[];
   typeErrors?: FabricTypeError[];
   /** Last ordinary nonzero shell exit, separate from error text and telemetry. */
   lastShellFailure?: LocalShellResult;
@@ -174,8 +179,10 @@ export class FabricExecutionService {
     } catch (error) {
       compileSpan?.end({ failed: true });
       const aborted = options.signal?.aborted === true;
-      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: aborted ? "aborted" : "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
-      return { status: aborted ? "aborted" : "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: aborted ? "Execution cancelled" : error instanceof Error ? error.message : String(error), effectiveTimeoutMs };
+      const compileStatus = aborted ? "aborted" : error instanceof FabricCompilerTimeoutError ? "timed_out" : "failed";
+      const failure = fabricFailureMetadata(error);
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: compileStatus, elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
+      return { status: compileStatus, success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: aborted ? "Execution cancelled" : error instanceof Error ? error.message : String(error), ...(failure ? { failure } : {}), effectiveTimeoutMs };
     }
     compileSpan?.end({ errors: checked.errors.length });
     if (checked.errors.length) {
@@ -183,6 +190,8 @@ export class FabricExecutionService {
       return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: "TypeScript validation failed", typeErrors: checked.errors, effectiveTimeoutMs };
     }
 
+    const checkpoints = createCheckpointJournal();
+    let interruptedFailure: FabricFailureMetadata | undefined;
     const audits: FabricCallAudit[] = [];
     const auditBudget = { bytes: 0 };
     let providerCalls = 0;
@@ -198,6 +207,8 @@ export class FabricExecutionService {
     let lastShellFailure: LocalShellResult | undefined;
     const providerContext = (signal: AbortSignal, deadline: import("./runtime/deadline.js").FabricDeadline) => ({
       cwd: this.cwd,
+      checkpoints,
+      maxResultChars: this.config.executor.maxNestedResultChars,
       signal,
       deadline,
       ...(options.bootstrap ? { bootstrap: options.bootstrap } : {}),
@@ -243,7 +254,7 @@ export class FabricExecutionService {
           switchRequested = true;
         } else if (!actionRef.startsWith("fabric.")) {
           if (switchRequested) throw new Error("Workspace calls cannot follow a pending workspace switch; use the next execution");
-          const requiresWorkspace = /^(local|memory|state)\./u.test(actionRef);
+          const requiresWorkspace = /^(local|memory|state|review|probe)\./u.test(actionRef);
           if ((options.workspaceUnavailable === true || (options.workspaceBound === false && requiresWorkspace)) && actionRef !== "artifacts.read") throw new Error("Verified workspace binding is required; use fabric.workspace in a separate bootstrap execution");
           workspaceCalls = true;
         }
@@ -292,7 +303,7 @@ export class FabricExecutionService {
             } finally { pendingApprovals -= 1; }
           },
         });
-        const localEffect = actionRef === "local.shell" || actionRef === "local.write" || actionRef === "local.edit";
+        const localEffect = ["local.shell", "local.write", "local.edit", "probe.create", "probe.write", "probe.run", "review.begin", "review.update", "review.finding", "review.reconcile", "review.end"].includes(actionRef);
         const invocation = localEffect
           ? localEffectTail.then(invoke, () => { throw new Error("Local effect queue stopped after a failed predecessor; inspect state before a new execution"); })
           : invoke();
@@ -302,11 +313,11 @@ export class FabricExecutionService {
           localEffectTail = invocation;
           void localEffectTail.catch(() => {});
         }
-        if (actionRef.startsWith("local.")) localSettlements.add(invocation);
+        if (/^(local|mcp|probe|review)\./u.test(actionRef)) localSettlements.add(invocation);
         let value: unknown;
         try { value = await invocation; }
         catch (error) {
-          if (actionRef === "local.shell" && error instanceof LocalShellExitError) lastShellFailure = error.result;
+          if ((actionRef === "local.shell" || actionRef === "probe.run") && (error instanceof LocalShellExitError || error instanceof ProbeRunExitError)) lastShellFailure = error.result;
           throw error;
         }
         finally { localSettlements.delete(invocation); }
@@ -314,6 +325,13 @@ export class FabricExecutionService {
         return value;
       } catch (error) {
         if (bridgeSpan) bridgeEnd = { ok: false, ...traceFailureMetadata("provider_failed") };
+        const failure = fabricFailureMetadata(error);
+        if (failure) {
+          const handles = checkpoints.snapshot();
+          const enriched = { ...failure, ...(handles.length ? { checkpoints: handles } : {}) };
+          if (signal.aborted && (interruptedFailure?.effectOutcome !== "uncertain" || enriched.effectOutcome === "uncertain")) interruptedFailure = enriched;
+          throw new FabricRepairError(error instanceof Error ? error.message : "Provider failed", enriched);
+        }
         throw error;
       } finally {
         bridgeSpan?.end(bridgeEnd);
@@ -374,6 +392,10 @@ export class FabricExecutionService {
       // on the interval timer for the tail of a finished run.
       tracer.flush();
     }
+    const handles = checkpoints.snapshot();
+    const failure: FabricFailureMetadata | undefined = result.failure
+      ?? ((status === "timed_out" || status === "aborted") ? interruptedFailure : undefined)
+      ?? (status !== "succeeded" && handles.length ? { code: status === "timed_out" ? "timeout" : "provider_error", phase: "execution", dispatchState: "dispatched", effectOutcome: "uncertain" } : undefined);
     return {
       status,
       success: status === "succeeded",
@@ -382,6 +404,8 @@ export class FabricExecutionService {
       audits,
       elapsedMs: performance.now() - started,
       ...(outputError ? { error: outputError } : {}),
+      ...(handles.length ? { checkpoints: handles } : {}),
+      ...(status !== "succeeded" && failure ? { failure: { ...failure, ...(status === "timed_out" ? { code: "timeout" as const } : {}), ...(handles.length ? { checkpoints: handles } : {}) } } : {}),
       ...(status === "failed" && lastShellFailure ? { lastShellFailure } : {}),
       effectiveTimeoutMs: result.effectiveTimeoutMs,
     };

@@ -22,6 +22,7 @@ vi.mock("@modelcontextprotocol/sdk/server/index.js", () => ({ Server: class {
 vi.mock("@modelcontextprotocol/sdk/server/stdio.js", () => ({ StdioServerTransport: class {} }));
 
 import { AGENT_PROMPT } from "../scripts/agent-profile.mjs";
+import { BUNDLED_GUIDANCE } from "../src/kiro/generated-guidance.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { createKiroMcpServer } from "../src/kiro/mcp-server.js";
 import { normalizeFabricConfig } from "../src/config.js";
@@ -30,8 +31,8 @@ import type { KiroWorkspaceSnapshot } from "../src/kiro/power/workspace-context.
 
 const temporary: string[] = [];
 const servers: Array<{ close(): Promise<void> }> = [];
-beforeEach(() => { wire.handlers.clear(); wire.approve = false; wire.elicitation = true; wire.forms.length = 0; wire.onForm = undefined; });
-afterEach(async () => { await Promise.all(servers.splice(0).map((server) => server.close())); vi.restoreAllMocks(); for (const root of temporary.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+beforeEach(() => { vi.unstubAllEnvs(); wire.handlers.clear(); wire.approve = false; wire.elicitation = true; wire.forms.length = 0; wire.onForm = undefined; });
+afterEach(async () => { await Promise.all(servers.splice(0).map((server) => server.close())); vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of temporary.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
 const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "data" | undefined = undefined, execute?: "allow" | "ask" | "deny") => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "strict-bootstrap-")); temporary.push(base);
@@ -58,28 +59,41 @@ const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "
 };
 
 describe("strict checked workspace bootstrap", () => {
-  it.each(["absent", "root", "nested"] as const)("runs the generated first inspection with a %s README, then reads only discovered paths", async (location) => {
+  it("returns all compiler failures with one repair hint and executes no partial program", async () => {
+    const f = await fixture();
+    const assignments = Array.from({ length: 50 }, (_, index) => `out["key${index}"] = ${index};`).join("\n");
+    const failed = await f.call('await local.write({path:"not-executed.txt",content:"never"});\nconst out = {};\n' + assignments + '\nreturn out;');
+    expect(failed.isError).toBe(true);
+    const value = f.value(failed);
+    expect(value.typeErrors).toHaveLength(50);
+    expect(value.typeErrors.every((error: { code: number }) => error.code === 7053)).toBe(true);
+    expect(value.typeErrors.filter((error: { hint?: string }) => error.hint !== undefined)).toHaveLength(1);
+    expect(failed.content[0].text).not.toContain("artifact ka_");
+    expect(wire.forms).toHaveLength(0);
+    expect(fs.existsSync(path.join(f.projects[0]!, "not-executed.txt"))).toBe(false);
+    const repaired = await f.call('const out: JsonObject = {};\n' + assignments + '\nreturn out;');
+    expect(repaired.isError).not.toBe(true);
+    expect(f.value(repaired)).toEqual(Object.fromEntries(Array.from({ length: 50 }, (_, index) => [`key${index}`, index])));
+  });
+
+  it.each(["absent", "root", "nested"] as const)("discovers and reads a %s README in one checked first inspection", async (location) => {
     const f = await fixture();
     const root = f.projects[0]!;
     const expectedPath = location === "absent" ? undefined : location === "root" ? "README.md" : "app/README.md";
     if (location === "nested") fs.mkdirSync(path.join(root, "app"));
     if (expectedPath) fs.writeFileSync(path.join(root, expectedPath), "# Discovered project\n");
-    const code = AGENT_PROMPT.match(/\{\s*code:\s*'([^']+)'\s*\}/)?.[1];
+    expect(AGENT_PROMPT).toContain("discovery -> bounded observed starter reads in the same exec");
+    const code = BUNDLED_GUIDANCE.review.match(/```ts\n(\/\/ Recipe: initial review evidence\n[\s\S]*?)\n```/)?.[1];
     expect(code).toBeDefined();
     const first = await f.call(code!);
     expect(first.isError, first.content[0].text).not.toBe(true);
-    expect(f.value(first)).toMatchObject({ entries: expect.arrayContaining([{ path: "fixture.txt", type: "file" }]), truncated: false });
-    // Listing is shallow: a nested README must be discovered, not guessed.
-    if (location === "nested") expect(f.value(first).entries).not.toContainEqual({ path: expectedPath, type: "file" });
-    const discovery = await f.call('return await local.find({pattern:"README*",path:".",limit:20});');
-    expect(discovery.isError, discovery.content[0].text).not.toBe(true);
-    const found = f.value(discovery);
-    expect(found).toEqual({ scope: { path: ".", glob: "README*", hidden: false, ignoreFiles: true }, paths: expectedPath ? [expectedPath] : [], truncated: false });
-    for (const discoveredPath of found.paths) {
-      const read = await f.call('return await local.read({path:payloads.path,limit:80});', { path: discoveredPath });
-      expect(read.isError, read.content[0].text).not.toBe(true);
-      expect(f.value(read)).toMatchObject({ path: expectedPath, text: "# Discovered project\n", truncated: false });
-    }
+    const result = f.value(first);
+    expect(result.manifest).toMatchObject({ scope: { path: ".", hidden: true, ignoreFiles: true }, truncated: false });
+    expect(result.manifest.paths).toEqual(expect.arrayContaining(expectedPath ? ["fixture.txt", expectedPath] : ["fixture.txt"]));
+    expect(result.unclassified).toEqual(["fixture.txt"]);
+    expect(result.help).toEqual({ topic: "review", text: BUNDLED_GUIDANCE.review, truncated: false });
+    const files = result.packets.flatMap((packet: { evidence: { files: unknown[] } }) => packet.evidence.files);
+    expect(files).toEqual(expectedPath ? [expect.objectContaining({ path: expectedPath, source: "1: # Discovered project", truncated: false })] : []);
     expect(wire.forms).toHaveLength(0);
   });
 
@@ -113,6 +127,20 @@ describe("strict checked workspace bootstrap", () => {
     expect(wire.forms).toHaveLength(0);
   });
 
+  it("reports launch declarations without promoting them to observed guidance or routing", async () => {
+    vi.stubEnv("KIRO_FABRIC_RUN_DECLARATION", JSON.stringify({ guidanceMode: "minimal", profile: "bench", prompt: "private prompt must not be displayed", resources: [], hooks: [], observed: { routing: { actualModel: "forged" }, guidanceOutputs: [{ reference: "x", output: "x" }] } }));
+    const f = await fixture();
+    const response = await f.call('return await fabric.info();');
+    expect(response.isError, response.content[0].text).not.toBe(true);
+    const info = f.value(response);
+    expect(info.runProvenance.configured).toMatchObject({ evidence: "unverified-declaration", guidanceMode: "minimal", prompt: { status: "known" }, resources: { count: 0 } });
+    expect(info.runProvenance.observed).toMatchObject({ evidence: "server-observation", runtimeVersion: { status: "known" }, prompt: { status: "unknown" }, guidanceDelivery: { status: "unknown" }, routing: { status: "unknown", actualModel: null, actualEffort: null } });
+    expect(response.content[0].text).not.toContain("private prompt must not be displayed");
+    expect(response.content[0].text).not.toContain("forged");
+    vi.stubEnv("KIRO_FABRIC_RUN_DECLARATION", JSON.stringify({ guidanceMode: "review" }));
+    expect(f.value(await f.call('return await fabric.info();')).runProvenance.manifestDigest).toBe(info.runProvenance.manifestDigest);
+  });
+
   it("advertises exact hot local shapes beside the model-visible execution tool", async () => {
     await fixture();
     const listing = await wire.handlers.get(ListToolsRequestSchema)!({ params: {} }, {});
@@ -135,7 +163,7 @@ describe("strict checked workspace bootstrap", () => {
     const root = f.projects[0]!;
     const skill = fs.readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
     const recipes = [...skill.matchAll(/```ts\n(\/\/ Recipe:[\s\S]*?)\n```/g)].map(match => match[1]!);
-    expect(recipes).toHaveLength(7);
+    expect(recipes.length).toBeGreaterThanOrEqual(8);
     fs.writeFileSync(path.join(root, "one.txt"), "  café 🛰 full first line  \r\nsecond\r\n");
     fs.writeFileSync(path.join(root, "two.txt"), "\nnot the first line\n");
     const read = await f.call(recipes[0]!);
@@ -148,7 +176,7 @@ describe("strict checked workspace bootstrap", () => {
     expect(search.isError, search.content[0].text).not.toBe(true);
     expect(f.value(search)).toEqual({
       search: { scope: { path: ".", hidden: true, ignoreFiles: true }, matches: [{ path: "config café.json", line: 1, text: '{"id": "example", "retryLimit": 3}' }], truncated: false },
-      evidence: { complete: true, remaining: [], files: [{ path: "config café.json", startLine: 1, endLine: 1, source: '1: {"id": "example", "retryLimit": 3}', totalLines: 1, sha256: expect.stringMatching(/^[a-f0-9]{64}$/u), truncated: false }] },
+      evidence: { complete: true, remaining: [], unreadTails: [], files: [{ path: "config café.json", startLine: 1, endLine: 1, source: '1: {"id": "example", "retryLimit": 3}', totalLines: 1, sha256: expect.stringMatching(/^[a-f0-9]{64}$/u), truncated: false }] },
     });
     const distant = Array.from({ length: 450 }, (_, i) => `quiet line ${i + 1}`);
     for (const line of [400, 401, 420]) distant[line - 1] = `{"id": "example", "where":${line}}`;
@@ -191,7 +219,7 @@ describe("strict checked workspace bootstrap", () => {
     for (const [file, group, amount] of [["a.json", "café", 20], ["b.json", "café", -3], ["c.json", "other", -2]]) {
       fs.writeFileSync(path.join(root, String(file)), JSON.stringify({ group, amount }));
     }
-    const pipeline = await f.call(recipes[5]!, { paths: JSON.stringify(["a.json", "b.json", "c.json"]), outputPath: "totals.json" });
+    const pipeline = await f.call(recipes.find(code => code.includes('// Recipe: known-schema read compute write verify'))!, { paths: JSON.stringify(["a.json", "b.json", "c.json"]), outputPath: "totals.json" });
     expect(pipeline.isError, pipeline.content[0].text).not.toBe(true);
     expect(f.value(pipeline)).toEqual({ path: "totals.json", groups: 2, verified: true });
     expect(JSON.parse(fs.readFileSync(path.join(root, "totals.json"), "utf8"))).toEqual({ totals: { café: 17, other: -2 } });
@@ -227,20 +255,20 @@ describe("strict checked workspace bootstrap", () => {
     expect((await f.call(code, { command: "printf must-be-denied" })).isError).toBe(true);
   });
 
-  it("verifies same-file edits against expected bytes, not replacement-text decoys", async () => {
+  it("verifies snapshot-bound atomic edits without accepting replacement-text decoys", async () => {
     const f = await fixture(); wire.approve = true;
     const source = fs.readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
-    const code = source.match(/```ts\n(\/\/ Recipe: sequential same-file edits[\s\S]*?)\n```/)![1]!;
+    const code = source.match(/```ts\n(\/\/ Recipe: snapshot-bound same-file edits[\s\S]*?)\n```/)![1]!;
     const target = path.join(f.projects[0]!, "same.txt");
     const original = "first=old\nsecond=old\ndecoy:first=new\n";
-    const payloads = { path: "same.txt", oldFirst: "first=old", newFirst: "first=new", oldSecond: "second=old", newSecond: "second=new", intervening: original };
+    const payloads = { path: "same.txt", oldFirst: "first=old", newFirst: "first=new", oldSecond: "second=old", newSecond: "second=new", intervening: original + "external change\n" };
     fs.writeFileSync(target, original);
     const between = code.replace("const change = await local.edit", "await local.write({path,content:payloads.intervening,overwrite:true}); const change = await local.edit");
     const conflict = await f.call(between, payloads);
     expect(conflict.isError).toBe(true);
-    expect(conflict.content[0].text).toContain("Final bytes differ from expected edits");
-    // Both replacements occur in the final file, but the first target was reverted.
-    expect(fs.readFileSync(target, "utf8")).toBe("first=old\nsecond=new\ndecoy:first=new\n");
+    expect(conflict.content[0].text).toContain("expectedSha256 conflict");
+    // Stale input rejects before either replacement; external changes survive.
+    expect(fs.readFileSync(target, "utf8")).toBe(payloads.intervening);
     fs.writeFileSync(target, original);
     const after = code.replace("const r = await local.read", "await local.write({path,content:payloads.intervening,overwrite:true}); const r = await local.read");
     const stale = await f.call(after, payloads);
@@ -249,7 +277,7 @@ describe("strict checked workspace bootstrap", () => {
     fs.writeFileSync(target, original);
     const missing = await f.call(code, { ...payloads, oldSecond: "absent" });
     expect(missing.isError).toBe(true);
-    expect(missing.content[0].text).toContain("unique nonempty anchor");
+    expect(missing.content[0].text).toContain("exact anchor was not found");
     expect(fs.readFileSync(target, "utf8")).toBe(original);
     const deletion = await f.call(code, { ...payloads, newFirst: "" });
     expect(deletion.isError, deletion.content[0].text).not.toBe(true);

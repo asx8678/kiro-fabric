@@ -1,3 +1,4 @@
+import { argumentRepairError } from "./repair-error.js";
 import { randomUUID } from "node:crypto";
 import { runAbortable, throwIfAbortedOrExpired } from "../async-settlement.js";
 import type {
@@ -9,7 +10,7 @@ import type {
 } from "../protocol.js";
 import { fabricCommitAcknowledgement, type FabricCommitAcknowledgement } from "../protocol.js";
 import { schemaValidationMessage } from "../schema-validation.js";
-import { fabricJsonText, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js";
+import { fabricJsonText, jsonStringPrefix, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js";
 import { semanticDigest } from "./semantic-digest.js";
 
 export interface FabricCallAudit {
@@ -65,13 +66,14 @@ const resolved = (provider: FabricProvider, descriptor: FabricActionDescriptor):
 };
 
 const boundedResult = (value: unknown, maximum: number): { value: unknown; chars: number; truncated: boolean } => {
+  if (!Number.isSafeInteger(maximum) || maximum < 1) throw new Error("Invalid Fabric result budget");
   const text = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
   if (text.length <= maximum) return { value, chars: text.length, truncated: false };
-  return {
-    value: { fabricTruncated: true, originalChars: text.length, preview: text.slice(0, Math.max(1, maximum - 100)) },
-    chars: text.length,
-    truncated: true,
-  };
+  const envelope = { fabricTruncated: true, originalChars: text.length, preview: "" };
+  const available = maximum - JSON.stringify(envelope).length;
+  if (available < 0) throw new Error("Fabric result budget cannot fit truncation metadata");
+  envelope.preview = jsonStringPrefix(text, available);
+  return { value: envelope, chars: text.length, truncated: true };
 };
 
 const overlaps = (left: readonly string[], right: readonly string[]): boolean =>
@@ -198,7 +200,7 @@ export class ActionRegistry {
     throwIfAbortedOrExpired(context.signal, context.deadline);
     if (!isRecord(prepared)) throw new Error(`Argument preparation for ${ref} must return an object`);
     const invalid = schemaValidationMessage(action.inputSchema, prepared);
-    if (invalid) throw new Error(`Invalid arguments for ${ref}: ${invalid}`);
+    if (invalid) throw argumentRepairError(ref, action.descriptorDigest, action.inputSchema, invalid);
 
     // Preparation, schema validation, and resource calculation all precede approval.
     // The frozen canonical snapshot is never normalized or mutated afterwards.

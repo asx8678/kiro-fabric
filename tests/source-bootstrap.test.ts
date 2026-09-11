@@ -40,7 +40,8 @@ describe("explicit checkout source bootstrap", () => {
     fs.cpSync(path.join(repository, "scripts"), path.join(source, "scripts"), { recursive: true });
     fs.mkdirSync(path.join(source, "src"), { mode: 0o700 });
     fs.cpSync(path.join(repository, "src", "installation"), path.join(source, "src", "installation"), { recursive: true });
-    fs.copyFileSync(path.join(repository, "install.sh"), path.join(source, "install.sh"));
+    for (const directory of ["skills", "resources"]) fs.cpSync(path.join(repository, directory), path.join(source, directory), { recursive: true });
+    for (const file of ["package.json", "pnpm-lock.yaml", "agent-product.json", "build-toolchain.json", "tsconfig.json", "tsconfig.build.json", "install.sh"]) fs.copyFileSync(path.join(repository, file), path.join(source, file));
     expect(fs.existsSync(path.join(source, "node_modules"))).toBe(false);
     // Controlled developer-tool fixtures prove ordering, not a successful real build.
     executable(path.join(bin, "git"), 'case "$*" in\n  "rev-parse HEAD") printf "%s\\n" "1111111111111111111111111111111111111111" ;;\n  "ls-files --cached --others --exclude-standard -z"|"status --porcelain -z") : ;;\n  *) exit 90 ;;\nesac');

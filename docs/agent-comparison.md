@@ -23,7 +23,7 @@ node scripts/agent-comparison.mjs selftest
 pnpm run comparison:selftest
 ```
 
-The output directory must not already exist. The exporter creates nine bug-repair projects plus three read-only review projects, their task prompts and a version-4 hash manifest. No reference solutions or held-out tests are exported into the agent workspaces. To inspect the all-bugs example:
+The output directory must not already exist. The exporter creates bug-repair and read-only review projects, including seeded/held-out regression families, their task prompts and a version-6 hash manifest. No reference solutions or held-out tests are exported into the agent workspaces. To inspect the all-bugs example:
 
 ```sh
 cd /tmp/my-new-tinyshop-lab/bug-checkout
@@ -123,11 +123,158 @@ The output schema uses finding categories plus exact file/line/source evidence, 
 
 The separate `review-contracts` case tests whether reviewers inspect referenced cleanup code and disprove attractive false positives. It contains two defects (protected-version selection and misleading dry-run logs), with controls for upstream name validation, runtime-supplied settings and a validator whose caller correctly fails. Independent Node probes exercise both valid/invalid inputs and both flag states. It uses distinct fixtures and categories, preserving existing `review-infra` prompt/fixture hashes.
 
-`review-boundaries` tests exact configuration keys, permission-target tuples and an unquoted shell query. Five controls challenge unsupported claims about lost responses, unconditional fallback, disabled cleanup, absent validation callers and live credentials. Node and Bash probes exercise the actual consumers, a non-default setting, hidden CI entrypoint and success/failure response bodies through the same path. Earlier fixture/prompt hashes are unchanged. All three review cases remain opt-in for paid plans; offline selftest qualifies each with two seeds. The oracle grades the enumerated claims and exact evidence; it is not a semantic judge of arbitrary prose or production behavior.
+`review-boundaries` tests exact configuration keys, permission-target tuples and an unquoted shell query. Five controls challenge unsupported claims about lost responses, unconditional fallback, disabled cleanup, absent validation callers and live credentials. Node and Bash probes exercise the actual consumers, a non-default setting, hidden CI entrypoint and success/failure response bodies through the same path. Earlier fixture/prompt hashes are unchanged. These review cases remain opt-in for paid plans; offline selftest qualifies each with two seeds. The oracle grades the enumerated claims and exact evidence; it is not a semantic judge of arbitrary prose or production behavior.
 
 For a future operator-approved comparison, select `"cases":["review-infra"]`, pin the same available model and `"effort":"low"`, and use repeated order-balanced runs in fresh workspaces. Existing manifest identity, spend-reserve and permission requirements still apply. Compare precision and recall before credits per grounded finding; a cheap partial review must not win by omitting defects. Include timeouts, failures and unknown telemetry rather than silently dropping them. Do not treat a single pair as evidence of a magnitude improvement.
 
-For coverage and precision, select `"cases":["review-infra","review-contracts","review-boundaries"]`. Record compiler failures, verification commands and uninspected scope alongside graded outcomes. Check the installed profile and bundled guidance against the candidate before admission: building this checkout does not refresh a separately installed generation or a running Kiro session.
+`review-evidence` is a separate opt-in fixture for finding discipline: two independently reproduced defects (unnecessary saves and a masked validator exit), plus five false-positive controls (lost removals, snapshot iteration, unreachable empty-batch division, declared field casing and runtime-supplied settings). Qualification executes the actual inert Node/Bash fixture consumers; it does not establish PowerShell or Helm semantics. Existing case prompts and default schedules are unchanged. Use the same seeds and immutable installed runtime/profile/guidance provenance for old/candidate comparisons. Gate adoption on supported findings, false positives and coverage before comparing outer calls, credits or latency; missing telemetry remains unknown. Offline fixture qualification is not a live model-quality result and runs no paid inference.
+
+For coverage and precision, select `"cases":["review-infra","review-contracts","review-boundaries","review-evidence"]`. Record compiler failures, verification commands and uninspected scope alongside graded outcomes. Check the installed profile and bundled guidance against the candidate before admission: building this checkout does not refresh a separately installed generation or a running Kiro session.
+
+## Review-adherence evaluation protocol
+
+`review-adherence` is a new opt-in `review-adherence/v1` schema, leaving earlier fixture/prompt/oracle bytes and default schedules unchanged. It extends `review-evidence` with controlled proposition IDs for headline, explanation, consequence, proof scenario, confidence and counterexample, plus source-line-supported partial/exhaustive report scope. Strict success requires grounded recall/precision **and zero quality violations**. JSON/Markdown reports expose optional adherence counters; missing historical dimensions remain unknown. Counters overlap: do not sum them into violations. Zero findings has zero recall, not a quality win. These finite assertions are not semantic judging of arbitrary prose, proof that a probe ran, or proof that a file was fully inspected.
+
+For a real-prose evaluation, blind the arm/model labels and manually adjudicate supported consequences, headline/explanation consistency, confidence, actual inspection/probe evidence and coverage claims. Keep defect recall and false positives beside those judgments. A correctly named defect with an invented consequence is not a successful review. Only compare cost/time/outer exchanges after quality holds or improves. An independent critic pass is an optional later experiment if contradictions persist, not an always-on extra round trip.
+
+### Finding validation and severity calibration
+
+`review-calibration` is a separate opt-in `review-calibration/v1` case. Its finite Node/Bash contracts distinguish three supported defects: unnecessary saves (low), a masked validator exit (medium), and protected-artifact deletion (high). Guarded division/selector inputs are disproved controls; externally supplied cleanup settings remain unresolved. Confidence is not impact. The active review help now places candidate admission before discovery mechanics and supplies an impact/scope/recovery rubric; these are instructions, not a runtime semantic enforcement mechanism over Kiro's final prose.
+
+The controller independently runs actual inert fixture entrypoints, limiting cases and safe/unsafe corrections. Exact caller/consumer citations, consequence, disposition, severity, proof/counterexample scenario and recommendation must agree with the private finite oracle. `Case.reviewOracle` is included in the oracle hash but not the task prompt, exported workspace or valid reference answer. Earlier fixture/prompt/oracle hashes and default case selection remain unchanged.
+
+Strict success requires complete validated recall, zero false positives/duplicates and zero calibration violations. Wrong consequences, inflated or understated severity and harmful recommendations cannot earn validated credit. Disproved/unresolved assessments earn no defect credit. Empty reviews fail recall, and missed substantial defects remain visible (medium/high/critical under this fixture's declared rubric). Counters overlap; violations counts invalid assessments, not their summed diagnostics.
+
+JSON `reviewQuality.calibration` and the first Markdown table expose grounded versus validated findings, severity errors, unsafe fixes, substantial recall, misses and credits per validated finding. Historical `verifiedFindings` remains a case-oracle-match field for compatibility: earlier cases only establish grounding and must not be relabeled calibrated success. Missing historical calibration and unsafe/unscored attempts remain unknown. Failed attempts retain their costs; failed quality blocks both-pass efficiency ratios.
+
+For the next separately authorized matched pilot, include `review-calibration` alongside `review-infra` (caller/key mapping) and `review-boundaries` (configuration contracts). Keep identical cases, seeds, model policy and immutable old/candidate profile/help provenance. Blind and manually adjudicate real prose for consequence validity, severity, unsafe fixes and missed defects before comparing cost. A named proof is not evidence the model executed it, and passing offline fixtures does not demonstrate a live Kiro reasoning improvement.
+
+`tests/review-execution.test.ts` runs actual Bash counterexamples through checked Fabric execution. `tests/review-runtime-controls.test.ts` adds offline Helm rendering/casing and PowerShell controls when those binaries are installed; absent runtimes are explicit skips, never claimed as verified. These language probes qualify only their supplied inputs, not arbitrary charts, PowerShell versions or production deployments.
+
+### Verify delivery, not a loaded claim
+
+The standing profile now requires a cold opening to return review help alongside inventory and bounded observed source; the shipped recipe skips help only when already known and returns partial-help cursors explicitly. No preliminary workspace status is needed for an already verified root.
+
+New plans freeze each arm's own `resources/skills/fabric-exec/references/review.md` text/hash under `identity.profiles[arm].reviewHelp`, independently of this checkout. Missing historical references remain null. Runtime/profile/bundle drift still rejects admission. Completed Fabric outputs are scanned boundedly for exact structured review pages matching that frozen reference; contiguous UTF-16 pages through EOF produce `row.reviewHelp.status: complete`. `partial`, `unobserved` and `unknown` remain distinct. A code-string mention, final-answer claim or `loaded:true` does not prove delivery. Missing/corrupt event evidence is unknown. Unobserved means no matching inline page in observed output, not proof the client never loaded another resource. Delivery is content evidence, not comprehension or even proof of a particular provider invocation. Artifact-only or omitted output cannot establish complete delivery.
+
+### Seeded and held-out behavioral regressions
+
+Select `review-regressions-seeded` and `review-regressions-heldout` in the existing plan's `cases` array, with repeated matched profile/model/effort settings. Both are exported by `comparison:fixtures` and independently qualified by `comparison:selftest`. They cover incomplete-inventory deletion, async exception translation, the actual surrounding HTTP middleware, delay-versus-request-rate reasoning, shell pipeline status, Terraform detailed-exitcode, and Kubernetes/Helm inventory guards. Changing the held-out family's guards changes the correct assessment; seed changes identifiers, inputs and source offsets.
+
+Quality diagnostics report missed demonstrated high-impact cases, missing caller/consumer evidence, unsupported consequences, counterexamples and scenario coverage. These remain finite structural oracles, not a semantic judge, a finding-count target or evidence that an agent executed a probe. The controller executes actual TS/JS fixture modules and offline Bash contract doubles. HTTP uses Request/Response middleware without sockets; no real cluster or Terraform operation runs. C# is explicitly source-only and skipped by the runtime qualification. Agent workspaces do not receive expected answer tuples or private controller metadata. Held-out denotes a separate fixture family, not guaranteed training-data secrecy. Use blind manual adjudication and repeated real-agent runs before claiming improved audit quality.
+
+### Effective-config provenance (explicit, offline capture)
+
+`src/kiro/run-provenance.ts` exports the pure `buildRunProvenance(input?)`,
+`parseRunProvenanceDeclaration(explicitJson)`, `RUN_PROVENANCE_LIMITS`, and
+`RunProvenanceInput` / `RunProvenanceConfiguredInput` / `RunProvenanceObservedInput` /
+`RunProvenanceManifest` types. The compact manifest is suitable for `fabric.info`:
+
+- `configured` is always an **unverified declaration**. It records guidance mode,
+  requested model/effort, profile, runtime-bundle identity, prompt, ordered resource
+  and hook digests, and repository commit/dirty declarations plus a dirty-evidence
+  digest. A known hash means bytes were supplied, not that Kiro used them.
+- `observed` is a **separate server-observation channel**. Populate it only with
+  independently available runtime identity/content and actual returned guidance
+  bytes. Prompt/resource/hook availability alone never establishes delivery.
+  `guidanceOutputs: [{reference, output}]` requires a nonempty exact byte match;
+  its `observed-content-match` status covers only those supplied outputs, not all
+  configured guidance. Inputs, loaded flags and copied reference text are not
+  output evidence. Neither channel authenticates the caller's assertions.
+- `observed.routing.actualModel` and `actualEffort` remain `null` with status
+  `unknown`, even for pinned requests or observed session configuration. Never
+  infer Kiro's hidden routing from a profile, requested model or CLI option.
+- Opaque labels (including requested model/effort and runtime identity/version)
+  are SHA-256 digests, **not echoed strings**. Only the guidance-mode enum and
+  validated Git commit IDs are shown verbatim. Prompt, resource, hook, dirty
+  evidence, paths and secret-bearing metadata are never printed. Hashes still
+  reveal equality and are not encryption; retain reports appropriately.
+- Missing collections have unknown count/digest; explicit empty lists have count
+  zero and a digest. Collection digests bind ordered label/content digests;
+  manifest digests bind the fixed-shape summary. Oversized content is unknown,
+  never a prefix presented as a whole-content hash. Limits: 1 MiB per content,
+  4 MiB total hashed content per builder, 32 entries per collection, and 65,536
+  characters for explicit launch declaration JSON.
+
+Parent integration: add optional `KiroMcpServerOptions.runProvenance?:
+RunProvenanceInput`, pass the bounded builder result into the shared health value
+used by `fabric_info` / `fabric.info`, and export the public symbols through
+`src/index.ts`. Launch JSON must go only through
+`parseRunProvenanceDeclaration` into `configured`; never spread it into `observed`.
+The builder performs no filesystem reads, Git commands, ambient environment
+reads, runtime loading or automatic inspection of `~/.kiro`. The parent supplies
+only fields it actually has. A supplied bundle identity is hashed as bytes; this
+helper does not verify a bundle tree or replace build/installation verification.
+Guidance-mode profile generation (`standard|review|minimal`, unchanged default)
+remains the launch/profile module's responsibility, not this helper's.
+
+The Node >=24 CLI runs the same TypeScript builder without requiring or mutating
+`dist/`, then reuses `review-delivery.mjs` on captured ACP **output** evidence:
+
+```sh
+node scripts/steering-benchmark/run-provenance.mjs manifest --input /private/old/run.json
+node scripts/steering-benchmark/run-provenance.mjs compare --left /private/old/run.json --right /private/candidate/run.json
+```
+
+Each input is an explicitly selected descriptor; all fields are optional. Paths
+are relative to that descriptor (absolute paths also work). Example:
+
+```json
+{
+  "guidanceMode": "review",
+  "requestedModel": "auto",
+  "requestedEffort": "low",
+  "profileFile": "profile.json",
+  "bundleFile": "closure-manifest.json",
+  "promptFile": "prompt.txt",
+  "resourceFiles": ["skill.md", "review.md"],
+  "hookFiles": ["first-prompt-hook.js"],
+  "repository": {
+    "commitFile": "commit.txt",
+    "dirty": true,
+    "dirtyEvidenceFile": "dirty-evidence.txt"
+  },
+  "eventsFile": "attempt.stdout.jsonl",
+  "reviewReferenceFile": "review.md"
+}
+```
+
+Select a small immutable bundle identity/manifest file for `bundleFile`, not a
+large executable archive. No paths, resources, hooks, environment variables or
+commands embedded in the selected profile are followed/executed. No Git command
+is run: the caller must supply captured commit and dirty evidence. A status-only
+snapshot does not hash modified file contents; select a pre-captured patch or
+content-hash inventory if the comparison needs that distinction, including
+untracked evidence explicitly. Dirty state remains a declaration, not an
+inference from an empty file. No global steering/configuration is discovered.
+
+The CLI caps each selected regular file at 1 MiB, total reads at 16 MiB per arm,
+resource/hook lists at 32 each, and raw ACP JSONL at 4,096 events. Final symlinks
+and non-regular files are rejected. Malformed/oversized selected files fail with
+redacted errors rather than silently producing a partial hash. Missing optional
+files remain unknown; explicitly named missing files fail.
+
+CLI `manifest` is still unverified runtime configuration:
+`caller-selected-files-not-runtime-attestation`. The adjacent
+`reviewHelpDelivery` field separately reports `complete`, `partial`, `unobserved`
+or `unknown` from actual completed Fabric outputs matched to the selected frozen
+reference, with reference/event content digests but no raw text. Corrupt/missing
+stream evidence cannot establish delivery. Tool input strings and `loaded:true`
+never upgrade it. `compare` reports known fields as `same`/`different`, but equal
+unknowns stay `unknown`; inspect each arm's separate delivery result too. Neither
+content matches nor fixture CLI output prove provider invocation, comprehension,
+agent execution, semantic quality, speedup or actual routing. No live run or
+paid inference is performed by these commands.
+
+### Prepare matched Auto and pinned-model strata (no live run implied)
+
+1. Freeze separate old/candidate standalone bundles, profiles and private data roots using the existing `arms.old`/`arms.fabric` identity fields. Native is an implicit additional arm; include it in spend estimates. Restart sessions from disposable fixtures, never share mutable arm data.
+2. Prepare two manifests with the **same** cases, seed, repetitions, arm identities and compatible effort policy. A compact pilot can select `["fabric-help","review-boundaries","review-adherence"]` and `repetitions:2`; the schedule rotates/reverses order. Keep all current call/time/output/approval stops; this runner is not uncapped.
+3. In the pinned manifest set `model` to an explicit currently supported CLI model ID. In the Auto manifest set `model:"auto"`. Set `effort` only where supported and hold it matched; otherwise report an unmatched policy comparison, not a model-only effect. Requested/session-configured model is not hidden routing: `actualRoutedModel` remains null without independent telemetry.
+4. Obtain a numeric authorization covering **both strata**, qualification, failures, prior spend and reserve before filling credit fields or invoking `run`. Carry actual prior charges into subsequent admission; do not allocate the same reserve twice. Existing budgetGate and durable exactly-once admission remain authoritative. No spending authorization or live results are supplied by this document.
+5. `node scripts/steering-benchmark.mjs plan --manifest <manifest>` and `init --manifest <manifest> --out <new-private-directory>` prepare bounded, non-inference evidence. Verify both plans and the frozen installed guidance before a separately authorized run. Analyze old/candidate pairs **within** each stratum first; compare Auto/pinned outcomes separately, never pool them into one claimed prompt speedup. Preserve failures and unknown usage.
+
+Offline preparation: `node scripts/agent-comparison.mjs selftest` qualifies fixtures with no model inference. `fixtures --out <new-private-directory>` exports neutral workspaces without solutions. No offline result establishes live adherence or the best model choice.
 
 ## Live plan and consent
 
@@ -186,6 +333,30 @@ Do not clear a stopped row or edit its charge to zero. If the operator explicitl
 
 Carry known spend forward, keep unknown rejected charges explicitly unknown, reserve headroom and do not silently reset the original overall budget. A new authorization is not a billing receipt. Mark the authentication boundary and report the continuation as a separate stratum rather than pooling it into the unchanged pre-login headline matrix.
 
+## Compare the efficiency candidate in Auto
+
+For the before/after product comparison, use three arms in the same frozen schedule: implicit `native` (Default), `arms.old` (the saved pre-change Fabric profile and bundle), and `arms.fabric` (the rebuilt candidate). All use `model:"auto"`; omit an explicit effort override when measuring the user's normal Auto behavior. The existing scheduler rotates order by case and reverses it on the next repetition. Auto's actual routed model stays unknown; these are product observations, not a controlled comparison of underlying models.
+
+Before updating the installation, preserve the old profile and its complete immutable bundle. Generate candidate resources from a fresh build. Give both Fabric arms separate private mutable data/config roots; preserve each arm's own prompt, help and hook. Freeze the CLI version, global steering/settings and fixture identities for the whole series. Do not change Default or the user's installed policies to accommodate the benchmark. Record any user-steering/resource differences between products instead of attributing them to model quality.
+
+Use `bug-config`, `bug-retry`, `bug-checkout`, `review-infra`, `review-contracts` and `review-boundaries` for repair, boundary and review coverage, with the same cases/seeds for every arm. Smaller approved pilots should contain at least a repair and a review and be reported as pilots. Set the numeric planned spend, reserve and ceiling from the user's authorization before `plan`/`init`; `run` consumes credits and includes failures in the ledger. Budget exhaustion or unavailable usage leaves the comparison incomplete, never evidence of equivalent quality.
+
+Compare the candidate against **both** Default and old Fabric. Accept lower credits as an improvement only alongside no observed loss in held-out repair success, review precision and recall, high-impact findings, required verification and scope coverage on matched cases. Inspect unsupported findings and omitted scope; finding count alone is insufficient. Retain all charges and failed attempts. Even a passing repeated fixture comparison does not guarantee equal quality on arbitrary repositories or universal savings.
+
+Offline regression coverage verifies complete source delivery, hash-bound unread-tail recovery, no gaps or duplicates across output-budget pages, default full help with smaller-limit controls, and executable availability/verification recipes. These are deterministic functionality checks; they do not substitute for the paid Auto comparison or measure reasoning quality.
+
+## Measuring model-round-trip optimization (future authorized A/B)
+
+Use **A = immutable old Fabric**, **B = candidate Fabric**, with Default as a separate reference, not a proxy for A. Predeclare tasks, seeds, repetitions, quality gates and the analysis before collecting anything. Keep the identical task prompt and required verification for A/B; do not prompt either arm with a hard call cap or a target number of calls. Fewer calls obtained by skipping investigation are not an improvement.
+
+1. Archive content hashes of the exact harness, manifest, prompts, fixtures and held-out oracles, CLI executable/version, installed profile, complete runtime bundle, generated resources, help/hook/steering and configuration for each arm. A source revision alone does not identify the installed runtime. Record the intended A/B differences; freeze everything else, including model/effort policy, permissions, environment and trace settings. Verify identities before and after attempts. Never update an installed generation mid-series.
+2. Use fresh CLI sessions and disposable untouched workspaces for every attempt, with separate private mutable roots initialized equivalently. Do not resume conversations or carry workspace discoveries between arms. Run repeated matched case/seed blocks with A/B then B/A order (the existing three-arm scheduler rotates/reverses order). Keep cold/warm-cache and authentication boundaries explicit; backend load and Auto routing remain uncontrolled. Do not pool unmatched work or choose the best retry.
+3. Maintain a source-coverage ledger alongside raw evidence: required paths and consumers, actual delivered ranges, hidden files, long-file tails, truncation recovery and unread scope. Source delivery is not proof of comprehension. Require the same held-out repair checks and verification scope; compare review precision, recall, false positives, duplicates and high-impact omissions using the existing quality metrics. Both strict passes alone do not establish equal review coverage or quality.
+4. Report all planned, unrun, partial, failed, canceled and successful attempts, retaining raw streams, session/request IDs, charges, stop reasons and coverage. Use `outerToolCalls`/`toolCallCoverage` for observed non-system ACP exchanges, including failed tool calls. One outer Fabric execution may contain many nested provider operations; it need not correspond to one hidden model request. Request IDs are provenance, not a count of internal model requests. Unknown model-request counts, tokens and nested operations stay unknown; use independently exposed telemetry or existing trace analysis with its own coverage, never extrapolate from static recipes.
+5. Inspect `comparison.json`'s additive `oldFabricOuterCallPairs`: one row per scheduled candidate case/round, joined to old Fabric by seed and fixture/prompt/oracle hashes, with raw counts and attempt indices. `bothPassOuterCallDelta` is candidate minus old; `bothPassOuterCallReduction` is `(old - candidate) / old` (a fraction, negative for more calls). Deltas require both successful, unstopped completed attempts and complete call evidence; reduction additionally requires a nonzero old count. Missing/unrun evidence remains `null`, while observed zero stays zero. A partial continuation schedule without a same-round old counterpart retains the candidate observation with `oldIndex:null` and no conditional reduction; scheduled counterparts must still match fixture identities. Failed attempts retain counts and stop evidence but get no conditional reduction. Existing Default-relative pairs and failure-aware totals are unchanged. Interpret these descriptive reductions only alongside matched quality and source coverage, not as hidden-request savings or measured speedup. Measure wall time separately; static call consolidation alone establishes neither latency nor cost improvement.
+
+**Current runner limitation:** `maxCalls` is an enforced safety bound (default and maximum 40); there is no supported unlimited setting. Thus the current live runner cannot execute an uncapped protocol. Do not bypass it with an invented manifest value or claim bounded runs are uncapped. A future separately reviewed runner change is needed for no-hard-call-cap collection; retain timeout, output, spend and operator safety controls. Existing bound-hit attempts are censored failures, never efficient completions. This measurement change does not authorize live runs or alter those controls.
+
 ## Statistics and interpretation
 
 Reports are `comparison.json`, `comparison.md` and `attempts.csv`. Raw attempts retain commands, prompts, outputs, before/after filesystem evidence, validation failures, session/request IDs and reported usage. Keep these private: real future tasks could contain confidential source.
@@ -195,7 +366,7 @@ Reports are `comparison.json`, `comparison.md` and `attempts.csv`. Raw attempts 
 - **Grounded review quality**: the `review-infra` oracle counts unique source-backed findings, false positives, duplicates, precision and recall. Scores remain visible for partial reviews even when strict answer validation fails. Routing/identity/process/scope failures or unparseable answers remain unscored, not zero-cost successes. Credits per verified finding include all review-attempt charges; incomplete scores or charges yield `null`.
 - **Credits per success**: all comparable attempt credits, including failures, divided by successes. Unknown charge coverage or no successes yields `null`.
 - **Latency**: end-to-end CLI wall time, including startup/tool work, with median and p90. Report coverage; interrupted attempts are not dropped to make the agent look fast.
-- **Outer calls and traffic**: observed non-system ACP tool calls and serialized argument/result UTF-16 characters. These are not inner effect counts, prompt tokens, model round trips or wire sizes. Automatic cloud-config startup is excluded from model tool calls.
+- **Outer calls and traffic**: observed non-system ACP tool calls and serialized argument/result UTF-16 characters. Steering `summary` and comparison reports share `wallMs`/`wallCoverage` and `outerToolCalls`/`toolCallCoverage`: missing or invalid observations produce nullable totals, never fabricated zeros. Consumers must handle `null`; genuine observed zeros remain zero. These are not inner effect counts, prompt tokens, model round trips or wire sizes. Automatic cloud-config startup is excluded from model tool calls.
 - **Paired ratios**: match case, round, seed, prompt, fixture and oracle identities; both-pass ratios are explicitly conditional, never a substitute for failure-aware totals.
 - **Unknowns**: input/output/cache tokens, settled money charges and actual Auto routing remain `null` unless independently exposed. Do not estimate tokens from characters or convert credits to dollars without settled evidence.
 

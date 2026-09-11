@@ -5,6 +5,8 @@ dist/*
 !dist/kiro-agent-closure/**
 coverage/
 .tmp/
+# Historical audit reports and one-off probes are not application inputs.
+/audits/
 *.log
 .DS_Store
 .kiro/

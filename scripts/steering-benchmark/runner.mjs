@@ -7,9 +7,12 @@ import { collect, eventCollector, analyzeEvents } from './stream.mjs';
 import { validate } from './oracles.mjs';
 import { createNativeFixturePolicy, removeNativeFixturePolicy } from './native-policy.mjs';
 import { object, readJson, save, digest, putFiles, inventory, errorText } from './core.mjs';
+import { detailedStats } from './metrics.mjs';
+import { reviewHelpDelivery } from './review-delivery.mjs';
 
 /** @typedef {import('./plan.mjs').Plan} Plan */
-/** @typedef {{index:number,arm:string,caseId:string,qualification:boolean,state:string,credits:number|null,stopReason:string|null,ok:boolean,startedAt:string,finishedAt?:string,validation?:import('./oracles.mjs').Validation,evidence?:import('./stream.mjs').Evidence,process?:Omit<import('./stream.mjs').Collected,'stdout'|'stderr'>,error?:string,command?:{executable:string,args:string[],cwd:string},budget?:{spent:number,projected:number|null},nativePermission?:ReturnType<typeof createNativeFixturePolicy>}} Row */
+/** @typedef {ReturnType<typeof reviewHelpDelivery>} ReviewDelivery */
+/** @typedef {{index:number,arm:string,caseId:string,qualification:boolean,state:string,credits:number|null,stopReason:string|null,ok:boolean,startedAt:string,finishedAt?:string,validation?:import('./oracles.mjs').Validation,evidence?:import('./stream.mjs').Evidence,reviewHelp?:ReviewDelivery,process?:Omit<import('./stream.mjs').Collected,'stdout'|'stderr'>,error?:string,command?:{executable:string,args:string[],cwd:string},budget?:{spent:number,projected:number|null},nativePermission?:ReturnType<typeof createNativeFixturePolicy>}} Row */
 /** @param {string} output */
 export function privateOutput(output) { const root = fs.realpathSync(output), st = fs.lstatSync(output); assert.ok(st.isDirectory() && !st.isSymbolicLink() && (st.mode & 0o077) === 0, 'output must be a private non-symlink directory'); return root; }
 /** @param {string} output @returns {Plan} */
@@ -83,6 +86,7 @@ export async function runOne(output, index, signal) {
       const result = await collect({ ...row.command, env: { ...process.env, ...plan.config.env, KIRO_FABRIC_LAUNCH_WORKSPACE: workspace }, maxOutputBytes: plan.config.maxOutputBytes, timeoutMs: plan.config.timeoutMs, stdoutPath: path.join(base, 'client.jsonl'), stderrPath: path.join(base, 'stderr.log'), signal, onLine: stream.onLine });
       const { stdout: _stdout, stderr: _stderr, ...metrics } = result; row.process = metrics;
       row.evidence = analyzeEvents(stream.events); row.credits = row.evidence.credits;
+      if (item.arm !== 'native' && item.caseId.startsWith('review-')) row.reviewHelp = reviewHelpDelivery(row.evidence, plan.identity.profiles[item.arm]?.reviewHelp?.text);
       row.stopReason = result.stopReason ?? (result.spawnError || result.code !== 0 ? 'client-failure' : row.evidence.failures.length ? 'incomplete-events' : row.credits === null ? 'missing-usage' : row.credits > plan.config.singleRunCreditLimit ? 'single-run-credit-limit' : null);
       // Persist charge evidence before running any oracle or candidate-code probe.
       updateRow(root, row);
@@ -110,8 +114,15 @@ export async function runOne(output, index, signal) {
 export function summarizeRows(all) {
   /** @param {Row[]} selected */
   const stats = selected => {
-    const known = selected.filter(r => r.credits !== null && Number.isFinite(r.credits)), knownCredits = known.reduce((n, r) => n + Number(r.credits), 0), passed = selected.filter(r => r.ok && r.state === 'finished').length;
-    return { attempts: selected.length, passes: passed, wallMs: selected.reduce((n, r) => n + (r.process?.wallMs ?? 0), 0), outerToolCalls: selected.reduce((n, r) => n + (r.evidence?.calls.filter(c => !c.system).length ?? 0), 0), fixtureExecutionRecords: selected.reduce((n, r) => n + (r.validation?.audit?.length ?? 0), 0), innerEffects: null, peakConcurrency: null, failures: selected.filter(r => !r.ok || r.state !== 'finished').map(r => ({ index: r.index, caseId: r.caseId, state: r.state, stopReason: r.stopReason, error: r.error ?? null, checks: r.validation?.failures ?? [] })), knownReportedCredits: knownCredits, unreconciledCreditRows: selected.filter(r => r.credits === null).flatMap(r => (r.evidence?.usage ?? []).filter(u => u.unit === 'credit').map(usage => ({ index: r.index, usage }))), unknownChargeAttempts: selected.length - known.length, reportedCredits: known.length === selected.length ? knownCredits : null, creditsPerPass: passed && known.length === selected.length ? knownCredits / passed : null };
+    const common = detailedStats(selected);
+    const knownCredits = selected.reduce((n, r) => n + (typeof r.credits === 'number' && Number.isFinite(r.credits) && r.credits >= 0 ? r.credits : 0), 0);
+    return { attempts: common.attempts, passes: common.passes,
+      wallMs: common.wallMs, wallCoverage: common.wallCoverage,
+      outerToolCalls: common.outerToolCalls, toolCallCoverage: common.toolCallCoverage,
+      fixtureExecutionRecords: selected.reduce((n, r) => n + (r.validation?.audit?.length ?? 0), 0), innerEffects: common.innerEffects, peakConcurrency: null,
+      failures: selected.filter(r => !r.ok || r.state !== 'finished').map(r => ({ index: r.index, caseId: r.caseId, state: r.state, stopReason: r.stopReason, error: r.error ?? null, checks: r.validation?.failures ?? [] })),
+      knownReportedCredits: knownCredits, unreconciledCreditRows: selected.filter(r => r.credits === null).flatMap(r => (r.evidence?.usage ?? []).filter(u => u.unit === 'credit').map(usage => ({ index: r.index, usage }))),
+      unknownChargeAttempts: selected.length - common.creditCoverage.observed, reportedCredits: common.reportedCredits, creditsPerPass: common.creditsPerSuccess };
   };
   return { allExecuted: stats(all), comparison: Object.fromEntries(ARMS.map(arm => [arm, stats(all.filter(r => r.arm === arm && !r.qualification))])), fabricHelpQualification: Object.fromEntries(ARMS.filter(a => a !== 'native').map(arm => [arm, stats(all.filter(r => r.arm === arm && r.qualification))])), rows: all };
 }

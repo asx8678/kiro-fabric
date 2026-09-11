@@ -5,7 +5,7 @@ import path from "node:path";
 const ARTIFACT_ID = /^ka_[a-f0-9]{48}$/u;
 const MAX_ARTIFACT_RESIDUE_AGE_MS = 86_400_000;
 interface StoredArtifact { content: string; createdAt: number; lastReadAt: number; file?: string }
-interface KiroArtifactReadResult { id: string; text: string; offset: number; nextOffset: number; totalChars: number; done: boolean }
+export interface KiroArtifactReadResult { id: string; text: string; offset: number; nextOffset: number; totalChars: number; done: boolean }
 export interface KiroArtifactStore {
   write(content: string): string;
   read(id: string, offset?: number, limit?: number): KiroArtifactReadResult;
@@ -41,6 +41,9 @@ class ArtifactStore implements KiroArtifactStore {
     this.#maxArtifactChars = options.maxArtifactChars ?? 2_000_000;
     this.#maxTotalChars = options.maxTotalChars ?? 8_000_000;
     this.#ttlMs = options.ttlMs ?? 3_600_000;
+    for (const value of [this.#maxArtifacts, this.#maxArtifactChars, this.#maxTotalChars, this.#ttlMs]) {
+      if (!Number.isSafeInteger(value) || value < 1) throw new KiroArtifactStoreError("invalid artifact bounds");
+    }
     if (options.root) {
       fs.mkdirSync(options.root, { recursive: true, mode: 0o700 });
       const stat = fs.lstatSync(options.root);
@@ -70,6 +73,8 @@ class ArtifactStore implements KiroArtifactStore {
   write(content: string): string {
     this.#open();
     if (typeof content !== "string" || content.length > this.#maxArtifactChars) throw new KiroArtifactStoreError("artifact exceeds configured bounds");
+    // An impossible write must not evict otherwise usable evidence.
+    if (content.length > this.#maxTotalChars) throw new KiroArtifactStoreError("artifact quota exceeded");
     this.sweep(this.#ttlMs, this.#maxArtifacts - 1);
     while (this.#entries.size && this.#totalChars + content.length > this.#maxTotalChars) this.#remove(this.#oldest());
     if (this.#totalChars + content.length > this.#maxTotalChars) throw new KiroArtifactStoreError("artifact quota exceeded");
@@ -105,7 +110,12 @@ class ArtifactStore implements KiroArtifactStore {
     const entry = this.#entries.get(id);
     if (!entry) throw new KiroArtifactStoreError("artifact is unavailable or expired");
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1) throw new KiroArtifactStoreError("artifact offset and limit must be positive integers");
-    const text = entry.content.slice(offset, offset + Math.min(limit, 16_000));
+    // Offsets count UTF-16 units. Never return half of a valid surrogate pair.
+    if (offset > 0 && /[\uDC00-\uDFFF]/u.test(entry.content.charAt(offset)) && /[\uD800-\uDBFF]/u.test(entry.content.charAt(offset - 1))) throw new KiroArtifactStoreError("artifact offset splits a Unicode character");
+    let end = Math.min(entry.content.length, offset + Math.min(limit, 16_000));
+    if (end < entry.content.length && /[\uD800-\uDBFF]/u.test(entry.content.charAt(end - 1)) && /[\uDC00-\uDFFF]/u.test(entry.content.charAt(end))) end -= 1;
+    if (end === offset && offset < entry.content.length) throw new KiroArtifactStoreError("artifact limit cannot fit one Unicode character");
+    const text = entry.content.slice(offset, end);
     if (text) entry.lastReadAt = this.#now();
     const nextOffset = offset + text.length;
     return { id, text, offset, nextOffset, totalChars: entry.content.length, done: nextOffset >= entry.content.length };

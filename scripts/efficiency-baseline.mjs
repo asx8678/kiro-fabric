@@ -22,7 +22,7 @@ const SPECS = [
   { id: "bounded-help", recipe: "Default api page plus complete api paging (limit 16000, <=16 pages, <=100000 UTF-16 chars)", reads: null },
 ];
 const CONFIG = {
-  executor: { timeoutMs: 10000, maxTimeoutMs: 10000, maxNestedResultChars: 20000, maxOutputChars: 200000, maxProviderCalls: 64 },
+  executor: { timeoutMs: 10000, maxTimeoutMs: 10000, maxNestedResultChars: 200000, maxOutputChars: 200000, maxProviderCalls: 64 },
   approvals: { read: "allow", write: "deny", execute: "deny", network: "deny" },
   mcp: { enabled: false }, memory: { enabled: false }, state: { enabled: false }, tracing: { enabled: false },
 };
@@ -111,7 +111,7 @@ export function validateHelpPages(value) {
   }
   assert.ok(expanded.includes("declare const local:") && expanded.includes("declare const fabric:"));
   assert.ok(!expanded.includes("${LOCAL_GUEST_DECLARATIONS}"));
-  checkPage(value.defaultPage, 0, 8000);
+  checkPage(value.defaultPage, 0, 16000);
   assert.equal(value.defaultPage.text, expanded.slice(0, value.defaultPage.text.length));
   assert.equal(value.defaultPage.truncated, value.defaultPage.text.length < expanded.length);
   return {

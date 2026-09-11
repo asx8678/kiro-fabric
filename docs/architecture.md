@@ -6,6 +6,26 @@ Local coding uses the small `LocalCodingProvider`; web/LSP/delegation require su
 
 The reachability baseline is `docs/architecture/agent-reachability-baseline.json`. Private source names and storage salts containing “power” remain compatibility details only; they do not define a second product.
 
+## Compiler reuse
+
+Each execution service keeps an in-memory LRU cache of successful compiler output, keyed by the exact TypeScript source and guest declarations. It retains at most 32 programs and 2,097,152 UTF-16 code units across keys, emitted JavaScript and source maps (about 4 MiB of text plus bounded entry overhead). Oversized entries, diagnostics, compiler failures and custom-worker checks are not cached. The cache survives idle worker retirement and is cleared when its owning service closes.
+
+Stable programs with changing named `payloads` can skip repeat compilation and worker dispatch. New or changed programs still go through the isolated compiler. This never caches payload values, provider results, approvals or guest state: every execution retains its own QuickJS context and still enforces source/input limits, execution admission, cancellation, deadlines and per-call policy.
+
+## Task focus and output noise
+
+The standing prompt ties each step to the next unresolved acceptance check, discourages unrelated cleanup and unchanged retries, and stops investigation once required checks pass. The first-turn hook is a short reminder, not a second workflow; broad-review discovery is not the default for focused questions. These are instruction contracts, not a guarantee of live model quality.
+
+Model-facing compiler failures retain every diagnostic's location, code and message, but identical repair hints appear only on their first occurrence in that response. Raw execution results and successful user-returned values are unchanged. Distinct advice, failure progress, logs, checkpoint handles and artifact overflow/failure behavior remain available.
+
+## Source and result efficiency
+
+`local.readMany` captures and revalidates each distinct source as before, but builds one compact UTF-16 line-end index per invocation snapshot. Each window slices that index; whole-window/binary-search budget checks replace repeated per-line JSON serialization. Indices never survive an invocation, and CRLF/BOM, source hashes and final drift checks are preserved.
+
+Nested truncation counts the complete JSON envelope plus escaped preview content in a linear Unicode-safe scan. MCP calls can select `projection:"text"` or `"structured"` before duplication and bridge serialization; omitted/`"full"` remains compatible. Selection never bypasses raw-response validation, approval or remote error handling.
+
+Pagination retains its default unfiltered-scope consistency contract. Opt-in `snapshotScope:"query-v1"` uses the same ignore-safe glob intersection as search, fingerprints every selected candidate (including nonmatching grep files), re-enumerates and revalidates before publication, and reports its narrower contract in `scope`. It avoids unrelated-file hashing; full-scope queries still pay full-scope costs. Only returned page records are copied from the bounded cache.
+
 ## Session and process lifecycle
 
 Kiro owns conversation history, resume, and context compaction. The repository-owned lifecycle contract is that one selected Kiro CLI OS process starts one private Fabric stdio MCP process and keeps that transport throughout ordinary turns and compaction, including a compaction-induced logical chat-session transition if the client implements one. Repeated checked `fabric.info()` calls (and operator-only `fabric_info`) are idempotent; no mandatory health-check ritual is required. They report the same random `mcpInstanceId`, PID, start timestamp, and runtime generation; they do not initialize another process or runtime. Whether a particular Kiro build honors that contract through `/compact` remains blocked until the authenticated real-client gate observes it on the exact release commit.

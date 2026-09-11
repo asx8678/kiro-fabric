@@ -95,7 +95,14 @@ export function profileSnapshot(arm) {
   const data = text(env.KIRO_FABRIC_DATA_ROOT, 'private data root'); assert.ok(path.isAbsolute(data), 'absolute data root');
   assert.ok(!data.startsWith(bundle + path.sep) && data !== bundle, 'mutable data cannot be in immutable bundle');
   assert.ok(arm.configPaths.every(p => p.startsWith(data + path.sep)), 'config must belong to declared private data root');
-  return { raw, profile, dataRoot: data, profileIdentity: artifact(arm.profile) };
+  const reviewPath = path.join(bundle, 'resources', 'skills', 'fabric-exec', 'references', 'review.md');
+  let reviewHelp = null;
+  try {
+    const text = regularText(reviewPath);
+    assert.ok(text.trim() && !text.includes('\0') && text.length <= 100000, 'invalid frozen review guidance');
+    reviewHelp = { path: reviewPath, sha256: sha(text), text };
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  return { raw, profile, dataRoot: data, profileIdentity: artifact(arm.profile), reviewHelp };
 }
 export function harnessIdentity() {
   const directory = path.dirname(fileURLToPath(import.meta.url));

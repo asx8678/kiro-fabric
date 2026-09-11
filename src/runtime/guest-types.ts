@@ -1,10 +1,27 @@
 import { LOCAL_GUEST_DECLARATIONS } from "../providers/local-contract.js";
+import { REVIEW_GUEST_DECLARATIONS } from "../providers/review-contract.js";
+import { PROBE_GUEST_DECLARATIONS } from "../providers/probe-contract.js";
 
 export const fabricGuestDeclarations = `
 ${LOCAL_GUEST_DECLARATIONS}
+${REVIEW_GUEST_DECLARATIONS}
+${PROBE_GUEST_DECLARATIONS}
 type JsonPrimitive = null | boolean | number | string;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };
+type FabricCheckpointHandle = { id: string; label?: string };
+type FabricFailureMetadata = {
+  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error";
+  phase: "compile" | "validation" | "discovery" | "dispatch" | "execution";
+  dispatchState: "not_dispatched" | "dispatched";
+  effectOutcome: "none" | "uncertain";
+  ref?: string; descriptorDigest?: string; invalidPath?: string;
+  relevantSchema?: JsonObject; replacementDescriptor?: JsonObject; checkpoints?: FabricCheckpointHandle[];
+};
+/** Host-issued, bounded repair hints. Not complete schemas or permission to retry effects. */
+interface Error { readonly failure?: FabricFailureMetadata }
+type KiroArtifactReadResult = { id: string; text: string; offset: number; nextOffset: number; totalChars: number; done: boolean };
+type KiroArtifactCheckpointResult = { id: string; retrieval: { ref: "artifacts.read"; args: { id: string }; encoding: "json"; ephemeral: true } };
 type EmptyArgs = Record<string, never>;
 interface FabricActionSummary {
   ref: string;
@@ -43,7 +60,12 @@ declare const fabric: Readonly<{
   workspace(args: FabricWorkspaceRequest): Promise<JsonObject>;
 }>;
 declare const payloads: Readonly<Record<string, string>>;
-declare const artifacts: Readonly<{ read(args: { id: string; offset?: number; limit?: number }): Promise<JsonValue> }>;
+declare const artifacts: Readonly<{
+  /** UTF-16 cursors; escaped-envelope-aware pages. Advance only to nextOffset; done means EOF. */
+  read(args: { id: string; offset?: number; limit?: number }): Promise<KiroArtifactReadResult>;
+  /** Explicit chosen JSON evidence, in memory with TTL/quotas; normal write approval and at most 8 reservations per execution. */
+  checkpoint(args: { value: JsonValue; label?: string }): Promise<KiroArtifactCheckpointResult>;
+}>;
 declare const memory: Readonly<{
   get(args: { key: string }): Promise<JsonValue>;
   set(args: { key: string; value: JsonValue }): Promise<JsonValue>;
@@ -79,7 +101,8 @@ declare const mcp: Readonly<{
   servers(args?: EmptyArgs): Promise<JsonValue>;
   tools(args: { server: string }): Promise<FabricMcpToolSummary[]>;
   describe(args: { server: string; tool: string }): Promise<FabricMcpToolSummary>;
-  call(args: { server: string; tool: string; args?: JsonObject; expectedDescriptorDigest?: string }): Promise<JsonValue>;
+  /** Projection happens before the host/guest bridge. full (default) preserves legacy results; text selects joined text (or ""), structured selects structuredContent (or null). Missing forms are not converted. Errors/approval/schema checks are unchanged. */
+  call(args: { server: string; tool: string; args?: JsonObject; expectedDescriptorDigest?: string; projection?: "full" | "text" | "structured" }): Promise<JsonValue>;
 }>;
 declare function parallel<T, R>(
   items: readonly T[],

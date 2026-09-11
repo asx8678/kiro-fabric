@@ -16,6 +16,7 @@ import { createConfigurationBackup, restoreConfigurationBackup } from "./install
 import { smokeCandidate } from "./installer-smoke.mjs";
 import { planInstallationPreparation, applyInstallationPermissions, preservePiFabricProfile } from "./installer-home-preparation.mjs";
 import { planShellIntegration, applyShellIntegration } from "./installer-shell-integration.mjs";
+import { prepareLaunchProfile } from "./launch-profile.mjs";
 
 const commands = ["install", "update", "doctor", "rollback", "uninstall", "start", "restore"];
 const display = value => String(value).replace(/[\u0000-\u001f\u007f]/gu, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`).slice(0, 2000);
@@ -24,9 +25,9 @@ export class InstallerError extends Error {
   constructor(message, exitCode = 5, outcome = "conflict") { super(message); this.exitCode = exitCode; this.outcome = outcome; }
 }
 export function parseManagerArguments(argv) {
-  const result = { command: undefined, kiroHome: undefined, archive: undefined, version: undefined, backup: undefined, yes: false, nonInteractive: false, json: false, noColor: false, purgeData: false, migratePiFabric: false, noShellIntegration: false };
+  const result = { command: undefined, kiroHome: undefined, archive: undefined, version: undefined, backup: undefined, guidanceMode: undefined, yes: false, nonInteractive: false, json: false, noColor: false, purgeData: false, migratePiFabric: false, noShellIntegration: false };
   const seen = new Set();
-  const names = { "--kiro-home": "kiroHome", "--from-archive": "archive", "--version": "version", "--backup": "backup", "--yes": "yes", "--non-interactive": "nonInteractive", "--json": "json", "--no-color": "noColor", "--purge-data": "purgeData", "--migrate-pi-fabric": "migratePiFabric", "--no-shell-integration": "noShellIntegration" };
+  const names = { "--kiro-home": "kiroHome", "--from-archive": "archive", "--version": "version", "--backup": "backup", "--guidance-mode": "guidanceMode", "--yes": "yes", "--non-interactive": "nonInteractive", "--json": "json", "--no-color": "noColor", "--purge-data": "purgeData", "--migrate-pi-fabric": "migratePiFabric", "--no-shell-integration": "noShellIntegration" };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === "--source") throw new InstallerError("Installed management never builds source. Run bash /path/to/checkout/install.sh --source explicitly.", 2, "usage");
@@ -37,7 +38,7 @@ export function parseManagerArguments(argv) {
     const name = names[arg];
     if (!name || seen.has(name)) throw new InstallerError(`Unknown or duplicate option: ${display(arg)}`, 2, "usage");
     seen.add(name);
-    if (["kiroHome", "archive", "version", "backup"].includes(name)) {
+    if (["kiroHome", "archive", "version", "backup", "guidanceMode"].includes(name)) {
       const value = argv[++index];
       if (!value || value.startsWith("--") || /[\u0000-\u001f\u007f]/u.test(value)) throw new InstallerError(`${arg} requires a safe value`, 2, "usage");
       result[name] = value;
@@ -45,11 +46,12 @@ export function parseManagerArguments(argv) {
   }
   if (result.archive && result.version) throw new InstallerError("--from-archive and --version are mutually exclusive", 2, "usage");
   if (result.version && !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(result.version)) throw new InstallerError("--version requires an exact stable release version", 2, "usage");
-  const allowed = { doctor: ["kiroHome", "json", "noColor", "nonInteractive"], start: ["kiroHome", "noColor"], rollback: ["kiroHome", "yes", "json", "noColor", "nonInteractive"], uninstall: ["kiroHome", "yes", "json", "noColor", "nonInteractive", "purgeData", "noShellIntegration"], restore: ["kiroHome", "backup", "yes", "json", "noColor", "nonInteractive"] };
+  const allowed = { doctor: ["kiroHome", "json", "noColor", "nonInteractive"], start: ["kiroHome", "noColor", "guidanceMode"], rollback: ["kiroHome", "yes", "json", "noColor", "nonInteractive"], uninstall: ["kiroHome", "yes", "json", "noColor", "nonInteractive", "purgeData", "noShellIntegration"], restore: ["kiroHome", "backup", "yes", "json", "noColor", "nonInteractive"] };
   if (result.command && allowed[result.command] && [...seen].some(name => !allowed[result.command].includes(name))) throw new InstallerError(`${result.command} does not accept those operation options`, 2, "usage");
   if (result.backup && result.command !== "restore") throw new InstallerError("--backup applies only to restore", 2, "usage");
   if (result.purgeData && result.command !== "uninstall") throw new InstallerError("--purge-data applies only to uninstall", 2, "usage");
   if (result.migratePiFabric && result.command !== "install") throw new InstallerError("--migrate-pi-fabric applies only to install", 2, "usage");
+  if (result.guidanceMode !== undefined && (result.command !== "start" || !["standard", "review", "minimal"].includes(result.guidanceMode))) throw new InstallerError("--guidance-mode requires start and standard, review or minimal", 2, "usage");
   return result;
 }
 export function managerContext(script = fileURLToPath(import.meta.url)) {
@@ -227,7 +229,8 @@ export async function runManager(argv, internal = {}) {
       if (installation.status === "retired") throw new InstallerError("Fabric is retired; run install before this command", 4, "prerequisite");
       if (installation.status !== "active" || !installation.owner) throw new InstallerError("Fabric is not installed; run install before starting", 4, "prerequisite");
       const kiro = checkKiro();
-      return await new Promise((resolve, reject) => { const child = spawn(kiro.executable, ["--v3", "--agent", "kiro-fabric"], { cwd: process.cwd(), env: { ...process.env, KIRO_HOME: home, KIRO_FABRIC_LAUNCH_WORKSPACE: fs.realpathSync(process.cwd()) }, stdio: "inherit" }); child.once("error", reject); child.once("exit", code => resolve(code ?? 1)); });
+      const profile = prepareLaunchProfile(home, installation, options.guidanceMode ?? "standard");
+      return await new Promise((resolve, reject) => { const child = spawn(kiro.executable, ["--v3", "--agent", profile.name], { cwd: process.cwd(), env: { ...process.env, KIRO_HOME: home, KIRO_FABRIC_LAUNCH_WORKSPACE: fs.realpathSync(process.cwd()), KIRO_FABRIC_RUN_DECLARATION: profile.declaration }, stdio: "inherit" }); child.once("error", reject); child.once("exit", code => resolve(code ?? 1)); });
     }
     const owner = await currentOwner(home);
     if (owner?.status === "retired" && ["update", "rollback"].includes(options.command)) throw new InstallerError("Fabric is retired; run install before this command", 4, "prerequisite");

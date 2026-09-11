@@ -15,6 +15,32 @@ type Row = Parameters<typeof detailedStats>[0][number];
 const row = (index: number, arm: string, ok: boolean, credits: number | null): Row => ({ index, arm, ok, credits, caseId: 'bug-money', qualification: false, state: 'finished', stopReason: null, startedAt: 'test' });
 
 describe('TinyShop independent bug contracts', () => {
+  it('counterbalances Default, old Fabric and the candidate on identical Auto repair/review cases', () => {
+    const arm = { profile: '/unused', runtimePaths: ['/unused'], configPaths: ['/unused'] };
+    const config = parseConfig({
+      cli: process.execPath, python: process.execPath, runtimePaths: [process.execPath], cliConfigPaths: [process.execPath],
+      arms: { old: arm, fabric: arm }, cases: ['bug-config', 'review-boundaries'], model: 'auto', repetitions: 2,
+    }, process.cwd());
+    const plan = { config } as Parameters<typeof commandFor>[0];
+    const runs = schedule(config);
+    expect(runs).toHaveLength(12);
+    for (const caseId of config.cases!) {
+      const first = runs.filter(r => r.caseId === caseId && r.round === 0);
+      const second = runs.filter(r => r.caseId === caseId && r.round === 1);
+      expect(first.map(r => r.arm)).toEqual(second.map(r => r.arm).reverse());
+      for (const group of [first, second]) {
+        expect(new Set(group.map(r => r.arm))).toEqual(new Set(['native', 'old', 'fabric']));
+        for (const run of group) {
+          expect(run.hashes).toEqual(group[0]!.hashes);
+          expect(run.seed).toBe(group[0]!.seed);
+          const args = commandFor(plan, run, '/tmp', 'same prompt').args;
+          expect(args[args.indexOf('--model') + 1]).toBe('auto');
+          expect(args).not.toContain('--effort');
+        }
+      }
+    }
+  });
+
   it.each(BUG_CASES)('%s: rejects original and accepts reference for two seeds', async id => {
     for (const seed of ['alpha', 'beta']) {
       const spec = makeBugCase(id, seed);
@@ -43,7 +69,7 @@ describe('TinyShop independent bug contracts', () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
   it('preserves legacy defaults; pairs selected cases and validates selection', () => {
-    expect(CASES).toHaveLength(13); expect(ALL_CASES).toHaveLength(25);
+    expect(CASES).toHaveLength(13); expect(ALL_CASES).toHaveLength(30);
     const base = { cli: process.execPath, python: process.execPath, arms: {}, runtimePaths: [process.execPath], cliConfigPaths: [process.execPath], cases: BUG_CASES, model: 'test-model' };
     const config = parseConfig({ ...base, nativeTrustTools: ['fs_read', 'fs_write', 'str_replace', 'execute_bash'] }, process.cwd());
     const fakePlan = { config } as Parameters<typeof commandFor>[0];
@@ -74,6 +100,40 @@ describe('TinyShop independent bug contracts', () => {
 });
 
 describe('quality-first, coverage-aware statistics', () => {
+  it('pairs old/candidate outer exchanges without inventing hidden telemetry or rewarding failures', () => {
+    const arm = { profile: '/unused', runtimePaths: ['/unused'], configPaths: ['/unused'] };
+    const config = parseConfig({ cli: process.execPath, python: process.execPath, runtimePaths: [process.execPath], cliConfigPaths: [process.execPath], arms: { old: arm, fabric: arm }, cases: ['bug-money'] }, process.cwd());
+    const plan = { config, runs: schedule(config), limitations: [] } as unknown as Parameters<typeof comparisonMetrics>[0];
+    const rows = plan.runs.filter(r => r.round === 0).map(r => ({ ...row(r.index, r.arm, true, 0.2), evidence: {
+      failures: [], events: [], usage: [], credits: 0.2, finalText: '', mode: null, model: null, requestIds: [], sessionId: null,
+      calls: Array.from({ length: r.arm === 'old' ? 5 : 3 }, (_, i) => ({ id: String(i), input: {}, output: {}, title: '', origin: '', status: i === 1 ? 'failed' : 'completed', system: i === 0 })),
+    } }));
+    const pair = (values: Row[]) => comparisonMetrics(plan, values).oldFabricOuterCallPairs[0]!;
+    expect(pair(rows)).toMatchObject({ bothPass: true, oldOuterToolCalls: 4, candidateOuterToolCalls: 2, bothPassOuterCallDelta: -2, bothPassOuterCallReduction: 0.5 });
+    expect(comparisonMetrics(plan, rows).oldFabricOuterCallPairs[1]).toMatchObject({ completed: false, oldOuterToolCalls: null, candidateOuterToolCalls: null, bothPassOuterCallDelta: null });
+    const change = (patch: Partial<Row>) => rows.map(r => r.arm === 'fabric' ? { ...r, ...patch } : r);
+    const missingEvidence = rows.map(r => { const copy: Row = { ...r }; if (r.arm === 'fabric') delete copy.evidence; return copy; });
+    expect(pair(missingEvidence)).toMatchObject({ candidateOuterToolCalls: null, bothPassOuterCallReduction: null });
+    expect(comparisonMarkdown(comparisonMetrics(plan, rows))).toContain('| bug-money | 0 | 4 | 2 | -2 | 0.5 |');
+    expect(comparisonMarkdown(comparisonMetrics(plan, missingEvidence))).toContain('| bug-money | 0 | 4 | unknown | unknown | unknown |');
+    const evidence = rows.find(r => r.arm === 'fabric')!.evidence;
+    expect(pair(change({ evidence: { ...evidence, failures: ['incomplete call'] } }))).toMatchObject({ candidateOuterToolCalls: null, bothPassOuterCallDelta: null });
+    expect(pair(change({ ok: false, stopReason: 'timeout' }))).toMatchObject({ candidateOuterToolCalls: 2, candidatePass: false, candidateStopReason: 'timeout', bothPassOuterCallDelta: null });
+    expect(pair(change({ state: 'started' }))).toMatchObject({ completed: false, bothPassOuterCallReduction: null });
+    expect(pair(change({ evidence: { ...evidence, calls: [] } }))).toMatchObject({ bothPassOuterCallDelta: -4, bothPassOuterCallReduction: 1 });
+    expect(pair(rows.map(r => ({ ...r, evidence: { ...r.evidence, calls: [] } })))).toMatchObject({ bothPassOuterCallDelta: 0, bothPassOuterCallReduction: null });
+    expect(pair(rows.map(r => ({ ...r, evidence: { ...r.evidence, calls: r.arm === 'fabric' ? rows.find(x => x.arm === 'old')!.evidence.calls : evidence.calls } })))).toMatchObject({ bothPassOuterCallDelta: 2, bothPassOuterCallReduction: -1 });
+    expect(detailedStats(rows)).toMatchObject({ innerEffects: null, inputTokens: null, outputTokens: null, cachedTokens: null });
+    const runIndices = plan.runs.filter(r => r.arm === 'native' || (r.round === 0 && r.arm === 'fabric') || (r.round === 1 && r.arm === 'old')).map(r => r.index);
+    const partial = { ...plan, runs: schedule({ ...config, runIndices }) };
+    const partialRows = partial.runs.map(r => ({ ...row(r.index, r.arm, true, 0.2), evidence }));
+    expect(comparisonMetrics(partial, partialRows).oldFabricOuterCallPairs).toMatchObject([{
+      oldIndex: null, candidateIndex: expect.any(Number), completed: false, oldOuterToolCalls: null,
+      candidateOuterToolCalls: 2, bothPassOuterCallDelta: null, bothPassOuterCallReduction: null,
+    }]);
+    const drift = { ...plan, runs: plan.runs.map(r => r.arm === 'old' ? { ...r, seed: 'drift' } : r) };
+    expect(() => comparisonMetrics(drift, rows)).toThrow('unmatched');
+  });
   it('includes failures in cost per success and never imputes missing telemetry', () => {
     const stats = detailedStats([row(0, 'fabric', true, 0.2), row(1, 'fabric', false, 0.4)]);
     expect(stats.reportedCredits).toBeCloseTo(0.6); expect(stats.creditsPerSuccess).toBeCloseTo(0.6);
@@ -116,7 +176,12 @@ describe('offline example export', () => {
       expect(fs.existsSync(path.join(output, 'review-contracts/oracle.json'))).toBe(false);
       expect(fs.existsSync(path.join(output, 'review-boundaries/.ci/verify.json'))).toBe(true);
       expect(fs.existsSync(path.join(output, 'review-boundaries/oracle.json'))).toBe(false);
-      expect(result).toMatchObject({ fixtureVersion: 'tinyshop-and-review-v4' });
+      for (const family of ['review-regressions-seeded', 'review-regressions-heldout']) {
+        expect(fs.existsSync(path.join(output, family, 'src/job.ts'))).toBe(true);
+        expect(fs.existsSync(path.join(output, family, 'oracle.json'))).toBe(false);
+        expect(fs.existsSync(path.join(output, family, 'reviewOracle'))).toBe(false);
+      }
+      expect(result).toMatchObject({ fixtureVersion: 'tinyshop-and-review-v6' });
       await expect(main(['fixtures', '--out', output])).rejects.toThrow();
       for (const argv of [['run'], ['selftest', '--count', '1'], ['fixtures', '--out'], ['--help', 'extra']]) await expect(main(argv)).rejects.toThrow();
     } finally { fs.rmSync(parent, { recursive: true, force: true }); }

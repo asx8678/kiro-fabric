@@ -51,6 +51,9 @@ bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --migrate-pi-
 "${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" doctor
 cd /path/to/your/project
 "${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start
+# Explicit opt-in profiles; default remains unchanged:
+"${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start --guidance-mode review
+"${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start --guidance-mode minimal
 ```
 
 The install command works for any username on Linux or macOS: it uses `KIRO_HOME`
@@ -99,6 +102,9 @@ For older installations, this launcher remains a workaround:
 
 ```sh
 "${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start
+# Explicit opt-in profiles; default remains unchanged:
+"${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start --guidance-mode review
+"${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start --guidance-mode minimal
 ```
 
 The launcher selects Fabric and supplies an explicit canonical project path,

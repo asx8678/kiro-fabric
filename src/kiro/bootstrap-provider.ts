@@ -36,7 +36,8 @@ export class FabricBootstrapProvider implements FabricProvider {
         const truncated = offset + text.length < source.length;
         return { topic: args.topic, text, truncated, ...(truncated ? { nextOffset: offset + text.length } : {}) };
       };
-      let high = Math.min(typeof args.limit === "number" ? args.limit : 8000, Math.max(0, source.length - offset));
+      // Serve the requested topic in one page when it fits the existing limits.
+      let high = Math.min(typeof args.limit === "number" ? args.limit : 16000, Math.max(0, source.length - offset));
       const full = page(high);
       if (JSON.stringify(full).length <= this.maxResultChars) return full;
       let low = 0;
@@ -62,7 +63,7 @@ export class FabricBootstrapProvider implements FabricProvider {
     // generic bridge truncation must never replace a documented typed result.
     if (value && typeof value === "object") {
       const item = value as Record<string, unknown>;
-      const summary = { product: item.product, executor: item.executor, workspace: item.workspace, lifecycle: item.lifecycle, truncated: true };
+      const summary = { product: item.product, executor: item.executor, workspace: item.workspace, lifecycle: item.lifecycle, runProvenance: item.runProvenance, truncated: true };
       if (JSON.stringify(summary).length <= this.maxResultChars) return summary;
     }
     return { truncated: true, message: "Bootstrap detail exceeds the configured nested-result budget; increase that budget for full health/root details" };

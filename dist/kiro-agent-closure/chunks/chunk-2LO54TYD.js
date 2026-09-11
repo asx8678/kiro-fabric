@@ -211543,6 +211543,77 @@ Additional information: BADCLIENT: Bad error code, ${badCode} not found in range
   }
 });
 
+// src/core/repair-error.ts
+var FabricRepairError = class extends Error {
+  failure;
+  constructor(message, failure) {
+    super(message);
+    this.name = "FabricRepairError";
+    this.failure = structuredClone(failure);
+  }
+};
+var FabricCompilerTimeoutError = class extends FabricRepairError {
+  constructor(timeoutMs) {
+    super(`Fabric compiler timed out after ${timeoutMs}ms`, { code: "timeout", phase: "compile", dispatchState: "not_dispatched", effectOutcome: "none" });
+    this.name = "FabricCompilerTimeoutError";
+  }
+};
+var fabricFailureMetadata = (error) => error instanceof FabricRepairError ? structuredClone(error.failure) : void 0;
+var repairSchema = (schema) => {
+  let nodes = 0;
+  let chars = 0;
+  const walk = (value, depth, propertyMap = false) => {
+    if (++nodes > 128 || depth > 8) return void 0;
+    if (typeof value === "string") {
+      chars += value.length;
+      return value.length <= 256 && chars <= 4096 ? value : void 0;
+    }
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return Number.isFinite(value) ? value : void 0;
+    if (Array.isArray(value)) return value.slice(0, 16).map((v) => walk(v, depth + 1)).filter((v) => v !== void 0);
+    if (!value || typeof value !== "object") return void 0;
+    const out = /* @__PURE__ */ Object.create(null);
+    for (const [key, child] of Object.entries(value).slice(0, 64)) {
+      if (key.length > 128 || !propertyMap && !["type", "properties", "required", "items", "additionalProperties", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"].includes(key)) continue;
+      chars += key.length;
+      if (chars > 4096) break;
+      const projected = walk(child, depth + 1, !propertyMap && key === "properties");
+      if (projected !== void 0) out[key] = projected;
+    }
+    return out;
+  };
+  return walk(schema, 0) ?? {};
+};
+var argumentRepairError = (ref, descriptorDigest, schema, invalid) => new FabricRepairError(`Invalid arguments for ${ref}: ${invalid}`, {
+  code: "invalid_arguments",
+  phase: "validation",
+  dispatchState: "not_dispatched",
+  effectOutcome: "none",
+  ref: ref.slice(0, 512),
+  descriptorDigest,
+  invalidPath: (invalid.startsWith("/") ? invalid.split(": ")[0] : "/").slice(0, 512),
+  relevantSchema: repairSchema(schema)
+});
+var createCheckpointJournal = () => {
+  const handles = [];
+  let reservations = 0;
+  return {
+    reserve() {
+      if (reservations >= 8) throw new Error("Fabric checkpoint quota exceeded");
+      reservations += 1;
+      let recorded = false;
+      return (handle) => {
+        if (recorded) return;
+        recorded = true;
+        if (typeof handle.id !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(handle.id)) return;
+        if (handle.label !== void 0 && (typeof handle.label !== "string" || handle.label.length > 128)) return;
+        handles.push({ id: handle.id, ...handle.label !== void 0 ? { label: handle.label } : {} });
+      };
+    },
+    snapshot: () => structuredClone(handles)
+  };
+};
+
 // src/runtime/type-checker.ts
 var import_typescript = __toESM(require_typescript(), 1);
 import path from "node:path";
@@ -211731,6 +211802,8 @@ var transpileFabricCodeWithSourceMap = (code) => {
 var typeCheckFabricCode = (code, declarations) => checkerFor(declarations).check(code);
 var COMPILER_WORKER_IDLE_MS = 3e4;
 var COMPILER_WORKER_MAX_USES = 250;
+var MAX_COMPILER_CACHE_ENTRIES = 32;
+var MAX_COMPILER_CACHE_CHARS = 2 * 1024 * 1024;
 var defaultCompilerWorkerUrl = () => import.meta.url.endsWith(".ts") ? new URL("../../dist/runtime/compiler-worker-entry.js", import.meta.url) : new URL("../runtime/compiler-worker-entry.js", import.meta.url);
 var FabricCompilerPool = class {
   constructor(maxWorkers = 4) {
@@ -211740,9 +211813,32 @@ var FabricCompilerPool = class {
   maxWorkers;
   #workers = /* @__PURE__ */ new Set();
   #idle;
+  #cache = /* @__PURE__ */ new Map();
+  #cachedChars = 0;
   #nextId = 0;
   #closed = false;
   #closing;
+  #remember(key, result) {
+    if (key === void 0 || result.errors.length > 0 || result.javascript === void 0) return;
+    const chars = key.length + result.javascript.length + (result.sourceMap?.length ?? 0);
+    if (chars > MAX_COMPILER_CACHE_CHARS) return;
+    const previous = this.#cache.get(key);
+    if (previous) {
+      this.#cache.delete(key);
+      this.#cachedChars -= previous.chars;
+    }
+    this.#cache.set(key, { chars, result: {
+      errors: [],
+      javascript: result.javascript,
+      ...result.sourceMap === void 0 ? {} : { sourceMap: result.sourceMap }
+    } });
+    this.#cachedChars += chars;
+    while (this.#cache.size > MAX_COMPILER_CACHE_ENTRIES || this.#cachedChars > MAX_COMPILER_CACHE_CHARS) {
+      const oldest = this.#cache.keys().next().value;
+      this.#cachedChars -= this.#cache.get(oldest).chars;
+      this.#cache.delete(oldest);
+    }
+  }
   #detachIdle(state) {
     if (state.idleTimer) {
       clearTimeout(state.idleTimer);
@@ -211799,6 +211895,15 @@ var FabricCompilerPool = class {
         reject(options.signal.reason ?? new Error("Fabric compiler aborted"));
         return;
       }
+      const { code, declarations } = request;
+      const cacheKey = options.workerUrl === void 0 && code.length + declarations.length <= MAX_COMPILER_CACHE_CHARS ? `${declarations.length}:${declarations}${code}` : void 0;
+      const cached = cacheKey === void 0 ? void 0 : this.#cache.get(cacheKey);
+      if (cached) {
+        this.#cache.delete(cacheKey);
+        this.#cache.set(cacheKey, cached);
+        resolve({ ...cached.result, errors: [] });
+        return;
+      }
       const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? DEFAULT_COMPILER_TIMEOUT_MS, 6e4));
       const state = this.#acquire(options.workerUrl);
       const id = ++this.#nextId;
@@ -211817,6 +211922,7 @@ var FabricCompilerPool = class {
           void this.#terminate(state).then(complete);
           return;
         }
+        this.#remember(cacheKey, result);
         state.uses += 1;
         if (!this.#closed && !this.#idle && state.poolable && state.uses < COMPILER_WORKER_MAX_USES) {
           this.#idle = state;
@@ -211830,13 +211936,13 @@ var FabricCompilerPool = class {
         }
       };
       const onAbort = () => finish(options.signal?.reason instanceof Error ? options.signal.reason : new Error("Fabric compiler aborted"));
-      const timer = setTimeout(() => finish(new Error(`Fabric compiler timed out after ${timeoutMs}ms`)), timeoutMs);
+      const timer = setTimeout(() => finish(new FabricCompilerTimeoutError(timeoutMs)), timeoutMs);
       state.pending = { id, finish };
       options.signal?.addEventListener("abort", onAbort, { once: true });
       if (options.signal?.aborted) onAbort();
       if (!settled) {
         try {
-          state.worker.postMessage({ id, ...request });
+          state.worker.postMessage({ id, code, declarations });
         } catch (error) {
           finish(error instanceof Error ? error : new Error("Fabric compiler dispatch failed"));
         }
@@ -211845,6 +211951,8 @@ var FabricCompilerPool = class {
   }
   close() {
     this.#closed = true;
+    this.#cache.clear();
+    this.#cachedChars = 0;
     return this.#closing ??= Promise.all([...this.#workers].map((state) => {
       state.pending?.finish(new Error("Fabric compiler pool is closed"));
       return this.#terminate(state);
@@ -211854,6 +211962,12 @@ var FabricCompilerPool = class {
 var standaloneCompilerPool = new FabricCompilerPool();
 
 export {
+  FabricRepairError,
+  FabricCompilerTimeoutError,
+  fabricFailureMetadata,
+  repairSchema,
+  argumentRepairError,
+  createCheckpointJournal,
   assertFabricTranspiledWrapper,
   transpileFabricCodeWithSourceMap,
   typeCheckFabricCode,

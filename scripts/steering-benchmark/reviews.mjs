@@ -4,12 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { sha, canonical, object, putFiles } from './core.mjs';
 import { collect } from './stream.mjs';
+import { makeAdherenceReviewCase, scoreReviewQuality } from './review-quality.mjs';
+import { makeCalibrationReviewCase, scoreReviewCalibration, probeCalibrationReviewFixture } from './review-calibration.mjs';
 
-export const REVIEW_CASES = ['review-infra', 'review-contracts', 'review-boundaries'];
+export const REVIEW_CASES = ['review-infra', 'review-contracts', 'review-boundaries', 'review-evidence', 'review-adherence', 'review-calibration'];
 export const REVIEW_KINDS = ['environment-key-mismatch', 'cron-frequency', 'unused-alerts', 'validation-exit', 'expired-exemption', 'rollout-outage', 'same-release', 'disabled-cleanup'];
 /** @typedef {{path:string,line:number,text:string}} ReviewEvidence */
 /** @typedef {{kind:string,evidence:ReviewEvidence[]}} Finding */
-/** @typedef {{expected:number,reported:number,truePositives:number,falsePositives:number,duplicates:number,missed:string[],precision:number|null,recall:number}} ReviewScore */
+/** @typedef {{expected:number,reported:number,truePositives:number,falsePositives:number,duplicates:number,missed:string[],precision:number|null,recall:number,quality?:import('./review-quality.mjs').ReviewQuality,calibration?:import('./review-calibration.mjs').ReviewCalibration}} ReviewScore */
 /** @param {Record<string,string>} files @param {string} file @param {string} text @returns {ReviewEvidence} */
 function evidence(files, file, text) {
   const lines = files[file].split('\n'), matches = lines.flatMap((line, i) => line === text ? [i + 1] : []);
@@ -21,8 +23,11 @@ function evidence(files, file, text) {
  * @param {string} id @param {string} seed @returns {import('./cases.mjs').Case} */
 export function makeReviewCase(id, seed) {
   assert.ok(REVIEW_CASES.includes(id), 'unknown review case');
+  if (id === 'review-calibration') return makeCalibrationReviewCase(seed);
   if (id === 'review-contracts') return makeContractReviewCase(seed);
   if (id === 'review-boundaries') return makeBoundaryReviewCase(seed);
+  if (id === 'review-evidence') return makeEvidenceReviewCase(seed);
+  if (id === 'review-adherence') return makeAdherenceReviewCase(makeEvidenceReviewCase(seed));
   const token = sha(seed).slice(0, 8), hour = 9 + parseInt(token.slice(0, 2), 16) % 8;
   const envFile = `config/environments/production-${token}.json`;
   const pipeline = `.azure-pipelines/maintenance-${token}.json`;
@@ -100,10 +105,82 @@ function makeContractReviewCase(seed) {
     expected: { findings },
     prompt: 'Review this maintenance project for concrete defects. Work only inside this disposable workspace. Change no files; no network, installation, persistent memory or delegation. Follow README.md contracts, trace callers and validate reachable inputs. Return only raw JSON {"findings":[{"kind":string,"evidence":[{"path":relative_path,"line":one_based_integer,"text":exact_source_line}]}]}. Choose the most specific kind from ' + JSON.stringify(kinds) + '. Include caller/consumer evidence for cross-file defects, preserve exact source-line whitespace and deduplicate. Not every kind necessarily applies. No fixes or extra prose.' };
 }
+/** Opt-in evidence discipline case; older fixtures and their prompts remain unchanged.
+ * Node/Bash contracts only: not qualification of PowerShell or Helm semantics.
+ * @param {string} seed @returns {import('./cases.mjs').Case} */
+function makeEvidenceReviewCase(seed) {
+  const token = sha(seed).slice(0, 8);
+  const files = {
+    'README.md': `# Maintenance evidence ${token}\nReview scripts/cleanup.mjs and scripts/check.sh. Cleanup must remove all expired nodes and save ONLY files whose nodes changed. Returned saves are simulated effects, not filesystem writes. Input nodes are ordinary arrays. scripts/check.sh must propagate the validator's failure status.\nconfig/job.json is the active renderer configuration; capitalized RestartPolicy is the declared contract, and non-default OnFailure must be honored. Operator settings supply should_remove at runtime; the commented local variable is not an input. Empty cleanup batches are valid. Everything is inert Node/Bash with no dependencies, network or credentials. These contracts do not specify PowerShell or Helm behavior.\n`,
+    'scripts/cleanup.mjs': `export function cleanup(files) {
+  let changesMade = false;
+  const saves = [], progress = [];
+  for (const [index, file] of files.entries()) {
+    progress.push(index / files.length * 100);
+    const nodes = [...file.nodes];
+    for (const node of nodes) {
+      if (node.expired) {
+        file.nodes.splice(file.nodes.indexOf(node), 1);
+        changesMade = true;
+      }
+    }
+    if (changesMade) saves.push(file.name);
+  }
+  return {saves, progress};
+}
+`,
+    'scripts/validate input.sh': 'printf "%s\\n" "invalid fixture input" >&2\nexit 7\n',
+    'scripts/check.sh': 'bash "scripts/validate input.sh" | tail -n 1\n',
+    'scripts/render.mjs': 'export function render(config) { return {restartPolicy: config.RestartPolicy ?? "Never"}; }\n',
+    'config/job.json': '{"RestartPolicy":"OnFailure"}\n',
+    'scripts/enabled.mjs': '// const should_remove = false;\nexport function enabled(settings) { return settings.should_remove === true; }\n',
+  };
+  const at = (file, line) => evidence(files, file, line);
+  const findings = [
+    { kind: 'unnecessary-save', evidence: [at('scripts/cleanup.mjs', '  let changesMade = false;'), at('scripts/cleanup.mjs', '    if (changesMade) saves.push(file.name);')] },
+    { kind: 'masked-validation-exit', evidence: [at('scripts/check.sh', 'bash "scripts/validate input.sh" | tail -n 1'), at('scripts/validate input.sh', 'exit 7')] },
+  ];
+  const kinds = ['unnecessary-save', 'masked-validation-exit', 'missed-removals', 'skipped-nodes', 'empty-division', 'config-key-case', 'disabled-cleanup'];
+  return { id: 'review-evidence', seed, files, sources: [], allowed: [], solution: {}, noTools: false, json: true, qualification: false,
+    expected: { findings },
+    prompt: 'Review this maintenance project for concrete defects under README.md contracts. Work only inside this disposable workspace. Change no files; no network, installation, persistent memory or delegation. Return only raw JSON {"findings":[{"kind":string,"evidence":[{"path":relative_path,"line":one_based_integer,"text":exact_source_line}]}]}. Choose the most specific kind from ' + JSON.stringify(kinds) + '. Inspect reachable consequences and counterexamples. Include relevant caller/configuration evidence, preserve exact source lines and deduplicate. Not every kind applies. No fixes or extra prose.' };
+}
+
+/** @param {import('./cases.mjs').Case} spec */
+async function probeEvidenceReviewFixture(spec) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'review-evidence-probe-'));
+  try {
+    putFiles(root, spec.files);
+    const program = `import assert from "node:assert/strict"; import fs from "node:fs";
+import {cleanup} from "./scripts/cleanup.mjs";
+import {render} from "./scripts/render.mjs";
+import {enabled} from "./scripts/enabled.mjs";
+const files = [{name:"before",nodes:[]},{name:"changed",nodes:[{expired:true},{expired:true},{expired:false}]},{name:"after",nodes:[]}];
+assert.deepEqual(cleanup(files).saves, ["changed","after"], "unnecessary save, not lost removal");
+assert.deepEqual(files[1].nodes,[{expired:false}], "snapshot removes adjacent expired nodes");
+assert.deepEqual(cleanup([]),{saves:[],progress:[]}, "empty batch never evaluates division");
+assert.equal(render(JSON.parse(fs.readFileSync("config/job.json","utf8"))).restartPolicy,"OnFailure");
+assert.equal(enabled({should_remove:true}),true); assert.equal(enabled({should_remove:false}),false);`;
+    const result = await collect({ executable: process.execPath, args: ['--input-type=module', '-e', program], cwd: root, maxOutputBytes: 65536, timeoutMs: 10000 });
+    assert.ok(result.code === 0 && !result.stopReason && !result.spawnError, result.stderr);
+    for (const [file, code] of [['scripts/validate input.sh', 7], ['scripts/check.sh', 0]]) {
+      const result = await collect({ executable: 'bash', args: ['--noprofile', '--norc', String(file)], cwd: root, maxOutputBytes: 65536, timeoutMs: 10000 });
+      assert.equal(result.code, code); assert.ok(!result.stopReason && !result.spawnError);
+      assert.ok(result.stderr.includes('invalid fixture input'));
+    }
+    assert.equal(scoreReview(spec, spec.expected).truePositives, 2);
+    return { ok: true, defects: 2, falsePositiveControls: 5 };
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+
 /** Grounded fixture findings, not a semantic judge for arbitrary real-world reviews.
  * Partial recall and false positives survive strict pass/fail reporting. Never count duplicates twice.
  * @param {import('./cases.mjs').Case} spec @param {unknown} answer @returns {ReviewScore} */
 export function scoreReview(spec, answer) {
+  if (spec.id === 'review-calibration') return scoreReviewCalibration(spec, answer,
+    (s, a) => scoreReview({ ...s, id: 'review-evidence' }, a));
+  if (spec.id === 'review-adherence') return scoreReviewQuality(spec, answer,
+    (s, a) => scoreReview({ ...s, id: 'review-evidence' }, a));
   const value = object(answer);
   assert.deepEqual(Object.keys(value), ['findings'], 'review answer schema');
   assert.ok(Array.isArray(value.findings) && value.findings.length <= 100, 'bounded findings array');
@@ -131,8 +208,15 @@ export function scoreReview(spec, answer) {
 /** Independently qualify seeded defect semantics with actual Node execution, not agent claims.
  * @param {import('./cases.mjs').Case} spec */
 export async function probeReviewFixture(spec) {
+  if (spec.id === 'review-calibration') return probeCalibrationReviewFixture(spec);
   if (spec.id === 'review-contracts') return probeContractReviewFixture(spec);
   if (spec.id === 'review-boundaries') return probeBoundaryReviewFixture(spec);
+  if (spec.id === 'review-evidence') return probeEvidenceReviewFixture(spec);
+  if (spec.id === 'review-adherence') {
+    const result = await probeEvidenceReviewFixture(spec);
+    assert.equal(scoreReview(spec, spec.expected).quality.violations, 0);
+    return { ...result, qualityVersion: 'review-adherence/v1', manualAdjudicationRequired: true };
+  }
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'review-fixture-probe-'));
   try {
     putFiles(root, spec.files);

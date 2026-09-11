@@ -7,7 +7,12 @@ import { build } from "esbuild";
 import { uniquePackageRecords } from "./package-identity.mjs";
 import { sharedEsbuildOptions } from "./esbuild-common.mjs";
 
+import { captureBuildInputs, assertBuildInputs } from "./build-inputs.mjs";
+import { renderAgentGuidance } from "./generate-agent-guidance.mjs";
+
 const root = path.resolve(".");
+const buildInputs = captureBuildInputs(root);
+if (fs.readFileSync(path.join(root, "src/kiro/generated-guidance.ts"), "utf8") !== renderAgentGuidance(root)) throw new Error("Bundled guidance is stale; run pnpm run build");
 const outdir = path.join(root, "dist", "kiro-agent-closure");
 const product = JSON.parse(fs.readFileSync(path.join(root, "agent-product.json"), "utf8"));
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
@@ -164,7 +169,7 @@ fs.writeFileSync(path.join(evidenceDirectory, "agent-reachability.json"), `${JSO
 
 const files = [];
 const walk = (directory) => {
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
     const target = path.join(directory, entry.name);
     if (entry.isDirectory()) walk(target);
     else if (entry.isFile()) files.push(target);
@@ -181,6 +186,7 @@ const evidenceFiles = files.map((file) => {
 });
 const manifest = {
   schemaVersion: 1,
+  buildInputs,
   product: product.product,
   entrypoint: "kiro/mcp-entry.js",
   compilerWorker: "runtime/compiler-worker-entry.js",
@@ -190,6 +196,7 @@ const manifest = {
   files: evidenceFiles,
   contentDigest: digest.digest("hex"),
 };
+assertBuildInputs(root, buildInputs);
 fs.writeFileSync(path.join(outdir, "closure-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
 const forbiddenText = [

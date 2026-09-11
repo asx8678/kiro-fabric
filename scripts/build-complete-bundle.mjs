@@ -1,12 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { acquirePrivateTools } from "./build-private-tools.mjs";
 import { canonical, createBundleManifest, validateBundle, sha256 } from "./bundle-contract.mjs";
 import { createBundleArchive } from "./bundle-archive.mjs";
 import { detectInstallerPlatform, compatibilityFor, assertUnprivilegedInstaller } from "./installer-platform.mjs";
+
+import { captureBuildInputs, verifyBuildClosure, verifyBuildCapture, verifyCapturedInputs } from "./build-inputs.mjs";
 
 const ownDirectory = (directory) => {
   const s = fs.lstatSync(directory);
@@ -27,15 +29,7 @@ export function sourceProvenance(root) {
   const git = args => execFileSync("git", args, { cwd: root, env: { PATH: process.env.PATH, LANG: "C" }, encoding: "utf8", timeout: 10000, maxBuffer: 4 * 1024 * 1024 });
   const head = git(["rev-parse", "HEAD"]).trim();
   if (!/^[a-f0-9]{40}$/u.test(head)) throw new Error("Cannot establish source Git identity");
-  const inputs = [...new Set(git(["ls-files", "--cached", "--others", "--exclude-standard", "-z"]).split("\0").filter(Boolean))]
-    .filter(name => /^(src\/|scripts\/|skills\/|resources\/|package\.json$|pnpm-lock\.yaml$|agent-product\.json$|build-toolchain\.json$|install\.sh$|tsconfig)/u.test(name)).sort();
-  const digest = createHash("sha256").update("kiro-fabric.source.v1\0");
-  for (const name of inputs) {
-    const file = path.join(root, name), s = fs.lstatSync(file);
-    if (!s.isFile() || s.isSymbolicLink() || s.nlink !== 1 || s.size > 16 * 1024 * 1024) throw new Error("Unsafe source input");
-    digest.update(name).update("\0").update(fs.readFileSync(file)).update("\0");
-  }
-  return { kind: "local-source", sourceDigest: digest.digest("hex"), gitHead: head, dirty: git(["status", "--porcelain", "-z"]).length > 0 };
+  return { kind: "local-source", sourceDigest: captureBuildInputs(root).digest, gitHead: head, dirty: git(["status", "--porcelain", "-z"]).length > 0 };
 }
 function verifyCachedTools(root, pins) {
   ownDirectory(root);
@@ -49,6 +43,7 @@ function verifyCachedTools(root, pins) {
 export async function buildCompleteBundle(options = {}) {
   assertUnprivilegedInstaller();
   const root = fs.realpathSync(options.root ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."));
+  const initialBuild = verifyBuildClosure(root);
   const initialProvenance = sourceProvenance(root);
   const platform = detectInstallerPlatform();
   const target = options.target ?? platform.target;
@@ -88,6 +83,8 @@ export async function buildCompleteBundle(options = {}) {
     fs.mkdirSync(path.join(staging, "resources", "steering"), { mode: 0o700 });
     copyClosure(path.join(root, "resources", "steering", "fabric.md"), path.join(staging, "resources", "steering", "fabric.md"));
     const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    verifyCapturedInputs(staging, initialBuild, [["skills/fabric-exec", "resources/skills/fabric-exec"], ["resources/steering/fabric.md", "resources/steering/fabric.md"]]);
+    verifyBuildCapture(root, path.join(staging, "app"), initialBuild);
     const provenance = sourceProvenance(root);
     if (provenance.sourceDigest !== initialProvenance.sourceDigest || provenance.gitHead !== initialProvenance.gitHead) throw new Error("Source changed during bundle capture");
     const manifest = await createBundleManifest(staging, { version: pkg.version, target, compatibility: compatibilityFor(target), provenance, tools: pins });

@@ -25,7 +25,7 @@ printf '%s\\n' "$*" >> ${shellQuote(calls)}
 case "$*" in
   --version) printf 'kiro-cli 2.21.1\\n' ;;
   'agent validate --help') printf '%s\\n' --path ;;
-  '--v3 --agent kiro-fabric')
+  '--v3 --agent kiro-fabric'|'--v3 --agent kiro-fabric-review-'*|'--v3 --agent kiro-fabric-minimal-'*)
     printf '%s\\n' "$PWD" "$KIRO_HOME" "$KIRO_FABRIC_LAUNCH_WORKSPACE" > ${shellQuote(launch)}
     exit "$START_TEST_EXIT" ;;
   *) exit 91 ;;
@@ -37,8 +37,8 @@ esac
       const bundle = await fixture(); roots.push(bundle);
       return await installCompleteGeneration(bundle, { kiroHome, userHome: home, env: {}, provenance: "source", validateCandidate: async () => {} });
     },
-    run(clientExit = 0) {
-      return spawnSync(process.execPath, [manager, "start", "--kiro-home", kiroHome], {
+    run(clientExit = 0, guidanceMode?: "standard" | "review" | "minimal") {
+      return spawnSync(process.execPath, [manager, "start", "--kiro-home", kiroHome, ...(guidanceMode ? ["--guidance-mode", guidanceMode] : [])], {
         cwd: project, env: { HOME: home, KIRO_HOME: "/must-not-be-used", PATH: bin, TMPDIR: root, LANG: "C", LC_ALL: "C", KIRO_FABRIC_LAUNCH_WORKSPACE: "/must-be-overwritten", START_TEST_EXIT: String(clientExit) },
         encoding: "utf8", timeout: 15000, maxBuffer: 16384, stdio: ["ignore", "pipe", "pipe"],
       });
@@ -122,6 +122,20 @@ describe("start installation admission", () => {
     fs.appendFileSync(target, "tampered");
     expectRefused(f, 5, /modified|inventory/i);
   });
+  it.each(["review", "minimal"] as const)("launches explicit %s mode without replacing the managed default", async mode => {
+    const f = setup(), installed = await f.install();
+    const original = fs.readFileSync(installed.paths.profile);
+    const result = f.run(0, mode);
+    expect(result.error).toBeUndefined(); expect(result.status, result.stdout + result.stderr).toBe(0);
+    const name = `kiro-fabric-${mode}-${installed.digest.slice(0, 12)}`;
+    expect(fs.readFileSync(f.calls, "utf8")).toContain(`--v3 --agent ${name}`);
+    const profile = JSON.parse(fs.readFileSync(path.join(f.kiroHome, "agents", `${name}.json`), "utf8"));
+    expect(profile.name).toBe(name); expect(profile.tools).toEqual(["@fabric/fabric_exec"]);
+    if (mode === "minimal") { expect(profile.resources).toEqual([]); expect(profile.hooks).toEqual([]); }
+    expect(fs.readFileSync(installed.paths.profile)).toEqual(original);
+    expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe("active");
+  });
+
   it.each([0, 23])("launches only an active verified generation and forwards client exit %s", async exitCode => {
     const f = setup(); await f.install();
     expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe("active");

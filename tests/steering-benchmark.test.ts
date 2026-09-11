@@ -3,13 +3,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeCase, CASES, AUDIT, HELP_CODE, caseHashes } from '../scripts/steering-benchmark/cases.mjs';
-import { canonical, checkScope, inventory, object, putFiles, readJson, save } from '../scripts/steering-benchmark/core.mjs';
+import { canonical, checkScope, inventory, object, putFiles, readJson, save, sha } from '../scripts/steering-benchmark/core.mjs';
 import { analyzeEvents, collect, eventCollector } from '../scripts/steering-benchmark/stream.mjs';
 import { validate, validateAnswer, validateAudit } from '../scripts/steering-benchmark/oracles.mjs';
 import { syntheticEvents, solvedTrial, selftest } from '../scripts/steering-benchmark/selftest.mjs';
 import { ARMS, artifact, budgetGate, createPlan, executable, parseConfig, profileSnapshot, schedule, verifyPlan } from '../scripts/steering-benchmark/plan.mjs';
 import { commandFor, init, loadPlan, rows, runOne, summarizeRows } from '../scripts/steering-benchmark/runner.mjs';
 import { main } from '../scripts/steering-benchmark.mjs';
+import { detailedStats } from '../scripts/steering-benchmark/metrics.mjs';
 
 type Trial = Awaited<ReturnType<typeof solvedTrial>>;
 type Row = Parameters<typeof summarizeRows>[0][number];
@@ -248,6 +249,25 @@ describe('ACP events and complete usage', () => {
     const s = summarizeRows([{ ...charge(0, null), state: 'started', ok: false }, charge(1, 0.3)]);
     expect(s.allExecuted).toMatchObject({ attempts: 2, unknownChargeAttempts: 1, reportedCredits: null, knownReportedCredits: 0.3 });
   });
+  it('uses identical unknown and zero semantics in steering and comparison summaries', async () => {
+    const processResult = await collect({ executable: process.execPath, args: ['-e', ''], cwd: root, maxOutputBytes: 1024, timeoutMs: 5000 });
+    const evidence = analyzeEvents(syntheticEvents('[]', { tools: true }));
+    const observed: Row = { ...charge(0), process: processResult, evidence };
+    const zero: Row = { ...observed, process: { ...processResult, wallMs: 0 }, evidence: { ...evidence, calls: [] } };
+    const variants: Row[][] = [[], [charge(0)], [observed], [zero],
+      [{ ...observed, ok: false, stopReason: 'fixture-failure' }],
+      [{ ...observed, evidence: { ...evidence, failures: ['incomplete call evidence'] } }],
+      [observed, { ...charge(1, null), state: 'started', ok: false }],
+    ];
+    for (const rows of variants) {
+      const steering = summarizeRows(rows).allExecuted, comparison = detailedStats(rows);
+      expect(steering).toMatchObject({ wallMs: comparison.wallMs, wallCoverage: comparison.wallCoverage,
+        outerToolCalls: comparison.outerToolCalls, toolCallCoverage: comparison.toolCallCoverage,
+        reportedCredits: comparison.reportedCredits, creditsPerPass: comparison.creditsPerSuccess });
+    }
+    expect(summarizeRows([charge(0)]).allExecuted).toMatchObject({ wallMs: null, outerToolCalls: null });
+    expect(summarizeRows([zero]).allExecuted).toMatchObject({ wallMs: 0, outerToolCalls: 0 });
+  });
   it('rejects malformed JSON and caps actual start events, not text mentions', () => {
     const stream = eventCollector(1); expect(stream.onLine('not-json')).toBe('malformed-stream-json');
     const capped = eventCollector(1), start = syntheticEvents('[]', { tools: true })[1];
@@ -315,6 +335,19 @@ function manifestFixture() {
 }
 
 describe('portable plans, drift refusal and spend gates', () => {
+  it('freezes each arm\'s own optional review reference and rejects later drift', () => {
+    const f = manifestFixture(), arm = f.value.arms.old;
+    expect(profileSnapshot(arm).reviewHelp).toBeNull();
+    const file = path.join(arm.runtimePaths[0], 'resources/skills/fabric-exec/references/review.md');
+    fs.mkdirSync(path.dirname(file)); fs.writeFileSync(file, 'old arm review guidance\n');
+    const plan = createPlan(f.manifest);
+    expect(plan.identity.profiles.old!.reviewHelp).toMatchObject({ path: file, text: 'old arm review guidance\n', sha256: sha('old arm review guidance\n') });
+    expect(plan.identity.profiles.pass1!.reviewHelp).toBeNull();
+    expect(() => verifyPlan(plan)).not.toThrow();
+    fs.writeFileSync(file, 'candidate guidance must not substitute for old\n');
+    expect(() => verifyPlan(plan)).toThrow();
+  });
+
   it('freezes all four arms, paired seeds, reverse/rotated order and excludes native help', () => {
     const f = manifestFixture(), plan = createPlan(f.manifest);
     expect(plan.runs.slice(-8).every(r => r.caseId === 'range')).toBe(true);

@@ -1,17 +1,19 @@
 import { sha, digest } from './core.mjs';
 import { BUG_CASES, makeBugCase } from './projects.mjs';
 import { REVIEW_CASES, makeReviewCase } from './reviews.mjs';
+import { REVIEW_REGRESSION_CASES, makeRegressionReviewCase } from './review-regressions.mjs';
 
 export const CASES = ['explain', 'json160', 'microcalc', 'read24', 'range', 'target-edit', 'multi-edit', 'parser', 'rename-api', 'invoice', 'exit7', 'fabric-help', 'github-advisory'];
-export const ALL_CASES = [...CASES, ...BUG_CASES, ...REVIEW_CASES];
+export const ALL_CASES = [...CASES, ...BUG_CASES, ...REVIEW_CASES, ...REVIEW_REGRESSION_CASES];
 export const AUDIT = 'execution-audit.jsonl';
 export const HELP_CODE = "return await fabric.help({topic:'overview'});";
 const common = 'Work only inside this disposable workspace. Do not access network, install dependencies, use persistent memory, or delegate. Do not modify tests or fixture scripts. Avoid unnecessary output. ';
-/** @typedef {{id:string,seed:string,files:Record<string,string>,allowed:string[],sources:string[],prompt:string,expected:unknown,solution:Record<string,string>,noTools:boolean,json:boolean,qualification:boolean}} Case */
+/** @typedef {{id:string,seed:string,files:Record<string,string>,allowed:string[],sources:string[],prompt:string,expected:unknown,reviewOracle?:unknown,solution:Record<string,string>,noTools:boolean,json:boolean,qualification:boolean}} Case */
 /** @param {number} n */
 const pad = n => String(n).padStart(2, '0');
 /** @param {string} id @param {string} seed @param {string} [python] @returns {Case} */
 export function makeCase(id, seed, python = 'python3') {
+  if (REVIEW_REGRESSION_CASES.includes(id)) return makeRegressionReviewCase(id, seed);
   if (BUG_CASES.includes(id)) return makeBugCase(id, seed);
   if (REVIEW_CASES.includes(id)) return makeReviewCase(id, seed);
   if (!CASES.includes(id)) throw new Error('unknown case ' + id);
@@ -110,4 +112,4 @@ function auditScript(s, checks, successExit) {
   return `import hashlib, json, pathlib, sys, traceback\nsys.dont_write_bytecode = True\nROOT = pathlib.Path(__file__).resolve().parent.parent\nsys.path.insert(0, str(ROOT))\ndef hashes(names):\n    return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in names}\nsources = ${JSON.stringify(s.sources)}\nfixtures = ${JSON.stringify(immutable)}\npre = hashes(sources)\nfixture_hashes = hashes(fixtures)\ncode = ${successExit}\ntry:\n${checks.trimEnd().split('\n').map(l => '    ' + l).join('\n')}\nexcept BaseException:\n    traceback.print_exc()\n    code = 1\nfinally:\n    audit = ROOT / ${JSON.stringify(AUDIT)}\n    seq = len(audit.read_text(encoding="utf-8").splitlines())\n    row = {"seq": seq, "kind": ${JSON.stringify(s.id)}, "pre": pre, "post": hashes(sources), "fixtures": fixture_hashes, "exit": code}\n    with audit.open("a", encoding="utf-8") as handle: handle.write(json.dumps(row, sort_keys=True) + "\\n")\nsys.exit(code)\n`;
 }
 /** @param {Case} s */
-export function caseHashes(s) { return { prompt: sha(s.prompt), fixtures: digest(s.files), oracle: digest({ expected: s.expected, allowed: s.allowed, solution: s.solution }) }; }
+export function caseHashes(s) { return { prompt: sha(s.prompt), fixtures: digest(s.files), oracle: digest({ expected: s.expected, allowed: s.allowed, solution: s.solution, ...(s.reviewOracle !== undefined ? { reviewOracle: s.reviewOracle } : {}) }) }; }

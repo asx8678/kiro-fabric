@@ -1,20 +1,60 @@
 import type { LocalReadManyResult, LocalReadResult, LocalReadWindow, LocalSourceWindow } from "./local-contract.js";
 
+export class LocalReadFailure extends Error {}
+
+function summarizeWindows(files: LocalSourceWindow[], remaining: LocalReadWindow[]): LocalReadManyResult {
+  // Summarize each snapshot once, even when its windows arrive out of order.
+  // This describes suffixes only; it is not a persistent inspection ledger.
+  const last = new Map<string, LocalSourceWindow>();
+  for (const file of files) {
+    if (file.endLine === null) continue;
+    const key = `${file.path}\0${file.sha256}`;
+    if ((last.get(key)?.endLine ?? 0) < file.endLine) last.set(key, file);
+  }
+  const unreadTails: LocalReadWindow[] = [];
+  for (const file of last.values()) {
+    const offset = file.endLine! + 1;
+    if (offset <= file.totalLines) unreadTails.push({
+      path: file.path, offset, limit: Math.min(2000, file.totalLines - offset + 1), expectedSha256: file.sha256,
+    });
+  }
+  return { complete: remaining.length === 0, unreadTails, files, remaining };
+}
+
 /** Compose bounded source windows, retaining every undelivered requested line.
  * Retrieval is evidence availability, never proof that a model inspected it. */
 export function readManyWindows(
   windows: LocalReadWindow[], budget: number,
   read: (window: LocalReadWindow) => LocalReadResult,
+  partial = false,
+  // Pure serialization only: budget the actual returned value, never re-read or replay.
+  delivery: { serialize?: (result: LocalReadManyResult) => string; operation?: string } = {},
 ): LocalReadManyResult {
   const files: LocalSourceWindow[] = [];
-  const fits = (value: LocalReadManyResult) => JSON.stringify(value).length <= budget;
-  const pending = (index: number): LocalReadManyResult => ({ files: [...files], remaining: windows.slice(index), complete: false });
-  if (!fits(pending(0))) throw new Error("local.readMany metadata exceeds budget; narrow the batch");
+  const failures: { index: number; path: string; code: "read" | "stale-hash"; message: string }[] = [];
+  const failed: LocalReadWindow[] = [];
+  const summarize = (delivered: LocalSourceWindow[], pending: LocalReadWindow[]): LocalReadManyResult => {
+    const result = summarizeWindows(delivered, [...failed, ...pending]);
+    return partial ? { ...result, failures: [...failures] } : result;
+  };
+  const fits = (value: LocalReadManyResult) => JSON.stringify(delivery.serialize ? delivery.serialize(value) : value).length <= budget;
+  const operation = delivery.operation ?? "local.readMany";
+  const pending = (index: number): LocalReadManyResult => summarize([...files], windows.slice(index));
+  if (!fits(pending(0))) throw new Error(`${operation} metadata exceeds budget; narrow the batch`);
   for (let index = 0; index < windows.length; index++) {
     const window = windows[index]!;
-    const raw = read(window);
-    if (window.expectedSha256 !== undefined && raw.sha256 !== window.expectedSha256) {
-      throw new Error("local.readMany source changed; restart this file instead of joining different snapshots");
+    let raw: LocalReadResult;
+    let stale = false;
+    try {
+      raw = read(window);
+      stale = window.expectedSha256 !== undefined && raw.sha256 !== window.expectedSha256;
+      if (stale) throw new LocalReadFailure(`${operation} source changed; restart this file instead of joining different snapshots`);
+    } catch (error) {
+      if (!partial || !(error instanceof LocalReadFailure)) throw error;
+      failures.push({ index, path: window.path, code: stale ? "stale-hash" : "read", message: error.message.slice(0, 200) });
+      failed.push(window);
+      if (!fits(pending(index + 1))) throw new Error(`${operation} failure metadata exceeds budget; narrow the batch`);
+      continue;
     }
     const lines = raw.text === "" ? [] : raw.text.split(/\r?\n/u);
     if (raw.text.endsWith("\n")) lines.pop();
@@ -32,7 +72,7 @@ export function readManyWindows(
         truncated: count > 0 && next <= raw.totalLines,
         ...(count > 0 && next <= raw.totalLines ? { nextOffset: next } : {}),
       };
-      return { files: [...files, file], remaining: remainder, complete: remainder.length === 0 };
+      return summarize([...files, file], remainder);
     };
     let high = lines.length;
     let result = page(high);
@@ -45,7 +85,7 @@ export function readManyWindows(
       }
       if (!low) {
         if (files.length) return pending(index);
-        throw new Error("local.readMany single line or metadata exceeds budget; increase maxChars or narrow the batch");
+        throw new Error(`${operation} single line or metadata exceeds budget; increase maxChars or narrow the batch`);
       }
       result = page(low);
     }
@@ -55,5 +95,5 @@ export function readManyWindows(
     if ((result.files.at(-1)!.endLine ?? start - 1) < end) return result;
     if (index === windows.length - 1) return result;
   }
-  return { files, remaining: [], complete: true };
+  return summarize(files, []);
 }

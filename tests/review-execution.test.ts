@@ -113,9 +113,11 @@ for (const d of ["scripts"]) out[d] = await local.list({path:d}); return out;`, 
     const code = [...guide.matchAll(/```ts\n([\s\S]*?)\n```/g)].map(m => m[1]!).find(c => c.includes("// Recipe: review callers"))!;
     const result = await service.execute({ code, payloads: { symbol: "validate-config.mjs" }, approver });
     expect(result).toMatchObject({ success: true, value: {
-      scope: { path: ".", hidden: true, ignoreFiles: true }, truncated: false,
-      matches: [{ path: ".ci/check.yml", line: 1, text: "run: node scripts/validate-config.mjs" }],
+      search: { scope: { path: ".", hidden: true, ignoreFiles: true }, truncated: false,
+        matches: [{ path: ".ci/check.yml", line: 1, text: "run: node scripts/validate-config.mjs" }] },
+      evidence: { complete: true, remaining: [], files: [{ path: ".ci/check.yml", startLine: 1, endLine: 1, source: "1: run: node scripts/validate-config.mjs" }] },
     } });
+    expect(result.audits.map(audit => audit.ref)).toEqual(["local.grep", "local.readMany"]);
   });
 
   it("composes search and numbered overlapping source reads in one shipped program", async () => {
@@ -140,6 +142,30 @@ for (const d of ["scripts"]) out[d] = await local.list({path:d}); return out;`, 
     const partial = await service.execute({ code, payloads: { symbol: "dispatch", path: "." }, approver });
     expect(partial.success, partial.error).toBe(true);
     expect(partial.value).toMatchObject({ search: { truncated: true }, evidence: { complete: true, remaining: [] } });
+  });
+
+  it.each([
+    ['response=$(curl --url https://fixture.invalid/build?branch=main&api-version=1)', 0],
+    ['response=$(curl --url "https://fixture.invalid/build?branch=main&api-version=1")', 0],
+    ['response=$(curl --url "https://fixture.invalid/build?branch=main&api-version=1"', 2],
+  ])("checks the original and proposed correction without executing shell effects: %s", async (input, exitCode) => {
+    const { root, service } = fixture();
+    const guide = fs.readFileSync(new URL("../skills/fabric-exec/references/review.md", import.meta.url), "utf8");
+    const code = [...guide.matchAll(/```ts\n([\s\S]*?)\n```/g)].map(m => m[1]!).find(c => c.includes("// Recipe: literal Bash probe"))!;
+    const result = await service.execute({ code, payloads: { script: 'bash --noprofile --norc -n -c "$1"', input },
+      approver: { prepareApproval: () => ({ decision: "allow" as const }), async approve() {} } });
+    expect(result).toMatchObject({ success: true, value: { ok: exitCode === 0, exitCode, stdout: "", truncated: false } });
+    expect(fs.readdirSync(root)).toEqual([]);
+  });
+
+  it("falsifies the Bash null-fallback claim under explicit non-nounset semantics", async () => {
+    const { service } = fixture();
+    const result = await service.execute({
+      code: 'return await local.shell({script:payloads.script,interpreter:"bash",settle:true});',
+      payloads: { script: 'set +u\nunset null\nbuildid=null\n[[ "$buildid" -eq "null" ]] && buildid="latest"\nprintf "%s" "$buildid"' },
+      approver: { prepareApproval: () => ({ decision: "allow" as const }), async approve() {} },
+    });
+    expect(result).toMatchObject({ success: true, value: { ok: true, exitCode: 0, stdout: "latest", stderr: "", truncated: false } });
   });
 
   it("reproduces the URL background operator without losing captured stdout or contacting a service", async () => {

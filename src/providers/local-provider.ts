@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { applyLocalEdits, type LocalTextEdit } from "./local-edit.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
@@ -9,7 +10,9 @@ import { fabricJsonText, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js
 import { FABRIC_COMMIT_ACKNOWLEDGEMENT } from "../protocol.js";
 import type { FabricActionDescriptor, FabricInvocationContext, FabricProvider } from "../protocol.js";
 import type { LocalProviderOptions, LocalReadResult, LocalReadWindow, LocalShellInput, LocalGrepResult, LocalFindResult, LocalListResult, LocalShellResult } from "./local-contract.js";
-import { readManyWindows } from "./local-read-many.js";
+import { LocalReadFailure, readManyWindows } from "./local-read-many.js";
+import { formatLocalEvidence } from "./local-evidence.js";
+import { LocalLineIndex } from "./local-line-index.js";
 import { LOCAL_MAX_FILE_BYTES, LocalNonTextError, LocalPaths, localHash, localIdentity, sameLocalIdentity } from "./local-path.js";
 import type { LocalPathSnapshot } from "./local-path.js";
 import { runLocalShell } from "./local-shell.js";
@@ -26,38 +29,43 @@ const integer = { type: "integer", minimum: 0 };
 const identitySchema = object({ dev: integer, ino: integer }, ["dev", "ino"]);
 const pathSchema = { type: "string", minLength: 1, maxLength: 4096 };
 const count = { type: "integer", minimum: 1, maximum: 1000 };
-const searchScopeSchema = object({ path: string, glob: string, hidden: boolean, ignoreFiles: { const: true } }, ["path", "hidden", "ignoreFiles"]);
+const searchScopeSchema = object({ path: string, glob: string, hidden: boolean, ignoreFiles: { const: true }, snapshotScope: { const: "query-v1" } }, ["path", "hidden", "ignoreFiles"]);
+const truncationSchema = { type: "array", maxItems: 4, items: { enum: ["match-text", "count", "output", "oversized-files"] } };
 const VCS_METADATA = new Set([".git", ".hg", ".svn"]);
 const metadataSchema = object({ token: { type: "string", minLength: 36, maxLength: 36 }, beforeSha256: { type: ["string", "null"] }, afterSha256: string, identity: { ...identitySchema, type: ["object", "null"] }, parentIdentity: identitySchema }, ["token"]);
 const readWindowSchema = object({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2000 }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]);
+const textEditSchema = object({ oldText: { type: "string", minLength: 1, maxLength: LOCAL_MAX_FILE_BYTES }, newText: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, all: boolean }, ["oldText", "newText"]);
 const rawSchemas: Record<string, Record<string, unknown>> = {
   read: object({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2000 } }, ["path"]),
-  readMany: object({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1000, maximum: 40000 } }, ["windows"]),
-  grep: object({ pattern: { type: "string", maxLength: 2000 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2000 }, literal: boolean, ignoreCase: boolean, hidden: boolean, limit: count }, ["pattern"]),
-  find: object({ pattern: { type: "string", minLength: 1, maxLength: 2000 }, path: pathSchema, hidden: boolean, limit: count }, ["pattern"]),
+  readMany: object({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1000, maximum: 40000 }, partial: boolean }, ["windows"]),
+  readEvidence: object({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1000, maximum: 40000 }, partial: boolean }, ["windows"]),
+  grep: object({ pattern: { type: "string", maxLength: 2000 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2000 }, literal: boolean, ignoreCase: boolean, hidden: boolean, limit: count, paginate: boolean, snapshotScope: { enum: ["query-v1"] }, cursor: { type: "string", minLength: 36, maxLength: 36 } }, ["pattern"]),
+  find: object({ pattern: { type: "string", minLength: 1, maxLength: 2000 }, path: pathSchema, hidden: boolean, limit: count, paginate: boolean, snapshotScope: { enum: ["query-v1"] }, cursor: { type: "string", minLength: 36, maxLength: 36 } }, ["pattern"]),
   list: object({ path: pathSchema, limit: count }),
   write: object({ path: pathSchema, content: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, overwrite: boolean }, ["path", "content"]),
-  edit: object({ path: pathSchema, oldText: { type: "string", minLength: 1, maxLength: LOCAL_MAX_FILE_BYTES }, newText: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, all: boolean }, ["path", "oldText", "newText"]),
+  edit: object({ path: pathSchema, ...(textEditSchema.properties as Record<string, unknown>), edits: { type: "array", minItems: 1, maxItems: 100, items: textEditSchema }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]),
   shell: object({ command: { type: "string", minLength: 1, maxLength: 8000 }, script: { type: "string", minLength: 1, maxLength: 8000 }, interpreter: { enum: ["bash", "sh"] }, args: { type: "array", maxItems: 64, items: { type: "string", maxLength: 8000 } }, cwd: pathSchema, timeoutMs: { type: "integer", minimum: 1, maximum: 900000 }, settle: boolean }),
 };
 const mutationOutput = object({ path: string, changed: boolean, sha256: string, bytes: integer, identity: identitySchema }, ["path", "changed", "sha256", "bytes", "identity"]);
 const outputSchemas: Record<string, Record<string, unknown>> = {
+  readEvidence: string,
   read: object({ path: string, text: string, totalLines: integer, truncated: boolean, nextOffset: { type: "integer", minimum: 1 }, sha256: string, identity: identitySchema }, ["path", "text", "totalLines", "truncated", "sha256", "identity"]),
-  readMany: object({ files: { type: "array", maxItems: 32, items: object({ path: string, startLine: { type: "integer", minimum: 1 }, endLine: { type: ["integer", "null"] }, totalLines: integer, sha256: string, source: string, truncated: boolean, nextOffset: { type: "integer", minimum: 1 } }, ["path", "startLine", "endLine", "totalLines", "sha256", "source", "truncated"]) }, remaining: { type: "array", maxItems: 32, items: readWindowSchema }, complete: boolean }, ["files", "remaining", "complete"]),
-  grep: object({ scope: searchScopeSchema, matches: { type: "array", maxItems: 1000, items: object({ path: string, line: { type: "integer", minimum: 1 }, text: { type: "string", maxLength: 500 } }, ["path", "line", "text"]) }, truncated: boolean }, ["scope", "matches", "truncated"]),
-  find: object({ scope: searchScopeSchema, paths: { type: "array", maxItems: 1000, items: string }, truncated: boolean }, ["scope", "paths", "truncated"]),
+  readMany: object({ files: { type: "array", maxItems: 32, items: object({ path: string, startLine: { type: "integer", minimum: 1 }, endLine: { type: ["integer", "null"] }, totalLines: integer, sha256: string, source: string, truncated: boolean, nextOffset: { type: "integer", minimum: 1 } }, ["path", "startLine", "endLine", "totalLines", "sha256", "source", "truncated"]) }, remaining: { type: "array", maxItems: 32, items: readWindowSchema }, complete: boolean, unreadTails: { type: "array", maxItems: 32, items: readWindowSchema }, failures: { type: "array", maxItems: 32, items: object({ index: { type: "integer", minimum: 0, maximum: 31 }, path: string, code: { enum: ["read", "stale-hash"] }, message: { type: "string", maxLength: 200 } }, ["index", "path", "code", "message"]) } }, ["files", "remaining", "complete", "unreadTails"]),
+  grep: object({ scope: searchScopeSchema, matches: { type: "array", maxItems: 1000, items: object({ path: string, line: { type: "integer", minimum: 1 }, text: { type: "string", maxLength: 500 } }, ["path", "line", "text"]) }, truncated: boolean, truncationReasons: truncationSchema, nextCursor: string }, ["scope", "matches", "truncated"]),
+  find: object({ scope: searchScopeSchema, paths: { type: "array", maxItems: 1000, items: string }, truncated: boolean, truncationReasons: truncationSchema, nextCursor: string }, ["scope", "paths", "truncated"]),
   list: object({ entries: { type: "array", maxItems: 1000, items: object({ path: string, type: { enum: ["file", "directory"] } }, ["path", "type"]) }, truncated: boolean }, ["entries", "truncated"]),
   write: mutationOutput, edit: mutationOutput,
   shell: object({ ok: boolean, exitCode: { type: ["integer", "null"] }, signal: { type: ["string", "null"] }, stdout: string, stderr: string, truncated: boolean, stdoutTruncated: boolean, stderrTruncated: boolean }, ["ok", "exitCode", "signal", "stdout", "stderr", "truncated", "stdoutTruncated", "stderrTruncated"]),
 };
 const descriptions: Record<string, string> = {
+  readEvidence: "Explicit compact text packet: KIRO_LOCAL_EVIDENCE/1 header, numbered sources, final META JSON footer with ranges, full-file hashes, UTF-16 sourceOffset/sourceChars, remaining, unreadTails, complete and failures (always present). Same windows/defaults/path safety/partial failures/final snapshot checks as readMany. Default 32000/maxChars 1000..40000; full JSON-serialized returned string including escaping fits runtime and visible source allowances or rejects, never drops metadata. Continue remaining verbatim after repairing failures, then relevant unreadTails; tails may overlap remaining and omit prefixes/gaps. complete covers requested windows only; not proof of inspection. Return directly with resultFormat:text and headroom for other data/logs. No automatic inspection, steering or guaranteed delivery of discarded/remapped results.",
   read: "Read valid UTF-8, one-based offset; default 200/max 2000 lines, <=2MiB file, bounded JSON. Whole lines only; totalLines counts the whole file; truncated means unread file suffix. nextOffset is the next one-based line; stop at the requested end. Oversized single lines fail. No traversal, symlinks, hardlinks or special files.",
-  readMany: "Read 1..32 numbered source windows with line ranges and hashes. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars 1000..40000, clamped to runtime budgets. Read related callers/implementations/configs together; lower maxChars when returning other data. Return files plus remaining requests; continue remaining verbatim. Hash conflicts reject changed-file continuations. complete covers requested windows, not the repo or understanding. Same path protections as read; no hidden persistent ledger.",
-  grep: "Search with external rg, --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Pinned startup-validated executable. Selected candidates <=10000; batches <=256 text files/2MiB stop at requested prefix with truncated=true for unsearched files. Aggregate input <=32MiB; search <=10s; narrow path/glob on work limits. No JS search fallback.",
-  find: "Glob file paths via external rg --files --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 results. Unsafe files rejected. Glob only narrows normal enumeration; selected candidates <=10000, raw process output <=2MiB; search <=10s. Narrow path/glob on work limits.",
+  readMany: "Read 1..32 numbered source windows with line ranges and hashes. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars 1000..40000, clamped to runtime budgets. Read related callers/implementations/configs together; lower maxChars when returning other data. Return files plus remaining requests; continue remaining verbatim. Hash conflicts reject by default. partial:true retains independent successes and zero-based indexed failures (read/stale-hash), complete:false and failed requests in remaining; repair failed requests before retrying. Safety, cancellation and final snapshot drift remain hard failures. Same-file windows reuse one invocation-local snapshot, revalidated before return. complete covers requested windows only. unreadTails contains hash-bound suffix windows (<=2000 lines) after the last delivered line per file snapshot; finish remaining first to avoid overlapping reads. Empty tails do not cover omitted prefixes/gaps or other files. Same path protections as read; no hidden persistent ledger.",
+  grep: "Search with external rg, --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Pinned startup-validated executable. Selected candidates <=10000; batches <=256 text files/2MiB stop at requested prefix with truncated=true for unsearched files. Aggregate input <=32MiB; search <=10s; narrow path/glob on work limits. No JS search fallback. truncationReasons: match-text => read the reported line; count => increase limit or narrow scope; output => narrow scope; oversized-files => exclude or inspect separately. paginate:true enables bounded snapshot pages; repeat identical query/options/limit with cursor:nextCursor. Cursors expire after 60s; provider-local, at most 8 snapshots, 262144 JSON chars each. Collection rejects work/cache limits and nontext/oversized snapshot files; count/output are resumable, match-text is not. Optional snapshotScope:query-v1 (paginate only) hashes glob-selected candidates, not unrelated files, and reports scope.snapshotScope. Selected membership/content/identity changes still reject; defaults retain unfiltered-scope validation.",
+  find: "Glob file paths via external rg --files --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 results. Unsafe files rejected. Glob only narrows normal enumeration; selected candidates <=10000, raw process output <=2MiB; search <=10s. Narrow path/glob on work limits. truncationReasons: count => increase limit or narrow scope; output => narrow scope. paginate:true enables bounded snapshot pages; repeat identical query/options/limit with cursor:nextCursor. Cursors expire after 60s; provider-local, at most 8 snapshots, 262144 JSON chars each. Collection rejects work/cache limits and nontext/oversized snapshot files; count/output are resumable, match-text is not. Optional snapshotScope:query-v1 (paginate only) hashes glob-selected candidates, not unrelated files, and reports scope.snapshotScope. Selected membership/content/identity changes still reject; defaults retain unfiltered-scope validation.",
   list: "Sorted direct children, including hidden entries; only path/limit, no depth. Use local.find for nested files. Default 100/max 1000 results, at most 10000 scanned entries. Symlinks, hardlinks and special entries fail.",
   write: "Exact approved write, create-only unless overwrite=true; existing parent required. Snapshots bind identities/content and complete diff before approval; revalidated before publication. Path checks are defense in depth, not hostile-race isolation.",
-  edit: "Exact approved edit; nonempty unique oldText unless all=true (nonoverlapping replacements). Existing parent required. Identity/hash conflict detection and complete actual diff; no multi-operation transaction or hostile-race isolation.",
+  edit: "Exact approved edit: oldText/newText OR edits[1..100], optional expectedSha256. All anchors resolve against the original snapshot, must be disjoint, and validate before one complete diff approval/publication; unique unless per-edit all=true. Existing parent required. Identity/hash conflict detection and complete actual diff; no multi-operation transaction or hostile-race isolation.",
   shell: "Exact approved host command OR literal script in verified canonical cwd, not confinement. command uses /bin/sh; script uses interpreter bash/sh (default sh), args become positional $1... without outer expansion or scratch files. Workspace-wide lock, bounded head/tail output and deadline, TERM/KILL cleanup; ordinary nonzero exits expose error.result or return data with settle=true; no background jobs or network isolation. Deliberate process-group escapes are not contained.",
 };
 const effectful = (name: string): boolean => ["write", "edit", "shell"].includes(name);
@@ -75,7 +83,7 @@ interface Prepared {
  * Never breaks stale/uncertain locks; recovery requires operator investigation.
  * Bounds: <=2MiB/file, <=10000 enumeration entries, <=32MiB grep input,
  * <=2MiB rg stdout/stderr, 10s rg timeout, result JSON <=min(20000,budget),
- * except readMany <=min(40000,budget,visible source allowance).
+ * except readMany/readEvidence <=min(40000,budget,visible source allowance).
  * Search ignore files may affect enumeration; explicit roots must be safe.
  * Node pathname revalidation does not close malicious same-user TOCTOU races. */
 export class LocalCodingProvider implements FabricProvider {
@@ -90,6 +98,7 @@ export class LocalCodingProvider implements FabricProvider {
   readonly #controller = new AbortController();
   readonly #pending = new Set<Promise<unknown>>();
   readonly #prepared = new Map<string, Prepared>();
+  readonly #searchPages = new Map<string, { key: string; fingerprint: string; result: LocalFindResult | LocalGrepResult; offset: number; expires: number }>();
   #closed = false;
   #pendingRelease: (() => void) | undefined;
   readonly #searchExecutable: SearchExecutable;
@@ -142,9 +151,15 @@ export class LocalCodingProvider implements FabricProvider {
         (typeof args.command === "string" && (args.interpreter !== undefined || args.args !== undefined)))) {
       throw new Error("local.shell requires exactly one of command or script; interpreter/args require script");
     }
-    if (name === "readMany" && (args.windows as LocalReadWindow[]).some(window =>
+    if ((name === "find" || name === "grep") && args.snapshotScope !== undefined && args.paginate !== true) throw new Error("local search snapshotScope requires paginate:true");
+    if (name === "edit") {
+      const batch = args.edits !== undefined;
+      if (batch ? args.oldText !== undefined || args.newText !== undefined || args.all !== undefined : typeof args.oldText !== "string" || typeof args.newText !== "string") throw new Error("local.edit requires exactly one of edits or oldText/newText");
+      if (args.expectedSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(args.expectedSha256 as string)) throw new Error("local.edit expectedSha256 must be a lowercase SHA-256 digest");
+    }
+    if ((name === "readMany" || name === "readEvidence") && (args.windows as LocalReadWindow[]).some(window =>
       window.expectedSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(window.expectedSha256))) {
-      throw new Error("local.readMany expectedSha256 must be a lowercase SHA-256 digest");
+      throw new Error(`local.${name} expectedSha256 must be a lowercase SHA-256 digest`);
     }
   }
   #fits(value: unknown, budget = this.#budget): boolean { return JSON.stringify(value).length <= budget; }
@@ -157,8 +172,8 @@ export class LocalCodingProvider implements FabricProvider {
     this.#check(context);
     const canonical = structuredClone(args);
     if (!effectful(name)) {
-      if (name === "readMany") {
-        canonical.windows = (args.windows as LocalReadWindow[]).map(window => ({ ...window, path: this.#paths.check(window.path).path }));
+      if (name === "readMany" || name === "readEvidence") {
+        canonical.windows = (args.windows as LocalReadWindow[]).map(window => ({ ...window, path: this.#readWindowPath(window.path, args.partial === true) }));
         return canonical;
       }
       canonical.path = this.#paths.check((args.path as string | undefined) ?? ".").path;
@@ -188,11 +203,8 @@ export class LocalCodingProvider implements FabricProvider {
       let proposed: string;
       if (name === "write") proposed = args.content as string;
       else {
-        const anchor = args.oldText as string;
-        const first = captured.text.indexOf(anchor);
-        if (first < 0) throw new Error("local.edit exact anchor was not found");
-        if (captured.text.indexOf(anchor, first + 1) >= 0 && args.all !== true) throw new Error("local.edit anchor is not unique; use all=true for all nonoverlapping occurrences");
-        proposed = captured.text.split(anchor).join(args.newText as string);
+        if (args.expectedSha256 !== undefined && args.expectedSha256 !== captured.snapshot.file!.sha256) throw new Error("local.edit source changed: expectedSha256 conflict");
+        proposed = applyLocalEdits(captured.text, (args.edits as LocalTextEdit[] | undefined) ?? [{ oldText: args.oldText as string, newText: args.newText as string, all: args.all === true }]);
       }
       if (Buffer.byteLength(proposed) > LOCAL_MAX_FILE_BYTES || proposed.includes("\0") || Buffer.from(proposed).toString("utf8") !== proposed) throw new Error("local proposed content must be valid UTF-8 text <=2MiB without NUL");
       review = this.#review(captured.snapshot.path, captured.text, proposed);
@@ -323,41 +335,64 @@ export class LocalCodingProvider implements FabricProvider {
       return this.#publish(name, entry, context);
     }
     if (name === "read") return this.#read(args);
-    if (name === "readMany") {
-      const windows = (args.windows as LocalReadWindow[]).map(window => ({ ...window, path: this.#paths.relative(this.#paths.check(window.path).path) }));
-      const budget = Math.min(this.#readManyBudget, (args.maxChars as number | undefined) ?? 32000);
-      return this.#bounded(readManyWindows(windows, budget, window => {
+    if (name === "readMany" || name === "readEvidence") {
+      const windows = (args.windows as LocalReadWindow[]).map(window => ({ ...window, path: this.#paths.relative(this.#readWindowPath(window.path, args.partial === true)) }));
+      const budget = Math.min(this.#readManyBudget, (args.maxChars as number | undefined) ?? 32000,
+        name === "readEvidence" ? context.maxResultChars ?? this.#readManyBudget : this.#readManyBudget);
+      const snapshots = new Map<string, ReturnType<LocalPaths["read"]> & { lines: LocalLineIndex }>();
+      const result = readManyWindows(windows, budget, window => {
         this.#check(context);
-        return this.#read({ ...window }, budget);
-      }), budget);
+        let captured = snapshots.get(window.path);
+        if (!captured) {
+          try {
+            const source = this.#paths.read(window.path);
+            captured = { ...source, lines: new LocalLineIndex(source.text) };
+          }
+          catch (error) {
+            if (args.partial === true && (error instanceof LocalNonTextError || ["ENOENT", "EACCES", "EPERM"].includes((error as NodeJS.ErrnoException).code ?? ""))) throw new LocalReadFailure(`local.${name} ordinary read failure`, { cause: error });
+            throw error;
+          }
+          snapshots.set(window.path, captured);
+        }
+        return this.#read({ ...window }, budget, captured);
+      }, args.partial === true, name === "readEvidence" ? { serialize: formatLocalEvidence, operation: "local.readEvidence" } : {});
+      for (const captured of snapshots.values()) { this.#check(context); this.#paths.revalidate(captured.snapshot); }
+      return this.#bounded(name === "readEvidence" ? formatLocalEvidence(result) : result, budget);
     }
     if (name === "list") return this.#list(args);
     if (name === "find" || name === "grep") return await this.#search(name, args, context);
     throw new Error(`Unknown local action: ${name}`);
   }
-  #read(args: Record<string, unknown>, budget = this.#budget): LocalReadResult {
-    const { text, snapshot } = this.#paths.read(args.path as string);
-    const lines = text === "" ? [] : text.split("\n");
-    if (text.endsWith("\n")) lines.pop();
+  #read(args: Record<string, unknown>, budget = this.#budget, captured?: ReturnType<LocalPaths["read"]> & { lines: LocalLineIndex }): LocalReadResult {
+    const { text, snapshot } = captured ?? this.#paths.read(args.path as string);
+    const lines = captured?.lines ?? new LocalLineIndex(text);
     const start = ((args.offset as number | undefined) ?? 1) - 1;
-    const end = Math.min(lines.length, start + ((args.limit as number | undefined) ?? 200));
-    const result: LocalReadResult = { path: this.#paths.relative(snapshot.path), text: "", totalLines: lines.length, truncated: false, sha256: snapshot.file!.sha256, identity: snapshot.file!.identity };
-    this.#bounded(result, budget);
-    for (let index = start; index < end; index++) {
-      const previous = result.text;
-      result.text += lines[index]! + (index < lines.length - 1 || text.endsWith("\n") ? "\n" : "");
-      result.truncated = index + 1 < lines.length;
-      if (result.truncated) result.nextOffset = index + 2;
-      else delete result.nextOffset;
-      if (!this.#fits(result, budget)) {
-        if (index === start) throw new Error("local.read single line exceeds configured character budget");
-        result.text = previous;
-        result.truncated = true;
-        result.nextOffset = index + 1;
-        return this.#bounded(result, budget);
-      }
+    const end = Math.min(lines.totalLines, start + ((args.limit as number | undefined) ?? 200));
+    const empty: LocalReadResult = { path: this.#paths.relative(snapshot.path), text: "", totalLines: lines.totalLines, truncated: false, sha256: snapshot.file!.sha256, identity: snapshot.file!.identity };
+    this.#bounded(empty, budget);
+    if (start >= end) return empty;
+    const page = (count: number): LocalReadResult => ({
+      ...empty, text: lines.slice(start, start + count), truncated: start + count < lines.totalLines,
+      ...(start + count < lines.totalLines ? { nextOffset: start + count + 1 } : {}),
+    });
+    // Test EOF first: removing continuation metadata can make the last page
+    // smaller. All remaining candidates retain it and have monotone sizes.
+    const complete = page(end - start);
+    if (this.#fits(complete, budget)) return complete;
+    let low = 0, high = end - start - 1;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (this.#fits(page(mid), budget)) low = mid; else high = mid - 1;
     }
-    return this.#bounded(result, budget);
+    if (!low) throw new Error("local.read single line exceeds configured character budget");
+    return this.#bounded(page(low), budget);
+  }
+  #readWindowPath(input: string, partial: boolean): string {
+    try { return this.#paths.check(input).path; }
+    catch (error) {
+      if (!partial || !["ENOENT", "EACCES", "EPERM"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+      return this.#paths.resolve(input);
+    }
   }
   #list(args: Record<string, unknown>): LocalListResult {
     const directory = this.#paths.directory((args.path as string | undefined) ?? ".");
@@ -396,14 +431,13 @@ export class LocalCodingProvider implements FabricProvider {
     this.#check(context);
     return output;
   }
-  async #search(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<LocalFindResult | LocalGrepResult> {
-    const searchMs = Math.max(1, Math.min(10000, context.deadline?.remainingMs() ?? 10000));
-    context = { ...context, deadline: new FabricDeadline(searchMs, searchMs) };
+  async #selectSearch(name: string, args: Record<string, unknown>, context: FabricInvocationContext) {
     const base = this.#paths.check((args.path as string | undefined) ?? ".");
     const glob = name === "find" ? args.pattern as string : args.glob as string | undefined;
     const relative = this.#paths.relative(base.path) || ".";
     if (relative.split("/").some(part => VCS_METADATA.has(part))) throw new Error("local search excludes VCS metadata");
-    const scope = { path: relative, ...(glob ? { glob } : {}), hidden: args.hidden === true, ignoreFiles: true as const };
+    const scope = { path: relative, ...(glob ? { glob } : {}), hidden: args.hidden === true, ignoreFiles: true as const,
+      ...(args.snapshotScope === "query-v1" ? { snapshotScope: "query-v1" as const } : {}) };
     // Opting into dotfiles does not opt into repository internals or ignored data.
     const enumerationArgs = ["--files", "--null", ...(scope.hidden ? ["--hidden"] : []),
       ...[...VCS_METADATA].flatMap(name => ["--glob", `!**/${name}`, "--glob", `!**/${name}/**`])];
@@ -421,20 +455,36 @@ export class LocalCodingProvider implements FabricProvider {
     if (files.length > 10000) throw new Error("local search exceeded 10000-file work limit; narrow path or glob");
     const checked = files.map((file) => { this.#check(context); return this.#paths.check(file); });
     for (const file of checked) if (!file.stat?.isFile()) throw new Error("local search requires regular files");
-    const limit = (args.limit as number | undefined) ?? 100;
+    return { scope, files, checked };
+  }
+  async #search(name: string, args: Record<string, unknown>, context: FabricInvocationContext, collect = false): Promise<LocalFindResult | LocalGrepResult> {
+    if (args.cursor !== undefined && args.paginate !== true) throw new Error("local search cursor requires paginate:true");
+    if (args.paginate === true && !collect) return this.#searchPage(name, args, context);
+    const searchMs = Math.max(1, Math.min(10000, context.deadline?.remainingMs() ?? 10000));
+    context = { ...context, deadline: new FabricDeadline(searchMs, searchMs) };
+    const { scope, files, checked } = await this.#selectSearch(name, args, context);
+    const limit = collect ? 10001 : (args.limit as number | undefined) ?? 100;
+    const finish = <T>(value: T): T => this.#bounded(value, collect ? 262144 : this.#budget);
+    const mark = (result: LocalFindResult | LocalGrepResult, reason: NonNullable<LocalGrepResult["truncationReasons"]>[number]): void => {
+      result.truncated = true;
+      result.truncationReasons ??= [];
+      if (!result.truncationReasons.includes(reason)) result.truncationReasons.push(reason);
+    };
+    // Reserve bounded metadata space before accepting a record.
+    const searchFits = (result: LocalFindResult | LocalGrepResult): boolean => this.#fits({ ...result, truncationReasons: ["match-text", "count", "output", "oversized-files"] }, collect ? 262144 : this.#budget);
     if (name === "find") {
       const result: LocalFindResult = { scope, paths: [], truncated: false };
       for (const file of checked) {
-        if (result.paths.length >= limit) { result.truncated = true; break; }
+        if (result.paths.length >= limit) { mark(result, "count"); break; }
         result.paths.push(this.#paths.relative(file.path));
-        if (!this.#fits(result)) { result.paths.pop(); result.truncated = true; break; }
+        if (!searchFits(result)) { result.paths.pop(); mark(result, "output"); break; }
       }
-      return this.#bounded(result);
+      return finish(result);
     }
     const result: LocalGrepResult = { scope, matches: [], truncated: false };
-    if (!files.length) return this.#bounded(result);
+    if (!files.length) return finish(result);
     const candidates = checked.filter((item) => item.stat!.size <= LOCAL_MAX_FILE_BYTES);
-    if (candidates.length !== checked.length) result.truncated = true;
+    if (candidates.length !== checked.length) mark(result, "oversized-files");
     let searchedBytes = 0;
     let searchedPathChars = 0;
     let outputBytes = 0;
@@ -466,17 +516,103 @@ export class LocalCodingProvider implements FabricProvider {
         if (!line) continue;
         const record = JSON.parse(line) as { type: string; data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } } };
         if (record.type !== "match") continue;
-        if (result.matches.length >= limit) { result.truncated = true; return this.#bounded(result); }
+        if (result.matches.length >= limit) { mark(result, "count"); return finish(result); }
         const data = record.data;
         if (typeof data?.path?.text !== "string" || !Number.isSafeInteger(data.line_number) || !data.line_number || typeof data.lines?.text !== "string") throw new Error("local rg returned unsupported non-UTF-8 match data");
         const text = data.lines.text.replace(/\r?\n$/u, "");
         result.matches.push({ path: this.#paths.relative(this.#paths.check(data.path.text).path), line: data.line_number, text: text.slice(0, 500) });
-        if (text.length > 500) result.truncated = true;
-        if (!this.#fits(result)) { result.matches.pop(); result.truncated = true; return this.#bounded(result); }
+        if (text.length > 500) mark(result, "match-text");
+        if (!searchFits(result)) { result.matches.pop(); mark(result, "output"); return finish(result); }
       }
-      if (result.matches.length >= limit && index < candidates.length) { result.truncated = true; break; }
+      if (result.matches.length >= limit && index < candidates.length) { mark(result, "count"); break; }
     }
-    return this.#bounded(result);
+    return finish(result);
+  }
+  async #searchFingerprint(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<string> {
+    const base = this.#paths.check((args.path as string | undefined) ?? ".");
+    const enumerationArgs = ["--files", "--null", ...(args.hidden ? ["--hidden"] : []), ...[...VCS_METADATA].flatMap(name => ["--glob", `!**/${name}`, "--glob", `!**/${name}/**`]), "--", base.path];
+    // Default retains the whole-enumeration contract. Query-v1 explicitly
+    // binds only glob-selected files (including nonmatching grep candidates).
+    // Re-enumeration still applies hidden/ignore/VCS rules on every page.
+    const enumerate = async (): Promise<string> => args.snapshotScope === "query-v1"
+      ? (await this.#selectSearch(name, args, context)).files.join("\0")
+      : this.#rg(enumerationArgs, context);
+    const output = await enumerate();
+    const files = output.split("\0").filter(Boolean);
+    if (files.length > 10000) throw new Error("local snapshot exceeds 10000-file work limit");
+    let bytes = 0;
+    let metadataChars = 0;
+    const hashes: string[] = [];
+    const snapshots: LocalPathSnapshot[] = [];
+    for (const file of files) {
+      this.#check(context);
+      const checked = this.#paths.check(file);
+      bytes += checked.stat!.size;
+      if (bytes > 32 * 1024 * 1024) throw new Error("local snapshot exceeds 32MiB work limit");
+      const snapshot = this.#paths.read(file).snapshot;
+      hashes.push(JSON.stringify(snapshot));
+      snapshots.push(snapshot);
+      metadataChars += hashes[hashes.length - 1]!.length;
+      if (metadataChars > 2 * 1024 * 1024) throw new Error("local snapshot metadata work limit");
+    }
+    // A resume must not publish cached records if an earlier file changed while
+    // later files were fingerprinted, or enumeration changed during capture.
+    if (await enumerate() !== output) throw new Error("local search snapshot enumeration drift during validation");
+    for (const snapshot of snapshots) { this.#check(context); this.#paths.revalidate(snapshot); }
+    this.#check(context);
+    return localHash(JSON.stringify([base.path, hashes]));
+  }
+  async #searchPage(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<LocalFindResult | LocalGrepResult> {
+    const ms = Math.max(1, Math.min(10000, context.deadline?.remainingMs() ?? 10000));
+    context = { ...context, deadline: new FabricDeadline(ms, ms) };
+    const now = Date.now();
+    for (const [token, entry] of this.#searchPages) if (entry.expires <= now) this.#searchPages.delete(token);
+    const key = JSON.stringify([this.#paths.root, name, Object.entries(args).filter(([key]) => key !== "cursor").sort(([a], [b]) => a.localeCompare(b))]);
+    let entry = args.cursor ? this.#searchPages.get(args.cursor as string) : undefined;
+    if (args.cursor && (!entry || entry.key !== key)) throw new Error("local search cursor invalid, expired, or query/provider mismatch");
+    const fingerprint = await this.#searchFingerprint(name, args, context);
+    if (entry && entry.fingerprint !== fingerprint) throw new Error("local search snapshot drift; restart pagination");
+    if (!entry) {
+      if (this.#searchPages.size >= 8) throw new Error("local search snapshot cache limit; wait for expiry");
+      const result = await this.#search(name, args, context, true);
+      if (result.truncationReasons?.some(reason => reason !== "match-text")) throw new Error("local search snapshot collection incomplete: work/cache limit or nonresumable omission; narrow scope");
+      if (await this.#searchFingerprint(name, args, context) !== fingerprint) throw new Error("local search snapshot drift during collection");
+      entry = { key, fingerprint, result, offset: 0, expires: now + 60000 };
+    }
+    // Copy only the page, not the entire cached 262144-character result.
+    // No mutable scope/record/array from the cache is exposed to callers.
+    const result: LocalFindResult | LocalGrepResult = "paths" in entry.result
+      ? { scope: { ...entry.result.scope }, paths: [], truncated: true }
+      : { scope: { ...entry.result.scope }, matches: [], truncated: true };
+    const records = "paths" in result ? result.paths : result.matches;
+    const all = "paths" in entry.result ? entry.result.paths : entry.result.matches;
+    const next = randomUUID();
+    result.nextCursor = next;
+    result.truncated = true;
+    result.truncationReasons = [...(entry.result.truncationReasons ?? []), "count", "output"];
+    let offset = entry.offset;
+    while (offset < all.length && records.length < ((args.limit as number | undefined) ?? 100)) {
+      const record = all[offset]!;
+      (records as unknown[]).push(typeof record === "string" ? record : { ...record });
+      if (!this.#fits(result)) { records.pop(); break; }
+      offset++;
+    }
+    if (offset === entry.offset && offset < all.length) throw new Error("local search record exceeds output budget; cannot advance cursor");
+    result.truncationReasons = [...(entry.result.truncationReasons ?? [])];
+    if (offset < all.length) result.truncationReasons.push(records.length === ((args.limit as number | undefined) ?? 100) ? "count" : "output");
+    else delete result.nextCursor;
+    result.truncated = result.truncationReasons.length > 0;
+    if (!result.truncationReasons.length) delete result.truncationReasons;
+    this.#check(context);
+    if (Date.now() >= entry.expires) throw new Error("local search cursor expired");
+    this.#bounded(result);
+    if (args.cursor && this.#searchPages.get(args.cursor as string) !== entry) throw new Error("local search cursor already consumed");
+    if (args.cursor) this.#searchPages.delete(args.cursor as string);
+    if (result.nextCursor) {
+      if (this.#searchPages.size >= 8) throw new Error("local search snapshot cache limit");
+      this.#searchPages.set(next, { ...entry, offset });
+    }
+    return result;
   }
   #publish(name: string, entry: Prepared, context: FabricInvocationContext): unknown {
     const snapshot = entry.snapshot!;
@@ -539,6 +675,7 @@ export class LocalCodingProvider implements FabricProvider {
     }
   }
   async close(): Promise<void> {
+    this.#searchPages.clear();
     this.#closed = true;
     this.#controller.abort(new Error("local provider closed"));
     await Promise.allSettled([...this.#pending]);

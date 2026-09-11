@@ -11,6 +11,7 @@ import type {
   FabricToolAnnotations,
   ResolvedFabricAction,
 } from "../protocol.js";
+import { argumentRepairError, FabricRepairError, repairSchema } from "../core/repair-error.js";
 import { validateSchemaValue } from "../schema-validation.js";
 import { assertFabricJsonBudget } from "../runtime/json-budget.js";
 import { semanticDigest } from "../core/semantic-digest.js";
@@ -59,7 +60,7 @@ const descriptors: readonly FabricActionDescriptor[] = [
   },
   {
     name: "$call",
-    description: "Call one configured MCP tool after network approval",
+    description: "Call one configured MCP tool after network approval. Optional projection: full (default, legacy shape), text (joined text or empty string), structured (structuredContent or null); no fallback/conversion. Projection precedes the guest bridge; errors, budgets, approvals and remote args are unchanged.",
     inputSchema: {
       type: "object",
       properties: {
@@ -67,6 +68,7 @@ const descriptors: readonly FabricActionDescriptor[] = [
         tool: { type: "string", minLength: 1, maxLength: 256 },
         args: { type: "object", additionalProperties: true },
         expectedDescriptorDigest: { type: "string", minLength: 64, maxLength: 64 },
+        projection: { enum: ["full", "text", "structured"] },
         transportSnapshot: { type: "object", additionalProperties: true },
       },
       required: ["server", "tool"],
@@ -494,9 +496,17 @@ const projectRemoteTool = (server: string, tool: NormalizedServerTool, transport
   };
 };
 
-const normalizeMcpResult = (result: unknown): unknown => {
+const resultProjection = (value: unknown): "full" | "text" | "structured" => {
+  if (value === undefined) return "full";
+  if (value === "full" || value === "text" || value === "structured") return value;
+  throw new Error("MCP projection must be full, text, or structured");
+};
+
+const normalizeMcpResult = (result: unknown, projection: ReturnType<typeof resultProjection>): unknown => {
   if (!isRecord(result) || !Array.isArray(result.content)) {
     assertFabricJsonBudget(result);
+    if (projection === "text") return typeof result === "string" ? result : "";
+    if (projection === "structured") return isRecord(result) ? result.structuredContent ?? null : null;
     return result;
   }
   const projected = {
@@ -505,12 +515,15 @@ const normalizeMcpResult = (result: unknown): unknown => {
     ...(result.isError === undefined ? {} : { isError: result.isError }),
   };
   assertFabricJsonBudget(projected);
-  const text = projected.content
+  const textContent = (): string => projected.content
     .filter((part): part is { type: "text"; text: string } =>
       isRecord(part) && part.type === "text" && typeof part.text === "string")
     .map((part) => part.text)
     .join("\n");
-  if (projected.isError === true) throw new Error((text || "MCP tool returned an error").slice(0, 2_000));
+  if (projected.isError === true) throw new Error((textContent() || "MCP tool returned an error").slice(0, 2_000));
+  if (projection === "structured") return projected.structuredContent ?? null;
+  const text = textContent();
+  if (projection === "text") return text;
   return {
     text,
     content: projected.content,
@@ -607,6 +620,7 @@ export class KiroMcpProvider implements FabricProvider {
           !/^[a-f0-9]{64}$/u.test(args.expectedDescriptorDigest))) {
       throw new Error("MCP expectedDescriptorDigest must be a lowercase SHA-256 digest");
     }
+    if (actionName === "$call") resultProjection(args.projection);
     const runtime = await this.#getRuntime(context.signal);
     throwIfAbortedOrExpired(context.signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
@@ -615,6 +629,7 @@ export class KiroMcpProvider implements FabricProvider {
       server,
       ...(actionName === "$call" || actionName === "$describe" ? { tool } : {}),
       ...(actionName === "$call" ? { args: args.args === undefined ? {} : structuredClone(args.args) } : {}),
+      ...(actionName === "$call" && args.projection !== undefined ? { projection: args.projection } : {}),
       ...(actionName === "$call" && Object.hasOwn(args, "expectedDescriptorDigest")
         ? { expectedDescriptorDigest: args.expectedDescriptorDigest }
         : {}),
@@ -655,6 +670,7 @@ export class KiroMcpProvider implements FabricProvider {
     const toolName = typeof args.tool === "string" ? args.tool : "";
     const toolArgs = args.args === undefined ? {} : args.args;
     const expectedDescriptorDigest = args.expectedDescriptorDigest;
+    const projection = actionName === "$call" ? resultProjection(args.projection) : "full";
     if (!server || ((actionName === "$call" || actionName === "$describe") && !toolName) ||
         (actionName === "$call" && (!isRecord(toolArgs) ||
           (expectedDescriptorDigest !== undefined &&
@@ -682,52 +698,69 @@ export class KiroMcpProvider implements FabricProvider {
 
     throwIfAbortedOrExpired(signal, context.deadline);
     return this.#withServerLease(server, signal, async (lease) => {
-      this.#assertTransportSnapshot(runtime, server, approvedTransport);
-      // Discovery and invocation share one configured operation budget. Giving
-      // each phase a fresh timeout would make one mcp.call consume nearly twice
-      // the configured limit.
-      const actionDeadline = performance.now() + this.#config.callTimeoutMs;
-      const discoveryBudget = this.#remainingCallBudget(actionDeadline);
-      const rawTools = await this.#bounded(
-        runtime,
-        server,
-        this.#listRawTools(runtime, server, actionDeadline, signal),
-        signal,
-        "tool discovery",
-        discoveryBudget,
-        lease,
-      );
-      const tools = normalizeServerTools(rawTools);
-      const projected = tools.map((tool) => projectRemoteTool(server, tool, approvedTransport));
-      if (actionName === "$tools") return projected;
-      const matches = tools.map((tool, index) => ({ tool, projected: projected[index]! }))
-        .filter(({ tool }) => tool.name === toolName);
-      if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
-      if (actionName === "$describe") return matches[0]!.projected;
-      if (expectedDescriptorDigest !== undefined &&
-          matches[0]!.projected.descriptorDigest !== expectedDescriptorDigest) {
-        throw new Error(`MCP tool descriptor changed before invocation: ${server}.${toolName}`);
-      }
-      this.#validateToolArguments(matches[0]!.tool, toolArgs as Record<string, unknown>);
+      let dispatched = false;
+      try {
+        this.#assertTransportSnapshot(runtime, server, approvedTransport);
+        // Discovery and invocation share one configured operation budget. Giving
+        // each phase a fresh timeout would make one mcp.call consume nearly twice
+        // the configured limit.
+        const actionDeadline = performance.now() + this.#config.callTimeoutMs;
+        const discoveryBudget = this.#remainingCallBudget(actionDeadline);
+        const rawTools = await this.#bounded(
+          runtime,
+          server,
+          this.#listRawTools(runtime, server, actionDeadline, signal),
+          signal,
+          "tool discovery",
+          discoveryBudget,
+          lease,
+        );
+        const tools = normalizeServerTools(rawTools);
+        const projected = tools.map((tool) => projectRemoteTool(server, tool, approvedTransport));
+        if (actionName === "$tools") return projected;
+        const matches = tools.map((tool, index) => ({ tool, projected: projected[index]! }))
+          .filter(({ tool }) => tool.name === toolName);
+        if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
+        if (actionName === "$describe") return matches[0]!.projected;
+        if (expectedDescriptorDigest !== undefined &&
+            matches[0]!.projected.descriptorDigest !== expectedDescriptorDigest) {
+          const observed = matches[0]!.projected;
+          throw new FabricRepairError(`MCP tool descriptor changed before invocation: ${server}.${toolName}`, {
+            code: "stale_descriptor", phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none",
+            ref: observed.ref.slice(0, 512), descriptorDigest: String(expectedDescriptorDigest),
+            replacementDescriptor: { ref: observed.ref.slice(0, 512), name: observed.name.slice(0, 256), descriptorDigest: observed.descriptorDigest, inputSchema: repairSchema(observed.inputSchema) },
+          });
+        }
+        this.#validateToolArguments(matches[0]!.tool, toolArgs as Record<string, unknown>, matches[0]!.projected);
 
-      throwIfAbortedOrExpired(signal, context.deadline);
-      this.#assertTransportSnapshot(runtime, server, approvedTransport);
-      const callBudget = this.#remainingCallBudget(actionDeadline);
-      const result = await this.#bounded(
-        runtime,
-        server,
-        runtime.callTool(server, toolName, {
-          args: toolArgs as Record<string, unknown>,
-          timeoutMs: callBudget,
-          disableOAuth: this.#config.disableOAuth,
-        }),
-        signal,
-        "tool call",
-        callBudget,
-        lease,
-      );
-      throwIfAbortedOrExpired(signal, context.deadline);
-      return normalizeMcpResult(result);
+        throwIfAbortedOrExpired(signal, context.deadline);
+        this.#assertTransportSnapshot(runtime, server, approvedTransport);
+        const callBudget = this.#remainingCallBudget(actionDeadline);
+        dispatched = true;
+        const result = await this.#bounded(
+          runtime,
+          server,
+          runtime.callTool(server, toolName, {
+            args: toolArgs as Record<string, unknown>,
+            timeoutMs: callBudget,
+            disableOAuth: this.#config.disableOAuth,
+          }),
+          signal,
+          "tool call",
+          callBudget,
+          lease,
+        );
+        throwIfAbortedOrExpired(signal, context.deadline);
+        return normalizeMcpResult(result, projection);
+      } catch (error) {
+        if (error instanceof FabricRepairError) throw error;
+        throw new FabricRepairError(error instanceof Error ? error.message : "MCP operation failed", {
+          code: context.deadline?.expired ? "timeout" : "provider_error",
+          phase: dispatched ? "dispatch" : "discovery",
+          dispatchState: dispatched ? "dispatched" : "not_dispatched",
+          effectOutcome: dispatched ? "uncertain" : "none",
+        });
+      }
     });
   }
 
@@ -872,7 +905,7 @@ export class KiroMcpProvider implements FabricProvider {
     throwIfAbortedOrExpired(context.signal, context.deadline);
   }
 
-  #validateToolArguments(tool: ServerToolInfo, args: Record<string, unknown>): void {
+  #validateToolArguments(tool: ServerToolInfo, args: Record<string, unknown>, descriptor: { ref: string; descriptorDigest: string }): void {
     const validation = validateSchemaValue(tool.inputSchema, args, {
       pathPrefix: "/args",
       includeInstancePath: true,
@@ -880,7 +913,7 @@ export class KiroMcpProvider implements FabricProvider {
     // External schemas are advisory. Unsupported schemas still receive the
     // remote server's authoritative validation.
     if (validation.status === "invalid") {
-      throw new Error(`Invalid arguments for mcp.call: ${validation.message}`);
+      throw argumentRepairError(descriptor.ref, descriptor.descriptorDigest, tool.inputSchema, validation.message);
     }
   }
 
@@ -983,7 +1016,9 @@ export class KiroMcpProvider implements FabricProvider {
 
   #remainingCallBudget(deadline: number): number {
     const remaining = Math.ceil(deadline - performance.now());
-    if (remaining < 1) throw new Error(`MCP call timed out after ${this.#config.callTimeoutMs}ms`);
+    if (remaining < 1) throw new FabricRepairError(`MCP call timed out after ${this.#config.callTimeoutMs}ms`, {
+      code: "timeout", phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none",
+    });
     return remaining;
   }
 
@@ -1022,16 +1057,21 @@ export class KiroMcpProvider implements FabricProvider {
           reject(error);
         });
       };
-      const onAbort = (): void => terminate(abortError(signal!));
+      const classified = (message: string, code: "timeout" | "provider_error"): FabricRepairError => new FabricRepairError(message, {
+        code, phase: label === "tool call" ? "dispatch" : "discovery",
+        dispatchState: label === "tool call" ? "dispatched" : "not_dispatched",
+        effectOutcome: label === "tool call" ? "uncertain" : "none",
+      });
+      const onAbort = (): void => terminate(classified(abortError(signal!).message, "provider_error"));
       const timer = setTimeout(
-        () => terminate(new Error(`MCP ${label} timed out after ${this.#config.callTimeoutMs}ms total`)),
+        () => terminate(classified(`MCP ${label} timed out after ${this.#config.callTimeoutMs}ms total`, "timeout")),
         timeoutMs,
       );
       if (signal?.aborted) onAbort();
       else signal?.addEventListener("abort", onAbort, { once: true });
       operation.then(
         (value) => finish(() => resolve(value)),
-        (error) => finish(() => reject(error)),
+        (error) => finish(() => reject(error instanceof FabricRepairError ? error : classified(error instanceof Error ? error.message : "MCP operation failed", "provider_error"))),
       );
     });
   }

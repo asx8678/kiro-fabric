@@ -8,6 +8,9 @@ if (!["linux", "darwin"].includes(process.platform)) {
   throw new Error(`Agent staging requires Linux or macOS (received ${process.platform})`);
 }
 
+import { verifyBuildClosure, verifyBuildCapture, verifyCapturedInputs } from "./build-inputs.mjs";
+
+const initialBuild = verifyBuildClosure(path.resolve("."));
 const parent = fs.realpathSync(path.resolve(".tmp"));
 const parentStats = fs.lstatSync(parent);
 if (!parentStats.isDirectory() || parentStats.isSymbolicLink() ||
@@ -51,6 +54,8 @@ try {
     scripts: { "install:agent": "node scripts/install-agent-user.mjs ." },
   }, null, 2)}\n`, { mode: 0o600 });
 
+  verifyCapturedInputs(building, initialBuild, [["skills", "skills"], ["agent-product.json", "agent-product.json"], ...["agent-profile.mjs", "install-agent-user.mjs", "validate-agent-package.mjs"].map(name => [`scripts/${name}`, `scripts/${name}`])]);
+  verifyBuildCapture(path.resolve("."), path.join(building, "runtime"), initialBuild);
   const provisional = validateAgentPackage(building);
   const generation = path.join(parent, `.kiro-fabric-agent-generation-${provisional.digest}`);
   let selected;

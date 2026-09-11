@@ -76,6 +76,25 @@ const preflight = (root: unknown, maxChars: number): void => {
   }
 };
 
+/** Largest Unicode-safe prefix whose JSON-string content fits the budget.
+ * Quotes around the string are excluded. Linear scan, no repeated serialization
+ * of multi-megabyte prefixes; matches JSON.stringify's escapes/lone surrogates. */
+export const jsonStringPrefix = (value: string, contentChars: number): string => {
+  if (!Number.isSafeInteger(contentChars) || contentChars < 0) throw budgetError("invalid string prefix budget");
+  let end = 0, used = 0;
+  while (end < value.length) {
+    const unit = value.charCodeAt(end), next = value.charCodeAt(end + 1);
+    const pair = unit >= 0xd800 && unit <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+    const width = pair ? 2 : 1;
+    const cost = unit === 0x22 || unit === 0x5c ? 2
+      : unit < 0x20 ? ([8, 9, 10, 12, 13].includes(unit) ? 2 : 6)
+      : !pair && unit >= 0xd800 && unit <= 0xdfff ? 6 : width;
+    if (used + cost > contentChars) break;
+    used += cost; end += width;
+  }
+  return value.slice(0, end);
+};
+
 export const fabricJsonText = (
   value: unknown,
   maxChars = DEFAULT_FABRIC_JSON_CHARS,

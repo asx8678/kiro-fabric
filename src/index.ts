@@ -10,11 +10,24 @@ export {
   type KiroRuntime,
   type KiroRuntimeOptions,
 } from "./kiro/runtime.js";
+export { FabricRepairError, FabricCompilerTimeoutError } from "./core/repair-error.js";
+export type { KiroArtifactReadResult } from "./kiro/artifacts.js";
+export type { KiroArtifactCheckpointResult } from "./kiro/power/artifacts-provider.js";
 export { ActionRegistry } from "./core/action-registry.js";
 export { LocalCodingProvider } from "./providers/local-provider.js";
+export { formatLocalEvidence } from "./providers/local-evidence.js";
+export { ReviewProvider } from "./providers/review-provider.js";
+export { buildRunProvenance, parseRunProvenanceDeclaration } from "./kiro/run-provenance.js";
+export type { RunProvenanceInput, RunProvenanceConfiguredInput, RunProvenanceObservedInput, RunProvenanceManifest } from "./kiro/run-provenance.js";
+export { ProbeProvider, ProbeRunExitError } from "./providers/probe-provider.js";
+export { PROBE_ACTION_DESCRIPTORS, PROBE_GUEST_DECLARATIONS } from "./providers/probe-contract.js";
+export { REVIEW_GUEST_DECLARATIONS } from "./providers/review-contract.js";
+export type * from "./providers/review-contract.js";
+export type * from "./providers/probe-contract.js";
 export type {
   LocalProviderOptions, LocalReadArguments, LocalGrepArguments, LocalFindArguments,
   LocalReadWindow, LocalReadManyArguments, LocalSourceWindow, LocalReadManyResult, LocalShellInput,
+  LocalReadEvidenceArguments, LocalReadEvidenceResult, LocalEvidenceMetadata,
   LocalListArguments, LocalWriteArguments, LocalEditArguments, LocalShellArguments,
   LocalIdentity, LocalReadResult, LocalSearchScope, LocalGrepResult, LocalFindResult, LocalListResult,
   LocalMutationResult, LocalShellResult, LocalShellOptions,
@@ -23,6 +36,9 @@ export type {
   FabricActionDescriptor,
   FabricActionEffect,
   FabricToolAnnotations,
+  FabricFailureMetadata,
+  FabricCheckpointHandle,
+  FabricInvocationContext,
   FabricProvider,
   FabricProviderStatus,
 } from "./protocol.js";

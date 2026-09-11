@@ -67,9 +67,9 @@ export async function inspectCompleteInstallation(kiroHome,{verifyGenerations=tr
  if(owner.launcherSha256!==s.hash(completeGenerationLauncher(owner.currentRuntime)))throw Error('launcher binding mismatch');
  // Profile bytes are retained as an exact control hash; validate semantic generation bindings independently.
  if(owner.status==='active'){const profile=JSON.parse(readControl(p.profile).toString()),server=profile.mcpServers?.fabric,expected=profileFor(p,owner.currentRuntime).mcpServers.fabric;
- // Older hash-verified profiles predate launcher forwarding / direct CLI binding.
- // Accept only omission, never a changed workspace value or generation binding.
- for(const key of ['KIRO_FABRIC_LAUNCH_WORKSPACE','KIRO_FABRIC_WORKSPACE_SOURCE']) {
+ // Older hash-verified profiles predate launcher forwarding, direct CLI binding or run declarations.
+ // Accept only omission, never a changed declared value or generation binding.
+ for(const key of ['KIRO_FABRIC_LAUNCH_WORKSPACE','KIRO_FABRIC_WORKSPACE_SOURCE','KIRO_FABRIC_RUN_DECLARATION']) {
   if(server?.env && !Object.hasOwn(server.env,key))delete expected.env[key];
  }
  if(!server||server.command!==expected.command||JSON.stringify(server.args)!==JSON.stringify(expected.args)||JSON.stringify(server.env)!==JSON.stringify(expected.env)||JSON.stringify(profile.resources)!==JSON.stringify(profileFor(p,owner.currentRuntime).resources))throw Error('profile generation binding mismatch');}

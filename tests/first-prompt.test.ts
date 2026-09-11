@@ -4,7 +4,8 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import { firstPromptContext } from "../src/kiro/first-prompt-hook.js";
-import { FIRST_PROMPT_GUIDANCE, FIRST_PROMPT_PROGRAM } from "../src/kiro/first-prompt-guidance.js";
+import { FIRST_PROMPT_GUIDANCE } from "../src/kiro/first-prompt-guidance.js";
+import { BUNDLED_GUIDANCE } from "../src/kiro/generated-guidance.js";
 import { generateAgentProfile } from "../scripts/agent-profile.mjs";
 import { createKiroRuntime, type KiroRuntime } from "../src/kiro/runtime.js";
 import { normalizeFabricConfig } from "../src/config.js";
@@ -43,8 +44,10 @@ const hook = (data: string, input: unknown, cwd: string) => processProbe(process
 
 type StarterResult = {
   manifest: LocalFindResult;
+  help: { topic: string; text: string; truncated: boolean } | null;
   packets?: { area: string; evidence?: LocalReadManyResult; deferred?: string[]; error?: string; unread?: string[] }[];
   narrowDiscovery?: boolean;
+  unclassified?: string[];
 };
 const readApprover = {
   prepareApproval(action: { risk: string }) { expect(action.risk).toBe("read"); return { decision: "allow" as const }; },
@@ -53,11 +56,17 @@ const readApprover = {
 async function starter(f: ReturnType<typeof fixture>) {
   const runtime = createKiroRuntime({ cwd: f.workspace, workspaceRoot: f.workspace, localLockRoot: path.join(f.data, "locks"), artifactsRoot: path.join(f.data, "artifacts"), configFile: path.join(f.data, "config.json"), mcpConfigPath: path.join(f.data, "mcp.json"), config: normalizeFabricConfig({ executor: { timeoutMs: 10000 }, mcp: { enabled: false }, memory: { enabled: false }, state: { enabled: false } }) });
   runtimes.push(runtime);
-  const result = await runtime.service.execute({ code: FIRST_PROMPT_PROGRAM, approver: readApprover });
+  // Execute the actual task-loaded recipe, not a second copy in the hook or test.
+  const code = BUNDLED_GUIDANCE.review.match(/```ts\n(\/\/ Recipe: initial review evidence\n[\s\S]*?)\n```/)?.[1];
+  expect(code).toBeDefined();
+  const result = await runtime.service.execute({ code: code!, approver: readApprover });
   expect(result.success, JSON.stringify({ error: result.error, typeErrors: result.typeErrors })).toBe(true);
   const projection = projectFabricExecutionText({ result, resultFormat: "auto", maxOutputChars: 50000, writeArtifact() { throw new Error("Unexpected spill"); } });
   expect(projection.overflowed).toBe(false);
   expect(JSON.parse(projection.text)).toEqual(result.value);
+  expect(result.audits.slice(0, 2).map(a => a.ref).sort()).toEqual(["fabric.help", "local.find"]);
+  expect(result.audits.slice(2).every(audit => audit.ref === "local.readMany")).toBe(true);
+  expect((result.value as StarterResult).help).toEqual({ topic: "review", text: BUNDLED_GUIDANCE.review, truncated: false });
   return { runtime, value: result.value as StarterResult };
 }
 function put(f: ReturnType<typeof fixture>, file: string, source = "fixture\n") {
@@ -67,6 +76,36 @@ function put(f: ReturnType<typeof fixture>, file: string, source = "fixture\n") 
 }
 
 describe("first submitted prompt context", () => {
+  it("executes the review runtime discovery and preserves every batched probe outcome", async () => {
+    const f = fixture();
+    const { runtime } = await starter(f);
+    const recipe = (name: string) => {
+      const code = BUNDLED_GUIDANCE.review.match(new RegExp("```ts\\n(// Recipe: " + name + "\\n[\\s\\S]*?)\\n```"))?.[1];
+      expect(code).toBeDefined(); return code!;
+    };
+    const approver = { prepareApproval: () => ({ decision: "allow" as const }), async approve() {} };
+    const available = await runtime.service.execute({
+      code: recipe("review runtime availability"), approver,
+      payloads: { executables: JSON.stringify(["sh", "fabric-deliberately-missing-runtime-7841"]) },
+    });
+    expect(available.success, available.error).toBe(true);
+    expect(available.value).toMatchObject({ ok: true, stdout: "sh available\nfabric-deliberately-missing-runtime-7841 unavailable\n" });
+    const probes = await runtime.service.execute({
+      code: recipe("review verification batch"), approver,
+      payloads: { checks: JSON.stringify([
+        { name: "original failure", script: 'printf "failure evidence\\n" >&2; exit 7' },
+        { name: "counterexample", script: 'printf "%s\\n" "$1"', args: ["literal $(touch should-not-exist)"] },
+      ]) },
+    });
+    expect(probes.success, probes.error).toBe(true);
+    expect(probes.audits).toHaveLength(2);
+    expect(probes.value).toMatchObject({ complete: true, remaining: [], results: [
+      { name: "original failure", status: "executed", ok: false, exitCode: 7, stderr: "failure evidence\n", truncated: false },
+      { name: "counterexample", status: "executed", ok: true, exitCode: 0, stdout: "literal $(touch should-not-exist)\n", truncated: false },
+    ] });
+    expect(fs.existsSync(path.join(f.workspace, "should-not-exist"))).toBe(false);
+  });
+
   it("emits once per session without persisting user text, and isolates concurrent chat identities", () => {
     const f = fixture();
     expect(firstPromptContext(event("session-a", "PRIVATE-PROMPT-CONTENTS"), f.data)).toBe(FIRST_PROMPT_GUIDANCE);
@@ -211,6 +250,20 @@ describe("first submitted prompt context", () => {
     const f = fixture(); put(f, "server.py", "def main(): pass\n");
     const { value } = await starter(f);
     expect(value.packets).toMatchObject([{ area: "implementation", evidence: { files: [{ path: "server.py", source: "1: def main(): pass" }] } }]);
+  });
+
+  it("collects SQL and Helm evidence while keeping unmatched and sensitive paths open", async () => {
+    const f = fixture();
+    for (const file of ["init_database.sql", "helm/app/values.yaml", "helm/app/templates/deployment.yaml", ".azure-pipelines/check.yml"]) put(f, file);
+    put(f, "validations/schema.xsd", "<schema/>");
+    put(f, "custom.unknown", "unclassified evidence");
+    put(f, "secrets/values.yaml", "DO-NOT-AUTOREAD");
+    const { value } = await starter(f);
+    const delivered = value.packets!.flatMap(packet => packet.evidence!.files.map(file => file.path));
+    expect(delivered).toEqual(expect.arrayContaining(["init_database.sql", "helm/app/values.yaml", "helm/app/templates/deployment.yaml", ".azure-pipelines/check.yml"]));
+    expect(value.unclassified).toEqual(expect.arrayContaining(["validations/schema.xsd", "custom.unknown", "secrets/values.yaml"]));
+    expect(JSON.stringify(value)).not.toContain("DO-NOT-AUTOREAD");
+    expect(JSON.stringify(value).length).toBeLessThan(40000);
   });
 
   it("retains a failed area's unread paths without discarding other source packets", async () => {

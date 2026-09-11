@@ -71,7 +71,7 @@ it("limit 1 stops expensive snapshots before exhausting aggregate bytes and disc
   const f = fixture(); const text = "needle\n" + "x".repeat(2 * 1024 * 1024 - 7);
   for (let index = 0; index < 18; index++) fs.writeFileSync(path.join(f.root, `${String(index).padStart(2, "0")}.txt`), text);
   const open = vi.spyOn(fs, "openSync");
-  expect(await f.call("grep", { pattern: "needle", limit: 1 })).toEqual({ scope: searchScope(), matches: [{ path: "00.txt", line: 1, text: "needle" }], truncated: true });
+  expect(await f.call("grep", { pattern: "needle", limit: 1 })).toEqual({ scope: searchScope(), matches: [{ path: "00.txt", line: 1, text: "needle" }], truncated: true, truncationReasons: ["count"] });
   expect(open.mock.calls.filter(([target]) => String(target).endsWith(".txt"))).toHaveLength(2);
   await expect(f.call("grep", { pattern: "not-found", limit: 1 })).rejects.toThrow(/aggregate search work limit; narrow path or glob/);
 });

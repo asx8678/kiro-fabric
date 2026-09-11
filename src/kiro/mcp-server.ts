@@ -44,6 +44,7 @@ import {
 } from "./power/workspace-context.js";
 import { projectFabricExecutionText } from "./projection.js";
 import { createKiroRuntime, type KiroRuntime, type KiroRuntimeOptions } from "./runtime.js";
+import { buildRunProvenance, parseRunProvenanceDeclaration, type RunProvenanceInput } from "./run-provenance.js";
 import {
   DISABLED_TRACER,
   createFabricTracer,
@@ -51,7 +52,7 @@ import {
   type FabricTracer,
 } from "../trace/tracer.js";
 
-const EXEC_DESCRIPTION = "Checked TypeScript; await and return. local.read({path,offset?,limit?})->{text:string,totalLines,truncated,nextOffset?}; not a string/array. local.readMany({windows:[{path,offset?,limit?}],maxChars?})->{files,remaining,complete}: numbered source; default 32000 chars, maximum 40000; continue remaining. local.grep({pattern,path?,glob?,literal?,hidden?,limit?})->{matches,scope,truncated}; local.find({pattern,path?,hidden?,limit?})->{paths,scope,truncated}; local.list({path?,limit?}); local.edit({path,oldText,newText,all?}); local.write({path,content,overwrite?}); local.shell({command,settle:true})->{ok,exitCode,stdout,stderr,truncated}; literal Bash: {script,interpreter:'bash',args?}. Reviews: hidden:true; ignore rules still apply. fabric.help({topic:'review'}). No native fallback.";
+const EXEC_DESCRIPTION = "Checked TypeScript; await/return. local.read({path,offset?,limit?})->{text:string,totalLines,truncated,nextOffset?}, not a string/array. local.readMany({windows,maxChars?,partial?})->{files,remaining,complete,unreadTails}; complete=windows only. local.readEvidence({windows,maxChars?,partial?})->string packet+metadata. local.grep({pattern,path?,glob?,literal?,hidden?,limit?})->{matches,scope,truncated}; local.find({pattern,path?,hidden?,limit?})->{paths,scope,truncated}. local.edit({path,oldText,newText,all?}); local.shell({command,settle:true})->{ok,exitCode,stdout,stderr,truncated}; scripts: {script,interpreter:'bash',args?}. Optional review/probe APIs: tools.describe. hidden:true; ignore rules still apply; fabric.help({topic:'review'}). No native fallback.";
 const MCP_INSTANCE_ID = `fmcp_${randomBytes(16).toString("hex")}`;
 const MCP_STARTED_AT = new Date().toISOString();
 const MCP_PARENT_PID = process.ppid;
@@ -77,6 +78,8 @@ export interface KiroMcpServerOptions {
   launchWorkspaceRoot?: string;
   managedSearch?: KiroRuntimeOptions["managedSearch"];
   version?: string;
+  /** Explicit host metadata: launch JSON may supply configured, never observed. */
+  runProvenance?: RunProvenanceInput;
   runtime?: KiroRuntime;
   prepareRuntime?: (options: KiroRuntimeOptions) => KiroRuntime | Promise<KiroRuntime>;
   workspaceContext?: WorkspaceContextProvider;
@@ -175,6 +178,12 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   }
   const kiroHome = explicitKiroHome ?? inferredKiroHome;
   const version = options.version ?? String((JSON.parse(readFileSync(path.join(options.runtimeRoot, "package.json"), "utf8")) as { version: unknown }).version);
+  const generationName = path.basename(path.dirname(options.runtimeRoot));
+  const runProvenance = buildRunProvenance({
+    configured: options.runProvenance?.configured ?? parseRunProvenanceDeclaration(process.env.KIRO_FABRIC_RUN_DECLARATION) ?? {},
+    observed: { ...options.runProvenance?.observed, runtimeVersion: version,
+      runtimeBundle: path.basename(options.runtimeRoot) === "app" && /^[a-f0-9]{64}$/u.test(generationName) ? generationName : undefined },
+  });
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
   const data = prepareKiroPowerDataPaths(options.dataRoot);
   const tracer = createAgentTracer(data, version);
@@ -349,11 +358,11 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       : { actual: realpathSync(process.execPath), expected: expectedNode, matches: realpathSync(process.execPath) === expectedNode };
     const providers = current ? current.providers().map((provider) => workspaceBlocked && provider.name !== "fabric"
       ? { ...provider, available: false, reason: "workspace identity is temporarily unverifiable" } : provider)
-      : ["fabric", "local", "artifacts", "memory", "state", "mcp"].map((name) => ({ name, description: "Provider awaits runtime", available: false, reason: "runtime unavailable" }));
+      : ["fabric", "local", "review", "probe", "artifacts", "memory", "state", "mcp"].map((name) => ({ name, description: "Provider awaits runtime", available: false, reason: "runtime unavailable" }));
     const actionCatalog = fabricInfoCatalog(current && !workspaceBlocked ? await current.registry.list() : []);
     if (tracer.enabled) { tracer.event("eval", "tool.fabric_info", undefined, lifecycleInfo); tracer.flush(); }
     return {
-      product: "kiro-fabric-agent", version, executor: "quickjs",
+      product: "kiro-fabric-agent", version, executor: "quickjs", runProvenance,
       limits: current?.service.config.executor ?? loadFabricConfig(data.configFile).executor,
       workspace: workspaceValue("status"), providers,
       tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },

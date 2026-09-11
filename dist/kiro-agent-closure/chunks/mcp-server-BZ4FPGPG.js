@@ -36,9 +36,15 @@ import {
 } from "./chunk-762YYRNE.js";
 import {
   FabricCompilerPool,
+  FabricCompilerTimeoutError,
+  FabricRepairError,
+  argumentRepairError,
   assertFabricTranspiledWrapper,
+  createCheckpointJournal,
+  fabricFailureMetadata,
+  repairSchema,
   transpileFabricCodeWithSourceMap
-} from "./chunk-FIOHS7MS.js";
+} from "./chunk-2LO54TYD.js";
 import "./chunk-G3LABT6U.js";
 import "./chunk-DDMC62E6.js";
 import "./chunk-YQ4ZVOWF.js";
@@ -1076,10 +1082,10 @@ var require_util = __commonJS({
     var codegen_1 = require_codegen();
     var code_1 = require_code();
     function toHash(arr) {
-      const hash = {};
+      const hash3 = {};
       for (const item of arr)
-        hash[item] = true;
-      return hash;
+        hash3[item] = true;
+      return hash3;
     }
     exports.toHash = toHash;
     function alwaysValidSchema(it, schema) {
@@ -1739,12 +1745,12 @@ var require_code2 = __commonJS({
       });
     }
     exports.checkReportMissingProp = checkReportMissingProp;
-    function checkMissingProp({ gen, data, it: { opts } }, properties, missing) {
-      return (0, codegen_1.or)(...properties.map((prop) => (0, codegen_1.and)(noPropertyInData(gen, data, prop, opts.ownProperties), (0, codegen_1._)`${missing} = ${prop}`)));
+    function checkMissingProp({ gen, data, it: { opts } }, properties, missing2) {
+      return (0, codegen_1.or)(...properties.map((prop) => (0, codegen_1.and)(noPropertyInData(gen, data, prop, opts.ownProperties), (0, codegen_1._)`${missing2} = ${prop}`)));
     }
     exports.checkMissingProp = checkMissingProp;
-    function reportMissingProp(cxt, missing) {
-      cxt.setParams({ missingProperty: missing }, true);
+    function reportMissingProp(cxt, missing2) {
+      cxt.setParams({ missingProperty: missing2 }, true);
       cxt.error();
     }
     exports.reportMissingProp = reportMissingProp;
@@ -2250,10 +2256,10 @@ var require_resolve = __commonJS({
       }
       return count2;
     }
-    function getFullPath(resolver, id = "", normalize) {
+    function getFullPath(resolver, id3 = "", normalize) {
       if (normalize !== false)
-        id = normalizeId(id);
-      const p = resolver.parse(id);
+        id3 = normalizeId(id3);
+      const p = resolver.parse(id3);
       return _getFullPath(resolver, p);
     }
     exports.getFullPath = getFullPath;
@@ -2263,13 +2269,13 @@ var require_resolve = __commonJS({
     }
     exports._getFullPath = _getFullPath;
     var TRAILING_SLASH_HASH = /#\/?$/;
-    function normalizeId(id) {
-      return id ? id.replace(TRAILING_SLASH_HASH, "") : "";
+    function normalizeId(id3) {
+      return id3 ? id3.replace(TRAILING_SLASH_HASH, "") : "";
     }
     exports.normalizeId = normalizeId;
-    function resolveUrl(resolver, baseId, id) {
-      id = normalizeId(id);
-      return resolver.resolve(baseId, id);
+    function resolveUrl(resolver, baseId, id3) {
+      id3 = normalizeId(id3);
+      return resolver.resolve(baseId, id3);
     }
     exports.resolveUrl = resolveUrl;
     var ANCHOR = /^[a-z_][-a-z0-9._]*$/i;
@@ -3039,8 +3045,8 @@ var require_compile = __commonJS({
       if (Object.keys(root.schema).length > 0 && refPath === baseId) {
         return getJsonPointer.call(this, p, root);
       }
-      const id = (0, resolve_1.normalizeId)(refPath);
-      const schOrRef = this.refs[id] || this.schemas[id];
+      const id3 = (0, resolve_1.normalizeId)(refPath);
+      const schOrRef = this.refs[id3] || this.schemas[id3];
       if (typeof schOrRef == "string") {
         const sch = resolveSchema.call(this, root, schOrRef);
         if (typeof (sch === null || sch === void 0 ? void 0 : sch.schema) !== "object")
@@ -3051,7 +3057,7 @@ var require_compile = __commonJS({
         return;
       if (!schOrRef.validate)
         compileSchema.call(this, schOrRef);
-      if (id === (0, resolve_1.normalizeId)(ref)) {
+      if (id3 === (0, resolve_1.normalizeId)(ref)) {
         const { schema } = schOrRef;
         const { schemaId } = this.opts;
         const schId = schema[schemaId];
@@ -3276,8 +3282,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path12) {
-      let input = path12;
+    function removeDotSegments(path17) {
+      let input = path17;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3682,8 +3688,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path12 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path12 && path12 !== "/" ? path12 : void 0;
+        const path17 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path17 && path17 !== "/" ? path17 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -4466,15 +4472,15 @@ var require_core = __commonJS({
             this.addSchema(sch, void 0, _meta, _validateSchema);
           return this;
         }
-        let id;
+        let id3;
         if (typeof schema === "object") {
           const { schemaId } = this.opts;
-          id = schema[schemaId];
-          if (id !== void 0 && typeof id != "string") {
+          id3 = schema[schemaId];
+          if (id3 !== void 0 && typeof id3 != "string") {
             throw new Error(`schema ${schemaId} must be string`);
           }
         }
-        key = (0, resolve_1.normalizeId)(key || id);
+        key = (0, resolve_1.normalizeId)(key || id3);
         this._checkUnique(key);
         this.schemas[key] = this._addSchema(schema, _meta, key, _validateSchema, true);
         return this;
@@ -4553,11 +4559,11 @@ var require_core = __commonJS({
           case "object": {
             const cacheKey = schemaKeyRef;
             this._cache.delete(cacheKey);
-            let id = schemaKeyRef[this.opts.schemaId];
-            if (id) {
-              id = (0, resolve_1.normalizeId)(id);
-              delete this.schemas[id];
-              delete this.refs[id];
+            let id3 = schemaKeyRef[this.opts.schemaId];
+            if (id3) {
+              id3 = (0, resolve_1.normalizeId)(id3);
+              delete this.schemas[id3];
+              delete this.refs[id3];
             }
             return this;
           }
@@ -4628,7 +4634,7 @@ var require_core = __commonJS({
       errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
         if (!errors || errors.length === 0)
           return "No errors";
-        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text, msg) => text + separator + msg);
+        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text3, msg) => text3 + separator + msg);
       }
       $dataMetaSchema(metaSchema, keywordsJsonPointers) {
         const rules = this.RULES.all;
@@ -4664,10 +4670,10 @@ var require_core = __commonJS({
         }
       }
       _addSchema(schema, meta, baseId, validateSchema = this.opts.validateSchema, addSchema = this.opts.addUsedSchema) {
-        let id;
+        let id3;
         const { schemaId } = this.opts;
         if (typeof schema == "object") {
-          id = schema[schemaId];
+          id3 = schema[schemaId];
         } else {
           if (this.opts.jtd)
             throw new Error("schema must be object");
@@ -4677,7 +4683,7 @@ var require_core = __commonJS({
         let sch = this._cache.get(schema);
         if (sch !== void 0)
           return sch;
-        baseId = (0, resolve_1.normalizeId)(id || baseId);
+        baseId = (0, resolve_1.normalizeId)(id3 || baseId);
         const localRefs = resolve_1.getSchemaRefs.call(this, schema, baseId);
         sch = new compile_1.SchemaEnv({ schema, schemaId, meta, baseId, localRefs });
         this._cache.set(sch.schema, sch);
@@ -4690,9 +4696,9 @@ var require_core = __commonJS({
           this.validateSchema(schema, true);
         return sch;
       }
-      _checkUnique(id) {
-        if (this.schemas[id] || this.refs[id]) {
-          throw new Error(`schema with key or id "${id}" already exists`);
+      _checkUnique(id3) {
+        if (this.schemas[id3] || this.refs[id3]) {
+          throw new Error(`schema with key or id "${id3}" already exists`);
         }
       }
       _compileSchemaEnv(sch) {
@@ -5238,14 +5244,14 @@ var require_required = __commonJS({
           }
         }
         function exitOnErrorMode() {
-          const missing = gen.let("missing");
+          const missing2 = gen.let("missing");
           if (useLoop || $data) {
             const valid = gen.let("valid", true);
-            cxt.block$data(valid, () => loopUntilMissing(missing, valid));
+            cxt.block$data(valid, () => loopUntilMissing(missing2, valid));
             cxt.ok(valid);
           } else {
-            gen.if((0, code_1.checkMissingProp)(cxt, schema, missing));
-            (0, code_1.reportMissingProp)(cxt, missing);
+            gen.if((0, code_1.checkMissingProp)(cxt, schema, missing2));
+            (0, code_1.reportMissingProp)(cxt, missing2);
             gen.else();
           }
         }
@@ -5255,10 +5261,10 @@ var require_required = __commonJS({
             gen.if((0, code_1.noPropertyInData)(gen, data, prop, opts.ownProperties), () => cxt.error());
           });
         }
-        function loopUntilMissing(missing, valid) {
-          cxt.setParams({ missingProperty: missing });
-          gen.forOf(missing, schemaCode, () => {
-            gen.assign(valid, (0, code_1.propertyInData)(gen, data, missing, opts.ownProperties));
+        function loopUntilMissing(missing2, valid) {
+          cxt.setParams({ missingProperty: missing2 });
+          gen.forOf(missing2, schemaCode, () => {
+            gen.assign(valid, (0, code_1.propertyInData)(gen, data, missing2, opts.ownProperties));
             gen.if((0, codegen_1.not)(valid), () => {
               cxt.error();
               gen.break();
@@ -5796,7 +5802,7 @@ var require_dependencies = __commonJS({
       const { gen, data, it } = cxt;
       if (Object.keys(propertyDeps).length === 0)
         return;
-      const missing = gen.let("missing");
+      const missing2 = gen.let("missing");
       for (const prop in propertyDeps) {
         const deps = propertyDeps[prop];
         if (deps.length === 0)
@@ -5814,8 +5820,8 @@ var require_dependencies = __commonJS({
             }
           });
         } else {
-          gen.if((0, codegen_1._)`${hasProperty} && (${(0, code_1.checkMissingProp)(cxt, deps, missing)})`);
-          (0, code_1.reportMissingProp)(cxt, missing);
+          gen.if((0, codegen_1._)`${hasProperty} && (${(0, code_1.checkMissingProp)(cxt, deps, missing2)})`);
+          (0, code_1.reportMissingProp)(cxt, missing2);
           gen.else();
         }
       }
@@ -7189,12 +7195,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs13, exportName) {
+    function addFormats(ajv, list, fs15, exportName) {
       var _a;
       var _b;
       (_a = (_b = ajv.opts.code).formats) !== null && _a !== void 0 ? _a : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs13[f]);
+        ajv.addFormat(f, fs15[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7204,8 +7210,8 @@ var require_dist = __commonJS({
 
 // src/kiro/mcp-server.ts
 import { randomBytes as randomBytes5 } from "node:crypto";
-import fs12, { readFileSync, realpathSync } from "node:fs";
-import path11 from "node:path";
+import fs14, { readFileSync, realpathSync } from "node:fs";
+import path16 from "node:path";
 import { pathToFileURL } from "node:url";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
@@ -9929,7 +9935,7 @@ var ExperimentalServerTasks = class {
       if (hasPreviousToolUse) {
         const toolUseIds = new Set(previousContent.filter((c) => c.type === "tool_use").map((c) => c.id));
         const toolResultIds = new Set(lastContent.filter((c) => c.type === "tool_result").map((c) => c.toolUseId));
-        if (toolUseIds.size !== toolResultIds.size || ![...toolUseIds].every((id) => toolResultIds.has(id))) {
+        if (toolUseIds.size !== toolResultIds.size || ![...toolUseIds].every((id3) => toolResultIds.has(id3))) {
           throw new Error("ids of tool_result blocks and tool_use blocks from previous message do not match");
         }
       }
@@ -10354,7 +10360,7 @@ var Server = class extends Protocol {
       if (hasPreviousToolUse) {
         const toolUseIds = new Set(previousContent.filter((c) => c.type === "tool_use").map((c) => c.id));
         const toolResultIds = new Set(lastContent.filter((c) => c.type === "tool_result").map((c) => c.toolUseId));
-        if (toolUseIds.size !== toolResultIds.size || ![...toolUseIds].every((id) => toolResultIds.has(id))) {
+        if (toolUseIds.size !== toolResultIds.size || ![...toolUseIds].every((id3) => toolResultIds.has(id3))) {
           throw new Error("ids of tool_result blocks and tool_use blocks from previous message do not match");
         }
       }
@@ -10557,8 +10563,8 @@ var StdioServerTransport = class {
   }
   send(message) {
     return new Promise((resolve) => {
-      const json = serializeMessage(message);
-      if (this._stdout.write(json)) {
+      const json2 = serializeMessage(message);
+      if (this._stdout.write(json2)) {
         resolve();
       } else {
         this._stdout.once("drain", resolve);
@@ -10855,8 +10861,8 @@ function SomeAll(value, callback) {
 function Counted(value, callback) {
   return value.reduce((result, value2, index) => callback(value2, index) ? ++result : result, 0);
 }
-function ShiftLeft(array2, true_, false_) {
-  return IsEqual(array2.length, 0) ? false_() : true_(array2[0], array2.slice(1));
+function ShiftLeft(array4, true_, false_) {
+  return IsEqual(array4.length, 0) ? false_() : true_(array4[0], array4.slice(1));
 }
 function IsUnsafePropertyKey(key) {
   return IsEqual(key, "__proto__") || IsEqual(key, "constructor") || IsEqual(key, "prototype");
@@ -12873,10 +12879,10 @@ function ErrorUniqueItems(_stack, context, schemaPath, instancePath, schema, val
     return true;
   const set = /* @__PURE__ */ new Set();
   const duplicateItems = value.reduce((result, value2, index) => {
-    const hash = hash_exports.Hash(value2);
-    if (set.has(hash))
+    const hash3 = hash_exports.Hash(value2);
+    if (set.has(hash3))
       return [...result, index];
-    set.add(hash);
+    set.add(hash3);
     return result;
   }, []);
   const isUniqueItems = guard_exports.IsEqual(duplicateItems.length, 0);
@@ -13123,10 +13129,10 @@ function DynamicRef(context, root, base, dynamicRef, dynamicAnchors) {
 }
 
 // node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_stack.mjs
-var __classPrivateFieldGet = function(receiver, state, kind, f) {
-  if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
+var __classPrivateFieldGet = function(receiver, state, kind2, f) {
+  if (kind2 === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
   if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
-  return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
+  return kind2 === "m" ? f : kind2 === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
 var _Stack_instances;
 var _Stack_PushResourceAnchors;
@@ -13520,8 +13526,8 @@ function Assert(...args) {
 }
 
 // node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/schema.mjs
-function IsKind(value, kind) {
-  return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "~kind") && guard_exports.IsEqual(value["~kind"], kind);
+function IsKind(value, kind2) {
+  return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "~kind") && guard_exports.IsEqual(value["~kind"], kind2);
 }
 function IsSchema2(value) {
   return guard_exports.IsObject(value);
@@ -14319,8 +14325,8 @@ function CreateObject(types, value) {
 }
 function FromUnionKey(types, value) {
   const flattened = Flatten(types);
-  const record3 = TryBuildRecord(flattened, value);
-  return IsSchema2(record3) ? record3 : CreateObject(flattened, value);
+  const record4 = TryBuildRecord(flattened, value);
+  return IsSchema2(record4) ? record4 : CreateObject(flattened, value);
 }
 
 // node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key.mjs
@@ -16311,8 +16317,8 @@ function FromObject5(properties) {
 
 // node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_tuple.mjs
 function FromTuple(types) {
-  const object4 = TupleToObject(Tuple(types));
-  const result = FromType8(object4);
+  const object6 = TupleToObject(Tuple(types));
+  const result = FromType8(object6);
   return result;
 }
 
@@ -16688,29 +16694,29 @@ function MappedInstantiate(context, state, identifier, type, as, property, optio
 }
 
 // node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/module/instantiate.mjs
-function InstantiateCyclics(context, declarations, cyclicKeys) {
-  const declarationContext = memory_exports.Assign(context, declarations);
-  const declarationKeys = guard_exports.Keys(declarations).filter((key) => cyclicKeys.includes(key));
+function InstantiateCyclics(context, declarations2, cyclicKeys) {
+  const declarationContext = memory_exports.Assign(context, declarations2);
+  const declarationKeys = guard_exports.Keys(declarations2).filter((key) => cyclicKeys.includes(key));
   return declarationKeys.reduce((result, key) => {
-    return { ...result, [key]: InstantiateCyclic(declarationContext, key, declarations[key]) };
+    return { ...result, [key]: InstantiateCyclic(declarationContext, key, declarations2[key]) };
   }, {});
 }
-function InstantiateNonCyclics(context, declarations, cyclicKeys) {
-  const declarationContext = memory_exports.Assign(context, declarations);
-  const declarationKeys = guard_exports.Keys(declarations).filter((key) => !cyclicKeys.includes(key));
+function InstantiateNonCyclics(context, declarations2, cyclicKeys) {
+  const declarationContext = memory_exports.Assign(context, declarations2);
+  const declarationKeys = guard_exports.Keys(declarations2).filter((key) => !cyclicKeys.includes(key));
   return declarationKeys.reduce((result, key) => {
-    return { ...result, [key]: InstantiateType(declarationContext, State([], []), declarations[key]) };
+    return { ...result, [key]: InstantiateType(declarationContext, State([], []), declarations2[key]) };
   }, {});
 }
-function InstantiateModule(context, declarations, options) {
-  const cyclicCandidates = CyclicCandidates(declarations);
-  const instantiatedCyclics = InstantiateCyclics(context, declarations, cyclicCandidates);
-  const instantiatedNonCyclics = InstantiateNonCyclics(context, declarations, cyclicCandidates);
+function InstantiateModule(context, declarations2, options) {
+  const cyclicCandidates = CyclicCandidates(declarations2);
+  const instantiatedCyclics = InstantiateCyclics(context, declarations2, cyclicCandidates);
+  const instantiatedNonCyclics = InstantiateNonCyclics(context, declarations2, cyclicCandidates);
   const instantiatedModule = { ...instantiatedCyclics, ...instantiatedNonCyclics };
   return memory_exports.Update(instantiatedModule, {}, options);
 }
-function ModuleInstantiate(context, _state, declarations, options) {
-  const instantiatedModule = InstantiateModule(context, declarations, options);
+function ModuleInstantiate(context, _state, declarations2, options) {
+  const instantiatedModule = InstantiateModule(context, declarations2, options);
   return instantiatedModule;
 }
 
@@ -17164,11 +17170,11 @@ function Evaluate(type, options = {}) {
 }
 
 // node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/module.mjs
-function ModuleDeferred(declarations, options = {}) {
-  return Deferred("Module", [declarations], options);
+function ModuleDeferred(declarations2, options = {}) {
+  return Deferred("Module", [declarations2], options);
 }
-function Module2(declarations, options = {}) {
-  return ModuleInstantiate({}, State([], []), declarations, options);
+function Module2(declarations2, options = {}) {
+  return ModuleInstantiate({}, State([], []), declarations2, options);
 }
 
 // node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/priority/priority.mjs
@@ -18319,23 +18325,23 @@ function Parse(...args) {
 }
 
 // node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/delta/diff.mjs
-function CreateUpdate(path12, value) {
-  return { type: "update", path: path12, value };
+function CreateUpdate(path17, value) {
+  return { type: "update", path: path17, value };
 }
-function CreateInsert(path12, value) {
-  return { type: "insert", path: path12, value };
+function CreateInsert(path17, value) {
+  return { type: "insert", path: path17, value };
 }
-function CreateDelete(path12) {
-  return { type: "delete", path: path12 };
+function CreateDelete(path17) {
+  return { type: "delete", path: path17 };
 }
 function AssertCanDiffObject(value) {
   if (guard_exports.IsObject(value) && guard_exports.IsEqual(guard_exports.Symbols(value).length, 0))
     return;
   throw new Error("Cannot create diffs for objects with symbols keys");
 }
-function* FromObject17(path12, left, right) {
+function* FromObject17(path17, left, right) {
   if (!guard_exports.IsObject(right) || guard_exports.IsArray(right))
-    return yield CreateUpdate(path12, right);
+    return yield CreateUpdate(path17, right);
   AssertCanDiffObject(left);
   AssertCanDiffObject(right);
   const leftKeys = guard_exports.Keys(left);
@@ -18345,7 +18351,7 @@ function* FromObject17(path12, left, right) {
       continue;
     if (guard_exports.IsUnsafePropertyKey(key))
       continue;
-    yield CreateInsert(`${path12}/${key}`, right[key]);
+    yield CreateInsert(`${path17}/${key}`, right[key]);
   }
   for (const key of leftKeys) {
     if (!guard_exports.HasPropertyKey(right, key))
@@ -18354,52 +18360,52 @@ function* FromObject17(path12, left, right) {
       continue;
     if (Equal(left, right))
       continue;
-    yield* FromValue4(`${path12}/${key}`, left[key], right[key]);
+    yield* FromValue4(`${path17}/${key}`, left[key], right[key]);
   }
   for (const key of leftKeys) {
     if (guard_exports.HasPropertyKey(right, key))
       continue;
     if (guard_exports.IsUnsafePropertyKey(key))
       continue;
-    yield CreateDelete(`${path12}/${key}`);
+    yield CreateDelete(`${path17}/${key}`);
   }
 }
-function* FromArray13(path12, left, right) {
+function* FromArray13(path17, left, right) {
   if (!guard_exports.IsArray(right))
-    return yield CreateUpdate(path12, right);
+    return yield CreateUpdate(path17, right);
   for (let i = 0; i < Math.min(left.length, right.length); i++) {
-    yield* FromValue4(`${path12}/${i}`, left[i], right[i]);
+    yield* FromValue4(`${path17}/${i}`, left[i], right[i]);
   }
   for (let i = 0; i < right.length; i++) {
     if (i < left.length)
       continue;
-    yield CreateInsert(`${path12}/${i}`, right[i]);
+    yield CreateInsert(`${path17}/${i}`, right[i]);
   }
   for (let i = left.length - 1; i >= 0; i--) {
     if (i < right.length)
       continue;
-    yield CreateDelete(`${path12}/${i}`);
+    yield CreateDelete(`${path17}/${i}`);
   }
 }
-function* FromTypedArray2(path12, left, right) {
+function* FromTypedArray2(path17, left, right) {
   const typeLeft = globalThis.Object.getPrototypeOf(left).constructor.name;
   const typeRight = globalThis.Object.getPrototypeOf(right).constructor.name;
   const predicate = globals_exports.IsTypeArray(right) && guard_exports.IsEqual(left.length, right.length) && guard_exports.IsEqual(typeLeft, typeRight);
   if (predicate) {
     for (let index = 0; index < Math.min(left.length, right.length); index++) {
-      yield* FromValue4(`${path12}/${index}`, left[index], right[index]);
+      yield* FromValue4(`${path17}/${index}`, left[index], right[index]);
     }
   } else {
-    return yield CreateUpdate(path12, right);
+    return yield CreateUpdate(path17, right);
   }
 }
-function* FromUnknown(path12, left, right) {
+function* FromUnknown(path17, left, right) {
   if (left === right)
     return;
-  yield CreateUpdate(path12, right);
+  yield CreateUpdate(path17, right);
 }
-function* FromValue4(path12, left, right) {
-  return globals_exports.IsTypeArray(left) ? yield* FromTypedArray2(path12, left, right) : guard_exports.IsArray(left) ? yield* FromArray13(path12, left, right) : guard_exports.IsObject(left) ? yield* FromObject17(path12, left, right) : yield* FromUnknown(path12, left, right);
+function* FromValue4(path17, left, right) {
+  return globals_exports.IsTypeArray(left) ? yield* FromTypedArray2(path17, left, right) : guard_exports.IsArray(left) ? yield* FromArray13(path17, left, right) : guard_exports.IsObject(left) ? yield* FromObject17(path17, left, right) : yield* FromUnknown(path17, left, right);
 }
 function Diff(current, next) {
   return [...FromValue4("", current, next)];
@@ -18468,10 +18474,10 @@ var RepairError = class extends Error {
 function MakeUnique(values) {
   const [hashes, result] = [/* @__PURE__ */ new Set(), []];
   for (const value of values) {
-    const hash = Hash2(value);
-    if (hashes.has(hash))
+    const hash3 = Hash2(value);
+    if (hashes.has(hash3))
       continue;
-    hashes.add(hash);
+    hashes.add(hash3);
     result.push(value);
   }
   return result;
@@ -19125,10 +19131,10 @@ async function localProcessGroupAlive(pid, end) {
     };
     if (await live(String(pid))) return true;
     check();
-    const directory = await opendir("/proc");
+    const directory2 = await opendir("/proc");
     let count2 = 0;
     let batch = [];
-    for await (const entry of directory) {
+    for await (const entry of directory2) {
       check();
       if (++count2 > PROC_ENTRY_LIMIT) throw uncertain();
       if (!/^\d+$/u.test(entry.name) || entry.name === String(pid)) continue;
@@ -19308,16 +19314,9 @@ async function runLocalShell(options) {
   return result;
 }
 
-// src/core/action-registry.ts
+// src/providers/probe-provider.ts
+import path3 from "node:path";
 import { randomUUID } from "node:crypto";
-
-// src/protocol.ts
-var FABRIC_COMMIT_ACKNOWLEDGEMENT = /* @__PURE__ */ Symbol("fabric.commitAcknowledgement");
-var fabricCommitAcknowledgement = (error) => {
-  if (!(error instanceof Error)) return void 0;
-  const marker = error[FABRIC_COMMIT_ACKNOWLEDGEMENT];
-  return marker?.version === 1 && ["set", "delete", "write", "edit"].includes(marker.operation) ? marker : void 0;
-};
 
 // src/schema-validation.ts
 var MAX_VALIDATION_MESSAGE_CHARS = 2e3;
@@ -19389,8 +19388,8 @@ var schemaForDynamicProperty = (schema, property) => {
   }
   return isRecord(schema.additionalProperties) ? schema.additionalProperties : void 0;
 };
-var traceSafePath = (schema, path12) => {
-  const rawParts = typeof path12 === "string" ? path12 === "" || path12 === "/" ? [] : path12.split("/").slice(1).map(decodePointerPart) : Array.isArray(path12) ? path12.filter(
+var traceSafePath = (schema, path17) => {
+  const rawParts = typeof path17 === "string" ? path17 === "" || path17 === "/" ? [] : path17.split("/").slice(1).map(decodePointerPart) : Array.isArray(path17) ? path17.filter(
     (part) => typeof part === "string" || typeof part === "number"
   ).map(String) : [];
   const safeParts = [];
@@ -19416,7 +19415,7 @@ var traceSafePath = (schema, path12) => {
   }
   return safeParts.map((part) => `/${pointerPart(part)}`).join("");
 };
-var prefixedPath = (schema, prefix, path12) => `${prefix}${traceSafePath(schema, path12)}` || "/";
+var prefixedPath = (schema, prefix, path17) => `${prefix}${traceSafePath(schema, path17)}` || "/";
 var traceSafeErrorMessage = (error) => {
   if (error.keyword === "additionalProperties") return "must not have additional properties";
   if (error.keyword === "propertyNames") return "property names are invalid";
@@ -19429,8 +19428,8 @@ var validateSchemaValue = (schema, value, options = {}) => {
     const messages = [];
     for (const rawError of value_exports.Errors(schema, value)) {
       const error = rawError;
-      const path12 = error.path ?? (options.includeInstancePath ? error.instancePath : void 0);
-      const parentPath = prefixedPath(schema, prefix, path12);
+      const path17 = error.path ?? (options.includeInstancePath ? error.instancePath : void 0);
+      const parentPath = prefixedPath(schema, prefix, path17);
       const safePath = error.keyword === "additionalProperties" || error.keyword === "propertyNames" ? `${parentPath === "/" ? "" : parentPath}/${REDACTED_PROPERTY_SEGMENT}` : parentPath;
       messages.push(`${safePath}: ${traceSafeErrorMessage(error)}`);
       if (messages.length >= 5) break;
@@ -19453,6 +19452,706 @@ var schemaValidationMessage = (schema, value) => {
   if (result.status === "unavailable") return "Schema validator failed";
   return result.message.replace(/^\/: /, "");
 };
+
+// src/protocol.ts
+var FABRIC_COMMIT_ACKNOWLEDGEMENT = /* @__PURE__ */ Symbol("fabric.commitAcknowledgement");
+var fabricCommitAcknowledgement = (error) => {
+  if (!(error instanceof Error)) return void 0;
+  const marker = error[FABRIC_COMMIT_ACKNOWLEDGEMENT];
+  return marker?.version === 1 && ["set", "delete", "write", "edit"].includes(marker.operation) ? marker : void 0;
+};
+
+// src/providers/probe-contract.ts
+var object3 = (properties, required = []) => JSON.parse(JSON.stringify({ type: "object", properties, required, additionalProperties: false }));
+var text = (maxLength, minLength = 0) => ({ type: "string", minLength, maxLength });
+var array2 = (items, maxItems) => ({ type: "array", items, maxItems });
+var bool2 = { type: "boolean" };
+var id = text(36, 36);
+var kind = { enum: ["repository-code", "framework-semantic", "illustrative"] };
+var declarations = object3({
+  sdkVersions: array2(object3({ name: text(128, 1), version: text(256, 1) }, ["name", "version"]), 16),
+  packageVersions: array2(object3({ name: text(128, 1), version: text(256, 1) }, ["name", "version"]), 32),
+  environment: array2(object3({ name: text(128, 1), value: text(1024) }, ["name", "value"]), 16),
+  sourceReferences: array2(object3({ path: text(1024, 1), sha256: text(64, 64), note: text(1024) }, ["path"]), 16)
+});
+var PROBE_INPUT_SCHEMAS = {
+  discover: object3({ executables: { ...array2(text(64, 1), 16), minItems: 1 } }, ["executables"]),
+  create: object3({ label: text(160), kind, files: array2(object3({ path: text(240, 1), content: text(32768) }, ["path", "content"]), 16), declarations }, ["kind"]),
+  write: object3({ id, path: text(240, 1), content: text(32768) }, ["id", "path", "content"]),
+  run: object3({ id, script: text(16e3, 1), executable: text(4096, 1), interpreter: { enum: ["sh", "bash"] }, args: array2(text(4096), 64), timeoutMs: { type: "integer", minimum: 1, maximum: 9e5 }, settle: bool2, declarations }, ["id"])
+};
+var outputs = {
+  discover: object3({ executables: array2(object3({ name: text(64), path: text(4096), source: { enum: ["PATH", "conventional-sdk"] }, exists: bool2, executableFile: bool2 }, ["name", "path", "source", "exists", "executableFile"]), 640), caches: array2(object3({ path: text(4096), exists: bool2 }, ["path", "exists"]), 8), truncated: bool2, executed: { const: false }, versionsObserved: { const: false }, credentialsAssumed: { const: false } }, ["executables", "caches", "truncated", "executed", "versionsObserved", "credentialsAssumed"]),
+  create: object3({ id, kind, cwd: text(4096), manifestPath: text(4096), retained: { const: true }, productionProof: { const: false } }, ["id", "kind", "cwd", "manifestPath", "retained", "productionProof"]),
+  write: object3({ id, path: text(240), sha256: text(64), bytes: { type: "integer", minimum: 0 }, recordPath: text(4096), retained: { const: true } }, ["id", "path", "sha256", "bytes", "recordPath", "retained"]),
+  run: object3({ id, runId: id, kind, productionProof: { const: false }, recordPath: text(4096), ok: bool2, exitCode: { type: ["integer", "null"] }, signal: { type: ["string", "null"] }, stdout: text(2e4), stderr: text(2e4), truncated: bool2, stdoutTruncated: bool2, stderrTruncated: bool2 }, ["id", "runId", "kind", "productionProof", "recordPath", "ok", "exitCode", "signal", "stdout", "stderr", "truncated", "stdoutTruncated", "stderrTruncated"])
+};
+var descriptions = {
+  discover: "Read-only bounded PATH/conventional SDK presence and cache location checks. No commands, version detection, cache contents, installs, or credential assumptions. executableFile means a regular X_OK candidate, not a successful launch or usable SDK. Absence is limited to searched candidates.",
+  create: "Explicit approved fresh independent retained project outside the repository. Caller declares provenance kind/versions/source references, never production proof. No copying, installs, automatic tests, or deletion. IDs are host-owned and usable only by this provider instance.",
+  write: "Explicit individually approved create-only UTF-8 file in a retained owned probe project. Safe relative paths; no overwrite or deletion. Missing project subdirectories are created after approval.",
+  run: "Explicit approved HOST execution in this probe's owned project cwd using runLocalShell. Not filesystem/network confinement; no injected environment or implicit installs/tests/reruns. Literal scripts preserve the shell's last exit (no arbitrary pipeline parsing); executable+args uses a positional exec wrapper. Retains separate request/result records. settle catches only ordinary nonzero exits, never timeout/cancellation/abnormal termination. Quotas cover provider-managed data, not shell effects."
+};
+var PROBE_ACTION_DESCRIPTORS = JSON.parse(JSON.stringify(Object.entries(PROBE_INPUT_SCHEMAS).map(([name, inputSchema]) => ({
+  name,
+  description: descriptions[name],
+  inputSchema: name === "discover" ? inputSchema : { ...inputSchema, properties: { ...inputSchema.properties, _probePreparation: object3({ token: id, id, operationId: id, cwd: text(4096), recordPath: text(4096) }, ["token", "id", "operationId", "cwd", "recordPath"]), review: text(4096) } },
+  outputSchema: outputs[name],
+  risk: name === "run" ? "execute" : name === "discover" ? "read" : "write",
+  effect: { kind: name === "discover" ? "read" : "write", resources: ["*"] }
+}))));
+var PROBE_GUEST_DECLARATIONS = `
+type ProbeKind = "repository-code" | "framework-semantic" | "illustrative";
+type ProbeDeclarations = { sdkVersions?: {name:string;version:string}[]; packageVersions?: {name:string;version:string}[]; environment?: {name:string;value:string}[]; sourceReferences?: {path:string;sha256?:string;note?:string}[] };
+type ProbeHandle = {id:string;kind:ProbeKind;cwd:string;manifestPath:string;retained:true;productionProof:false};
+type ProbeWriteResult = {id:string;path:string;sha256:string;bytes:number;recordPath:string;retained:true};
+type ProbeRunResult = {id:string;runId:string;kind:ProbeKind;productionProof:false;recordPath:string;ok:boolean;exitCode:number|null;signal:string|null;stdout:string;stderr:string;truncated:boolean;stdoutTruncated:boolean;stderrTruncated:boolean};
+type ProbeDiscoveryResult = {executables:{name:string;path:string;source:"PATH"|"conventional-sdk";exists:boolean;executableFile:boolean}[];caches:{path:string;exists:boolean}[];truncated:boolean;executed:false;versionsObserved:false;credentialsAssumed:false};
+declare const probe: {
+  /** Presence-only, <=16 names; <=32 absolute PATH entries and <=8 conventional SDK directories. No execution/credential assumption. */
+  discover(args:{executables:string[]}):Promise<ProbeDiscoveryResult>;
+  /** Explicit approved independent retained project; declarations are unverified caller claims. IDs are instance-owned, not paths. */
+  create(args:{label?:string;kind:ProbeKind;files?:{path:string;content:string}[];declarations?:ProbeDeclarations}):Promise<ProbeHandle>;
+  /** Individually approved create-only file, safe relative path; no deletion/overwrite. */
+  write(args:{id:string;path:string;content:string}):Promise<ProbeWriteResult>;
+  /** Approved HOST authority, not network/filesystem isolation. No inferred tests/installs/reruns. Literal script returns shell last exit; executable+args execs directly. settle never catches hard failure. */
+  run(args:{id:string;args?:string[];timeoutMs?:number;settle?:boolean;declarations?:ProbeDeclarations}&({script:string;interpreter?:"sh"|"bash";executable?:never}|{executable:string;script?:never;interpreter?:never})):Promise<ProbeRunResult>;
+};
+`;
+
+// src/providers/probe-discovery.ts
+import fs2 from "node:fs";
+import path from "node:path";
+import os2 from "node:os";
+function discoverProbeExecutables(names, options, budget, check) {
+  const env = options.discoveryEnvironment ?? process.env;
+  const home = env.HOME ?? (options.discoveryEnvironment ? void 0 : os2.homedir());
+  const result = { executables: [], caches: [], truncated: false, executed: false, versionsObserved: false, credentialsAssumed: false };
+  const bounded3 = (value) => path.isAbsolute(value) && value.length <= 4e3 && !value.includes("\0");
+  const pathText = env.PATH ?? "";
+  const pathParts = pathText.slice(0, 32768).split(path.delimiter);
+  if (pathText.length > 32768) {
+    pathParts.pop();
+    result.truncated = true;
+  }
+  if (pathParts.length > 32) result.truncated = true;
+  const pathDirs = [...new Set(pathParts.slice(0, 32).filter((item) => {
+    if (!item || !bounded3(item)) {
+      result.truncated = true;
+      return false;
+    }
+    return true;
+  }))];
+  const sdkCandidates = [
+    ...env.DOTNET_ROOT ? [env.DOTNET_ROOT] : [],
+    ...home && bounded3(home) ? [path.join(home, ".dotnet"), path.join(home, ".cargo", "bin"), path.join(home, ".local", "bin")] : [],
+    "/usr/share/dotnet",
+    "/usr/local/share/dotnet",
+    "/opt/dotnet",
+    ...options.sdkDirectories ?? []
+  ];
+  const sdkDirs = [...new Set(sdkCandidates.filter(bounded3))].slice(0, 8);
+  if (sdkCandidates.length > 8) result.truncated = true;
+  const append = (list, item) => {
+    list.push(item);
+    if (JSON.stringify(result).length > budget) {
+      list.pop();
+      result.truncated = true;
+    }
+  };
+  const candidates = [];
+  for (const name of [...new Set(names)]) {
+    const seen = /* @__PURE__ */ new Set();
+    for (const [source, dirs] of [["PATH", pathDirs], ["conventional-sdk", sdkDirs]]) {
+      for (const dir of dirs) {
+        check();
+        const candidate = path.join(dir, name);
+        if (seen.has(candidate)) continue;
+        seen.add(candidate);
+        let exists = false;
+        let executableFile = false;
+        try {
+          const stat = fs2.statSync(candidate);
+          exists = true;
+          if (stat.isFile()) {
+            try {
+              fs2.accessSync(candidate, fs2.constants.X_OK);
+              executableFile = true;
+            } catch {
+            }
+          }
+        } catch (error) {
+          if (!["ENOENT", "ENOTDIR"].includes(error.code ?? "")) result.truncated = true;
+        }
+        candidates.push({ name, path: candidate, source, exists, executableFile });
+      }
+    }
+  }
+  candidates.sort((a, b) => Number(b.exists) - Number(a.exists));
+  for (const candidate of candidates.filter((item) => item.exists)) append(result.executables, candidate);
+  if (home && bounded3(home)) {
+    for (const relative of [".nuget/packages", ".local/share/NuGet", ".npm", ".cache/pip", ".cargo/registry"]) {
+      check();
+      const candidate = path.join(home, relative);
+      let exists = false;
+      try {
+        fs2.statSync(candidate);
+        exists = true;
+      } catch (error) {
+        if (!["ENOENT", "ENOTDIR"].includes(error.code ?? "")) result.truncated = true;
+      }
+      append(result.caches, { path: candidate, exists });
+    }
+  }
+  for (const candidate of candidates.filter((item) => !item.exists)) append(result.executables, candidate);
+  return result;
+}
+
+// src/providers/probe-storage.ts
+import fs4 from "node:fs";
+import path2 from "node:path";
+import { createHash } from "node:crypto";
+
+// src/providers/owned-file.ts
+import fs3 from "node:fs";
+function initializeOwnedFile(target, owned, initialize) {
+  const fd = fs3.openSync(target, fs3.constants.O_WRONLY | fs3.constants.O_CREAT | fs3.constants.O_EXCL | fs3.constants.O_NOFOLLOW, 384);
+  owned.created = true;
+  const errors = [];
+  let closeUncertain = false;
+  try {
+    const stat = fs3.fstatSync(fd);
+    owned.identity = { dev: stat.dev, ino: stat.ino };
+    initialize(fd);
+  } catch (error) {
+    errors.push(error);
+  } finally {
+    if (!owned.identity) {
+      try {
+        const stat = fs3.fstatSync(fd);
+        owned.identity = { dev: stat.dev, ino: stat.ino };
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    try {
+      fs3.closeSync(fd);
+    } catch (error) {
+      closeUncertain = true;
+      errors.push(error);
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, closeUncertain ? "owned file initialization failed; descriptor close uncertain (never retried)" : owned.identity ? "owned file initialization failed" : "uncertain lock/file: ownership identity unavailable; operator recovery required", { cause: errors[0] });
+}
+
+// src/providers/probe-storage.ts
+var probeHash = (text3) => createHash("sha256").update(text3).digest("hex");
+var identity = (stat) => ({ dev: stat.dev, ino: stat.ino });
+var same = (stat, expected) => stat.dev === expected.dev && stat.ino === expected.ino;
+var missing = (error) => error.code === "ENOENT";
+var contains = (parent, child) => child === parent || child.startsWith(parent.endsWith(path2.sep) ? parent : parent + path2.sep);
+var privateDirectory = (stat) => {
+  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 63) !== 0 || process.getuid && stat.uid !== process.getuid()) throw new Error("probe directory must be private (0700) and host-owned");
+};
+var chain = (target) => {
+  const paths = [target];
+  while (paths[0] !== path2.parse(target).root) paths.unshift(path2.dirname(paths[0]));
+  return paths;
+};
+var directory = (target) => {
+  const stat = fs4.lstatSync(target);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("probe path is not a regular no-symlink directory");
+  return stat;
+};
+var ProbeStorage = class {
+  root;
+  probesRoot;
+  #ancestors = /* @__PURE__ */ new Map();
+  #missing = [];
+  #owned = /* @__PURE__ */ new Map();
+  constructor(root, probesRoot) {
+    this.root = fs4.realpathSync(root);
+    if (!directory(this.root).isDirectory()) throw new Error("probe workspace must be a directory");
+    if (!path2.isAbsolute(probesRoot) || path2.resolve(probesRoot) !== probesRoot || probesRoot.length > 3e3) throw new Error("probesRoot must be a bounded canonical absolute path");
+    if (contains(this.root, probesRoot) || contains(probesRoot, this.root)) throw new Error("probesRoot must be outside and not contain the repository");
+    this.probesRoot = probesRoot;
+    let absent = false;
+    for (const current of chain(probesRoot)) {
+      if (absent) {
+        this.#missing.push(current);
+        continue;
+      }
+      try {
+        this.#ancestors.set(current, identity(directory(current)));
+      } catch (error) {
+        if (!missing(error)) throw error;
+        absent = true;
+        this.#missing.push(current);
+      }
+    }
+    if (!absent) privateDirectory(directory(probesRoot));
+  }
+  verify() {
+    for (const [target, expected] of this.#ancestors) {
+      if (!same(directory(target), expected)) throw new Error("probe root/ancestor identity changed");
+    }
+    for (const target of this.#missing) {
+      try {
+        fs4.lstatSync(target);
+      } catch (error) {
+        if (missing(error)) continue;
+        throw error;
+      }
+      throw new Error("probe previously missing root was replaced externally");
+    }
+    if (!this.#missing.length) privateDirectory(directory(this.probesRoot));
+  }
+  countRoots(limit) {
+    this.verify();
+    if (this.#missing.length) return 0;
+    const entries = fs4.opendirSync(this.probesRoot);
+    let count2 = 0;
+    try {
+      while (entries.readSync()) {
+        count2++;
+        if (count2 >= limit) break;
+      }
+    } finally {
+      entries.closeSync();
+    }
+    return count2;
+  }
+  ensureRoot() {
+    this.verify();
+    while (this.#missing.length) {
+      const target = this.#missing[0];
+      fs4.mkdirSync(target, { mode: 448 });
+      const stat = directory(target);
+      privateDirectory(stat);
+      this.#ancestors.set(target, identity(stat));
+      this.#missing.shift();
+    }
+    this.verify();
+  }
+  createDirectory(target) {
+    this.verify();
+    if (!contains(this.probesRoot, target) || target === this.probesRoot) throw new Error("probe directory escaped owned root");
+    this.snapshot(path2.dirname(target));
+    fs4.mkdirSync(target, { mode: 448 });
+    const stat = directory(target);
+    privateDirectory(stat);
+    this.#owned.set(target, identity(stat));
+  }
+  snapshot(target) {
+    this.verify();
+    if (!contains(this.probesRoot, target)) throw new Error("probe directory escaped owned root");
+    const result = [];
+    for (const current of chain(target).filter((item) => contains(this.probesRoot, item))) {
+      const stat = directory(current);
+      privateDirectory(stat);
+      const expected = current === this.probesRoot ? this.#ancestors.get(current) : this.#owned.get(current);
+      if (!expected || !same(stat, expected)) throw new Error("probe directory identity is not host-owned or changed");
+      result.push({ path: current, identity: identity(stat) });
+    }
+    return result;
+  }
+  verifySnapshot(snapshot) {
+    for (const item of snapshot) {
+      const actual = this.snapshot(item.path).at(-1);
+      if (actual.identity.dev !== item.identity.dev || actual.identity.ino !== item.identity.ino) throw new Error("probe approval directory identity changed");
+    }
+  }
+  safeName(name) {
+    const parts = name.split("/");
+    if (name.length > 240 || parts.length > 8 || parts.some((part) => !/^[A-Za-z0-9_.-]{1,80}$/.test(part) || part === "." || part === "..")) throw new Error("probe file requires a bounded safe relative name (no traversal/symlinks)");
+    return parts;
+  }
+  /** Capture existing owned parents and require a missing final file. No writes. */
+  filePlan(project, name) {
+    const parts = this.safeName(name);
+    const snapshots = this.snapshot(project);
+    let current = project;
+    let absent = false;
+    for (const part of parts.slice(0, -1)) {
+      current = path2.join(current, part);
+      if (absent) continue;
+      try {
+        fs4.lstatSync(current);
+      } catch (error) {
+        if (missing(error)) {
+          absent = true;
+          continue;
+        }
+        throw error;
+      }
+      snapshots.push(...this.snapshot(current));
+    }
+    if (!absent) {
+      try {
+        fs4.lstatSync(path2.join(project, ...parts));
+      } catch (error) {
+        if (missing(error)) return snapshots;
+        throw error;
+      }
+      throw new Error("probe.write/create files are create-only; target already exists");
+    }
+    return snapshots;
+  }
+  writeProjectFile(project, name, content) {
+    this.filePlan(project, name);
+    const parts = this.safeName(name);
+    let current = project;
+    for (const part of parts.slice(0, -1)) {
+      current = path2.join(current, part);
+      try {
+        fs4.lstatSync(current);
+        this.snapshot(current);
+      } catch (error) {
+        if (!missing(error)) throw error;
+        this.createDirectory(current);
+      }
+    }
+    this.writeRecord(path2.join(project, ...parts), content);
+  }
+  /** Never overwrite or unlink anything, including a substituted symlink/hardlink. */
+  writeRecord(target, text3) {
+    const parents = this.snapshot(path2.dirname(target));
+    initializeOwnedFile(target, { created: false }, (fd) => {
+      const stat = fs4.fstatSync(fd);
+      if (!stat.isFile() || stat.nlink !== 1) throw new Error("probe record is not an independent regular file");
+      this.verifySnapshot(parents);
+      fs4.writeFileSync(fd, text3, "utf8");
+      fs4.fsyncSync(fd);
+      const actual = fs4.lstatSync(target);
+      if (!same(actual, identity(stat)) || actual.isSymbolicLink() || actual.nlink !== 1) throw new Error("probe file changed during publication; inspect retained data");
+    });
+  }
+};
+
+// src/providers/probe-provider.ts
+var reservations = /* @__PURE__ */ new Map();
+var hardLimit = (value, fallback, min, max, name) => {
+  const actual = value ?? fallback;
+  if (!Number.isSafeInteger(actual) || actual < min || actual > max) throw new Error(`probe ${name} must be ${min}..${max}`);
+  return actual;
+};
+var effectful = (name) => name !== "discover";
+var json = (value) => JSON.stringify(value, null, 2) + "\n";
+var fileBytes = (files) => files.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0);
+var observedEnvironment = () => {
+  const result = {};
+  for (const key of ["HOME", "PATH", "TMPDIR", "LANG", "TERM", "TZ", "USER", "LOGNAME", ...Object.keys(process.env).filter((key2) => /^LC_[A-Z_]+$/.test(key2)).sort()]) {
+    if (process.env[key] !== void 0) result[key] = process.env[key];
+  }
+  if (JSON.stringify(result).length > 16e3) throw new Error("probe shell environment exceeds retained approval budget");
+  return result;
+};
+var ProbeRunExitError = class extends Error {
+  result;
+  [FABRIC_COMMIT_ACKNOWLEDGEMENT] = { version: 1, operation: "write" };
+  constructor(result) {
+    super(`Probe command exited with code ${result.exitCode}; retained run ${result.runId}`);
+    this.name = "ProbeRunExitError";
+    this.result = result;
+    Object.defineProperty(this, "result", { enumerable: false });
+  }
+};
+var ProbeProvider = class {
+  name = "probe";
+  description = "Explicit approved retained independent probes with declared provenance; host execution, not production proof or network isolation";
+  #storage;
+  #options;
+  #budget;
+  #maxProbes;
+  #maxRuns;
+  #maxWrites;
+  #maxBytes;
+  #descriptors;
+  #probes = /* @__PURE__ */ new Map();
+  #prepared = /* @__PURE__ */ new Map();
+  #controller = new AbortController();
+  #pending = /* @__PURE__ */ new Set();
+  #closed = false;
+  constructor(options) {
+    this.#options = structuredClone(options);
+    this.#budget = Math.min(2e4, hardLimit(options.maxResultChars, 2e4, 1e3, Number.MAX_SAFE_INTEGER, "maxResultChars"));
+    this.#maxProbes = hardLimit(options.maxProbes, 64, 1, 1e3, "maxProbes");
+    this.#maxRuns = hardLimit(options.maxRunsPerProbe, 64, 1, 1e3, "maxRunsPerProbe");
+    this.#maxWrites = hardLimit(options.maxWritesPerProbe, 128, 1, 1e3, "maxWritesPerProbe");
+    this.#maxBytes = hardLimit(options.maxManagedBytesPerProbe, 8 * 1024 * 1024, 65536, 64 * 1024 * 1024, "maxManagedBytesPerProbe");
+    if (options.sdkDirectories && (options.sdkDirectories.length > 8 || options.sdkDirectories.some((dir) => !path3.isAbsolute(dir) || dir.length > 4e3 || dir.includes("\0")))) throw new Error("probe sdkDirectories must contain <=8 bounded absolute paths");
+    this.#storage = new ProbeStorage(options.root, options.probesRoot);
+    this.#descriptors = structuredClone(PROBE_ACTION_DESCRIPTORS);
+    for (const descriptor2 of this.#descriptors) descriptor2.effect = { kind: descriptor2.name === "discover" ? "read" : "write", resources: [...this.effectResources(descriptor2.name)] };
+  }
+  async list() {
+    return structuredClone(this.#descriptors);
+  }
+  async describe(name) {
+    return structuredClone(this.#descriptors.find((item) => item.name === name));
+  }
+  effectResources(name) {
+    return name === "run" ? ["*"] : name === "discover" ? [] : [`probe-root:${this.#storage.probesRoot}`];
+  }
+  #check(context) {
+    if (this.#closed) throw new Error("probe provider is closed");
+    throwIfAbortedOrExpired(context.signal, context.deadline);
+    this.#controller.signal.throwIfAborted();
+    this.#storage.verify();
+  }
+  #resultBudget(context) {
+    return Math.min(this.#budget, hardLimit(context.maxResultChars, this.#budget, 1e3, Number.MAX_SAFE_INTEGER, "context maxResultChars"));
+  }
+  #bounded(value, budget) {
+    if (JSON.stringify(value).length > budget) throw new Error("probe result metadata exceeds maxResultChars");
+    return value;
+  }
+  #validate(name, args, prepared = false) {
+    if (!Object.hasOwn(PROBE_INPUT_SCHEMAS, name)) throw new Error(`Unknown probe action: ${name}`);
+    if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("probe arguments must be an object");
+    const invalid = schemaValidationMessage(prepared ? this.#descriptors.find((item) => item.name === name).inputSchema : PROBE_INPUT_SCHEMAS[name], args);
+    if (invalid) throw new Error(`Invalid probe.${name} arguments: ${invalid}`);
+    const serialized = JSON.stringify(args);
+    if (serialized.length > 64e3) throw new Error("probe exact arguments exceed 64000-character approval budget");
+    const checkText = (value) => {
+      if (typeof value === "string" && (value.includes("\0") || Buffer.from(value).toString("utf8") !== value)) throw new Error("probe arguments require valid UTF-8 without NUL");
+      if (Array.isArray(value)) value.forEach(checkText);
+      else if (value && typeof value === "object") Object.values(value).forEach(checkText);
+    };
+    checkText(args);
+    if (typeof args.id === "string" && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(args.id)) throw new Error("probe ID must be a host-issued UUID");
+    if (name === "discover" && args.executables.some((item) => !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(item))) throw new Error("Invalid probe executable name");
+    if (name === "run" && (typeof args.script === "string" === (typeof args.executable === "string") || args.executable !== void 0 && args.interpreter !== void 0)) throw new Error("probe.run requires script/interpreter OR executable, not both");
+    const declarations2 = args.declarations;
+    if (declarations2?.sourceReferences?.some((item) => item.sha256 !== void 0 && !/^[0-9a-f]{64}$/.test(item.sha256))) throw new Error("probe source sha256 declaration must be 64 lowercase hex characters");
+  }
+  #probe(id3) {
+    const probe = this.#probes.get(id3);
+    if (!probe || probe.blocked) throw new Error("probe ID is not owned by this instance or has uncertain retained state");
+    this.#storage.snapshot(probe.directory);
+    this.#storage.snapshot(probe.handle.cwd);
+    this.#storage.snapshot(probe.records);
+    return probe;
+  }
+  #quota(probe, name, bytes2) {
+    if (probe.bytes + bytes2 > this.#maxBytes || name === "run" && probe.runs >= this.#maxRuns || name === "write" && probe.writes >= this.#maxWrites) throw new Error("probe managed bytes/run/write quota exceeded (retained data is never deleted)");
+  }
+  #handle(id3, kind2) {
+    const directory2 = path3.join(this.#storage.probesRoot, id3);
+    return { id: id3, kind: kind2, cwd: path3.join(directory2, "project"), manifestPath: path3.join(directory2, "manifest.json"), retained: true, productionProof: false };
+  }
+  async prepareArguments(name, args, context) {
+    this.#validate(name, args);
+    this.#check(context);
+    const budget = this.#resultBudget(context);
+    if (!effectful(name)) return structuredClone(args);
+    const canonical = structuredClone(args);
+    const id3 = name === "create" ? randomUUID() : args.id;
+    const operationId = randomUUID();
+    const token = randomUUID();
+    let directories = [];
+    let environment;
+    let handle;
+    if (name === "create") {
+      if (this.#storage.countRoots(this.#maxProbes) >= this.#maxProbes) throw new Error("probe retained directory quota exceeded");
+      const files = args.files ?? [];
+      for (const file of files) this.#storage.safeName(file.path);
+      const names = files.map((file) => file.path);
+      if (names.some((file, i) => names.some((other, j) => i !== j && (file === other || other.startsWith(file + "/"))))) throw new Error("probe initial files overlap");
+      if (files.length > this.#maxWrites || fileBytes(files) > 32768) throw new Error("probe initial files exceed write/content quota");
+      handle = this.#handle(id3, args.kind);
+      this.#bounded(handle, budget);
+    } else {
+      const probe = this.#probe(id3);
+      handle = probe.handle;
+      directories = [...this.#storage.snapshot(probe.handle.cwd), ...this.#storage.snapshot(probe.records)];
+      if (name === "write") directories.push(...this.#storage.filePlan(handle.cwd, args.path));
+      else {
+        if (typeof args.executable === "string" && (!path3.isAbsolute(args.executable) && !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(args.executable))) throw new Error("probe executable must be an absolute path or a bare executable name");
+        canonical.timeoutMs = args.timeoutMs ?? 3e4;
+        canonical.settle = args.settle ?? false;
+        canonical.args = args.args ?? [];
+        if (typeof args.script === "string") canonical.interpreter = args.interpreter ?? "sh";
+        environment = observedEnvironment();
+      }
+    }
+    const recordPath = name === "create" ? handle.manifestPath : path3.join(this.#storage.probesRoot, id3, "records", `${name}-${operationId}.result.json`);
+    const metadata = { token, id: id3, operationId, cwd: handle.cwd, recordPath };
+    canonical._probePreparation = metadata;
+    canonical.review = `${name} retained probe ${id3}; kind=${handle.kind}; productionProof=false. Canonical cwd: ${JSON.stringify(handle.cwd)}. Record: ${JSON.stringify(recordPath)}. Exact files/script/argv/declarations are in these approved arguments. No deletion or implicit install/test/rerun. ${name === "run" ? 'HOST AUTHORITY: cwd is not filesystem/network confinement. Direct executable uses /bin/sh exec "$@"; scripts return the shell last exit. Environment declarations are not applied.' : "Provider-managed create-only writes, including retained evidence."}`;
+    if (environment) {
+      canonical.review += ` Forwarded environment: ${JSON.stringify(environment)}`;
+    }
+    if (canonical.review.length > 4096) throw new Error("probe exact environment/review exceeds approval budget");
+    this.#validate(name, canonical, true);
+    const outputBudget = name === "run" ? budget - JSON.stringify(this.#runEnvelope(metadata, handle.kind)).length - 128 : budget;
+    if (outputBudget < 256) throw new Error("probe run metadata exceeds result budget before execution");
+    if (name === "write") this.#bounded(this.#writeResult(metadata, args.path, args.content), budget);
+    const byteReservation = Buffer.byteLength(json(canonical)) * 2 + 8192 + budget + (name === "create" ? fileBytes(args.files ?? []) : name === "write" ? Buffer.byteLength(args.content) : 0);
+    if (name === "create") {
+      if (byteReservation > this.#maxBytes) throw new Error("probe managed byte quota exceeded");
+    } else this.#quota(this.#probe(id3), name, byteReservation);
+    for (const [key, entry] of this.#prepared) if (!entry.active && entry.expires < Date.now()) this.#prepared.delete(key);
+    while (this.#prepared.size >= 64) {
+      const victim = [...this.#prepared].find(([, entry]) => !entry.active);
+      if (!victim) throw new Error("probe preparation quota exceeded");
+      this.#prepared.delete(victim[0]);
+    }
+    this.#prepared.set(token, { name, signature: probeHash(JSON.stringify(canonical)), expires: Date.now() + 6e4, active: false, used: false, metadata, directories, ...environment ? { environment } : {}, byteReservation, outputBudget });
+    return canonical;
+  }
+  #entry(name, args) {
+    this.#validate(name, args, true);
+    const token = args._probePreparation?.token;
+    const entry = token ? this.#prepared.get(token) : void 0;
+    if (!entry || entry.name !== name || entry.signature !== probeHash(JSON.stringify(args)) || !entry.active && entry.expires < Date.now()) throw new Error("probe preparation missing, altered, or expired");
+    return entry;
+  }
+  async reserveInvocation(name, args, context) {
+    this.#check(context);
+    if (!effectful(name)) return () => {
+    };
+    const entry = this.#entry(name, args);
+    if (entry.active || entry.used) throw new Error("probe preparation already reserved/used");
+    const root = this.#storage.probesRoot;
+    if (reservations.has(root) || [...reservations.values()].some((item) => item.run) || name === "run" && reservations.size) throw new Error("probe overlapping effect reservation rejected");
+    entry.active = true;
+    reservations.set(root, { token: entry.metadata.token, run: name === "run" });
+    return () => {
+      if (reservations.get(root)?.token === entry.metadata.token) reservations.delete(root);
+      entry.active = false;
+      this.#prepared.delete(entry.metadata.token);
+    };
+  }
+  invoke(name, args, context) {
+    const pending = this.#invoke(name, args, context);
+    this.#pending.add(pending);
+    void pending.finally(() => this.#pending.delete(pending)).catch(() => {
+    });
+    return pending;
+  }
+  async #invoke(name, args, context) {
+    this.#check(context);
+    if (name === "discover") {
+      this.#validate(name, args);
+      return discoverProbeExecutables(args.executables, this.#options, this.#resultBudget(context), () => this.#check(context));
+    }
+    const entry = this.#entry(name, args);
+    if (!entry.active || entry.used) throw new Error("probe effect requires unused active registry reservation");
+    this.#storage.verifySnapshot(entry.directories);
+    if (entry.environment && JSON.stringify(entry.environment) !== JSON.stringify(observedEnvironment())) throw new Error("probe forwarded environment changed since approval");
+    if (name !== "create") {
+      const probe2 = this.#probe(entry.metadata.id);
+      this.#quota(probe2, name, entry.byteReservation);
+      for (const target of [entry.metadata.recordPath, entry.metadata.recordPath.replace(".result.json", ".request.json")]) {
+        this.#storage.filePlan(probe2.records, path3.basename(target));
+      }
+    }
+    entry.used = true;
+    if (name === "create") return this.#create(args, entry, context);
+    const probe = this.#probe(entry.metadata.id);
+    if (name === "write") {
+      this.#storage.filePlan(probe.handle.cwd, args.path);
+      this.#check(context);
+      probe.bytes += entry.byteReservation;
+      probe.writes++;
+      try {
+        this.#storage.writeRecord(entry.metadata.recordPath.replace(".result.json", ".request.json"), json({ schemaVersion: 1, operation: "write", approvedArguments: args, startedAt: (/* @__PURE__ */ new Date()).toISOString() }));
+        this.#storage.writeProjectFile(probe.handle.cwd, args.path, args.content);
+        const result = this.#writeResult(entry.metadata, args.path, args.content);
+        this.#storage.writeRecord(entry.metadata.recordPath, json(result));
+        this.#check(context);
+        return result;
+      } catch (cause) {
+        probe.blocked = true;
+        throw this.#retainedError("write", entry, cause);
+      }
+    }
+    return this.#run(args, probe, entry, context);
+  }
+  #retainedError(operation, entry, cause) {
+    const error = new Error(`Probe ${operation} failed after retained writes may have begun; inspect ${entry.metadata.id}/${entry.metadata.operationId} before any explicit retry`, { cause });
+    return error;
+  }
+  #create(args, entry, context) {
+    if (this.#storage.countRoots(this.#maxProbes) >= this.#maxProbes) throw new Error("probe retained directory quota exceeded");
+    this.#check(context);
+    const handle = this.#handle(entry.metadata.id, args.kind);
+    const directory2 = path3.dirname(handle.cwd);
+    const probe = { handle, directory: directory2, records: path3.join(directory2, "records"), declarations: structuredClone(args.declarations ?? {}), bytes: entry.byteReservation, writes: (args.files ?? []).length, runs: 0, blocked: false };
+    try {
+      this.#storage.ensureRoot();
+      this.#storage.createDirectory(directory2);
+      this.#storage.createDirectory(handle.cwd);
+      this.#storage.createDirectory(probe.records);
+      this.#probes.set(handle.id, probe);
+      this.#storage.writeRecord(handle.manifestPath, json({ schemaVersion: 1, ...handle, label: args.label ?? null, createdAt: (/* @__PURE__ */ new Date()).toISOString(), approvedArguments: args, declarations: { status: "caller-declared-unverified", ...probe.declarations }, files: (args.files ?? []).map((file) => ({ path: file.path, bytes: Buffer.byteLength(file.content), sha256: probeHash(file.content) })), evidence: "Independent probe only; kind is caller-declared, not proof about repository/production. Records are retained host files, not tamper-proof attestations.", execution: "Approved host authority, no network/filesystem confinement; no automatic execution/install/rerun. Managed quotas do not bound shell effects." }));
+      for (const file of args.files ?? []) this.#storage.writeProjectFile(handle.cwd, file.path, file.content);
+      this.#storage.writeRecord(path3.join(probe.records, `create-${entry.metadata.operationId}.result.json`), json({ complete: true, ...handle }));
+      this.#check(context);
+      return handle;
+    } catch (cause) {
+      probe.blocked = true;
+      throw this.#retainedError("create", entry, cause);
+    }
+  }
+  #writeResult(metadata, name, content) {
+    return { id: metadata.id, path: name, sha256: probeHash(content), bytes: Buffer.byteLength(content), recordPath: metadata.recordPath, retained: true };
+  }
+  #runEnvelope(metadata, kind2) {
+    return { id: metadata.id, runId: metadata.operationId, kind: kind2, productionProof: false, recordPath: metadata.recordPath };
+  }
+  async #run(args, probe, entry, context) {
+    this.#check(context);
+    probe.bytes += entry.byteReservation;
+    probe.runs++;
+    const input = typeof args.executable === "string" ? { script: 'exec "$@"', interpreter: "sh", args: [args.executable, ...args.args ?? []] } : { script: args.script, interpreter: args.interpreter ?? "sh", args: args.args ?? [] };
+    const startedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const envelope = this.#runEnvelope(entry.metadata, probe.handle.kind);
+    try {
+      this.#storage.writeRecord(entry.metadata.recordPath.replace(".result.json", ".request.json"), json({ schemaVersion: 1, ...envelope, startedAt, cwd: probe.handle.cwd, approvedArguments: args, executedInput: input, environment: { policy: "runLocalShell allowlist; no declaration injection", observed: entry.environment }, declarations: { status: "caller-declared-unverified", project: probe.declarations, run: args.declarations ?? {} }, versionObservation: "No version detection performed. Command stdout/stderr are observations, never parsed into verified SDK/package claims.", semantics: "Literal scripts return shell last status; arbitrary pipeline correctness is not inferred. Explicit direct executable uses exec positional arguments. Host authority; not network confinement." }));
+    } catch (cause) {
+      probe.blocked = true;
+      throw this.#retainedError("run record", entry, cause);
+    }
+    let result;
+    try {
+      this.#check(context);
+      const shell = await runLocalShell({ ...input, cwd: probe.handle.cwd, timeoutMs: args.timeoutMs ?? 3e4, settle: true, maxOutputChars: entry.outputBudget, signal: context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal, ...context.deadline ? { deadline: context.deadline } : {} });
+      result = { ...envelope, ...shell };
+    } catch (cause) {
+      try {
+        this.#storage.verifySnapshot(entry.directories);
+        this.#storage.writeRecord(entry.metadata.recordPath, json({ schemaVersion: 1, ...envelope, startedAt, endedAt: (/* @__PURE__ */ new Date()).toISOString(), status: "hard-failure", result: null, evidenceUnavailable: true, reason: cause instanceof Error ? cause.message.slice(0, 512) : "Shell execution failed", note: "runLocalShell did not return diagnostic streams/exit/signal; cancellation, timeout and cleanup failure are not settled. External effects may have occurred." }));
+      } catch (recordFailure) {
+        probe.blocked = true;
+        throw this.#retainedError("run/retention", entry, new AggregateError([cause, recordFailure], "Execution and evidence retention failed"));
+      }
+      if (cause instanceof Error && /uncertain/.test(cause.message)) probe.blocked = true;
+      throw cause;
+    }
+    try {
+      this.#storage.verifySnapshot(entry.directories);
+      this.#storage.writeRecord(entry.metadata.recordPath, json({ schemaVersion: 1, startedAt, endedAt: (/* @__PURE__ */ new Date()).toISOString(), status: "completed", result }));
+    } catch (cause) {
+      probe.blocked = true;
+      throw this.#retainedError("run retention", entry, cause);
+    }
+    this.#check(context);
+    this.#bounded(result, this.#resultBudget(context));
+    if (!result.ok && args.settle !== true) throw new ProbeRunExitError(result);
+    return result;
+  }
+  async close() {
+    this.#closed = true;
+    this.#controller.abort(new Error("probe provider closed"));
+    await Promise.allSettled([...this.#pending]);
+    for (const [token, entry] of this.#prepared) if (!entry.active) this.#prepared.delete(token);
+  }
+};
+
+// src/core/action-registry.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
 
 // src/runtime/json-budget.ts
 import { isProxy } from "node:util/types";
@@ -19504,12 +20203,12 @@ var preflight = (root, maxChars) => {
       throw budgetError("non-plain object");
     }
     if (Object.getOwnPropertySymbols(value).length > 0) throw budgetError("symbol property");
-    const descriptors5 = Object.getOwnPropertyDescriptors(value);
-    const keys = Object.keys(descriptors5);
+    const descriptors6 = Object.getOwnPropertyDescriptors(value);
+    const keys = Object.keys(descriptors6);
     if (keys.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
     for (let index = keys.length - 1; index >= 0; index--) {
       const key = keys[index];
-      const descriptor2 = descriptors5[key];
+      const descriptor2 = descriptors6[key];
       if (!("value" in descriptor2)) throw budgetError("accessor property");
       if (!descriptor2.enumerable) continue;
       rawChars += key.length;
@@ -19517,6 +20216,20 @@ var preflight = (root, maxChars) => {
       stack.push({ value: descriptor2.value, depth: depth + 1, nested: true });
     }
   }
+};
+var jsonStringPrefix = (value, contentChars) => {
+  if (!Number.isSafeInteger(contentChars) || contentChars < 0) throw budgetError("invalid string prefix budget");
+  let end = 0, used = 0;
+  while (end < value.length) {
+    const unit = value.charCodeAt(end), next = value.charCodeAt(end + 1);
+    const pair = unit >= 55296 && unit <= 56319 && next >= 56320 && next <= 57343;
+    const width = pair ? 2 : 1;
+    const cost = unit === 34 || unit === 92 ? 2 : unit < 32 ? [8, 9, 10, 12, 13].includes(unit) ? 2 : 6 : !pair && unit >= 55296 && unit <= 57343 ? 6 : width;
+    if (used + cost > contentChars) break;
+    used += cost;
+    end += width;
+  }
+  return value.slice(0, end);
 };
 var fabricJsonText = (value, maxChars = DEFAULT_FABRIC_JSON_CHARS) => {
   const limit = normalizedLimit(maxChars);
@@ -19532,7 +20245,7 @@ var assertFabricJsonBudget = (value, maxChars = DEFAULT_FABRIC_JSON_CHARS) => {
 };
 
 // src/core/semantic-digest.ts
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 var compareCodeUnits = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var sortJson = (value) => {
   if (Array.isArray(value)) return value.map(sortJson);
@@ -19544,7 +20257,7 @@ var sortJson = (value) => {
 var semanticDigest = (domain, value) => {
   const bounded3 = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
   const canonical = fabricJsonText(sortJson(JSON.parse(bounded3)), MAX_FABRIC_JSON_CHARS);
-  return createHash("sha256").update(domain).update("\0").update(canonical).digest("hex");
+  return createHash2("sha256").update(domain).update("\0").update(canonical).digest("hex");
 };
 
 // src/core/action-registry.ts
@@ -19575,13 +20288,14 @@ var resolved = (provider, descriptor2) => {
   };
 };
 var boundedResult = (value, maximum) => {
-  const text = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
-  if (text.length <= maximum) return { value, chars: text.length, truncated: false };
-  return {
-    value: { fabricTruncated: true, originalChars: text.length, preview: text.slice(0, Math.max(1, maximum - 100)) },
-    chars: text.length,
-    truncated: true
-  };
+  if (!Number.isSafeInteger(maximum) || maximum < 1) throw new Error("Invalid Fabric result budget");
+  const text3 = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
+  if (text3.length <= maximum) return { value, chars: text3.length, truncated: false };
+  const envelope = { fabricTruncated: true, originalChars: text3.length, preview: "" };
+  const available = maximum - JSON.stringify(envelope).length;
+  if (available < 0) throw new Error("Fabric result budget cannot fit truncation metadata");
+  envelope.preview = jsonStringPrefix(text3, available);
+  return { value: envelope, chars: text3.length, truncated: true };
 };
 var overlaps = (left, right) => left.includes("*") || right.includes("*") || left.some((entry) => right.includes(entry));
 var deepFreeze = (value) => {
@@ -19595,8 +20309,8 @@ var normalizedTerms = (value) => [...new Set(
   value.split(/[^\p{L}\p{N}_.$-]+/u).filter(Boolean).slice(0, 64)
 )];
 var boundedSearchField = (value) => {
-  const text = typeof value === "string" ? value : fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
-  return text.slice(0, MAX_SEARCHABLE_DESCRIPTOR_CHARS).normalize("NFKC").toLowerCase();
+  const text3 = typeof value === "string" ? value : fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
+  return text3.slice(0, MAX_SEARCHABLE_DESCRIPTOR_CHARS).normalize("NFKC").toLowerCase();
 };
 var ActionRegistry = class {
   #providers = /* @__PURE__ */ new Map();
@@ -19689,11 +20403,11 @@ var ActionRegistry = class {
     throwIfAbortedOrExpired(context.signal, context.deadline);
     if (!isRecord2(prepared)) throw new Error(`Argument preparation for ${ref} must return an object`);
     const invalid = schemaValidationMessage(action.inputSchema, prepared);
-    if (invalid) throw new Error(`Invalid arguments for ${ref}: ${invalid}`);
+    if (invalid) throw argumentRepairError(ref, action.descriptorDigest, action.inputSchema, invalid);
     const canonicalArgs = deepFreeze(structuredClone(prepared));
     const resources = Object.freeze([...provider.effectResources?.(action.name, structuredClone(canonicalArgs), context) ?? action.effect?.resources ?? (action.risk === "write" ? ["*"] : [])]);
     const writeLike = action.risk === "write" || action.effect?.kind === "write";
-    const nestedToolCallId = `fabric_${randomUUID()}`;
+    const nestedToolCallId = `fabric_${randomUUID2()}`;
     if (context.audits.length >= (context.maxAuditEntries ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit entry quota exceeded");
     const audit = { ref, nestedToolCallId, startedAt: Date.now() };
     const auditBudget = context.auditBudget ?? { bytes: 0 };
@@ -19767,11 +20481,19 @@ type LocalIdentity = { dev: number; ino: number };
 type LocalReadResult = { path: string; text: string; totalLines: number; truncated: boolean; nextOffset?: number; sha256: string; identity: LocalIdentity };
 type LocalReadWindow = { path: string; offset?: number; limit?: number; expectedSha256?: string };
 type LocalSourceWindow = { path: string; startLine: number; endLine: number | null; totalLines: number; sha256: string; source: string; truncated: boolean; nextOffset?: number };
-type LocalReadManyResult = { files: LocalSourceWindow[]; remaining: LocalReadWindow[]; complete: boolean };
+type LocalReadManyResult = { files: LocalSourceWindow[]; remaining: LocalReadWindow[]; complete: boolean; unreadTails: LocalReadWindow[]; failures?: { index: number; path: string; code: "read" | "stale-hash"; message: string }[] };
+type LocalReadEvidenceArguments = { windows: LocalReadWindow[]; maxChars?: number; partial?: boolean };
+type LocalReadEvidenceResult = string;
+type LocalEvidenceMetadata = {
+  scope: "requested windows only; not proof of inspection";
+  files: (Omit<LocalSourceWindow, "source"> & { sourceOffset: number; sourceChars: number })[];
+  remaining: LocalReadWindow[]; complete: boolean; unreadTails: LocalReadWindow[];
+  failures: NonNullable<LocalReadManyResult["failures"]>;
+};
 type LocalShellInput = { command: string; script?: never; interpreter?: never; args?: never } | { script: string; interpreter?: "bash" | "sh"; args?: string[]; command?: never };
-type LocalSearchScope = { path: string; glob?: string; hidden: boolean; ignoreFiles: true };
-type LocalGrepResult = { scope: LocalSearchScope; matches: { path: string; line: number; text: string }[]; truncated: boolean };
-type LocalFindResult = { scope: LocalSearchScope; paths: string[]; truncated: boolean };
+type LocalSearchScope = { path: string; glob?: string; hidden: boolean; ignoreFiles: true; snapshotScope?: "query-v1" };
+type LocalGrepResult = { scope: LocalSearchScope; matches: { path: string; line: number; text: string }[]; truncated: boolean; nextCursor?: string; truncationReasons?: ("match-text" | "count" | "output" | "oversized-files")[] };
+type LocalFindResult = { scope: LocalSearchScope; paths: string[]; truncated: boolean; nextCursor?: string; truncationReasons?: ("match-text" | "count" | "output" | "oversized-files")[] };
 type LocalListResult = { entries: { path: string; type: "file" | "directory" }[]; truncated: boolean };
 type LocalMutationResult = { path: string; changed: boolean; sha256: string; bytes: number; identity: LocalIdentity };
 type LocalShellResult = { ok: boolean; exitCode: number | null; signal: string | null; stdout: string; stderr: string; truncated: boolean; stdoutTruncated: boolean; stderrTruncated: boolean };
@@ -19780,30 +20502,94 @@ interface Error { readonly result?: LocalShellResult }
 declare const local: {
   /** UTF-8 whole lines; 1-based, default 200/max 2000, files <=2MiB. totalLines is the whole-file count. truncated means unread suffix; nextOffset is the next line. Stop at requested end. Oversized single lines fail. */
   read(args: { path: string; offset?: number; limit?: number }): Promise<LocalReadResult>;
-  /** Numbered source and hashes across 1..32 windows. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars 1000..40000, clamped to runtime budgets. Continue remaining verbatim; hash conflicts fail. complete covers requested ranges, not the repo or understanding. */
-  readMany(args: { windows: LocalReadWindow[]; maxChars?: number }): Promise<LocalReadManyResult>;
-  /** Requires rg. hidden:true includes dotfiles; default false. Ignore files still apply; VCS metadata/symlinks excluded. scope describes enumeration, not whole-repo completeness. Skips binary/invalid UTF-8; >2MiB skipped with truncated=true. Default 100/max 1000 matches; text <=500 chars. */
-  grep(args: { pattern: string; path?: string; glob?: string; literal?: boolean; ignoreCase?: boolean; hidden?: boolean; limit?: number }): Promise<LocalGrepResult>;
+  /** partial:true retains independent successes and indexed ordinary read/stale-hash failures in failures and remaining; complete:false. Safety/cancellation/final drift reject. Same-file windows reuse one invocation snapshot, verified before return. Numbered source and hashes across 1..32 windows. Default 200/max 2000 lines per window; request 2000 for whole relevant files. 32000 aggregate JSON chars, maxChars 1000..40000, clamped to runtime budgets. Continue remaining verbatim first, then relevant unreadTails (hash-bound suffix windows, <=2000 lines). They can overlap remaining. complete covers requested ranges only; empty tails do not cover omitted prefixes/gaps or other files. */
+  readMany(args: { windows: LocalReadWindow[]; maxChars?: number; partial?: boolean }): Promise<LocalReadManyResult>;
+  /** Explicit compact string packet: KIRO_LOCAL_EVIDENCE/1 header, numbered sources, final newline + META + space + JSON footer (LocalEvidenceMetadata). sourceOffset/sourceChars use UTF-16 in the decoded packet. Same windows, safety, snapshots and partial semantics as readMany. maxChars budgets the ENTIRE JSON-serialized string (including escaping), default 32000/max 40000, min 1000, clamped to runtime/visible allowances. Metadata never silently drops; too-small budgets/oversized lines reject. Return the packet directly, preferably resultFormat:"text"; leave headroom for other returned data/logs. Continue remaining verbatim after repairing failures, then relevant unreadTails; tails can overlap remaining and omit prefixes/gaps. complete means requested windows only; not proof of inspection. No automatic inspection, steering, or delivery guarantee if a caller discards/remaps the result. */
+  readEvidence(args: LocalReadEvidenceArguments): Promise<LocalReadEvidenceResult>;
+  /** truncationReasons: match-text => read the line; count => raise limit/narrow scope; output => narrow scope; oversized-files => inspect separately. paginate:true enables snapshot pages; repeat identical options with cursor:nextCursor. Optional snapshotScope:"query-v1" with paginate:true validates glob-selected candidates, including nonmatching grep files, not unrelated files; scope.snapshotScope reports this contract. Default validates unfiltered scope. Provider-owned single-use cursors expire after 60s; collection rejects work/cache limits; count/output resumable, match-text not resumable. Requires rg. hidden:true includes dotfiles; default false. Ignore files still apply; VCS metadata/symlinks excluded. scope describes enumeration, not whole-repo completeness. Skips binary/invalid UTF-8; >2MiB skipped with truncated=true. Default 100/max 1000 matches; text <=500 chars. */
+  grep(args: { pattern: string; path?: string; glob?: string; literal?: boolean; ignoreCase?: boolean; hidden?: boolean; limit?: number; paginate?: boolean; snapshotScope?: "query-v1"; cursor?: string }): Promise<LocalGrepResult>;
   /** Recursive rg glob enumeration; hidden:true for repository reviews. Same scope/ignore/VCS/no-follow semantics as grep. */
-  find(args: { pattern: string; path?: string; hidden?: boolean; limit?: number }): Promise<LocalFindResult>;
+  find(args: { pattern: string; path?: string; hidden?: boolean; limit?: number; paginate?: boolean; snapshotScope?: "query-v1"; cursor?: string }): Promise<LocalFindResult>;
   /** Sorted direct children, including hidden entries. Only path/limit; no depth. Use find for nested files. Unsafe entries are rejected. Default 100/max 1000. */
   list(args?: { path?: string; limit?: number }): Promise<LocalListResult>;
   /** Create-only unless overwrite=true. Parent must already exist. Exact approval binds snapshots and proposed content. */
   write(args: { path: string; content: string; overwrite?: boolean }): Promise<LocalMutationResult>;
-  /** Nonempty exact unique anchor unless all=true. Parent must already exist. */
-  edit(args: { path: string; oldText: string; newText: string; all?: boolean }): Promise<LocalMutationResult>;
+  /** oldText/newText OR edits[1..100]; expectedSha256 binds the original. All nonempty anchors resolve on that snapshot, unique unless all=true, disjoint across edits. One complete diff approval/publication; no writes on late-anchor failure. Parent must exist. */
+  edit(args: { path: string; expectedSha256?: string } & ({ oldText: string; newText: string; all?: boolean; edits?: never } | { edits: { oldText: string; newText: string; all?: boolean }[]; oldText?: never; newText?: never; all?: never })): Promise<LocalMutationResult>;
   /** Approved /bin/sh; cwd is NOT confinement. Within one exec, shell/write/edit queue FIFO before preparation. Failure stops queued effects; settle handles ordinary nonzero exits. No background jobs. */
   /** For multiline Bash use {script,interpreter:"bash",args?}: passed literally without outer shell expansion or scratch files. Default script interpreter sh. args become $1...; same approvals/queue/cleanup as command. Neither form provides network isolation. */
   shell(args: LocalShellInput & { cwd?: string; timeoutMs?: number; settle?: boolean }): Promise<LocalShellResult>;
 };
 `;
 
+// src/providers/review-contract.ts
+var REVIEW_GUEST_DECLARATIONS = `
+type ReviewCoverage = "unknown" | "retrieved" | "traced" | "verified" | "blocked";
+type ReviewEvidenceKind = "source" | "static-proof" | "test" | "probe";
+type ReviewFindingStatus = "candidate" | "confirmed" | "conditional" | "disproved";
+type ReviewRole = "entry" | "model-validation" | "service" | "dependency" | "persistence" | "consumer";
+type ReviewEvidenceInput = { path: string; startLine: number; endLine: number; kind: ReviewEvidenceKind; rationale: string; expectedSha256?: string };
+type ReviewEvidence = ReviewEvidenceInput & { sha256: string; rangeSha256: string };
+type ReviewBlocker = { reason: string; nextAction: string };
+type ReviewBeginArguments = { objective: string; paths: string[]; scenarios?: string[] };
+type ReviewUpdateArguments = { taskId: string; obligationId: string; status: ReviewCoverage; evidence?: ReviewEvidenceInput[]; note?: string; contract?: string; blocker?: ReviewBlocker };
+type ReviewCounterexample = { verdict: "not-checked" | "survived" | "disproved" | "conditional"; method: "static-proof" | "test" | "probe"; description: string; evidence: ReviewEvidenceInput[] };
+type ReviewFindingArguments = { taskId: string; findingId?: string; title: string; requestedStatus: ReviewFindingStatus; severity: "critical" | "high" | "medium" | "low" | "info"; confidence: "high" | "medium" | "low"; caller: string; trigger: string; expectedContract: string; actualAction: string; consequence: string; evidence: ReviewEvidenceInput[]; counterexample: ReviewCounterexample; unresolvedAssumptions: string[] };
+type ReviewTaskArguments = { taskId: string };
+type ReviewPageArguments = ReviewTaskArguments & { offset?: number; limit?: number };
+type ReviewObligation = { type: "obligation"; id: string; kind: "path" | "scenario" | "role" | "edge" | "partial-failure"; pathId: string; failureCheck?: string; scenario?: string; role?: ReviewRole; from?: ReviewRole; to?: ReviewRole; status: ReviewCoverage; note: string | null; contract: string | null; blocker: ReviewBlocker | null; evidence: ReviewEvidence[]; stale: boolean };
+type ReviewFinding = Omit<ReviewFindingArguments, "taskId" | "findingId" | "evidence" | "counterexample"> & { type: "finding"; id: string; status: ReviewFindingStatus; evidence: ReviewEvidence[]; counterexample: Omit<ReviewCounterexample, "evidence"> & { evidence: ReviewEvidence[] }; admissionReasons: string[]; needsDowngrade: boolean };
+type ReviewBeginResult = { taskId: string; revision: number; obligationCount: number; expiresInMs: number };
+type ReviewMutationResult = { taskId: string; revision: number; id: string; status: ReviewCoverage | ReviewFindingStatus; admissionReasons?: string[] };
+type ReviewSummary = { taskId: string; revision: number; ready: boolean; advisory: true; semanticValidation: false; freshness: "unreconciled" | "last-reconciled"; unresolvedCount: number; findingsNeedingDowngradeCount: number; coverage: Record<ReviewCoverage, number>; expiresInMs: number };
+type ReviewStatusResult = ReviewSummary & { objective: string; entries: (ReviewObligation | ReviewFinding)[]; total: number; nextOffset: number | null };
+type ReviewReconcileResult = ReviewSummary & { unresolvedObligations: string[]; findingsNeedingDowngrade: string[]; total: number; nextOffset: number | null };
+type ReviewEndResult = { taskId: string; ended: true };
+/** Optional, instance/session-local ledger. Mutations require ordinary write approval.
+ * Evidence is read and hash-checked, never executed. Admission is structural only;
+ * static proof is allowed, but no semantic correctness or test execution is certified.
+ * paths are execution-path IDs, independent of evidence filenames. Each gets
+ * normal/repeated/malformed/partial-failure scenarios, causal roles/edges, and
+ * before/after-effect, retry, compensation, acknowledgement and visibility checks.
+ * All obligations start unknown. Traced needs note+evidence; verified also needs
+ * contract+non-source proof. Blocked needs reason+nextAction. No automatic steering.
+ * status is last-known data only. reconcile rereads evidence and invalidates stale
+ * coverage/findings; ready is advisory, scope-limited, and cannot force an answer.
+ * status/reconcile pages use offset/limit (default 20, max 50); continue nextOffset.
+ * Fixed task/session TTLs survive exec/compaction only while this instance lives.
+ * end discards a task; no implicit persistence or cross-chat restoration.
+ */
+declare const review: {
+  begin(args: ReviewBeginArguments): Promise<ReviewBeginResult>;
+  update(args: ReviewUpdateArguments): Promise<ReviewMutationResult>;
+  finding(args: ReviewFindingArguments): Promise<ReviewMutationResult>;
+  status(args: ReviewPageArguments): Promise<ReviewStatusResult>;
+  reconcile(args: ReviewPageArguments): Promise<ReviewReconcileResult>;
+  end(args: ReviewTaskArguments): Promise<ReviewEndResult>;
+};
+`;
+
 // src/runtime/guest-types.ts
 var fabricGuestDeclarations = `
 ${LOCAL_GUEST_DECLARATIONS}
+${REVIEW_GUEST_DECLARATIONS}
+${PROBE_GUEST_DECLARATIONS}
 type JsonPrimitive = null | boolean | number | string;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };
+type FabricCheckpointHandle = { id: string; label?: string };
+type FabricFailureMetadata = {
+  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error";
+  phase: "compile" | "validation" | "discovery" | "dispatch" | "execution";
+  dispatchState: "not_dispatched" | "dispatched";
+  effectOutcome: "none" | "uncertain";
+  ref?: string; descriptorDigest?: string; invalidPath?: string;
+  relevantSchema?: JsonObject; replacementDescriptor?: JsonObject; checkpoints?: FabricCheckpointHandle[];
+};
+/** Host-issued, bounded repair hints. Not complete schemas or permission to retry effects. */
+interface Error { readonly failure?: FabricFailureMetadata }
+type KiroArtifactReadResult = { id: string; text: string; offset: number; nextOffset: number; totalChars: number; done: boolean };
+type KiroArtifactCheckpointResult = { id: string; retrieval: { ref: "artifacts.read"; args: { id: string }; encoding: "json"; ephemeral: true } };
 type EmptyArgs = Record<string, never>;
 interface FabricActionSummary {
   ref: string;
@@ -19842,7 +20628,12 @@ declare const fabric: Readonly<{
   workspace(args: FabricWorkspaceRequest): Promise<JsonObject>;
 }>;
 declare const payloads: Readonly<Record<string, string>>;
-declare const artifacts: Readonly<{ read(args: { id: string; offset?: number; limit?: number }): Promise<JsonValue> }>;
+declare const artifacts: Readonly<{
+  /** UTF-16 cursors; escaped-envelope-aware pages. Advance only to nextOffset; done means EOF. */
+  read(args: { id: string; offset?: number; limit?: number }): Promise<KiroArtifactReadResult>;
+  /** Explicit chosen JSON evidence, in memory with TTL/quotas; normal write approval and at most 8 reservations per execution. */
+  checkpoint(args: { value: JsonValue; label?: string }): Promise<KiroArtifactCheckpointResult>;
+}>;
 declare const memory: Readonly<{
   get(args: { key: string }): Promise<JsonValue>;
   set(args: { key: string; value: JsonValue }): Promise<JsonValue>;
@@ -19878,7 +20669,8 @@ declare const mcp: Readonly<{
   servers(args?: EmptyArgs): Promise<JsonValue>;
   tools(args: { server: string }): Promise<FabricMcpToolSummary[]>;
   describe(args: { server: string; tool: string }): Promise<FabricMcpToolSummary>;
-  call(args: { server: string; tool: string; args?: JsonObject; expectedDescriptorDigest?: string }): Promise<JsonValue>;
+  /** Projection happens before the host/guest bridge. full (default) preserves legacy results; text selects joined text (or ""), structured selects structuredContent (or null). Missing forms are not converted. Errors/approval/schema checks are unchanged. */
+  call(args: { server: string; tool: string; args?: JsonObject; expectedDescriptorDigest?: string; projection?: "full" | "text" | "structured" }): Promise<JsonValue>;
 }>;
 declare function parallel<T, R>(
   items: readonly T[],
@@ -19984,9 +20776,9 @@ var createGuestStackMap = (sourceMapText) => {
   };
 };
 var GUEST_FRAME_PATTERN = /kiro-fabric-guest\.js:(\d+):(\d+)/g;
-var remapGuestErrorText = (text, stackMap, guestLineCount) => {
-  if (!stackMap || !text.includes("kiro-fabric-guest.js:")) return text;
-  return text.replace(GUEST_FRAME_PATTERN, (match, lineText, columnText) => {
+var remapGuestErrorText = (text3, stackMap, guestLineCount) => {
+  if (!stackMap || !text3.includes("kiro-fabric-guest.js:")) return text3;
+  return text3.replace(GUEST_FRAME_PATTERN, (match, lineText, columnText) => {
     const line = Number(lineText);
     const mapped = stackMap.lookup(line, Number(columnText));
     if (mapped) return `guest code:${mapped.line}:${mapped.column}`;
@@ -20033,11 +20825,11 @@ var FabricDeadline = class {
 };
 
 // src/trace/tracer.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { randomUUID as randomUUID3 } from "node:crypto";
 
 // src/trace/trace-writer.ts
-import fs2 from "node:fs";
-import path from "node:path";
+import fs5 from "node:fs";
+import path4 from "node:path";
 var DEFAULT_MAX_BUFFER_LINES = 4096;
 var DEFAULT_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 var DEFAULT_FLUSH_INTERVAL_MS = 250;
@@ -20102,10 +20894,10 @@ var BufferedTraceWriter = class {
   #disabled = false;
   #closed = false;
   constructor(options) {
-    if (!path.isAbsolute(options.file)) throw new Error("trace file must be an absolute path");
+    if (!path4.isAbsolute(options.file)) throw new Error("trace file must be an absolute path");
     this.file = options.file;
-    fs2.mkdirSync(path.dirname(options.file), { recursive: true, mode: 448 });
-    this.#fd = fs2.openSync(options.file, "wx", 384);
+    fs5.mkdirSync(path4.dirname(options.file), { recursive: true, mode: 448 });
+    this.#fd = fs5.openSync(options.file, "wx", 384);
     this.#ring = new LineRing(
       options.maxBufferLines ?? DEFAULT_MAX_BUFFER_LINES,
       options.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
@@ -20139,14 +20931,14 @@ var BufferedTraceWriter = class {
       if (this.#writtenBytes + chunkBytes > this.#maxFileBytes) {
         const marker = JSON.stringify({ v: 1, cat: "teardown", ev: "trace.truncated", data: { maxFileBytes: this.#maxFileBytes } });
         const room = this.#maxFileBytes - this.#writtenBytes;
-        if (room > marker.length + 1) fs2.writeSync(this.#fd, `${marker}
+        if (room > marker.length + 1) fs5.writeSync(this.#fd, `${marker}
 `);
         this.#disabled = true;
         return;
       }
-      fs2.writeSync(this.#fd, chunk);
+      fs5.writeSync(this.#fd, chunk);
       this.#writtenBytes += chunkBytes;
-      if (fsync) fs2.fsyncSync(this.#fd);
+      if (fsync) fs5.fsyncSync(this.#fd);
     } catch {
       this.#disabled = true;
     }
@@ -20161,7 +20953,7 @@ var BufferedTraceWriter = class {
     clearInterval(this.#timer);
     process.removeListener("exit", this.#onExit);
     try {
-      fs2.closeSync(this.#fd);
+      fs5.closeSync(this.#fd);
     } catch {
     }
   }
@@ -20195,7 +20987,7 @@ var ActiveFabricTracer = class {
     this.file = writer.file;
   }
   newExecutionId() {
-    return `exec_${randomUUID2()}`;
+    return `exec_${randomUUID3()}`;
   }
   #emit(event) {
     if (this.#closed) return;
@@ -20210,11 +21002,11 @@ var ActiveFabricTracer = class {
     this.#writer.write(line);
   }
   span(cat, ev, execId, data, parentId) {
-    const id = `span_${++this.#spanSeq}`;
+    const id3 = `span_${++this.#spanSeq}`;
     const startedUs = monotonicUs();
     let ended = false;
     return {
-      id,
+      id: id3,
       end: (endData) => {
         if (ended) return;
         ended = true;
@@ -20225,7 +21017,7 @@ var ActiveFabricTracer = class {
           cat,
           ev,
           ...execId ? { execId } : {},
-          spanId: id,
+          spanId: id3,
           ...parentId ? { parentId } : {},
           durUs: Math.max(0, monotonicUs() - startedUs),
           ...data || endData ? { data: { ...data ?? {}, ...endData ?? {} } } : {}
@@ -20521,11 +21313,21 @@ var GUEST_SETUP = `
   globalThis.local = objectFreeze({
     read: (args) => call("local.read", args), grep: (args) => call("local.grep", args),
     readMany: (args) => call("local.readMany", args),
+    readEvidence: (args) => call("local.readEvidence", args),
     find: (args) => call("local.find", args), list: (args = {}) => call("local.list", args),
     write: (args) => call("local.write", args), edit: (args) => call("local.edit", args),
     shell: (args) => call("local.shell", args),
   });
-  globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args) });
+  globalThis.review = objectFreeze({
+    begin: (args) => call("review.begin", args), update: (args) => call("review.update", args),
+    finding: (args) => call("review.finding", args), status: (args) => call("review.status", args),
+    reconcile: (args) => call("review.reconcile", args), end: (args) => call("review.end", args),
+  });
+  globalThis.probe = objectFreeze({
+    discover: (args) => call("probe.discover", args), create: (args) => call("probe.create", args),
+    write: (args) => call("probe.write", args), run: (args) => call("probe.run", args),
+  });
+  globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args), checkpoint: (args) => call("artifacts.checkpoint", args) });
   globalThis.memory = objectFreeze({
     get: (args) => call("memory.get", args), set: (args) => call("memory.set", args),
     delete: (args) => call("memory.delete", args), search: (args) => call("memory.search", args),
@@ -20659,6 +21461,7 @@ var QuickJsRuntime = class {
       if (!hostController.signal.aborted) hostController.abort(reason);
       rejectGuestGraph(reason);
     };
+    const issuedFailures = /* @__PURE__ */ new Map();
     const timeoutMessage = () => `Execution timed out after ${deadline.effectiveTimeoutMs}ms`;
     const expire = () => {
       if (closing || timedOut) return;
@@ -20701,10 +21504,22 @@ var QuickJsRuntime = class {
           const raw2 = error instanceof Error ? error.message : String(error);
           const handle = context.newError(raw2.slice(0, 4096));
           try {
-            if (error instanceof LocalShellExitError) {
+            if (error instanceof LocalShellExitError || error instanceof ProbeRunExitError) {
               const diagnostic = jsonHandle(context, jsonObject, jsonParse, error.result, options.maxNestedResultChars);
               try {
                 context.setProp(handle, "result", diagnostic);
+              } finally {
+                diagnostic.dispose();
+              }
+            }
+            const failure = fabricFailureMetadata(error);
+            if (failure) {
+              const text3 = JSON.stringify(failure);
+              if (issuedFailures.size >= 128) issuedFailures.delete(issuedFailures.keys().next().value);
+              issuedFailures.set(text3, failure);
+              const diagnostic = jsonHandle(context, jsonObject, jsonParse, failure, 32e3);
+              try {
+                context.setProp(handle, "failure", diagnostic);
               } finally {
                 diagnostic.dispose();
               }
@@ -20842,9 +21657,16 @@ var QuickJsRuntime = class {
       if (settled.error) {
         const deadlineExceeded = timedOut || interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatGuestFailure(context.dump(settled.error)), stackMap, guestLineCount);
+        const failureHandle = context.getProp(settled.error, "failure");
+        let failure;
+        try {
+          failure = issuedFailures.get(JSON.stringify(context.dump(failureHandle)));
+        } finally {
+          failureHandle.dispose();
+        }
         settled.error.dispose();
         abortHost(new Error(error));
-        return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+        return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded || failure?.code === "timeout" ? "timed_out" : "runtime_error", error, ...failure ? { failure } : {}, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
       const serialized = context.getString(settled.value);
       settled.value.dispose();
@@ -21001,14 +21823,18 @@ var FabricExecutionService = class {
     } catch (error) {
       compileSpan?.end({ failed: true });
       const aborted = options.signal?.aborted === true;
-      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: aborted ? "aborted" : "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
-      return { status: aborted ? "aborted" : "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: aborted ? "Execution cancelled" : error instanceof Error ? error.message : String(error), effectiveTimeoutMs };
+      const compileStatus = aborted ? "aborted" : error instanceof FabricCompilerTimeoutError ? "timed_out" : "failed";
+      const failure2 = fabricFailureMetadata(error);
+      if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: compileStatus, elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
+      return { status: compileStatus, success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: aborted ? "Execution cancelled" : error instanceof Error ? error.message : String(error), ...failure2 ? { failure: failure2 } : {}, effectiveTimeoutMs };
     }
     compileSpan?.end({ errors: checked.errors.length });
     if (checked.errors.length) {
       if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: checked.errors.length, resultChars: 0, resultValueChars: null });
       return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: "TypeScript validation failed", typeErrors: checked.errors, effectiveTimeoutMs };
     }
+    const checkpoints = createCheckpointJournal();
+    let interruptedFailure;
     const audits = [];
     const auditBudget = { bytes: 0 };
     let providerCalls = 0;
@@ -21022,6 +21848,8 @@ var FabricExecutionService = class {
     let lastShellFailure;
     const providerContext = (signal, deadline) => ({
       cwd: this.cwd,
+      checkpoints,
+      maxResultChars: this.config.executor.maxNestedResultChars,
       signal,
       deadline,
       ...options.bootstrap ? { bootstrap: options.bootstrap } : {}
@@ -21073,7 +21901,7 @@ var FabricExecutionService = class {
           switchRequested = true;
         } else if (!actionRef.startsWith("fabric.")) {
           if (switchRequested) throw new Error("Workspace calls cannot follow a pending workspace switch; use the next execution");
-          const requiresWorkspace = /^(local|memory|state)\./u.test(actionRef);
+          const requiresWorkspace = /^(local|memory|state|review|probe)\./u.test(actionRef);
           if ((options.workspaceUnavailable === true || options.workspaceBound === false && requiresWorkspace) && actionRef !== "artifacts.read") throw new Error("Verified workspace binding is required; use fabric.workspace in a separate bootstrap execution");
           workspaceCalls = true;
         }
@@ -21118,7 +21946,7 @@ var FabricExecutionService = class {
             }
           }
         });
-        const localEffect = actionRef === "local.shell" || actionRef === "local.write" || actionRef === "local.edit";
+        const localEffect = ["local.shell", "local.write", "local.edit", "probe.create", "probe.write", "probe.run", "review.begin", "review.update", "review.finding", "review.reconcile", "review.end"].includes(actionRef);
         const invocation = localEffect ? localEffectTail.then(invoke, () => {
           throw new Error("Local effect queue stopped after a failed predecessor; inspect state before a new execution");
         }) : invoke();
@@ -21127,12 +21955,12 @@ var FabricExecutionService = class {
           void localEffectTail.catch(() => {
           });
         }
-        if (actionRef.startsWith("local.")) localSettlements.add(invocation);
+        if (/^(local|mcp|probe|review)\./u.test(actionRef)) localSettlements.add(invocation);
         let value;
         try {
           value = await invocation;
         } catch (error) {
-          if (actionRef === "local.shell" && error instanceof LocalShellExitError) lastShellFailure = error.result;
+          if ((actionRef === "local.shell" || actionRef === "probe.run") && (error instanceof LocalShellExitError || error instanceof ProbeRunExitError)) lastShellFailure = error.result;
           throw error;
         } finally {
           localSettlements.delete(invocation);
@@ -21141,6 +21969,13 @@ var FabricExecutionService = class {
         return value;
       } catch (error) {
         if (bridgeSpan) bridgeEnd = { ok: false, ...traceFailureMetadata("provider_failed") };
+        const failure2 = fabricFailureMetadata(error);
+        if (failure2) {
+          const handles2 = checkpoints.snapshot();
+          const enriched = { ...failure2, ...handles2.length ? { checkpoints: handles2 } : {} };
+          if (signal.aborted && (interruptedFailure?.effectOutcome !== "uncertain" || enriched.effectOutcome === "uncertain")) interruptedFailure = enriched;
+          throw new FabricRepairError(error instanceof Error ? error.message : "Provider failed", enriched);
+        }
         throw error;
       } finally {
         bridgeSpan?.end(bridgeEnd);
@@ -21193,6 +22028,8 @@ var FabricExecutionService = class {
       tracer.event("eval", "exec.end", execId, { status, elapsedMs: performance.now() - started, audits: audits.length, logs: result.logs.length, typeErrors: 0, resultChars: resultValueChars ?? 0, resultValueChars });
       tracer.flush();
     }
+    const handles = checkpoints.snapshot();
+    const failure = result.failure ?? (status === "timed_out" || status === "aborted" ? interruptedFailure : void 0) ?? (status !== "succeeded" && handles.length ? { code: status === "timed_out" ? "timeout" : "provider_error", phase: "execution", dispatchState: "dispatched", effectOutcome: "uncertain" } : void 0);
     return {
       status,
       success: status === "succeeded",
@@ -21201,6 +22038,8 @@ var FabricExecutionService = class {
       audits,
       elapsedMs: performance.now() - started,
       ...outputError ? { error: outputError } : {},
+      ...handles.length ? { checkpoints: handles } : {},
+      ...status !== "succeeded" && failure ? { failure: { ...failure, ...status === "timed_out" ? { code: "timeout" } : {}, ...handles.length ? { checkpoints: handles } : {} } } : {},
       ...status === "failed" && lastShellFailure ? { lastShellFailure } : {},
       effectiveTimeoutMs: result.effectiveTimeoutMs
     };
@@ -21376,8 +22215,8 @@ var KIRO_MCP_DRAIN_TIMEOUT_MS = 3e3;
 var kiroMcpOuterDeadlineMs = (guestMaximumMs, compilerTimeoutMs) => guestMaximumMs + compilerTimeoutMs + KIRO_MCP_DEADLINE_GRACE_MS;
 
 // src/kiro/power/approver.ts
-import { createHash as createHash2 } from "node:crypto";
-import path2 from "node:path";
+import { createHash as createHash3 } from "node:crypto";
+import path5 from "node:path";
 var SECRET_KEY = /(?:apikey|authorization|authtoken|bearer|clientkey|clientsecret|cookie|credential|idtoken|passphrase|password|privatekey|refreshtoken|secret|session|token)/iu;
 var SECRET_VALUE = /^(?:(?:basic|bearer)\s+|gh[pousr]_|github_pat_|sk-[a-z0-9_-]{12,}|akia[0-9a-z]{12,}|eyj[a-z0-9_-]+\.[a-z0-9_-]+\.|-----begin\s)|(?:^|[?&])(?:api[_-]?key|password|secret|token)=/iu;
 var URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//iu;
@@ -21387,7 +22226,7 @@ var APPROVAL_MESSAGE_CHARS = 1500;
 var fabricApprovalIdentity = (action, args) => {
   const canonical = fabricJsonText({ schemaVersion: 1, ref: action.ref, risk: action.risk, args });
   return {
-    digest: createHash2("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex"),
+    digest: createHash3("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex"),
     chars: canonical.length
   };
 };
@@ -21428,9 +22267,9 @@ var summarize = (args, cwd) => {
     if (isSecretKey(key)) return "<redacted>";
     if (typeof value === "string") {
       if (SECRET_VALUE.test(value)) return "<redacted>";
-      if (path2.isAbsolute(value)) {
-        const relative = path2.relative(cwd, value);
-        return relative === "" ? "." : relative.startsWith("..") || path2.isAbsolute(relative) ? "<outside-workspace>" : relative;
+      if (path5.isAbsolute(value)) {
+        const relative = path5.relative(cwd, value);
+        return relative === "" ? "." : relative.startsWith("..") || path5.isAbsolute(relative) ? "<outside-workspace>" : relative;
       }
       if (URL_VALUE.test(value) || /(?:url|uri|endpoint)/iu.test(key)) {
         try {
@@ -21480,7 +22319,7 @@ var KiroPowerFabricApprover = class {
     if (mode === "allow") return { decision: "allow" };
     if (mode === "deny") return { decision: "deny", reason: `${action.ref} is denied by Fabric policy` };
     if (mode !== "ask") return { decision: "deny", reason: `${action.ref} has invalid Fabric approval policy` };
-    const identity = fabricApprovalIdentity(action, args);
+    const identity2 = fabricApprovalIdentity(action, args);
     const localReview = action.provider === "local" && (action.risk === "write" || action.risk === "execute") ? typeof args.review === "string" ? args.review : (() => {
       throw new Error("Local effect lacks canonical review material");
     })() : void 0;
@@ -21489,7 +22328,7 @@ var KiroPowerFabricApprover = class {
       risk: action.risk,
       provider: action.provider,
       action: action.name,
-      summary: `Canonical request: sha256:${identity.digest} (${identity.chars} chars)
+      summary: `Canonical request: sha256:${identity2.digest} (${identity2.chars} chars)
 ${localReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
       ...localReview === void 0 ? {} : { reviewable: true },
       ...signal ? { signal } : {}
@@ -21505,56 +22344,56 @@ ${localReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
 };
 
 // src/kiro/power/data-paths.ts
-import { createHash as createHash3, randomBytes } from "node:crypto";
-import fs3 from "node:fs";
-import path3 from "node:path";
+import { createHash as createHash4, randomBytes } from "node:crypto";
+import fs6 from "node:fs";
+import path6 from "node:path";
 var isRecord4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var errorCode = (error) => isRecord4(error) && typeof error.code === "string" ? error.code : void 0;
 var projectKiroPowerWorkspaceIdentity = (value) => {
-  if (!isRecord4(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path3.isAbsolute(value.canonicalPath) || typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
+  if (!isRecord4(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path6.isAbsolute(value.canonicalPath) || typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
     throw new Error("Fabric workspace identity is malformed");
   }
   return Object.freeze({ schemaVersion: 1, canonicalPath: value.canonicalPath, deviceId: value.deviceId, fileId: value.fileId });
 };
 var sameIdentity = (left, right) => left.schemaVersion === right.schemaVersion && left.canonicalPath === right.canonicalPath && left.deviceId === right.deviceId && left.fileId === right.fileId;
-var kiroPowerMemoryNamespace = (identity) => `project:${createHash3("sha256").update(identity.canonicalPath).digest("hex")}`;
+var kiroPowerMemoryNamespace = (identity2) => `project:${createHash4("sha256").update(identity2.canonicalPath).digest("hex")}`;
 var assertCurrentUser = (stats, target) => {
   if (process.platform !== "win32" && typeof process.getuid === "function" && stats.uid !== process.getuid()) {
     throw new Error(`Fabric data path is owned by another user: ${target}`);
   }
 };
 var assertPrivateDirectory = (target) => {
-  const stats = fs3.lstatSync(target);
+  const stats = fs6.lstatSync(target);
   if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Fabric storage is not a regular directory: ${target}`);
   assertCurrentUser(stats, target);
   if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Fabric storage is not private: ${target}`);
   return stats;
 };
-var privateDirectory = (directory, boundary) => {
-  const root = path3.resolve(boundary);
-  const rootStats = fs3.lstatSync(root);
+var privateDirectory2 = (directory2, boundary) => {
+  const root = path6.resolve(boundary);
+  const rootStats = fs6.lstatSync(root);
   if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new Error(`Fabric storage root is not a regular directory: ${boundary}`);
   assertCurrentUser(rootStats, root);
-  const target = path3.resolve(directory);
-  const relative = path3.relative(root, target);
-  if (relative === ".." || relative.startsWith(`..${path3.sep}`) || path3.isAbsolute(relative)) throw new Error(`Fabric data path escapes storage: ${directory}`);
+  const target = path6.resolve(directory2);
+  const relative = path6.relative(root, target);
+  if (relative === ".." || relative.startsWith(`..${path6.sep}`) || path6.isAbsolute(relative)) throw new Error(`Fabric data path escapes storage: ${directory2}`);
   let cursor = root;
-  for (const segment of relative.split(path3.sep).filter(Boolean)) {
-    cursor = path3.join(cursor, segment);
+  for (const segment of relative.split(path6.sep).filter(Boolean)) {
+    cursor = path6.join(cursor, segment);
     try {
-      fs3.mkdirSync(cursor, { mode: 448 });
+      fs6.mkdirSync(cursor, { mode: 448 });
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
     }
-    const stats = fs3.lstatSync(cursor);
+    const stats = fs6.lstatSync(cursor);
     if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Fabric data path contains a non-directory: ${cursor}`);
     assertCurrentUser(stats, cursor);
-    fs3.chmodSync(cursor, 448);
+    fs6.chmodSync(cursor, 448);
   }
   return target;
 };
 var privateFile = (target, maximum = 1024 * 1024) => {
-  const stats = fs3.lstatSync(target);
+  const stats = fs6.lstatSync(target);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
     throw new Error(`Fabric data is not a bounded unaliased regular file: ${target}`);
   }
@@ -21563,12 +22402,12 @@ var privateFile = (target, maximum = 1024 * 1024) => {
   if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Fabric data is not private: ${target}`);
   return stats;
 };
-var fsyncDirectory = (directory) => {
-  const descriptor2 = fs3.openSync(directory, "r");
+var fsyncDirectory = (directory2) => {
+  const descriptor2 = fs6.openSync(directory2, "r");
   try {
-    fs3.fsyncSync(descriptor2);
+    fs6.fsyncSync(descriptor2);
   } finally {
-    fs3.closeSync(descriptor2);
+    fs6.closeSync(descriptor2);
   }
 };
 var writeJsonAtomic = (target, value, exclusive = false) => {
@@ -21576,12 +22415,12 @@ var writeJsonAtomic = (target, value, exclusive = false) => {
 `;
   if (exclusive) {
     try {
-      const descriptor2 = fs3.openSync(target, "wx", 384);
+      const descriptor2 = fs6.openSync(target, "wx", 384);
       try {
-        fs3.writeFileSync(descriptor2, bytes2);
-        fs3.fsyncSync(descriptor2);
+        fs6.writeFileSync(descriptor2, bytes2);
+        fs6.fsyncSync(descriptor2);
       } finally {
-        fs3.closeSync(descriptor2);
+        fs6.closeSync(descriptor2);
       }
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
@@ -21589,59 +22428,59 @@ var writeJsonAtomic = (target, value, exclusive = false) => {
   } else {
     const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
     try {
-      const descriptor2 = fs3.openSync(temporary, "wx", 384);
+      const descriptor2 = fs6.openSync(temporary, "wx", 384);
       try {
-        fs3.writeFileSync(descriptor2, bytes2);
-        fs3.fsyncSync(descriptor2);
+        fs6.writeFileSync(descriptor2, bytes2);
+        fs6.fsyncSync(descriptor2);
       } finally {
-        fs3.closeSync(descriptor2);
+        fs6.closeSync(descriptor2);
       }
-      fs3.renameSync(temporary, target);
+      fs6.renameSync(temporary, target);
     } catch (error) {
-      fs3.rmSync(temporary, { force: true });
+      fs6.rmSync(temporary, { force: true });
       throw error;
     }
   }
   privateFile(target);
-  fs3.chmodSync(target, 384);
-  fsyncDirectory(path3.dirname(target));
+  fs6.chmodSync(target, 384);
+  fsyncDirectory(path6.dirname(target));
   return target;
 };
 var privateJson = (target, initial) => writeJsonAtomic(target, initial, true);
 var copyFileAtomic = (source, target) => {
   privateFile(source);
-  const bytes2 = fs3.readFileSync(source);
-  const sourceDigest = createHash3("sha256").update(bytes2).digest("hex");
+  const bytes2 = fs6.readFileSync(source);
+  const sourceDigest = createHash4("sha256").update(bytes2).digest("hex");
   const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.migration.tmp`;
   try {
-    const descriptor2 = fs3.openSync(temporary, "wx", 384);
+    const descriptor2 = fs6.openSync(temporary, "wx", 384);
     try {
-      fs3.writeFileSync(descriptor2, bytes2);
-      fs3.fsyncSync(descriptor2);
+      fs6.writeFileSync(descriptor2, bytes2);
+      fs6.fsyncSync(descriptor2);
     } finally {
-      fs3.closeSync(descriptor2);
+      fs6.closeSync(descriptor2);
     }
-    if (createHash3("sha256").update(fs3.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
+    if (createHash4("sha256").update(fs6.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
     try {
-      fs3.linkSync(temporary, target);
+      fs6.linkSync(temporary, target);
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
       privateFile(target);
-      if (createHash3("sha256").update(fs3.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
+      if (createHash4("sha256").update(fs6.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
     }
-    fs3.unlinkSync(temporary);
-    fsyncDirectory(path3.dirname(target));
+    fs6.unlinkSync(temporary);
+    fsyncDirectory(path6.dirname(target));
   } catch (error) {
-    fs3.rmSync(temporary, { force: true });
+    fs6.rmSync(temporary, { force: true });
     throw error;
   }
 };
 var migrateMcpConfiguration = (config) => {
-  const current = path3.join(config, "mcp.json");
-  const legacy = path3.join(config, "mcporter.json");
-  if (fs3.existsSync(current) || !fs3.existsSync(legacy)) return [];
+  const current = path6.join(config, "mcp.json");
+  const legacy = path6.join(config, "mcporter.json");
+  if (fs6.existsSync(current) || !fs6.existsSync(legacy)) return [];
   privateFile(legacy, 256 * 1024);
-  const parsed = JSON.parse(fs3.readFileSync(legacy, "utf8"));
+  const parsed = JSON.parse(fs6.readFileSync(legacy, "utf8"));
   if (!isRecord4(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting Fabric");
   copyFileAtomic(legacy, current);
   return ["config/mcporter.json -> config/mcp.json"];
@@ -21655,10 +22494,10 @@ var LEGACY_CONFIG_FIELDS = {
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"]
 };
 var migrateLegacyFabricConfiguration = (root, config) => {
-  const legacy = path3.join(config, "fabric.json");
-  if (!fs3.existsSync(legacy)) return { migrated: [], ignored: [], quarantined: [] };
+  const legacy = path6.join(config, "fabric.json");
+  if (!fs6.existsSync(legacy)) return { migrated: [], ignored: [], quarantined: [] };
   privateFile(legacy, 256 * 1024);
-  const parsed = JSON.parse(fs3.readFileSync(legacy, "utf8"));
+  const parsed = JSON.parse(fs6.readFileSync(legacy, "utf8"));
   if (!isRecord4(parsed)) throw new Error("Legacy fabric configuration is malformed");
   const projected = {};
   const ignored = [];
@@ -21678,26 +22517,26 @@ var migrateLegacyFabricConfiguration = (root, config) => {
     }
     if (Object.keys(fields).length) projected[section] = fields;
   }
-  const current = path3.join(config, "config.json");
+  const current = path6.join(config, "config.json");
   const migrated = [];
-  if (!fs3.existsSync(current) && Object.keys(projected).length) {
+  if (!fs6.existsSync(current) && Object.keys(projected).length) {
     writeJsonAtomic(current, { schemaVersion: CURRENT_FABRIC_CONFIG_SCHEMA_VERSION, ...projected }, true);
     migrated.push("config/fabric.json -> allowlisted config/config.json");
   }
-  const quarantine = privateDirectory(path3.join(root, "quarantine"), root);
-  const destination = path3.join(quarantine, "legacy-fabric.json");
-  if (!fs3.existsSync(destination)) fs3.renameSync(legacy, destination);
-  else fs3.rmSync(legacy);
+  const quarantine = privateDirectory2(path6.join(root, "quarantine"), root);
+  const destination = path6.join(quarantine, "legacy-fabric.json");
+  if (!fs6.existsSync(destination)) fs6.renameSync(legacy, destination);
+  else fs6.rmSync(legacy);
   fsyncDirectory(quarantine);
   return { migrated, ignored, quarantined: ["legacy fabric.json"] };
 };
 var prepareKiroPowerDataPaths = (pluginData) => {
-  const root = privateDirectory(path3.join(pluginData, "fabric"), pluginData);
-  const config = privateDirectory(path3.join(root, "config"), root);
+  const root = privateDirectory2(path6.join(pluginData, "fabric"), pluginData);
+  const config = privateDirectory2(path6.join(root, "config"), root);
   const mcpMigrated = migrateMcpConfiguration(config);
   const policy = migrateLegacyFabricConfiguration(root, config);
   if (mcpMigrated.length || policy.migrated.length || policy.quarantined.length) {
-    writeJsonAtomic(path3.join(root, "migration-report.json"), {
+    writeJsonAtomic(path6.join(root, "migration-report.json"), {
       schemaVersion: 2,
       migrated: [...mcpMigrated, ...policy.migrated],
       ignoredFields: policy.ignored.sort(),
@@ -21707,97 +22546,97 @@ var prepareKiroPowerDataPaths = (pluginData) => {
   return {
     root,
     config,
-    configFile: path3.join(config, "config.json"),
-    mcpConfig: privateJson(path3.join(config, "mcp.json"), { mcpServers: {}, imports: [] }),
-    artifacts: privateDirectory(path3.join(root, "artifacts"), root),
-    projects: privateDirectory(path3.join(root, "projects"), root)
+    configFile: path6.join(config, "config.json"),
+    mcpConfig: privateJson(path6.join(config, "mcp.json"), { mcpServers: {}, imports: [] }),
+    artifacts: privateDirectory2(path6.join(root, "artifacts"), root),
+    projects: privateDirectory2(path6.join(root, "projects"), root)
   };
 };
-var kiroPowerWorkspaceId = (identity, generation = 3) => createHash3("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0").update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
+var kiroPowerWorkspaceId = (identity2, generation = 3) => createHash4("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity2.canonicalPath).update("\0").update(identity2.deviceId).update("\0").update(identity2.fileId).digest("hex");
 var encodeName = (value) => encodeURIComponent(value).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
-var memoryNamespaceDirectory = (namespace) => `${encodeName(namespace)}-${createHash3("sha256").update(namespace).digest("hex").slice(0, 16)}`;
+var memoryNamespaceDirectory = (namespace) => `${encodeName(namespace)}-${createHash4("sha256").update(namespace).digest("hex").slice(0, 16)}`;
 var migrateCompatibleMemory = (sourceRoot, targetRoot, namespace) => {
-  if (!fs3.existsSync(sourceRoot)) return false;
+  if (!fs6.existsSync(sourceRoot)) return false;
   assertPrivateDirectory(sourceRoot);
-  const sourceMemory = path3.join(sourceRoot, "memory");
-  if (!fs3.existsSync(sourceMemory)) return false;
+  const sourceMemory = path6.join(sourceRoot, "memory");
+  if (!fs6.existsSync(sourceMemory)) return false;
   assertPrivateDirectory(sourceMemory);
-  const rootMarker = path3.join(sourceMemory, ".kiro-fabric-owner");
+  const rootMarker = path6.join(sourceMemory, ".kiro-fabric-owner");
   privateFile(rootMarker, 8 * 1024);
-  const rootOwner = JSON.parse(fs3.readFileSync(rootMarker, "utf8"));
+  const rootOwner = JSON.parse(fs6.readFileSync(rootMarker, "utf8"));
   if (rootOwner.format !== 1 || rootOwner.owner !== "kiro-fabric" || rootOwner.kind !== "memory-root" || rootOwner.root !== sourceRoot) {
     throw new Error("Legacy memory root ownership is incompatible");
   }
   const namespaceName = memoryNamespaceDirectory(namespace);
-  const sourceNamespace = path3.join(sourceMemory, namespaceName);
+  const sourceNamespace = path6.join(sourceMemory, namespaceName);
   assertPrivateDirectory(sourceNamespace);
-  const namespaceMarker = path3.join(sourceNamespace, ".kiro-fabric-owner");
+  const namespaceMarker = path6.join(sourceNamespace, ".kiro-fabric-owner");
   privateFile(namespaceMarker, 8 * 1024);
-  const namespaceOwner = JSON.parse(fs3.readFileSync(namespaceMarker, "utf8"));
+  const namespaceOwner = JSON.parse(fs6.readFileSync(namespaceMarker, "utf8"));
   if (namespaceOwner.format !== 1 || namespaceOwner.owner !== "kiro-fabric" || namespaceOwner.kind !== "memory-namespace" || namespaceOwner.root !== sourceRoot || namespaceOwner.namespace !== namespace) throw new Error("Legacy memory namespace ownership is incompatible");
-  const sourceEntries = fs3.readdirSync(sourceNamespace, { withFileTypes: true });
+  const sourceEntries = fs6.readdirSync(sourceNamespace, { withFileTypes: true });
   if (sourceEntries.length > 130) throw new Error("Legacy memory entry limit exceeded");
-  const targetMemory = privateDirectory(path3.join(targetRoot, "memory"), targetRoot);
-  writeJsonAtomic(path3.join(targetMemory, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: targetRoot }, true);
-  const targetNamespace = privateDirectory(path3.join(targetMemory, namespaceName), targetMemory);
-  writeJsonAtomic(path3.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: targetRoot, namespace }, true);
+  const targetMemory = privateDirectory2(path6.join(targetRoot, "memory"), targetRoot);
+  writeJsonAtomic(path6.join(targetMemory, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: targetRoot }, true);
+  const targetNamespace = privateDirectory2(path6.join(targetMemory, namespaceName), targetMemory);
+  writeJsonAtomic(path6.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: targetRoot, namespace }, true);
   let totalBytes = 0;
   for (const entry of sourceEntries) {
     if (entry.name === ".kiro-fabric-owner") continue;
     if (!entry.isFile() || !entry.name.endsWith(".json")) throw new Error("Legacy memory contains incompatible residue");
-    const source = path3.join(sourceNamespace, entry.name);
+    const source = path6.join(sourceNamespace, entry.name);
     const stats = privateFile(source, 16 * 1024);
     totalBytes += stats.size;
     if (totalBytes > 256 * 1024) throw new Error("Legacy memory namespace byte limit exceeded");
-    const value = JSON.parse(fs3.readFileSync(source, "utf8"));
+    const value = JSON.parse(fs6.readFileSync(source, "utf8"));
     if (value.format !== 1 || value.owner !== "kiro-fabric" || value.kind !== "memory-entry" || value.namespace !== namespace || typeof value.key !== "string" || value.key.trim() !== value.key || !value.key || `${encodeName(value.key)}.json` !== entry.name || typeof value.updatedAt !== "string" || !("value" in value)) throw new Error("Legacy memory entry is incompatible");
-    copyFileAtomic(source, path3.join(targetNamespace, entry.name));
+    copyFileAtomic(source, path6.join(targetNamespace, entry.name));
   }
   return true;
 };
-var validateWorkspaceObject = (identity) => {
-  const canonical = fs3.realpathSync(identity.canonicalPath);
-  const stats = fs3.statSync(canonical, { bigint: true });
-  if (canonical !== identity.canonicalPath || String(stats.dev) !== identity.deviceId || String(stats.ino) !== identity.fileId) {
+var validateWorkspaceObject = (identity2) => {
+  const canonical = fs6.realpathSync(identity2.canonicalPath);
+  const stats = fs6.statSync(canonical, { bigint: true });
+  if (canonical !== identity2.canonicalPath || String(stats.dev) !== identity2.deviceId || String(stats.ino) !== identity2.fileId) {
     throw new Error("Fabric workspace identity no longer matches the verified filesystem object");
   }
 };
 var validatePersistedIdentity = (file, expected) => {
   privateFile(file, 64 * 1024);
-  const persisted = projectKiroPowerWorkspaceIdentity(JSON.parse(fs3.readFileSync(file, "utf8")));
+  const persisted = projectKiroPowerWorkspaceIdentity(JSON.parse(fs6.readFileSync(file, "utf8")));
   if (!sameIdentity(persisted, expected)) throw new Error("Legacy workspace identity does not match the currently verified filesystem object");
 };
-var quarantineLegacyWorkspace = (projects, legacy, identity) => {
-  if (!fs3.existsSync(legacy)) return void 0;
-  const quarantine = privateDirectory(path3.join(projects, ".quarantine"), projects);
-  const destination = path3.join(quarantine, `workspace-v2-${kiroPowerWorkspaceId(identity, 2)}`);
-  if (fs3.existsSync(destination)) throw new Error("Legacy workspace quarantine collision");
-  fs3.renameSync(legacy, destination);
+var quarantineLegacyWorkspace = (projects, legacy, identity2) => {
+  if (!fs6.existsSync(legacy)) return void 0;
+  const quarantine = privateDirectory2(path6.join(projects, ".quarantine"), projects);
+  const destination = path6.join(quarantine, `workspace-v2-${kiroPowerWorkspaceId(identity2, 2)}`);
+  if (fs6.existsSync(destination)) throw new Error("Legacy workspace quarantine collision");
+  fs6.renameSync(legacy, destination);
   fsyncDirectory(quarantine);
   return destination;
 };
-var migrateWorkspaceGeneration = (projects, identity) => {
-  const current = path3.join(projects, kiroPowerWorkspaceId(identity, 3));
-  const legacy = path3.join(projects, kiroPowerWorkspaceId(identity, 2));
-  if (!fs3.existsSync(legacy)) return { current, migrated: false };
+var migrateWorkspaceGeneration = (projects, identity2) => {
+  const current = path6.join(projects, kiroPowerWorkspaceId(identity2, 3));
+  const legacy = path6.join(projects, kiroPowerWorkspaceId(identity2, 2));
+  if (!fs6.existsSync(legacy)) return { current, migrated: false };
   assertPrivateDirectory(legacy);
-  validatePersistedIdentity(path3.join(legacy, "workspace-identity.json"), identity);
-  validateWorkspaceObject(identity);
-  if (fs3.existsSync(current)) {
-    validatePersistedIdentity(path3.join(current, "workspace-identity.json"), identity);
-    quarantineLegacyWorkspace(projects, legacy, identity);
+  validatePersistedIdentity(path6.join(legacy, "workspace-identity.json"), identity2);
+  validateWorkspaceObject(identity2);
+  if (fs6.existsSync(current)) {
+    validatePersistedIdentity(path6.join(current, "workspace-identity.json"), identity2);
+    quarantineLegacyWorkspace(projects, legacy, identity2);
     return { current, migrated: true };
   }
-  const staging = path3.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity).slice(0, 16)}-${process.pid}-${randomBytes(8).toString("hex")}.tmp`);
-  fs3.mkdirSync(staging, { mode: 448 });
+  const staging = path6.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity2).slice(0, 16)}-${process.pid}-${randomBytes(8).toString("hex")}.tmp`);
+  fs6.mkdirSync(staging, { mode: 448 });
   let memoryMigrated = false;
   try {
-    writeJsonAtomic(path3.join(staging, "workspace-identity.json"), identity, true);
-    memoryMigrated = migrateCompatibleMemory(legacy, staging, kiroPowerMemoryNamespace(identity));
-    privateDirectory(path3.join(staging, "memory"), staging);
-    privateDirectory(path3.join(staging, "state"), staging);
-    privateDirectory(path3.join(staging, "artifacts"), staging);
-    writeJsonAtomic(path3.join(staging, "migration-report.json"), {
+    writeJsonAtomic(path6.join(staging, "workspace-identity.json"), identity2, true);
+    memoryMigrated = migrateCompatibleMemory(legacy, staging, kiroPowerMemoryNamespace(identity2));
+    privateDirectory2(path6.join(staging, "memory"), staging);
+    privateDirectory2(path6.join(staging, "state"), staging);
+    privateDirectory2(path6.join(staging, "artifacts"), staging);
+    writeJsonAtomic(path6.join(staging, "migration-report.json"), {
       schemaVersion: 2,
       sourceGeneration: 2,
       destinationGeneration: 3,
@@ -21806,19 +22645,19 @@ var migrateWorkspaceGeneration = (projects, identity) => {
       complete: false
     }, true);
     try {
-      fs3.renameSync(staging, current);
+      fs6.renameSync(staging, current);
     } catch (error) {
       if (errorCode(error) !== "EEXIST" && errorCode(error) !== "ENOTEMPTY") throw error;
-      validatePersistedIdentity(path3.join(current, "workspace-identity.json"), identity);
-      fs3.rmSync(staging, { recursive: true, force: true });
+      validatePersistedIdentity(path6.join(current, "workspace-identity.json"), identity2);
+      fs6.rmSync(staging, { recursive: true, force: true });
     }
     fsyncDirectory(projects);
   } catch (error) {
-    fs3.rmSync(staging, { recursive: true, force: true });
+    fs6.rmSync(staging, { recursive: true, force: true });
     throw error;
   }
-  quarantineLegacyWorkspace(projects, legacy, identity);
-  writeJsonAtomic(path3.join(current, "migration-report.json"), {
+  quarantineLegacyWorkspace(projects, legacy, identity2);
+  writeJsonAtomic(path6.join(current, "migration-report.json"), {
     schemaVersion: 2,
     sourceGeneration: 2,
     destinationGeneration: 3,
@@ -21829,27 +22668,27 @@ var migrateWorkspaceGeneration = (projects, identity) => {
   return { current, migrated: true };
 };
 var prepareKiroPowerProjectPaths = (projects, rawIdentity) => {
-  const identity = projectKiroPowerWorkspaceIdentity(rawIdentity);
-  const migration = migrateWorkspaceGeneration(projects, identity);
-  if (!migration.migrated) validateWorkspaceObject(identity);
-  const root = privateDirectory(migration.current, projects);
-  const identityFile = privateJson(path3.join(root, "workspace-identity.json"), identity);
-  validatePersistedIdentity(identityFile, identity);
+  const identity2 = projectKiroPowerWorkspaceIdentity(rawIdentity);
+  const migration = migrateWorkspaceGeneration(projects, identity2);
+  if (!migration.migrated) validateWorkspaceObject(identity2);
+  const root = privateDirectory2(migration.current, projects);
+  const identityFile = privateJson(path6.join(root, "workspace-identity.json"), identity2);
+  validatePersistedIdentity(identityFile, identity2);
   return {
     root,
     identityFile,
-    memory: privateDirectory(path3.join(root, "memory"), root),
-    memoryNamespace: kiroPowerMemoryNamespace(identity),
-    state: privateDirectory(path3.join(root, "state"), root),
-    artifacts: privateDirectory(path3.join(root, "artifacts"), root)
+    memory: privateDirectory2(path6.join(root, "memory"), root),
+    memoryNamespace: kiroPowerMemoryNamespace(identity2),
+    state: privateDirectory2(path6.join(root, "state"), root),
+    artifacts: privateDirectory2(path6.join(root, "artifacts"), root)
   };
 };
 
 // src/kiro/power/workspace-binding.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 import { existsSync } from "node:fs";
-import os2 from "node:os";
-import path4 from "node:path";
+import os3 from "node:os";
+import path7 from "node:path";
 import { fileURLToPath } from "node:url";
 var kiroPowerWorkspaceRequestSchema = typebox_exports.Union([
   typebox_exports.Object({ action: typebox_exports.Literal("status") }, { additionalProperties: false }),
@@ -21878,7 +22717,7 @@ var kiroWorkspaceToolInputSchema = {
   required: ["action"],
   additionalProperties: false
 };
-var idFor = (root) => createHash4("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
+var idFor = (root) => createHash5("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
 var KiroPowerWorkspaceBinding = class {
   #pluginRoot;
   #pluginData;
@@ -21899,21 +22738,21 @@ var KiroPowerWorkspaceBinding = class {
       rejectFinalSymlink: true
     }).canonicalPath;
     this.#elicitor = options.elicitor;
-    this.#home = inspectCanonicalPath(os2.homedir(), { kind: "directory" }).canonicalPath;
-    this.#temporary = inspectCanonicalPath(os2.tmpdir(), { kind: "directory" }).canonicalPath;
+    this.#home = inspectCanonicalPath(os3.homedir(), { kind: "directory" }).canonicalPath;
+    this.#temporary = inspectCanonicalPath(os3.tmpdir(), { kind: "directory" }).canonicalPath;
     if (options.kiroHome !== void 0) {
-      if (!path4.isAbsolute(options.kiroHome)) throw new Error("Kiro home must be absolute");
+      if (!path7.isAbsolute(options.kiroHome)) throw new Error("Kiro home must be absolute");
       this.#kiroHome = inspectCanonicalPath(options.kiroHome, {
         kind: "directory",
         rejectFinalSymlink: true
       }).canonicalPath;
     } else {
-      const kiroHome = path4.join(this.#home, ".kiro");
+      const kiroHome = path7.join(this.#home, ".kiro");
       this.#kiroHome = existsSync(kiroHome) ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath : kiroHome;
     }
   }
   #canonical(candidate) {
-    if (!path4.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
+    if (!path7.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
     const inspected = inspectCanonicalPath(candidate, {
       kind: "directory",
       rejectFinalSymlink: true
@@ -21921,7 +22760,7 @@ var KiroPowerWorkspaceBinding = class {
     const root = inspected.canonicalPath;
     const currentKiroHome = existsSync(this.#kiroHome) ? inspectCanonicalPath(this.#kiroHome, { kind: "directory" }).canonicalPath : this.#kiroHome;
     const overlapsKiroHome = canonicalPathContains(currentKiroHome, root) || canonicalPathContains(root, currentKiroHome);
-    const unsafe = [path4.parse(root).root, this.#home, this.#temporary, this.#pluginRoot, this.#pluginData];
+    const unsafe = [path7.parse(root).root, this.#home, this.#temporary, this.#pluginRoot, this.#pluginData];
     if (unsafe.includes(root) || overlapsKiroHome || canonicalPathContains(root, this.#home)) {
       throw new Error("workspace root is too broad or reserved");
     }
@@ -21934,7 +22773,7 @@ var KiroPowerWorkspaceBinding = class {
       id: idFor(root),
       root,
       lexicalPath: inspected.lexicalPath,
-      name: path4.basename(root) || "workspace",
+      name: path7.basename(root) || "workspace",
       ...inspected.identity
     };
   }
@@ -21945,7 +22784,7 @@ var KiroPowerWorkspaceBinding = class {
       let advertised;
       try {
         if (!item.uri.startsWith("file:")) continue;
-        advertised = path4.resolve(fileURLToPath(item.uri));
+        advertised = path7.resolve(fileURLToPath(item.uri));
         const candidate = this.#canonical(advertised);
         advertisedCanonicalRoots.add(candidate.root);
         candidates.push({ ...candidate, name: (item.name?.trim() || candidate.name).slice(0, 120) });
@@ -22019,7 +22858,7 @@ var KiroPowerWorkspaceBinding = class {
     return workspace ? { status: "bound", rootId: workspace.rootId, name: workspace.name, source: workspace.source } : { status: "unbound", requiresSelection: this.#candidates.length > 1 };
   }
   list() {
-    return { ...this.status(), roots: this.#candidates.map(({ id, name }) => ({ rootId: id, name })) };
+    return { ...this.status(), roots: this.#candidates.map(({ id: id3, name }) => ({ rootId: id3, name })) };
   }
   async prepareMutation(request, signal) {
     if (request.action === "detach") return request;
@@ -22197,6 +23036,19 @@ var stringify = (value, format) => {
   if (format === "text" && typeof value === "string") return value;
   return JSON.stringify(value, null, format === "json" ? 2 : void 0) ?? "null";
 };
+var compactTypeErrors = (errors) => {
+  const hints = /* @__PURE__ */ new Set();
+  return errors.map((error) => {
+    if (error.hint === void 0) return error;
+    if (!hints.has(error.hint)) {
+      hints.add(error.hint);
+      return error;
+    }
+    const diagnostic = { ...error };
+    delete diagnostic.hint;
+    return diagnostic;
+  });
+};
 var failureProgress = (result) => {
   if (result.success) return "";
   const completed = result.audits.filter(
@@ -22244,10 +23096,16 @@ var truncateWithHint = (content, maximum, hint) => {
 };
 var projectFabricExecutionText = (options) => {
   const visibleMaximum = options.result.success ? options.maxOutputChars : Math.min(options.maxOutputChars, MAX_FAILURE_OUTPUT_CHARS);
+  const checkpointIds = [...new Set((options.result.checkpoints ?? options.result.failure?.checkpoints ?? []).slice(0, 8).map((handle) => handle.id).filter((id3) => /^ka_[a-f0-9]{48}$/u.test(id3)))];
+  const failure = options.result.failure ? {
+    ...options.result.failure,
+    ...options.result.failure.checkpoints ? { checkpoints: checkpointIds.map((id3) => ({ id: id3 })) } : {}
+  } : void 0;
   const value = options.result.success ? options.result.value : {
     status: options.result.status,
     error: options.result.error ?? "Fabric execution failed",
-    ...options.result.typeErrors ? { typeErrors: options.result.typeErrors } : {},
+    ...options.result.typeErrors ? { typeErrors: compactTypeErrors(options.result.typeErrors) } : {},
+    ...failure ? { failure } : {},
     ...options.result.lastShellFailure ? { lastShellFailure: options.result.lastShellFailure } : {},
     effectiveTimeoutMs: options.result.effectiveTimeoutMs
   };
@@ -22259,91 +23117,547 @@ Normalization diagnostics: ${JSON.stringify(options.normalizationDiagnostics)}` 
 
 Fabric logs: ${JSON.stringify(options.result.logs)}` : "";
   const progress = failureProgress(options.result);
-  const complete = `${body}${diagnostics}${logs}${progress}`;
+  const checkpoints = checkpointIds.length ? `
+
+Ephemeral checkpoint handles (read with artifacts.read): ${JSON.stringify(checkpointIds)}` : "";
+  const complete = `${body}${diagnostics}${logs}${progress}${checkpoints}`;
   if (complete.length <= visibleMaximum) return {
     text: complete,
     isError: !options.result.success,
     visibleChars: complete.length,
     visibleBytes: Buffer.byteLength(complete, "utf8"),
     overflowed: false,
-    artifactRetained: false
+    artifactRetained: false,
+    retention: "inline",
+    checkpointIds
   };
   try {
-    const artifactId = options.writeArtifact(complete);
+    let artifactId;
+    let retention = "complete";
+    try {
+      artifactId = options.writeArtifact(complete);
+    } catch {
+      const canonical = JSON.stringify(value) ?? "null";
+      artifactId = options.writeArtifact(canonical);
+      retention = "canonical";
+    }
     const hint = `
 
-Output exceeded ${visibleMaximum} characters. Full result is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
-    const text = truncateWithHint(complete, visibleMaximum, hint);
+Output exceeded ${visibleMaximum} characters. ${retention === "complete" ? "Full result" : "Canonical JSON result (formatting/logs/progress omitted)"} is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
+    const text3 = truncateWithHint(complete, visibleMaximum, hint);
     return {
-      text,
+      text: text3,
       isError: !options.result.success,
       artifactId,
-      visibleChars: text.length,
-      visibleBytes: Buffer.byteLength(text, "utf8"),
+      visibleChars: text3.length,
+      visibleBytes: Buffer.byteLength(text3, "utf8"),
       overflowed: true,
-      artifactRetained: true
+      artifactRetained: true,
+      retention,
+      checkpointIds
     };
   } catch {
     const hint = `
 
 Output exceeded ${visibleMaximum} characters and could not be retained within artifact bounds.`;
-    const text = truncateWithHint(complete, visibleMaximum, hint);
+    const text3 = truncateWithHint(complete, visibleMaximum, hint);
     return {
-      text,
+      text: text3,
       isError: true,
-      visibleChars: text.length,
-      visibleBytes: Buffer.byteLength(text, "utf8"),
+      visibleChars: text3.length,
+      visibleBytes: Buffer.byteLength(text3, "utf8"),
       overflowed: true,
-      artifactRetained: false
+      artifactRetained: false,
+      retention: "unavailable",
+      checkpointIds
     };
+  }
+};
+
+// src/kiro/runtime.ts
+import path15 from "node:path";
+
+// src/providers/review-provider.ts
+import { createHash as createHash7, randomUUID as randomUUID4 } from "node:crypto";
+import path9 from "node:path";
+import { performance as performance3 } from "node:perf_hooks";
+
+// src/providers/local-path.ts
+import fs7 from "node:fs";
+import path8 from "node:path";
+import { createHash as createHash6 } from "node:crypto";
+var LocalNonTextError = class extends Error {
+};
+var LOCAL_MAX_FILE_BYTES = 2 * 1024 * 1024;
+var localHash = (value) => createHash6("sha256").update(value).digest("hex");
+var localIdentity = (stat) => ({ dev: stat.dev, ino: stat.ino });
+var sameLocalIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino;
+var code = (error) => error?.code;
+var LocalPaths = class {
+  root;
+  identity;
+  #canonicalIdentity;
+  constructor(root) {
+    const inspected = inspectCanonicalPath(root, { kind: "directory" });
+    if (inspected.finalEntryIsSymlink || inspected.canonicalPath !== root || inspected.lexicalPath !== root) throw new Error("local root must be the verified canonical workspace path");
+    this.root = root;
+    this.identity = localIdentity(inspected.lexicalStats);
+    this.#canonicalIdentity = inspected.identity;
+  }
+  verifyRoot() {
+    const inspected = inspectCanonicalPath(this.root, { kind: "directory" });
+    if (inspected.finalEntryIsSymlink || inspected.canonicalPath !== this.root || !sameCanonicalFilesystemIdentity(inspected.identity, this.#canonicalIdentity)) throw new Error("local workspace root identity changed");
+  }
+  resolve(input) {
+    this.verifyRoot();
+    if (input.includes("\0") || input.split(/[\\/]/u).includes("..")) throw new Error("local path traversal is forbidden");
+    const resolved2 = path8.resolve(this.root, input);
+    const relative = path8.relative(this.root, resolved2);
+    if (relative === ".." || relative.startsWith(`..${path8.sep}`) || path8.isAbsolute(relative)) throw new Error("local path is outside workspace");
+    return resolved2;
+  }
+  check(input, allowMissing = false) {
+    const target = this.resolve(input);
+    const parts = path8.relative(this.root, target).split(path8.sep).filter(Boolean);
+    const parents = [{ path: this.root, identity: this.identity }];
+    let current = this.root;
+    let stat = fs7.lstatSync(current);
+    for (let index = 0; index < parts.length; index++) {
+      current = path8.join(current, parts[index]);
+      try {
+        stat = fs7.lstatSync(current);
+      } catch (error) {
+        if (allowMissing && index === parts.length - 1 && code(error) === "ENOENT") return { path: target, stat: null, parents };
+        throw error;
+      }
+      if (stat.isSymbolicLink()) throw new Error("local symlink components are forbidden");
+      if (!stat.isFile() && !stat.isDirectory()) throw new Error("local special files are forbidden");
+      if (stat.isFile() && stat.nlink !== 1) throw new Error("local hardlink regular files are forbidden");
+      if (index < parts.length - 1) {
+        if (!stat.isDirectory()) throw new Error("local parent must be an existing directory");
+        parents.push({ path: current, identity: localIdentity(stat) });
+      }
+    }
+    const canonical = fs7.realpathSync(target);
+    if (canonical !== target || !canonicalPathContains(this.root, canonical)) throw new Error("local path canonical containment changed");
+    return { path: target, stat, parents };
+  }
+  directory(input) {
+    const found = this.check(input);
+    if (!found.stat?.isDirectory()) throw new Error("local path must be a directory");
+    return { path: found.path, identity: localIdentity(found.stat), parents: found.parents };
+  }
+  read(input) {
+    const found = this.check(input);
+    if (!found.stat?.isFile()) throw new Error("local path must be a regular file");
+    if (found.stat.size > LOCAL_MAX_FILE_BYTES) throw new Error("local file exceeds 2MiB byte limit");
+    const fd = fs7.openSync(found.path, fs7.constants.O_RDONLY | fs7.constants.O_NOFOLLOW | fs7.constants.O_NONBLOCK);
+    try {
+      const before = fs7.fstatSync(fd);
+      if (!before.isFile() || before.nlink !== 1 || !sameLocalIdentity(before, found.stat)) throw new Error("local file identity changed");
+      const bytes2 = Buffer.alloc(Math.min(before.size + 1, LOCAL_MAX_FILE_BYTES + 1));
+      let length = 0;
+      while (length < bytes2.length) {
+        const count2 = fs7.readSync(fd, bytes2, length, bytes2.length - length, null);
+        if (!count2) break;
+        length += count2;
+      }
+      const after = fs7.fstatSync(fd);
+      if (length !== before.size || length > LOCAL_MAX_FILE_BYTES || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs || after.nlink !== 1) throw new Error("local file changed during bounded read");
+      const data = bytes2.subarray(0, length);
+      if (data.includes(0)) throw new LocalNonTextError("local binary file is unsupported");
+      let text3;
+      try {
+        text3 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data);
+      } catch {
+        throw new LocalNonTextError("local file is not valid UTF-8");
+      }
+      this.verifyRoot();
+      const again = this.check(found.path);
+      if (!again.stat || !sameLocalIdentity(again.stat, before) || JSON.stringify(again.parents) !== JSON.stringify(found.parents)) throw new Error("local file identity changed during read");
+      return { text: text3, snapshot: { path: found.path, parents: found.parents, file: { identity: localIdentity(before), mode: before.mode, size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs, sha256: localHash(data) } } };
+    } finally {
+      fs7.closeSync(fd);
+    }
+  }
+  snapshot(input) {
+    const found = this.check(input, true);
+    return found.stat ? this.read(found.path) : { text: "", snapshot: { path: found.path, parents: found.parents, file: null } };
+  }
+  revalidate(snapshot) {
+    if (JSON.stringify(this.snapshot(snapshot.path).snapshot) !== JSON.stringify(snapshot)) throw new Error("local approval snapshot conflict: file or parent identity/content changed");
+  }
+  relative(input) {
+    return path8.relative(this.root, input) || ".";
+  }
+};
+
+// src/providers/review-provider.ts
+var DEFAULT_SCENARIOS = ["normal", "repeated", "malformed", "partial-failure"];
+var ROLES = ["entry", "model-validation", "service", "dependency", "persistence", "consumer"];
+var COVERAGE = ["unknown", "retrieved", "traced", "verified", "blocked"];
+var FAILURE_CHECKS = ["before-effect", "after-effect", "retry-idempotency", "compensation", "acknowledgement", "consumer-visibility"];
+var MAX_FINDINGS = 32;
+var MAX_INPUT_CHARS = 64e3;
+var hash = (text3) => createHash7("sha256").update(text3).digest("hex");
+var id2 = (prefix) => `${prefix}_${randomUUID4()}`;
+var validId = (value, prefix) => new RegExp(`^${prefix}_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`, "u").test(value);
+var boundedInteger = (value, fallback, min, max) => {
+  const result = value ?? fallback;
+  if (!Number.isSafeInteger(result) || result < min || result > max) throw new Error("review option/budget is out of bounds");
+  return result;
+};
+var text2 = (maxLength = 2e3) => ({ type: "string", minLength: 1, maxLength });
+var integer2 = (minimum, maximum) => ({ type: "integer", minimum, maximum });
+var enumeration = (values) => ({ type: "string", enum: [...values] });
+var array3 = (items, maxItems, minItems = 0) => ({ type: "array", items, minItems, maxItems });
+var object4 = (properties, required = Object.keys(properties)) => ({ type: "object", properties, required: [...required], additionalProperties: false });
+var evidenceSchema = () => object4({
+  path: text2(512),
+  startLine: integer2(1, 2e6),
+  endLine: integer2(1, 2e6),
+  kind: enumeration(["source", "static-proof", "test", "probe"]),
+  rationale: text2(),
+  expectedSha256: text2(64)
+}, ["path", "startLine", "endLine", "kind", "rationale"]);
+var evidences = () => array3(evidenceSchema(), 8);
+var pages = () => object4({ taskId: text2(41), offset: integer2(0, 1e3), limit: integer2(1, 50) }, ["taskId"]);
+var descriptors = () => [
+  { name: "begin", description: "Begin an ephemeral task. paths are execution-path IDs, not filenames. Adds per-path default scenario and role/edge obligations; no source reads or execution.", inputSchema: object4({ objective: text2(1e3), paths: array3(text2(120), 8, 1), scenarios: array3(text2(120), 4) }, ["objective", "paths"]), risk: "write", effect: { kind: "write" } },
+  { name: "update", description: "Replace one in-memory obligation. Host-read evidence; traced needs note, verified needs contract and proof, blocked needs reason and nextAction. No semantic judgment.", inputSchema: object4({ taskId: text2(41), obligationId: text2(41), status: enumeration(COVERAGE), evidence: evidences(), note: text2(), contract: text2(), blocker: object4({ reason: text2(), nextAction: text2() }) }, ["taskId", "obligationId", "status"]), risk: "write", effect: { kind: "write" } },
+  { name: "finding", description: "Admit or replace a structured finding. Severity is independent of confidence. Confirmed is structural admission only; counterexamples/assumptions can prevent it. Never runs code.", inputSchema: object4({ taskId: text2(41), findingId: text2(41), title: text2(300), requestedStatus: enumeration(["candidate", "confirmed", "conditional", "disproved"]), severity: enumeration(["critical", "high", "medium", "low", "info"]), confidence: enumeration(["high", "medium", "low"]), caller: text2(), trigger: text2(), expectedContract: text2(), actualAction: text2(), consequence: text2(), evidence: evidences(), counterexample: object4({ verdict: enumeration(["not-checked", "survived", "disproved", "conditional"]), method: enumeration(["static-proof", "test", "probe"]), description: text2(), evidence: evidences() }), unresolvedAssumptions: array3(text2(), 8) }, ["taskId", "title", "requestedStatus", "severity", "confidence", "caller", "trigger", "expectedContract", "actualAction", "consequence", "evidence", "counterexample", "unresolvedAssumptions"]), risk: "write", effect: { kind: "write" } },
+  { name: "status", description: "Read a bounded page of last-known in-memory coverage/findings. No source reads or mutations; last-reconciled is not a current freshness guarantee. Ready is advisory only.", inputSchema: pages(), risk: "read", effect: { kind: "none" } },
+  { name: "reconcile", description: "Explicit approved mutation: reread all evidence, invalidate stale coverage and downgrade stale findings, return paged unresolved IDs. Does not execute tools, prove semantics, or force a final answer.", inputSchema: pages(), risk: "write", effect: { kind: "write" } },
+  { name: "end", description: "Discard one in-memory task regardless of readiness; no durable state or automatic final answer.", inputSchema: object4({ taskId: text2(41) }), risk: "write", effect: { kind: "write" } }
+];
+var ReviewSourceQuotaError = class extends Error {
+};
+var ReviewProvider = class {
+  name = "review";
+  description = "Optional ephemeral review ledger; structural evidence accounting, not a semantic judge";
+  #root;
+  #reader;
+  #now;
+  #maxResultChars;
+  #maxTasks;
+  #maxTaskChars;
+  #maxSessionChars;
+  #taskTtlMs;
+  #expiresAt;
+  #scope = `review:${randomUUID4()}`;
+  #descriptors = descriptors();
+  #tasks = /* @__PURE__ */ new Map();
+  #timers = /* @__PURE__ */ new Map();
+  #sessionTimer;
+  #closed = false;
+  constructor(options) {
+    const allowed = ["root", "maxResultChars", "maxTasks", "maxTaskChars", "maxSessionChars", "taskTtlMs", "sessionTtlMs", "sourceSnapshot", "now"];
+    if (!options || Object.keys(options).some((key) => !allowed.includes(key))) throw new Error("Invalid review options");
+    if (typeof options.root !== "string" || !path9.isAbsolute(options.root) || path9.resolve(options.root) !== options.root || options.root.includes("\0")) throw new Error("review root must be canonical and absolute");
+    this.#root = options.root;
+    this.#maxResultChars = Math.min(32e3, boundedInteger(options.maxResultChars, 16e3, 1e3, 8e6));
+    this.#maxTasks = boundedInteger(options.maxTasks, 16, 1, 64);
+    this.#maxTaskChars = boundedInteger(options.maxTaskChars, 256e3, 4096, 1e6);
+    this.#maxSessionChars = boundedInteger(options.maxSessionChars, 1e6, 4096, 8e6);
+    this.#taskTtlMs = boundedInteger(options.taskTtlMs, 36e5, 1, 864e5);
+    const sessionTtlMs = boundedInteger(options.sessionTtlMs, 288e5, 1, 864e5);
+    if (options.now !== void 0 && typeof options.now !== "function") throw new Error("Invalid review clock");
+    if (options.sourceSnapshot !== void 0 && typeof options.sourceSnapshot !== "function") throw new Error("Invalid review snapshot reader");
+    this.#now = options.now ?? (() => performance3.now());
+    const now = this.#now();
+    if (!Number.isFinite(now)) throw new Error("Invalid review clock");
+    this.#expiresAt = now + sessionTtlMs;
+    const local = options.sourceSnapshot ? void 0 : new LocalPaths(this.#root);
+    this.#reader = options.sourceSnapshot ?? ((file) => local.read(file).text);
+    this.#sessionTimer = setTimeout(() => {
+      void this.close();
+    }, sessionTtlMs);
+    this.#sessionTimer.unref();
+  }
+  async list() {
+    this.#open();
+    return structuredClone(this.#descriptors);
+  }
+  async describe(actionName) {
+    this.#open();
+    return structuredClone(this.#descriptors.find((entry) => entry.name === actionName));
+  }
+  effectResources() {
+    return [this.#scope];
+  }
+  async invoke(actionName, args, context) {
+    this.#check(context);
+    const descriptor2 = this.#descriptors.find((entry) => entry.name === actionName);
+    if (!descriptor2) throw new Error("Unknown review action");
+    const input = JSON.parse(fabricJsonText(args, MAX_INPUT_CHARS));
+    const validation = validateSchemaValue(descriptor2.inputSchema, args);
+    if (validation.status !== "valid") throw new Error(`Invalid review arguments${validation.status === "invalid" ? `: ${validation.message}` : " schema"}`);
+    this.#nonempty(input);
+    const budget = Math.min(this.#maxResultChars, boundedInteger(context.maxResultChars, this.#maxResultChars, 1, 8e6));
+    if (actionName === "begin") return this.#begin(input, context, budget);
+    const taskId = input.taskId;
+    const task = this.#get(taskId);
+    if (actionName === "status") {
+      const result2 = this.#status(task, input, budget);
+      this.#check(context, task);
+      return result2;
+    }
+    if (actionName === "end") {
+      const result2 = { taskId, ended: true };
+      this.#fit(result2, budget);
+      this.#check(context, task);
+      this.#discard(taskId);
+      return result2;
+    }
+    const draft = structuredClone(task);
+    draft.revision++;
+    draft.reconciled = false;
+    let result;
+    if (actionName === "update") result = this.#update(draft, input, context);
+    else if (actionName === "finding") result = this.#finding(draft, input, context);
+    else result = this.#reconcile(draft, input, context, budget);
+    this.#fit(result, budget);
+    this.#commit(draft, context);
+    return result;
+  }
+  async close() {
+    this.#closed = true;
+    clearTimeout(this.#sessionTimer);
+    for (const timer of this.#timers.values()) clearTimeout(timer);
+    this.#timers.clear();
+    this.#tasks.clear();
+  }
+  #open() {
+    if (this.#closed || this.#now() >= this.#expiresAt) throw new Error("review session is closed or expired");
+  }
+  #check(context, task) {
+    throwIfAbortedOrExpired(context.signal, context.deadline);
+    this.#open();
+    if (task && this.#now() >= task.expiresAt) throw new Error("review task is expired");
+  }
+  #get(taskId) {
+    if (!validId(taskId, "task")) throw new Error("Invalid review task ID");
+    const task = this.#tasks.get(taskId);
+    if (!task || this.#now() >= task.expiresAt) throw new Error("Unknown or expired review task");
+    return task;
+  }
+  #nonempty(value) {
+    if (typeof value === "string" && !value.trim()) throw new Error("review fields must not be empty or whitespace");
+    if (value && typeof value === "object") for (const item of Object.values(value)) this.#nonempty(item);
+  }
+  #fit(value, budget) {
+    if (JSON.stringify(value).length > budget) throw new Error("review result exceeds budget; increase maxResultChars or narrow the record");
+  }
+  #discard(taskId) {
+    clearTimeout(this.#timers.get(taskId));
+    this.#timers.delete(taskId);
+    this.#tasks.delete(taskId);
+  }
+  #commit(task, context) {
+    const chars = JSON.stringify(task).length;
+    if (chars > this.#maxTaskChars) throw new Error("review task memory quota exceeded");
+    const now = this.#now();
+    const active = [...this.#tasks.values()].filter((entry) => entry.expiresAt > now && entry.taskId !== task.taskId);
+    if (active.length >= this.#maxTasks) throw new Error("review task count quota exceeded");
+    if (chars + active.reduce((sum, entry) => sum + JSON.stringify(entry).length, 0) > this.#maxSessionChars) throw new Error("review session memory quota exceeded");
+    const header = JSON.stringify({ ...this.#summary(task), objective: task.objective, entries: [], total: 999, nextOffset: 999 }).length;
+    for (const entry of [...task.obligations, ...task.findings]) this.#fit(entry, this.#maxResultChars - header - 16);
+    this.#check(context, task);
+    for (const entry of this.#tasks.values()) if (entry.expiresAt <= now) this.#discard(entry.taskId);
+    if (!this.#tasks.has(task.taskId)) {
+      const timer = setTimeout(() => this.#discard(task.taskId), Math.max(1, task.expiresAt - this.#now()));
+      timer.unref();
+      this.#timers.set(task.taskId, timer);
+    }
+    this.#tasks.set(task.taskId, task);
+  }
+  #begin(args, context, budget) {
+    const paths = args.paths.map((value) => value.trim());
+    if (new Set(paths).size !== paths.length) throw new Error("Duplicate review execution-path IDs");
+    const extras = (args.scenarios ?? []).map((value) => value.trim());
+    if (new Set(extras).size !== extras.length) throw new Error("Duplicate review scenarios");
+    const scenarios = [.../* @__PURE__ */ new Set([...DEFAULT_SCENARIOS, ...extras])];
+    const task = { taskId: id2("task"), objective: args.objective, revision: 1, expiresAt: Math.min(this.#expiresAt, this.#now() + this.#taskTtlMs), reconciled: false, obligations: [], findings: [] };
+    const add = (target) => {
+      task.obligations.push({ type: "obligation", id: id2("obl"), ...target, status: "unknown", evidence: [], note: null, contract: null, blocker: null, stale: false });
+    };
+    for (const pathId of paths) {
+      add({ kind: "path", pathId });
+      for (const scenario of scenarios) add({ kind: "scenario", pathId, scenario });
+      for (const check of FAILURE_CHECKS) add({ kind: "partial-failure", pathId, failureCheck: check });
+      for (const role of ROLES) add({ kind: "role", pathId, role });
+      for (let index = 0; index < ROLES.length - 1; index++) add({ kind: "edge", pathId, from: ROLES[index], to: ROLES[index + 1] });
+    }
+    const result = { taskId: task.taskId, revision: task.revision, obligationCount: task.obligations.length, expiresInMs: Math.max(0, task.expiresAt - this.#now()) };
+    this.#fit(result, budget);
+    this.#commit(task, context);
+    return result;
+  }
+  #source(file, context, cache) {
+    this.#check(context);
+    if (cache.has(file)) return cache.get(file);
+    if (cache.size >= 32) throw new ReviewSourceQuotaError("review source snapshot count quota exceeded");
+    const value = this.#reader(file, context);
+    this.#check(context);
+    if (typeof value !== "string" || value.includes("\0") || Buffer.byteLength(value, "utf8") > LOCAL_MAX_FILE_BYTES || Buffer.from(value, "utf8").toString("utf8") !== value) throw new Error("review source must be bounded valid UTF-8 text");
+    const bytes2 = Buffer.byteLength(value, "utf8");
+    if (bytes2 + [...cache.values()].reduce((sum, source2) => sum + source2.bytes, 0) > 8 * LOCAL_MAX_FILE_BYTES) throw new ReviewSourceQuotaError("review source snapshot byte quota exceeded");
+    const lines = value.split("\n");
+    if (lines.at(-1) === "") lines.pop();
+    const source = { bytes: bytes2, lines, sha256: hash(value) };
+    cache.set(file, source);
+    return source;
+  }
+  #file(input) {
+    if (input.includes("\0") || input.includes("\\") || path9.isAbsolute(input) || input.split("/").some((part) => part === ".." || part === "." || part === "")) throw new Error("review evidence path must be normalized workspace-relative, without traversal");
+    const relative = path9.relative(this.#root, path9.resolve(this.#root, input));
+    if (!relative || relative.startsWith("..") || path9.isAbsolute(relative)) throw new Error("review evidence path is outside workspace");
+    return relative.split(path9.sep).join("/");
+  }
+  #capture(inputs, context, cache) {
+    return inputs.map((input) => {
+      const file = this.#file(input.path);
+      const source = this.#source(file, context, cache);
+      if (input.endLine < input.startLine || input.endLine - input.startLine >= 2e3 || input.endLine > source.lines.length) throw new Error("review evidence range is invalid or exceeds 2000 lines");
+      if (input.expectedSha256 !== void 0 && (!/^[0-9a-f]{64}$/u.test(input.expectedSha256) || input.expectedSha256 !== source.sha256)) throw new Error("review evidence hash is stale or invalid");
+      const { expectedSha256: _expected, ...rest } = input;
+      return { ...rest, path: file, sha256: source.sha256, rangeSha256: hash(source.lines.slice(input.startLine - 1, input.endLine).join("\n")) };
+    });
+  }
+  #proof(evidence) {
+    return evidence.some((item) => item.kind !== "source");
+  }
+  #update(task, args, context) {
+    if (!validId(args.obligationId, "obl")) throw new Error("Invalid review obligation ID");
+    const entry = task.obligations.find((item) => item.id === args.obligationId);
+    if (!entry) throw new Error("Unknown review obligation");
+    if (args.status === "blocked" ? !args.blocker : args.blocker !== void 0) throw new Error("review blocker requires blocked status and reason/nextAction");
+    const inputs = args.evidence ?? [];
+    if (["retrieved", "traced", "verified"].includes(args.status) && inputs.length === 0) throw new Error("review coverage requires evidence");
+    if (["traced", "verified"].includes(args.status) && !args.note) throw new Error("review tracing requires a causal note");
+    if (args.status === "verified" && !args.contract) throw new Error("review verification requires an expected contract");
+    const evidence = this.#capture(inputs, context, /* @__PURE__ */ new Map());
+    if (args.status === "verified" && !this.#proof(evidence)) throw new Error("review verification requires static-proof, test, or probe evidence");
+    Object.assign(entry, { status: args.status, evidence, note: args.note ?? null, contract: args.contract ?? null, blocker: args.blocker ?? null, stale: false });
+    return { taskId: task.taskId, revision: task.revision, id: entry.id, status: entry.status };
+  }
+  #admit(finding) {
+    const reasons = [];
+    if (!this.#proof(finding.evidence)) reasons.push("supporting static-proof/test/probe evidence missing");
+    if (finding.counterexample.verdict !== "survived") reasons.push(`counterexample verdict: ${finding.counterexample.verdict}`);
+    if (!finding.counterexample.evidence.some((item) => item.kind === finding.counterexample.method)) reasons.push("counterexample evidence matching method missing");
+    if (finding.unresolvedAssumptions.length) reasons.push("unresolved assumptions");
+    if (finding.needsDowngrade) reasons.push("evidence changed or unreadable; re-admit with fresh evidence");
+    finding.admissionReasons = reasons;
+    if (finding.requestedStatus === "disproved" || finding.counterexample.verdict === "disproved") finding.status = "disproved";
+    else if (finding.requestedStatus === "conditional" || finding.counterexample.verdict === "conditional" || finding.unresolvedAssumptions.length) finding.status = "conditional";
+    else finding.status = finding.requestedStatus === "confirmed" && reasons.length === 0 ? "confirmed" : "candidate";
+  }
+  #finding(task, args, context) {
+    if (args.findingId !== void 0 && !validId(args.findingId, "find")) throw new Error("Invalid review finding ID");
+    const index = args.findingId === void 0 ? -1 : task.findings.findIndex((item) => item.id === args.findingId);
+    if (args.findingId !== void 0 && index < 0) throw new Error("Unknown review finding");
+    if (index < 0 && task.findings.length >= MAX_FINDINGS) throw new Error("review finding quota exceeded");
+    const cache = /* @__PURE__ */ new Map();
+    const { taskId: _taskId, findingId: _findingId, ...fields } = args;
+    const finding = { ...fields, type: "finding", id: args.findingId ?? id2("find"), status: "candidate", evidence: this.#capture(args.evidence, context, cache), counterexample: { ...args.counterexample, evidence: this.#capture(args.counterexample.evidence, context, cache) }, admissionReasons: [], needsDowngrade: false };
+    this.#admit(finding);
+    if (index < 0) task.findings.push(finding);
+    else task.findings[index] = finding;
+    return { taskId: task.taskId, revision: task.revision, id: finding.id, status: finding.status, admissionReasons: [...finding.admissionReasons] };
+  }
+  #summary(task) {
+    const coverage = { unknown: 0, retrieved: 0, traced: 0, verified: 0, blocked: 0 };
+    for (const entry of task.obligations) coverage[entry.status]++;
+    const unresolvedCount = task.obligations.filter((entry) => entry.status !== "verified").length;
+    const findingsNeedingDowngradeCount = task.findings.filter((entry) => entry.needsDowngrade || entry.status === "candidate" || entry.status === "conditional").length;
+    return { taskId: task.taskId, revision: task.revision, ready: task.reconciled && unresolvedCount === 0 && findingsNeedingDowngradeCount === 0, advisory: true, semanticValidation: false, freshness: task.reconciled ? "last-reconciled" : "unreconciled", unresolvedCount, findingsNeedingDowngradeCount, coverage, expiresInMs: Math.max(0, task.expiresAt - this.#now()) };
+  }
+  #status(task, args, budget) {
+    const all = [...task.obligations, ...task.findings];
+    const offset = args.offset ?? 0;
+    if (offset > all.length) throw new Error("review page offset exceeds total");
+    const result = { ...this.#summary(task), objective: task.objective, entries: [], total: all.length, nextOffset: offset < all.length ? offset : null };
+    this.#fit(result, budget);
+    for (let index = offset; index < Math.min(all.length, offset + (args.limit ?? 20)); index++) {
+      const previous = result.nextOffset;
+      result.entries.push(all[index]);
+      result.nextOffset = index + 1 < all.length ? index + 1 : null;
+      if (JSON.stringify(result).length > budget) {
+        result.entries.pop();
+        result.nextOffset = previous;
+        break;
+      }
+    }
+    if (offset < all.length && !result.entries.length) throw new Error("review record exceeds result budget; increase maxResultChars");
+    return structuredClone(result);
+  }
+  #reconcile(task, args, context, budget) {
+    const cache = /* @__PURE__ */ new Map();
+    const failures = /* @__PURE__ */ new Set();
+    const current = (evidence) => {
+      this.#check(context, task);
+      if (failures.has(evidence.path)) return false;
+      let source;
+      try {
+        source = this.#source(evidence.path, context, cache);
+      } catch (error) {
+        this.#check(context, task);
+        if (error instanceof ReviewSourceQuotaError) throw error;
+        failures.add(evidence.path);
+        return false;
+      }
+      return source.sha256 === evidence.sha256 && evidence.endLine <= source.lines.length && hash(source.lines.slice(evidence.startLine - 1, evidence.endLine).join("\n")) === evidence.rangeSha256;
+    };
+    for (const entry of task.obligations) {
+      if (entry.evidence.some((item) => !current(item))) {
+        entry.stale = true;
+        if (entry.status !== "blocked") entry.status = "unknown";
+        entry.blocker = entry.status === "blocked" ? entry.blocker : null;
+      }
+    }
+    for (const finding of task.findings) {
+      if ([...finding.evidence, ...finding.counterexample.evidence].some((item) => !current(item))) {
+        finding.needsDowngrade = true;
+        this.#admit(finding);
+        finding.status = "candidate";
+      }
+    }
+    task.reconciled = true;
+    const unresolved = task.obligations.filter((entry) => entry.status !== "verified").map((entry) => entry.id);
+    const downgrade = task.findings.filter((entry) => entry.needsDowngrade || entry.status === "candidate" || entry.status === "conditional").map((entry) => entry.id);
+    const all = [...unresolved, ...downgrade];
+    const offset = args.offset ?? 0;
+    if (offset > all.length) throw new Error("review page offset exceeds total");
+    const result = { ...this.#summary(task), unresolvedObligations: [], findingsNeedingDowngrade: [], total: all.length, nextOffset: offset < all.length ? offset : null };
+    this.#fit(result, budget);
+    for (let index = offset; index < Math.min(all.length, offset + (args.limit ?? 20)); index++) {
+      const target = index < unresolved.length ? result.unresolvedObligations : result.findingsNeedingDowngrade;
+      const previous = result.nextOffset;
+      target.push(all[index]);
+      result.nextOffset = index + 1 < all.length ? index + 1 : null;
+      if (JSON.stringify(result).length > budget) {
+        target.pop();
+        result.nextOffset = previous;
+        break;
+      }
+    }
+    if (offset < all.length && result.unresolvedObligations.length + result.findingsNeedingDowngrade.length === 0) throw new Error("review result budget cannot fit an obligation ID");
+    return result;
   }
 };
 
 // src/providers/state-provider.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
-import fs5 from "node:fs";
-import path5 from "node:path";
-
-// src/providers/owned-file.ts
-import fs4 from "node:fs";
-function initializeOwnedFile(target, owned, initialize) {
-  const fd = fs4.openSync(target, fs4.constants.O_WRONLY | fs4.constants.O_CREAT | fs4.constants.O_EXCL | fs4.constants.O_NOFOLLOW, 384);
-  owned.created = true;
-  const errors = [];
-  let closeUncertain = false;
-  try {
-    const stat = fs4.fstatSync(fd);
-    owned.identity = { dev: stat.dev, ino: stat.ino };
-    initialize(fd);
-  } catch (error) {
-    errors.push(error);
-  } finally {
-    if (!owned.identity) {
-      try {
-        const stat = fs4.fstatSync(fd);
-        owned.identity = { dev: stat.dev, ino: stat.ino };
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-    try {
-      fs4.closeSync(fd);
-    } catch (error) {
-      closeUncertain = true;
-      errors.push(error);
-    }
-  }
-  if (errors.length) throw new AggregateError(errors, closeUncertain ? "owned file initialization failed; descriptor close uncertain (never retried)" : owned.identity ? "owned file initialization failed" : "uncertain lock/file: ownership identity unavailable; operator recovery required", { cause: errors[0] });
-}
-
-// src/providers/state-provider.ts
+import fs8 from "node:fs";
+import path10 from "node:path";
 var emptyEntries = () => /* @__PURE__ */ Object.create(null);
 var emptyDocument = () => ({ schemaVersion: 1, revision: 0, entries: emptyEntries() });
 var KEY_MAX = 512;
 var LOCK_NAME = ".state-mutation.lock";
 var LOCK_TIMEOUT_MS = 5e3;
 var STALE_LOCK_MS = 3e4;
-var descriptors = [
+var descriptors2 = [
   { name: "get", description: "Read one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
   { name: "set", description: "Atomically set one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX }, value: {}, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
   { name: "list", description: "List bounded workspace state metadata", inputSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 1e3 } }, additionalProperties: false }, risk: "read", effect: { kind: "read" } },
@@ -22369,16 +23683,16 @@ var processIsAlive = (pid) => {
   }
 };
 var privateRoot = (root) => {
-  fs5.mkdirSync(root, { recursive: true, mode: 448 });
-  const stat = fs5.lstatSync(root);
+  fs8.mkdirSync(root, { recursive: true, mode: 448 });
+  const stat = fs8.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error("state root must be a private regular directory");
   }
   if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new Error("state root must be owned by the current user");
   }
-  fs5.chmodSync(root, 448);
-  return fs5.realpathSync(root);
+  fs8.chmodSync(root, 448);
+  return fs8.realpathSync(root);
 };
 var StateCommitAcknowledgementError = class extends Error {
   constructor(revision, options, operation = "set") {
@@ -22404,17 +23718,17 @@ var StateProvider = class {
   #uncertainLock = false;
   constructor(root, options = {}) {
     this.#root = privateRoot(root);
-    this.#file = path5.join(this.#root, "state.json");
-    this.#lock = path5.join(this.#root, LOCK_NAME);
+    this.#file = path10.join(this.#root, "state.json");
+    this.#lock = path10.join(this.#root, LOCK_NAME);
     this.#maxEntries = options.maxEntries ?? 1e3;
     this.#maxValueChars = options.maxValueChars ?? 1e5;
     this.#maxTotalChars = options.maxTotalChars ?? 8e6;
   }
   async list() {
-    return [...descriptors];
+    return [...descriptors2];
   }
   async describe(actionName) {
-    return descriptors.find((entry) => entry.name === actionName);
+    return descriptors2.find((entry) => entry.name === actionName);
   }
   effectResources(_actionName, args) {
     return typeof args.key === "string" ? [`state:${args.key}`] : ["state:index"];
@@ -22481,15 +23795,15 @@ var StateProvider = class {
   #read() {
     let descriptor2;
     try {
-      const lexicalStats = fs5.lstatSync(this.#file);
+      const lexicalStats = fs8.lstatSync(this.#file);
       if (!lexicalStats.isFile() || lexicalStats.isSymbolicLink() || lexicalStats.nlink !== 1) {
         throw new Error("state file is not a private regular file");
       }
-      descriptor2 = fs5.openSync(
+      descriptor2 = fs8.openSync(
         this.#file,
-        fs5.constants.O_RDONLY | (fs5.constants.O_NOFOLLOW ?? 0)
+        fs8.constants.O_RDONLY | (fs8.constants.O_NOFOLLOW ?? 0)
       );
-      const stat = fs5.fstatSync(descriptor2);
+      const stat = fs8.fstatSync(descriptor2);
       if (!stat.isFile() || stat.nlink !== 1 || stat.dev !== lexicalStats.dev || stat.ino !== lexicalStats.ino) {
         throw new Error("state file changed while it was being opened");
       }
@@ -22500,9 +23814,9 @@ var StateProvider = class {
         if ((stat.mode & 63) !== 0) throw new Error("state file permissions must be private");
       }
       if (stat.size > this.#maxTotalChars * 4) throw new Error("state document exceeds configured bounds");
-      const text = fs5.readFileSync(descriptor2, "utf8");
-      if (text.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
-      const parsed = JSON.parse(text);
+      const text3 = fs8.readFileSync(descriptor2, "utf8");
+      if (text3.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
+      const parsed = JSON.parse(text3);
       if (!isRecord5(parsed) || !hasExactKeys(parsed, ["schemaVersion", "revision", "entries"]) || parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) || parsed.revision < 0 || !isRecord5(parsed.entries)) {
         throw new Error("state file is malformed");
       }
@@ -22528,40 +23842,40 @@ var StateProvider = class {
       if (errorCode2(error) === "ENOENT") return emptyDocument();
       throw error;
     } finally {
-      if (descriptor2 !== void 0) fs5.closeSync(descriptor2);
+      if (descriptor2 !== void 0) fs8.closeSync(descriptor2);
     }
   }
   #write(document, beforeCommit) {
-    const text = `${JSON.stringify(document, null, 2)}
+    const text3 = `${JSON.stringify(document, null, 2)}
 `;
-    if (text.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
-    const temporary = path5.join(
+    if (text3.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
+    const temporary = path10.join(
       this.#root,
       `.state-${process.pid}-${randomBytes2(8).toString("hex")}.tmp`
     );
     const owned = { created: false };
     try {
       initializeOwnedFile(temporary, owned, (descriptor2) => {
-        fs5.writeFileSync(descriptor2, text);
-        fs5.fchmodSync(descriptor2, 384);
-        fs5.fsyncSync(descriptor2);
+        fs8.writeFileSync(descriptor2, text3);
+        fs8.fchmodSync(descriptor2, 384);
+        fs8.fsyncSync(descriptor2);
       });
       beforeCommit();
-      const current = fs5.lstatSync(temporary);
+      const current = fs8.lstatSync(temporary);
       if (!owned.identity || !current.isFile() || current.isSymbolicLink() || current.dev !== owned.identity.dev || current.ino !== owned.identity.ino) {
         throw new Error("uncertain state temporary publication: replacement preserved");
       }
-      fs5.renameSync(temporary, this.#file);
+      fs8.renameSync(temporary, this.#file);
     } catch (error) {
       if (owned.created) {
         try {
           if (!owned.identity) throw new Error("uncertain state temporary ownership; operator recovery required");
           try {
-            const current = fs5.lstatSync(temporary);
+            const current = fs8.lstatSync(temporary);
             if (!current.isFile() || current.isSymbolicLink() || current.dev !== owned.identity.dev || current.ino !== owned.identity.ino) {
               throw new Error("uncertain state temporary cleanup: replacement preserved");
             }
-            fs5.rmSync(temporary);
+            fs8.rmSync(temporary);
           } catch (cleanup) {
             if (errorCode2(cleanup) !== "ENOENT") throw cleanup;
           }
@@ -22572,11 +23886,11 @@ var StateProvider = class {
       throw error;
     }
   }
-  #releaseLock(identity) {
+  #releaseLock(identity2) {
     try {
-      const current = fs5.lstatSync(this.#lock);
-      if (current.isFile() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
-        fs5.rmSync(this.#lock);
+      const current = fs8.lstatSync(this.#lock);
+      if (current.isFile() && !current.isSymbolicLink() && current.dev === identity2.dev && current.ino === identity2.ino) {
+        fs8.rmSync(this.#lock);
       } else {
         throw new Error("uncertain state lock cleanup: replacement lock preserved");
       }
@@ -22587,11 +23901,11 @@ var StateProvider = class {
   async #withMutationLock(context, operation) {
     if (this.#uncertainLock) throw new Error("uncertain state lock ownership; operator recovery required");
     const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
-    let identity;
+    let identity2;
     let operationError;
     let failed = false;
     try {
-      while (!identity) {
+      while (!identity2) {
         throwIfAbortedOrExpired(context.signal, context.deadline);
         if (this.#pendingLockCleanup) {
           this.#releaseLock(this.#pendingLockCleanup);
@@ -22601,22 +23915,22 @@ var StateProvider = class {
           const owned = { created: false };
           try {
             initializeOwnedFile(this.#lock, owned, (descriptor2) => {
-              fs5.writeFileSync(descriptor2, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}
+              fs8.writeFileSync(descriptor2, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}
 `);
-              fs5.fsyncSync(descriptor2);
+              fs8.fsyncSync(descriptor2);
             });
           } catch (error) {
             if (!owned.created) throw error;
             if (!owned.identity) this.#uncertainLock = true;
             throw new AggregateError([error], owned.identity ? "state lock initialization failure; ownership cleanup required" : "state lock initialization failure; uncertain ownership identity unavailable; operator recovery required", { cause: error });
           } finally {
-            identity = owned.identity;
+            identity2 = owned.identity;
           }
         } catch (error) {
-          if (identity || errorCode2(error) !== "EEXIST") throw error;
+          if (identity2 || errorCode2(error) !== "EEXIST") throw error;
           let stat;
           try {
-            stat = fs5.lstatSync(this.#lock);
+            stat = fs8.lstatSync(this.#lock);
           } catch (statError) {
             if (errorCode2(statError) === "ENOENT") continue;
             throw statError;
@@ -22625,16 +23939,16 @@ var StateProvider = class {
           if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
             let ownerPid = 0;
             try {
-              const owner = JSON.parse(fs5.readFileSync(this.#lock, "utf8"));
+              const owner = JSON.parse(fs8.readFileSync(this.#lock, "utf8"));
               if (typeof owner.pid === "number") ownerPid = owner.pid;
             } catch (cause) {
               throw new Error("uncertain state lock owner; operator recovery required", { cause });
             }
             if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) throw new Error("uncertain state lock owner; operator recovery required");
             if (!processIsAlive(ownerPid)) {
-              const current = fs5.lstatSync(this.#lock);
+              const current = fs8.lstatSync(this.#lock);
               if (current.dev === stat.dev && current.ino === stat.ino && current.isFile()) {
-                fs5.rmSync(this.#lock);
+                fs8.rmSync(this.#lock);
                 continue;
               }
             }
@@ -22652,11 +23966,11 @@ var StateProvider = class {
       operationError = error;
       throw error;
     } finally {
-      if (identity) {
+      if (identity2) {
         try {
-          this.#releaseLock(identity);
+          this.#releaseLock(identity2);
         } catch (cleanup) {
-          this.#pendingLockCleanup = identity;
+          this.#pendingLockCleanup = identity2;
           if (failed) throw new AggregateError([operationError, cleanup], "state mutation and lock cleanup failed; lock replacement or removal is uncertain", { cause: operationError });
           throw cleanup;
         }
@@ -22666,22 +23980,85 @@ var StateProvider = class {
 };
 
 // src/providers/local-provider.ts
-import fs7 from "node:fs";
-import path7 from "node:path";
-import { randomUUID as randomUUID3 } from "node:crypto";
+import fs9 from "node:fs";
+
+// src/providers/local-edit.ts
+function applyLocalEdits(original, edits) {
+  const ranges = [];
+  for (const edit of edits) {
+    if (!edit.oldText) throw new Error("local.edit anchor must be nonempty");
+    const first = original.indexOf(edit.oldText);
+    if (first < 0) throw new Error("local.edit exact anchor was not found");
+    if (!edit.all && original.indexOf(edit.oldText, first + 1) >= 0) throw new Error("local.edit anchor is not unique; use all=true for all nonoverlapping occurrences");
+    for (let start = first; start >= 0; start = edit.all ? original.indexOf(edit.oldText, start + edit.oldText.length) : -1) {
+      ranges.push({ start, end: start + edit.oldText.length, text: edit.newText });
+    }
+  }
+  ranges.sort((a, b) => a.start - b.start);
+  let end = 0;
+  const pieces = [];
+  for (const range of ranges) {
+    if (range.start < end) throw new Error("local.edit original snapshot anchors overlap");
+    pieces.push(original.slice(end, range.start), range.text);
+    end = range.end;
+  }
+  pieces.push(original.slice(end));
+  return pieces.join("");
+}
+
+// src/providers/local-provider.ts
+import path11 from "node:path";
+import { randomUUID as randomUUID5 } from "node:crypto";
 import { execFile as execFile2 } from "node:child_process";
 
 // src/providers/local-read-many.ts
-function readManyWindows(windows, budget, read) {
+var LocalReadFailure = class extends Error {
+};
+function summarizeWindows(files, remaining) {
+  const last = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    if (file.endLine === null) continue;
+    const key = `${file.path}\0${file.sha256}`;
+    if ((last.get(key)?.endLine ?? 0) < file.endLine) last.set(key, file);
+  }
+  const unreadTails = [];
+  for (const file of last.values()) {
+    const offset = file.endLine + 1;
+    if (offset <= file.totalLines) unreadTails.push({
+      path: file.path,
+      offset,
+      limit: Math.min(2e3, file.totalLines - offset + 1),
+      expectedSha256: file.sha256
+    });
+  }
+  return { complete: remaining.length === 0, unreadTails, files, remaining };
+}
+function readManyWindows(windows, budget, read, partial = false, delivery = {}) {
   const files = [];
-  const fits = (value) => JSON.stringify(value).length <= budget;
-  const pending = (index) => ({ files: [...files], remaining: windows.slice(index), complete: false });
-  if (!fits(pending(0))) throw new Error("local.readMany metadata exceeds budget; narrow the batch");
+  const failures = [];
+  const failed = [];
+  const summarize2 = (delivered, pending2) => {
+    const result = summarizeWindows(delivered, [...failed, ...pending2]);
+    return partial ? { ...result, failures: [...failures] } : result;
+  };
+  const fits = (value) => JSON.stringify(delivery.serialize ? delivery.serialize(value) : value).length <= budget;
+  const operation = delivery.operation ?? "local.readMany";
+  const pending = (index) => summarize2([...files], windows.slice(index));
+  if (!fits(pending(0))) throw new Error(`${operation} metadata exceeds budget; narrow the batch`);
   for (let index = 0; index < windows.length; index++) {
     const window = windows[index];
-    const raw = read(window);
-    if (window.expectedSha256 !== void 0 && raw.sha256 !== window.expectedSha256) {
-      throw new Error("local.readMany source changed; restart this file instead of joining different snapshots");
+    let raw;
+    let stale = false;
+    try {
+      raw = read(window);
+      stale = window.expectedSha256 !== void 0 && raw.sha256 !== window.expectedSha256;
+      if (stale) throw new LocalReadFailure(`${operation} source changed; restart this file instead of joining different snapshots`);
+    } catch (error) {
+      if (!partial || !(error instanceof LocalReadFailure)) throw error;
+      failures.push({ index, path: window.path, code: stale ? "stale-hash" : "read", message: error.message.slice(0, 200) });
+      failed.push(window);
+      if (!fits(pending(index + 1))) throw new Error(`${operation} failure metadata exceeds budget; narrow the batch`);
+      continue;
     }
     const lines = raw.text === "" ? [] : raw.text.split(/\r?\n/u);
     if (raw.text.endsWith("\n")) lines.pop();
@@ -22700,7 +24077,7 @@ function readManyWindows(windows, budget, read) {
         truncated: count2 > 0 && next <= raw.totalLines,
         ...count2 > 0 && next <= raw.totalLines ? { nextOffset: next } : {}
       };
-      return { files: [...files, file], remaining: remainder, complete: remainder.length === 0 };
+      return summarize2([...files, file], remainder);
     };
     let high = lines.length;
     let result = page(high);
@@ -22713,7 +24090,7 @@ function readManyWindows(windows, budget, read) {
       }
       if (!low) {
         if (files.length) return pending(index);
-        throw new Error("local.readMany single line or metadata exceeds budget; increase maxChars or narrow the batch");
+        throw new Error(`${operation} single line or metadata exceeds budget; increase maxChars or narrow the batch`);
       }
       result = page(low);
     }
@@ -22721,164 +24098,110 @@ function readManyWindows(windows, budget, read) {
     if ((result.files.at(-1).endLine ?? start - 1) < end) return result;
     if (index === windows.length - 1) return result;
   }
-  return { files, remaining: [], complete: true };
+  return summarize2(files, []);
 }
 
-// src/providers/local-path.ts
-import fs6 from "node:fs";
-import path6 from "node:path";
-import { createHash as createHash5 } from "node:crypto";
-var LocalNonTextError = class extends Error {
-};
-var LOCAL_MAX_FILE_BYTES = 2 * 1024 * 1024;
-var localHash = (value) => createHash5("sha256").update(value).digest("hex");
-var localIdentity = (stat) => ({ dev: stat.dev, ino: stat.ino });
-var sameLocalIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino;
-var code = (error) => error?.code;
-var LocalPaths = class {
-  root;
-  identity;
-  #canonicalIdentity;
-  constructor(root) {
-    const inspected = inspectCanonicalPath(root, { kind: "directory" });
-    if (inspected.finalEntryIsSymlink || inspected.canonicalPath !== root || inspected.lexicalPath !== root) throw new Error("local root must be the verified canonical workspace path");
-    this.root = root;
-    this.identity = localIdentity(inspected.lexicalStats);
-    this.#canonicalIdentity = inspected.identity;
+// src/providers/local-evidence.ts
+function formatLocalEvidence(result) {
+  let packet = "KIRO_LOCAL_EVIDENCE/1\n";
+  const files = [];
+  const hashes = new Map(result.files.map((file) => [file.path, file.sha256]));
+  for (const [index, file] of result.files.entries()) {
+    const { source, ...metadata2 } = file;
+    packet += `SOURCE ${index} ${JSON.stringify(file.path)}
+`;
+    files.push({ ...metadata2, sourceOffset: packet.length, sourceChars: source.length });
+    packet += source + "\n";
   }
-  verifyRoot() {
-    const inspected = inspectCanonicalPath(this.root, { kind: "directory" });
-    if (inspected.finalEntryIsSymlink || inspected.canonicalPath !== this.root || !sameCanonicalFilesystemIdentity(inspected.identity, this.#canonicalIdentity)) throw new Error("local workspace root identity changed");
+  const metadata = {
+    scope: "requested windows only; not proof of inspection",
+    files,
+    // Also bind later, not-yet-delivered windows of a delivered file. Retrying
+    // failed requests preserves explicit expected hashes; it never blesses drift.
+    remaining: result.remaining.map((window) => {
+      const sha256 = window.expectedSha256 ?? hashes.get(window.path);
+      return { ...window, ...sha256 === void 0 ? {} : { expectedSha256: sha256 } };
+    }),
+    complete: result.complete,
+    unreadTails: result.unreadTails,
+    failures: result.failures ?? []
+  };
+  return packet + `META ${JSON.stringify(metadata)}`;
+}
+
+// src/providers/local-line-index.ts
+var LocalLineIndex = class {
+  constructor(text3) {
+    this.text = text3;
+    let count2 = 0;
+    for (let at = text3.indexOf("\n"); at !== -1; at = text3.indexOf("\n", at + 1)) count2++;
+    if (text3.length && !text3.endsWith("\n")) count2++;
+    this.#ends = new Uint32Array(count2);
+    let index = 0;
+    for (let at = text3.indexOf("\n"); at !== -1; at = text3.indexOf("\n", at + 1)) this.#ends[index++] = at + 1;
+    if (index < count2) this.#ends[index] = text3.length;
   }
-  resolve(input) {
-    this.verifyRoot();
-    if (input.includes("\0") || input.split(/[\\/]/u).includes("..")) throw new Error("local path traversal is forbidden");
-    const resolved2 = path6.resolve(this.root, input);
-    const relative = path6.relative(this.root, resolved2);
-    if (relative === ".." || relative.startsWith(`..${path6.sep}`) || path6.isAbsolute(relative)) throw new Error("local path is outside workspace");
-    return resolved2;
+  text;
+  #ends;
+  get totalLines() {
+    return this.#ends.length;
   }
-  check(input, allowMissing = false) {
-    const target = this.resolve(input);
-    const parts = path6.relative(this.root, target).split(path6.sep).filter(Boolean);
-    const parents = [{ path: this.root, identity: this.identity }];
-    let current = this.root;
-    let stat = fs6.lstatSync(current);
-    for (let index = 0; index < parts.length; index++) {
-      current = path6.join(current, parts[index]);
-      try {
-        stat = fs6.lstatSync(current);
-      } catch (error) {
-        if (allowMissing && index === parts.length - 1 && code(error) === "ENOENT") return { path: target, stat: null, parents };
-        throw error;
-      }
-      if (stat.isSymbolicLink()) throw new Error("local symlink components are forbidden");
-      if (!stat.isFile() && !stat.isDirectory()) throw new Error("local special files are forbidden");
-      if (stat.isFile() && stat.nlink !== 1) throw new Error("local hardlink regular files are forbidden");
-      if (index < parts.length - 1) {
-        if (!stat.isDirectory()) throw new Error("local parent must be an existing directory");
-        parents.push({ path: current, identity: localIdentity(stat) });
-      }
-    }
-    const canonical = fs6.realpathSync(target);
-    if (canonical !== target || !canonicalPathContains(this.root, canonical)) throw new Error("local path canonical containment changed");
-    return { path: target, stat, parents };
-  }
-  directory(input) {
-    const found = this.check(input);
-    if (!found.stat?.isDirectory()) throw new Error("local path must be a directory");
-    return { path: found.path, identity: localIdentity(found.stat), parents: found.parents };
-  }
-  read(input) {
-    const found = this.check(input);
-    if (!found.stat?.isFile()) throw new Error("local path must be a regular file");
-    if (found.stat.size > LOCAL_MAX_FILE_BYTES) throw new Error("local file exceeds 2MiB byte limit");
-    const fd = fs6.openSync(found.path, fs6.constants.O_RDONLY | fs6.constants.O_NOFOLLOW | fs6.constants.O_NONBLOCK);
-    try {
-      const before = fs6.fstatSync(fd);
-      if (!before.isFile() || before.nlink !== 1 || !sameLocalIdentity(before, found.stat)) throw new Error("local file identity changed");
-      const bytes2 = Buffer.alloc(Math.min(before.size + 1, LOCAL_MAX_FILE_BYTES + 1));
-      let length = 0;
-      while (length < bytes2.length) {
-        const count2 = fs6.readSync(fd, bytes2, length, bytes2.length - length, null);
-        if (!count2) break;
-        length += count2;
-      }
-      const after = fs6.fstatSync(fd);
-      if (length !== before.size || length > LOCAL_MAX_FILE_BYTES || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs || after.nlink !== 1) throw new Error("local file changed during bounded read");
-      const data = bytes2.subarray(0, length);
-      if (data.includes(0)) throw new LocalNonTextError("local binary file is unsupported");
-      let text;
-      try {
-        text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data);
-      } catch {
-        throw new LocalNonTextError("local file is not valid UTF-8");
-      }
-      this.verifyRoot();
-      const again = this.check(found.path);
-      if (!again.stat || !sameLocalIdentity(again.stat, before) || JSON.stringify(again.parents) !== JSON.stringify(found.parents)) throw new Error("local file identity changed during read");
-      return { text, snapshot: { path: found.path, parents: found.parents, file: { identity: localIdentity(before), mode: before.mode, size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs, sha256: localHash(data) } } };
-    } finally {
-      fs6.closeSync(fd);
-    }
-  }
-  snapshot(input) {
-    const found = this.check(input, true);
-    return found.stat ? this.read(found.path) : { text: "", snapshot: { path: found.path, parents: found.parents, file: null } };
-  }
-  revalidate(snapshot) {
-    if (JSON.stringify(this.snapshot(snapshot.path).snapshot) !== JSON.stringify(snapshot)) throw new Error("local approval snapshot conflict: file or parent identity/content changed");
-  }
-  relative(input) {
-    return path6.relative(this.root, input) || ".";
+  slice(start, end) {
+    if (end <= start) return "";
+    return this.text.slice(start ? this.#ends[start - 1] : 0, this.#ends[end - 1]);
   }
 };
 
 // src/providers/local-provider.ts
 var jsonTree = (value) => JSON.parse(JSON.stringify(value));
-var object3 = (properties, required = []) => jsonTree({ type: "object", properties, required, additionalProperties: false });
+var object5 = (properties, required = []) => jsonTree({ type: "object", properties, required, additionalProperties: false });
 var string2 = { type: "string" };
 var boolean2 = { type: "boolean" };
-var integer2 = { type: "integer", minimum: 0 };
-var identitySchema = object3({ dev: integer2, ino: integer2 }, ["dev", "ino"]);
+var integer3 = { type: "integer", minimum: 0 };
+var identitySchema = object5({ dev: integer3, ino: integer3 }, ["dev", "ino"]);
 var pathSchema = { type: "string", minLength: 1, maxLength: 4096 };
 var count = { type: "integer", minimum: 1, maximum: 1e3 };
-var searchScopeSchema = object3({ path: string2, glob: string2, hidden: boolean2, ignoreFiles: { const: true } }, ["path", "hidden", "ignoreFiles"]);
+var searchScopeSchema = object5({ path: string2, glob: string2, hidden: boolean2, ignoreFiles: { const: true }, snapshotScope: { const: "query-v1" } }, ["path", "hidden", "ignoreFiles"]);
+var truncationSchema = { type: "array", maxItems: 4, items: { enum: ["match-text", "count", "output", "oversized-files"] } };
 var VCS_METADATA = /* @__PURE__ */ new Set([".git", ".hg", ".svn"]);
-var metadataSchema = object3({ token: { type: "string", minLength: 36, maxLength: 36 }, beforeSha256: { type: ["string", "null"] }, afterSha256: string2, identity: { ...identitySchema, type: ["object", "null"] }, parentIdentity: identitySchema }, ["token"]);
-var readWindowSchema = object3({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2e3 }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]);
+var metadataSchema = object5({ token: { type: "string", minLength: 36, maxLength: 36 }, beforeSha256: { type: ["string", "null"] }, afterSha256: string2, identity: { ...identitySchema, type: ["object", "null"] }, parentIdentity: identitySchema }, ["token"]);
+var readWindowSchema = object5({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2e3 }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]);
+var textEditSchema = object5({ oldText: { type: "string", minLength: 1, maxLength: LOCAL_MAX_FILE_BYTES }, newText: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, all: boolean2 }, ["oldText", "newText"]);
 var rawSchemas = {
-  read: object3({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2e3 } }, ["path"]),
-  readMany: object3({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1e3, maximum: 4e4 } }, ["windows"]),
-  grep: object3({ pattern: { type: "string", maxLength: 2e3 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2e3 }, literal: boolean2, ignoreCase: boolean2, hidden: boolean2, limit: count }, ["pattern"]),
-  find: object3({ pattern: { type: "string", minLength: 1, maxLength: 2e3 }, path: pathSchema, hidden: boolean2, limit: count }, ["pattern"]),
-  list: object3({ path: pathSchema, limit: count }),
-  write: object3({ path: pathSchema, content: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, overwrite: boolean2 }, ["path", "content"]),
-  edit: object3({ path: pathSchema, oldText: { type: "string", minLength: 1, maxLength: LOCAL_MAX_FILE_BYTES }, newText: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, all: boolean2 }, ["path", "oldText", "newText"]),
-  shell: object3({ command: { type: "string", minLength: 1, maxLength: 8e3 }, script: { type: "string", minLength: 1, maxLength: 8e3 }, interpreter: { enum: ["bash", "sh"] }, args: { type: "array", maxItems: 64, items: { type: "string", maxLength: 8e3 } }, cwd: pathSchema, timeoutMs: { type: "integer", minimum: 1, maximum: 9e5 }, settle: boolean2 })
+  read: object5({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2e3 } }, ["path"]),
+  readMany: object5({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1e3, maximum: 4e4 }, partial: boolean2 }, ["windows"]),
+  readEvidence: object5({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1e3, maximum: 4e4 }, partial: boolean2 }, ["windows"]),
+  grep: object5({ pattern: { type: "string", maxLength: 2e3 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2e3 }, literal: boolean2, ignoreCase: boolean2, hidden: boolean2, limit: count, paginate: boolean2, snapshotScope: { enum: ["query-v1"] }, cursor: { type: "string", minLength: 36, maxLength: 36 } }, ["pattern"]),
+  find: object5({ pattern: { type: "string", minLength: 1, maxLength: 2e3 }, path: pathSchema, hidden: boolean2, limit: count, paginate: boolean2, snapshotScope: { enum: ["query-v1"] }, cursor: { type: "string", minLength: 36, maxLength: 36 } }, ["pattern"]),
+  list: object5({ path: pathSchema, limit: count }),
+  write: object5({ path: pathSchema, content: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, overwrite: boolean2 }, ["path", "content"]),
+  edit: object5({ path: pathSchema, ...textEditSchema.properties, edits: { type: "array", minItems: 1, maxItems: 100, items: textEditSchema }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]),
+  shell: object5({ command: { type: "string", minLength: 1, maxLength: 8e3 }, script: { type: "string", minLength: 1, maxLength: 8e3 }, interpreter: { enum: ["bash", "sh"] }, args: { type: "array", maxItems: 64, items: { type: "string", maxLength: 8e3 } }, cwd: pathSchema, timeoutMs: { type: "integer", minimum: 1, maximum: 9e5 }, settle: boolean2 })
 };
-var mutationOutput = object3({ path: string2, changed: boolean2, sha256: string2, bytes: integer2, identity: identitySchema }, ["path", "changed", "sha256", "bytes", "identity"]);
+var mutationOutput = object5({ path: string2, changed: boolean2, sha256: string2, bytes: integer3, identity: identitySchema }, ["path", "changed", "sha256", "bytes", "identity"]);
 var outputSchemas = {
-  read: object3({ path: string2, text: string2, totalLines: integer2, truncated: boolean2, nextOffset: { type: "integer", minimum: 1 }, sha256: string2, identity: identitySchema }, ["path", "text", "totalLines", "truncated", "sha256", "identity"]),
-  readMany: object3({ files: { type: "array", maxItems: 32, items: object3({ path: string2, startLine: { type: "integer", minimum: 1 }, endLine: { type: ["integer", "null"] }, totalLines: integer2, sha256: string2, source: string2, truncated: boolean2, nextOffset: { type: "integer", minimum: 1 } }, ["path", "startLine", "endLine", "totalLines", "sha256", "source", "truncated"]) }, remaining: { type: "array", maxItems: 32, items: readWindowSchema }, complete: boolean2 }, ["files", "remaining", "complete"]),
-  grep: object3({ scope: searchScopeSchema, matches: { type: "array", maxItems: 1e3, items: object3({ path: string2, line: { type: "integer", minimum: 1 }, text: { type: "string", maxLength: 500 } }, ["path", "line", "text"]) }, truncated: boolean2 }, ["scope", "matches", "truncated"]),
-  find: object3({ scope: searchScopeSchema, paths: { type: "array", maxItems: 1e3, items: string2 }, truncated: boolean2 }, ["scope", "paths", "truncated"]),
-  list: object3({ entries: { type: "array", maxItems: 1e3, items: object3({ path: string2, type: { enum: ["file", "directory"] } }, ["path", "type"]) }, truncated: boolean2 }, ["entries", "truncated"]),
+  readEvidence: string2,
+  read: object5({ path: string2, text: string2, totalLines: integer3, truncated: boolean2, nextOffset: { type: "integer", minimum: 1 }, sha256: string2, identity: identitySchema }, ["path", "text", "totalLines", "truncated", "sha256", "identity"]),
+  readMany: object5({ files: { type: "array", maxItems: 32, items: object5({ path: string2, startLine: { type: "integer", minimum: 1 }, endLine: { type: ["integer", "null"] }, totalLines: integer3, sha256: string2, source: string2, truncated: boolean2, nextOffset: { type: "integer", minimum: 1 } }, ["path", "startLine", "endLine", "totalLines", "sha256", "source", "truncated"]) }, remaining: { type: "array", maxItems: 32, items: readWindowSchema }, complete: boolean2, unreadTails: { type: "array", maxItems: 32, items: readWindowSchema }, failures: { type: "array", maxItems: 32, items: object5({ index: { type: "integer", minimum: 0, maximum: 31 }, path: string2, code: { enum: ["read", "stale-hash"] }, message: { type: "string", maxLength: 200 } }, ["index", "path", "code", "message"]) } }, ["files", "remaining", "complete", "unreadTails"]),
+  grep: object5({ scope: searchScopeSchema, matches: { type: "array", maxItems: 1e3, items: object5({ path: string2, line: { type: "integer", minimum: 1 }, text: { type: "string", maxLength: 500 } }, ["path", "line", "text"]) }, truncated: boolean2, truncationReasons: truncationSchema, nextCursor: string2 }, ["scope", "matches", "truncated"]),
+  find: object5({ scope: searchScopeSchema, paths: { type: "array", maxItems: 1e3, items: string2 }, truncated: boolean2, truncationReasons: truncationSchema, nextCursor: string2 }, ["scope", "paths", "truncated"]),
+  list: object5({ entries: { type: "array", maxItems: 1e3, items: object5({ path: string2, type: { enum: ["file", "directory"] } }, ["path", "type"]) }, truncated: boolean2 }, ["entries", "truncated"]),
   write: mutationOutput,
   edit: mutationOutput,
-  shell: object3({ ok: boolean2, exitCode: { type: ["integer", "null"] }, signal: { type: ["string", "null"] }, stdout: string2, stderr: string2, truncated: boolean2, stdoutTruncated: boolean2, stderrTruncated: boolean2 }, ["ok", "exitCode", "signal", "stdout", "stderr", "truncated", "stdoutTruncated", "stderrTruncated"])
+  shell: object5({ ok: boolean2, exitCode: { type: ["integer", "null"] }, signal: { type: ["string", "null"] }, stdout: string2, stderr: string2, truncated: boolean2, stdoutTruncated: boolean2, stderrTruncated: boolean2 }, ["ok", "exitCode", "signal", "stdout", "stderr", "truncated", "stdoutTruncated", "stderrTruncated"])
 };
-var descriptions = {
+var descriptions2 = {
+  readEvidence: "Explicit compact text packet: KIRO_LOCAL_EVIDENCE/1 header, numbered sources, final META JSON footer with ranges, full-file hashes, UTF-16 sourceOffset/sourceChars, remaining, unreadTails, complete and failures (always present). Same windows/defaults/path safety/partial failures/final snapshot checks as readMany. Default 32000/maxChars 1000..40000; full JSON-serialized returned string including escaping fits runtime and visible source allowances or rejects, never drops metadata. Continue remaining verbatim after repairing failures, then relevant unreadTails; tails may overlap remaining and omit prefixes/gaps. complete covers requested windows only; not proof of inspection. Return directly with resultFormat:text and headroom for other data/logs. No automatic inspection, steering or guaranteed delivery of discarded/remapped results.",
   read: "Read valid UTF-8, one-based offset; default 200/max 2000 lines, <=2MiB file, bounded JSON. Whole lines only; totalLines counts the whole file; truncated means unread file suffix. nextOffset is the next one-based line; stop at the requested end. Oversized single lines fail. No traversal, symlinks, hardlinks or special files.",
-  readMany: "Read 1..32 numbered source windows with line ranges and hashes. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars 1000..40000, clamped to runtime budgets. Read related callers/implementations/configs together; lower maxChars when returning other data. Return files plus remaining requests; continue remaining verbatim. Hash conflicts reject changed-file continuations. complete covers requested windows, not the repo or understanding. Same path protections as read; no hidden persistent ledger.",
-  grep: "Search with external rg, --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Pinned startup-validated executable. Selected candidates <=10000; batches <=256 text files/2MiB stop at requested prefix with truncated=true for unsearched files. Aggregate input <=32MiB; search <=10s; narrow path/glob on work limits. No JS search fallback.",
-  find: "Glob file paths via external rg --files --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 results. Unsafe files rejected. Glob only narrows normal enumeration; selected candidates <=10000, raw process output <=2MiB; search <=10s. Narrow path/glob on work limits.",
+  readMany: "Read 1..32 numbered source windows with line ranges and hashes. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars 1000..40000, clamped to runtime budgets. Read related callers/implementations/configs together; lower maxChars when returning other data. Return files plus remaining requests; continue remaining verbatim. Hash conflicts reject by default. partial:true retains independent successes and zero-based indexed failures (read/stale-hash), complete:false and failed requests in remaining; repair failed requests before retrying. Safety, cancellation and final snapshot drift remain hard failures. Same-file windows reuse one invocation-local snapshot, revalidated before return. complete covers requested windows only. unreadTails contains hash-bound suffix windows (<=2000 lines) after the last delivered line per file snapshot; finish remaining first to avoid overlapping reads. Empty tails do not cover omitted prefixes/gaps or other files. Same path protections as read; no hidden persistent ledger.",
+  grep: "Search with external rg, --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 records, text <=500 chars (truncated flags omissions). Binary/invalid UTF-8 files skipped; >2MiB files skipped with truncated=true. Pinned startup-validated executable. Selected candidates <=10000; batches <=256 text files/2MiB stop at requested prefix with truncated=true for unsearched files. Aggregate input <=32MiB; search <=10s; narrow path/glob on work limits. No JS search fallback. truncationReasons: match-text => read the reported line; count => increase limit or narrow scope; output => narrow scope; oversized-files => exclude or inspect separately. paginate:true enables bounded snapshot pages; repeat identical query/options/limit with cursor:nextCursor. Cursors expire after 60s; provider-local, at most 8 snapshots, 262144 JSON chars each. Collection rejects work/cache limits and nontext/oversized snapshot files; count/output are resumable, match-text is not. Optional snapshotScope:query-v1 (paginate only) hashes glob-selected candidates, not unrelated files, and reports scope.snapshotScope. Selected membership/content/identity changes still reject; defaults retain unfiltered-scope validation.",
+  find: "Glob file paths via external rg --files --no-config --sort path; hidden:true includes dotfiles (default false); respects ignore files, excludes VCS metadata and symlinks. Returned scope records path/glob/hidden/ignore rules; truncated:false is only complete within that scope. Default 100/max 1000 results. Unsafe files rejected. Glob only narrows normal enumeration; selected candidates <=10000, raw process output <=2MiB; search <=10s. Narrow path/glob on work limits. truncationReasons: count => increase limit or narrow scope; output => narrow scope. paginate:true enables bounded snapshot pages; repeat identical query/options/limit with cursor:nextCursor. Cursors expire after 60s; provider-local, at most 8 snapshots, 262144 JSON chars each. Collection rejects work/cache limits and nontext/oversized snapshot files; count/output are resumable, match-text is not. Optional snapshotScope:query-v1 (paginate only) hashes glob-selected candidates, not unrelated files, and reports scope.snapshotScope. Selected membership/content/identity changes still reject; defaults retain unfiltered-scope validation.",
   list: "Sorted direct children, including hidden entries; only path/limit, no depth. Use local.find for nested files. Default 100/max 1000 results, at most 10000 scanned entries. Symlinks, hardlinks and special entries fail.",
   write: "Exact approved write, create-only unless overwrite=true; existing parent required. Snapshots bind identities/content and complete diff before approval; revalidated before publication. Path checks are defense in depth, not hostile-race isolation.",
-  edit: "Exact approved edit; nonempty unique oldText unless all=true (nonoverlapping replacements). Existing parent required. Identity/hash conflict detection and complete actual diff; no multi-operation transaction or hostile-race isolation.",
+  edit: "Exact approved edit: oldText/newText OR edits[1..100], optional expectedSha256. All anchors resolve against the original snapshot, must be disjoint, and validate before one complete diff approval/publication; unique unless per-edit all=true. Existing parent required. Identity/hash conflict detection and complete actual diff; no multi-operation transaction or hostile-race isolation.",
   shell: "Exact approved host command OR literal script in verified canonical cwd, not confinement. command uses /bin/sh; script uses interpreter bash/sh (default sh), args become positional $1... without outer expansion or scratch files. Workspace-wide lock, bounded head/tail output and deadline, TERM/KILL cleanup; ordinary nonzero exits expose error.result or return data with settle=true; no background jobs or network isolation. Deliberate process-group escapes are not contained."
 };
-var effectful = (name) => ["write", "edit", "shell"].includes(name);
+var effectful2 = (name) => ["write", "edit", "shell"].includes(name);
 var LocalCodingProvider = class {
   name = "local";
   description = "Verified workspace local coding with bounded reads and exact approved effects";
@@ -22891,6 +24214,7 @@ var LocalCodingProvider = class {
   #controller = new AbortController();
   #pending = /* @__PURE__ */ new Set();
   #prepared = /* @__PURE__ */ new Map();
+  #searchPages = /* @__PURE__ */ new Map();
   #closed = false;
   #pendingRelease;
   #searchExecutable;
@@ -22901,19 +24225,19 @@ var LocalCodingProvider = class {
     if (!Number.isSafeInteger(this.#budget) || this.#budget < 256) throw new Error("local maxResultChars must be an integer >=256");
     if (options.maxReadManyChars !== void 0 && (!Number.isSafeInteger(options.maxReadManyChars) || options.maxReadManyChars < 256)) throw new Error("local maxReadManyChars must be an integer >=256");
     this.#readManyBudget = Math.min(4e4, options.maxResultChars ?? 4e4, options.maxReadManyChars ?? 4e4);
-    if (!path7.isAbsolute(options.lockRoot)) throw new Error("local lockRoot must be absolute");
-    let existing = path7.resolve(options.lockRoot);
-    while (!fs7.existsSync(existing)) existing = path7.dirname(existing);
-    const canonicalLockTarget = path7.resolve(fs7.realpathSync(existing), path7.relative(existing, path7.resolve(options.lockRoot)));
+    if (!path11.isAbsolute(options.lockRoot)) throw new Error("local lockRoot must be absolute");
+    let existing = path11.resolve(options.lockRoot);
+    while (!fs9.existsSync(existing)) existing = path11.dirname(existing);
+    const canonicalLockTarget = path11.resolve(fs9.realpathSync(existing), path11.relative(existing, path11.resolve(options.lockRoot)));
     if (canonicalPathContains(this.#paths.root, canonicalLockTarget)) throw new Error("local lockRoot must be outside the source workspace");
-    fs7.mkdirSync(options.lockRoot, { recursive: true, mode: 448 });
-    this.#lockRoot = fs7.realpathSync(options.lockRoot);
-    const lockStat = fs7.lstatSync(options.lockRoot);
+    fs9.mkdirSync(options.lockRoot, { recursive: true, mode: 448 });
+    this.#lockRoot = fs9.realpathSync(options.lockRoot);
+    const lockStat = fs9.lstatSync(options.lockRoot);
     if (this.#lockRoot !== options.lockRoot || !lockStat.isDirectory() || lockStat.isSymbolicLink() || (lockStat.mode & 63) !== 0 || process.getuid && lockStat.uid !== process.getuid()) throw new Error("local lockRoot must be a canonical private owned directory (0700)");
     this.#lockIdentity = localIdentity(lockStat);
     this.#descriptors = Object.keys(rawSchemas).map((name) => {
       const raw = rawSchemas[name];
-      return { name, description: descriptions[name], inputSchema: effectful(name) ? { ...raw, properties: { ...raw.properties, _localPreparation: metadataSchema, review: { type: "string", maxLength: 11e3 } } } : raw, outputSchema: outputSchemas[name], risk: name === "shell" ? "execute" : effectful(name) ? "write" : "read", effect: { kind: effectful(name) ? "write" : "read", resources: [`local-workspace:${this.#paths.root}`] } };
+      return { name, description: descriptions2[name], inputSchema: effectful2(name) ? { ...raw, properties: { ...raw.properties, _localPreparation: metadataSchema, review: { type: "string", maxLength: 11e3 } } } : raw, outputSchema: outputSchemas[name], risk: name === "shell" ? "execute" : effectful2(name) ? "write" : "read", effect: { kind: effectful2(name) ? "write" : "read", resources: [`local-workspace:${this.#paths.root}`] } };
     });
   }
   async list() {
@@ -22942,8 +24266,14 @@ var LocalCodingProvider = class {
     if (name === "shell" && (typeof args.command === "string" === (typeof args.script === "string") || typeof args.command === "string" && (args.interpreter !== void 0 || args.args !== void 0))) {
       throw new Error("local.shell requires exactly one of command or script; interpreter/args require script");
     }
-    if (name === "readMany" && args.windows.some((window) => window.expectedSha256 !== void 0 && !/^[a-f0-9]{64}$/u.test(window.expectedSha256))) {
-      throw new Error("local.readMany expectedSha256 must be a lowercase SHA-256 digest");
+    if ((name === "find" || name === "grep") && args.snapshotScope !== void 0 && args.paginate !== true) throw new Error("local search snapshotScope requires paginate:true");
+    if (name === "edit") {
+      const batch = args.edits !== void 0;
+      if (batch ? args.oldText !== void 0 || args.newText !== void 0 || args.all !== void 0 : typeof args.oldText !== "string" || typeof args.newText !== "string") throw new Error("local.edit requires exactly one of edits or oldText/newText");
+      if (args.expectedSha256 !== void 0 && !/^[a-f0-9]{64}$/u.test(args.expectedSha256)) throw new Error("local.edit expectedSha256 must be a lowercase SHA-256 digest");
+    }
+    if ((name === "readMany" || name === "readEvidence") && args.windows.some((window) => window.expectedSha256 !== void 0 && !/^[a-f0-9]{64}$/u.test(window.expectedSha256))) {
+      throw new Error(`local.${name} expectedSha256 must be a lowercase SHA-256 digest`);
     }
   }
   #fits(value, budget = this.#budget) {
@@ -22957,21 +24287,21 @@ var LocalCodingProvider = class {
     this.#validate(name, args);
     this.#check(context);
     const canonical = structuredClone(args);
-    if (!effectful(name)) {
-      if (name === "readMany") {
-        canonical.windows = args.windows.map((window) => ({ ...window, path: this.#paths.check(window.path).path }));
+    if (!effectful2(name)) {
+      if (name === "readMany" || name === "readEvidence") {
+        canonical.windows = args.windows.map((window) => ({ ...window, path: this.#readWindowPath(window.path, args.partial === true) }));
         return canonical;
       }
       canonical.path = this.#paths.check(args.path ?? ".").path;
       return canonical;
     }
     let entry;
-    const token = randomUUID3();
+    const token = randomUUID5();
     let metadata;
     let review;
     if (name === "shell") {
-      const directory = this.#paths.directory(args.cwd ?? ".");
-      canonical.cwd = directory.path;
+      const directory2 = this.#paths.directory(args.cwd ?? ".");
+      canonical.cwd = directory2.path;
       canonical.timeoutMs = args.timeoutMs ?? 3e4;
       canonical.settle = args.settle ?? false;
       const shellValues = [args.command ?? args.script, ...args.args ?? []];
@@ -22980,11 +24310,11 @@ var LocalCodingProvider = class {
 Script: ${JSON.stringify(args.script)}
 Arguments: ${JSON.stringify(args.args ?? [])}`;
       review = `${sourceReview}
-Canonical cwd: ${JSON.stringify(directory.path)}
+Canonical cwd: ${JSON.stringify(directory2.path)}
 Timeout ms: ${canonical.timeoutMs}
 Settle ordinary nonzero: ${canonical.settle}`;
-      metadata = { token, identity: directory.identity, parentIdentity: directory.parents.at(-1).identity };
-      entry = { name, signature: "", directory, active: false };
+      metadata = { token, identity: directory2.identity, parentIdentity: directory2.parents.at(-1).identity };
+      entry = { name, signature: "", directory: directory2, active: false };
     } else {
       const captured = this.#paths.snapshot(args.path);
       canonical.path = captured.snapshot.path;
@@ -22993,11 +24323,8 @@ Settle ordinary nonzero: ${canonical.settle}`;
       let proposed;
       if (name === "write") proposed = args.content;
       else {
-        const anchor = args.oldText;
-        const first = captured.text.indexOf(anchor);
-        if (first < 0) throw new Error("local.edit exact anchor was not found");
-        if (captured.text.indexOf(anchor, first + 1) >= 0 && args.all !== true) throw new Error("local.edit anchor is not unique; use all=true for all nonoverlapping occurrences");
-        proposed = captured.text.split(anchor).join(args.newText);
+        if (args.expectedSha256 !== void 0 && args.expectedSha256 !== captured.snapshot.file.sha256) throw new Error("local.edit source changed: expectedSha256 conflict");
+        proposed = applyLocalEdits(captured.text, args.edits ?? [{ oldText: args.oldText, newText: args.newText, all: args.all === true }]);
       }
       if (Buffer.byteLength(proposed) > LOCAL_MAX_FILE_BYTES || proposed.includes("\0") || Buffer.from(proposed).toString("utf8") !== proposed) throw new Error("local proposed content must be valid UTF-8 text <=2MiB without NUL");
       review = this.#review(captured.snapshot.path, captured.text, proposed);
@@ -23032,9 +24359,9 @@ No content change`;
     const newEnd = after.length - suffix;
     const oldText = before.slice(prefix, oldEnd);
     const newText = after.slice(prefix, newEnd);
-    const lineAt = (text, end) => {
+    const lineAt = (text3, end) => {
       let line = 1;
-      for (let index = 0; index < end; index++) if (text.charCodeAt(index) === 10) line++;
+      for (let index = 0; index < end; index++) if (text3.charCodeAt(index) === 10) line++;
       return line;
     };
     const contextStart = Math.max(0, prefix - 200);
@@ -23056,12 +24383,12 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     return { token, entry };
   }
   #verifyLockRoot() {
-    const stat = fs7.lstatSync(this.#lockRoot);
-    if (!stat.isDirectory() || stat.isSymbolicLink() || !sameLocalIdentity(stat, this.#lockIdentity) || fs7.realpathSync(this.#lockRoot) !== this.#lockRoot || (stat.mode & 63) !== 0 || process.getuid && stat.uid !== process.getuid()) throw new Error("local lockRoot identity/privacy changed");
+    const stat = fs9.lstatSync(this.#lockRoot);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || !sameLocalIdentity(stat, this.#lockIdentity) || fs9.realpathSync(this.#lockRoot) !== this.#lockRoot || (stat.mode & 63) !== 0 || process.getuid && stat.uid !== process.getuid()) throw new Error("local lockRoot identity/privacy changed");
   }
   async reserveInvocation(name, args, context) {
     this.#check(context);
-    if (!effectful(name)) return () => {
+    if (!effectful2(name)) return () => {
     };
     try {
       this.#pendingRelease?.();
@@ -23071,7 +24398,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     const { token, entry } = this.#preparedEntry(name, args);
     if (entry.active) throw new Error("local invocation is already reserved");
     this.#verifyLockRoot();
-    const lock = path7.join(this.#lockRoot, `local-${localHash(this.#paths.root)}.lock`);
+    const lock = path11.join(this.#lockRoot, `local-${localHash(this.#paths.root)}.lock`);
     const owned = { created: false };
     let released = false;
     const release = () => {
@@ -23080,9 +24407,9 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
         this.#verifyLockRoot();
         if (!owned.identity) throw new Error("uncertain local lock: ownership identity unavailable; operator recovery required");
         try {
-          const stat = fs7.lstatSync(lock);
+          const stat = fs9.lstatSync(lock);
           if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || !sameLocalIdentity(stat, owned.identity)) throw new Error("local lock ownership changed; refusing to release uncertain lock");
-          fs7.unlinkSync(lock);
+          fs9.unlinkSync(lock);
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
@@ -23102,7 +24429,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     };
     try {
       initializeOwnedFile(lock, owned, (fd) => {
-        fs7.writeFileSync(fd, JSON.stringify({ pid: process.pid, token, root: this.#paths.root }));
+        fs9.writeFileSync(fd, JSON.stringify({ pid: process.pid, token, root: this.#paths.root }));
       });
       this.#verifyLockRoot();
     } catch (error) {
@@ -23125,9 +24452,9 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     return pending;
   }
   async #invoke(name, args, context) {
-    this.#validate(name, args, effectful(name));
+    this.#validate(name, args, effectful2(name));
     this.#check(context);
-    if (effectful(name)) {
+    if (effectful2(name)) {
       const { entry } = this.#preparedEntry(name, args);
       if (!entry.active) throw new Error("local effect requires an active registry reservation");
       if (name === "shell") {
@@ -23141,45 +24468,75 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
       return this.#publish(name, entry, context);
     }
     if (name === "read") return this.#read(args);
-    if (name === "readMany") {
-      const windows = args.windows.map((window) => ({ ...window, path: this.#paths.relative(this.#paths.check(window.path).path) }));
-      const budget = Math.min(this.#readManyBudget, args.maxChars ?? 32e3);
-      return this.#bounded(readManyWindows(windows, budget, (window) => {
+    if (name === "readMany" || name === "readEvidence") {
+      const windows = args.windows.map((window) => ({ ...window, path: this.#paths.relative(this.#readWindowPath(window.path, args.partial === true)) }));
+      const budget = Math.min(
+        this.#readManyBudget,
+        args.maxChars ?? 32e3,
+        name === "readEvidence" ? context.maxResultChars ?? this.#readManyBudget : this.#readManyBudget
+      );
+      const snapshots = /* @__PURE__ */ new Map();
+      const result = readManyWindows(windows, budget, (window) => {
         this.#check(context);
-        return this.#read({ ...window }, budget);
-      }), budget);
+        let captured = snapshots.get(window.path);
+        if (!captured) {
+          try {
+            const source = this.#paths.read(window.path);
+            captured = { ...source, lines: new LocalLineIndex(source.text) };
+          } catch (error) {
+            if (args.partial === true && (error instanceof LocalNonTextError || ["ENOENT", "EACCES", "EPERM"].includes(error.code ?? ""))) throw new LocalReadFailure(`local.${name} ordinary read failure`, { cause: error });
+            throw error;
+          }
+          snapshots.set(window.path, captured);
+        }
+        return this.#read({ ...window }, budget, captured);
+      }, args.partial === true, name === "readEvidence" ? { serialize: formatLocalEvidence, operation: "local.readEvidence" } : {});
+      for (const captured of snapshots.values()) {
+        this.#check(context);
+        this.#paths.revalidate(captured.snapshot);
+      }
+      return this.#bounded(name === "readEvidence" ? formatLocalEvidence(result) : result, budget);
     }
     if (name === "list") return this.#list(args);
     if (name === "find" || name === "grep") return await this.#search(name, args, context);
     throw new Error(`Unknown local action: ${name}`);
   }
-  #read(args, budget = this.#budget) {
-    const { text, snapshot } = this.#paths.read(args.path);
-    const lines = text === "" ? [] : text.split("\n");
-    if (text.endsWith("\n")) lines.pop();
+  #read(args, budget = this.#budget, captured) {
+    const { text: text3, snapshot } = captured ?? this.#paths.read(args.path);
+    const lines = captured?.lines ?? new LocalLineIndex(text3);
     const start = (args.offset ?? 1) - 1;
-    const end = Math.min(lines.length, start + (args.limit ?? 200));
-    const result = { path: this.#paths.relative(snapshot.path), text: "", totalLines: lines.length, truncated: false, sha256: snapshot.file.sha256, identity: snapshot.file.identity };
-    this.#bounded(result, budget);
-    for (let index = start; index < end; index++) {
-      const previous = result.text;
-      result.text += lines[index] + (index < lines.length - 1 || text.endsWith("\n") ? "\n" : "");
-      result.truncated = index + 1 < lines.length;
-      if (result.truncated) result.nextOffset = index + 2;
-      else delete result.nextOffset;
-      if (!this.#fits(result, budget)) {
-        if (index === start) throw new Error("local.read single line exceeds configured character budget");
-        result.text = previous;
-        result.truncated = true;
-        result.nextOffset = index + 1;
-        return this.#bounded(result, budget);
-      }
+    const end = Math.min(lines.totalLines, start + (args.limit ?? 200));
+    const empty = { path: this.#paths.relative(snapshot.path), text: "", totalLines: lines.totalLines, truncated: false, sha256: snapshot.file.sha256, identity: snapshot.file.identity };
+    this.#bounded(empty, budget);
+    if (start >= end) return empty;
+    const page = (count2) => ({
+      ...empty,
+      text: lines.slice(start, start + count2),
+      truncated: start + count2 < lines.totalLines,
+      ...start + count2 < lines.totalLines ? { nextOffset: start + count2 + 1 } : {}
+    });
+    const complete = page(end - start);
+    if (this.#fits(complete, budget)) return complete;
+    let low = 0, high = end - start - 1;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (this.#fits(page(mid), budget)) low = mid;
+      else high = mid - 1;
     }
-    return this.#bounded(result, budget);
+    if (!low) throw new Error("local.read single line exceeds configured character budget");
+    return this.#bounded(page(low), budget);
+  }
+  #readWindowPath(input, partial) {
+    try {
+      return this.#paths.check(input).path;
+    } catch (error) {
+      if (!partial || !["ENOENT", "EACCES", "EPERM"].includes(error.code ?? "")) throw error;
+      return this.#paths.resolve(input);
+    }
   }
   #list(args) {
-    const directory = this.#paths.directory(args.path ?? ".");
-    const handle = fs7.opendirSync(directory.path);
+    const directory2 = this.#paths.directory(args.path ?? ".");
+    const handle = fs9.opendirSync(directory2.path);
     const names = [];
     try {
       let item;
@@ -23193,7 +24550,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     const result = { entries: [], truncated: false };
     const limit = args.limit ?? 100;
     for (const name of names.sort()) {
-      const found = this.#paths.check(path7.join(directory.path, name));
+      const found = this.#paths.check(path11.join(directory2.path, name));
       if (result.entries.length >= limit) {
         result.truncated = true;
         continue;
@@ -23205,7 +24562,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
         break;
       }
     }
-    if (JSON.stringify(this.#paths.directory(directory.path)) !== JSON.stringify(directory)) throw new Error("local.list directory identity changed");
+    if (JSON.stringify(this.#paths.directory(directory2.path)) !== JSON.stringify(directory2)) throw new Error("local.list directory identity changed");
     return this.#bounded(result);
   }
   async #rg(args, context) {
@@ -23222,22 +24579,26 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     this.#check(context);
     return output;
   }
-  async #search(name, args, context) {
-    const searchMs = Math.max(1, Math.min(1e4, context.deadline?.remainingMs() ?? 1e4));
-    context = { ...context, deadline: new FabricDeadline(searchMs, searchMs) };
+  async #selectSearch(name, args, context) {
     const base = this.#paths.check(args.path ?? ".");
     const glob = name === "find" ? args.pattern : args.glob;
     const relative = this.#paths.relative(base.path) || ".";
     if (relative.split("/").some((part) => VCS_METADATA.has(part))) throw new Error("local search excludes VCS metadata");
-    const scope = { path: relative, ...glob ? { glob } : {}, hidden: args.hidden === true, ignoreFiles: true };
+    const scope = {
+      path: relative,
+      ...glob ? { glob } : {},
+      hidden: args.hidden === true,
+      ignoreFiles: true,
+      ...args.snapshotScope === "query-v1" ? { snapshotScope: "query-v1" } : {}
+    };
     const enumerationArgs = [
       "--files",
       "--null",
       ...scope.hidden ? ["--hidden"] : [],
       ...[...VCS_METADATA].flatMap((name2) => ["--glob", `!**/${name2}`, "--glob", `!**/${name2}/**`])
     ];
-    const enumeration = await this.#rg([...enumerationArgs, "--", base.path], context);
-    let files = enumeration.split("\0").filter(Boolean);
+    const enumeration2 = await this.#rg([...enumerationArgs, "--", base.path], context);
+    let files = enumeration2.split("\0").filter(Boolean);
     if (!glob && files.length > 1e4) throw new Error("local search exceeded 10000-file work limit; narrow path or glob");
     if (glob && glob !== "**/*") {
       const filtered = await this.#rg([...enumerationArgs, "--glob", glob, "--", base.path], context);
@@ -23250,27 +24611,42 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
       return this.#paths.check(file);
     });
     for (const file of checked) if (!file.stat?.isFile()) throw new Error("local search requires regular files");
-    const limit = args.limit ?? 100;
+    return { scope, files, checked };
+  }
+  async #search(name, args, context, collect = false) {
+    if (args.cursor !== void 0 && args.paginate !== true) throw new Error("local search cursor requires paginate:true");
+    if (args.paginate === true && !collect) return this.#searchPage(name, args, context);
+    const searchMs = Math.max(1, Math.min(1e4, context.deadline?.remainingMs() ?? 1e4));
+    context = { ...context, deadline: new FabricDeadline(searchMs, searchMs) };
+    const { scope, files, checked } = await this.#selectSearch(name, args, context);
+    const limit = collect ? 10001 : args.limit ?? 100;
+    const finish = (value) => this.#bounded(value, collect ? 262144 : this.#budget);
+    const mark = (result2, reason) => {
+      result2.truncated = true;
+      result2.truncationReasons ??= [];
+      if (!result2.truncationReasons.includes(reason)) result2.truncationReasons.push(reason);
+    };
+    const searchFits = (result2) => this.#fits({ ...result2, truncationReasons: ["match-text", "count", "output", "oversized-files"] }, collect ? 262144 : this.#budget);
     if (name === "find") {
       const result2 = { scope, paths: [], truncated: false };
       for (const file of checked) {
         if (result2.paths.length >= limit) {
-          result2.truncated = true;
+          mark(result2, "count");
           break;
         }
         result2.paths.push(this.#paths.relative(file.path));
-        if (!this.#fits(result2)) {
+        if (!searchFits(result2)) {
           result2.paths.pop();
-          result2.truncated = true;
+          mark(result2, "output");
           break;
         }
       }
-      return this.#bounded(result2);
+      return finish(result2);
     }
     const result = { scope, matches: [], truncated: false };
-    if (!files.length) return this.#bounded(result);
+    if (!files.length) return finish(result);
     const candidates = checked.filter((item) => item.stat.size <= LOCAL_MAX_FILE_BYTES);
-    if (candidates.length !== checked.length) result.truncated = true;
+    if (candidates.length !== checked.length) mark(result, "oversized-files");
     let searchedBytes = 0;
     let searchedPathChars = 0;
     let outputBytes = 0;
@@ -23299,29 +24675,110 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
       for (const snapshot of snapshots) this.#paths.revalidate(snapshot);
       for (const line of output.split("\n")) {
         if (!line) continue;
-        const record3 = JSON.parse(line);
-        if (record3.type !== "match") continue;
+        const record4 = JSON.parse(line);
+        if (record4.type !== "match") continue;
         if (result.matches.length >= limit) {
-          result.truncated = true;
-          return this.#bounded(result);
+          mark(result, "count");
+          return finish(result);
         }
-        const data = record3.data;
+        const data = record4.data;
         if (typeof data?.path?.text !== "string" || !Number.isSafeInteger(data.line_number) || !data.line_number || typeof data.lines?.text !== "string") throw new Error("local rg returned unsupported non-UTF-8 match data");
-        const text = data.lines.text.replace(/\r?\n$/u, "");
-        result.matches.push({ path: this.#paths.relative(this.#paths.check(data.path.text).path), line: data.line_number, text: text.slice(0, 500) });
-        if (text.length > 500) result.truncated = true;
-        if (!this.#fits(result)) {
+        const text3 = data.lines.text.replace(/\r?\n$/u, "");
+        result.matches.push({ path: this.#paths.relative(this.#paths.check(data.path.text).path), line: data.line_number, text: text3.slice(0, 500) });
+        if (text3.length > 500) mark(result, "match-text");
+        if (!searchFits(result)) {
           result.matches.pop();
-          result.truncated = true;
-          return this.#bounded(result);
+          mark(result, "output");
+          return finish(result);
         }
       }
       if (result.matches.length >= limit && index < candidates.length) {
-        result.truncated = true;
+        mark(result, "count");
         break;
       }
     }
-    return this.#bounded(result);
+    return finish(result);
+  }
+  async #searchFingerprint(name, args, context) {
+    const base = this.#paths.check(args.path ?? ".");
+    const enumerationArgs = ["--files", "--null", ...args.hidden ? ["--hidden"] : [], ...[...VCS_METADATA].flatMap((name2) => ["--glob", `!**/${name2}`, "--glob", `!**/${name2}/**`]), "--", base.path];
+    const enumerate = async () => args.snapshotScope === "query-v1" ? (await this.#selectSearch(name, args, context)).files.join("\0") : this.#rg(enumerationArgs, context);
+    const output = await enumerate();
+    const files = output.split("\0").filter(Boolean);
+    if (files.length > 1e4) throw new Error("local snapshot exceeds 10000-file work limit");
+    let bytes2 = 0;
+    let metadataChars = 0;
+    const hashes = [];
+    const snapshots = [];
+    for (const file of files) {
+      this.#check(context);
+      const checked = this.#paths.check(file);
+      bytes2 += checked.stat.size;
+      if (bytes2 > 32 * 1024 * 1024) throw new Error("local snapshot exceeds 32MiB work limit");
+      const snapshot = this.#paths.read(file).snapshot;
+      hashes.push(JSON.stringify(snapshot));
+      snapshots.push(snapshot);
+      metadataChars += hashes[hashes.length - 1].length;
+      if (metadataChars > 2 * 1024 * 1024) throw new Error("local snapshot metadata work limit");
+    }
+    if (await enumerate() !== output) throw new Error("local search snapshot enumeration drift during validation");
+    for (const snapshot of snapshots) {
+      this.#check(context);
+      this.#paths.revalidate(snapshot);
+    }
+    this.#check(context);
+    return localHash(JSON.stringify([base.path, hashes]));
+  }
+  async #searchPage(name, args, context) {
+    const ms = Math.max(1, Math.min(1e4, context.deadline?.remainingMs() ?? 1e4));
+    context = { ...context, deadline: new FabricDeadline(ms, ms) };
+    const now = Date.now();
+    for (const [token, entry2] of this.#searchPages) if (entry2.expires <= now) this.#searchPages.delete(token);
+    const key = JSON.stringify([this.#paths.root, name, Object.entries(args).filter(([key2]) => key2 !== "cursor").sort(([a], [b]) => a.localeCompare(b))]);
+    let entry = args.cursor ? this.#searchPages.get(args.cursor) : void 0;
+    if (args.cursor && (!entry || entry.key !== key)) throw new Error("local search cursor invalid, expired, or query/provider mismatch");
+    const fingerprint = await this.#searchFingerprint(name, args, context);
+    if (entry && entry.fingerprint !== fingerprint) throw new Error("local search snapshot drift; restart pagination");
+    if (!entry) {
+      if (this.#searchPages.size >= 8) throw new Error("local search snapshot cache limit; wait for expiry");
+      const result2 = await this.#search(name, args, context, true);
+      if (result2.truncationReasons?.some((reason) => reason !== "match-text")) throw new Error("local search snapshot collection incomplete: work/cache limit or nonresumable omission; narrow scope");
+      if (await this.#searchFingerprint(name, args, context) !== fingerprint) throw new Error("local search snapshot drift during collection");
+      entry = { key, fingerprint, result: result2, offset: 0, expires: now + 6e4 };
+    }
+    const result = "paths" in entry.result ? { scope: { ...entry.result.scope }, paths: [], truncated: true } : { scope: { ...entry.result.scope }, matches: [], truncated: true };
+    const records = "paths" in result ? result.paths : result.matches;
+    const all = "paths" in entry.result ? entry.result.paths : entry.result.matches;
+    const next = randomUUID5();
+    result.nextCursor = next;
+    result.truncated = true;
+    result.truncationReasons = [...entry.result.truncationReasons ?? [], "count", "output"];
+    let offset = entry.offset;
+    while (offset < all.length && records.length < (args.limit ?? 100)) {
+      const record4 = all[offset];
+      records.push(typeof record4 === "string" ? record4 : { ...record4 });
+      if (!this.#fits(result)) {
+        records.pop();
+        break;
+      }
+      offset++;
+    }
+    if (offset === entry.offset && offset < all.length) throw new Error("local search record exceeds output budget; cannot advance cursor");
+    result.truncationReasons = [...entry.result.truncationReasons ?? []];
+    if (offset < all.length) result.truncationReasons.push(records.length === (args.limit ?? 100) ? "count" : "output");
+    else delete result.nextCursor;
+    result.truncated = result.truncationReasons.length > 0;
+    if (!result.truncationReasons.length) delete result.truncationReasons;
+    this.#check(context);
+    if (Date.now() >= entry.expires) throw new Error("local search cursor expired");
+    this.#bounded(result);
+    if (args.cursor && this.#searchPages.get(args.cursor) !== entry) throw new Error("local search cursor already consumed");
+    if (args.cursor) this.#searchPages.delete(args.cursor);
+    if (result.nextCursor) {
+      if (this.#searchPages.size >= 8) throw new Error("local search snapshot cache limit");
+      this.#searchPages.set(next, { ...entry, offset });
+    }
+    return result;
   }
   #publish(name, entry, context) {
     const snapshot = entry.snapshot;
@@ -23330,26 +24787,26 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     this.#check(context);
     const sha256 = localHash(proposed);
     if (snapshot.file?.sha256 === sha256) return this.#bounded({ path: this.#paths.relative(snapshot.path), changed: false, sha256, bytes: Buffer.byteLength(proposed), identity: snapshot.file.identity });
-    const temporary = path7.join(path7.dirname(snapshot.path), `.fabric-local-${randomUUID3()}.tmp`);
+    const temporary = path11.join(path11.dirname(snapshot.path), `.fabric-local-${randomUUID5()}.tmp`);
     const owned = { created: false };
     let published = false;
     let operationError;
     try {
       initializeOwnedFile(temporary, owned, (fd) => {
-        fs7.writeFileSync(fd, proposed, "utf8");
-        fs7.fchmodSync(fd, snapshot.file ? snapshot.file.mode & 511 : 384);
-        fs7.fsyncSync(fd);
+        fs9.writeFileSync(fd, proposed, "utf8");
+        fs9.fchmodSync(fd, snapshot.file ? snapshot.file.mode & 511 : 384);
+        fs9.fsyncSync(fd);
       });
       this.#paths.revalidate(snapshot);
       this.#check(context);
-      if (!sameLocalIdentity(fs7.lstatSync(temporary), owned.identity)) throw new Error("local temporary file identity changed");
-      if (snapshot.file) fs7.renameSync(temporary, snapshot.path);
+      if (!sameLocalIdentity(fs9.lstatSync(temporary), owned.identity)) throw new Error("local temporary file identity changed");
+      if (snapshot.file) fs9.renameSync(temporary, snapshot.path);
       else {
-        fs7.linkSync(temporary, snapshot.path);
+        fs9.linkSync(temporary, snapshot.path);
       }
       published = true;
       entry.committed = true;
-      if (!snapshot.file) fs7.unlinkSync(temporary);
+      if (!snapshot.file) fs9.unlinkSync(temporary);
       const actual = this.#paths.read(snapshot.path).snapshot.file;
       if (actual.sha256 !== sha256 || !sameLocalIdentity(actual.identity, owned.identity)) throw new Error("local published verification conflict");
       this.#check(context);
@@ -23366,9 +24823,9 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
       try {
         if (owned.created) {
           if (!owned.identity) throw new Error("uncertain local temporary file: ownership identity unavailable");
-          const current = fs7.lstatSync(temporary);
+          const current = fs9.lstatSync(temporary);
           if (!current.isFile() || current.isSymbolicLink() || !sameLocalIdentity(current, owned.identity)) throw new Error("local temporary file ownership changed; refusing cleanup");
-          fs7.unlinkSync(temporary);
+          fs9.unlinkSync(temporary);
         }
       } catch (error) {
         if (error.code !== "ENOENT") {
@@ -23384,6 +24841,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     }
   }
   async close() {
+    this.#searchPages.clear();
     this.#closed = true;
     this.#controller.abort(new Error("local provider closed"));
     await Promise.allSettled([...this.#pending]);
@@ -23393,18 +24851,63 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
 
 // src/kiro/generated-guidance.ts
 var BUNDLED_GUIDANCE = Object.freeze({
-  "skill": '---\nname: fabric-exec\ndescription: Strict always-on Code Mode for local coding, bounded provider composition, durable memory/state, artifacts and explicitly configured MCP federation. No native tool fallback.\nlicense: MIT\ncompatibility: Kiro CLI v3 with the Kiro Fabric Agent enabled\n---\n\n# Fabric execution\n\nUse the sole model tool `@fabric/fabric_exec` for every tool operation. User tool/output constraints override workflow advice: if tools are forbidden, use none, including pure computation, formatting, help or verification. Answer general explanations from context without workspace inspection. For workspace work, act directly on known task paths; no ritual listing/help call. Orient recursively with `local.find({pattern:"**/*",hidden:true,limit:200})` once bound; for direct children: `return await local.list({path:".",limit:100});`. Immutable `fabric.help` topics are `api` (declarations), `skill` (this document), `guide` (API prose), `recipes`, `workflow` and `review`. They require no native read, workspace binding or shell; follow `nextOffset` on truncation. Load only unknown, needed contracts. fabric_exec strictly checks a TypeScript function body and runs it in QuickJS. There is no text, action-name, manual-command, or legacy execution fallback. QuickJS has no operating-system, filesystem, shell, environment, import, timer, or direct-network API.\n\n`local.list` accepts only `{path?,limit?}` and lists direct children, including hidden entries; there is no `depth` argument. To find nested files, use `local.find({pattern:"README*",path:".",limit:20})` or list an observed child directory. Never assume a root `README.md` exists. Check discovery results and their `truncated` flags, then read selected existing files in the same execution when no model decision is needed; do not batch a speculative read with the listing/search it depends on. If an API\'s arguments are uncertain, use `tools.describe` rather than inventing options. Search before reading unfamiliar files; read only located ranges. Batch independent reads; await mechanical search/read/edit/test dependencies within one program. Yield for model judgment. `local` handles workspace files/search/shell; `mcp` handles configured external capabilities; `memory` holds intentional durable facts; `state` holds revisioned task progress. Read offsets are one-based lines; help accepts `{topic:"overview"|"api"|"skill"|"guide"|"recipes"|"workflow"|"review",offset?,limit?}` with zero-based UTF-16 character paging. Shell timeoutMs is at most 900000; there is no background job guarantee. Provider-generated `review` contains canonical approval material, not a caller-supplied authorization.\n\nFor repository reviews and improvement requests, load [review guidance](references/review.md) with fabric.help({topic:"review"}) unless already known. Coverage precedes speed: inspect high-risk references and consumers, track unreviewed ranges, and try to disprove findings before finalizing. Orient once; ignore rules still apply. Inspect search scope. The 120-word default does not limit reviews/audits.\n\n## Task and output contracts\n\nCode Mode governs routing when a tool is needed, not an obligation to call a tool. Explicit tool bans include pure computations and verification. Read user-provided files before content-dependent claims when a suitable read capability is available; local.read is UTF-8 only, not visual image/PDF inspection. If tools are forbidden or a reader is unavailable, state the blocker without assuming contents.\n\nChoose the requested final format before work. For JSON-only output, emit no visible assistant commentary before or between tool calls: Kiro concatenates that text into finalText, even when the last message alone is valid JSON. For JSON, keep permitted status, explanation, verification and blockers inside one valid JSON value; no prose, fences, post-test Markdown summary or extra fields contrary to an exact schema. Complete requested output overrides the default brevity limit. Before sending, recheck format without tools. No steering rule is a constrained decoder or a hard no-tools switch.\n\nDefault to a short outcome with concrete check results and unresolved blockers, not a transcript. Progress: milestones, plan changes or blockers, no routine tool narration or repeated recap. Requested detail and exact formats still win.\n\nBefore each tool program choose the task question, evidence that distinguishes causes, and what result changes the next action. Read caller, implementation and config/tests together; assess evidence before choosing a fix. Keep an acceptance ledger, verify public contracts, and use targeted behavioral checks. Broaden for failures or cross-cutting risk; do not repeat unchanged passing checks unless required. A build alone is not completion.\n\n## Hot local recipes and workflow\n\nread returns an object with text:string, not content, lines or a bare string. text[0] is one character, not the first line. Use `text.split(/\\r?\\n/,1)[0]` for a complete first line, preserving whitespace. Search is local.grep, not local.search; edit fields are oldText/newText. Use tools.describe on uncertainty; never guess options.\n\nUse `local.readMany({windows:[{path:"observed-file",limit:2000}]})`: numbered source, hashes, default 32000/max 40000 JSON chars, clamped to runtime budgets. Continue `remaining` verbatim, not the original prefix. Ranges do not prove repo coverage. Dynamic keys need `const out: JsonObject = {};`, not `{}` or `Record<string, unknown>`. Compiler failures execute no calls.\n\nLoad [bounded recipes](references/recipes.md) with fabric.help({topic:"recipes"}) for complete first lines, discover/read composition, exact or same-file edits, settled nonzero commands and known-schema data pipelines. Load [workflow rules](references/workflow.md) with fabric.help({topic:"workflow"}) for acceptance ledgers, user-file handling, coding style, safe Git history, commitlint, PR templates, authorized in-thread review replies, noninteractive commands and file-backed Markdown bodies. Follow nextOffset if a required page is truncated. Reading help never executes an example or grants approval.\n\nOnly for authorized deterministic data work: read, parse, join/filter/compute, write and verify inside one bounded execution. Keep raw records in guest variables, not model round trips or persistent scratch state. Inspect unknown schemas before choosing transformations. Bounded parallel is for independent read-only work, not overlapping writes or commands.\n\nUse `payloads` for named string input:\n\n```ts\nconst request = JSON.parse(payloads.request);\nreturn { id: request.id, normalized: String(request.value).trim() };\n```\n\nProvider composition uses exact references. `fabric.info()` returns an `actions` array plus `catalog` completeness metadata for the bound workspace. When `catalog.complete` or `catalog.digestComplete` is false, recover targeted live descriptors with `tools.search` and `tools.describe`; describe downstream MCP tools again before calling because their freshness is transport-specific:\n\n```ts\nreturn await memory.get({ key: "release" });\n```\n\nWithin one Code Mode execution, `local.shell`, `local.write`, and `local.edit` are queued FIFO in host-call arrival order, including calls through `tools.call`. Even `cat`/`find` shell commands are treated as potential writes; no command-text safety guessing occurs. Their preparation, approval, execution and cleanup complete before the next local effect starts. A failed predecessor stops the remaining local effects in that execution, even when caught. `settle:true` permits continuation only for ordinary nonzero shell exits. Cancellation/deadline never starts queued effects. Other executions/processes still fail fast on conflicting workspace locks.\n\nPrefer `local.read`, `local.list`, `local.find`, and `local.grep` for parallel inspection. Reads/searches are not queued; explicitly await a write before a read that depends on it. Queue wait consumes the outer execution deadline and existing provider-call/concurrency budgets. Shell timeout applies when that command runs; allow outer timeout headroom for the entire batch.\n\nUse the bounded helper for independent calls instead of an unbounded `Promise.all`:\n\n```ts\nconst keys = ["release", "owner", "status"];\nreturn await parallel(keys, async (key) => memory.get({ key }));\n```\n\nInspect a configured downstream MCP server before calling it. Discovery itself is approval-gated and returns a live descriptor bound to the current transport/configuration digest:\n\n```ts\nconst descriptor = await mcp.describe({ server: "reports", tool: "summarize" });\nreturn await mcp.call({\n  server: "reports",\n  tool: "summarize",\n  args: { report: payloads.report },\n  expectedDescriptorDigest: descriptor.descriptorDigest,\n});\n```\n\nThe mounted namespaces are `local`, `fabric`, `artifacts`, `memory`, `state`, and `mcp`. Bootstrap when needed through `fabric.info()` and `fabric.workspace({action:"status"})` inside exec, not top-level compatibility tools. Workspace-scoped providers require a verified binding. Select an ambiguous root in a separate execution with `fabric.workspace({action:"select",rootId})`; do not mix selection and workspace effects. Web/LSP/delegation are unavailable unless explicitly configured through MCP. Write, execute, and network calls follow Fabric approval policy and fail closed when required elicitation is unavailable; batching work into one program does not merge approvals: each write/network action independently follows Fabric approval policy; elicitation occurs only when that policy requires it. Cancellation and the effective deadline propagate through nested calls.\n\nNested call arguments and results do not enter context automatically. The returned value plus bounded diagnostics, guest logs, and failure progress re-enter context. Returned output is capped (`executor.maxOutputChars`, 50,000 chars by default) and spills to an artifact reference when exceeded, so filter, aggregate, and slice inside the program and return only the data the task needs.\n\nLocal shell has host authority. For literal Bash use `local.shell({script:payloads.script,interpreter:"bash",args:[]})`; JSON.stringify is not shell quoting. Request outer `timeoutMs:180000` for `local.shell({command:"pnpm test",timeoutMs:120000})`, leaving cleanup time. Never automatically retry an effectful program.\n',
-  "guide": '# Checked guest API\n\n## Top-level `fabric_exec` input\n\n- `code: string` \u2014 required TypeScript function body; 1 to the enforced source limit\n- `payloads?: Record<string, string>` \u2014 named immutable string inputs\n- `resultFormat?: "auto" | "json" | "text"`\n- `timeoutMs?: number` \u2014 invocation request bounded by Agent policy\n\nNo extra input fields are accepted. Type errors stop execution before QuickJS or any provider call.\n\n## Local and bootstrap facades\n\nAll calls below run inside `fabric_exec`, cross the bounded JSON registry bridge, validate closed schemas and follow exact inner approval policy. There are no native Kiro tools. Paths default to the verified workspace, never process cwd. Missing/ambiguous roots allow bootstrap, not workspace effects.\n\nCall-shape catalogue, not an executable program: await each selected call inside fabric_exec. Workspace selection must be its own execution, separate from all workspace effects. Use the tagged [recipes](recipes.md) for complete executable programs.\n\n```ts\nfabric.info()\nfabric.help({topic: "overview", offset: 0, limit: 4000}) // topics: api, skill, guide, recipes, workflow, review; zero-based UTF-16 paging\nfabric.workspace({action: "status"}) // or "list"\nfabric.workspace({action: "select", rootId: "root-id"})\n\nlocal.list({path: ".", limit: 100}) // inspect the workspace before selecting files\nlocal.read({path: "discovered/file.md", offset: 1, limit: 80}) // use an observed path\nlocal.grep({pattern: "TODO", path: "src", literal: true, ignoreCase: false, limit: 20})\nlocal.find({pattern: "**/*.ts", path: "src", limit: 20})\nlocal.list({path: "src", limit: 20})\nlocal.write({path: "note.txt", content: payloads.content})\nlocal.edit({path: "note.txt", oldText: payloads.old, newText: payloads.next})\nlocal.shell({command: "pnpm test", timeoutMs: 120000, settle: true})\n```\n\nFor that shell example pass **outer `timeoutMs:180000`**. Await each call and return only needed results. Optional `cwd` is canonical/verified but not shell confinement. Shell `timeoutMs` is at most 900000. Provider-generated `review` carries the exact canonical command/cwd or diff for approval; it is not caller-supplied authorization. There is no background job guarantee.\n\nUse supplied/observed task paths directly, without routine listing/help. For an unknown layout begin inspection with `local.list({path:".",limit:100})`, then discover relevant files (for example `local.find({pattern:"README*",path:".",limit:20})`) and read observed paths. A root README is not required. Check `truncated` before treating a discovery result as complete. Do not batch a speculative file read with the discovery it depends on. Search before reading unfamiliar files. Batch independent work; sequence dependent search/read/edit/test steps. `local` handles workspace coding, `mcp` configured external capabilities, `memory` intentional durable facts, and `state` revisioned task progress.\n\n- `read({path,offset?,limit?})`: one-based lines (offset defaults 1), default 200/max 2000 lines per call; returns `{text:string,path,totalLines,truncated,nextOffset?,sha256,identity}`; `totalLines` is the whole-file line count (zero for an empty file). Use `.text.split(/\\r?\\n/,1)[0]` for a complete first line, not `.text[0]`; `.lines`/`.content` and bare-string methods are invalid. Read returns whole lines, never line fragments. `truncated` means unread file suffix, not necessarily missing requested content: for inclusive end line E, `nextOffset > E` means the requested range is covered. For explicitly requested ranges, continue only while the next unread line is in range, with bounded progress/hash checks; stop at the requested end. For reviews, cover relevant unread content or mark it unreviewed; see [review guidance](review.md). Binary/invalid UTF-8, special files and oversized single lines reject rather than inventing continuation.\n- `grep({pattern,path?,glob?,literal?,ignoreCase?,hidden?,limit?})`: `{matches:[{path,line,text}],scope,truncated}`; line numbers are one-based, returned count is not total. `find({pattern,path?,hidden?,limit?})`: `{paths,scope,truncated}`; `pattern` is a glob, not a regular expression. Use `**/*_test.exs`, not `_test\\.exs$`. Empty results from an incorrect pattern do not establish that files are absent. Search requires a trusted external `rg`, resolved and version-checked at provider startup; missing search fails early, never falls back to native tools. Executable identity stays pinned even if PATH later changes. Enumeration is deterministic and bounded, with ripgrep ignore rules and no config or shell interpolation. `hidden:true` includes dotfiles/CI directories (default false); an explicitly named hidden path can also be searched. Ignore rules still apply; positive globs only narrow that enumeration. VCS metadata (`.git`, `.hg`, `.svn`) and symlink traversal remain excluded. `scope:{path,glob?,hidden,ignoreFiles:true}` records the enumeration scope. Even `truncated:false` does not establish whole-repository absence. For a repository review, prefer one bounded `local.find({pattern:"**/*",hidden:true,limit:200})` manifest; partition by relevant subdirectory on truncation.\n- `list({path?,limit?})`: sorted bounded direct children, including hidden entries; returns `{entries:[{path,type}],truncated}`. Only `path` and `limit` are accepted, not `depth`; this is not recursive. Use `find` for nested files or list an observed child directory.\n- `write({path,content,overwrite?})`: create-only unless `overwrite:true`. `edit({path,oldText,newText,all?})`: nonempty exact unique anchor unless `all:true`. Both return `{path,changed,sha256,...}` bounded verification metadata; changed identity/content before publication rejects. No implicit multi-operation transaction.\n- `readMany({windows:[{path,offset?,limit?,expectedSha256?}],maxChars?})`: numbered `files` with ranges, totalLines, hashes and suffix metadata; aggregate default 32000 JSON chars, maxChars 1000..40000, clamped to runtime budgets. Continue `remaining` verbatim; changed-file continuations fail. `complete` covers requested ranges only. Default 200/max 2000 lines per window, at most 32 windows. Lower maxChars when returning other substantial data. No automatic claim of inspection.\n- `shell({command,cwd?,timeoutMs?,settle?})`: `{ok,exitCode,signal,stdout,stderr,truncated,stdoutTruncated,stderrTruncated}`. Ordinary nonzero exits return data with `settle:true`; otherwise they reject with the same bounded data on `error.result` (narrow to `Error` first). Failed outer execution also exposes the last ordinary nonzero result as `lastShellFailure`. Both streams retain deterministic head and tail with truncation flags; output is not embedded into audit/error messages. Denial, spawn failure, cancellation, timeout and uncertain cleanup always fail. `command` uses `/bin/sh` on supported POSIX hosts. Alternatively pass `{script,interpreter:"bash"|"sh",args?,cwd?,timeoutMs?,settle?}`; script defaults to sh, with literal script/positional arguments and no outer expansion or scratch file. Specify exactly one of command/script; bounded streams/deadline, process-group TERM/KILL cleanup, no managed background jobs. Deliberate process-group escape is not contained.\n\nUse `tools.describe({ref:"local.read"})` (and the other exact refs) for current numeric bounds/defaults and complete schemas; limits also depend on the configured bridge budget. Over-budget requests fail rather than authorizing invisible suffixes. Local path checks reject traversal, symlink components, multiply linked and special files. They are defense in depth, not race-proof OS isolation against same-user filesystem attackers. Within one Code Mode execution, write/edit/shell calls queue FIFO before preparation and approval (including `tools.call`); a failed predecessor stops remaining local effects. Reads/searches remain concurrent. Across executions/processes, write/edit/shell conflicts still reject before approval; external editors do not obey Fabric locks.\n\n`fabric.help({topic:"overview"|"api"|"skill"|"guide"|"recipes"|"workflow"|"review",offset?,limit?})` pages immutable compiled help/declarations by zero-based UTF-16 character offset; it does not read a workspace or bundled file at request time. Workspace helpers return JSON objects. Selection returns `{status:"pending",committed:false,nextExecutionRequired:true}` in guest code. After successful settlement the MCP response carries bounded `Workspace transition` sideband evidence with `committed:true`; failure/cancellation does not commit. Never mix selection with workspace effects in either order. Compatibility attach/detach remain validated operator operations, not an ambient model tool. `fabric.info`/`fabric.help` remain usable for recovery without native reads.\n\n## Client approval readiness\n\nMissing approval overrides default to `read: allow`, `write: ask`, `execute: allow`, `network: ask`. Shell execution is enabled by default in a verified workspace and does not require client elicitation. Shell commands have host authority, including filesystem writes and network access; separate write/network policies do not confine them. Explicit `ask`/`deny` settings are preserved on update and remain authoritative. Outer `fabric_exec` permission is not nested approval. `approval was denied or unavailable` can mean an explicit restriction, decline, cancellation or a broken/missing confirmation path. Stop affected effects and inspect the cause; do not repeatedly retry, use native fallback, or switch to blanket allow.\n\nIf the client logs `No handler registered for method: _kiro/mcp/elicitation`, its approval UI handler is missing in that session even if `fabric.info()` reports form elicitation support. This was observed with Kiro CLI 2.21.2 v3; do not assume every client/version is affected. Default shell execution does not need this handler, but operations configured as `ask` still do. Check for an official client fix and start a new conversation; reinstalling Fabric cannot supply a Kiro UI handler. Report affected approval-dependent operations as blocked and preserve `ask` policies.\n\nA healthy installation doctor, valid profile, build, tests or advertised capability is not live coding-readiness evidence. Verify actual shell results and exact edited bytes. To qualify the approval UI rather than default shell execution, configure `execute: ask` and require an explicitly human-approved shell command and file edit through the actual v3 UI, retaining declined/no-effect controls. Use disposable fixtures; never count automatic fixture approvals as human interaction.\n\n## Globals\n\n```ts\npayloads: Readonly<Record<string, string>>\nprint(...values: unknown[]): void\nparallel(items, mapper, options?): Promise<unknown[]>\nparallel(tasks, options?): Promise<unknown[]>\n\ntools.providers(): Promise<Array<{\n  name: string; description: string; available: boolean; reason?: string\n}>>\ntools.list(): Promise<FabricActionSummary[]>\ntools.search(input: string | { query: string; limit?: number }): Promise<FabricActionSummary[]>\ntools.describe(input: string | { ref: string }): Promise<FabricActionSummary>\ntools.call(input: { ref: string; args?: JsonObject }): Promise<JsonValue>\n\nartifacts.read(args: { id: string; offset?: number; limit?: number }): Promise<JsonValue>\n\nmemory.get(args: { key: string }): Promise<JsonValue>\nmemory.set(args: { key: string; value: JsonValue }): Promise<JsonValue>\nmemory.search(args: { query: string; limit?: number }): Promise<JsonValue>\nmemory.index(args?: Record<string, never>): Promise<JsonValue>\nmemory.delete(args: { key: string }): Promise<JsonValue>\n\nstate.get(args: { key: string }): Promise<JsonValue>\nstate.set(args: { key: string; value: JsonValue; expectedRevision?: number }): Promise<JsonValue>\nstate.list(args?: { limit?: number }): Promise<JsonValue>\nstate.delete(args: { key: string; expectedRevision?: number }): Promise<JsonValue>\n\nmcp.servers(args?: Record<string, never>): Promise<JsonValue>\nmcp.tools(args: { server: string }): Promise<FabricMcpToolSummary[]>\nmcp.describe(args: { server: string; tool: string }): Promise<FabricMcpToolSummary>\nmcp.call(args: { server: string; tool: string; args?: JsonObject; expectedDescriptorDigest?: string }): Promise<JsonValue>\n```\n\n`FabricActionSummary.ref` is the exact `provider.action` reference. Action summaries include the full bounded public descriptor plus `descriptorDigest`; search ranks exact refs/names and token matches across descriptions, providers, namespaces, annotations, and schemas deterministically. `tools.call` validates the exact descriptor schema before approval and invocation. `mcp.tools` and `mcp.describe` contact only one explicitly configured server after network approval (and stdio/OAuth execution approval where applicable), returning bounded descriptors tied to transport/configuration and definition digests. For stdio, that transport digest binds the resolved executable plus every argument that resolved to a regular file when the transport was first bound for that server (path, inode, and content); the bound set is frozen for the runtime, so files an approved server itself creates (pid, log, or socket targets named by its own arguments) never shift the digest, while literal argument strings stay bound. It does not recursively attest a script\'s imported dependency graph. Standard MCP tool annotations are preserved in the descriptor digest but never grant approval. `mcp.call` rediscovers and validates the exact advertised remote schema at invocation time; pass `expectedDescriptorDigest` from discovery to reject intervening descriptor drift before the tool call.\n\n`parallel` preserves input order and runs at most the requested number of mapper tasks, capped by `executor.maxConcurrentProviderCalls`. All guest-to-host calls share one execution-wide queue at that same cap, including nested `parallel` helpers and direct `Promise.all`, so excess bridge work waits instead of crossing the host concurrency quota.\n\nAll values crossing the bridge must fit the JSON budgets. Cycles, proxies, unsupported values, over-depth objects, over-budget logs/results, and malformed provider output fail closed. `print` output is returned in a bounded `Fabric logs` sideband after the formatted value. Cancellation and the effective request deadline propagate through nested calls.\n\nQuickJS intentionally has no host imports, dynamic import, built-in modules, process object, environment variables, timers, filesystem, shell, or unrestricted network.\n',
-  "recipes": '# Bounded Code Mode recipes\n\nUse these only when tools are allowed and the task needs them. They are examples, not automatic workflows. Use the observed schema and requested paths; do not assume example files exist. Writes require task authorization and normal per-effect approval. All calls below run inside fabric_exec with named string payloads.\n\n## Complete first lines\n\nRead returns an object with text:string. Preserve whitespace and Unicode, including caf\xE9 \u{1F6F0}; remove only the line ending (including CRLF), not other characters. An empty first line/file yields an empty string.\n\n```ts\n// Recipe: complete first lines from supplied paths\nconst paths = ["one.txt", "two.txt"];\nreturn await parallel(paths, async (path) => {\n  const r = await local.read({path, offset:1, limit:1});\n  return r.text.split(/\\r?\\n/, 1)[0];\n});\n```\n\nFor bounded ranges, `local.read` returns whole lines. `truncated:true` may only mean the file continues beyond the requested end: `offset:41,limit:4,nextOffset:45` covers lines 41\u201344 completely. Do not continue to EOF or make a second tool call merely to format those lines. Split the returned text and return the requested value in the same execution; strip only actual CRLF/LF terminators. If the budget stops before the requested end, advance only to `nextOffset` while it remains in range, with bounded progress and unchanged-file checks. Oversized single lines fail rather than returning a recoverable fragment.\n\n## Discover then read\n\nWhen the search term and context size are already justified, locate and read matching windows in one program. Merge overlaps and preserve search scope; zero hits is only absence within that scope. Yield for model judgment when selecting causes or fixes, not merely to copy paths into a read. For known paths use readMany directly. Its default is 32000 aggregate JSON chars (maxChars up to 40000, clamped to runtime budgets); lower it when also returning substantial search results. Never concatenate continuation pages past the visible cap.\n\n```ts\n// Recipe: discover then read without a model round trip\nconst hits = await local.grep({pattern:payloads.symbol, path:payloads.path, hidden:true, literal:true, limit:10});\nconst matches = [...hits.matches].sort((a,b) => a.path.localeCompare(b.path) || a.line-b.line);\nconst windows: Array<{path:string; start:number; end:number}> = [];\nfor (const match of matches) {\n  const range = {path:match.path, start:Math.max(1,match.line-3), end:match.line+3};\n  const previous = windows[windows.length-1];\n  if (previous && previous.path === range.path && range.start <= previous.end+1) previous.end = Math.max(previous.end,range.end);\n  else windows.push(range);\n}\nconst evidence = windows.length ? await local.readMany({windows:windows.map(range => ({\n  path:range.path, offset:range.start, limit:range.end-range.start+1,\n}))}) : {files:[], remaining:[], complete:true};\nreturn {search:hits, evidence};\n```\n\nIf search.truncated, narrow the search before making absence claims; partial hits remain useful evidence. Continue evidence.remaining verbatim. evidence.complete covers the selected windows, not search completeness. Prefer source windows to guessed field extraction until the schema is known.\n\n## Exact edit and verification\n\n```ts\n// Recipe: exact edit then verification\nconst path = payloads.path;\nconst change = await local.edit({path, oldText:payloads.oldText, newText:payloads.newText});\nconst r = await local.read({path, limit:80});\nif (r.sha256 !== change.sha256) throw new Error("File changed after edit; inspect before recovery");\nreturn {path, changed:change.changed, verifiedSha256:r.sha256, text:r.text, truncated:r.truncated};\n```\n\n## Multiple known edits in one file\n\nThere is no edits-array overload or multi-edit transaction. For a file that fits one bounded read, compute the exact expected bytes from the inspected snapshot, then sequence unique anchors. Each edit retains its own approval and snapshot checks. If a later edit fails, inspect earlier effects before recovery. Final bytes and the last edit hash detect conflicting final state, not all transient external writes.\n\n```ts\n// Recipe: sequential same-file edits\nconst path = payloads.path;\nconst before = await local.read({path, limit:2000});\nif (before.truncated) throw new Error("Incomplete input: narrow/read remaining lines");\nconst replaceOnce = (text:string, oldText:string, newText:string):string => {\n  const parts = text.split(oldText);\n  if (!oldText || parts.length !== 2) throw new Error("Expected a unique nonempty anchor");\n  return parts[0] + newText + parts[1];\n};\nconst expected = replaceOnce(replaceOnce(before.text, payloads.oldFirst, payloads.newFirst), payloads.oldSecond, payloads.newSecond);\nawait local.edit({path, oldText:payloads.oldFirst, newText:payloads.newFirst});\nconst change = await local.edit({path, oldText:payloads.oldSecond, newText:payloads.newSecond});\nconst r = await local.read({path, limit:2000});\nif (r.sha256 !== change.sha256) throw new Error("File changed after edit; inspect before recovery");\nif (r.truncated || r.text !== expected) throw new Error("Final bytes differ from expected edits");\nreturn {path, verified:true, verifiedSha256:r.sha256};\n```\n\n## Expected nonzero commands\n\n```ts\n// Recipe: bounded evidence from expected nonzero commands\nconst r = await local.shell({command:payloads.command, timeoutMs:120000, settle:true});\nreturn {ok:r.ok, exitCode:r.exitCode, stdout:r.stdout.slice(-1200), stderr:r.stderr.slice(-1200),\n  truncated:r.truncated || r.stdout.length > 1200 || r.stderr.length > 1200};\n```\n\nUse outer timeoutMs:180000 for this command. A tail is not full output; select relevant diagnostics and disclose omissions. Denial, timeout, cancellation and uncertain cleanup still fail. Do not retry an intentionally nonzero command.\n\n## Known-schema data pipeline\n\nFor supplied JSON files containing {group:string,amount:integer}, validate inputs, compute in guest variables, create the requested output, then verify exact saved bytes. For unknown schemas, inspect first instead of guessing fields. Adapt aggregation to the actual task.\n\n```ts\n// Recipe: known-schema read compute write verify\nconst paths = JSON.parse(payloads.paths) as string[];\nconst rows = await parallel(paths, async (path) => {\n  const r = await local.read({path, limit:2000});\n  if (r.truncated) throw new Error("Incomplete input: narrow/read remaining lines");\n  const row = JSON.parse(r.text) as {group:string; amount:number};\n  if (typeof row.group !== "string" || !Number.isSafeInteger(row.amount)) throw new Error("Invalid record");\n  return row;\n});\nconst totals = new Map<string, number>();\nfor (const row of rows) {\n  const total = (totals.get(row.group) ?? 0) + row.amount;\n  if (!Number.isSafeInteger(total)) throw new Error("Unsafe total");\n  totals.set(row.group, total);\n}\nconst content = JSON.stringify({totals:Object.fromEntries(totals)});\nawait local.write({path:payloads.outputPath, content});\nconst saved = await local.read({path:payloads.outputPath, limit:2000});\nif (saved.truncated || saved.text !== content) throw new Error("Report verification failed");\nreturn {path:payloads.outputPath, groups:totals.size, verified:true};\n```\n\n## Quiet check results\n\nUse this only for a known command whose stdout is routine logs, not required acceptance evidence or requested output. Inspect/parse stdout instead when it contains test counts, warnings or other decision-relevant data. Always retain stderr, even on exit zero. `ok` reports the command exit, not task correctness; disclose omitted stdout separately from truncation. A truncated result is not complete diagnostic evidence.\n\n```ts\n// Recipe: quiet command status with failure evidence\nconst r = await local.shell({command:payloads.command, timeoutMs:120000, settle:true});\nreturn {ok:r.ok, exitCode:r.exitCode,\n  ...(r.ok ? {} : {stdout:r.stdout.slice(-1200)}),\n  ...(r.stderr ? {stderr:r.stderr.slice(-1200)} : {}),\n  stdoutOmitted:r.ok && r.stdout.length > 0,\n  truncated:r.truncated || (!r.ok && r.stdout.length > 1200) || r.stderr.length > 1200};\n```\n\nUse outer timeoutMs:180000; denial, timeout, cancellation and uncertain cleanup still fail. Do not use `print` to leak the omitted logs back into context.\n\nReturn requested output or compact evidence, not raw records to copy into another execution. Do not use persistent memory/state as scratch storage. parallel preserves input order and bounds concurrency; overlapping writes and commands are not independent fan-out.\n',
-  "workflow": '# Coding and repository workflow\n\nThis is task guidance, not permission. User tool/output constraints override generic workflow advice. If tools are forbidden, make no call, including computation, formatting, help or verification. Explain missing evidence without guessing. For JSON, keep permitted status, explanation, verification and blockers inside the requested schema; do not add fields to an exact schema or append a prose test summary.\n\nFor JSON-only requests, do not emit visible progress prose before or between tool calls. Kiro includes it in finalText. Keep reasoning private and produce only the requested final value; checking the last message alone is insufficient.\n\n## Coding\n\nKeep a small acceptance ledger in working context, not a new repository file by default:\n\n1. Translate the request into observable checks and the requested output contract. Separate requirements from optional cleanup.\n2. Trace the affected execution path before editing. Search before bounded reads; batch independent inspections and sequence dependencies. Keep known-schema data pipelines in guest variables, not model round trips.\n3. Implement the smallest complete change. Mechanically verify requested public symbols, registrations and configuration; substring presence alone does not establish correctness.\n4. Run the smallest targeted tests and direct behavioral probes covering the ledger. Inspect nonzero exits with local.shell settle:true and preserve relevant diagnostics. A build alone is not completion. Escalate for failures, changed dependencies or cross-cutting risk; do not rerun unchanged passing checks unless repository rules require it. Follow required checks/builds without overriding tool bans or read-only constraints.\n5. Stop when each requirement has evidence or an explicit blocker. Distinguish passed, failed and not-run checks; an execution succeeding is not proof that its returned checks passed. Inspect partial effects before recovery, never replay them blindly.\n\n## Repository reviews\n\nFor audits, code review or project-improvement requests, apply [review guidance](review.md) via fabric.help({topic:"review"}). A coding acceptance ledger alone does not establish review coverage: trace high-risk scripts, overrides and consumers; record incomplete reads and unresolved leads. Correctness and coverage precede reducing calls.\n\n## Concise reporting\n\nReduce narration, not verification. For routine outcomes default to concrete check results and unresolved blockers in <=120 words; reviews/audits are exempt, and explicit detail or complete output requests override this. Keep each finding concise without limiting the number of supported findings. No opening pleasantries, repeated plan/recap, raw diffs or successful-command log dumps unless requested. Progress updates should mark meaningful milestones, plan changes or blockers, not each tool call; JSON-only rules above still suppress them.\n\nChoose the needed return shape before execution. Keep intermediate records and routine logs in guest variables; return only decision-relevant evidence such as changed paths, check names/status, failure diagnostics and truncation/omission flags. Inspect relevant output before reducing it. Preserve warnings and uncertainty; do not translate an exit-zero build into "all tests passed". Report only checks actually run, identifying delegated evidence as reported rather than independently verified. Do not claim live model-quality or token-cost improvements from static prompt tests.\n\nNever use decorative comment separator blocks of any kind. Use plain single-line comments and blank lines.\n\nRead every user-provided file through an available read capability before content-dependent claims. local.read handles UTF-8 text only, inside the verified workspace; it is not an image/PDF viewer. For images or other unsupported inputs, use an actually available suitable capability or report the blocker and ask for accessible input. Never guess contents, bypass a tool ban, or change the coding workspace to the installation directory just to read guidance.\n\nNever search the whole disk, user home or cwd ancestors. Do not run find, grep -r, fd, rg or ls against /, /Users, /Users/<user>, ~/, $HOME or any ancestor of cwd. Search only the named task/repository subtree; narrow on truncation.\n\n## Git and GitHub\n\nReference: [GitHub review-comment reply API](https://docs.github.com/en/rest/pulls/comments#create-a-reply-for-a-review-comment).\n\nWorkflow instructions do not authorize commits, pushes or remote mutations. Never git reset --hard or git commit --amend unless explicitly asked. Preserve existing edits and staging. Create new commits and push normally when authorized, following repository commitlint/Conventional Commit standards. If work was wiped, inspect git reflog and recover available commits non-destructively; reflog cannot guarantee recovery of uncommitted edits.\n\nFor interactive commands use an appropriate noninteractive flag, GIT_EDITOR=true, EDITOR=true or --no-edit. Before opening a PR, locate, read and follow the repository PR template, including .github/PULL_REQUEST_TEMPLATE.md or its alternatives.\n\nNever post, edit or delete GitHub comments on issues, PRs, reviews or discussions without explicit permission. Read-only gh pr view and gh api GETs are allowed, subject to normal network approval. With authorization, reply to a PR review comment in-thread via gh api repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies, never as a new parent comment. Supply the PR number and original top-level review-comment ID, not the GraphQL thread ID. Resolve the corresponding thread with the GraphQL resolveReviewThread mutation only after the reply succeeds and resolution is authorized. No pleasantries: state what changed, which commit and why.\n\nNever pass PR, issue or comment Markdown inline as --body. Write it to a temporary file and use --body-file where that command supports it. gh api has no --body-file: encode a JSON request file and use --input, or use its file-backed body field. Keep Markdown out of shell command strings. Use git commit -F for Markdown commit messages. File-backed data still needs safe path quoting and exact approval; it never grants permission to post.\n',
-  "review": '# Evidence-led repository reviews\n\nUse for reviews, audits and bug-finding requests. Honor scope and prior authorization; a review does not authorize edits, deployments, secret use or network requests. Reviews are exempt from the 120-word default. Follow nextOffset if help is truncated.\n\n## Map once, then follow behavior\n\nIdentify the repo\'s role: application, configuration/deployment, generated code or external dependency. Combine unknown guidance and recursive discovery:\n\n```ts\nconst [guidance, manifest] = await Promise.all([\n  fabric.help({topic:"review"}),\n  local.find({path:".", pattern:"**/*", hidden:true, limit:200}),\n]);\nreturn {guidance, manifest};\n```\n\nOmit known discovery/help. hidden:true includes CI/dot-directories; ignore rules still apply. truncated:false means completeness within returned scope. Partition truncated searches; retain scope/truncated. Zero matches alone do not prove absence.\n\nKeep a compact coverage ledger in working context: area/path, received ranges, open leads, inspected / unreviewed / blocked with reason. Include entrypoints, maintenance scripts, overrides, template consumers, validators and security/data boundaries. A listing or requested range is not inspection. Inspect returned evidence, including overflow and unread suffixes.\n\nTrace pipeline -> script -> argument mapping -> selected objects -> actions -> reported outcome. Trace default -> environment override -> rendered resource and configuration -> loader -> observable effect. Read referenced executable code, not only its launcher. If implementation or settings live elsewhere, identify that boundary rather than inventing behavior.\n\n## Read source without losing coverage\n\nBefore writing a tool program choose the question, related source needed to distinguish causes, and what result changes the next action. Use local.readMany to gather callers, implementation and config/tests together, then assess the evidence. Supply observed files in payloads.windows as JSON [{"path":"scripts/task.ts","limit":2000}].\n\n```ts\n// Recipe: numbered review evidence\nreturn await local.readMany({\n  windows: JSON.parse(payloads.windows) as LocalReadWindow[],\n});\n```\n\nEach file has path, startLine/endLine, totalLines, source, sha256, truncated and optional nextOffset. Continue remaining verbatim; hashes guard partial ranges against source changes. Do not repeat the original prefix. complete covers requested ranges, not the whole file/repo or understanding. Stop at a bounded range\'s end; for whole-file review follow further file nextOffset. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars up to 40000, clamped to runtime budgets. Lower maxChars when returning other data; do not concatenate pages past the visible output cap.\n\nFor long structured data use bounded parsing: return exceptions, totals and redacted locations. Inspect security/config fields, consumers and signature/allowlist presence without returning credentials. A signed URL proves storage, not validity, permissions or successful abuse. Do not skip sensitive areas or extrapolate one file to every environment.\n\nFor generic dynamic JSON keys use const out: JsonObject = {}; not an untyped {} or Record<string, unknown>. Compiler hints explain repairs. Do not drop evidence metadata to bypass a type error.\n\n## Verify and try to falsify\n\nFor each candidate retain location, first incorrect value/action, trigger, evidence, counterexample and unresolved dependency. Grade each claim now, not just in a final disclaimer: source mismatch; reproduced behavior under stated inputs; or conditional risk. A wrong key mapping is observable without asserting authentication failure. A commented setting can come from variable groups/UI/runtime settings. Missing application code cannot prove a response property absent, defaults or matching behavior. State the condition beside the claim; a caveat at the end cannot support an unconditional headline.\n\nInspect logic in both directions: inputs to effects, then each guard/log against the object acted upon. Compare simulation/force and success/failure paths. For configuration repos also compare exact producer/consumer keys, including casing, names/ports/selectors and API group/resource/verb tuples. Read defaults and overrides; exercise a supported non-default value when the default hides a mismatch. A successful render does not check these contracts or prove cluster behavior.\n\nBefore declaring a validator/config unused, search callers, including hidden CI:\n\n```ts\n// Recipe: review callers\nreturn await local.grep({pattern:payloads.symbol,path:".",literal:true,hidden:true,limit:80});\n```\n\nRetain scope/truncated and follow references. hidden defaults to false even after hidden:true discovery. Read caller exit policy and imported owners; absence is only within searched scope.\n\nUse small local probes to resolve uncertainty: render configs, run pure functions or compare contracts. Read modules before importing: imports may execute effects. Never run deploy/cleanup scripts against services. Client dry-runs can contact clusters for discovery/schema; use offline checks. Missing runtimes leave semantics unverified; installation needs authorization.\n\nFor multiline shell probes use the literal script API and the actual interpreter:\n\n```ts\n// Recipe: literal Bash probe\nreturn await local.shell({\n  script: payloads.script, interpreter:"bash", args:[payloads.input],\n  timeoutMs:20000, settle:true,\n});\n```\n\nScript/args arrive literally, with args as $1 onward. Stub external effects. JSON.stringify is not shell quoting. Preserve the tested status immediately (probe_status=$?), then exit "$probe_status" after diagnostics; trailing echo/grep/tail can replace it. Return exitCode/stdout/stderr/truncation. settle handles ordinary nonzero exits only. Host authority/approvals remain; this is not network isolation.\n\nA probe must exercise the claimed causal chain. Feeding a constant into a downstream parser separately does not prove how the upstream response is handled. Test representative success and failure inputs through the same path. Record what the stub substitutes and what remains unknown; an observed dropped argument does not imply a fallback, data loss or production failure. Preserve the original failure policy when reproducing it, and validate proposed fixes too.\n\nActively seek counterexamples: upstream validation, externally supplied settings, caller failure policy and alternate ownership. Collection mutation is not proof of skipped elements: check whether the runtime returns a snapshot. A background operator is not proof of lost stdout. Missing runtimes leave these claims conditional, not verified.\n\n## Completion and reporting\n\nBefore finalizing, make a separate skeptical pass over candidates and coverage. Reconcile every retained lead: report it with evidence/condition, reject it with a counterexample, or mark the missing check. Do not silently drop a supported defect from an already-read file. Recheck never/always/cannot/live and each "therefore". Keep branch conditions consistent across findings. Deduplicate symptoms; no findings is valid.\n\nClose high-risk leads and cross-file contracts in accessible relevant areas before offering follow-up on a small repo. For bounded reviews or real blockers report uninspected scope and next checks. A fetched file is not inspected; a green probe proves only its inputs/path. Do not claim whole-repo coverage with omissions.\n\nReport verified defects first, ordered by impact, with file:line, reachable cause and concrete correction. Separate conditional risks and optional improvements. State verification actually run, unresolved external dependencies and unrun checks. Keep narration concise while completing the necessary investigation; never fill a findings quota or claim superiority from synthetic checks alone.\n'
+  "skill": '---\nname: fabric-exec\ndescription: Strict always-on Code Mode for local coding, bounded provider composition, durable memory/state, artifacts and explicitly configured MCP federation. No native tool fallback.\nlicense: MIT\ncompatibility: Kiro CLI v3 with the Kiro Fabric Agent enabled\n---\n\n# Fabric execution\n\nThe standing prompt owns completion, authorization and output rules. This resource supplies execution details; read only the task help you need. Reuse known paths, context and descriptors. Complete the requested scope with fewer redundant reads and tool exchanges, preserving evidence and required verification.\n\nUse `@fabric/fabric_exec` for tools, with a checked TypeScript function body. No native fallback. QuickJS has no OS, filesystem, environment, imports, timers or direct networking. Mounted namespaces include `local`, `fabric`, `artifacts`, `memory`, `state`, `mcp`, and the explicitly invoked `review`/`probe` APIs. Their availability is not permission to load guidance or run a review; see optional typed operations in guide help.\n\nKnown task paths bypass discovery. For broad reviews of unfamiliar layouts, default to discovery -> bounded observed starter reads in the same exec: use `local.find({pattern:"**/*",hidden:true,limit:200})`, then mechanically select relevant returned paths for `local.readMany`. Narrow on truncation and respect ignore rules; starter reads are not a coverage limit. Use `local.list` only when direct children are needed; it accepts only path/limit, no depth. Never assume README.md exists. Follow the standing execution/yield policy; the recipes below implement mechanical composition without another model turn. General conversation needs no empty tool call.\n\nLoad unknown call shapes with `tools.describe`. Immutable `fabric.help` topics: `overview`, `api`, `skill`, `guide`, `recipes`, `workflow`, `review`. Help uses zero-based UTF-16 offset/limit paging; follow `nextOffset` on truncation. Do not reload help already present. Review help is explicit and optional: use `fabric.help({topic:"review"})` only when its contract or recipes are needed, never as an automatic bootstrap. Return requested help text with continuations, not a loaded flag. Fetched source is not traced behavior; apply the finding proof gate when reporting defects. Single verified roots need no preliminary workspace status call. Guidance examples do not authorize effects.\n\nFor JSON-only output, omit visible commentary before/between tools: Kiro concatenates that text into finalText. Match the requested schema, including verification/blockers only where allowed. Report all requested results and supported findings with no arbitrary word target; no routine tool narration or repeated recap.\n\n## Profile selection and installed guidance\n\n`generateAgentProfile({..., guidanceMode})` accepts `standard` (default), `review`, or `minimal`; `createAgentPrompt(mode)` selects the exported immutable `AGENT_PROMPTS` entries. Existing installers omit the option and retain standard behavior. No mode changes tool inventory, workspace binding, approvals or effect safety.\n\nStandard and review profiles reference the installed `skill://.../SKILL.md` and optional `file://.../fabric.md` steering resource. Their `UserPromptSubmit` command invokes `mcp-entry.js --first-prompt-hook <dataRoot>`; the hook emits first-prompt guidance once per session, not on every prompt. Review explicitly adds the short review core; optional recipes are not executed by loading them. Minimal emits `resources:[]` and `hooks:[]`, never the first-prompt hook; its prompt contains only tool operation/authorization instructions, not review help. Profile selection does not rewrite user-owned configuration or disable client-supplied instructions. Tool-only use does not require guidance injection or permission to steer.\n\nMemory/state is shared by workspace, not isolated by chat. Use explicit session/task keys and revision checks for intentional task persistence; keys are coordination, not an access-control boundary. Do not adopt another session\'s ledger or mirror conversation into shared scratch state.\n\n## Hot local recipes and workflow\n\nUse local.edit({path,expectedSha256,edits:[{oldText,newText}]}) for independent same-file changes: original-snapshot anchors, one approved publication, no partial edits on invalid anchors. readMany({windows,partial:true}) may retain independent successes with indexed failures; resolve failures rather than blindly replaying remaining. Safety and final-drift errors still stop. Host-issued Error.failure supplies bounded repair hints; it never authorizes replay of earlier effects. artifacts.read has typed pagination; explicitly chosen artifacts.checkpoint evidence needs write approval and is ephemeral, quota/TTL-bound, not durable memory. See guide/recipes for contracts.\n\nRead the current contents of an existing file before modifying it. Prefer targeted local.edit changes to existing files; use local.write to create a file when a new file is needed for the requested outcome. Discover unfamiliar paths first and use already-known relevant paths directly.\n\nread returns an object with text:string, not content, lines or a bare string. text[0] is one character, not the first line. Use `text.split(/\\r?\\n/,1)[0]` for a complete first line, preserving whitespace. Search is local.grep, not local.search; edit fields are oldText/newText. Use tools.describe on uncertainty; never guess options.\n\nUse `local.readMany({windows:[{path:"observed-file",limit:2000}]})` for whole relevant files together: numbered source, hashes, default 32000/max 40000 JSON chars, clamped to runtime budgets. Use smaller explicit ranges for focused evidence. Reuse `totalLines` from these substantive reads; do not read first lines only to count lines. Continue `remaining` verbatim first, not the original prefix; then follow relevant `unreadTails`. The lists can overlap, so do not concatenate them. `complete` covers requested windows; `unreadTails` summarizes file suffixes after the last delivered line per file snapshot. Follow relevant tails using the file hash; an empty summary does not account for omitted prefixes, gaps or unrequested files. Dynamic keys need `const out: JsonObject = {};`, not `{}` or `Record<string, unknown>`. Compiler failures execute no calls.\n\nLoad [bounded recipes](references/recipes.md) with fabric.help({topic:"recipes"}) for complete first lines, discover/read composition, exact or same-file edits, settled nonzero commands and known-schema data pipelines. Load [workflow rules](references/workflow.md) with fabric.help({topic:"workflow"}) for acceptance ledgers, user-file handling, coding style, safe Git history, commitlint, PR templates, authorized in-thread review replies, noninteractive commands and file-backed Markdown bodies. Follow nextOffset if a required page is truncated. Reading help never executes an example or grants approval.\n\nOnly for authorized deterministic data work: read, parse, join/filter/compute, write and verify inside one bounded execution. Keep raw records in guest variables, not model round trips or persistent scratch state. Inspect unknown schemas before choosing transformations. Bounded parallel is for independent read-only work, not overlapping writes or commands.\n\nUse `payloads` for named string input:\n\n```ts\nconst request = JSON.parse(payloads.request);\nreturn { id: request.id, normalized: String(request.value).trim() };\n```\n\nProvider composition uses exact references. `fabric.info()` returns an `actions` array plus `catalog` completeness metadata for the bound workspace. When `catalog.complete` or `catalog.digestComplete` is false, recover targeted live descriptors with `tools.search` and `tools.describe`; describe downstream MCP tools again before calling because their freshness is transport-specific:\n\n```ts\nreturn await memory.get({ key: "release" });\n```\n\nWithin one Code Mode execution, `local.shell`, `local.write`, and `local.edit` are queued FIFO in host-call arrival order, including calls through `tools.call`. Even `cat`/`find` shell commands are treated as potential writes; no command-text safety guessing occurs. Their preparation, approval, execution and cleanup complete before the next local effect starts. A failed predecessor stops the remaining local effects in that execution, even when caught. `settle:true` permits continuation only for ordinary nonzero shell exits. Cancellation/deadline never starts queued effects. Other executions/processes still fail fast on conflicting workspace locks.\n\nPrefer `local.read`, `local.list`, `local.find`, and `local.grep` for parallel inspection. Reads/searches are not queued; explicitly await a write before a read that depends on it. Queue wait consumes the outer execution deadline and existing provider-call/concurrency budgets. Shell timeout applies when that command runs; allow outer timeout headroom for the entire batch.\n\nUse the bounded helper for independent calls instead of an unbounded `Promise.all`:\n\n```ts\nconst keys = ["release", "owner", "status"];\nreturn await parallel(keys, async (key) => memory.get({ key }));\n```\n\nInspect a configured downstream MCP server before calling it. Discovery itself is approval-gated and returns a live descriptor bound to the current transport/configuration digest:\n\n```ts\nconst descriptor = await mcp.describe({ server: "reports", tool: "summarize" });\nreturn await mcp.call({\n  server: "reports",\n  tool: "summarize",\n  args: { report: payloads.report },\n  expectedDescriptorDigest: descriptor.descriptorDigest,\n});\n```\n\nBootstrap when needed through `fabric.info()` and `fabric.workspace({action:"status"})` inside exec, not top-level compatibility tools. Workspace-scoped providers require a verified binding. Select an ambiguous root in a separate execution with `fabric.workspace({action:"select",rootId})`; do not mix selection and workspace effects. Web/LSP/delegation are unavailable unless explicitly configured through MCP. Write, execute, and network calls follow Fabric approval policy and fail closed when required elicitation is unavailable; batching work into one program does not merge approvals: each write/network action independently follows Fabric approval policy; elicitation occurs only when that policy requires it. Cancellation and the effective deadline propagate through nested calls.\n\nNested call arguments and results do not enter context automatically. The returned value plus bounded diagnostics, guest logs, and failure progress re-enter context. Reserve aggregate output headroom across all returned reads, evidence, diagnostics and continuation metadata; lower per-read maxChars when combining results. Returned output is capped (`executor.maxOutputChars`, 50,000 chars by default) and spills to an artifact reference when exceeded, so filter, aggregate, and slice inside the program and return only the data the task needs.\n\nLocal shell has host authority. For literal Bash use `local.shell({script:payloads.script,interpreter:"bash",args:[]})`; JSON.stringify is not shell quoting. Request outer `timeoutMs:180000` for `local.shell({command:"pnpm test",timeoutMs:120000})`, leaving cleanup time. Never automatically retry an effectful program.\n',
+  "guide": '# Checked guest API\n\n## Top-level `fabric_exec` input\n\n- `code: string` \u2014 required TypeScript function body; 1 to the enforced source limit\n- `payloads?: Record<string, string>` \u2014 named immutable string inputs\n- `resultFormat?: "auto" | "json" | "text"`\n- `timeoutMs?: number` \u2014 invocation request bounded by Agent policy\n\nNo extra input fields are accepted. Type errors stop execution before QuickJS or any provider call.\n\n## Local and bootstrap facades\n\nAll calls below run inside `fabric_exec`, cross the bounded JSON registry bridge, validate closed schemas and follow exact inner approval policy. There are no native Kiro tools. Paths default to the verified workspace, never process cwd. Missing/ambiguous roots allow bootstrap, not workspace effects.\n\nCall-shape catalogue, not an executable program: await each selected call inside fabric_exec. Workspace selection must be its own execution, separate from all workspace effects. Use the tagged [recipes](recipes.md) for complete executable programs.\n\n```ts\nfabric.info()\nfabric.help({topic: "overview", offset: 0, limit: 4000}) // topics: api, skill, guide, recipes, workflow, review; zero-based UTF-16 paging\nfabric.workspace({action: "status"}) // or "list"\nfabric.workspace({action: "select", rootId: "root-id"})\n\nlocal.list({path: ".", limit: 100}) // only when direct children are needed\nlocal.read({path: "discovered/file.md", offset: 1, limit: 80}) // use an observed path\nlocal.grep({pattern: "TODO", path: "src", literal: true, ignoreCase: false, limit: 20})\nlocal.find({pattern: "**/*.ts", path: "src", limit: 20})\nlocal.list({path: "src", limit: 20})\nlocal.write({path: "note.txt", content: payloads.content})\nlocal.edit({path: "note.txt", oldText: payloads.old, newText: payloads.next})\nlocal.shell({command: "pnpm test", timeoutMs: 120000, settle: true})\n```\n\nFor that shell example pass **outer `timeoutMs:180000`**. Await each call and return only needed results. Optional `cwd` is canonical/verified but not shell confinement. Shell `timeoutMs` is at most 900000. Provider-generated `review` carries the exact canonical command/cwd or diff for approval; it is not caller-supplied authorization. There is no background job guarantee.\n\nUse supplied/observed task paths directly, without routine listing/help. For broad reviews of unfamiliar layouts, default to discovery -> bounded observed starter reads in the same exec: `local.find({pattern:"**/*",hidden:true,limit:200})`, then mechanically select relevant returned paths for `local.readMany`. Use `local.list` only when direct children are needed. A root README is not required. Check `truncated` before treating a discovery result as complete. Never read speculative paths: await discovery before deriving reads from observed results. Search before reading unfamiliar files. Follow the standing execution/yield policy: dependent calls can share an exec when their next step is mechanical. Reserve aggregate output headroom across reads, evidence, diagnostics and continuation metadata, reducing per-read maxChars when combining results. `local` handles workspace coding, `mcp` configured external capabilities, `memory` intentional durable facts, and `state` revisioned task progress.\n\n- `read({path,offset?,limit?})`: one-based lines (offset defaults 1), default 200/max 2000 lines per call; returns `{text:string,path,totalLines,truncated,nextOffset?,sha256,identity}`; `totalLines` is the whole-file line count (zero for an empty file). Use `.text.split(/\\r?\\n/,1)[0]` for a complete first line, not `.text[0]`; `.lines`/`.content` and bare-string methods are invalid. Read returns whole lines, never line fragments. `truncated` means unread file suffix, not necessarily missing requested content: for inclusive end line E, `nextOffset > E` means the requested range is covered. For explicitly requested ranges, continue only while the next unread line is in range, with bounded progress/hash checks; stop at the requested end. For reviews, cover relevant unread content or mark it unreviewed; see [review guidance](review.md). Binary/invalid UTF-8, special files and oversized single lines reject rather than inventing continuation.\n- `grep({pattern,path?,glob?,literal?,ignoreCase?,hidden?,limit?})`: `{matches:[{path,line,text}],scope,truncated}`; line numbers are one-based, returned count is not total. `find({pattern,path?,hidden?,limit?})`: `{paths,scope,truncated}`; `pattern` is a glob, not a regular expression. Use `**/*_test.exs`, not `_test\\.exs$`. Empty results from an incorrect pattern do not establish that files are absent. Search requires a trusted external `rg`, resolved and version-checked at provider startup; missing search fails early, never falls back to native tools. Executable identity stays pinned even if PATH later changes. Enumeration is deterministic and bounded, with ripgrep ignore rules and no config or shell interpolation. `hidden:true` includes dotfiles/CI directories (default false); an explicitly named hidden path can also be searched. Ignore rules still apply; positive globs only narrow that enumeration. VCS metadata (`.git`, `.hg`, `.svn`) and symlink traversal remain excluded. `scope:{path,glob?,hidden,ignoreFiles:true}` records the enumeration scope. Even `truncated:false` does not establish whole-repository absence. For a repository review, prefer one bounded `local.find({pattern:"**/*",hidden:true,limit:200})` manifest; partition by relevant subdirectory on truncation.\n- Search results may include `truncationReasons`: `match-text` means inspect the original line; `count`/`output` require narrower scope, a larger allowed budget, or opt-in pagination; `oversized-files` requires separate inspection. `find`/`grep` accept `paginate:true` and `cursor?:string`, returning `nextCursor?`. Resume with identical original arguments plus `cursor:nextCursor`; cursors are opaque, provider-local, single-use and expire 60 seconds after initial capture, not after each page. Defaults remain 100/max 1000 records. Up to eight snapshots of <=262144 JSON characters are cached; existing work/deadline limits remain. Pagination validates the unfiltered enumeration scope and file content before publishing cached records, rejecting additions/deletions/drift. Oversized/nontext files and incomplete collection reject rather than imply complete coverage; narrow the path, not just the glob. Count/output can resume; clipped match text cannot. A terminal cursor does not mean `truncated:false` when match text was clipped. This is bounded ephemeral snapshot recovery, not persistent repository indexing. Opt-in `snapshotScope:"query-v1"` (requires `paginate:true`) binds only glob-selected candidates and reports `scope.snapshotScope`. It still checks selected membership, content and identities twice and re-applies ignore/hidden/VCS rules; nonmatching grep candidates are included. Unrelated content/binaries outside the glob no longer invalidate/block pages. Selected nontext/oversized files still reject. Narrow globs and larger pages reduce work; this is not constant-time paging. Omit the option to retain unfiltered-scope validation; repeat the chosen mode on every continuation.\n- `list({path?,limit?})`: sorted bounded direct children, including hidden entries; returns `{entries:[{path,type}],truncated}`. Only `path` and `limit` are accepted, not `depth`; this is not recursive. Use `find` for nested files or list an observed child directory.\n- `write({path,content,overwrite?})`: create-only unless `overwrite:true`. `edit({path,oldText,newText,all?,expectedSha256?})` or `edit({path,edits:[{oldText,newText,all?}],expectedSha256?})`: 1..100 replacements resolved against one original snapshot, nonempty unique anchors unless per-edit `all:true`. Overlapping ranges and late invalid anchors reject before one complete-diff approval/publication. A stale expectedSha256 rejects before approval; chain returned hashes for dependent edits. Both return `{path,changed,sha256,...}` bounded verification metadata; changed identity/content before publication rejects. No implicit multi-operation transaction.\n- `readMany({windows:[{path,offset?,limit?,expectedSha256?}],maxChars?,partial?})`: same-file windows reuse one immutable invocation snapshot and UTF-16 line index, revalidated before return. Whole-line window sizing avoids per-line reserialization; CRLF/BOM and continuation/hash semantics stay intact. Default failures reject. Opt-in `partial:true` retains independent successes with zero-based indexed `failures:[{index,path,code,message}]` and unresolved `remaining`; codes are `read` or `stale-hash`, and `complete:false`. Unsafe paths, cancellation and final snapshot drift still reject. Resolve failures before replaying their unchanged remaining requests. Otherwise: numbered `files` with ranges, totalLines, hashes and suffix metadata; aggregate default 32000 JSON chars, maxChars 1000..40000, clamped to runtime budgets. Continue `remaining` verbatim first; changed-file continuations fail. `complete` covers requested ranges only. `unreadTails` supplies hash-bound suffix windows after the last delivered line per file snapshot, at most 2000 lines each. Once remaining requests finish, follow relevant tails; the lists can overlap, so never concatenate them. Empty tails do not cover omitted prefixes/gaps or unrequested files. Default 200/max 2000 lines per window, at most 32 windows; use 2000 when whole relevant files are needed and reuse returned totalLines instead of separate count-only reads. Lower maxChars when returning other substantial data. No automatic claim of inspection.\n- `shell({command,cwd?,timeoutMs?,settle?})`: `{ok,exitCode,signal,stdout,stderr,truncated,stdoutTruncated,stderrTruncated}`. Ordinary nonzero exits return data with `settle:true`; otherwise they reject with the same bounded data on `error.result` (narrow to `Error` first). Failed outer execution also exposes the last ordinary nonzero result as `lastShellFailure`. Both streams retain deterministic head and tail with truncation flags; output is not embedded into audit/error messages. Denial, spawn failure, cancellation, timeout and uncertain cleanup always fail. `command` uses `/bin/sh` on supported POSIX hosts. Alternatively pass `{script,interpreter:"bash"|"sh",args?,cwd?,timeoutMs?,settle?}`; script defaults to sh, with literal script/positional arguments and no outer expansion or scratch file. Specify exactly one of command/script; bounded streams/deadline, process-group TERM/KILL cleanup, no managed background jobs. Deliberate process-group escape is not contained.\n\nUse `tools.describe({ref:"local.read"})` (and the other exact refs) for current numeric bounds/defaults and complete schemas; limits also depend on the configured bridge budget. Over-budget requests fail rather than authorizing invisible suffixes. Local path checks reject traversal, symlink components, multiply linked and special files. They are defense in depth, not race-proof OS isolation against same-user filesystem attackers. Within one Code Mode execution, write/edit/shell calls queue FIFO before preparation and approval (including `tools.call`); a failed predecessor stops remaining local effects. Reads/searches remain concurrent. Across executions/processes, write/edit/shell conflicts still reject before approval; external editors do not obey Fabric locks.\n\n`fabric.help({topic:"overview"|"api"|"skill"|"guide"|"recipes"|"workflow"|"review",offset?,limit?})` pages immutable compiled help/declarations by zero-based UTF-16 character offset, default/max limit 16000 within the configured serialized JSON budget; it does not read a workspace or bundled file at request time. Workspace helpers return JSON objects. Selection returns `{status:"pending",committed:false,nextExecutionRequired:true}` in guest code. After successful settlement the MCP response carries bounded `Workspace transition` sideband evidence with `committed:true`; failure/cancellation does not commit. Never mix selection with workspace effects in either order. Compatibility attach/detach remain validated operator operations, not an ambient model tool. `fabric.info`/`fabric.help` remain usable for recovery without native reads.\n\n## Explicit evidence, review and probe APIs\n\nThese APIs are optional operations, not instructions to run a review. Discover/describe an unavailable namespace rather than inventing a fallback. Selecting minimal or tool-only guidance does not grant effects or inject recipes.\n\n- `local.readEvidence(args: LocalReadEvidenceArguments): Promise<string>` accepts the same `windows`, `maxChars` and `partial` contract as readMany. It returns a `KIRO_LOCAL_EVIDENCE/1` packet with numbered sources and a final `META <JSON>` line typed as `LocalEvidenceMetadata`. Parse the **last** newline+META delimiter, not text resembling a footer inside source. `sourceOffset/sourceChars` address decoded packet UTF-16, not bytes; hashes identify original file bytes. Budget the entire JSON-serialized string, including escaping. Follow `remaining` before relevant `unreadTails` without concatenating overlaps; retain `failures`. `complete` describes requested windows only, never traced coverage or understanding. readMany remains the structured alternative.\n- `review.begin({objective,paths,scenarios?})` creates an optional instance/session-local ledger; paths are execution-path IDs, not filenames. `review.update({taskId,obligationId,status,evidence?,note?,contract?,blocker?})` records declared coverage (`unknown|retrieved|traced|verified|blocked`). Traced needs note+evidence; verified also needs contract+non-source proof; blocked needs reason+nextAction. Evidence uses `{path,startLine,endLine,kind,rationale,expectedSha256?}`; the host reads/hash-checks it but does not execute it.\n- `review.finding(args: ReviewFindingArguments)` requires caller/trigger, expectedContract, actualAction, consequence, evidence, counterexample and unresolvedAssumptions alongside title, requestedStatus, severity and confidence. Admission is structural, not semantic validation or proof that a declared test ran. `review.status({taskId,offset?,limit?})` returns last-known entries; `review.reconcile(...)` explicitly rechecks source freshness. Continue `nextOffset` while non-null (default 20/max 50 entries). `ready` is advisory and declared-scope-only; `semanticValidation:false` is deliberate. `review.end({taskId})` discards the ledger. Mutations require ordinary write approval; no automatic steering, persistence or cross-chat restoration. Tasks expire with bounded task/session TTLs. Shared `memory/state` is separate and requires explicit session/task keys and revision checks.\n- `probe.discover({executables:string[]})` performs bounded PATH/conventional SDK presence and cache-location checks, not commands, version detection, cache inspection or credential discovery. Results explicitly report `executed:false`, `versionsObserved:false`, `credentialsAssumed:false`; absence is limited to searched candidates.\n- `probe.create({label?,kind,files?,declarations?})` creates an explicitly approved retained project outside the repository. kind is `repository-code|framework-semantic|illustrative`. `probe.write({id,path,content})` is individually approved/create-only. Host-owned IDs are instance-local. `probe.run({id,executable,args?,timeoutMs?,settle?,declarations?})` executes literal argv, or choose `script` plus optional `interpreter:"sh"|"bash"` instead of executable. Run uses host authority, not filesystem/network confinement, and retains request/result records. Ordinary nonzero exits may settle; denial, cancellation, timeout and abnormal termination do not. No implicit install, test, replay or deletion.\n\nProbe SDK/package versions, environment and source references in `declarations` are caller claims, not detected versions, environment injection or source attestation. A discover hit does not establish an importable SDK. Inspect dependencies and run the actual SDK only with authorization; distinguish real repository/framework execution from illustrative imitations and report missing prerequisites. Run results include exitCode, signal, stdout/stderr, truncation, recordPath and `productionProof:false`; successful execution never proves production correctness. See optional [typed recipes](#optional-typed-operations).\n\n## Optional typed operations\n\nThese examples require the corresponding available namespace and normal per-action approval. Use only the operation needed, with explicit named payloads; no recipe authorizes a follow-up effect. The [API reference](api.md#explicit-evidence-review-and-probe-apis) owns full contracts.\n\nBegin a ledger only when wanted; paths are execution-path IDs (not source filenames), scenarios are caller-selected cases. Return generated obligation IDs before choosing updates; do not mark fetched source traced automatically.\n\n```ts\n// Recipe: explicit review ledger\nconst task = await review.begin({objective:payloads.objective,\n  paths:JSON.parse(payloads.paths) as string[], scenarios:JSON.parse(payloads.scenarios) as string[]});\nconst status = await review.status({taskId:task.taskId});\nreturn {taskId:task.taskId, revision:status.revision, ready:status.ready,\n  semanticValidation:status.semanticValidation, nextOffset:status.nextOffset,\n  entries:status.entries.map(entry => ({id:entry.id, type:entry.type, status:entry.status}))};\n```\n\nRecord a judgment only after tracing evidence. The host validates structure/hashes, not the truth of a rationale or a claimed probe. Reconcile is explicit; ready never forces an answer, fix or next tool.\n\n```ts\n// Recipe: explicit review update\nconst change = await review.update(JSON.parse(payloads.update) as ReviewUpdateArguments);\nreturn {taskId:change.taskId, revision:change.revision, id:change.id,\n  status:change.status, admissionReasons:change.admissionReasons ?? []};\n```\n\nPrefer one evidence representation; do not return both readMany JSON and a duplicate packet. The final metadata retains continuations/failures, not a certificate of inspection.\n\n```ts\n// Recipe: compact review evidence\nreturn await local.readEvidence({windows:JSON.parse(payloads.windows) as LocalReadWindow[], maxChars:24000, partial:true});\n```\n\nDiscover actual presence before choosing a runtime. This is read-only and does not execute versions, assume credentials or inspect cache contents; missing SDK modules can still block a present executable.\n\n```ts\n// Recipe: explicit SDK availability\nreturn await probe.discover({executables:JSON.parse(payloads.executables) as string[]});\n```\n\nAn illustrative project is not repository/framework proof. For a real semantic test, explicitly choose the appropriate kind after inspecting the actual SDK, imports and effects; record only observed versions as evidence, not invented declarations. Projects/records are retained, not automatically deleted.\n\n```ts\n// Recipe: explicit illustrative probe project\nreturn await probe.create({kind:"illustrative", files:[{path:payloads.path,content:payloads.content}]});\n```\n\nRun an already chosen project and executable only when authorized. No implicit installs/restores or automatic retries; execution is host-authority, not an offline sandbox. Use outer timeoutMs:40000 for this 20s run and cleanup.\n\n```ts\n// Recipe: explicit retained probe run\nreturn await probe.run({id:payloads.id, executable:payloads.executable,\n  args:JSON.parse(payloads.args) as string[], timeoutMs:20000, settle:true});\n```\n\n## Client approval readiness\n\nMissing approval overrides default to `read: allow`, `write: ask`, `execute: allow`, `network: ask`. Shell execution is enabled by default in a verified workspace and does not require client elicitation. Shell commands have host authority, including filesystem writes and network access; separate write/network policies do not confine them. Explicit `ask`/`deny` settings are preserved on update and remain authoritative. Outer `fabric_exec` permission is not nested approval. `approval was denied or unavailable` can mean an explicit restriction, decline, cancellation or a broken/missing confirmation path. Stop affected effects and inspect the cause; do not repeatedly retry, use native fallback, or switch to blanket allow.\n\nIf the client logs `No handler registered for method: _kiro/mcp/elicitation`, its approval UI handler is missing in that session even if `fabric.info()` reports form elicitation support. This was observed with Kiro CLI 2.21.2 v3; do not assume every client/version is affected. Default shell execution does not need this handler, but operations configured as `ask` still do. Check for an official client fix and start a new conversation; reinstalling Fabric cannot supply a Kiro UI handler. Report affected approval-dependent operations as blocked and preserve `ask` policies.\n\nA healthy installation doctor, valid profile, build, tests or advertised capability is not live coding-readiness evidence. Verify actual shell results and exact edited bytes. To qualify the approval UI rather than default shell execution, configure `execute: ask` and require an explicitly human-approved shell command and file edit through the actual v3 UI, retaining declined/no-effect controls. Use disposable fixtures; never count automatic fixture approvals as human interaction.\n\n## Globals\n\n```ts\npayloads: Readonly<Record<string, string>>\nprint(...values: unknown[]): void\nparallel(items, mapper, options?): Promise<unknown[]>\nparallel(tasks, options?): Promise<unknown[]>\n\ntools.providers(): Promise<Array<{\n  name: string; description: string; available: boolean; reason?: string\n}>>\ntools.list(): Promise<FabricActionSummary[]>\ntools.search(input: string | { query: string; limit?: number }): Promise<FabricActionSummary[]>\ntools.describe(input: string | { ref: string }): Promise<FabricActionSummary>\ntools.call(input: { ref: string; args?: JsonObject }): Promise<JsonValue>\n\nartifacts.read(args: { id: string; offset?: number; limit?: number }): Promise<KiroArtifactReadResult>\nartifacts.checkpoint(args: { value: JsonValue; label?: string }): Promise<KiroArtifactCheckpointResult>\n\nmemory.get(args: { key: string }): Promise<JsonValue>\nmemory.set(args: { key: string; value: JsonValue }): Promise<JsonValue>\nmemory.search(args: { query: string; limit?: number }): Promise<JsonValue>\nmemory.index(args?: Record<string, never>): Promise<JsonValue>\nmemory.delete(args: { key: string }): Promise<JsonValue>\n\nstate.get(args: { key: string }): Promise<JsonValue>\nstate.set(args: { key: string; value: JsonValue; expectedRevision?: number }): Promise<JsonValue>\nstate.list(args?: { limit?: number }): Promise<JsonValue>\nstate.delete(args: { key: string; expectedRevision?: number }): Promise<JsonValue>\n\nmcp.servers(args?: Record<string, never>): Promise<JsonValue>\nmcp.tools(args: { server: string }): Promise<FabricMcpToolSummary[]>\nmcp.describe(args: { server: string; tool: string }): Promise<FabricMcpToolSummary>\nmcp.call(args: { server: string; tool: string; args?: JsonObject; expectedDescriptorDigest?: string; projection?: "full" | "text" | "structured" }): Promise<JsonValue>\n```\n\n`mcp.call` / generic `mcp.$call` optionally projects before crossing the guest bridge: `projection:"text"` returns joined text without duplicate content blocks; `"structured"` returns only `structuredContent`. Missing forms yield `""` / `null`, not parsing or fallback. Legacy bare strings are text; raw objects without `structuredContent` have no structured view. Omitted/`"full"` preserves the existing full/raw result. Raw JSON safety limits, remote errors, schemas, digest checks, approval and remote arguments remain unchanged. Prefer an explicit lean view when sufficient; even lean results can exceed nested limits and return `{fabricTruncated:true,originalChars,preview}`. Preview size includes JSON escaping and metadata; it is not the full result and must not trigger automatic provider replay.\n\n`KiroArtifactReadResult` is `{id,text,offset,nextOffset,totalChars,done}` with UTF-16 cursors and escaped-envelope-aware chunk sizing. Follow nextOffset; offsets/limits splitting a valid surrogate pair reject. `artifacts.checkpoint` explicitly stores chosen JSON evidence in bounded runtime-memory artifacts after normal write approval, returning `{id,retrieval:{ref:"artifacts.read",args:{id},encoding:"json",ephemeral:true}}`. Its stored JSON is `{label?,value}`. At most eight reservations per execution; labels <=80 characters. Checkpoint storage uses the smaller of configured artifact limits and 16 entries/100000 characters per entry/400000 total/15-minute TTL. This is separate from ordinary overflow storage, not durable memory; quota eviction, expiration, workspace/runtime teardown remove evidence. Later failures expose only opaque IDs, never the chosen values or labels automatically.\n\nHost-issued `Error.failure` and failed outer results may carry `{code,phase,dispatchState,effectOutcome,ref?,descriptorDigest?,invalidPath?,relevantSchema?,replacementDescriptor?,checkpoints?}`. Schema hints are bounded structural subsets, not complete schemas or authority to call. Stale MCP arguments are never dispatched; a post-dispatch timeout is uncertain. Inspect earlier audited effects before retrying: `effectOutcome` describes the failed phase, not rollback of previous calls. Compiler timeouts report `timed_out`/`phase:"compile"` with no dispatched effects.\n\n`FabricActionSummary.ref` is the exact `provider.action` reference. Action summaries include the full bounded public descriptor plus `descriptorDigest`; search ranks exact refs/names and token matches across descriptions, providers, namespaces, annotations, and schemas deterministically. `tools.call` validates the exact descriptor schema before approval and invocation. `mcp.tools` and `mcp.describe` contact only one explicitly configured server after network approval (and stdio/OAuth execution approval where applicable), returning bounded descriptors tied to transport/configuration and definition digests. For stdio, that transport digest binds the resolved executable plus every argument that resolved to a regular file when the transport was first bound for that server (path, inode, and content); the bound set is frozen for the runtime, so files an approved server itself creates (pid, log, or socket targets named by its own arguments) never shift the digest, while literal argument strings stay bound. It does not recursively attest a script\'s imported dependency graph. Standard MCP tool annotations are preserved in the descriptor digest but never grant approval. `mcp.call` rediscovers and validates the exact advertised remote schema at invocation time; pass `expectedDescriptorDigest` from discovery to reject intervening descriptor drift before the tool call.\n\n`parallel` preserves input order and runs at most the requested number of mapper tasks, capped by `executor.maxConcurrentProviderCalls`. All guest-to-host calls share one execution-wide queue at that same cap, including nested `parallel` helpers and direct `Promise.all`, so excess bridge work waits instead of crossing the host concurrency quota.\n\nAll values crossing the bridge must fit the JSON budgets. Cycles, proxies, unsupported values, over-depth objects, over-budget logs/results, and malformed provider output fail closed. `print` output is returned in a bounded `Fabric logs` sideband after the formatted value. Cancellation and the effective request deadline propagate through nested calls.\n\nQuickJS intentionally has no host imports, dynamic import, built-in modules, process object, environment variables, timers, filesystem, shell, or unrestricted network.\n',
+  "recipes": '# Bounded Code Mode recipes\n\nUse these only when tools are allowed and the task needs them. They are examples, not automatic workflows. Use the observed schema and requested paths; do not assume example files exist. Writes require task authorization and normal per-effect approval. All calls below run inside fabric_exec with named string payloads.\n\n## Complete first lines\n\nRead returns an object with text:string. Preserve whitespace and Unicode, including caf\xE9 \u{1F6F0}; remove only the line ending (including CRLF), not other characters. An empty first line/file yields an empty string.\n\n```ts\n// Recipe: complete first lines from supplied paths\nconst paths = ["one.txt", "two.txt"];\nreturn await parallel(paths, async (path) => {\n  const r = await local.read({path, offset:1, limit:1});\n  return r.text.split(/\\r?\\n/, 1)[0];\n});\n```\n\nFor bounded ranges, `local.read` returns whole lines. `truncated:true` may only mean the file continues beyond the requested end: `offset:41,limit:4,nextOffset:45` covers lines 41\u201344 completely. Do not continue to EOF or make a second tool call merely to format those lines. Split the returned text and return the requested value in the same execution; strip only actual CRLF/LF terminators. If the budget stops before the requested end, advance only to `nextOffset` while it remains in range, with bounded progress and unchanged-file checks. Oversized single lines fail rather than returning a recoverable fragment.\n\n## Discover then read\n\nWhen the search term and context size are already justified, locate and read matching windows in one program. Merge overlaps and preserve search scope; zero hits is only absence within that scope. Yield for model judgment when selecting causes or fixes, not merely to copy paths into a read. For known paths use readMany directly. Its default is 32000 aggregate JSON chars (maxChars up to 40000, clamped to runtime budgets); lower it when also returning substantial search results. Never concatenate continuation pages past the visible cap.\n\n```ts\n// Recipe: discover then read without a model round trip\nconst hits = await local.grep({pattern:payloads.symbol, path:payloads.path, hidden:true, literal:true, limit:10});\nconst matches = [...hits.matches].sort((a,b) => a.path.localeCompare(b.path) || a.line-b.line);\nconst windows: Array<{path:string; start:number; end:number}> = [];\nfor (const match of matches) {\n  const range = {path:match.path, start:Math.max(1,match.line-3), end:match.line+3};\n  const previous = windows[windows.length-1];\n  if (previous && previous.path === range.path && range.start <= previous.end+1) previous.end = Math.max(previous.end,range.end);\n  else windows.push(range);\n}\nconst maxChars = Math.min(32000,40000-JSON.stringify({search:hits}).length-1000);\nif (maxChars < 1000) return {search:hits,unread:windows,narrowSearch:true};\nconst evidence = windows.length ? await local.readMany({windows:windows.map(range => ({\n  path:range.path, offset:range.start, limit:range.end-range.start+1,\n})),maxChars}) : {files:[], remaining:[], unreadTails:[], complete:true};\nreturn {search:hits, evidence};\n```\n\nThe search and source share one output allowance; lower the 40000-character envelope target for a smaller known runtime budget. Do not concatenate more packets or continuation pages past the outer cap. If search.truncated, narrow the search before making absence claims; partial hits remain useful evidence. Continue evidence.remaining verbatim. evidence.complete covers the selected windows, not search completeness. Prefer source windows to guessed field extraction until the schema is known.\n\n## Exact edit and verification\n\n```ts\n// Recipe: exact edit then verification\nconst path = payloads.path;\nconst change = await local.edit({path, oldText:payloads.oldText, newText:payloads.newText});\nconst r = await local.read({path, limit:80});\nif (r.sha256 !== change.sha256) throw new Error("File changed after edit; inspect before recovery");\nreturn {path, changed:change.changed, verifiedSha256:r.sha256, text:r.text, truncated:r.truncated};\n```\n\n## Multiple known edits in one file\n\nUse one local.edit with edits[] and expectedSha256 for independent replacements in one file. Every anchor resolves against the original snapshot; overlap, ambiguity or a late missing anchor rejects before publication. One complete diff receives approval and publishes once. This is not a multi-file transaction. For truly dependent edits, sequence calls and pass each returned sha256 as the next expectedSha256; never replay earlier successful effects.\n\n```ts\n// Recipe: snapshot-bound same-file edits\nconst path = payloads.path;\nconst before = await local.read({path,limit:2000});\nif (before.truncated) throw new Error("Incomplete input: narrow/read remaining lines");\nconst change = await local.edit({path,expectedSha256:before.sha256,edits:[\n  {oldText:payloads.oldFirst,newText:payloads.newFirst},\n  {oldText:payloads.oldSecond,newText:payloads.newSecond},\n]});\nconst r = await local.read({path,limit:2000});\nif (r.sha256 !== change.sha256) throw new Error("File changed after edit; inspect before recovery");\nif (r.truncated) throw new Error("Final read incomplete; inspect remaining lines");\nreturn {path,verified:true,verifiedSha256:r.sha256};\n```\n\n## Expected nonzero commands\n\n```ts\n// Recipe: bounded evidence from expected nonzero commands\nconst r = await local.shell({command:payloads.command, timeoutMs:120000, settle:true});\nreturn {ok:r.ok, exitCode:r.exitCode, stdout:r.stdout.slice(-1200), stderr:r.stderr.slice(-1200),\n  truncated:r.truncated || r.stdout.length > 1200 || r.stderr.length > 1200};\n```\n\nUse outer timeoutMs:180000 for this command. A tail is not full output; select relevant diagnostics and disclose omissions. Denial, timeout, cancellation and uncertain cleanup still fail. Do not retry an intentionally nonzero command.\n\n## Validator diagnostics and source in one execution\n\nFor an inspected, authorized offline validator, emit bounded machine-readable JSON on stdout: `{diagnostics:[{path,line,message}],truncated:boolean}`. Keep routine logs on stderr or suppress them inside the validator; parsing already-truncated shell output cannot recover discarded middle diagnostics. Adapt the validator\'s documented JSON output before using this recipe, not arbitrary text regexes. Paths must be workspace-relative. Unknown validators need inspection first; never execute a discovered file automatically.\n\n```ts\n// Recipe: validator diagnostics then source\nconst result = await local.shell({script:payloads.script,interpreter:"bash",args:JSON.parse(payloads.args ?? "[]"),timeoutMs:20000,settle:true});\nconst check = {ok:result.ok,exitCode:result.exitCode,signal:result.signal,\n  stderr:result.stderr.length > 1600 ? result.stderr.slice(0,800) + result.stderr.slice(-800) : result.stderr,\n  stderrTruncated:result.stderrTruncated || result.stderr.length > 1600,stdoutOmitted:true,truncated:result.truncated || result.stderr.length > 1600};\nif (result.stdoutTruncated) return {check,evidenceUnavailable:"validator JSON was truncated; do not infer complete diagnostics"};\nlet report: {diagnostics:Array<{path:string;line:number;message:string}>;truncated:boolean};\ntry { report = JSON.parse(result.stdout); }\ncatch { return {check,evidenceUnavailable:"validator did not emit the expected JSON"}; }\nif (!report || typeof report !== "object" || !Array.isArray(report.diagnostics) || typeof report.truncated !== "boolean" || report.diagnostics.some(d =>\n  !d || typeof d.path !== "string" || !d.path || d.path.length > 1024 || /[\\\\\\u0000-\\u001f]/.test(d.path) || d.path.startsWith("/") || /^[A-Za-z]:/.test(d.path) || d.path.split("/").includes("..") ||\n  !Number.isSafeInteger(d.line) || d.line < 1 || d.line > 100000000 || typeof d.message !== "string"\n)) return {check,evidenceUnavailable:"invalid diagnostic schema or unsafe path; no source reads attempted"};\nconst diagnostics: Array<{path:string;line:number;message:string;messageTruncated:boolean}> = [];\nfor (const d of report.diagnostics.slice(0,16)) {\n  const next = {path:d.path,line:d.line,message:d.message.slice(0,400),messageTruncated:d.message.length > 400};\n  if (JSON.stringify([...diagnostics,next]).length > 10000) break;\n  diagnostics.push(next);\n}\nconst summary = {check,diagnostics,diagnosticsTruncated:report.truncated || report.diagnostics.length > diagnostics.length,omittedDiagnostics:report.diagnostics.length-diagnostics.length};\nconst windows: Array<{path:string;start:number;end:number}> = [];\nfor (const d of [...diagnostics].sort((a,b) => a.path.localeCompare(b.path) || a.line-b.line)) {\n  const range = {path:d.path,start:Math.max(1,d.line-3),end:d.line+3};\n  const previous = windows[windows.length-1];\n  if (previous && previous.path === range.path && range.start <= previous.end+1) previous.end = Math.max(previous.end,range.end);\n  else windows.push(range);\n}\nconst maxChars = Math.min(24000,40000-JSON.stringify(summary).length-1000);\nif (maxChars < 1000) return {...summary,unread:windows,evidenceUnavailable:"aggregate output budget"};\ntry {\n  const evidence = windows.length ? await local.readMany({windows:windows.map(w => ({path:w.path,offset:w.start,limit:w.end-w.start+1})),maxChars}) : {files:[],remaining:[],unreadTails:[],complete:true};\n  return {...summary,evidence};\n} catch (error) { return {...summary,unread:windows,readError:error instanceof Error ? error.message.slice(0,600) : "Source read failed"}; }\n```\n\nSet outer timeoutMs:30000 or more for the 20000ms command plus reads/cleanup. Normal approvals, cancellation and uncertain-cleanup hard stops remain. Inspect read failures and continuations without rerunning the validator; an exit status or complete source window is not proof of correctness. Lower all output allowances together for smaller known runtime limits. Truncated diagnostic messages and stderr stay explicitly marked.\n\n## Known-schema data pipeline\n\nFor supplied JSON files containing {group:string,amount:integer}, validate inputs, compute in guest variables, create the requested output, then verify exact saved bytes. For unknown schemas, inspect first instead of guessing fields. Adapt aggregation to the actual task.\n\n```ts\n// Recipe: known-schema read compute write verify\nconst paths = JSON.parse(payloads.paths) as string[];\nconst rows = await parallel(paths, async (path) => {\n  const r = await local.read({path, limit:2000});\n  if (r.truncated) throw new Error("Incomplete input: narrow/read remaining lines");\n  const row = JSON.parse(r.text) as {group:string; amount:number};\n  if (typeof row.group !== "string" || !Number.isSafeInteger(row.amount)) throw new Error("Invalid record");\n  return row;\n});\nconst totals = new Map<string, number>();\nfor (const row of rows) {\n  const total = (totals.get(row.group) ?? 0) + row.amount;\n  if (!Number.isSafeInteger(total)) throw new Error("Unsafe total");\n  totals.set(row.group, total);\n}\nconst content = JSON.stringify({totals:Object.fromEntries(totals)});\nawait local.write({path:payloads.outputPath, content});\nconst saved = await local.read({path:payloads.outputPath, limit:2000});\nif (saved.truncated || saved.text !== content) throw new Error("Report verification failed");\nreturn {path:payloads.outputPath, groups:totals.size, verified:true};\n```\n\n## Evidence counterexamples\n\nThe [review finding-evidence gate](review.md#finding-evidence-gate) owns admission/severity; the [optional typed operations](api.md#optional-typed-operations) cover review ledgers, compact readEvidence and retained probes. None is a required bootstrap or permission to execute. Apply these counterexample checks before reporting:\n- Shared change flag: distinguish unnecessary saves after the first removal from lost removals. If removal sets the flag before the save, that path does not establish missed saves.\n- Collection mutation: inspect actual runtime enumeration/snapshot semantics; removal during iteration alone does not prove skipped nodes.\n- Empty collection: trace whether division is reachable when the loop has no iterations.\n- Field casing: inspect the declared values and consumer together; convention alone does not establish a mismatch or justify a breaking rename.\n- Commented pipeline variable: inspect operator inputs, variable groups and environment overrides before claiming it is always undefined or cleanup is disabled.\n- Template whitespace: inspect rendered output with actual required values; unusual source indentation that renders correctly is not a functional defect.\n\nValidation gate: distinguish unavailable tooling, missing required inputs, failed checks and passed checks. Preserve the validator exit code before trimming diagnostics; never infer success from a trailing echo/head/tail or fallback chain. Use the status-preserving validator recipe in recipes help for direct executable/argv checks. Do not use whitespace-splitting `for f in $(find ...)`; pass observed filenames as literal arguments or use NUL-safe traversal. Parsing proves syntax only, and Helm lint does not prove a successful render. A failed render without required deployment values is not evidence that rendering succeeds with them. Read large data through bounded programmatic validation and offending examples rather than crowding small source files out of readMany; retain remaining/failures/tails explicitly.\n\n## Status-preserving validator\n\nAfter choosing a safe offline check, pass `payloads.check` as JSON `{name,tool,args,requiredFiles?}`. Use an observed executable (for example jq, xmllint or helm) and literal argv, not a shell pipeline. requiredFiles are known workspace-relative readable inputs; they do not validate required values inside a file. Missing values require a separate explicit configuration check, not a guessed success. Availability and execution share one outer call. Use outer timeoutMs:40000; this recipe budgets 5s preflight and 20s execution. Normal approvals apply; denial/cancellation/timeout still throw. Tools may have host effects: inspect before choosing them. Do not pass shell interpreters with arbitrary scripts and then mistake their last command\'s status for a validator\'s status.\n\n```ts\n// Recipe: status-preserving validator\ntype Check = {name:string;tool:string;args:string[];requiredFiles?:string[]};\nconst c:Check = JSON.parse(payloads.check);\nconst strings = (x:unknown):x is string[] => Array.isArray(x) && x.length <= 64 && x.every(v => typeof v === "string" && v.length <= 2000 && !v.includes("\\0"));\nif (!c || typeof c !== "object" || Object.keys(c).some(k => !["name","tool","args","requiredFiles"].includes(k)) ||\n  typeof c.name !== "string" || !c.name.trim() || c.name.length > 120 ||\n  typeof c.tool !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.+-]*$/.test(c.tool) || c.tool.length > 120 ||\n  !strings(c.args) || (c.requiredFiles !== undefined && (!strings(c.requiredFiles) || c.requiredFiles.some(p => !p || p.startsWith("/") || p.includes("\\\\") || p.includes(":") || p.split("/").includes(".."))))) throw new Error("Invalid literal validator check");\nconst preflight = await local.shell({script:\'command -v "$1" >/dev/null 2>&1 || exit 41; shift; for file in "$@"; do if [ ! -f "$file" ] || [ ! -r "$file" ]; then exit 42; fi; done\',\n  interpreter:"sh",args:[c.tool,...(c.requiredFiles ?? [])],timeoutMs:5000,settle:true});\nif (!preflight.ok) return {check:c.name,status:"blocked",available:preflight.exitCode === 42 ? true : preflight.exitCode === 41 ? false : null,\n  reason:preflight.exitCode === 41 ? "tool unavailable" : preflight.exitCode === 42 ? "required input unavailable" : "preflight failed",exitCode:null,preflightExitCode:preflight.exitCode,truncated:preflight.truncated};\nconst r = await local.shell({script:\'exec "$@"\',interpreter:"sh",args:[c.tool,...c.args],timeoutMs:20000,settle:true});\nconst clip = (s:string) => s.length <= 1200 ? s : s.slice(0,600) + "\\n[omitted]\\n" + s.slice(-600);\nreturn {check:c.name,available:true,status:r.ok ? "passed" : "failed",exitCode:r.exitCode,signal:r.signal,\n  stdout:clip(r.stdout),stderr:clip(r.stderr),truncated:r.truncated || r.stdout.length > 1200 || r.stderr.length > 1200};\n```\n\npassed means this invocation exited zero, not that the repository is correct. Read warnings even on success; truncated diagnostics are incomplete. Do not relabel a real validator failure as tool unavailability or silently try a different validator. For multiple checks, compose bounded invocations after prevalidating the whole plan; retain independent failed and blocked results without replaying completed effects.\n\n## Quiet check results\n\nUse this only for a known command whose stdout is routine logs, not required acceptance evidence or requested output. Inspect/parse stdout instead when it contains test counts, warnings or other decision-relevant data. Always retain stderr, even on exit zero. `ok` reports the command exit, not task correctness; disclose omitted stdout separately from truncation. A truncated result is not complete diagnostic evidence.\n\n```ts\n// Recipe: quiet command status with failure evidence\nconst r = await local.shell({command:payloads.command, timeoutMs:120000, settle:true});\nreturn {ok:r.ok, exitCode:r.exitCode,\n  ...(r.ok ? {} : {stdout:r.stdout.slice(-1200)}),\n  ...(r.stderr ? {stderr:r.stderr.slice(-1200)} : {}),\n  stdoutOmitted:r.ok && r.stdout.length > 0,\n  truncated:r.truncated || (!r.ok && r.stdout.length > 1200) || r.stderr.length > 1200};\n```\n\nUse outer timeoutMs:180000; denial, timeout, cancellation and uncertain cleanup still fail. Do not use `print` to leak the omitted logs back into context.\n\nReturn requested output or compact evidence, not raw records to copy into another execution. Do not use persistent memory/state as scratch storage. parallel preserves input order and bounds concurrency; overlapping writes and commands are not independent fan-out.\n',
+  "workflow": `# Coding and repository workflow
+
+This is task guidance, not permission. User tool/output constraints override generic workflow advice. If tools are forbidden, make no call, including computation, formatting, help or verification. Explain missing evidence without guessing. For JSON, keep permitted status, explanation, verification and blockers inside the requested schema; do not add fields to an exact schema or append a prose test summary.
+
+For JSON-only requests, do not emit visible progress prose before or between tool calls. Kiro includes it in finalText. Keep reasoning private and produce only the requested final value; checking the last message alone is insufficient.
+
+## Coding
+
+Apply the standing acceptance ledger and completion rules. Keep working state in context, not new repository reports by default. Read applicable instructions and trace caller -> implementation -> defaults/overrides -> consumer -> tests before choosing a change. Include installation/build paths when they affect the result.
+
+Batch related source with local.readMany and appropriate explicit ranges. Reuse returned totalLines; avoid metadata-only line-count reads. Follow remaining and relevant unreadTails without rereading prefixes. Keep known-schema transformations in the guest rather than copying raw data through the model. Follow the standing execution/yield policy. The [search\u2192read recipe](recipes.md#discover-then-read) merges located source windows without a model handoff. Reserve aggregate output headroom for combined reads, evidence, diagnostics and continuation metadata, reducing per-read maxChars rather than losing coverage.
+
+For a bug, reproduce the trigger and test a credible counterexample. For a feature, verify extension points, compatibility and failure behavior. For optimization, record a comparable before/after measurement; fewer lines or calls do not establish a speedup. Check which relevant runtimes and test commands are available early. Batch mechanical probes after understanding their inputs and effects, preserving each check's status and failure evidence.
+
+Implement authorized work with targeted edits to current file contents; use create-only writes for needed new files. Verify public symbols, registrations, configuration and actual integration behavior. Run required repository checks/builds and repeat passing checks for concrete reasons, such as new failures or changed dependencies. An exit-zero wrapper or build alone is not completion. Never skip required checks to reduce credits.
+
+Before handoff, reconcile every requested outcome and material lead with evidence. Continue productive investigation and independent work when one requirement is blocked. Preserve partial effects during recovery; do not replay blindly. Report passed, failed and not-run checks and specific blockers. Carry evidence and open checks across turns/compaction instead of restarting unchanged investigation. Kiro Auto controls model selection; working rules do not guarantee routing.
+
+## Repository reviews
+
+For audits, code review or broad project-improvement reviews, [review guidance](review.md) is optional task help via fabric.help({topic:"review"}), not an automatic first call. Explicit review mode selects its short contract; minimal/tool-only operation does not inject it. Known task paths bypass discovery. For unfamiliar layouts, default to discovery -> bounded observed starter reads in the same exec, deriving relevant readMany windows from find results rather than requiring list -> find or guessing files. Focused fixes and optimizations use the affected path and acceptance checks above, without inventing a whole-repo audit. Keep fetched ranges separate from traced paths/scenarios in the coverage ledger; see the single finding-evidence gate in review help. Account for every requested review area with evidence or an explicit limitation. Shared memory/state needs explicit session/task keys and revision checks; no global scratch ledger. Neither tool availability nor workflow advice authorizes fixes, probes or steering when forbidden.
+
+## Complete reporting
+
+Reduce narration, not verification. Give every requested result, supported finding, important tradeoff and material limitation enough explanation, with no arbitrary word target. Remove repeated explanation and intermediate output while retaining every requested result and supported finding. Respect explicit user length limits and exact output formats. Avoid opening pleasantries, repeated plan/recap, raw diffs or successful-command log dumps unless requested. Progress updates should mark meaningful milestones, plan changes or blockers, not each tool call; JSON-only rules above still suppress them.
+
+Choose the needed return shape before execution. Keep intermediate records and routine logs in guest variables; return only decision-relevant evidence such as changed paths, check names/status, failure diagnostics and truncation/omission flags. Inspect relevant output before reducing it. Preserve warnings and uncertainty; do not translate an exit-zero build into "all tests passed". Report only checks actually run, identifying delegated evidence as reported rather than independently verified. Do not claim live model-quality or token-cost improvements from static prompt tests.
+
+Never use decorative comment separator blocks of any kind. Use plain single-line comments and blank lines.
+
+Read every user-provided file through an available read capability before content-dependent claims. local.read handles UTF-8 text only, inside the verified workspace; it is not an image/PDF viewer. For images or other unsupported inputs, use an actually available suitable capability or report the blocker and ask for accessible input. Never guess contents, bypass a tool ban, or change the coding workspace to the installation directory just to read guidance.
+
+Never search the whole disk, user home or cwd ancestors. Do not run find, grep -r, fd, rg or ls against /, /Users, /Users/<user>, ~/, $HOME or any ancestor of cwd. Search only the named task/repository subtree; narrow on truncation.
+
+## Git and GitHub
+
+Reference: [GitHub review-comment reply API](https://docs.github.com/en/rest/pulls/comments#create-a-reply-for-a-review-comment).
+
+Workflow instructions do not authorize commits, pushes or remote mutations. Never git reset --hard or git commit --amend unless explicitly asked. Preserve existing edits and staging. Create new commits and push normally when authorized, following repository commitlint/Conventional Commit standards. If work was wiped, inspect git reflog and recover available commits non-destructively; reflog cannot guarantee recovery of uncommitted edits.
+
+For interactive commands use an appropriate noninteractive flag, GIT_EDITOR=true, EDITOR=true or --no-edit. Before opening a PR, locate, read and follow the repository PR template, including .github/PULL_REQUEST_TEMPLATE.md or its alternatives.
+
+Never post, edit or delete GitHub comments on issues, PRs, reviews or discussions without explicit permission. Read-only gh pr view and gh api GETs are allowed, subject to normal network approval. With authorization, reply to a PR review comment in-thread via gh api repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies, never as a new parent comment. Supply the PR number and original top-level review-comment ID, not the GraphQL thread ID. Resolve the corresponding thread with the GraphQL resolveReviewThread mutation only after the reply succeeds and resolution is authorized. No pleasantries: state what changed, which commit and why.
+
+Never pass PR, issue or comment Markdown inline as --body. Write it to a temporary file and use --body-file where that command supports it. gh api has no --body-file: encode a JSON request file and use --input, or use its file-backed body field. Keep Markdown out of shell command strings. Use git commit -F for Markdown commit messages. File-backed data still needs safe path quoting and exact approval; it never grants permission to post.
+`,
+  "review": '# Evidence-led repository reviews\n\nExplicit, optional task help for reviews, audits and bug finding, not an automatic bootstrap. A review alone does not authorize edits, deployments, secret use or network requests. User tool bans apply even to help, formatting and verification. No forced fixes, probes or steering when forbidden. Tool-only modes may use authorized tools without guidance injection.\n\n## Short review core\n\nMap core paths and success/failure/non-default scenarios from entrypoint through configuration, caller/guards and consumer to consequence. Keep a coverage ledger with separate **fetched** ranges/hashes, **traced** paths/scenarios and unresolved/blocked scope. Retrieval is not understanding; complete windows, syntax checks and green builds do not establish semantic correctness. Follow productive leads without a finding quota or call cap as a stopping rule; runtime budgets remain binding. No findings is a valid result.\n\nUse real SDK/parser/runtime probes only when available and authorized. Inspect imports/effects and identify stubs; an imitation is not a real SDK execution. Missing executable, SDK/module or required input is unavailable evidence, not a pass or finding. Network effects need explicit authorization.\n\nPersisted memory/state is workspace-shared, not chat-private; use explicit session/task keys and revision checks, not global scratch keys. Keep unrequested ledgers in context. The optional review provider instead owns instance/session-local ephemeral tasks; do not silently load another session\'s state.\n\nUse the admission gate below and report supported findings, checks run/unrun, material blockers and uninspected scope in the requested format. Recipes below are optional mechanisms, never permission or automatic execution.\n\n## Finding-evidence gate\n\nFor every candidate keep: location/caller, concrete trigger, expected contract with its source, expected vs actual action, observable consequence, proof and counterexample checked. Evidence is a reproduction or complete static argument, not a suspicious line or a claimed probe ID.\n\n- Supported defect: reachable consequence proved; headline and explanation agree.\n- suspected/unverified: decisive runtime/configuration evidence is missing; state the unresolved dependency, not a confirmed headline.\n- maintenance concern: no demonstrated behavioral failure.\n- Rejected: disproved by a guard, contract or probe; remove the defect, do not relabel it conditional.\n\nAssign severity only after admission. Confidence is not severity; record affected scope and recovery:\n\n| Severity | Supported impact |\n| --- | --- |\n| Critical | Broad compromise or major irreversible loss. |\n| High | Serious operational failure, exposure or data loss. |\n| Medium | Bounded, recoverable correctness/configuration failure. |\n| Low | Minor demonstrated degradation. |\n\nKeep maintenance and unresolved leads outside confirmed severity rankings. Validate the proposed correction against the original trigger and preserved contracts; a fix can introduce a new bug. Never enable deletion or bypass validation merely to resolve an unknown setting.\n\nOptional [typed review/probe/readEvidence recipes](api.md#optional-typed-operations) are separate from this core help; use only available, authorized operations.\n\n## Map once, then follow behavior\n\nOptional recipes follow; none is a required first call. Cold help+inventory\u2192starter reads loads help unless payloads.reviewKnown="true"; do not choose it for no-guidance work. Focused tasks use search\u2192read. Hypotheses require judgment.\n\n```ts\n// Recipe: initial review evidence\nconst [help,manifest] = await Promise.all([\n  payloads.reviewKnown === "true" ? null : fabric.help({topic:"review"}),\n  local.find({path:".",pattern:"**/*",hidden:true,limit:200}),\n]);\nif (help?.truncated) return {help,manifest,helpIncomplete:true};\nconst patterns = [\n  {area:"guidance", match:/(^|\\/)(AGENTS\\.md|README(?:\\.md)?)$/i},\n  {area:"entrypoints", match:/(^|\\/)(package\\.json|pyproject\\.toml|Cargo\\.toml|go\\.mod|Makefile|Dockerfile)$/},\n  {area:"automation", match:/(^|\\/)([^/]*pipeline[^/]*\\.ya?ml|\\.gitlab-ci\\.yml)$|(^|\\/)(\\.github\\/workflows|\\.azure-pipelines)\\/.*\\.ya?ml$/i},\n  {area:"overrides", match:/(^|\\/)(envs?|environments|overlays)\\/.*\\.ya?ml$|(^|\\/)values[.-][^/]+\\.ya?ml$/i},\n  {area:"configuration", match:/(^|\\/)(Chart|values(?:[.-][^/]+)?|deployment|docker-compose|compose)\\.ya?ml$/i},\n  {area:"templates", match:/(^|\\/)templates\\/.*\\.(ya?ml|tpl)$/i},\n  {area:"checks", match:/(^|\\/)(tests?|__tests__|spec|validations)\\/.*\\.(ts|tsx|js|py|go|rs|cs|sh|ps1)$|\\.(test|spec)\\.[cm]?[jt]sx?$/i},\n  {area:"implementation", match:/\\.(?:[cm]?[jt]sx?|py|go|rs|cs|java|sh|ps1|tf|sql)$/i},\n];\nconst paths = [...manifest.paths].sort((a,b) => a.split("/").length-b.split("/").length || a.localeCompare(b));\nconst seen = new Set<string>();\nconst areas = patterns.map(({area,match}) => ({area, paths:paths.filter(path => {\n  if (seen.has(path) || !match.test(path) || /(^|\\/)(secrets?([./_-]|$)|credentials?([./_-]|$)|\\.env(\\.|$))|\\.(pem|key)$/i.test(path)) return false;\n  seen.add(path); return true;\n})})).filter(group => group.paths.length);\nconst unclassified = paths.filter(path => !seen.has(path));\nconst maxChars = Math.floor(Math.min(24000,40000-JSON.stringify({help,manifest,areas,unclassified}).length-1000)/Math.max(1,areas.length));\nif (maxChars < 1000) return {help,manifest,narrowDiscovery:true};\nconst packets = await parallel(areas, async ({area,paths}): Promise<JsonObject> => {\n  const windows = paths.slice(0,3).map(path => ({path,limit:160}));\n  try {\n    return {area,evidence:await local.readMany({windows,maxChars}),deferred:paths.slice(3)};\n  } catch (error) {\n    const message = error instanceof Error ? error.message : String(error);\n    return {area,error:message.slice(0,500),errorTruncated:message.length > 500,unread:paths};\n  }\n},{concurrency:3});\nreturn {help,manifest,packets,unclassified};\n```\n\nFollow deferred/unclassified paths, unread ranges and callers without exposing secrets. SQL is implementation evidence. Lower shared budgets together; retain failures.\n\nhidden:true includes CI/dot-directories; ignore rules apply. truncated:false means completeness within returned scope. Partition on truncation or narrowDiscovery; zero matches do not prove absence. Omit known discovery/help.\n\nThe core coverage ledger covers entrypoints, overrides, consumers, checks and security/data boundaries; fetched ranges alone never mark a path/scenario traced.\n\nTrace pipeline -> script -> arguments -> selected objects -> actions -> outcome; default -> environment override -> resource; configuration -> loader -> effect. Read callees, not only launchers. Mark unknown external behavior.\n\n## Read source without losing coverage\n\nGroup observed local.readMany windows by causal chain: pipeline\u2192script\u2192schema/allowlist or chart defaults\u2192overrides\u2192templates, not file extension. Merge overlaps and reuse guest source/metadata. One unreadable window may reject its packet: retain failed paths and other packets. Never automatically run discovered scripts.\n\n```ts\n// Recipe: numbered review evidence\nreturn await local.readMany({\n  windows: JSON.parse(payloads.windows) as LocalReadWindow[],\n});\n```\n\nRetain ranges, totalLines, source, sha256 and truncation. Follow remaining verbatim before relevant hash-bound unreadTails; do not concatenate overlaps. complete covers requested ranges, not prefixes/gaps/other files or understanding. readMany defaults to 200/max 2000 lines and 32000 JSON chars (maxChars <=40000, runtime-clamped). Reserve metadata/failure headroom; see API for full paging contracts.\n\nFor long data return exceptions/totals/redacted locations. Inspect security consumers and allowlists without credentials; a signed URL proves storage, not validity or abuse. Preserve metadata when fixing compiler errors.\n\n## Verify and try to falsify\n\nCheck external settings, upstream validation and unknown schemas. Repository absence does not prove runtime absence. A dropped argument proves neither fallback nor production failure.\n\nCompare simulation/force and success/failure paths. Check producer/consumer keys, casing, names/ports/selectors and API group/resource/verb tuples with non-default overrides. Rendering alone proves neither these contracts nor cluster behavior.\n\nBefore declaring validators/config unused, search hidden CI and read merged caller windows in the same execution:\n\n```ts\n// Recipe: review callers\nconst hits = await local.grep({pattern:payloads.symbol,path:".",literal:true,hidden:true,limit:10});\nconst matches = [...hits.matches].sort((a,b) => a.path.localeCompare(b.path) || a.line-b.line);\nconst windows: Array<{path:string; start:number; end:number}> = [];\nfor (const match of matches) {\n  const range = {path:match.path, start:Math.max(1,match.line-3), end:match.line+3};\n  const previous = windows[windows.length-1];\n  if (previous && previous.path === range.path && range.start <= previous.end+1) previous.end = Math.max(previous.end,range.end);\n  else windows.push(range);\n}\nconst maxChars = Math.min(32000,40000-JSON.stringify({search:hits}).length-1000);\nif (maxChars < 1000) return {search:hits,unread:windows,narrowSearch:true};\nconst evidence = windows.length ? await local.readMany({windows:windows.map(range => ({\n  path:range.path,offset:range.start,limit:range.end-range.start+1,\n})),maxChars}) : {files:[],remaining:[],unreadTails:[],complete:true};\nreturn {search:hits,evidence};\n```\n\nRetain search.scope/truncated. hidden defaults to false even after hidden:true discovery. Inspect owners and caller exit policy. Follow remaining before relevant unreadTails; complete windows are not complete caller coverage. Narrow truncated searches; widen for omitted guards/contracts. Share output headroom across searches.\n\nReuse known runtimes. Discover availability separately only when it requires a model decision; otherwise use the prerequisite-aware verification batch below. Normal shell approval applies:\n\n```ts\n// Recipe: review runtime availability\nreturn await local.shell({\n  script: \'for executable in "$@"; do if command -v "$executable" >/dev/null 2>&1; then printf "%s available\\\\n" "$executable"; else printf "%s unavailable\\\\n" "$executable"; fi; done\',\n  interpreter:"sh", args:JSON.parse(payloads.executables) as string[],\n  timeoutMs:10000, settle:true,\n});\n```\n\nUse actual Helm values, including non-default/false/zero cases. Bash parsing alone does not prove argument passing or exit handling; trace PowerShell validators through caller error policy. For authorized fixes reproduce the trigger; measure comparable performance baselines.\n\nValidate payloads.checks before effects. This optional batch uses 70000ms/40000 output chars, per-probe timeoutMs default/max 20000, and outer timeoutMs:120000 for cleanup; lower budgets for smaller runtime limits. Unavailable remains unverified; ordinary nonzero exits permit the next diagnostic, not hard failures:\n\n```ts\n// Recipe: review verification batch\ntype Probe = { name:string; script:string; interpreter?:"bash"|"sh"; args?:string[]; requires?:string[]; timeoutMs?:number };\nconst checks: Probe[] = JSON.parse(payloads.checks);\nif (!Array.isArray(checks) || checks.length > 32 || checks.some(c =>\n  !c || typeof c !== "object" || Object.keys(c).some(k => !["name","script","interpreter","args","requires","timeoutMs"].includes(k)) ||\n  typeof c.name !== "string" || !c.name.trim() || c.name.length > 120 ||\n  typeof c.script !== "string" || !c.script.length || c.script.length > 8000 || c.script.includes("\\0") ||\n  (c.timeoutMs !== undefined && (!Number.isSafeInteger(c.timeoutMs) || c.timeoutMs < 1 || c.timeoutMs > 20000)) ||\n  (c.interpreter !== undefined && c.interpreter !== "bash" && c.interpreter !== "sh") ||\n  (c.args !== undefined && (!Array.isArray(c.args) || c.args.length > 64 || c.args.some(a => typeof a !== "string" || a.length > 8000 || a.includes("\\0")))) ||\n  (c.requires !== undefined && (!Array.isArray(c.requires) || c.requires.length > 8 || c.requires.some(r => typeof r !== "string" || r.length > 120 || !/^[A-Za-z0-9_][A-Za-z0-9_.+-]*$/.test(r))))\n)) throw new Error("Expected at most 32 valid named literal checks");\nconst clip = (text:string) => {\n  let n = 800;\n  const sample = () => text.length <= 2*n ? text : text.slice(0,n) + text.slice(-n);\n  while (JSON.stringify(sample()).length > 1602) n = Math.floor(n/2);\n  return sample();\n};\nconst summary = (r:LocalShellResult) => {\n  const stdout = clip(r.stdout), stderr = clip(r.stderr);\n  return {...r,stdout,stderr,stdoutTruncated:r.stdoutTruncated || stdout.length < r.stdout.length,\n    stderrTruncated:r.stderrTruncated || stderr.length < r.stderr.length,\n    truncated:r.truncated || stdout.length < r.stdout.length || stderr.length < r.stderr.length};\n};\nlet count = 0, deadline = 10000;\nconst metadata = JSON.stringify(checks.map((c,index) => ({index,name:c.name}))).length + 1000;\nwhile (count < checks.length && deadline + (checks[count]!.timeoutMs ?? 20000) <= 70000 && metadata + (count+1)*4500 <= 40000) {\n  deadline += checks[count]!.timeoutMs ?? 20000; count++;\n}\nconst batch = checks.slice(0,count);\nconst required = [...new Set(batch.flatMap(c => c.requires ?? []))];\nconst available = new Set<string>();\nif (required.length) {\n  const result = await local.shell({\n    script:\'for executable in "$@"; do if command -v "$executable" >/dev/null 2>&1; then printf "%s\\n" "$executable"; fi; done\',\n    interpreter:"sh",args:required,timeoutMs:10000,settle:true,\n  });\n  if (!result.ok || result.truncated) return {availability:summary(result),results:[],complete:false,remaining:checks.map((c,index) => ({index,name:c.name}))};\n  for (const name of result.stdout.split(/\\r?\\n/)) if (name) available.add(name);\n}\nconst results: JsonObject[] = [];\nfor (const {name,requires = [],...input} of batch) {\n  const missing = requires.filter(r => !available.has(r));\n  if (missing.length) { results.push({name,status:"unavailable",missing}); continue; }\n  const result = await local.shell({...input,timeoutMs:input.timeoutMs ?? 20000,settle:true});\n  results.push({name,status:"executed",...summary(result)});\n}\nreturn {results,complete:checks.length <= batch.length,remaining:checks.slice(batch.length).map((c,index) => ({index:index+batch.length,name:c.name}))};\n```\n\ncomplete means no pending checks, not all passed. Resume remaining only, preserving stderr and truncation; omitted diagnostics are incomplete evidence.\n\nApply the core\'s real-runtime/authorization rules: client dry-runs may contact clusters; never deploy/cleanup against services or install missing runtimes without permission.\n\nFor literal Bash, use the script API and actual interpreter:\n\n```ts\n// Recipe: literal Bash probe\nreturn await local.shell({\n  script: payloads.script, interpreter:"bash", args:[payloads.input],\n  timeoutMs:20000, settle:true,\n});\n```\n\nArgs arrive literally as $1 onward; JSON.stringify is not shell quoting. Preserve probe_status=$? immediately and exit "$probe_status" after diagnostics. Return exitCode/stdout/stderr/truncation. settle catches only ordinary nonzero exits, never hard failures; shell retains host authority.\n\nSeek counterexamples in upstream validation, settings, caller policy and alternate owners. Collection mutation does not prove skipped elements (check snapshots); backgrounding does not prove lost stdout.\n\n## Completion and reporting\n\nReconcile coverage and each candidate with the core and finding-evidence gate above; a final caveat cannot justify an unconditional headline. Report supported defects by impact with file:line, trigger, expected contract, evidence and any proposed correction (not automatic edits). See [recipes](recipes.md#evidence-counterexamples) for counterexamples and status-preserving validation. Green probes prove only tested paths; synthetic checks do not establish live model superiority.\n'
 });
 
 // src/kiro/bootstrap-provider.ts
 var OVERVIEW = `Your only tool is fabric_exec. All supported tool work runs in checked TypeScript. Use local.read/grep/find/list/write/edit/shell for coding, mcp for explicitly configured external tools, and memory/state only for intentional durable facts. Search before large reads; batch independent calls; sequence read-dependent edits and verification. Return compact evidence, not intermediate results. Use payloads for long strings. Shell settle:true returns ordinary nonzero exits, never denial/cancellation/timeout. Approved shell has host OS authority; cwd is not confinement. No native fallback exists. Web/LSP/delegation require suitable configured MCP tools or are unavailable. Conversation needs no empty execution. Single verified roots bind automatically. Use fabric.workspace({action:'list'}) and a separate fabric.workspace({action:'select',rootId}) execution only when selection is needed. A switch is pending until the host confirms the transition after guest settlement; do not mix it with workspace calls. fabric.help({topic:'api',offset,limit}) pages immutable declarations; topics skill/guide/recipes/workflow/review serve bundled task instructions (zero-based UTF-16 offsets). Read offsets are one-based lines. Programs are not transactions; never blindly retry after effects or uncertain termination.`;
 var DOCUMENTS = Object.freeze({ overview: OVERVIEW, api: fabricGuestDeclarations, ...BUNDLED_GUIDANCE });
 var HELP_SCHEMA = { type: "object", properties: { topic: { type: "string", enum: Object.keys(DOCUMENTS) }, offset: { type: "integer", minimum: 0, maximum: 1e5 }, limit: { type: "integer", minimum: 1, maximum: 16e3 } }, required: ["topic"], additionalProperties: false };
-var descriptors2 = [
+var descriptors3 = [
   { name: "info", description: "Bounded health, lifecycle and workspace status through Code Mode", risk: "read", effect: { kind: "none" }, inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "help", description: "Read only immutable bundled API instructions; zero-based character paging", risk: "read", effect: { kind: "none" }, inputSchema: HELP_SCHEMA },
   // Selecting a client-verified root is an explicit bootstrap operation, not a
@@ -23419,7 +24922,7 @@ var FabricBootstrapProvider = class {
   name = "fabric";
   description = "Checked bootstrap and immutable bundled help";
   async list() {
-    return descriptors2.map((entry) => structuredClone(entry));
+    return descriptors3.map((entry) => structuredClone(entry));
   }
   async describe(name) {
     return (await this.list()).find((entry) => entry.name === name);
@@ -23432,11 +24935,11 @@ var FabricBootstrapProvider = class {
       const source = DOCUMENTS[String(args.topic)];
       const offset = typeof args.offset === "number" ? args.offset : 0;
       const page = (size) => {
-        const text = source.slice(offset, offset + size);
-        const truncated = offset + text.length < source.length;
-        return { topic: args.topic, text, truncated, ...truncated ? { nextOffset: offset + text.length } : {} };
+        const text3 = source.slice(offset, offset + size);
+        const truncated = offset + text3.length < source.length;
+        return { topic: args.topic, text: text3, truncated, ...truncated ? { nextOffset: offset + text3.length } : {} };
       };
-      let high = Math.min(typeof args.limit === "number" ? args.limit : 8e3, Math.max(0, source.length - offset));
+      let high = Math.min(typeof args.limit === "number" ? args.limit : 16e3, Math.max(0, source.length - offset));
       const full = page(high);
       if (JSON.stringify(full).length <= this.maxResultChars) return full;
       let low = 0;
@@ -23460,7 +24963,7 @@ var FabricBootstrapProvider = class {
     if (JSON.stringify(value).length <= this.maxResultChars) return value;
     if (value && typeof value === "object") {
       const item = value;
-      const summary = { product: item.product, executor: item.executor, workspace: item.workspace, lifecycle: item.lifecycle, truncated: true };
+      const summary = { product: item.product, executor: item.executor, workspace: item.workspace, lifecycle: item.lifecycle, runProvenance: item.runProvenance, truncated: true };
       if (JSON.stringify(summary).length <= this.maxResultChars) return summary;
     }
     return { truncated: true, message: "Bootstrap detail exceeds the configured nested-result budget; increase that budget for full health/root details" };
@@ -23469,8 +24972,8 @@ var FabricBootstrapProvider = class {
 
 // src/kiro/artifacts.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
-import fs8 from "node:fs";
-import path8 from "node:path";
+import fs10 from "node:fs";
+import path12 from "node:path";
 var ARTIFACT_ID = /^ka_[a-f0-9]{48}$/u;
 var MAX_ARTIFACT_RESIDUE_AGE_MS = 864e5;
 var KiroArtifactStoreError = class extends Error {
@@ -23495,23 +24998,26 @@ var ArtifactStore = class {
     this.#maxArtifactChars = options.maxArtifactChars ?? 2e6;
     this.#maxTotalChars = options.maxTotalChars ?? 8e6;
     this.#ttlMs = options.ttlMs ?? 36e5;
+    for (const value of [this.#maxArtifacts, this.#maxArtifactChars, this.#maxTotalChars, this.#ttlMs]) {
+      if (!Number.isSafeInteger(value) || value < 1) throw new KiroArtifactStoreError("invalid artifact bounds");
+    }
     if (options.root) {
-      fs8.mkdirSync(options.root, { recursive: true, mode: 448 });
-      const stat = fs8.lstatSync(options.root);
+      fs10.mkdirSync(options.root, { recursive: true, mode: 448 });
+      const stat = fs10.lstatSync(options.root);
       if (!stat.isDirectory() || stat.isSymbolicLink()) throw new KiroArtifactStoreError("artifact root must be a regular directory");
       if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
         throw new KiroArtifactStoreError("artifact root must be owned by the current user");
       }
-      fs8.chmodSync(options.root, 448);
-      const canonicalRoot = fs8.realpathSync(options.root);
-      for (const entry of fs8.readdirSync(canonicalRoot, { withFileTypes: true })) {
-        const target = path8.join(canonicalRoot, entry.name);
-        const targetStats = fs8.lstatSync(target);
+      fs10.chmodSync(options.root, 448);
+      const canonicalRoot = fs10.realpathSync(options.root);
+      for (const entry of fs10.readdirSync(canonicalRoot, { withFileTypes: true })) {
+        const target = path12.join(canonicalRoot, entry.name);
+        const targetStats = fs10.lstatSync(target);
         if (!entry.isFile() || targetStats.isSymbolicLink() || !ARTIFACT_ID.test(entry.name)) {
           throw new KiroArtifactStoreError(`artifact root contains an unsupported entry: ${entry.name}`);
         }
         if (this.#now() - targetStats.mtimeMs > MAX_ARTIFACT_RESIDUE_AGE_MS) {
-          fs8.rmSync(target);
+          fs10.rmSync(target);
         }
       }
       this.#root = canonicalRoot;
@@ -23523,54 +25029,59 @@ var ArtifactStore = class {
   write(content) {
     this.#open();
     if (typeof content !== "string" || content.length > this.#maxArtifactChars) throw new KiroArtifactStoreError("artifact exceeds configured bounds");
+    if (content.length > this.#maxTotalChars) throw new KiroArtifactStoreError("artifact quota exceeded");
     this.sweep(this.#ttlMs, this.#maxArtifacts - 1);
     while (this.#entries.size && this.#totalChars + content.length > this.#maxTotalChars) this.#remove(this.#oldest());
     if (this.#totalChars + content.length > this.#maxTotalChars) throw new KiroArtifactStoreError("artifact quota exceeded");
-    let id;
+    let id3;
     do
-      id = `ka_${randomBytes3(24).toString("hex")}`;
-    while (this.#entries.has(id) || this.#root !== void 0 && fs8.existsSync(path8.join(this.#root, id)));
+      id3 = `ka_${randomBytes3(24).toString("hex")}`;
+    while (this.#entries.has(id3) || this.#root !== void 0 && fs10.existsSync(path12.join(this.#root, id3)));
     const now = this.#now();
-    const file = this.#root ? path8.join(this.#root, id) : void 0;
+    const file = this.#root ? path12.join(this.#root, id3) : void 0;
     if (file) {
-      const descriptor2 = fs8.openSync(file, "wx", 384);
+      const descriptor2 = fs10.openSync(file, "wx", 384);
       try {
         try {
-          fs8.writeFileSync(descriptor2, content);
-          fs8.fchmodSync(descriptor2, 384);
-          fs8.fsyncSync(descriptor2);
+          fs10.writeFileSync(descriptor2, content);
+          fs10.fchmodSync(descriptor2, 384);
+          fs10.fsyncSync(descriptor2);
         } finally {
-          fs8.closeSync(descriptor2);
+          fs10.closeSync(descriptor2);
         }
       } catch (error) {
         try {
-          fs8.rmSync(file, { force: true });
+          fs10.rmSync(file, { force: true });
         } catch (cleanup) {
           throw new AggregateError([error, cleanup], "artifact write and cleanup failed");
         }
         throw error;
       }
     }
-    this.#entries.set(id, { content, createdAt: now, lastReadAt: now, ...file ? { file } : {} });
+    this.#entries.set(id3, { content, createdAt: now, lastReadAt: now, ...file ? { file } : {} });
     this.#totalChars += content.length;
-    return id;
+    return id3;
   }
-  read(id, offset = 0, limit = 12e3) {
+  read(id3, offset = 0, limit = 12e3) {
     this.#open();
-    if (!ARTIFACT_ID.test(id)) throw new KiroArtifactStoreError("invalid artifact id");
+    if (!ARTIFACT_ID.test(id3)) throw new KiroArtifactStoreError("invalid artifact id");
     this.sweep(this.#ttlMs, this.#maxArtifacts);
-    const entry = this.#entries.get(id);
+    const entry = this.#entries.get(id3);
     if (!entry) throw new KiroArtifactStoreError("artifact is unavailable or expired");
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1) throw new KiroArtifactStoreError("artifact offset and limit must be positive integers");
-    const text = entry.content.slice(offset, offset + Math.min(limit, 16e3));
-    if (text) entry.lastReadAt = this.#now();
-    const nextOffset = offset + text.length;
-    return { id, text, offset, nextOffset, totalChars: entry.content.length, done: nextOffset >= entry.content.length };
+    if (offset > 0 && /[\uDC00-\uDFFF]/u.test(entry.content.charAt(offset)) && /[\uD800-\uDBFF]/u.test(entry.content.charAt(offset - 1))) throw new KiroArtifactStoreError("artifact offset splits a Unicode character");
+    let end = Math.min(entry.content.length, offset + Math.min(limit, 16e3));
+    if (end < entry.content.length && /[\uD800-\uDBFF]/u.test(entry.content.charAt(end - 1)) && /[\uDC00-\uDFFF]/u.test(entry.content.charAt(end))) end -= 1;
+    if (end === offset && offset < entry.content.length) throw new KiroArtifactStoreError("artifact limit cannot fit one Unicode character");
+    const text3 = entry.content.slice(offset, end);
+    if (text3) entry.lastReadAt = this.#now();
+    const nextOffset = offset + text3.length;
+    return { id: id3, text: text3, offset, nextOffset, totalChars: entry.content.length, done: nextOffset >= entry.content.length };
   }
   sweep(maxAgeMs = this.#ttlMs, maxEntries = this.#maxArtifacts) {
     this.#open();
     const now = this.#now();
-    for (const [id, entry] of this.#entries) if (now - entry.lastReadAt > maxAgeMs) this.#remove(id);
+    for (const [id3, entry] of this.#entries) if (now - entry.lastReadAt > maxAgeMs) this.#remove(id3);
     while (this.#entries.size > maxEntries) this.#remove(this.#oldest());
   }
   #oldest() {
@@ -23578,26 +25089,26 @@ var ArtifactStore = class {
     if (!entries[0]) throw new KiroArtifactStoreError("artifact store is empty");
     return entries[0][0];
   }
-  #remove(id) {
-    const entry = this.#entries.get(id);
+  #remove(id3) {
+    const entry = this.#entries.get(id3);
     if (!entry) return;
-    if (entry.file) fs8.rmSync(entry.file, { force: true });
-    this.#entries.delete(id);
+    if (entry.file) fs10.rmSync(entry.file, { force: true });
+    this.#entries.delete(id3);
     this.#totalChars -= entry.content.length;
   }
   close() {
     if (this.#closed) return;
-    for (const id of [...this.#entries.keys()]) this.#remove(id);
+    for (const id3 of [...this.#entries.keys()]) this.#remove(id3);
     this.#closed = true;
   }
 };
 var createKiroArtifactStore = (options = {}) => new ArtifactStore(options);
 
 // src/kiro/mcp-provider.ts
-import { createHash as createHash6, randomBytes as randomBytes4 } from "node:crypto";
-import fs9 from "node:fs";
-import path9 from "node:path";
-var descriptors3 = [
+import { createHash as createHash8, randomBytes as randomBytes4 } from "node:crypto";
+import fs11 from "node:fs";
+import path13 from "node:path";
+var descriptors4 = [
   {
     name: "$servers",
     description: "List explicitly configured MCP servers without connecting",
@@ -23641,7 +25152,7 @@ var descriptors3 = [
   },
   {
     name: "$call",
-    description: "Call one configured MCP tool after network approval",
+    description: "Call one configured MCP tool after network approval. Optional projection: full (default, legacy shape), text (joined text or empty string), structured (structuredContent or null); no fallback/conversion. Projection precedes the guest bridge; errors, budgets, approvals and remote args are unchanged.",
     inputSchema: {
       type: "object",
       properties: {
@@ -23649,6 +25160,7 @@ var descriptors3 = [
         tool: { type: "string", minLength: 1, maxLength: 256 },
         args: { type: "object", additionalProperties: true },
         expectedDescriptorDigest: { type: "string", minLength: 64, maxLength: 64 },
+        projection: { enum: ["full", "text", "structured"] },
         transportSnapshot: { type: "object", additionalProperties: true }
       },
       required: ["server", "tool"],
@@ -23671,17 +25183,17 @@ var MAX_MCP_ARGUMENT_FILE_BYTES = 16 * 1024 * 1024;
 var MAX_MCP_ARGUMENT_FILES_TOTAL_BYTES = 64 * 1024 * 1024;
 var MAX_EXPLICIT_MCP_CONFIG_BYTES = 256 * 1024;
 var fileDigest = (file, maximumBytes = MAX_MCP_TRANSPORT_FILE_BYTES) => {
-  const descriptor2 = fs9.openSync(file, fs9.constants.O_RDONLY | (fs9.constants.O_NOFOLLOW ?? 0));
+  const descriptor2 = fs11.openSync(file, fs11.constants.O_RDONLY | (fs11.constants.O_NOFOLLOW ?? 0));
   try {
-    const before = fs9.fstatSync(descriptor2, { bigint: true });
+    const before = fs11.fstatSync(descriptor2, { bigint: true });
     if (!before.isFile() || before.size > BigInt(maximumBytes)) {
       throw new Error(`MCP transport file is not regular or exceeds ${maximumBytes} bytes`);
     }
-    const digest = createHash6("sha256");
+    const digest = createHash8("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     let position = 0;
     while (position < Number(before.size)) {
-      const count2 = fs9.readSync(
+      const count2 = fs11.readSync(
         descriptor2,
         buffer,
         0,
@@ -23692,44 +25204,44 @@ var fileDigest = (file, maximumBytes = MAX_MCP_TRANSPORT_FILE_BYTES) => {
       digest.update(buffer.subarray(0, count2));
       position += count2;
     }
-    const after = fs9.fstatSync(descriptor2, { bigint: true });
+    const after = fs11.fstatSync(descriptor2, { bigint: true });
     if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.ctimeNs !== after.ctimeNs || before.mtimeNs !== after.mtimeNs || before.nlink !== after.nlink) {
       throw new Error("MCP transport file changed while hashing");
     }
     return digest.digest("hex");
   } finally {
-    fs9.closeSync(descriptor2);
+    fs11.closeSync(descriptor2);
   }
 };
 var sameFileIdentity = (left, right) => left.isFile() && right.isFile() && !left.isSymbolicLink() && !right.isSymbolicLink() && left.nlink === 1n && right.nlink === 1n && left.dev === right.dev && left.ino === right.ino;
 var sameFileVersion = (left, right) => sameFileIdentity(left, right) && left.size === right.size && left.ctimeNs === right.ctimeNs && left.mtimeNs === right.mtimeNs;
 var readExplicitMcpConfiguration = (configPath) => {
-  const lexical = fs9.lstatSync(configPath, { bigint: true });
+  const lexical = fs11.lstatSync(configPath, { bigint: true });
   if (!lexical.isFile() || lexical.isSymbolicLink() || lexical.nlink !== 1n || lexical.size > BigInt(MAX_EXPLICIT_MCP_CONFIG_BYTES)) {
     throw new Error("MCP configuration is not a bounded unaliased regular file");
   }
   if (process.platform !== "win32" && (typeof process.getuid === "function" && lexical.uid !== BigInt(process.getuid()) || (lexical.mode & 0o077n) !== 0n)) {
     throw new Error("MCP configuration is not private to the current user");
   }
-  const descriptor2 = fs9.openSync(configPath, fs9.constants.O_RDONLY | (fs9.constants.O_NOFOLLOW ?? 0));
+  const descriptor2 = fs11.openSync(configPath, fs11.constants.O_RDONLY | (fs11.constants.O_NOFOLLOW ?? 0));
   let opened;
   let after;
   const buffer = Buffer.allocUnsafe(MAX_EXPLICIT_MCP_CONFIG_BYTES + 1);
   let byteCount = 0;
   try {
-    opened = fs9.fstatSync(descriptor2, { bigint: true });
+    opened = fs11.fstatSync(descriptor2, { bigint: true });
     if (!sameFileIdentity(lexical, opened)) throw new Error("MCP configuration changed while opening");
     while (byteCount < buffer.length) {
-      const count2 = fs9.readSync(descriptor2, buffer, byteCount, buffer.length - byteCount, byteCount);
+      const count2 = fs11.readSync(descriptor2, buffer, byteCount, buffer.length - byteCount, byteCount);
       if (count2 === 0) break;
       byteCount += count2;
     }
     if (byteCount > MAX_EXPLICIT_MCP_CONFIG_BYTES) throw new Error("MCP configuration exceeds 262144 bytes");
-    after = fs9.fstatSync(descriptor2, { bigint: true });
+    after = fs11.fstatSync(descriptor2, { bigint: true });
   } finally {
-    fs9.closeSync(descriptor2);
+    fs11.closeSync(descriptor2);
   }
-  const current = fs9.lstatSync(configPath, { bigint: true });
+  const current = fs11.lstatSync(configPath, { bigint: true });
   if (!sameFileVersion(opened, after) || !sameFileVersion(opened, current)) {
     throw new Error("MCP configuration changed while reading");
   }
@@ -23742,28 +25254,28 @@ var readExplicitMcpConfiguration = (configPath) => {
   if (names.length > 128 || names.some((name) => !name || name.length > 256)) throw new Error("MCP configuration server names exceed product bounds");
   return {
     names: new Set(names),
-    digest: createHash6("sha256").update(bytes2).digest("hex"),
+    digest: createHash8("sha256").update(bytes2).digest("hex"),
     bytes: bytes2,
     stats: opened
   };
 };
-var fsyncDirectory2 = (directory) => {
+var fsyncDirectory2 = (directory2) => {
   if (process.platform === "win32") return;
-  const descriptor2 = fs9.openSync(directory, "r");
+  const descriptor2 = fs11.openSync(directory2, "r");
   try {
-    fs9.fsyncSync(descriptor2);
+    fs11.fsyncSync(descriptor2);
   } finally {
-    fs9.closeSync(descriptor2);
+    fs11.closeSync(descriptor2);
   }
 };
 var stageExplicitMcpConfiguration = (configPath, explicit) => {
-  const directory = path9.dirname(configPath);
-  const directoryStats = fs9.lstatSync(directory, { bigint: true });
+  const directory2 = path13.dirname(configPath);
+  const directoryStats = fs11.lstatSync(directory2, { bigint: true });
   if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink() || process.platform !== "win32" && (typeof process.getuid === "function" && directoryStats.uid !== BigInt(process.getuid()) || (directoryStats.mode & 0o077n) !== 0n)) {
     throw new Error("MCP configuration directory is not private to the current user");
   }
-  const stagedPath = path9.join(
-    directory,
+  const stagedPath = path13.join(
+    directory2,
     `.kiro-fabric-mcp-snapshot-${process.pid}-${randomBytes4(16).toString("hex")}.json`
   );
   let descriptor2;
@@ -23772,30 +25284,30 @@ var stageExplicitMcpConfiguration = (configPath, explicit) => {
     if (descriptor2 === void 0) return;
     const fd = descriptor2;
     descriptor2 = void 0;
-    fs9.closeSync(fd);
+    fs11.closeSync(fd);
   };
   try {
-    descriptor2 = fs9.openSync(
+    descriptor2 = fs11.openSync(
       stagedPath,
-      fs9.constants.O_WRONLY | fs9.constants.O_CREAT | fs9.constants.O_EXCL | (fs9.constants.O_NOFOLLOW ?? 0),
+      fs11.constants.O_WRONLY | fs11.constants.O_CREAT | fs11.constants.O_EXCL | (fs11.constants.O_NOFOLLOW ?? 0),
       384
     );
-    createdStats = fs9.fstatSync(descriptor2, { bigint: true });
-    fs9.writeFileSync(descriptor2, explicit.bytes);
-    fs9.fsyncSync(descriptor2);
-    const writtenStats = fs9.fstatSync(descriptor2, { bigint: true });
+    createdStats = fs11.fstatSync(descriptor2, { bigint: true });
+    fs11.writeFileSync(descriptor2, explicit.bytes);
+    fs11.fsyncSync(descriptor2);
+    const writtenStats = fs11.fstatSync(descriptor2, { bigint: true });
     close();
-    fsyncDirectory2(directory);
+    fsyncDirectory2(directory2);
     const verified = readExplicitMcpConfiguration(stagedPath);
     if (!sameFileIdentity(createdStats, writtenStats) || !sameFileIdentity(writtenStats, verified.stats) || verified.digest !== explicit.digest) {
       throw new Error("staged MCP configuration changed while writing");
     }
-    return { path: stagedPath, directory, digest: explicit.digest, stats: verified.stats };
+    return { path: stagedPath, directory: directory2, digest: explicit.digest, stats: verified.stats };
   } catch (error) {
     const errors = [error];
     if (createdStats === void 0 && descriptor2 !== void 0) {
       try {
-        createdStats = fs9.fstatSync(descriptor2, { bigint: true });
+        createdStats = fs11.fstatSync(descriptor2, { bigint: true });
       } catch (cleanup) {
         errors.push(cleanup);
       }
@@ -23807,10 +25319,10 @@ var stageExplicitMcpConfiguration = (configPath, explicit) => {
     }
     if (createdStats !== void 0) {
       try {
-        const current = fs9.lstatSync(stagedPath, { bigint: true });
+        const current = fs11.lstatSync(stagedPath, { bigint: true });
         if (sameFileIdentity(createdStats, current)) {
-          fs9.unlinkSync(stagedPath);
-          fsyncDirectory2(directory);
+          fs11.unlinkSync(stagedPath);
+          fsyncDirectory2(directory2);
         }
       } catch (cleanup) {
         if (cleanup.code !== "ENOENT") errors.push(cleanup);
@@ -23831,9 +25343,9 @@ var removeStagedMcpConfiguration = (staged) => {
     verification = error;
   }
   try {
-    const current = fs9.lstatSync(staged.path, { bigint: true });
+    const current = fs11.lstatSync(staged.path, { bigint: true });
     if (sameFileIdentity(staged.stats, current)) {
-      fs9.unlinkSync(staged.path);
+      fs11.unlinkSync(staged.path);
       fsyncDirectory2(staged.directory);
     }
   } catch (error) {
@@ -23857,22 +25369,22 @@ var assertNoAmbientMcporterOptions = () => {
 };
 var executablePath = (command, cwd = process.cwd()) => {
   if (command.includes("/") || command.includes("\\")) {
-    return fs9.realpathSync(path9.isAbsolute(command) ? command : path9.resolve(cwd, command));
+    return fs11.realpathSync(path13.isAbsolute(command) ? command : path13.resolve(cwd, command));
   }
-  for (const directory of (process.env.PATH ?? "").split(path9.delimiter)) {
-    if (!directory) continue;
-    const candidate = path9.resolve(cwd, directory, command);
+  for (const directory2 of (process.env.PATH ?? "").split(path13.delimiter)) {
+    if (!directory2) continue;
+    const candidate = path13.resolve(cwd, directory2, command);
     try {
-      if (fs9.statSync(candidate).isFile()) return fs9.realpathSync(candidate);
+      if (fs11.statSync(candidate).isFile()) return fs11.realpathSync(candidate);
     } catch {
     }
   }
   throw new Error(`Configured MCP executable cannot be resolved: ${command}`);
 };
-var environmentDigest = () => createHash6("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
+var environmentDigest = () => createHash8("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
 var configDigest = (configPath) => configPath ? readExplicitMcpConfiguration(configPath).digest : null;
 var fileStatKey = (file) => {
-  const stats = fs9.statSync(file, { bigint: true });
+  const stats = fs11.statSync(file, { bigint: true });
   return `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.mtimeNs}:${stats.size}:${stats.nlink}:${Number(stats.isSymbolicLink())}`;
 };
 var boundArgumentStatKey = (entry) => {
@@ -23887,7 +25399,7 @@ var boundArgumentStatKey = (entry) => {
 };
 var canonicalizeStdioTransport = (server) => {
   if (server.command.kind !== "stdio") return server;
-  const cwd = fs9.realpathSync(server.command.cwd);
+  const cwd = fs11.realpathSync(server.command.cwd);
   const command = executablePath(server.command.command, cwd);
   return {
     ...server,
@@ -23902,10 +25414,10 @@ var resolveStdioArgumentFiles = (arguments_, cwd) => {
   let totalBytes = 0;
   for (const [argumentIndex, argument] of arguments_.entries()) {
     if (!argument || argument.includes("\0")) continue;
-    const candidate = path9.isAbsolute(argument) ? argument : path9.resolve(cwd, argument);
+    const candidate = path13.isAbsolute(argument) ? argument : path13.resolve(cwd, argument);
     try {
-      const resolvedPath = fs9.realpathSync(candidate);
-      const stats = fs9.statSync(resolvedPath);
+      const resolvedPath = fs11.realpathSync(candidate);
+      const stats = fs11.statSync(resolvedPath);
       if (!stats.isFile()) continue;
       if (stats.size > MAX_MCP_ARGUMENT_FILE_BYTES) {
         throw new Error(`Configured MCP stdio argument file exceeds ${MAX_MCP_ARGUMENT_FILE_BYTES} bytes`);
@@ -24007,9 +25519,16 @@ var projectRemoteTool = (server, tool, transport) => {
     stale: false
   };
 };
-var normalizeMcpResult = (result) => {
+var resultProjection = (value) => {
+  if (value === void 0) return "full";
+  if (value === "full" || value === "text" || value === "structured") return value;
+  throw new Error("MCP projection must be full, text, or structured");
+};
+var normalizeMcpResult = (result, projection) => {
   if (!isRecord6(result) || !Array.isArray(result.content)) {
     assertFabricJsonBudget(result);
+    if (projection === "text") return typeof result === "string" ? result : "";
+    if (projection === "structured") return isRecord6(result) ? result.structuredContent ?? null : null;
     return result;
   }
   const projected = {
@@ -24018,10 +25537,13 @@ var normalizeMcpResult = (result) => {
     ...result.isError === void 0 ? {} : { isError: result.isError }
   };
   assertFabricJsonBudget(projected);
-  const text = projected.content.filter((part) => isRecord6(part) && part.type === "text" && typeof part.text === "string").map((part) => part.text).join("\n");
-  if (projected.isError === true) throw new Error((text || "MCP tool returned an error").slice(0, 2e3));
+  const textContent = () => projected.content.filter((part) => isRecord6(part) && part.type === "text" && typeof part.text === "string").map((part) => part.text).join("\n");
+  if (projected.isError === true) throw new Error((textContent() || "MCP tool returned an error").slice(0, 2e3));
+  if (projection === "structured") return projected.structuredContent ?? null;
+  const text3 = textContent();
+  if (projection === "text") return text3;
   return {
-    text,
+    text: text3,
     content: projected.content,
     structuredContent: projected.structuredContent ?? null
   };
@@ -24049,7 +25571,7 @@ var KiroMcpProvider = class {
       let servers = [];
       this.#loadedConfigDigest = null;
       if (this.#config.configPath) {
-        const configPath = path9.resolve(this.#config.configPath);
+        const configPath = path13.resolve(this.#config.configPath);
         const explicit = readExplicitMcpConfiguration(configPath);
         const staged = stageExplicitMcpConfiguration(configPath, explicit);
         try {
@@ -24060,7 +25582,7 @@ var KiroMcpProvider = class {
           }
           for (const server of servers) {
             const sources = server.sources ?? (server.source ? [server.source] : []);
-            if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) => source.kind !== "local" || path9.resolve(source.path) !== staged.path)) {
+            if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) => source.kind !== "local" || path13.resolve(source.path) !== staged.path)) {
               throw new Error("mcporter loaded a server outside the explicit Fabric configuration snapshot");
             }
           }
@@ -24077,10 +25599,10 @@ var KiroMcpProvider = class {
     });
   }
   async list() {
-    return [...descriptors3];
+    return [...descriptors4];
   }
   async describe(actionName) {
-    return descriptors3.find((entry) => entry.name === actionName);
+    return descriptors4.find((entry) => entry.name === actionName);
   }
   async prepareArguments(actionName, args, context) {
     if (actionName !== "$call" && actionName !== "$tools" && actionName !== "$describe") return { ...args };
@@ -24095,6 +25617,7 @@ var KiroMcpProvider = class {
     if (actionName === "$call" && args.expectedDescriptorDigest !== void 0 && (typeof args.expectedDescriptorDigest !== "string" || !/^[a-f0-9]{64}$/u.test(args.expectedDescriptorDigest))) {
       throw new Error("MCP expectedDescriptorDigest must be a lowercase SHA-256 digest");
     }
+    if (actionName === "$call") resultProjection(args.projection);
     const runtime = await this.#getRuntime(context.signal);
     throwIfAbortedOrExpired(context.signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
@@ -24103,6 +25626,7 @@ var KiroMcpProvider = class {
       server,
       ...actionName === "$call" || actionName === "$describe" ? { tool } : {},
       ...actionName === "$call" ? { args: args.args === void 0 ? {} : structuredClone(args.args) } : {},
+      ...actionName === "$call" && args.projection !== void 0 ? { projection: args.projection } : {},
       ...actionName === "$call" && Object.hasOwn(args, "expectedDescriptorDigest") ? { expectedDescriptorDigest: args.expectedDescriptorDigest } : {},
       transportSnapshot: this.#transportSnapshot(runtime, server)
     };
@@ -24133,6 +25657,7 @@ var KiroMcpProvider = class {
     const toolName = typeof args.tool === "string" ? args.tool : "";
     const toolArgs = args.args === void 0 ? {} : args.args;
     const expectedDescriptorDigest = args.expectedDescriptorDigest;
+    const projection = actionName === "$call" ? resultProjection(args.projection) : "full";
     if (!server || (actionName === "$call" || actionName === "$describe") && !toolName || actionName === "$call" && (!isRecord6(toolArgs) || expectedDescriptorDigest !== void 0 && (typeof expectedDescriptorDigest !== "string" || !/^[a-f0-9]{64}$/u.test(expectedDescriptorDigest)))) {
       throw new Error("MCP call requires non-empty server/tool strings and object args");
     }
@@ -24152,46 +25677,67 @@ var KiroMcpProvider = class {
     }
     throwIfAbortedOrExpired(signal, context.deadline);
     return this.#withServerLease(server, signal, async (lease) => {
-      this.#assertTransportSnapshot(runtime, server, approvedTransport);
-      const actionDeadline = performance.now() + this.#config.callTimeoutMs;
-      const discoveryBudget = this.#remainingCallBudget(actionDeadline);
-      const rawTools = await this.#bounded(
-        runtime,
-        server,
-        this.#listRawTools(runtime, server, actionDeadline, signal),
-        signal,
-        "tool discovery",
-        discoveryBudget,
-        lease
-      );
-      const tools = normalizeServerTools(rawTools);
-      const projected = tools.map((tool) => projectRemoteTool(server, tool, approvedTransport));
-      if (actionName === "$tools") return projected;
-      const matches = tools.map((tool, index) => ({ tool, projected: projected[index] })).filter(({ tool }) => tool.name === toolName);
-      if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
-      if (actionName === "$describe") return matches[0].projected;
-      if (expectedDescriptorDigest !== void 0 && matches[0].projected.descriptorDigest !== expectedDescriptorDigest) {
-        throw new Error(`MCP tool descriptor changed before invocation: ${server}.${toolName}`);
+      let dispatched = false;
+      try {
+        this.#assertTransportSnapshot(runtime, server, approvedTransport);
+        const actionDeadline = performance.now() + this.#config.callTimeoutMs;
+        const discoveryBudget = this.#remainingCallBudget(actionDeadline);
+        const rawTools = await this.#bounded(
+          runtime,
+          server,
+          this.#listRawTools(runtime, server, actionDeadline, signal),
+          signal,
+          "tool discovery",
+          discoveryBudget,
+          lease
+        );
+        const tools = normalizeServerTools(rawTools);
+        const projected = tools.map((tool) => projectRemoteTool(server, tool, approvedTransport));
+        if (actionName === "$tools") return projected;
+        const matches = tools.map((tool, index) => ({ tool, projected: projected[index] })).filter(({ tool }) => tool.name === toolName);
+        if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
+        if (actionName === "$describe") return matches[0].projected;
+        if (expectedDescriptorDigest !== void 0 && matches[0].projected.descriptorDigest !== expectedDescriptorDigest) {
+          const observed = matches[0].projected;
+          throw new FabricRepairError(`MCP tool descriptor changed before invocation: ${server}.${toolName}`, {
+            code: "stale_descriptor",
+            phase: "discovery",
+            dispatchState: "not_dispatched",
+            effectOutcome: "none",
+            ref: observed.ref.slice(0, 512),
+            descriptorDigest: String(expectedDescriptorDigest),
+            replacementDescriptor: { ref: observed.ref.slice(0, 512), name: observed.name.slice(0, 256), descriptorDigest: observed.descriptorDigest, inputSchema: repairSchema(observed.inputSchema) }
+          });
+        }
+        this.#validateToolArguments(matches[0].tool, toolArgs, matches[0].projected);
+        throwIfAbortedOrExpired(signal, context.deadline);
+        this.#assertTransportSnapshot(runtime, server, approvedTransport);
+        const callBudget = this.#remainingCallBudget(actionDeadline);
+        dispatched = true;
+        const result = await this.#bounded(
+          runtime,
+          server,
+          runtime.callTool(server, toolName, {
+            args: toolArgs,
+            timeoutMs: callBudget,
+            disableOAuth: this.#config.disableOAuth
+          }),
+          signal,
+          "tool call",
+          callBudget,
+          lease
+        );
+        throwIfAbortedOrExpired(signal, context.deadline);
+        return normalizeMcpResult(result, projection);
+      } catch (error) {
+        if (error instanceof FabricRepairError) throw error;
+        throw new FabricRepairError(error instanceof Error ? error.message : "MCP operation failed", {
+          code: context.deadline?.expired ? "timeout" : "provider_error",
+          phase: dispatched ? "dispatch" : "discovery",
+          dispatchState: dispatched ? "dispatched" : "not_dispatched",
+          effectOutcome: dispatched ? "uncertain" : "none"
+        });
       }
-      this.#validateToolArguments(matches[0].tool, toolArgs);
-      throwIfAbortedOrExpired(signal, context.deadline);
-      this.#assertTransportSnapshot(runtime, server, approvedTransport);
-      const callBudget = this.#remainingCallBudget(actionDeadline);
-      const result = await this.#bounded(
-        runtime,
-        server,
-        runtime.callTool(server, toolName, {
-          args: toolArgs,
-          timeoutMs: callBudget,
-          disableOAuth: this.#config.disableOAuth
-        }),
-        signal,
-        "tool call",
-        callBudget,
-        lease
-      );
-      throwIfAbortedOrExpired(signal, context.deadline);
-      return normalizeMcpResult(result);
     });
   }
   async close() {
@@ -24241,7 +25787,7 @@ var KiroMcpProvider = class {
   #boundArgumentFiles(server, command) {
     const bound = this.#argumentFileBindings.get(server);
     if (bound !== void 0) return bound;
-    const resolved2 = resolveStdioArgumentFiles(command.args ?? [], fs9.realpathSync(command.cwd ?? this.#cwd));
+    const resolved2 = resolveStdioArgumentFiles(command.args ?? [], fs11.realpathSync(command.cwd ?? this.#cwd));
     this.#argumentFileBindings.set(server, resolved2);
     return resolved2;
   }
@@ -24262,11 +25808,11 @@ var KiroMcpProvider = class {
     };
     const details = definition.command.kind === "stdio" ? (() => {
       const executable = resolvedExecutable ?? executablePath(definition.command.command, definition.command.cwd);
-      const stats = fs9.statSync(executable, { bigint: true });
+      const stats = fs11.statSync(executable, { bigint: true });
       const configured = definition.env ?? {};
       const arguments_ = [...definition.command.args ?? []];
       const argumentFiles = resolvedArgumentFiles.map((entry) => {
-        const argumentStats = fs9.statSync(entry.resolvedPath, { bigint: true });
+        const argumentStats = fs11.statSync(entry.resolvedPath, { bigint: true });
         return {
           ...entry,
           digest: fileDigest(entry.resolvedPath, MAX_MCP_ARGUMENT_FILE_BYTES),
@@ -24280,14 +25826,14 @@ var KiroMcpProvider = class {
         executableDigest: fileDigest(executable),
         executableDevice: String(stats.dev),
         executableFile: String(stats.ino),
-        cwd: fs9.realpathSync(definition.command.cwd ?? this.#cwd),
+        cwd: fs11.realpathSync(definition.command.cwd ?? this.#cwd),
         arguments: arguments_,
         argumentFiles,
-        configuredEnvironmentDigest: createHash6("sha256").update(JSON.stringify(Object.entries(configured).sort(([left], [right]) => left.localeCompare(right)))).digest("hex")
+        configuredEnvironmentDigest: createHash8("sha256").update(JSON.stringify(Object.entries(configured).sort(([left], [right]) => left.localeCompare(right)))).digest("hex")
       };
     })() : { kind: "http", endpoint: definition.command.url.href };
     const unsigned = { ...base, ...details };
-    return { ...unsigned, digest: createHash6("sha256").update("kiro-fabric-mcp-transport-v2\0").update(JSON.stringify(unsigned)).digest("hex") };
+    return { ...unsigned, digest: createHash8("sha256").update("kiro-fabric-mcp-transport-v2\0").update(JSON.stringify(unsigned)).digest("hex") };
   }
   #assertTransportSnapshot(runtime, server, approved) {
     if (!isRecord6(approved)) throw new Error("MCP call is missing its approved transport snapshot");
@@ -24300,13 +25846,13 @@ var KiroMcpProvider = class {
     await context.approve(action, details);
     throwIfAbortedOrExpired(context.signal, context.deadline);
   }
-  #validateToolArguments(tool, args) {
+  #validateToolArguments(tool, args, descriptor2) {
     const validation = validateSchemaValue(tool.inputSchema, args, {
       pathPrefix: "/args",
       includeInstancePath: true
     });
     if (validation.status === "invalid") {
-      throw new Error(`Invalid arguments for mcp.call: ${validation.message}`);
+      throw argumentRepairError(descriptor2.ref, descriptor2.descriptorDigest, tool.inputSchema, validation.message);
     }
   }
   async #listRawTools(runtime, server, deadline, signal) {
@@ -24403,7 +25949,12 @@ var KiroMcpProvider = class {
   }
   #remainingCallBudget(deadline) {
     const remaining = Math.ceil(deadline - performance.now());
-    if (remaining < 1) throw new Error(`MCP call timed out after ${this.#config.callTimeoutMs}ms`);
+    if (remaining < 1) throw new FabricRepairError(`MCP call timed out after ${this.#config.callTimeoutMs}ms`, {
+      code: "timeout",
+      phase: "discovery",
+      dispatchState: "not_dispatched",
+      effectOutcome: "none"
+    });
     return remaining;
   }
   #bounded(runtime, server, operation, signal, label, timeoutMs, lease) {
@@ -24431,29 +25982,35 @@ var KiroMcpProvider = class {
           reject(error);
         });
       };
-      const onAbort = () => terminate(abortError2(signal));
+      const classified = (message, code2) => new FabricRepairError(message, {
+        code: code2,
+        phase: label === "tool call" ? "dispatch" : "discovery",
+        dispatchState: label === "tool call" ? "dispatched" : "not_dispatched",
+        effectOutcome: label === "tool call" ? "uncertain" : "none"
+      });
+      const onAbort = () => terminate(classified(abortError2(signal).message, "provider_error"));
       const timer = setTimeout(
-        () => terminate(new Error(`MCP ${label} timed out after ${this.#config.callTimeoutMs}ms total`)),
+        () => terminate(classified(`MCP ${label} timed out after ${this.#config.callTimeoutMs}ms total`, "timeout")),
         timeoutMs
       );
       if (signal?.aborted) onAbort();
       else signal?.addEventListener("abort", onAbort, { once: true });
       operation.then(
         (value) => finish(() => resolve(value)),
-        (error) => finish(() => reject(error))
+        (error) => finish(() => reject(error instanceof FabricRepairError ? error : classified(error instanceof Error ? error.message : "MCP operation failed", "provider_error")))
       );
     });
   }
 };
 
 // src/kiro/memory-provider.ts
-import { createHash as createHash7 } from "node:crypto";
-import fs11 from "node:fs";
+import { createHash as createHash9 } from "node:crypto";
+import fs13 from "node:fs";
 
 // src/kiro/memory.ts
 import crypto from "node:crypto";
-import fs10 from "node:fs";
-import path10 from "node:path";
+import fs12 from "node:fs";
+import path14 from "node:path";
 var DEFAULT_MAX_NAMESPACE_ENTRIES = 128;
 var DEFAULT_MAX_NAMESPACE_BYTES = 256 * 1024;
 var DEFAULT_MAX_ENTRY_BYTES = 16 * 1024;
@@ -24500,14 +26057,14 @@ var normalizeKiroMemoryToken = (value, label) => {
 var encodeName2 = (value) => encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 var hashNamespace = (namespace) => crypto.createHash("sha256").update(namespace).digest("hex").slice(0, 16);
 var isWithinOrEqual = (root, candidate) => {
-  const relative = path10.relative(root, candidate);
+  const relative = path14.relative(root, candidate);
   if (relative === "" || relative === ".") return true;
-  if (path10.isAbsolute(relative)) return false;
-  return relative.split(path10.sep).filter(Boolean)[0] !== "..";
+  if (path14.isAbsolute(relative)) return false;
+  return relative.split(path14.sep).filter(Boolean)[0] !== "..";
 };
 var lstatOrNull = (target) => {
   try {
-    return fs10.lstatSync(target);
+    return fs12.lstatSync(target);
   } catch (error) {
     if (error.code === "ENOENT") return null;
     throw error;
@@ -24526,53 +26083,53 @@ var processIsAlive2 = (pid) => {
   }
 };
 var recoverPendingMutationLock = (lockPath, pending) => {
-  const identity = pending.identity;
-  if (identity && !identity.owner && pending.ownerDescriptor !== void 0) {
-    const owner = fs10.fstatSync(pending.ownerDescriptor);
-    identity.owner = { dev: owner.dev, ino: owner.ino };
+  const identity2 = pending.identity;
+  if (identity2 && !identity2.owner && pending.ownerDescriptor !== void 0) {
+    const owner = fs12.fstatSync(pending.ownerDescriptor);
+    identity2.owner = { dev: owner.dev, ino: owner.ino };
   }
-  if (!identity) throw new KiroMemoryScopeError("Kiro memory lock cleanup remains unresolved: ownership identity is unavailable");
-  releaseNamespaceMutationLock(lockPath, identity);
+  if (!identity2) throw new KiroMemoryScopeError("Kiro memory lock cleanup remains unresolved: ownership identity is unavailable");
+  releaseNamespaceMutationLock(lockPath, identity2);
   if (pending.ownerDescriptor !== void 0) {
     const descriptor2 = pending.ownerDescriptor;
     pending.ownerDescriptor = void 0;
-    fs10.closeSync(descriptor2);
+    fs12.closeSync(descriptor2);
   }
 };
-var releaseNamespaceMutationLock = (lockPath, identity, requireOwner = false) => {
+var releaseNamespaceMutationLock = (lockPath, identity2, requireOwner = false) => {
   let current;
   try {
-    current = fs10.lstatSync(lockPath);
+    current = fs12.lstatSync(lockPath);
   } catch (error) {
     if (errorCode3(error) === "ENOENT") return;
     throw error;
   }
-  if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== identity.directory.dev || current.ino !== identity.directory.ino) {
+  if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== identity2.directory.dev || current.ino !== identity2.directory.ino) {
     throw new KiroMemoryScopeError("Refusing to clean up a replacement Kiro memory mutation lock");
   }
-  const ownerPath = path10.join(lockPath, MUTATION_LOCK_OWNER);
+  const ownerPath = path14.join(lockPath, MUTATION_LOCK_OWNER);
   try {
-    const owner = fs10.lstatSync(ownerPath);
+    const owner = fs12.lstatSync(ownerPath);
     let ownerToken;
     try {
-      ownerToken = JSON.parse(fs10.readFileSync(ownerPath, "utf8")).token;
+      ownerToken = JSON.parse(fs12.readFileSync(ownerPath, "utf8")).token;
     } catch {
     }
-    if (!identity.owner || !owner.isFile() || owner.isSymbolicLink() || owner.dev !== identity.owner.dev || owner.ino !== identity.owner.ino || identity.owner.token !== void 0 && ownerToken !== identity.owner.token) {
+    if (!identity2.owner || !owner.isFile() || owner.isSymbolicLink() || owner.dev !== identity2.owner.dev || owner.ino !== identity2.owner.ino || identity2.owner.token !== void 0 && ownerToken !== identity2.owner.token) {
       throw new KiroMemoryScopeError("Refusing to remove a foreign Kiro memory mutation lock owner");
     }
-    fs10.unlinkSync(ownerPath);
+    fs12.unlinkSync(ownerPath);
   } catch (error) {
     if (errorCode3(error) !== "ENOENT" || requireOwner) throw error;
   }
-  fs10.rmdirSync(lockPath);
+  fs12.rmdirSync(lockPath);
 };
 var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, beforeCommit) => {
-  const lockPath = path10.join(namespaceRoot, MUTATION_LOCK);
+  const lockPath = path14.join(namespaceRoot, MUTATION_LOCK);
   const deadline = performance.now() + MUTATION_LOCK_TIMEOUT_MS;
-  let identity;
+  let identity2;
   let operationError;
-  while (!identity) {
+  while (!identity2) {
     if (state.pending) {
       const pending = state.pending;
       recoverPendingMutationLock(lockPath, pending);
@@ -24581,10 +26138,10 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
     throwIfAborted(signal);
     beforeCommit?.();
     try {
-      fs10.mkdirSync(lockPath, { mode: 448 });
+      fs12.mkdirSync(lockPath, { mode: 448 });
       let stat;
       try {
-        stat = fs10.lstatSync(lockPath);
+        stat = fs12.lstatSync(lockPath);
       } catch (error) {
         state.pending = {};
         throw new AggregateError([error], "Kiro memory lock initialization failed; cleanup remains unresolved", { cause: error });
@@ -24592,37 +26149,37 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
       if (!stat.isDirectory() || stat.isSymbolicLink()) {
         throw new KiroMemoryScopeError("Kiro memory mutation lock is not a real directory");
       }
-      identity = { directory: { dev: stat.dev, ino: stat.ino } };
+      identity2 = { directory: { dev: stat.dev, ino: stat.ino } };
       let ownerDescriptor;
       try {
-        const ownerPath = path10.join(lockPath, MUTATION_LOCK_OWNER);
+        const ownerPath = path14.join(lockPath, MUTATION_LOCK_OWNER);
         const token = crypto.randomBytes(32).toString("hex");
         try {
-          ownerDescriptor = fs10.openSync(
+          ownerDescriptor = fs12.openSync(
             ownerPath,
-            fs10.constants.O_WRONLY | fs10.constants.O_CREAT | fs10.constants.O_EXCL | (fs10.constants.O_NOFOLLOW ?? 0),
+            fs12.constants.O_WRONLY | fs12.constants.O_CREAT | fs12.constants.O_EXCL | (fs12.constants.O_NOFOLLOW ?? 0),
             384
           );
-          const owner = fs10.fstatSync(ownerDescriptor);
-          identity.owner = { dev: owner.dev, ino: owner.ino };
-          fs10.writeFileSync(ownerDescriptor, JSON.stringify({ pid: process.pid, acquiredAt: Date.now(), token }), "utf8");
-          identity.owner.token = token;
+          const owner = fs12.fstatSync(ownerDescriptor);
+          identity2.owner = { dev: owner.dev, ino: owner.ino };
+          fs12.writeFileSync(ownerDescriptor, JSON.stringify({ pid: process.pid, acquiredAt: Date.now(), token }), "utf8");
+          identity2.owner.token = token;
         } finally {
-          if (ownerDescriptor !== void 0 && identity.owner) {
+          if (ownerDescriptor !== void 0 && identity2.owner) {
             const descriptor2 = ownerDescriptor;
             ownerDescriptor = void 0;
-            fs10.closeSync(descriptor2);
+            fs12.closeSync(descriptor2);
           }
         }
       } catch (error) {
-        const cleanupIdentity = identity;
-        identity = void 0;
+        const cleanupIdentity = identity2;
+        identity2 = void 0;
         try {
           releaseNamespaceMutationLock(lockPath, cleanupIdentity);
           if (ownerDescriptor !== void 0) {
             const descriptor2 = ownerDescriptor;
             ownerDescriptor = void 0;
-            fs10.closeSync(descriptor2);
+            fs12.closeSync(descriptor2);
           }
         } catch (cleanup) {
           state.pending = { identity: cleanupIdentity, ...ownerDescriptor === void 0 ? {} : { ownerDescriptor } };
@@ -24638,7 +26195,7 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
       if (errorCode3(error) !== "EEXIST") throw error;
       let stat;
       try {
-        stat = fs10.lstatSync(lockPath);
+        stat = fs12.lstatSync(lockPath);
       } catch (statError) {
         if (errorCode3(statError) === "ENOENT") continue;
         throw statError;
@@ -24647,13 +26204,13 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
         throw new KiroMemoryScopeError("Kiro memory mutation lock is foreign");
       }
       if (Date.now() - stat.mtimeMs > STALE_MUTATION_LOCK_MS) {
-        const ownerPath = path10.join(lockPath, MUTATION_LOCK_OWNER);
+        const ownerPath = path14.join(lockPath, MUTATION_LOCK_OWNER);
         let ownerStat;
         let owner;
         try {
-          ownerStat = fs10.lstatSync(ownerPath);
+          ownerStat = fs12.lstatSync(ownerPath);
           if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) throw new Error("invalid owner file");
-          owner = JSON.parse(fs10.readFileSync(ownerPath, "utf8"));
+          owner = JSON.parse(fs12.readFileSync(ownerPath, "utf8"));
           if (!owner || !Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.token !== "string" || !owner.token || !Number.isSafeInteger(owner.acquiredAt) || owner.acquiredAt <= 0) {
             throw new Error("invalid owner metadata");
           }
@@ -24691,10 +26248,10 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
     throw error;
   } finally {
     try {
-      releaseNamespaceMutationLock(lockPath, identity);
+      releaseNamespaceMutationLock(lockPath, identity2);
       state.pending = void 0;
     } catch (cleanup) {
-      state.pending = { identity };
+      state.pending = { identity: identity2 };
       if (operationError !== void 0) throw new AggregateError(
         [operationError, cleanup],
         "Kiro memory mutation and lock cleanup failed",
@@ -24705,15 +26262,15 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
   }
 };
 var ensureDirectory = (target) => {
-  fs10.mkdirSync(target, { recursive: true, mode: 448 });
-  const stat = fs10.lstatSync(target);
+  fs12.mkdirSync(target, { recursive: true, mode: 448 });
+  const stat = fs12.lstatSync(target);
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new KiroMemoryScopeError(`Kiro memory directory must be a real directory: ${target}`);
   }
   if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new KiroMemoryScopeError(`Kiro memory directory is owned by another user: ${target}`);
   }
-  fs10.chmodSync(target, 448);
+  fs12.chmodSync(target, 448);
 };
 var assertPrivateDirectory2 = (target, stat) => {
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
@@ -24731,11 +26288,11 @@ var assertPrivateDirectory2 = (target, stat) => {
 var readOwnershipMarker = (filePath) => {
   let descriptor2;
   try {
-    descriptor2 = fs10.openSync(
+    descriptor2 = fs12.openSync(
       filePath,
-      fs10.constants.O_RDONLY | (fs10.constants.O_NOFOLLOW ?? 0)
+      fs12.constants.O_RDONLY | (fs12.constants.O_NOFOLLOW ?? 0)
     );
-    const stat = fs10.fstatSync(descriptor2);
+    const stat = fs12.fstatSync(descriptor2);
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > 8 * 1024) {
       throw new KiroMemoryScopeError(`Kiro memory ownership marker is invalid: ${filePath}`);
     }
@@ -24747,14 +26304,14 @@ var readOwnershipMarker = (filePath) => {
         throw new KiroMemoryScopeError(`Kiro memory ownership marker is not private: ${filePath}`);
       }
     }
-    return JSON.parse(fs10.readFileSync(descriptor2, "utf8"));
+    return JSON.parse(fs12.readFileSync(descriptor2, "utf8"));
   } catch (error) {
     if (error instanceof KiroMemoryScopeError) throw error;
     throw new KiroMemoryScopeError(
       `Kiro memory directory is foreign or its ownership marker is unreadable: ${filePath}`
     );
   } finally {
-    if (descriptor2 !== void 0) fs10.closeSync(descriptor2);
+    if (descriptor2 !== void 0) fs12.closeSync(descriptor2);
   }
 };
 var ensureOwnedDirectory = (memoryRoot, target, marker) => {
@@ -24763,42 +26320,42 @@ var ensureOwnedDirectory = (memoryRoot, target, marker) => {
   let created = false;
   if (!existing) {
     try {
-      fs10.mkdirSync(target, { mode: 448 });
+      fs12.mkdirSync(target, { mode: 448 });
       created = true;
     } catch (error) {
       if (errorCode3(error) !== "EEXIST") throw error;
     }
   }
-  const stat = fs10.lstatSync(target);
+  const stat = fs12.lstatSync(target);
   assertPrivateDirectory2(target, stat);
-  const markerPath = path10.join(target, OWNERSHIP_MARKER);
+  const markerPath = path14.join(target, OWNERSHIP_MARKER);
   if (created) {
-    const temporaryMarker = path10.join(
+    const temporaryMarker = path14.join(
       target,
       `.kiro-fabric-owner-${process.pid}-${crypto.randomBytes(8).toString("hex")}.tmp`
     );
     try {
-      const descriptor2 = fs10.openSync(
+      const descriptor2 = fs12.openSync(
         temporaryMarker,
-        fs10.constants.O_WRONLY | fs10.constants.O_CREAT | fs10.constants.O_EXCL | (fs10.constants.O_NOFOLLOW ?? 0),
+        fs12.constants.O_WRONLY | fs12.constants.O_CREAT | fs12.constants.O_EXCL | (fs12.constants.O_NOFOLLOW ?? 0),
         384
       );
       try {
-        fs10.writeFileSync(descriptor2, `${JSON.stringify(marker)}
+        fs12.writeFileSync(descriptor2, `${JSON.stringify(marker)}
 `, "utf8");
-        fs10.fsyncSync(descriptor2);
+        fs12.fsyncSync(descriptor2);
       } finally {
-        fs10.closeSync(descriptor2);
+        fs12.closeSync(descriptor2);
       }
-      fs10.linkSync(temporaryMarker, markerPath);
-      fs10.unlinkSync(temporaryMarker);
+      fs12.linkSync(temporaryMarker, markerPath);
+      fs12.unlinkSync(temporaryMarker);
     } catch (error) {
       try {
-        fs10.unlinkSync(temporaryMarker);
+        fs12.unlinkSync(temporaryMarker);
       } catch {
       }
       try {
-        fs10.rmdirSync(target);
+        fs12.rmdirSync(target);
       } catch {
       }
       throw error;
@@ -24806,7 +26363,7 @@ var ensureOwnedDirectory = (memoryRoot, target, marker) => {
   } else if (!lstatOrNull(markerPath)) {
     let entries = [];
     try {
-      entries = fs10.readdirSync(target);
+      entries = fs12.readdirSync(target);
     } catch {
     }
     if (entries.every((name) => name.startsWith(".kiro-fabric-owner-"))) {
@@ -24827,9 +26384,9 @@ var assertNoSymlinkComponents = (root, target) => {
     throw new KiroMemoryScopeError(`Kiro memory path escapes its root: ${target}`);
   }
   let cursor = root;
-  const relative = path10.relative(root, target);
-  for (const part of relative.split(path10.sep).filter(Boolean)) {
-    cursor = path10.join(cursor, part);
+  const relative = path14.relative(root, target);
+  for (const part of relative.split(path14.sep).filter(Boolean)) {
+    cursor = path14.join(cursor, part);
     const stat = lstatOrNull(cursor);
     if (!stat) continue;
     if (stat.isSymbolicLink()) {
@@ -24838,16 +26395,16 @@ var assertNoSymlinkComponents = (root, target) => {
   }
 };
 var canonicalDirectory = (root) => {
-  const candidate = path10.resolve(normalizeKiroMemoryToken(root, "root"));
+  const candidate = path14.resolve(normalizeKiroMemoryToken(root, "root"));
   ensureDirectory(candidate);
-  const canonical = fs10.realpathSync(candidate);
-  const stat = fs10.statSync(canonical);
+  const canonical = fs12.realpathSync(candidate);
+  const stat = fs12.statSync(canonical);
   if (!stat.isDirectory()) {
     throw new KiroMemoryScopeError(`Kiro memory root is not a directory: ${canonical}`);
   }
   return canonical;
 };
-var memoryNamespaceRoot = (root, namespace) => path10.join(root, MEMORY_DIR, `${encodeName2(namespace)}-${hashNamespace(namespace)}`);
+var memoryNamespaceRoot = (root, namespace) => path14.join(root, MEMORY_DIR, `${encodeName2(namespace)}-${hashNamespace(namespace)}`);
 var entryPath = (namespaceRoot, key) => (() => {
   const name = `${encodeName2(key)}.json`;
   if (utf8Bytes(name) > MAX_FILE_NAME_BYTES) {
@@ -24855,14 +26412,14 @@ var entryPath = (namespaceRoot, key) => (() => {
       `Kiro memory key is too long after filesystem-safe encoding`
     );
   }
-  return path10.join(namespaceRoot, name);
+  return path14.join(namespaceRoot, name);
 })();
 var readEntry = (filePath, expectedNamespace, maxValueChars) => {
   let descriptor2;
   let raw;
   try {
-    descriptor2 = fs10.openSync(filePath, fs10.constants.O_RDONLY | (fs10.constants.O_NOFOLLOW ?? 0));
-    const stat = fs10.fstatSync(descriptor2);
+    descriptor2 = fs12.openSync(filePath, fs12.constants.O_RDONLY | (fs12.constants.O_NOFOLLOW ?? 0));
+    const stat = fs12.fstatSync(descriptor2);
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > DEFAULT_MAX_ENTRY_BYTES) {
       throw new KiroMemoryScopeError(`Kiro memory entry must be a bounded regular file: ${filePath}`);
     }
@@ -24874,9 +26431,9 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
         throw new KiroMemoryScopeError(`Kiro memory entry must be private: ${filePath}`);
       }
     }
-    raw = fs10.readFileSync(descriptor2, "utf8");
+    raw = fs12.readFileSync(descriptor2, "utf8");
   } finally {
-    if (descriptor2 !== void 0) fs10.closeSync(descriptor2);
+    if (descriptor2 !== void 0) fs12.closeSync(descriptor2);
   }
   let parsed;
   try {
@@ -24892,7 +26449,7 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
     encodedValue = JSON.stringify(parsed.value);
   } catch {
   }
-  if (parsed.namespace !== expectedNamespace || normalizeKiroMemoryToken(parsed.key, "key") !== parsed.key || entryPath(path10.dirname(filePath), parsed.key) !== filePath || encodedValue === void 0 || encodedValue.length > maxValueChars) {
+  if (parsed.namespace !== expectedNamespace || normalizeKiroMemoryToken(parsed.key, "key") !== parsed.key || entryPath(path14.dirname(filePath), parsed.key) !== filePath || encodedValue === void 0 || encodedValue.length > maxValueChars) {
     throw new KiroMemoryScopeError(`Kiro memory entry violates its configured scope: ${filePath}`);
   }
   return {
@@ -24908,29 +26465,29 @@ var isUnsupportedDirectorySync = (error, phase) => {
   if (code2 === "EINVAL" || code2 === "ENOTSUP" || code2 === "EOPNOTSUPP") return true;
   return phase === "open" && process.platform === "win32" && (code2 === "EISDIR" || code2 === "EPERM" || code2 === "EACCES");
 };
-var syncDirectoryBestEffort = (directory) => {
+var syncDirectoryBestEffort = (directory2) => {
   let descriptor2;
   try {
     try {
-      descriptor2 = fs10.openSync(directory, "r");
+      descriptor2 = fs12.openSync(directory2, "r");
     } catch (error) {
       if (isUnsupportedDirectorySync(error, "open")) return;
       throw error;
     }
     try {
-      fs10.fsyncSync(descriptor2);
+      fs12.fsyncSync(descriptor2);
     } catch (error) {
       if (!isUnsupportedDirectorySync(error, "sync")) throw error;
     }
   } finally {
-    if (descriptor2 !== void 0) fs10.closeSync(descriptor2);
+    if (descriptor2 !== void 0) fs12.closeSync(descriptor2);
   }
 };
 var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
-  const directory = path10.dirname(filePath);
-  const temporary = path10.join(
-    directory,
-    `.${path10.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+  const directory2 = path14.dirname(filePath);
+  const temporary = path14.join(
+    directory2,
+    `.${path14.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
   );
   let descriptor2;
   let createdStats;
@@ -24938,23 +26495,23 @@ var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
     if (descriptor2 === void 0) return;
     const fd = descriptor2;
     descriptor2 = void 0;
-    fs10.closeSync(fd);
+    fs12.closeSync(fd);
   };
   try {
-    descriptor2 = fs10.openSync(temporary, "wx", 384);
-    createdStats = fs10.fstatSync(descriptor2);
-    fs10.writeFileSync(descriptor2, content, "utf8");
-    fs10.fsyncSync(descriptor2);
+    descriptor2 = fs12.openSync(temporary, "wx", 384);
+    createdStats = fs12.fstatSync(descriptor2);
+    fs12.writeFileSync(descriptor2, content, "utf8");
+    fs12.fsyncSync(descriptor2);
     close();
     beforeCommit?.();
-    fs10.renameSync(temporary, filePath);
+    fs12.renameSync(temporary, filePath);
     afterCommit?.();
-    syncDirectoryBestEffort(directory);
+    syncDirectoryBestEffort(directory2);
   } catch (error) {
     const errors = [error];
     if (createdStats === void 0 && descriptor2 !== void 0) {
       try {
-        createdStats = fs10.fstatSync(descriptor2);
+        createdStats = fs12.fstatSync(descriptor2);
       } catch (cleanup) {
         errors.push(cleanup);
       }
@@ -24967,7 +26524,7 @@ var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
     try {
       const current = lstatOrNull(temporary);
       if (createdStats && current?.isFile() && !current.isSymbolicLink() && current.dev === createdStats.dev && current.ino === createdStats.ino) {
-        fs10.rmSync(temporary, { force: true });
+        fs12.rmSync(temporary, { force: true });
       }
     } catch (cleanup) {
       errors.push(cleanup);
@@ -24978,7 +26535,7 @@ var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
 };
 var listEntryFiles = (namespaceRoot) => {
   try {
-    return fs10.readdirSync(namespaceRoot, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => path10.join(namespaceRoot, entry.name)).sort((left, right) => left.localeCompare(right));
+    return fs12.readdirSync(namespaceRoot, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => path14.join(namespaceRoot, entry.name)).sort((left, right) => left.localeCompare(right));
   } catch (error) {
     if (error.code === "ENOENT") return [];
     throw error;
@@ -25016,7 +26573,7 @@ var openKiroMemory = (namespace, root, limits = {}) => {
   const maxValueChars = Number.isSafeInteger(limits.maxValueChars) && limits.maxValueChars > 0 ? Math.min(DEFAULT_MAX_ENTRY_BYTES, limits.maxValueChars) : DEFAULT_MAX_ENTRY_BYTES;
   const memoryNamespace = normalizeKiroMemoryToken(namespace, "namespace");
   const memoryRoot = canonicalDirectory(root);
-  const scopedRoot = path10.join(memoryRoot, MEMORY_DIR);
+  const scopedRoot = path14.join(memoryRoot, MEMORY_DIR);
   ensureOwnedDirectory(memoryRoot, scopedRoot, {
     format: MEMORY_FORMAT,
     owner: MEMORY_OWNER,
@@ -25133,12 +26690,12 @@ var openKiroMemory = (namespace, root, limits = {}) => {
           const entry = readEntry(filePath, memoryNamespace, maxValueChars);
           if (entry.key !== normalizedKey) throw new KiroMemoryScopeError("Kiro memory entry identity mismatch");
           throwIfAborted(signal);
-          const current = fs10.lstatSync(filePath);
+          const current = fs12.lstatSync(filePath);
           if (current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1) {
             throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
           }
           beforeCommit?.();
-          fs10.unlinkSync(filePath);
+          fs12.unlinkSync(filePath);
           published = true;
           syncDirectoryBestEffort(namespaceRoot);
           beforeCommit?.();
@@ -25199,7 +26756,7 @@ ${JSON.stringify(entry.value)}`.toLowerCase();
 // src/kiro/memory-provider.ts
 var KEY_MAX2 = 512;
 var QUERY_MAX = 2e3;
-var descriptors4 = [
+var descriptors5 = [
   { name: "get", description: "Read one value from Fabric workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX2 } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
   { name: "set", description: "Persist one bounded JSON value in Fabric workspace memory", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX2 }, value: {} }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
   { name: "delete", description: "Delete one Fabric workspace memory value after destructive approval", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX2 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
@@ -25216,8 +26773,8 @@ var KiroMemoryProvider = class {
   #binding;
   constructor(options) {
     this.#root = options.root;
-    const canonicalWorkspace = fs11.realpathSync(options.cwd);
-    this.#namespace = options.namespace ?? `project:${createHash7("sha256").update(canonicalWorkspace).digest("hex")}`;
+    const canonicalWorkspace = fs13.realpathSync(options.cwd);
+    this.#namespace = options.namespace ?? `project:${createHash9("sha256").update(canonicalWorkspace).digest("hex")}`;
     this.#maxEntries = options.maxEntries;
     this.#maxValueChars = options.maxValueChars;
   }
@@ -25228,10 +26785,10 @@ var KiroMemoryProvider = class {
     });
   }
   async list() {
-    return descriptors4;
+    return descriptors5;
   }
   async describe(actionName) {
-    return descriptors4.find((entry) => entry.name === actionName);
+    return descriptors5.find((entry) => entry.name === actionName);
   }
   prepareArguments(actionName, args) {
     if (["get", "set", "delete"].includes(actionName) && typeof args.key === "string") {
@@ -25266,31 +26823,89 @@ var KiroMemoryProvider = class {
 };
 
 // src/kiro/power/artifacts-provider.ts
+var idSchema = { type: "string", minLength: 51, maxLength: 51 };
+var KIRO_ARTIFACT_READ_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: { id: { ...idSchema }, text: { type: "string" }, offset: { type: "integer", minimum: 0 }, nextOffset: { type: "integer", minimum: 0 }, totalChars: { type: "integer", minimum: 0 }, done: { type: "boolean" } },
+  required: ["id", "text", "offset", "nextOffset", "totalChars", "done"],
+  additionalProperties: false
+};
 var descriptor = {
   name: "read",
-  description: "Read a bounded chunk of an opaque overflow artifact",
-  inputSchema: { type: "object", properties: { id: { type: "string", minLength: 51, maxLength: 51 }, offset: { type: "integer", minimum: 0 }, limit: { type: "integer", minimum: 1, maximum: 16e3 } }, required: ["id"], additionalProperties: false },
+  description: "Read a bounded UTF-16-offset chunk of an opaque ephemeral artifact; advance using nextOffset",
+  inputSchema: { type: "object", properties: { id: { ...idSchema }, offset: { type: "integer", minimum: 0 }, limit: { type: "integer", minimum: 1, maximum: 16e3 } }, required: ["id"], additionalProperties: false },
+  outputSchema: KIRO_ARTIFACT_READ_OUTPUT_SCHEMA,
   risk: "read",
   namespace: "workspace",
   effect: { kind: "read" }
 };
+var checkpointDescriptor = {
+  name: "checkpoint",
+  description: "Explicitly emit chosen intermediate JSON evidence to a bounded ephemeral artifact, not durable memory. Requires write approval. Labels are optional and bounded.",
+  inputSchema: { type: "object", properties: { value: {}, label: { type: "string", maxLength: 80 } }, required: ["value"], additionalProperties: false },
+  outputSchema: { type: "object", properties: { id: { ...idSchema }, retrieval: { type: "object", properties: { ref: { const: "artifacts.read" }, args: { type: "object", properties: { id: { ...idSchema } }, required: ["id"], additionalProperties: false }, encoding: { const: "json" }, ephemeral: { const: true } }, required: ["ref", "args", "encoding", "ephemeral"], additionalProperties: false } }, required: ["id", "retrieval"], additionalProperties: false },
+  risk: "write",
+  namespace: "workspace",
+  effect: { kind: "emission" }
+};
+var boundKiroArtifactRead = (page, maximum) => {
+  if (!Number.isSafeInteger(maximum) || maximum < 1) throw new Error("invalid artifact response budget");
+  const candidate = (length) => {
+    if (length > 0 && length < page.text.length && /[\uD800-\uDBFF]/u.test(page.text.charAt(length - 1)) && /[\uDC00-\uDFFF]/u.test(page.text.charAt(length))) length--;
+    const text3 = page.text.slice(0, length);
+    const nextOffset = page.offset + text3.length;
+    return { ...page, text: text3, nextOffset, done: nextOffset >= page.totalChars };
+  };
+  let low = 0, high = page.text.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (JSON.stringify(candidate(mid)).length <= maximum) low = mid;
+    else high = mid - 1;
+  }
+  const result = candidate(low);
+  if (JSON.stringify(result).length > maximum || !result.done && !result.text.length) throw new Error("artifact response budget cannot fit metadata and one Unicode character");
+  return result;
+};
 var KiroPowerArtifactsProvider = class {
-  constructor(store) {
+  constructor(store, options = {}) {
     this.store = store;
+    this.#checkpoints = createKiroArtifactStore({ ...options.now ? { now: options.now } : {}, maxArtifacts: Math.min(options.maxArtifacts ?? 16, 16), maxArtifactChars: Math.min(options.maxArtifactChars ?? 1e5, 1e5), maxTotalChars: Math.min(options.maxTotalChars ?? 4e5, 4e5), ttlMs: Math.min(options.ttlMs ?? 9e5, 9e5) });
   }
   store;
   name = "artifacts";
   description = "Bounded private Fabric artifacts";
+  #checkpoints;
   async list() {
-    return [descriptor];
+    return [descriptor, checkpointDescriptor];
   }
   async describe(actionName) {
-    return actionName === "read" ? descriptor : void 0;
+    return (await this.list()).find((action) => action.name === actionName);
   }
   async invoke(actionName, args, context) {
+    throwIfAbortedOrExpired(context.signal, context.deadline);
+    const maximum = context.maxResultChars ?? 2e6;
+    if (actionName === "checkpoint") {
+      if (!("value" in args) || args.label !== void 0 && (typeof args.label !== "string" || args.label.length > 80 || /[\u0000-\u001f\u007f]/u.test(args.label))) throw new Error("invalid checkpoint arguments");
+      const content = fabricJsonText({ ...args.label === void 0 ? {} : { label: args.label }, value: args.value }, 1e5);
+      const response = (id4) => ({ id: id4, retrieval: { ref: "artifacts.read", args: { id: id4 }, encoding: "json", ephemeral: true } });
+      fabricJsonText(response(`ka_${"0".repeat(48)}`), maximum);
+      const record4 = context.checkpoints?.reserve();
+      const id3 = this.#checkpoints.write(content);
+      record4?.({ id: id3, ...typeof args.label === "string" ? { label: args.label } : {} });
+      return response(id3);
+    }
     if (actionName !== "read") throw new Error(`Unknown artifacts action: ${actionName}`);
-    throwIfAborted(context.signal);
-    return this.store.read(args.id, args.offset, args.limit);
+    let page;
+    try {
+      page = this.#checkpoints.read(args.id, args.offset, args.limit);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("unavailable or expired")) throw error;
+      page = this.store.read(args.id, args.offset, args.limit);
+    }
+    return boundKiroArtifactRead(page, maximum);
+  }
+  async close() {
+    this.#checkpoints.close();
   }
 };
 
@@ -25314,8 +26929,12 @@ var createKiroRuntime = (options) => {
       maxReadManyChars: Math.floor(config.executor.maxOutputChars * 0.8),
       ...options.managedSearch ? { managedSearch: options.managedSearch } : {}
     }));
-  } else registry.markUnavailable("local", "verified workspace binding is required");
-  registry.register(new KiroPowerArtifactsProvider(artifacts));
+    registry.register(new ReviewProvider({ root: options.workspaceRoot, maxResultChars: config.executor.maxNestedResultChars }));
+    registry.register(new ProbeProvider({ root: options.workspaceRoot, probesRoot: options.probesRoot ?? path15.join(path15.dirname(options.localLockRoot), "probes"), maxResultChars: config.executor.maxNestedResultChars }));
+  } else {
+    for (const name of ["local", "review", "probe"]) registry.markUnavailable(name, "verified workspace binding is required");
+  }
+  registry.register(new KiroPowerArtifactsProvider(artifacts, config.artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));
   else registry.markUnavailable("mcp", "disabled by configuration");
   if (options.memoryRoot && config.memory.enabled) {
@@ -25345,8 +26964,105 @@ var createKiroRuntime = (options) => {
   };
 };
 
+// src/kiro/run-provenance.ts
+import { createHash as createHash10 } from "node:crypto";
+var RUN_PROVENANCE_LIMITS = Object.freeze({ contentBytes: 1048576, entries: 32, totalBytes: 4194304, declarationJsonChars: 65536 });
+var record3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+var hash2 = (value) => createHash10("sha256").update(value).digest("hex");
+function parseRunProvenanceDeclaration(json2) {
+  if (typeof json2 !== "string" || json2.length > RUN_PROVENANCE_LIMITS.declarationJsonChars) return void 0;
+  try {
+    const value = JSON.parse(json2);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return void 0;
+    const r = record3(value);
+    return {
+      guidanceMode: r.guidanceMode,
+      profile: r.profile,
+      requestedModel: r.requestedModel,
+      requestedEffort: r.requestedEffort,
+      runtimeBundle: r.runtimeBundle,
+      prompt: r.prompt,
+      ...Array.isArray(r.resources) ? { resources: r.resources } : {},
+      ...Array.isArray(r.hooks) ? { hooks: r.hooks } : {},
+      ...r.repository ? { repository: record3(r.repository) } : {}
+    };
+  } catch {
+    return void 0;
+  }
+}
+function buildRunProvenance(input = {}) {
+  let remaining = RUN_PROVENANCE_LIMITS.totalBytes;
+  const digest = (value) => {
+    if (value === void 0 || value === null) return { status: "unknown", reason: "not-supplied" };
+    if (typeof value !== "string" && !(value instanceof Uint8Array)) return { status: "unknown", reason: "invalid" };
+    if (value.length > RUN_PROVENANCE_LIMITS.contentBytes) return { status: "unknown", reason: "limit" };
+    const bytes2 = typeof value === "string" ? Buffer.byteLength(value, "utf8") : value.byteLength;
+    if (bytes2 > RUN_PROVENANCE_LIMITS.contentBytes || bytes2 > remaining) return { status: "unknown", reason: "limit" };
+    remaining -= bytes2;
+    return { status: "known", sha256: hash2(value), bytes: bytes2 };
+  };
+  const collection = (value) => {
+    if (!Array.isArray(value)) return { status: "unknown", count: null, sha256: null };
+    if (value.length > RUN_PROVENANCE_LIMITS.entries) return { status: "limit", count: value.length, sha256: null };
+    const entries = Array.from(value, (item) => {
+      const r = record3(item);
+      return { label: digest(r.label), content: digest(r.content) };
+    });
+    const complete = entries.every((entry) => entry.content.status === "known" && (entry.label.status === "known" || entry.label.reason === "not-supplied"));
+    return {
+      status: complete ? "known" : "unknown",
+      count: value.length,
+      sha256: complete ? hash2(JSON.stringify(entries)) : null
+    };
+  };
+  const repository = (value) => {
+    const r = record3(value);
+    const commit = typeof r.commit === "string" && /^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/u.test(r.commit) ? r.commit.toLowerCase() : null;
+    return { commit, dirty: typeof r.dirty === "boolean" ? r.dirty : null, dirtyEvidence: digest(r.dirtyEvidence) };
+  };
+  const c = record3(input.configured), o = record3(input.observed);
+  const configured = {
+    evidence: "unverified-declaration",
+    guidanceMode: c.guidanceMode === "standard" || c.guidanceMode === "review" || c.guidanceMode === "minimal" ? c.guidanceMode : null,
+    profile: digest(c.profile),
+    requestedModel: digest(c.requestedModel),
+    requestedEffort: digest(c.requestedEffort),
+    runtimeBundle: digest(c.runtimeBundle),
+    prompt: digest(c.prompt),
+    resources: collection(c.resources),
+    hooks: collection(c.hooks),
+    repository: repository(c.repository)
+  };
+  const observed = {
+    evidence: "server-observation",
+    runtimeBundle: digest(o.runtimeBundle),
+    runtimeVersion: digest(o.runtimeVersion),
+    prompt: digest(o.prompt),
+    resources: collection(o.resources),
+    hooks: collection(o.hooks),
+    repository: repository(o.repository),
+    guidanceDelivery: (() => {
+      if (!Array.isArray(o.guidanceOutputs)) return { status: "unknown", count: null, matchedCount: null, sha256: null };
+      if (o.guidanceOutputs.length > RUN_PROVENANCE_LIMITS.entries) return { status: "unknown", count: o.guidanceOutputs.length, matchedCount: null, sha256: null };
+      const entries = Array.from(o.guidanceOutputs, (item) => {
+        const r = record3(item), reference = digest(r.reference), output = digest(r.output);
+        return { status: reference.status === "known" && reference.bytes > 0 && output.status === "known" && reference.sha256 === output.sha256 ? "observed-content-match" : "unknown", reference, output };
+      });
+      return {
+        status: entries.length > 0 && entries.every((entry) => entry.status === "observed-content-match") ? "observed-content-match" : "unknown",
+        count: entries.length,
+        matchedCount: entries.filter((entry) => entry.status === "observed-content-match").length,
+        sha256: entries.every((entry) => entry.reference.status === "known" && entry.output.status === "known") ? hash2(JSON.stringify(entries)) : null
+      };
+    })(),
+    routing: { actualModel: null, actualEffort: null, status: "unknown" }
+  };
+  const manifest = { schemaVersion: 1, configured, observed };
+  return { ...manifest, manifestDigest: hash2(JSON.stringify(manifest)) };
+}
+
 // src/kiro/mcp-server.ts
-var EXEC_DESCRIPTION = "Checked TypeScript; await and return. local.read({path,offset?,limit?})->{text:string,totalLines,truncated,nextOffset?}; not a string/array. local.readMany({windows:[{path,offset?,limit?}],maxChars?})->{files,remaining,complete}: numbered source; default 32000 chars, maximum 40000; continue remaining. local.grep({pattern,path?,glob?,literal?,hidden?,limit?})->{matches,scope,truncated}; local.find({pattern,path?,hidden?,limit?})->{paths,scope,truncated}; local.list({path?,limit?}); local.edit({path,oldText,newText,all?}); local.write({path,content,overwrite?}); local.shell({command,settle:true})->{ok,exitCode,stdout,stderr,truncated}; literal Bash: {script,interpreter:'bash',args?}. Reviews: hidden:true; ignore rules still apply. fabric.help({topic:'review'}). No native fallback.";
+var EXEC_DESCRIPTION = "Checked TypeScript; await/return. local.read({path,offset?,limit?})->{text:string,totalLines,truncated,nextOffset?}, not a string/array. local.readMany({windows,maxChars?,partial?})->{files,remaining,complete,unreadTails}; complete=windows only. local.readEvidence({windows,maxChars?,partial?})->string packet+metadata. local.grep({pattern,path?,glob?,literal?,hidden?,limit?})->{matches,scope,truncated}; local.find({pattern,path?,hidden?,limit?})->{paths,scope,truncated}. local.edit({path,oldText,newText,all?}); local.shell({command,settle:true})->{ok,exitCode,stdout,stderr,truncated}; scripts: {script,interpreter:'bash',args?}. Optional review/probe APIs: tools.describe. hidden:true; ignore rules still apply; fabric.help({topic:'review'}). No native fallback.";
 var MCP_INSTANCE_ID = `fmcp_${randomBytes5(16).toString("hex")}`;
 var MCP_STARTED_AT = (/* @__PURE__ */ new Date()).toISOString();
 var MCP_PARENT_PID = process.ppid;
@@ -25363,13 +27079,13 @@ var supportsKiroElicitation = (capabilities) => {
 var installedKiroHomeFor = (runtimeRoot, dataRoot) => {
   const runtime = inspectCanonicalPath(runtimeRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
   const data = inspectCanonicalPath(dataRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
-  const installRoot = path11.dirname(data);
-  if (path11.basename(data) !== "data" || path11.basename(installRoot) !== "kiro-fabric") return void 0;
-  const generation = path11.basename(runtime) === "app" ? path11.dirname(runtime) : runtime;
-  if (!/^[a-f0-9]{64}$/u.test(path11.basename(generation)) || path11.dirname(generation) !== path11.join(installRoot, "runtime")) {
+  const installRoot = path16.dirname(data);
+  if (path16.basename(data) !== "data" || path16.basename(installRoot) !== "kiro-fabric") return void 0;
+  const generation = path16.basename(runtime) === "app" ? path16.dirname(runtime) : runtime;
+  if (!/^[a-f0-9]{64}$/u.test(path16.basename(generation)) || path16.dirname(generation) !== path16.join(installRoot, "runtime")) {
     throw new Error("installed Agent data root does not match its digest-named runtime layout");
   }
-  return inspectCanonicalPath(path11.dirname(installRoot), {
+  return inspectCanonicalPath(path16.dirname(installRoot), {
     kind: "directory",
     rejectFinalSymlink: true
   }).canonicalPath;
@@ -25382,12 +27098,12 @@ var workspaceRequest = (value) => {
 var TRACE_RETENTION_MAX_FILES = 16;
 var TRACE_RETENTION_MAX_AGE_MS = 7 * 864e5;
 var TRACE_FILE_NAME = /^fabric-\d+-[a-z0-9]+\.jsonl$/u;
-var sweepTraceDirectory = (directory) => {
+var sweepTraceDirectory = (directory2) => {
   try {
     const now = Date.now();
-    const candidates = fs12.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && !entry.isSymbolicLink() && TRACE_FILE_NAME.test(entry.name)).map((entry) => {
+    const candidates = fs14.readdirSync(directory2, { withFileTypes: true }).filter((entry) => entry.isFile() && !entry.isSymbolicLink() && TRACE_FILE_NAME.test(entry.name)).map((entry) => {
       try {
-        return { name: entry.name, mtimeMs: fs12.lstatSync(path11.join(directory, entry.name)).mtimeMs };
+        return { name: entry.name, mtimeMs: fs14.lstatSync(path16.join(directory2, entry.name)).mtimeMs };
       } catch {
         return void 0;
       }
@@ -25395,7 +27111,7 @@ var sweepTraceDirectory = (directory) => {
     candidates.forEach((entry, index) => {
       if (index < TRACE_RETENTION_MAX_FILES && now - entry.mtimeMs <= TRACE_RETENTION_MAX_AGE_MS) return;
       try {
-        fs12.rmSync(path11.join(directory, entry.name), { force: true });
+        fs14.rmSync(path16.join(directory2, entry.name), { force: true });
       } catch {
       }
     });
@@ -25411,9 +27127,9 @@ var createAgentTracer = (data, version) => {
   }
   if (!resolveTraceEnabled(process.env.KIRO_FABRIC_DEBUG, configured)) return DISABLED_TRACER;
   try {
-    const directory = path11.join(data.root, "traces");
-    sweepTraceDirectory(directory);
-    const file = path11.join(directory, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
+    const directory2 = path16.join(data.root, "traces");
+    sweepTraceDirectory(directory2);
+    const file = path16.join(directory2, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
     const tracer = createFabricTracer({ file });
     tracer.event("init", "agent.mcp.start", void 0, {
       product: "kiro-fabric-agent",
@@ -25438,7 +27154,16 @@ var createKiroMcpServer = async (options) => {
     throw new Error("explicit Kiro home does not match the installed Agent storage layout");
   }
   const kiroHome = explicitKiroHome ?? inferredKiroHome;
-  const version = options.version ?? String(JSON.parse(readFileSync(path11.join(options.runtimeRoot, "package.json"), "utf8")).version);
+  const version = options.version ?? String(JSON.parse(readFileSync(path16.join(options.runtimeRoot, "package.json"), "utf8")).version);
+  const generationName = path16.basename(path16.dirname(options.runtimeRoot));
+  const runProvenance = buildRunProvenance({
+    configured: options.runProvenance?.configured ?? parseRunProvenanceDeclaration(process.env.KIRO_FABRIC_RUN_DECLARATION) ?? {},
+    observed: {
+      ...options.runProvenance?.observed,
+      runtimeVersion: version,
+      runtimeBundle: path16.basename(options.runtimeRoot) === "app" && /^[a-f0-9]{64}$/u.test(generationName) ? generationName : void 0
+    }
+  });
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
   const data = prepareKiroPowerDataPaths(options.dataRoot);
   const tracer = createAgentTracer(data, version);
@@ -25538,18 +27263,18 @@ var createKiroMcpServer = async (options) => {
       mcpConfigPath: data.mcpConfig,
       artifactsRoot: project?.artifacts ?? data.artifacts,
       ...options.managedSearch ? { managedSearch: options.managedSearch } : {},
-      ...project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, workspaceRoot: workspace.canonicalPath, localLockRoot: path11.join(path11.dirname(project.state), "local-locks") } : {}
+      ...project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, workspaceRoot: workspace.canonicalPath, localLockRoot: path16.join(path16.dirname(project.state), "local-locks") } : {}
     });
   };
   const runtimeForIdentity = async () => {
     const observation = binding.workspaceObservation();
     const blocked = unavailableWorkspace() || observation.status === "temporarily-unavailable";
     const workspace = !blocked && observation.status === "verified" ? observation.workspace : void 0;
-    const identity = blocked ? `<unavailable>:${binding.bindingIdentity()}` : binding.bindingIdentity();
-    if (runtime && (runtimeIdentity === identity || runtimeIdentity === "<injected>")) return runtime;
+    const identity2 = blocked ? `<unavailable>:${binding.bindingIdentity()}` : binding.bindingIdentity();
+    if (runtime && (runtimeIdentity === identity2 || runtimeIdentity === "<injected>")) return runtime;
     await closeRuntime(new Error("workspace binding changed"));
     runtime = await createRuntimeFor(workspace);
-    runtimeIdentity = identity;
+    runtimeIdentity = identity2;
     runtimeGeneration += 1;
     if (tracer.enabled) tracer.event("init", "runtime.start", void 0, { runtimeGeneration });
     return runtime;
@@ -25606,7 +27331,7 @@ var createKiroMcpServer = async (options) => {
     };
     const expectedNode = process.env.KIRO_FABRIC_EXPECTED_NODE;
     const interpreter = expectedNode === void 0 ? { actual: realpathSync(process.execPath), expected: null, matches: "unknown" } : { actual: realpathSync(process.execPath), expected: expectedNode, matches: realpathSync(process.execPath) === expectedNode };
-    const providers = current ? current.providers().map((provider) => workspaceBlocked && provider.name !== "fabric" ? { ...provider, available: false, reason: "workspace identity is temporarily unverifiable" } : provider) : ["fabric", "local", "artifacts", "memory", "state", "mcp"].map((name) => ({ name, description: "Provider awaits runtime", available: false, reason: "runtime unavailable" }));
+    const providers = current ? current.providers().map((provider) => workspaceBlocked && provider.name !== "fabric" ? { ...provider, available: false, reason: "workspace identity is temporarily unverifiable" } : provider) : ["fabric", "local", "review", "probe", "artifacts", "memory", "state", "mcp"].map((name) => ({ name, description: "Provider awaits runtime", available: false, reason: "runtime unavailable" }));
     const actionCatalog = fabricInfoCatalog(current && !workspaceBlocked ? await current.registry.list() : []);
     if (tracer.enabled) {
       tracer.event("eval", "tool.fabric_info", void 0, lifecycleInfo);
@@ -25616,6 +27341,7 @@ var createKiroMcpServer = async (options) => {
       product: "kiro-fabric-agent",
       version,
       executor: "quickjs",
+      runProvenance,
       limits: current?.service.config.executor ?? loadFabricConfig(data.configFile).executor,
       workspace: workspaceValue("status"),
       providers,
@@ -25691,10 +27417,10 @@ var createKiroMcpServer = async (options) => {
     const tracedError = (code2, error, issues) => {
       const response = toolError(code2, error, issues);
       if (tracer.enabled) {
-        const text = response.content[0].text;
+        const text3 = response.content[0].text;
         tracer.event("eval", "exec.projection", execId, {
-          visibleChars: text.length,
-          visibleBytes: Buffer.byteLength(text, "utf8"),
+          visibleChars: text3.length,
+          visibleBytes: Buffer.byteLength(text3, "utf8"),
           isError: true,
           overflowed: false,
           artifactRetained: false

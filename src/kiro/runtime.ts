@@ -1,3 +1,6 @@
+import path from "node:path";
+import { ReviewProvider } from "../providers/review-provider.js";
+import { ProbeProvider } from "../providers/probe-provider.js";
 import type { ManagedSearchExecutable } from "../providers/local-executable.js";
 import { ActionRegistry } from "../core/action-registry.js";
 import {
@@ -24,6 +27,8 @@ export interface KiroRuntimeOptions {
   /** Only the binding authority may supply a verified root; cwd alone grants nothing. */
   workspaceRoot?: string;
   localLockRoot?: string;
+  /** Explicit retained probe storage outside source; defaults beside local locks. */
+  probesRoot?: string;
   managedSearch?: ManagedSearchExecutable;
   memoryRoot?: string;
   memoryNamespace?: string;
@@ -58,8 +63,12 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
       maxReadManyChars: Math.floor(config.executor.maxOutputChars * 0.8),
       ...(options.managedSearch ? { managedSearch: options.managedSearch } : {}),
     }));
-  } else registry.markUnavailable("local", "verified workspace binding is required");
-  registry.register(new KiroPowerArtifactsProvider(artifacts));
+    registry.register(new ReviewProvider({ root: options.workspaceRoot, maxResultChars: config.executor.maxNestedResultChars }));
+    registry.register(new ProbeProvider({ root: options.workspaceRoot, probesRoot: options.probesRoot ?? path.join(path.dirname(options.localLockRoot), "probes"), maxResultChars: config.executor.maxNestedResultChars }));
+  } else {
+    for (const name of ["local", "review", "probe"]) registry.markUnavailable(name, "verified workspace binding is required");
+  }
+  registry.register(new KiroPowerArtifactsProvider(artifacts, config.artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));
   else registry.markUnavailable("mcp", "disabled by configuration");
   if (options.memoryRoot && config.memory.enabled) {

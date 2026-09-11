@@ -31,6 +31,49 @@ const workingRules = [
 ];
 
 describe("compiled task guidance", () => {
+  it("ships a finding proof gate and does not confuse validation with correctness", () => {
+    for (const clause of ["Finding-evidence gate", "concrete trigger", "observable consequence", "counterexample checked", "suspected/unverified", "maintenance concern", "missed saves", "snapshot semantics", "loop has no iterations", "variable groups", "renders correctly"])
+      expect(BUNDLED_GUIDANCE.review + BUNDLED_GUIDANCE.recipes).toContain(clause);
+    for (const clause of ["Recipe: status-preserving validator", "exec", "required input unavailable", "truncated diagnostics are incomplete", "not that the repository is correct"])
+      expect(BUNDLED_GUIDANCE.recipes).toContain(clause);
+  });
+
+  it("puts finding admission and severity before review mechanics, without treating confidence as impact", () => {
+    const review = BUNDLED_GUIDANCE.review;
+    expect(review.indexOf("Finding-evidence gate")).toBeLessThan(review.indexOf("Map once"));
+    for (const clause of ["expected vs actual", "suspected/unverified", "disproved", "Confidence is not severity", "Critical", "High", "Medium", "Low", "scope and recovery", "proposed correction", "enable deletion"])
+      expect(review).toContain(clause);
+    for (const clause of ["For every review finding", "disproved", "severity", "unresolved", "correction"])
+      expect(AGENT_PROMPT).toContain(clause);
+  });
+
+  it("serves API and review help in bounded default pages without dropping expanded contracts", async () => {
+    const provider = new FabricBootstrapProvider();
+    for (const [topic, text] of [["api", fabricGuestDeclarations], ["review", BUNDLED_GUIDANCE.review]]) {
+      let reconstructed = "";
+      for (;;) {
+        const page = await provider.invoke("help", { topic, offset: reconstructed.length }, { cwd: "/none" }) as {
+          topic: string; text: string; truncated: boolean; nextOffset?: number;
+        };
+        expect(page.topic).toBe(topic);
+        expect(page.text).toBe(text!.slice(reconstructed.length, reconstructed.length + page.text.length));
+        expect(JSON.stringify(page).length).toBeLessThanOrEqual(provider.maxResultChars);
+        reconstructed += page.text;
+        if (!page.truncated) { expect(page.nextOffset).toBeUndefined(); break; }
+        expect(page.text.length).toBeGreaterThan(1000);
+        expect(page.nextOffset).toBe(reconstructed.length);
+        expect(reconstructed.length).toBeLessThan(text!.length);
+      }
+      expect(reconstructed).toBe(text);
+    }
+    // Explicit paging and configured envelope limits remain authoritative.
+    const limited = new FabricBootstrapProvider(1000);
+    const page = await limited.invoke("help", { topic: "api" }, { cwd: "/none" }) as { text: string; truncated: boolean; nextOffset: number };
+    expect(page.truncated).toBe(true);
+    expect(page.nextOffset).toBe(page.text.length);
+    expect(JSON.stringify(page).length).toBeLessThanOrEqual(1000);
+  });
+
   it.each(workingRules)("keeps critical user policy always on: %s", rule => {
     expect(AGENT_PROMPT).toMatch(rule);
   });
@@ -47,9 +90,9 @@ describe("compiled task guidance", () => {
     for (const clause of ["repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies", "resolveReviewThread", "only after the reply succeeds", "No pleasantries", ".github/PULL_REQUEST_TEMPLATE.md", "GIT_EDITOR=true", "EDITOR=true", "--no-edit", "gh api has no --body-file", "--input", "uncommitted edits"]) expect(workflow).toContain(clause);
   });
 
-  it("keeps concise reporting evidence-led and distinguishes API catalogues from programs", () => {
+  it("keeps complete reporting evidence-led and distinguishes API catalogues from programs", () => {
     for (const rule of [/Reduce narration, not verification/i, /passed, failed and not-run checks/i,
-      /unless repository rules require it/i, /Preserve warnings and uncertainty/i,
+      /repeat passing checks for concrete reasons/i, /Preserve warnings and uncertainty/i,
       /identifying delegated evidence as reported/i, /Do not claim live model-quality or token-cost improvements/i]) {
       expect(BUNDLED_GUIDANCE.workflow).toMatch(rule);
     }
@@ -81,7 +124,10 @@ describe("compiled task guidance", () => {
     for (const code of examples) expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors).toEqual([]);
     expect(BUNDLED_GUIDANCE.skill).toContain('fabric.help({topic:"review"})');
     expect(BUNDLED_GUIDANCE.guide).toContain("scope:{path,glob?,hidden,ignoreFiles:true}");
-    expect(BUNDLED_GUIDANCE.workflow).toContain("reviews/audits are exempt");
+    for (const guidance of [AGENT_PROMPT, BUNDLED_GUIDANCE.skill, BUNDLED_GUIDANCE.workflow, review]) {
+      expect(guidance).not.toContain("over speed, token savings or credit consumption");
+      expect(guidance).not.toMatch(/(?:<=|at most)\s*\d+\s*words|120-word default/i);
+    }
   });
 
   it("matches every canonical Markdown byte and the checked generated source", () => {
@@ -124,10 +170,25 @@ describe("compiled task guidance", () => {
     }
   });
 
-  it("delivers the complete review procedure on the default first call", async () => {
-    const result = await new FabricBootstrapProvider().invoke("help", { topic: "review" }, { cwd: "/none" });
-    expect(result).toEqual({ topic: "review", text: BUNDLED_GUIDANCE.review, truncated: false });
-    expect(JSON.stringify(result).length).toBeLessThanOrEqual(20000);
+  it("delivers the complete review procedure through default help continuations", async () => {
+    const provider = new FabricBootstrapProvider();
+    let text = "";
+    for (;;) {
+      const args = text.length ? { topic: "review", offset: text.length } : { topic: "review" };
+      const page = await provider.invoke("help", args, { cwd: "/none" }) as { topic: string; text: string; truncated: boolean; nextOffset?: number };
+      expect(page.topic).toBe("review");
+      expect(page.text.length).toBeGreaterThan(0);
+      expect(page.text).toBe(BUNDLED_GUIDANCE.review.slice(text.length, text.length + page.text.length));
+      expect(JSON.stringify(page).length).toBeLessThanOrEqual(20000);
+      text += page.text;
+      if (!page.truncated) {
+        expect(page.nextOffset).toBeUndefined();
+        break;
+      }
+      expect(page.nextOffset).toBe(text.length);
+      expect(text.length).toBeLessThan(BUNDLED_GUIDANCE.review.length);
+    }
+    expect(text).toBe(BUNDLED_GUIDANCE.review);
   });
 
   it("preserves surrogate boundaries at the minimum budget and reconstructs overview", async () => {

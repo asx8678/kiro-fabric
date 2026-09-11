@@ -49,6 +49,7 @@
     "comparison:fixtures": "node scripts/agent-comparison.mjs fixtures",
     "comparison:selftest": "node scripts/agent-comparison.mjs selftest",
     "comparison:report": "node scripts/agent-comparison.mjs report",
+    "comparison:provenance": "node scripts/steering-benchmark/run-provenance.mjs",
     "agent:validate": "node scripts/validate-agent-package.mjs .tmp/kiro-fabric-agent",
     "agent:stage:local": "pnpm run build && node scripts/build-agent-dev.mjs",
     "agent:install": "bash ./install.sh --source --migrate-pi-fabric",

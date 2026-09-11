@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createHash } from "node:crypto";
+import { verifyBuildClosure } from "./build-inputs.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -39,26 +39,7 @@ for (const file of files) {
   if (file.endsWith(".map")) throw new Error(`Production build contains a source map: ${file}`);
 }
 
-const closureRoot = path.resolve("dist/kiro-agent-closure");
-const manifest = JSON.parse(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"), "utf8"));
-const actualClosureFiles = files
-  .filter((file) => path.resolve(file).startsWith(`${closureRoot}${path.sep}`) && !file.endsWith("closure-manifest.json"))
-  .map((file) => path.relative(closureRoot, file).replaceAll("\\", "/"))
-  .sort();
-const manifestFiles = manifest.files.map((entry) => entry.path).sort();
-if (JSON.stringify(actualClosureFiles) !== JSON.stringify(manifestFiles)) {
-  throw new Error("Closure manifest file inventory does not match dist");
-}
-const digest = createHash("sha256");
-for (const entry of manifest.files) {
-  const file = path.join(closureRoot, entry.path);
-  const content = fs.readFileSync(file);
-  if (content.length !== entry.bytes || createHash("sha256").update(content).digest("hex") !== entry.sha256) {
-    throw new Error(`Closure manifest checksum mismatch: ${entry.path}`);
-  }
-  digest.update(entry.path).update("\0").update(content);
-}
-if (digest.digest("hex") !== manifest.contentDigest) throw new Error("Closure content digest mismatch");
+verifyBuildClosure(path.resolve("."));
 
 const declarations = fs.readFileSync("dist/index.d.ts", "utf8");
 for (const removed of ["agent", "managed", "extension", "node-process", "orchestration"]) {

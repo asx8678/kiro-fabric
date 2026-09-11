@@ -1,10 +1,35 @@
-# Agent architecture and security audit
+# Implementation and validation inventory
 
-> Historical pre-migration audit: native-routing observations below are retained as evidence, not active requirements. Current strict tool visibility and qualification are recorded in [strict-code-mode-migration.md](strict-code-mode-migration.md).
+This inventory is checked by the package-boundary tests. Current runtime contracts are documented in [configuration.md](configuration.md), and qualification requirements are in [release.md](release.md). Historical audit reports and completed implementation plans remain in Git history; keep new local reports and probes under the ignored `.tmp/` directory.
 
 Kiro Fabric is one native custom-agent product. The selected agent owns one stdio MCP child; the child exposes exactly `fabric_info`, `fabric_workspace`, and `fabric_exec`. Native Kiro tools remain outside QuickJS. The repository contains no discoverable `.kiro/agents/kiro-fabric.*`; only the user-global installed profile has that name. The execution, approval, workspace, persistence, cancellation, and package boundaries are covered by the files below and the full test suite. Power-named source paths, documented deprecated API aliases, explicit migration messages, and the `kiro-fabric-power-workspace-v3` salt remain only for compatibility; active descriptions and primary APIs are Agent/Fabric-first.
 
 - `tests/installer-capability-fixture.ts` — native inode-anchored directory traversal probe for crash-recovery qualification.
+
+## Review reliability and explicit profiles
+
+These additions preserve Code Mode and ordinary approvals. Structural evidence accounting is not semantic validation or proof of live-agent superiority.
+
+- `src/providers/review-contract.ts` — host/guest typed optional task, coverage, causal/failure obligations and finding contracts.
+- `src/providers/review-provider.ts` — bounded instance-local ledger, host-read hash evidence, structural admission, advisory reconciliation and expiry.
+- `src/providers/local-evidence.ts` — full source packets with framed metadata and continuations, budgeted after serialization.
+- `src/providers/probe-contract.ts` — closed schemas and typed retained-probe operations.
+- `src/providers/probe-provider.ts` — explicit approved creation, file writes, execution, retention and ordinary-exit diagnostics.
+- `src/providers/probe-storage.ts` — canonical owned storage and create-only identity-checked publication outside source.
+- `src/providers/probe-discovery.ts` — bounded SDK/executable/cache presence checks without version execution or credential assumptions.
+- `src/kiro/run-provenance.ts` — bounded hashed configured-versus-observed metadata; unknown routing remains unknown.
+- `scripts/launch-profile.mjs` — explicit generation-specific review/minimal launch profiles without replacing the managed default.
+- `scripts/steering-benchmark/run-provenance.mjs` — explicit-file manifest/compare CLI and independently classified delivery evidence.
+- `scripts/steering-benchmark/review-regressions.mjs` — seeded/held-out cross-file and framework-contract fixtures, private structural oracles and offline qualification.
+- `tests/review-ledger.test.ts` — task isolation, structural admission, stale source, quotas, expiry, authority and guest declarations.
+- `tests/local-evidence.test.ts` — compact packets, Unicode/escaping, continuations, failures and source safety.
+- `tests/probe-provider.test.ts` — denied effects, actual process exits, retention, discovery, quotas, identity and cancellation.
+- `tests/review-profile.test.ts` — explicit mode selection, no hidden minimal resources/hooks and real typed recipes.
+- `tests/run-provenance.test.ts` — unknown/declared/observed separation, bounds, hashing and explicit CLI capture.
+- `tests/launch-profile.test.ts` — default preservation, opt-in generation profiles and collision/symlink refusal.
+- `tests/review-runtime-integration.test.ts` — public namespaces through actual checked execution, stale evidence, approvals, failure diagnostics and FIFO protection.
+- `tests/review-regressions.test.ts` — independently executable positive/negative controls and finite-oracle calibration.
+- `tests/review-regressions-integration.test.ts` — case registration, matched repeated scheduling, scenario admission and quality-first reporting.
 
 ## Workspace handoff and local effect scheduling coverage
 
@@ -39,11 +64,11 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 - `scripts/steering-benchmark/selftest.mjs` — explicitly synthetic offline oracle qualification, excluded from measured results.
 - `tests/steering-benchmark.test.ts` — contract negatives, source/config drift, process bounds, interrupted rows and credit gates.
 
-Benchmark scripts are development tooling, not installed model capabilities. The stopped live pilot and its limitations are recorded separately in the audits directory.
+Benchmark scripts are development tooling, not installed model capabilities. Their reproducible workflow and measurement limits are documented in [agent-comparison.md](agent-comparison.md).
 
 ## Complete implementation inventory
 
-- `src/kiro/first-prompt-guidance.ts` — initial investigation instructions and a checked discovery/read example.
+- `src/kiro/first-prompt-guidance.ts` — full-scope problem solving, evidence, falsification, persistence and verified completion ahead of token/credit savings; no reporting word target or unsupported Auto-routing guarantee. The checked discovery/read example is task-loaded from `skills/fabric-exec/references/review.md`.
 - `src/kiro/first-prompt-hook.ts` — per-session, at-most-once prompt context through the profile's submit hook; private markers contain no prompt text.
 - `tests/first-prompt.test.ts` — separate/concurrent/resumed sessions, actual built hook processes, literal arguments, private state boundaries and executable starter coverage, source budgets, continuations and partial failures.
 - `scripts/agent-profile.mjs`
@@ -244,7 +269,42 @@ These entries extend the implementation inventory; observed statistics are descr
 - `scripts/agent-comparison.mjs` — offline example export, oracle selftest and report generation; no inference in any command.
 - `tests/agent-comparison.test.ts` / `tests/native-fixture-policy.test.ts` — fixture discrimination, held-out rejection, pairing, continuation selection, credit bounds and permission cleanup regression.
 - `docs/agent-comparison.md` — runnable labs, checked-TypeScript Code Mode examples, live-plan consent and interpretation rules.
-- `audits/agent-comparison-2026-09-09.md` — completed 54-attempt comparison record with full charge ledger.
+
+## Review adherence additions (current implementation)
+
+- `scripts/steering-benchmark/review-quality.mjs` — opt-in finite claim/proof/confidence/coverage oracle; manual semantic adjudication remains required.
+- `scripts/steering-benchmark/review-delivery.mjs` — bounded matching of observed structured help pages against a frozen arm reference, not inferred invocation or comprehension.
+- `tests/review-quality.test.ts` — contradiction, unsupported consequence, confidence, citation coverage, recall and failure-aware metric regressions.
+- `tests/review-delivery.test.ts` — full/partial/missing/forged help-output evidence and UTF-16 continuity.
+
+## Round-trip recovery additions (current implementation)
+
+These entries record implementation coverage, not measured live speedups or authenticated client qualification.
+
+- `src/core/repair-error.ts` — bounded trusted structural repair metadata and typed compiler timeout classification.
+- `src/providers/local-edit.ts` — original-snapshot disjoint replacements validated before one approval/publication.
+- `scripts/build-inputs.mjs` — deterministic build-input provenance, independent closure validation and capture drift checks.
+- `tests/structured-recovery.test.ts` — checked guest hints, dispatch uncertainty, timeout phases and checkpoint isolation.
+- `tests/artifact-recovery.test.ts` — typed escaped-envelope paging, canonical retention and approved ephemeral checkpoint privacy/quotas.
+- `tests/local-code-mode-fixes.test.ts` — atomic edit/hash guards, partial read failures and invocation snapshot reuse.
+- `tests/local-search-cursor.test.ts` — opaque single-use TTL cursors, bounded cache and enumeration/content drift checks.
+- `tests/build-input-provenance.test.ts` — stale source/guidance rejection and captured resource integrity.
+- `tests/roundtrip-recipes.test.ts` — composed bounded discovery/read/probe examples and diagnostic-to-source chains.
+
+## Code-mode efficiency and calibration additions (current implementation)
+
+These entries record implementation and regression coverage, not live-model quality or billing gains.
+
+- `src/providers/local-line-index.ts` — invocation-local UTF-16 line ends for bounded, whole-line source windows.
+- `tests/local-line-index.test.ts` — CRLF/BOM/EOF equivalence, index reuse, escaped budgets and retained snapshot drift detection.
+- `tests/result-budget.test.ts` — Unicode/escape-aware truncation envelopes and checked execution without provider replay.
+- `tests/mcp-projection.test.ts` — opt-in full/text/structured views, canonical approval, unchanged remote arguments/errors and pre-bridge projection.
+- `tests/local-query-pagination.test.ts` — explicit query-v1 scope, reduced selective-query I/O, membership/content/ignore drift, unsafe files, bounded independent pages and cursor lifecycle.
+- `tests/compiler-cache.test.ts` / `tests/code-mode-cache.test.ts` — bounded compiler-output reuse and fresh policy/payload/provider/guest execution.
+- `tests/projection-noise.test.ts` / `tests/task-focus.test.ts` — diagnostic hint deduplication and focused task guidance.
+- `scripts/steering-benchmark/review-calibration.mjs` — finite controller-owned consequence, severity and recommendation calibration with independent inert probes.
+- `tests/review-calibration.test.ts` / `tests/review-calibration-integration.test.ts` — fixture mutation, grounding, calibrated admission, private oracle hashes and failure-aware comparison metrics.
+- `tests/review-runtime-controls.test.ts` — optional offline Helm/PowerShell qualification; missing binaries remain explicit skips.
 
 ## Review coverage improvements (current implementation)
 
@@ -258,4 +318,3 @@ These entries document later changes, not a revision to historical results or ev
 - `tests/source-packets.test.ts` — checked runtime and visible projection of related source batches, complete evidence with fewer calls, and nested/visible budget clamps.
 - `skills/fabric-exec/references/review.md` — task-loaded coverage ledger, risk-prioritized reference tracing, falsification and explicit partial-review reporting.
 - Existing local read/search contracts add total line counts and search scope; all-files manifests avoid a redundant ripgrep launch. Permission and execution budgets are unchanged.
-- `audits/source-batch-probe-2026-09-10.mjs` — read-only before/after measurement of fixed review source groups; full line/hash equality and no inference.

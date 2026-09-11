@@ -44,8 +44,24 @@ export interface FabricActionDescriptor {
   annotations?: FabricToolAnnotations;
 }
 
+export interface FabricCheckpointHandle { id: string; label?: string }
+export interface FabricFailureMetadata {
+  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error";
+  phase: "compile" | "validation" | "discovery" | "dispatch" | "execution";
+  dispatchState: "not_dispatched" | "dispatched";
+  effectOutcome: "none" | "uncertain";
+  ref?: string;
+  descriptorDigest?: string;
+  invalidPath?: string;
+  relevantSchema?: Record<string, unknown>;
+  replacementDescriptor?: Record<string, unknown>;
+  checkpoints?: FabricCheckpointHandle[];
+}
+
 export interface FabricInvocationContext {
   cwd: string;
+  maxResultChars?: number;
+  checkpoints?: { reserve(): (handle: FabricCheckpointHandle) => void };
   signal?: AbortSignal;
   /** Host-only absolute monotonic deadline. Providers must check it at commit boundaries. */
   deadline?: FabricDeadline;

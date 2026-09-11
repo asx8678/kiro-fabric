@@ -1,28 +1,92 @@
 # Evidence-led repository reviews
 
-Use for reviews, audits and bug-finding requests. Honor scope and prior authorization; a review does not authorize edits, deployments, secret use or network requests. Reviews are exempt from the 120-word default. Follow nextOffset if help is truncated.
+Explicit, optional task help for reviews, audits and bug finding, not an automatic bootstrap. A review alone does not authorize edits, deployments, secret use or network requests. User tool bans apply even to help, formatting and verification. No forced fixes, probes or steering when forbidden. Tool-only modes may use authorized tools without guidance injection.
+
+## Short review core
+
+Map core paths and success/failure/non-default scenarios from entrypoint through configuration, caller/guards and consumer to consequence. Keep a coverage ledger with separate **fetched** ranges/hashes, **traced** paths/scenarios and unresolved/blocked scope. Retrieval is not understanding; complete windows, syntax checks and green builds do not establish semantic correctness. Follow productive leads without a finding quota or call cap as a stopping rule; runtime budgets remain binding. No findings is a valid result.
+
+Use real SDK/parser/runtime probes only when available and authorized. Inspect imports/effects and identify stubs; an imitation is not a real SDK execution. Missing executable, SDK/module or required input is unavailable evidence, not a pass or finding. Network effects need explicit authorization.
+
+Persisted memory/state is workspace-shared, not chat-private; use explicit session/task keys and revision checks, not global scratch keys. Keep unrequested ledgers in context. The optional review provider instead owns instance/session-local ephemeral tasks; do not silently load another session's state.
+
+Use the admission gate below and report supported findings, checks run/unrun, material blockers and uninspected scope in the requested format. Recipes below are optional mechanisms, never permission or automatic execution.
+
+## Finding-evidence gate
+
+For every candidate keep: location/caller, concrete trigger, expected contract with its source, expected vs actual action, observable consequence, proof and counterexample checked. Evidence is a reproduction or complete static argument, not a suspicious line or a claimed probe ID.
+
+- Supported defect: reachable consequence proved; headline and explanation agree.
+- suspected/unverified: decisive runtime/configuration evidence is missing; state the unresolved dependency, not a confirmed headline.
+- maintenance concern: no demonstrated behavioral failure.
+- Rejected: disproved by a guard, contract or probe; remove the defect, do not relabel it conditional.
+
+Assign severity only after admission. Confidence is not severity; record affected scope and recovery:
+
+| Severity | Supported impact |
+| --- | --- |
+| Critical | Broad compromise or major irreversible loss. |
+| High | Serious operational failure, exposure or data loss. |
+| Medium | Bounded, recoverable correctness/configuration failure. |
+| Low | Minor demonstrated degradation. |
+
+Keep maintenance and unresolved leads outside confirmed severity rankings. Validate the proposed correction against the original trigger and preserved contracts; a fix can introduce a new bug. Never enable deletion or bypass validation merely to resolve an unknown setting.
+
+Optional [typed review/probe/readEvidence recipes](api.md#optional-typed-operations) are separate from this core help; use only available, authorized operations.
 
 ## Map once, then follow behavior
 
-Identify the repo's role: application, configuration/deployment, generated code or external dependency. Combine unknown guidance and recursive discovery:
+Optional recipes follow; none is a required first call. Cold help+inventory→starter reads loads help unless payloads.reviewKnown="true"; do not choose it for no-guidance work. Focused tasks use search→read. Hypotheses require judgment.
 
 ```ts
-const [guidance, manifest] = await Promise.all([
-  fabric.help({topic:"review"}),
-  local.find({path:".", pattern:"**/*", hidden:true, limit:200}),
+// Recipe: initial review evidence
+const [help,manifest] = await Promise.all([
+  payloads.reviewKnown === "true" ? null : fabric.help({topic:"review"}),
+  local.find({path:".",pattern:"**/*",hidden:true,limit:200}),
 ]);
-return {guidance, manifest};
+if (help?.truncated) return {help,manifest,helpIncomplete:true};
+const patterns = [
+  {area:"guidance", match:/(^|\/)(AGENTS\.md|README(?:\.md)?)$/i},
+  {area:"entrypoints", match:/(^|\/)(package\.json|pyproject\.toml|Cargo\.toml|go\.mod|Makefile|Dockerfile)$/},
+  {area:"automation", match:/(^|\/)([^/]*pipeline[^/]*\.ya?ml|\.gitlab-ci\.yml)$|(^|\/)(\.github\/workflows|\.azure-pipelines)\/.*\.ya?ml$/i},
+  {area:"overrides", match:/(^|\/)(envs?|environments|overlays)\/.*\.ya?ml$|(^|\/)values[.-][^/]+\.ya?ml$/i},
+  {area:"configuration", match:/(^|\/)(Chart|values(?:[.-][^/]+)?|deployment|docker-compose|compose)\.ya?ml$/i},
+  {area:"templates", match:/(^|\/)templates\/.*\.(ya?ml|tpl)$/i},
+  {area:"checks", match:/(^|\/)(tests?|__tests__|spec|validations)\/.*\.(ts|tsx|js|py|go|rs|cs|sh|ps1)$|\.(test|spec)\.[cm]?[jt]sx?$/i},
+  {area:"implementation", match:/\.(?:[cm]?[jt]sx?|py|go|rs|cs|java|sh|ps1|tf|sql)$/i},
+];
+const paths = [...manifest.paths].sort((a,b) => a.split("/").length-b.split("/").length || a.localeCompare(b));
+const seen = new Set<string>();
+const areas = patterns.map(({area,match}) => ({area, paths:paths.filter(path => {
+  if (seen.has(path) || !match.test(path) || /(^|\/)(secrets?([./_-]|$)|credentials?([./_-]|$)|\.env(\.|$))|\.(pem|key)$/i.test(path)) return false;
+  seen.add(path); return true;
+})})).filter(group => group.paths.length);
+const unclassified = paths.filter(path => !seen.has(path));
+const maxChars = Math.floor(Math.min(24000,40000-JSON.stringify({help,manifest,areas,unclassified}).length-1000)/Math.max(1,areas.length));
+if (maxChars < 1000) return {help,manifest,narrowDiscovery:true};
+const packets = await parallel(areas, async ({area,paths}): Promise<JsonObject> => {
+  const windows = paths.slice(0,3).map(path => ({path,limit:160}));
+  try {
+    return {area,evidence:await local.readMany({windows,maxChars}),deferred:paths.slice(3)};
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {area,error:message.slice(0,500),errorTruncated:message.length > 500,unread:paths};
+  }
+},{concurrency:3});
+return {help,manifest,packets,unclassified};
 ```
 
-Omit known discovery/help. hidden:true includes CI/dot-directories; ignore rules still apply. truncated:false means completeness within returned scope. Partition truncated searches; retain scope/truncated. Zero matches alone do not prove absence.
+Follow deferred/unclassified paths, unread ranges and callers without exposing secrets. SQL is implementation evidence. Lower shared budgets together; retain failures.
 
-Keep a compact coverage ledger in working context: area/path, received ranges, open leads, inspected / unreviewed / blocked with reason. Include entrypoints, maintenance scripts, overrides, template consumers, validators and security/data boundaries. A listing or requested range is not inspection. Inspect returned evidence, including overflow and unread suffixes.
+hidden:true includes CI/dot-directories; ignore rules apply. truncated:false means completeness within returned scope. Partition on truncation or narrowDiscovery; zero matches do not prove absence. Omit known discovery/help.
 
-Trace pipeline -> script -> argument mapping -> selected objects -> actions -> reported outcome. Trace default -> environment override -> rendered resource and configuration -> loader -> observable effect. Read referenced executable code, not only its launcher. If implementation or settings live elsewhere, identify that boundary rather than inventing behavior.
+The core coverage ledger covers entrypoints, overrides, consumers, checks and security/data boundaries; fetched ranges alone never mark a path/scenario traced.
+
+Trace pipeline -> script -> arguments -> selected objects -> actions -> outcome; default -> environment override -> resource; configuration -> loader -> effect. Read callees, not only launchers. Mark unknown external behavior.
 
 ## Read source without losing coverage
 
-Before writing a tool program choose the question, related source needed to distinguish causes, and what result changes the next action. Use local.readMany to gather callers, implementation and config/tests together, then assess the evidence. Supply observed files in payloads.windows as JSON [{"path":"scripts/task.ts","limit":2000}].
+Group observed local.readMany windows by causal chain: pipeline→script→schema/allowlist or chart defaults→overrides→templates, not file extension. Merge overlaps and reuse guest source/metadata. One unreadable window may reject its packet: retain failed paths and other packets. Never automatically run discovered scripts.
 
 ```ts
 // Recipe: numbered review evidence
@@ -31,30 +95,110 @@ return await local.readMany({
 });
 ```
 
-Each file has path, startLine/endLine, totalLines, source, sha256, truncated and optional nextOffset. Continue remaining verbatim; hashes guard partial ranges against source changes. Do not repeat the original prefix. complete covers requested ranges, not the whole file/repo or understanding. Stop at a bounded range's end; for whole-file review follow further file nextOffset. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars up to 40000, clamped to runtime budgets. Lower maxChars when returning other data; do not concatenate pages past the visible output cap.
+Retain ranges, totalLines, source, sha256 and truncation. Follow remaining verbatim before relevant hash-bound unreadTails; do not concatenate overlaps. complete covers requested ranges, not prefixes/gaps/other files or understanding. readMany defaults to 200/max 2000 lines and 32000 JSON chars (maxChars <=40000, runtime-clamped). Reserve metadata/failure headroom; see API for full paging contracts.
 
-For long structured data use bounded parsing: return exceptions, totals and redacted locations. Inspect security/config fields, consumers and signature/allowlist presence without returning credentials. A signed URL proves storage, not validity, permissions or successful abuse. Do not skip sensitive areas or extrapolate one file to every environment.
-
-For generic dynamic JSON keys use const out: JsonObject = {}; not an untyped {} or Record<string, unknown>. Compiler hints explain repairs. Do not drop evidence metadata to bypass a type error.
+For long data return exceptions/totals/redacted locations. Inspect security consumers and allowlists without credentials; a signed URL proves storage, not validity or abuse. Preserve metadata when fixing compiler errors.
 
 ## Verify and try to falsify
 
-For each candidate retain location, first incorrect value/action, trigger, evidence, counterexample and unresolved dependency. Grade each claim now, not just in a final disclaimer: source mismatch; reproduced behavior under stated inputs; or conditional risk. A wrong key mapping is observable without asserting authentication failure. A commented setting can come from variable groups/UI/runtime settings. Missing application code cannot prove a response property absent, defaults or matching behavior. State the condition beside the claim; a caveat at the end cannot support an unconditional headline.
+Check external settings, upstream validation and unknown schemas. Repository absence does not prove runtime absence. A dropped argument proves neither fallback nor production failure.
 
-Inspect logic in both directions: inputs to effects, then each guard/log against the object acted upon. Compare simulation/force and success/failure paths. For configuration repos also compare exact producer/consumer keys, including casing, names/ports/selectors and API group/resource/verb tuples. Read defaults and overrides; exercise a supported non-default value when the default hides a mismatch. A successful render does not check these contracts or prove cluster behavior.
+Compare simulation/force and success/failure paths. Check producer/consumer keys, casing, names/ports/selectors and API group/resource/verb tuples with non-default overrides. Rendering alone proves neither these contracts nor cluster behavior.
 
-Before declaring a validator/config unused, search callers, including hidden CI:
+Before declaring validators/config unused, search hidden CI and read merged caller windows in the same execution:
 
 ```ts
 // Recipe: review callers
-return await local.grep({pattern:payloads.symbol,path:".",literal:true,hidden:true,limit:80});
+const hits = await local.grep({pattern:payloads.symbol,path:".",literal:true,hidden:true,limit:10});
+const matches = [...hits.matches].sort((a,b) => a.path.localeCompare(b.path) || a.line-b.line);
+const windows: Array<{path:string; start:number; end:number}> = [];
+for (const match of matches) {
+  const range = {path:match.path, start:Math.max(1,match.line-3), end:match.line+3};
+  const previous = windows[windows.length-1];
+  if (previous && previous.path === range.path && range.start <= previous.end+1) previous.end = Math.max(previous.end,range.end);
+  else windows.push(range);
+}
+const maxChars = Math.min(32000,40000-JSON.stringify({search:hits}).length-1000);
+if (maxChars < 1000) return {search:hits,unread:windows,narrowSearch:true};
+const evidence = windows.length ? await local.readMany({windows:windows.map(range => ({
+  path:range.path,offset:range.start,limit:range.end-range.start+1,
+})),maxChars}) : {files:[],remaining:[],unreadTails:[],complete:true};
+return {search:hits,evidence};
 ```
 
-Retain scope/truncated and follow references. hidden defaults to false even after hidden:true discovery. Read caller exit policy and imported owners; absence is only within searched scope.
+Retain search.scope/truncated. hidden defaults to false even after hidden:true discovery. Inspect owners and caller exit policy. Follow remaining before relevant unreadTails; complete windows are not complete caller coverage. Narrow truncated searches; widen for omitted guards/contracts. Share output headroom across searches.
 
-Use small local probes to resolve uncertainty: render configs, run pure functions or compare contracts. Read modules before importing: imports may execute effects. Never run deploy/cleanup scripts against services. Client dry-runs can contact clusters for discovery/schema; use offline checks. Missing runtimes leave semantics unverified; installation needs authorization.
+Reuse known runtimes. Discover availability separately only when it requires a model decision; otherwise use the prerequisite-aware verification batch below. Normal shell approval applies:
 
-For multiline shell probes use the literal script API and the actual interpreter:
+```ts
+// Recipe: review runtime availability
+return await local.shell({
+  script: 'for executable in "$@"; do if command -v "$executable" >/dev/null 2>&1; then printf "%s available\\n" "$executable"; else printf "%s unavailable\\n" "$executable"; fi; done',
+  interpreter:"sh", args:JSON.parse(payloads.executables) as string[],
+  timeoutMs:10000, settle:true,
+});
+```
+
+Use actual Helm values, including non-default/false/zero cases. Bash parsing alone does not prove argument passing or exit handling; trace PowerShell validators through caller error policy. For authorized fixes reproduce the trigger; measure comparable performance baselines.
+
+Validate payloads.checks before effects. This optional batch uses 70000ms/40000 output chars, per-probe timeoutMs default/max 20000, and outer timeoutMs:120000 for cleanup; lower budgets for smaller runtime limits. Unavailable remains unverified; ordinary nonzero exits permit the next diagnostic, not hard failures:
+
+```ts
+// Recipe: review verification batch
+type Probe = { name:string; script:string; interpreter?:"bash"|"sh"; args?:string[]; requires?:string[]; timeoutMs?:number };
+const checks: Probe[] = JSON.parse(payloads.checks);
+if (!Array.isArray(checks) || checks.length > 32 || checks.some(c =>
+  !c || typeof c !== "object" || Object.keys(c).some(k => !["name","script","interpreter","args","requires","timeoutMs"].includes(k)) ||
+  typeof c.name !== "string" || !c.name.trim() || c.name.length > 120 ||
+  typeof c.script !== "string" || !c.script.length || c.script.length > 8000 || c.script.includes("\0") ||
+  (c.timeoutMs !== undefined && (!Number.isSafeInteger(c.timeoutMs) || c.timeoutMs < 1 || c.timeoutMs > 20000)) ||
+  (c.interpreter !== undefined && c.interpreter !== "bash" && c.interpreter !== "sh") ||
+  (c.args !== undefined && (!Array.isArray(c.args) || c.args.length > 64 || c.args.some(a => typeof a !== "string" || a.length > 8000 || a.includes("\0")))) ||
+  (c.requires !== undefined && (!Array.isArray(c.requires) || c.requires.length > 8 || c.requires.some(r => typeof r !== "string" || r.length > 120 || !/^[A-Za-z0-9_][A-Za-z0-9_.+-]*$/.test(r))))
+)) throw new Error("Expected at most 32 valid named literal checks");
+const clip = (text:string) => {
+  let n = 800;
+  const sample = () => text.length <= 2*n ? text : text.slice(0,n) + text.slice(-n);
+  while (JSON.stringify(sample()).length > 1602) n = Math.floor(n/2);
+  return sample();
+};
+const summary = (r:LocalShellResult) => {
+  const stdout = clip(r.stdout), stderr = clip(r.stderr);
+  return {...r,stdout,stderr,stdoutTruncated:r.stdoutTruncated || stdout.length < r.stdout.length,
+    stderrTruncated:r.stderrTruncated || stderr.length < r.stderr.length,
+    truncated:r.truncated || stdout.length < r.stdout.length || stderr.length < r.stderr.length};
+};
+let count = 0, deadline = 10000;
+const metadata = JSON.stringify(checks.map((c,index) => ({index,name:c.name}))).length + 1000;
+while (count < checks.length && deadline + (checks[count]!.timeoutMs ?? 20000) <= 70000 && metadata + (count+1)*4500 <= 40000) {
+  deadline += checks[count]!.timeoutMs ?? 20000; count++;
+}
+const batch = checks.slice(0,count);
+const required = [...new Set(batch.flatMap(c => c.requires ?? []))];
+const available = new Set<string>();
+if (required.length) {
+  const result = await local.shell({
+    script:'for executable in "$@"; do if command -v "$executable" >/dev/null 2>&1; then printf "%s\n" "$executable"; fi; done',
+    interpreter:"sh",args:required,timeoutMs:10000,settle:true,
+  });
+  if (!result.ok || result.truncated) return {availability:summary(result),results:[],complete:false,remaining:checks.map((c,index) => ({index,name:c.name}))};
+  for (const name of result.stdout.split(/\r?\n/)) if (name) available.add(name);
+}
+const results: JsonObject[] = [];
+for (const {name,requires = [],...input} of batch) {
+  const missing = requires.filter(r => !available.has(r));
+  if (missing.length) { results.push({name,status:"unavailable",missing}); continue; }
+  const result = await local.shell({...input,timeoutMs:input.timeoutMs ?? 20000,settle:true});
+  results.push({name,status:"executed",...summary(result)});
+}
+return {results,complete:checks.length <= batch.length,remaining:checks.slice(batch.length).map((c,index) => ({index:index+batch.length,name:c.name}))};
+```
+
+complete means no pending checks, not all passed. Resume remaining only, preserving stderr and truncation; omitted diagnostics are incomplete evidence.
+
+Apply the core's real-runtime/authorization rules: client dry-runs may contact clusters; never deploy/cleanup against services or install missing runtimes without permission.
+
+For literal Bash, use the script API and actual interpreter:
 
 ```ts
 // Recipe: literal Bash probe
@@ -64,16 +208,10 @@ return await local.shell({
 });
 ```
 
-Script/args arrive literally, with args as $1 onward. Stub external effects. JSON.stringify is not shell quoting. Preserve the tested status immediately (probe_status=$?), then exit "$probe_status" after diagnostics; trailing echo/grep/tail can replace it. Return exitCode/stdout/stderr/truncation. settle handles ordinary nonzero exits only. Host authority/approvals remain; this is not network isolation.
+Args arrive literally as $1 onward; JSON.stringify is not shell quoting. Preserve probe_status=$? immediately and exit "$probe_status" after diagnostics. Return exitCode/stdout/stderr/truncation. settle catches only ordinary nonzero exits, never hard failures; shell retains host authority.
 
-A probe must exercise the claimed causal chain. Feeding a constant into a downstream parser separately does not prove how the upstream response is handled. Test representative success and failure inputs through the same path. Record what the stub substitutes and what remains unknown; an observed dropped argument does not imply a fallback, data loss or production failure. Preserve the original failure policy when reproducing it, and validate proposed fixes too.
-
-Actively seek counterexamples: upstream validation, externally supplied settings, caller failure policy and alternate ownership. Collection mutation is not proof of skipped elements: check whether the runtime returns a snapshot. A background operator is not proof of lost stdout. Missing runtimes leave these claims conditional, not verified.
+Seek counterexamples in upstream validation, settings, caller policy and alternate owners. Collection mutation does not prove skipped elements (check snapshots); backgrounding does not prove lost stdout.
 
 ## Completion and reporting
 
-Before finalizing, make a separate skeptical pass over candidates and coverage. Reconcile every retained lead: report it with evidence/condition, reject it with a counterexample, or mark the missing check. Do not silently drop a supported defect from an already-read file. Recheck never/always/cannot/live and each "therefore". Keep branch conditions consistent across findings. Deduplicate symptoms; no findings is valid.
-
-Close high-risk leads and cross-file contracts in accessible relevant areas before offering follow-up on a small repo. For bounded reviews or real blockers report uninspected scope and next checks. A fetched file is not inspected; a green probe proves only its inputs/path. Do not claim whole-repo coverage with omissions.
-
-Report verified defects first, ordered by impact, with file:line, reachable cause and concrete correction. Separate conditional risks and optional improvements. State verification actually run, unresolved external dependencies and unrun checks. Keep narration concise while completing the necessary investigation; never fill a findings quota or claim superiority from synthetic checks alone.
+Reconcile coverage and each candidate with the core and finding-evidence gate above; a final caveat cannot justify an unconditional headline. Report supported defects by impact with file:line, trigger, expected contract, evidence and any proposed correction (not automatic edits). See [recipes](recipes.md#evidence-counterexamples) for counterexamples and status-preserving validation. Green probes prove only tested paths; synthetic checks do not establish live model superiority.

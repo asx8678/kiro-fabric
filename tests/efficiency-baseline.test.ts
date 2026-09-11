@@ -94,7 +94,7 @@ describe("offline efficiency preparation", () => {
     const help = report.tasks[4].runtimeProbe;
     expect(help.success).toBe(true);
     expect(help.result.expandedChars).toBeGreaterThanOrEqual(help.result.defaultPageTextChars);
-    expect(help.result.defaultPageTextChars).toBe(Math.min(8000, fabricGuestDeclarations.length));
+    expect(help.result.defaultPageTextChars).toBe(Math.min(16000, fabricGuestDeclarations.length));
     expect(help.result.defaultPageTruncated).toBe(help.result.defaultPageTextChars < help.result.expandedChars);
     expect(help.result.expandedSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(help.returnedChars).toBeGreaterThan(help.result.expandedChars);
@@ -131,7 +131,7 @@ describe("offline efficiency preparation", () => {
     expect(summary.expandedChars).toBe(fabricGuestDeclarations.length);
     expect(summary.expandedSha256).toBe(createHash("sha256").update(fabricGuestDeclarations).digest("hex"));
     expect(value.pages.map((page) => page.text).join("")).toBe(fabricGuestDeclarations);
-    expect(summary.defaultPageTextChars).toBe(Math.min(8000, fabricGuestDeclarations.length));
+    expect(summary.defaultPageTextChars).toBe(Math.min(16000, fabricGuestDeclarations.length));
     expect(summary.defaultPageJsonChars).toBe(JSON.stringify(value.defaultPage).length);
     expect(summary.defaultPageJsonChars).toBeLessThanOrEqual(20000);
     expect(summary.expandedChars).toBeGreaterThan(fs.readFileSync("src/runtime/guest-types.ts", "utf8").length);

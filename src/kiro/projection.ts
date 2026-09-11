@@ -9,6 +9,8 @@ export interface KiroProjectionResult {
   visibleBytes: number;
   overflowed: boolean;
   artifactRetained: boolean;
+  retention: "inline" | "complete" | "canonical" | "unavailable";
+  checkpointIds?: readonly string[];
 }
 const MAX_FAILURE_PROGRESS_ENTRIES = 8;
 const MAX_FAILURE_PROGRESS_REF_CHARS = 512;
@@ -31,6 +33,19 @@ const safeSuffix = (value: string, maximum: number): string => {
 const stringify = (value: unknown, format: FabricExecResultFormat): string => {
   if (format === "text" && typeof value === "string") return value;
   return JSON.stringify(value, null, format === "json" ? 2 : undefined) ?? "null";
+};
+
+// Keep every compiler diagnostic, but show identical repair advice once per
+// response. Repeated hints can otherwise displace the errors into an artifact.
+const compactTypeErrors = (errors: NonNullable<FabricExecutionResult["typeErrors"]>) => {
+  const hints = new Set<string>();
+  return errors.map((error) => {
+    if (error.hint === undefined) return error;
+    if (!hints.has(error.hint)) { hints.add(error.hint); return error; }
+    const diagnostic = { ...error };
+    delete diagnostic.hint;
+    return diagnostic;
+  });
 };
 
 const failureProgress = (result: FabricExecutionResult): string => {
@@ -88,7 +103,7 @@ const truncateWithHint = (content: string, maximum: number, hint: string): strin
 };
 
 export const projectFabricExecutionText = (options: {
-  result: FabricExecutionResult;
+  result: FabricExecutionResult & { checkpoints?: readonly { id: string; label?: string }[] };
   resultFormat: FabricExecResultFormat;
   maxOutputChars: number;
   writeArtifact(content: string): string;
@@ -97,12 +112,18 @@ export const projectFabricExecutionText = (options: {
   const visibleMaximum = options.result.success
     ? options.maxOutputChars
     : Math.min(options.maxOutputChars, MAX_FAILURE_OUTPUT_CHARS);
+  const checkpointIds = [...new Set((options.result.checkpoints ?? options.result.failure?.checkpoints ?? []).slice(0, 8)
+    .map(handle => handle.id).filter(id => /^ka_[a-f0-9]{48}$/u.test(id)))];
+  const failure = options.result.failure ? { ...options.result.failure,
+    ...(options.result.failure.checkpoints ? { checkpoints: checkpointIds.map(id => ({ id })) } : {}),
+  } : undefined;
   const value = options.result.success
     ? options.result.value
     : {
         status: options.result.status,
         error: options.result.error ?? "Fabric execution failed",
-        ...(options.result.typeErrors ? { typeErrors: options.result.typeErrors } : {}),
+        ...(options.result.typeErrors ? { typeErrors: compactTypeErrors(options.result.typeErrors) } : {}),
+        ...(failure ? { failure } : {}),
         ...(options.result.lastShellFailure ? { lastShellFailure: options.result.lastShellFailure } : {}),
         effectiveTimeoutMs: options.result.effectiveTimeoutMs,
       };
@@ -114,7 +135,9 @@ export const projectFabricExecutionText = (options: {
     ? `\n\nFabric logs: ${JSON.stringify(options.result.logs)}`
     : "";
   const progress = failureProgress(options.result);
-  const complete = `${body}${diagnostics}${logs}${progress}`;
+  // Never surface labels or nested evidence in recovery metadata, including failure.checkpoints.
+  const checkpoints = checkpointIds.length ? `\n\nEphemeral checkpoint handles (read with artifacts.read): ${JSON.stringify(checkpointIds)}` : "";
+  const complete = `${body}${diagnostics}${logs}${progress}${checkpoints}`;
   if (complete.length <= visibleMaximum) return {
     text: complete,
     isError: !options.result.success,
@@ -122,10 +145,21 @@ export const projectFabricExecutionText = (options: {
     visibleBytes: Buffer.byteLength(complete, "utf8"),
     overflowed: false,
     artifactRetained: false,
+    retention: "inline",
+    checkpointIds,
   };
   try {
-    const artifactId = options.writeArtifact(complete);
-    const hint = `\n\nOutput exceeded ${visibleMaximum} characters. Full result is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
+    let artifactId: string;
+    let retention: "complete" | "canonical" = "complete";
+    try { artifactId = options.writeArtifact(complete); }
+    catch {
+      // Retry serialization/retention only: NEVER execute the program or a provider again.
+      // Compact JSON removes formatting expansion and auxiliary sections at the store cap.
+      const canonical = JSON.stringify(value) ?? "null";
+      artifactId = options.writeArtifact(canonical);
+      retention = "canonical";
+    }
+    const hint = `\n\nOutput exceeded ${visibleMaximum} characters. ${retention === "complete" ? "Full result" : "Canonical JSON result (formatting/logs/progress omitted)"} is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
     const text = truncateWithHint(complete, visibleMaximum, hint);
     return {
       text,
@@ -135,6 +169,8 @@ export const projectFabricExecutionText = (options: {
       visibleBytes: Buffer.byteLength(text, "utf8"),
       overflowed: true,
       artifactRetained: true,
+      retention,
+      checkpointIds,
     };
   } catch {
     const hint = `\n\nOutput exceeded ${visibleMaximum} characters and could not be retained within artifact bounds.`;
@@ -146,6 +182,8 @@ export const projectFabricExecutionText = (options: {
       visibleBytes: Buffer.byteLength(text, "utf8"),
       overflowed: true,
       artifactRetained: false,
+      retention: "unavailable",
+      checkpointIds,
     };
   }
 };

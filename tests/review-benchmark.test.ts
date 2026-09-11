@@ -16,6 +16,36 @@ type Row = Parameters<typeof detailedStats>[0][number];
 const answer = (spec: ReturnType<typeof makeReviewCase>) => structuredClone(spec.expected) as { findings: Finding[] };
 
 describe('read-only infrastructure review benchmark', () => {
+  it.each(['evidence-v1', 'evidence-v2'])('qualifies evidence traps without inventing consequences: %s', async seed => {
+    const spec = makeReviewCase('review-evidence', seed);
+    expect(makeCase('review-evidence', seed)).toEqual(spec);
+    expect(ALL_CASES).toContain('review-evidence');
+    expect(CASES).not.toContain('review-evidence');
+    expect(caseHashes(spec).fixtures).not.toBe(caseHashes(makeReviewCase('review-evidence', seed + '-other')).fixtures);
+    expect(await probeReviewFixture(spec)).toEqual({ ok: true, defects: 2, falsePositiveControls: 5 });
+    expect(scoreReview(spec, spec.expected)).toMatchObject({ truePositives: 2, falsePositives: 0, precision: 1, recall: 1 });
+    for (const [kind, file] of [
+      ['missed-removals', 'scripts/cleanup.mjs'], ['skipped-nodes', 'scripts/cleanup.mjs'],
+      ['empty-division', 'scripts/cleanup.mjs'], ['config-key-case', 'scripts/render.mjs'],
+      ['disabled-cleanup', 'scripts/enabled.mjs'],
+    ]) {
+      const noisy = answer(spec);
+      noisy.findings.push({ kind: kind!, evidence: [{ path: file!, line: 1, text: spec.files[file!]!.split('\n')[0]! }] });
+      expect(scoreReview(spec, noisy)).toMatchObject({ truePositives: 2, falsePositives: 1, precision: 2 / 3 });
+    }
+    const corrected = structuredClone(spec);
+    corrected.files['scripts/check.sh'] = 'bash "scripts/validate input.sh"\n';
+    await expect(probeReviewFixture(corrected)).rejects.toThrow();
+  });
+
+  it('grades evidence reviews through the existing immutable-workspace validation path', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'review-evidence-validation-'));
+    try {
+      const trial = await solvedTrial(root, 'review-evidence', process.execPath);
+      expect((await validate(trial)).review).toMatchObject({ expected: 2, truePositives: 2, falsePositives: 0 });
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
   it.each(['boundaries-v1', 'boundaries-v2'])('qualifies exact contracts and rejects unsupported consequences: %s', async seed => {
     const spec = makeReviewCase('review-boundaries', seed);
     expect(makeCase('review-boundaries', seed)).toEqual(spec);

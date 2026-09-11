@@ -1,3 +1,4 @@
+import { FabricCompilerTimeoutError } from "../core/repair-error.js";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import ts from "typescript";
@@ -230,6 +231,7 @@ export const transpileFabricCodeWithSourceMap = (code: string): FabricTranspileR
 };
 export const typeCheckFabricCode = (code: string, declarations: string): FabricTypeCheckResult => checkerFor(declarations).check(code);
 
+
 export interface FabricCompilerWorkerOptions { signal?: AbortSignal; timeoutMs?: number; workerUrl?: URL }
 
 /** Reuse is safe because the compiler host, not worker freshness, constrains
@@ -237,6 +239,11 @@ export interface FabricCompilerWorkerOptions { signal?: AbortSignal; timeoutMs?:
  * active compiler. Admission rejects rather than retaining an unbounded queue. */
 const COMPILER_WORKER_IDLE_MS = 30_000;
 const COMPILER_WORKER_MAX_USES = 250;
+// Per-owner, in-memory compiler output only. Count keys, emitted JS and maps;
+// at most ~4 MiB of UTF-16 text plus bounded entry overhead, with no payloads.
+const MAX_COMPILER_CACHE_ENTRIES = 32;
+const MAX_COMPILER_CACHE_CHARS = 2 * 1024 * 1024;
+interface CachedFabricCompilation { result: FabricTypeCheckResult; chars: number }
 
 interface FabricCompilerWorkerState {
   worker: Worker;
@@ -254,12 +261,33 @@ const defaultCompilerWorkerUrl = (): URL => import.meta.url.endsWith(".ts")
 export class FabricCompilerPool {
   readonly #workers = new Set<FabricCompilerWorkerState>();
   #idle: FabricCompilerWorkerState | undefined;
+  readonly #cache = new Map<string, CachedFabricCompilation>();
+  #cachedChars = 0;
   #nextId = 0;
   #closed = false;
   #closing: Promise<void> | undefined;
 
   constructor(readonly maxWorkers = 4) {
     if (!Number.isSafeInteger(maxWorkers) || maxWorkers < 1 || maxWorkers > 64) throw new Error("Invalid Fabric compiler worker limit");
+  }
+
+  #remember(key: string | undefined, result: FabricTypeCheckResult): void {
+    if (key === undefined || result.errors.length > 0 || result.javascript === undefined) return;
+    const chars = key.length + result.javascript.length + (result.sourceMap?.length ?? 0);
+    if (chars > MAX_COMPILER_CACHE_CHARS) return;
+    const previous = this.#cache.get(key);
+    if (previous) { this.#cache.delete(key); this.#cachedChars -= previous.chars; }
+    // Never expose the cached object or its mutable errors array to callers.
+    this.#cache.set(key, { chars, result: {
+      errors: [], javascript: result.javascript,
+      ...(result.sourceMap === undefined ? {} : { sourceMap: result.sourceMap }),
+    } });
+    this.#cachedChars += chars;
+    while (this.#cache.size > MAX_COMPILER_CACHE_ENTRIES || this.#cachedChars > MAX_COMPILER_CACHE_CHARS) {
+      const oldest = this.#cache.keys().next().value!;
+      this.#cachedChars -= this.#cache.get(oldest)!.chars;
+      this.#cache.delete(oldest);
+    }
   }
 
   #detachIdle(state: FabricCompilerWorkerState): void {
@@ -307,6 +335,17 @@ export class FabricCompilerPool {
     return new Promise((resolve, reject) => {
       if (this.#closed) { reject(new Error("Fabric compiler pool is closed")); return; }
       if (options.signal?.aborted) { reject(options.signal.reason ?? new Error("Fabric compiler aborted")); return; }
+      const { code, declarations } = request;
+      // Length framing preserves exact UTF-16 source/declarations without hash
+      // collisions or delimiter ambiguity. Custom workers never read/write it.
+      const cacheKey = options.workerUrl === undefined && code.length + declarations.length <= MAX_COMPILER_CACHE_CHARS
+        ? `${declarations.length}:${declarations}${code}` : undefined;
+      const cached = cacheKey === undefined ? undefined : this.#cache.get(cacheKey);
+      if (cached) {
+        this.#cache.delete(cacheKey!); this.#cache.set(cacheKey!, cached);
+        resolve({ ...cached.result, errors: [] });
+        return;
+      }
       const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? DEFAULT_COMPILER_TIMEOUT_MS, 60_000));
       const state = this.#acquire(options.workerUrl);
       const id = ++this.#nextId;
@@ -319,6 +358,7 @@ export class FabricCompilerPool {
         options.signal?.removeEventListener("abort", onAbort);
         const complete = (): void => { if (error) reject(error); else resolve(result!); };
         if (error) { void this.#terminate(state).then(complete); return; }
+        this.#remember(cacheKey, result!);
         state.uses += 1;
         // Retain at most one warm idle worker; concurrent completions cannot
         // overwrite an owned worker and lose its shutdown handle.
@@ -330,12 +370,12 @@ export class FabricCompilerPool {
         } else { void this.#terminate(state).then(complete); }
       };
       const onAbort = (): void => finish(options.signal?.reason instanceof Error ? options.signal.reason : new Error("Fabric compiler aborted"));
-      const timer = setTimeout(() => finish(new Error(`Fabric compiler timed out after ${timeoutMs}ms`)), timeoutMs);
+      const timer = setTimeout(() => finish(new FabricCompilerTimeoutError(timeoutMs)), timeoutMs);
       state.pending = { id, finish };
       options.signal?.addEventListener("abort", onAbort, { once: true });
       if (options.signal?.aborted) onAbort();
       if (!settled) {
-        try { state.worker.postMessage({ id, ...request }); }
+        try { state.worker.postMessage({ id, code, declarations }); }
         catch (error) { finish(error instanceof Error ? error : new Error("Fabric compiler dispatch failed")); }
       }
     });
@@ -343,6 +383,7 @@ export class FabricCompilerPool {
 
   close(): Promise<void> {
     this.#closed = true;
+    this.#cache.clear(); this.#cachedChars = 0;
     return this.#closing ??= Promise.all([...this.#workers].map((state) => {
       state.pending?.finish(new Error("Fabric compiler pool is closed"));
       return this.#terminate(state);

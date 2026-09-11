@@ -105,10 +105,11 @@ try {
     throw new Error("fabric_info did not prove canonical workspace binding");
   }
   const providers = info.providers?.map((provider) => provider.name).sort();
-  if (JSON.stringify(providers) !== JSON.stringify(["artifacts", "fabric", "local", "mcp", "memory", "state"]) ||
+  if (JSON.stringify(providers) !== JSON.stringify(["artifacts", "fabric", "local", "mcp", "memory", "probe", "review", "state"]) ||
       info.providers.some((provider) => provider.available !== true)) {
     throw new Error("fabric_info provider set is incomplete");
   }
+  if (info.runProvenance?.schemaVersion !== 1 || info.runProvenance?.observed?.routing?.status !== "unknown") throw new Error("fabric_info provenance must preserve unknown routing");
   const execution = await call(4, "fabric_exec", { code: "return { ok: true, value: payloads.value }", payloads: { value: "42" }, resultFormat: "json" });
   const value = projectedJson(execution);
   if (execution.isError || value.ok !== true || value.value !== "42") throw new Error(`checked execution failed: ${text(execution)}`);
@@ -191,7 +192,7 @@ try {
     executor: "quickjs",
     lifecycle: info.lifecycle,
     scope: "component-mcp-only",
-    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "six-providers", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
+    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "eight-providers", "declared-versus-observed-provenance", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
   };
   const serialized = `${JSON.stringify(report, null, 2)}\n`;
   if (jsonOutput) writeFileAtomic(jsonOutput, serialized);

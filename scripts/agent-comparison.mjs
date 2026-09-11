@@ -7,6 +7,9 @@ import { BUG_CASES, makeBugCase, probeProject } from './steering-benchmark/proje
 import { caseHashes, makeCase } from './steering-benchmark/cases.mjs';
 import { REVIEW_CASES, makeReviewCase, probeReviewFixture, scoreReview } from './steering-benchmark/reviews.mjs';
 import { putFiles, save } from './steering-benchmark/core.mjs';
+import { REVIEW_QUALITY_SCHEMA } from './steering-benchmark/review-quality.mjs';
+import { REVIEW_CALIBRATION_SCHEMA } from './steering-benchmark/review-calibration.mjs';
+import { REVIEW_REGRESSION_CASES, REVIEW_REGRESSIONS_SCHEMA, makeRegressionReviewCase, probeRegressionReviewFixture, scoreReviewRegressions } from './steering-benchmark/review-regressions.mjs';
 import { loadPlan, rows, privateOutput } from './steering-benchmark/runner.mjs';
 import { comparisonMetrics, comparisonMarkdown, comparisonCsv } from './steering-benchmark/metrics.mjs';
 
@@ -27,8 +30,8 @@ export async function main(argv) {
   if (action === 'fixtures') {
     assert.ok(args.out, '--out required'); fs.mkdirSync(args.out, { mode: 0o700 }); const root = privateOutput(args.out), seed = args.seed ?? 'tinyshop-v1';
     const tasks = [];
-    for (const id of [...BUG_CASES, ...REVIEW_CASES]) { const spec = makeCase(id, seed), workspace = path.join(root, id); fs.mkdirSync(workspace, { mode: 0o700 }); putFiles(workspace, spec.files); fs.writeFileSync(path.join(root, id + '-prompt.txt'), spec.prompt + '\n', { mode: 0o600, flag: 'wx' }); tasks.push({ id, workspace, hashes: caseHashes(spec) }); }
-    const manifest = { fixtureVersion: 'tinyshop-and-review-v4', seed, inferenceRequests: 0, tasks }; save(path.join(root, 'fixtures.json'), manifest); return manifest;
+    for (const id of [...BUG_CASES, ...REVIEW_CASES, ...REVIEW_REGRESSION_CASES]) { const spec = makeCase(id, seed), workspace = path.join(root, id); fs.mkdirSync(workspace, { mode: 0o700 }); putFiles(workspace, spec.files); fs.writeFileSync(path.join(root, id + '-prompt.txt'), spec.prompt + '\n', { mode: 0o600, flag: 'wx' }); tasks.push({ id, workspace, hashes: caseHashes(spec) }); }
+    const manifest = { fixtureVersion: 'tinyshop-and-review-v6', seed, inferenceRequests: 0, tasks }; save(path.join(root, 'fixtures.json'), manifest); return manifest;
   }
   if (action === 'selftest') {
     let rejectedBuggy = 0, acceptedReference = 0;
@@ -41,10 +44,23 @@ export async function main(argv) {
     for (const seed of ['review-v1', 'review-v2']) for (const id of REVIEW_CASES) {
       const spec = makeReviewCase(id, seed);
       assert.equal((await probeReviewFixture(spec)).ok, true);
-      assert.equal(scoreReview(spec, { findings: [] }).recall, 0);
+      const empty = id === 'review-adherence' ? { schema: REVIEW_QUALITY_SCHEMA, findings: [], coverage: { scope: 'partial', evidence: [] } }
+        : id === 'review-calibration' ? { schema: REVIEW_CALIBRATION_SCHEMA, findings: [] } : { findings: [] };
+      assert.equal(scoreReview(spec, empty).recall, 0);
       qualifiedReviews++;
     }
-    return { rejectedBuggy, acceptedReference, qualifiedReviews, inferenceRequests: 0, syntheticEvidenceOnly: true };
+    let qualifiedRegressions = 0;
+    for (const seed of ['regression-v1', 'regression-v2']) for (const id of REVIEW_REGRESSION_CASES) {
+      const spec = makeRegressionReviewCase(id, seed);
+      assert.equal((await probeRegressionReviewFixture(spec)).ok, true);
+      assert.equal(scoreReviewRegressions(spec, { schema: REVIEW_REGRESSIONS_SCHEMA, findings: [] }).recall, 0);
+      const reference = scoreReviewRegressions(spec, spec.expected);
+      assert.equal(reference.recall, 1);
+      assert.equal(reference.regressions.violations, 0);
+      assert.equal(reference.regressions.scenarioCoverage, 1);
+      qualifiedRegressions++;
+    }
+    return { rejectedBuggy, acceptedReference, qualifiedReviews, qualifiedRegressions, inferenceRequests: 0, syntheticEvidenceOnly: true };
   }
   assert.ok(args.out && args.dest, '--out and --dest required');
   const plan = loadPlan(args.out), observations = rows(privateOutput(args.out)), report = comparisonMetrics(plan, observations);

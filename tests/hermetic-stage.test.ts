@@ -33,10 +33,15 @@ describe("hermetic staging", () => {
       for (const source of ["dist/kiro-agent-closure", "skills"]) {
         fs.cpSync(path.resolve(source), path.join(checkout, source), { recursive: true });
       }
+      const manifest = JSON.parse(fs.readFileSync(path.resolve("dist/kiro-agent-closure/closure-manifest.json"), "utf8"));
+      for (const { path: source } of manifest.buildInputs.files as { path: string }[]) {
+        fs.mkdirSync(path.dirname(path.join(checkout, source)), { recursive: true });
+        fs.copyFileSync(path.resolve(source), path.join(checkout, source));
+      }
       for (const source of ["agent-product.json", "package.json"]) {
         fs.copyFileSync(path.resolve(source), path.join(checkout, source));
       }
-      fs.mkdirSync(path.join(checkout, "scripts"), { mode: 0o700 });
+      fs.mkdirSync(path.join(checkout, "scripts"), { mode: 0o700, recursive: true });
       for (const source of ["agent-profile.mjs", "install-agent-user.mjs", "validate-agent-package.mjs"]) {
         fs.copyFileSync(path.resolve("scripts", source), path.join(checkout, "scripts", source));
       }

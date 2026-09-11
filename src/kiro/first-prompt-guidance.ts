@@ -1,58 +1,6 @@
-/** A checked example, also executed against fixtures in first-prompt tests. */
-export const FIRST_PROMPT_PROGRAM = String.raw`const [guidance, manifest] = await Promise.all([
-  fabric.help({topic:"review"}),
-  local.find({path:".",pattern:"**/*",hidden:true,limit:200}),
-]);
-const patterns = [
-  {area:"guidance", match:/(^|\/)(AGENTS\.md|README(?:\.md)?)$/i},
-  {area:"entrypoints", match:/(^|\/)(package\.json|pyproject\.toml|Cargo\.toml|go\.mod|Makefile|Dockerfile)$/},
-  {area:"automation", match:/(^|\/)([^/]*pipeline[^/]*\.ya?ml|\.gitlab-ci\.yml)$|(^|\/)(\.github\/workflows|\.azure-pipelines)\/.*\.ya?ml$/i},
-  {area:"overrides", match:/(^|\/)(envs?|environments|overlays)\/.*\.ya?ml$|(^|\/)values[.-][^/]+\.ya?ml$/i},
-  {area:"configuration", match:/(^|\/)(Chart|values(?:[.-][^/]+)?|deployment|docker-compose|compose)\.ya?ml$/i},
-  {area:"templates", match:/(^|\/)templates\/.*\.(ya?ml|tpl)$/i},
-  {area:"checks", match:/(^|\/)(tests?|__tests__|spec|validations)\/.*\.(ts|tsx|js|py|go|rs|cs|sh|ps1)$|\.(test|spec)\.[cm]?[jt]sx?$/i},
-  {area:"implementation", match:/\.(?:[cm]?[jt]sx?|py|go|rs|cs|java|sh|ps1|tf)$/i},
-];
-const paths = [...manifest.paths].sort((a,b) => a.split("/").length-b.split("/").length || a.localeCompare(b));
-const seen = new Set<string>();
-const areas = patterns.map(({area,match}) => ({area, paths:paths.filter(path => {
-  if (seen.has(path) || !match.test(path) || /(^|\/)(secrets?([./_-]|$)|credentials?([./_-]|$)|\.env(\.|$))|\.(pem|key)$/i.test(path)) return false;
-  seen.add(path); return true;
-})})).filter(group => group.paths.length);
-const maxChars = Math.floor(Math.min(24000,40000-JSON.stringify({guidance,manifest,areas}).length-1000)/Math.max(1,areas.length));
-if (maxChars < 1000) return {guidance,manifest,narrowDiscovery:true};
-const packets = await parallel(areas, async ({area,paths}): Promise<JsonObject> => {
-  const windows = paths.slice(0,3).map(path => ({path,limit:160}));
-  try {
-    return {area,evidence:await local.readMany({windows,maxChars}),deferred:paths.slice(3)};
-  } catch (error) {
-    return {area,error:error instanceof Error ? error.message : String(error),unread:paths};
-  }
-},{concurrency:3});
-return {guidance,manifest,packets};`;
-
-/** Injected into the first submitted message, never into the standing prompt. */
+/** First-turn task reminder; durable workflow rules live in the standing prompt. */
 export const FIRST_PROMPT_GUIDANCE = `
 <fabric_initial_investigation>
-Apply this once-per-chat method to the user's actual task. Preserve their scope, tool restrictions, edit authorization and output format. Simple questions need no audit. Review requests authorize investigation and reporting, not edits.
-
-Before your first tool program, identify the outcome, the important unknowns and what evidence would distinguish causes. For coding, establish the affected path and acceptance checks before editing. For broad reviews, use the discovery/read starter below, or adapt it to gather equivalent evidence. Do not spend separate turns listing already-discovered directories, formatting results or narrating plans.
-
-\`\`\`ts
-${FIRST_PROMPT_PROGRAM}
-\`\`\`
-
-This is an initial sample, not a completed review. Each area gets a separate source budget so a long README cannot consume the implementation packet. Selection is heuristic: follow references and inspect relevant manifest paths outside these groups too. Credential-looking paths are deferred from automatic reading; inspect relevant storage/consumers with redacted evidence.
-
-After receiving the packet:
-1. Inspect evidence before choosing the next program. Track areas, unread ranges and open leads. Follow evidence.remaining exactly; for whole-file coverage use nextOffset and hash. Never invent offsets or reread prefixes. Partition discovery when truncated or narrowDiscovery is true; follow truncated help. complete refers only to requested ranges.
-2. Gather related evidence together: caller + executable code + defaults/overrides + consumer/tests. For a deployment repo this includes environment values AND templates, maintenance scripts and CI callers. Trace inputs -> selected object -> guard -> effect -> reported outcome. A few findings are not a stopping condition; close relevant accessible areas and retained leads, or report the specific limit.
-3. Challenge each consequential claim before reporting it. Use an actual parser, render, test or stubbed execution when runtime semantics decide the answer. A tool call containing comments, constant output or a rewritten imitation of the suspect code is not verification. Preserve the original causal path and exit status, test a counterexample, and check that the proposed correction also works. Use local.shell({script,interpreter:"bash",args}) for literal Bash; JSON.stringify is not shell quoting. Keep probes offline and do not run deployment/cleanup against services.
-4. Match confidence to evidence beside each finding: source mismatch, reproduced behavior under stated inputs, or conditional risk. Check external settings, upstream validation and unavailable application schemas before saying always/never. Do not turn a dropped argument into an assumed empty response, or a typo into a guaranteed crash. Report observed behavior, not invented downstream effects.
-5. Before finalizing, reconcile coverage and leads: supported finding, rejected with evidence, or unresolved check. Do not claim to have inspected every file from a listing or partial reads. Rank by demonstrated impact; include file:line, trigger, concise evidence and a correction that follows from it. State uninspected scope and checks not run. No findings is a valid outcome.
-
-Use the returned review help for detailed recipes; do not reload known guidance. local.readMany defaults to 32000 aggregate JSON characters, maximum 40000, subject to runtime limits; reserve room for other returned data. Keep ranges, hashes, failures and continuations. Use inferred types or JsonObject, not Record<string, unknown>. Return evidence that changes a decision; never use an empty or analysis-only exec as a reasoning step.
-
-Continue from this investigation state on later turns; do not append this block again. These are workflow instructions, not a model or reasoning-effort override. They cannot force Auto routing or guarantee review quality.
+Apply the standing task contract to this request: answer, review or authorized implementation. Start with the next unresolved acceptance check, not a broad audit by default. Preserve required scope and verification; report the exact blocker if unable to proceed.
 </fabric_initial_investigation>
 `.trim();

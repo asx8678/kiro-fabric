@@ -33,6 +33,34 @@ function fixture(budget = 20000, maxReadManyChars?: number) {
 }
 
 describe("bounded numbered source batches", () => {
+  it("exposes a hash-bound unread tail even when the default requested window is complete", async () => {
+    const f = fixture();
+    const lines = Array.from({ length: 500 }, (_, i) => `line ${i + 1}`);
+    fs.writeFileSync(path.join(f.root, "large"), lines.join("\n") + "\n");
+    const first = await f.call([{ path: "large" }]);
+    expect(first).toMatchObject({ complete: true, remaining: [], unreadTails: [
+      { path: "large", offset: 201, limit: 300, expectedSha256: first.files[0]!.sha256 },
+    ] });
+    const tail = await f.call(first.unreadTails);
+    expect(tail).toMatchObject({ complete: true, remaining: [], unreadTails: [] });
+    expect([...first.files, ...tail.files].map(f => f.source).join("\n")).toBe(lines.map((line, i) => `${i + 1}: ${line}`).join("\n"));
+    const whole = await f.call([{ path: "large", limit: 2000 }]);
+    expect(whole).toMatchObject({ complete: true, unreadTails: [] });
+    expect(whole.files[0]!.source).toBe([...first.files, ...tail.files].map(f => f.source).join("\n"));
+    fs.appendFileSync(path.join(f.root, "large"), "changed\n");
+    await expect(f.call(first.unreadTails)).rejects.toThrow("source changed");
+  });
+
+  it("summarizes suffixes once per snapshot without mistaking empty or out-of-order windows for EOF", async () => {
+    const f = fixture();
+    fs.writeFileSync(path.join(f.root, "large"), "line\n".repeat(2400));
+    const partial = await f.call([{ path: "large", offset: 101, limit: 10 }, { path: "large", limit: 5 }, { path: "large", offset: 9999 }]);
+    expect(partial.unreadTails).toEqual([{ path: "large", offset: 111, limit: 2000, expectedSha256: partial.files[0]!.sha256 }]);
+    // This suffix summary deliberately makes no claim about the unrequested gap.
+    const atEnd = await f.call([{ path: "large", offset: 2400 }, { path: "large", limit: 5 }]);
+    expect(atEnd.unreadTails).toEqual([]);
+  });
+
   it("delivers a related source batch in one default call instead of two at the former 16000 cap", async () => {
     const f = fixture(2_000_000);
     const lines = Array.from({ length: 220 }, (_, i) => `route(${i}, { target: "worker-${i}", retry: false, description: "${"configuration ".repeat(4)}" });`);

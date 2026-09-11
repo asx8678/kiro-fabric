@@ -32,11 +32,6 @@ const options = {
 
 const steering = readFileSync(new URL("../resources/steering/fabric.md", import.meta.url), "utf8");
 
-// Budget explicit standing text, not task-loaded help, tokens or billing.
-// The former 3500-character ceiling did not include the user's repository rules.
-// Keep detailed procedures/recipes off the hot path and measure the input trade-off.
-const MAX_STANDING_CHARS = 6400;
-
 // Contract clauses, not whole sentences: tolerate punctuation and connective
 // prose changes while keeping obligations in the prompt even without steering.
 const promptContracts: Array<[string, RegExp]> = [
@@ -76,13 +71,13 @@ describe("Kiro Agent profile generation", () => {
     expect(AGENT_PROMPT).toMatch(rule);
   });
 
-  it("avoids ritual discovery and steers concise answers without sacrificing requested output or evidence", () => {
+  it("avoids ritual discovery and preserves complete requested output and evidence", () => {
     expect(AGENT_PROMPT).toContain("For workspace work only");
     expect(AGENT_PROMPT).toContain("if tools are forbidden, use none");
     expect(AGENT_PROMPT).toContain("General explanations need no workspace inspection");
     expect(AGENT_PROMPT).toMatch(/known task paths[^.]*skip[^.]*listing\/help/i);
     expect(AGENT_PROMPT).toMatch(/otherwise discover paths before reads/i);
-    expect(AGENT_PROMPT).toMatch(/120 words/i);
+    expect(AGENT_PROMPT).toContain("no arbitrary word target");
     expect(AGENT_PROMPT).toContain("no prose/fences around JSON");
     expect(AGENT_PROMPT).toMatch(/explicit requests[^.]*complete[^.]*override/i);
     expect(AGENT_PROMPT).toMatch(/verification[^.]*blockers/i);
@@ -91,10 +86,13 @@ describe("Kiro Agent profile generation", () => {
     expect(AGENT_PROMPT).toMatch(/do not copy[^.]*data[^.]*model/i);
   });
 
-  it("keeps efficiency steering always on even without optional resource activation", () => {
+  it("keeps completion and effort requirements always on without optional resource activation", () => {
     const profile = generateAgentProfile(options);
     expect(profile.resources).toHaveLength(1);
-    expect(profile.prompt).toContain("<=120 words");
+    expect(profile.prompt).toContain("Complete every requested outcome; minimize redundant instructions, repeated reads, intermediate output and avoidable tool exchanges");
+    expect(profile.prompt).toContain("while a required outcome has a productive next step");
+    expect(profile.prompt).toContain("Never label a request complete while a required outcome remains blocked");
+    expect(profile.prompt).not.toMatch(/(?:<=|at most)\s*\d+\s*words/i);
     expect(profile.prompt).toContain("Match requested format exactly");
     expect(profile.prompt).toContain("no prose/fences around JSON");
     expect(profile.prompt).toContain("do not copy raw data through the model");
@@ -111,10 +109,14 @@ describe("Kiro Agent profile generation", () => {
   });
 
   it("keeps verification inside requested JSON and rechecks format without a tool", () => {
-    expect(AGENT_PROMPT).toContain("Default only if unspecified");
+    expect(AGENT_PROMPT).toContain("Match requested format exactly");
     expect(AGENT_PROMPT).toContain("inside one valid JSON value");
     expect(AGENT_PROMPT).toContain("verification and blockers");
-    expect(AGENT_PROMPT.trim().endsWith("Before sending, recheck the requested format without tools.")).toBe(true);
+    expect(AGENT_PROMPT.trim().endsWith("recheck the requested format without tools.")).toBe(true);
+    expect(AGENT_PROMPT).toContain("reconcile each finding headline with its evidence and consequence");
+    expect(AGENT_PROMPT).toContain("remove self-disproved defects");
+    expect(AGENT_PROMPT).toContain("missing runtime/configuration evidence means unverified");
+    expect(AGENT_PROMPT).toContain("separate maintenance concerns");
   });
 
   it("suppresses inter-tool commentary for JSON-only Kiro finalText", () => {
@@ -123,11 +125,11 @@ describe("Kiro Agent profile generation", () => {
   });
 
   it("makes review coverage mandatory without a findings quota or a brevity cutoff", () => {
-    for (const clause of ["Correctness and coverage before speed", "do not stop early to save calls", "reviews/audits are exempt", 'fabric.help({topic:"review"})', "coverage ledger", "local.readMany", "Trace callers", "Try to disprove", "unreviewed scope", "conditional risks", "hidden:true", "totalLines", "zero matches is not whole-repo absence"]) expect(AGENT_PROMPT).toContain(clause);
+    for (const clause of ["Complete every requested outcome", "productive next step", "no arbitrary word target", "An initial sample is not a coverage limit", "Review help is optional, not a required bootstrap", "coverage ledger", "local.readMany", "Trace callers", "Try to disprove", "unreviewed scope", "conditional risks", "hidden:true", "totalLines", "zero matches is not whole-repo absence"]) expect(AGENT_PROMPT).toContain(clause);
     expect(typeCheckFabricCode('return await local.find({pattern:"**/*",hidden:true,limit:200});', fabricGuestDeclarations).errors).toEqual([]);
   });
 
-  it("keeps proportional quality gates and quiet progress always on", () => {
+  it("keeps complete acceptance checks and useful progress always on", () => {
     const prompt = generateAgentProfile(options).prompt;
     for (const rule of [/acceptance ledger/i, /trace[^.]*before editing/i, /public symbols, registrations and configuration/i,
       /targeted tests and behavioral probes/i, /build alone is not completion/i, /failures or cross-cutting risk/i,
@@ -137,39 +139,51 @@ describe("Kiro Agent profile generation", () => {
     }
   });
 
-  it("budgets the activated skill separately from standing text and on-demand help", () => {
-    const skill = readFileSync(new URL("../skills/fabric-exec/SKILL.md", import.meta.url), "utf8");
-    // Character budgets are input-growth guards, not token, billing or model-quality measurements.
-    expect(skill.length).toBeLessThanOrEqual(10400);
-    expect(AGENT_PROMPT.length + steering.length + skill.length).toBeLessThanOrEqual(MAX_STANDING_CHARS + 10400);
-  });
-
   it("type-checks every documented local recipe", () => {
     const skill = readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
     const recipes = [...skill.matchAll(/```ts\n(\/\/ Recipe:[\s\S]*?)\n```/g)].map(match => match[1]!);
-    expect(recipes).toHaveLength(7);
+    expect(recipes.length).toBeGreaterThanOrEqual(8);
+    for (const name of ["snapshot-bound same-file edits", "validator diagnostics then source"]) expect(recipes.some(code => code.includes('// Recipe: ' + name))).toBe(true);
     for (const code of recipes) expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors, code).toEqual([]);
   });
 
-  it("bounds standing guidance including the requested working rules", () => {
-    expect(AGENT_PROMPT.length).toBeGreaterThan(0);
-    expect(steering.length).toBeGreaterThan(0);
-    expect(AGENT_PROMPT.length + steering.length).toBeLessThanOrEqual(MAX_STANDING_CHARS);
-  });
-
-  it("keeps a type-checked first-list input and native-free bootstrap examples", () => {
-    const code = AGENT_PROMPT.match(/\{\s*code:\s*'([^']+)'\s*\}/)?.[1];
-    expect(code).toBeDefined();
-    expect(code).toMatch(/return\s+await\s+local\.list\(/);
-    expect(code).toMatch(/path:\s*"\."/);
-    expect(code).toMatch(/limit:\s*\d+/);
-    expect(code).not.toMatch(/local[.]read|depth|README/);
+  it("aligns discovery, causal-chain batching and native-free bootstrap examples", () => {
+    const discovery = 'local.find({pattern:"**/*",hidden:true,limit:200})';
     const skill = readFileSync(new URL("../skills/fabric-exec/SKILL.md", import.meta.url), "utf8");
-    expect(skill).toContain(code!);
-    expect(skill).not.toContain("For a first read:");
-    expect(typeCheckFabricCode(code!, fabricGuestDeclarations).errors).toEqual([]);
+    const api = readFileSync(new URL("../skills/fabric-exec/references/api.md", import.meta.url), "utf8");
+    const workflow = readFileSync(new URL("../skills/fabric-exec/references/workflow.md", import.meta.url), "utf8");
+    for (const text of [AGENT_PROMPT, skill, api, workflow]) {
+      expect(text).toContain("discovery -> bounded observed starter reads in the same exec");
+      if (text === AGENT_PROMPT) {
+        expect(text).toMatch(/compose mechanical dependencies in one exec/i);
+        expect(text).toContain("yield only for model judgment, safety/authorization, budget limits or recovery");
+        expect(text).toContain("Batch causal chains with sequential awaits");
+        expect(text).toContain("known-schema transform -> authorized write -> verification");
+        expect(text).toContain("Fewer nested operations do not imply fewer model round trips");
+      } else {
+        expect(text).toContain("standing execution/yield policy");
+        expect(text).not.toContain("Fewer nested operations do not imply fewer model round trips");
+      }
+      expect(text).toContain("aggregate output headroom");
+      expect(text).toContain("continuation metadata");
+      expect(text).not.toMatch(/(?:at most|no more than)\s+\d+\s+(?:tool |nested |exec )?calls/i);
+    }
+    for (const text of [AGENT_PROMPT, skill, api]) {
+      expect(text).toContain(discovery);
+      expect(text).toMatch(/only when direct children are needed/);
+      expect(text).not.toContain("begin inspection with `local.list");
+    }
+    expect(skill).toContain("Known task paths bypass discovery");
+    expect(api).toContain("Use supplied/observed task paths directly");
+    expect(workflow).toContain("Known task paths bypass discovery");
+    const firstPrompt = readFileSync(new URL("../src/kiro/first-prompt-guidance.ts", import.meta.url), "utf8");
+    expect(firstPrompt).not.toContain("batch related inspections and mechanical checks");
+    expect(typeCheckFabricCode(`return await ${discovery};`, fabricGuestDeclarations).errors).toEqual([]);
     const bootstrap = AGENT_PROMPT.match(/return await fabric\.(?:info|help|workspace)\([^)]*\)/g) ?? [];
-    expect(bootstrap).toHaveLength(3);
+    expect(bootstrap).toHaveLength(0);
+    expect(AGENT_PROMPT).toContain("no preliminary status/info/list call");
+    expect(AGENT_PROMPT).toContain("Review help is optional, not a required bootstrap");
+    expect(AGENT_PROMPT).not.toContain("load unknown fabric.help({topic:\"review\"})");
     expect(typeCheckFabricCode('return await fabric.help({topic:"review"});', fabricGuestDeclarations).errors).toEqual([]);
     for (const call of bootstrap) expect(typeCheckFabricCode(call, fabricGuestDeclarations).errors, call).toEqual([]);
     expect(AGENT_PROMPT).toMatch(/fabric\.workspace\(\{action:\s*"list"\}\)/);
@@ -215,7 +229,7 @@ describe("Kiro Agent profile generation", () => {
       };
       expect(page.topic).toBe("api");
       expect(page.text.length).toBeGreaterThan(0);
-      expect(page.text.length).toBeLessThanOrEqual(8000);
+      expect(page.text.length).toBeLessThanOrEqual(16000);
       expect(JSON.stringify(page).length).toBeLessThanOrEqual(provider.maxResultChars);
       expect(page.text).toBe(fabricGuestDeclarations.slice(offset, offset + page.text.length));
       reconstructed += page.text;
@@ -242,6 +256,7 @@ describe("Kiro Agent profile generation", () => {
           args: [path.join(options.runtimeRoot, "kiro", "mcp-entry.js")],
           env: {
             KIRO_FABRIC_LAUNCH_WORKSPACE: "${KIRO_FABRIC_LAUNCH_WORKSPACE}",
+            KIRO_FABRIC_RUN_DECLARATION: "${KIRO_FABRIC_RUN_DECLARATION}",
             KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd",
             KIRO_FABRIC_RUNTIME_ROOT: options.runtimeRoot,
             KIRO_FABRIC_DATA_ROOT: options.dataRoot,

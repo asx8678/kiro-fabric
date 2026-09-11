@@ -59,6 +59,7 @@ describe("LocalCodingProvider read contracts", () => {
     const samples = [
       'return await local.read({path:"x"});', 'return await local.grep({pattern:"x"});',
       'return await local.readMany({windows:[{path:"x"}]});',
+      'return await local.readEvidence({windows:[{path:"x"}]});',
       'return await local.find({pattern:"*"});', 'return await local.list();',
       'return await local.write({path:"x",content:"x"});', 'return await local.edit({path:"x",oldText:"x",newText:"y"});',
       'return await local.shell({command:"true"});',
@@ -72,7 +73,7 @@ describe("LocalCodingProvider read contracts", () => {
   it("keeps public descriptors JSON trees and validates representative raw and prepared calls", async () => {
     const f = fixture(); f.put("x", "x");
     const args: Record<string, Record<string, unknown>> = {
-      read: { path: "x" }, readMany: { windows: [{ path: "x" }] }, grep: { pattern: "x" }, find: { pattern: "*" }, list: {},
+      read: { path: "x" }, readMany: { windows: [{ path: "x" }] }, readEvidence: { windows: [{ path: "x" }] }, grep: { pattern: "x" }, find: { pattern: "*" }, list: {},
       write: { path: "new", content: "x" }, edit: { path: "x", oldText: "x", newText: "y" }, shell: { command: "true" },
     };
     const descriptors = await f.provider.list();
@@ -87,10 +88,11 @@ describe("LocalCodingProvider read contracts", () => {
   it("registers closed typed descriptors and a shared write resource", async () => {
     const f = fixture();
     const descriptors = await f.provider.list();
-    expect(descriptors.map((item) => item.name)).toEqual(["read", "readMany", "grep", "find", "list", "write", "edit", "shell"]);
+    expect(descriptors.map((item) => item.name)).toEqual(["read", "readMany", "readEvidence", "grep", "find", "list", "write", "edit", "shell"]);
     for (const descriptor of descriptors) {
       expect(descriptor.inputSchema.additionalProperties).toBe(false);
-      expect(descriptor.outputSchema?.additionalProperties).toBe(false);
+      if (descriptor.name === "readEvidence") expect(descriptor.outputSchema?.type).toBe("string");
+      else expect(descriptor.outputSchema?.additionalProperties).toBe(false);
       expect(LOCAL_GUEST_DECLARATIONS).toContain(`${descriptor.name}(`);
       expect(await f.provider.describe(descriptor.name)).toEqual(descriptor);
       if (["write", "edit", "shell"].includes(descriptor.name)) expect(descriptor.effect).toEqual({ kind: "write", resources: [`local-workspace:${f.root}`] });
@@ -192,7 +194,7 @@ describe("LocalCodingProvider read contracts", () => {
     const f = fixture(512);
     for (let index = 0; index < 12; index++) f.put(`${String(index).padStart(2, "0")}.txt`, "match\n".repeat(10));
     const found = await f.call("find", { pattern: "*.txt", limit: 2 }) as LocalFindResult;
-    expect(found).toEqual({ scope: searchScope("*.txt"), paths: ["00.txt", "01.txt"], truncated: true });
+    expect(found).toEqual({ scope: searchScope("*.txt"), paths: ["00.txt", "01.txt"], truncated: true, truncationReasons: ["count"] });
     const matches = await f.call("grep", { pattern: "match", limit: 1000 }) as LocalGrepResult;
     expect(matches.matches.length).toBeGreaterThan(0); expect(matches.truncated).toBe(true);
     expect(JSON.stringify(matches).length).toBeLessThanOrEqual(512);

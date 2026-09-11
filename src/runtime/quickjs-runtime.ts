@@ -1,7 +1,10 @@
+import { fabricFailureMetadata } from "../core/repair-error.js";
+import type { FabricFailureMetadata } from "../protocol.js";
 import releaseSyncVariant from "@jitl/quickjs-singlefile-mjs-release-sync";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
 import { runAbortable, settleWithin } from "../async-settlement.js";
 import { LocalShellExitError } from "../providers/local-shell.js";
+import { ProbeRunExitError } from "../providers/probe-provider.js";
 import { createGuestStackMap, remapGuestErrorText } from "./guest-stack-map.js";
 import {
   assertFabricJsonBudget,
@@ -26,6 +29,7 @@ export interface FabricSandboxResult {
   terminationReason: FabricSandboxTerminationReason;
   effectiveTimeoutMs: number;
   error?: string;
+  failure?: FabricFailureMetadata;
 }
 
 export interface FabricSandboxOptions {
@@ -313,11 +317,21 @@ const GUEST_SETUP = `
   globalThis.local = objectFreeze({
     read: (args) => call("local.read", args), grep: (args) => call("local.grep", args),
     readMany: (args) => call("local.readMany", args),
+    readEvidence: (args) => call("local.readEvidence", args),
     find: (args) => call("local.find", args), list: (args = {}) => call("local.list", args),
     write: (args) => call("local.write", args), edit: (args) => call("local.edit", args),
     shell: (args) => call("local.shell", args),
   });
-  globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args) });
+  globalThis.review = objectFreeze({
+    begin: (args) => call("review.begin", args), update: (args) => call("review.update", args),
+    finding: (args) => call("review.finding", args), status: (args) => call("review.status", args),
+    reconcile: (args) => call("review.reconcile", args), end: (args) => call("review.end", args),
+  });
+  globalThis.probe = objectFreeze({
+    discover: (args) => call("probe.discover", args), create: (args) => call("probe.create", args),
+    write: (args) => call("probe.write", args), run: (args) => call("probe.run", args),
+  });
+  globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args), checkpoint: (args) => call("artifacts.checkpoint", args) });
   globalThis.memory = objectFreeze({
     get: (args) => call("memory.get", args), set: (args) => call("memory.set", args),
     delete: (args) => call("memory.delete", args), search: (args) => call("memory.search", args),
@@ -452,6 +466,7 @@ export class QuickJsRuntime {
       if (!hostController.signal.aborted) hostController.abort(reason);
       rejectGuestGraph(reason);
     };
+    const issuedFailures = new Map<string, FabricFailureMetadata>();
     const timeoutMessage = (): string => `Execution timed out after ${deadline.effectiveTimeoutMs}ms`;
     const expire = (): void => {
       if (closing || timedOut) return;
@@ -496,9 +511,17 @@ export class QuickJsRuntime {
           try {
             // Explicit trusted shell diagnostics only; never serialize arbitrary
             // error properties, approval data, causes, or cancellation reasons.
-            if (error instanceof LocalShellExitError) {
+            if (error instanceof LocalShellExitError || error instanceof ProbeRunExitError) {
               const diagnostic = jsonHandle(context, jsonObject, jsonParse, error.result, options.maxNestedResultChars);
               try { context.setProp(handle, "result", diagnostic); } finally { diagnostic.dispose(); }
+            }
+            const failure = fabricFailureMetadata(error);
+            if (failure) {
+              const text = JSON.stringify(failure);
+              if (issuedFailures.size >= 128) issuedFailures.delete(issuedFailures.keys().next().value!);
+              issuedFailures.set(text, failure);
+              const diagnostic = jsonHandle(context, jsonObject, jsonParse, failure, 32_000);
+              try { context.setProp(handle, "failure", diagnostic); } finally { diagnostic.dispose(); }
             }
             promise.reject(handle);
           } finally { handle.dispose(); }
@@ -637,9 +660,13 @@ export class QuickJsRuntime {
       if (settled.error) {
         const deadlineExceeded = timedOut || interrupted || deadline.expired;
         const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatGuestFailure(context.dump(settled.error)), stackMap, guestLineCount);
+        const failureHandle = context.getProp(settled.error, "failure");
+        let failure: FabricFailureMetadata | undefined;
+        try { failure = issuedFailures.get(JSON.stringify(context.dump(failureHandle))); }
+        finally { failureHandle.dispose(); }
         settled.error.dispose();
         abortHost(new Error(error));
-        return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+        return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded || failure?.code === "timeout" ? "timed_out" : "runtime_error", error, ...(failure ? { failure } : {}), effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
       const serialized = context.getString(settled.value);
       settled.value.dispose();
