@@ -64,6 +64,21 @@ No manual `chmod` or `sudo` is needed. Foreign ownership, writable-by-others
 directories, and symlinks are rejected before building; other directory/file
 permissions are preserved. Doctor never adjusts permissions.
 
+Human-readable installs show an ASCII banner and an overview even with `--yes`: the
+selected Kiro home, detected installed Fabric version, components and planned
+configuration-backup root. After bundle verification and before activation, the
+installer reports the exact target version, private Node/ripgrep versions and
+whether this is a fresh install, upgrade, downgrade, same-version replacement or
+already-installed generation. Legacy installations without version metadata are
+explicitly reported as version unknown. Kiro CLI itself is not installed or updated.
+
+As soon as a backup succeeds, its exact path under
+`<Kiro home>/kiro-fabric/backups/` is printed, along with exclusions; this is a
+configuration backup, not a complete `.kiro` clone. The saved path is also retained
+in the final result or any later error. An absent home needs no backup. `--json`
+remains a single result without a banner; `--dry-run` only reports the installed
+identity and planned backup root, without creating a backup or verifying a target.
+
 `--migrate-pi-fabric` also handles an older Pi Fabric profile using
 `.kiro-fabric/install.json`. The record must identify a user installation and its
 profile checksum must match. A complete configuration backup is required before

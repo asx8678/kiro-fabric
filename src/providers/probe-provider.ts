@@ -88,6 +88,7 @@ export class ProbeProvider implements FabricProvider {
     for (const descriptor of this.#descriptors) descriptor.effect = { kind: descriptor.name === "discover" ? "read" : "write", resources: [...this.effectResources(descriptor.name)] };
   }
 
+  discoveryRevision(): string { return "1"; }
   async list(): Promise<FabricActionDescriptor[]> { return structuredClone(this.#descriptors); }
   async describe(name: string): Promise<FabricActionDescriptor | undefined> { return structuredClone(this.#descriptors.find(item => item.name === name)); }
   effectResources(name: string): readonly string[] { return name === "run" ? ["*"] : name === "discover" ? [] : [`probe-root:${this.#storage.probesRoot}`]; }

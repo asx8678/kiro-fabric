@@ -127,9 +127,9 @@ describe("configured Fabric MCP federation", () => {
       expect(listed[0]).toMatchObject({
         server: "configured",
         name: "echo",
-        ref: "configured.echo",
+        ref: "mcp.remote/configured/echo",
         description: "Echo one value",
-        stale: false,
+        freshness: "observed",
         annotations: { readOnlyHint: true, destructiveHint: false },
         transport: { kind: "http", configDigest: null },
       });
@@ -291,14 +291,14 @@ describe("configured Fabric MCP federation", () => {
             ref: descriptor.ref,
             digestLength: descriptor.descriptorDigest.length,
             transportKind: descriptor.transport.kind,
-            stale: descriptor.stale,
+            freshness: descriptor.freshness,
           };
         `,
         approver: { async approve(action) { approved.push(action.ref); } },
       });
       expect(result).toMatchObject({
         status: "succeeded",
-        value: { ref: "configured.echo", digestLength: 64, transportKind: "http", stale: false },
+        value: { ref: "mcp.remote/configured/echo", digestLength: 64, transportKind: "http", freshness: "observed" },
       });
       expect(approved).toEqual(["mcp.$describe"]);
       expect(result.audits).toMatchObject([{ ref: "mcp.$describe", success: true }]);

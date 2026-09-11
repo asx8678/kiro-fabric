@@ -44,7 +44,7 @@ export const repairSchema = (schema: unknown): Record<string, unknown> => {
 export const argumentRepairError = (ref: string, descriptorDigest: string, schema: unknown, invalid: string): FabricRepairError =>
   new FabricRepairError(`Invalid arguments for ${ref}: ${invalid}`, {
     code: "invalid_arguments", phase: "validation", dispatchState: "not_dispatched", effectOutcome: "none",
-    ref: ref.slice(0, 512), descriptorDigest,
+    ref, descriptorDigest,
     invalidPath: (invalid.startsWith("/") ? invalid.split(": ")[0]! : "/").slice(0, 512),
     relevantSchema: repairSchema(schema),
   });

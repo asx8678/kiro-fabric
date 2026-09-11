@@ -50,8 +50,12 @@ const preflight = (root: unknown, maxChars: number): void => {
 
     if (Array.isArray(value)) {
       if (value.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
+      const descriptors = Object.getOwnPropertyDescriptors(value);
+      if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some(key => key !== "length" && !/^(0|[1-9][0-9]*)$/u.test(key))) throw budgetError("non-index array property");
       for (let index = value.length - 1; index >= 0; index--) {
-        stack.push({ value: value[index], depth: depth + 1, nested: true });
+        const descriptor = descriptors[String(index)];
+        if (!descriptor || !("value" in descriptor)) throw budgetError("accessor or sparse array");
+        stack.push({ value: descriptor.value, depth: depth + 1, nested: true });
       }
       continue;
     }

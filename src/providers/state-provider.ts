@@ -97,10 +97,11 @@ export class StateProvider implements FabricProvider {
     this.#maxTotalChars = options.maxTotalChars ?? 8_000_000;
   }
 
-  async list(): Promise<FabricActionDescriptor[]> { return [...descriptors]; }
+  discoveryRevision(): string { return "1"; }
+  async list(): Promise<FabricActionDescriptor[]> { return structuredClone([...descriptors]); }
 
   async describe(actionName: string): Promise<FabricActionDescriptor | undefined> {
-    return descriptors.find((entry) => entry.name === actionName);
+    return structuredClone(descriptors.find((entry) => entry.name === actionName));
   }
 
   effectResources(_actionName: string, args: Record<string, unknown>): readonly string[] {

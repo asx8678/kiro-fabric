@@ -57,7 +57,8 @@ export class KiroPowerArtifactsProvider implements FabricProvider {
   constructor(readonly store: KiroArtifactStore, options: Omit<KiroArtifactStoreOptions, "root"> = {}) {
     this.#checkpoints = createKiroArtifactStore({ ...(options.now ? { now: options.now } : {}), maxArtifacts: Math.min(options.maxArtifacts ?? 16, 16), maxArtifactChars: Math.min(options.maxArtifactChars ?? 100_000, 100_000), maxTotalChars: Math.min(options.maxTotalChars ?? 400_000, 400_000), ttlMs: Math.min(options.ttlMs ?? 900_000, 900_000) });
   }
-  async list(): Promise<FabricActionDescriptor[]> { return [descriptor, checkpointDescriptor]; }
+  discoveryRevision(): string { return "1"; }
+  async list(): Promise<FabricActionDescriptor[]> { return structuredClone([descriptor, checkpointDescriptor]); }
   async describe(actionName: string): Promise<FabricActionDescriptor | undefined> { return (await this.list()).find(action => action.name === actionName); }
   async invoke(actionName: string, args: Record<string, unknown>, context: KiroArtifactInvocationContext): Promise<KiroArtifactReadResult | KiroArtifactCheckpointResult> {
     throwIfAbortedOrExpired(context.signal, context.deadline);

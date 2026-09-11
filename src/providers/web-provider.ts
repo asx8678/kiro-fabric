@@ -221,6 +221,7 @@ export class WebProvider implements FabricProvider {
     if (!Number.isSafeInteger(this.#searchTimeoutMs) || this.#searchTimeoutMs < 1 || this.#searchTimeoutMs > 900_000) throw new Error("web searchTimeoutMs must be 1..900000");
     if (!Number.isSafeInteger(this.#openTimeoutMs) || this.#openTimeoutMs < 1 || this.#openTimeoutMs > 900_000) throw new Error("web openTimeoutMs must be 1..900000");
   }
+  discoveryRevision(): string { return "1"; }
   async list(): Promise<FabricActionDescriptor[]> { return jsonTree([...descriptors]); }
   async describe(actionName: string): Promise<FabricActionDescriptor | undefined> {
     const descriptor = descriptors.find((entry) => entry.name === actionName);

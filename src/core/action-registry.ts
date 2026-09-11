@@ -1,4 +1,7 @@
-import { argumentRepairError } from "./repair-error.js";
+import { catalogWeight } from "./catalog-resources.js";
+import { parseRemoteRef } from "./remote-identity.js";
+import { catalogResultMethod, type CatalogMethod } from "./catalog-contract.js";
+import { argumentRepairError, FabricRepairError } from "./repair-error.js";
 import { randomUUID } from "node:crypto";
 import { runAbortable, throwIfAbortedOrExpired } from "../async-settlement.js";
 import type {
@@ -29,6 +32,7 @@ export interface FabricCallAudit {
 }
 
 export interface FabricRegistryInvocationContext extends FabricInvocationContext {
+  formatCatalogResult?(value: unknown, method: CatalogMethod): unknown;
   audits: FabricCallAudit[];
   maxResultChars: number;
   maxAuditEntries?: number;
@@ -44,6 +48,7 @@ const compareCodeUnits = (left: string, right: string): number => left < right ?
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const resolved = (provider: FabricProvider, descriptor: FabricActionDescriptor): ResolvedFabricAction => {
+  fabricJsonText(descriptor, MAX_FABRIC_JSON_CHARS);
   const copied = structuredClone(descriptor);
   const ref = `${provider.name}.${descriptor.name}`;
   return {
@@ -83,7 +88,7 @@ const deepFreeze = <T>(value: T): T => {
   for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
   return Object.freeze(value);
 };
-const AUDIT_RESERVATION_BYTES = 2_048;
+const AUDIT_TERMINAL_BYTES = 8_192;
 const MAX_SEARCHABLE_DESCRIPTOR_CHARS = 32_000;
 
 const normalizedTerms = (value: string): string[] => [...new Set(
@@ -95,7 +100,103 @@ const boundedSearchField = (value: unknown): string => {
   return text.slice(0, MAX_SEARCHABLE_DESCRIPTOR_CHARS).normalize("NFKC").toLowerCase();
 };
 
+const indexedAction = (provider: FabricProvider, action: ResolvedFabricAction) => {
+        const providerDescription = provider.description;
+        const fields = {
+          ref: boundedSearchField(action.ref),
+          name: boundedSearchField(action.name),
+          description: boundedSearchField(action.description),
+          provider: boundedSearchField(action.provider),
+          providerDescription: boundedSearchField(providerDescription),
+          namespace: boundedSearchField(action.namespace ?? ""),
+          annotations: boundedSearchField(action.annotations ?? {}),
+          schema: boundedSearchField({ input: action.inputSchema, output: action.outputSchema ?? null }),
+        };
+        const tokens = Object.fromEntries(
+          Object.entries(fields).map(([name, field]) => [name, new Set(normalizedTerms(field))]),
+        ) as Record<keyof typeof fields, Set<string>>;
+  return { action: deepFreeze(action), fields, tokens };
+};
+type DiscoveryIndex = { entries: ReturnType<typeof indexedAction>[]; refs: Map<string, ResolvedFabricAction>; bytes: number; nodes: number };
+
 export class ActionRegistry {
+  readonly #discovery = new Map<FabricProvider, { revision: string; pending: boolean; promise: Promise<DiscoveryIndex>; index?: DiscoveryIndex; touched?: number }>();
+
+  async #buildIndex(provider: FabricProvider): Promise<DiscoveryIndex> {
+    const raw = await provider.list();
+    // Validate original container/accessors/shared graphs before map or cloning.
+    catalogWeight(raw);
+    const actions = raw.map(descriptor => resolved(provider, descriptor));
+    for (const observed of provider.observedActions?.() ?? []) {
+      if (provider.name !== "mcp" || !parseRemoteRef(observed.ref)) throw new Error("Invalid observed remote reference");
+      const descriptor = observed.descriptor();
+      fabricJsonText(descriptor, MAX_FABRIC_JSON_CHARS);
+      if (descriptor.ref !== observed.ref || descriptor.provider !== provider.name) throw new Error("Invalid observed remote descriptor");
+      actions.push(structuredClone(descriptor));
+    }
+    const refs = new Map<string, ResolvedFabricAction>();
+    const entries = actions.map(action => {
+      if (refs.has(action.ref)) throw new Error(`Ambiguous Fabric action: ${action.ref}`);
+      refs.set(action.ref, action);
+      return indexedAction(provider, action);
+    });
+    let bytes = 0, nodes = 0;
+    for (const entry of entries) {
+      const weight = catalogWeight(entry.action);
+      const fields = Object.values(entry.fields);
+      // Tokens allocate independent strings plus Set slots; charge every token
+      // and field/container even when an engine happens to share backing strings.
+      const tokenBytes = Object.values(entry.tokens).reduce((sum, tokens) => sum + 256 + [...tokens].reduce((n, token) => n + 192 + token.length * 4, 0), 0);
+      bytes += weight.bytes + fields.reduce((n, field) => n + 128 + field.length * 4, 0) + tokenBytes + 2048;
+      nodes += weight.nodes + fields.length + Object.values(entry.tokens).reduce((n, tokens) => n + tokens.size, 0) + 4;
+    }
+    if (bytes > 16 * 1024 * 1024 || nodes > 300_000) throw new Error("Fabric discovery index catalog_quota_exceeded");
+    return { entries, refs, bytes, nodes };
+  }
+
+  #index(provider: FabricProvider): Promise<DiscoveryIndex> {
+    const revision = provider.discoveryRevision?.();
+    if (revision === undefined) {
+      this.#discovery.delete(provider);
+      return this.#buildIndex(provider);
+    }
+    const cached = this.#discovery.get(provider);
+    if (cached && (cached.pending || cached.revision === revision)) { cached.touched = performance.now(); return cached.promise; }
+    const record: { revision: string; pending: boolean; promise: Promise<DiscoveryIndex>; index?: DiscoveryIndex; touched?: number } = { revision, pending: true, promise: undefined as unknown as Promise<DiscoveryIndex> };
+    record.promise = (async () => {
+      let before: string | undefined = revision;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const index = await this.#buildIndex(provider);
+        const after = provider.discoveryRevision?.();
+        if (before === after) {
+          const others = () => [...this.#discovery.entries()].filter(([key, value]) => key !== provider && value.index);
+          while (others().reduce((n, [, value]) => n + value.index!.bytes, index.bytes) > 16 * 1024 * 1024 ||
+            others().reduce((n, [, value]) => n + value.index!.nodes, index.nodes) > 300_000 || others().length >= 32) {
+            const oldest = others().sort((a, b) => (a[1].touched ?? 0) - (b[1].touched ?? 0))[0];
+            if (!oldest) throw new Error("Fabric discovery index catalog_quota_exceeded");
+            this.#discovery.delete(oldest[0]);
+          }
+          record.index = index; record.touched = performance.now();
+          record.pending = false;
+          record.revision = after!;
+          if (after === undefined && this.#discovery.get(provider) === record) this.#discovery.delete(provider);
+          return index;
+        }
+        before = after;
+      }
+      throw new Error(`Fabric discovery revision churn: ${provider.name}`);
+    })().catch(error => {
+      if (this.#discovery.get(provider) === record) this.#discovery.delete(provider);
+      throw error;
+    });
+    this.#discovery.set(provider, record);
+    return record.promise;
+  }
+
+  #indexes(): Promise<DiscoveryIndex[]> {
+    return Promise.all([...this.#providers.values()].map(provider => this.#index(provider)));
+  }
+
   readonly #providers = new Map<string, FabricProvider>();
   readonly #unavailable = new Map<string, string>();
   readonly #activeWrites = new Map<string, { ref: string; resources: readonly string[] }>();
@@ -103,6 +204,7 @@ export class ActionRegistry {
   register(provider: FabricProvider): void {
     if (!providerName.test(provider.name)) throw new Error(`Invalid Fabric provider name: ${provider.name}`);
     if (this.#providers.has(provider.name)) throw new Error(`Fabric provider already registered: ${provider.name}`);
+    if (this.#providers.size >= 128) throw new Error("Fabric provider retention limit exceeded");
     this.#providers.set(provider.name, provider);
     this.#unavailable.delete(provider.name);
   }
@@ -122,33 +224,23 @@ export class ActionRegistry {
   }
 
   async list(): Promise<ResolvedFabricAction[]> {
-    const lists = await Promise.all([...this.#providers.values()].map(async (provider) =>
-      (await provider.list()).map((descriptor) => resolved(provider, descriptor))));
-    return lists.flat().sort((left, right) => compareCodeUnits(left.ref, right.ref));
+    return (await this.#indexes()).flatMap(index => index.entries.map(entry => structuredClone(entry.action)))
+      .sort((left, right) => compareCodeUnits(left.ref, right.ref));
   }
 
   async search(query: string, limit = 30): Promise<ResolvedFabricAction[]> {
+    return (await this.searchAll(query)).slice(0, Math.max(1, Math.min(100, Math.floor(limit))));
+  }
+
+  async searchAll(query: string): Promise<ResolvedFabricAction[]> {
     if (query.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Fabric search query exceeds 2000 characters");
     const normalized = query.normalize("NFKC").trim().toLowerCase();
     if (!normalized) return [];
     if (normalized.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Normalized Fabric search query exceeds 2000 characters");
     const terms = normalizedTerms(normalized);
-    return (await this.list())
-      .map((action) => {
-        const providerDescription = this.#providers.get(action.provider)?.description ?? "";
-        const fields = {
-          ref: boundedSearchField(action.ref),
-          name: boundedSearchField(action.name),
-          description: boundedSearchField(action.description),
-          provider: boundedSearchField(action.provider),
-          providerDescription: boundedSearchField(providerDescription),
-          namespace: boundedSearchField(action.namespace ?? ""),
-          annotations: boundedSearchField(action.annotations ?? {}),
-          schema: boundedSearchField({ input: action.inputSchema, output: action.outputSchema ?? null }),
-        };
-        const tokens = Object.fromEntries(
-          Object.entries(fields).map(([name, field]) => [name, new Set(normalizedTerms(field))]),
-        ) as Record<keyof typeof fields, Set<string>>;
+    return (await this.#indexes()).flatMap(index => index.entries)
+      .map((entry) => {
+        const { action, fields, tokens } = entry;
         let score = 0;
         if (fields.ref === normalized) score += 1_000;
         if (fields.name === normalized) score += 800;
@@ -174,11 +266,18 @@ export class ActionRegistry {
       })
       .filter(({ score }) => score > 0)
       .sort((left, right) => right.score - left.score || compareCodeUnits(left.action.ref, right.action.ref))
-      .slice(0, Math.max(1, Math.min(100, Math.floor(limit))))
-      .map(({ action }) => action);
+      .map(({ action }) => structuredClone(action));
   }
 
   async describe(ref: string): Promise<ResolvedFabricAction> {
+    if (parseRemoteRef(ref)) {
+      const observed = this.#providers.get("mcp")?.observedActions?.().filter(entry => entry.ref === ref) ?? [];
+      if (observed.length !== 1) throw new Error(`Unknown or ambiguous Fabric action: ${ref}`);
+      const descriptor = observed[0]!.descriptor();
+      fabricJsonText(descriptor, MAX_FABRIC_JSON_CHARS);
+      if (descriptor.ref !== ref || descriptor.provider !== "mcp") throw new Error("Invalid observed remote descriptor");
+      return structuredClone(descriptor);
+    }
     if (ref.length > MAX_ACTION_REFERENCE_CHARS) throw new Error("Fabric action reference exceeds 512 characters");
     const separator = ref.indexOf(".");
     if (separator <= 0) throw new Error(`Fabric action reference must be provider.action: ${ref}`);
@@ -189,14 +288,26 @@ export class ActionRegistry {
     return resolved(provider, descriptor);
   }
 
-  async invoke(ref: string, args: Record<string, unknown>, context: FabricRegistryInvocationContext): Promise<unknown> {
+  async invoke(ref: string, args: Record<string, unknown>, context: FabricRegistryInvocationContext, options?: { expectedDescriptorDigest?: string; projection?: "full" | "text" | "structured" }): Promise<unknown> {
     throwIfAbortedOrExpired(context.signal, context.deadline);
     if (!isRecord(args)) throw new Error(`Arguments for ${ref} must be an object`);
-    const action = await this.describe(ref);
+    const remote = parseRemoteRef(ref);
+    if (!remote && options !== undefined) throw new Error("Invocation options require a canonical remote reference");
+    if (remote) args = { server: remote.server, tool: remote.tool, args,
+      ...(options?.expectedDescriptorDigest === undefined ? {} : { expectedDescriptorDigest: options.expectedDescriptorDigest }),
+      ...(options?.projection === undefined ? {} : { projection: options.projection }),
+    };
+    const action = await this.describe(remote ? "mcp.$call" : ref);
     const provider = this.#providers.get(action.provider)!;
-    const prepared = provider.prepareArguments
-      ? await runAbortable(context.signal, () => provider.prepareArguments!(action.name, structuredClone(args), context))
-      : structuredClone(args);
+    let prepared: Record<string, unknown>;
+    try {
+      prepared = provider.prepareArguments
+        ? await runAbortable(context.signal, () => provider.prepareArguments!(action.name, structuredClone(args), context))
+        : structuredClone(args);
+    } catch (error) {
+      if (provider.name === "mcp") provider.invalidateDiscovery?.(typeof args.server === "string" ? args.server : undefined);
+      throw error;
+    }
     throwIfAbortedOrExpired(context.signal, context.deadline);
     if (!isRecord(prepared)) throw new Error(`Argument preparation for ${ref} must return an object`);
     const invalid = schemaValidationMessage(action.inputSchema, prepared);
@@ -212,8 +323,9 @@ export class ActionRegistry {
     const nestedToolCallId = `fabric_${randomUUID()}`;
     if (context.audits.length >= (context.maxAuditEntries ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit entry quota exceeded");
     const audit: FabricCallAudit = { ref, nestedToolCallId, startedAt: Date.now() };
-    const auditBudget = context.auditBudget ?? { bytes: 0 };
-    if (auditBudget.bytes + AUDIT_RESERVATION_BYTES > (context.maxAuditBytes ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit byte quota exceeded");
+    const auditBudget = context.auditBudget ??= { bytes: Buffer.byteLength(JSON.stringify(context.audits), "utf8") };
+    const auditReservationBytes = Buffer.byteLength(JSON.stringify(audit), "utf8") + 2 + AUDIT_TERMINAL_BYTES;
+    if (auditBudget.bytes + auditReservationBytes > (context.maxAuditBytes ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit byte quota exceeded");
     if (writeLike) {
       for (const active of this.#activeWrites.values()) {
         if (overlaps(resources, active.resources)) throw new Error(`Overlapping write rejected: ${ref} conflicts with ${active.ref}`);
@@ -223,7 +335,7 @@ export class ActionRegistry {
       this.#activeWrites.set(nestedToolCallId, { ref, resources });
     }
     context.audits.push(audit);
-    auditBudget.bytes += AUDIT_RESERVATION_BYTES;
+    auditBudget.bytes += auditReservationBytes;
     let releaseReservation: (() => void | Promise<void>) | undefined;
     let invocationStarted = false;
     let published: FabricCommitAcknowledgement | undefined;
@@ -247,7 +359,10 @@ export class ActionRegistry {
         published = { version: 1, operation: action.name };
       }
       throwIfAbortedOrExpired(context.signal, context.deadline);
-      const bounded = boundedResult(value, context.maxResultChars);
+      const method = catalogResultMethod(value);
+      const formatted = method && context.formatCatalogResult ? context.formatCatalogResult(value, method) : value;
+      const bounded = boundedResult(formatted, context.maxResultChars);
+      if (method && bounded.truncated) throw new Error("Catalog result exceeds budget; use catalog pagination");
       throwIfAbortedOrExpired(context.signal, context.deadline);
       const release = releaseReservation;
       releaseReservation = undefined;
@@ -258,6 +373,7 @@ export class ActionRegistry {
       audit.resultTruncated = bounded.truncated;
       return bounded.value;
     } catch (error) {
+      if (provider.name === "mcp" && !(error instanceof FabricRepairError && error.failure.code === "catalog_requires_paging")) provider.invalidateDiscovery?.(typeof canonicalArgs.server === "string" ? canonicalArgs.server : undefined);
       audit.endedAt = Date.now();
       audit.success = false;
       audit.error = error instanceof Error ? error.message.slice(0, 1_000) : String(error).slice(0, 1_000);
@@ -273,13 +389,19 @@ export class ActionRegistry {
         if (published) audit.commitAcknowledgement = published;
         if (invocationStarted && provider.name === "local" && action.name === "shell") audit.effectOutcome = "uncertain";
         throw error;
-      } finally { this.#activeWrites.delete(nestedToolCallId); }
+      } finally {
+        this.#activeWrites.delete(nestedToolCallId);
+        // Reserve worst-case terminal capacity before prompting, then retain only
+        // actual escaped UTF-8 bytes after every terminal/cleanup path settles.
+        auditBudget.bytes += Buffer.byteLength(JSON.stringify(audit), "utf8") + 2 - auditReservationBytes;
+      }
     }
   }
 
   async close(): Promise<void> {
     await Promise.allSettled([...this.#providers.values()].map((provider) => provider.close?.()));
     this.#providers.clear();
+    this.#discovery.clear();
     this.#activeWrites.clear();
   }
 }

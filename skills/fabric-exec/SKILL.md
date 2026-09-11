@@ -52,7 +52,7 @@ const request = JSON.parse(payloads.request);
 return { id: request.id, normalized: String(request.value).trim() };
 ```
 
-Provider composition uses exact references. `fabric.info()` returns an `actions` array plus `catalog` completeness metadata for the bound workspace. When `catalog.complete` or `catalog.digestComplete` is false, recover targeted live descriptors with `tools.search` and `tools.describe`; describe downstream MCP tools again before calling because their freshness is transport-specific:
+Provider composition uses exact references. `fabric.info()` returns an `actions` array plus `catalog` completeness metadata for the bound workspace. When `catalog.complete` or `catalog.digestComplete` is false, recover targeted locally observed descriptors with `tools.search` and `tools.describe`. Explicit approved `mcp.tools/describe` populate canonical `mcp.remote/<encoded-server>/<encoded-tool>` refs; generic remote calls always re-enumerate before dispatch, and optional expectedDescriptorDigest pins observed semantics:
 
 ```ts
 return await memory.get({ key: "release" });
@@ -69,7 +69,7 @@ const keys = ["release", "owner", "status"];
 return await parallel(keys, async (key) => memory.get({ key }));
 ```
 
-Inspect a configured downstream MCP server before calling it. Discovery itself is approval-gated and returns a live descriptor bound to the current transport/configuration digest:
+Inspect a configured downstream MCP server before calling it. Discovery itself is approval-gated and returns an observed descriptor bound to the current transport/configuration digest (not cached execution authority). For large catalogs use tools.listPage/searchPage/describePage or mcp.toolsPage/describePage. Catalog failures provide an actual host-issued method/cursor; continue across executions rather than replaying discovery. Follow descriptorCursor through the corresponding describePage to reconstruct oversized JSON descriptors. Keep per-execution call quotas; cursors expire or evict and never authorize effects:
 
 ```ts
 const descriptor = await mcp.describe({ server: "reports", tool: "summarize" });

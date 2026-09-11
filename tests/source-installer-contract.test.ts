@@ -23,7 +23,7 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
 describe("source frontend activation boundary", () => {
-  it.each([{ reused: false, releaseFails: false }, { reused: true, releaseFails: false }, { reused: true, releaseFails: true }])("leases through activation, skips unused build work and emits one truthful result: %j", async ({ reused, releaseFails }) => {
+  it.each([{ reused: false, releaseFails: false, json: true }, { reused: true, releaseFails: false, json: true }, { reused: true, releaseFails: true, json: true }, { reused: false, releaseFails: false, json: false }, { reused: true, releaseFails: false, json: false }])("leases through activation, skips unused build work and emits one truthful result: %j", async ({ reused, releaseFails, json }) => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "source-installer-contract-"))); roots.push(root); fs.chmodSync(root, 0o700);
     const home = path.join(root, "home"), bin = path.join(root, "bin"), kiroHome = path.join(home, ".kiro"), record = path.join(root, "developer-commands");
     for (const directory of [home, bin, kiroHome]) fs.mkdirSync(directory, { mode: 0o700 });
@@ -40,13 +40,21 @@ describe("source frontend activation boundary", () => {
     let stdout = "", stderr = "";
     vi.spyOn(process.stdout, "write").mockImplementation(chunk => { stdout += String(chunk); return true; });
     vi.spyOn(process.stderr, "write").mockImplementation(chunk => { stderr += String(chunk); return true; });
-    const code = await runSourceInstaller(["--source", "--yes", "--non-interactive", "--json", "--no-shell-integration"]);
+    const code = await runSourceInstaller(["--source", "--yes", "--non-interactive", ...(json ? ["--json"] : []), "--no-shell-integration"]);
     const sourceRoot = fs.realpathSync(fileURLToPath(new URL("..", import.meta.url)));
     expect(findReusableSourceBundle).toHaveBeenCalledWith({ root: sourceRoot });
     expect(withInstallerArtifactLease).toHaveBeenCalledWith(sourceRoot, expect.any(Function));
     if (reused) { expect(buildCompleteBundle).not.toHaveBeenCalled(); expect(fs.existsSync(record)).toBe(false); }
     else { expect(buildCompleteBundle).toHaveBeenCalledWith({ root: sourceRoot, archive: false }); expect(fs.readFileSync(record, "utf8")).toBe("install --frozen-lockfile\nrun build\n"); }
-    expect(code).toBe(7); expect(stderr).toBe(""); expect(stdout.trim().split("\n")).toHaveLength(1);
+    expect(code).toBe(7);
+    if (!json) {
+      expect(stdout).toBe(""); expect(stderr.match(/KIRO FABRIC/gu)).toHaveLength(1);
+      expect(stderr.indexOf("KIRO FABRIC")).toBeLessThan(stderr.indexOf(reused ? "Reusing verified source bundle" : "Source build:"));
+      expect(stderr).toContain("Target version: 1.0.0 (verified bundle)");
+      expect(stderr).toContain("Prior configuration backup:");
+      return;
+    }
+    expect(stderr).toBe(""); expect(stdout.trim().split("\n")).toHaveLength(1);
     const result = JSON.parse(stdout); expect(result).toMatchObject({ command: "install", committed: false, recoveryRequired: true, outcome: "recovery-required", configurationBackup: { sourceRoot } });
     expect(fs.readFileSync(path.join(result.configurationBackup.path, "settings.json"), "utf8")).toBe("source fixture configuration");
     expect(fs.readFileSync(path.join(kiroHome, "settings.json"), "utf8")).toBe("source fixture configuration");

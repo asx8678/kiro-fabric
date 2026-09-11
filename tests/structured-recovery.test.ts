@@ -112,7 +112,7 @@ describe("structured recovery", () => {
     const runtime = { listServers: () => ["configured"], getDefinition: () => definition, getDefinitions: () => [definition], connect: async () => ({ client: { listTools: async () => ({ tools: [{ name: "echo", inputSchema: action.inputSchema }] }) } }), callTool, close: async () => {} } as unknown as Runtime;
     const provider = new KiroMcpProvider(process.cwd(), { enabled: true, disableOAuth: false, callTimeoutMs: 1000 }, async () => runtime);
     try {
-      await expect(provider.invoke("$call", { server: "configured", tool: "echo", args: { value: "secret" }, expectedDescriptorDigest: "0".repeat(64) }, { cwd: process.cwd(), approve })).rejects.toMatchObject({ failure: { code: "stale_descriptor", dispatchState: "not_dispatched", replacementDescriptor: { ref: "configured.echo", descriptorDigest: expect.stringMatching(/^[a-f0-9]{64}$/), inputSchema: { type: "object" } } } });
+      await expect(provider.invoke("$call", { server: "configured", tool: "echo", args: { value: "secret" }, expectedDescriptorDigest: "0".repeat(64) }, { cwd: process.cwd(), approve })).rejects.toMatchObject({ failure: { code: "stale_descriptor", dispatchState: "not_dispatched", replacementDescriptor: { ref: "mcp.remote/configured/echo", descriptorDigest: expect.stringMatching(/^[a-f0-9]{64}$/), inputSchema: { type: "object" } } } });
       expect(approve).toHaveBeenCalledTimes(1); expect(callTool).not.toHaveBeenCalled();
     } finally { await provider.close(); }
   });

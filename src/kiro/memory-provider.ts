@@ -36,8 +36,9 @@ export class KiroMemoryProvider implements FabricProvider {
       maxValueChars: this.#maxValueChars,
     });
   }
-  async list(): Promise<FabricActionDescriptor[]> { return descriptors; }
-  async describe(actionName: string): Promise<FabricActionDescriptor | undefined> { return descriptors.find((entry) => entry.name === actionName); }
+  discoveryRevision(): string { return "1"; }
+  async list(): Promise<FabricActionDescriptor[]> { return structuredClone(descriptors); }
+  async describe(actionName: string): Promise<FabricActionDescriptor | undefined> { return structuredClone(descriptors.find((entry) => entry.name === actionName)); }
   prepareArguments(actionName: string, args: Record<string, unknown>): Record<string, unknown> {
     if (["get", "set", "delete"].includes(actionName) && typeof args.key === "string") {
       args.key = normalizeKiroMemoryToken(args.key, "key");

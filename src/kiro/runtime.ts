@@ -36,6 +36,8 @@ export interface KiroRuntimeOptions {
   memoryNamespace?: string;
   stateRoot?: string;
   config?: FabricConfig;
+  /** Host-issued client/workspace authorization; never accepted from guest arguments. */
+  catalogBinding?: Omit<import("../core/catalog-contract.js").CatalogBinding, "runtimeNonce">;
 }
 
 export interface KiroRuntime {
@@ -97,6 +99,7 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   if (options.stateRoot && config.state.enabled) registry.register(new StateProvider(options.stateRoot, config.state));
   else registry.markUnavailable("state", config.state.enabled ? "workspace binding is required" : "disabled by configuration");
   const service = new FabricExecutionService(registry, config, options.cwd);
+  if (options.catalogBinding) service.bindCatalog(options.catalogBinding);
   return {
     service,
     registry,

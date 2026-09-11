@@ -22,6 +22,37 @@ import { InstallerError, display, shellQuote, MANAGER_COMMANDS, parseManagerArgu
 import { installedIdentity, installationGuidance, inspectSourceComparison, previewManagerOperation } from "./installer-diagnostics.mjs";
 export { InstallerError, shellQuote, parseManagerArguments } from "./installer-cli-contract.mjs";
 
+export const INSTALLER_BANNER = [
+  "+--------------------------------------+",
+  "|             KIRO FABRIC              |",
+  "|      Native agent + orchestration    |",
+  "+--------------------------------------+",
+].join("\n") + "\n";
+
+function installedVersionLabel(identity) {
+  if (identity?.version) return `${identity.version} (${identity.status})`;
+  if (identity?.status === "absent") return "Not installed (fresh installation)";
+  if (identity?.status === "legacy") return "Legacy installation detected; version unknown";
+  return `Version unknown (${identity?.status ?? "unknown"})`;
+}
+
+function versionChange(previous, bundle) {
+  let action;
+  if (previous.status === "absent") action = "Install new version";
+  else if (previous.status === "retired") action = "Reinstall retired installation";
+  else if (previous.generation === bundle.digest) action = "Already installed; no new generation needed";
+  else if (!previous.version) action = "Replace existing installation (previous version unknown)";
+  else {
+    const comparison = compareVersions(bundle.version, previous.version);
+    action = comparison > 0 ? "Upgrade to newer version" : comparison < 0 ? "Install older version (downgrade)" : "Replace same-version generation";
+  }
+  return { previous, target: { version: bundle.version, generation: bundle.digest, node: bundle.manifest.tools.node.version, ripgrep: bundle.manifest.tools.rg.version }, action };
+}
+
+function formatVersionChange(change) {
+  return `Previously installed: ${display(installedVersionLabel(change.previous))}\nTarget version: ${display(change.target.version)} (verified bundle)\nChange: ${display(change.action)}\nPrivate tools: Node ${display(change.target.node)}, ripgrep ${display(change.target.ripgrep)}\n`;
+}
+
 export function managerContext(script = fileURLToPath(import.meta.url)) {
   const self = fs.realpathSync(script), generation = path.dirname(path.dirname(self)), base = path.dirname(path.dirname(generation));
   if (path.basename(path.dirname(self)) === "manager" && /^[a-f0-9]{64}$/u.test(path.basename(generation)) && path.basename(path.dirname(generation)) === "runtime" && path.basename(base) === "kiro-fabric") {
@@ -178,7 +209,9 @@ export async function runManager(argv, internal = {}) {
   catch (error) { const result = managerErrorResult(error); emit(result, { json: argv.includes("--json") }); return result.exitCode; }
   if (options.help) { emit(managerHelp(options.command), options); return 0; }
   const context = internal.context ?? managerContext();
-  let home, homePreparation, configurationBackup, operationResult;
+  let home, homePreparation, configurationBackup, operationResult, installationChange;
+  let bannerShown = internal.bannerShown === true;
+  const banner = () => { if (!options.json && !bannerShown) { process.stderr.write(INSTALLER_BANNER); bannerShown = true; } };
   try {
     assertUnprivilegedInstaller();
     const platform = detectInstallerPlatform();
@@ -187,6 +220,7 @@ export async function runManager(argv, internal = {}) {
     if (!options.command) {
       if (!process.stdin.isTTY || !process.stdout.isTTY || options.json || options.nonInteractive || options.dryRun) throw new InstallerError("Noninteractive use requires an explicit command", 2, "usage");
       const owner = await currentOwner(home);
+      banner();
       process.stderr.write(`Kiro Fabric\nSystem        ${platform.target}\nKiro home     ${display(home)} (${selected.source})\nInstallation  ${owner?.status ?? (owner ? "legacy" : "Not installed")}\n`);
       const choice = await ask(owner?.status !== "retired" && owner ? "[U]pdate, [C]heck, [R]ollback, [X]Uninstall, [E]xit [U]: " : "Install Fabric? [Y/n]: ");
       if (["e", "n", "no"].includes(choice)) throw new InstallerError("Cancelled before installation preparation", 3, "cancelled");
@@ -226,13 +260,20 @@ export async function runManager(argv, internal = {}) {
     }
     if (installation?.status === "recovery-required") throw new InstallerError("Interrupted installation requires offline recover --yes; journal/candidate evidence is preserved", 7, "recovery-required");
     const kiro = spec.kiro === "required" ? checkKiro() : undefined;
-    if (!options.yes) {
+    if (!options.json) {
+      banner();
       process.stderr.write(`Kiro Fabric\nSystem        ${platform.target}\nKiro CLI      ${kiro ? `Found (${kiro.version})` : "Not required for this operation"}\nKiro home     ${display(home)} (${selected.source})\nOperation     ${options.command}\nDurable data is retained. Preparation, backups and requested configuration changes may remain if a later step fails.\n`);
+      if (installation) process.stderr.write(`Installed     ${display(installedVersionLabel(installedIdentity(installation)))}\n`);
+      if (["install", "update"].includes(options.command)) {
+        process.stderr.write("Will install  Fabric backend, private Node/ripgrep, manager, agent profile, skills and steering\n");
+        process.stderr.write(`Target        ${options.version ? `${display(options.version)} (requested; verification pending)` : "Version determined after bundle verification"}\nKiro CLI is already installed; it will not be installed, upgraded or authenticated by this installer.\n`);
+      }
+      if (spec.backup) process.stderr.write(`Backup root   ${display(path.join(home, "kiro-fabric", "backups"))} (configuration only; created if the home exists)\n`);
       if (shellPlan?.status === "planned") process.stderr.write(`Shell workspace handoff will be ${shellPlan.remove ? "removed from" : "configured in"} ${display(shellPlan.file)}; prior content is backed up.\n`);
       if (preparation?.permissions.length) process.stderr.write("Kiro home and agents directories will be restricted to the current user (0700).\n");
       if (preparation?.legacy) process.stderr.write("The verified old Pi Fabric profile will be backed up and replaced.\n");
-      if (!["", "y", "yes"].includes(await ask("Continue? [Y/n]: "))) throw new InstallerError("Cancelled before installation preparation", 3, "cancelled");
     }
+    if (!options.yes && !["", "y", "yes"].includes(await ask("Continue? [Y/n]: "))) throw new InstallerError("Cancelled before installation preparation", 3, "cancelled");
     const shownPhases = new Set();
     const phase = name => {
       const label = ({ "candidate-journal-synced": "Preparing installation", "before-candidate-validation": "Validating backend", "candidate-validated": "Backend smoke passed", "generation-published": "Configuring agent", "journal-synced": "Activating installation", "owner-committed": "Installation committed", "before-configuration-backup": "Backing up existing configuration" })[name] ?? (/^(Checking|Verifying)/u.test(name) ? name : undefined);
@@ -250,6 +291,10 @@ export async function runManager(argv, internal = {}) {
       phase("before-configuration-backup");
       // Backup worker validates narrow source-home exclusions; never infer a checkout.
       configurationBackup = createConfigurationBackup(home, { command: options.command, sourceRoot: internal.sourceRoot });
+      if (!options.json) {
+        if (configurationBackup) process.stderr.write(`Kiro configuration backed up from: ${display(home)}\nPrior configuration backup: ${display(configurationBackup.path)}\nBackup exclusions: ${display(configurationBackup.excludes.join(", "))} (see backup-manifest.json for scope)\n`);
+        else process.stderr.write("Configuration backup: not needed; Kiro home does not exist yet.\n");
+      }
     }
     let result;
     if (options.command === "recover") {
@@ -282,6 +327,8 @@ export async function runManager(argv, internal = {}) {
         const bundle = await validateBundle(bundleRoot);
         if (bundle.manifest.target !== platform.target) throw new InstallerError("Bundle target does not match this system", 4, "prerequisite");
         if (releaseMetadata && (bundle.digest !== releaseMetadata.bundleDigest || bundle.version !== releaseMetadata.version || bundle.manifest.provenance.kind !== "release" || bundle.manifest.provenance.sourceCommit !== releaseMetadata.sourceCommit)) throw new InstallerError("Signed release does not match complete bundle identity/provenance");
+        installationChange = versionChange(installedIdentity(installation), bundle);
+        if (!options.json) process.stderr.write(formatVersionChange(installationChange));
         if (preparation?.legacy) homePreparation.legacyProfileBackup = preservePiFabricProfile(home, preparation.legacy, configurationBackup);
         result = await installCompleteGeneration(bundle.root, { kiroHome: home, provenance: internal.sourceBundle ? "source" : "release", ...(releaseMetadata ? { releaseMetadata } : {}), onPhase: phase, validateCandidate: smokeCandidate });
         operationResult = result; // Preserve commit truth even if archive cleanup below fails.
@@ -289,7 +336,7 @@ export async function runManager(argv, internal = {}) {
     }
     operationResult = result;
     const guidance = installationGuidance(home, result.owner ? await inspectCompleteInstallation(home, { verifyGenerations: false }).catch(() => installation) : installation, { sourceRoot: internal.sourceRoot, source: !!internal.sourceBundle });
-    const output = { schemaVersion: 1, ...result, command: options.command, kiroHome: selected, platform, restartRequired: result.restartRequired === true, recoveryRequired: result.recoveryRequired === true || result.outcome === "committed-cleanup-required", configurationBackup: configurationBackup ?? null, warnings: [...(result.warnings ?? []), ...(configurationBackup ? [`Prior Kiro configuration backed up to ${configurationBackup.path}; restore with: ${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} restore --backup ${shellQuote(configurationBackup.path)} --yes`] : []), "Authenticated Kiro session and resource loading not tested"], ...guidance, ...(homePreparation ? { homePreparation } : {}) };
+    const output = { schemaVersion: 1, ...result, ...(installationChange ? { installationChange } : {}), command: options.command, kiroHome: selected, platform, restartRequired: result.restartRequired === true, recoveryRequired: result.recoveryRequired === true || result.outcome === "committed-cleanup-required", configurationBackup: configurationBackup ?? null, warnings: [...(result.warnings ?? []), ...(configurationBackup ? [`Prior Kiro configuration backed up to ${configurationBackup.path}; restore with: ${shellQuote(path.join(home, "kiro-fabric", "bin", "kiro-fabric"))} restore --backup ${shellQuote(configurationBackup.path)} --yes`] : []), "Authenticated Kiro session and resource loading not tested"], ...guidance, ...(homePreparation ? { homePreparation } : {}) };
     if (shellPlan) {
       try { output.shellIntegration = applyShellIntegration(home, shellPlan, { expectedOwner: result.owner ?? null }); }
       catch (error) { throw Object.assign(new Error(`Backend ${options.command} completed, but shell setup failed: ${error.message}. Startup content and backups are preserved; inspect before retrying.`), { committed: result.committed === true, operationCompleted: true, recoveryRequired: true }); }
@@ -307,6 +354,7 @@ export async function runManager(argv, internal = {}) {
     if (homePreparation) error.homePreparation = homePreparation;
     if (homePreparation?.legacyProfileBackup) error.legacyProfileBackup ??= homePreparation.legacyProfileBackup;
     if (configurationBackup) error.configurationBackup = configurationBackup;
+    if (installationChange) error.installationChange = installationChange;
     if (operationResult) { error.committed = error.committed === true || operationResult.committed === true; error.operationCompleted = true; error.recoveryRequired = true; error.operationResult = operationResult; }
     error.command ??= options.command;
     if (internal.present) { const result = managerErrorResult(error, home); emit(result, options); return result.exitCode; }
@@ -322,6 +370,8 @@ export function presentManagerResult(result, options) {
   if (result.recoveryRequired) process.stdout.write("Recovery required: yes; preserve transaction evidence and inspect before retrying.\n");
   if (result.recovery) process.stdout.write(`Recovery: ${display(JSON.stringify(result.recovery))}\n`);
   for (const check of result.checks ?? []) process.stdout.write(`${check.status} ${display(check.id)}: ${display(typeof check.detail === "string" ? check.detail : JSON.stringify(check.detail))}\n`);
+  if (result.installation) process.stdout.write(`Installed: ${display(installedVersionLabel(result.installation))}\n`);
+  if (result.installationChange) process.stdout.write(formatVersionChange(result.installationChange));
   if (result.version) process.stdout.write(`Version: ${display(result.version)}\nGeneration: ${display(result.generation ?? result.digest)}\n`);
   if (result.dataRoot) process.stdout.write(`Data: ${display(result.dataRoot)}\n`);
   if (result.configurationBackup) process.stdout.write(`Prior configuration backup: ${display(result.configurationBackup.path)}\n`);
@@ -349,6 +399,7 @@ export function managerErrorResult(error, home = null) {
   else if (detail.code === "INSTALL_LOCK_RECOVERY_REQUIRED" || /^recovery-required:/i.test(message)) code = 7;
   return { schemaVersion: 1, committed: detail.committed === true, recoveryRequired: code === 7, dataPreserved: detail.dataPreserved !== false, outcome: detail.committed === true ? "committed-cleanup-required" : detail.outcome ?? (code === 7 ? "recovery-required" : code === 8 ? "discovery-unavailable" : "failed"), kiroHome: home, error: display(message), exitCode: code,
     ...(detail.command ? { command: detail.command } : {}), ...(detail.recovery ? { recovery: detail.recovery } : {}), ...(detail.operationCompleted ? { operationCompleted: true } : {}), ...(detail.operationResult ? { operationResult: detail.operationResult } : {}),
+    ...(detail.installationChange ? { installationChange: detail.installationChange } : {}),
     ...(detail.configurationBackup ? { configurationBackup: detail.configurationBackup } : {}), ...(detail.homePreparation ? { homePreparation: detail.homePreparation } : {}), ...(detail.legacyProfileBackup ? { legacyProfileBackup: detail.legacyProfileBackup } : {}),
     limitations: ["Failure is not a no-change guarantee; reported preparation, backups and committed operations may remain. Preserve unknown evidence."] };
 }

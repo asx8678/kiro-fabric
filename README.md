@@ -1,59 +1,45 @@
+# Install Kiro Fabric
+
+Requires Bash, Git, Node >=24, pnpm **11.20.0**, tar/gzip, and Kiro CLI >=2.21.1 with v3 support on PATH.
+
+From your Kiro Fabric checkout, run:
+
 ```sh
 bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --migrate-pi-fabric
 ```
 
-Run this from the checkout. The installer builds Fabric, makes the selected Kiro
-home and its `agents` directory private to you (0700), and backs up existing
-configuration. No `sudo` or manual `chmod` is needed. Valid Kiro CLI hard links
-are supported. The migration option preserves and replaces an old Pi Fabric
-profile only when its recorded ownership and checksum match; it does nothing
-when migration is unnecessary.
+The installer builds and installs Fabric, backs up existing configuration, and makes the selected Kiro home and its `agents` directory private (0700). No `sudo` or manual `chmod` is needed. The migration flag replaces an old Pi Fabric profile only when its recorded ownership and checksum match; otherwise, unnecessary migration does nothing.
 
-After installation, start a new Kiro session from your project:
+For unattended installation, add `--yes --non-interactive`. To leave shell configuration untouched, add `--no-shell-integration`.
+
+After installation, start a new session from your project directory:
 
 ```sh
-kiro-cli --v3
+kiro-cli --v3 --agent kiro-fabric
 ```
 
-The installed Fabric profile binds Kiro's launch directory automatically, even
-when Kiro supplies no MCP roots. No manual workspace binding or environment
-export is needed. If Fabric isn't already selected, use
-`kiro-cli --v3 --agent kiro-fabric` (works in existing terminals too).
+Restart existing Kiro sessions after an update. Open a new terminal to load the installed shortcut that selects Fabric for `kiro-cli --v3`.
 
-The installer also configures a backed-up bash/zsh shortcut that selects Fabric
-for `kiro-cli --v3`; open a new terminal to load that shortcut.
-`--no-shell-integration` leaves shell files untouched without disabling workspace
-binding. Existing Kiro sessions must restart after an update.
+## If the CLI preflight fails
 
-Shell execution is enabled by default (`approvals.execute: "allow"`). Commands
-have host access, including writes and network access. Explicit `ask`/`deny`
-overrides are preserved; direct write/network approvals remain `ask`. See
-[approval configuration](docs/configuration.md#clients-without-roots-or-elicitation).
+If you see:
 
-## Internet grounding
-
-Fabric can search and read sources whenever facts need verification:
-
-```ts
-const hits = await web.search({ query: "latest TypeScript release", limit: 3 });
-const first = hits.results[0];
-return first ? await web.open({ url: first.url, maxChars: 12000 }) : hits;
+```text
+Kiro Fabric: Kiro CLI help/version preflight failed; authentication was not attempted
 ```
 
-Run inside `fabric_exec` with `timeoutMs:120000`. Requires the optional
-`browser-harness-js` CLI and a Chromium connection supporting private contexts; no search API key. Web is opt-in (disabled by default). Known secrets are rejected, but arbitrary confidential prose cannot be reliably detected.
-The agent is guided to verify primary sources and cite URLs. Existing network
-approvals still apply. See [setup and privacy](docs/configuration.md#browser-backed-web-search).
+The installer could not complete a CLI check with a temporary home, a restricted environment, and a 5-second timeout. This is not an authentication failure.
 
-## Evidence-led reviews
+Run these commands in the same terminal:
 
-Repository reviews now use a coverage ledger and an on-demand `fabric.help({topic:"review"})` workflow: follow scripts, environment overrides and configuration consumers; verify suspected defects and report uninspected scope. Routine answer brevity does not limit audits. This is agent guidance, not a guarantee that a model will find every defect.
+```sh
+type -a kiro-cli
+kiro-cli --version
+kiro-cli agent validate --help
+```
 
-In a new Fabric chat, the first message receives a short task contract. The standing prompt requires complete, verified outcomes while minimizing redundant instructions, repeated reads, intermediate output and avoidable tool exchanges. It preserves investigation beyond initial samples, counterexample checks and continued authorized work while a productive next step remains. Task-specific review help provides batched source reads, runtime discovery and executable verification recipes. Answers have no arbitrary word target. The startup block is appended once per session, including across resume; Kiro may retain it in history. Auto remains controlled by Kiro, and prompt length does not guarantee a particular model, review quality or credit savings. See [first-message context](docs/configuration.md#first-message-investigation-context).
+Confirm that Kiro CLI is available, its version is >=2.21.1, and the validation help includes `--path`. If a command fails, resolve that CLI error first. If both CLI commands succeed, retry the installer once: the isolated check may have timed out. If it still fails, report the outputs above and the installer error; normal CLI checks can pass while isolated checks fail.
 
-`local.find` and `local.grep` accept `hidden:true` for CI/dotfiles while retaining ignore rules, VCS exclusions and path safety. Search results report their `scope`; reads report `totalLines` alongside continuation flags. Recursive all-files manifests use one ripgrep pass rather than repeated shallow directory listings.
+Do not delete configuration or rerun with `sudo`. A failed installation is not a guarantee that nothing changed; preserve any reported backups or recovery evidence.
 
-The [comparison lab](docs/agent-comparison.md) includes a seeded read-only review fixture with precision/recall and credits-per-grounded-finding reporting. Offline regression tests are not evidence that Fabric outperforms default Kiro; use matched live trials before making that claim.
-
-For unattended installation, add `--yes --non-interactive`. See
-[installation details](docs/installer.md) for prerequisites and recovery.
+See [installation details](docs/installer.md) for prerequisites and recovery.

@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { buildCompleteBundle, findReusableSourceBundle, sourceProvenance } from "./build-complete-bundle.mjs";
 import { withInstallerArtifactLease } from "./installer-artifacts.mjs";
 import { stageSourceBundle } from "./source-bundle-stage.mjs";
-import { runManager, parseManagerArguments, checkKiro, InstallerError, presentManagerError, presentManagerResult } from "./install-manager.mjs";
+import { runManager, parseManagerArguments, checkKiro, InstallerError, presentManagerError, presentManagerResult, INSTALLER_BANNER } from "./install-manager.mjs";
 import { configurePullHook } from "./source-pull-hook.mjs";
 import { resolveKiroHome } from "./install-agent-user.mjs";
 import { detectInstallerPlatform, assertUnprivilegedInstaller, compareVersions } from "./installer-platform.mjs";
@@ -38,6 +38,7 @@ export async function runSourceInstaller(args) {
     checkKiro();
     planInstallationPreparation(kiroHome, options);
     planShellIntegration(kiroHome, { disabled: options.noShellIntegration });
+    if (!json) process.stderr.write(`${INSTALLER_BANNER}Preparing source bundle; the installed and verified target versions will be shown before activation.\n`);
     const outcome = await withInstallerArtifactLease(root, async () => {
       const before = sourceProvenance(root);
       stage = "cache-verification";
@@ -67,7 +68,7 @@ export async function runSourceInstaller(args) {
           sourceBundle = path.join(temporary, "bundle");
           await stageSourceBundle(bundle.root, sourceBundle);
         }
-        return await runManager(argv, { context: { kind: "bootstrap" }, sourceBundle, sourceRoot: root, present: result => { activationOutput = result; },
+        return await runManager(argv, { context: { kind: "bootstrap" }, sourceBundle, sourceRoot: root, bannerShown: true, present: result => { activationOutput = result; },
           ...(enableHook ? { afterOperation: () => { try { configurePullHook(root, kiroHome, true); } catch (error) { throw new Error(`Installation completed but pull-hook setup failed: ${error.message}`); } } } : {}),
         });
       } finally {
@@ -82,7 +83,7 @@ export async function runSourceInstaller(args) {
     // Only failures from the actual build stage are classified as build failures.
     const classified = stage === "build" && !(error instanceof InstallerError) && !error.code && !error.recoveryRequired && !error.committed ? new InstallerError(error.message, 4, "source-build-failed") : error;
     classified.command = "install";
-    if (activationOutput) Object.assign(classified, { committed: activationOutput.committed === true, recoveryRequired: true, operationCompleted: !activationOutput.error || activationOutput.operationCompleted === true, operationResult: activationOutput, configurationBackup: activationOutput.configurationBackup, homePreparation: activationOutput.homePreparation });
+    if (activationOutput) Object.assign(classified, { committed: activationOutput.committed === true, recoveryRequired: true, operationCompleted: !activationOutput.error || activationOutput.operationCompleted === true, operationResult: activationOutput, configurationBackup: activationOutput.configurationBackup, installationChange: activationOutput.installationChange, homePreparation: activationOutput.homePreparation });
     return presentManagerError(classified, json, kiroHome);
   }
 }

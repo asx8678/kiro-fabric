@@ -35,7 +35,7 @@ describe("fabric_info action catalog", () => {
     const first = fabricInfoCatalog([action("state.get")]);
     (first.catalog.recovery as { search: string }).search = "poisoned";
     const second = fabricInfoCatalog([action("state.get")]);
-    expect(second.catalog.recovery).toEqual({ search: "tools.search({ query, limit })", describe: "tools.describe({ ref })" });
+    expect(second.catalog.recovery).toEqual({ search: "tools.search({ query, limit })", describe: "tools.describe({ ref })", listPage: "tools.listPage({})", searchPage: "tools.searchPage({ query })" });
     expect(bytes(second)).toBeLessThanOrEqual(MAX_INFO_CATALOG_BYTES);
   });
 
@@ -43,7 +43,7 @@ describe("fabric_info action catalog", () => {
     const result = fabricInfoCatalog([action("😀".repeat(MAX_INFO_CATALOG_BYTES))]);
     expect(result.actions).toEqual([]);
     expect(result.catalog).toMatchObject({ total: 1, returned: 0, complete: false, representation: "refs", digestComplete: false });
-    expect(result.catalog.recovery).toEqual({ search: "tools.search({ query, limit })", describe: "tools.describe({ ref })" });
+    expect(result.catalog.recovery).toEqual({ search: "tools.search({ query, limit })", describe: "tools.describe({ ref })", listPage: "tools.listPage({})", searchPage: "tools.searchPage({ query })" });
     expect(bytes(result)).toBeLessThanOrEqual(MAX_INFO_CATALOG_BYTES);
   });
 });

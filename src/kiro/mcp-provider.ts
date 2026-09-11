@@ -1,3 +1,4 @@
+import { catalogWeight } from "../core/catalog-resources.js";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,11 +10,15 @@ import type {
   FabricInvocationContext,
   FabricProvider,
   FabricToolAnnotations,
+  McpToolDescriptor,
+  ObservedFabricAction,
   ResolvedFabricAction,
 } from "../protocol.js";
 import { argumentRepairError, FabricRepairError, repairSchema } from "../core/repair-error.js";
 import { validateSchemaValue } from "../schema-validation.js";
 import { assertFabricJsonBudget } from "../runtime/json-budget.js";
+import { remoteRef, remoteComponent } from "../core/remote-identity.js";
+import { markCatalogResult } from "../core/catalog-contract.js";
 import { semanticDigest } from "../core/semantic-digest.js";
 
 const descriptors: readonly FabricActionDescriptor[] = [
@@ -424,8 +429,9 @@ const abortError = (signal: AbortSignal): Error =>
       ? signal.reason
       : "MCP call cancelled");
 
-type NormalizedServerTool = Omit<ServerToolInfo, "inputSchema"> & {
+type NormalizedServerTool = Omit<ServerToolInfo, "inputSchema" | "outputSchema"> & {
   inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
   annotations?: FabricToolAnnotations;
 };
 const MCP_ANNOTATION_KEYS = new Set([
@@ -456,6 +462,7 @@ const normalizeServerTools = (value: unknown): NormalizedServerTool[] => {
         (tool.outputSchema !== undefined && !isRecord(tool.outputSchema))) {
       throw new Error(`Configured MCP tool at index ${index} is malformed`);
     }
+    remoteComponent(tool.name);
     const annotations = normalizeToolAnnotations((tool as { annotations?: unknown }).annotations, index);
     return {
       name: tool.name,
@@ -474,11 +481,11 @@ const normalizeServerTools = (value: unknown): NormalizedServerTool[] => {
   return tools;
 };
 
-const projectRemoteTool = (server: string, tool: NormalizedServerTool, transport: McpTransportSnapshot) => {
+const projectRemoteTool = (server: string, tool: NormalizedServerTool, transport: McpTransportSnapshot): McpToolDescriptor => {
   const descriptor = {
     server,
     name: tool.name,
-    ref: `${server}.${tool.name}`,
+    ref: remoteRef(server, tool.name),
     description: tool.description ?? "",
     inputSchema: tool.inputSchema,
     ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
@@ -492,10 +499,17 @@ const projectRemoteTool = (server: string, tool: NormalizedServerTool, transport
   return {
     ...descriptor,
     descriptorDigest: semanticDigest("kiro-fabric-remote-mcp-descriptor-v1", descriptor),
-    stale: false as const,
+    freshness: "observed" as const,
   };
 };
 
+const freezeInventory = <T>(value: T): T => {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) freezeInventory(child);
+    Object.freeze(value);
+  }
+  return value;
+};
 const resultProjection = (value: unknown): "full" | "text" | "structured" => {
   if (value === undefined) return "full";
   if (value === "full" || value === "text" || value === "structured") return value;
@@ -553,6 +567,24 @@ export class KiroMcpProvider implements FabricProvider {
   readonly #snapshotCache = new Map<string, { envDigest: string; statKey: string; snapshot: McpTransportSnapshot }>();
   readonly #argumentFileBindings = new Map<string, ResolvedStdioArgumentFile[]>();
   #closed = false;
+  #revision = 0;
+  readonly #observationReservations = new Set<string>();
+  readonly #invalidatedReservations = new Set<string>();
+  readonly #observations = new Map<string, readonly ObservedFabricAction[]>();
+  readonly #observationWeights = new Map<string, { bytes: number; nodes: number }>();
+  invalidateDiscovery(server?: string): void { this.#evict(server); }
+
+  discoveryRevision(): string { return String(this.#revision); }
+  observedActions(): readonly ObservedFabricAction[] { return Object.freeze([...this.#observations.values()].flat()); }
+  #evict(server?: string): void {
+    if (server === undefined) this.#observationWeights.clear(); else this.#observationWeights.delete(server);
+    for (const reserved of this.#observationReservations) {
+      if (server === undefined || reserved === server) this.#invalidatedReservations.add(reserved);
+    }
+    if (server === undefined) {
+      if (this.#observations.size) { this.#observations.clear(); this.#revision++; }
+    } else if (this.#observations.delete(server)) this.#revision++;
+  }
 
   constructor(cwd: string, config: FabricMcpConfig, runtimeFactory?: McpRuntimeFactory) {
     this.#cwd = cwd;
@@ -607,11 +639,13 @@ export class KiroMcpProvider implements FabricProvider {
 
   async prepareArguments(actionName: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<Record<string, unknown>> {
     if (actionName !== "$call" && actionName !== "$tools" && actionName !== "$describe") return { ...args };
-    const server = typeof args.server === "string" ? args.server.trim() : "";
-    const tool = typeof args.tool === "string" ? args.tool.trim() : "";
+    const server = typeof args.server === "string" ? args.server : "";
+    const tool = typeof args.tool === "string" ? args.tool : "";
     if (!server || ((actionName === "$call" || actionName === "$describe") && !tool)) {
       throw new Error("MCP call requires non-empty server/tool strings");
     }
+    remoteComponent(server);
+    if (tool) remoteComponent(tool);
     if (actionName === "$call" && args.args !== undefined && !isRecord(args.args)) {
       throw new Error("MCP call args must be an object when provided");
     }
@@ -654,6 +688,7 @@ export class KiroMcpProvider implements FabricProvider {
       const servers = runtime.listServers();
       if (servers.length > 128) throw new Error("Configured MCP server limit exceeded");
       return servers.map((name) => {
+        remoteComponent(name);
         const definition = runtime.getDefinition(name);
         return {
           name,
@@ -678,6 +713,8 @@ export class KiroMcpProvider implements FabricProvider {
       throw new Error("MCP call requires non-empty server/tool strings and object args");
     }
 
+    remoteComponent(server);
+    if (toolName) remoteComponent(toolName);
     const runtime = await this.#getRuntime(signal);
     throwIfAbortedOrExpired(signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
@@ -700,6 +737,10 @@ export class KiroMcpProvider implements FabricProvider {
     return this.#withServerLease(server, signal, async (lease) => {
       let dispatched = false;
       try {
+        // Reserve a bounded server slot before contacting the transport. Each
+        // inventory is independently bounded by the raw JSON/tool limits.
+        if (new Set([...this.#observations.keys(), ...this.#observationReservations, server]).size > 128) throw new Error("MCP observation server limit exceeded");
+        this.#observationReservations.add(server);
         this.#assertTransportSnapshot(runtime, server, approvedTransport);
         // Discovery and invocation share one configured operation budget. Giving
         // each phase a fresh timeout would make one mcp.call consume nearly twice
@@ -715,20 +756,61 @@ export class KiroMcpProvider implements FabricProvider {
           discoveryBudget,
           lease,
         );
-        const tools = normalizeServerTools(rawTools);
-        const projected = tools.map((tool) => projectRemoteTool(server, tool, approvedTransport));
-        if (actionName === "$tools") return projected;
-        const matches = tools.map((tool, index) => ({ tool, projected: projected[index]! }))
-          .filter(({ tool }) => tool.name === toolName);
-        if (matches.length !== 1) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
-        if (actionName === "$describe") return matches[0]!.projected;
+        const tools = freezeInventory(structuredClone(normalizeServerTools(rawTools)));
+        // Reserve all lazy projection/container overhead before remote dispatch.
+        const weight = catalogWeight(tools);
+        weight.bytes = weight.bytes * 2 + tools.reduce((n, tool) => n + remoteRef(server, tool.name).length * 4 + 1024, 0);
+        weight.nodes = weight.nodes * 2 + tools.length * 16;
+        if (weight.bytes > 16 * 1024 * 1024 || weight.nodes > 100_000) throw new Error("MCP observation catalog_quota_exceeded");
+        const retained = () => [...this.#observationWeights.entries()].filter(([name]) => name !== server).reduce((sum, [, item]) => ({ bytes: sum.bytes + item.bytes, nodes: sum.nodes + item.nodes }), { ...weight });
+        while (retained().bytes > 16 * 1024 * 1024 || retained().nodes > 100_000) {
+          const oldest = [...this.#observationWeights.keys()].find(name => name !== server);
+          if (!oldest) throw new Error("MCP observation catalog_quota_exceeded");
+          this.#evict(oldest);
+        }
+        const cache = new Map<string, McpToolDescriptor>();
+        const project = (tool: NormalizedServerTool): McpToolDescriptor => {
+          let descriptor = cache.get(tool.name);
+          if (!descriptor) {
+            descriptor = freezeInventory(projectRemoteTool(server, tool, approvedTransport));
+            cache.set(tool.name, descriptor);
+          }
+          return descriptor;
+        };
+        const observations = Object.freeze(tools.map((tool): ObservedFabricAction => {
+          let resolved: ResolvedFabricAction | undefined;
+          return Object.freeze({
+            ref: remoteRef(server, tool.name),
+            descriptor: () => resolved ??= freezeInventory({
+              ref: remoteRef(server, tool.name), name: tool.name, description: tool.description ?? "",
+              inputSchema: tool.inputSchema,
+              ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
+              ...(tool.annotations === undefined ? {} : { annotations: tool.annotations }),
+              descriptorDigest: project(tool).descriptorDigest, provider: "mcp", risk: "network" as const, freshness: "observed" as const,
+              namespace: "remote", effect: { kind: "emission" as const },
+            }),
+          });
+        }));
+        throwIfAbortedOrExpired(signal, context.deadline);
+        this.#remainingCallBudget(actionDeadline);
+        this.#assertTransportSnapshot(runtime, server, approvedTransport);
+        if (this.#closed) throw new Error("MCP provider is closed");
+        if (this.#invalidatedReservations.has(server)) throw new Error("MCP observation epoch invalidated during discovery");
+        if (observations.length) { this.#observations.set(server, observations); this.#observationWeights.set(server, weight); }
+        else { this.#observations.delete(server); this.#observationWeights.delete(server); }
+        this.#revision++;
+        if (actionName === "$tools") return markCatalogResult(tools.map(project), "mcp.toolsPage");
+        const selected = tools.find((tool) => tool.name === toolName);
+        if (!selected) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
+        const matches = [{ tool: selected, projected: project(selected) }];
+        if (actionName === "$describe") return markCatalogResult(matches[0]!.projected, "mcp.describePage");
         if (expectedDescriptorDigest !== undefined &&
             matches[0]!.projected.descriptorDigest !== expectedDescriptorDigest) {
           const observed = matches[0]!.projected;
           throw new FabricRepairError(`MCP tool descriptor changed before invocation: ${server}.${toolName}`, {
             code: "stale_descriptor", phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none",
-            ref: observed.ref.slice(0, 512), descriptorDigest: String(expectedDescriptorDigest),
-            replacementDescriptor: { ref: observed.ref.slice(0, 512), name: observed.name.slice(0, 256), descriptorDigest: observed.descriptorDigest, inputSchema: repairSchema(observed.inputSchema) },
+            ref: observed.ref, descriptorDigest: String(expectedDescriptorDigest),
+            replacementDescriptor: { ref: observed.ref, name: observed.name.slice(0, 256), descriptorDigest: observed.descriptorDigest, inputSchema: repairSchema(observed.inputSchema) },
           });
         }
         this.#validateToolArguments(matches[0]!.tool, toolArgs as Record<string, unknown>, matches[0]!.projected);
@@ -753,6 +835,7 @@ export class KiroMcpProvider implements FabricProvider {
         throwIfAbortedOrExpired(signal, context.deadline);
         return normalizeMcpResult(result, projection);
       } catch (error) {
+        this.#evict(server);
         if (error instanceof FabricRepairError) throw error;
         throw new FabricRepairError(error instanceof Error ? error.message : "MCP operation failed", {
           code: context.deadline?.expired ? "timeout" : "provider_error",
@@ -760,6 +843,9 @@ export class KiroMcpProvider implements FabricProvider {
           dispatchState: dispatched ? "dispatched" : "not_dispatched",
           effectOutcome: dispatched ? "uncertain" : "none",
         });
+      } finally {
+        this.#observationReservations.delete(server);
+        this.#invalidatedReservations.delete(server);
       }
     });
   }
@@ -767,6 +853,7 @@ export class KiroMcpProvider implements FabricProvider {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    this.#evict();
     this.#closeController.abort(new Error("MCP provider is closed"));
     const runtime = this.#runtime;
     const creation = this.#runtimeCreation;
@@ -789,6 +876,11 @@ export class KiroMcpProvider implements FabricProvider {
   }
 
   #transportSnapshot(runtime: Runtime, server: string): McpTransportSnapshot {
+    try { return this.#currentTransportSnapshot(runtime, server); }
+    catch (error) { this.#evict(server); throw error; }
+  }
+
+  #currentTransportSnapshot(runtime: Runtime, server: string): McpTransportSnapshot {
     const definition = runtime.getDefinition(server);
     // Fast path: the expensive snapshot inputs are content hashes of the
     // executable and configuration file plus executable PATH resolution. Gate
@@ -807,10 +899,12 @@ export class KiroMcpProvider implements FabricProvider {
       argumentFiles = this.#boundArgumentFiles(server, definition.command);
     }
     const argumentStatKey = argumentFiles.map(boundArgumentStatKey).join("|");
-    const statKey = `${executable ? fileStatKey(executable) : "-"}|${argumentStatKey}|${this.#config.configPath ? fileStatKey(this.#config.configPath) : "-"}`;
+    const definitionKey = semanticDigest("mcp-definition-cache-v1", { command: definition.command.kind === "http" ? { kind: "http", url: definition.command.url.href } : definition.command, env: definition.env ?? {}, allowedTools: definition.allowedTools ?? null, blockedTools: definition.blockedTools ?? null });
+    const statKey = `${definitionKey}|${executable ? fileStatKey(executable) : "-"}|${argumentStatKey}|${this.#config.configPath ? fileStatKey(this.#config.configPath) : "-"}`;
     const cached = this.#snapshotCache.get(server);
     if (cached && cached.envDigest === processEnvironmentDigest && cached.statKey === statKey) return cached.snapshot;
     const snapshot = this.#computeTransportSnapshot(runtime, server, processEnvironmentDigest, executable, argumentFiles);
+    if (cached && cached.snapshot.digest !== snapshot.digest) this.#evict(server);
     this.#snapshotCache.set(server, { envDigest: processEnvironmentDigest, statKey, snapshot });
     return snapshot;
   }
@@ -834,9 +928,11 @@ export class KiroMcpProvider implements FabricProvider {
 
   #assertRuntimeConfigurationCurrent(): void {
     if (this.#loadedConfigDigest === undefined) return;
-    if (configDigest(this.#config.configPath) !== this.#loadedConfigDigest) {
-      throw new Error("MCP configuration changed after runtime loading; restart before calling a server");
-    }
+    try {
+      if (configDigest(this.#config.configPath) !== this.#loadedConfigDigest) {
+        throw new Error("MCP configuration changed after runtime loading; restart before calling a server");
+      }
+    } catch (error) { this.#evict(); throw error; }
   }
 
   #computeTransportSnapshot(
@@ -891,7 +987,10 @@ export class KiroMcpProvider implements FabricProvider {
   #assertTransportSnapshot(runtime: Runtime, server: string, approved: unknown): McpTransportSnapshot {
     if (!isRecord(approved)) throw new Error("MCP call is missing its approved transport snapshot");
     const current = this.#transportSnapshot(runtime, server);
-    if (JSON.stringify(current) !== JSON.stringify(approved)) throw new Error("MCP transport changed after approval; approve the exact transport again");
+    if (JSON.stringify(current) !== JSON.stringify(approved)) {
+      this.#evict(server);
+      throw new Error("MCP transport changed after approval; approve the exact transport again");
+    }
     return current;
   }
 
@@ -901,7 +1000,8 @@ export class KiroMcpProvider implements FabricProvider {
     context: FabricInvocationContext,
   ): Promise<void> {
     if (!context.approve) throw new Error(`${action.ref} execution approval is unavailable`);
-    await context.approve(action, details);
+    try { await context.approve(action, details); }
+    catch (error) { if (typeof details.server === "string") this.#evict(details.server); throw error; }
     throwIfAbortedOrExpired(context.signal, context.deadline);
   }
 
@@ -954,6 +1054,8 @@ export class KiroMcpProvider implements FabricProvider {
         cursors.add(response.nextCursor);
         cursor = response.nextCursor;
       }
+      // Validate the complete raw inventory before applying configured filters.
+      normalizeServerTools(tools);
       const definition = runtime.getDefinition(server);
       return tools.filter((tool) => {
         if (!isRecord(tool) || typeof tool.name !== "string") return true;
@@ -964,6 +1066,7 @@ export class KiroMcpProvider implements FabricProvider {
     } catch (error) {
       // Match mcporter's public listTools recovery behavior: a failed raw MCP
       // listing invalidates the cached connection before a later retry.
+      this.#evict(server);
       try { await runtime.close(server); } catch { /* retain the discovery error */ }
       throw error;
     }
@@ -1047,6 +1150,7 @@ export class KiroMcpProvider implements FabricProvider {
       const terminate = (error: Error): void => {
         if (settled || terminating) return;
         terminating = true;
+        this.#evict(server);
         cleanup();
         const close = Promise.resolve().then(() => runtime.close(server));
         // Lease release requires both transport close and raw operation

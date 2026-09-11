@@ -8,7 +8,7 @@ interface FabricInfoCatalogMetadata {
   complete: boolean;
   representation: "descriptors" | "refs-risk" | "refs";
   digestComplete: boolean;
-  recovery: { search: "tools.search({ query, limit })"; describe: "tools.describe({ ref })" };
+  recovery: { search: "tools.search({ query, limit })"; describe: "tools.describe({ ref })"; listPage: "tools.listPage({})"; searchPage: "tools.searchPage({ query })" };
 }
 
 export interface FabricInfoCatalog {
@@ -19,6 +19,8 @@ export interface FabricInfoCatalog {
 const recovery = (): FabricInfoCatalogMetadata["recovery"] => ({
   search: "tools.search({ query, limit })",
   describe: "tools.describe({ ref })",
+  listPage: "tools.listPage({})",
+  searchPage: "tools.searchPage({ query })",
 });
 const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value), "utf8");
 const packageCatalog = (

@@ -1,3 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { CatalogSnapshotStore } from "./core/catalog-snapshot-store.js";
+import type { CatalogBinding, CatalogReservation } from "./core/catalog-contract.js";
+import { catalogMethodForBridge, catalogUnavailable, continueCatalog, publishCatalog, validateCatalogRequest } from "./core/catalog-execution.js";
+import { parseRemoteRef } from "./core/remote-identity.js";
 import { createCheckpointJournal, fabricFailureMetadata, FabricCompilerTimeoutError, FabricRepairError } from "./core/repair-error.js";
 import type { FabricFailureMetadata, FabricCheckpointHandle } from "./protocol.js";
 import type { FabricConfig } from "./config.js";
@@ -83,12 +88,17 @@ export const effectiveFabricTimeout = (
   invocationTimeout: number,
 ): number => Math.min(configuredMaximum, Math.max(executorDefault, exactActionFloor, invocationTimeout));
 
-export const exactActionTimeoutFloor = (ref: string, mcpCallTimeoutMs: number): number =>
-  ref === "mcp.$call" || ref === "mcp.$tools" || ref === "mcp.$describe"
-    ? mcpCallTimeoutMs +
-      FABRIC_APPROVAL_TIMEOUT_MS * MAX_MCP_APPROVAL_STAGES +
-      FABRIC_PROVIDER_TIMEOUT_GRACE_MS
-    : 0;
+export const exactActionTimeoutFloor = (ref: string, mcpCallTimeoutMs: number, args: Record<string, unknown> = {}): number => {
+  let remote = false;
+  try { remote = parseRemoteRef(ref) !== undefined; } catch { return 0; }
+  const method = catalogMethodForBridge(ref);
+  let initialMcpPage = false;
+  if (method?.startsWith("mcp.") && !Object.hasOwn(args, "cursor")) {
+    try { validateCatalogRequest(method, args); initialMcpPage = true; } catch { return 0; }
+  }
+  return remote || initialMcpPage || ref === "mcp.$call" || ref === "mcp.$tools" || ref === "mcp.$describe"
+    ? mcpCallTimeoutMs + FABRIC_APPROVAL_TIMEOUT_MS * MAX_MCP_APPROVAL_STAGES + FABRIC_PROVIDER_TIMEOUT_GRACE_MS : 0;
+};
 
 export const exactHostActionReference = (
   bridgeRef: string,
@@ -104,6 +114,23 @@ export class FabricExecutionService {
   readonly #executions = new Set<Promise<FabricExecutionResult>>();
   readonly #closeController = new AbortController();
   #closing: Promise<void> | undefined;
+  readonly #catalogNonce = randomUUID();
+  #catalogBinding: string | undefined;
+  #catalogStore: CatalogSnapshotStore | undefined;
+
+  /** Host-only authorization binding. Shared runtimes cannot silently change owners. */
+  bindCatalog(binding: Omit<CatalogBinding, "runtimeNonce">): void {
+    const identity = JSON.stringify(binding);
+    if (this.#catalogBinding === identity && this.#catalogStore) return;
+    if (this.#catalogBinding !== undefined || this.#closeController.signal.aborted) {
+      this.invalidateCatalogs();
+      throw new Error("Catalog runtime already bound or revoked; create a new authorized runtime");
+    }
+    this.#catalogBinding = identity;
+    this.#catalogStore = new CatalogSnapshotStore({ ...binding, runtimeNonce: this.#catalogNonce });
+  }
+
+  invalidateCatalogs(): void { this.#catalogStore?.invalidate(); this.#catalogStore = undefined; }
   constructor(
     readonly registry: ActionRegistry,
     readonly config: FabricConfig,
@@ -227,24 +254,39 @@ export class FabricExecutionService {
       // sizes attribute cost to payload volume, not just provider latency.
       const bridgeSpan = tracer.enabled ? tracer.span("bridge", ref, execId, { argsChars: traceJsonChars(args) }, executeSpanId) : undefined;
       let bridgeEnd: Record<string, unknown> = {};
+      let catalogReservation: CatalogReservation | undefined;
       try {
         const context = providerContext(signal, deadline);
         if (ref === "fabric.providers") { const value = this.registry.providers(); if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) }; return value; }
-        if (ref === "fabric.list") { const value = await this.registry.list(); if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) }; return value; }
-        if (ref === "fabric.search") {
-          if (typeof args.query !== "string") throw new Error("fabric.search query must be a string");
-          const value = await this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
-          if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) };
-          return value;
+        const pageMethod = catalogMethodForBridge(ref);
+        if (pageMethod) {
+          validateCatalogRequest(pageMethod, args);
+          if (switchRequested || options.workspaceUnavailable) throw catalogUnavailable();
+          if (typeof args.cursor === "string") {
+            if (!this.#catalogStore) throw catalogUnavailable();
+            return continueCatalog(this.#catalogStore, pageMethod, args.cursor, args, this.config.executor.maxNestedResultChars);
+          }
+          if (!this.#catalogStore) throw catalogUnavailable();
         }
-        if (ref === "fabric.describe") {
-          if (typeof args.ref !== "string") throw new Error("fabric.describe ref must be a string");
-          const value = await this.registry.describe(args.ref);
-          if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) };
-          return value;
+        if (["fabric.list", "fabric.search", "fabric.describe"].includes(ref) || pageMethod?.startsWith("tools.")) {
+          if (switchRequested || options.workspaceUnavailable) throw catalogUnavailable();
+          catalogReservation = this.#catalogStore?.reserve();
+          const method = pageMethod ?? (ref === "fabric.list" ? "tools.listPage" : ref === "fabric.search" ? "tools.searchPage" : "tools.describePage");
+          let value: unknown;
+          if (method === "tools.listPage") value = await this.registry.list();
+          else if (method === "tools.searchPage") {
+            if (typeof args.query !== "string") throw new Error("fabric.search query must be a string");
+            value = pageMethod ? await this.registry.searchAll(args.query) : await this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
+          } else {
+            if (typeof args.ref !== "string") throw new Error("fabric.describe ref must be a string");
+            value = await this.registry.describe(args.ref);
+          }
+          throwIfAbortedOrExpired(signal, deadline);
+          return publishCatalog(this.#catalogStore, catalogReservation, method, value, this.config.executor.maxNestedResultChars, pageMethod ? args : undefined, typeof args.query === "string" ? args.query : undefined);
         }
-        const actionRef = ref === "fabric.call" ? args.ref : ref;
-        const actionArgs = ref === "fabric.call" ? args.args ?? {} : args;
+        const actionRef = pageMethod === "mcp.toolsPage" ? "mcp.$tools" : pageMethod === "mcp.describePage" ? "mcp.$describe" : ref === "fabric.call" ? args.ref : ref;
+        const actionArgs = pageMethod?.startsWith("mcp.") ? { server: args.server, ...(pageMethod === "mcp.describePage" ? { tool: args.tool } : {}) } : ref === "fabric.call" ? args.args ?? {} : args;
+        if (actionRef === "mcp.$tools" || actionRef === "mcp.$describe") catalogReservation = this.#catalogStore?.reserve();
         if (typeof actionRef !== "string" || typeof actionArgs !== "object" || actionArgs === null || Array.isArray(actionArgs)) {
           throw new Error("Fabric provider call requires an exact ref and object args");
         }
@@ -265,6 +307,15 @@ export class FabricExecutionService {
           maxAuditEntries: this.config.executor.maxAuditEntries,
           maxAuditBytes: this.config.executor.maxAuditBytes,
           maxResultChars: this.config.executor.maxNestedResultChars,
+          formatCatalogResult: (value, method) => {
+            try {
+              return publishCatalog(this.#catalogStore, catalogReservation, method, value, this.config.executor.maxNestedResultChars, pageMethod ? args : undefined);
+            } catch (error) {
+              const failure = fabricFailureMetadata(error);
+              if (failure) throw new FabricRepairError(error instanceof Error ? error.message : "Catalog formatting failed", { ...failure, dispatchState: "dispatched", effectOutcome: "uncertain" });
+              throw error;
+            }
+          },
           approve: async (action, exactArgs) => {
             throwIfAbortedOrExpired(signal, deadline);
             // The registry and nested MCP transport stages share this callback.
@@ -302,7 +353,10 @@ export class FabricExecutionService {
               throw error;
             } finally { pendingApprovals -= 1; }
           },
-        });
+        }, ref === "fabric.call" && (args.expectedDescriptorDigest !== undefined || args.projection !== undefined) ? {
+          ...(args.expectedDescriptorDigest !== undefined ? { expectedDescriptorDigest: args.expectedDescriptorDigest as string } : {}),
+          ...(args.projection !== undefined ? { projection: args.projection as "full" | "text" | "structured" } : {}),
+        } : undefined);
         const localEffect = ["local.shell", "local.write", "local.edit", "probe.create", "probe.write", "probe.run", "review.begin", "review.update", "review.finding", "review.reconcile", "review.end"].includes(actionRef);
         const invocation = localEffect
           ? localEffectTail.then(invoke, () => { throw new Error("Local effect queue stopped after a failed predecessor; inspect state before a new execution"); })
@@ -313,7 +367,7 @@ export class FabricExecutionService {
           localEffectTail = invocation;
           void localEffectTail.catch(() => {});
         }
-        if (/^(local|mcp|probe|review)\./u.test(actionRef)) localSettlements.add(invocation);
+        if (/^(local|mcp|probe|review)[./]/u.test(actionRef)) localSettlements.add(invocation);
         let value: unknown;
         try { value = await invocation; }
         catch (error) {
@@ -334,6 +388,7 @@ export class FabricExecutionService {
         }
         throw error;
       } finally {
+        catalogReservation?.release();
         bridgeSpan?.end(bridgeEnd);
         activeProviderCalls -= 1;
       }
@@ -356,7 +411,7 @@ export class FabricExecutionService {
         // inspection, rewriting, or fuzzy matching.
         const actionRef = exactHostActionReference(bridgeRef, args);
         const actionFloor = actionRef
-          ? exactActionTimeoutFloor(actionRef, this.config.mcp.callTimeoutMs)
+          ? exactActionTimeoutFloor(actionRef, this.config.mcp.callTimeoutMs, bridgeRef === "fabric.call" && typeof args.args === "object" && args.args !== null ? args.args as Record<string, unknown> : args)
           : 0;
         const candidate = effectiveFabricTimeout(
           configuredMaximum,
@@ -412,6 +467,7 @@ export class FabricExecutionService {
   }
 
   close(): Promise<void> {
+    this.invalidateCatalogs();
     return this.#closing ??= (async () => {
       this.#closeController.abort(new Error("Fabric execution service is closed"));
       try {

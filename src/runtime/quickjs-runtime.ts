@@ -306,6 +306,9 @@ const GUEST_SETUP = `
   globalThis.tools = objectFreeze({
     providers: () => call("fabric.providers"),
     list: () => call("fabric.list"),
+    listPage: (args = {}) => call("fabric.listPage", args),
+    searchPage: (args) => call("fabric.searchPage", args),
+    describePage: (args) => call("fabric.describePage", args),
     search: (input) => call("fabric.search", typeof input === "string" ? { query: input } : input),
     describe: (input) => call("fabric.describe", typeof input === "string" ? { ref: input } : input),
     call: (input) => call("fabric.call", input),
@@ -347,6 +350,8 @@ const GUEST_SETUP = `
   globalThis.mcp = objectFreeze({
     servers: (args = {}) => call("mcp.$servers", args),
     tools: (args) => call("mcp.$tools", args),
+    toolsPage: (args) => call("mcp.$toolsPage", args),
+    describePage: (args) => call("mcp.$describePage", args),
     describe: (args) => call("mcp.$describe", args),
     call: (args) => call("mcp.$call", args),
   });
@@ -674,7 +679,9 @@ export class QuickJsRuntime {
       const serialized = context.getString(settled.value);
       settled.value.dispose();
       const value: unknown = JSON.parse(serialized);
-      assertFabricJsonBudget(value, options.maxNestedResultChars);
+      // Nested ceilings apply to individual host calls, not the composed final result.
+      // The execution service separately enforces the configured artifact/output ceiling.
+      assertFabricJsonBudget(value, MAX_FABRIC_JSON_CHARS);
       deadline.throwIfExpired();
       return { value, logs, terminationReason: "completed", effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     } catch (error) {

@@ -224,7 +224,7 @@ describe("first submitted prompt context", () => {
     put(f, "secrets/values.yaml", "DO-NOT-AUTOREAD");
     const { runtime, value } = await starter(f);
     const packets = value.packets!;
-    expect(packets.every(packet => packet.evidence && !packet.error)).toBe(true);
+    expect(packets.every(packet => packet.evidence && !packet.error), JSON.stringify(packets)).toBe(true);
     const files = packets.flatMap(packet => packet.evidence!.files);
     const delivered = files.map(file => file.path);
     expect(delivered).toEqual(expect.arrayContaining(["package.json", ".github/workflows/ci.yml", ".azure-pipelines/release-pipeline.yml", "chart/Chart.yaml", "chart/values.yaml", "configurations/common/deployment.yaml", "configurations/envs/prod/deployment.yaml", "configurations/envs/staging/deployment.yaml", "scripts/cleanup.ps1", "chart/templates/service.yaml", "validations/check.ps1"]));

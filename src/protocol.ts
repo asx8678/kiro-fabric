@@ -46,7 +46,8 @@ export interface FabricActionDescriptor {
 
 export interface FabricCheckpointHandle { id: string; label?: string }
 export interface FabricFailureMetadata {
-  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error";
+  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error" | "catalog_requires_paging" | "catalog_cursor_unavailable" | "catalog_quota_exceeded" | "catalog_page_budget";
+  catalogContinuation?: { method: import("./core/catalog-contract.js").CatalogMethod; cursor: string };
   phase: "compile" | "validation" | "discovery" | "dispatch" | "execution";
   dispatchState: "not_dispatched" | "dispatched";
   effectOutcome: "none" | "uncertain";
@@ -76,6 +77,12 @@ export interface FabricInvocationContext {
 export interface FabricProvider {
   name: string;
   description: string;
+  /** Synchronous, local and side-effect-free; undefined opts out of discovery caching. */
+  discoveryRevision?(): string | undefined;
+  /** Locally observed approved metadata; never an execution authority. */
+  observedActions?(): readonly ObservedFabricAction[];
+  /** Synchronous revocation after denied/failed approved discovery. */
+  invalidateDiscovery?(server?: string): void;
   list(): Promise<FabricActionDescriptor[]>;
   describe(actionName: string): Promise<FabricActionDescriptor | undefined>;
   prepareArguments?(
@@ -99,10 +106,25 @@ export interface FabricProvider {
 }
 
 export interface ResolvedFabricAction extends FabricActionDescriptor {
+  /** Present for approved remote observations, never freshness authority. */
+  freshness?: "observed";
   ref: string;
   provider: string;
   /** Stable digest of the provider/ref and complete public descriptor semantics. */
   descriptorDigest: string;
+}
+
+export interface ObservedFabricAction {
+  readonly ref: string;
+  descriptor(): ResolvedFabricAction;
+}
+
+export interface McpToolDescriptor {
+  server: string; name: string; ref: string; description: string;
+  inputSchema: Record<string, unknown>; outputSchema?: Record<string, unknown>;
+  annotations?: FabricToolAnnotations;
+  transport: { kind: "stdio" | "http"; digest: string; configDigest: string | null };
+  descriptorDigest: string; freshness: "observed";
 }
 
 export interface FabricProviderStatus {

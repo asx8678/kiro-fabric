@@ -20,6 +20,7 @@ export class FabricBootstrapProvider implements FabricProvider {
   readonly name = "fabric";
   readonly description = "Checked bootstrap and immutable bundled help";
   constructor(readonly maxResultChars = 20000) {}
+  discoveryRevision(): string { return "1"; }
   async list(): Promise<FabricActionDescriptor[]> { return descriptors.map((entry) => structuredClone(entry)); }
   async describe(name: string): Promise<FabricActionDescriptor | undefined> { return (await this.list()).find((entry) => entry.name === name); }
   async invoke(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<unknown> {

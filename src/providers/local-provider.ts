@@ -126,6 +126,7 @@ export class LocalCodingProvider implements FabricProvider {
       return { name, description: descriptions[name]!, inputSchema: effectful(name) ? { ...raw, properties: { ...(raw.properties as Record<string, unknown>), _localPreparation: metadataSchema, review: { type: "string", maxLength: 11000 } } } : raw, outputSchema: outputSchemas[name]!, risk: name === "shell" ? "execute" : effectful(name) ? "write" : "read", effect: { kind: effectful(name) ? "write" : "read", resources: [`local-workspace:${this.#paths.root}`] } };
     });
   }
+  discoveryRevision(): string { return "1"; }
   async list(): Promise<FabricActionDescriptor[]> { return jsonTree(this.#descriptors); }
   async describe(name: string): Promise<FabricActionDescriptor | undefined> {
     const descriptor = this.#descriptors.find((item) => item.name === name);

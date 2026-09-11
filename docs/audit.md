@@ -6,6 +6,20 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 
 - `tests/installer-capability-fixture.ts` — native inode-anchored directory traversal probe for crash-recovery qualification.
 
+## Canonical observed tool discovery and continuation
+
+- `src/core/remote-identity.ts` — exact RFC3986 canonical remote identity and strict decode-once validation.
+- `src/core/catalog-contract.ts` — separate typed paging contracts and non-serializable host result provenance.
+- `src/core/catalog-execution.ts` — exclusive-selector validation, metadata-only continuation and actionable legacy paging recovery.
+- `src/core/catalog-resources.ts` — conservative retained JSON/container accounting.
+- `src/core/catalog-snapshot-store.ts` — runtime/client/workspace/epoch-bound HMAC cursors, exact descriptor chunks, quotas and finite lifecycle.
+- `tests/discovery-index.test.ts` — deterministic warm-work counters, revision churn/coalescing, dynamic parity and defensive metadata.
+- `tests/mcp-observed-discovery.test.ts` — fake-runtime approved observations, collision routing, selected projection and invalidation.
+- `tests/catalog-snapshot-store.test.ts` — envelope budgets, tamper/expiry/renewal/LRU, graph safety and permanent revocation.
+- `tests/catalog-integration.test.ts` — checked QuickJS plus actual in-memory SDK, 1000-tool cross-execution reconstruction with default call quotas, small arrays and uncaught legacy recovery.
+
+The five friendly page methods do not expand outer tools. MCP calls always re-enumerate current authoritative schemas before dispatch; observed metadata and continuations never grant execution permission. Discovery retention uses conservative partitions within 64MiB/1M nodes rather than sharing an unbounded general artifact store. Tests and builds are not live-client approval qualification.
+
 ## Browser-backed fact grounding
 
 - `src/providers/web-provider.ts` — opt-in trusted CLI discovery, bounded execution, closed contracts, private-context requests and withheld raw diagnostics.

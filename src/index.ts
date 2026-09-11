@@ -13,6 +13,8 @@ export {
 export { FabricRepairError, FabricCompilerTimeoutError } from "./core/repair-error.js";
 export type { KiroArtifactReadResult } from "./kiro/artifacts.js";
 export type { KiroArtifactCheckpointResult } from "./kiro/power/artifacts-provider.js";
+export type { CatalogBinding, CatalogMethod, CatalogPageOptions, CatalogContinuation, CatalogPage, DescriptorJsonPage } from "./core/catalog-contract.js";
+export { remoteRef, parseRemoteRef, MAX_REMOTE_REF_CHARS } from "./core/remote-identity.js";
 export { ActionRegistry } from "./core/action-registry.js";
 export { LocalCodingProvider } from "./providers/local-provider.js";
 export { formatLocalEvidence } from "./providers/local-evidence.js";
@@ -43,6 +45,9 @@ export type {
   FabricInvocationContext,
   FabricProvider,
   FabricProviderStatus,
+  ResolvedFabricAction,
+  ObservedFabricAction,
+  McpToolDescriptor,
 } from "./protocol.js";
 export type {
   FabricApprovalConfig,

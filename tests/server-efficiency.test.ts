@@ -14,12 +14,13 @@ const harness = vi.hoisted(() => ({
   runtimeCreates: 0,
   prepareRuntime: undefined as undefined | (() => Promise<any>),
   runtimeCloses: 0,
+  temporarilyUnavailable: false,
 }));
 
 vi.mock("@modelcontextprotocol/sdk/server/index.js", () => ({
   Server: class {
     setRequestHandler(schema: unknown, handler: (...args: any[]) => any) { harness.handlers.set(schema, handler); }
-    setNotificationHandler() {}
+    setNotificationHandler(schema: unknown, handler: (...args: any[]) => any) { harness.handlers.set(schema, handler); }
     getClientCapabilities() { return {}; }
     async connect() {}
     async close() {}
@@ -66,7 +67,7 @@ vi.mock("../src/kiro/power/workspace-binding.js", async (importOriginal) => {
   } };
 });
 
-import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, RootsListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { createKiroMcpServer } from "../src/kiro/mcp-server.js";
 
 const deferred = <T>() => {
@@ -76,7 +77,7 @@ const deferred = <T>() => {
 };
 const baseResult = (value: unknown) => ({ success: true, status: "succeeded", value, logs: [], audits: [], effectiveTimeoutMs: 100 });
 const runtime = () => ({
-  service: { cwd: "/workspace", config: { executor: { maxTimeoutMs: 1_000, timeoutMs: 100, maxOutputChars: 100, resultFormat: "text" }, approvals: {} }, execute: vi.fn(async () => harness.executeResult) },
+  service: { bindCatalog: vi.fn(), invalidateCatalogs: vi.fn(), cwd: "/workspace", config: { executor: { maxTimeoutMs: 1_000, timeoutMs: 100, maxOutputChars: 100, resultFormat: "text" }, approvals: {} }, execute: vi.fn(async () => harness.executeResult) },
   artifacts: { write: (content: string) => { harness.artifactWrites.push(content); if (harness.artifactError) throw harness.artifactError; return "artifact-safe"; } },
   providers: () => [], registry: { list: async () => [] },
   close: async () => { harness.runtimeCloses++; },
@@ -87,7 +88,7 @@ const create = async (injected = true) => {
     runtimeRoot: "/runtime", dataRoot: "/data", version: "test",
     ...(injected ? { runtime: instance as any } : {}),
     prepareRuntime: async () => { harness.runtimeCreates++; return harness.prepareRuntime ? harness.prepareRuntime() : instance as any; },
-    workspaceContext: { current: async () => { if (harness.syncError) throw harness.syncError; return { status: "explicitly-empty" as const, roots: [], revision: 1, observedAt: Date.now() }; }, invalidate() {}, subscribe: () => ({ dispose() {} }) },
+    workspaceContext: { current: async () => { if (harness.syncError) throw harness.syncError; return { status: harness.temporarilyUnavailable ? "temporarily-unavailable" as const : "explicitly-empty" as const, roots: [], revision: 1, observedAt: Date.now() }; }, invalidate() {}, subscribe: () => ({ dispose() {} }) },
   });
   const handler = harness.handlers.get(CallToolRequestSchema)!;
   return { server, handler, instance };
@@ -100,9 +101,37 @@ beforeEach(() => {
   harness.handlers.clear(); harness.events.length = 0; harness.configThrows = false; harness.syncError = undefined;
   harness.executeResult = baseResult("ok"); harness.artifactError = undefined; harness.artifactWrites.length = 0;
   harness.prepareMutation = undefined; harness.commits.length = 0; harness.identity = "<unbound>";
-  harness.runtimeCreates = 0; harness.prepareRuntime = undefined; harness.runtimeCloses = 0;
+  harness.runtimeCreates = 0; harness.prepareRuntime = undefined; harness.runtimeCloses = 0; harness.temporarilyUnavailable = false;
 });
 afterEach(() => vi.restoreAllMocks());
+
+describe("outer-host catalog authorization and synchronous revocation", () => {
+  it("binds injected runtimes explicitly to distinct host client sessions and canonical device/inode", async () => {
+    const first=await create(); await call(first.handler,"fabric_exec",{code:"return null"});
+    const a=first.instance.service.bindCatalog.mock.calls[0]?.[0];
+    const second=await create(); await call(second.handler,"fabric_exec",{code:"return null"});
+    const b=second.instance.service.bindCatalog.mock.calls[0]?.[0];
+    expect(a).toMatchObject({workspace:"/data",device:"1",inode:"1",authorizationEpoch:"1"});
+    expect(b).toMatchObject({workspace:"/data",device:"1",inode:"1",authorizationEpoch:"1"});
+    expect(a.clientSession).not.toBe(b.clientSession);
+    await Promise.all([first.server.close(),second.server.close()]);
+  });
+  it.each(["close","workspace-switch","workspace-unavailable"])("revokes catalogs before draining a held execution on %s", async cause => {
+    const f=await create(), entered=deferred<void>(), held=deferred<any>();
+    f.instance.service.execute.mockImplementationOnce(async()=>{entered.resolve();return held.promise;});
+    const execution=call(f.handler,"fabric_exec",{code:"return null"}); await entered.promise;
+    let transition:Promise<unknown>;
+    if(cause==="close"){
+      transition=f.server.close();
+      expect(f.instance.service.invalidateCatalogs).toHaveBeenCalledTimes(1);
+    } else if(cause==="workspace-switch") transition=call(f.handler,"fabric_workspace",{action:"detach"});
+    else {harness.temporarilyUnavailable=true;transition=harness.handlers.get(RootsListChangedNotificationSchema)!({});}
+    await vi.waitFor(()=>expect(f.instance.service.invalidateCatalogs).toHaveBeenCalled());
+    expect(harness.runtimeCloses).toBe(0);
+    held.resolve(baseResult("settled")); await execution; await transition;
+    expect(harness.runtimeCloses).toBe(1); await f.server.close();
+  });
+});
 
 describe("actual MCP CallTool handler projection behavior", () => {
   it("returns Unicode exactly and emits one correlated allowlisted projection", async () => {

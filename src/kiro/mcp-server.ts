@@ -228,6 +228,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   });
   let workspaceSnapshot: KiroWorkspaceSnapshot | undefined;
   let clientRootsObserved = false;
+  const catalogClientSession = randomBytes(24).toString("hex");
   let runtime = options.runtime;
   let runtimeIdentity = runtime ? "<injected>" : "";
   let runtimeGeneration = runtime ? 1 : 0;
@@ -247,6 +248,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   const closeRuntime = async (reason: Error, knownDrained?: boolean): Promise<void> => {
     const current = runtime;
     if (!current) return;
+    // Revoke cursor access synchronously, before abort/drain/transport cleanup.
+    current.service.invalidateCatalogs();
     const leases = [...active].filter((item) => item.runtime === current);
     const drained = knownDrained ?? await drain(leases, reason);
     if (!drained) await Promise.allSettled(leases.map((item) => item.settled));
@@ -300,11 +303,23 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     const blocked = unavailableWorkspace() || observation.status === "temporarily-unavailable";
     const workspace = !blocked && observation.status === "verified" ? observation.workspace : undefined;
     const identity = blocked ? `<unavailable>:${binding.bindingIdentity()}` : binding.bindingIdentity();
-    if (runtime && (runtimeIdentity === identity || runtimeIdentity === "<injected>")) return runtime;
+    if (runtime && runtimeIdentity === identity) return runtime;
+    const authorizeCatalog = (current: KiroRuntime): void => {
+      const observed = inspectCanonicalPath(workspace?.canonicalPath ?? data.root, { kind: "directory", rejectFinalSymlink: true });
+      current.service.bindCatalog({ clientSession: catalogClientSession, workspace: observed.canonicalPath,
+        device: workspace?.deviceId ?? String(observed.identity.dev), inode: workspace?.fileId ?? String(observed.identity.ino),
+        authorizationEpoch: String(runtimeGeneration) });
+    };
+    if (runtime && runtimeIdentity === "<injected>") {
+      authorizeCatalog(runtime);
+      runtimeIdentity = identity;
+      return runtime;
+    }
     await closeRuntime(new Error("workspace binding changed"));
     runtime = await createRuntimeFor(workspace);
     runtimeIdentity = identity;
     runtimeGeneration += 1;
+    authorizeCatalog(runtime);
     if (tracer.enabled) tracer.event("init", "runtime.start", undefined, { runtimeGeneration });
     return runtime;
   };
@@ -583,6 +598,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   await server.connect(new StdioServerTransport());
   let closeTask: Promise<void> | undefined;
   return { close() {
+    runtime?.service.invalidateCatalogs();
     closeTask ??= (async () => {
       try {
         await lifecycle(async () => {
