@@ -2,6 +2,8 @@ import { verify, createPublicKey } from 'node:crypto';
 import { canonical, sha256, TARGETS, LIMITS, PRODUCT, readRegular, checkCompatibility, exactFields } from './bundle-contract.mjs';
 export const PRODUCTION_TRUST_ROOT = '';
 export const RELEASE_DOMAIN = 'kiro-fabric.release.v1\0';
+// Exact official sidecar name; promotion must publish this beside the archive.
+export const RELEASE_SBOM_SUFFIX = '.spdx.json';
 /** @param {any} v */
 const hash=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 /** @param {any} v */
@@ -28,7 +30,8 @@ function verifyWithKey(metadataBytes,signatureBytes,key,expected={}){
  const signature=Buffer.from(s.trim(),'base64');if(signature.length!==64||signature.toString('base64')+'\n'!==s)throw Error('Signature encoding');
  const publicKey=createPublicKey(key);if(publicKey.asymmetricKeyType!=='ed25519'||!verify(null,releaseSigningBytes(m),publicKey,signature))throw Error('Release signature mismatch');
  for(const k of ['product','target','version','bundleDigest'])if(expected[k]!==undefined&&expected[k]!==m[k])throw Error('Release '+k+' mismatch');
- if(expected.archiveBytes&&(expected.archiveBytes.length!==m.archive.size||sha256(expected.archiveBytes)!==m.archive.sha256))throw Error('Release archive mismatch');
+ if(expected.archiveBytes!==undefined&&(!Buffer.isBuffer(expected.archiveBytes)||expected.archiveBytes.length!==m.archive.size||sha256(expected.archiveBytes)!==m.archive.sha256))throw Error('Release archive mismatch');
+ if(expected.sbomBytes!==undefined)checkReleaseSbom(m,expected.sbomBytes);
  return m;
 }
 /** @param {Buffer} metadataBytes @param {Buffer} signatureBytes @param {any} [expected] */
@@ -40,13 +43,34 @@ export function verifyReleaseForTest(metadataBytes,signatureBytes,publicKey,expe
 export async function verifyReleaseSidecars(archive,expected={}){
  return (await verifyReleaseSidecarsCaptured(archive,expected)).metadata;
 }
+/** Byte identity only, not an authentication bypass or native SPDX qualification.
+ * The caller must first authenticate metadata using its existing trust policy.
+ * @param {any} metadata @param {Buffer} bytes */
+export function checkReleaseSbom(metadata,bytes){
+ validateReleaseMetadata(metadata);
+ if(!Buffer.isBuffer(bytes)||bytes.length!==metadata.sbom.size||sha256(bytes)!==metadata.sbom.sha256)throw Error('Release SBOM digest/size mismatch');
+}
+/** @param {string} archive @param {(m:Buffer,s:Buffer,e:any)=>any} verifyMetadata @param {any} expected */
+async function captureSidecars(archive,verifyMetadata,expected){
+ // Authenticate before touching either large artifact, then capture exactly the
+ // signed lengths. A failure cannot fall through to source installation.
+ const [metadataBytes,signatureBytes]=await Promise.all([readRegular(archive+'.release.json',65536),readRegular(archive+'.release.sig',89)]);
+ const metadata=verifyMetadata(metadataBytes,signatureBytes,expected);
+ const sbomBytes=await readRegular(archive+RELEASE_SBOM_SUFFIX,metadata.sbom.size);checkReleaseSbom(metadata,sbomBytes);
+ const archiveBytes=await readRegular(archive,metadata.archive.size);
+ verifyMetadata(metadataBytes,signatureBytes,{...expected,archiveBytes,sbomBytes});
+ return {metadata,archiveBytes,sbomBytes,metadataBytes,signatureBytes};
+}
 /** Capture and verify once; extract archiveBytes, not the original path.
  * @param {string} archive @param {any} [expected] */
 export async function verifyReleaseSidecarsCaptured(archive,expected={}){
  if(!PRODUCTION_TRUST_ROOT)throw Error('Production release trust root unavailable: distribution blocked');
- const [metadata,signature,archiveBytes]=await Promise.all([readRegular(archive+'.release.json',65536),readRegular(archive+'.release.sig',89),readRegular(archive,LIMITS.archive)]);
- const verified=verifyRelease(metadata,signature,{...expected,archiveBytes});
- return {metadata:verified,archiveBytes,metadataBytes:metadata,signatureBytes:signature};
+ return captureSidecars(archive,verifyRelease,expected);
+}
+/** Explicit fixture seam, never selected through environment, CLI or metadata.
+ * @param {string} archive @param {string | Buffer} publicKey @param {any} [expected] */
+export async function verifyReleaseSidecarsCapturedForTest(archive,publicKey,expected={}){
+ return captureSidecars(archive,(m,s,e)=>verifyReleaseForTest(m,s,publicKey,e),expected);
 }
 /** @param {any} candidate @param {{schema:number,product:string,highestVersion:string,highestDigest:string,accepted:{version:string,digest:string}[]} | null} [state] */
 export function checkReleaseAdmission(candidate,state=null){

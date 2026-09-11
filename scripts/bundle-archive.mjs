@@ -1,15 +1,26 @@
-import { gzipSync, gunzipSync } from 'node:zlib';
-import { mkdir, writeFile, chmod, lstat } from 'node:fs/promises';
+import { gzipSync, gunzipSync, createGzip } from 'node:zlib';
+import { writeFile } from 'node:fs/promises';
+import { createHash, randomBytes } from 'node:crypto';
+import { pinnedDirectoryIdentity, pinnedEntryIdentity, runPinnedDirectoryOperation, writePinnedDirectoryStream } from './pinned-directory-child.mjs';
+import { captureDirectoryAncestry } from '../src/installation/filesystem-boundary.mjs';
+import { extractPrivateEntries } from './private-extraction.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
-import { LIMITS, safePath, canonical, checkManifest, sha256, validateBundle, readRegular, byteOrder } from './bundle-contract.mjs';
+import { LIMITS, safePath, canonical, checkManifest, sha256, validateBundle, readRegular, captureRegular, hashRegular, byteOrder } from './bundle-contract.mjs';
 /** @typedef {{path:string,mode:number,data:Buffer}} ArchiveEntry */
 const block=512;
 /** @param {number} n @param {number} len */
 function octal(n,len){const s=n.toString(8);if(s.length>=len)throw Error('USTAR numeric overflow');return s.padStart(len-1,'0')+'\0';}
 /** @param {string} name @param {number} size @param {number} mode */
 function header(name,size,mode,flavor='bundle',directory=false,modifiedAt=0){
- const b=Buffer.alloc(block);let prefix='';if(Buffer.byteLength(name)>100){let i=name.lastIndexOf('/');if(flavor==='legacy')while(i>0&&(Buffer.byteLength(name.slice(0,i))>155||Buffer.byteLength(name.slice(i+1))>100))i=name.lastIndexOf('/',i-1);prefix=name.slice(0,i);name=name.slice(i+1);}
+ const b=Buffer.alloc(block);let prefix='';
+ if(Buffer.byteLength(name)>100){
+  // Choose the rightmost VALID byte split for both encodings. An earlier slash
+  // may fit even when the last slash gives a prefix longer than 155 bytes.
+  let i=name.lastIndexOf('/');
+  while(i>0&&(Buffer.byteLength(name.slice(0,i))>155||Buffer.byteLength(name.slice(i+1))>100))i=name.lastIndexOf('/',i-1);
+  if(i<=0)throw Error('USTAR path bound');prefix=name.slice(0,i);name=name.slice(i+1);
+ }
  if(Buffer.byteLength(name)>100||Buffer.byteLength(prefix)>155)throw Error('USTAR path bound');
  b.write(name,0,100);b.write(octal(mode,8),100);b.write(octal(0,8),108);b.write(octal(0,8),116);b.write(octal(size,12),124);b.write(octal(0,12),136);b.fill(32,148,156);b[156]=48;b.write('ustar\0',257);b.write('00',263);b.write(prefix,345,155);
  if(flavor==='legacy'){b.write(octal(modifiedAt,12),136);b[156]=directory?53:48;b.write(octal(0,8),329);b.write(octal(0,8),337);}
@@ -91,12 +102,7 @@ export function parseLegacyAgentArchive(bytes){
  * @param {Buffer} bytes @param {string} output */
 export function extractLegacyAgentArchiveBytes(bytes,output){
  const parsed=parseLegacyAgentArchive(bytes);
- fs.mkdirSync(output,{mode:448});fs.chmodSync(output,448);
- for(const e of [...parsed.entries].sort((a,b)=>a.path.split('/').length-b.path.split('/').length)){
-  const target=path.join(output,e.path);
-  if(e.mode===448){fs.mkdirSync(target,{mode:448});fs.chmodSync(target,448);}
-  else{fs.writeFileSync(target,e.data,{flag:'wx',mode:384});fs.chmodSync(target,384);}
- }
+ extractPrivateEntries([...parsed.entries].sort((a,b)=>a.path.split('/').length-b.path.split('/').length),output,true);
  return parsed;
 }
 /** @param {ArchiveEntry[]} entries */
@@ -107,10 +113,110 @@ function validateEntries(entries){
  for(const e of manifest.inventory){const actual=entries.find(a=>a.path===e.path);if(!actual||actual.mode!==e.mode||actual.data.length!==e.size||sha256(actual.data)!==e.sha256)throw Error('Archive inventory mismatch');}
  return {entries,manifest,digest:manifest.digest};
 }
-/** @param {string} root @param {string} output */
+/** Stream deterministic USTAR/gzip to an EXCLUSIVE private pending file, not a
+ * public archive. <=64KiB payload/compressor/output buffers with backpressure;
+ * manifest metadata remains separately bounded by LIMITS.manifest.
+ * Every member is hashed through captureRegular to EOF, including its growth
+ * probe, before trusting the bytes already sent to the PRIVATE compressor/file.
+ * A separate final bundle validation detects later inventory/manifest drift.
+ * Caller must still check checkout/source drift BEFORE publishing/renaming output.
+ * Existing Buffer encoders/parsers and createBundleArchive remain compatible.
+ * @param {string} root @param {string} output
+ * @param {{maxBytes?:number}} [options] Lower-only compressed-size ceiling.
+ */
+export async function writeBundleArchive(root,output,options={}){
+ return writeBundleArchiveForTest(root,output,{},options);
+}
+/** Internal mutation fixture seam; no hook is selectable by CLI/environment.
+ * @param {string} root @param {string} output @param {any} hooks
+ * @param {{maxBytes?:number}} [options] */
+export async function writeBundleArchiveForTest(root,output,hooks,{maxBytes=LIMITS.archive}={}){
+ if(!Number.isSafeInteger(maxBytes)||maxBytes<1||maxBytes>LIMITS.archive)throw Error('Invalid compressed archive bound');
+ const bundle=await validateBundle(root);root=bundle.root;output=path.resolve(output);
+ const relative=path.relative(root,output);
+ if(relative===''||!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative))throw Error('Archive output must be outside the source bundle');
+ const parent=path.dirname(output),guard=captureDirectoryAncestry(parent),parentStat=fs.lstatSync(parent,{bigint:true});
+ if((parentStat.mode&0o7777n)!==0o700n||parentStat.uid!==BigInt(process.getuid()))throw Error('Archive output parent must be private/current-user owned');
+ try{fs.lstatSync(output);throw Object.assign(Error('EEXIST: archive output exists'),{code:'EEXIST'});}catch(error){if(error.code!=='ENOENT')throw error;}
+ const fd=fs.openSync(parent,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
+ const parentIdentity=pinnedDirectoryIdentity(parentStat),equal=(a,b)=>canonical(a)===canonical(b);
+ const check=()=>{guard.check();if(!equal(pinnedDirectoryIdentity(fs.fstatSync(fd,{bigint:true})),parentIdentity))throw Error('Archive output directory changed');};
+ const captureName=`.archive-capture-${randomBytes(16).toString('hex')}`,capturePath=path.join(parent,captureName);
+ const base={fd,cwd:parent,parent:parentIdentity,check};
+ let gzip,completion,written,failure,verified=false;
+ try{
+  check();let size=0,tarBytes=0;const digest=createHash('sha256');
+  const tarBound=LIMITS.bytes+LIMITS.manifest+LIMITS.entries*1024;
+  gzip=createGzip({level:9,chunkSize:64*1024});const compressor=gzip;
+  // The child owns the output descriptor on every host. Its verified cwd/fd3
+  // protocol is portable to Darwin and never traverses /dev/fd/N as a directory.
+  const compressed=async function*(){for await(const chunk of compressor){size+=chunk.length;if(size>maxBytes)throw Error('Compressed bound');digest.update(chunk);yield chunk;}};
+  completion=writePinnedDirectoryStream({...base,name:captureName,mode:384,maxBytes},compressed()).then(result=>({result,error:null}),error=>({result:null,error}));
+  const send=async bytes=>{
+   tarBytes+=bytes.length;if(tarBytes>tarBound)throw Error('Tar bound');
+   await new Promise((resolve,reject)=>compressor.write(bytes,error=>error?reject(error):resolve()));
+  };
+  const manifestBytes=Buffer.from(canonical(bundle.manifest)+'\n');
+  const entries=[...bundle.inventory,{path:'bundle-manifest.json',mode:384,size:manifestBytes.length,sha256:sha256(manifestBytes)}].sort((a,b)=>byteOrder(a.path,b.path));
+  if(entries.length>LIMITS.entries+1)throw Error('Archive count bound');
+  for(const entry of entries){
+   safePath(entry.path);await hooks.beforeMember?.(entry.path);
+   await captureRegular(path.join(root,entry.path),Math.min(entry.size,entry.path==='bundle-manifest.json'?LIMITS.manifest:LIMITS.file),async(input,expectedSize)=>{
+    if(expectedSize!==entry.size)throw Error('Archive member size changed');
+    await send(header(entry.path,entry.size,entry.mode));
+    const buffer=Buffer.alloc(Math.min(expectedSize+1,64*1024)),hash=createHash('sha256');let length=0;
+    while(length<=expectedSize){
+     const r=await input.read(buffer,0,Math.min(buffer.length,expectedSize+1-length),null);if(!r.bytesRead)break;
+     length+=r.bytesRead;if(length>expectedSize)throw Error('Archive member grew during capture');
+     const chunk=buffer.subarray(0,r.bytesRead);hash.update(chunk);await send(chunk);
+     await hooks.afterChunk?.(entry.path,length);
+    }
+    if(length!==entry.size||hash.digest('hex')!==entry.sha256)throw Error('Archive member checksum/size changed');
+    return {value:null,length};
+   },{mode:entry.mode});
+   await send(Buffer.alloc((block-entry.size%block)%block));await hooks.afterMember?.(entry.path);
+  }
+  await send(Buffer.alloc(1024));gzip.end();
+  const completed=await completion;if(completed.error)throw completed.error;written=completed.result;
+  const archiveDigest=digest.digest('hex');check();
+  const outputBytes=await hashRegular(capturePath,maxBytes,{mode:384});check();
+  if(outputBytes.size!==size||outputBytes.sha256!==archiveDigest||Number(written.size)!==size)throw Error('Private archive output checksum changed');
+  await hooks.beforeValidation?.(capturePath);
+  // Independent end-of-capture validation is NOT replaced by an integrity index.
+  const final=await validateBundle(root);
+  if(final.digest!==bundle.digest)throw Error('Bundle changed during archive capture');
+  check();
+  if(!equal(pinnedEntryIdentity(fs.lstatSync(capturePath,{bigint:true})),written))throw Error('Private archive output changed');
+  // Only now expose the requested private pending name; caller still checks
+  // source checkout drift before publishing its public development archive.
+  runPinnedDirectoryOperation({...base,operation:'rename',name:captureName,target:path.basename(output),expected:written});
+  verified=true;return {path:output,size,sha256:archiveDigest,digest:bundle.digest};
+ }catch(error){
+  gzip?.destroy(error);
+  const completed=completion?await completion:null;
+  written??=completed?.result;
+  failure=completed?.error??error;throw failure;
+ }finally{
+  gzip?.destroy();if(completion)await completion;
+  try{
+   if(!verified){
+    // A successful child gives an exact cleanup identity. A killed/failed child
+    // does not: preserve its internal private partial file as recovery evidence,
+    // NEVER guess ownership from a pathname or publish the requested output.
+    try{
+     const actual=pinnedEntryIdentity(fs.lstatSync(capturePath,{bigint:true}));
+     if(written&&equal(actual,written))runPinnedDirectoryOperation({...base,operation:'unlink',name:captureName,expected:written});
+     else if(failure)failure.recoveryPath=capturePath;
+    }catch(error){if(error.code!=='ENOENT'&&failure)failure.recoveryPath=capturePath;}
+   }
+  }finally{fs.closeSync(fd);}
+ }
+}
+/** Compatibility Buffer-backed file API. Production packaging uses writeBundleArchive.
+ * @param {string} root @param {string} output */
 export async function createBundleArchive(root,output){
- const bundle=await validateBundle(root);const entries=[];
- for(const e of bundle.inventory)entries.push({path:e.path,mode:e.mode,data:await readRegular(path.join(root,e.path),LIMITS.file)});
+ const bundle=await validateBundle(root);root=bundle.root;const entries=[];
+ for(const e of bundle.inventory)entries.push({path:e.path,mode:e.mode,data:await readRegular(path.join(root,e.path),LIMITS.file,{mode:e.mode})});
  entries.push({path:'bundle-manifest.json',mode:384,data:Buffer.from(canonical(bundle.manifest)+'\n')});entries.sort((a,b)=>byteOrder(a.path,b.path));
  const raw=encodeBundleTar(entries);parseBundleTar(raw);const archive=gzipSync(raw,{level:9});if(archive.length>LIMITS.archive)throw Error('Compressed bound');
  await writeFile(output,archive,{flag:'wx',mode:384});return {path:output,size:archive.length,sha256:sha256(archive),digest:bundle.digest};
@@ -127,8 +233,8 @@ export async function extractBundleArchiveBytes(bytes,output){
  if(!Buffer.isBuffer(bytes)||bytes.length>LIMITS.archive)throw Error('Archive bound');
  const parsed=parseBundleArchive(Buffer.from(bytes));
  // No destination operation occurs before the complete parser/inventory pass.
- try{await lstat(output);throw Error('Destination already exists');}catch(e){if(!(e instanceof Error)||!('code' in e)||e.code!=='ENOENT')throw e;}
- await mkdir(output,{mode:448});await chmod(output,448);
- for(const e of parsed.entries){const parent=path.dirname(path.join(output,e.path));await mkdir(parent,{recursive:true,mode:448});await writeFile(path.join(output,e.path),e.data,{flag:'wx',mode:e.mode});await chmod(path.join(output,e.path),e.mode);}
- return validateBundle(output);
+ const guard=extractPrivateEntries(parsed.entries,output);
+ const bundle=await validateBundle(guard.root);guard.check();
+ if(bundle.digest!==parsed.digest)throw Error('Extracted bundle identity changed');
+ return bundle;
 }

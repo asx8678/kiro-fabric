@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, readdir, realpath, open } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
+import { captureDirectoryAncestry, readDirectoryBounded } from './filesystem-boundary.mjs';
 import path from 'node:path';
 export const PRODUCT = 'kiro-fabric';
 export const TARGETS = ['darwin-arm64','darwin-x64','linux-arm64','linux-x64'];
@@ -134,37 +135,44 @@ export function checkManifest(m){
 }
 /** @param {import('node:fs').Stats} s */
 function owned(s){if(typeof process.getuid!=='function'||s.uid!==process.getuid())throw Error('File ownership mismatch');}
-/** Capture through an owned no-follow handle, then check both inode and name.
- * This is capture, not a promise that the caller's pathname remains unchanged.
+/** @typedef {{mode?:number}} CaptureOptions */
+/** @param {import('node:fs').Stats} a @param {import('node:fs').Stats} b */
+const sameFile=(a,b)=>b.isFile()&&b.nlink===1&&a.dev===b.dev&&a.ino===b.ino&&a.size===b.size&&a.mode===b.mode&&a.uid===b.uid&&a.gid===b.gid&&a.mtimeMs===b.mtimeMs&&a.ctimeMs===b.ctimeMs;
+/** Capture through an owned, nonblocking no-follow descriptor. consume must read
+ * through EOF (including an extra-byte growth probe), returning the observed length.
+ * Only the resolved result is verified; callback effects must remain private until
+ * success. This does not promise the caller's pathname remains unchanged later.
  * @template T
  * @param {string} file @param {number} max
- * @param {(handle: import('node:fs/promises').FileHandle, size: number) => Promise<{value:T,length:number}>} consume */
-async function captureRegular(file,max,consume){
+ * @param {(handle: import('node:fs/promises').FileHandle, size: number) => Promise<{value:T,length:number}>} consume
+ * @param {CaptureOptions} [options] */
+export async function captureRegular(file,max,consume,{mode}={}){
+ if(!Number.isSafeInteger(max)||max<0||mode!==undefined&&(!Number.isInteger(mode)||mode<0||mode>4095))throw Error('Invalid capture bound/mode');
  const before=await lstat(file);owned(before);
  if(!before.isFile()||before.nlink!==1||before.size>max)throw Error('Unsafe or oversized file: '+file);
- const handle=await open(file,constants.O_RDONLY|constants.O_NOFOLLOW);
+ if(mode!==undefined&&(before.mode&4095)!==mode)throw Error('File mode/type');
+ const handle=await open(file,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
  try{
   const s=await handle.stat();owned(s);
-  if(!s.isFile()||s.nlink!==1||s.size>max||s.ino!==before.ino||s.dev!==before.dev)throw Error('File changed');
+  if(!sameFile(before,s)||s.size>max||mode!==undefined&&(s.mode&4095)!==mode)throw Error('File changed');
   const {value,length}=await consume(handle,s.size);
   const after=await handle.stat(),named=await lstat(file);
-  if(length!==s.size||s.ino!==named.ino||s.dev!==named.dev||s.mtimeMs!==after.mtimeMs||s.ctimeMs!==after.ctimeMs||s.mode!==after.mode||s.uid!==after.uid||after.nlink!==1)throw Error('File changed');
+  if(length!==s.size||!sameFile(s,after)||!sameFile(s,named))throw Error('File changed');
   return value;
  }finally{await handle.close();}
 }
 /** Read bounded metadata bytes; large inventory members use streaming hashes.
- * @param {string} file @param {number} max */
-export async function readRegular(file,max){
+ * @param {string} file @param {number} max @param {CaptureOptions} [options] */
+export async function readRegular(file,max,options={}){
  return captureRegular(file,max,async(handle,size)=>{
   const buffer=Buffer.alloc(size+1);let length=0;
   while(length<buffer.length){const r=await handle.read(buffer,length,buffer.length-length,null);if(!r.bytesRead)break;length+=r.bytesRead;}
   return {value:buffer.subarray(0,length),length};
- });
+ },options);
 }
-/** Hash large binaries without allocating a Node-executable-sized buffer.
- * Read one extra byte to detect growth; retain the same capture trust checks.
- * @param {string} file @param {number} max */
-async function hashRegular(file,max){
+/** Hash through <=64KiB buffers with the same descriptor-bound checks.
+ * @param {string} file @param {number} max @param {CaptureOptions} [options] */
+export async function hashRegular(file,max,options={}){
  return captureRegular(file,max,async(handle,size)=>{
   const buffer=Buffer.alloc(Math.min(size+1,64*1024)),hash=createHash('sha256');let length=0;
   while(length<=size){
@@ -173,48 +181,55 @@ async function hashRegular(file,max){
    length+=r.bytesRead;hash.update(buffer.subarray(0,r.bytesRead));
   }
   return {value:{size:length,sha256:hash.digest('hex')},length};
- });
+ },options);
 }
-/** Reject symlink components; ancestors may be shared (e.g. /tmp), bundle root may not.
+/** Bundle roots are private; trusted/sticky ancestors are not bundle contents.
  * @param {string} root */
 async function checkRoot(root){
- const absolute=path.resolve(root);let current=path.parse(absolute).root;
- for(const part of absolute.slice(current.length).split('/').filter(Boolean)){current=path.join(current,part);const s=await lstat(current);if(!s.isDirectory()||s.isSymbolicLink())throw Error('Unsafe root component');}
- const s=await lstat(absolute);owned(s);if((s.mode&4095)!==448)throw Error('Unsafe bundle root mode');
+ const guard=captureDirectoryAncestry(root,{label:'Unsafe root component'});
+ const s=await lstat(guard.root);owned(s);if((s.mode&4095)!==448)throw Error('Unsafe bundle root mode');
+ guard.check();return guard;
 }
-/** @param {string} root */
+/** Iterative bounded enumeration: no whole attacker-controlled readdir array.
+ * @param {string} root */
 async function scan(root){
- /** @type {any[]} */ const inventory=[];const aliases=new Set();let count=0,total=0;
- /** @param {string} rel */
- async function walk(rel){
-  for(const name of (await readdir(path.join(root,rel))).sort(byteOrder)){
-   const p=rel?rel+'/'+name:name;safePath(p);if(++count>LIMITS.entries*2)throw Error('Tree bound');
+ /** @type {any[]} */const inventory=[];const aliases=new Set(),directories=[];let count=0,total=0;
+ const pending=[''];
+ while(pending.length){
+  const rel=/** @type {string} */(pending.pop()),directory=path.join(root,rel),guard=captureDirectoryAncestry(directory,{label:'Directory changed'});
+  const names=await readDirectoryBounded(directory,LIMITS.entries*2-count);count+=names.length;guard.check();
+  for(const name of names.sort(byteOrder)){
+   const p=rel?rel+'/'+name:name;safePath(p);
    const key=p.toLowerCase();if(aliases.has(key))throw Error('Case collision');aliases.add(key);
    const s=await lstat(path.join(root,p));owned(s);
-   if(s.isDirectory()){if((s.mode&4095)!==448)throw Error('Directory mode');await walk(p);if(!inventory.some(e=>e.path.startsWith(p+'/')))throw Error('Empty/unknown directory');}
+   if(s.isDirectory()){if((s.mode&4095)!==448)throw Error('Directory mode');pending.push(p);directories.push(p);}
    else{
     const role=p==='bundle-manifest.json'?'manifest':roleFor(p),mode=role==='executable'?448:384;
     if(!s.isFile()||s.nlink!==1||(s.mode&4095)!==mode)throw Error('File mode/type');
-    if(p==='bundle-manifest.json')continue;
-    total+=s.size;if(total>LIMITS.bytes)throw Error('Bundle byte bound');
-    const digest=await hashRegular(path.join(root,p),LIMITS.file);inventory.push({path:p,role,type:'file',mode,...digest});
+    if(p==='bundle-manifest.json'){await hashRegular(path.join(root,p),LIMITS.manifest,{mode});continue;}
+    const digest=await hashRegular(path.join(root,p),Math.min(LIMITS.file,LIMITS.bytes-total),{mode});
+    total+=digest.size;if(total>LIMITS.bytes)throw Error('Bundle byte bound');
+    inventory.push({path:p,role,type:'file',mode,...digest});
    }
+   guard.check();
   }
+  guard.check();
  }
- await walk('');return inventory.sort((a,b)=>byteOrder(a.path,b.path));
+ for(const p of directories)if(!inventory.some(e=>e.path.startsWith(p+'/')))throw Error('Empty/unknown directory');
+ return inventory.sort((a,b)=>byteOrder(a.path,b.path));
 }
 /** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any}} options */
 export async function createBundleManifest(root,{version,target,compatibility,provenance,tools}){
- await checkRoot(root);
+ const guard=await checkRoot(root);root=guard.root;
  const payload={schema:1,product:PRODUCT,version,target,compatibility,provenance,tools,inventory:await scan(root)};
- const manifest={...payload,digest:manifestDigest(payload)};checkManifest(manifest);return manifest;
+ guard.check();const manifest={...payload,digest:manifestDigest(payload)};checkManifest(manifest);return manifest;
 }
 /** @param {string} root */
 export async function validateBundle(root){
- await checkRoot(root);
- const raw=await readRegular(path.join(root,'bundle-manifest.json'),LIMITS.manifest),manifest=JSON.parse(raw.toString('utf8'));
+ const guard=await checkRoot(root);root=guard.root;
+ const raw=await readRegular(path.join(root,'bundle-manifest.json'),LIMITS.manifest,{mode:384}),manifest=JSON.parse(raw.toString('utf8'));
  if(!raw.equals(Buffer.from(canonical(manifest)+'\n')))throw Error('Noncanonical manifest bytes');
  const bytes=checkManifest(manifest),actual=await createBundleManifest(root,manifest);
  if(canonical(actual)!==canonical(manifest))throw Error('Bundle inventory mismatch');
- return {root:await realpath(root),digest:manifest.digest,manifest,version:manifest.version,inventory:manifest.inventory,bytes};
+ guard.check();return {root,digest:manifest.digest,manifest,version:manifest.version,inventory:manifest.inventory,bytes};
 }

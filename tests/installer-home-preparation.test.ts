@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { planInstallationPreparation, applyInstallationPermissions, preservePiFabricProfile } from "../scripts/installer-home-preparation.mjs";
 import { createConfigurationBackup } from "../scripts/installer-configuration-backup.mjs";
 import { installerSafety } from "../scripts/install-agent-user.mjs";
@@ -11,7 +11,7 @@ import { installCompleteGeneration, inspectCompleteInstallation } from "../scrip
 import { fixture } from "./bundle-fixture.js";
 
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 function setup(legacy = false) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "home-preparation-"))); roots.push(root); fs.chmodSync(root, 0o700);
   const home = path.join(root, "custom Kiro home ü"), agents = path.join(home, "agents"), old = path.join(home, ".kiro-fabric");
@@ -30,6 +30,16 @@ function setup(legacy = false) {
 const mode = (file: string) => fs.statSync(file).mode & 0o777;
 
 describe("installation home preparation", () => {
+  it("reports applied permissions when fsync fails after chmod", () => {
+    const f = setup(), plan = planInstallationPreparation(f.home);
+    vi.spyOn(fs, "fsyncSync").mockImplementationOnce(() => { throw new Error("fixture fsync failure"); });
+    let failure: any;
+    try { applyInstallationPermissions(plan); } catch (error) { failure = error; }
+    expect(failure.message).toContain("fixture fsync failure");
+    expect(failure.appliedPermissions).toEqual([{ path: f.home, previousMode: "755", mode: "700" }]);
+    expect(mode(f.home)).toBe(0o700); expect(mode(f.agents)).toBe(0o755);
+  });
+
   it("plans without mutation, then makes only the home and agents private", () => {
     const f = setup(), plan = planInstallationPreparation(f.home);
     expect(mode(f.home)).toBe(0o755); expect(mode(f.agents)).toBe(0o755);
@@ -77,8 +87,24 @@ describe("installation home preparation", () => {
     });
     expect(result.status, result.stdout + result.stderr).toBe(5);
     expect(result.stderr).toBe("");
-    expect(JSON.parse(result.stdout).legacyProfileBackup).toBeUndefined();
+    const output = JSON.parse(result.stdout);
+    expect(output.legacyProfileBackup).toBeUndefined();
+    expect(output).toMatchObject({ committed: false, homePreparation: { permissions: [{ path: f.home, previousMode: "755", mode: "700" }, { path: f.agents, previousMode: "755", mode: "700" }] }, configurationBackup: { path: expect.any(String) } });
+    expect(fs.existsSync(output.configurationBackup.path)).toBe(true);
+    expect(output.limitations.join(" " )).toContain("not a no-change guarantee");
     expect(fs.readFileSync(f.profile)).toEqual(f.bytes);
+  });
+
+  it("discloses actual preparation and durable backup on a human-mode activation failure", () => {
+    const f = setup(), bin = path.join(f.root, "bin"); fs.mkdirSync(bin, { mode: 0o700 });
+    fs.writeFileSync(path.join(bin, "kiro-cli"), '#!/bin/sh\nif [ "$1" = --version ]; then printf "kiro-cli 2.21.1\\n"; else printf "%s\\n" --path; fi\n', { mode: 0o700 });
+    const script = `import {runManager} from ${JSON.stringify(new URL("../scripts/install-manager.mjs", import.meta.url).href)}; process.exitCode=await runManager(['install','--kiro-home',process.argv[1],'--yes','--non-interactive','--no-shell-integration'],{context:{kind:'bootstrap'},sourceBundle:process.argv[2]});`;
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", script, f.home, path.join(f.root, "missing-bundle")], { cwd: f.root, env: { HOME: f.root, PATH: bin, TMPDIR: f.root }, encoding: "utf8", timeout: 10000 });
+    expect(result.status).toBe(5); expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(`Applied directory permissions: ${f.home} (755 -> 700)`);
+    expect(result.stderr).toContain("Prior configuration backup:"); expect(result.stderr).toContain("Failure is not a no-change guarantee");
+    expect(mode(f.home)).toBe(0o700); expect(mode(f.agents)).toBe(0o700);
+    expect(fs.readFileSync(path.join(f.agents, "other.json"), "utf8")).toBe("{}\n");
   });
 
   it("backs up the old profile and permits complete activation while preserving other configuration", async () => {

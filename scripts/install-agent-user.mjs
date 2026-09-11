@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateAgentProfile } from "./agent-profile.mjs";
+import { captureDirectoryAncestry, readDirectoryBoundedSync, directoryIsEmpty } from "./filesystem-boundary.mjs";
 import {
   snapshotTree,
   validateAgentPackage,
@@ -59,6 +60,7 @@ const assertSafeDirectory = (target, options = {}) => {
     const forbidden = options.private ? 0o077 : 0o022;
     if ((stats.mode & forbidden) !== 0) throw new Error(`unsafe directory permissions: ${absolute}`);
   }
+  captureDirectoryAncestry(absolute, { label: "unsafe directory ancestry", allowMacAliases: true });
   return absolute;
 };
 
@@ -90,6 +92,7 @@ const assertTrustedExecutable = (target) => {
     const displayPath = JSON.stringify(absolute.length > 512 ? `${absolute.slice(0, 512)}…` : absolute);
     throw new Error(`unsafe Node executable: ${displayPath}; ${reasons.join(", ")} (uid=${stats.uid}, currentUid=${currentUid ?? "unavailable"}, mode=${(stats.mode & 0o7777).toString(8)}, nlink=${stats.nlink})`);
   }
+  captureDirectoryAncestry(path.dirname(absolute), { label: "unsafe Node executable directory ancestry", allowMacAliases: true });
   return absolute;
 };
 
@@ -206,7 +209,7 @@ const removeIfEmpty = (target) => {
   const stats = lstat(target);
   if (!stats) return;
   assertSafeDirectory(target);
-  if (fs.readdirSync(target).length === 0) fs.rmdirSync(target);
+  if (directoryIsEmpty(target)) fs.rmdirSync(target);
 };
 
 const copyTree = (source, target) => {
@@ -215,7 +218,7 @@ const copyTree = (source, target) => {
   assertCurrentUser(stats, `source ${source}`);
   if (stats.isDirectory()) {
     fs.mkdirSync(target, { mode: 0o700 });
-    for (const entry of fs.readdirSync(source).sort()) copyTree(path.join(source, entry), path.join(target, entry));
+    for (const entry of readDirectoryBoundedSync(source, MAX_TREE_INVENTORY_ENTRIES).sort()) copyTree(path.join(source, entry), path.join(target, entry));
     return;
   }
   if (!stats.isFile() || stats.nlink !== 1) throw new Error(`unsupported source: ${source}`);
@@ -440,7 +443,7 @@ const releaseLock = (lock) => {
     throw new Error("install lock ownership changed during operation");
   }
   assertCurrentUser(stats, "install lock");
-  const entries = fs.readdirSync(lock.target);
+  const entries = readDirectoryBoundedSync(lock.target, 2);
   if (JSON.stringify(entries) !== JSON.stringify(["owner.json"])) throw new Error("install lock contains unowned content");
   const owner = path.join(lock.target, "owner.json");
   assertSafeFile(owner, "install lock owner");
@@ -467,7 +470,7 @@ const prepareMigration = (input, destination, options) => {
   for (const entry of entries) assertSafeDirectory(path.join(canonicalLegacyFabric, entry.name), { private: true });
   if (lstat(destination)) {
     assertSafeDirectory(destination, { private: true });
-    if (fs.readdirSync(destination).length > 0) throw new Error("agent data is not empty; migration refused");
+    if (!directoryIsEmpty(destination)) throw new Error("agent data is not empty; migration refused");
   }
   return { source: canonicalLegacyFabric, entries };
 };
@@ -678,7 +681,7 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
 
     if (migration) {
       const dataTarget = path.join(installPaths.data, "fabric");
-      if (fs.readdirSync(dataTarget).length !== 0) throw new Error("agent data changed during migration");
+      if (!directoryIsEmpty(dataTarget)) throw new Error("agent data changed during migration");
       for (const entry of migration.entries) {
         const target = path.join(dataTarget, entry.name);
         fs.renameSync(path.join(migrationRoot, entry.name), target);
@@ -976,7 +979,7 @@ export const uninstallUserAgent = (env = process.env, userHome = homedir(), opti
 // Versioned complete-generation activation reuses these existing ownership/path
 // predicates rather than creating a weaker destination policy.
 export const installerSafety = Object.freeze({
-  paths, lstat, hash, assertSafeDirectory, assertSafeFile, assertNoUnsafeSymlinkComponents,
+  paths, lstat, hash, assertSafeDirectory, assertSafeFile, assertTrustedExecutable, assertNoUnsafeSymlinkComponents,
   assertNoPathOverlap, ensureDirectory, atomicWrite, assertSameTree,
   readLegacyInstallation: (kiroHome) => inspectTarget(kiroHome, paths(kiroHome)),
 });

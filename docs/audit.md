@@ -318,3 +318,53 @@ These entries document later changes, not a revision to historical results or ev
 - `tests/source-packets.test.ts` — checked runtime and visible projection of related source batches, complete evidence with fewer calls, and nested/visible budget clamps.
 - `skills/fabric-exec/references/review.md` — task-loaded coverage ledger, risk-prioritized reference tracing, falsification and explicit partial-review reporting.
 - Existing local read/search contracts add total line counts and search scope; all-files manifests avoid a redundant ripgrep launch. Permission and execution budgets are unchanged.
+
+## Installer reliability implementation follow-up
+
+This is implementation/regression inventory, not native or authenticated release qualification. Production trust and publication remain blocked. Source activation keeps Code Mode and installed-home isolation; no installer command becomes an unrestricted native-tool bypass.
+
+Backup coverage distinguishes source artifacts from configuration, preserves excluded trees and rejects unsafe nested links. Retained-target rollback restores hash-bound original profiles (including real historical factory/inspector data); offline recovery preserves ambiguous evidence. CLI metadata drives help/validation/partial previews and truthful postcommit errors. Independent smoke checks validate actual read/search receipts, not echoed sentinels. Source packaging reuses verified immutable artifacts under leases, streams archives/private staging, and provides conservative opt-in checkout GC. Fixed descriptor-bound operations use a validated inherited-fd child where directory aliases are unavailable.
+
+New implementation files:
+- `src/installation/filesystem-boundary.mjs`
+- `scripts/filesystem-boundary.mjs`
+- `scripts/installer-artifacts.mjs`
+- `scripts/installer-cache.mjs`
+- `scripts/installer-ci-cache.mjs`
+- `scripts/installer-cli-contract.mjs`
+- `scripts/installer-diagnostics.mjs`
+- `scripts/installer-profile-publication.mjs`
+- `scripts/installer-profile-store.mjs`
+- `scripts/installer-smoke-contract.mjs`
+- `scripts/pinned-directory-child.mjs`
+- `scripts/private-extraction.mjs`
+- `scripts/qualification-failure.mjs`
+- `scripts/source-bundle-stage.mjs`
+- `scripts/test-installer.mjs`
+
+Regression and acceptance files:
+- `tests/installer-archive-stream.test.ts`
+- `tests/installer-boundary-regressions.test.ts`
+- `tests/installer-cache.test.ts`
+- `tests/installer-ci-cache-acceptance.test.ts`
+- `tests/installer-cli-contract.test.ts`
+- `tests/installer-diagnostics.test.ts`
+- `tests/installer-extraction-portability.test.ts`
+- `tests/installer-manager-acceptance.test.ts`
+- `tests/installer-native-zsh-acceptance.test.ts`
+- `tests/installer-packaging-cache.test.ts`
+- `tests/installer-profile-publication.test.ts`
+- `tests/installer-smoke-acceptance.test.ts`
+- `tests/installer-smoke-bundle-acceptance.test.ts`
+- `tests/installer-suite-registration.test.ts`
+- `tests/managed-installation-lifecycle.test.ts`
+- `tests/qualification-failure-acceptance.test.ts`
+- `tests/release-capture-boundaries.test.ts`
+- `tests/source-bundle-stage.test.ts`
+- `tests/source-frontend-acceptance.test.ts`
+- `tests/source-installer-contract.test.ts`
+- `tests/bundle-sbom-artifacts.test.ts`
+
+Historical module bytes in `tests/fixtures/installer-history/c0f65e9/agent-profile.mjs.txt`, `tests/fixtures/installer-history/c0f65e9/managed-installation.mjs.txt` and `tests/fixtures/installer-history/d33de003/install-agent-user.mjs.txt` are hash-pinned test data, so shallow/offline checkouts need no historical Git subprocess. The native suite registry is shared with CI; passing Linux child-strategy tests does not claim native macOS qualification. SBOM producers retain legacy names and emit archive-linked snapshots with exact size/hash descriptors; no signing key or qualification bypass is introduced. Failure publications are sanitized and nonqualifying; transcript-bound private success evidence is not silently stripped and published as proof.
+
+Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces SIGKILL between owner unlink and directory removal, then verifies durable release-marker recovery, positive birth identity, preserved foreign evidence and retained committed transaction provenance. `src/installation/installer-lock.mjs` and `src/installation/pinned-recovery.mjs` keep public lock APIs unchanged. Legacy ownerless locks without proof remain preserved; this is not an age-based force-clean mechanism.

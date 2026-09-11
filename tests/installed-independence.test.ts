@@ -154,8 +154,10 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect(await controls()).toEqual(beforeDoctor);
     run(['start']);
     expect((await fs.readFile(env.FAKE_KIRO_CAPTURE, 'utf8')).trimEnd().split('\n')).toEqual([cwd, home, kiroHome, '--v3', '--agent', 'kiro-fabric']);
-    const update = JSON.parse(run(['update', '--yes', '--non-interactive', '--json'], 8));
-    expect(update.error).toMatch(/production.*trust root|trust root.*production/i);
+    const update = JSON.parse(run(['update', '--yes', '--non-interactive', '--json'], 4));
+    expect(update.error).toMatch(/Source installation.*trusted checkout/s);
+    const signedUpdate = JSON.parse(run(['update', '--version', '1.0.0', '--yes', '--non-interactive', '--json'], 8));
+    expect(signedUpdate.error).toMatch(/production.*trust root|trust root.*production/i);
     expect(await controls()).toEqual(beforeDoctor);
     run(['update', '--source', '--yes', '--json'], 2);
     const data = path.join(installed.paths.data, 'fabric', 'independence-data');

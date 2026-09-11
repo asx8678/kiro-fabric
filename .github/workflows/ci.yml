@@ -54,7 +54,10 @@ jobs:
           - { target: darwin-arm64, runner: macos-15, os: Darwin, arch: arm64 }
           - { target: darwin-x64, runner: macos-15-intel, os: Darwin, arch: x86_64 }
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 45
+    env:
+      PNPM_STORE_DIR: ${{ runner.temp }}/kiro-fabric-pnpm-store
+      TOOL_TRANSPORT: ${{ runner.temp }}/kiro-fabric-private-ci-cache/tool-transport
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: { persist-credentials: false }
@@ -76,7 +79,22 @@ jobs:
             getconf GNU_LIBC_VERSION
           fi
       - run: npm install --global pnpm@11.20.0
-      - run: pnpm install --frozen-lockfile
+      - name: Create private cache rematerialization parent
+        run: |
+          test ! -e "$RUNNER_TEMP/kiro-fabric-private-ci-cache"
+          mkdir -m 700 "$RUNNER_TEMP/kiro-fabric-private-ci-cache"
+      - name: Restore content-addressable pnpm store only
+        id: pnpm-cache
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ${{ env.PNPM_STORE_DIR }}
+          key: installer-pnpm-v1-${{ matrix.target }}-node24-pnpm11.20.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
+      - name: Restore untrusted pinned tool transport only
+        id: tool-cache
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ${{ env.TOOL_TRANSPORT }}
+          key: installer-tools-v1-${{ matrix.target }}-${{ hashFiles('build-toolchain.json', 'scripts/installer-ci-cache.mjs') }}
       - name: Provision ripgrep for native runtime contracts
         run: |
           if [ "$(uname -s)" = Linux ]; then
@@ -86,6 +104,11 @@ jobs:
             brew list ripgrep >/dev/null 2>&1 || brew install ripgrep
           fi
           rg --version
+      - name: Materialize fresh dependencies with store verification
+        run: pnpm install --frozen-lockfile --store-dir "$PNPM_STORE_DIR" --verify-store-integrity=true --package-import-method=copy
+      - name: Verify and rematerialize pinned private tools
+        env: { TARGET: "${{ matrix.target }}" }
+        run: node scripts/installer-ci-cache.mjs restore "$TARGET" "$TOOL_TRANSPORT"
       - name: Isolated native installer and runtime contract tests
         run: |
           set -euo pipefail
@@ -93,8 +116,9 @@ jobs:
           root=$(mktemp -d "$RUNNER_TEMP/installer-contracts.XXXXXX")
           trap 'rm -rf -- "$root"' EXIT
           mkdir "$root/home" "$root/kiro" "$root/tmp"
-          HOME="$root/home" KIRO_HOME="$root/kiro" TMPDIR="$root/tmp" ./node_modules/.bin/vitest run tests/installer-platform.test.ts tests/bundle-archive.test.ts tests/release-trust.test.ts tests/installer-bootstrap.test.ts tests/source-bootstrap.test.ts tests/private-tools.test.ts tests/local-process-group.test.ts tests/local-shell.test.ts tests/local-search-work.test.ts tests/local-executable.test.ts tests/local-provider.test.ts tests/bundle-contract.test.ts tests/bundle-streaming.test.ts tests/managed-generation.test.ts tests/managed-generation-efficiency.test.ts
+          HOME="$root/home" KIRO_HOME="$root/kiro" TMPDIR="$root/tmp" node scripts/test-installer.mjs run contracts
       - name: Build and exercise the complete native bundle
+        env: { TARGET: "${{ matrix.target }}" }
         run: |
           set -euo pipefail
           umask 022
@@ -105,9 +129,29 @@ jobs:
           pnpm run agent:bundle
           archive=$(node -p 'JSON.parse(require("fs").readFileSync(".tmp/complete-bundle.json","utf8")).archive')
           cp "$archive" "$root/first.tar.gz"
+          if [ ! -e "$TOOL_TRANSPORT" ]; then
+            node scripts/installer-ci-cache.mjs save "$TARGET" "$TOOL_TRANSPORT"
+          fi
+          # No receipt/complete-bundle reuse may satisfy reproducibility. Preserve
+          # the first build and start a fresh artifact namespace, with verified tools.
+          mv .tmp "$root/first-build"
+          pnpm run build
+          node scripts/installer-ci-cache.mjs restore "$TARGET" "$TOOL_TRANSPORT"
           node scripts/build-complete-bundle.mjs
           cmp "$root/first.tar.gz" "$archive"
-          ./node_modules/.bin/vitest run tests/installed-independence.test.ts tests/installer-lock.test.ts tests/pinned-recovery.test.ts tests/install-transaction.test.ts tests/managed-installation.test.ts
+          node scripts/test-installer.mjs run bundle
+      - name: Save verified pinned tool transport
+        if: success() && steps.tool-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ${{ env.TOOL_TRANSPORT }}
+          key: ${{ steps.tool-cache.outputs.cache-primary-key }}
+      - name: Save verified pnpm store
+        if: success() && steps.pnpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ${{ env.PNPM_STORE_DIR }}
+          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
       - name: Report qualification remains pending
         if: always()
         run: echo 'Installer native exact-artifact/client/signing qualification PENDING; contract tests do not qualify production binaries. Unavailable runners are PENDING, never PASS.' >> "$GITHUB_STEP_SUMMARY"

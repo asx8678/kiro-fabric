@@ -4,7 +4,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { installerSafety as s } from "./install-agent-user.mjs";
 import { acquireInstallationLock } from "./installer-lock.mjs";
-import { syncDirectory } from "./install-transaction.mjs";
+import { syncDirectory, readControl, transactionPaths } from "./install-transaction.mjs";
 
 const marker = "# >>> kiro-fabric workspace handoff v1";
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
@@ -72,11 +72,36 @@ export function planShellIntegration(home, { env = process.env, userHome = env.H
   return { status: "planned", file, content, managed, remove, state, saved, next: remove ? without : index >= 0 ? text : text + managed };
 }
 
-/** Separate recoverable post-commit step; failures must not hide backend commit. */
-export function applyShellIntegration(home, plan) {
+function assertCoreOwner(home, plan, expectedOwner) {
+  const p = transactionPaths(home), raw = readControl(p.manifest);
+  const superseded = () => { throw Object.assign(new Error('Shell integration plan superseded by changed core ownership/status; no shell files changed'), { code: 'INSTALL_SHELL_SUPERSEDED', superseded: true, dataPreserved: true }); };
+  // This check runs under the SAME lock as activation/retirement. Pending core
+  // replay, including candidate-only evidence, must not publish a shell plan.
+  const transactions = path.dirname(p.journal);
+  if (s.lstat(transactions)) {
+    s.assertNoUnsafeSymlinkComponents(transactions);s.assertSafeDirectory(transactions, { private: true });
+    if (fs.readdirSync(transactions).length) superseded();
+  }
+  if (expectedOwner === null) {
+    if (raw !== null || !plan.remove || s.lstat(path.join(p.base, 'profile-snapshots')) || readControl(p.profile) !== null || readControl(p.launcher, 0o700) !== null || readControl(p.releaseState) !== null || (s.lstat(p.runtime) && fs.readdirSync(p.runtime).length)) superseded();
+    return;
+  }
+  if (!expectedOwner || expectedOwner.schemaVersion !== 3 || expectedOwner.kiroHome !== home || expectedOwner.dataRoot !== p.data || !raw?.equals(Buffer.from(JSON.stringify(expectedOwner, null, 2) + '\n')) || expectedOwner.status !== (plan.remove ? 'retired' : 'active')) superseded();
+  for (const [file, hash, mode] of [[p.profile, expectedOwner.profileSha256, 0o600], [p.launcher, expectedOwner.launcherSha256, 0o700], [p.releaseState, expectedOwner.releaseStateSha256, 0o600]]) {
+    const content = readControl(file, mode);
+    if ((content === null ? null : s.hash(content)) !== hash) superseded();
+  }
+}
+/** Separate recoverable post-commit step; failures must not hide backend commit.
+ * expectedOwner is the exact core result.owner (or null for absence). Omission
+ * preserves the legacy two-argument API; manager/CLI callers must supply it.
+ */
+export function applyShellIntegration(home, plan, options = {}) {
   if (plan.status !== "planned") return plan;
+  if (!path.isAbsolute(home) || path.resolve(home) !== home || fs.realpathSync(home) !== home || plan.state !== statePath(home) || plan.managed !== block(home)) throw new Error("Shell plan home binding mismatch");
   const release = acquireInstallationLock(path.join(home, "kiro-fabric"));
   try {
+    if (Object.hasOwn(options, "expectedOwner")) assertCoreOwner(home, plan, options.expectedOwner);
     const current = readSafe(plan.file);
     if ((current === null) !== (plan.content === null) || (current && !current.equals(plan.content))) throw new Error(`Shell startup changed during installation: ${plan.file}`);
     const recorded = s.lstat(plan.state) ? JSON.parse(readSafe(plan.state).toString("utf8")) : null;

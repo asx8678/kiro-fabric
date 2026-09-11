@@ -47,18 +47,23 @@ export function planInstallationPreparation(kiroHome, { migratePiFabric = false 
 
 /** Tighten only the two verified user-owned directories, after installation confirmation. */
 export function applyInstallationPermissions(plan) {
-  for (const directory of plan.permissions) {
-    s.assertNoUnsafeSymlinkComponents(directory.path);
-    s.assertSafeDirectory(directory.path);
-    const fd = fs.openSync(directory.path, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
-    try {
-      const stat = fs.fstatSync(fd);
-      if (stat.dev !== directory.dev || stat.ino !== directory.ino || (stat.mode & 0o777) !== directory.mode) throw new Error(`Kiro directory changed during preparation: ${directory.path}`);
-      fs.fchmodSync(fd, 0o700);
-      fs.fsyncSync(fd);
-    } finally { fs.closeSync(fd); }
-  }
-  return plan.permissions.map(directory => ({ path: directory.path, previousMode: directory.mode.toString(8), mode: "700" }));
+  const applied = [];
+  try {
+    for (const directory of plan.permissions) {
+      s.assertNoUnsafeSymlinkComponents(directory.path);
+      s.assertSafeDirectory(directory.path);
+      const fd = fs.openSync(directory.path, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
+      try {
+        const stat = fs.fstatSync(fd);
+        if (stat.dev !== directory.dev || stat.ino !== directory.ino || (stat.mode & 0o777) !== directory.mode) throw new Error(`Kiro directory changed during preparation: ${directory.path}`);
+        fs.fchmodSync(fd, 0o700);
+        // Record the applied change before fsync, which can itself fail.
+        applied.push({ path: directory.path, previousMode: directory.mode.toString(8), mode: "700" });
+        fs.fsyncSync(fd);
+      } finally { fs.closeSync(fd); }
+    }
+    return applied;
+  } catch (error) { error.appliedPermissions = applied; throw error; }
 }
 
 /** Explicit migration is a separate, backed-up preparation step; old runtimes remain in place. */
@@ -90,5 +95,7 @@ export function preservePiFabricProfile(kiroHome, legacy, configurationBackup) {
   } catch (error) {
     if (saved) error.legacyProfileBackup = saved;
     throw error;
-  } finally { release(); }
+  } finally {
+    try { release(); } catch (error) { if (saved) error.legacyProfileBackup = saved; throw error; }
+  }
 }

@@ -71,6 +71,58 @@ describe('kernel-pinned child recovery', () => {
     expect(() => runPinnedRecovery(f.lock, f.expected, { operation: 'publish', created, text })).toThrow();
     expect(fs.readFileSync(f.claim, 'utf8')).toBe('');
   });
+  it('inspects and exclusively restores the exact release-marker inode without changing cwd', () => {
+    const f = fixture(), marker = path.join(f.root, '.install-lock-release.json'), cwd = process.cwd();
+    fs.linkSync(f.owner, marker); fs.unlinkSync(f.owner);
+    const expected = { ...f.expected, releasing: true, hasOwner: false, owner: { ...f.expected.owner, value: { lockBirth: String(fs.statSync(f.lock, { bigint: true }).birthtimeNs) } } };
+    const before = fs.statSync(marker, { bigint: true }); runPinnedRecovery(f.lock, expected);
+    expect(fs.readdirSync(f.lock)).toEqual([]); expect(fs.statSync(marker, { bigint: true }).ctimeNs).toBe(before.ctimeNs);
+    runPinnedRecovery(f.lock, expected, { operation: 'restore' });
+    expect(id(f.owner)).toEqual(id(marker)); expect(fs.statSync(marker).nlink).toBe(2);
+    runPinnedRecovery(f.lock, { ...expected, hasOwner: true });
+    expect(() => runPinnedRecovery(f.lock, expected, { operation: 'restore' })).toThrow();
+    expect(process.cwd()).toBe(cwd);
+  });
+  it('keeps native claim creation/publication exclusive while the owner has a proven release link', () => {
+    const f = fixture(), marker = path.join(f.root, '.install-lock-release.json'); fs.linkSync(f.owner, marker);
+    const expected = { ...f.expected, linkedRelease: true };
+    runPinnedRecovery(f.lock, expected);
+    const created = runPinnedRecovery(f.lock, expected, { operation: 'create' });
+    runPinnedRecovery(f.lock, expected, { operation: 'publish', created, text: '{"claim":true}\n' });
+    const claim = { file: id(f.claim), hash: createHash('sha256').update(fs.readFileSync(f.claim)).digest('hex') };
+    runPinnedRecovery(f.lock, { ...expected, claims: [claim] });
+    expect(fs.statSync(f.claim).nlink).toBe(1); expect(fs.statSync(marker).nlink).toBe(2);
+    fs.linkSync(f.claim, path.join(f.root, 'foreign-claim-link'));
+    expect(() => runPinnedRecovery(f.lock, { ...expected, claims: [claim] })).toThrow();
+    expect(fs.readFileSync(f.claim, 'utf8')).toBe('{"claim":true}\n');
+  });
+  it.each(['marker-inode', 'birth', 'owner', 'extra', 'root', 'hardlink'])('preserves %s mutation during native release restoration', kind => {
+    const f = fixture(), marker = path.join(f.root, '.install-lock-release.json');
+    fs.linkSync(f.owner, marker); fs.unlinkSync(f.owner);
+    const expected = { ...f.expected, releasing: true, hasOwner: false, owner: { ...f.expected.owner, value: { lockBirth: String(fs.statSync(f.lock, { bigint: true }).birthtimeNs) } } };
+    if (kind === 'marker-inode') { const bytes = fs.readFileSync(marker); fs.renameSync(marker, path.join(f.root, 'saved')); fs.writeFileSync(marker, bytes, { mode: 0o600 }); }
+    else if (kind === 'birth') expected.owner.value.lockBirth = '1';
+    else if (kind === 'root') expected.root = { ...expected.root, ino: '0' };
+    else if (kind === 'hardlink') fs.linkSync(marker, path.join(f.root, 'foreign-link'));
+    else fs.writeFileSync(kind === 'owner' ? f.owner : path.join(f.lock, 'evidence'), 'foreign', { mode: 0o600 });
+    const bytes = fs.readFileSync(marker), names = fs.readdirSync(f.lock);
+    expect(() => runPinnedRecovery(f.lock, expected, { operation: 'restore' })).toThrow();
+    expect(fs.readFileSync(marker)).toEqual(bytes); expect(fs.readdirSync(f.lock)).toEqual(names);
+    if (kind === 'owner') expect(fs.readFileSync(f.owner, 'utf8')).toBe('foreign');
+  });
+  it('pins release restoration to the original child cwd despite a replacement pathname', async () => {
+    const f = fixture(), marker = path.join(f.root, '.install-lock-release.json'); fs.linkSync(f.owner, marker); fs.unlinkSync(f.owner);
+    const request = { ...f.expected, releasing: true, hasOwner: false, operation: 'restore', birth: String(fs.statSync(f.lock, { bigint: true }).birthtimeNs) };
+    const module = new URL('../src/installation/pinned-recovery.mjs', import.meta.url).href;
+    const code = `import fs from 'node:fs'; import {createHash} from 'node:crypto'; import {pinnedRecoveryChild} from ${JSON.stringify(module)};
+      process.once('message', () => { try { process.send(pinnedRecoveryChild(fs, createHash, JSON.parse(process.argv[1]))); } catch(e) { process.send({error:String(e)}); } finally { process.disconnect(); } }); process.send({ready:true});`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', code, JSON.stringify(request)], { cwd: f.lock, env: { PATH: '/usr/bin:/bin' }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] }); children.push(child);
+    expect(await message(child)).toEqual({ ready: true });
+    const saved = path.join(f.root, 'saved-lock'); fs.renameSync(f.lock, saved); fs.mkdirSync(f.lock, { mode: 0o700 });
+    fs.writeFileSync(f.owner, 'foreign', { mode: 0o600 });
+    const result = message(child); child.send('go'); expect(await result).toMatchObject({ ok: true });
+    expect(id(path.join(saved, 'owner.json'))).toEqual(id(marker)); expect(fs.readFileSync(f.owner, 'utf8')).toBe('foreign');
+  });
   it('retains the original cwd inode when its pathname is replaced after child startup', async () => {
     const f = fixture();
     const module = new URL('../src/installation/pinned-recovery.mjs', import.meta.url).href;

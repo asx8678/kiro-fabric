@@ -17,6 +17,7 @@ const SCRIPT_FILES = [
   "install-agent-user.mjs",
   "validate-agent-package.mjs",
 ];
+const STANDALONE_SCRIPT_FILES = [...SCRIPT_FILES, "filesystem-boundary.mjs"];
 const ROOT_ENTRIES = ["agent-product.json", "package.json", "runtime", "scripts", "skills"];
 const normalize = (value) => value.replaceAll("\\", "/");
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -231,8 +232,21 @@ export const validateAgentPackage = (input) => {
 
   const scriptFiles = walkPackage(path.join(root, "scripts"))
     .map((file) => normalize(path.relative(path.join(root, "scripts"), file)));
-  assertExactNames(scriptFiles, SCRIPT_FILES, "installer script");
-  assertExactNames(fs.readdirSync(path.join(root, "scripts")), SCRIPT_FILES, "installer script root");
+  // Historical packages have the reviewed three-script closure. New packages
+  // add exactly one builtin-only implementation, never an arbitrary src tree.
+  const hasBoundary = scriptFiles.includes("filesystem-boundary.mjs");
+  const expectedScripts = hasBoundary ? STANDALONE_SCRIPT_FILES : SCRIPT_FILES;
+  assertExactNames(scriptFiles, expectedScripts, "installer script");
+  assertExactNames(fs.readdirSync(path.join(root, "scripts")), expectedScripts, "installer script root");
+  const installerText = fs.readFileSync(path.join(root, "scripts/install-agent-user.mjs"), "utf8");
+  if (!hasBoundary && installerText.includes('./filesystem-boundary.mjs')) fail("installer dependency filesystem-boundary.mjs is missing");
+  if (installerText.includes('../src/installation/filesystem-boundary.mjs')) fail("installer depends on an unavailable source checkout");
+  if (hasBoundary) {
+    const boundaryText = fs.readFileSync(path.join(root, "scripts/filesystem-boundary.mjs"), "utf8");
+    for (const match of boundaryText.matchAll(/(?:from\s*|import\s*\(\s*|import\s*)["']([^"']+)["']/gu)) {
+      if (!match[1].startsWith("node:")) fail("filesystem boundary is not a standalone builtin-only implementation");
+    }
+  }
   assertExactNames(fs.readdirSync(path.join(root, "skills")), ["fabric-exec"], "skills root");
   const skillFiles = walkPackage(path.join(root, "skills", "fabric-exec"))
     .map((file) => normalize(path.relative(path.join(root, "skills", "fabric-exec"), file)));

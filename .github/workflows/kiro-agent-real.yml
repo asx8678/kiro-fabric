@@ -16,11 +16,16 @@ jobs:
     runs-on: [self-hosted, kiro-agent, trusted]
     environment: kiro-agent-qualification
     timeout-minutes: 120
+    env:
+      FAILURE_OUTPUT: ${{ runner.temp }}/real-client-failure-${{ github.run_id }}-${{ github.run_attempt }}.json
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: { persist-credentials: false }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
+      - name: Initialize nonqualifying safe diagnostic
+        run: |
+          node --input-type=module -e 'import {qualificationFailureRecorder} from "./scripts/qualification-failure.mjs"; qualificationFailureRecorder(process.argv[1],"wrapper").flush()' "$FAILURE_OUTPUT"
       - run: npm install --global pnpm@11.20.0
       - name: Verify runner-provisioned ripgrep
         run: |
@@ -41,8 +46,21 @@ jobs:
         env:
           KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
           KIRO_CLI_PATH: ${{ vars.KIRO_CLI_PATH }}
-        run: pnpm run certify:agent:real -- --archive .tmp/kiro-fabric-agent.tar.gz --commit "${{ github.sha }}" --work-root "$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --output "$RUNNER_TEMP/real-client.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        run: pnpm run certify:agent:real -- --archive .tmp/kiro-fabric-agent.tar.gz --commit "${{ github.sha }}" --work-root "$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --output "$RUNNER_TEMP/real-client.json" --failure-output "$FAILURE_OUTPUT"
+      - name: Remove isolated Kiro qualification state
+        if: always()
+        run: |
+          target="$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup=removed
+          case "$target" in
+            "$RUNNER_TEMP"/kiro-fabric-real-*) rm -rf -- "$target" || cleanup=failed ;;
+            *) echo "refusing unsafe cleanup target" >&2; cleanup=failed ;;
+          esac
+          node --input-type=module -e 'import fs from "node:fs"; import {finalizeQualificationDiagnostic} from "./scripts/qualification-failure.mjs"; for (const [index, file] of process.argv.slice(2).entries()) if (index === 0 || fs.existsSync(file)) finalizeQualificationDiagnostic(file, process.argv[1])' "$cleanup" "$FAILURE_OUTPUT" "$FAILURE_OUTPUT.driver.json"
+          test "$cleanup" = removed
+      - name: Upload privacy-gated qualifying assets only
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: real-client-${{ github.sha }}
           path: |
@@ -50,11 +68,13 @@ jobs:
             .tmp/kiro-fabric-agent.tar.gz
             .tmp/kiro-fabric-agent.spdx.json
           if-no-files-found: error
-      - name: Remove isolated Kiro qualification state
+      - name: Upload bounded nonqualifying failure diagnostics
         if: always()
-        run: |
-          target="$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          case "$target" in
-            "$RUNNER_TEMP"/kiro-fabric-real-*) rm -rf -- "$target" ;;
-            *) echo "refusing unsafe cleanup target" >&2; exit 1 ;;
-          esac
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: nonqualifying-diagnostics-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ env.FAILURE_OUTPUT }}
+            ${{ env.FAILURE_OUTPUT }}.driver.json

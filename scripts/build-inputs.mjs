@@ -47,13 +47,19 @@ export function captureBuildInputs(root) {
   const files = ordered([...names]).map(name => ({ path: name, sha256: hash(bytes(root, name)) }));
   return { schemaVersion: 1, files, digest: hash(JSON.stringify(files)) };
 }
-export function assertBuildInputs(root, expected) {
+export function validateBuildInputProvenance(expected) {
   if (!expected || expected.schemaVersion !== 1 || !Array.isArray(expected.files) || !/^[a-f0-9]{64}$/u.test(expected.digest ?? "") ||
       expected.files.some((entry, i) => !entry || !safePath(entry.path) || !/^[a-f0-9]{64}$/u.test(entry.sha256 ?? "") || (i > 0 && expected.files[i - 1].path >= entry.path)) ||
       hash(JSON.stringify(expected.files)) !== expected.digest) throw new Error("Invalid build input provenance; rebuild required");
+  return expected;
+}
+export function assertBuildInputs(root, expected) {
+  validateBuildInputProvenance(expected);
   if (captureBuildInputs(root).digest !== expected.digest) throw new Error("Build inputs changed since build or during capture; rebuild required");
 }
-export function verifyBuildClosure(root, closure = path.join(root, "dist/kiro-agent-closure")) {
+// Validate stored closure bytes before deciding a stale-input cache miss. A bad
+// existing closure is corruption, not permission to hide it behind a rebuild.
+export function verifyClosureIntegrity(closure) {
   let manifest;
   try { manifest = JSON.parse(bytes(closure, "closure-manifest.json").toString("utf8")); }
   catch (cause) { throw new Error("Invalid or missing closure manifest; rebuild required", { cause }); }
@@ -68,6 +74,10 @@ export function verifyBuildClosure(root, closure = path.join(root, "dist/kiro-ag
     digest.update(entry.path).update("\0").update(content);
   }
   if (digest.digest("hex") !== manifest.contentDigest) throw new Error("Closure content digest mismatch");
+  return manifest;
+}
+export function verifyBuildClosure(root, closure = path.join(root, "dist/kiro-agent-closure")) {
+  const manifest = verifyClosureIntegrity(closure);
   assertBuildInputs(root, manifest.buildInputs);
   return manifest;
 }

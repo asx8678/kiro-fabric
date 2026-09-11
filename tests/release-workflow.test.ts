@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { installerSuiteFiles } from "../scripts/test-installer.mjs";
 
 const workflow = (name: string) => fs.readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8");
 const release = workflow("release");
@@ -45,19 +46,24 @@ describe("installer production fail-closed gates", () => {
     const gate = step(release, "Require production installer signing and native qualification readiness");
     expect(run(gate)).toBe("node scripts/generate-installer-bootstrap.mjs");
     expect(release.indexOf(gate)).toBeLessThan(release.indexOf("      - name: Download exact-commit real-client evidence"));
+    for (const costly of ["npm install --global", "pnpm install --frozen-lockfile", "pnpm run check", "Provision ripgrep"]) expect(release.indexOf(gate)).toBeLessThan(release.indexOf(costly));
+    expect(run(step(release, "Promote exact qualified release assets"))).toContain("--require-release-ready");
   });
 
   it("requires complete native bundle execution and byte comparison, not just filename selection", () => {
     const ci = workflow("ci");
     const body = run(step(ci, "Build and exercise the complete native bundle"));
-    for (const required of ["pnpm run agent:bundle", "node scripts/build-complete-bundle.mjs", 'cmp "$root/first.tar.gz" "$archive"', "tests/installed-independence.test.ts", "tests/installer-lock.test.ts", "tests/install-transaction.test.ts", "tests/managed-installation.test.ts"]) expect(body).toContain(required);
+    for (const required of ["pnpm run agent:bundle", "pnpm run build", "node scripts/build-complete-bundle.mjs", 'mv .tmp "$root/first-build"', 'cmp "$root/first.tar.gz" "$archive"', "node scripts/test-installer.mjs run bundle"]) expect(body).toContain(required);
+    expect(body.indexOf('mv .tmp')).toBeLessThan(body.indexOf('node scripts/build-complete-bundle.mjs'));
+    for (const file of ["installed-independence", "installer-lock", "install-transaction", "managed-installation", "installer-smoke-bundle-acceptance"]) expect(installerSuiteFiles("bundle")).toContain(`tests/${file}.test.ts`);
     expect(body).toContain('export HOME="$root/home" KIRO_HOME="$root/kiro"');
     expect(ci.indexOf("Assert actual native target")).toBeLessThan(ci.indexOf("Build and exercise the complete native bundle"));
   });
   it("runs Linux cleanup, search and startup regressions on every native target", () => {
     const ci = workflow("ci");
     const body = run(step(ci, "Isolated native installer and runtime contract tests"));
-    for (const file of ["local-process-group", "local-shell", "local-search-work", "local-executable", "local-provider", "bundle-contract", "bundle-streaming", "managed-generation", "managed-generation-efficiency"]) expect(body).toContain(`tests/${file}.test.ts`);
+    expect(body).toContain("node scripts/test-installer.mjs run contracts");
+    for (const file of ["local-process-group", "local-shell", "local-search-work", "local-executable", "local-provider", "bundle-contract", "bundle-streaming", "managed-generation", "managed-generation-efficiency", "installer-configuration-backup", "installer-home-preparation", "installer-shell-integration", "installer-cli-contract", "install-manager-start", "launch-profile", "managed-installation-lifecycle", "installer-native-zsh-acceptance"]) expect(installerSuiteFiles("contracts")).toContain(`tests/${file}.test.ts`);
     expect(ci.indexOf("Provision ripgrep for native runtime contracts")).toBeLessThan(ci.indexOf("Isolated native installer and runtime contract tests"));
     expect(body).toContain('HOME="$root/home" KIRO_HOME="$root/kiro"');
   });
@@ -76,6 +82,32 @@ describe("installer production fail-closed gates", () => {
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(expected.EXPECTED_TARGET === "wrong" ? 1 : 0);
     }
+  });
+});
+
+describe("native cache and qualification privacy registrations", () => {
+  it("caches only verified pin/target tool transport and lock/pnpm-version-bound store bytes", () => {
+    const native = workflow("ci").split("  installer-native-contracts:")[1]!.split("  macos-stage:")[0]!;
+    expect(native).toContain("installer-tools-v1-${{ matrix.target }}"); expect(native).toContain("hashFiles('build-toolchain.json', 'scripts/installer-ci-cache.mjs')");
+    expect(native).toContain("node24-pnpm11.20.0"); expect(native).toContain("hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml')");
+    expect(native).toContain('--verify-store-integrity=true --package-import-method=copy');
+    expect(native).not.toContain("restore-keys:"); expect(native).not.toMatch(/path:.*(?:node_modules|[.]tmp)/u);
+    expect(run(step(native, "Verify and rematerialize pinned private tools"))).toContain('installer-ci-cache.mjs restore "$TARGET" "$TOOL_TRANSPORT"');
+    expect(native.indexOf("Assert actual native target")).toBeLessThan(native.indexOf("Restore untrusted pinned tool transport only"));
+  });
+  it("uploads only explicit per-attempt sanitized diagnostics, always after raw-home cleanup", () => {
+    const real = workflow("kiro-agent-real"), upload = step(real, "Upload bounded nonqualifying failure diagnostics"), cleanup = step(real, "Remove isolated Kiro qualification state");
+    expect(upload).toContain("if: always()"); expect(cleanup).toContain("if: always()");
+    expect(upload).toContain("retention-days: 7"); expect(upload).toContain("${{ env.FAILURE_OUTPUT }}.driver.json");
+    expect(upload).not.toMatch(/[*]|transcript|acp[.]jsonl/u); expect(real).toContain("${{ github.run_id }}-${{ github.run_attempt }}.json");
+    expect(real.indexOf(cleanup)).toBeLessThan(real.indexOf(upload));
+    expect(run(cleanup)).toContain("finalizeQualificationDiagnostic"); expect(run(cleanup)).toContain('test "$cleanup" = removed');
+    expect(run(step(real, "Exercise exact package with the repository-owned real client driver"))).toContain('--failure-output "$FAILURE_OUTPUT"');
+    expect(step(real, "Upload privacy-gated qualifying assets only")).toContain("if: success()");
+  });
+  it("retains complete-bundle exact-archive SBOM sidecar publication without bypassing blocked readiness", () => {
+    expect(release).toContain("${{ runner.temp }}/release/*.tar.gz.spdx.json");
+    expect(release).toContain("--require-release-ready");
   });
 });
 

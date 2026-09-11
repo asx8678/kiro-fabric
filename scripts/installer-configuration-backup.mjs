@@ -24,6 +24,9 @@ const STAMP = /^\d{8}T\d{6}Z-[a-f0-9]{16}$/;
 // bytes). Restore must never rewrite these: a retired installation leaves the
 // profile absent, and a restored stale profile fails ownership verification.
 const MANAGED_CONTROLS = ["agents/kiro-fabric.json"];
+// Reserved source/build directories, not a general Kiro-home ignore list.
+// Only safe, real directories at the exact explicit checkout-home root qualify.
+const SOURCE_ARTIFACT_DIRECTORIES = new Set([".git", ".tmp", "dist", "node_modules"]);
 
 const backupPaths = (kiroHome) => ({
   root: path.join(kiroHome, "kiro-fabric", "backups"),
@@ -39,19 +42,78 @@ const assertContainedRelative = (relativePath, kiroHome) => {
 
 const entrySort = (left, right) => left.name.localeCompare(right.name);
 
+const assertCanonicalBackupPath = (target, label) => {
+  if (typeof target !== "string" || !path.isAbsolute(target)) throw new Error(`configuration backup requires an absolute ${label}`);
+  if (path.resolve(target) !== target || /[\u0000-\u001f\u007f]/u.test(target)) throw new Error(`configuration backup requires a canonical ${label}`);
+  s.assertNoUnsafeSymlinkComponents(target);
+  if (s.lstat(target) && fs.realpathSync(target) !== target) throw new Error(`configuration backup requires a canonical ${label}`);
+};
+
+const validateSourceRoot = (sourceRoot, kiroHome) => {
+  if (sourceRoot === undefined) return null;
+  assertCanonicalBackupPath(sourceRoot, "source root");
+  s.assertSafeDirectory(sourceRoot, { private: sourceRoot === kiroHome });
+  if (sourceRoot !== kiroHome) s.assertNoPathOverlap(kiroHome, sourceRoot, "source checkout");
+  return sourceRoot;
+};
+
+// The hardlink exception is classification only, never a weaker control-file
+// predicate. Unsafe links still reach the original strict guard and fail.
+const isSafeOrdinaryHardlink = (stats, relativePath) => !MANAGED_CONTROLS.includes(relativePath)
+  && stats.isFile() && !stats.isSymbolicLink() && stats.nlink > 1
+  && (typeof process.getuid !== "function" || stats.uid === process.getuid())
+  && (process.platform === "win32" || (stats.mode & 0o022) === 0);
+
+// Both inventory and copy use bounded descriptor reads. Recheck the path and
+// inode so a file becoming a hardlink/symlink after inventory is not copied.
+const readConfigurationFile = (sourcePath, relativePath) => {
+  s.assertNoUnsafeSymlinkComponents(sourcePath);
+  const stats = s.assertSafeFile(sourcePath, `configuration file ${relativePath}`);
+  if (stats.size > MAX_FILE_BYTES) throw new Error(`configuration file exceeds backup bound: ${relativePath}`);
+  const descriptor = fs.openSync(sourcePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  const unchanged = actual => ["dev", "ino", "uid", "gid", "mode", "nlink", "size", "mtimeMs", "ctimeMs"].every(key => actual[key] === stats[key]);
+  const changed = () => { throw new Error(`configuration changed during backup: ${relativePath}`); };
+  try {
+    if (!unchanged(fs.fstatSync(descriptor))) changed();
+    const bytes = Buffer.alloc(stats.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = fs.readSync(descriptor, bytes, offset, bytes.length - offset, null);
+      if (count === 0) changed();
+      offset += count;
+    }
+    if (fs.readSync(descriptor, Buffer.alloc(1), 0, 1, null) !== 0 || !unchanged(fs.fstatSync(descriptor))) changed();
+    s.assertNoUnsafeSymlinkComponents(sourcePath);
+    if (!unchanged(s.assertSafeFile(sourcePath, `configuration file ${relativePath}`))) changed();
+    return { stats, bytes };
+  } finally { fs.closeSync(descriptor); }
+};
+
 /**
- * Copy the existing Kiro configuration (everything except the managed
- * `kiro-fabric` tree) into a private, uniquely named, immutable backup.
- * Symlinks are recreated verbatim without being followed. Any unsafe or
- * oversized condition fails closed BEFORE the caller performs any mutation.
+ * Copy the existing Kiro configuration (except the managed `kiro-fabric`
+ * tree) into a private, uniquely named backup. Managed controls are captured
+ * as evidence but excluded from restore. Symlinks are never followed.
+ *
+ * Only the trusted source frontend may supply sourceRoot: the actual checkout,
+ * not its staged bundle, cwd, an environment hint or a release package. Both
+ * roots must be absolute/canonical, non-symlink, safe user-owned directories;
+ * non-equal roots must be disjoint. ONLY exact sourceRoot === kiroHome omits
+ * safe top-level .git/, .tmp/, dist/ and node_modules/ source/build directories.
+ * Same-named files, symlinks, nested paths and all other configuration remain
+ * subject to normal backup rules and caps. No source markers are inferred.
+ * The manifest/result record sourceRoot (null when absent) and the effective
+ * excludes (managed policy plus source directories actually omitted).
+ * Any unsafe/oversized condition fails before the caller's intended mutation.
  * @param {string} kiroHome resolved, absolute, user-owned Kiro home
- * @param {{command?: string}} [options]
- * @returns {{path: string, files: number, directories: number, symlinks: number, skipped: number, manifestSha256: string}|null}
+ * @param {{command?: string, sourceRoot?: string|undefined}} [options]
+ * @returns {{path: string, files: number, directories: number, symlinks: number, skipped: number, manifestSha256: string, sourceRoot: string|null, excludes: string[]}|null}
  */
 export function createConfigurationBackup(kiroHome, options = {}) {
-  if (!path.isAbsolute(kiroHome)) throw new Error("configuration backup requires an absolute Kiro home");
+  assertCanonicalBackupPath(kiroHome, "Kiro home");
+  const sourceRoot = validateSourceRoot(options.sourceRoot, kiroHome);
   const { root, managed } = backupPaths(kiroHome);
   const files = [], directories = [], symlinks = [], skipped = [];
+  const excludes = ["kiro-fabric", ...MANAGED_CONTROLS];
   if (!s.lstat(kiroHome)) return null; // nothing to preserve before a first install
   s.assertSafeDirectory(kiroHome, { private: true });
   const visit = (source, relative, depth) => {
@@ -59,9 +121,15 @@ export function createConfigurationBackup(kiroHome, options = {}) {
     for (const entry of fs.readdirSync(source, { withFileTypes: true }).sort(entrySort)) {
       if (files.length + directories.length + symlinks.length + skipped.length >= MAX_ENTRIES) throw new Error("configuration backup entry capacity exceeded");
       const sourcePath = path.join(source, entry.name), relativePath = relative ? `${relative}/${entry.name}` : entry.name;
+      // Never classify a managed control as skippable, even if its type changed.
+      if (MANAGED_CONTROLS.includes(relativePath)) s.assertSafeFile(sourcePath, `configuration file ${relativePath}`);
       if (entry.isDirectory()) {
         if (sourcePath === managed && depth === 0) continue; // managed tree has its own transaction evidence
         s.assertSafeDirectory(sourcePath, { private: false });
+        if (sourceRoot === kiroHome && depth === 0 && SOURCE_ARTIFACT_DIRECTORIES.has(entry.name)) {
+          excludes.push(relativePath);
+          continue;
+        }
         directories.push({ path: relativePath, mode: fs.lstatSync(sourcePath).mode & 0o777 });
         visit(sourcePath, relativePath, depth + 1);
       } else if (entry.isSymbolicLink()) {
@@ -69,15 +137,13 @@ export function createConfigurationBackup(kiroHome, options = {}) {
         // through user symlinks, and restore recreates the exact link target.
         symlinks.push({ path: relativePath, target: fs.readlinkSync(sourcePath) });
       } else if (entry.isFile()) {
-        const stats = s.assertSafeFile(sourcePath, `configuration file ${relativePath}`);
-        if (stats.size > MAX_FILE_BYTES) throw new Error(`configuration file exceeds backup bound: ${relativePath}`);
-        if (stats.nlink !== 1) {
-          // Hardlinked files cannot be immutability-audited; skip rather than
-          // brick every mutation over one stale link.
+        if (isSafeOrdinaryHardlink(fs.lstatSync(sourcePath), relativePath)) {
+          // Record without reading: another name can modify this inode, so it
+          // cannot be an immutable snapshot. All original links stay untouched.
           skipped.push({ path: relativePath, reason: "hardlinked" });
           continue;
         }
-        const bytes = fs.readFileSync(sourcePath);
+        const { stats, bytes } = readConfigurationFile(sourcePath, relativePath);
         files.push({ path: relativePath, size: bytes.length, sha256: s.hash(bytes), mode: stats.mode & 0o777 });
       } else {
         // FIFOs, sockets and devices are not configuration content; record and
@@ -110,7 +176,7 @@ export function createConfigurationBackup(kiroHome, options = {}) {
       if (prepared.length !== 0) throw new Error(`configuration backup collision: ${file.path}`);
     }
     for (const file of files) {
-      const bytes = fs.readFileSync(path.join(kiroHome, file.path));
+      const { bytes } = readConfigurationFile(path.join(kiroHome, file.path), file.path);
       if (bytes.length !== file.size || s.hash(bytes) !== file.sha256) throw new Error(`configuration changed during backup: ${file.path}`);
       fs.writeFileSync(targetOf(file.path), bytes, { flag: "r+", mode: 0o600 });
       fs.chmodSync(targetOf(file.path), (file.mode & 0o555) | 0o400);
@@ -122,7 +188,8 @@ export function createConfigurationBackup(kiroHome, options = {}) {
       command: typeof options.command === "string" ? options.command : null,
       time: new Date().toISOString(),
       kiroHome,
-      excludes: ["kiro-fabric", ...MANAGED_CONTROLS],
+      sourceRoot,
+      excludes,
       files, directories, symlinks, skipped,
     };
     s.atomicWrite(path.join(destination, MANIFEST), Buffer.from(JSON.stringify(manifest, null, 2) + "\n"));
@@ -132,7 +199,7 @@ export function createConfigurationBackup(kiroHome, options = {}) {
     // Retention is housekeeping, not part of the backup's atomic unit: a
     // retention failure must never destroy the fresh backup.
     try { retainBoundedBackups(root); } catch { /* keep all backups on retention failure */ }
-    return { path: destination, files: files.length, directories: directories.length, symlinks: symlinks.length, skipped: skipped.length, manifestSha256 };
+    return { path: destination, files: files.length, directories: directories.length, symlinks: symlinks.length, skipped: skipped.length, manifestSha256, sourceRoot, excludes };
   } catch (error) {
     // Never leave a partial backup that could be trusted as complete.
     try { fs.rmSync(destination, { recursive: true, force: true }); } catch { /* preserve original failure */ }

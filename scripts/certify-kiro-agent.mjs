@@ -6,6 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { writeFileAtomic } from "./atomic-file.mjs";
 import { validateAgentPackage } from "./validate-agent-package.mjs";
+import { assertInstallerSmokeResult, installerSmokeInput } from "./installer-smoke-contract.mjs";
 
 const requestedPluginRoot = path.resolve(process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : ".tmp/kiro-fabric-agent");
 const jsonIndex = process.argv.indexOf("--json");
@@ -15,6 +16,8 @@ const pluginRoot = packageEvidence.root;
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-cert-"));
 const pluginData = path.join(temporary, "data");
 const workspace = path.join(temporary, "workspace");
+const home = path.join(temporary, "home");
+fs.mkdirSync(home, { mode: 0o700 });
 fs.mkdirSync(pluginData, { mode: 0o700 });
 // Certification explicitly tests declined approval rather than relying on product defaults.
 const configDirectory = path.join(pluginData, "fabric", "config");
@@ -24,7 +27,7 @@ fs.mkdirSync(workspace, { mode: 0o700 });
 const entry = path.join(pluginRoot, "runtime", "kiro", "mcp-entry.js");
 const child = spawn(process.execPath, [entry], {
   cwd: pluginRoot,
-  env: { PATH: process.env.PATH, HOME: process.env.HOME, KIRO_FABRIC_RUNTIME_ROOT: path.join(pluginRoot, "runtime"), KIRO_FABRIC_DATA_ROOT: pluginData, KIRO_FABRIC_DEBUG: "1" },
+  env: { PATH: process.env.PATH, HOME: home, KIRO_HOME: path.join(home, ".kiro"), KIRO_FABRIC_RUNTIME_ROOT: path.join(pluginRoot, "runtime"), KIRO_FABRIC_DATA_ROOT: pluginData, KIRO_FABRIC_DEBUG: "1" },
   stdio: ["pipe", "pipe", "pipe"],
 });
 const MAX_CAPTURE_CHARS = 8 * 1024 * 1024;
@@ -165,6 +168,9 @@ try {
       throw new Error(`unsupported guest result was not rejected: ${code}`);
     }
   }
+  const sentinel = "fabric-smoke-component-acceptance";
+  fs.writeFileSync(path.join(workspace, "probe.txt"), `${sentinel}\n`, { mode: 0o600 });
+  assertInstallerSmokeResult({ result: await call(requestId++, "fabric_exec", installerSmokeInput(sentinel)) }, sentinel);
   const finalInfo = JSON.parse(text(await call(requestId++, "fabric_info", {})));
   if (JSON.stringify(finalInfo.lifecycle) !== JSON.stringify(info.lifecycle)) {
     throw new Error("multiple MCP calls recreated the MCP instance or Fabric runtime");
@@ -192,7 +198,8 @@ try {
     executor: "quickjs",
     lifecycle: info.lifecycle,
     scope: "component-mcp-only",
-    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "eight-providers", "declared-versus-observed-provenance", "checked-execution", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
+    authenticatedKiro: "NOT TESTED",
+    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "eight-providers", "declared-versus-observed-provenance", "checked-execution", "structured-read-and-search", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
   };
   const serialized = `${JSON.stringify(report, null, 2)}\n`;
   if (jsonOutput) writeFileAtomic(jsonOutput, serialized);

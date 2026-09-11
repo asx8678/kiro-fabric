@@ -85,7 +85,15 @@ pnpm run agent:install --kiro-home "${KIRO_HOME:-$HOME/.kiro}"
 bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --migrate-pi-fabric --yes --non-interactive --json
 ```
 
-Source mode requires developer Node >=24 and pnpm 11.20.0, installs frozen dependencies and builds the current checkout including local changes. It never clones/resets. Local-source provenance records Git HEAD, dirty state and a source-input digest. Default `bash ./install.sh` fails clearly until a genuine release-pinned bootstrap is generated.
+Source mode requires developer Node >=24. It first verifies matching source inputs, Git HEAD/dirty state, captured build closure, target, toolchain pins and immutable bundle bytes. A verified warm hit skips pnpm, dependency installation, compilation and archive creation; a receipt alone is never sufficient. Missing/stale inputs rebuild with pinned pnpm **11.20.0** and frozen dependencies. Corrupt evidence refuses rather than silently rebuilding over it. It never clones/resets. Local-source provenance records Git HEAD, dirty state and a source-input digest. Default `bash ./install.sh` fails clearly until a genuine release-pinned bootstrap is generated.
+
+### Source cache and packaging
+
+Agent staging and complete bundles reuse only independently validated generations. Normal source activation requests no archive; explicit complete-bundle archive production streams deterministic USTAR/gzip to private output with bounded buffers and input-drift checks before publication. Private-tool verification hashes in bounded chunks. Build-input/target/toolchain changes invalidate reuse.
+
+`pnpm run agent:cache:gc` previews checkout-cache collection; `node scripts/installer-cache.mjs --apply` opts into deletion. `--keep COUNT` defaults to two generations per kind/target and `--max-bytes BYTES` to 2 GiB of validated retained artifacts. This is a non-destructive preview, not the manager's strictly read-only `--dry-run`: a transient coordination gate is used. Only recorded, independently verified `.tmp` Agent/bundle/private-tool generations are eligible. Current pointers, referenced/current tool pins, unknown or modified files and all installed data are preserved; active entries can exceed the requested budget. Archives are not pruned.
+
+Builders and the source frontend hold per-consumer leases through final artifact use, including activation. GC refuses any lease, including stale or malformed evidence; no age/PID cleanup or force bypass exists. Interrupted gates/leases require inspection. `pnpm run test:installer` runs the centralized offline installer acceptance suite; native/authenticated release qualification is separate.
 
 The selected global home is explicit --kiro-home, supplied KIRO_HOME, then the current user's home/.kiro. Empty/relative/control-bearing and unsafe destinations fail. Installer cwd is never stored as the coding workspace. The generated profile explicitly authorizes Kiro's per-session MCP launch directory when client roots are absent. Install/update also configure a backed-up bash/zsh default-agent/workspace-handoff block (opt out with --no-shell-integration). No default-agent setting or authentication changes occur.
 
@@ -154,7 +162,11 @@ integrity-checked. Restart existing Kiro processes to use the new profile.
 ## Installed commands
 
 ```sh
+"$HOME/.kiro/kiro-fabric/bin/kiro-fabric" --help
 "$HOME/.kiro/kiro-fabric/bin/kiro-fabric" doctor
+"$HOME/.kiro/kiro-fabric/bin/kiro-fabric" doctor --source-root /path/to/kiro-fabric --json
+"$HOME/.kiro/kiro-fabric/bin/kiro-fabric" recover --yes --non-interactive --json
+"$HOME/.kiro/kiro-fabric/bin/kiro-fabric" update --dry-run --json
 "$HOME/.kiro/kiro-fabric/bin/kiro-fabric" update
 "$HOME/.kiro/kiro-fabric/bin/kiro-fabric" rollback
 "$HOME/.kiro/kiro-fabric/bin/kiro-fabric" start
@@ -167,9 +179,13 @@ Before any client execution (including help/version probes), `start` requires a 
 
 Kiro CLI binaries may have hard-link aliases, including `kiro-cli-chat`. These are accepted when the shared file and its executable path pass the ownership and permission checks. Fabric does not modify these external binaries. A failed sibling check reports the path and underlying reason; Fabric-managed files still require a single link.
 
-Installed management uses its private Node, not system Node/pnpm or the checkout. It always rejects --source; rebuild through the explicit checkout command. install/update accept --version or --from-archive, never both. Offline archives require exact `<archive>.release.json` and `<archive>.release.sig` signed sidecars; first-install bootstrap also requires matching embedded archive/member pins. No local archive bypasses production verification. Public update/discovery currently fails before networking because the production key is missing.
+Installed management uses its private Node, not system Node/pnpm or the checkout. It always rejects --source; rebuild through the explicit checkout command. install/update accept --version or --from-archive, never both. Offline archives require exact `<archive>.release.json`, `<archive>.release.sig` and `<archive>.spdx.json` sidecars. The signed release binds the exact SBOM size/hash; byte authentication is not SPDX semantic validation; first-install bootstrap also requires matching embedded archive/member pins. No local archive bypasses production verification. Public update/discovery currently fails before networking because the production key is missing.
 
-Use --yes --non-interactive for explicit automation and --json for one structured result on stdout. Doctor rejects mutation options and never repairs, locks, logs, initializes durable data, authenticates or contacts downstream MCP. Its Kiro help/version probes have disposable homes. Live model inventory, resources, elicitation, compaction/resume and MCP connectivity are NOT TESTED offline. Terminal output is plain ASCII and does not require color/TUI dependencies.
+Use --yes --non-interactive for explicit automation and --json for one structured result on stdout. `restore` and `recover` require explicit `--yes`; missing consent returns usage exit 2 without prompting or writing. Generated `--help` reads no installation state. Mutation `--dry-run` previews are explicitly partial: they do not download, build, probe clients, capture backups or change the installation, and do not claim candidate compatibility or authorization of later writes. For source previews use `bash ./install.sh --source --dry-run --json` from the chosen checkout.
+
+`doctor --source-root /absolute/checkout` compares explicit source, build and installed identities as data only. Missing/stale/unavailable evidence remains explicit; matching hashes are not signed-release or authenticated-client qualification. Source installations receive source-update guidance; the installed launcher never executes a remembered checkout. Selecting `--version` or `--from-archive` explicitly requests the signed-release path and still requires production verification.
+
+Human and JSON errors preserve known commit status, preparation changes, backup information and recovery requirements. A post-commit failure is not reported as an untouched installation; recover before choosing a new operation. Doctor rejects mutation options and never repairs, locks, logs, initializes durable data, authenticates or contacts downstream MCP. Its Kiro help/version probes have disposable homes. Live model inventory, resources, elicitation, compaction/resume and MCP connectivity are NOT TESTED offline. Terminal output is plain ASCII and does not require color/TUI dependencies.
 
 Doctor also reports `signed-distribution`: WARNING while the production trust root is absent, never PASS merely because a key is configured. An otherwise healthy local installation is not production qualification.
 
@@ -188,13 +204,27 @@ managed `kiro-fabric` tree itself is excluded: it has its own transaction
 journals, immutable generations and `data/` preservation. If the Kiro home is
 absent (first install), no backup is created.
 
-- Backup failure **aborts the operation before any change**: a partial backup
-  is never trusted or left behind.
+The trusted source frontend supplies the actual canonical checkout as
+`sourceRoot`. Only when it exactly equals the selected Kiro home may backup omit
+safe top-level `.git/`, `.tmp/`, `dist/`, and `node_modules/` source/build
+directories. This keeps generated private tools and dependencies out of the
+configuration backup without raising its size limits. The manifest and result
+record `sourceRoot` and effective `excludes`; settings, authentication, sessions,
+foreign profiles, and other configuration remain covered. Ordinary homes have
+no inferred source exclusions, and excluded source artifacts are not restorable
+from a configuration backup.
+
+- Backup failure aborts before backend activation: a partial backup is never
+  trusted or left behind. Explicitly approved permission preparation may already
+  have tightened the home/agents directories; failure diagnostics retain these
+  preparation changes rather than claiming that nothing changed.
 - Backups never follow symlinks; links are recreated verbatim on restore.
 - Directories are 0700, backup files are read-only owner modes; a tampered
   backup fails verification instead of restoring.
-- Non-regular entries (FIFOs, sockets) and hardlinked files are recorded as
-  `skipped` in the manifest instead of blocking the operation.
+- Non-regular entries (FIFOs, sockets) and safely owned ordinary hardlinked
+  configuration files are recorded as `skipped`, not copied. Managed controls,
+  unsafe ownership/modes, and unexpected filesystem changes still fail closed.
+  Skipped entries are not restorable from that backup.
 - Retention keeps the 20 most recent backups (matched by exact name pattern);
   a retention failure never destroys the fresh backup.
 - The JSON result reports the backup as `configurationBackup`, and human
@@ -204,7 +234,7 @@ Restore is explicit, never automatic. Use the installed launcher or the
 source module:
 
 ```sh
-"$HOME/.kiro/kiro-fabric/bin/kiro-fabric" restore --backup \
+"$HOME/.kiro/kiro-fabric/bin/kiro-fabric" restore --yes --backup \
   "$HOME/.kiro/kiro-fabric/backups/<timestamp>-<id>"
 # or, from a checkout:
 node scripts/installer-configuration-backup.mjs list "$HOME/.kiro"
@@ -222,7 +252,7 @@ ownership verification.
 
 A generation at `kiro-fabric/runtime/<bundle-digest>/` contains app/, tools/node, tools/rg, manager/install-manager.mjs, resources/steering/fabric.md, resources/skills/fabric-exec/, notices/ and bundle-manifest.json. Every generated profile binds exact matching generation paths. Durable configuration/projects/memory/state/artifacts stay in the existing `kiro-fabric/data/fabric/` structure; namespaces/salts are unchanged. Private directories and executables are 0700; ordinary managed files are 0600.
 
-New sessions adopt the updated profile. Existing sessions keep their exact retained code/tools/resources. There is no automatic generation GC; bounded capacity refuses further updates rather than deleting potentially active files. Rollback validates a retained complete generation and does not rewind user data or release anti-downgrade state.
+New sessions adopt the updated profile. Existing sessions keep their exact retained code/tools/resources. There is no automatic generation GC; bounded capacity refuses further updates rather than deleting potentially active files. Rollback validates a retained complete generation and restores its verified original profile from private, integrity-bound `kiro-fabric/profile-snapshots/` evidence. It never renders an old target using an incompatible new profile generator. Missing, changed or unbound original profile evidence refuses activation before live controls change. Ownership schema-3 fields remain compatible with historical managers. Rollback does not rewind user data or release anti-downgrade state; raw backend smoke is not proof of shared-data or authenticated-client compatibility.
 
 Uninstall deregisters the verified agent and publishes retired ownership, retaining data, immutable generations and the verified management launcher for doctor, repeat uninstall or explicit reinstall. It does not claim complete disk erasure. Foreign/modified files are preserved and reported as conflicts. `--purge-data` is explicit but currently **refused**: complete process-inactivity visibility is not qualified. No negative process snapshot is treated as proof that deleting live data is safe.
 
@@ -234,7 +264,7 @@ Bundle identity hashes a canonical payload inventory and metadata, excluding sel
 
 The portable generated bootstrap verifies the entire pinned archive and fixed private Node/manager members before executing downloaded code. A shared bounded restricted-USTAR consumer rejects links/special entries/traversal/collisions/unknown modes and oversized or malformed streams before extraction. Private Node 24.20.0 and ripgrep 14.1.1 archives/member hashes and exact license notices are recorded in build-toolchain.json. Linux requires glibc >=2.28/kernel >=4.18; musl is rejected. The declared macOS minimum is 13.5; its execution/quarantine/resource behavior is not yet natively qualified.
 
-Installer transactions use the existing destination/ownership policy, a shared incarnation/inode-bound lock and versioned journals. New-format backend admission takes the same short lock through data initialization. Individual file replacements are atomic, not the entire transaction. Actual owner bytes establish commit; precommit recovery restores only verified controls, while postcommit cleanup never rolls activation backward. Unknown/partial locks, foreign journal identities and unsupported versions preserve evidence and report recovery-required. A subsequent mutation recovers only provably owned interrupted transactions. Do not manually remove an uncertain lock or backup based only on age/PID.
+Installer transactions use the existing destination/ownership policy, a shared incarnation/inode-bound lock and versioned journals. New-format backend admission takes the same short lock through data initialization. Individual file replacements are atomic, not the entire transaction. Actual owner bytes establish commit; precommit recovery restores only verified controls, while postcommit cleanup never rolls activation backward. Unknown/partial locks, foreign journal identities and unsupported versions preserve evidence and report recovery-required. `recover --yes` reconciles only provably owned existing transaction/candidate/lock evidence, offline, without requiring Kiro, a release lookup, a build, or a new installation/removal. Repetition is a no-op once recovery is complete. Recovery syncs affected control directories before deleting the journal, including retries whose restored bytes already match. A default rollback retry stops after recovering a previously committed action rather than selecting a different new default target; a new rollback is a separate deliberate operation. Unknown identities and unsupported recovery capabilities still fail closed. Do not manually remove an uncertain lock or backup based only on age/PID.
 
 ### Unsupported automatic recovery
 
@@ -243,3 +273,7 @@ A dead PID is not sufficient proof that automatic recovery is available. Read-on
 If inode-pinned recovery is unavailable (including a failed or timed-out macOS helper), the next mutation returns recovery exit **7**, preserves the lock and transaction evidence, and does not silently fall back to unsafe pathname recovery. Empty or partially published claims also remain recovery-required: process death is not permission to delete uncertain bytes. Run the installed `doctor --json`, retain its report privately, stop retrying mutations, and arrange maintainer review of the preserved ownership/journal evidence. Do not remove locks, candidates or backups based only on age or PID. A changed macOS boot timestamp remains uncertain rather than automatic deletion authority; purge remains disabled.
 
 These checks are defense in depth for cooperating processes, not an OS sandbox against hostile same-user access. Approved shell commands retain host authority. Native runner, production signing and exact-artifact authenticated Kiro gates remain separate release requirements.
+
+### Interrupted lock release
+
+A private `.install-lock-release.json` hard-link marker retains the original owner evidence while the lock directory is removed and recovery hands ownership to a new lock. Inode/root/process and positive stable directory-birth identities must match; committed transaction provenance survives interrupted reclaimers. The existing recovery command handles provable markers. Legacy empty locks without such evidence, unavailable birth identity, changed namespaces and foreign markers remain fail-closed and must not be deleted blindly. Native macOS qualification of these new release changes remains pending.

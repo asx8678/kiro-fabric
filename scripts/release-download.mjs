@@ -1,6 +1,6 @@
 import https from 'node:https';
 import { LIMITS, TARGETS, isStable, sha256 } from './bundle-contract.mjs';
-import { PRODUCTION_TRUST_ROOT, verifyRelease } from './release-trust.mjs';
+import { PRODUCTION_TRUST_ROOT, verifyRelease, checkReleaseSbom, RELEASE_SBOM_SUFFIX } from './release-trust.mjs';
 
 export const RELEASE_API = 'https://api.github.com/repos/asx8678/kiro-fabric/releases';
 const HOSTS = new Set(['github.com','api.github.com','release-assets.githubusercontent.com']);
@@ -54,14 +54,24 @@ export async function downloadHttpsForTest(url,options,request){
      if(res.headers['content-encoding']&&res.headers['content-encoding']!=='identity'||length!==undefined&&(!/^(0|[1-9]\d*)$/.test(length)||!Number.isSafeInteger(Number(length))||Number(length)>maxBytes||expectedSize!==undefined&&Number(length)!==expectedSize)){
       fail(new ReleaseDownloadError('invalid-release','content length/encoding'));res.destroy();return;
      }
-     /** @type {Buffer[]} */const chunks=[];let bytes=0;
-     res.on('data',chunk=>{if(done)return;bytes+=chunk.length;if(bytes>maxBytes||expectedSize!==undefined&&bytes>expectedSize){fail(new ReleaseDownloadError('invalid-release','oversized'));res.destroy();return;}chunks.push(Buffer.from(chunk));});
+     // One geometrically grown bounded slab, not one retained allocation per
+     // peer-controlled fragment. Copy immediately so adapter buffer reuse is safe.
+     const bound=expectedSize??(length===undefined?maxBytes:Number(length));
+     let body=Buffer.alloc(Math.min(bound,64*1024)),bytes=0;
+     res.on('data',chunk=>{
+      if(done)return;
+      if(!Buffer.isBuffer(chunk)){fail(new ReleaseDownloadError('invalid-release','non-byte response'));res.destroy();return;}
+      const next=bytes+chunk.length;
+      if(next>bound){fail(new ReleaseDownloadError('invalid-release','oversized'));res.destroy();return;}
+      if(next>body.length){const grown=Buffer.alloc(Math.min(bound,Math.max(next,body.length*2)));body.copy(grown,0,0,bytes);body=grown;}
+      chunk.copy(body,bytes);bytes=next;
+     });
      res.on('aborted',()=>fail(new ReleaseDownloadError('invalid-release','truncated')));
      res.on('error',()=>fail(new ReleaseDownloadError('offline','response error')));
      res.on('end',()=>{
       if(done)return;
       if(!res.complete||length!==undefined&&bytes!==Number(length)||expectedSize!==undefined&&bytes!==expectedSize){fail(new ReleaseDownloadError('invalid-release','truncated'));return;}
-      done=true;clearTimeout(timer);resolve({bytes:Buffer.concat(chunks,bytes)});
+      done=true;clearTimeout(timer);resolve({bytes:body.subarray(0,bytes)});
      });
     });
     connectTimer=setTimeout(()=>fail(new ReleaseDownloadError('offline','connection timeout')),Math.min(connectionTimeoutMs,remaining));
@@ -97,10 +107,13 @@ export async function discoverReleaseForTest({target,version},{download,verify})
  const signatureBytes=await download(sidecar('.release.sig'),{maxBytes:89,expectedSize:89});
  const metadata=verify(metadataBytes,signatureBytes,{target,version:hint,product:'kiro-fabric'});
  if(metadata.archive.url!==archiveURL)throw new ReleaseDownloadError('invalid-release','signed location mismatch');
+ const sbomURL=sidecar(RELEASE_SBOM_SUFFIX);
+ const sbomBytes=await download(sbomURL,{maxBytes:metadata.sbom.size,expectedSize:metadata.sbom.size});
+ try{checkReleaseSbom(metadata,sbomBytes);}catch{throw new ReleaseDownloadError('invalid-release','SBOM digest/size mismatch');}
  const archiveBytes=await download(metadata.archive.url,{maxBytes:metadata.archive.size,expectedSize:metadata.archive.size});
  if(archiveBytes.length!==metadata.archive.size||sha256(archiveBytes)!==metadata.archive.sha256)throw new ReleaseDownloadError('invalid-release','archive digest/size mismatch');
  // Return precisely the verified capture, not a pathname that may change.
- return {metadata,archiveBytes,metadataBytes,signatureBytes};
+ return {metadata,archiveBytes,sbomBytes,metadataBytes,signatureBytes};
 }
 /** Public stable discovery. Missing production root fails BEFORE any network access.
  * @param {DiscoveryOptions} options */

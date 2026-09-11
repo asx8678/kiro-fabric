@@ -10,12 +10,13 @@ import { runPinnedRecovery } from "./pinned-recovery.mjs";
 // in an owner/claim record is ever followed. Quarantines are deliberately retained.
 /** @typedef {{dev: string, ino: string}} FileIdentity */
 /** @typedef {{platform: string, pid: number, boot: string, start: string, namespace: string}} ProcessIncarnation */
-/** @typedef {{schema: number, kind: string, root: FileIdentity, lock: FileIdentity, nonce: string, process: ProcessIncarnation, transactionId: string | null}} InstallationLockOwner */
-/** @typedef {{quarantine: string, owner: InstallationLockOwner}} InstallationLockRecovery */
+/** @typedef {{schema: number, kind: string, root: FileIdentity, lock: FileIdentity, nonce: string, process: ProcessIncarnation, transactionId: string | null, file?: FileIdentity, lockBirth?: string, recovered?: InstallationLockRecovery[]}} InstallationLockOwner */
+/** @typedef {{quarantine: string, owner: InstallationLockOwner, release?: {file: FileIdentity, hash: string}}} InstallationLockRecovery */
 /** @typedef {(() => void) & {recovered: InstallationLockRecovery[], owner: InstallationLockOwner}} InstallationLockRelease */
 /** @typedef {{status: 'absent' | 'busy' | 'stale' | 'recovery-required' | 'unsupported', available: boolean, owner?: InstallationLockOwner, claims?: number, recoverable?: boolean, reason?: string}} InstallationLockInspection */
 
 const LOCK = ".install-lock";
+const RELEASE = ".install-lock-release.json";
 const MAX_CONTROL = 4096;
 const MAX_CLAIMS = 16;
 const NONCE = /^[a-f0-9]{64}$/u;
@@ -140,12 +141,12 @@ const incarnationState = (owner) => {
   } catch { return "uncertain"; }
 };
 
-const privateStat = (target, directory) => {
+const privateStat = (target, directory, links = 1) => {
   const stat = fs.lstatSync(target, { bigint: true });
   if ((directory ? !stat.isDirectory() : !stat.isFile()) || stat.isSymbolicLink()
     || typeof process.getuid !== "function" || stat.uid !== BigInt(process.getuid())
     || (stat.mode & 0o7777n) !== (directory ? 0o700n : 0o600n)
-    || (!directory && (stat.nlink !== 1n || stat.size > BigInt(MAX_CONTROL)))) fail("unsafe installation lock identity, type, size or mode");
+    || (!directory && (stat.nlink !== BigInt(links) || stat.size > BigInt(MAX_CONTROL)))) fail("unsafe installation lock identity, type, size or mode");
   return stat;
 };
 const rootIdentity = (base) => {
@@ -166,8 +167,8 @@ const entries = (target) => {
   } finally { dir.closeSync(); }
   return result.sort();
 };
-const control = (target) => {
-  const before = privateStat(target, false);
+const control = (target, links = 1) => {
+  const before = privateStat(target, false, links);
   const fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   try {
     if (!same(identity(before), identity(fs.fstatSync(fd, { bigint: true })))) fail("lock control replaced before read");
@@ -180,7 +181,7 @@ const control = (target) => {
     }
     if (count > MAX_CONTROL || BigInt(count) !== before.size) fail("invalid lock control size");
     const text = buffer.subarray(0, count).toString("utf8");
-    const after = privateStat(target, false);
+    const after = privateStat(target, false, links);
     if (!same(identity(before), identity(after)) || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) fail("lock control changed during read");
     const value = JSON.parse(text);
     if (text !== `${JSON.stringify(value)}\n`) fail("noncanonical lock control");
@@ -190,18 +191,39 @@ const control = (target) => {
 const binding = (record) => ({ file: record.file, hash: record.hash });
 const claimName = (index) => `claim-${String(index).padStart(2, "0")}.json`;
 const quarantineName = (owner) => `.install-lock-quarantine-${owner.nonce}`;
-const snapshot = (base, root) => {
+const plainOwner = ({ recovered: _recovered, ...owner }) => owner;
+const validPlainOwner = (value, root) => keys(value, ["schema", "kind", "root", "lock", "nonce", "process", "transactionId", ...(value?.file === undefined ? [] : ["file"]), ...(value?.lockBirth === undefined ? [] : ["lockBirth"])])
+  && (value.file === undefined || validIdentity(value.file)) && (value.lockBirth === undefined || (typeof value.lockBirth === "string" && DECIMAL.test(value.lockBirth) && value.lockBirth !== "0"))
+  && value.schema === 1 && value.kind === "kiro-fabric-install-lock" && validIdentity(value.root) && same(value.root, root)
+  && validIdentity(value.lock) && typeof value.nonce === "string" && NONCE.test(value.nonce) && validProcess(value.process)
+  && (value.transactionId === null || (typeof value.transactionId === "string" && TRANSACTION.test(value.transactionId)));
+const validBinding = (value) => keys(value, ["file", "hash"]) && validIdentity(value.file) && typeof value.hash === "string" && NONCE.test(value.hash);
+// Flattened, bounded provenance survives death of the replacement owner. In
+// particular, a committed rollback with an already-cleaned journal must not be
+// toggled by another retry. No recorded path is used as filesystem authority.
+const validOwner = (value, root, lock = value?.lock) => value && validPlainOwner(plainOwner(value), root) && same(value.lock, lock)
+  && (value.recovered === undefined || (Array.isArray(value.recovered) && value.recovered.length > 0 && value.recovered.length <= MAX_CLAIMS
+    && value.recovered.every(r => keys(r, r?.release === undefined ? ["quarantine", "owner"] : ["quarantine", "owner", "release"])
+      && validPlainOwner(r.owner, root) && r.quarantine === quarantineName(r.owner) && (r.release === undefined || validBinding(r.release)))));
+const remember = (recovered, owner, release) => {
+  for (const record of [...(owner.recovered ?? []), { quarantine: quarantineName(owner), owner: plainOwner(owner), ...(release ? { release } : {}) }]) {
+    const previous = recovered.find(r => r.owner.nonce === record.owner.nonce);
+    if (previous && !equal(previous, record)) fail("conflicting lock recovery provenance");
+    if (!previous) recovered.push(record);
+  }
+};
+const snapshot = (base, root, name = LOCK) => {
   assertRoot(base, root);
-  const target = path.join(base, LOCK);
-  const lock = identity(privateStat(target, true));
+  const target = path.join(base, name);
+  const lockStat = privateStat(target, true), lock = identity(lockStat);
   const names = entries(target);
   if (!names.includes("owner.json")) fail("uninitialized installation lock; preserve for recovery");
-  const owner = control(path.join(target, "owner.json"));
+  const ownerPath = path.join(target, "owner.json");
+  const linkedRelease = fs.lstatSync(ownerPath, { bigint: true }).nlink === 2n;
+  const owner = control(ownerPath, linkedRelease ? 2 : 1);
   const value = owner.value;
-  if (!keys(value, ["schema", "kind", "root", "lock", "nonce", "process", "transactionId"])
-    || value.schema !== 1 || value.kind !== "kiro-fabric-install-lock" || !validIdentity(value.root) || !same(value.root, root)
-    || !validIdentity(value.lock) || !same(value.lock, lock) || !NONCE.test(value.nonce)
-    || !validProcess(value.process) || !(value.transactionId === null || (typeof value.transactionId === "string" && TRANSACTION.test(value.transactionId)))) fail("invalid installation lock owner binding");
+  if (linkedRelease && (!same(value.file, owner.file) || value.lockBirth === undefined || !equal(control(path.join(base, RELEASE), 2), owner))) fail("unproven linked release owner");
+  if (!validOwner(value, root, lock) || (value.file !== undefined && !same(value.file, owner.file)) || (value.lockBirth !== undefined && value.lockBirth !== String(lockStat.birthtimeNs))) fail("invalid installation lock owner binding");
   const claims = [];
   let previous = binding(owner);
   for (let index = 0; index < names.length - 1; index++) {
@@ -215,9 +237,59 @@ const snapshot = (base, root) => {
     claims.push(claim);
     previous = binding(claim);
   }
-  if (!same(identity(privateStat(target, true)), lock) || !equal(entries(target), names)) fail("installation lock changed during inspection");
+  const finalLock = privateStat(target, true);
+  if (!same(identity(finalLock), lock) || (value.lockBirth !== undefined && String(finalLock.birthtimeNs) !== value.lockBirth) || !equal(entries(target), names)) fail("installation lock changed during inspection");
   assertRoot(base, root);
-  return { root, lock, owner, claims };
+  return { root, lock, owner, claims, ...(linkedRelease ? { linkedRelease: true } : {}) };
+};
+// The marker is an O_EXCL hard link of the exact owner, never a newly written
+// JSON partial. Two links are accepted ONLY when both fixed names are proven.
+// An arbitrary empty .install-lock still has no recovery authority.
+const pendingRelease = (base, root) => {
+  assertRoot(base, root);
+  const markerPath = path.join(base, RELEASE);
+  let stat;
+  try { stat = fs.lstatSync(markerPath, { bigint: true }); }
+  catch (error) { if (errorCode(error) === "ENOENT") return null; throw error; }
+  if (![1n, 2n].includes(stat.nlink)) fail("invalid release marker links");
+  const links = Number(stat.nlink), owner = control(markerPath, links);
+  if (!validOwner(owner.value, root) || !same(owner.value.file, owner.file) || owner.value.lockBirth === undefined) fail("invalid release marker owner binding");
+  const target = path.join(base, LOCK);
+  let lock, birth;
+  try { const s = privateStat(target, true); lock = identity(s); birth = String(s.birthtimeNs); }
+  catch (error) { if (errorCode(error) !== "ENOENT") throw error; }
+  let directory = same(lock, owner.value.lock) && birth === owner.value.lockBirth;
+  let hasOwner = false, current, claims = [];
+  if (lock) {
+    // A freshly created directory can reuse the removed inode. Its durable,
+    // self-bound owner must explicitly carry this exact marker's provenance.
+    try {
+      const candidate = snapshot(base, root);
+      if (candidate.owner.value.recovered?.some(r => equal(r.release, binding(owner)) && equal(r.owner, plainOwner(owner.value)))) { current = candidate; directory = false; }
+    } catch { /* The original releasing directory is validated below. */ }
+  }
+  if (directory) {
+    const names = entries(target);
+    hasOwner = names.includes("owner.json");
+    if ((!hasOwner && names.length) || links !== (hasOwner ? 2 : 1)) fail("release directory or owner changed");
+    if (hasOwner) {
+      const state = snapshot(base, root);
+      if (!equal(state.owner, owner)) fail("release directory or owner changed");
+      claims = state.claims;
+    }
+    const finalLock = privateStat(target, true);
+    if (!same(identity(finalLock), lock) || String(finalLock.birthtimeNs) !== owner.value.lockBirth) fail("release directory replaced");
+  } else {
+    if (lock && !current) fail("release marker belongs to another lock inode");
+    if (links === 2) {
+      const name = quarantineName(owner.value), archived = fs.lstatSync(path.join(base, name));
+      const record = archived.isDirectory() ? snapshot(base, root, name).owner : control(path.join(base, name), 2);
+      if (!equal(record, owner)) fail("release archive replaced");
+    }
+  }
+  assertRoot(base, root);
+  if (!equal(control(markerPath, links), owner)) fail("release marker changed");
+  return { root, lock: owner.value.lock, owner, claims, releasing: true, directory, hasOwner, current, links };
 };
 const assertSnapshot = (base, expected) => {
   if (!equal(snapshot(base, expected.root), expected)) fail("installation lock ownership changed");
@@ -230,11 +302,13 @@ const assertSnapshot = (base, expected) => {
 const inOwnedDirectory = (target, expected, action) => {
   const fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
   try {
-    if (!same(identity(fs.fstatSync(fd, { bigint: true })), expected.lock)) fail("recovery directory replaced before claim");
+    const pinned = fs.fstatSync(fd, { bigint: true });
+    if (!same(identity(pinned), expected.lock) || (expected.owner.value.lockBirth !== undefined && String(pinned.birthtimeNs) !== expected.owner.value.lockBirth)) fail("recovery directory replaced before claim");
     const anchored = `${process.platform === "linux" ? "/proc/self/fd" : "/dev/fd"}/${fd}`;
     try {
+      const name = expected.releasing ? `../${RELEASE}` : "owner.json";
       if (!same(identity(fs.statSync(anchored, { bigint: true })), expected.lock)
-        || !same(identity(privateStat(path.join(anchored, "owner.json"), false)), expected.owner.file)) fail("recovery directory capability changed");
+        || !same(identity(privateStat(`${anchored}/${name}`, false, (expected.linkedRelease || (expected.releasing && expected.hasOwner)) ? 2 : 1)), expected.owner.file)) fail("recovery directory capability changed");
     } catch { fail("kernel directory-FD traversal unavailable; preserve lock", "INSTALL_LOCK_UNSUPPORTED"); }
     return action(anchored);
   } finally { fs.closeSync(fd); }
@@ -244,6 +318,89 @@ const syncDirectory = (target) => {
   try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
 };
 
+const assertPending = (base, expected) => {
+  if (!equal(pendingRelease(base, expected.root), expected)) fail("installation release ownership changed");
+};
+const pinnedReleaseOperation = (base, expected, operation) => {
+  const target = path.join(base, LOCK);
+  if (process.platform === "darwin") {
+    if (operation === "restore") return runPinnedRecovery(target, expected, { operation });
+    // Never delegate release deletion or marker creation to a child that can
+    // outlive a SIGKILLed owner and race its reclaimer. The child only inspects;
+    // the parent repeats the namespace proof before its fixed-path syscall,
+    // retaining the original cooperating-process (not hostile same-user) model.
+    runPinnedRecovery(target, expected);
+    if (expected.releasing) assertPending(base, expected); else assertSnapshot(base, expected);
+    if (operation === "release") fs.linkSync(path.join(target, "owner.json"), path.join(base, RELEASE));
+    else if (operation === "remove-owner") fs.unlinkSync(path.join(target, "owner.json"));
+    else if (operation !== "inspect") fail("invalid pinned release operation");
+    return;
+  }
+  return inOwnedDirectory(target, expected, anchored => {
+    if (expected.releasing) assertPending(base, expected); else assertSnapshot(base, expected);
+    const owner = path.join(anchored, "owner.json"), marker = `${anchored}/../${RELEASE}`;
+    if (operation === "release") fs.linkSync(owner, marker); // O_EXCL, including an empty foreign target.
+    else if (operation === "restore") fs.linkSync(marker, owner);
+    else if (operation === "remove-owner") fs.unlinkSync(owner);
+    else if (operation === "inspect") return;
+    else fail("invalid pinned release operation");
+  });
+};
+const ownedRelease = (base, initialized, onPhase) => {
+  let released = false, markerRemoved = false, begun = false;
+  const target = path.join(base, LOCK), marker = path.join(base, RELEASE);
+  const ownProcess = () => {
+    assertRoot(base, initialized.root);
+    if (!equal(currentProcess(), initialized.owner.value.process)) fail("release process incarnation or namespace changed");
+  };
+  const ownMarker = () => {
+    ownProcess();
+    const state = pendingRelease(base, initialized.root);
+    if (!state || state.current || !equal(state.owner, initialized.owner) || !same(state.lock, initialized.lock)) fail("release marker ownership changed");
+    return state;
+  };
+  return () => {
+    if (released) return;
+    ownProcess();
+    // A failed final fsync retries durability only, never a replacement lock.
+    if (markerRemoved) { syncDirectory(base); released = true; return; }
+    onPhase("release-before-remove");
+    ownProcess();
+    if (!pendingRelease(base, initialized.root)) {
+      if (begun) fail("release marker disappeared");
+      assertSnapshot(base, initialized);
+      pinnedReleaseOperation(base, initialized, "release");
+    }
+    begun = true;
+    let state = ownMarker();
+    // The last owner link may be removed only after its external twin is durable.
+    syncDirectory(base);
+    onPhase("release-marked");
+    state = ownMarker();
+    if (state.hasOwner) {
+      pinnedReleaseOperation(base, state, "remove-owner");
+      onPhase("release-owner-removed");
+    }
+    state = ownMarker();
+    if (state.directory) {
+      onPhase("release-before-rmdir");
+      state = ownMarker();
+      if (!state.directory || state.hasOwner) fail("release directory changed before removal");
+      fs.rmdirSync(target); // Nonrecursive: unexpected evidence always stops cleanup.
+    }
+    onPhase("release-directory-removed");
+    state = ownMarker();
+    if (state.directory || state.links !== 1) fail("release cleanup identity changed");
+    syncDirectory(base);
+    onPhase("release-before-marker-remove");
+    assertPending(base, state);
+    ownProcess();
+    fs.unlinkSync(marker); // Release commit point: no lock directory remains.
+    markerRemoved = true;
+    syncDirectory(base);
+    released = true;
+  };
+};
 /** Read-only; never creates a lock, repairs permissions, logs or replays journals.
  * @param {string} base
  * @returns {InstallationLockInspection}
@@ -251,10 +408,13 @@ const syncDirectory = (target) => {
 export function inspectInstallationLock(base) {
   try {
     const root = rootIdentity(base);
-    try { fs.lstatSync(path.join(base, LOCK)); }
-    catch (error) { if (errorCode(error) === "ENOENT") return { status: "absent", available: true }; throw error; }
-    const state = snapshot(base, root);
-    const states = [state.owner, ...state.claims].map(record => incarnationState(record.value.process));
+    const pending = pendingRelease(base, root);
+    if (!pending) {
+      try { fs.lstatSync(path.join(base, LOCK)); }
+      catch (error) { if (errorCode(error) === "ENOENT") return { status: "absent", available: true }; throw error; }
+    }
+    const state = pending?.current ?? (pending?.hasOwner ? snapshot(base, root) : pending) ?? snapshot(base, root);
+    const states = [state.owner, ...state.claims, ...(pending?.current ? [pending.owner] : [])].map(record => incarnationState(record.value.process));
     const status = states.includes("live") ? "busy" : states.includes("uncertain") ? "recovery-required" : "stale";
     /** @type {InstallationLockInspection} */
     const inspection = { status, available: false, owner: state.owner.value, claims: state.claims.length, recoverable: status === "stale" };
@@ -263,10 +423,11 @@ export function inspectInstallationLock(base) {
       try {
         // A dead owner alone is insufficient: prove the same pinned-directory
         // capability recovery needs, without creating a claim or replaying data.
-        if (process.platform === "darwin") {
-          runPinnedRecovery(path.join(base, LOCK), state);
-          assertSnapshot(base, state);
-        } else inOwnedDirectory(path.join(base, LOCK), state, () => assertSnapshot(base, state));
+        const verify = () => pending ? assertPending(base, pending) : assertSnapshot(base, state);
+        if (!pending || pending.directory || pending.current) {
+          if (process.platform === "darwin") { runPinnedRecovery(path.join(base, LOCK), state); verify(); }
+          else inOwnedDirectory(path.join(base, LOCK), state, verify);
+        } else verify();
       } catch (error) {
         if (errorCode(error) !== "INSTALL_LOCK_UNSUPPORTED") throw error;
         return { ...inspection, recoverable: false, reason: "Automatic lock recovery unavailable: inode-pinned recovery capability is unsupported; preserve lock and transaction evidence for operator review." };
@@ -364,13 +525,18 @@ export function installationLockAvailability() {
 
 // O_EXCL creation plus the open descriptor proves in-process partial-write cleanup
 // ownership. A crash loses that evidence: the next process MUST preserve partials.
-const writeControl = (target, value, onCreated) => {
-  const text = `${JSON.stringify(value)}\n`;
+const writeControl = (target, value, onCreated, bindSelf = false) => {
+  let text = `${JSON.stringify(value)}\n`;
   if (Buffer.byteLength(text) > MAX_CONTROL) fail("lock control exceeds bound");
   const fd = fs.openSync(target, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
   let owned;
   try {
     owned = identity(fs.fstatSync(fd, { bigint: true }));
+    if (bindSelf) {
+      value.file = owned;
+      text = `${JSON.stringify(value)}\n`;
+      if (Buffer.byteLength(text) > MAX_CONTROL) fail("lock control exceeds bound");
+    }
     fs.fchmodSync(fd, 0o600);
     onCreated();
     fs.writeFileSync(fd, text);
@@ -382,10 +548,32 @@ const writeControl = (target, value, onCreated) => {
   } finally { fs.closeSync(fd); }
 };
 
+// An absent lock directory is still fenced by the live release marker. A dead
+// marker is archived only AFTER its provenance is fsynced in the new owner. A
+// crash at either side therefore leaves a retryable, transaction-bound record.
+const archiveRelease = (base, initialized) => {
+  assertSnapshot(base, initialized);
+  if (!equal(currentProcess(), initialized.owner.value.process)) fail("release recovery namespace changed");
+  let pending = pendingRelease(base, initialized.root);
+  if (!pending?.current || !equal(pending.current, initialized) || incarnationState(pending.owner.value.process) !== "dead") fail("release recovery ownership changed");
+  const expectedOwner = pending.owner;
+  const marker = path.join(base, RELEASE), quarantine = path.join(base, quarantineName(pending.owner.value));
+  if (pending.links === 1) fs.linkSync(marker, quarantine); // Never overwrite a foreign archive.
+  pending = pendingRelease(base, initialized.root);
+  if (!pending?.current || !equal(pending.current, initialized) || !equal(pending.owner, expectedOwner) || pending.links !== 2) fail("release archive ownership changed");
+  assertSnapshot(base, initialized);
+  if (!equal(currentProcess(), initialized.owner.value.process)) fail("release recovery namespace changed");
+  fs.unlinkSync(marker);
+  syncDirectory(base);
+};
 /**
  * Synchronous, fail-fast shared mutation/startup-admission lock. Startup uses
  * recover:false and holds it THROUGH launch validation and durable-data admission.
  * recover:true only reclaims proven-dead lock ownership, NOT transaction data.
+ * New owners self-bind their file and stable directory birth identity. Release
+ * keeps that exact inode in an exclusive external marker until cleanup commits;
+ * interrupted-release provenance remains durable through recovery handoff.
+ * Filesystems without stable positive directory birth times fail closed.
  * Caller MUST reconcile journals under the returned lock, even when recovered is
  * empty (a previous reclaimer may have died just after quarantine).
  * @param {string} base existing canonical owned 0700 installation root
@@ -400,19 +588,50 @@ export function acquireInstallationLock(base, { recover = false, transactionId, 
   const recovered = [];
   for (let attempt = 0; attempt < 4; attempt++) {
     assertRoot(base, root);
+    let pending = pendingRelease(base, root);
+    if (pending) {
+      const status = incarnationState(pending.owner.value.process);
+      if (status === "live") fail("installation lock busy", "INSTALL_LOCK_BUSY");
+      if (status !== "dead") fail("installation release incarnation uncertain; preserve for recovery");
+      if (!recover) fail("dead installation lock requires explicit recovery");
+      if (pending.directory && !pending.hasOwner) {
+        // Restore the SAME inode, keeping the external marker through claims,
+        // quarantine, and durable replacement ownership. Even a crash just after
+        // quarantine must not lose a committed transaction's retry provenance.
+        const restoring = pending;
+        onPhase("release-recovery-before-restore");
+        assertPending(base, restoring);
+        if (!equal(currentProcess(), incarnation) || incarnationState(restoring.owner.value.process) !== "dead") fail("release restoration namespace changed");
+        try {
+          pinnedReleaseOperation(base, pending, "restore");
+        } catch (error) {
+          if (errorCode(error) === "INSTALL_LOCK_UNSUPPORTED") throw Object.assign(error, { recoveryRequired: true });
+          throw error;
+        }
+        pending = pendingRelease(base, root);
+        if (!pending?.directory || !pending.hasOwner || !equal(pending.owner, restoring.owner) || !same(pending.lock, restoring.lock)
+          || !equal(currentProcess(), incarnation) || incarnationState(restoring.owner.value.process) !== "dead") fail("release restoration changed");
+        syncDirectory(target);
+        assertPending(base, pending);
+        syncDirectory(base);
+        onPhase("release-recovery-restored");
+      }
+      if (!pending.directory && !pending.current) remember(recovered, pending.owner.value, binding(pending.owner));
+    }
     let created = false;
     try { fs.mkdirSync(target, { mode: 0o700 }); created = true; }
     catch (error) { if (errorCode(error) !== "EEXIST") throw error; }
     if (created) {
-      const lock = identity(fs.lstatSync(target, { bigint: true }));
+      const lockStat = fs.lstatSync(target, { bigint: true }), lock = identity(lockStat);
       let initialized;
       try {
         privateStat(target, true);
+        if (lockStat.birthtimeNs <= 0n) fail("stable directory birth identity unavailable", "INSTALL_LOCK_UNSUPPORTED");
         onPhase("lock-created");
         assertRoot(base, root);
         if (!same(identity(privateStat(target, true)), lock) || entries(target).length) fail("new installation lock replaced");
-        const value = { schema: 1, kind: "kiro-fabric-install-lock", root, lock, nonce: nonce(), process: incarnation, transactionId: transactionId ?? null };
-        writeControl(path.join(target, "owner.json"), value, () => onPhase("owner-created"));
+        const value = { schema: 1, kind: "kiro-fabric-install-lock", root, lock, nonce: nonce(), process: incarnation, transactionId: transactionId ?? null, lockBirth: String(lockStat.birthtimeNs), ...(recovered.length ? { recovered: [...recovered] } : {}) };
+        writeControl(path.join(target, "owner.json"), value, () => onPhase("owner-created"), true);
         const candidate = snapshot(base, root);
         if (!same(candidate.lock, lock) || !equal(candidate.owner.value, value) || candidate.claims.length) fail("new installation lock ownership changed");
         initialized = candidate;
@@ -420,29 +639,21 @@ export function acquireInstallationLock(base, { recover = false, transactionId, 
         syncDirectory(base);
         onPhase("owner-initialized");
         assertSnapshot(base, initialized);
-        let released = false;
-        const release = () => {
-          if (released) return;
-          assertSnapshot(base, initialized);
-          onPhase("release-before-remove");
-          assertSnapshot(base, initialized);
-          fs.unlinkSync(path.join(target, "owner.json"));
-          fs.rmdirSync(target);
-          released = true;
-          syncDirectory(base);
-        };
+        if (pendingRelease(base, root)) {
+          onPhase("release-recovery-before-archive");
+          archiveRelease(base, initialized);
+          onPhase("release-recovery-archived");
+        }
+        const release = ownedRelease(base, initialized, onPhase);
         onPhase("acquired");
         assertSnapshot(base, initialized);
-        return Object.assign(release, { recovered, owner: value });
+        return Object.assign(release, { recovered: recovered.map(({ quarantine, owner }) => ({ quarantine, owner })), owner: value });
       } catch (error) {
         try {
           assertRoot(base, root);
           if (!same(identity(privateStat(target, true)), lock)) throw error;
-          if (initialized) {
-            assertSnapshot(base, initialized);
-            fs.unlinkSync(path.join(target, "owner.json"));
-          }
-          if (entries(target).length === 0) fs.rmdirSync(target);
+          if (initialized) ownedRelease(base, initialized, () => {})();
+          else if (entries(target).length === 0) fs.rmdirSync(target);
         } catch {}
         throw error;
       }
@@ -497,7 +708,7 @@ export function acquireInstallationLock(base, { recover = false, transactionId, 
     assertSnapshot(base, claimed);
     fs.renameSync(target, quarantine);
     syncDirectory(base);
-    recovered.push({ quarantine: value.quarantine, owner: stale.owner.value });
+    remember(recovered, stale.owner.value, stale.linkedRelease ? binding(stale.owner) : undefined);
     onPhase("recovery-quarantined");
     // The new .install-lock arbitrates recovery with managers that arrived after
     // the move. A losing reclaimer NEVER deletes the winner's replacement lock.

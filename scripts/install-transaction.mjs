@@ -47,6 +47,7 @@ export function readTransaction(kiroHome) {
 /** @param {string} kiroHome @param {{onPhase?:(phase:string)=>unknown|Promise<unknown>}} [options] */
 export async function recoverInstallTransaction(kiroHome,{onPhase=()=>{}}={}) {
  const p=transactionPaths(kiroHome),j=readTransaction(kiroHome);if(!j)return {recovered:false};
+ try {
  const actual=identity(readControl(p.manifest));const committed=actual===j.afterOwnerSha256;
  if(!committed&&actual!==j.beforeOwnerSha256)throw Error('recovery-required: conflicting actual owner');
  const selected=decode(j.controls.manifest[committed?'after':'before']);
@@ -56,7 +57,19 @@ export async function recoverInstallTransaction(kiroHome,{onPhase=()=>{}}={}) {
  // Validate every control before touching any: foreign bytes are never removed.
  for(const name of names){const c=j.controls[name],h=identity(readControl(p[name],modeFor(name)));if(h!==c.beforeSha256&&h!==c.afterSha256)throw Error('recovery-required: conflicting '+name);if(committed&&h!==c.afterSha256)throw Error('recovery-required: committed control mismatch '+name);}
  if(!committed)for(const name of names.filter(n=>n!=='manifest')) {const c=j.controls[name];if(identity(readControl(p[name],modeFor(name)))!==c.beforeSha256)publishControl(p[name],decode(c.before),modeFor(name));await onPhase('recovery-restored-'+name);}
- await onPhase('recovery-before-cleanup');fs.unlinkSync(p.journal);syncDirectory(path.dirname(p.journal));await onPhase('recovery-cleaned');return {recovered:true,committed};
+ // A rename/unlink can have succeeded before its parent fsync failed. Bytes
+ // matching on retry are NOT durability evidence. Sync every control parent,
+ // including the owner parent on postcommit replay, before deleting the journal.
+ for(const dir of new Set(names.map(name=>path.dirname(p[name])))){s.assertNoUnsafeSymlinkComponents(dir);s.assertSafeDirectory(dir);syncDirectory(dir);}
+ await onPhase('recovery-controls-synced');
+ const before=j.controls.manifest.before===null?null:JSON.parse(decode(j.controls.manifest.before).toString());
+ const action=next.status==='retired'?'retirement':before?.status==='retired'?'reactivation':before?.runtimeGenerations?.some(r=>r.name===next.currentRuntime)?'retained-activation':'installation';
+ await onPhase('recovery-before-cleanup');fs.unlinkSync(p.journal);syncDirectory(path.dirname(p.journal));await onPhase('recovery-cleaned');return {recovered:true,committed,transactionId:j.transactionId,action,targetDigest:next.currentRuntime};
+ } catch(error) {
+  error.recoveryRequired=true;error.committed=false;
+  try{error.committed=identity(readControl(p.manifest))===j.afterOwnerSha256;}catch{}
+  throw error;
+ }
 }
 /** Fixed installation controls only. Caller holds the shared installation lock.
  * @param {string} kiroHome

@@ -14,38 +14,46 @@ export function pinnedRecoveryChild(fs, createHash, request) {
   const same = (a, b) => a?.dev === b?.dev && a?.ino === b?.ino;
   const identity = (v) => v && [v.dev, v.ino].every(s => typeof s === "string" && /^(0|[1-9][0-9]{0,24})$/u.test(s));
   const record = (v) => v && identity(v.file) && typeof v.hash === "string" && /^[a-f0-9]{64}$/u.test(v.hash);
-  const safe = (s, directory) => {
+  const safe = (s, directory, links = 1) => {
     if ((directory ? !s.isDirectory() : !s.isFile()) || s.isSymbolicLink() || typeof process.getuid !== "function"
       || s.uid !== BigInt(process.getuid()) || (s.mode & 0o7777n) !== (directory ? 0o700n : 0o600n)
-      || (!directory && (s.nlink !== 1n || s.size > 4096n))) fail("unsafe pinned recovery file");
+      || (!directory && (s.nlink !== BigInt(links) || s.size > 4096n))) fail("unsafe pinned recovery file");
     return s;
   };
-  const stat = (name, directory = false) => safe(fs.lstatSync(name, { bigint: true }), directory);
+  const stat = (name, directory = false, links = 1) => safe(fs.lstatSync(name, { bigint: true }), directory, links);
   const directory = () => {
-    if (!same(id(stat(".", true)), request.lock) || !same(id(stat("..", true)), request.root)) fail("pinned recovery directory replaced");
+    if (!same(id(stat(".", true)), request.lock) || (request.birth !== undefined && String(stat(".", true).birthtimeNs) !== request.birth) || !same(id(stat("..", true)), request.root)) fail("pinned recovery directory replaced");
   };
-  if (!request || !["inspect", "create", "publish"].includes(request.operation) || !identity(request.root)
+  if (!request || (request.birth !== undefined && (typeof request.birth !== "string" || !/^[1-9][0-9]{0,24}$/u.test(request.birth)))
+    || !["inspect", "create", "publish", "restore"].includes(request.operation) || !identity(request.root)
     || !identity(request.lock) || !record(request.owner) || !Array.isArray(request.claims)
     || request.claims.length > 16 || !request.claims.every(record)) fail("invalid pinned recovery request");
   if (request.operation !== "inspect" && request.claims.length >= 16) fail("recovery claim capacity reached");
+  if ((request.releasing && (typeof request.hasOwner !== "boolean" || request.claims.length || !["inspect", "restore"].includes(request.operation)))
+    || (request.operation === "restore" && !request.releasing)
+    || (request.linkedRelease !== undefined && (request.linkedRelease !== true || request.releasing))) fail("invalid pinned release request");
   const claimName = index => `claim-${String(index).padStart(2, "0")}.json`;
   const target = claimName(request.claims.length);
-  const names = ["owner.json", ...request.claims.map((_, i) => claimName(i)), ...(request.operation === "publish" ? [target] : [])].sort();
+  const ownerLinks = request.linkedRelease || (request.releasing && request.hasOwner) ? 2 : 1;
+  const names = [...(!request.releasing || request.hasOwner ? ["owner.json"] : []), ...request.claims.map((_, i) => claimName(i)), ...(request.operation === "publish" ? [target] : [])].sort();
+  const controls = [[request.releasing ? "../.install-lock-release.json" : "owner.json", request.owner, ownerLinks],
+    ...(request.releasing && request.hasOwner ? [["owner.json", request.owner, ownerLinks]] : []),
+    ...(request.linkedRelease ? [["../.install-lock-release.json", request.owner, ownerLinks]] : []), ...request.claims.map((c, i) => [claimName(i), c, 1])];
   const inspect = () => {
     directory();
     const dir = fs.opendirSync("."); const observed = [];
     try { let entry; while ((entry = dir.readSync())) { observed.push(entry.name); if (observed.length > 17) fail("pinned recovery entry bound"); } }
     finally { dir.closeSync(); }
     if (JSON.stringify(observed.sort()) !== JSON.stringify(names)) fail("pinned recovery entries changed");
-    for (const [name, expected] of [["owner.json", request.owner], ...request.claims.map((c, i) => [claimName(i), c])]) {
-      const before = stat(name);
+    for (const [name, expected, links] of controls) {
+      const before = stat(name, false, links);
       if (!same(id(before), expected.file)) fail("pinned recovery control replaced");
       const fd = fs.openSync(name, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
       try {
-        if (!same(id(safe(fs.fstatSync(fd, { bigint: true }), false)), expected.file)) fail("pinned recovery read identity changed");
+        if (!same(id(safe(fs.fstatSync(fd, { bigint: true }), false, links)), expected.file)) fail("pinned recovery read identity changed");
         const bytes = Buffer.alloc(4097); let count = 0;
         while (count < bytes.length) { const n = fs.readSync(fd, bytes, count, bytes.length - count, null); if (!n) break; count += n; }
-        const after = stat(name);
+        const after = stat(name, false, links);
         if (count > 4096 || BigInt(count) !== before.size || !same(id(after), expected.file)
           || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.size !== after.size
           || createHash("sha256").update(bytes.subarray(0, count)).digest("hex") !== expected.hash) fail("pinned recovery control changed");
@@ -55,6 +63,13 @@ export function pinnedRecoveryChild(fs, createHash, request) {
   };
   inspect();
   if (request.operation === "inspect") return { ok: true };
+  if (request.operation === "restore") {
+    if (request.hasOwner) fail("release owner already restored");
+    fs.linkSync("../.install-lock-release.json", "owner.json");
+    const fd = fs.openSync(".", fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    return { ok: true, file: request.owner.file };
+  }
   if (request.operation === "publish") {
     if (!identity(request.created) || typeof request.text !== "string" || Buffer.byteLength(request.text) > 4096
       || request.text !== `${JSON.stringify(JSON.parse(request.text))}\n`) fail("invalid pinned recovery publication");
@@ -92,15 +107,18 @@ try {
 
 /** Execute a bounded operation in a child whose cwd pins the exact directory.
  * 'create' leaves an owned EMPTY claim, preserving the existing partial-write
- * crash boundary. 'publish' revalidates that inode before writing. No deletion
+ * crash boundary. 'publish' revalidates that inode before writing. 'restore'
+ * exclusively links a proven parent release marker back to owner.json; linked
+ * release owners retain two-name proof while every claim remains single-linked.
+ * Optional directory birth identity prevents adoption of a recycled inode. No deletion
  * or cleanup is attempted after unknown child outcomes.
  * @param {string} target
  * @param {any} expected
- * @param {{operation?: 'inspect'|'create'|'publish', created?: {dev: string, ino: string}, text?: string}} [options]
+ * @param {{operation?: 'inspect'|'create'|'publish'|'restore', created?: {dev: string, ino: string}, text?: string}} [options]
  */
 export function runPinnedRecovery(target, expected, { operation = "inspect", created, text } = {}) {
   const bind = entry => ({ file: entry.file, hash: entry.hash });
-  const input = JSON.stringify({ operation, root: expected.root, lock: expected.lock, owner: bind(expected.owner), claims: expected.claims.map(bind), ...(created ? { created } : {}), ...(text === undefined ? {} : { text }) });
+  const input = JSON.stringify({ operation, root: expected.root, lock: expected.lock, owner: bind(expected.owner), claims: expected.claims.map(bind), ...(expected.linkedRelease ? { linkedRelease: true } : {}), ...(expected.owner.value?.lockBirth === undefined ? {} : { birth: expected.owner.value.lockBirth }), ...(expected.releasing ? { releasing: true, hasOwner: expected.hasOwner } : {}), ...(created ? { created } : {}), ...(text === undefined ? {} : { text }) });
   if (Buffer.byteLength(input) > 32768) throw Object.assign(new Error("pinned recovery request bound"), { code: "INSTALL_LOCK_RECOVERY_REQUIRED" });
   let output;
   try {

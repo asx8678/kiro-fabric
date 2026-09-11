@@ -44,6 +44,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
+      - name: Require production installer signing and native qualification readiness
+        run: node scripts/generate-installer-bootstrap.mjs
       - run: npm install --global pnpm@11.20.0
       - name: Provision ripgrep
         run: |
@@ -57,8 +59,6 @@ jobs:
         env: { TAG: "${{ github.ref_name }}" }
         run: test "$TAG" = "v$(node -p 'require("./package.json").version')"
       - run: node scripts/assert-kiro-home-unchanged.mjs pnpm run check
-      - name: Require production installer signing and native qualification readiness
-        run: node scripts/generate-installer-bootstrap.mjs
       - name: Download exact-commit real-client evidence
         env: { GH_TOKEN: "${{ github.token }}", COMMIT: "${{ needs.verify-tag.outputs.commit }}" }
         run: |
@@ -96,5 +96,6 @@ jobs:
           files: |
             ${{ runner.temp }}/release/kiro-fabric-agent.tar.gz
             ${{ runner.temp }}/release/kiro-fabric-agent.spdx.json
+            ${{ runner.temp }}/release/*.tar.gz.spdx.json
             ${{ runner.temp }}/release/release.json
             ${{ runner.temp }}/release/real-client.json

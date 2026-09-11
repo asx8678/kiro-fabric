@@ -53,6 +53,30 @@ recoveryTest.each(['releaseState-published','owner-committed'])('release trust r
 
 import nodefs from 'node:fs';
 import { vi } from 'vitest';
+test.each([
+ ['journal-synced','profile'], ['profile-published','profile'], ['launcher-published','launcher'], ['owner-committed','manifest'],
+])('replay after %s resyncs the %s parent on every retry even when bytes match',async(phase,control)=>{
+ const f=await setup();let spy:ReturnType<typeof vi.spyOn>|undefined;let unlock:(()=>void)|undefined;
+ try {
+  const a=await installCompleteGeneration(f.bundle,f.opts),before=await fs.readFile(a.paths.profile);await upgrade(f.bundle);
+  await expect(installCompleteGeneration(f.bundle,{...f.opts,onPhase:(p:string)=>{if(p===phase)throw Error('fixture interruption');}})).rejects.toThrow('fixture interruption');
+  unlock=acquireInstallationLock(a.paths.base);
+  const selected=path.dirname(a.paths[control]),target=nodefs.statSync(selected),original=nodefs.fsyncSync;let failed=false;
+  spy=vi.spyOn(nodefs,'fsyncSync').mockImplementation(fd=>{const st=nodefs.fstatSync(fd);if(!failed&&st.isDirectory()&&st.dev===target.dev&&st.ino===target.ino){failed=true;throw Error('fixture recovery parent fsync failure');}return original(fd);});
+  await expect(recoverInstallTransaction(f.kiroHome)).rejects.toThrow('fixture recovery parent fsync failure');
+  expect(failed).toBe(true);expect(readTransaction(f.kiroHome)).not.toBeNull();
+  if(phase!=='owner-committed')expect(await fs.readFile(a.paths.profile)).toEqual(before);
+  const controls=await Promise.all([a.paths.profile,a.paths.launcher,a.paths.manifest].map(file=>fs.readFile(file)));
+  spy.mockRestore();const seen=new Set<string>(),parents=[...new Set([a.paths.profile,a.paths.launcher,a.paths.manifest,a.paths.releaseState].map(file=>path.dirname(file)))];
+  const identities=parents.map(dir=>({dir,stat:nodefs.statSync(dir)}));
+  spy=vi.spyOn(nodefs,'fsyncSync').mockImplementation(fd=>{const st=nodefs.fstatSync(fd);for(const {dir,stat} of identities)if(st.isDirectory()&&st.dev===stat.dev&&st.ino===stat.ino)seen.add(dir);return original(fd);});
+  const recovered=await recoverInstallTransaction(f.kiroHome,{onPhase:p=>{if(p==='recovery-before-cleanup'){expect(readTransaction(f.kiroHome)).not.toBeNull();expect([...seen].sort()).toEqual(parents.sort());}}});
+  expect(recovered).toMatchObject({recovered:true,committed:phase==='owner-committed'});
+  expect(await Promise.all([a.paths.profile,a.paths.launcher,a.paths.manifest].map(file=>fs.readFile(file)))).toEqual(controls);
+  expect(readTransaction(f.kiroHome)).toBeNull();expect((await recoverInstallTransaction(f.kiroHome)).recovered).toBe(false);
+ }finally{spy?.mockRestore();unlock?.();await f.cleanup();}
+});
+
 test.each([1,2])('owner sync failure %s reports actual commit and next invocation recovers',async failAt=>{const f=await setup();let spy:ReturnType<typeof vi.spyOn>|undefined;try{await installCompleteGeneration(f.bundle,f.opts);const next=await upgrade(f.bundle);const original=nodefs.fsyncSync;let armed=false,count=0;spy=vi.spyOn(nodefs,'fsyncSync').mockImplementation(fd=>{if(armed&&++count===failAt){armed=false;throw Error('injected fsync failure');}return original(fd);});await expect(installCompleteGeneration(f.bundle,{...f.opts,onPhase:(p:string)=>{if(p==='before-manifest')armed=true;}})).rejects.toMatchObject({message:'injected fsync failure',committed:failAt===2,recoveryRequired:true});spy.mockRestore();spy=undefined;await installCompleteGeneration(f.bundle,f.opts);expect((await inspectCompleteInstallation(f.kiroHome)).owner.currentRuntime).toBe(next);}finally{spy?.mockRestore();await f.cleanup();}});
 
 recoveryTest.each(['before-candidate-validation','candidate-validated','owner-committed'])('rollback death at %s preserves both immutable generations and retries exact target',async phase=>{const f=await setup();try{const a=await installCompleteGeneration(f.bundle,f.opts);await upgrade(f.bundle);const b=await installCompleteGeneration(f.bundle,f.opts);const killed=await killAt(f,phase,'rollback');expect(killed.error).toBe('');expect(killed.signal).toBe('SIGKILL');const result=await rollbackCompleteGeneration(f.kiroHome,{digest:a.digest,validateCandidate:async(root:string)=>{expect(path.basename(root)).toMatch(/^\.candidate-[a-f0-9]{32}$/);expect((await validateBundle(root)).digest).toBe(a.digest);}});expect(result.owner.currentRuntime).toBe(a.digest);expect((await inspectCompleteInstallation(f.kiroHome)).generations).toHaveLength(2);expect(await fs.readFile(a.paths.runtime+'/'+a.digest+'/app/main.js','utf8')).toBe('fixture app/main.js');expect(await fs.readFile(b.paths.runtime+'/'+b.digest+'/app/main.js','utf8')).toBe('next-generation');}finally{await f.cleanup();}},15000);

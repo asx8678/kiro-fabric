@@ -91,6 +91,7 @@ const reportBody = {
   archiveDigest,
   sbomPackageDigest: sbomDigest,
   sbomFileDigest,
+  sbom: artifacts.sbom,
   closureManifestDigest: createHash("sha256").update(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"))).digest("hex"),
   packedFiles,
   realClient,

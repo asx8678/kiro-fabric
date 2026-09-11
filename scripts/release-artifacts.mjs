@@ -39,7 +39,7 @@ export const validateReleaseArtifacts = (stage, archivePath, sbomPath, closureRo
       JSON.stringify(sbomDependencies) !== JSON.stringify(closureDependencies)) {
     throw new Error("SBOM dependency inventory does not match the exact Agent closure");
   }
-  return { packageResult, packageDigest, sbomDigest, sbomFileDigest, archiveDigest, archiveBytes, sbomBytes };
+  return { packageResult, packageDigest, sbomDigest, sbomFileDigest, archiveDigest, archiveBytes, sbomBytes, sbom: { size: sbomBytes.length, sha256: sbomFileDigest } };
 };
 
 /** Caller must validate exact-client qualification before promotion. Never reread
@@ -48,5 +48,6 @@ export const writeReleaseAssetSnapshots = (directory, artifacts, qualificationBy
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   writeFileAtomic(path.join(directory, "kiro-fabric-agent.tar.gz"), artifacts.archiveBytes);
   writeFileAtomic(path.join(directory, "kiro-fabric-agent.spdx.json"), artifacts.sbomBytes);
+  writeFileAtomic(path.join(directory, "kiro-fabric-agent.tar.gz.spdx.json"), artifacts.sbomBytes);
   writeFileAtomic(path.join(directory, "real-client.json"), qualificationBytes);
 };

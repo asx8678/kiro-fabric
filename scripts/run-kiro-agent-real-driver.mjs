@@ -4,6 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertExternalDiagnosticPath, withQualificationFailureReport } from "./qualification-failure.mjs";
 import {
   REAL_CLIENT_AUTOMATIC_COMPACTION_CYCLES,
   REAL_CLIENT_AUTO_COMPACTION_MAX_PRESSURE_TURNS,
@@ -1392,8 +1393,9 @@ const assertOneObservedMcpProcess = (observer, kiroPid, label) => {
 const runRealKiroAgentDriverImplementation = async ({
   packageRoot, packageDigest, archiveDigest, commit, driverDigest, output, workspace,
   kiroHome, isolatedHome, installCwd, authMode, subscriptionLogin = false,
-  subscriptionLicense, identityProvider, region,
+  subscriptionLicense, identityProvider, region, record,
 }) => {
+  record.phase("preflight");
   const resolvedAuth = resolveRealClientAuthFlags({
     authMode, subscriptionLogin, subscriptionLicense, identityProvider, region,
   });
@@ -1408,6 +1410,11 @@ const runRealKiroAgentDriverImplementation = async ({
   const globalRoot = assertPrivateDirectory(path.resolve(kiroHome), true);
   const homeRoot = assertPrivateDirectory(path.resolve(isolatedHome));
   const installerCwd = assertPrivateDirectory(path.resolve(installCwd), true);
+  // Raw transcript evidence is an internal handoff to the wrapper, never an
+  // external report. The wrapper validates it, privacy-gates publication and
+  // removes this whole temporary work root, including authentication state.
+  const evidenceParent = assertPrivateDirectory(path.dirname(path.resolve(output)));
+  if (evidenceParent !== path.dirname(workspaceRoot) || evidenceParent !== path.dirname(homeRoot) || evidenceParent !== path.dirname(installerCwd)) throw new Error("Raw driver evidence must stay inside the private wrapper work root");
   if (containsReleaseProfile(releaseRoot)) throw new Error("release artifact contains a discoverable same-name workspace profile");
   const workspaceBeforeDigest = treeDigest(workspaceRoot);
   const executable = resolveKiroCli();
@@ -1430,6 +1437,7 @@ const runRealKiroAgentDriverImplementation = async ({
   const authenticatedEnvironment = resolvedAuthMode === "api-key"
     ? { ...environment, KIRO_API_KEY: apiKey }
     : environment;
+  record.phase("authentication");
   let preLoginUnauthenticated = false;
   if (resolvedAuthMode === "subscription") {
     if (resolvedSubscriptionLogin) {
@@ -1449,6 +1457,7 @@ const runRealKiroAgentDriverImplementation = async ({
     assertSubscriptionAuthenticated(executable, workspaceRoot, authenticatedEnvironment);
   }
 
+  record.phase("archive-installation");
   const installer = path.join(releaseRoot, "scripts", "install-agent-user.mjs");
   const installResult = runSync(process.execPath, [installer, releaseRoot], { cwd: installerCwd, env: environment, timeout: 120_000 });
   const installLine = installResult.stdout.toString("utf8").split("\n").find((line) => line.trim().startsWith("{"));
@@ -1473,6 +1482,7 @@ const runRealKiroAgentDriverImplementation = async ({
   const qualificationConfig = (write) => `${JSON.stringify({ approvals: { read: "allow", write, execute: write === "ask" ? "ask" : "deny", network: "deny" }, tracing: { enabled: true } }, null, 2)}\n`;
   fs.writeFileSync(configFile, qualificationConfig("ask"), { mode: 0o600, flag: "wx" });
 
+  record.phase("client-contract");
   const version = runSync(executable, ["--version"], { cwd: workspaceRoot, env: environment });
   const help = runSync(executable, ["--help-all"], { cwd: workspaceRoot, env: environment });
   const chatHelp = runSync(executable, ["chat", "--help"], { cwd: workspaceRoot, env: environment });
@@ -1541,6 +1551,7 @@ const runRealKiroAgentDriverImplementation = async ({
 
   const knownBeforeFormProbe = new Set(traceSessions(installed.data).map((entry) => entry.id));
   const interactiveArgv = REAL_CLIENT_INTERACTIVE_COMMAND.slice(1);
+  record.phase("coding-and-form");
   const formRecord = path.join(homeRoot, "form-probe-acp.jsonl");
   const formProbe = startPty(executable, interactiveArgv, {
     cwd: workspaceRoot,
@@ -1650,6 +1661,7 @@ const runRealKiroAgentDriverImplementation = async ({
   fs.writeFileSync(configFile, qualificationConfig("allow"), { encoding: "utf8", mode: 0o600 });
   fs.chmodSync(configFile, 0o600);
   const knownBeforeInteractive = new Set(traceSessions(installed.data).map((entry) => entry.id));
+  record.phase("interactive");
   const interactiveRecord = path.join(homeRoot, "interactive-acp.jsonl");
   const interactiveEnvironment = { ...authenticatedEnvironment, KIRO_ACP_RECORD_PATH: interactiveRecord };
   const interactive = startPty(executable, interactiveArgv, { cwd: workspaceRoot, env: interactiveEnvironment, forbiddenValues: protectedValues });
@@ -1742,6 +1754,7 @@ const runRealKiroAgentDriverImplementation = async ({
 
   // End-bind each structural event before sending any later command. A later
   // automatic compaction cannot satisfy any manual /compact cycle.
+  record.phase("manual-compaction");
   const firstManualCompaction = await manualCompactionCycle({
     session: interactive,
     recordFile: interactiveRecord,
@@ -1938,6 +1951,7 @@ const runRealKiroAgentDriverImplementation = async ({
   }
   const automaticFact = `context-automatic-1-${randomBytes(24).toString("hex")}`;
   const automaticContextKey = `qualification-compacted-context-automatic-1-${nonce}`;
+  record.phase("automatic-compaction");
   const automaticSeedArguments = {
     code: sentinelVerificationCode(false),
     payloads: { nonce, memoryKey, stateKey },
@@ -2062,6 +2076,7 @@ const runRealKiroAgentDriverImplementation = async ({
 
   const knownBeforeResume = new Set(traceSessions(installed.data).map((entry) => entry.id));
   const resumeArgv = ["--v3", "--agent", "kiro-fabric", "--resume-id", sessionId];
+  record.phase("resume");
   const resumeRecord = path.join(homeRoot, "resume-acp.jsonl");
   const resumed = startPty(executable, resumeArgv, {
     cwd: workspaceRoot,
@@ -2131,6 +2146,7 @@ const runRealKiroAgentDriverImplementation = async ({
   const resumeShutdownOutput = resumed.capture.slice(resumeShutdownCursor);
 
   const selector = headlessSelector(chatHelp.combined.toString("utf8"));
+  record.phase("headless");
   const headlessPrompt = qualificationPrompt({ code: "return { nonce: payloads.nonce, providers: await tools.providers() }", payloads: { nonce }, resultFormat: "json" });
   const headlessArgv = ["chat", ...(selector === "--v3" ? ["--v3"] : [selector, "v3"]), "--agent", "kiro-fabric", "--no-interactive", "--require-mcp-startup", "--output-format", "stream-json", headlessPrompt];
   const knownBeforeHeadless = new Set(traceSessions(installed.data).map((entry) => entry.id));
@@ -2677,21 +2693,18 @@ const runRealKiroAgentDriverImplementation = async ({
       transcriptEntry("automatic-compaction-setting-final", autoCompactionFinal.combined),
     ],
   };
+  record.phase("evidence-validation");
   const evidenceBytes = Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`);
   if (protectedValues.some((value) => value.length > 0 && evidenceBytes.includes(value))) throw new Error("qualification evidence contained a protected credential; evidence was suppressed");
   fs.writeFileSync(output, evidenceBytes, { mode: 0o600, flag: "wx" });
 };
 
 export const runRealKiroAgentDriver = async (options) => {
-  try {
-    const result = await runRealKiroAgentDriverImplementation(options);
-    await terminateQualificationChildren();
-    return result;
-  } catch (error) {
-    try { await terminateQualificationChildren(); }
-    catch (cleanupError) { throw new AggregateError([error, cleanupError], "Kiro qualification failed and exact-PID cleanup was incomplete"); }
-    throw error;
-  }
+  if (options.failureOutput) assertExternalDiagnosticPath(options.failureOutput, [options.kiroHome, options.isolatedHome, options.workspace, options.installCwd]);
+  return withQualificationFailureReport({ output: options.failureOutput, component: "driver", cleanupKind: "processes", cleanup: terminateQualificationChildren }, async record => {
+    record.cleanup("processes", "pending");
+    return runRealKiroAgentDriverImplementation({ ...options, record });
+  });
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -2702,23 +2715,24 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const installCwd = valueAfter(process.argv, "--install-cwd");
   if (!output || !workspace || !kiroHome || !isolatedHome || !installCwd) throw new Error("--output, --workspace, --kiro-home, --home, and --install-cwd are required");
   const script = fs.readFileSync(fileURLToPath(import.meta.url));
-  await runRealKiroAgentDriver({
+  try { await runRealKiroAgentDriver({
     packageRoot: path.resolve(valueAfter(process.argv, "--package") ?? ""),
     packageDigest: valueAfter(process.argv, "--package-digest"),
     archiveDigest: valueAfter(process.argv, "--archive-digest"),
     commit: valueAfter(process.argv, "--commit"),
     driverDigest: hash(script),
     output: path.resolve(output),
+    failureOutput: path.resolve(valueAfter(process.argv, "--failure-output") ?? `${output}.failure.json`),
     workspace: path.resolve(workspace),
     kiroHome: path.resolve(kiroHome),
     isolatedHome: path.resolve(isolatedHome),
     installCwd: path.resolve(installCwd),
-    ...resolveRealClientAuthFlags({
+    ...{
       authMode: valueAfter(process.argv, "--auth-mode"),
       subscriptionLogin: process.argv.includes("--subscription-login"),
       subscriptionLicense: valueAfter(process.argv, "--subscription-license"),
       identityProvider: valueAfter(process.argv, "--identity-provider"),
       region: valueAfter(process.argv, "--region"),
-    }),
-  });
+    },
+  }); } catch { process.stderr.write("Kiro qualification failed; inspect the nonqualifying sanitized diagnostic. Raw output suppressed.\n"); process.exitCode = 1; }
 }

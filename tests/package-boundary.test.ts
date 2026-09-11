@@ -276,12 +276,22 @@ describe("Agent product boundary", () => {
     expect(fs.existsSync(path.join(root, ".tmp/kiro-fabric-agent/scripts/install-agent-user.mjs"))).toBe(true);
   });
 
+  it("registers the executable installer acceptance entrypoint without implicit builds", () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    expect(pkg.scripts["test:installer"]).toBe("node scripts/test-installer.mjs run");
+    const listed = spawnSync(process.execPath, ["scripts/test-installer.mjs", "list", "bundle"], { cwd: root, encoding: "utf8", timeout: 10000 });
+    expect(listed.status, listed.stderr).toBe(0);
+    expect(listed.stdout).toContain("tests/installer-smoke-bundle-acceptance.test.ts");
+  });
+
   it("MCP certification reports exactly three tools", () => {
     const result = spawnSync(process.execPath, ["scripts/certify-kiro-agent.mjs"], { cwd: root, encoding: "utf8", timeout: 60_000 });
     expect(result.status, result.stderr).toBe(0);
     const report = JSON.parse(result.stdout);
     expect(report.tools).toEqual(["fabric_info", "fabric_workspace", "fabric_exec"]);
     expect(report.scope).toBe("component-mcp-only");
+    expect(report.authenticatedKiro).toBe("NOT TESTED");
+    expect(report.checks).toContain("structured-read-and-search");
     expect(report.checks).toContain("idempotent-info");
     expect(report.checks).toContain("single-runtime-generation");
     expect(report.checks).toContain("form-elicitation-decline");

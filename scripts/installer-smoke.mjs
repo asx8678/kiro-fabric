@@ -5,6 +5,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { validateBundle } from "./bundle-contract.mjs";
+import { assertInstallerSmokeResult, installerSmokeInput } from "./installer-smoke-contract.mjs";
 
 export async function smokeCandidate(bundleRoot) {
   const bundle = await validateBundle(bundleRoot);
@@ -25,7 +26,7 @@ export async function smokeCandidate(bundleRoot) {
     await new Promise((resolve, reject) => {
       const child = spawn(node, [path.join(bundle.root, "app", "kiro", "mcp-entry.js")], { cwd: workspace,
         env: { HOME: home, KIRO_HOME: path.join(home, ".kiro"), PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C", KIRO_FABRIC_BUNDLE_ROOT: bundle.root, KIRO_FABRIC_RUNTIME_ROOT: path.join(bundle.root, "app"), KIRO_FABRIC_EXPECTED_NODE: node, KIRO_FABRIC_RG: rg, KIRO_FABRIC_DATA_ROOT: data }, stdio: ["pipe", "pipe", "pipe"] });
-      let buffer = "", diagnostic = "", passed = false, failure;
+      let buffer = "", diagnostic = "", passed = false, failure, expectedResponse = 1;
       const fail = (error) => { failure ??= error; child.kill("SIGTERM"); };
       const timer = setTimeout(() => fail(new Error("Candidate backend smoke timed out")), 30000);
       const killer = setTimeout(() => child.kill("SIGKILL"), 33000);
@@ -41,18 +42,21 @@ export async function smokeCandidate(bundleRoot) {
           if (!line.trim()) continue;
           let frame;
           try { frame = JSON.parse(line); } catch { fail(new Error("Invalid backend JSON during smoke")); return; }
+          if (frame.id !== undefined && frame.method === undefined && frame.id !== expectedResponse) { fail(new Error("Candidate smoke response out of order")); return; }
           if (frame.method === "roots/list") send({ jsonrpc: "2.0", id: frame.id, result: { roots: [{ uri: pathToFileURL(workspace).href, name: "installer-fixture" }] } });
           else if (frame.method === "elicitation/create") send({ jsonrpc: "2.0", id: frame.id, result: { action: "decline" } });
           else if (frame.id === 1 && !frame.method) {
-            if (frame.error) { fail(new Error("Candidate initialization failed")); return; }
+            if (frame.error || !frame.result || typeof frame.result !== "object") { fail(new Error("Candidate initialization failed")); return; }
+            expectedResponse = 2;
             send({ jsonrpc: "2.0", method: "notifications/initialized" }); send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
           } else if (frame.id === 2 && !frame.method) {
             const names = frame.result?.tools?.map(tool => tool.name).sort();
-            if (JSON.stringify(names) !== JSON.stringify(["fabric_exec", "fabric_info", "fabric_workspace"])) { fail(new Error("Candidate raw backend inventory mismatch")); return; }
-            send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "fabric_exec", arguments: { code: 'return {read: await local.read({path:"probe.txt",limit:1}), search: await local.grep({pattern:"fabric-smoke",path:"."})};' } } });
+            if (frame.error || frame.result?.isError || JSON.stringify(names) !== JSON.stringify(["fabric_exec", "fabric_info", "fabric_workspace"])) { fail(new Error("Candidate raw backend inventory mismatch")); return; }
+            expectedResponse = 3;
+            send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "fabric_exec", arguments: installerSmokeInput(sentinel) } });
           } else if (frame.id === 3 && !frame.method) {
-            if (frame.error || frame.result?.isError || !JSON.stringify(frame.result).includes(sentinel)) fail(new Error(`Candidate checked read/search failed: ${JSON.stringify(frame.result ?? frame.error).slice(0, 1500)}`));
-            else { passed = true; child.stdin.end(); }
+            try { assertInstallerSmokeResult(frame, sentinel); expectedResponse = 4; passed = true; child.stdin.end(); }
+            catch (error) { fail(error); }
           }
         }
       });

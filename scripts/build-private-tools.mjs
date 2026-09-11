@@ -4,6 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { sha256, TARGETS, checkToolPins } from './bundle-contract.mjs';
+import { captureArtifactTree } from './installer-artifacts.mjs';
 const HOSTS=new Set(['nodejs.org','github.com','release-assets.githubusercontent.com']);
 /** Bounded upstream acquisition, one overall deadline including redirect bodies.
  * @param {string} url @param {{sha256:string,size?:number,max?:number}} options */
@@ -32,12 +33,29 @@ export function extractPinnedMember(archive,member,max=160*1024*1024){
  return execFileSync('tar',['-xOzf',archive,'--',member],{maxBuffer:max,timeout:30000,env:{PATH:'/usr/bin:/bin',LANG:'C'}});
 }
 /** Acquire the pinned binary and all legal notices; return the exact pin records.
- * @param {string} target @param {string} destination */
-export async function acquirePrivateTools(target,destination){
+ * @param {string} target @param {string} destination @param {string} [configRoot] */
+export async function acquirePrivateTools(target,destination,configRoot){
  if(!TARGETS.includes(target))throw Error('Unsupported target');
- const config=JSON.parse(await readFile(new URL('../build-toolchain.json',import.meta.url),'utf8'));
+ const config=JSON.parse(await readFile(configRoot ? path.join(configRoot,'build-toolchain.json') : new URL('../build-toolchain.json',import.meta.url),'utf8'));
  const pins=config.targets[target];if(!pins?.node?.sha256||!pins?.rg?.sha256)throw Error('Private tool pins unavailable');
  return acquirePrivateToolsForTest(target,destination,{pins,qualification:config.qualification,download:downloadVerified,extract:extractPinnedMember});
+}
+/** Verify the exact binary/notice closure with <=64KiB streaming hash buffers.
+ * Pins/size/mode/single-link/inode/ancestry checks are independent of any receipt.
+ * Extra files AND extra/empty directories are drift, never ignored cache debris.
+ * @param {string} root @param {any} pins @param {string} target */
+export async function verifyPrivateToolCache(root,pins,target){
+ checkToolPins(pins,undefined,target);
+ const members=Object.values(pins).flatMap(pin=>pin.members);
+ const captured=await captureArtifactTree(root,members.map(member=>({path:member.path,size:member.size,mode:member.path.startsWith('tools/')?0o700:0o600})));
+ const expected=members.map(member=>member.path).sort();
+ if(JSON.stringify(captured.files.map(file=>file.path).sort())!==JSON.stringify(expected)||
+    JSON.stringify(captured.entries.filter(entry=>entry.type==='directory').map(entry=>entry.path).sort())!==JSON.stringify(['','notices','tools']))throw Error('Pinned private-tool cache inventory drifted; preserve and inspect it');
+ for(const member of members){const file=captured.files.find(file=>file.path===member.path);
+  if(file.size!==member.size||file.sha256!==member.sha256||file.mode!==(member.path.startsWith('tools/')?0o700:0o600))throw Error('Pinned private-tool cache drifted; preserve and inspect it');
+ }
+ checkToolPins(pins,captured.files,target);
+ return captured;
 }
 /** Internal fixture seam for acquisition; never selectable by CLI or environment.
  * @param {string} target @param {string} destination

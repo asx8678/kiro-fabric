@@ -83,6 +83,8 @@ describe("release artifact content validation and snapshot promotion", () => {
       writeReleaseAssetSnapshots(assets, artifacts, evidence);
       expect(fs.readFileSync(path.join(assets, "kiro-fabric-agent.tar.gz"))).toEqual(qualifiedBytes);
       expect(fs.readFileSync(path.join(assets, "kiro-fabric-agent.spdx.json"))).toEqual(sbomBytes);
+      expect(fs.readFileSync(path.join(assets, "kiro-fabric-agent.tar.gz.spdx.json"))).toEqual(sbomBytes);
+      expect(artifacts.sbom).toEqual({ size: sbomBytes.length, sha256: artifacts.sbomFileDigest });
       expect(fs.readFileSync(path.join(assets, "real-client.json"))).toEqual(evidence);
     } finally { fs.writeFileSync(archive, qualifiedBytes); fs.writeFileSync(sbom, sbomBytes); }
   });

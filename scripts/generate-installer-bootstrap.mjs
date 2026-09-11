@@ -2,9 +2,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonical, sha256 } from './bundle-contract.mjs';
 import { parseBundleArchive } from './bundle-archive.mjs';
-import { PRODUCTION_TRUST_ROOT, validateReleaseMetadata } from './release-trust.mjs';
+import { PRODUCTION_TRUST_ROOT, validateReleaseMetadata, checkReleaseSbom, RELEASE_SBOM_SUFFIX } from './release-trust.mjs';
 
-/** @typedef {{metadata:any,archiveBytes:Buffer}} VerifiedCapture */
+/** @typedef {{metadata:any,archiveBytes:Buffer,sbomBytes:Buffer}} VerifiedCapture */
 /** Quote only validated data, never interpret metadata as shell source. @param {string} value */
 const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
 /** Internal release-pipeline function: callers MUST supply already signature-verified
@@ -18,12 +18,13 @@ export function generateInstallerBootstrap(captures){
   const m=validateReleaseMetadata(capture.metadata);
   if(seen.has(m.target)||version&&version!==m.version)throw Error('Bootstrap target/version mismatch');seen.add(m.target);version=m.version;
   if(!Buffer.isBuffer(capture.archiveBytes)||capture.archiveBytes.length!==m.archive.size||sha256(capture.archiveBytes)!==m.archive.sha256)throw Error('Bootstrap archive mismatch');
+  checkReleaseSbom(m,capture.sbomBytes);
   const parsed=parseBundleArchive(capture.archiveBytes);
   if(parsed.manifest.digest!==m.bundleDigest||parsed.manifest.version!==m.version||parsed.manifest.target!==m.target||canonical(parsed.manifest.compatibility)!==canonical(m.compatibility)||parsed.manifest.provenance.kind!=='release'||parsed.manifest.provenance.sourceCommit!==m.sourceCommit)throw Error('Bootstrap manifest/release mismatch');
   const node=parsed.manifest.inventory.find((/** @type {any} */ e)=>e.path==='tools/node');const manager=parsed.manifest.inventory.find((/** @type {any} */ e)=>e.path==='manager/install-manager.mjs');
   // Current declared layout has no executable ancillaries; native qualification is pending. Any future ancillary
   // role/layout requires manifest support, fixed pins here, and native evidence.
-  cases.push(`  ${m.target}) archive_url=${quote(m.archive.url)}; archive_size=${m.archive.size}; archive_hash=${quote(m.archive.sha256)}; node_size=${node.size}; node_hash=${quote(node.sha256)}; manager_size=${manager.size}; manager_hash=${quote(manager.sha256)} ;;`);
+  cases.push(`  ${m.target}) archive_url=${quote(m.archive.url)}; archive_size=${m.archive.size}; archive_hash=${quote(m.archive.sha256)}; sbom_size=${m.sbom.size}; sbom_hash=${quote(m.sbom.sha256)}; node_size=${node.size}; node_hash=${quote(node.sha256)}; manager_size=${manager.size}; manager_hash=${quote(manager.sha256)} ;;`);
  }
  return `#!/bin/bash
 # Generated pinned RELEASE bootstrap. Save, inspect, then run; never curl | bash.
@@ -143,7 +144,7 @@ download() {
   while :; do
     case "$url" in *$'\\r'*|*$'\\n'*|*'#'*) fail 'unsafe redirect URL' ;; esac
     case "$url" in https://github.com/*|https://api.github.com/*|https://release-assets.githubusercontent.com/*) ;; *) fail 'unapproved HTTPS redirect' ;; esac
-    status=$( ( ulimit -f "$(( ((max > 65536 ? max : 65536) + 511) / 512 ))"; curl -q --silent --show-error --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --max-filesize "$max" --dump-header "$tmp/headers" --output "$destination" --write-out '%{http_code}' -- "$url" ) ) || fail 'download failed: offline or oversized'
+    status=$( ( ulimit -f "$(( ((max > 65536 ? max : 65536) + 511) / 512 ))"; curl -q --globoff --silent --show-error --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --max-filesize "$max" --dump-header "$tmp/headers" --output "$destination" --write-out '%{http_code}' -- "$url" ) ) || fail 'download failed: offline or oversized'
     [ "$(size_of "$destination")" -le "$max" ] || fail 'oversized download'
     [ "$(size_of "$tmp/headers")" -le 65536 ] || fail 'oversized headers'
     case "$status" in
@@ -177,11 +178,14 @@ check_file "$archive" "$archive_size" "$archive_hash"
 if [ -n "$from_archive" ]; then
   bounded_copy "$from_archive.release.json" "$archive.release.json" 65536
   bounded_copy "$from_archive.release.sig" "$archive.release.sig" 89
+  bounded_copy "$from_archive${RELEASE_SBOM_SUFFIX}" "$archive${RELEASE_SBOM_SUFFIX}" "$sbom_size"
 else
   download "$archive_url.release.json" "$archive.release.json" 65536
   download "$archive_url.release.sig" "$archive.release.sig" 89
+  download "$archive_url${RELEASE_SBOM_SUFFIX}" "$archive${RELEASE_SBOM_SUFFIX}" "$sbom_size"
 fi
 [ "$(size_of "$archive.release.sig")" = 89 ] || fail 'signature size mismatch'
+check_file "$archive${RELEASE_SBOM_SUFFIX}" "$sbom_size" "$sbom_hash"
 # Fixed named-member extraction to controlled files; never unpack untrusted paths.
 ( ulimit -f "$(( (node_size + 511) / 512 ))"; tar -xOzf "$archive" -- tools/node > "$tmp/node" ) || fail 'node extraction failed'
 check_file "$tmp/node" "$node_size" "$node_hash"

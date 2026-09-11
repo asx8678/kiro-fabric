@@ -1,15 +1,29 @@
 import { test, expect } from 'vitest';
-import http from 'node:http';
-import { once } from 'node:events';
+import type http from 'node:http';
+import { EventEmitter } from 'node:events';
+import { sha256 } from '../scripts/bundle-contract.mjs';
 import { discoverRelease, discoverReleaseForTest, downloadHttpsForTest, RELEASE_API, ReleaseDownloadError } from '../scripts/release-download.mjs';
 import { signedRelease } from './release-fixture.js';
 
+// Socket-free request/response fixture. The same production state machine sees
+// status, headers, fragments, completion and deadlines; no loopback exemption.
 async function transport(handler:http.RequestListener,run:(request:typeof http.request)=>Promise<void>){
- const server=http.createServer(handler);server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address() as import('node:net').AddressInfo;
- // Only fixture request adapter rewrites transport to loopback. Production URL
- // validation still sees the original HTTPS URL on every redirect.
- const request=((url:URL,options:http.RequestOptions,callback:(r:http.IncomingMessage)=>void)=>http.request({host:'127.0.0.1',port:address.port,path:url.pathname,...options},callback)) as typeof http.request;
- try{await run(request);}finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+ const request=((url:URL,_options:http.RequestOptions,callback:(r:http.IncomingMessage)=>void)=>{
+  const req:any=new EventEmitter(),incoming:any=new EventEmitter();let started=false;
+  incoming.headers={};incoming.statusCode=200;incoming.complete=false;incoming.destroyed=false;
+  incoming.destroy=()=>{incoming.destroyed=true;};req.destroy=()=>{incoming.destroy();};
+  const start=()=>{if(!started){started=true;callback(incoming);}};
+  const response:any={
+   writeHead:(status:number,headers:Record<string,string>={})=>{incoming.statusCode=status;for(const [key,value] of Object.entries(headers))incoming.headers[key.toLowerCase()]=value;return response;},
+   flushHeaders:()=>start(),
+   write:(value:string|Buffer)=>{start();if(!incoming.destroyed)incoming.emit('data',Buffer.isBuffer(value)?value:Buffer.from(value));return true;},
+   end:(value?:string|Buffer)=>{if(value!==undefined)response.write(value);else start();if(!incoming.destroyed){incoming.complete=true;incoming.emit('end');}},
+   destroy:()=>{start();if(!incoming.destroyed){incoming.emit('aborted');incoming.destroy();}},
+  };
+  req.end=()=>{req.emit('socket',{connecting:false});queueMicrotask(()=>handler({url:url.pathname} as http.IncomingMessage,response));};
+  return req;
+ }) as typeof http.request;
+ await run(request);
 }
 test('public discovery is blocked before network or option processing',async()=>{
  await expect(discoverRelease({target:'linux-x64'})).rejects.toMatchObject({code:'trust-root blocked'});
@@ -45,16 +59,16 @@ test('rejects oversized declared/chunked bytes, truncation, encoding and deadlin
  await transport((_req,res)=>{res.write('a');},async r=>{await expect(downloadHttpsForTest('https://github.com/a',{maxBytes:3,connectionTimeoutMs:100,overallTimeoutMs:30},r)).rejects.toThrow(/overall timeout/);});
 });
 function discoveryFixture(){
- const f=signedRelease();const url=f.metadata.archive.url;
- const release={tag_name:'v1.0.0',draft:false,prerelease:false,assets:['','.release.json','.release.sig'].map(s=>({name:url.split('/').at(-1)+s,browser_download_url:url+s}))};
+ const sbomBytes=Buffer.from('fixture sbom');const f={...signedRelease(undefined,{sbom:{size:sbomBytes.length,sha256:sha256(sbomBytes)}}),sbomBytes};const url=f.metadata.archive.url;
+ const release={tag_name:'v1.0.0',draft:false,prerelease:false,assets:['','.release.json','.release.sig','.spdx.json'].map(s=>({name:url.split('/').at(-1)+s,browser_download_url:url+s}))};
  const calls:string[]=[];
- const responses=new Map([[RELEASE_API+'/latest',Buffer.from(JSON.stringify(release))],[RELEASE_API+'/tags/v1.0.0',Buffer.from(JSON.stringify(release))],[url,f.archiveBytes],[url+'.release.json',f.metadataBytes],[url+'.release.sig',f.signatureBytes]]);
+ const responses=new Map([[RELEASE_API+'/latest',Buffer.from(JSON.stringify(release))],[RELEASE_API+'/tags/v1.0.0',Buffer.from(JSON.stringify(release))],[url,f.archiveBytes],[url+'.release.json',f.metadataBytes],[url+'.release.sig',f.signatureBytes],[url+'.spdx.json',f.sbomBytes]]);
  const download=async (u:string)=>{calls.push(u);const b=responses.get(u);if(!b)throw new ReleaseDownloadError('offline');return b;};
  return {...f,release,responses,calls,download};
 }
 test('discovery authenticates stable official hints then returns the verified capture',async()=>{
  const f=discoveryFixture();const result=await discoverReleaseForTest({target:'linux-x64'},{download:f.download,verify:f.verify});
- expect(result.metadata).toEqual(f.metadata);expect(result.archiveBytes).toEqual(f.archiveBytes);expect(f.calls.at(-1)).toBe(f.metadata.archive.url);
+ expect(result.metadata).toEqual(f.metadata);expect(result.sbomBytes).toEqual(f.sbomBytes);expect(result.archiveBytes).toEqual(f.archiveBytes);expect(f.calls.at(-1)).toBe(f.metadata.archive.url);
  expect((await discoverReleaseForTest({target:'linux-x64',version:'1.0.0'},{download:f.download,verify:f.verify})).metadata.version).toBe('1.0.0');
 });
 test('signature failure never fetches archive, tampered capture fails, no source fallback',async()=>{

@@ -12,6 +12,8 @@ const safe = { isFile: () => true, isSymbolicLink: () => false, uid: 1001, mode:
 const check = (patch: Partial<typeof safe> = {}, platform = "linux", uid: number | undefined = 1001, target = "/runner/toolcache/node") => {
   const context = vm.createContext({
     fs: { lstatSync: () => ({ ...safe, ...patch }) }, path,
+    // File-predicate unit isolation; real ancestry behavior has filesystem probes.
+    captureDirectoryAncestry: () => undefined,
     process: { platform, getuid: uid === undefined ? undefined : () => uid },
   });
   const fn = vm.runInContext(`${predicate}\nassertTrustedExecutable`, context) as (value: string) => string;
@@ -46,7 +48,7 @@ describe("installer Node executable trust diagnostics", () => {
   it("preserves the missing-getuid and Windows mode exceptions, not other predicates", () => {
     // Pass undefined explicitly through a context to avoid the helper's default UID.
     const fn = vm.runInNewContext(`${predicate}\nassertTrustedExecutable`, {
-      fs: { lstatSync: () => ({ ...safe, uid: 1002 }) }, path, process: { platform: "linux" },
+      fs: { lstatSync: () => ({ ...safe, uid: 1002 }) }, path, process: { platform: "linux" }, captureDirectoryAncestry: () => undefined,
     }) as (value: string) => string;
     expect(fn("/node")).toBe("/node");
     expect(check({ mode: 0o100666 }, "win32")).toBe("/runner/toolcache/node");

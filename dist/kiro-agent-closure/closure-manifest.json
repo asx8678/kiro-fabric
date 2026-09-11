@@ -13,7 +13,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "f3fca1d31ca4478d92549f28735b9d7609517dca743d6c926f274ad1032b2897"
+        "sha256": "c9141160f18112e4d1a13e4a748e562ff17268381e8d7f744f2b7892be121978"
       },
       {
         "path": "pnpm-lock.yaml",
@@ -33,15 +33,15 @@
       },
       {
         "path": "scripts/build-agent-dev.mjs",
-        "sha256": "f2fde578db9ce8345956b4f51333196cfa90fd34dfa75329e98864623b73a2ee"
+        "sha256": "4135ad444638e804eb55635e84bf7fdab9ad444a0f10f75e95d9a4a8ba718cbd"
       },
       {
         "path": "scripts/build-complete-bundle.mjs",
-        "sha256": "699949a1e3f569de6368eab7fc9fdb2fe9bf87cf22839ad2978b30a15f8bcf25"
+        "sha256": "4fbfb68df3cba903f6b49d86d925d1c3263dcf1b6bd81f73f44600f75cbac5d0"
       },
       {
         "path": "scripts/build-inputs.mjs",
-        "sha256": "c848ef0b2bf1099a2ca1854fa53cafc5fd78595a4241959673acec9a4c50ee22"
+        "sha256": "06f230b69a0ca7ff51c56da0cc9c3818caf9b1f6ac1603701d0ee696d36f3a79"
       },
       {
         "path": "scripts/build-kiro-closure.mjs",
@@ -49,7 +49,7 @@
       },
       {
         "path": "scripts/build-private-tools.mjs",
-        "sha256": "b2b73b58955a7bcdab500c9a752bbf8150a9a3a42d3ed1422427b70e80efccd1"
+        "sha256": "9521d9f9134988b0adb9fbf55f0081efa566a05363a601b3e2a242e5aaa19619"
       },
       {
         "path": "scripts/build.mjs",
@@ -57,7 +57,7 @@
       },
       {
         "path": "scripts/bundle-archive.mjs",
-        "sha256": "8eaaaf2b401368a8f45caa9ec578bdc333b1bae5a1ec039231535006fd363aac"
+        "sha256": "8deb9048041e56d235d9a9b9b04a5f58c51e96f73e7af090a303c350956d0142"
       },
       {
         "path": "scripts/bundle-contract.mjs",
@@ -68,28 +68,44 @@
         "sha256": "2d9e438a01527b138e758d562d9e579ac469f03c1a75cad2da28d703f38cd180"
       },
       {
+        "path": "scripts/filesystem-boundary.mjs",
+        "sha256": "9dcb4824bf1f9f36040be7e78cc09f7f9fee837d5adf9ad623570c69f83a3347"
+      },
+      {
         "path": "scripts/generate-agent-guidance.mjs",
         "sha256": "adbd39eea1308a686e36cf5fe4e778dfa9b2df216929228963daf2d7ad01c0ce"
       },
       {
         "path": "scripts/install-agent-user.mjs",
-        "sha256": "26588cd40f6d201ab84f8ac6018c14189412a57c250f02692188a3796b71f3fb"
+        "sha256": "3bc6a4d0e8e27c686572abc30d747e505f0b4038c420b56602bed0da85dbb3f5"
       },
       {
         "path": "scripts/install-manager.mjs",
-        "sha256": "31f44b2374b0966ffe22880e8329e1ed41ad2bb619cacb991055e1108fa18f60"
+        "sha256": "c9b3962d6cb33a1f28aa6f7457b44c7ab1b954bb98eeb30bb8c1fb3eb669752f"
       },
       {
         "path": "scripts/install-transaction.mjs",
-        "sha256": "43bdce0d4ba3532fd8f550535f1eb1a88e2f9f9bb2a52661bf495547737bc67e"
+        "sha256": "36b42844fa0de3ad957b90fa1887839314a23e05ce12dc02bfc9b3f43c970a7a"
+      },
+      {
+        "path": "scripts/installer-artifacts.mjs",
+        "sha256": "395aae75a7388f13a13e0b1876f76de6c019e281018f23b9e67f60092dbad880"
+      },
+      {
+        "path": "scripts/installer-cli-contract.mjs",
+        "sha256": "311f9bf195a56796fb1c67aabff43f571e6bd5f1dc0b5758d747b8d69d1ac9cb"
       },
       {
         "path": "scripts/installer-configuration-backup.mjs",
-        "sha256": "65e214eb716115e1f3d699ab960e6ba23a8d362aaaa1629f4ecca174189d0093"
+        "sha256": "07687f291417c5af2b852fdcf32fd6385f779de6019d2d38939067cf4a8bbbd7"
+      },
+      {
+        "path": "scripts/installer-diagnostics.mjs",
+        "sha256": "9ad93057cc6f8b76c2f74a3319ee152b34cd4ffb86f07e5e9f4b4604b2b6c257"
       },
       {
         "path": "scripts/installer-home-preparation.mjs",
-        "sha256": "ea808c782c7b214d7a197186b79d28b23206cac210316c90aec97feaf0071565"
+        "sha256": "f22ae4ef74a75d3df49d1183748862c0fa1e436fe98381767940f7ca1c52b2e1"
       },
       {
         "path": "scripts/installer-lock.mjs",
@@ -100,20 +116,32 @@
         "sha256": "ce870d531f3c268610c50c435b4aa37f5d929f3360eb6a5984f2c7b1f82a8e95"
       },
       {
+        "path": "scripts/installer-profile-publication.mjs",
+        "sha256": "d2a2017bb71c72bfd04e0f2c1c316e390a2c96355521323f3023edfa0d6123f1"
+      },
+      {
+        "path": "scripts/installer-profile-store.mjs",
+        "sha256": "eda234d4b320a8bb8ca0e8481fa76b9804d6616a5eb2177131fea3aa9a9e9dc2"
+      },
+      {
         "path": "scripts/installer-shell-integration.mjs",
-        "sha256": "5146f1bd0a6f250598ba9e0f76035f80c3007bc3e65fa492660e4a8205127a61"
+        "sha256": "a9d75426f71d7f91af92bf3d784a8cd93cb36534207cc11127bab1a016243ac2"
+      },
+      {
+        "path": "scripts/installer-smoke-contract.mjs",
+        "sha256": "b812f4507929f566251dee6e5c7267fe60989f669e092a94c247615ff82068a7"
       },
       {
         "path": "scripts/installer-smoke.mjs",
-        "sha256": "2a823b8923a982fdf21ee8b99f8f85a7d2f544e86ec46fd863c82e53fab9d9be"
+        "sha256": "9d52b8ea37834344e804a6bb2382937bea163bb5ae9098faf1627c43cf89e448"
       },
       {
         "path": "scripts/launch-profile.mjs",
-        "sha256": "de79ec615e22a94b57e31d42c0e3162281935188178f7256f6b5436a72c806e0"
+        "sha256": "efe14710a4bf40aa50343793636ecd732477d2c4ef648a7acbd4d1acc55fa69b"
       },
       {
         "path": "scripts/managed-installation.mjs",
-        "sha256": "94555eaa484d70e985394b83f1ec457d6cbe6c4b8401fe893df511b345632fb5"
+        "sha256": "5709cbe79367825790e30b56b18866e168d12cec91f16b244336b530193c471c"
       },
       {
         "path": "scripts/package-identity.mjs",
@@ -124,16 +152,24 @@
         "sha256": "4345f9740db163fbc9488408db81297735ee5c4da8b6b0ef25f1d1c49caf3914"
       },
       {
+        "path": "scripts/pinned-directory-child.mjs",
+        "sha256": "66e1a595e6716179c245ff729ef9112687c0b40d5974925669d4362d8652862e"
+      },
+      {
+        "path": "scripts/private-extraction.mjs",
+        "sha256": "6a10d2366675dd94580f8a4913b1c80b612fc9c18694c17c0be79927a002ee2f"
+      },
+      {
         "path": "scripts/release-download.mjs",
-        "sha256": "8bd1859222d6c332831ee09a7d9105271df5b856c3b0eafc937742e9238e6c59"
+        "sha256": "fa8fa49f0d4e8977deb44257a2c6efca367aeaf8b7a4826853c4fde646e6d59f"
       },
       {
         "path": "scripts/release-trust.mjs",
-        "sha256": "aa542fa083a7aa77091aedabf67ef993539e08ecd43d8b749624ca774d053d26"
+        "sha256": "a880f5a892b00acb857e0e1038ffa98b663731c4af51b820cb5a1d5506099560"
       },
       {
         "path": "scripts/validate-agent-package.mjs",
-        "sha256": "4d16bf2b3fca18a6a8a0a057cb56a2783311d62142c81a4371d34404c3de859b"
+        "sha256": "bae4a3692e0ec4422f67c55755b5abca962caf49c5e180392c6dd06fb3cf6203"
       },
       {
         "path": "skills/fabric-exec/SKILL.md",
@@ -185,15 +221,19 @@
       },
       {
         "path": "src/installation/bundle-contract.mjs",
-        "sha256": "3c1ab34f8ef2e1d91216f341035050db08185e5904ac61392279e8c6ba755589"
+        "sha256": "330f3b9bbb1c64eee65a92cf73ab7a841a787efc69ab88b26598820d05aa8a0a"
+      },
+      {
+        "path": "src/installation/filesystem-boundary.mjs",
+        "sha256": "8d29eb45ad760ca5dc0f0302b70a34108374f45a0f5e306ec9d75353560b5f0d"
       },
       {
         "path": "src/installation/installer-lock.mjs",
-        "sha256": "4fd0cd1680899ab82839e722fded1d4f76976b1daac9b57ed364df1f2c4b73a7"
+        "sha256": "3d354acb221f537e8c27a7b4181cefc19a8cc11416d2e04b64c86447e5414e29"
       },
       {
         "path": "src/installation/pinned-recovery.mjs",
-        "sha256": "7a8138341c7aeb3cc9b21440f92d392f7726acfa960f42bed08dbab6ac4a1fd5"
+        "sha256": "db5b181094730927b0402b2ce51c796857eb0c3b607fc3427268a51bb293f26c"
       },
       {
         "path": "src/kernel/fabric-exec-contract.ts",
@@ -424,7 +464,7 @@
         "sha256": "efd3e11265c46f657fd78a9ab0426bbaf455ade35d5145b6b932f3b50d78cc62"
       }
     ],
-    "digest": "c2fe656cd183ef5fe6ddac45666bec235d42eb8273952fa93989e166c21791b3"
+    "digest": "632ac992b50c83f3bbaed7c54c4d4f3a2508d3536cdd069e1661212c315f6572"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -438,6 +478,7 @@
     "src/core/semantic-digest.ts",
     "src/execution-service.ts",
     "src/installation/bundle-contract.mjs",
+    "src/installation/filesystem-boundary.mjs",
     "src/installation/installer-lock.mjs",
     "src/installation/pinned-recovery.mjs",
     "src/kernel/fabric-exec-contract.ts",
@@ -1015,8 +1056,8 @@
     },
     {
       "path": "kiro/mcp-entry.js",
-      "bytes": 56605,
-      "sha256": "ad7f38f84e7494c29d05cd563b7c9f4aa75738f159613f05fa705af0781a8fce"
+      "bytes": 73307,
+      "sha256": "e61085101674cbfd86d5b6b315126c85ed4a4b6b399d9a8261a9934e58623c6e"
     },
     {
       "path": "package.json",
@@ -1029,5 +1070,5 @@
       "sha256": "7b189e5b4b02d6e7be4161ed7dff86da8d86f7910fe15042bdaf8a475d51880e"
     }
   ],
-  "contentDigest": "9abe4eb9b4b4aa1d89677d705c75bb2841aa38754f310b7b944b3c81f287c93a"
+  "contentDigest": "342cac5aa627be329315b179b323646f61947295f70c82f3a0859d6fc9404814"
 }

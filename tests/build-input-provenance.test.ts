@@ -5,7 +5,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { buildSync } from "esbuild";
-import { captureBuildInputs, verifyBuildClosure, verifyBuildCapture, verifyCapturedInputs } from "../scripts/build-inputs.mjs";
+import { captureBuildInputs, verifyBuildClosure, verifyClosureIntegrity, validateBuildInputProvenance, verifyBuildCapture, verifyCapturedInputs } from "../scripts/build-inputs.mjs";
 
 const roots: string[] = [];
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -76,6 +76,26 @@ describe("build input provenance", () => {
     }
     put(root, "dist/kiro-agent-closure/closure-manifest.json", "{");
     expect(() => verifyBuildClosure(root)).toThrow(/Invalid or missing closure manifest/);
+  });
+  it("separates intact stale closure bytes from invalid provenance without weakening either", () => {
+    const root = fixture(), initial = build(root), closure = path.join(root, "dist/kiro-agent-closure");
+    fs.appendFileSync(path.join(root, "src/kiro/first-prompt-hook.ts"), "// changed");
+    expect(verifyClosureIntegrity(closure).contentDigest).toBe(initial.contentDigest);
+    expect(validateBuildInputProvenance(initial.buildInputs)).toEqual(initial.buildInputs);
+    expect(() => verifyBuildClosure(root)).toThrow(/Build inputs changed/);
+    expect(() => validateBuildInputProvenance({ ...initial.buildInputs, digest: "0".repeat(64) })).toThrow(/Invalid build input provenance/);
+    put(root, "dist/kiro-agent-closure/entry.js", "tampered");
+    expect(() => verifyClosureIntegrity(closure)).toThrow(/checksum/);
+  });
+  it("new packaging/cache implementation dependencies are tracked as build inputs", () => {
+    const root = fixture(), files = captureBuildInputs(root).files.map((entry: { path: string }) => entry.path);
+    expect(files).toContain("scripts/installer-artifacts.mjs");
+    expect(files).toContain("scripts/build-private-tools.mjs");
+  });
+  it("source packaging exports load before dependency installation", () => {
+    const root = fixture();
+    const probe = spawnSync(process.execPath, ["--input-type=module", "-e", `import {findReusableSourceBundle} from ${JSON.stringify(new URL(`file://${path.join(root, "scripts/build-complete-bundle.mjs")}`).href)}; import {withInstallerArtifactLease,collectInstallerCache} from ${JSON.stringify(new URL(`file://${path.join(root, "scripts/installer-cache.mjs")}`).href)}; if(typeof withInstallerArtifactLease!=='function'||typeof collectInstallerCache!=='function')throw Error('missing exports'); if(await findReusableSourceBundle({root:${JSON.stringify(root)}})!==null)throw Error('unexpected reuse');`], { encoding: "utf8", timeout: 10000 });
+    expect(probe.status, probe.stderr).toBe(0); expect(fs.existsSync(path.join(root, ".tmp"))).toBe(false);
   });
   it("rejects source drift during capture and changed-then-restored resource mixing", () => {
     const root = fixture(); const initial = build(root);

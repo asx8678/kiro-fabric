@@ -12,12 +12,12 @@ export function fixtureTools(target='linux-x64'){
  };
  return {node:make('node',['tools/node','notices/node-LICENSE']),rg:make('rg',['tools/rg','notices/rg-LICENSE-MIT','notices/rg-COPYING','notices/rg-UNLICENSE'])};
 }
-export async function fixture(){
+export async function fixture(target='linux-x64'){
  const root=await mkdtemp(path.join(tmpdir(),'bundle-test-'));await chmod(root,0o700);
- const tools=fixtureTools();
+ const tools=fixtureTools(target);
  for(const p of [...REQUIRED_APP,'app/main.js',...Object.values(tools).flatMap(p=>p.members.map(m=>m.path)),'manager/install-manager.mjs','resources/steering/fabric.md','resources/skills/fabric-exec/SKILL.md','resources/skills/fabric-exec/references/api.md']){
   await mkdir(path.dirname(path.join(root,p)),{recursive:true,mode:0o700});await writeFile(path.join(root,p),'fixture '+p,{mode:p.startsWith('tools/')?0o700:0o600});
  }
- const manifest=await createBundleManifest(root,{version:'1.0.0',target:'linux-x64',compatibility:compatibilityFor('linux-x64'),provenance:{kind:'local-source',sourceDigest:sha256('source'),gitHead:null,dirty:true},tools});
+ const manifest=await createBundleManifest(root,{version:'1.0.0',target,compatibility:compatibilityFor(target),provenance:{kind:'local-source',sourceDigest:sha256('source'),gitHead:null,dirty:true},tools});
  await writeFile(path.join(root,'bundle-manifest.json'),canonical(manifest)+'\n',{mode:0o600});return root;
 }

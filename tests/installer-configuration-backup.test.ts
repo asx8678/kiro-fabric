@@ -5,15 +5,15 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { build } from "esbuild";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createConfigurationBackup,
   listConfigurationBackups,
   restoreConfigurationBackup,
 } from "../scripts/installer-configuration-backup.mjs";
 
-const backupOf = (kiroHome: string, command: string): NonNullable<ReturnType<typeof createConfigurationBackup>> => {
-  const backup = createConfigurationBackup(kiroHome, { command });
+const backupOf = (kiroHome: string, command: string, sourceRoot?: string): NonNullable<ReturnType<typeof createConfigurationBackup>> => {
+  const backup = createConfigurationBackup(kiroHome, { command, sourceRoot });
   if (!backup) throw new Error("expected a configuration backup");
   return backup;
 };
@@ -72,12 +72,23 @@ describe("configuration backup", () => {
     expect((fs.statSync(path.join(kiroHome, "kiro-fabric", "backups")).mode & 0o777)).toBe(0o700);
     const manifest = JSON.parse(fs.readFileSync(path.join(backup.path, "backup-manifest.json"), "utf8"));
     expect(manifest.command).toBe("install");
+    expect(manifest.sourceRoot).toBeNull();
+    expect(backup.sourceRoot).toBeNull();
     expect(manifest.excludes).toEqual(["kiro-fabric", "agents/kiro-fabric.json"]);
+    expect(backup.excludes).toEqual(manifest.excludes);
     expect(manifest.files.map((file: { path: string }) => file.path).sort()).toEqual(["agents/foreign.json", "agents/kiro-fabric.json", "executable.sh", "settings/global.json"]);
     expect(fs.existsSync(path.join(backup.path, "kiro-fabric"))).toBe(false);
     expect((fs.statSync(path.join(backup.path, "executable.sh")).mode & 0o777) & 0o100).toBe(0o100);
     expect(fs.readlinkSync(path.join(backup.path, "current-settings"))).toBe("settings/global.json");
     expect(treeDigest(kiroHome, true)).toBe(before);
+  });
+
+  it("keeps a missing first-install home untouched and returns null", () => {
+    const parent = temporary(), sourceRoot = temporary(), kiroHome = path.join(parent, "new-home");
+    expect(createConfigurationBackup(kiroHome, { command: "install" })).toBeNull();
+    expect(createConfigurationBackup(kiroHome, { command: "install", sourceRoot })).toBeNull();
+    expect(fs.readdirSync(parent)).toEqual([]);
+    expect(fs.readdirSync(sourceRoot)).toEqual([]);
   });
 
   it("restores a verified backup only onto a non-overlapping destination", () => {
@@ -124,6 +135,286 @@ describe("configuration backup", () => {
     expect(fs.lstatSync(path.join(backup.path, "leak")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(backup.path, "leak")).isFile()).toBe(false);
     expect(fs.readFileSync(target, "utf8")).toBe("secret");
+  });
+
+  it("backs up a checkout-home with a realistic sparse Node artifact only after explicit source opt-in", () => {
+    const kiroHome = temporary();
+    seedConfiguration(kiroHome);
+    const artifacts = [".git", ".tmp", "dist", "node_modules"];
+    for (const directory of artifacts) fs.mkdirSync(path.join(kiroHome, directory), { mode: 0o700 });
+    const node = path.join(kiroHome, ".tmp", `private-tools-${"a".repeat(64)}`, "tools", "node");
+    fs.mkdirSync(path.dirname(node), { recursive: true, mode: 0o700 });
+    const fd = fs.openSync(node, "wx", 0o700);
+    try { fs.ftruncateSync(fd, Math.ceil(120.6 * 1024 * 1024)); } finally { fs.closeSync(fd); }
+    const nodeBefore = fs.lstatSync(node);
+    expect(nodeBefore.size).toBeGreaterThan(64 * 1024 * 1024);
+    expect(nodeBefore.blocks * 512).toBeLessThan(nodeBefore.size);
+    for (const directory of artifacts) fs.writeFileSync(path.join(kiroHome, directory, "artifact"), "source/build data", { mode: 0o600 });
+    // Names are not a generic ignore list: nested artifacts and arbitrary
+    // configuration (including dotfiles and source inputs) must be preserved.
+    const userFiles = ["preferences.json", ".gitignore", "package.json", "custom/user.txt", ...artifacts.map(name => `projects/${name}/user.json`)];
+    for (const relative of userFiles) {
+      const file = path.join(kiroHome, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(file, `configuration: ${relative}\n`, { mode: 0o600 });
+    }
+    const backup = backupOf(kiroHome, "install", kiroHome);
+    const raw = fs.readFileSync(path.join(backup.path, "backup-manifest.json"));
+    const manifest = JSON.parse(raw.toString());
+    expect(manifest.sourceRoot).toBe(kiroHome);
+    expect(backup.sourceRoot).toBe(kiroHome);
+    expect(manifest.excludes).toEqual(["kiro-fabric", "agents/kiro-fabric.json", ...artifacts]);
+    expect(backup.excludes).toEqual(manifest.excludes);
+    expect(backup.manifestSha256).toBe(createHash("sha256").update(raw).digest("hex"));
+    expect(backup.files).toBe(4 + userFiles.length);
+    for (const directory of artifacts) expect(fs.existsSync(path.join(backup.path, directory))).toBe(false);
+    expect(fs.lstatSync(node)).toMatchObject({ ino: nodeBefore.ino, size: nodeBefore.size, mode: nodeBefore.mode, nlink: 1, mtimeMs: nodeBefore.mtimeMs });
+    const destination = temporary();
+    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    const restored = restoreConfigurationBackup(backup.path, destination);
+    expect(restored.restored).toBe(3 + userFiles.length);
+    expect(restored.managedSkipped).toEqual(["agents/kiro-fabric.json"]);
+    for (const relative of ["settings/global.json", "agents/foreign.json", ...userFiles]) {
+      const original = fs.readFileSync(path.join(kiroHome, relative));
+      expect(fs.readFileSync(path.join(backup.path, relative))).toEqual(original);
+      expect(fs.readFileSync(path.join(destination, relative))).toEqual(original);
+      const record = manifest.files.find((file: { path: string }) => file.path === relative);
+      expect(record.sha256).toBe(createHash("sha256").update(original).digest("hex"));
+    }
+  });
+
+  it.each(["implicit", "disjoint"])("does not infer source exclusions for an ordinary home (%s source root)", kind => {
+    const kiroHome = temporary();
+    seedConfiguration(kiroHome);
+    fs.mkdirSync(path.join(kiroHome, ".git"), { mode: 0o700 });
+    fs.writeFileSync(path.join(kiroHome, "package.json"), '{"name":"kiro-fabric"}', { mode: 0o600 });
+    const artifact = path.join(kiroHome, ".tmp", "tools", "node");
+    fs.mkdirSync(path.dirname(artifact), { recursive: true, mode: 0o700 });
+    const fd = fs.openSync(artifact, "wx", 0o600);
+    try { fs.ftruncateSync(fd, Math.ceil(120.6 * 1024 * 1024)); } finally { fs.closeSync(fd); }
+    const sourceRoot = kind === "disjoint" ? temporary() : undefined;
+    expect(() => createConfigurationBackup(kiroHome, { command: "install", sourceRoot })).toThrow(/exceeds backup bound: .tmp\/tools\/node/);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric", "backups"))).toBe(false);
+    expect(fs.readFileSync(path.join(kiroHome, "settings/global.json"), "utf8")).toBe('{"theme":"dark"}\n');
+    expect(fs.lstatSync(artifact).size).toBeGreaterThan(64 * 1024 * 1024);
+  });
+
+  it.each(["user-export.bin", ".tmp"])("does not exclude oversized user file %s even in an explicit checkout-home", name => {
+    const kiroHome = temporary();
+    const file = path.join(kiroHome, name);
+    const fd = fs.openSync(file, "wx", 0o600);
+    try { fs.ftruncateSync(fd, 65 * 1024 * 1024); } finally { fs.closeSync(fd); }
+    expect(() => createConfigurationBackup(kiroHome, { command: "install", sourceRoot: kiroHome })).toThrow(`configuration file exceeds backup bound: ${name}`);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric"))).toBe(false);
+    expect(fs.lstatSync(file).size).toBe(65 * 1024 * 1024);
+  });
+
+  it("preserves ordinary-home artifact names and source-home same-named files and symlinks", () => {
+    const kiroHome = temporary(), unrelatedSource = temporary(), outside = temporary();
+    for (const name of [".git", ".tmp", "dist", "node_modules"]) {
+      fs.mkdirSync(path.join(kiroHome, name), { mode: 0o700 });
+      fs.writeFileSync(path.join(kiroHome, name, "user.json"), name, { mode: 0o600 });
+    }
+    const ordinary = backupOf(kiroHome, "install", unrelatedSource);
+    expect(ordinary.excludes).toEqual(["kiro-fabric", "agents/kiro-fabric.json"]);
+    for (const name of [".git", ".tmp", "dist", "node_modules"]) expect(fs.readFileSync(path.join(ordinary.path, name, "user.json"), "utf8")).toBe(name);
+    const sourceHome = temporary();
+    for (const name of [".git", ".tmp", "dist"]) fs.writeFileSync(path.join(sourceHome, name), `user configuration ${name}`, { mode: 0o600 });
+    fs.symlinkSync(outside, path.join(sourceHome, "node_modules"));
+    const explicit = backupOf(sourceHome, "install", sourceHome);
+    expect(explicit.excludes).toEqual(["kiro-fabric", "agents/kiro-fabric.json"]);
+    for (const name of [".git", ".tmp", "dist"]) expect(fs.readFileSync(path.join(explicit.path, name), "utf8")).toBe(`user configuration ${name}`);
+    expect(fs.readlinkSync(path.join(explicit.path, "node_modules"))).toBe(outside);
+  });
+
+  it("rejects invalid, aliased, noncanonical and overlapping source roots before creating a backup", () => {
+    const parent = temporary(), kiroHome = path.join(parent, "home"), sibling = path.join(parent, "source");
+    fs.mkdirSync(kiroHome, { mode: 0o700 });
+    fs.mkdirSync(sibling, { mode: 0o700 });
+    seedConfiguration(kiroHome);
+    fs.symlinkSync(kiroHome, path.join(parent, "alias"));
+    fs.symlinkSync(parent, path.join(parent, "parent-alias"));
+    const invalid = ["", "relative", path.join(parent, "missing"), path.join(kiroHome, "settings/global.json"), path.join(parent, "alias"), path.join(parent, "parent-alias", "home"), `${kiroHome}/settings/..`, path.join(kiroHome, "settings"), parent];
+    for (const sourceRoot of invalid) {
+      expect(() => createConfigurationBackup(kiroHome, { command: "install", sourceRoot }), sourceRoot).toThrow();
+      expect(fs.existsSync(path.join(kiroHome, "kiro-fabric", "backups"))).toBe(false);
+    }
+    expect(() => createConfigurationBackup(path.join(parent, "alias"), { command: "install", sourceRoot: kiroHome })).toThrow(/symlink|canonical|unsafe directory/);
+    expect(fs.readFileSync(path.join(kiroHome, "agents/foreign.json"), "utf8")).toBe("{}\n");
+  });
+
+  it("skips safe ordinary hardlinks without reading or modifying them, while preserving normal user files", () => {
+    const kiroHome = temporary(), outside = temporary();
+    seedConfiguration(kiroHome);
+    const first = path.join(kiroHome, "linked-config.json"), second = path.join(kiroHome, "other-config.json");
+    fs.writeFileSync(first, "shared user content", { mode: 0o600 });
+    fs.linkSync(first, second);
+    fs.linkSync(first, path.join(outside, "external-link"));
+    const before = fs.lstatSync(first);
+    const opened = vi.spyOn(fs, "openSync");
+    const backup = backupOf(kiroHome, "install");
+    expect(opened.mock.calls.some(([file]) => file === first || file === second)).toBe(false);
+    const manifest = JSON.parse(fs.readFileSync(path.join(backup.path, "backup-manifest.json"), "utf8"));
+    expect(backup.skipped).toBe(2);
+    expect(manifest.skipped).toEqual([{ path: "linked-config.json", reason: "hardlinked" }, { path: "other-config.json", reason: "hardlinked" }]);
+    expect(fs.existsSync(path.join(backup.path, "linked-config.json"))).toBe(false);
+    expect(fs.existsSync(path.join(backup.path, "other-config.json"))).toBe(false);
+    expect(fs.readFileSync(path.join(backup.path, "settings/global.json"), "utf8")).toBe('{"theme":"dark"}\n');
+    expect(fs.readFileSync(path.join(backup.path, "agents/foreign.json"), "utf8")).toBe("{}\n");
+    expect(fs.lstatSync(first)).toMatchObject({ ino: before.ino, nlink: 3, mode: before.mode, mtimeMs: before.mtimeMs });
+    expect(fs.readFileSync(path.join(outside, "external-link"), "utf8")).toBe("shared user content");
+  });
+
+  it.each([false, true])("refuses hardlinked managed controls (source-home=%s)", source => {
+    const kiroHome = temporary(), outside = temporary();
+    seedConfiguration(kiroHome);
+    const control = path.join(kiroHome, "agents/kiro-fabric.json");
+    fs.linkSync(control, path.join(outside, "control-link"));
+    expect(() => createConfigurationBackup(kiroHome, { command: "install", sourceRoot: source ? kiroHome : undefined })).toThrow(/unsafe configuration file agents\/kiro-fabric.json/);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric", "backups"))).toBe(false);
+    expect(fs.lstatSync(control).nlink).toBe(2);
+    expect(fs.readFileSync(path.join(outside, "control-link"), "utf8")).toBe("{}\n");
+  });
+
+  it.each([0o620, 0o602])("refuses unsafe ordinary hardlinks with writable mode %s", mode => {
+    const kiroHome = temporary(), outside = temporary();
+    const file = path.join(kiroHome, "user.json");
+    fs.writeFileSync(file, "unsafe shared content", { mode: 0o600 });
+    fs.linkSync(file, path.join(outside, "alias"));
+    fs.chmodSync(file, mode);
+    expect(() => createConfigurationBackup(kiroHome, { command: "install" })).toThrow(/unsafe configuration file user.json/);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric"))).toBe(false);
+    expect(fs.lstatSync(file).mode & 0o777).toBe(mode);
+    expect(fs.lstatSync(file).nlink).toBe(2);
+  });
+
+  it("does not classify a foreign-owned ordinary hardlink as safe", () => {
+    const kiroHome = temporary(), outside = temporary();
+    const file = path.join(kiroHome, "foreign.json");
+    fs.writeFileSync(file, "foreign content", { mode: 0o600 });
+    fs.linkSync(file, path.join(outside, "alias"));
+    const original = fs.lstatSync;
+    // Ownership cannot be changed by an unprivileged fixture. All path/link
+    // operations are real; only this inode's observed uid is fault-injected.
+    vi.spyOn(fs, "lstatSync").mockImplementation(((...args: Parameters<typeof fs.lstatSync>) => {
+      const stats = original(...args);
+      if (stats && args[0] === file) Reflect.set(stats, "uid", Number(stats.uid) + 1);
+      return stats;
+    }) as typeof fs.lstatSync);
+    expect(() => createConfigurationBackup(kiroHome, { command: "install" })).toThrow(/unsafe configuration file foreign.json|not owned/);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric"))).toBe(false);
+  });
+
+  it.each(["symlink", "directory"])("refuses a managed control with unsafe type %s", kind => {
+    const kiroHome = temporary(), outside = temporary();
+    seedConfiguration(kiroHome);
+    const control = path.join(kiroHome, "agents/kiro-fabric.json");
+    fs.unlinkSync(control);
+    if (kind === "symlink") fs.symlinkSync(outside, control);
+    else fs.mkdirSync(control, { mode: 0o700 });
+    expect(() => createConfigurationBackup(kiroHome, { command: "install" })).toThrow(/unsafe configuration file agents\/kiro-fabric.json/);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric", "backups"))).toBe(false);
+  });
+
+  it.each(["managed", "backups"])("refuses a symlinked %s backup destination component without touching foreign evidence", kind => {
+    const kiroHome = temporary(), outside = temporary();
+    fs.writeFileSync(path.join(outside, "foreign-evidence"), "preserve", { mode: 0o600 });
+    fs.mkdirSync(path.join(outside, "backups"), { mode: 0o700 });
+    if (kind === "managed") fs.symlinkSync(outside, path.join(kiroHome, "kiro-fabric"));
+    else {
+      fs.mkdirSync(path.join(kiroHome, "kiro-fabric"), { mode: 0o700 });
+      fs.symlinkSync(path.join(outside, "backups"), path.join(kiroHome, "kiro-fabric", "backups"));
+    }
+    const before = treeDigest(outside);
+    expect(() => createConfigurationBackup(kiroHome, { command: "install", sourceRoot: kiroHome })).toThrow(/symlink|unsafe directory/);
+    expect(treeDigest(outside)).toBe(before);
+  });
+
+  it("does not use source exclusions to bypass unsafe directory permissions", () => {
+    const kiroHome = temporary();
+    seedConfiguration(kiroHome);
+    const artifact = path.join(kiroHome, ".tmp");
+    fs.mkdirSync(artifact, { mode: 0o700 });
+    fs.chmodSync(artifact, 0o777);
+    expect(() => createConfigurationBackup(kiroHome, { command: "install", sourceRoot: kiroHome })).toThrow(/unsafe directory permissions/);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric", "backups"))).toBe(false);
+    expect(fs.lstatSync(artifact).mode & 0o777).toBe(0o777);
+  });
+
+  it("keeps the depth cap for unknown source-home configuration", () => {
+    const kiroHome = temporary();
+    const deep = path.join(kiroHome, ...Array.from({ length: 33 }, () => "user"));
+    fs.mkdirSync(deep, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(deep, "settings.json"), "preserve", { mode: 0o600 });
+    expect(() => createConfigurationBackup(kiroHome, { command: "install", sourceRoot: kiroHome })).toThrow(/configuration backup depth exceeded/);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric"))).toBe(false);
+    expect(fs.readFileSync(path.join(deep, "settings.json"), "utf8")).toBe("preserve");
+  });
+
+  it.each(["user.json", "agents/kiro-fabric.json"])("refuses an inventoried file becoming hardlinked before copy: %s", relative => {
+    const kiroHome = temporary(), outside = temporary();
+    seedConfiguration(kiroHome);
+    const file = path.join(kiroHome, relative), alias = path.join(outside, "late-hardlink");
+    if (relative === "user.json") fs.writeFileSync(file, "shared content", { mode: 0o600 });
+    const backups = path.join(kiroHome, "kiro-fabric", "backups");
+    const original = fs.mkdirSync;
+    let injected = false;
+    vi.spyOn(fs, "mkdirSync").mockImplementation(((...args: Parameters<typeof fs.mkdirSync>) => {
+      if (typeof args[0] === "string" && path.dirname(args[0]) === backups) {
+        fs.linkSync(file, alias);
+        injected = true;
+      }
+      return original(...args);
+    }) as typeof fs.mkdirSync);
+    expect(() => createConfigurationBackup(kiroHome, { command: "install" })).toThrow(/unsafe configuration file/);
+    expect(injected).toBe(true);
+    expect(fs.readdirSync(backups)).toEqual([]);
+    expect(fs.lstatSync(file).nlink).toBe(2);
+    expect(fs.readFileSync(alias)).toEqual(fs.readFileSync(file));
+  });
+
+  it("refuses a symlink swap at open without reading its external target", () => {
+    const kiroHome = temporary(), outside = temporary();
+    const file = path.join(kiroHome, "user.json"), secret = path.join(outside, "secret.json");
+    fs.writeFileSync(file, "same-sized data", { mode: 0o600 });
+    fs.writeFileSync(secret, "private content", { mode: 0o600 });
+    const original = fs.openSync;
+    let injected = false;
+    vi.spyOn(fs, "openSync").mockImplementation((...args) => {
+      if (args[0] === file && !injected) {
+        fs.unlinkSync(file);
+        fs.symlinkSync(secret, file);
+        injected = true;
+      }
+      return original(...args);
+    });
+    expect(() => createConfigurationBackup(kiroHome, { command: "install" })).toThrow(/ELOOP|symlink|unsafe/);
+    expect(injected).toBe(true);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric"))).toBe(false);
+    expect(fs.readlinkSync(file)).toBe(secret);
+    expect(fs.readFileSync(secret, "utf8")).toBe("private content");
+  });
+
+  it("bounds a source read even if a file grows past 64 MiB during inventory", () => {
+    const kiroHome = temporary();
+    const file = path.join(kiroHome, "growing.json");
+    fs.writeFileSync(file, "small", { mode: 0o600 });
+    const original = fs.readSync;
+    let read = 0, injected = false;
+    vi.spyOn(fs, "readSync").mockImplementation(((...args: Parameters<typeof fs.readSync>) => {
+      const count = original(...args);
+      read += count;
+      if (!injected) {
+        fs.truncateSync(file, 65 * 1024 * 1024);
+        injected = true;
+      }
+      return count;
+    }) as typeof fs.readSync);
+    expect(() => createConfigurationBackup(kiroHome, { command: "install" })).toThrow(/configuration changed during backup/);
+    expect(injected).toBe(true);
+    expect(read).toBeLessThanOrEqual(Buffer.byteLength("small") + 1);
+    expect(fs.existsSync(path.join(kiroHome, "kiro-fabric"))).toBe(false);
+    expect(fs.lstatSync(file).size).toBe(65 * 1024 * 1024);
   });
 
   it("retains a bounded number of backups", () => {

@@ -46,6 +46,7 @@ import {
 } from "../scripts/run-kiro-agent-real-driver.mjs";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
+import { qualificationFailureRecorder } from "../scripts/qualification-failure.mjs";
 
 const digest = "a".repeat(64);
 const archiveDigest = "b".repeat(64);
@@ -692,6 +693,14 @@ const valid = {
 };
 
 describe("real-client release evidence", () => {
+  it("never accepts sanitized failure/progress reports as authenticated qualification", () => {
+    const recorder = qualificationFailureRecorder(undefined, "driver");
+    recorder.phase("publication"); recorder.failure(new Error("fixture failure")); recorder.cleanup("processes", "complete");
+    const report = recorder.snapshot();
+    expect(report).toMatchObject({ qualifying: false, ok: false, scope: "nonqualifying-sanitized-diagnostic-only" });
+    expect(() => assertRealClientEvidence(report, digest)).toThrow();
+    expect(() => assertRealClientEvidence({ ...report, ok: true }, digest)).toThrow();
+  });
   it("accepts only the complete strict inventory, never presence of expected tokens", () => {
     expect(assertStrictToolInventory("@fabric/fabric_exec\n")).toEqual(["@fabric/fabric_exec"]);
     for (const text of ["", "@fabric", "fabric_exec", "Tools: @fabric/fabric_exec", "@fabric/fabric_exec\n@fabric/fabric_exec",

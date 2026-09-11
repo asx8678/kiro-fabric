@@ -1,82 +1,84 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import os from "node:os";
+import { pathToFileURL } from "node:url";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { validateAgentPackage } from "../scripts/validate-agent-package.mjs";
-
+import { buildAgentDev } from "../scripts/build-agent-dev.mjs";
+import { packagingFixture, put } from "./installer-packaging-fixture.js";
+const roots: string[] = [];
+const fixture = () => { const root = packagingFixture(); roots.push(root); return root; };
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 const digestTree = (root: string): string => {
-  const digest = createHash("sha256");
-  const visit = (directory: string) => { for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const target = path.join(directory, entry.name); digest.update(path.relative(root, target)); if (entry.isDirectory()) visit(target); else digest.update(fs.readFileSync(target)); } };
-  visit(root); return digest.digest("hex");
+  const digest = createHash("sha256"), pending = [root];
+  while (pending.length) for (const entry of fs.readdirSync(pending.pop()!, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const target = path.join(entry.parentPath, entry.name); digest.update(path.relative(root, target));
+    if (entry.isDirectory()) pending.push(target); else digest.update(fs.readFileSync(target));
+  }
+  return digest.digest("hex");
 };
 
 describe("hermetic staging", () => {
-  it("leaves a sentinel KIRO_HOME byte-for-byte unchanged", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-hermetic-"));
-    const home = path.join(root, "home"); const kiroHome = path.join(root, "kiro"); fs.mkdirSync(home); fs.mkdirSync(kiroHome);
-    fs.writeFileSync(path.join(kiroHome, "sentinel"), Buffer.from([0, 1, 255]));
+  it("leaves a sentinel KIRO_HOME byte-for-byte unchanged using only a fixture closure", () => {
+    const root = fixture(), home = path.join(root, "home"), kiroHome = path.join(root, "kiro");
+    fs.mkdirSync(home); put(kiroHome, "sentinel", Buffer.from([0, 1, 255]));
     const before = digestTree(kiroHome);
-    const result = spawnSync(process.execPath, ["scripts/build-agent-dev.mjs"], { cwd: path.resolve("."), encoding: "utf8", env: { ...process.env, HOME: home, KIRO_HOME: kiroHome }, timeout: 60_000 });
-    expect(result.status, result.stderr).toBe(0);
-    expect(digestTree(kiroHome)).toBe(before);
-    fs.rmSync(root, { recursive: true, force: true });
+    const result = spawnSync(process.execPath, [path.resolve("scripts/build-agent-dev.mjs")], { cwd: root, encoding: "utf8", env: { ...process.env, HOME: home, KIRO_HOME: kiroHome }, timeout: 60_000 });
+    expect(result.status, result.stderr).toBe(0); expect(digestTree(kiroHome)).toBe(before);
   });
-
-  it("refuses to reuse a tampered digest-named generation", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-stage-generation-"));
-    try {
-      const checkout = path.join(root, "checkout");
-      fs.mkdirSync(checkout, { mode: 0o700 });
-      fs.mkdirSync(path.join(checkout, ".tmp"), { mode: 0o700 });
-      for (const source of ["dist/kiro-agent-closure", "skills"]) {
-        fs.cpSync(path.resolve(source), path.join(checkout, source), { recursive: true });
-      }
-      const manifest = JSON.parse(fs.readFileSync(path.resolve("dist/kiro-agent-closure/closure-manifest.json"), "utf8"));
-      for (const { path: source } of manifest.buildInputs.files as { path: string }[]) {
-        fs.mkdirSync(path.dirname(path.join(checkout, source)), { recursive: true });
-        fs.copyFileSync(path.resolve(source), path.join(checkout, source));
-      }
-      for (const source of ["agent-product.json", "package.json"]) {
-        fs.copyFileSync(path.resolve(source), path.join(checkout, source));
-      }
-      fs.mkdirSync(path.join(checkout, "scripts"), { mode: 0o700, recursive: true });
-      for (const source of ["agent-profile.mjs", "install-agent-user.mjs", "validate-agent-package.mjs"]) {
-        fs.copyFileSync(path.resolve("scripts", source), path.join(checkout, "scripts", source));
-      }
-
-      const stage = () => spawnSync(process.execPath, [path.resolve("scripts/build-agent-dev.mjs")], {
-        cwd: checkout,
-        encoding: "utf8",
-        timeout: 60_000,
-      });
-      const first = stage();
-      expect(first.status, first.stderr).toBe(0);
-      const evidence = JSON.parse(first.stdout.split("\n")[0]!) as { generation: string };
-      const stable = path.join(checkout, ".tmp", "kiro-fabric-agent");
-      const stableTarget = fs.readlinkSync(stable);
-      expect(validateAgentPackage(stable).root).toBe(evidence.generation);
-
-      const aliasedGeneration = path.join(checkout, ".tmp", `.kiro-fabric-agent-generation-${"0".repeat(64)}`);
-      fs.symlinkSync(path.basename(evidence.generation), aliasedGeneration, "dir");
-      fs.unlinkSync(stable);
-      fs.symlinkSync(path.basename(aliasedGeneration), stable, "dir");
-      expect(() => validateAgentPackage(stable)).toThrow("staging generation is not a regular directory");
-      fs.unlinkSync(stable);
-      fs.unlinkSync(aliasedGeneration);
-      fs.symlinkSync(stableTarget, stable, "dir");
-
-      fs.appendFileSync(path.join(evidence.generation, "scripts", "agent-profile.mjs"), "\n");
-      expect(() => validateAgentPackage(evidence.generation)).toThrow(
-        "digest-named staging generation does not match its contents",
-      );
-      const second = stage();
-      expect(second.status).not.toBe(0);
-      expect(second.stderr).toContain("digest-named staging generation does not match its contents");
-      expect(fs.readlinkSync(stable)).toBe(stableTarget);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
+  it("imports the actual staged installer with the checkout unavailable", async () => {
+    const root = fixture(), staged = await buildAgentDev({ root });
+    const isolated = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "standalone-agent-"))); roots.push(isolated);
+    const standalone = path.join(isolated, "package"); fs.cpSync(staged.generation, standalone, { recursive: true });
+    expect(fs.readFileSync(path.join(standalone, "scripts/filesystem-boundary.mjs"))).toEqual(fs.readFileSync(path.join(root, "src/installation/filesystem-boundary.mjs")));
+    fs.rmSync(root, { recursive: true });
+    expect(validateAgentPackage(standalone).ok).toBe(true);
+    const probe = spawnSync(process.execPath, ["--input-type=module", "-e", `const installer=await import(${JSON.stringify(pathToFileURL(path.join(standalone, "scripts/install-agent-user.mjs")).href)}); if(typeof installer.installUserAgent!=='function'||typeof installer.installerSafety!=='object')throw Error('incomplete standalone installer');`], { cwd: isolated, encoding: "utf8", env: { ...process.env, HOME: path.join(isolated, "home"), KIRO_HOME: path.join(isolated, "kiro") }, timeout: 10000 });
+    expect(probe.status, probe.stderr).toBe(0); expect(fs.existsSync(path.join(standalone, "src"))).toBe(false);
+  });
+  it("preserves historical three-script packages while rejecting incomplete or unknown new closures", async () => {
+    const root = fixture(), staged = await buildAgentDev({ root }), legacy = path.join(root, "legacy-package");
+    fs.cpSync(staged.generation, legacy, { recursive: true });
+    fs.unlinkSync(path.join(legacy, "scripts/filesystem-boundary.mjs"));
+    expect(() => validateAgentPackage(legacy)).toThrow(/dependency.*missing/);
+    const historical = fs.readFileSync(new URL("./fixtures/installer-history/d33de003/install-agent-user.mjs.txt", import.meta.url), "utf8");
+    expect(createHash("sha256").update(historical).digest("hex")).toBe("26588cd40f6d201ab84f8ac6018c14189412a57c250f02692188a3796b71f3fb");
+    put(legacy, "scripts/install-agent-user.mjs", historical);
+    expect(validateAgentPackage(legacy).ok).toBe(true);
+    const probe = spawnSync(process.execPath, ["--input-type=module", "-e", `await import(${JSON.stringify(pathToFileURL(path.join(legacy, "scripts/install-agent-user.mjs")).href)});`], { cwd: legacy, encoding: "utf8", timeout: 10000 });
+    expect(probe.status, probe.stderr).toBe(0);
+    put(legacy, "scripts/unknown.mjs", "export {};"); expect(() => validateAgentPackage(legacy)).toThrow(/installer script/);
+    fs.unlinkSync(path.join(legacy, "scripts/unknown.mjs"));
+    put(legacy, "scripts/filesystem-boundary.mjs", 'export * from "../src/installation/filesystem-boundary.mjs";');
+    expect(() => validateAgentPackage(legacy)).toThrow(/standalone builtin-only/);
+  });
+  it("reuses before any staging copy and preserves generation inodes", async () => {
+    const root = fixture(), first = await buildAgentDev({ root });
+    const inode = fs.lstatSync(first.generation).ino;
+    const copies = vi.spyOn(fs, "copyFileSync").mockImplementation(() => { throw new Error("must reuse before copy"); });
+    const second = await buildAgentDev({ root });
+    expect(second.reused).toBe(true); expect(second.generation).toBe(first.generation);
+    expect(fs.lstatSync(second.generation).ino).toBe(inode); expect(copies).not.toHaveBeenCalled();
+  });
+  it("refuses a symlinked digest generation without replacing the stable pointer", async () => {
+    const root = fixture(), first = await buildAgentDev({ root }), stable = path.join(root, ".tmp/kiro-fabric-agent");
+    const alias = `.kiro-fabric-agent-generation-${"0".repeat(64)}`;
+    fs.symlinkSync(path.basename(first.generation), path.join(root, ".tmp", alias), "dir");
+    fs.unlinkSync(stable); fs.symlinkSync(alias, stable, "dir");
+    expect(() => validateAgentPackage(stable)).toThrow("staging generation is not a regular directory");
+    await expect(buildAgentDev({ root })).rejects.toThrow("staging generation is not a regular directory");
+    expect(fs.readlinkSync(stable)).toBe(alias);
+  });
+  it.each(["modify", "delete", "add"])("refuses %s tampering in an existing generation before copy", async mutation => {
+    const root = fixture(), first = await buildAgentDev({ root }), stable = path.join(root, ".tmp/kiro-fabric-agent"), previous = fs.readlinkSync(stable);
+    const file = path.join(first.generation, "scripts/agent-profile.mjs");
+    if (mutation === "modify") fs.appendFileSync(file, "\n");
+    if (mutation === "delete") fs.unlinkSync(file);
+    if (mutation === "add") put(first.generation, "runtime/extra.js", "foreign");
+    const copies = vi.spyOn(fs, "copyFileSync");
+    await expect(buildAgentDev({ root })).rejects.toThrow("digest-named staging generation does not match its contents");
+    expect(copies).not.toHaveBeenCalled(); expect(fs.readlinkSync(stable)).toBe(previous);
   });
 });

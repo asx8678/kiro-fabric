@@ -22,6 +22,64 @@ function fixture(shell = "bash", original: string | null = "# user's settings wi
   return { root, home, kiro, file, env, plan, install: () => applyShellIntegration(kiro, plan()) };
 }
 
+import { fixture as bundleFixture } from './bundle-fixture.js';
+import { installCompleteGeneration, retireCompleteInstallation } from '../scripts/managed-installation.mjs';
+import { acquireInstallationLock } from '../scripts/installer-lock.mjs';
+
+async function coreFixture() {
+ const f=fixture();fs.unlinkSync(path.join(f.kiro,'agents/kiro-fabric.json'));
+ const bundle=await bundleFixture();roots.push(bundle);
+ const opts={kiroHome:f.kiro,userHome:f.home,env:{},provenance:'source',validateCandidate:async()=>{}};
+ const plan=f.plan();if(plan.file===undefined)throw Error('Fixture needs a planned shell path');
+ const core=await installCompleteGeneration(bundle,opts);
+ return {...f,bundle,opts,initialPlan:plan,core};
+}
+
+describe('owner-bound shell postcommit integration',()=>{
+ it('refuses delayed installation plan after retirement before writing backup or rc',async()=>{
+  const f=await coreFixture(),before=fs.readFileSync(f.file),entries=fs.readdirSync(f.home);
+  await retireCompleteInstallation(f.kiro);
+  expect(()=>applyShellIntegration(f.kiro,f.initialPlan,{expectedOwner:f.core.owner})).toThrow(/superseded/);
+  expect(fs.readFileSync(f.file)).toEqual(before);expect(fs.readdirSync(f.home)).toEqual(entries);
+  expect(fs.existsSync(path.join(f.kiro,'kiro-fabric/shell-integration.json'))).toBe(false);
+ });
+ it('refuses delayed retirement removal after SAME generation reactivation (transaction identity matters)',async()=>{
+  const f=await coreFixture();applyShellIntegration(f.kiro,f.initialPlan,{expectedOwner:f.core.owner});
+  const removal=f.plan(true),retired=await retireCompleteInstallation(f.kiro),active=await installCompleteGeneration(f.bundle,f.opts);
+  expect(active.owner.currentRuntime).toBe(f.core.owner.currentRuntime);expect(active.owner.transactionId).not.toBe(f.core.owner.transactionId);
+  const state=path.join(f.kiro,'kiro-fabric/shell-integration.json'),before=fs.readFileSync(f.file),record=fs.readFileSync(state);
+  let failure:any;try{applyShellIntegration(f.kiro,removal,{expectedOwner:retired.owner});}catch(error){failure=error;}
+  expect(failure).toMatchObject({code:'INSTALL_SHELL_SUPERSEDED',superseded:true,dataPreserved:true});
+  expect(fs.readFileSync(f.file)).toEqual(before);expect(fs.readFileSync(state)).toEqual(record);
+  const fresh=await retireCompleteInstallation(f.kiro);expect(applyShellIntegration(f.kiro,f.plan(true),{expectedOwner:fresh.owner}).status).toBe('removed');
+ });
+ it('rejects old active plan after retirement/reactivation even though status and runtime match',async()=>{
+  const f=await coreFixture();await retireCompleteInstallation(f.kiro);const current=await installCompleteGeneration(f.bundle,f.opts);
+  expect(()=>applyShellIntegration(f.kiro,f.initialPlan,{expectedOwner:f.core.owner})).toThrow(/superseded/);
+  expect(applyShellIntegration(f.kiro,f.initialPlan,{expectedOwner:current.owner}).status).toBe('configured');
+ });
+ it.each(['wrong intent','null owner','pending transaction','foreign transaction','modified control','modified owner'])('rejects %s without shell mutation',async kind=>{
+  const f=await coreFixture();let plan=f.initialPlan,owner:any=f.core.owner;
+  if(kind==='wrong intent')plan={...plan,remove:true};
+  if(kind==='null owner')owner=null;
+  if(kind==='pending transaction')fs.writeFileSync(f.core.paths.journal,'unknown',{mode:0o600});
+  if(kind==='foreign transaction')fs.writeFileSync(path.join(path.dirname(f.core.paths.journal),'foreign.json'),'unknown',{mode:0o600});
+  if(kind==='modified control')fs.appendFileSync(f.core.paths.profile,'foreign');
+  if(kind==='modified owner')fs.appendFileSync(f.core.paths.manifest,' ');
+  const before=fs.readFileSync(f.file);expect(()=>applyShellIntegration(f.kiro,plan,{expectedOwner:owner})).toThrow(/superseded/);expect(fs.readFileSync(f.file)).toEqual(before);
+ });
+ it('uses the same core lock and preserves busy state',async()=>{
+  const f=await coreFixture(),before=fs.readFileSync(f.file),unlock=acquireInstallationLock(f.core.paths.base);
+  try{expect(()=>applyShellIntegration(f.kiro,f.initialPlan,{expectedOwner:f.core.owner})).toThrow(/busy/);expect(fs.readFileSync(f.file)).toEqual(before);}finally{unlock();}
+ });
+ it('explicit null admits only an absent-core removal; two-argument API remains usable',()=>{
+  const f=fixture();f.install();const removal=f.plan(true);
+  expect(()=>applyShellIntegration(f.kiro,removal,{expectedOwner:null})).toThrow(/superseded/);
+  fs.unlinkSync(path.join(f.kiro,'agents/kiro-fabric.json'));
+  expect(applyShellIntegration(f.kiro,removal,{expectedOwner:null}).status).toBe('removed');
+ });
+});
+
 describe("automatic installer shell handoff", () => {
   it.for(["bash", "zsh"])("runs ordinary kiro-cli --v3 in %s with per-project paths and preserved argv/exit", (shell, context) => {
     const f = fixture(shell); f.install();

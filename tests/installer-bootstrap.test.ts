@@ -19,8 +19,9 @@ async function bootstrapFixture(target='linux-x64'){
   const member=previous.tools.node.members.find((m:{path:string})=>m.path==='tools/node');member.size=node.length;member.sha256=sha256(node);
   const manifest=await createBundleManifest(root,{...previous,provenance:{kind:'release',sourceCommit:'a'.repeat(40)}});
   await writeFile(root+'/bundle-manifest.json',canonical(manifest)+'\n');await createBundleArchive(root,temp+'/bundle.tar.gz');
-  const archiveBytes=await readFile(temp+'/bundle.tar.gz');const capture=signedRelease(archiveBytes,{bundleDigest:manifest.digest,target,compatibility:compatibilityFor(target),archive:{url:'https://github.com/asx8678/kiro-fabric/releases/download/v1.0.0/kiro-fabric-1.0.0-'+target+'.tar.gz',size:archiveBytes.length,sha256:sha256(archiveBytes)}});capture.verify(capture.metadataBytes,capture.signatureBytes,{archiveBytes});
+  const archiveBytes=await readFile(temp+'/bundle.tar.gz'),sbomBytes=Buffer.from('fixture SBOM');const capture={...signedRelease(archiveBytes,{sbom:{size:sbomBytes.length,sha256:sha256(sbomBytes)},bundleDigest:manifest.digest,target,compatibility:compatibilityFor(target),archive:{url:'https://github.com/asx8678/kiro-fabric/releases/download/v1.0.0/kiro-fabric-1.0.0-'+target+'.tar.gz',size:archiveBytes.length,sha256:sha256(archiveBytes)}}),sbomBytes};capture.verify(capture.metadataBytes,capture.signatureBytes,{archiveBytes,sbomBytes});
   const script=generateInstallerBootstrap([capture]);await writeFile(temp+'/install.sh',script,{mode:0o600});
+  await writeFile(temp+'/bundle.tar.gz.spdx.json',capture.sbomBytes);
   await writeFile(temp+'/bundle.tar.gz.release.json',capture.metadataBytes);await writeFile(temp+'/bundle.tar.gz.release.sig',capture.signatureBytes);
   await mkdir(temp+'/bin');
   // System tools live in /bin or /usr/bin on macOS; sha256sum is not shipped there.
@@ -72,6 +73,17 @@ test('invalid whole archive hash fails before extraction, local sidecars are man
   await symlink(f.temp+'/bundle.tar.gz',f.temp+'/link');expect(f.run(['--from-archive',f.temp+'/link']).stderr).toContain('unsafe local');
  }finally{await f.cleanup();}
 });
+test.each(['missing','same-size','oversized'])('signed SBOM %s fails before bootstrap extraction or execution',async kind=>{
+ const f=await bootstrapFixture();try{
+  const file=f.temp+'/bundle.tar.gz.spdx.json';
+  if(kind==='missing')await rm(file);
+  if(kind==='same-size')await writeFile(file,Buffer.alloc(f.capture.sbomBytes.length));
+  if(kind==='oversized')await writeFile(file,Buffer.alloc(f.capture.sbomBytes.length+1));
+  const result=f.run(['--from-archive',f.temp+'/bundle.tar.gz']);
+  expect(result.status).not.toBe(0);expect(result.stdout).toBe('');expect(result.stderr).toMatch(/unsafe local|sha256 mismatch|oversized local/);
+  expect(()=>generateInstallerBootstrap([{...f.capture,sbomBytes:Buffer.alloc(f.capture.sbomBytes.length)}])).toThrow(/SBOM/);
+ }finally{await f.cleanup();}
+});
 test('member hash failure prevents execution even after a valid whole archive',async()=>{
  const f=await bootstrapFixture();try{
   await rm(f.temp+'/bin/tar');await writeFile(f.temp+'/bin/tar','#!/bin/bash\nprintf "wrong"\n',{mode:0o700});
@@ -79,15 +91,17 @@ test('member hash failure prevents execution even after a valid whole archive',a
  }finally{await f.cleanup();}
 });
 const curlFixture=`#!/bin/bash
-out='' headers='' url=''
+out='' headers='' url='' globoff=''
 while [ "$#" -gt 0 ]; do
  case "$1" in
   --output) out=$2; shift 2 ;; --dump-header) headers=$2; shift 2 ;;
+  --globoff) globoff=1; shift ;;
   --proto|--tlsv1.2|--silent|--show-error|-q) if [ "$1" = --proto ]; then shift 2; else shift; fi ;;
   --connect-timeout|--max-time|--max-filesize|--write-out) shift 2 ;;
   --) shift; url=$1; shift ;; *) exit 88 ;;
  esac
 done
+[ "$globoff" = 1 ] || exit 89
 printf '%s\\n' "$url" >> "$FIXTURE_LOG"
 if [ "\${FIXTURE_MODE:-}" = offline ]; then exit 7; fi
 if [ "\${FIXTURE_MODE:-}" = redirect ]; then
@@ -97,14 +111,14 @@ if [ "\${FIXTURE_MODE:-}" = escape ]; then
  printf 'HTTP/1.1 302 Found\\r\\nLocation: https://evil.test/no\\r\\n\\r\\n' > "$headers"; : > "$out"; printf 302; exit 0
 fi
 printf 'HTTP/1.1 200 OK\\r\\n\\r\\n' > "$headers"
-case "$url" in *.release.json) /bin/cat "$FIXTURE_ARCHIVE.release.json" > "$out" ;; *.release.sig) /bin/cat "$FIXTURE_ARCHIVE.release.sig" > "$out" ;; *) /bin/cat "$FIXTURE_ARCHIVE" > "$out" ;; esac
+case "$url" in *.spdx.json) /bin/cat "$FIXTURE_ARCHIVE.spdx.json" > "$out" ;; *.release.json) /bin/cat "$FIXTURE_ARCHIVE.release.json" > "$out" ;; *.release.sig) /bin/cat "$FIXTURE_ARCHIVE.release.sig" > "$out" ;; *) /bin/cat "$FIXTURE_ARCHIVE" > "$out" ;; esac
 if [ "\${FIXTURE_MODE:-}" = oversize ]; then printf extra >> "$out"; fi
 printf 200
 `;
 test('bounded curl fixture downloads all sidecars, no fallback on offline/redirect/oversize',async()=>{
  const f=await bootstrapFixture();try{
   await writeFile(f.temp+'/bin/curl',curlFixture,{mode:0o700});const env={FIXTURE_ARCHIVE:f.temp+'/bundle.tar.gz',FIXTURE_LOG:f.temp+'/requests'};
-  const result=f.run([],env);expect(result.status,result.stderr).toBe(0);expect((await readFile(env.FIXTURE_LOG,'utf8')).trim().split('\n')).toHaveLength(3);
+  const result=f.run([],env);expect(result.status,result.stderr).toBe(0);expect((await readFile(env.FIXTURE_LOG,'utf8')).trim().split('\n')).toHaveLength(4);
   for(const [mode,message,count] of [['offline','offline',1],['redirect','redirect limit',5],['escape','unapproved HTTPS redirect',1],['oversize','oversized',1]] as const){
    await writeFile(env.FIXTURE_LOG,'');const failed=f.run([],{...env,FIXTURE_MODE:mode});expect(failed.status).not.toBe(0);expect(failed.stderr).toContain(message);expect(failed.stdout).toBe('');expect((await readFile(env.FIXTURE_LOG,'utf8')).trim().split('\n')).toHaveLength(count);
   }
