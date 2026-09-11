@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { isProxy } from "node:util/types";
-import type { CatalogBinding, CatalogMethod, CatalogReservation, CatalogPageOptions, CatalogPage, DescriptorJsonPage } from "./catalog-contract.js";
+import type { CatalogDependency, CatalogBinding, CatalogMethod, CatalogReservation, CatalogPageOptions, CatalogPage, DescriptorJsonPage } from "./catalog-contract.js";
 import { FabricRepairError } from "./repair-error.js";
 import { semanticDigest } from "./semantic-digest.js";
 import { fabricJsonText } from "../runtime/json-budget.js";
@@ -19,14 +19,16 @@ const defaults: CatalogStorePolicy = {
 const methods: CatalogMethod[] = ["tools.listPage", "tools.searchPage", "tools.describePage", "mcp.toolsPage", "mcp.describePage"];
 type Position = [number, string, number, number, number, number];
 interface Entry { text: string; digest: string }
-interface Snapshot { id: string; method?: CatalogMethod; query?: string; entries?: Entry[]; bytes: number; nodes: number; created: number; touched: number; expires: number }
+interface Snapshot { dependencies: Set<CatalogDependency>; id: string; method?: CatalogMethod; query?: string; entries?: Entry[]; bytes: number; nodes: number; created: number; touched: number; expires: number }
 const fail = (code: "catalog_quota_exceeded" | "catalog_page_budget" | "catalog_cursor_unavailable", message: string): never => {
   throw new FabricRepairError(message, { code, phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none" });
 };
 const unavailable: () => never = () => fail("catalog_cursor_unavailable", "Catalog cursor unavailable; explicitly reopen the catalog to continue.");
 const quota: () => never = () => fail("catalog_quota_exceeded", "Catalog snapshot quota exceeded; release reservations or reopen a smaller catalog.");
 
-/** Host-owned, in-memory authority. No cursor table and no upstream callbacks. */
+/** Host-owned authority. Dependency checks are synchronous and local, never upstream reads.
+ * Revoked memory is reclaimed on store access; scanning is bounded by maxSnapshots.
+ */
 export class CatalogSnapshotStore {
   private key = randomBytes(32);
   private closed = false;
@@ -43,13 +45,16 @@ export class CatalogSnapshotStore {
   private prune(): void {
     const now = this.policy.now();
     for (const [id, snapshot] of this.snapshots) {
-      if (now - snapshot.created >= this.policy.absoluteMs || now - snapshot.touched >= this.policy.idleMs) this.snapshots.delete(id);
+      if (![...snapshot.dependencies].every(dependency => dependency.isCurrent()) || now - snapshot.created >= this.policy.absoluteMs || now - snapshot.touched >= this.policy.idleMs) this.snapshots.delete(id);
     }
   }
-  reserve(): CatalogReservation {
+  reserve(dependencies: readonly CatalogDependency[] = []): CatalogReservation {
+    if (dependencies.length > 256) quota();
+    if (!dependencies.every(dependency => dependency.isCurrent())) unavailable();
     if (this.closed) unavailable();
     this.prune();
     const p = this.policy;
+    if (dependencies.length * 64 > p.reservationBytes || dependencies.length > p.reservationNodes) quota();
     if (p.reservationBytes > p.maxBytes || p.reservationNodes > p.maxNodes) quota();
     const fits = (): boolean => {
       let bytes = p.reservationBytes, nodes = p.reservationNodes;
@@ -62,10 +67,22 @@ export class CatalogSnapshotStore {
       this.snapshots.delete(oldest.id);
     }
     const now = p.now();
-    const snapshot: Snapshot = { id: randomBytes(12).toString("base64url"), bytes: p.reservationBytes, nodes: p.reservationNodes, created: now, touched: now, expires: now + p.softExpiryMs };
+    const snapshot: Snapshot = { dependencies: new Set(dependencies), id: randomBytes(12).toString("base64url"), bytes: p.reservationBytes, nodes: p.reservationNodes, created: now, touched: now, expires: now + p.softExpiryMs };
     this.snapshots.set(snapshot.id, snapshot);
     let active = true;
     return {
+      depend: (dependencies) => {
+        this.prune();
+        if (!active || this.snapshots.get(snapshot.id) !== snapshot) unavailable();
+        if (dependencies.length > 256) { this.snapshots.delete(snapshot.id); active = false; quota(); }
+        const combined = new Set([...snapshot.dependencies, ...dependencies]);
+        if (combined.size > 256 || combined.size * 64 > p.reservationBytes || combined.size > p.reservationNodes) {
+          this.snapshots.delete(snapshot.id); active = false; quota();
+        }
+        snapshot.dependencies = combined;
+        this.prune();
+        if (this.snapshots.get(snapshot.id) !== snapshot) unavailable();
+      },
       release: () => { if (active) { this.snapshots.delete(snapshot.id); active = false; } },
       publish: (method, descriptors, query) => {
         this.prune();
@@ -73,7 +90,7 @@ export class CatalogSnapshotStore {
         try {
           if (!methods.includes(method) || (query !== undefined && typeof query !== "string")) quota();
           // Validate the ORIGINAL graph, including array accessors, before any serialization.
-          let nodes = 0, raw = 0;
+          let nodes = snapshot.dependencies.size, raw = snapshot.dependencies.size * 64;
           const seen = new WeakSet<object>();
           const walk = (value: unknown, depth: number): void => {
             if (++nodes > p.reservationNodes) quota();
@@ -100,7 +117,7 @@ export class CatalogSnapshotStore {
           // Inventory root does not consume a descriptor's allowed depth.
           walk(descriptors, -1);
           if (method.endsWith("describePage") && descriptors.length !== 1) quota();
-          let bytes = 512 + nodes * 32 + (query?.length ?? 0) * 4;
+          let bytes = 512 + snapshot.dependencies.size * 64 + nodes * 32 + (query?.length ?? 0) * 4;
           if (bytes > p.reservationBytes) quota();
           const entries: Entry[] = [];
           for (const descriptor of descriptors) {

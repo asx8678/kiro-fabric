@@ -270,25 +270,27 @@ export class FabricExecutionService {
         }
         if (["fabric.list", "fabric.search", "fabric.describe"].includes(ref) || pageMethod?.startsWith("tools.")) {
           if (switchRequested || options.workspaceUnavailable) throw catalogUnavailable();
-          catalogReservation = this.#catalogStore?.reserve();
+          catalogReservation = this.#catalogStore?.reserve(this.registry.catalogDependencies());
           const method = pageMethod ?? (ref === "fabric.list" ? "tools.listPage" : ref === "fabric.search" ? "tools.searchPage" : "tools.describePage");
           let value: unknown;
-          if (method === "tools.listPage") value = await this.registry.list();
+          if (method === "tools.listPage") value = await this.registry.list(signal);
           else if (method === "tools.searchPage") {
             if (typeof args.query !== "string") throw new Error("fabric.search query must be a string");
-            value = pageMethod ? await this.registry.searchAll(args.query) : await this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
+            value = pageMethod ? await this.registry.searchAll(args.query, signal) : await this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30, signal);
           } else {
             if (typeof args.ref !== "string") throw new Error("fabric.describe ref must be a string");
-            value = await this.registry.describe(args.ref);
+            value = await this.registry.describe(args.ref, signal);
           }
           throwIfAbortedOrExpired(signal, deadline);
           return publishCatalog(this.#catalogStore, catalogReservation, method, value, this.config.executor.maxNestedResultChars, pageMethod ? args : undefined, typeof args.query === "string" ? args.query : undefined);
         }
         const actionRef = pageMethod === "mcp.toolsPage" ? "mcp.$tools" : pageMethod === "mcp.describePage" ? "mcp.$describe" : ref === "fabric.call" ? args.ref : ref;
         const actionArgs = pageMethod?.startsWith("mcp.") ? { server: args.server, ...(pageMethod === "mcp.describePage" ? { tool: args.tool } : {}) } : ref === "fabric.call" ? args.args ?? {} : args;
-        if (actionRef === "mcp.$tools" || actionRef === "mcp.$describe") catalogReservation = this.#catalogStore?.reserve();
         if (typeof actionRef !== "string" || typeof actionArgs !== "object" || actionArgs === null || Array.isArray(actionArgs)) {
           throw new Error("Fabric provider call requires an exact ref and object args");
+        }
+        if (actionRef === "mcp.$tools" || actionRef === "mcp.$describe") {
+          catalogReservation = this.#catalogStore?.reserve(this.registry.catalogDependencies("mcp", actionArgs as Record<string, unknown>));
         }
         const switching = actionRef === "fabric.workspace" && ["select", "attach", "detach"].includes(String((actionArgs as Record<string, unknown>).action));
         if (switching) {

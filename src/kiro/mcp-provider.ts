@@ -18,7 +18,7 @@ import { argumentRepairError, FabricRepairError, repairSchema } from "../core/re
 import { validateSchemaValue } from "../schema-validation.js";
 import { assertFabricJsonBudget } from "../runtime/json-budget.js";
 import { remoteRef, remoteComponent } from "../core/remote-identity.js";
-import { markCatalogResult } from "../core/catalog-contract.js";
+import { bindCatalogResult, type CatalogDependency, markCatalogResult } from "../core/catalog-contract.js";
 import { semanticDigest } from "../core/semantic-digest.js";
 
 const descriptors: readonly FabricActionDescriptor[] = [
@@ -551,6 +551,7 @@ const normalizeMcpResult = (result: unknown, projection: ReturnType<typeof resul
  * network approval (plus execute approval for stdio transports).
  */
 type McpRuntimeFactory = () => Promise<Runtime>;
+const catalogTicket = () => ({ current: true, isCurrent() { return this.current; } });
 type ServerLease = { quiescence: Promise<void> };
 
 export class KiroMcpProvider implements FabricProvider {
@@ -572,11 +573,37 @@ export class KiroMcpProvider implements FabricProvider {
   readonly #invalidatedReservations = new Set<string>();
   readonly #observations = new Map<string, readonly ObservedFabricAction[]>();
   readonly #observationWeights = new Map<string, { bytes: number; nodes: number }>();
+  #globalCatalog = catalogTicket();
+  // At most 128 live server authorities. Removed tickets survive only in their
+  // consumers; no tombstone/epoch map grows with arbitrary server names.
+  readonly #catalogTickets = new Map<string, { revocation: ReturnType<typeof catalogTicket>; inventory: ReturnType<typeof catalogTicket> }>();
+  #tickets(server: string) {
+    let tickets = this.#catalogTickets.get(server);
+    if (!tickets) {
+      if (this.#catalogTickets.size >= 128) this.#evict(this.#catalogTickets.keys().next().value!);
+      tickets = { revocation: catalogTicket(), inventory: catalogTicket() };
+      this.#catalogTickets.set(server, tickets);
+    }
+    return tickets;
+  }
+  catalogDependencies(args?: Record<string, unknown>): readonly CatalogDependency[] {
+    if (this.#closed) return [{ isCurrent: () => false }];
+    if (isRecord(args) && typeof args.server === "string") return [this.#tickets(args.server).revocation];
+    // Every publication/revocation rotates this aggregate inventory authority.
+    return [this.#globalCatalog];
+  }
   invalidateDiscovery(server?: string): void { this.#evict(server); }
 
   discoveryRevision(): string { return String(this.#revision); }
   observedActions(): readonly ObservedFabricAction[] { return Object.freeze([...this.#observations.values()].flat()); }
   #evict(server?: string): void {
+    this.#globalCatalog.current = false;
+    this.#globalCatalog = catalogTicket();
+    for (const [name, tickets] of this.#catalogTickets) {
+      if (server !== undefined && name !== server) continue;
+      tickets.revocation.current = false; tickets.inventory.current = false;
+      this.#catalogTickets.delete(name);
+    }
     if (server === undefined) this.#observationWeights.clear(); else this.#observationWeights.delete(server);
     for (const reserved of this.#observationReservations) {
       if (server === undefined || reserved === server) this.#invalidatedReservations.add(reserved);
@@ -658,7 +685,7 @@ export class KiroMcpProvider implements FabricProvider {
     const runtime = await this.#getRuntime(context.signal);
     throwIfAbortedOrExpired(context.signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
-    if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
+    if (!runtime.listServers().includes(server)) { this.#evict(server); throw new Error(`Unknown configured MCP server: ${server}`); }
     return {
       server,
       ...(actionName === "$call" || actionName === "$describe" ? { tool } : {}),
@@ -715,10 +742,11 @@ export class KiroMcpProvider implements FabricProvider {
 
     remoteComponent(server);
     if (toolName) remoteComponent(toolName);
+    let invocationTickets = this.catalogDependencies({ server });
     const runtime = await this.#getRuntime(signal);
     throwIfAbortedOrExpired(signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
-    if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
+    if (!runtime.listServers().includes(server)) { this.#evict(server); throw new Error(`Unknown configured MCP server: ${server}`); }
     // ActionRegistry always injects this during canonical preparation. The
     // fallback preserves direct provider use in tests/embedders while still
     // snapshotting before any contact.
@@ -736,7 +764,11 @@ export class KiroMcpProvider implements FabricProvider {
     throwIfAbortedOrExpired(signal, context.deadline);
     return this.#withServerLease(server, signal, async (lease) => {
       let dispatched = false;
+      // Calls retain the existing quiescent-lease retry behavior; catalog opens
+      // retain their pre-queue authority and may never publish across revocation.
+      if (actionName === "$call") invocationTickets = this.catalogDependencies({ server });
       try {
+        if (!invocationTickets.every(ticket => ticket.isCurrent())) throw new Error("MCP observation epoch invalidated before discovery");
         // Reserve a bounded server slot before contacting the transport. Each
         // inventory is independently bounded by the raw JSON/tool limits.
         if (new Set([...this.#observations.keys(), ...this.#observationReservations, server]).size > 128) throw new Error("MCP observation server limit exceeded");
@@ -795,15 +827,20 @@ export class KiroMcpProvider implements FabricProvider {
         this.#remainingCallBudget(actionDeadline);
         this.#assertTransportSnapshot(runtime, server, approvedTransport);
         if (this.#closed) throw new Error("MCP provider is closed");
+        if (!invocationTickets.every(ticket => ticket.isCurrent())) throw new Error("MCP observation epoch invalidated during discovery");
         if (this.#invalidatedReservations.has(server)) throw new Error("MCP observation epoch invalidated during discovery");
         if (observations.length) { this.#observations.set(server, observations); this.#observationWeights.set(server, weight); }
         else { this.#observations.delete(server); this.#observationWeights.delete(server); }
         this.#revision++;
-        if (actionName === "$tools") return markCatalogResult(tools.map(project), "mcp.toolsPage");
+        const tickets = this.#tickets(server);
+        tickets.inventory.current = false; tickets.inventory = catalogTicket();
+        this.#globalCatalog.current = false; this.#globalCatalog = catalogTicket();
+        const publication = [tickets.revocation, tickets.inventory];
+        if (actionName === "$tools") return bindCatalogResult(markCatalogResult(tools.map(project), "mcp.toolsPage"), publication);
         const selected = tools.find((tool) => tool.name === toolName);
         if (!selected) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
         const matches = [{ tool: selected, projected: project(selected) }];
-        if (actionName === "$describe") return markCatalogResult(matches[0]!.projected, "mcp.describePage");
+        if (actionName === "$describe") return bindCatalogResult(markCatalogResult(matches[0]!.projected, "mcp.describePage"), publication);
         if (expectedDescriptorDigest !== undefined &&
             matches[0]!.projected.descriptorDigest !== expectedDescriptorDigest) {
           const observed = matches[0]!.projected;
@@ -999,8 +1036,11 @@ export class KiroMcpProvider implements FabricProvider {
     details: Record<string, unknown>,
     context: FabricInvocationContext,
   ): Promise<void> {
-    if (!context.approve) throw new Error(`${action.ref} execution approval is unavailable`);
-    try { await context.approve(action, details); }
+    try {
+      if (!context.approve) throw new Error(`${action.ref} execution approval is unavailable`);
+      await context.approve(action, details);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
+    }
     catch (error) { if (typeof details.server === "string") this.#evict(details.server); throw error; }
     throwIfAbortedOrExpired(context.signal, context.deadline);
   }

@@ -79,6 +79,8 @@ export interface FabricProvider {
   description: string;
   /** Synchronous, local and side-effect-free; undefined opts out of discovery caching. */
   discoveryRevision?(): string | undefined;
+  /** Local authority tickets: selected-server reservations or observed inventory epochs. */
+  catalogDependencies?(args?: Record<string, unknown>): readonly import("./core/catalog-contract.js").CatalogDependency[];
   /** Locally observed approved metadata; never an execution authority. */
   observedActions?(): readonly ObservedFabricAction[];
   /** Synchronous revocation after denied/failed approved discovery. */

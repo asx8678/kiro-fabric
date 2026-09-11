@@ -35,7 +35,7 @@ type FabricActionSummary = {
   inputSchema: JsonObject;
   outputSchema?: JsonObject;
   namespace?: string;
-  effect?: { kind: "none" | "read" | "write" | "emission"; resources?: readonly string[] };
+  effect?: { kind: "none" | "read" | "write" | "emission"; resources?: string[] };
   annotations?: {
     title?: string;
     readOnlyHint?: boolean;

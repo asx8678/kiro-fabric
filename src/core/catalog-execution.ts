@@ -1,5 +1,5 @@
 import { CatalogSnapshotStore } from "./catalog-snapshot-store.js";
-import type { CatalogMethod, CatalogPageOptions, CatalogReservation } from "./catalog-contract.js";
+import { catalogResultDependencies, type CatalogMethod, type CatalogPageOptions, type CatalogReservation } from "./catalog-contract.js";
 import { FabricRepairError } from "./repair-error.js";
 import { fabricJsonText, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js";
 
@@ -31,6 +31,9 @@ export const publishCatalog = (
   method: CatalogMethod, value: unknown, maxChars: number,
   page?: CatalogPageOptions, query?: string,
 ): unknown => {
+  // Check both pre-discovery revocation tickets and the inventory epoch captured
+  // by the provider after its own successful discovery, even for legacy values.
+  reservation?.depend(catalogResultDependencies(value));
   // Small legacy values retain their exact array/object shapes. Formatting cannot
   // replay a provider; oversized values become authenticated continuation errors.
   if (!page) {

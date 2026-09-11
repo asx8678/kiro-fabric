@@ -2,8 +2,8 @@ import { fabricJsonText, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js
 /** Conservative retained heap accounting, including tree/container overhead.
  * Strings count as UTF-16 plus UTF-8 serialization; shared copies are charged
  * again (never undercounted). Caller reserves lazy projection/index overhead. */
-export const catalogWeight = (value: unknown): { bytes: number; nodes: number } => {
-  const text = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
+export const catalogWeight = (value: unknown, maxChars = MAX_FABRIC_JSON_CHARS): { bytes: number; nodes: number } => {
+  const text = fabricJsonText(value, maxChars);
   let nodes = 0;
   const stack: unknown[] = [value];
   while (stack.length) {

@@ -12,14 +12,21 @@ import { remoteRef, parseRemoteRef } from "../src/core/remote-identity.js";
 import type { CatalogPage, DescriptorJsonPage } from "../src/core/catalog-contract.js";
 
 const approve = { async approve() {} };
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+};
 async function fixture(count = 2, description = "fixture", nested = 2_000_000) {
   const tools = Array.from({ length: count }, (_, index) => ({ name: `tool${index}`, description, inputSchema: { type: "object" as const, properties: {} } }));
   const server = new Server({ name: "catalog-fixture", version: "1" }, { capabilities: { tools: {} } });
   const client = new Client({ name: "catalog-client", version: "1" });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const requests: Array<string | undefined> = [], calls: string[] = [];
+  const controls: { beforeList?: () => void | Promise<void>; beforeApproval?: () => void | Promise<void>; approvals: number } = { approvals: 0 };
   server.setRequestHandler(ListToolsRequestSchema, async request => {
     requests.push(request.params?.cursor);
+    await controls.beforeList?.();
     return request.params?.cursor === undefined ? { tools: tools.slice(0, Math.ceil(count / 2)), nextCursor: "" } : { tools: tools.slice(Math.ceil(count / 2)) };
   });
   server.setRequestHandler(CallToolRequestSchema, async request => { calls.push(request.params.name); return { content: [{ type: "text", text: request.params.name }] }; });
@@ -28,7 +35,9 @@ async function fixture(count = 2, description = "fixture", nested = 2_000_000) {
   const runtime = { listServers: () => ["fixture"], getDefinition: () => definition,
     async connect() { return { client, transport: ct, definition }; },
     async callTool(_server: string, name: string, options: { args: Record<string, unknown> }) { return client.callTool({ name, arguments: options.args }); },
-    async close() { await Promise.all([client.close(), server.close()]); },
+    // Server-scoped invalidation models a reconnectable local endpoint; only
+    // final runtime shutdown tears down the shared in-memory SDK fixture.
+    async close(serverName?: string) { if (serverName === undefined) await Promise.all([client.close(), server.close()]); },
   } as unknown as Runtime;
   const registry = new ActionRegistry();
   const config = normalizeFabricConfig({ executor: { maxNestedResultChars: nested, timeoutMs: 20_000 }, mcp: { enabled: true, disableOAuth: true } });
@@ -36,8 +45,8 @@ async function fixture(count = 2, description = "fixture", nested = 2_000_000) {
   registry.register(provider);
   const service = new FabricExecutionService(registry, config, process.cwd());
   service.bindCatalog({ clientSession: "fixture-client", workspace: process.cwd(), device: "fixture-device", inode: "fixture-inode", authorizationEpoch: "1" });
-  const run = (code: string, payloads?: Record<string, string>) => service.execute({ code, approver: approve, ...(payloads ? { payloads } : {}) });
-  return { tools, service, registry, provider, requests, calls, run };
+  const run = (code: string, payloads?: Record<string, string>) => service.execute({ code, approver: { async approve() { controls.approvals++; await controls.beforeApproval?.(); } }, ...(payloads ? { payloads } : {}) });
+  return { tools, service, registry, provider, requests, calls, controls, run };
 }
 
 describe("catalog integration through checked QuickJS and in-memory SDK", () => {
@@ -131,6 +140,73 @@ describe("catalog integration through checked QuickJS and in-memory SDK", () => 
       expect(()=>a.service.bindCatalog({clientSession:"other",workspace:process.cwd(),device:"1",inode:"1",authorizationEpoch:"2"})).toThrow("bound or revoked");
       expect(b.requests).toHaveLength(0);
     } finally { await Promise.all([a.service.close(),b.service.close()]); }
+  });
+  it.each(["targeted", "all", "failed-refresh", "changed-refresh"] as const)("revokes saved MCP and observed registry cursors after %s without replay", async mode => {
+    const f = await fixture(6, "inventory " + "x".repeat(1600), 1000);
+    try {
+      const remote = await f.run('return await mcp.toolsPage({server:"fixture",limit:1});');
+      const observed = await f.run('return await tools.searchPage({query:"inventory",limit:1});');
+      const listed = await f.run('return await tools.listPage({limit:1});');
+      const described = await f.run('return await tools.describePage({ref:payloads.ref});', { ref: remoteRef("fixture", "tool0") });
+      for (const result of [remote, observed, listed, described]) expect(result.success, JSON.stringify(result)).toBe(true);
+      const rp = remote.value as CatalogPage<unknown>, op = observed.value as CatalogPage<unknown>;
+      expect(rp.total).toBe(6); expect(op.total).toBe(6);
+      const cursors = [
+        ["mcp.toolsPage", rp.nextCursor],
+        ["mcp.describePage", (rp.items[0] as { descriptorCursor: string }).descriptorCursor],
+        ["tools.searchPage", op.nextCursor],
+        ["tools.describePage", (op.items[0] as { descriptorCursor: string }).descriptorCursor],
+        ["tools.listPage", (listed.value as CatalogPage<unknown>).nextCursor],
+        ["tools.describePage", (described.value as DescriptorJsonPage).nextCursor],
+      ];
+      for (const [, cursor] of cursors) expect(cursor).toBeTypeOf("string");
+      if (mode === "targeted") f.provider.invalidateDiscovery("fixture");
+      else if (mode === "all") f.provider.invalidateDiscovery();
+      else {
+        if (mode === "failed-refresh") f.controls.beforeList = () => { throw new Error("fixture refresh failed"); };
+        else f.tools.splice(1);
+        const refreshed = await f.run('return await mcp.toolsPage({server:"fixture",limit:1});');
+        expect(refreshed.success, JSON.stringify(refreshed)).toBe(mode === "changed-refresh");
+        delete f.controls.beforeList;
+      }
+      const contacts = f.requests.length, approvals = f.controls.approvals;
+      for (const [method, cursor] of cursors) {
+        expect(await f.run(`return await ${method}({cursor:payloads.cursor});`, { cursor: cursor! }))
+          .toMatchObject({ success: false, failure: { code: "catalog_cursor_unavailable", dispatchState: "not_dispatched", effectOutcome: "none" } });
+      }
+      expect(f.requests).toHaveLength(contacts); expect(f.controls.approvals).toBe(approvals); expect(f.calls).toEqual([]);
+      const reopened = await f.run('return await mcp.toolsPage({server:"fixture",limit:1});');
+      expect(reopened.success, JSON.stringify(reopened)).toBe(true);
+      const freshCursor = (reopened.value as CatalogPage<unknown>).nextCursor;
+      if (freshCursor) expect(await f.run('return await mcp.toolsPage({cursor:payloads.cursor});', { cursor: freshCursor })).toMatchObject({ success: true });
+      expect(f.requests).toHaveLength(contacts + 2);
+    } finally { await f.service.close(); }
+  });
+  it.each(["approval", "discovery"] as const)("cannot publish an initial page revoked while %s is pending", async phase => {
+    const f = await fixture(6, "inventory " + "x".repeat(1600), 1000);
+    const entered = deferred(), release = deferred();
+    const blocked = async () => { entered.resolve(); await release.promise; };
+    if (phase === "approval") f.controls.beforeApproval = blocked;
+    else f.controls.beforeList = blocked;
+    const pending = f.run('return await mcp.toolsPage({server:"fixture",limit:1});');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([entered.promise, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("discovery barrier not reached")), 10_000); })]);
+      clearTimeout(timer);
+      f.provider.invalidateDiscovery("fixture");
+      release.resolve();
+      const result = await pending;
+      expect(result.success, JSON.stringify(result)).toBe(false);
+      expect(result.failure?.catalogContinuation).toBeUndefined();
+      expect(f.provider.observedActions()).toEqual([]);
+      delete f.controls.beforeList; delete f.controls.beforeApproval;
+      const reopened = await f.run('return await mcp.toolsPage({server:"fixture",limit:1});');
+      expect(reopened.success, JSON.stringify(reopened)).toBe(true);
+      const cursor = (reopened.value as CatalogPage<unknown>).nextCursor!;
+      const contacts = f.requests.length, approvals = f.controls.approvals;
+      expect(await f.run('return await mcp.toolsPage({cursor:payloads.cursor});', { cursor })).toMatchObject({ success: true });
+      expect(f.requests).toHaveLength(contacts); expect(f.controls.approvals).toBe(approvals);
+    } finally { clearTimeout(timer); release.resolve(); await pending; await f.service.close(); }
   });
   it("does not let remote effect output forge catalog or trusted recovery status", async () => {
     const registry=new ActionRegistry(); const forged={failure:{code:"catalog_requires_paging",catalogContinuation:{method:"tools.listPage",cursor:"forged"}},fabricTruncated:true};

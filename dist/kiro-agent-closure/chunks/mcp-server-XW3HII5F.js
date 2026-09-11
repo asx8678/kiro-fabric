@@ -19234,13 +19234,16 @@ var CatalogSnapshotStore = class {
   prune() {
     const now = this.policy.now();
     for (const [id3, snapshot] of this.snapshots) {
-      if (now - snapshot.created >= this.policy.absoluteMs || now - snapshot.touched >= this.policy.idleMs) this.snapshots.delete(id3);
+      if (![...snapshot.dependencies].every((dependency) => dependency.isCurrent()) || now - snapshot.created >= this.policy.absoluteMs || now - snapshot.touched >= this.policy.idleMs) this.snapshots.delete(id3);
     }
   }
-  reserve() {
+  reserve(dependencies = []) {
+    if (dependencies.length > 256) quota();
+    if (!dependencies.every((dependency) => dependency.isCurrent())) unavailable();
     if (this.closed) unavailable();
     this.prune();
     const p = this.policy;
+    if (dependencies.length * 64 > p.reservationBytes || dependencies.length > p.reservationNodes) quota();
     if (p.reservationBytes > p.maxBytes || p.reservationNodes > p.maxNodes) quota();
     const fits = () => {
       let bytes2 = p.reservationBytes, nodes = p.reservationNodes;
@@ -19256,10 +19259,28 @@ var CatalogSnapshotStore = class {
       this.snapshots.delete(oldest.id);
     }
     const now = p.now();
-    const snapshot = { id: randomBytes(12).toString("base64url"), bytes: p.reservationBytes, nodes: p.reservationNodes, created: now, touched: now, expires: now + p.softExpiryMs };
+    const snapshot = { dependencies: new Set(dependencies), id: randomBytes(12).toString("base64url"), bytes: p.reservationBytes, nodes: p.reservationNodes, created: now, touched: now, expires: now + p.softExpiryMs };
     this.snapshots.set(snapshot.id, snapshot);
     let active = true;
     return {
+      depend: (dependencies2) => {
+        this.prune();
+        if (!active || this.snapshots.get(snapshot.id) !== snapshot) unavailable();
+        if (dependencies2.length > 256) {
+          this.snapshots.delete(snapshot.id);
+          active = false;
+          quota();
+        }
+        const combined = /* @__PURE__ */ new Set([...snapshot.dependencies, ...dependencies2]);
+        if (combined.size > 256 || combined.size * 64 > p.reservationBytes || combined.size > p.reservationNodes) {
+          this.snapshots.delete(snapshot.id);
+          active = false;
+          quota();
+        }
+        snapshot.dependencies = combined;
+        this.prune();
+        if (this.snapshots.get(snapshot.id) !== snapshot) unavailable();
+      },
       release: () => {
         if (active) {
           this.snapshots.delete(snapshot.id);
@@ -19271,7 +19292,7 @@ var CatalogSnapshotStore = class {
         if (!active || this.snapshots.get(snapshot.id) !== snapshot) unavailable();
         try {
           if (!methods.includes(method) || query !== void 0 && typeof query !== "string") quota();
-          let nodes = 0, raw = 0;
+          let nodes = snapshot.dependencies.size, raw = snapshot.dependencies.size * 64;
           const seen = /* @__PURE__ */ new WeakSet();
           const walk = (value, depth) => {
             if (++nodes > p.reservationNodes) quota();
@@ -19301,7 +19322,7 @@ var CatalogSnapshotStore = class {
           if (isProxy2(descriptors7) || !Array.isArray(descriptors7)) quota();
           walk(descriptors7, -1);
           if (method.endsWith("describePage") && descriptors7.length !== 1) quota();
-          let bytes2 = 512 + nodes * 32 + (query?.length ?? 0) * 4;
+          let bytes2 = 512 + snapshot.dependencies.size * 64 + nodes * 32 + (query?.length ?? 0) * 4;
           if (bytes2 > p.reservationBytes) quota();
           const entries = [];
           for (const descriptor2 of descriptors7) {
@@ -19416,6 +19437,20 @@ var CatalogSnapshotStore = class {
   }
 };
 
+// src/core/catalog-contract.ts
+var catalogDependencies = /* @__PURE__ */ new WeakMap();
+var catalogResultDependencies = (value) => typeof value === "object" && value !== null ? catalogDependencies.get(value) ?? [] : [];
+var bindCatalogResult = (value, dependencies) => {
+  catalogDependencies.set(value, dependencies);
+  return value;
+};
+var catalogResults = /* @__PURE__ */ new WeakMap();
+var markCatalogResult = (value, method) => {
+  catalogResults.set(value, method);
+  return value;
+};
+var catalogResultMethod = (value) => typeof value === "object" && value !== null ? catalogResults.get(value) : void 0;
+
 // src/core/catalog-execution.ts
 var catalogUnavailable = () => new FabricRepairError("Catalog cursor unavailable; explicitly reopen discovery in an authorized runtime", {
   code: "catalog_cursor_unavailable",
@@ -19445,6 +19480,7 @@ var continueCatalog = (store, method, cursor, options, maxChars) => {
   return method.endsWith("describePage") ? store.describePage(cursor, options, maxChars) : store.catalogPage(cursor, options, maxChars);
 };
 var publishCatalog = (store, reservation, method, value, maxChars, page, query) => {
+  reservation?.depend(catalogResultDependencies(value));
   if (!page) {
     try {
       if (fabricJsonText(value, MAX_FABRIC_JSON_CHARS).length <= maxChars) return value;
@@ -20584,8 +20620,8 @@ var ProbeProvider = class {
 };
 
 // src/core/catalog-resources.ts
-var catalogWeight = (value) => {
-  const text3 = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
+var catalogWeight = (value, maxChars = MAX_FABRIC_JSON_CHARS) => {
+  const text3 = fabricJsonText(value, maxChars);
   let nodes = 0;
   const stack = [value];
   while (stack.length) {
@@ -20595,14 +20631,6 @@ var catalogWeight = (value) => {
   }
   return { bytes: text3.length * 2 + Buffer.byteLength(text3) + nodes * 48, nodes };
 };
-
-// src/core/catalog-contract.ts
-var catalogResults = /* @__PURE__ */ new WeakMap();
-var markCatalogResult = (value, method) => {
-  catalogResults.set(value, method);
-  return value;
-};
-var catalogResultMethod = (value) => typeof value === "object" && value !== null ? catalogResults.get(value) : void 0;
 
 // src/core/action-registry.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
@@ -20652,7 +20680,7 @@ var deepFreeze = (value) => {
 var AUDIT_TERMINAL_BYTES = 8192;
 var MAX_SEARCHABLE_DESCRIPTOR_CHARS = 32e3;
 var normalizedTerms = (value) => [...new Set(
-  value.split(/[^\p{L}\p{N}_.$-]+/u).filter(Boolean).slice(0, 64)
+  value.split(/[^\p{L}\p{N}_.$-]+/u, 65).filter(Boolean).slice(0, 64)
 )];
 var boundedSearchField = (value) => {
   const text3 = typeof value === "string" ? value : fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
@@ -20675,79 +20703,305 @@ var indexedAction = (provider, action) => {
   );
   return { action: deepFreeze(action), fields, tokens };
 };
+var INDEX_BYTES = 16 * 1024 * 1024;
+var INDEX_NODES = 3e5;
+var RAW_BYTES = 7 * 1024 * 1024;
+var RAW_NODES = 1e5;
+var discoveryQuota = () => new FabricRepairError("Fabric discovery index catalog_quota_exceeded", { code: "catalog_quota_exceeded", phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none" });
+var rawWeight = (value) => {
+  try {
+    return catalogWeight(value, Math.floor(RAW_BYTES / 4));
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Fabric host JSON is outside the bounded JSON contract: more than")) throw discoveryQuota();
+    throw error;
+  }
+};
 var ActionRegistry = class {
   #discovery = /* @__PURE__ */ new Map();
-  async #buildIndex(provider) {
-    const raw = await provider.list();
-    catalogWeight(raw);
-    const actions = raw.map((descriptor2) => resolved(provider, descriptor2));
-    for (const observed of provider.observedActions?.() ?? []) {
-      if (provider.name !== "mcp" || !parseRemoteRef(observed.ref)) throw new Error("Invalid observed remote reference");
-      const descriptor2 = observed.descriptor();
-      fabricJsonText(descriptor2, MAX_FABRIC_JSON_CHARS);
-      if (descriptor2.ref !== observed.ref || descriptor2.provider !== provider.name) throw new Error("Invalid observed remote descriptor");
-      actions.push(structuredClone(descriptor2));
-    }
-    const refs = /* @__PURE__ */ new Map();
-    const entries = actions.map((action) => {
-      if (refs.has(action.ref)) throw new Error(`Ambiguous Fabric action: ${action.ref}`);
-      refs.set(action.ref, action);
-      return indexedAction(provider, action);
-    });
-    let bytes2 = 0, nodes = 0;
-    for (const entry of entries) {
-      const weight = catalogWeight(entry.action);
-      const fields = Object.values(entry.fields);
-      const tokenBytes = Object.values(entry.tokens).reduce((sum, tokens) => sum + 256 + [...tokens].reduce((n, token) => n + 192 + token.length * 4, 0), 0);
-      bytes2 += weight.bytes + fields.reduce((n, field) => n + 128 + field.length * 4, 0) + tokenBytes + 2048;
-      nodes += weight.nodes + fields.length + Object.values(entry.tokens).reduce((n, tokens) => n + tokens.size, 0) + 4;
-    }
-    if (bytes2 > 16 * 1024 * 1024 || nodes > 3e5) throw new Error("Fabric discovery index catalog_quota_exceeded");
-    return { entries, refs, bytes: bytes2, nodes };
+  #descriptions = /* @__PURE__ */ new Map();
+  #rawQueue = [];
+  #rawActive = 0;
+  #peakRawActive = 0;
+  #bytes = 0;
+  #nodes = 0;
+  #peakBytes = 0;
+  #peakNodes = 0;
+  #loads = 0;
+  discoveryUsage() {
+    return Object.freeze({ bytes: this.#bytes, nodes: this.#nodes, peakBytes: this.#peakBytes, peakNodes: this.#peakNodes, inflight: this.#loads, records: this.#discovery.size, descriptions: this.#descriptions.size, rawActive: this.#rawActive, rawQueued: this.#rawQueue.length, peakRawActive: this.#peakRawActive, subscribers: [...this.#discovery.values(), ...this.#descriptions.values()].reduce((n, record4) => n + record4.listeners.size, 0), rawReservationBytes: RAW_BYTES, maxBytes: INDEX_BYTES, maxNodes: INDEX_NODES });
   }
-  #index(provider) {
-    const revision = provider.discoveryRevision?.();
-    if (revision === void 0) {
-      this.#discovery.delete(provider);
-      return this.#buildIndex(provider);
+  #trimDiscovery() {
+    for (const [provider, record4] of this.#discovery) {
+      if (this.#discovery.size <= 32) break;
+      if (!record4.pending && !record4.users) {
+        this.#discovery.delete(provider);
+        record4.release();
+      }
     }
-    const cached = this.#discovery.get(provider);
+  }
+  #reserve(bytes2, nodes) {
+    for (const [provider, record4] of this.#discovery) {
+      if (this.#bytes + bytes2 <= INDEX_BYTES && this.#nodes + nodes <= INDEX_NODES) break;
+      if (!record4.pending && !record4.users) {
+        this.#discovery.delete(provider);
+        record4.release();
+      }
+    }
+    if (this.#bytes + bytes2 > INDEX_BYTES || this.#nodes + nodes > INDEX_NODES) throw discoveryQuota();
+    this.#bytes += bytes2;
+    this.#nodes += nodes;
+    this.#peakBytes = Math.max(this.#peakBytes, this.#bytes);
+    this.#peakNodes = Math.max(this.#peakNodes, this.#nodes);
+    let active = true;
+    return () => {
+      if (active) {
+        active = false;
+        this.#bytes -= bytes2;
+        this.#nodes -= nodes;
+      }
+    };
+  }
+  #pumpRaw() {
+    while (this.#rawQueue.length && this.#rawActive < 2) {
+      let release;
+      try {
+        release = this.#reserve(RAW_BYTES, RAW_NODES);
+      } catch {
+        if (this.#rawActive) return;
+        this.#rawQueue.shift().cancel();
+        continue;
+      }
+      const job = this.#rawQueue.shift();
+      this.#rawActive++;
+      this.#peakRawActive = Math.max(this.#peakRawActive, this.#rawActive);
+      let transferred = false, finished = false;
+      const admission = {
+        resize: (bytes2, nodes) => {
+          if (bytes2 > RAW_BYTES || nodes > RAW_NODES) throw discoveryQuota();
+          release();
+          release = this.#reserve(bytes2, nodes);
+        },
+        transfer: () => {
+          transferred = true;
+        },
+        ownedRelease: () => release(),
+        release: () => {
+          if (finished) return;
+          finished = true;
+          this.#rawActive--;
+          if (!transferred) release();
+          this.#pumpRaw();
+        }
+      };
+      job.start(admission);
+    }
+  }
+  #raw(record4, operation) {
+    return new Promise((resolve, reject) => {
+      const job = {
+        start: (admission) => {
+          delete record4.cancelQueued;
+          void operation(admission).then(resolve, reject).finally(() => admission.release());
+        },
+        cancel: () => {
+          delete record4.cancelQueued;
+          reject(discoveryQuota());
+        }
+      };
+      record4.cancelQueued = () => {
+        const position = this.#rawQueue.indexOf(job);
+        if (position >= 0) {
+          this.#rawQueue.splice(position, 1);
+          job.cancel();
+        }
+      };
+      this.#rawQueue.push(job);
+      this.#pumpRaw();
+    });
+  }
+  // Consumers subscribe to a removable Set, NEVER to the indefinitely pending
+  // producer promise. Aborting/failing a query detaches every reaction and all
+  // captured indexes/errors immediately, rather than only reducing counters.
+  #wait(records, signal) {
+    return new Promise((resolve, reject) => {
+      let done = false;
+      const finish = (error, failed = false) => {
+        if (done) return;
+        done = true;
+        for (const record4 of records) record4.listeners.delete(check);
+        signal?.removeEventListener("abort", abort);
+        if (failed) reject(error);
+        else resolve();
+      };
+      const abort = () => finish(signal?.reason ?? new Error("Discovery aborted"), true);
+      const check = () => {
+        const failed = records.find((record4) => record4.failed);
+        if (failed) finish(failed.error, true);
+        else if (records.every((record4) => !record4.pending)) finish();
+      };
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      for (const record4 of records) record4.listeners.add(check);
+      signal?.addEventListener("abort", abort, { once: true });
+      check();
+    });
+  }
+  #produce(record4, operation, complete) {
+    void operation.then((value) => {
+      record4.value = value;
+    }, (error) => {
+      record4.failed = true;
+      record4.error = error;
+    }).finally(() => {
+      record4.pending = false;
+      complete();
+      for (const listener of [...record4.listeners]) listener();
+    });
+  }
+  #releaseIndex(provider, record4) {
+    if (record4.pending) {
+      if (!record4.users) record4.cancelQueued?.();
+      return;
+    }
+    if (!record4.users && (record4.failed || record4.revision === void 0 || this.#discovery.get(provider) !== record4)) {
+      record4.release();
+      delete record4.value;
+      delete record4.error;
+      if (this.#discovery.get(provider) === record4) this.#discovery.delete(provider);
+    }
+  }
+  async #buildIndex(provider, record4, admission) {
+    const raw = await provider.list();
+    const weight = rawWeight(raw);
+    admission.resize(weight.bytes, weight.nodes);
+    const releases = [];
+    const entries = [], refs = /* @__PURE__ */ new Map();
+    let bytes2 = 1024, nodes = 16;
+    try {
+      releases.push(this.#reserve(bytes2, nodes));
+      const add = (descriptor2, observed = false) => {
+        const weight2 = catalogWeight(descriptor2);
+        const scratch = this.#reserve(weight2.bytes * 32 + 32768 + provider.description.length * 32, weight2.nodes * 8 + 2048);
+        try {
+          const action = observed ? structuredClone(descriptor2) : resolved(provider, descriptor2);
+          if (refs.has(action.ref)) throw new Error(`Ambiguous Fabric action: ${action.ref}`);
+          const entry = indexedAction(provider, action), actionWeight = catalogWeight(action);
+          let b = actionWeight.bytes + 4096, n = actionWeight.nodes + 32;
+          for (const field of Object.values(entry.fields)) b += 128 + field.length * 4;
+          for (const tokens of Object.values(entry.tokens)) {
+            b += 256;
+            n++;
+            for (const token of tokens) {
+              b += 192 + token.length * 4;
+              n++;
+            }
+          }
+          releases.push(this.#reserve(b, n));
+          bytes2 += b;
+          nodes += n;
+          refs.set(action.ref, action);
+          entries.push(entry);
+        } finally {
+          scratch();
+        }
+      };
+      for (const descriptor2 of raw) add(descriptor2);
+      for (const observed of provider.observedActions?.() ?? []) {
+        if (provider.name !== "mcp" || !parseRemoteRef(observed.ref)) throw new Error("Invalid observed remote reference");
+        const descriptor2 = observed.descriptor();
+        if (descriptor2.ref !== observed.ref || descriptor2.provider !== provider.name) throw new Error("Invalid observed remote descriptor");
+        add(descriptor2, true);
+      }
+      record4.release = () => {
+        for (const release of releases) release();
+        releases.length = 0;
+        entries.length = 0;
+        refs.clear();
+      };
+      return { entries, refs, bytes: bytes2, nodes };
+    } catch (error) {
+      for (const release of releases) release();
+      releases.length = 0;
+      entries.length = 0;
+      refs.clear();
+      throw error;
+    }
+  }
+  #acquire(provider) {
+    const revision = provider.discoveryRevision?.(), cached = this.#discovery.get(provider);
     if (cached && (cached.pending || cached.revision === revision)) {
-      cached.touched = performance.now();
-      return cached.promise;
+      cached.users++;
+      this.#discovery.delete(provider);
+      this.#discovery.set(provider, cached);
+      return cached;
     }
-    const record4 = { revision, pending: true, promise: void 0 };
-    record4.promise = (async () => {
+    if (cached) {
+      this.#discovery.delete(provider);
+      if (!cached.users) cached.release();
+    }
+    const initial = this.#reserve(1024, 16);
+    const record4 = { revision, pending: true, failed: false, users: 1, release: () => {
+    }, listeners: /* @__PURE__ */ new Set() };
+    this.#discovery.set(provider, record4);
+    this.#loads++;
+    const load = async () => {
       let before = revision;
       for (let attempt = 0; attempt < 2; attempt++) {
-        const index = await this.#buildIndex(provider);
+        const index = await this.#raw(record4, (admission) => this.#buildIndex(provider, record4, admission));
         const after = provider.discoveryRevision?.();
         if (before === after) {
-          const others = () => [...this.#discovery.entries()].filter(([key, value]) => key !== provider && value.index);
-          while (others().reduce((n, [, value]) => n + value.index.bytes, index.bytes) > 16 * 1024 * 1024 || others().reduce((n, [, value]) => n + value.index.nodes, index.nodes) > 3e5 || others().length >= 32) {
-            const oldest = others().sort((a, b) => (a[1].touched ?? 0) - (b[1].touched ?? 0))[0];
-            if (!oldest) throw new Error("Fabric discovery index catalog_quota_exceeded");
-            this.#discovery.delete(oldest[0]);
-          }
-          record4.index = index;
-          record4.touched = performance.now();
-          record4.pending = false;
           record4.revision = after;
-          if (after === void 0 && this.#discovery.get(provider) === record4) this.#discovery.delete(provider);
           return index;
         }
+        record4.release();
         before = after;
       }
       throw new Error(`Fabric discovery revision churn: ${provider.name}`);
-    })().catch((error) => {
-      if (this.#discovery.get(provider) === record4) this.#discovery.delete(provider);
-      throw error;
+    };
+    this.#produce(record4, load(), () => {
+      initial();
+      this.#loads--;
+      if (record4.failed && this.#discovery.get(provider) === record4) this.#discovery.delete(provider);
+      this.#releaseIndex(provider, record4);
+      this.#trimDiscovery();
     });
-    this.#discovery.set(provider, record4);
-    return record4.promise;
+    return record4;
   }
-  #indexes() {
-    return Promise.all([...this.#providers.values()].map((provider) => this.#index(provider)));
+  async #withIndexes(use, signal) {
+    throwIfAbortedOrExpired(signal);
+    const operationRelease = this.#reserve(2048 + this.#providers.size * 256, 32 + this.#providers.size * 4);
+    const records = [];
+    try {
+      for (const provider of this.#providers.values()) records.push([provider, this.#acquire(provider)]);
+      await this.#wait(records.map(([, record4]) => record4), signal);
+      const indexes = records.map(([, record4]) => record4.value);
+      let bytes2 = 1024, nodes = 16;
+      for (const index of indexes) for (const entry of index.entries) {
+        const weight = catalogWeight(entry.action);
+        bytes2 += weight.bytes * 4 + 512;
+        nodes += weight.nodes * 2 + 16;
+      }
+      const release = this.#reserve(bytes2, nodes);
+      try {
+        return use(indexes);
+      } finally {
+        release();
+      }
+    } finally {
+      for (const [provider, record4] of records) {
+        record4.users--;
+        this.#releaseIndex(provider, record4);
+      }
+      records.length = 0;
+      operationRelease();
+      this.#trimDiscovery();
+      this.#pumpRaw();
+    }
+  }
+  catalogDependencies(providerName2, args) {
+    return providerName2 === void 0 ? [...this.#providers.values()].flatMap((provider) => [...provider.catalogDependencies?.(args) ?? []]) : this.#providers.get(providerName2)?.catalogDependencies?.(args) ?? [];
   }
   #providers = /* @__PURE__ */ new Map();
   #unavailable = /* @__PURE__ */ new Map();
@@ -20772,19 +21026,20 @@ var ActionRegistry = class {
       ...[...this.#unavailable].map(([name, reason]) => ({ name, description: reason, available: false, reason }))
     ].sort((left, right) => compareCodeUnits2(left.name, right.name));
   }
-  async list() {
-    return (await this.#indexes()).flatMap((index) => index.entries.map((entry) => structuredClone(entry.action))).sort((left, right) => compareCodeUnits2(left.ref, right.ref));
+  async list(signal) {
+    return this.#withIndexes((indexes) => indexes.flatMap((index) => index.entries.map((entry) => structuredClone(entry.action))).sort((left, right) => compareCodeUnits2(left.ref, right.ref)), signal);
   }
-  async search(query, limit = 30) {
-    return (await this.searchAll(query)).slice(0, Math.max(1, Math.min(100, Math.floor(limit))));
+  async search(query, limit = 30, signal) {
+    return (await this.searchAll(query, signal)).slice(0, Math.max(1, Math.min(100, Math.floor(limit))));
   }
-  async searchAll(query) {
+  async searchAll(query, signal) {
+    throwIfAbortedOrExpired(signal);
     if (query.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Fabric search query exceeds 2000 characters");
     const normalized = query.normalize("NFKC").trim().toLowerCase();
     if (!normalized) return [];
     if (normalized.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Normalized Fabric search query exceeds 2000 characters");
     const terms = normalizedTerms(normalized);
-    return (await this.#indexes()).flatMap((index) => index.entries).map((entry) => {
+    return this.#withIndexes((indexes) => indexes.flatMap((index) => index.entries).map((entry) => {
       const { action, fields, tokens } = entry;
       let score = 0;
       if (fields.ref === normalized) score += 1e3;
@@ -20808,16 +21063,73 @@ var ActionRegistry = class {
       }
       if (terms.length > 0 && matched === terms.length) score += 15;
       return { action, score };
-    }).filter(({ score }) => score > 0).sort((left, right) => right.score - left.score || compareCodeUnits2(left.action.ref, right.action.ref)).map(({ action }) => structuredClone(action));
+    }).filter(({ score }) => score > 0).sort((left, right) => right.score - left.score || compareCodeUnits2(left.action.ref, right.action.ref)).map(({ action }) => structuredClone(action)), signal);
   }
-  async describe(ref) {
+  #releaseDescription(ref, record4) {
+    if (record4.users) return;
+    if (record4.pending) {
+      record4.cancelQueued?.();
+      return;
+    }
+    record4.release();
+    delete record4.value;
+    delete record4.error;
+    if (this.#descriptions.get(ref) === record4) this.#descriptions.delete(ref);
+  }
+  async describe(ref, signal) {
+    throwIfAbortedOrExpired(signal);
+    const release = this.#reserve(1024 + ref.length * 4, 16);
+    let record4 = this.#descriptions.get(ref);
+    try {
+      if (!record4) {
+        const pendingRelease = this.#reserve(1024 + ref.length * 4, 16);
+        record4 = { users: 1, pending: true, failed: false, release: () => {
+        }, listeners: /* @__PURE__ */ new Set() };
+        this.#descriptions.set(ref, record4);
+        const current = record4;
+        this.#produce(record4, this.#raw(record4, (admission) => this.#describe(ref, current, admission)), () => {
+          pendingRelease();
+          this.#releaseDescription(ref, current);
+        });
+      } else record4.users++;
+      await this.#wait([record4], signal);
+      const descriptor2 = record4.value, weight = catalogWeight(descriptor2);
+      const cloneRelease = this.#reserve(weight.bytes, weight.nodes);
+      try {
+        return structuredClone(descriptor2);
+      } finally {
+        cloneRelease();
+      }
+    } finally {
+      if (record4) {
+        record4.users--;
+        this.#releaseDescription(ref, record4);
+      }
+      release();
+      this.#pumpRaw();
+    }
+  }
+  #retainDescriptor(provider, descriptor2, record4, admission, observed = false) {
+    const weight = rawWeight(descriptor2);
+    admission.resize(weight.bytes + 4096, weight.nodes + 16);
+    const scratch = this.#reserve(weight.bytes * 2 + 4096, weight.nodes * 2 + 32);
+    try {
+      const result = observed ? structuredClone(descriptor2) : resolved(provider, descriptor2);
+      admission.transfer();
+      record4.release = admission.ownedRelease;
+      return result;
+    } finally {
+      scratch();
+    }
+  }
+  async #describe(ref, record4, admission) {
     if (parseRemoteRef(ref)) {
       const observed = this.#providers.get("mcp")?.observedActions?.().filter((entry) => entry.ref === ref) ?? [];
       if (observed.length !== 1) throw new Error(`Unknown or ambiguous Fabric action: ${ref}`);
       const descriptor3 = observed[0].descriptor();
       fabricJsonText(descriptor3, MAX_FABRIC_JSON_CHARS);
       if (descriptor3.ref !== ref || descriptor3.provider !== "mcp") throw new Error("Invalid observed remote descriptor");
-      return structuredClone(descriptor3);
+      return this.#retainDescriptor(this.#providers.get("mcp"), descriptor3, record4, admission, true);
     }
     if (ref.length > MAX_ACTION_REFERENCE_CHARS) throw new Error("Fabric action reference exceeds 512 characters");
     const separator = ref.indexOf(".");
@@ -20826,7 +21138,7 @@ var ActionRegistry = class {
     if (!provider) throw new Error(`Unknown Fabric provider: ${ref.slice(0, separator)}`);
     const descriptor2 = await provider.describe(ref.slice(separator + 1));
     if (!descriptor2) throw new Error(`Unknown Fabric action: ${ref}`);
-    return resolved(provider, descriptor2);
+    return this.#retainDescriptor(provider, descriptor2, record4, admission);
   }
   async invoke(ref, args, context, options) {
     throwIfAbortedOrExpired(context.signal, context.deadline);
@@ -20840,7 +21152,7 @@ var ActionRegistry = class {
       ...options?.expectedDescriptorDigest === void 0 ? {} : { expectedDescriptorDigest: options.expectedDescriptorDigest },
       ...options?.projection === void 0 ? {} : { projection: options.projection }
     };
-    const action = await this.describe(remote ? "mcp.$call" : ref);
+    const action = await this.describe(remote ? "mcp.$call" : ref, context.signal);
     const provider = this.#providers.get(action.provider);
     let prepared;
     try {
@@ -20926,6 +21238,7 @@ var ActionRegistry = class {
   async close() {
     await Promise.allSettled([...this.#providers.values()].map((provider) => provider.close?.()));
     this.#providers.clear();
+    for (const record4 of this.#discovery.values()) if (!record4.pending && !record4.users) record4.release();
     this.#discovery.clear();
     this.#activeWrites.clear();
   }
@@ -21059,7 +21372,7 @@ type FabricActionSummary = {
   inputSchema: JsonObject;
   outputSchema?: JsonObject;
   namespace?: string;
-  effect?: { kind: "none" | "read" | "write" | "emission"; resources?: readonly string[] };
+  effect?: { kind: "none" | "read" | "write" | "emission"; resources?: string[] };
   annotations?: {
     title?: string;
     readOnlyHint?: boolean;
@@ -22406,25 +22719,27 @@ var FabricExecutionService = class {
         }
         if (["fabric.list", "fabric.search", "fabric.describe"].includes(ref) || pageMethod?.startsWith("tools.")) {
           if (switchRequested || options.workspaceUnavailable) throw catalogUnavailable();
-          catalogReservation = this.#catalogStore?.reserve();
+          catalogReservation = this.#catalogStore?.reserve(this.registry.catalogDependencies());
           const method = pageMethod ?? (ref === "fabric.list" ? "tools.listPage" : ref === "fabric.search" ? "tools.searchPage" : "tools.describePage");
           let value2;
-          if (method === "tools.listPage") value2 = await this.registry.list();
+          if (method === "tools.listPage") value2 = await this.registry.list(signal);
           else if (method === "tools.searchPage") {
             if (typeof args.query !== "string") throw new Error("fabric.search query must be a string");
-            value2 = pageMethod ? await this.registry.searchAll(args.query) : await this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30);
+            value2 = pageMethod ? await this.registry.searchAll(args.query, signal) : await this.registry.search(args.query, typeof args.limit === "number" ? args.limit : 30, signal);
           } else {
             if (typeof args.ref !== "string") throw new Error("fabric.describe ref must be a string");
-            value2 = await this.registry.describe(args.ref);
+            value2 = await this.registry.describe(args.ref, signal);
           }
           throwIfAbortedOrExpired(signal, deadline);
           return publishCatalog(this.#catalogStore, catalogReservation, method, value2, this.config.executor.maxNestedResultChars, pageMethod ? args : void 0, typeof args.query === "string" ? args.query : void 0);
         }
         const actionRef = pageMethod === "mcp.toolsPage" ? "mcp.$tools" : pageMethod === "mcp.describePage" ? "mcp.$describe" : ref === "fabric.call" ? args.ref : ref;
         const actionArgs = pageMethod?.startsWith("mcp.") ? { server: args.server, ...pageMethod === "mcp.describePage" ? { tool: args.tool } : {} } : ref === "fabric.call" ? args.args ?? {} : args;
-        if (actionRef === "mcp.$tools" || actionRef === "mcp.$describe") catalogReservation = this.#catalogStore?.reserve();
         if (typeof actionRef !== "string" || typeof actionArgs !== "object" || actionArgs === null || Array.isArray(actionArgs)) {
           throw new Error("Fabric provider call requires an exact ref and object args");
+        }
+        if (actionRef === "mcp.$tools" || actionRef === "mcp.$describe") {
+          catalogReservation = this.#catalogStore?.reserve(this.registry.catalogDependencies("mcp", actionArgs));
         }
         const switching = actionRef === "fabric.workspace" && ["select", "attach", "detach"].includes(String(actionArgs.action));
         if (switching) {
@@ -26549,6 +26864,9 @@ var normalizeMcpResult = (result, projection) => {
     structuredContent: projected.structuredContent ?? null
   };
 };
+var catalogTicket = () => ({ current: true, isCurrent() {
+  return this.current;
+} });
 var KiroMcpProvider = class {
   name = "mcp";
   description = "Approval-gated calls to explicitly configured MCP servers";
@@ -26568,6 +26886,24 @@ var KiroMcpProvider = class {
   #invalidatedReservations = /* @__PURE__ */ new Set();
   #observations = /* @__PURE__ */ new Map();
   #observationWeights = /* @__PURE__ */ new Map();
+  #globalCatalog = catalogTicket();
+  // At most 128 live server authorities. Removed tickets survive only in their
+  // consumers; no tombstone/epoch map grows with arbitrary server names.
+  #catalogTickets = /* @__PURE__ */ new Map();
+  #tickets(server) {
+    let tickets = this.#catalogTickets.get(server);
+    if (!tickets) {
+      if (this.#catalogTickets.size >= 128) this.#evict(this.#catalogTickets.keys().next().value);
+      tickets = { revocation: catalogTicket(), inventory: catalogTicket() };
+      this.#catalogTickets.set(server, tickets);
+    }
+    return tickets;
+  }
+  catalogDependencies(args) {
+    if (this.#closed) return [{ isCurrent: () => false }];
+    if (isRecord7(args) && typeof args.server === "string") return [this.#tickets(args.server).revocation];
+    return [this.#globalCatalog];
+  }
   invalidateDiscovery(server) {
     this.#evict(server);
   }
@@ -26578,6 +26914,14 @@ var KiroMcpProvider = class {
     return Object.freeze([...this.#observations.values()].flat());
   }
   #evict(server) {
+    this.#globalCatalog.current = false;
+    this.#globalCatalog = catalogTicket();
+    for (const [name, tickets] of this.#catalogTickets) {
+      if (server !== void 0 && name !== server) continue;
+      tickets.revocation.current = false;
+      tickets.inventory.current = false;
+      this.#catalogTickets.delete(name);
+    }
     if (server === void 0) this.#observationWeights.clear();
     else this.#observationWeights.delete(server);
     for (const reserved of this.#observationReservations) {
@@ -26651,7 +26995,10 @@ var KiroMcpProvider = class {
     const runtime = await this.#getRuntime(context.signal);
     throwIfAbortedOrExpired(context.signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
-    if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
+    if (!runtime.listServers().includes(server)) {
+      this.#evict(server);
+      throw new Error(`Unknown configured MCP server: ${server}`);
+    }
     return {
       server,
       ...actionName === "$call" || actionName === "$describe" ? { tool } : {},
@@ -26694,10 +27041,14 @@ var KiroMcpProvider = class {
     }
     remoteComponent(server);
     if (toolName) remoteComponent(toolName);
+    let invocationTickets = this.catalogDependencies({ server });
     const runtime = await this.#getRuntime(signal);
     throwIfAbortedOrExpired(signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
-    if (!runtime.listServers().includes(server)) throw new Error(`Unknown configured MCP server: ${server}`);
+    if (!runtime.listServers().includes(server)) {
+      this.#evict(server);
+      throw new Error(`Unknown configured MCP server: ${server}`);
+    }
     const approvedTransport = this.#assertTransportSnapshot(
       runtime,
       server,
@@ -26711,7 +27062,9 @@ var KiroMcpProvider = class {
     throwIfAbortedOrExpired(signal, context.deadline);
     return this.#withServerLease(server, signal, async (lease) => {
       let dispatched = false;
+      if (actionName === "$call") invocationTickets = this.catalogDependencies({ server });
       try {
+        if (!invocationTickets.every((ticket) => ticket.isCurrent())) throw new Error("MCP observation epoch invalidated before discovery");
         if ((/* @__PURE__ */ new Set([...this.#observations.keys(), ...this.#observationReservations, server])).size > 128) throw new Error("MCP observation server limit exceeded");
         this.#observationReservations.add(server);
         this.#assertTransportSnapshot(runtime, server, approvedTransport);
@@ -26770,6 +27123,7 @@ var KiroMcpProvider = class {
         this.#remainingCallBudget(actionDeadline);
         this.#assertTransportSnapshot(runtime, server, approvedTransport);
         if (this.#closed) throw new Error("MCP provider is closed");
+        if (!invocationTickets.every((ticket) => ticket.isCurrent())) throw new Error("MCP observation epoch invalidated during discovery");
         if (this.#invalidatedReservations.has(server)) throw new Error("MCP observation epoch invalidated during discovery");
         if (observations.length) {
           this.#observations.set(server, observations);
@@ -26779,11 +27133,17 @@ var KiroMcpProvider = class {
           this.#observationWeights.delete(server);
         }
         this.#revision++;
-        if (actionName === "$tools") return markCatalogResult(tools.map(project), "mcp.toolsPage");
+        const tickets = this.#tickets(server);
+        tickets.inventory.current = false;
+        tickets.inventory = catalogTicket();
+        this.#globalCatalog.current = false;
+        this.#globalCatalog = catalogTicket();
+        const publication = [tickets.revocation, tickets.inventory];
+        if (actionName === "$tools") return bindCatalogResult(markCatalogResult(tools.map(project), "mcp.toolsPage"), publication);
         const selected = tools.find((tool) => tool.name === toolName);
         if (!selected) throw new Error(`Unknown or ambiguous MCP tool: ${server}.${toolName}`);
         const matches = [{ tool: selected, projected: project(selected) }];
-        if (actionName === "$describe") return markCatalogResult(matches[0].projected, "mcp.describePage");
+        if (actionName === "$describe") return bindCatalogResult(markCatalogResult(matches[0].projected, "mcp.describePage"), publication);
         if (expectedDescriptorDigest !== void 0 && matches[0].projected.descriptorDigest !== expectedDescriptorDigest) {
           const observed = matches[0].projected;
           throw new FabricRepairError(`MCP tool descriptor changed before invocation: ${server}.${toolName}`, {
@@ -26952,9 +27312,10 @@ var KiroMcpProvider = class {
     return current;
   }
   async #approveExecution(action, details, context) {
-    if (!context.approve) throw new Error(`${action.ref} execution approval is unavailable`);
     try {
+      if (!context.approve) throw new Error(`${action.ref} execution approval is unavailable`);
       await context.approve(action, details);
+      throwIfAbortedOrExpired(context.signal, context.deadline);
     } catch (error) {
       if (typeof details.server === "string") this.#evict(details.server);
       throw error;

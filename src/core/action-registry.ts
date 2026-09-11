@@ -1,6 +1,6 @@
 import { catalogWeight } from "./catalog-resources.js";
 import { parseRemoteRef } from "./remote-identity.js";
-import { catalogResultMethod, type CatalogMethod } from "./catalog-contract.js";
+import { catalogResultMethod, type CatalogMethod, type CatalogDependency } from "./catalog-contract.js";
 import { argumentRepairError, FabricRepairError } from "./repair-error.js";
 import { randomUUID } from "node:crypto";
 import { runAbortable, throwIfAbortedOrExpired } from "../async-settlement.js";
@@ -92,7 +92,7 @@ const AUDIT_TERMINAL_BYTES = 8_192;
 const MAX_SEARCHABLE_DESCRIPTOR_CHARS = 32_000;
 
 const normalizedTerms = (value: string): string[] => [...new Set(
-  value.split(/[^\p{L}\p{N}_.$-]+/u).filter(Boolean).slice(0, 64),
+  value.split(/[^\p{L}\p{N}_.$-]+/u, 65).filter(Boolean).slice(0, 64),
 )];
 
 const boundedSearchField = (value: unknown): string => {
@@ -118,83 +118,231 @@ const indexedAction = (provider: FabricProvider, action: ResolvedFabricAction) =
   return { action: deepFreeze(action), fields, tokens };
 };
 type DiscoveryIndex = { entries: ReturnType<typeof indexedAction>[]; refs: Map<string, ResolvedFabricAction>; bytes: number; nodes: number };
+type Load<T> = { pending: boolean; failed: boolean; users: number; value?: T; error?: unknown; release: () => void; listeners: Set<() => void>; cancelQueued?: () => void };
+type DiscoveryRecord = Load<DiscoveryIndex> & { revision: string | undefined };
+type DescriptionRecord = Load<ResolvedFabricAction>;
+type Admission = { resize(bytes: number, nodes: number): void; release(): void; transfer(): void; ownedRelease(): void };
+const INDEX_BYTES = 16 * 1024 * 1024, INDEX_NODES = 300_000;
+// Each producer owns capacity BEFORE invoking provider code. At most two raw
+// returns can be outstanding, never an unbounded Promise.all of inventories.
+const RAW_BYTES = 7 * 1024 * 1024, RAW_NODES = 100_000;
+const discoveryQuota = () => new FabricRepairError("Fabric discovery index catalog_quota_exceeded", { code: "catalog_quota_exceeded", phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none" });
+const rawWeight = (value: unknown) => {
+  try { return catalogWeight(value, Math.floor(RAW_BYTES / 4)); }
+  catch (error) {
+    if (error instanceof Error && error.message.startsWith("Fabric host JSON is outside the bounded JSON contract: more than")) throw discoveryQuota();
+    throw error;
+  }
+};
 
 export class ActionRegistry {
-  readonly #discovery = new Map<FabricProvider, { revision: string; pending: boolean; promise: Promise<DiscoveryIndex>; index?: DiscoveryIndex; touched?: number }>();
+  readonly #discovery = new Map<FabricProvider, DiscoveryRecord>();
+  readonly #descriptions = new Map<string, DescriptionRecord>();
+  readonly #rawQueue: Array<{ start(admission: Admission): void; cancel(): void }> = [];
+  #rawActive = 0;
+  #peakRawActive = 0;
+  #bytes = 0;
+  #nodes = 0;
+  #peakBytes = 0;
+  #peakNodes = 0;
+  #loads = 0;
+  discoveryUsage() { return Object.freeze({ bytes: this.#bytes, nodes: this.#nodes, peakBytes: this.#peakBytes, peakNodes: this.#peakNodes, inflight: this.#loads, records: this.#discovery.size, descriptions: this.#descriptions.size, rawActive: this.#rawActive, rawQueued: this.#rawQueue.length, peakRawActive: this.#peakRawActive, subscribers: [...this.#discovery.values(), ...this.#descriptions.values()].reduce((n, record) => n + record.listeners.size, 0), rawReservationBytes: RAW_BYTES, maxBytes: INDEX_BYTES, maxNodes: INDEX_NODES }); }
 
-  async #buildIndex(provider: FabricProvider): Promise<DiscoveryIndex> {
-    const raw = await provider.list();
-    // Validate original container/accessors/shared graphs before map or cloning.
-    catalogWeight(raw);
-    const actions = raw.map(descriptor => resolved(provider, descriptor));
-    for (const observed of provider.observedActions?.() ?? []) {
-      if (provider.name !== "mcp" || !parseRemoteRef(observed.ref)) throw new Error("Invalid observed remote reference");
-      const descriptor = observed.descriptor();
-      fabricJsonText(descriptor, MAX_FABRIC_JSON_CHARS);
-      if (descriptor.ref !== observed.ref || descriptor.provider !== provider.name) throw new Error("Invalid observed remote descriptor");
-      actions.push(structuredClone(descriptor));
+  #trimDiscovery(): void {
+    for (const [provider, record] of this.#discovery) {
+      if (this.#discovery.size <= 32) break;
+      if (!record.pending && !record.users) { this.#discovery.delete(provider); record.release(); }
     }
-    const refs = new Map<string, ResolvedFabricAction>();
-    const entries = actions.map(action => {
-      if (refs.has(action.ref)) throw new Error(`Ambiguous Fabric action: ${action.ref}`);
-      refs.set(action.ref, action);
-      return indexedAction(provider, action);
-    });
-    let bytes = 0, nodes = 0;
-    for (const entry of entries) {
-      const weight = catalogWeight(entry.action);
-      const fields = Object.values(entry.fields);
-      // Tokens allocate independent strings plus Set slots; charge every token
-      // and field/container even when an engine happens to share backing strings.
-      const tokenBytes = Object.values(entry.tokens).reduce((sum, tokens) => sum + 256 + [...tokens].reduce((n, token) => n + 192 + token.length * 4, 0), 0);
-      bytes += weight.bytes + fields.reduce((n, field) => n + 128 + field.length * 4, 0) + tokenBytes + 2048;
-      nodes += weight.nodes + fields.length + Object.values(entry.tokens).reduce((n, tokens) => n + tokens.size, 0) + 4;
-    }
-    if (bytes > 16 * 1024 * 1024 || nodes > 300_000) throw new Error("Fabric discovery index catalog_quota_exceeded");
-    return { entries, refs, bytes, nodes };
   }
-
-  #index(provider: FabricProvider): Promise<DiscoveryIndex> {
-    const revision = provider.discoveryRevision?.();
-    if (revision === undefined) {
-      this.#discovery.delete(provider);
-      return this.#buildIndex(provider);
+  #reserve(bytes: number, nodes: number): () => void {
+    for (const [provider, record] of this.#discovery) {
+      if (this.#bytes + bytes <= INDEX_BYTES && this.#nodes + nodes <= INDEX_NODES) break;
+      if (!record.pending && !record.users) { this.#discovery.delete(provider); record.release(); }
     }
-    const cached = this.#discovery.get(provider);
-    if (cached && (cached.pending || cached.revision === revision)) { cached.touched = performance.now(); return cached.promise; }
-    const record: { revision: string; pending: boolean; promise: Promise<DiscoveryIndex>; index?: DiscoveryIndex; touched?: number } = { revision, pending: true, promise: undefined as unknown as Promise<DiscoveryIndex> };
-    record.promise = (async () => {
-      let before: string | undefined = revision;
+    if (this.#bytes + bytes > INDEX_BYTES || this.#nodes + nodes > INDEX_NODES) throw discoveryQuota();
+    this.#bytes += bytes; this.#nodes += nodes;
+    this.#peakBytes = Math.max(this.#peakBytes, this.#bytes); this.#peakNodes = Math.max(this.#peakNodes, this.#nodes);
+    let active = true;
+    return () => { if (active) { active = false; this.#bytes -= bytes; this.#nodes -= nodes; } };
+  }
+  #pumpRaw(): void {
+    while (this.#rawQueue.length && this.#rawActive < 2) {
+      let release: () => void;
+      try { release = this.#reserve(RAW_BYTES, RAW_NODES); }
+      catch {
+        // Only a live raw producer can free handoff capacity. Waiting behind
+        // one is budget-driven; otherwise reject rather than deadlock a query
+        // whose completed indexes are pinned until its other providers finish.
+        if (this.#rawActive) return;
+        this.#rawQueue.shift()!.cancel(); continue;
+      }
+      const job = this.#rawQueue.shift()!;
+      this.#rawActive++; this.#peakRawActive = Math.max(this.#peakRawActive, this.#rawActive);
+      let transferred = false, finished = false;
+      const admission: Admission = {
+        resize: (bytes, nodes) => {
+          if (bytes > RAW_BYTES || nodes > RAW_NODES) throw discoveryQuota();
+          release(); release = this.#reserve(bytes, nodes);
+        },
+        transfer: () => { transferred = true; },
+        ownedRelease: () => release(),
+        release: () => {
+          if (finished) return;
+          finished = true; this.#rawActive--;
+          if (!transferred) release();
+          this.#pumpRaw();
+        },
+      };
+      // A transferred descriptor retains the resized reservation, independently
+      // of the producer slot. Its owner receives a separate idempotent release.
+      job.start(admission);
+    }
+  }
+  #raw<T>(record: Load<T>, operation: (admission: Admission) => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const job = {
+        start: (admission: Admission) => {
+          delete record.cancelQueued;
+          void operation(admission).then(resolve, reject).finally(() => admission.release());
+        },
+        cancel: () => { delete record.cancelQueued; reject(discoveryQuota()); },
+      };
+      record.cancelQueued = () => {
+        const position = this.#rawQueue.indexOf(job);
+        if (position >= 0) { this.#rawQueue.splice(position, 1); job.cancel(); }
+      };
+      this.#rawQueue.push(job); this.#pumpRaw();
+    });
+  }
+  // Consumers subscribe to a removable Set, NEVER to the indefinitely pending
+  // producer promise. Aborting/failing a query detaches every reaction and all
+  // captured indexes/errors immediately, rather than only reducing counters.
+  #wait(records: readonly Load<unknown>[], signal?: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let done = false;
+      const finish = (error?: unknown, failed = false) => {
+        if (done) return; done = true;
+        for (const record of records) record.listeners.delete(check);
+        signal?.removeEventListener("abort", abort);
+        if (failed) reject(error); else resolve();
+      };
+      const abort = () => finish(signal?.reason ?? new Error("Discovery aborted"), true);
+      const check = () => {
+        const failed = records.find(record => record.failed);
+        if (failed) finish(failed.error, true);
+        else if (records.every(record => !record.pending)) finish();
+      };
+      if (signal?.aborted) { abort(); return; }
+      for (const record of records) record.listeners.add(check);
+      signal?.addEventListener("abort", abort, { once: true }); check();
+    });
+  }
+  #produce<T>(record: Load<T>, operation: Promise<T>, complete: () => void): void {
+    void operation.then(value => { record.value = value; }, error => { record.failed = true; record.error = error; }).finally(() => {
+      record.pending = false; complete();
+      for (const listener of [...record.listeners]) listener();
+    });
+  }
+  #releaseIndex(provider: FabricProvider, record: DiscoveryRecord): void {
+    if (record.pending) { if (!record.users) record.cancelQueued?.(); return; }
+    if (!record.users && (record.failed || record.revision === undefined || this.#discovery.get(provider) !== record)) {
+      record.release(); delete record.value; delete record.error;
+      if (this.#discovery.get(provider) === record) this.#discovery.delete(provider);
+    }
+  }
+  async #buildIndex(provider: FabricProvider, record: DiscoveryRecord, admission: Admission): Promise<DiscoveryIndex> {
+    const raw = await provider.list();
+    const weight = rawWeight(raw);
+    admission.resize(weight.bytes, weight.nodes);
+    const releases: Array<() => void> = [];
+    const entries: ReturnType<typeof indexedAction>[] = [], refs = new Map<string, ResolvedFabricAction>();
+    let bytes = 1024, nodes = 16;
+    try {
+      releases.push(this.#reserve(bytes, nodes));
+      const add = (descriptor: FabricActionDescriptor, observed = false) => {
+        const weight = catalogWeight(descriptor);
+        const scratch = this.#reserve(weight.bytes * 32 + 32768 + provider.description.length * 32, weight.nodes * 8 + 2048);
+        try {
+          const action = observed ? structuredClone(descriptor) as ResolvedFabricAction : resolved(provider, descriptor);
+          if (refs.has(action.ref)) throw new Error(`Ambiguous Fabric action: ${action.ref}`);
+          const entry = indexedAction(provider, action), actionWeight = catalogWeight(action);
+          let b = actionWeight.bytes + 4096, n = actionWeight.nodes + 32;
+          for (const field of Object.values(entry.fields)) b += 128 + field.length * 4;
+          for (const tokens of Object.values(entry.tokens)) { b += 256; n++; for (const token of tokens) { b += 192 + token.length * 4; n++; } }
+          releases.push(this.#reserve(b, n)); bytes += b; nodes += n;
+          refs.set(action.ref, action); entries.push(entry);
+        } finally { scratch(); }
+      };
+      for (const descriptor of raw) add(descriptor);
+      for (const observed of provider.observedActions?.() ?? []) {
+        if (provider.name !== "mcp" || !parseRemoteRef(observed.ref)) throw new Error("Invalid observed remote reference");
+        const descriptor = observed.descriptor();
+        if (descriptor.ref !== observed.ref || descriptor.provider !== provider.name) throw new Error("Invalid observed remote descriptor");
+        add(descriptor, true);
+      }
+      record.release = () => {
+        for (const release of releases) release(); releases.length = 0;
+        // A suspended revision-retry producer can still hold the discarded
+        // index object. Sever its graphs, not merely their accounting charges.
+        entries.length = 0; refs.clear();
+      };
+      return { entries, refs, bytes, nodes };
+    } catch (error) {
+      for (const release of releases) release(); releases.length = 0;
+      entries.length = 0; refs.clear(); throw error;
+    }
+  }
+  #acquire(provider: FabricProvider): DiscoveryRecord {
+    const revision = provider.discoveryRevision?.(), cached = this.#discovery.get(provider);
+    if (cached && (cached.pending || cached.revision === revision)) {
+      cached.users++; this.#discovery.delete(provider); this.#discovery.set(provider, cached); return cached;
+    }
+    if (cached) { this.#discovery.delete(provider); if (!cached.users) cached.release(); }
+    const initial = this.#reserve(1024, 16);
+    const record: DiscoveryRecord = { revision, pending: true, failed: false, users: 1, release: () => {}, listeners: new Set() };
+    this.#discovery.set(provider, record); this.#loads++;
+    const load = async () => {
+      let before = revision;
       for (let attempt = 0; attempt < 2; attempt++) {
-        const index = await this.#buildIndex(provider);
+        const index = await this.#raw(record, admission => this.#buildIndex(provider, record, admission));
         const after = provider.discoveryRevision?.();
-        if (before === after) {
-          const others = () => [...this.#discovery.entries()].filter(([key, value]) => key !== provider && value.index);
-          while (others().reduce((n, [, value]) => n + value.index!.bytes, index.bytes) > 16 * 1024 * 1024 ||
-            others().reduce((n, [, value]) => n + value.index!.nodes, index.nodes) > 300_000 || others().length >= 32) {
-            const oldest = others().sort((a, b) => (a[1].touched ?? 0) - (b[1].touched ?? 0))[0];
-            if (!oldest) throw new Error("Fabric discovery index catalog_quota_exceeded");
-            this.#discovery.delete(oldest[0]);
-          }
-          record.index = index; record.touched = performance.now();
-          record.pending = false;
-          record.revision = after!;
-          if (after === undefined && this.#discovery.get(provider) === record) this.#discovery.delete(provider);
-          return index;
-        }
-        before = after;
+        if (before === after) { record.revision = after; return index; }
+        record.release(); before = after;
       }
       throw new Error(`Fabric discovery revision churn: ${provider.name}`);
-    })().catch(error => {
-      if (this.#discovery.get(provider) === record) this.#discovery.delete(provider);
-      throw error;
+    };
+    this.#produce(record, load(), () => {
+      initial(); this.#loads--;
+      if (record.failed && this.#discovery.get(provider) === record) this.#discovery.delete(provider);
+      this.#releaseIndex(provider, record); this.#trimDiscovery();
     });
-    this.#discovery.set(provider, record);
-    return record.promise;
+    return record;
+  }
+  async #withIndexes<T>(use: (indexes: DiscoveryIndex[]) => T, signal?: AbortSignal): Promise<T> {
+    throwIfAbortedOrExpired(signal);
+    const operationRelease = this.#reserve(2048 + this.#providers.size * 256, 32 + this.#providers.size * 4);
+    const records: Array<[FabricProvider, DiscoveryRecord]> = [];
+    try {
+      for (const provider of this.#providers.values()) records.push([provider, this.#acquire(provider)]);
+      await this.#wait(records.map(([, record]) => record), signal);
+      const indexes = records.map(([, record]) => record.value!);
+      let bytes = 1024, nodes = 16;
+      for (const index of indexes) for (const entry of index.entries) {
+        const weight = catalogWeight(entry.action);
+        bytes += weight.bytes * 4 + 512; nodes += weight.nodes * 2 + 16;
+      }
+      const release = this.#reserve(bytes, nodes);
+      try { return use(indexes); } finally { release(); }
+    } finally {
+      for (const [provider, record] of records) { record.users--; this.#releaseIndex(provider, record); }
+      records.length = 0; operationRelease(); this.#trimDiscovery(); this.#pumpRaw();
+    }
   }
 
-  #indexes(): Promise<DiscoveryIndex[]> {
-    return Promise.all([...this.#providers.values()].map(provider => this.#index(provider)));
+  catalogDependencies(providerName?: string, args?: Record<string, unknown>): readonly CatalogDependency[] {
+    return providerName === undefined
+      ? [...this.#providers.values()].flatMap(provider => [...(provider.catalogDependencies?.(args) ?? [])])
+      : this.#providers.get(providerName)?.catalogDependencies?.(args) ?? [];
   }
 
   readonly #providers = new Map<string, FabricProvider>();
@@ -223,22 +371,23 @@ export class ActionRegistry {
     ].sort((left, right) => compareCodeUnits(left.name, right.name));
   }
 
-  async list(): Promise<ResolvedFabricAction[]> {
-    return (await this.#indexes()).flatMap(index => index.entries.map(entry => structuredClone(entry.action)))
-      .sort((left, right) => compareCodeUnits(left.ref, right.ref));
+  async list(signal?: AbortSignal): Promise<ResolvedFabricAction[]> {
+    return this.#withIndexes(indexes => indexes.flatMap(index => index.entries.map(entry => structuredClone(entry.action)))
+      .sort((left, right) => compareCodeUnits(left.ref, right.ref)), signal);
   }
 
-  async search(query: string, limit = 30): Promise<ResolvedFabricAction[]> {
-    return (await this.searchAll(query)).slice(0, Math.max(1, Math.min(100, Math.floor(limit))));
+  async search(query: string, limit = 30, signal?: AbortSignal): Promise<ResolvedFabricAction[]> {
+    return (await this.searchAll(query, signal)).slice(0, Math.max(1, Math.min(100, Math.floor(limit))));
   }
 
-  async searchAll(query: string): Promise<ResolvedFabricAction[]> {
+  async searchAll(query: string, signal?: AbortSignal): Promise<ResolvedFabricAction[]> {
+    throwIfAbortedOrExpired(signal);
     if (query.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Fabric search query exceeds 2000 characters");
     const normalized = query.normalize("NFKC").trim().toLowerCase();
     if (!normalized) return [];
     if (normalized.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Normalized Fabric search query exceeds 2000 characters");
     const terms = normalizedTerms(normalized);
-    return (await this.#indexes()).flatMap(index => index.entries)
+    return this.#withIndexes(indexes => indexes.flatMap(index => index.entries)
       .map((entry) => {
         const { action, fields, tokens } = entry;
         let score = 0;
@@ -266,17 +415,58 @@ export class ActionRegistry {
       })
       .filter(({ score }) => score > 0)
       .sort((left, right) => right.score - left.score || compareCodeUnits(left.action.ref, right.action.ref))
-      .map(({ action }) => structuredClone(action));
+      .map(({ action }) => structuredClone(action)), signal);
   }
 
-  async describe(ref: string): Promise<ResolvedFabricAction> {
+  #releaseDescription(ref: string, record: DescriptionRecord): void {
+    if (record.users) return;
+    if (record.pending) { record.cancelQueued?.(); return; }
+    record.release(); delete record.value; delete record.error;
+    if (this.#descriptions.get(ref) === record) this.#descriptions.delete(ref);
+  }
+  async describe(ref: string, signal?: AbortSignal): Promise<ResolvedFabricAction> {
+    throwIfAbortedOrExpired(signal);
+    const release = this.#reserve(1024 + ref.length * 4, 16);
+    let record = this.#descriptions.get(ref);
+    try {
+      if (!record) {
+        const pendingRelease = this.#reserve(1024 + ref.length * 4, 16);
+        record = { users: 1, pending: true, failed: false, release: () => {}, listeners: new Set() };
+        this.#descriptions.set(ref, record);
+        const current = record;
+        this.#produce(record, this.#raw(record, admission => this.#describe(ref, current, admission)), () => {
+          pendingRelease(); this.#releaseDescription(ref, current);
+        });
+      } else record.users++;
+      await this.#wait([record], signal);
+      const descriptor = record.value!, weight = catalogWeight(descriptor);
+      const cloneRelease = this.#reserve(weight.bytes, weight.nodes);
+      try { return structuredClone(descriptor); } finally { cloneRelease(); }
+    } finally {
+      if (record) { record.users--; this.#releaseDescription(ref, record); }
+      release(); this.#pumpRaw();
+    }
+  }
+  #retainDescriptor(provider: FabricProvider, descriptor: FabricActionDescriptor, record: DescriptionRecord, admission: Admission, observed = false): ResolvedFabricAction {
+    const weight = rawWeight(descriptor);
+    admission.resize(weight.bytes + 4096, weight.nodes + 16);
+    // Transfer the raw handoff reservation into the retained exact descriptor;
+    // scratch covers the simultaneous source, clone, and digest serialization.
+    const scratch = this.#reserve(weight.bytes * 2 + 4096, weight.nodes * 2 + 32);
+    try {
+      const result = observed ? structuredClone(descriptor) as ResolvedFabricAction : resolved(provider, descriptor);
+      admission.transfer(); record.release = admission.ownedRelease;
+      return result;
+    } finally { scratch(); }
+  }
+  async #describe(ref: string, record: DescriptionRecord, admission: Admission): Promise<ResolvedFabricAction> {
     if (parseRemoteRef(ref)) {
       const observed = this.#providers.get("mcp")?.observedActions?.().filter(entry => entry.ref === ref) ?? [];
       if (observed.length !== 1) throw new Error(`Unknown or ambiguous Fabric action: ${ref}`);
       const descriptor = observed[0]!.descriptor();
       fabricJsonText(descriptor, MAX_FABRIC_JSON_CHARS);
       if (descriptor.ref !== ref || descriptor.provider !== "mcp") throw new Error("Invalid observed remote descriptor");
-      return structuredClone(descriptor);
+      return this.#retainDescriptor(this.#providers.get("mcp")!, descriptor, record, admission, true);
     }
     if (ref.length > MAX_ACTION_REFERENCE_CHARS) throw new Error("Fabric action reference exceeds 512 characters");
     const separator = ref.indexOf(".");
@@ -285,7 +475,7 @@ export class ActionRegistry {
     if (!provider) throw new Error(`Unknown Fabric provider: ${ref.slice(0, separator)}`);
     const descriptor = await provider.describe(ref.slice(separator + 1));
     if (!descriptor) throw new Error(`Unknown Fabric action: ${ref}`);
-    return resolved(provider, descriptor);
+    return this.#retainDescriptor(provider, descriptor, record, admission);
   }
 
   async invoke(ref: string, args: Record<string, unknown>, context: FabricRegistryInvocationContext, options?: { expectedDescriptorDigest?: string; projection?: "full" | "text" | "structured" }): Promise<unknown> {
@@ -297,7 +487,7 @@ export class ActionRegistry {
       ...(options?.expectedDescriptorDigest === undefined ? {} : { expectedDescriptorDigest: options.expectedDescriptorDigest }),
       ...(options?.projection === undefined ? {} : { projection: options.projection }),
     };
-    const action = await this.describe(remote ? "mcp.$call" : ref);
+    const action = await this.describe(remote ? "mcp.$call" : ref, context.signal);
     const provider = this.#providers.get(action.provider)!;
     let prepared: Record<string, unknown>;
     try {
@@ -401,6 +591,7 @@ export class ActionRegistry {
   async close(): Promise<void> {
     await Promise.allSettled([...this.#providers.values()].map((provider) => provider.close?.()));
     this.#providers.clear();
+    for (const record of this.#discovery.values()) if (!record.pending && !record.users) record.release();
     this.#discovery.clear();
     this.#activeWrites.clear();
   }

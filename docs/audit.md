@@ -12,13 +12,16 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 - `src/core/catalog-contract.ts` — separate typed paging contracts and non-serializable host result provenance.
 - `src/core/catalog-execution.ts` — exclusive-selector validation, metadata-only continuation and actionable legacy paging recovery.
 - `src/core/catalog-resources.ts` — conservative retained JSON/container accounting.
-- `src/core/catalog-snapshot-store.ts` — runtime/client/workspace/epoch-bound HMAC cursors, exact descriptor chunks, quotas and finite lifecycle.
-- `tests/discovery-index.test.ts` — deterministic warm-work counters, revision churn/coalescing, dynamic parity and defensive metadata.
+- `src/core/catalog-snapshot-store.ts` — runtime/client/workspace-bound HMAC cursors, local provider-epoch dependencies on reservations and snapshots, exact descriptor chunks, quotas and finite lifecycle.
+- `tests/discovery-index.test.ts` — deterministic warm-work counters, revision churn/coalescing, dynamic parity, defensive metadata, cancellation and aggregate cached/dynamic/in-flight admission.
+- `tests/discovery-retention.test.ts` — pre-launch raw reservations, failed-index WeakRef reachability, 25,000 detached cancellation subscribers and trusted QuickJS quota failures.
 - `tests/mcp-observed-discovery.test.ts` — fake-runtime approved observations, collision routing, selected projection and invalidation.
 - `tests/catalog-snapshot-store.test.ts` — envelope budgets, tamper/expiry/renewal/LRU, graph safety and permanent revocation.
-- `tests/catalog-integration.test.ts` — checked QuickJS plus actual in-memory SDK, 1000-tool cross-execution reconstruction with default call quotas, small arrays and uncaught legacy recovery.
+- `tests/catalog-integration.test.ts` — checked QuickJS plus actual in-memory SDK, 1000-tool cross-execution reconstruction, legacy recovery, saved-cursor revocation without replay and pending approval/discovery races.
+- `tests/catalog-provider-revocation.test.ts` — selected-server and global inventory epochs, fresh reopening and late-publication rejection with fake transports.
+- `tests/catalog-lifecycle.test.ts` — actual outer-host cursor ownership and workspace/unavailable/close revocation before deferred execution cleanup.
 
-The five friendly page methods do not expand outer tools. MCP calls always re-enumerate current authoritative schemas before dispatch; observed metadata and continuations never grant execution permission. Discovery retention uses conservative partitions within 64MiB/1M nodes rather than sharing an unbounded general artifact store. Tests and builds are not live-client approval qualification.
+The five friendly page methods do not expand outer tools. MCP calls always re-enumerate current authoritative schemas before dispatch; observed metadata and continuations never grant execution permission. Discovery retention uses conservative partitions within 64MiB/1M nodes rather than sharing an unbounded general artifact store. Known provider revocation is checked synchronously on every cursor read and publication; it never triggers network revalidation or replay. Revoked snapshot memory is pruned on the next store operation, remains within the fixed store quotas meanwhile, and is cleared on runtime invalidation. Successful discovery binds its new page to the resulting inventory epoch rather than the pre-discovery epoch. Index producers reserve a 7MiB/100,000-node raw handoff before provider list/describe, with at most two producers; additional loads wait only for reserved capacity and reject if pinned indexes prevent progress. Raw validation limits serialization to one quarter of that byte allowance before accepting its measured weight. Consumer subscriptions detach on failure/cancellation; uncooperative active producers remain charged until settlement. The bounds cover host-owned discovery retention, not arbitrary allocation inside trusted provider implementations or caller-owned returned values. Tests and builds are not live-client approval qualification.
 
 ## Browser-backed fact grounding
 
@@ -375,6 +378,7 @@ Regression and acceptance files:
 - `tests/installer-manager-acceptance.test.ts`
 - `tests/installer-native-zsh-acceptance.test.ts`
 - `tests/installer-packaging-cache.test.ts`
+- `tests/installer-presentation.test.ts` — version/backup presentation, cancellation without mutation, and single-envelope JSON output.
 - `tests/installer-profile-publication.test.ts`
 - `tests/installer-smoke-acceptance.test.ts`
 - `tests/installer-smoke-bundle-acceptance.test.ts`

@@ -21,6 +21,37 @@ const reconstruct = (s: CatalogSnapshotStore, cursor: string, budget = 1000) => 
   }
 };
 describe("CatalogSnapshotStore", () => {
+  it("bounds repeated dependency additions and accounts for ticket bytes and nodes", () => {
+    const dependencies = Array.from({ length: 257 }, () => ({ isCurrent: () => true }));
+    const s = new CatalogSnapshotStore(binding);
+    code(() => s.reserve(dependencies), "catalog_quota_exceeded");
+    const pending = s.reserve(dependencies.slice(0, 256));
+    pending.depend(dependencies.slice(0, 256));
+    code(() => pending.depend(dependencies.slice(256)), "catalog_quota_exceeded");
+    code(() => pending.publish("tools.listPage", []), "catalog_cursor_unavailable");
+    const tiny = new CatalogSnapshotStore(binding, { reservationBytes: 1000 });
+    code(() => tiny.reserve(dependencies.slice(0, 16)), "catalog_quota_exceeded");
+    code(() => tiny.reserve(dependencies.slice(0, 8)).publish("tools.listPage", []), "catalog_quota_exceeded");
+    const nodes = new CatalogSnapshotStore(binding, { reservationNodes: 2 });
+    code(() => nodes.reserve(dependencies.slice(0, 2)).publish("tools.listPage", []), "catalog_quota_exceeded");
+  });
+  it("checks added dependencies and reclaims revoked pending quota on access", () => {
+    let current = true;
+    const dependency = { isCurrent: () => current };
+    const s = new CatalogSnapshotStore(binding, { maxSnapshots: 1 });
+    const pending = s.reserve([dependency]);
+    current = false;
+    code(() => s.reserve([dependency]), "catalog_cursor_unavailable");
+    const fresh = s.reserve();
+    code(() => pending.publish("tools.listPage", []), "catalog_cursor_unavailable");
+    code(() => fresh.depend([dependency]), "catalog_cursor_unavailable");
+    code(() => fresh.publish("tools.listPage", []), "catalog_cursor_unavailable");
+    const next = s.reserve(); current = true; next.depend([dependency]);
+    const cursor = next.publish("tools.describePage", [1]);
+    current = false; code(() => s.describePage(cursor), "catalog_cursor_unavailable");
+    current = true; code(() => s.method(cursor), "catalog_cursor_unavailable");
+    expect(s.catalogPage(s.reserve().publish("tools.listPage", [])).complete).toBe(true);
+  });
   it("enumerates defaults, explicit limits, empty inventories and stable replay", () => {
     const s = new CatalogSnapshotStore(binding), values = Array.from({ length: 105 }, (_, i) => ({ i }));
     const cursor = publish(s, values);
