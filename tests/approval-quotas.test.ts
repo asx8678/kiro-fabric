@@ -19,7 +19,7 @@ const fixture = (options: {
   supported?: () => boolean;
 } = {}) => {
   const config = normalizeFabricConfig({
-    // Isolate approval/provider quotas from the independent 2,048-byte audit reservations.
+    // Isolate approval/provider quotas from pending audit reservations (8,192 bytes plus metadata).
     executor: { maxAuditBytes: 200_000, ...options.executor },
     // Interactive quota tests explicitly opt into prompts, independently of product defaults.
     approvals: { read: "allow", write: "ask", execute: "ask", network: "ask", ...options.approvals },

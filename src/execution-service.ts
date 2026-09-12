@@ -244,11 +244,11 @@ export class FabricExecutionService {
     const executeSpanId = executeSpan?.id;
     const result = await this.#runtime.execute(options.code, async (ref, args, signal, deadline) => {
       providerCalls += 1;
-      if (providerCalls > this.config.executor.maxProviderCalls) throw new Error("Fabric provider call quota exceeded");
+      if (providerCalls > this.config.executor.maxProviderCalls) throw new FabricRepairError("Fabric provider call quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
       activeProviderCalls += 1;
       if (activeProviderCalls > this.config.executor.maxConcurrentProviderCalls) {
         activeProviderCalls -= 1;
-        throw new Error("Fabric concurrent provider call quota exceeded");
+        throw new FabricRepairError("Fabric concurrent provider call quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
       }
       // One span per host-bridge call, parented to the execute span. Byte
       // sizes attribute cost to payload volume, not just provider latency.
@@ -331,7 +331,7 @@ export class FabricExecutionService {
               case "allow": return;
               case "deny":
                 if (typeof plan.reason !== "string") throw new Error("Invalid Fabric approval plan");
-                throw new Error(plan.reason);
+                throw new FabricRepairError(plan.reason, { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
               case "ask":
                 if (typeof plan.prompt !== "function") throw new Error("Invalid Fabric approval plan");
                 break;
@@ -339,8 +339,8 @@ export class FabricExecutionService {
             }
             // Reserve atomically before interaction. Rejected admission consumes
             // neither counter; admitted attempts retain total usage on failure.
-            if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new Error("Fabric approval request quota exceeded");
-            if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new Error("Fabric pending approval quota exceeded");
+            if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new FabricRepairError("Fabric approval request quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
+            if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new FabricRepairError("Fabric pending approval quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
             approvalRequests += 1;
             pendingApprovals += 1;
             // Only actual approval waits (or conservative legacy calls) are
@@ -352,7 +352,7 @@ export class FabricExecutionService {
               approvalSpan?.end({ approved: true });
             } catch (error) {
               approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });
-              throw error;
+              throw error instanceof FabricRepairError ? error : new FabricRepairError(error instanceof Error ? error.message : String(error), { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
             } finally { pendingApprovals -= 1; }
           },
         }, ref === "fabric.call" && (args.expectedDescriptorDigest !== undefined || args.projection !== undefined) ? {

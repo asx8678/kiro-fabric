@@ -22,7 +22,7 @@ Source: [execution service](../src/execution-service.ts), [compiler](../src/runt
 [Open efficiency diagram](images/efficiency-flow.svg)
 
 1. **Batch routine work.** Four known file reads can be expressed in one outer execution. The diagram branches into four reads and joins their results in the guest. All four provider calls and their validation/policy checks still occur. This can reduce model/tool exchanges compared with issuing each read separately.
-2. **Overlap independent I/O.** The default execution-wide limit is eight simultaneous host calls. A shared queue covers `parallel` and direct `Promise.all`, so excess work waits. The host-call ceiling is 64, while the default audit budget admits at most 31 audited calls. Dependent operations stay sequential; conflicting writes can be rejected.
+2. **Overlap independent I/O.** The default execution-wide limit is eight simultaneous host calls. A shared queue covers `parallel` and direct `Promise.all`, so excess work waits. The host-call ceiling is 64; audit admission separately accounts for retained entries and temporary pending-call reservations. Dependent operations stay sequential; conflicting writes can be rejected.
 3. **Reduce data in code.** Intermediate results stay inside the guest unless returned or printed. Code can filter and combine them, returning only the fields the model needs.
 4. **Reuse the compiler.** Each service retains at most one warm idle compiler worker. Its idle expiry is 30 seconds, and it is recycled after 250 uses. The compiler reuses stable declarations, but every new program is checked and gets a fresh guest context.
 
@@ -46,7 +46,7 @@ Execute requires approval before shell commands run. Once approved, commands can
 
 Interactive budgets admit at most **16 attempts** and **two simultaneous waits** per execution. Silent allow/deny decisions consume neither counter. Decline or cancellation still consumes an admitted attempt.
 
-The default audit budget is 64,000 bytes per execution. Each audited registry call reserves 2,048 bytes, admitting at most **31 audited calls**. The separate host-call ceiling is 64; all budgets apply together. A batch of 64 audited calls needs at least 131,072 audit bytes as well as sufficient other budgets.
+The default audit budget is 64,000 bytes per execution. Each pending registry call reserves **8,192 bytes plus initial audit metadata and 2 bytes of framing** before approval. After the call and cleanup settle, only the actual escaped UTF-8 terminal entry size plus framing is retained. Thus 64 small sequential audited calls can fit; concurrency and larger entries need more capacity. The separate host-call and audit-entry ceilings are both 64; all budgets apply together.
 
 An approved shell command runs with host OS authority. A later failure does not undo earlier effects. Inspect current files or durable state before retrying.
 

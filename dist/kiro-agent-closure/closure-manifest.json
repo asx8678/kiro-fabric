@@ -201,7 +201,7 @@
       },
       {
         "path": "src/core/action-registry.ts",
-        "sha256": "1b2b9e389836be62f63d565bebcc0f83fcc5dd73f865346d493093ee87f29cf8"
+        "sha256": "baeee59f3d31fb1857c79513f8c0b4d630c450706b91dc04c9087495814060d4"
       },
       {
         "path": "src/core/catalog-contract.ts",
@@ -225,7 +225,7 @@
       },
       {
         "path": "src/core/repair-error.ts",
-        "sha256": "de26664d7e75e0304580ced4d0d3f8f08177f508be523ac14b79808277b91984"
+        "sha256": "d83ce1b5d2e68c09a5f4cc5c75414ccea798405670cb2c035539a4b1b74615e9"
       },
       {
         "path": "src/core/semantic-digest.ts",
@@ -233,7 +233,7 @@
       },
       {
         "path": "src/execution-service.ts",
-        "sha256": "37eb106591f1e5c556fe54774edaca96351b1eab1043940876cefced49884b74"
+        "sha256": "33b14bb7707c0c493678eb62886050136e7327196f8a4f1d8910e830c15ba51f"
       },
       {
         "path": "src/index.ts",
@@ -357,7 +357,7 @@
       },
       {
         "path": "src/protocol.ts",
-        "sha256": "440418f852dfdfc0e0f54fd0df32e7e8d20aca41260214c79e83e2233c111f6d"
+        "sha256": "7e7d49c305c98a467fc6e64707f3b21de3a98080fb593768850adb14b0ea1f86"
       },
       {
         "path": "src/providers/local-contract.ts",
@@ -452,12 +452,16 @@
         "sha256": "a97b2b0d78a10654fd12d732d461a11c1a8649868b601dbff16a7b4a8bcce959"
       },
       {
+        "path": "src/runtime/guest-bootstrap.ts",
+        "sha256": "385f885af29ca4d72561b0e80605d45b7b2ba7f64c577d43dd0db1f35fdab2a7"
+      },
+      {
         "path": "src/runtime/guest-stack-map.ts",
         "sha256": "57c0b07c4e234984dedc2cfb637e577323cbf4bf26920b075ef93ff3714bde93"
       },
       {
         "path": "src/runtime/guest-types.ts",
-        "sha256": "97386847e54ea641794fd906d822dab5932968101c762cd49c821ffda8e1cee4"
+        "sha256": "02e8c4e3289881cf3944e629a95b2b78bcf5176f05cf7417846315ef5741104b"
       },
       {
         "path": "src/runtime/json-budget.ts",
@@ -465,7 +469,7 @@
       },
       {
         "path": "src/runtime/quickjs-runtime.ts",
-        "sha256": "6d2b4eb321bc589ac93c025f60b97fab5012568994e4bbd9aa09eab324ef36e6"
+        "sha256": "dce0d8a368857316662f693ce13325472829092abe3345c5ed37dda4d5e21a6a"
       },
       {
         "path": "src/runtime/source-limit.ts",
@@ -496,7 +500,7 @@
         "sha256": "efd3e11265c46f657fd78a9ab0426bbaf455ade35d5145b6b932f3b50d78cc62"
       }
     ],
-    "digest": "ec98cd722a7f4ebe934d09a5d5d264536a1e004955835fc399a140d34f89ed6e"
+    "digest": "4cce382d0feb478c473bd910e700d95674f8806a6c889391c26e191cda090fbc"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -566,6 +570,7 @@
     "src/providers/web-snippets.ts",
     "src/runtime/compiler-worker-entry.ts",
     "src/runtime/deadline.ts",
+    "src/runtime/guest-bootstrap.ts",
     "src/runtime/guest-stack-map.ts",
     "src/runtime/guest-types.ts",
     "src/runtime/json-budget.ts",
@@ -750,14 +755,14 @@
       "sha256": "6dc6eeff440eb4fffa4714ec7c315318a60b4ac00f0917ed6217a3d64882e81d"
     },
     {
+      "path": "chunks/chunk-JSPECSBT.js",
+      "bytes": 9996852,
+      "sha256": "2d8c38884bdf7d38c588d814ad667ec367cc36e39817516b9dbc13726ed8eeff"
+    },
+    {
       "path": "chunks/chunk-K2USGJPF.js",
       "bytes": 2206,
       "sha256": "ff448fca423e2af9717928a0f77830b8542213a73948d1b921f28351a6e2145f"
-    },
-    {
-      "path": "chunks/chunk-L4FAO5JH.js",
-      "bytes": 9996737,
-      "sha256": "f88e50ea91cab29331862d61008bc199d52669d4d8fc99525c0817a1a4654e63"
     },
     {
       "path": "chunks/chunk-YQ4ZVOWF.js",
@@ -1075,9 +1080,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-XW3HII5F.js",
-      "bytes": 1411607,
-      "sha256": "5ce2cdc334174e00579fb6c3108d02d2108df74a71132718f6095a66bf65a311"
+      "path": "chunks/mcp-server-Z4KGCMFD.js",
+      "bytes": 1412859,
+      "sha256": "8b88ba9095d42dd4110d08e78b4091fad3a18ee435fd938aa4a3237141be6751"
     },
     {
       "path": "chunks/module-ES6BEMUI-2A2DOREW.js",
@@ -1097,7 +1102,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 73307,
-      "sha256": "974d61acc512a15be31f6f13b8f777fbabcb79edd6271275b4a9485b2a137bbc"
+      "sha256": "cfcaa0b76cbcc32532f6060e6848d92ef0f9b737172063d22a7eebde3d3fcc1a"
     },
     {
       "path": "package.json",
@@ -1107,8 +1112,8 @@
     {
       "path": "runtime/compiler-worker-entry.js",
       "bytes": 902,
-      "sha256": "86296021313ac9227b661ff5b10669cc55a3f5ed0c35ac3e2a704b6a6328bd9f"
+      "sha256": "9f554850db873a2ef9ce3d44e44bddb001deaddf77621b4b23ca444a0f5f325e"
     }
   ],
-  "contentDigest": "4f8fdee523f4978ca9f060e85b10a18a1b27ebb48a3a08d0654a187bbb311e99"
+  "contentDigest": "181e993da8f5cd339b5eab1ef65a2e26a950950a79bec79dc09c72a452513364"
 }

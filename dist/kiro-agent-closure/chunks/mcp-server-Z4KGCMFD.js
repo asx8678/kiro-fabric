@@ -44,7 +44,7 @@ import {
   fabricFailureMetadata,
   repairSchema,
   transpileFabricCodeWithSourceMap
-} from "./chunk-L4FAO5JH.js";
+} from "./chunk-JSPECSBT.js";
 import "./chunk-G3LABT6U.js";
 import "./chunk-DDMC62E6.js";
 import "./chunk-YQ4ZVOWF.js";
@@ -21169,11 +21169,11 @@ var ActionRegistry = class {
     const resources = Object.freeze([...provider.effectResources?.(action.name, structuredClone(canonicalArgs), context) ?? action.effect?.resources ?? (action.risk === "write" ? ["*"] : [])]);
     const writeLike = action.risk === "write" || action.effect?.kind === "write";
     const nestedToolCallId = `fabric_${randomUUID2()}`;
-    if (context.audits.length >= (context.maxAuditEntries ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit entry quota exceeded");
+    if (context.audits.length >= (context.maxAuditEntries ?? Number.POSITIVE_INFINITY)) throw new FabricRepairError("Fabric audit entry quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
     const audit = { ref, nestedToolCallId, startedAt: Date.now() };
     const auditBudget = context.auditBudget ??= { bytes: Buffer.byteLength(JSON.stringify(context.audits), "utf8") };
     const auditReservationBytes = Buffer.byteLength(JSON.stringify(audit), "utf8") + 2 + AUDIT_TERMINAL_BYTES;
-    if (auditBudget.bytes + auditReservationBytes > (context.maxAuditBytes ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit byte quota exceeded");
+    if (auditBudget.bytes + auditReservationBytes > (context.maxAuditBytes ?? Number.POSITIVE_INFINITY)) throw new FabricRepairError("Fabric audit byte quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
     if (writeLike) {
       for (const active of this.#activeWrites.values()) {
         if (overlaps(resources, active.resources)) throw new Error(`Overlapping write rejected: ${ref} conflicts with ${active.ref}`);
@@ -21200,7 +21200,7 @@ var ActionRegistry = class {
       const method = catalogResultMethod(value);
       const formatted = method && context.formatCatalogResult ? context.formatCatalogResult(value, method) : value;
       const bounded3 = boundedResult(formatted, context.maxResultChars);
-      if (method && bounded3.truncated) throw new Error("Catalog result exceeds budget; use catalog pagination");
+      if (method && bounded3.truncated) throw new FabricRepairError("Catalog result exceeds budget; use catalog pagination", { code: "catalog_page_budget", phase: "execution", dispatchState: "dispatched", effectOutcome: "none" });
       throwIfAbortedOrExpired(context.signal, context.deadline);
       const release = releaseReservation;
       releaseReservation = void 0;
@@ -21348,7 +21348,7 @@ type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };
 type FabricCheckpointHandle = { id: string; label?: string };
 type FabricFailureMetadata = {
-  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error" | "catalog_requires_paging" | "catalog_cursor_unavailable" | "catalog_quota_exceeded" | "catalog_page_budget";
+  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error" | "catalog_requires_paging" | "catalog_cursor_unavailable" | "catalog_quota_exceeded" | "catalog_page_budget" | "quota_exceeded" | "approval_denied";
   catalogContinuation?: { method: CatalogMethod; cursor: string };
   phase: "compile" | "validation" | "discovery" | "dispatch" | "execution";
   dispatchState: "not_dispatched" | "dispatched";
@@ -21850,9 +21850,7 @@ var resolveTraceEnabled = (envValue, configured) => {
 };
 var createFabricTracer = (options) => new ActiveFabricTracer(options.writer ?? createTraceWriter(options));
 
-// src/runtime/quickjs-runtime.ts
-var modulePromise;
-var quickJsModule = () => modulePromise ??= newQuickJSWASMModuleFromVariant(src_default);
+// src/runtime/guest-bootstrap.ts
 var GUEST_SETUP = `
 (() => {
   'use strict';
@@ -22145,6 +22143,10 @@ var GUEST_SETUP = `
   return objectFreeze({ run, cancel });
 })()
 `;
+
+// src/runtime/quickjs-runtime.ts
+var modulePromise;
+var quickJsModule = () => modulePromise ??= newQuickJSWASMModuleFromVariant(src_default);
 var formatValue = (value, maxChars = 1e5) => {
   if (typeof value === "string") return value.slice(0, maxChars);
   try {
@@ -22691,11 +22693,11 @@ var FabricExecutionService = class {
     const executeSpanId = executeSpan?.id;
     const result = await this.#runtime.execute(options.code, async (ref, args, signal, deadline) => {
       providerCalls += 1;
-      if (providerCalls > this.config.executor.maxProviderCalls) throw new Error("Fabric provider call quota exceeded");
+      if (providerCalls > this.config.executor.maxProviderCalls) throw new FabricRepairError("Fabric provider call quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
       activeProviderCalls += 1;
       if (activeProviderCalls > this.config.executor.maxConcurrentProviderCalls) {
         activeProviderCalls -= 1;
-        throw new Error("Fabric concurrent provider call quota exceeded");
+        throw new FabricRepairError("Fabric concurrent provider call quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
       }
       const bridgeSpan = tracer.enabled ? tracer.span("bridge", ref, execId, { argsChars: traceJsonChars(args) }, executeSpanId) : void 0;
       let bridgeEnd = {};
@@ -22777,15 +22779,15 @@ var FabricExecutionService = class {
                 return;
               case "deny":
                 if (typeof plan.reason !== "string") throw new Error("Invalid Fabric approval plan");
-                throw new Error(plan.reason);
+                throw new FabricRepairError(plan.reason, { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
               case "ask":
                 if (typeof plan.prompt !== "function") throw new Error("Invalid Fabric approval plan");
                 break;
               default:
                 throw new Error("Invalid Fabric approval plan");
             }
-            if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new Error("Fabric approval request quota exceeded");
-            if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new Error("Fabric pending approval quota exceeded");
+            if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new FabricRepairError("Fabric approval request quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
+            if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new FabricRepairError("Fabric pending approval quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
             approvalRequests += 1;
             pendingApprovals += 1;
             const approvalSpan = tracer.enabled ? tracer.span("eval", "approval.wait", execId, { ref: action.ref, risk: action.risk }, bridgeSpan?.id) : void 0;
@@ -22795,7 +22797,7 @@ var FabricExecutionService = class {
               approvalSpan?.end({ approved: true });
             } catch (error) {
               approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });
-              throw error;
+              throw error instanceof FabricRepairError ? error : new FabricRepairError(error instanceof Error ? error.message : String(error), { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
             } finally {
               pendingApprovals -= 1;
             }

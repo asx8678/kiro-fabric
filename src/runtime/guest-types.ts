@@ -11,7 +11,7 @@ type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };
 type FabricCheckpointHandle = { id: string; label?: string };
 type FabricFailureMetadata = {
-  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error" | "catalog_requires_paging" | "catalog_cursor_unavailable" | "catalog_quota_exceeded" | "catalog_page_budget";
+  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error" | "catalog_requires_paging" | "catalog_cursor_unavailable" | "catalog_quota_exceeded" | "catalog_page_budget" | "quota_exceeded" | "approval_denied";
   catalogContinuation?: { method: CatalogMethod; cursor: string };
   phase: "compile" | "validation" | "discovery" | "dispatch" | "execution";
   dispatchState: "not_dispatched" | "dispatched";

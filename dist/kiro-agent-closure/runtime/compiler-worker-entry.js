@@ -7,7 +7,7 @@ const require = __createRequire(import.meta.url);
 
 import {
   typeCheckFabricCode
-} from "../chunks/chunk-L4FAO5JH.js";
+} from "../chunks/chunk-JSPECSBT.js";
 import "../chunks/chunk-AE4E2KSU.js";
 
 // src/runtime/compiler-worker-entry.ts

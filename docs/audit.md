@@ -147,6 +147,7 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 - `src/providers/state-provider.ts`
 - `src/runtime/compiler-worker-entry.ts`
 - `src/runtime/deadline.ts`
+- `src/runtime/guest-bootstrap.ts` — frozen guest bootstrap source: captured primordials, disabled dynamic code generation, and bounded bridge facades.
 - `src/runtime/guest-stack-map.ts`
 - `src/runtime/guest-types.ts`
 - `src/runtime/json-budget.ts`

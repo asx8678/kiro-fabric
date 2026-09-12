@@ -511,11 +511,11 @@ export class ActionRegistry {
       ?? (action.risk === "write" ? ["*"] : []))]);
     const writeLike = action.risk === "write" || action.effect?.kind === "write";
     const nestedToolCallId = `fabric_${randomUUID()}`;
-    if (context.audits.length >= (context.maxAuditEntries ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit entry quota exceeded");
+    if (context.audits.length >= (context.maxAuditEntries ?? Number.POSITIVE_INFINITY)) throw new FabricRepairError("Fabric audit entry quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
     const audit: FabricCallAudit = { ref, nestedToolCallId, startedAt: Date.now() };
     const auditBudget = context.auditBudget ??= { bytes: Buffer.byteLength(JSON.stringify(context.audits), "utf8") };
     const auditReservationBytes = Buffer.byteLength(JSON.stringify(audit), "utf8") + 2 + AUDIT_TERMINAL_BYTES;
-    if (auditBudget.bytes + auditReservationBytes > (context.maxAuditBytes ?? Number.POSITIVE_INFINITY)) throw new Error("Fabric audit byte quota exceeded");
+    if (auditBudget.bytes + auditReservationBytes > (context.maxAuditBytes ?? Number.POSITIVE_INFINITY)) throw new FabricRepairError("Fabric audit byte quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
     if (writeLike) {
       for (const active of this.#activeWrites.values()) {
         if (overlaps(resources, active.resources)) throw new Error(`Overlapping write rejected: ${ref} conflicts with ${active.ref}`);
@@ -552,7 +552,7 @@ export class ActionRegistry {
       const method = catalogResultMethod(value);
       const formatted = method && context.formatCatalogResult ? context.formatCatalogResult(value, method) : value;
       const bounded = boundedResult(formatted, context.maxResultChars);
-      if (method && bounded.truncated) throw new Error("Catalog result exceeds budget; use catalog pagination");
+      if (method && bounded.truncated) throw new FabricRepairError("Catalog result exceeds budget; use catalog pagination", { code: "catalog_page_budget", phase: "execution", dispatchState: "dispatched", effectOutcome: "none" });
       throwIfAbortedOrExpired(context.signal, context.deadline);
       const release = releaseReservation;
       releaseReservation = undefined;

@@ -41,7 +41,10 @@ describe("structured recovery", () => {
     const { service, invoke } = fixture();
     try {
       const result = await service.execute({ code: 'return await tools.call({ref:"test.write",args:{value:"ok"}});', approver: { async approve() { throw new Error("denied"); } } });
-      expect(result.status).toBe("failed"); expect(result.failure).toBeUndefined(); expect(invoke).not.toHaveBeenCalled();
+      expect(result.status).toBe("failed");
+      // Denial carries only the minimal classification; never fabricated repair data.
+      expect(result.failure).toEqual({ code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: "test.write" });
+      expect(invoke).not.toHaveBeenCalled();
     } finally { await service.close(); }
   });
   it("classifies compiler timeout by type rather than message", async () => {

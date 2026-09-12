@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="1140" viewBox="0 0 640 1140" role="img" aria-labelledby="title desc">
 <title id="title">Batching, concurrency, and reuse</title>
-<desc id="desc">One fabric_exec request branches into four provider reads and joins their results inside the guest. The guest filters results and returns one response. All reads still incur checks. Default concurrency is eight host calls, with a shared queue covering parallel and Promise.all. There are 64 host-call slots but the default audit budget admits only 31 audited calls. One idle compiler per service is reused for 30 seconds and recycled after 250 uses. Discovery is on demand. End-to-end savings have not been established. See docs/diagram-descriptions.md, Efficiency.</desc>
+<desc id="desc">One fabric_exec request branches into four provider reads and joins their results inside the guest. The guest filters results and returns one response. All reads still incur checks. Default concurrency is eight host calls, with a shared queue covering parallel and Promise.all. There are 64 host-call slots; audit capacity depends on retained entries and temporary pending-call reservations, not a fixed 31-call limit. One idle compiler per service is reused for 30 seconds and recycled after 250 uses. Discovery is on demand. End-to-end savings have not been established. See docs/diagram-descriptions.md, Efficiency.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
 text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
@@ -54,7 +54,7 @@ text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
 <text x="44" y="617" class="label">3. Bound concurrency and total work</text>
 <text x="44" y="657" class="body">Default: 8 simultaneous host calls per execution.</text>
 <text x="44" y="687" class="body">One queue covers parallel and Promise.all.</text>
-<text x="44" y="717" class="body">64 host-call slots; audit budget fits 31 audited calls.</text>
+<text x="44" y="717" class="body">64 host-call slots; pending audits share a byte budget.</text>
 <text x="44" y="747" class="body">Dependent steps stay ordered; conflicts reject.</text>
 </g>
 <g data-card="true"><rect x="24" y="788" width="592" height="184" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>

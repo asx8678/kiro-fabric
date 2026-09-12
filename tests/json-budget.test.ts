@@ -49,3 +49,54 @@ describe("bounded host JSON", () => {
     expect(() => assertFabricJsonBudget(new Array(100_001).fill(null), 8_000_000)).toThrow("node limit");
   });
 });
+
+describe("bounded host JSON boundary properties", () => {
+  const seeded = (seed: number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  };
+  const makeValue = (next: () => number, depth: number): unknown => {
+    if (depth <= 0 || next() < 0.3) {
+      const choice = next();
+      if (choice < 0.25) return null;
+      if (choice < 0.5) return next() < 0.5;
+      if (choice < 0.75) return Math.floor(next() * 1e6);
+      return Array.from({ length: Math.floor(next() * 8) }, () => "abcdefghij0123456789"[Math.floor(next() * 20)]).join("");
+    }
+    if (next() < 0.5) return Array.from({ length: Math.floor(next() * 5) }, () => makeValue(next, depth - 1));
+    return Object.fromEntries(
+      Array.from({ length: Math.floor(next() * 5) }, () => [`key${Math.floor(next() * 1e6)}`, makeValue(next, depth - 1)]),
+    );
+  };
+
+  it("round-trips deterministic random plain structures", () => {
+    const next = seeded(0x5eed);
+    for (let index = 0; index < 200; index++) {
+      const value = makeValue(next, 5);
+      expect(JSON.parse(fabricJsonText(value, 1_000_000))).toEqual(value);
+    }
+  });
+
+  it("enforces the exact character boundary for random strings", () => {
+    const next = seeded(0xbeef);
+    for (let index = 0; index < 100; index++) {
+      const text = Array.from({ length: Math.floor(next() * 64) + 1 }, () => "abcdefghij0123456789"[Math.floor(next() * 20)]).join("");
+      expect(JSON.parse(fabricJsonText(text, text.length + 2))).toBe(text);
+      expect(() => fabricJsonText(text, text.length + 1)).toThrow("serialized characters");
+    }
+  });
+
+  it("rejects random graphs exactly past the depth bound", () => {
+    const next = seeded(0xd00d);
+    for (let index = 0; index < 50; index++) {
+      const depth = 60 + Math.floor(next() * 10);
+      let value: unknown = null;
+      for (let level = 0; level < depth; level++) value = [value];
+      if (depth > 64) expect(() => assertFabricJsonBudget(value, 1_000_000)).toThrow("depth limit");
+      else expect(() => assertFabricJsonBudget(value, 1_000_000)).not.toThrow();
+    }
+  });
+});

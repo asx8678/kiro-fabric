@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="1156" viewBox="0 0 640 1156" role="img" aria-labelledby="title desc">
 <title id="title">Approvals bind the exact action</title>
-<desc id="desc">The registry prepares arguments, validates the descriptor schema, and freezes the canonical request. Audit capacity and effect resources are reserved before allow, ask, or deny policy is evaluated. Defaults allow read and ask for write, execute, and network. Each execution admits up to 16 interactive attempts and two simultaneous waits; silent decisions consume neither. Audit bytes admit at most 31 audited calls by default. Approved shell commands have host authority and failures do not roll back earlier effects. See docs/diagram-descriptions.md, Permissions.</desc>
+<desc id="desc">The registry prepares arguments, validates the descriptor schema, and freezes the canonical request. Audit capacity and effect resources are reserved before allow, ask, or deny policy is evaluated. Defaults allow read and ask for write, execute, and network. Each execution admits up to 16 interactive attempts and two simultaneous waits; silent decisions consume neither. Audit admission combines retained terminal entries with pending reservations of 8,192 bytes plus metadata and framing; there is no fixed call count from bytes alone. Approved shell commands have host authority and failures do not roll back earlier effects. See docs/diagram-descriptions.md, Permissions.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
 text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
@@ -44,9 +44,9 @@ text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
 </g>
 <g data-card="true"><rect x="24" y="864" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
 <text x="44" y="901" class="label">Audit budget can be tighter</text>
-<text x="44" y="941" class="body">64,000 bytes ÷ 2,048 per audited call → 31 calls.</text>
+<text x="44" y="941" class="body">64,000 bytes: retained entries + pending reservations.</text>
 <text x="44" y="971" class="body">The separate host-call ceiling is 64.</text>
-<text x="44" y="1001" class="body">64 audited calls need at least 131,072 audit bytes.</text>
+<text x="44" y="1001" class="body">64 small sequential audited calls can fit the defaults.</text>
 </g>
 <g data-card="true"><rect x="24" y="1042" width="592" height="90" rx="10" fill="#eff6ff" stroke="#334155" stroke-width="2"/>
 <text x="44" y="1078" class="body">Approved shell commands use host OS authority.</text>

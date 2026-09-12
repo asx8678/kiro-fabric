@@ -46,7 +46,7 @@ export interface FabricActionDescriptor {
 
 export interface FabricCheckpointHandle { id: string; label?: string }
 export interface FabricFailureMetadata {
-  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error" | "catalog_requires_paging" | "catalog_cursor_unavailable" | "catalog_quota_exceeded" | "catalog_page_budget";
+  code: "invalid_arguments" | "stale_descriptor" | "timeout" | "provider_error" | "catalog_requires_paging" | "catalog_cursor_unavailable" | "catalog_quota_exceeded" | "catalog_page_budget" | "quota_exceeded" | "approval_denied";
   catalogContinuation?: { method: import("./core/catalog-contract.js").CatalogMethod; cursor: string };
   phase: "compile" | "validation" | "discovery" | "dispatch" | "execution";
   dispatchState: "not_dispatched" | "dispatched";

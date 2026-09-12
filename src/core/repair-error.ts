@@ -55,7 +55,7 @@ export const createCheckpointJournal = (): { reserve(): (handle: FabricCheckpoin
   let reservations = 0;
   return {
     reserve() {
-      if (reservations >= 8) throw new Error("Fabric checkpoint quota exceeded");
+      if (reservations >= 8) throw new FabricRepairError("Fabric checkpoint quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
       reservations += 1;
       let recorded = false;
       return (handle) => {
