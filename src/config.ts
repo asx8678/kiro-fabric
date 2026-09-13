@@ -147,6 +147,13 @@ const integer = (value: unknown, fallback: number, minimum: number, maximum: num
   typeof value === "number" && Number.isSafeInteger(value)
     ? Math.max(minimum, Math.min(maximum, value))
     : fallback;
+
+/** Provider call timeouts are derived bounds. Both an explicit value and the
+ * default must fit inside the execution maximum, and the maximum is
+ * authoritative when it is tighter than the documented floor, so a derived
+ * timeout can never exceed the execution maximum. */
+const callTimeout = (value: unknown, fallback: number, maximum: number): number =>
+  integer(value, Math.min(fallback, maximum), Math.min(1_000, maximum), maximum);
 const bool = (value: unknown, fallback: boolean): boolean =>
   typeof value === "boolean" ? value : fallback;
 const boundedString = (value: unknown, fallback: string, maximum: number): string =>
@@ -272,13 +279,13 @@ export const normalizeFabricConfig = (
       enabled: bool(mcp.enabled, defaults.mcp.enabled),
       ...(typeof mcp.configPath === "string" && mcp.configPath ? { configPath: mcp.configPath } : defaults.mcp.configPath ? { configPath: defaults.mcp.configPath } : {}),
       disableOAuth: bool(mcp.disableOAuth, defaults.mcp.disableOAuth),
-      callTimeoutMs: integer(mcp.callTimeoutMs, defaults.mcp.callTimeoutMs, 1_000, maxTimeoutMs),
+      callTimeoutMs: callTimeout(mcp.callTimeoutMs, defaults.mcp.callTimeoutMs, maxTimeoutMs),
     },
     web: {
       enabled: bool(web.enabled, defaults.web.enabled),
       command: boundedString(web.command, defaults.web.command, 4_096),
-      searchTimeoutMs: integer(web.searchTimeoutMs, defaults.web.searchTimeoutMs, 1_000, maxTimeoutMs),
-      openTimeoutMs: integer(web.openTimeoutMs, defaults.web.openTimeoutMs, 1_000, maxTimeoutMs),
+      searchTimeoutMs: callTimeout(web.searchTimeoutMs, defaults.web.searchTimeoutMs, maxTimeoutMs),
+      openTimeoutMs: callTimeout(web.openTimeoutMs, defaults.web.openTimeoutMs, maxTimeoutMs),
     },
     memory: {
       enabled: bool(memory.enabled, defaults.memory.enabled),

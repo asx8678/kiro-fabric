@@ -31,6 +31,16 @@ const DEFAULT_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 const DEFAULT_FLUSH_INTERVAL_MS = 250;
 const DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_LINE_BYTES = 8 * 1024;
+/** Smallest cap that can still hold one well-formed JSON object without a newline. */
+const MIN_MAX_LINE_BYTES = 2;
+
+const boundedOption = (name: string, value: number | undefined, fallback: number, minimum: number): number => {
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum) {
+    throw new Error(`trace writer ${name} must be an integer of at least ${minimum}`);
+  }
+  return value;
+};
 
 class LineRing {
   readonly #slots: (string | undefined)[];
@@ -43,17 +53,19 @@ class LineRing {
   ) {
     this.#slots = new Array<string | undefined>(capacity);
   }
-  /** Returns true when an oldest line was dropped to make room. */
-  push(line: string): boolean {
-    let dropped = false;
+  /** Returns how many lines were discarded: evicted oldest lines plus, when the
+   * line cannot fit the byte budget at all, the rejected line itself. */
+  push(line: string): number {
     const lineBytes = Buffer.byteLength(line, "utf8");
+    if (lineBytes > this.maxBytes) return 1;
+    let dropped = 0;
     while (this.#size > 0 && (this.#size >= this.capacity || this.#bytes + lineBytes > this.maxBytes)) {
       const index = this.#start;
       this.#bytes -= Buffer.byteLength(this.#slots[index]!, "utf8");
       this.#slots[index] = undefined;
       this.#start = (this.#start + 1) % this.capacity;
       this.#size -= 1;
-      dropped = true;
+      dropped += 1;
     }
     this.#slots[(this.#start + this.#size) % this.capacity] = line;
     this.#size += 1;
@@ -93,18 +105,22 @@ class BufferedTraceWriter implements TraceWriter {
 
   constructor(options: TraceWriterOptions) {
     if (!path.isAbsolute(options.file)) throw new Error("trace file must be an absolute path");
+    // Validate every bound before touching the filesystem so a rejected writer
+    // cannot leave an empty trace file or an orphaned parent directory behind.
+    const maxBufferLines = boundedOption("maxBufferLines", options.maxBufferLines, DEFAULT_MAX_BUFFER_LINES, 1);
+    const maxBufferBytes = boundedOption("maxBufferBytes", options.maxBufferBytes, DEFAULT_MAX_BUFFER_BYTES, 1);
+    const maxFileBytes = boundedOption("maxFileBytes", options.maxFileBytes, DEFAULT_MAX_FILE_BYTES, 1);
+    const maxLineBytes = boundedOption("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES, MIN_MAX_LINE_BYTES);
+    const flushIntervalMs = boundedOption("flushIntervalMs", options.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS, 1);
     this.file = options.file;
     fs.mkdirSync(path.dirname(options.file), { recursive: true, mode: 0o700 });
     this.#fd = fs.openSync(options.file, "wx", 0o600);
-    this.#ring = new LineRing(
-      options.maxBufferLines ?? DEFAULT_MAX_BUFFER_LINES,
-      options.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES,
-    );
-    this.#maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
-    this.#maxLineBytes = options.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES;
+    this.#ring = new LineRing(maxBufferLines, maxBufferBytes);
+    this.#maxFileBytes = maxFileBytes;
+    this.#maxLineBytes = maxLineBytes;
     this.#timer = setInterval(() => {
       this.#flushSync(true);
-    }, options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS);
+    }, flushIntervalMs);
     this.#timer.unref();
     process.once("exit", this.#onExit);
   }
@@ -118,10 +134,28 @@ class BufferedTraceWriter implements TraceWriter {
 
   write(line: string): void {
     if (this.#disabled || this.#closed) return;
-    const bounded = Buffer.byteLength(line, "utf8") > this.#maxLineBytes
-      ? `${line.slice(0, this.#maxLineBytes)}\n`
-      : `${line}\n`;
-    if (this.#ring.push(bounded)) this.#dropped += 1;
+    const raw = `${line}\n`;
+    // Slicing a serialized line at a byte offset can split a UTF-8 sequence and
+    // always truncates JSON mid-token. Replace an over-cap line with the
+    // largest well-formed marker that fits, so every written line stays valid
+    // JSONL and the byte bound holds.
+    const bounded = Buffer.byteLength(raw, "utf8") <= this.#maxLineBytes ? raw : this.#truncatedLine(raw);
+    this.#dropped += this.#ring.push(bounded);
+  }
+
+  #truncatedLine(raw: string): string {
+    const bytes = Buffer.byteLength(raw, "utf8");
+    const candidates = [
+      JSON.stringify({ v: 1, ev: "line.truncated", bytes }),
+      '{"line.truncated":true}',
+      '{"t":1}',
+      "{}",
+    ];
+    for (const candidate of candidates) {
+      if (Buffer.byteLength(`${candidate}\n`, "utf8") <= this.#maxLineBytes) return `${candidate}\n`;
+      if (Buffer.byteLength(candidate, "utf8") <= this.#maxLineBytes) return candidate;
+    }
+    return "{}";
   }
 
   #flushSync(fsync: boolean): void {
@@ -132,7 +166,7 @@ class BufferedTraceWriter implements TraceWriter {
       if (this.#writtenBytes + chunkBytes > this.#maxFileBytes) {
         const marker = JSON.stringify({ v: 1, cat: "teardown", ev: "trace.truncated", data: { maxFileBytes: this.#maxFileBytes } });
         const room = this.#maxFileBytes - this.#writtenBytes;
-        if (room > marker.length + 1) fs.writeSync(this.#fd, `${marker}\n`);
+        if (room > Buffer.byteLength(marker, "utf8") + 1) fs.writeSync(this.#fd, `${marker}\n`);
         this.#disabled = true;
         return;
       }

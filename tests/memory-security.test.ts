@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openKiroMemory } from "../src/kiro/memory.js";
+import { KiroMemoryProvider } from "../src/kiro/memory-provider.js";
 
 const roots: string[] = [];
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-memory-")); roots.push(root); return root; };
@@ -28,6 +29,21 @@ describe("Fabric memory confinement", () => {
     vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
     const second = await memory.set("second", { payload: "b".repeat(10_000) });
     await expect(memory.index()).resolves.toEqual([second, first].map(({ key, bytes, updatedAt }) => ({ key, bytes, updatedAt })));
+  });
+
+  it("rejects keys that pass the source bound but cannot become bounded entry filenames", () => {
+    const provider = new KiroMemoryProvider({ cwd: process.cwd(), root: temporary(), maxEntries: 10, maxValueChars: 1_000, namespace: "probe" });
+    // 300 characters satisfies the descriptor's 512-character source bound but
+    // encodes beyond the entry-filename limit.
+    expect(() => provider.prepareArguments("set", { key: "a".repeat(300), value: true })).toThrow("filesystem-safe encoding");
+    expect(() => provider.prepareArguments("set", { key: "a".repeat(200), value: true })).not.toThrow();
+  });
+
+  it("bounds namespace names the same way as entry keys", async () => {
+    expect(() => openKiroMemory("n".repeat(300), temporary())).toThrow("namespace is too long after filesystem-safe encoding");
+    // A namespace within the bound still opens and serves requests.
+    const bounded = openKiroMemory("n".repeat(200), temporary());
+    await expect(bounded.index()).resolves.toEqual([]);
   });
 
   it("rejects an oversized index before loading entry values", async () => {

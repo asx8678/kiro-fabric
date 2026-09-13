@@ -53,6 +53,13 @@ describe("browser-backed web provider", () => {
     if (input.startsWith("https:")) await expect(f.provider.invoke("open", { url: input }, { cwd: f.root })).rejects.toThrow("possible sensitive information");
     expect(fs.existsSync(f.calls)).toBe(false);
   });
+  it("rejects deeply nested percent-encoding disguises at every decoded layer", () => {
+    for (const encoding of ["%253D", "%25253D", "%2525253D", "%252525253D"]) {
+      expect(() => assertPublicWebInput(`notes api_key${encoding}synthetic-only`)).toThrow("possible sensitive information");
+    }
+    expect(() => assertPublicWebInput("notes synthetic-only")).not.toThrow();
+  });
+
   it("retains useful public queries without claiming to recognize all confidential prose", () => {
     for (const query of ["OAuth token refresh documentation", "password reset documentation", "TypeScript release notes", "Unannounced internal project name"])
       expect(() => assertPublicWebInput(query)).not.toThrow();
@@ -117,10 +124,13 @@ describe("browser-backed web provider", () => {
     await expect(provider.invoke("search", { query: "facts" }, { cwd: f.root })).rejects.toThrow("timed out");
     const signal = AbortSignal.timeout(100);
     await expect(f.provider.invoke("search", { query: "facts" }, { cwd: f.root, signal })).rejects.toThrow("cancelled");
-    const before = fs.readFileSync(f.calls, "utf8");
+    // The child is killed on timeout and may not reach its own startup write;
+    // absence of the capture file is itself evidence that nothing launched.
+    const captures = () => fs.existsSync(f.calls) ? fs.readFileSync(f.calls, "utf8") : "";
+    const before = captures();
     let now = 0; const deadline = new FabricDeadline(10, 10, () => now); now = 20;
     await expect(f.provider.invoke("search", { query: "facts" }, { cwd: f.root, deadline })).rejects.toThrow("timed out");
-    expect(fs.readFileSync(f.calls, "utf8")).toBe(before);
+    expect(captures()).toBe(before);
   });
   it("loads web configuration without rewriting user consent or legacy files", () => {
     const f = fixture(), file = path.join(f.root, "config.json");

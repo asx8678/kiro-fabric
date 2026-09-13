@@ -1,5 +1,6 @@
 import { fabricFailureMetadata } from "../core/repair-error.js";
 import type { FabricFailureMetadata } from "../protocol.js";
+import { performance } from "node:perf_hooks";
 import releaseSyncVariant from "@jitl/quickjs-singlefile-mjs-release-sync";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
 import { runAbortable, settleWithin } from "../async-settlement.js";
@@ -142,8 +143,13 @@ export class QuickJsRuntime {
     let interrupted = false;
     let timedOut = false;
     let closing = false;
+    // Set during teardown so synchronous guest cleanup (including runaway
+    // microtask loops) stops at the cleanup grace budget instead of running
+    // until the execution deadline expires.
+    let teardownCutoff: number | undefined;
     runtime.setInterruptHandler(() => {
       if (options.signal?.aborted) return true;
+      if (teardownCutoff !== undefined && performance.now() >= teardownCutoff) return true;
       if (!deadline.expired) return false;
       interrupted = true;
       return true;
@@ -161,6 +167,7 @@ export class QuickJsRuntime {
     let activeHandle: QuickJSHandle | undefined;
     let runExecution: QuickJSHandle | undefined;
     let cancelExecution: QuickJSHandle | undefined;
+    let logFormatter: QuickJSHandle | undefined;
 
     const rejectGuestGraph = (reason: Error): void => {
       if (cancelExecution && cancelExecution.alive !== false) {
@@ -176,6 +183,7 @@ export class QuickJsRuntime {
         handle.dispose();
       }
       for (let index = 0; index < 1_024; index++) {
+        if (teardownCutoff !== undefined && performance.now() >= teardownCutoff) break;
         const jobs = runtime.executePendingJobs();
         if (jobs.error) { jobs.error.dispose(); break; }
         if (jobs.value === 0) break;
@@ -291,6 +299,28 @@ export class QuickJsRuntime {
       context.setProp(context.global, "__fabricPrepareHostCall", prepareHostFunction);
       prepareHostFunction.dispose();
 
+      const renderLogValue = (handle: QuickJSHandle, maxChars: number): string => {
+        const limit = Math.max(0, Math.floor(maxChars));
+        if (limit === 0) return "";
+        // Format inside the VM so an over-cap string is sliced before it is
+        // copied across the bridge. The host fallback still clamps the result,
+        // so the configured character budget always holds.
+        if (logFormatter && logFormatter.alive !== false) {
+          const budget = context.newNumber(limit);
+          try {
+            const formatted = context.callFunction(logFormatter, context.undefined, handle, budget);
+            if (!formatted.error) {
+              try {
+                const text = context.getString(formatted.value);
+                return text.length > limit ? text.slice(0, limit) : text;
+              } finally { formatted.value.dispose(); }
+            }
+            formatted.error.dispose();
+          } catch { /* fall through to the host-side formatter */ }
+          finally { budget.dispose(); }
+        }
+        return formatValue(context.dump(handle), limit).slice(0, limit);
+      };
       const printFunction = context.newFunction("print", (...handles: QuickJSHandle[]) => {
         let remaining = maxLogChars - logChars;
         if (remaining <= 0) return;
@@ -298,7 +328,7 @@ export class QuickJsRuntime {
         for (const handle of handles) {
           const separator = parts.length > 0 ? " " : "";
           if (remaining <= separator.length) break;
-          const rendered = formatValue(context.dump(handle), remaining - separator.length);
+          const rendered = renderLogValue(handle, remaining - separator.length);
           parts.push(`${separator}${rendered}`);
           remaining -= separator.length + rendered.length;
         }
@@ -331,6 +361,7 @@ export class QuickJsRuntime {
       }
       runExecution = context.getProp(setup.value, "run");
       cancelExecution = context.getProp(setup.value, "cancel");
+      logFormatter = context.getProp(setup.value, "boundLog");
       setup.value.dispose();
 
       const bundle = options.transpiledCode === undefined
@@ -419,9 +450,14 @@ export class QuickJsRuntime {
       closing = true;
       if (deadlineTimer) clearTimeout(deadlineTimer);
       if (abortListener) options.signal?.removeEventListener("abort", abortListener);
+      // Teardown is bounded by the cleanup grace budget, not the execution
+      // deadline. A guest that leaves an unbounded microtask loop behind must
+      // not extend cancellation to the full configured timeout.
+      teardownCutoff = performance.now() + Math.max(0, options.cleanupGraceMs ?? 100);
       abortHost(new Error("Execution request ended"));
       await settleWithin(bridgeTasks, Math.max(0, options.cleanupGraceMs ?? 100));
       for (let index = 0; index < 1_024; index++) {
+        if (performance.now() >= teardownCutoff) break;
         const jobs = runtime.executePendingJobs();
         if (jobs.error) { jobs.error.dispose(); break; }
         if (jobs.value === 0) break;
@@ -433,6 +469,7 @@ export class QuickJsRuntime {
       for (const promise of pendingPromises) if (promise.alive !== false) promise.dispose();
       if (cancelExecution && cancelExecution.alive !== false) cancelExecution.dispose();
       if (runExecution && runExecution.alive !== false) runExecution.dispose();
+      if (logFormatter && logFormatter.alive !== false) logFormatter.dispose();
       jsonParse.dispose();
       jsonObject.dispose();
       context.dispose();

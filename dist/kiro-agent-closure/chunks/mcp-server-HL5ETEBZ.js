@@ -44,7 +44,7 @@ import {
   fabricFailureMetadata,
   repairSchema,
   transpileFabricCodeWithSourceMap
-} from "./chunk-JSPECSBT.js";
+} from "./chunk-5CIPARYU.js";
 import "./chunk-G3LABT6U.js";
 import "./chunk-DDMC62E6.js";
 import "./chunk-YQ4ZVOWF.js";
@@ -18845,6 +18845,7 @@ var DEFAULT_FABRIC_CONFIG = {
 };
 var record2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
 var integer = (value, fallback, minimum, maximum) => typeof value === "number" && Number.isSafeInteger(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback;
+var callTimeout = (value, fallback, maximum) => integer(value, Math.min(fallback, maximum), Math.min(1e3, maximum), maximum);
 var bool = (value, fallback) => typeof value === "boolean" ? value : fallback;
 var boundedString = (value, fallback, maximum) => typeof value === "string" && value.trim().length > 0 && !value.includes("\0") && value.length <= maximum ? value : fallback;
 var approval = (value, fallback) => value === "allow" || value === "ask" || value === "deny" ? value : fallback;
@@ -18951,13 +18952,13 @@ var normalizeFabricConfig = (input, defaults2 = DEFAULT_FABRIC_CONFIG) => {
       enabled: bool(mcp.enabled, defaults2.mcp.enabled),
       ...typeof mcp.configPath === "string" && mcp.configPath ? { configPath: mcp.configPath } : defaults2.mcp.configPath ? { configPath: defaults2.mcp.configPath } : {},
       disableOAuth: bool(mcp.disableOAuth, defaults2.mcp.disableOAuth),
-      callTimeoutMs: integer(mcp.callTimeoutMs, defaults2.mcp.callTimeoutMs, 1e3, maxTimeoutMs)
+      callTimeoutMs: callTimeout(mcp.callTimeoutMs, defaults2.mcp.callTimeoutMs, maxTimeoutMs)
     },
     web: {
       enabled: bool(web.enabled, defaults2.web.enabled),
       command: boundedString(web.command, defaults2.web.command, 4096),
-      searchTimeoutMs: integer(web.searchTimeoutMs, defaults2.web.searchTimeoutMs, 1e3, maxTimeoutMs),
-      openTimeoutMs: integer(web.openTimeoutMs, defaults2.web.openTimeoutMs, 1e3, maxTimeoutMs)
+      searchTimeoutMs: callTimeout(web.searchTimeoutMs, defaults2.web.searchTimeoutMs, maxTimeoutMs),
+      openTimeoutMs: callTimeout(web.openTimeoutMs, defaults2.web.openTimeoutMs, maxTimeoutMs)
     },
     memory: {
       enabled: bool(memory.enabled, defaults2.memory.enabled),
@@ -21154,6 +21155,7 @@ var ActionRegistry = class {
     };
     const action = await this.describe(remote ? "mcp.$call" : ref, context.signal);
     const provider = this.#providers.get(action.provider);
+    if (!provider) throw new Error("Fabric registry is closed");
     let prepared;
     try {
       prepared = provider.prepareArguments ? await runAbortable(context.signal, () => provider.prepareArguments(action.name, structuredClone(args), context)) : structuredClone(args);
@@ -21473,6 +21475,9 @@ declare function parallel<T>(
 declare function print(...values: unknown[]): void;
 `;
 
+// src/runtime/quickjs-runtime.ts
+import { performance as performance3 } from "node:perf_hooks";
+
 // node_modules/.pnpm/@jitl+quickjs-singlefile-mjs-release-sync@0.32.0/node_modules/@jitl/quickjs-singlefile-mjs-release-sync/dist/index.mjs
 var variant = { type: "sync", importFFI: () => import("./ffi-2CFDPMEQ.js").then((mod) => mod.QuickJSFFI), importModuleLoader: () => import("./emscripten-module-Q67P5WYC-K2EI3T2U.js").then((mod) => mod.default) };
 var src_default = variant;
@@ -21624,6 +21629,14 @@ var DEFAULT_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 var DEFAULT_FLUSH_INTERVAL_MS = 250;
 var DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024;
 var DEFAULT_MAX_LINE_BYTES = 8 * 1024;
+var MIN_MAX_LINE_BYTES = 2;
+var boundedOption = (name, value, fallback, minimum) => {
+  if (value === void 0) return fallback;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum) {
+    throw new Error(`trace writer ${name} must be an integer of at least ${minimum}`);
+  }
+  return value;
+};
 var LineRing = class {
   constructor(capacity, maxBytes) {
     this.capacity = capacity;
@@ -21636,17 +21649,19 @@ var LineRing = class {
   #start = 0;
   #size = 0;
   #bytes = 0;
-  /** Returns true when an oldest line was dropped to make room. */
+  /** Returns how many lines were discarded: evicted oldest lines plus, when the
+   * line cannot fit the byte budget at all, the rejected line itself. */
   push(line) {
-    let dropped = false;
     const lineBytes = Buffer.byteLength(line, "utf8");
+    if (lineBytes > this.maxBytes) return 1;
+    let dropped = 0;
     while (this.#size > 0 && (this.#size >= this.capacity || this.#bytes + lineBytes > this.maxBytes)) {
       const index = this.#start;
       this.#bytes -= Buffer.byteLength(this.#slots[index], "utf8");
       this.#slots[index] = void 0;
       this.#start = (this.#start + 1) % this.capacity;
       this.#size -= 1;
-      dropped = true;
+      dropped += 1;
     }
     this.#slots[(this.#start + this.#size) % this.capacity] = line;
     this.#size += 1;
@@ -21684,18 +21699,20 @@ var BufferedTraceWriter = class {
   #closed = false;
   constructor(options) {
     if (!path4.isAbsolute(options.file)) throw new Error("trace file must be an absolute path");
+    const maxBufferLines = boundedOption("maxBufferLines", options.maxBufferLines, DEFAULT_MAX_BUFFER_LINES, 1);
+    const maxBufferBytes = boundedOption("maxBufferBytes", options.maxBufferBytes, DEFAULT_MAX_BUFFER_BYTES, 1);
+    const maxFileBytes = boundedOption("maxFileBytes", options.maxFileBytes, DEFAULT_MAX_FILE_BYTES, 1);
+    const maxLineBytes = boundedOption("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES, MIN_MAX_LINE_BYTES);
+    const flushIntervalMs = boundedOption("flushIntervalMs", options.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS, 1);
     this.file = options.file;
     fs5.mkdirSync(path4.dirname(options.file), { recursive: true, mode: 448 });
     this.#fd = fs5.openSync(options.file, "wx", 384);
-    this.#ring = new LineRing(
-      options.maxBufferLines ?? DEFAULT_MAX_BUFFER_LINES,
-      options.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
-    );
-    this.#maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
-    this.#maxLineBytes = options.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES;
+    this.#ring = new LineRing(maxBufferLines, maxBufferBytes);
+    this.#maxFileBytes = maxFileBytes;
+    this.#maxLineBytes = maxLineBytes;
     this.#timer = setInterval(() => {
       this.#flushSync(true);
-    }, options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS);
+    }, flushIntervalMs);
     this.#timer.unref();
     process.once("exit", this.#onExit);
   }
@@ -21707,10 +21724,26 @@ var BufferedTraceWriter = class {
   }
   write(line) {
     if (this.#disabled || this.#closed) return;
-    const bounded3 = Buffer.byteLength(line, "utf8") > this.#maxLineBytes ? `${line.slice(0, this.#maxLineBytes)}
-` : `${line}
+    const raw = `${line}
 `;
-    if (this.#ring.push(bounded3)) this.#dropped += 1;
+    const bounded3 = Buffer.byteLength(raw, "utf8") <= this.#maxLineBytes ? raw : this.#truncatedLine(raw);
+    this.#dropped += this.#ring.push(bounded3);
+  }
+  #truncatedLine(raw) {
+    const bytes2 = Buffer.byteLength(raw, "utf8");
+    const candidates = [
+      JSON.stringify({ v: 1, ev: "line.truncated", bytes: bytes2 }),
+      '{"line.truncated":true}',
+      '{"t":1}',
+      "{}"
+    ];
+    for (const candidate of candidates) {
+      if (Buffer.byteLength(`${candidate}
+`, "utf8") <= this.#maxLineBytes) return `${candidate}
+`;
+      if (Buffer.byteLength(candidate, "utf8") <= this.#maxLineBytes) return candidate;
+    }
+    return "{}";
   }
   #flushSync(fsync) {
     if (this.#closed || this.#ring.size === 0) return;
@@ -21720,7 +21753,7 @@ var BufferedTraceWriter = class {
       if (this.#writtenBytes + chunkBytes > this.#maxFileBytes) {
         const marker = JSON.stringify({ v: 1, cat: "teardown", ev: "trace.truncated", data: { maxFileBytes: this.#maxFileBytes } });
         const room = this.#maxFileBytes - this.#writtenBytes;
-        if (room > marker.length + 1) fs5.writeSync(this.#fd, `${marker}
+        if (room > Buffer.byteLength(marker, "utf8") + 1) fs5.writeSync(this.#fd, `${marker}
 `);
         this.#disabled = true;
         return;
@@ -21972,6 +22005,17 @@ var GUEST_SETUP = `
     return text;
   };
   const parseStrict = (text) => apply(jsonParse, JSON, [text]);
+  // Bounded print formatting runs inside the VM: an over-cap string is sliced
+  // here so the host never copies the whole value across the bridge. Mirrors the
+  // host formatter's JSON shape for non-strings and never throws.
+  const boundLog = (value, maxChars) => {
+    if (typeof maxChars !== 'number' || !numberIsFinite(maxChars) || maxChars <= 0) return '';
+    if (typeof value === 'string') return value.length <= maxChars ? value : value.slice(0, maxChars);
+    let text;
+    try { text = strictJsonText(value); }
+    catch { text = '[value outside bounded JSON]'; }
+    return text.length <= maxChars ? text : text.slice(0, maxChars);
+  };
   // One execution-wide semaphore covers friendly APIs, tools.call, direct
   // Promise.all fan-out, and nested parallel helpers alike. This queues excess
   // bridge work before it reaches the host's fail-closed concurrency quota.
@@ -22140,7 +22184,7 @@ var GUEST_SETUP = `
   });
   objectDefineProperty(globalThis, 'parallel', { value: parallel, writable: false, configurable: false });
   objectFreeze(globalThis.payloads);
-  return objectFreeze({ run, cancel });
+  return objectFreeze({ run, cancel, boundLog });
 })()
 `;
 
@@ -22215,8 +22259,10 @@ var QuickJsRuntime = class {
     let interrupted = false;
     let timedOut = false;
     let closing = false;
+    let teardownCutoff;
     runtime.setInterruptHandler(() => {
       if (options.signal?.aborted) return true;
+      if (teardownCutoff !== void 0 && performance3.now() >= teardownCutoff) return true;
       if (!deadline.expired) return false;
       interrupted = true;
       return true;
@@ -22233,6 +22279,7 @@ var QuickJsRuntime = class {
     let activeHandle;
     let runExecution;
     let cancelExecution;
+    let logFormatter;
     const rejectGuestGraph = (reason) => {
       if (cancelExecution && cancelExecution.alive !== false) {
         const message = context.newString(reason.message.slice(0, 4096));
@@ -22248,6 +22295,7 @@ var QuickJsRuntime = class {
         handle.dispose();
       }
       for (let index = 0; index < 1024; index++) {
+        if (teardownCutoff !== void 0 && performance3.now() >= teardownCutoff) break;
         const jobs = runtime.executePendingJobs();
         if (jobs.error) {
           jobs.error.dispose();
@@ -22365,6 +22413,29 @@ var QuickJsRuntime = class {
       });
       context.setProp(context.global, "__fabricPrepareHostCall", prepareHostFunction);
       prepareHostFunction.dispose();
+      const renderLogValue = (handle, maxChars) => {
+        const limit = Math.max(0, Math.floor(maxChars));
+        if (limit === 0) return "";
+        if (logFormatter && logFormatter.alive !== false) {
+          const budget = context.newNumber(limit);
+          try {
+            const formatted = context.callFunction(logFormatter, context.undefined, handle, budget);
+            if (!formatted.error) {
+              try {
+                const text3 = context.getString(formatted.value);
+                return text3.length > limit ? text3.slice(0, limit) : text3;
+              } finally {
+                formatted.value.dispose();
+              }
+            }
+            formatted.error.dispose();
+          } catch {
+          } finally {
+            budget.dispose();
+          }
+        }
+        return formatValue(context.dump(handle), limit).slice(0, limit);
+      };
       const printFunction = context.newFunction("print", (...handles) => {
         let remaining = maxLogChars - logChars;
         if (remaining <= 0) return;
@@ -22372,7 +22443,7 @@ var QuickJsRuntime = class {
         for (const handle of handles) {
           const separator = parts.length > 0 ? " " : "";
           if (remaining <= separator.length) break;
-          const rendered = formatValue(context.dump(handle), remaining - separator.length);
+          const rendered = renderLogValue(handle, remaining - separator.length);
           parts.push(`${separator}${rendered}`);
           remaining -= separator.length + rendered.length;
         }
@@ -22404,6 +22475,7 @@ var QuickJsRuntime = class {
       }
       runExecution = context.getProp(setup.value, "run");
       cancelExecution = context.getProp(setup.value, "cancel");
+      logFormatter = context.getProp(setup.value, "boundLog");
       setup.value.dispose();
       const bundle = options.transpiledCode === void 0 ? transpileFabricCodeWithSourceMap(code2) : { code: options.transpiledCode, sourceMap: options.transpiledSourceMap };
       assertFabricTranspiledWrapper(bundle.code);
@@ -22497,9 +22569,11 @@ var QuickJsRuntime = class {
       closing = true;
       if (deadlineTimer) clearTimeout(deadlineTimer);
       if (abortListener) options.signal?.removeEventListener("abort", abortListener);
+      teardownCutoff = performance3.now() + Math.max(0, options.cleanupGraceMs ?? 100);
       abortHost(new Error("Execution request ended"));
       await settleWithin(bridgeTasks, Math.max(0, options.cleanupGraceMs ?? 100));
       for (let index = 0; index < 1024; index++) {
+        if (performance3.now() >= teardownCutoff) break;
         const jobs = runtime.executePendingJobs();
         if (jobs.error) {
           jobs.error.dispose();
@@ -22511,6 +22585,7 @@ var QuickJsRuntime = class {
       for (const promise of pendingPromises) if (promise.alive !== false) promise.dispose();
       if (cancelExecution && cancelExecution.alive !== false) cancelExecution.dispose();
       if (runExecution && runExecution.alive !== false) runExecution.dispose();
+      if (logFormatter && logFormatter.alive !== false) logFormatter.dispose();
       jsonParse.dispose();
       jsonObject.dispose();
       context.dispose();
@@ -22681,12 +22756,24 @@ var FabricExecutionService = class {
     const localSettlements = /* @__PURE__ */ new Set();
     let localEffectTail = Promise.resolve();
     let lastShellFailure;
+    const chargeApproval = async (prompt) => {
+      if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new FabricRepairError("Fabric approval request quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
+      if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new FabricRepairError("Fabric pending approval quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
+      approvalRequests += 1;
+      pendingApprovals += 1;
+      try {
+        await prompt();
+      } finally {
+        pendingApprovals -= 1;
+      }
+    };
     const providerContext = (signal, deadline) => ({
       cwd: this.cwd,
       checkpoints,
       maxResultChars: this.config.executor.maxNestedResultChars,
       signal,
       deadline,
+      chargeApproval,
       ...options.bootstrap ? { bootstrap: options.bootstrap } : {}
     });
     const executeSpan = tracer.enabled ? tracer.span("eval", "execute", execId) : void 0;
@@ -22786,20 +22873,14 @@ var FabricExecutionService = class {
               default:
                 throw new Error("Invalid Fabric approval plan");
             }
-            if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new FabricRepairError("Fabric approval request quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
-            if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new FabricRepairError("Fabric pending approval quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
-            approvalRequests += 1;
-            pendingApprovals += 1;
             const approvalSpan = tracer.enabled ? tracer.span("eval", "approval.wait", execId, { ref: action.ref, risk: action.risk }, bridgeSpan?.id) : void 0;
             try {
-              await plan.prompt();
+              await chargeApproval(plan.prompt);
               throwIfAbortedOrExpired(signal, deadline);
               approvalSpan?.end({ approved: true });
             } catch (error) {
               approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });
               throw error instanceof FabricRepairError ? error : new FabricRepairError(error instanceof Error ? error.message : String(error), { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
-            } finally {
-              pendingApprovals -= 1;
             }
           }
         }, ref === "fabric.call" && (args.expectedDescriptorDigest !== void 0 || args.projection !== void 0) ? {
@@ -23724,7 +23805,7 @@ var KiroPowerWorkspaceBinding = class {
   list() {
     return { ...this.status(), roots: this.#candidates.map(({ id: id3, name }) => ({ rootId: id3, name })) };
   }
-  async prepareMutation(request, signal) {
+  async prepareMutation(request, signal, chargeApproval) {
     if (request.action === "detach") return request;
     if (request.action === "select") {
       if (!this.#candidates.some((entry) => entry.id === request.rootId)) {
@@ -23738,7 +23819,13 @@ var KiroPowerWorkspaceBinding = class {
     }
     if (!this.#elicitor) throw new Error("manual workspace attachment requires MCP elicitation support");
     signal?.throwIfAborted();
-    const approved = await this.#elicitor.approveWorkspace(candidate.root, signal);
+    const elicitor = this.#elicitor;
+    let approved = false;
+    const elicit = async () => {
+      approved = await elicitor.approveWorkspace(candidate.root, signal);
+    };
+    if (chargeApproval) await chargeApproval(elicit);
+    else await elicit();
     signal?.throwIfAborted();
     if (!approved) throw new Error("manual workspace attachment was not approved");
     const approvedIdentity = inspectCanonicalPath(candidate.root, {
@@ -24044,7 +24131,7 @@ import path16 from "node:path";
 // src/providers/review-provider.ts
 import { createHash as createHash7, randomUUID as randomUUID5 } from "node:crypto";
 import path9 from "node:path";
-import { performance as performance3 } from "node:perf_hooks";
+import { performance as performance4 } from "node:perf_hooks";
 
 // src/providers/local-path.ts
 import fs7 from "node:fs";
@@ -24227,7 +24314,7 @@ var ReviewProvider = class {
     const sessionTtlMs = boundedInteger(options.sessionTtlMs, 288e5, 1, 864e5);
     if (options.now !== void 0 && typeof options.now !== "function") throw new Error("Invalid review clock");
     if (options.sourceSnapshot !== void 0 && typeof options.sourceSnapshot !== "function") throw new Error("Invalid review snapshot reader");
-    this.#now = options.now ?? (() => performance3.now());
+    this.#now = options.now ?? (() => performance4.now());
     const now = this.#now();
     if (!Number.isFinite(now)) throw new Error("Invalid review clock");
     this.#expiresAt = now + sessionTtlMs;
@@ -24624,21 +24711,28 @@ var SECRET_PATTERN = /-----BEGIN[ A-Z]*PRIVATE KEY-----|\b(?:gh[pousr]_[a-z0-9_]
 var SECRET_ASSIGNMENT = /(?:^|[\s?&#;,/"'])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|password|passwd|secret|client[_-]?secret|authorization|cookie|credential|signature|x-amz-signature)\s*["']?\s*[:=]\s*["']?\S+/iu;
 var PERSONAL_EMAIL = /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/iu;
 var SENSITIVE_URL_KEY = /^(?:api[_-]?key|.*token|password|passwd|secret|client[_-]?secret|auth|authorization|cookie|credential|sig|signature|x-amz-(?:signature|credential|security-token))$/iu;
+var MAX_DECODE_PASSES = 8;
+var containsSensitive = (value) => {
+  let sensitiveUrl = false;
+  try {
+    const url = new URL(value);
+    sensitiveUrl = [...url.searchParams.keys()].some((key) => SENSITIVE_URL_KEY.test(key));
+  } catch {
+  }
+  return sensitiveUrl || SECRET_PATTERN.test(value) || SECRET_ASSIGNMENT.test(value) || PERSONAL_EMAIL.test(value);
+};
 function assertPublicWebInput(input) {
   let value = input.normalize("NFKC");
-  for (let pass = 0; pass < 4; pass += 1) {
-    let sensitiveUrl = false;
-    try {
-      const url = new URL(value);
-      sensitiveUrl = [...url.searchParams.keys()].some((key) => SENSITIVE_URL_KEY.test(key));
-    } catch {
-    }
-    if (sensitiveUrl || SECRET_PATTERN.test(value) || SECRET_ASSIGNMENT.test(value) || PERSONAL_EMAIL.test(value)) {
+  for (let pass = 0; pass < MAX_DECODE_PASSES; pass += 1) {
+    if (containsSensitive(value)) {
       throw new Error("Web input rejected: possible sensitive information. Use a public, non-sensitive query or URL; rejected values are not echoed.");
     }
     const next = value.replace(/%([0-9a-f]{2})/giu, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
-    if (next === value) break;
+    if (next === value) return;
     value = next;
+  }
+  if (containsSensitive(value)) {
+    throw new Error("Web input rejected: possible sensitive information. Use a public, non-sensitive query or URL; rejected values are not echoed.");
   }
 }
 
@@ -25202,6 +25296,42 @@ var StateProvider = class {
       if (errorCode3(error) !== "ENOENT") throw error;
     }
   }
+  /** Reclaim a stale lock without ever unlinking a pathname that may have been
+   * replaced since inspection. The stale file is moved to a private quarantine
+   * name first; only the exact inspected inode is then removed. A displaced
+   * live lock is restored rather than deleted. Returns true when the stale lock
+   * was reclaimed and acquisition may be retried immediately. */
+  #reclaimStaleLock(inspected) {
+    const quarantine = path11.join(this.#root, `${LOCK_NAME}.reclaim-${randomBytes3(12).toString("hex")}`);
+    try {
+      fs9.renameSync(this.#lock, quarantine);
+    } catch (error) {
+      if (errorCode3(error) === "ENOENT") return true;
+      throw error;
+    }
+    const moved = (() => {
+      try {
+        return fs9.lstatSync(quarantine);
+      } catch (error) {
+        if (errorCode3(error) === "ENOENT") return void 0;
+        throw error;
+      }
+    })();
+    if (moved && moved.isFile() && !moved.isSymbolicLink() && moved.dev === inspected.dev && moved.ino === inspected.ino) {
+      fs9.rmSync(quarantine);
+      return true;
+    }
+    try {
+      fs9.linkSync(quarantine, this.#lock);
+    } catch (error) {
+      if (errorCode3(error) !== "EEXIST") {
+        this.#uncertainLock = true;
+        throw new Error("uncertain state lock reclamation; operator recovery required", { cause: error });
+      }
+    }
+    fs9.rmSync(quarantine);
+    return false;
+  }
   async #withMutationLock(context, operation) {
     if (this.#uncertainLock) throw new Error("uncertain state lock ownership; operator recovery required");
     const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
@@ -25249,13 +25379,7 @@ var StateProvider = class {
               throw new Error("uncertain state lock owner; operator recovery required", { cause });
             }
             if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) throw new Error("uncertain state lock owner; operator recovery required");
-            if (!processIsAlive(ownerPid)) {
-              const current = fs9.lstatSync(this.#lock);
-              if (current.dev === stat.dev && current.ino === stat.ino && current.isFile()) {
-                fs9.rmSync(this.#lock);
-                continue;
-              }
-            }
+            if (!processIsAlive(ownerPid) && this.#reclaimStaleLock(stat)) continue;
           }
           if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
           await delay2(10);
@@ -25857,11 +25981,11 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     const result = { entries: [], truncated: false };
     const limit = args.limit ?? 100;
     for (const name of names.sort()) {
-      const found = this.#paths.check(path12.join(directory2.path, name));
       if (result.entries.length >= limit) {
         result.truncated = true;
         continue;
       }
+      const found = this.#paths.check(path12.join(directory2.path, name));
       result.entries.push({ path: this.#paths.relative(found.path), type: found.stat.isDirectory() ? "directory" : "file" });
       if (!this.#fits(result)) {
         result.entries.pop();
@@ -26264,7 +26388,7 @@ var FabricBootstrapProvider = class {
     if (!context.bootstrap) throw new Error("Kiro bootstrap context is unavailable in this library execution");
     if (name === "workspace") {
       if (!value_exports.Check(kiroPowerWorkspaceRequestSchema, args)) throw new Error("Invalid fabric.workspace action/arguments");
-      return this.#bounded(await context.bootstrap.workspace(args, context.signal));
+      return this.#bounded(await context.bootstrap.workspace(args, context.signal, context.chargeApproval));
     }
     if (name === "info") return this.#bounded(await context.bootstrap.info());
     throw new Error(`Unknown bootstrap action: ${name}`);
@@ -26907,6 +27031,10 @@ var KiroMcpProvider = class {
     return [this.#globalCatalog];
   }
   invalidateDiscovery(server) {
+    if (server !== void 0 && this.#runtime !== void 0 && !this.#runtime.listServers().includes(server)) {
+      this.#evictServer(server);
+      return;
+    }
     this.#evict(server);
   }
   discoveryRevision() {
@@ -26915,26 +27043,40 @@ var KiroMcpProvider = class {
   observedActions() {
     return Object.freeze([...this.#observations.values()].flat());
   }
-  #evict(server) {
-    this.#globalCatalog.current = false;
-    this.#globalCatalog = catalogTicket();
-    for (const [name, tickets] of this.#catalogTickets) {
-      if (server !== void 0 && name !== server) continue;
+  /** Revoke one server's authority without rotating the aggregate catalog. */
+  #evictServer(server) {
+    const tickets = this.#catalogTickets.get(server);
+    if (tickets) {
       tickets.revocation.current = false;
       tickets.inventory.current = false;
-      this.#catalogTickets.delete(name);
+      this.#catalogTickets.delete(server);
     }
-    if (server === void 0) this.#observationWeights.clear();
-    else this.#observationWeights.delete(server);
+    this.#observationWeights.delete(server);
     for (const reserved of this.#observationReservations) {
-      if (server === void 0 || reserved === server) this.#invalidatedReservations.add(reserved);
+      if (reserved === server) this.#invalidatedReservations.add(reserved);
     }
-    if (server === void 0) {
-      if (this.#observations.size) {
-        this.#observations.clear();
-        this.#revision++;
-      }
-    } else if (this.#observations.delete(server)) this.#revision++;
+    if (this.#observations.delete(server)) this.#revision++;
+  }
+  #evict(server) {
+    if (server !== void 0) {
+      this.#evictServer(server);
+      this.#globalCatalog.current = false;
+      this.#globalCatalog = catalogTicket();
+      return;
+    }
+    this.#globalCatalog.current = false;
+    this.#globalCatalog = catalogTicket();
+    for (const tickets of this.#catalogTickets.values()) {
+      tickets.revocation.current = false;
+      tickets.inventory.current = false;
+    }
+    this.#catalogTickets.clear();
+    this.#observationWeights.clear();
+    for (const reserved of this.#observationReservations) this.#invalidatedReservations.add(reserved);
+    if (this.#observations.size) {
+      this.#observations.clear();
+      this.#revision++;
+    }
   }
   constructor(cwd, config, runtimeFactory) {
     this.#cwd = cwd;
@@ -26998,7 +27140,7 @@ var KiroMcpProvider = class {
     throwIfAbortedOrExpired(context.signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
     if (!runtime.listServers().includes(server)) {
-      this.#evict(server);
+      this.#evictServer(server);
       throw new Error(`Unknown configured MCP server: ${server}`);
     }
     return {
@@ -27048,7 +27190,7 @@ var KiroMcpProvider = class {
     throwIfAbortedOrExpired(signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
     if (!runtime.listServers().includes(server)) {
-      this.#evict(server);
+      this.#evictServer(server);
       throw new Error(`Unknown configured MCP server: ${server}`);
     }
     const approvedTransport = this.#assertTransportSnapshot(
@@ -27885,16 +28027,25 @@ var canonicalDirectory = (root) => {
   }
   return canonical;
 };
-var memoryNamespaceRoot = (root, namespace) => path15.join(root, MEMORY_DIR, `${encodeName2(namespace)}-${hashNamespace(namespace)}`);
-var entryPath = (namespaceRoot, key) => (() => {
-  const name = `${encodeName2(key)}.json`;
-  if (utf8Bytes(name) > MAX_FILE_NAME_BYTES) {
+var memoryNamespaceRoot = (root, namespace) => {
+  if (utf8Bytes(`${encodeName2(namespace)}-${hashNamespace(namespace)}`) > MAX_FILE_NAME_BYTES) {
+    throw new KiroMemoryScopeError(
+      "Kiro memory namespace is too long after filesystem-safe encoding"
+    );
+  }
+  return path15.join(root, MEMORY_DIR, `${encodeName2(namespace)}-${hashNamespace(namespace)}`);
+};
+var assertKiroMemoryKeyFits = (key) => {
+  if (utf8Bytes(`${encodeName2(key)}.json`) > MAX_FILE_NAME_BYTES) {
     throw new KiroMemoryScopeError(
       `Kiro memory key is too long after filesystem-safe encoding`
     );
   }
-  return path15.join(namespaceRoot, name);
-})();
+};
+var entryPath = (namespaceRoot, key) => {
+  assertKiroMemoryKeyFits(key);
+  return path15.join(namespaceRoot, `${encodeName2(key)}.json`);
+};
 var readEntry = (filePath, expectedNamespace, maxValueChars) => {
   let descriptor2;
   let raw;
@@ -28277,6 +28428,7 @@ var KiroMemoryProvider = class {
   prepareArguments(actionName, args) {
     if (["get", "set", "delete"].includes(actionName) && typeof args.key === "string") {
       args.key = normalizeKiroMemoryToken(args.key, "key");
+      assertKiroMemoryKeyFits(args.key);
     }
     if (actionName === "search" && typeof args.query === "string") {
       args.query = normalizeKiroMemoryToken(args.query, "query");
@@ -28913,7 +29065,14 @@ var createKiroMcpServer = async (options) => {
           context: workspaceSnapshot?.status ?? "temporarily-unavailable"
         }) }] };
         if (parsed.action === "select" && unavailableWorkspace()) throw new Error("workspace roots are temporarily unverifiable");
-        const mutation = await binding.prepareMutation(parsed, extra.signal);
+        const chargeApproval = async (prompt) => {
+          const budget = (runtime ?? await getRuntime()).service.config.executor.maxApprovalRequests;
+          if (typeof budget === "number" && budget < 1) {
+            throw new Error("Manual workspace attachment is blocked: executor.maxApprovalRequests is 0");
+          }
+          await prompt();
+        };
+        const mutation = await binding.prepareMutation(parsed, extra.signal, chargeApproval);
         const result = await lifecycle(async () => {
           if (closing) throw new Error("Agent MCP server is shutting down");
           extra.signal.throwIfAborted();
@@ -29007,7 +29166,7 @@ var createKiroMcpServer = async (options) => {
       let pendingMutation;
       const bootstrap = {
         info: () => infoValue(current, unavailableWorkspace() || binding.workspaceObservation().status === "temporarily-unavailable"),
-        workspace: async (args, signal) => {
+        workspace: async (args, signal, chargeApproval) => {
           const parsed = workspaceRequest(args);
           if (tracer.enabled) {
             tracer.event("eval", "tool.fabric_workspace", execId, { action: parsed.action });
@@ -29016,7 +29175,7 @@ var createKiroMcpServer = async (options) => {
           if (parsed.action === "status" || parsed.action === "list") return workspaceValue(parsed.action);
           if (pendingMutation) throw new Error("Only one workspace transition is permitted per execution");
           if (parsed.action === "select" && unavailableWorkspace()) throw new Error("workspace roots are temporarily unverifiable");
-          pendingMutation = await binding.prepareMutation(parsed, signal);
+          pendingMutation = await binding.prepareMutation(parsed, signal, chargeApproval);
           signal?.throwIfAborted();
           if (binding.bindingIdentity() !== pinnedIdentity) throw new Error("Workspace changed during bootstrap preparation");
           return { status: "pending", action: parsed.action, committed: false, nextExecutionRequired: true };

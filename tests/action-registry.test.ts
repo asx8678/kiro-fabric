@@ -204,4 +204,27 @@ describe("canonical remote registry integration", () => {
     expect(await registry.invoke("state.set", args, { ...context(async () => {}), maxResultChars: 100, formatCatalogResult(value, method) { expect(value).toBe(catalog); expect(method).toBe("mcp.toolsPage"); return { cursor: "next" }; } })).toEqual({ cursor: "next" });
     await expect(registry.invoke("state.set", args, { ...context(async () => {}), formatCatalogResult() { throw new Error("trusted repair"); } })).rejects.toThrow("trusted repair");
   });
+  it("reports a closed registry instead of a raw TypeError when shutdown races describe", async () => {
+    const registry = new ActionRegistry();
+    registry.register(provider(async () => true));
+    const original = registry.describe.bind(registry);
+    let reached!: () => void;
+    let release!: () => void;
+    const atGate = new Promise<void>((resolve) => { reached = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    registry.describe = async (...args: Parameters<ActionRegistry["describe"]>) => {
+      const result = await original(...args);
+      reached();
+      await gate;
+      return result;
+    };
+    const call = registry.invoke("state.set", { key: "a", value: 1 }, context(async () => {})).then(() => null, (error: unknown) => error);
+    await atGate;
+    await registry.close();
+    release();
+    const error = await call;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("Fabric registry is closed");
+    expect(error).not.toBeInstanceOf(TypeError);
+  });
 });

@@ -116,4 +116,23 @@ describe("compiler ownership and bounded admission", () => {
     await vi.advanceTimersByTimeAsync(30_001);
     expect(workers[1]!.terminated).toBe(1);
   });
+
+  it("admits a new request while an idle worker is still retiring", async () => {
+    vi.useFakeTimers();
+    const owner = pool(1);
+    const warm = owner.check(request); workers[0]!.reply(); await warm;
+    // Idle retirement starts but does not settle: the worker is gone from the
+    // pool's capacity accounting while its termination is still pending.
+    let release!: () => void;
+    workers[0]!.terminationGate = new Promise<void>((resolve) => { release = resolve; });
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(workers[0]!.terminated).toBe(1);
+    const next = owner.check(request);
+    await Promise.resolve();
+    expect(workers).toHaveLength(2);
+    workers[1]!.reply();
+    expect((await next).errors).toHaveLength(1);
+    release();
+    await owner.close();
+  });
 });

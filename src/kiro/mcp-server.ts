@@ -425,7 +425,18 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
           context: workspaceSnapshot?.status ?? "temporarily-unavailable",
         }) }] };
         if (parsed.action === "select" && unavailableWorkspace()) throw new Error("workspace roots are temporarily unverifiable");
-        const mutation = await binding.prepareMutation(parsed, extra.signal);
+        // This direct tool path has no Fabric execution to charge, so it honors
+        // the configured prompt budget itself: a zero budget must not open an
+        // interactive attachment dialog. A host that injects no executor budget
+        // keeps the previous behavior.
+        const chargeApproval = async (prompt: () => Promise<void>): Promise<void> => {
+          const budget = (runtime ?? await getRuntime()).service.config.executor.maxApprovalRequests;
+          if (typeof budget === "number" && budget < 1) {
+            throw new Error("Manual workspace attachment is blocked: executor.maxApprovalRequests is 0");
+          }
+          await prompt();
+        };
+        const mutation = await binding.prepareMutation(parsed, extra.signal, chargeApproval);
         const result = await lifecycle(async () => {
           if (closing) throw new Error("Agent MCP server is shutting down");
           extra.signal.throwIfAborted();
@@ -524,13 +535,17 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       let pendingMutation: KiroPowerWorkspaceMutation | undefined;
       const bootstrap = {
         info: () => infoValue(current, unavailableWorkspace() || binding.workspaceObservation().status === "temporarily-unavailable"),
-        workspace: async (args: Record<string, unknown>, signal?: AbortSignal) => {
+        workspace: async (
+          args: Record<string, unknown>,
+          signal?: AbortSignal,
+          chargeApproval?: (prompt: () => Promise<void>) => Promise<void>,
+        ) => {
           const parsed = workspaceRequest(args);
           if (tracer.enabled) { tracer.event("eval", "tool.fabric_workspace", execId, { action: parsed.action }); tracer.flush(); }
           if (parsed.action === "status" || parsed.action === "list") return workspaceValue(parsed.action);
           if (pendingMutation) throw new Error("Only one workspace transition is permitted per execution");
           if (parsed.action === "select" && unavailableWorkspace()) throw new Error("workspace roots are temporarily unverifiable");
-          pendingMutation = await binding.prepareMutation(parsed, signal);
+          pendingMutation = await binding.prepareMutation(parsed, signal, chargeApproval);
           signal?.throwIfAborted();
           if (binding.bindingIdentity() !== pinnedIdentity) throw new Error("Workspace changed during bootstrap preparation");
           return { status: "pending", action: parsed.action, committed: false, nextExecutionRequired: true };

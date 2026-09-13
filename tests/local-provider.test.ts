@@ -190,6 +190,16 @@ describe("LocalCodingProvider read contracts", () => {
     expect(matches).toEqual({ scope: searchScope("*.txt"), matches: [{ path: "a.txt", line: 1, text: "HELLO.[x]" }, { path: "b.txt", line: 2, text: "Hello.[x]" }], truncated: false });
     expect(await f.call("grep", { pattern: "no-match", literal: true })).toEqual({ scope: searchScope(), matches: [], truncated: false });
   });
+  it("does not fail a bounded listing because of an unsafe entry beyond the limit", async () => {
+    const f = fixture();
+    f.put("a.txt", "a");
+    f.put("b.txt", "b");
+    fs.symlinkSync(path.join(f.root, "a.txt"), path.join(f.root, "z-link"));
+    const listed = await f.call("list", { limit: 2 }) as LocalListResult;
+    expect(listed.entries.map((entry) => entry.path)).toEqual(["a.txt", "b.txt"]);
+    expect(listed.truncated).toBe(true);
+  });
+
   it("bounds find and grep counts, record text and small-budget result shapes", async () => {
     const f = fixture(512);
     for (let index = 0; index < 12; index++) f.put(`${String(index).padStart(2, "0")}.txt`, "match\n".repeat(10));

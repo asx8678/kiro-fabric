@@ -122,6 +122,40 @@ describe("private artifacts and state", () => {
     expect(fs.readFileSync(lock, "utf8")).toBe("replacement");
   });
 
+  it("never deletes a live lock that replaced a stale lock during reclamation", async () => {
+    const root = temporary();
+    const provider = new StateProvider(root);
+    const lock = path.join(root, ".state-mutation.lock");
+    fs.writeFileSync(lock, JSON.stringify({ pid: 2_147_483_647 }), { mode: 0o600 });
+    const stale = new Date(Date.now() - 60_000);
+    fs.utimesSync(lock, stale, stale);
+    // The stale owner is a definitely-dead pid, so reclamation proceeds.
+    vi.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("simulated dead owner"), { code: "ESRCH" });
+    });
+    // Simulate a competing owner taking the pathname after inspection but
+    // before this process acts on it.
+    const realRename = fs.renameSync;
+    let swapped = false;
+    vi.spyOn(fs, "renameSync").mockImplementation(((from: fs.PathLike, to: fs.PathLike) => {
+      if (!swapped && String(from) === lock) {
+        swapped = true;
+        fs.rmSync(lock);
+        fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }), { mode: 0o600 });
+      }
+      return realRename(from, to);
+    }) as typeof fs.renameSync);
+    const controller = new AbortController();
+    const pending = provider.invoke("set", { key: "first", value: 1 }, { cwd: root, signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    controller.abort(new Error("stop waiting for the live lock"));
+    await expect(pending).rejects.toThrow();
+    expect(swapped).toBe(true);
+    // The live owner's lock must survive with its own identity and content.
+    expect(JSON.parse(fs.readFileSync(lock, "utf8")).pid).toBe(process.pid);
+    expect(fs.readdirSync(root).filter((name) => name.includes("reclaim-"))).toEqual([]);
+  });
+
   it("shares durable memory and state safely across independent runtimes for one workspace", async () => {
     const root = temporary();
     const workspace = path.join(root, "workspace");

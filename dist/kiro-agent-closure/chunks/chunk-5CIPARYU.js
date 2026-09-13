@@ -211812,6 +211812,9 @@ var FabricCompilerPool = class {
   }
   maxWorkers;
   #workers = /* @__PURE__ */ new Set();
+  /** Workers whose termination has begun. They no longer hold pool capacity,
+   * but shutdown still awaits them so retirement remains complete. */
+  #retiring = /* @__PURE__ */ new Set();
   #idle;
   #cache = /* @__PURE__ */ new Map();
   #cachedChars = 0;
@@ -211848,9 +211851,16 @@ var FabricCompilerPool = class {
   }
   #terminate(state) {
     this.#detachIdle(state);
-    return state.termination ??= state.worker.terminate().catch(() => void 0).then(() => {
-      this.#workers.delete(state);
-    });
+    if (state.termination) return state.termination;
+    this.#workers.delete(state);
+    const termination = state.worker.terminate().catch(() => void 0).then(() => void 0);
+    state.termination = termination;
+    this.#retiring.add(termination);
+    void termination.then(
+      () => this.#retiring.delete(termination),
+      () => this.#retiring.delete(termination)
+    );
+    return termination;
   }
   #acquire(workerUrl) {
     if (workerUrl === void 0 && this.#idle) {
@@ -211953,10 +211963,13 @@ var FabricCompilerPool = class {
     this.#closed = true;
     this.#cache.clear();
     this.#cachedChars = 0;
-    return this.#closing ??= Promise.all([...this.#workers].map((state) => {
-      state.pending?.finish(new Error("Fabric compiler pool is closed"));
-      return this.#terminate(state);
-    })).then(() => void 0);
+    return this.#closing ??= (async () => {
+      for (const state of [...this.#workers]) {
+        state.pending?.finish(new Error("Fabric compiler pool is closed"));
+        void this.#terminate(state);
+      }
+      while (this.#retiring.size > 0) await Promise.all([...this.#retiring]);
+    })();
   }
 };
 var standaloneCompilerPool = new FabricCompilerPool();

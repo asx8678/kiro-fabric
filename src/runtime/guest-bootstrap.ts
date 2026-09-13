@@ -123,6 +123,17 @@ export const GUEST_SETUP = `
     return text;
   };
   const parseStrict = (text) => apply(jsonParse, JSON, [text]);
+  // Bounded print formatting runs inside the VM: an over-cap string is sliced
+  // here so the host never copies the whole value across the bridge. Mirrors the
+  // host formatter's JSON shape for non-strings and never throws.
+  const boundLog = (value, maxChars) => {
+    if (typeof maxChars !== 'number' || !numberIsFinite(maxChars) || maxChars <= 0) return '';
+    if (typeof value === 'string') return value.length <= maxChars ? value : value.slice(0, maxChars);
+    let text;
+    try { text = strictJsonText(value); }
+    catch { text = '[value outside bounded JSON]'; }
+    return text.length <= maxChars ? text : text.slice(0, maxChars);
+  };
   // One execution-wide semaphore covers friendly APIs, tools.call, direct
   // Promise.all fan-out, and nested parallel helpers alike. This queues excess
   // bridge work before it reaches the host's fail-closed concurrency quota.
@@ -291,6 +302,6 @@ export const GUEST_SETUP = `
   });
   objectDefineProperty(globalThis, 'parallel', { value: parallel, writable: false, configurable: false });
   objectFreeze(globalThis.payloads);
-  return objectFreeze({ run, cancel });
+  return objectFreeze({ run, cancel, boundLog });
 })()
 `;

@@ -98,6 +98,17 @@ describe("real provider catalog revocation dependencies", () => {
     unavailable(() => pending.publish("mcp.toolsPage", []));
     expect(f.contacts()).toBe(before); await f.provider.close();
   });
+  it("keeps the aggregate catalog when an unconfigured server is requested", async () => {
+    const f = setup(), cursor = await f.open();
+    const aggregate = f.store.reserve(f.provider.catalogDependencies()).publish("tools.listPage", [{ description: "x".repeat(4000) }]);
+    const before = f.contacts();
+    await expect(f.invoke("missing")).rejects.toThrow("Unknown configured MCP server");
+    expect(f.store.catalogPage(cursor).total).toBe(1);
+    expect(f.store.catalogPage(aggregate).total).toBe(1);
+    expect(f.contacts()).toBe(before);
+    await f.provider.close();
+  });
+
   it("bounds server authorities and never resurrects evicted tickets", async () => {
     const f = setup(), old = f.provider.catalogDependencies({ server: "unused" });
     for (let i = 0; i < 129; i++) f.provider.catalogDependencies({ server: String(i) });

@@ -191,6 +191,28 @@ describe("QuickJS-only guest runtime", () => {
     expect(logs.logs.join("").length).toBeLessThanOrEqual(10);
   });
 
+  it.each([
+    ["a large string", "print('x'.repeat(200000));return true"],
+    ["a large object", "print({ value: 'x'.repeat(200000) });return true"],
+    ["a non-JSON value", "print(() => 1);return true"],
+  ])("never exceeds the log character budget for %s", async (_label, code) => {
+    const result = await new QuickJsRuntime().execute(code, async () => null, { ...defaults, maxLogChars: 16, timeoutMs: 2_000, maxTimeoutMs: 2_000 });
+    expect(result.terminationReason).toBe("completed");
+    expect(result.logs.join("").length).toBeLessThanOrEqual(16);
+  });
+
+  it("bounds teardown by the cleanup grace instead of the execution deadline", async () => {
+    const before = Date.now();
+    const result = await new QuickJsRuntime().execute(
+      "const p = tools.call({ ref: 'test.never', args: {} });p.catch(() => { while (true) {} });return true",
+      () => new Promise(() => {}),
+      { ...defaults, timeoutMs: 5_000, maxTimeoutMs: 5_000, cleanupGraceMs: 25 },
+    );
+    const elapsed = Date.now() - before;
+    expect(result.terminationReason).toBe("completed");
+    expect(elapsed).toBeLessThan(2_000);
+  });
+
   it("provides ordered fan-out bounded by the configured host-call concurrency", async () => {
     let active = 0;
     let maximum = 0;

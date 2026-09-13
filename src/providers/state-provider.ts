@@ -287,6 +287,39 @@ export class StateProvider implements FabricProvider {
     }
   }
 
+  /** Reclaim a stale lock without ever unlinking a pathname that may have been
+   * replaced since inspection. The stale file is moved to a private quarantine
+   * name first; only the exact inspected inode is then removed. A displaced
+   * live lock is restored rather than deleted. Returns true when the stale lock
+   * was reclaimed and acquisition may be retried immediately. */
+  #reclaimStaleLock(inspected: fs.Stats): boolean {
+    const quarantine = path.join(this.#root, `${LOCK_NAME}.reclaim-${randomBytes(12).toString("hex")}`);
+    try { fs.renameSync(this.#lock, quarantine); }
+    catch (error) { if (errorCode(error) === "ENOENT") return true; throw error; }
+    const moved = (() => {
+      try { return fs.lstatSync(quarantine); }
+      catch (error) { if (errorCode(error) === "ENOENT") return undefined; throw error; }
+    })();
+    if (moved && moved.isFile() && !moved.isSymbolicLink() &&
+        moved.dev === inspected.dev && moved.ino === inspected.ino) {
+      fs.rmSync(quarantine);
+      return true;
+    }
+    // The pathname changed between inspection and reclamation. Put the
+    // displaced lock back so its live owner keeps the authority it holds.
+    try { fs.linkSync(quarantine, this.#lock); }
+    catch (error) {
+      // Another owner already occupies the pathname, so the displaced file is
+      // superseded. Any other failure is uncertain and must fail closed.
+      if (errorCode(error) !== "EEXIST") {
+        this.#uncertainLock = true;
+        throw new Error("uncertain state lock reclamation; operator recovery required", { cause: error });
+      }
+    }
+    fs.rmSync(quarantine);
+    return false;
+  }
+
   async #withMutationLock<T>(context: FabricInvocationContext, operation: () => T): Promise<T> {
     if (this.#uncertainLock) throw new Error("uncertain state lock ownership; operator recovery required");
     const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
@@ -329,13 +362,7 @@ export class StateProvider implements FabricProvider {
               if (typeof owner.pid === "number") ownerPid = owner.pid;
             } catch (cause) { throw new Error("uncertain state lock owner; operator recovery required", { cause }); }
             if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) throw new Error("uncertain state lock owner; operator recovery required");
-            if (!processIsAlive(ownerPid)) {
-              const current = fs.lstatSync(this.#lock);
-              if (current.dev === stat.dev && current.ino === stat.ino && current.isFile()) {
-                fs.rmSync(this.#lock);
-                continue;
-              }
-            }
+            if (!processIsAlive(ownerPid) && this.#reclaimStaleLock(stat)) continue;
           }
           if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
           await delay(10);

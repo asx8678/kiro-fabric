@@ -67,10 +67,17 @@ export interface FabricInvocationContext {
   /** Host-only absolute monotonic deadline. Providers must check it at commit boundaries. */
   deadline?: FabricDeadline;
   approve?(action: ResolvedFabricAction, args: Record<string, unknown>): Promise<void>;
+  /** Charge a provider-owned interactive prompt against this execution's
+   * approval budget. The prompt content stays provider-owned. */
+  chargeApproval?(prompt: () => Promise<void>): Promise<void>;
   /** Per-execution Kiro bootstrap capability; never serialized into the guest. */
   bootstrap?: {
     info(): Promise<unknown>;
-    workspace(args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+    workspace(
+      args: Record<string, unknown>,
+      signal?: AbortSignal,
+      chargeApproval?: (prompt: () => Promise<void>) => Promise<void>,
+    ): Promise<unknown>;
   };
 }
 

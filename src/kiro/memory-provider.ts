@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { throwIfAbortedOrExpired } from "../async-settlement.js";
 import type { FabricActionDescriptor, FabricInvocationContext, FabricProvider } from "../protocol.js";
-import { normalizeKiroMemoryToken, openKiroMemory, type KiroMemoryBinding } from "./memory.js";
+import { assertKiroMemoryKeyFits, normalizeKiroMemoryToken, openKiroMemory, type KiroMemoryBinding } from "./memory.js";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 const KEY_MAX = 512;
@@ -42,6 +42,10 @@ export class KiroMemoryProvider implements FabricProvider {
   prepareArguments(actionName: string, args: Record<string, unknown>): Record<string, unknown> {
     if (["get", "set", "delete"].includes(actionName) && typeof args.key === "string") {
       args.key = normalizeKiroMemoryToken(args.key, "key");
+      // The descriptor's 512-character bound is a source bound, not a filename
+      // bound: keys that encode beyond the entry-name limit are rejected here,
+      // before approval, with the same error the filesystem layer would raise.
+      assertKiroMemoryKeyFits(args.key as string);
     }
     if (actionName === "search" && typeof args.query === "string") {
       args.query = normalizeKiroMemoryToken(args.query, "query");

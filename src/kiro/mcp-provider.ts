@@ -592,25 +592,50 @@ export class KiroMcpProvider implements FabricProvider {
     // Every publication/revocation rotates this aggregate inventory authority.
     return [this.#globalCatalog];
   }
-  invalidateDiscovery(server?: string): void { this.#evict(server); }
+  invalidateDiscovery(server?: string): void {
+    // An unknown server never contributed to the aggregate inventory, so a
+    // typo or stale reference must not discard valid cursors for other servers.
+    if (server !== undefined && this.#runtime !== undefined && !this.#runtime.listServers().includes(server)) {
+      this.#evictServer(server);
+      return;
+    }
+    this.#evict(server);
+  }
 
   discoveryRevision(): string { return String(this.#revision); }
   observedActions(): readonly ObservedFabricAction[] { return Object.freeze([...this.#observations.values()].flat()); }
+  /** Revoke one server's authority without rotating the aggregate catalog. */
+  #evictServer(server: string): void {
+    const tickets = this.#catalogTickets.get(server);
+    if (tickets) {
+      tickets.revocation.current = false; tickets.inventory.current = false;
+      this.#catalogTickets.delete(server);
+    }
+    this.#observationWeights.delete(server);
+    for (const reserved of this.#observationReservations) {
+      if (reserved === server) this.#invalidatedReservations.add(reserved);
+    }
+    if (this.#observations.delete(server)) this.#revision++;
+  }
+
   #evict(server?: string): void {
+    if (server !== undefined) {
+      this.#evictServer(server);
+      // A failed or denied operation against a configured server may have
+      // published its inventory, so the aggregate inventory is rotated too.
+      this.#globalCatalog.current = false;
+      this.#globalCatalog = catalogTicket();
+      return;
+    }
     this.#globalCatalog.current = false;
     this.#globalCatalog = catalogTicket();
-    for (const [name, tickets] of this.#catalogTickets) {
-      if (server !== undefined && name !== server) continue;
+    for (const tickets of this.#catalogTickets.values()) {
       tickets.revocation.current = false; tickets.inventory.current = false;
-      this.#catalogTickets.delete(name);
     }
-    if (server === undefined) this.#observationWeights.clear(); else this.#observationWeights.delete(server);
-    for (const reserved of this.#observationReservations) {
-      if (server === undefined || reserved === server) this.#invalidatedReservations.add(reserved);
-    }
-    if (server === undefined) {
-      if (this.#observations.size) { this.#observations.clear(); this.#revision++; }
-    } else if (this.#observations.delete(server)) this.#revision++;
+    this.#catalogTickets.clear();
+    this.#observationWeights.clear();
+    for (const reserved of this.#observationReservations) this.#invalidatedReservations.add(reserved);
+    if (this.#observations.size) { this.#observations.clear(); this.#revision++; }
   }
 
   constructor(cwd: string, config: FabricMcpConfig, runtimeFactory?: McpRuntimeFactory) {
@@ -685,7 +710,7 @@ export class KiroMcpProvider implements FabricProvider {
     const runtime = await this.#getRuntime(context.signal);
     throwIfAbortedOrExpired(context.signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
-    if (!runtime.listServers().includes(server)) { this.#evict(server); throw new Error(`Unknown configured MCP server: ${server}`); }
+    if (!runtime.listServers().includes(server)) { this.#evictServer(server); throw new Error(`Unknown configured MCP server: ${server}`); }
     return {
       server,
       ...(actionName === "$call" || actionName === "$describe" ? { tool } : {}),
@@ -746,7 +771,7 @@ export class KiroMcpProvider implements FabricProvider {
     const runtime = await this.#getRuntime(signal);
     throwIfAbortedOrExpired(signal, context.deadline);
     this.#assertRuntimeConfigurationCurrent();
-    if (!runtime.listServers().includes(server)) { this.#evict(server); throw new Error(`Unknown configured MCP server: ${server}`); }
+    if (!runtime.listServers().includes(server)) { this.#evictServer(server); throw new Error(`Unknown configured MCP server: ${server}`); }
     // ActionRegistry always injects this during canonical preparation. The
     // fallback preserves direct provider use in tests/embedders while still
     // snapshotting before any contact.

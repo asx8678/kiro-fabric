@@ -53,7 +53,7 @@ export class FabricBootstrapProvider implements FabricProvider {
     if (!context.bootstrap) throw new Error("Kiro bootstrap context is unavailable in this library execution");
     if (name === "workspace") {
       if (!Value.Check(kiroPowerWorkspaceRequestSchema, args)) throw new Error("Invalid fabric.workspace action/arguments");
-      return this.#bounded(await context.bootstrap.workspace(args, context.signal));
+      return this.#bounded(await context.bootstrap.workspace(args, context.signal, context.chargeApproval));
     }
     if (name === "info") return this.#bounded(await context.bootstrap.info());
     throw new Error(`Unknown bootstrap action: ${name}`);

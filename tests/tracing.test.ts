@@ -95,14 +95,44 @@ describe("trace writer", () => {
     writer.close();
   });
 
-  it("truncates oversized lines instead of dropping the buffer bound", () => {
+  it.each([16, 128])("keeps oversized UTF-8 JSONL within a %i-byte line cap", (maxLineBytes) => {
     const file = path.join(temporary(), "trace.jsonl");
-    const writer = createTraceWriter({ file, maxLineBytes: 128 });
-    writer.write(JSON.stringify({ ev: "large", pad: "y".repeat(4_096) }));
-    writer.flush();
-    const text = fs.readFileSync(file, "utf8");
-    expect(text.length).toBeLessThanOrEqual(200);
+    const writer = createTraceWriter({ file, maxLineBytes });
+    writer.write(JSON.stringify({ ev: "large", pad: "界".repeat(4_096) }));
     writer.close();
+    const text = fs.readFileSync(file, "utf8");
+    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(maxLineBytes);
+    expect(() => JSON.parse(text.trim())).not.toThrow();
+  });
+
+  it("counts every eviction needed to admit one larger line", () => {
+    const file = path.join(temporary(), "trace.jsonl");
+    const writer = createTraceWriter({ file, maxBufferBytes: 64, maxLineBytes: 64 });
+    for (let n = 0; n < 4; n++) writer.write(JSON.stringify({ n }));
+    writer.write(JSON.stringify({ pad: "x".repeat(50) }));
+    expect(writer.dropped).toBe(4);
+    writer.close();
+    expect(readEvents(file)).toEqual([{ pad: "x".repeat(50) }]);
+  });
+
+  it("drops an unbufferable line without evicting existing lines", () => {
+    const file = path.join(temporary(), "trace.jsonl");
+    const writer = createTraceWriter({ file, maxBufferBytes: 8 });
+    writer.write("{}");
+    writer.write('{"n":123456789}');
+    expect(writer.dropped).toBe(1);
+    writer.close();
+    expect(fs.readFileSync(file, "utf8")).toBe("{}\n");
+  });
+
+  it.each([
+    { maxBufferLines: 0 }, { maxBufferLines: -1 }, { maxBufferLines: 1.5 },
+    { maxBufferLines: Number.NaN }, { maxBufferBytes: 0 },
+    { maxLineBytes: 0 }, { maxFileBytes: -1 }, { flushIntervalMs: 0 },
+  ])("rejects invalid writer bounds before creating a file: %j", (bounds) => {
+    const file = path.join(temporary(), "trace.jsonl");
+    expect(() => { const writer = createTraceWriter({ file, ...bounds }); writer.close(); }).toThrow(/must be/);
+    expect(fs.existsSync(file)).toBe(false);
   });
 });
 

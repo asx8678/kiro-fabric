@@ -257,6 +257,7 @@ export class KiroPowerWorkspaceBinding {
   async prepareMutation(
     request: Extract<KiroPowerWorkspaceRequest, { action: "select" | "attach" | "detach" }>,
     signal?: AbortSignal,
+    chargeApproval?: (prompt: () => Promise<void>) => Promise<void>,
   ): Promise<KiroPowerWorkspaceMutation> {
     if (request.action === "detach") return request;
     if (request.action === "select") {
@@ -271,7 +272,13 @@ export class KiroPowerWorkspaceBinding {
     }
     if (!this.#elicitor) throw new Error("manual workspace attachment requires MCP elicitation support");
     signal?.throwIfAborted();
-    const approved = await this.#elicitor.approveWorkspace(candidate.root, signal);
+    const elicitor = this.#elicitor;
+    let approved = false;
+    const elicit = async (): Promise<void> => { approved = await elicitor.approveWorkspace(candidate.root, signal); };
+    // Manual attachment is an interactive consent step. Charge it against the
+    // execution's approval budget so a zero-prompt policy also blocks this
+    // dialog; the elicitation itself stays provider-owned.
+    if (chargeApproval) await chargeApproval(elicit); else await elicit();
     signal?.throwIfAborted();
     if (!approved) throw new Error("manual workspace attachment was not approved");
     // Bind approval to the exact filesystem object that was presented. The

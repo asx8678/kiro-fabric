@@ -34,7 +34,7 @@ const servers: Array<{ close(): Promise<void> }> = [];
 beforeEach(() => { vi.unstubAllEnvs(); wire.handlers.clear(); wire.approve = false; wire.elicitation = true; wire.forms.length = 0; wire.onForm = undefined; });
 afterEach(async () => { await Promise.all(servers.splice(0).map((server) => server.close())); vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of temporary.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
-const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "data" | undefined = undefined, execute?: "allow" | "ask" | "deny") => {
+const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "data" | undefined = undefined, execute?: "allow" | "ask" | "deny", extra: { write?: "allow" | "ask" | "deny"; maxApprovalRequests?: number } = {}) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "strict-bootstrap-")); temporary.push(base);
   const runtimeRoot = path.join(base, "runtime"); const dataRoot = path.join(base, "data");
   fs.mkdirSync(runtimeRoot); fs.mkdirSync(dataRoot);
@@ -50,12 +50,14 @@ const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "
   }, prepareRuntime: (options) => createKiroRuntime({ ...options, config: normalizeFabricConfig({
     // Exercise product approval defaults, or an explicit execute restriction.
     ...(execute ? { approvals: { execute } } : {}),
-    executor: { timeoutMs: 5000, maxTimeoutMs: 180000 }, mcp: { enabled: false },
+    ...(extra.write ? { approvals: { write: extra.write } } : {}),
+    executor: { timeoutMs: 5000, maxTimeoutMs: 180000, ...(extra.maxApprovalRequests === undefined ? {} : { maxApprovalRequests: extra.maxApprovalRequests }) }, mcp: { enabled: false },
   }) }) });
   servers.push(server);
   const call = (code: string, payloads?: Record<string, string>, signal = new AbortController().signal) => wire.handlers.get(CallToolRequestSchema)!({ params: { name: "fabric_exec", arguments: { code, resultFormat: "json", ...(payloads ? { payloads } : {}) } } }, { signal });
   const value = (response: any) => JSON.parse(response.content[0].text.split("\n\nWorkspace transition:")[0]);
-  return { base, projects, dataRoot, call, value, snapshot: (next: KiroWorkspaceSnapshot) => { snapshot = next; } };
+  const tool = (name: string, args: Record<string, unknown>) => wire.handlers.get(CallToolRequestSchema)!({ params: { name, arguments: args } }, { signal: new AbortController().signal });
+  return { base, projects, dataRoot, call, value, tool, snapshot: (next: KiroWorkspaceSnapshot) => { snapshot = next; } };
 };
 
 describe("strict checked workspace bootstrap", () => {
@@ -406,6 +408,36 @@ describe("strict checked workspace bootstrap", () => {
     expect(invalidDynamic.isError).toBe(true); expect(invalidDynamic.content[0].text).toContain("Invalid fabric.workspace");
     const badHelp = await f.call('return await tools.call({ref:"fabric.help",args:{topic:"/etc/passwd"}})');
     expect(badHelp.isError).toBe(true);
+  });
+
+  it("charges manual attachment against the execution approval budget", async () => {
+    const blocked = await fixture(0, false, undefined, undefined, { write: "allow", maxApprovalRequests: 0 });
+    const denied = await blocked.call('return await fabric.workspace({action:"attach",path:payloads.root})', { root: blocked.projects[0]! });
+    expect(denied.isError).toBe(true);
+    expect(denied.content[0].text).toContain("approval request quota exceeded");
+    // No dialog is opened once the budget rejects the prompt.
+    expect(wire.forms).toHaveLength(0);
+
+    const allowed = await fixture(0, false, undefined, undefined, { write: "allow" });
+    wire.approve = true;
+    const approved = await allowed.call('return await fabric.workspace({action:"attach",path:payloads.root})', { root: allowed.projects[0]! });
+    expect(approved.isError).not.toBe(true);
+    expect(approved.content[0].text).toContain('"committed":true');
+    expect(wire.forms[0]).toContain(allowed.projects[0]);
+  });
+
+  it("honors the prompt budget for the direct fabric_workspace tool too", async () => {
+    const blocked = await fixture(0, false, undefined, undefined, { write: "allow", maxApprovalRequests: 0 });
+    const denied = await blocked.tool("fabric_workspace", { action: "attach", path: blocked.projects[0]! });
+    expect(denied.isError).toBe(true);
+    expect(JSON.stringify(denied)).toContain("maxApprovalRequests");
+    expect(wire.forms).toHaveLength(0);
+
+    const allowed = await fixture(0, false, undefined, undefined, { write: "allow" });
+    wire.approve = true;
+    const approved = await allowed.tool("fabric_workspace", { action: "attach", path: allowed.projects[0]! });
+    expect(approved.isError).not.toBe(true);
+    expect(wire.forms[0]).toContain(allowed.projects[0]);
   });
 
   it("manual attach preserves exact elicitation and denied/missing approval fails closed", async () => {

@@ -260,6 +260,9 @@ const defaultCompilerWorkerUrl = (): URL => import.meta.url.endsWith(".ts")
 
 export class FabricCompilerPool {
   readonly #workers = new Set<FabricCompilerWorkerState>();
+  /** Workers whose termination has begun. They no longer hold pool capacity,
+   * but shutdown still awaits them so retirement remains complete. */
+  readonly #retiring = new Set<Promise<void>>();
   #idle: FabricCompilerWorkerState | undefined;
   readonly #cache = new Map<string, CachedFabricCompilation>();
   #cachedChars = 0;
@@ -297,7 +300,19 @@ export class FabricCompilerPool {
 
   #terminate(state: FabricCompilerWorkerState): Promise<void> {
     this.#detachIdle(state);
-    return state.termination ??= state.worker.terminate().catch(() => undefined).then(() => { this.#workers.delete(state); });
+    if (state.termination) return state.termination;
+    // Release capacity synchronously. Retiring workers used to hold their slot
+    // until termination settled, so a request arriving during idle retirement
+    // was rejected with a concurrency error even though the pool was idle.
+    this.#workers.delete(state);
+    const termination = state.worker.terminate().catch(() => undefined).then(() => undefined);
+    state.termination = termination;
+    this.#retiring.add(termination);
+    void termination.then(
+      () => this.#retiring.delete(termination),
+      () => this.#retiring.delete(termination),
+    );
+    return termination;
   }
 
   #acquire(workerUrl?: URL): FabricCompilerWorkerState {
@@ -384,10 +399,15 @@ export class FabricCompilerPool {
   close(): Promise<void> {
     this.#closed = true;
     this.#cache.clear(); this.#cachedChars = 0;
-    return this.#closing ??= Promise.all([...this.#workers].map((state) => {
-      state.pending?.finish(new Error("Fabric compiler pool is closed"));
-      return this.#terminate(state);
-    })).then(() => undefined);
+    return this.#closing ??= (async () => {
+      for (const state of [...this.#workers]) {
+        state.pending?.finish(new Error("Fabric compiler pool is closed"));
+        void this.#terminate(state);
+      }
+      // Retirement may still be settling for workers that released capacity
+      // before this call. Await every generation so close stays complete.
+      while (this.#retiring.size > 0) await Promise.all([...this.#retiring]);
+    })();
   }
 }
 

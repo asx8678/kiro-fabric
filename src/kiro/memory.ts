@@ -489,19 +489,32 @@ const canonicalDirectory = (root: string): string => {
   return canonical;
 };
 
-const memoryNamespaceRoot = (root: string, namespace: string): string =>
-  path.join(root, MEMORY_DIR, `${encodeName(namespace)}-${hashNamespace(namespace)}`);
+const memoryNamespaceRoot = (root: string, namespace: string): string => {
+  // A namespace also becomes a directory name. Bound it the same way entry keys
+  // are bounded so an over-long namespace fails before the filesystem does.
+  if (utf8Bytes(`${encodeName(namespace)}-${hashNamespace(namespace)}`) > MAX_FILE_NAME_BYTES) {
+    throw new KiroMemoryScopeError(
+      "Kiro memory namespace is too long after filesystem-safe encoding",
+    );
+  }
+  return path.join(root, MEMORY_DIR, `${encodeName(namespace)}-${hashNamespace(namespace)}`);
+};
 
-const entryPath = (namespaceRoot: string, key: string): string =>
-  (() => {
-    const name = `${encodeName(key)}.json`;
-    if (utf8Bytes(name) > MAX_FILE_NAME_BYTES) {
-      throw new KiroMemoryScopeError(
-        `Kiro memory key is too long after filesystem-safe encoding`,
-      );
-    }
-    return path.join(namespaceRoot, name);
-  })();
+/** Reject a key whose filesystem-safe encoding cannot become a bounded entry
+ * filename. Exported so argument preparation attributes the failure to the
+ * request instead of surfacing it as a late filesystem limit. */
+export const assertKiroMemoryKeyFits = (key: string): void => {
+  if (utf8Bytes(`${encodeName(key)}.json`) > MAX_FILE_NAME_BYTES) {
+    throw new KiroMemoryScopeError(
+      `Kiro memory key is too long after filesystem-safe encoding`,
+    );
+  }
+};
+
+const entryPath = (namespaceRoot: string, key: string): string => {
+  assertKiroMemoryKeyFits(key);
+  return path.join(namespaceRoot, `${encodeName(key)}.json`);
+};
 
 const readEntry = <T extends JsonValue>(
   filePath: string,

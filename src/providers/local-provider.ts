@@ -409,8 +409,10 @@ export class LocalCodingProvider implements FabricProvider {
     const result: LocalListResult = { entries: [], truncated: false };
     const limit = (args.limit as number | undefined) ?? 100;
     for (const name of names.sort()) {
-      const found = this.#paths.check(path.join(directory.path, name));
+      // Stop inspecting entries once the requested page is filled. An unsafe
+      // entry beyond the limit is never returned, so it must not fail the read.
       if (result.entries.length >= limit) { result.truncated = true; continue; }
+      const found = this.#paths.check(path.join(directory.path, name));
       result.entries.push({ path: this.#paths.relative(found.path), type: found.stat!.isDirectory() ? "directory" : "file" });
       // Reserve room for truncated=true (shorter than false, but explicit).
       if (!this.#fits(result)) { result.entries.pop(); result.truncated = true; break; }

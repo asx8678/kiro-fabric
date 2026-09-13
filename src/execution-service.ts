@@ -232,12 +232,23 @@ export class FabricExecutionService {
     // but never prepare a queued local mutation against a predecessor's old state.
     let localEffectTail: Promise<unknown> = Promise.resolve();
     let lastShellFailure: LocalShellResult | undefined;
+    // Reserve an interactive prompt against this execution's approval budget.
+    // Provider-owned elicitations (manual workspace attachment) use this so a
+    // zero-prompt policy is enforced for every dialog, not only registry ones.
+    const chargeApproval = async (prompt: () => Promise<void>): Promise<void> => {
+      if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new FabricRepairError("Fabric approval request quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
+      if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new FabricRepairError("Fabric pending approval quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
+      approvalRequests += 1;
+      pendingApprovals += 1;
+      try { await prompt(); } finally { pendingApprovals -= 1; }
+    };
     const providerContext = (signal: AbortSignal, deadline: import("./runtime/deadline.js").FabricDeadline) => ({
       cwd: this.cwd,
       checkpoints,
       maxResultChars: this.config.executor.maxNestedResultChars,
       signal,
       deadline,
+      chargeApproval,
       ...(options.bootstrap ? { bootstrap: options.bootstrap } : {}),
     });
     const executeSpan = tracer.enabled ? tracer.span("eval", "execute", execId) : undefined;
@@ -337,23 +348,20 @@ export class FabricExecutionService {
                 break;
               default: throw new Error("Invalid Fabric approval plan");
             }
-            // Reserve atomically before interaction. Rejected admission consumes
-            // neither counter; admitted attempts retain total usage on failure.
-            if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new FabricRepairError("Fabric approval request quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
-            if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new FabricRepairError("Fabric pending approval quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
-            approvalRequests += 1;
-            pendingApprovals += 1;
             // Only actual approval waits (or conservative legacy calls) are
             // traced here. Trace ref/risk only, never arguments.
             const approvalSpan = tracer.enabled ? tracer.span("eval", "approval.wait", execId, { ref: action.ref, risk: action.risk }, bridgeSpan?.id) : undefined;
             try {
-              await plan.prompt();
+              // Reserve atomically before interaction. Rejected admission
+              // consumes neither counter; admitted attempts retain total usage
+              // on failure.
+              await chargeApproval(plan.prompt);
               throwIfAbortedOrExpired(signal, deadline);
               approvalSpan?.end({ approved: true });
             } catch (error) {
               approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });
               throw error instanceof FabricRepairError ? error : new FabricRepairError(error instanceof Error ? error.message : String(error), { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
-            } finally { pendingApprovals -= 1; }
+            }
           },
         }, ref === "fabric.call" && (args.expectedDescriptorDigest !== undefined || args.projection !== undefined) ? {
           ...(args.expectedDescriptorDigest !== undefined ? { expectedDescriptorDigest: args.expectedDescriptorDigest as string } : {}),

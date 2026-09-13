@@ -69,6 +69,20 @@ describe("Agent-only configuration", () => {
     });
   });
 
+  it("never derives a provider call timeout above the execution maximum", () => {
+    const tight = normalizeFabricConfig({ executor: { timeoutMs: 500, maxTimeoutMs: 500 } });
+    expect(tight.executor.maxTimeoutMs).toBe(500);
+    expect(tight.mcp.callTimeoutMs).toBe(500);
+    expect(tight.web.searchTimeoutMs).toBe(500);
+    expect(tight.web.openTimeoutMs).toBe(500);
+    const explicit = normalizeFabricConfig({ executor: { timeoutMs: 500, maxTimeoutMs: 500 }, mcp: { callTimeoutMs: 20_000 }, web: { searchTimeoutMs: 20_000 } });
+    expect(explicit.mcp.callTimeoutMs).toBe(500);
+    expect(explicit.web.searchTimeoutMs).toBe(500);
+    const generous = normalizeFabricConfig({ executor: { timeoutMs: 5_000, maxTimeoutMs: 900_000 } });
+    expect(generous.mcp.callTimeoutMs).toBe(120_000);
+    expect(generous.web.searchTimeoutMs).toBe(45_000);
+  });
+
   it("caps configurable memory limits at the enforced storage bounds", () => {
     expect(normalizeFabricConfig({
       memory: { enabled: true, maxEntries: 10_000, maxValueChars: 2_000_000 },

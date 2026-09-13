@@ -488,7 +488,10 @@ export class ActionRegistry {
       ...(options?.projection === undefined ? {} : { projection: options.projection }),
     };
     const action = await this.describe(remote ? "mcp.$call" : ref, context.signal);
-    const provider = this.#providers.get(action.provider)!;
+    // A concurrent close() clears providers between describe and dispatch. Fail
+    // with an explicit, attributable error instead of an undefined dereference.
+    const provider = this.#providers.get(action.provider);
+    if (!provider) throw new Error("Fabric registry is closed");
     let prepared: Record<string, unknown>;
     try {
       prepared = provider.prepareArguments
