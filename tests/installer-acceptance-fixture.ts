@@ -4,10 +4,28 @@ import { createHash } from "node:crypto";
 import { canonical, compatibilityFor, createBundleManifest, REQUIRED_APP } from "../scripts/bundle-contract.mjs";
 import { fixtureTools } from "./bundle-fixture.js";
 import { installerSmokeCode } from "../scripts/installer-smoke-contract.mjs";
+import { installerSafety } from "../scripts/install-agent-user.mjs";
+
+/** These fixtures copy the running executable as the private Node, and the
+ * installer independently re-validates it with assertTrustedExecutable. That
+ * policy correctly rejects group-writable ancestry, so a Homebrew Cellar host
+ * (`/opt/homebrew/Cellar`, drwxrwxr-x) or a launcher stub fails deep inside
+ * unrelated install assertions. Fail once, at the source, with the remedy. */
+function assertAcceptanceNode(executable: string): void {
+  let trusted: string;
+  try {
+    trusted = installerSafety.assertTrustedExecutable(fs.realpathSync(executable));
+  } catch (error) {
+    throw new Error(`Acceptance fixtures require a trusted Node executable; ${executable} was rejected: ${error instanceof Error ? error.message : String(error)}. Run the suite with a trusted standalone Node >=24 (see AGENTS.md, Local verification).`);
+  }
+  const size = fs.statSync(trusted).size;
+  if (size <= 64 * 1024 * 1024) throw new Error(`Acceptance fixtures require a standalone Node binary (>64MiB), not a launcher stub; ${trusted} is ${size} bytes. Run the suite with a trusted standalone Node >=24 (see AGENTS.md, Local verification).`);
+}
 
 // Test-only MCP peer, with a real private Node binary (>64MiB), not a build-failure
 // stub. Product smoke validates inventory/structured results over real stdio.
 export async function acceptanceBundle(root: string, behavior: "success" | "empty-search" | "extra-tool" | "out-of-order") {
+  assertAcceptanceNode(process.execPath);
   fs.mkdirSync(root, { mode: 0o700 });
   const target = `${process.platform}-${process.arch}`, tools = fixtureTools(target);
   for (const relative of [...REQUIRED_APP, "app/main.js", ...Object.values(tools).flatMap(pin => pin.members.map(member => member.path)), "manager/install-manager.mjs", "resources/steering/fabric.md", "resources/skills/fabric-exec/SKILL.md", "resources/skills/fabric-exec/references/api.md"]) {
