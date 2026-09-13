@@ -21732,7 +21732,7 @@ var BufferedTraceWriter = class {
   #truncatedLine(raw) {
     const bytes2 = Buffer.byteLength(raw, "utf8");
     const candidates = [
-      JSON.stringify({ v: 1, ev: "line.truncated", bytes: bytes2 }),
+      JSON.stringify({ v: 1, ev: "line.truncated", data: { bytes: bytes2 } }),
       '{"line.truncated":true}',
       '{"t":1}',
       "{}"

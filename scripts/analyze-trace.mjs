@@ -209,7 +209,7 @@ const analyze = (events, malformed) => {
   for (const event of events) {
     if (event.ev === "trace.dropped") anomalies.push({ kind: "ring-drops", lost: event.data?.lost, total: event.data?.total });
     if (event.ev === "trace.truncated") anomalies.push({ kind: "file-cap-truncated" });
-    if (event.ev === "line.truncated") anomalies.push({ kind: "line-truncated", bytes: nullableNumber(event.data?.bytes) });
+    if (event.ev === "line.truncated") anomalies.push({ kind: "line-truncated", bytes: nullableNumber(event.data?.bytes ?? event.bytes) });
     if (event.ev === "exec.end" && event.data?.status && event.data.status !== "succeeded") anomalies.push({ kind: "failed-execution", execId: event.execId, status: event.data.status, typeErrors: event.data.typeErrors });
     if (event.cat === "bridge" && event.data?.error) anomalies.push({ kind: "bridge-error", ref: event.data.actionRef ?? event.ev, error: event.data.error });
     if (event.ev === "approval.wait" && event.data?.approved === false) anomalies.push({ kind: "approval-denied", ref: event.data.ref, error: event.data.error });

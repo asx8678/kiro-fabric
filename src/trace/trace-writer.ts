@@ -145,8 +145,11 @@ class BufferedTraceWriter implements TraceWriter {
 
   #truncatedLine(raw: string): string {
     const bytes = Buffer.byteLength(raw, "utf8");
+    // Canonical shape matches the tracer event schema (`data` payload) and the
+    // sibling `trace.truncated` marker. Shorter well-formed objects keep the
+    // byte bound when the cap cannot hold the canonical marker.
     const candidates = [
-      JSON.stringify({ v: 1, ev: "line.truncated", bytes }),
+      JSON.stringify({ v: 1, ev: "line.truncated", data: { bytes } }),
       '{"line.truncated":true}',
       '{"t":1}',
       "{}",
