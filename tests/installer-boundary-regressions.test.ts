@@ -87,7 +87,12 @@ test.each(['bundle','legacy'])('%s extraction rejects unsafe ancestry without wr
  expect(fs.statSync(good).mode&0o7777).toBe(0o700);
 });
 
-test.each(['bundle','legacy'])('%s extraction binds mkdir to the captured parent even when replaced at the syscall boundary',async kind=>{
+// The in-process syscall boundary this case replaces exists only on the Linux
+// kernel-alias path (scripts/pinned-directory-child.mjs `anchor`). Darwin always
+// routes the effect through the cwd/fd3-verified child, where an in-process fs
+// mock cannot observe it; that path is covered by
+// tests/installer-extraction-portability.test.ts.
+test.skipIf(process.platform !== 'linux').each(['bundle','legacy'])('%s extraction binds mkdir to the captured parent even when replaced at the syscall boundary',async kind=>{
  const bytes=kind==='bundle'?await archive():legacyArchive(),parent=temp(),container=mkdir(path.join(parent,'container')),victim=mkdir(path.join(parent,'victim'));
  const original=fs.mkdirSync;let replaced=false;
  vi.spyOn(fs,'mkdirSync').mockImplementation(((...args:Parameters<typeof fs.mkdirSync>)=>{
