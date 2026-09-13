@@ -91,6 +91,21 @@ describe("analyze-trace", () => {
     expect(report.anomalies).toContainEqual({ kind: "bridge-error", ref: "mcp.$call", error: "denied" });
   });
 
+  it("reports per-line trace truncation as an anomaly and lowers coverage", () => {
+    const events = [
+      { ...base, seq: 1, monoUs: 1, ev: "exec.start", execId: "exec_t" },
+      { ...base, seq: 2, monoUs: 2, ev: "line.truncated", data: { bytes: 9_000 } },
+      { ...base, seq: 3, monoUs: 3, ev: "exec.end", execId: "exec_t", data: { status: "succeeded" } },
+    ];
+    const report = JSON.parse(run(fixture(events), "--json")) as { coverage: string; anomalies: Array<Record<string, unknown>> };
+    expect(report.anomalies).toContainEqual({ kind: "line-truncated", bytes: 9_000 });
+    expect(report.coverage).toBe("incomplete-lower-bound");
+    // The same trace without the marker is reported as complete again.
+    const clean = JSON.parse(run(fixture(events.filter((event) => event.ev !== "line.truncated")), "--json")) as { coverage: string; anomalies: Array<Record<string, unknown>> };
+    expect(clean.anomalies.map((anomaly) => anomaly.kind)).not.toContain("line-truncated");
+    expect(clean.coverage).toBe("complete-observed-records");
+  });
+
   it("computes serial, overlapping, nested, and parent-clipped child union time", () => {
     const events = [
       { ...base, seq: 1, monoUs: 100, ev: "parent", spanId: "p", durUs: 100 },
