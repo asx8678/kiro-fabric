@@ -30,13 +30,13 @@ export function packagingFixture() {
 export function refreshFixtureClosure(root: string) {
   const content = buildSync({ entryPoints: [path.join(root, "src/fixture-entry.ts")], bundle: true, format: "esm", target: "node24", write: false, logLevel: "silent" }).outputFiles[0]!.text;
   const buildInputs = captureBuildInputs(root), digest = createHash("sha256");
-  const members: Record<string, string> = { "kiro/mcp-entry.js": content, "package.json": '{"name":"kiro-fabric-agent-runtime","type":"module","private":true}', "runtime/compiler-worker-entry.js": content };
+  const members: Record<string, string> = { "kiro/mcp-entry.js": content, "package.json": '{"name":"kiro-fabric-agent-runtime","type":"module","private":true}', "runtime/compiler-worker-entry.js": content, "runtime/sandbox-worker-entry.js": content };
   const files = Object.keys(members).sort().map(name => {
     const bytes = members[name]!; put(root, `dist/kiro-agent-closure/${name}`, bytes);
     digest.update(name).update("\0").update(bytes);
     return { path: name, bytes: Buffer.byteLength(bytes), sha256: hash(bytes) };
   });
-  put(root, "dist/kiro-agent-closure/closure-manifest.json", JSON.stringify({ schemaVersion: 1, product: "kiro-fabric-agent", entrypoint: "kiro/mcp-entry.js", compilerWorker: "runtime/compiler-worker-entry.js", executor: "quickjs", buildInputs, files, contentDigest: digest.digest("hex") }));
+  put(root, "dist/kiro-agent-closure/closure-manifest.json", JSON.stringify({ schemaVersion: 1, product: "kiro-fabric-agent", entrypoint: "kiro/mcp-entry.js", compilerWorker: "runtime/compiler-worker-entry.js", sandboxWorker: "runtime/sandbox-worker-entry.js", executor: "quickjs", buildInputs, files, contentDigest: digest.digest("hex") }));
 }
 export function fixtureDependencies() {
   return {

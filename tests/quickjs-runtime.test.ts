@@ -67,15 +67,21 @@ describe("QuickJS-only guest runtime", () => {
 
   it("aborts outstanding host calls and does not wait for their natural completion", async () => {
     let hostAborted = false;
+    let providerStarted!: () => void;
+    const started = new Promise<void>((resolve) => { providerStarted = resolve; });
     const controller = new AbortController();
     const execution = new QuickJsRuntime().execute(
       "return await tools.call({ ref: 'test.wait', args: {} })",
       async (_ref, _args, signal) => new Promise((_resolve, reject) => {
+        providerStarted();
         signal.addEventListener("abort", () => { hostAborted = true; reject(signal.reason); }, { once: true });
       }),
       { ...defaults, signal: controller.signal },
     );
-    setTimeout(() => controller.abort(new Error("cancelled")), 20);
+    // Abort only once the provider call is genuinely outstanding. The VM runs on
+    // its own thread, so a fixed delay could fire before the bridge was reached.
+    await started;
+    controller.abort(new Error("cancelled"));
     const result = await execution;
     expect(result.terminationReason).toBe("aborted");
     expect(hostAborted).toBe(true);
@@ -84,19 +90,32 @@ describe("QuickJS-only guest runtime", () => {
   it("returns cancellation without waiting for a non-cooperative raw provider", async () => {
     const controller = new AbortController();
     let mutationAt = 0;
-    const startedAt = Date.now();
+    let providerStarted!: () => void;
+    const started = new Promise<void>((resolve) => { providerStarted = resolve; });
     const execution = new QuickJsRuntime().execute(
       "return await tools.call({ ref: 'test.noncooperative', args: {} })",
-      async () => new Promise((resolve) => setTimeout(() => { mutationAt = Date.now(); resolve(true); }, 200)),
+      async () => new Promise((resolve) => { providerStarted(); setTimeout(() => { mutationAt = Date.now(); resolve(true); }, 200); }),
       { ...defaults, signal: controller.signal, cleanupGraceMs: 10 },
     );
-    setTimeout(() => controller.abort(new Error("cancelled")), 5);
+    await started;
+    const cancelledAt = Date.now();
+    controller.abort(new Error("cancelled"));
     const result = await execution;
     expect(result.terminationReason).toBe("aborted");
-    expect(Date.now() - startedAt).toBeLessThan(150);
+    // Measured from the outstanding call, not from process start: cancellation
+    // must return from the bridge well before the provider's own 200ms timer.
+    expect(Date.now() - cancelledAt).toBeLessThan(150);
     expect(mutationAt).toBe(0);
-    await new Promise((resolve) => setTimeout(resolve, 220));
+    // Detached host work must still complete, but its wake-up time depends on
+    // host scheduling: under a loaded suite the provider's timer can slip past
+    // a fixed sleep. Observe the mutation within a bound instead of asserting
+    // one, so a dropped continuation still fails while scheduling cannot.
+    const observeDeadline = Date.now() + 5_000;
+    while (mutationAt === 0 && Date.now() < observeDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
     expect(mutationAt).toBeGreaterThan(0);
+
   });
 
   it("survives 1000 repeated cancellation and timeout settlements", { timeout: 60_000 }, async () => {
@@ -343,5 +362,62 @@ describe("QuickJS-only guest runtime", () => {
     expect(result.error).toContain("first failed");
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(started.sort()).toEqual([0, 1]);
+  });
+
+  it("bounds binary allocations that QuickJS object accounting does not cover", async () => {
+    // ArrayBuffer backing stores come from the WebAssembly linear memory, not the
+    // QuickJS allocator, so setMemoryLimit alone does not bound them. The fixed
+    // memory maximum must turn an over-limit allocation into a controlled error
+    // instead of growing host memory or rejecting the execution.
+    const overLimit = await new QuickJsRuntime().execute(
+      "const buffers = [new ArrayBuffer(4000000), new ArrayBuffer(4000000), new ArrayBuffer(4000000)]; return buffers.length",
+      async () => null,
+      { ...defaults, memoryLimitBytes: 8 * 1024 * 1024, timeoutMs: 2_000, maxTimeoutMs: 2_000 },
+    );
+    expect(overLimit.terminationReason).toBe("runtime_error");
+    expect(typeof overLimit.error).toBe("string");
+    expect(overLimit.value).toBeUndefined();
+
+    // The ceiling must not make the limit unusable: an allocation inside the
+    // configured bound still succeeds.
+    const withinLimit = await new QuickJsRuntime().execute(
+      "const buffers = [new ArrayBuffer(2000000), new ArrayBuffer(2000000)]; return buffers.reduce((total, buffer) => total + buffer.byteLength, 0)",
+      async () => null,
+      { ...defaults, memoryLimitBytes: 8 * 1024 * 1024, timeoutMs: 2_000, maxTimeoutMs: 2_000 },
+    );
+    expect(withinLimit).toMatchObject({ terminationReason: "completed", value: 4_000_000 });
+  });
+
+  it("keeps later executions healthy after one exhausts the VM heap", async () => {
+    const runtime = new QuickJsRuntime();
+    const exhausted = await runtime.execute(
+      "const buffers = [new ArrayBuffer(4000000), new ArrayBuffer(4000000), new ArrayBuffer(4000000)]; return buffers.length",
+      async () => null,
+      { ...defaults, memoryLimitBytes: 8 * 1024 * 1024, timeoutMs: 2_000, maxTimeoutMs: 2_000 },
+    );
+    expect(exhausted.terminationReason).toBe("runtime_error");
+    const healthy = await runtime.execute("return { ok: true }", async () => null, defaults);
+    expect(healthy).toMatchObject({ terminationReason: "completed", value: { ok: true } });
+  });
+
+  it("keeps the host event loop responsive during guest CPU work", async () => {
+    // The regression this guards: an in-process VM holds the host event loop for
+    // the whole synchronous guest run, delaying timers, unrelated requests and
+    // even the delivery of the guest's own cancellation. The VM now runs on its
+    // own thread, so a host timer must fire while the guest is still busy.
+    const runtime = new QuickJsRuntime();
+    let timerDelayMs = Number.POSITIVE_INFINITY;
+    const started = performance.now();
+    const timer = new Promise<void>((resolve) => setTimeout(() => { timerDelayMs = performance.now() - started; resolve(); }, 20));
+    const execution = runtime.execute(
+      "const until = Date.now() + 400; while (Date.now() < until) {} return 'done'",
+      async () => null,
+      { ...defaults, timeoutMs: 2_000, maxTimeoutMs: 2_000 },
+    );
+    await timer;
+    // Any delay below the 400ms guest run proves the loop was not held.
+    expect(timerDelayMs).toBeLessThan(350);
+    await expect(execution).resolves.toMatchObject({ terminationReason: "completed", value: "done" });
+    await runtime.close();
   });
 });

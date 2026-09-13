@@ -42,7 +42,7 @@ export function roleFor(p) {
   if(p.startsWith('notices/')) return 'notice';
   throw Error('Unknown bundle entry: '+p);
 }
-export const REQUIRED_APP = ['app/kiro/mcp-entry.js','app/runtime/compiler-worker-entry.js','app/package.json','app/closure-manifest.json'];
+export const REQUIRED_APP = ['app/kiro/mcp-entry.js','app/runtime/compiler-worker-entry.js','app/runtime/sandbox-worker-entry.js','app/package.json','app/closure-manifest.json'];
 /** Stable upstream platform contract; never derived from running node --version.
  * Evidence: https://github.com/nodejs/node/blob/v24.20.0/BUILDING.md
  * @param {string} target */

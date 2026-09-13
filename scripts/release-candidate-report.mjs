@@ -28,7 +28,7 @@ const packedFiles = (Array.isArray(packedDocument) ? packedDocument[0] : packedD
 if (packedFiles.some((file) => !isPackedPackageFileAllowed(file))) {
   throw new Error("packed artifact contains a file outside the exact Agent allowlist");
 }
-for (const required of ["dist/index.js", "dist/runtime/compiler-worker-entry.js", "dist/index.d.ts"]) {
+for (const required of ["dist/index.js", "dist/runtime/compiler-worker-entry.js", "dist/runtime/sandbox-worker-entry.js", "dist/index.d.ts"]) {
   if (!packedFiles.includes(required)) throw new Error(`packed artifact is missing ${required}`);
 }
 if (!packedFiles.some((file) => /^dist\/chunks\/[^/]+\.js$/u.test(file))) {

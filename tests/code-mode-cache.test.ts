@@ -15,7 +15,19 @@ const fixture = (timeoutMs = 5_000) => {
   registry.register({ name: "fixture", description: "cache integration", async list() { return [descriptor]; }, async describe() { return descriptor; }, invoke });
   const service = new FabricExecutionService(registry, normalizeFabricConfig({ executor: { timeoutMs, maxConcurrentExecutions: 1, maxSourceBytes: 1_024, maxInputBytes: 1_024 } }), "/workspace");
   const approver = { async approve() { throw new Error("unexpected prompt"); }, prepareApproval: vi.fn(() => ({ decision: "allow" as const })) };
-  const dispatch = vi.spyOn(Worker.prototype, "postMessage");
+  // Compiler dispatches only. The sandbox VM also runs on a worker thread now,
+  // so a blanket spy on Worker#postMessage would also count VM transport
+  // messages and stop measuring compilation reuse.
+  const originalPostMessage = Worker.prototype.postMessage;
+  const dispatch = vi.fn((message: unknown) => message);
+  vi.spyOn(Worker.prototype, "postMessage").mockImplementation(function (this: Worker, ...args: unknown[]) {
+    const message = args[0] as { type?: unknown; code?: unknown; declarations?: unknown } | undefined;
+    if (message && typeof message === "object" && message.type === undefined &&
+        typeof message.code === "string" && typeof message.declarations === "string") {
+      dispatch(message);
+    }
+    return originalPostMessage.apply(this, args as Parameters<typeof originalPostMessage>);
+  });
   return { service, invoke, approver, dispatch };
 };
 const code = `const globals = globalThis as unknown as JsonObject;

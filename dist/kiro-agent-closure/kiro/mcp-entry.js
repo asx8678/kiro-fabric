@@ -841,7 +841,7 @@ function roleFor(p) {
   if (p.startsWith("notices/")) return "notice";
   throw Error("Unknown bundle entry: " + p);
 }
-var REQUIRED_APP = ["app/kiro/mcp-entry.js", "app/runtime/compiler-worker-entry.js", "app/package.json", "app/closure-manifest.json"];
+var REQUIRED_APP = ["app/kiro/mcp-entry.js", "app/runtime/compiler-worker-entry.js", "app/runtime/sandbox-worker-entry.js", "app/package.json", "app/closure-manifest.json"];
 function compatibilityFor(target) {
   if (!TARGETS.includes(target)) throw Error("Unsupported target");
   const linux = target.startsWith("linux-");
@@ -1209,7 +1209,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         const manifestHash = createHash4("sha256").update(readFileSync(path6.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-BGC5KSQA.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-KOSBF5HS.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {} });
     } finally {
       release?.();

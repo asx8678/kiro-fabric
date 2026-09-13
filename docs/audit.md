@@ -146,6 +146,7 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 - `src/protocol.ts`
 - `src/providers/state-provider.ts`
 - `src/runtime/compiler-worker-entry.ts`
+- `src/runtime/sandbox-worker-entry.ts`
 - `src/runtime/deadline.ts`
 - `src/runtime/guest-bootstrap.ts` — frozen guest bootstrap source: captured primordials, disabled dynamic code generation, and bounded bridge facades.
 - `src/runtime/guest-stack-map.ts`
@@ -214,6 +215,7 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `tests/state-reliability.test.ts` — exact ownership and common state commit acknowledgement.
 - `tests/memory-delete-ack.test.ts` — committed delete proof through cleanup/cancellation/deadline.
 - `tests/memory-lock-safety.test.ts` — unidentified/replacement/live/stale owner safety.
+- `tests/memory-quota.test.ts` — bounded namespace enumeration, cumulative byte enforcement, and quota parity across list/search/index.
 - `tests/owned-file.test.ts` — explicit uncertain close without unsafe descriptor retry.
 
 ## Complete-generation installer additions (current implementation)

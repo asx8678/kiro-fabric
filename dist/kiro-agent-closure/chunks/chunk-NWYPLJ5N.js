@@ -1124,7 +1124,9 @@ var QuickJSWASMModule = class {
 };
 
 export {
+  debugLog,
   QuickJSNotImplemented,
+  QuickJSEmscriptenModuleError,
   Lifetime,
   Scope,
   intrinsicsToFlags,

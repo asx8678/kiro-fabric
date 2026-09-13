@@ -121,7 +121,7 @@ describe("interactive approval quotas", () => {
       await ${mcpCall}; return results;
     ` });
     try {
-      await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1), { timeout: 15_000 });
       expect(callTool).not.toHaveBeenCalled();
       gate.resolve();
       const result = await execution;
@@ -206,10 +206,12 @@ describe("interactive approval quotas", () => {
       return { results, error: 'missing quota' };
     ` });
     try {
+      // The VM boots on its own thread now, so reaching an in-guest state
+      // includes thread startup and VM initialization.
       await vi.waitFor(() => {
         expect(request).toHaveBeenCalledTimes(2);
         expect(invoke).toHaveBeenCalledTimes(1);
-      });
+      }, { timeout: 15_000 });
       expect(invoke.mock.calls[0]?.[0]).toBe("read");
       gate.resolve();
       const result = await execution;
@@ -375,7 +377,9 @@ describe("interactive approval quotas", () => {
       return 'unexpected';
     ` });
     try {
-      await vi.waitFor(() => expect(approve).toHaveBeenCalledTimes(2));
+      // The VM boots on its own thread now, so the first action's latency
+      // includes thread startup and VM initialization.
+      await vi.waitFor(() => expect(approve).toHaveBeenCalledTimes(2), { timeout: 10_000 });
       gate.resolve();
       const result = await execution;
       expect(result.value).toContain("legacy denied");
@@ -419,7 +423,7 @@ describe("interactive approval quotas", () => {
     invoke.mockImplementation(async (_name, args) => { await gate.promise; return args; });
     const execution = service.execute({ code: concurrent(9), approver });
     try {
-      await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(8));
+      await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(8), { timeout: 15_000 });
       gate.resolve();
       const result = await execution;
       expect(result.success, JSON.stringify(result)).toBe(true);

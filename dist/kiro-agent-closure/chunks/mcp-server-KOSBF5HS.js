@@ -35,19 +35,166 @@ import {
   verifySearchExecutable
 } from "./chunk-762YYRNE.js";
 import {
+  Any,
+  BigInt as BigInt2,
+  Boolean as Boolean2,
+  Call,
+  Capitalize,
+  Codec,
+  Conditional,
+  Constructor,
+  ConstructorParameters,
+  Cyclic,
+  DEFAULT_EXECUTOR_SOURCE_BYTES,
+  DISABLED_TRACER,
+  Decode,
+  DecodeBuilder,
+  Dependent,
+  Encode,
+  EncodeBuilder,
+  Enum,
+  Evaluate,
+  Exclude,
+  Extends,
+  Extract,
+  FABRIC_COMMIT_ACKNOWLEDGEMENT,
+  FabricDeadline,
+  Generic,
+  Identifier,
+  Immutable,
+  Index,
+  Infer,
+  InstanceType,
+  Instantiate,
+  Integer,
+  Interface,
+  Intersect,
+  IsAny,
+  IsArray,
+  IsBigInt,
+  IsBoolean,
+  IsCall,
+  IsCodec,
+  IsConstructor,
+  IsCyclic,
+  IsDependent,
+  IsEnum,
+  IsEnumValue,
+  IsFunction,
+  IsGeneric,
+  IsIdentifier,
+  IsImmutable,
+  IsInfer,
+  IsInteger,
+  IsIntersect,
+  IsKind,
+  IsLiteral,
+  IsNever,
+  IsNull,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsParameter,
+  IsReadonly,
+  IsRecord,
+  IsRef,
+  IsRefine,
+  IsRest,
+  IsSchema,
+  IsString,
+  IsSymbol,
+  IsTemplateLiteral,
+  IsThis,
+  IsTuple,
+  IsUndefined,
+  IsUnion,
+  IsUnknown,
+  IsUnsafe,
+  IsVoid,
+  KeyOf,
+  Literal,
+  LocalShellExitError,
+  Lowercase,
+  MAX_EXECUTOR_SOURCE_BYTES,
+  MAX_FABRIC_JSON_CHARS,
+  MIN_EXECUTOR_SOURCE_BYTES,
+  Mapped,
+  Module,
+  Never,
+  NonNullable,
+  Null,
+  Number as Number2,
+  Omit,
+  Optional,
+  PROBE_GUEST_DECLARATIONS,
+  Parameter,
+  Parameters,
+  Partial,
+  Pick,
+  ProbeProvider,
+  ProbeRunExitError,
+  QuickJsRuntime,
+  Readonly,
+  ReadonlyObject,
+  ReadonlyType,
+  Record,
+  RecordKey,
+  RecordPattern,
+  RecordValue,
+  Ref,
+  Refine,
+  Required,
+  Rest,
+  ReturnType,
+  Script,
+  String as String2,
+  Symbol as Symbol2,
+  TemplateLiteral,
+  This,
+  Tuple,
+  Uncapitalize,
+  Undefined,
+  Union,
+  Unknown,
+  Unsafe,
+  Uppercase,
+  Void,
+  With,
+  _Array_,
+  _Function_,
+  _Object_,
+  assertFabricJsonBudget,
+  createFabricTracer,
+  fabricCommitAcknowledgement,
+  fabricJsonText,
+  fabricPayloadsLimitError,
+  fabricSourceLimitError,
+  initializeOwnedFile,
+  jsonStringPrefix,
+  resolveTraceEnabled,
+  result_exports,
+  runAbortable,
+  runLocalShell,
+  schemaValidationMessage,
+  settleWithin,
+  throwIfAborted,
+  throwIfAbortedOrExpired,
+  traceFailureMetadata,
+  validateSchemaValue,
+  value_exports
+} from "./chunk-SJK3F6QR.js";
+import {
   FabricCompilerPool,
   FabricCompilerTimeoutError,
   FabricRepairError,
   argumentRepairError,
-  assertFabricTranspiledWrapper,
   createCheckpointJournal,
   fabricFailureMetadata,
-  repairSchema,
-  transpileFabricCodeWithSourceMap
+  repairSchema
 } from "./chunk-5CIPARYU.js";
 import "./chunk-G3LABT6U.js";
-import "./chunk-DDMC62E6.js";
-import "./chunk-YQ4ZVOWF.js";
+import "./chunk-XJTFSUKV.js";
+import "./chunk-NWYPLJ5N.js";
 import {
   __commonJS,
   __export,
@@ -442,7 +589,7 @@ var require_codegen = __commonJS({
         return this.rhs instanceof code_1._CodeOrName ? this.rhs.names : {};
       }
     };
-    var Assign2 = class extends Node {
+    var Assign = class extends Node {
       constructor(lhs, rhs, sideEffects) {
         super();
         this.lhs = lhs;
@@ -463,7 +610,7 @@ var require_codegen = __commonJS({
         return addExprNames(names, this.rhs);
       }
     };
-    var AssignOp = class extends Assign2 {
+    var AssignOp = class extends Assign {
       constructor(lhs, op, rhs, sideEffects) {
         super(lhs, rhs, sideEffects);
         this.op = op;
@@ -572,7 +719,7 @@ var require_codegen = __commonJS({
     var Else = class extends BlockNode {
     };
     Else.kind = "else";
-    var If2 = class _If extends BlockNode {
+    var If = class _If extends BlockNode {
       constructor(condition, nodes) {
         super(nodes);
         this.condition = condition;
@@ -620,7 +767,7 @@ var require_codegen = __commonJS({
         return names;
       }
     };
-    If2.kind = "if";
+    If.kind = "if";
     var For = class extends BlockNode {
     };
     For.kind = "for";
@@ -808,7 +955,7 @@ var require_codegen = __commonJS({
       }
       // assignment code
       assign(lhs, rhs, sideEffects) {
-        return this._leafNode(new Assign2(lhs, rhs, sideEffects));
+        return this._leafNode(new Assign(lhs, rhs, sideEffects));
       }
       // `+=` code
       add(lhs, rhs) {
@@ -839,7 +986,7 @@ var require_codegen = __commonJS({
       }
       // `if` clause (or statement if `thenBody` and, optionally, `elseBody` are passed)
       if(condition, thenBody, elseBody) {
-        this._blockNode(new If2(condition));
+        this._blockNode(new If(condition));
         if (thenBody && elseBody) {
           this.code(thenBody).else().code(elseBody).endIf();
         } else if (thenBody) {
@@ -851,7 +998,7 @@ var require_codegen = __commonJS({
       }
       // `else if` clause - invalid without `if` or after `else` clauses
       elseIf(condition) {
-        return this._elseNode(new If2(condition));
+        return this._elseNode(new If(condition));
       }
       // `else` clause - only valid after `if` or `else if` clauses
       else() {
@@ -859,7 +1006,7 @@ var require_codegen = __commonJS({
       }
       // end `if` statement (needed if gen.if was used only with condition)
       endIf() {
-        return this._endBlockNode(If2, Else);
+        return this._endBlockNode(If, Else);
       }
       _for(node, forBody) {
         this._blockNode(node);
@@ -994,7 +1141,7 @@ var require_codegen = __commonJS({
       }
       _elseNode(node) {
         const n = this._currNode;
-        if (!(n instanceof If2)) {
+        if (!(n instanceof If)) {
           throw new Error('CodeGen: "else" without "if"');
         }
         this._currNode = n.else = node;
@@ -1215,14 +1362,14 @@ var require_util = __commonJS({
       });
     }
     exports.useFunc = useFunc;
-    var Type2;
-    (function(Type3) {
-      Type3[Type3["Num"] = 0] = "Num";
-      Type3[Type3["Str"] = 1] = "Str";
-    })(Type2 || (exports.Type = Type2 = {}));
+    var Type;
+    (function(Type2) {
+      Type2[Type2["Num"] = 0] = "Num";
+      Type2[Type2["Str"] = 1] = "Str";
+    })(Type || (exports.Type = Type = {}));
     function getErrorPath(dataProp, dataPropType, jsPropertySyntax) {
       if (dataProp instanceof codegen_1.Name) {
-        const isNumber = dataPropType === Type2.Num;
+        const isNumber = dataPropType === Type.Num;
         return jsPropertySyntax ? isNumber ? (0, codegen_1._)`"[" + ${dataProp} + "]"` : (0, codegen_1._)`"['" + ${dataProp} + "']"` : isNumber ? (0, codegen_1._)`"/" + ${dataProp}` : (0, codegen_1._)`"/" + ${dataProp}.replace(/~/g, "~0").replace(/\\//g, "~1")`;
       }
       return jsPropertySyntax ? (0, codegen_1.getProperty)(dataProp).toString() : "/" + escapeJsonPointer(dataProp);
@@ -1745,12 +1892,12 @@ var require_code2 = __commonJS({
       });
     }
     exports.checkReportMissingProp = checkReportMissingProp;
-    function checkMissingProp({ gen, data, it: { opts } }, properties, missing2) {
-      return (0, codegen_1.or)(...properties.map((prop) => (0, codegen_1.and)(noPropertyInData(gen, data, prop, opts.ownProperties), (0, codegen_1._)`${missing2} = ${prop}`)));
+    function checkMissingProp({ gen, data, it: { opts } }, properties, missing) {
+      return (0, codegen_1.or)(...properties.map((prop) => (0, codegen_1.and)(noPropertyInData(gen, data, prop, opts.ownProperties), (0, codegen_1._)`${missing} = ${prop}`)));
     }
     exports.checkMissingProp = checkMissingProp;
-    function reportMissingProp(cxt, missing2) {
-      cxt.setParams({ missingProperty: missing2 }, true);
+    function reportMissingProp(cxt, missing) {
+      cxt.setParams({ missingProperty: missing }, true);
       cxt.error();
     }
     exports.reportMissingProp = reportMissingProp;
@@ -2256,10 +2403,10 @@ var require_resolve = __commonJS({
       }
       return count2;
     }
-    function getFullPath(resolver, id3 = "", normalize) {
+    function getFullPath(resolver, id2 = "", normalize) {
       if (normalize !== false)
-        id3 = normalizeId(id3);
-      const p = resolver.parse(id3);
+        id2 = normalizeId(id2);
+      const p = resolver.parse(id2);
       return _getFullPath(resolver, p);
     }
     exports.getFullPath = getFullPath;
@@ -2269,13 +2416,13 @@ var require_resolve = __commonJS({
     }
     exports._getFullPath = _getFullPath;
     var TRAILING_SLASH_HASH = /#\/?$/;
-    function normalizeId(id3) {
-      return id3 ? id3.replace(TRAILING_SLASH_HASH, "") : "";
+    function normalizeId(id2) {
+      return id2 ? id2.replace(TRAILING_SLASH_HASH, "") : "";
     }
     exports.normalizeId = normalizeId;
-    function resolveUrl(resolver, baseId, id3) {
-      id3 = normalizeId(id3);
-      return resolver.resolve(baseId, id3);
+    function resolveUrl(resolver, baseId, id2) {
+      id2 = normalizeId(id2);
+      return resolver.resolve(baseId, id2);
     }
     exports.resolveUrl = resolveUrl;
     var ANCHOR = /^[a-z_][-a-z0-9._]*$/i;
@@ -3045,8 +3192,8 @@ var require_compile = __commonJS({
       if (Object.keys(root.schema).length > 0 && refPath === baseId) {
         return getJsonPointer.call(this, p, root);
       }
-      const id3 = (0, resolve_1.normalizeId)(refPath);
-      const schOrRef = this.refs[id3] || this.schemas[id3];
+      const id2 = (0, resolve_1.normalizeId)(refPath);
+      const schOrRef = this.refs[id2] || this.schemas[id2];
       if (typeof schOrRef == "string") {
         const sch = resolveSchema.call(this, root, schOrRef);
         if (typeof (sch === null || sch === void 0 ? void 0 : sch.schema) !== "object")
@@ -3057,7 +3204,7 @@ var require_compile = __commonJS({
         return;
       if (!schOrRef.validate)
         compileSchema.call(this, schOrRef);
-      if (id3 === (0, resolve_1.normalizeId)(ref)) {
+      if (id2 === (0, resolve_1.normalizeId)(ref)) {
         const { schema } = schOrRef;
         const { schemaId } = this.opts;
         const schId = schema[schemaId];
@@ -3282,8 +3429,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path18) {
-      let input = path18;
+    function removeDotSegments(path14) {
+      let input = path14;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3688,8 +3835,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path18 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path18 && path18 !== "/" ? path18 : void 0;
+        const path14 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path14 && path14 !== "/" ? path14 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -4472,15 +4619,15 @@ var require_core = __commonJS({
             this.addSchema(sch, void 0, _meta, _validateSchema);
           return this;
         }
-        let id3;
+        let id2;
         if (typeof schema === "object") {
           const { schemaId } = this.opts;
-          id3 = schema[schemaId];
-          if (id3 !== void 0 && typeof id3 != "string") {
+          id2 = schema[schemaId];
+          if (id2 !== void 0 && typeof id2 != "string") {
             throw new Error(`schema ${schemaId} must be string`);
           }
         }
-        key = (0, resolve_1.normalizeId)(key || id3);
+        key = (0, resolve_1.normalizeId)(key || id2);
         this._checkUnique(key);
         this.schemas[key] = this._addSchema(schema, _meta, key, _validateSchema, true);
         return this;
@@ -4559,11 +4706,11 @@ var require_core = __commonJS({
           case "object": {
             const cacheKey = schemaKeyRef;
             this._cache.delete(cacheKey);
-            let id3 = schemaKeyRef[this.opts.schemaId];
-            if (id3) {
-              id3 = (0, resolve_1.normalizeId)(id3);
-              delete this.schemas[id3];
-              delete this.refs[id3];
+            let id2 = schemaKeyRef[this.opts.schemaId];
+            if (id2) {
+              id2 = (0, resolve_1.normalizeId)(id2);
+              delete this.schemas[id2];
+              delete this.refs[id2];
             }
             return this;
           }
@@ -4634,7 +4781,7 @@ var require_core = __commonJS({
       errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
         if (!errors || errors.length === 0)
           return "No errors";
-        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text3, msg) => text3 + separator + msg);
+        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text2, msg) => text2 + separator + msg);
       }
       $dataMetaSchema(metaSchema, keywordsJsonPointers) {
         const rules = this.RULES.all;
@@ -4670,10 +4817,10 @@ var require_core = __commonJS({
         }
       }
       _addSchema(schema, meta, baseId, validateSchema = this.opts.validateSchema, addSchema = this.opts.addUsedSchema) {
-        let id3;
+        let id2;
         const { schemaId } = this.opts;
         if (typeof schema == "object") {
-          id3 = schema[schemaId];
+          id2 = schema[schemaId];
         } else {
           if (this.opts.jtd)
             throw new Error("schema must be object");
@@ -4683,7 +4830,7 @@ var require_core = __commonJS({
         let sch = this._cache.get(schema);
         if (sch !== void 0)
           return sch;
-        baseId = (0, resolve_1.normalizeId)(id3 || baseId);
+        baseId = (0, resolve_1.normalizeId)(id2 || baseId);
         const localRefs = resolve_1.getSchemaRefs.call(this, schema, baseId);
         sch = new compile_1.SchemaEnv({ schema, schemaId, meta, baseId, localRefs });
         this._cache.set(sch.schema, sch);
@@ -4696,9 +4843,9 @@ var require_core = __commonJS({
           this.validateSchema(schema, true);
         return sch;
       }
-      _checkUnique(id3) {
-        if (this.schemas[id3] || this.refs[id3]) {
-          throw new Error(`schema with key or id "${id3}" already exists`);
+      _checkUnique(id2) {
+        if (this.schemas[id2] || this.refs[id2]) {
+          throw new Error(`schema with key or id "${id2}" already exists`);
         }
       }
       _compileSchemaEnv(sch) {
@@ -5244,14 +5391,14 @@ var require_required = __commonJS({
           }
         }
         function exitOnErrorMode() {
-          const missing2 = gen.let("missing");
+          const missing = gen.let("missing");
           if (useLoop || $data) {
             const valid = gen.let("valid", true);
-            cxt.block$data(valid, () => loopUntilMissing(missing2, valid));
+            cxt.block$data(valid, () => loopUntilMissing(missing, valid));
             cxt.ok(valid);
           } else {
-            gen.if((0, code_1.checkMissingProp)(cxt, schema, missing2));
-            (0, code_1.reportMissingProp)(cxt, missing2);
+            gen.if((0, code_1.checkMissingProp)(cxt, schema, missing));
+            (0, code_1.reportMissingProp)(cxt, missing);
             gen.else();
           }
         }
@@ -5261,10 +5408,10 @@ var require_required = __commonJS({
             gen.if((0, code_1.noPropertyInData)(gen, data, prop, opts.ownProperties), () => cxt.error());
           });
         }
-        function loopUntilMissing(missing2, valid) {
-          cxt.setParams({ missingProperty: missing2 });
-          gen.forOf(missing2, schemaCode, () => {
-            gen.assign(valid, (0, code_1.propertyInData)(gen, data, missing2, opts.ownProperties));
+        function loopUntilMissing(missing, valid) {
+          cxt.setParams({ missingProperty: missing });
+          gen.forOf(missing, schemaCode, () => {
+            gen.assign(valid, (0, code_1.propertyInData)(gen, data, missing, opts.ownProperties));
             gen.if((0, codegen_1.not)(valid), () => {
               cxt.error();
               gen.break();
@@ -5802,7 +5949,7 @@ var require_dependencies = __commonJS({
       const { gen, data, it } = cxt;
       if (Object.keys(propertyDeps).length === 0)
         return;
-      const missing2 = gen.let("missing");
+      const missing = gen.let("missing");
       for (const prop in propertyDeps) {
         const deps = propertyDeps[prop];
         if (deps.length === 0)
@@ -5820,8 +5967,8 @@ var require_dependencies = __commonJS({
             }
           });
         } else {
-          gen.if((0, codegen_1._)`${hasProperty} && (${(0, code_1.checkMissingProp)(cxt, deps, missing2)})`);
-          (0, code_1.reportMissingProp)(cxt, missing2);
+          gen.if((0, codegen_1._)`${hasProperty} && (${(0, code_1.checkMissingProp)(cxt, deps, missing)})`);
+          (0, code_1.reportMissingProp)(cxt, missing);
           gen.else();
         }
       }
@@ -6966,16 +7113,16 @@ var require_formats = __commonJS({
     function isLeapYear(year) {
       return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
     }
-    var DATE2 = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
-    var DAYS2 = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    var DATE = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
+    var DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     function date(str) {
-      const matches = DATE2.exec(str);
+      const matches = DATE.exec(str);
       if (!matches)
         return false;
       const year = +matches[1];
       const month = +matches[2];
       const day = +matches[3];
-      return month >= 1 && month <= 12 && day >= 1 && day <= (month === 2 && isLeapYear(year) ? 29 : DAYS2[month]);
+      return month >= 1 && month <= 12 && day >= 1 && day <= (month === 2 && isLeapYear(year) ? 29 : DAYS[month]);
     }
     function compareDate(d1, d2) {
       if (!(d1 && d2))
@@ -6986,10 +7133,10 @@ var require_formats = __commonJS({
         return -1;
       return 0;
     }
-    var TIME2 = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
+    var TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
     function getTime(strictTimeZone) {
       return function time(str) {
-        const matches = TIME2.exec(str);
+        const matches = TIME.exec(str);
         if (!matches)
           return false;
         const hr = +matches[1];
@@ -7020,8 +7167,8 @@ var require_formats = __commonJS({
     function compareIsoTime(t1, t2) {
       if (!(t1 && t2))
         return void 0;
-      const a1 = TIME2.exec(t1);
-      const a2 = TIME2.exec(t2);
+      const a1 = TIME.exec(t1);
+      const a2 = TIME.exec(t2);
       if (!(a1 && a2))
         return void 0;
       t1 = a1[1] + a1[2] + a1[3];
@@ -7181,26 +7328,26 @@ var require_dist = __commonJS({
         addFormats(ajv, opts, formats_1.fullFormats, fullName);
         return ajv;
       }
-      const [formats2, exportName] = opts.mode === "fast" ? [formats_1.fastFormats, fastName] : [formats_1.fullFormats, fullName];
+      const [formats, exportName] = opts.mode === "fast" ? [formats_1.fastFormats, fastName] : [formats_1.fullFormats, fullName];
       const list = opts.formats || formats_1.formatNames;
-      addFormats(ajv, list, formats2, exportName);
+      addFormats(ajv, list, formats, exportName);
       if (opts.keywords)
         (0, limit_1.default)(ajv);
       return ajv;
     };
     formatsPlugin.get = (name, mode = "full") => {
-      const formats2 = mode === "fast" ? formats_1.fastFormats : formats_1.fullFormats;
-      const f = formats2[name];
+      const formats = mode === "fast" ? formats_1.fastFormats : formats_1.fullFormats;
+      const f = formats[name];
       if (!f)
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs16, exportName) {
+    function addFormats(ajv, list, fs12, exportName) {
       var _a;
       var _b;
       (_a = (_b = ajv.opts.code).formats) !== null && _a !== void 0 ? _a : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs16[f]);
+        ajv.addFormat(f, fs12[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7210,8 +7357,8 @@ var require_dist = __commonJS({
 
 // src/kiro/mcp-server.ts
 import { randomBytes as randomBytes6 } from "node:crypto";
-import fs15, { readFileSync, realpathSync } from "node:fs";
-import path17 from "node:path";
+import fs11, { readFileSync, realpathSync } from "node:fs";
+import path13 from "node:path";
 import { pathToFileURL } from "node:url";
 
 // node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
@@ -9935,7 +10082,7 @@ var ExperimentalServerTasks = class {
       if (hasPreviousToolUse) {
         const toolUseIds = new Set(previousContent.filter((c) => c.type === "tool_use").map((c) => c.id));
         const toolResultIds = new Set(lastContent.filter((c) => c.type === "tool_result").map((c) => c.toolUseId));
-        if (toolUseIds.size !== toolResultIds.size || ![...toolUseIds].every((id3) => toolResultIds.has(id3))) {
+        if (toolUseIds.size !== toolResultIds.size || ![...toolUseIds].every((id2) => toolResultIds.has(id2))) {
           throw new Error("ids of tool_result blocks and tool_use blocks from previous message do not match");
         }
       }
@@ -10360,7 +10507,7 @@ var Server = class extends Protocol {
       if (hasPreviousToolUse) {
         const toolUseIds = new Set(previousContent.filter((c) => c.type === "tool_use").map((c) => c.id));
         const toolResultIds = new Set(lastContent.filter((c) => c.type === "tool_result").map((c) => c.toolUseId));
-        if (toolUseIds.size !== toolResultIds.size || ![...toolUseIds].every((id3) => toolResultIds.has(id3))) {
+        if (toolUseIds.size !== toolResultIds.size || ![...toolUseIds].every((id2) => toolResultIds.has(id2))) {
           throw new Error("ids of tool_result blocks and tool_use blocks from previous message do not match");
         }
       }
@@ -10563,8 +10710,8 @@ var StdioServerTransport = class {
   }
   send(message) {
     return new Promise((resolve) => {
-      const json2 = serializeMessage(message);
-      if (this._stdout.write(json2)) {
+      const json = serializeMessage(message);
+      if (this._stdout.write(json)) {
         resolve();
       } else {
         this._stdout.once("drain", resolve);
@@ -10573,8223 +10720,9 @@ var StdioServerTransport = class {
   }
 };
 
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/arguments/arguments.mjs
-var arguments_exports = {};
-__export(arguments_exports, {
-  Match: () => Match
-});
-function Match(args, match) {
-  return match[args.length]?.(...args) ?? (() => {
-    throw Error("Invalid Arguments");
-  })();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/settings/settings.mjs
-var settings_exports = {};
-__export(settings_exports, {
-  Get: () => Get,
-  Reset: () => Reset,
-  Set: () => Set2
-});
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/guard.mjs
-var guard_exports = {};
-__export(guard_exports, {
-  Counted: () => Counted,
-  Entries: () => Entries,
-  EntriesRegExp: () => EntriesRegExp,
-  Every: () => Every,
-  EveryAll: () => EveryAll,
-  GraphemeCount: () => GraphemeCount2,
-  HasPropertyKey: () => HasPropertyKey,
-  IsArray: () => IsArray,
-  IsBigInt: () => IsBigInt,
-  IsBoolean: () => IsBoolean,
-  IsClassInstance: () => IsClassInstance,
-  IsConstructor: () => IsConstructor,
-  IsDeepEqual: () => IsDeepEqual,
-  IsEqual: () => IsEqual,
-  IsFunction: () => IsFunction,
-  IsGreaterEqualThan: () => IsGreaterEqualThan,
-  IsGreaterThan: () => IsGreaterThan,
-  IsInteger: () => IsInteger,
-  IsLessEqualThan: () => IsLessEqualThan,
-  IsLessThan: () => IsLessThan,
-  IsMaxLength: () => IsMaxLength2,
-  IsMinLength: () => IsMinLength2,
-  IsMultipleOf: () => IsMultipleOf,
-  IsNull: () => IsNull,
-  IsNumber: () => IsNumber,
-  IsObject: () => IsObject,
-  IsObjectNotArray: () => IsObjectNotArray,
-  IsString: () => IsString,
-  IsSymbol: () => IsSymbol,
-  IsUndefined: () => IsUndefined,
-  IsUnsafePropertyKey: () => IsUnsafePropertyKey,
-  IsValueLike: () => IsValueLike,
-  Keys: () => Keys,
-  ShiftLeft: () => ShiftLeft,
-  Some: () => Some,
-  SomeAll: () => SomeAll,
-  Symbols: () => Symbols,
-  Values: () => Values
-});
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/string.mjs
-function IsBetween(value, min, max) {
-  return value >= min && value <= max;
-}
-function IsZeroWidthJoiner(value) {
-  return value === 8205;
-}
-function IsHighSurrogate(value) {
-  return IsBetween(value, 55296, 56319);
-}
-function IsRegionalIndicator(value) {
-  return IsBetween(value, 127462, 127487);
-}
-function IsVariationSelector(value) {
-  return IsBetween(value, 65024, 65039);
-}
-function IsCombiningMark(value) {
-  return IsBetween(value, 768, 879) || IsBetween(value, 6832, 6911) || IsBetween(value, 7616, 7679) || IsBetween(value, 65056, 65071);
-}
-function CodePointLength(value) {
-  return value > 65535 ? 2 : 1;
-}
-function ConsumeModifiers(value, index) {
-  while (index < value.length) {
-    const point = value.codePointAt(index);
-    if (IsCombiningMark(point) || IsVariationSelector(point)) {
-      index += CodePointLength(point);
-    } else {
-      break;
-    }
-  }
-  return index;
-}
-function NextGraphemeClusterIndex(value, clusterStart) {
-  const startCP = value.codePointAt(clusterStart);
-  let clusterEnd = clusterStart + CodePointLength(startCP);
-  clusterEnd = ConsumeModifiers(value, clusterEnd);
-  while (clusterEnd < value.length - 1 && IsZeroWidthJoiner(value.codePointAt(clusterEnd))) {
-    const nextCP = value.codePointAt(clusterEnd + 1);
-    clusterEnd += 1 + CodePointLength(nextCP);
-    clusterEnd = ConsumeModifiers(value, clusterEnd);
-  }
-  if (IsRegionalIndicator(startCP) && clusterEnd < value.length && IsRegionalIndicator(value.codePointAt(clusterEnd))) {
-    clusterEnd += CodePointLength(value.codePointAt(clusterEnd));
-  }
-  return clusterEnd;
-}
-function IsGraphemeCodePoint(value) {
-  return value >= 768 && // above special range
-  (IsHighSurrogate(value) || IsCombiningMark(value) || IsVariationSelector(value) || IsZeroWidthJoiner(value));
-}
-function GraphemeCount(value) {
-  let count2 = 0;
-  let index = 0;
-  while (index < value.length) {
-    index = NextGraphemeClusterIndex(value, index);
-    count2++;
-  }
-  return count2;
-}
-function IsMinLengthSegmented(value, minLength) {
-  let count2 = 0;
-  let index = 0;
-  while (index < value.length) {
-    index = NextGraphemeClusterIndex(value, index);
-    if (++count2 >= minLength)
-      return true;
-  }
-  return false;
-}
-function IsMaxLengthSegmented(value, maxLength) {
-  let count2 = 0;
-  let index = 0;
-  while (index < value.length) {
-    index = NextGraphemeClusterIndex(value, index);
-    if (++count2 > maxLength)
-      return false;
-  }
-  return true;
-}
-function IsMinLength(value, minLength) {
-  if (minLength === 0)
-    return true;
-  if (value.length < minLength)
-    return false;
-  let index = 0;
-  while (true) {
-    if (IsGraphemeCodePoint(value.charCodeAt(index))) {
-      return IsMinLengthSegmented(value, minLength);
-    }
-    if (++index >= minLength)
-      return true;
-  }
-}
-function IsMaxLength(value, maxLength) {
-  if (value.length <= maxLength)
-    return true;
-  let index = 0;
-  while (true) {
-    if (IsGraphemeCodePoint(value.charCodeAt(index))) {
-      return IsMaxLengthSegmented(value, maxLength);
-    }
-    if (++index > maxLength)
-      return false;
-  }
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/guard.mjs
-function IsArray(value) {
-  return Array.isArray(value);
-}
-function IsBigInt(value) {
-  return IsEqual(typeof value, "bigint");
-}
-function IsBoolean(value) {
-  return IsEqual(typeof value, "boolean");
-}
-function IsConstructor(value) {
-  if (IsUndefined(value) || !IsFunction(value))
-    return false;
-  const result = Function.prototype.toString.call(value);
-  if (/^class\s/.test(result))
-    return true;
-  if (/\[native code\]/.test(result))
-    return true;
-  return false;
-}
-function IsFunction(value) {
-  return IsEqual(typeof value, "function");
-}
-function IsInteger(value) {
-  return Number.isInteger(value);
-}
-function IsNull(value) {
-  return IsEqual(value, null);
-}
-function IsNumber(value) {
-  return Number.isFinite(value);
-}
-function IsObjectNotArray(value) {
-  return IsObject(value) && !IsArray(value);
-}
-function IsObject(value) {
-  return IsEqual(typeof value, "object") && !IsNull(value);
-}
-function IsString(value) {
-  return IsEqual(typeof value, "string");
-}
-function IsSymbol(value) {
-  return IsEqual(typeof value, "symbol");
-}
-function IsUndefined(value) {
-  return IsEqual(value, void 0);
-}
-function IsEqual(left, right) {
-  return left === right;
-}
-function IsGreaterThan(left, right) {
-  return left > right;
-}
-function IsLessThan(left, right) {
-  return left < right;
-}
-function IsLessEqualThan(left, right) {
-  return left <= right;
-}
-function IsGreaterEqualThan(left, right) {
-  return left >= right;
-}
-function IsMultipleOf(dividend, divisor) {
-  if (IsBigInt(dividend) || IsBigInt(divisor)) {
-    return BigInt(dividend) % BigInt(divisor) === 0n;
-  }
-  const tolerance = 1e-10;
-  if (!IsNumber(dividend))
-    return true;
-  if (IsInteger(dividend) && 1 / divisor % 1 === 0)
-    return true;
-  const mod = dividend % divisor;
-  return Math.min(Math.abs(mod), Math.abs(mod - divisor), Math.abs(mod + divisor)) < tolerance;
-}
-function IsClassInstance(value) {
-  if (!IsObject(value))
-    return false;
-  const proto = globalThis.Object.getPrototypeOf(value);
-  if (IsNull(proto))
-    return false;
-  return IsEqual(typeof proto.constructor, "function") && !(IsEqual(proto.constructor, globalThis.Object) || IsEqual(proto.constructor.name, "Object"));
-}
-function IsValueLike(value) {
-  return IsBigInt(value) || IsBoolean(value) || IsNull(value) || IsNumber(value) || IsString(value) || IsUndefined(value);
-}
-function GraphemeCount2(value) {
-  return GraphemeCount(value);
-}
-function IsMaxLength2(value, length) {
-  return IsMaxLength(value, length);
-}
-function IsMinLength2(value, length) {
-  return IsMinLength(value, length);
-}
-function Every(value, offset, callback) {
-  return value.every((item, index) => index < offset || callback(item, index));
-}
-function EveryAll(value, offset, callback) {
-  let result = true;
-  value.forEach((item, index) => {
-    if (index >= offset && !callback(item, index))
-      result = false;
-  });
-  return result;
-}
-function Some(value, callback) {
-  return value.some((value2, index) => callback(value2, index));
-}
-function SomeAll(value, callback) {
-  let result = false;
-  value.forEach((item, index) => {
-    if (callback(item, index))
-      result = true;
-  });
-  return result;
-}
-function Counted(value, callback) {
-  return value.reduce((result, value2, index) => callback(value2, index) ? ++result : result, 0);
-}
-function ShiftLeft(array4, true_, false_) {
-  return IsEqual(array4.length, 0) ? false_() : true_(array4[0], array4.slice(1));
-}
-function IsUnsafePropertyKey(key) {
-  return IsEqual(key, "__proto__") || IsEqual(key, "constructor") || IsEqual(key, "prototype");
-}
-function HasPropertyKey(value, key) {
-  return IsUnsafePropertyKey(key) ? Object.prototype.hasOwnProperty.call(value, key) : key in value;
-}
-function EntriesRegExp(value) {
-  return Keys(value).map((key) => [new RegExp(`^${key}$`), value[key]]);
-}
-function Entries(value) {
-  return Object.entries(value);
-}
-function Keys(value) {
-  return Object.getOwnPropertyNames(value);
-}
-function Symbols(value) {
-  return Object.getOwnPropertySymbols(value);
-}
-function Values(value) {
-  return Object.values(value);
-}
-function DeepEqualObject(left, right) {
-  if (!IsObject(right))
-    return false;
-  const keys = Keys(left);
-  return IsEqual(keys.length, Keys(right).length) && keys.every((key) => IsDeepEqual(left[key], right[key]));
-}
-function DeepEqualArray(left, right) {
-  return IsArray(right) && IsEqual(left.length, right.length) && left.every((_, index) => IsDeepEqual(left[index], right[index]));
-}
-function IsDeepEqual(left, right) {
-  return IsArray(left) ? DeepEqualArray(left, right) : IsObject(left) ? DeepEqualObject(left, right) : IsEqual(left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/globals.mjs
-var globals_exports = {};
-__export(globals_exports, {
-  IsBigInt64Array: () => IsBigInt64Array,
-  IsBigUint64Array: () => IsBigUint64Array,
-  IsBoolean: () => IsBoolean2,
-  IsDate: () => IsDate,
-  IsFloat32Array: () => IsFloat32Array,
-  IsFloat64Array: () => IsFloat64Array,
-  IsInt16Array: () => IsInt16Array,
-  IsInt32Array: () => IsInt32Array,
-  IsInt8Array: () => IsInt8Array,
-  IsMap: () => IsMap,
-  IsNumber: () => IsNumber2,
-  IsRegExp: () => IsRegExp,
-  IsSet: () => IsSet,
-  IsString: () => IsString2,
-  IsTypeArray: () => IsTypeArray,
-  IsUint16Array: () => IsUint16Array,
-  IsUint32Array: () => IsUint32Array,
-  IsUint8Array: () => IsUint8Array,
-  IsUint8ClampedArray: () => IsUint8ClampedArray
-});
-function IsBoolean2(value) {
-  return value instanceof Boolean;
-}
-function IsNumber2(value) {
-  return value instanceof Number;
-}
-function IsString2(value) {
-  return value instanceof String;
-}
-function IsTypeArray(value) {
-  return globalThis.ArrayBuffer.isView(value);
-}
-function IsInt8Array(value) {
-  return value instanceof globalThis.Int8Array;
-}
-function IsUint8Array(value) {
-  return value instanceof globalThis.Uint8Array;
-}
-function IsUint8ClampedArray(value) {
-  return value instanceof globalThis.Uint8ClampedArray;
-}
-function IsInt16Array(value) {
-  return value instanceof globalThis.Int16Array;
-}
-function IsUint16Array(value) {
-  return value instanceof globalThis.Uint16Array;
-}
-function IsInt32Array(value) {
-  return value instanceof globalThis.Int32Array;
-}
-function IsUint32Array(value) {
-  return value instanceof globalThis.Uint32Array;
-}
-function IsFloat32Array(value) {
-  return value instanceof globalThis.Float32Array;
-}
-function IsFloat64Array(value) {
-  return value instanceof globalThis.Float64Array;
-}
-function IsBigInt64Array(value) {
-  return value instanceof globalThis.BigInt64Array;
-}
-function IsBigUint64Array(value) {
-  return value instanceof globalThis.BigUint64Array;
-}
-function IsRegExp(value) {
-  return value instanceof globalThis.RegExp;
-}
-function IsDate(value) {
-  return value instanceof globalThis.Date;
-}
-function IsSet(value) {
-  return value instanceof globalThis.Set;
-}
-function IsMap(value) {
-  return value instanceof globalThis.Map;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/guard/index.mjs
-var guard_default = guard_exports;
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/settings/settings.mjs
-var settings = {
-  immutableTypes: false,
-  maxErrors: 8,
-  maxInstantiationCount: 128,
-  useAcceleration: true,
-  exactOptionalPropertyTypes: false,
-  enumerableKind: false,
-  correctiveParse: false,
-  unionPrioritySort: true
-};
-function Reset() {
-  settings.immutableTypes = false;
-  settings.maxErrors = 8;
-  settings.maxInstantiationCount = 128;
-  settings.useAcceleration = true;
-  settings.exactOptionalPropertyTypes = false;
-  settings.enumerableKind = false;
-  settings.correctiveParse = false;
-  settings.unionPrioritySort = true;
-}
-function Set2(options) {
-  for (const key of guard_exports.Keys(options)) {
-    const value = options[key];
-    if (value !== void 0) {
-      Object.defineProperty(settings, key, { value });
-    }
-  }
-}
-function Get() {
-  return settings;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/_refine.mjs
-function IsRefine(value) {
-  return guard_exports.HasPropertyKey(value, "~refine") && guard_exports.IsArray(value["~refine"]) && guard_exports.Every(value["~refine"], 0, (value2) => guard_exports.IsObject(value2) && guard_exports.HasPropertyKey(value2, "check") && guard_exports.HasPropertyKey(value2, "error") && guard_exports.IsFunction(value2.check) && guard_exports.IsFunction(value2.error));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/schema.mjs
-function IsSchemaObject(value) {
-  return guard_exports.IsObject(value) && !guard_exports.IsArray(value);
-}
-function IsSchemaBoolean(value) {
-  return guard_exports.IsBoolean(value);
-}
-function IsSchema(value) {
-  return IsSchemaObject(value) || IsSchemaBoolean(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/additionalItems.mjs
-function IsAdditionalItems(schema) {
-  return guard_exports.HasPropertyKey(schema, "additionalItems") && IsSchema(schema.additionalItems);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/additionalProperties.mjs
-function IsAdditionalProperties(schema) {
-  return guard_exports.HasPropertyKey(schema, "additionalProperties") && IsSchema(schema.additionalProperties);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/allOf.mjs
-function IsAllOf(schema) {
-  return guard_exports.HasPropertyKey(schema, "allOf") && guard_exports.IsArray(schema.allOf) && schema.allOf.every((value) => IsSchema(value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/anchor.mjs
-function IsAnchor(schema) {
-  return guard_exports.HasPropertyKey(schema, "$anchor") && guard_exports.IsString(schema.$anchor);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/anyOf.mjs
-function IsAnyOf(schema) {
-  return guard_exports.HasPropertyKey(schema, "anyOf") && guard_exports.IsArray(schema.anyOf) && schema.anyOf.every((value) => IsSchema(value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/const.mjs
-function IsConst(value) {
-  return guard_exports.HasPropertyKey(value, "const");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/contains.mjs
-function IsContains(schema) {
-  return guard_exports.HasPropertyKey(schema, "contains") && IsSchema(schema.contains);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/default.mjs
-function IsDefault(schema) {
-  return guard_exports.HasPropertyKey(schema, "default");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dependencies.mjs
-function IsDependencies(schema) {
-  return guard_exports.HasPropertyKey(schema, "dependencies") && guard_exports.IsObject(schema.dependencies) && Object.values(schema.dependencies).every((value) => IsSchema(value) || guard_exports.IsArray(value) && value.every((value2) => guard_exports.IsString(value2)));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dependentRequired.mjs
-function IsDependentRequired(schema) {
-  return guard_exports.HasPropertyKey(schema, "dependentRequired") && guard_exports.IsObject(schema.dependentRequired) && Object.values(schema.dependentRequired).every((value) => guard_exports.IsArray(value) && value.every((value2) => guard_exports.IsString(value2)));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dependentSchemas.mjs
-function IsDependentSchemas(schema) {
-  return guard_exports.HasPropertyKey(schema, "dependentSchemas") && guard_exports.IsObject(schema.dependentSchemas) && Object.values(schema.dependentSchemas).every((value) => IsSchema(value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dynamicAnchor.mjs
-function IsDynamicAnchor(schema) {
-  return guard_exports.HasPropertyKey(schema, "$dynamicAnchor") && guard_exports.IsString(schema.$dynamicAnchor);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/dynamicRef.mjs
-function IsDynamicRef(schema) {
-  return guard_exports.HasPropertyKey(schema, "$dynamicRef") && guard_exports.IsString(schema.$dynamicRef);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/else.mjs
-function IsElse(schema) {
-  return guard_exports.HasPropertyKey(schema, "else") && IsSchema(schema.else);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/enum.mjs
-function IsEnum(schema) {
-  return guard_exports.HasPropertyKey(schema, "enum") && guard_exports.IsArray(schema.enum);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/exclusiveMaximum.mjs
-function IsExclusiveMaximum(schema) {
-  return guard_exports.HasPropertyKey(schema, "exclusiveMaximum") && (guard_exports.IsNumber(schema.exclusiveMaximum) || guard_exports.IsBigInt(schema.exclusiveMaximum));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/exclusiveMinimum.mjs
-function IsExclusiveMinimum(schema) {
-  return guard_exports.HasPropertyKey(schema, "exclusiveMinimum") && (guard_exports.IsNumber(schema.exclusiveMinimum) || guard_exports.IsBigInt(schema.exclusiveMinimum));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/format.mjs
-function IsFormat(schema) {
-  return guard_exports.HasPropertyKey(schema, "format") && guard_exports.IsString(schema.format);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/id.mjs
-function IsId(schema) {
-  return guard_exports.HasPropertyKey(schema, "$id") && guard_exports.IsString(schema.$id);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/if.mjs
-function IsIf(schema) {
-  return guard_exports.HasPropertyKey(schema, "if") && IsSchema(schema.if);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/items.mjs
-function IsItems(schema) {
-  return guard_exports.HasPropertyKey(schema, "items") && (IsSchema(schema.items) || guard_exports.IsArray(schema.items) && schema.items.every((value) => {
-    return IsSchema(value);
-  }));
-}
-function IsItemsSized(schema) {
-  return IsItems(schema) && guard_exports.IsArray(schema.items);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maximum.mjs
-function IsMaximum(schema) {
-  return guard_exports.HasPropertyKey(schema, "maximum") && (guard_exports.IsNumber(schema.maximum) || guard_exports.IsBigInt(schema.maximum));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maxContains.mjs
-function IsMaxContains(schema) {
-  return guard_exports.HasPropertyKey(schema, "maxContains") && guard_exports.IsNumber(schema.maxContains);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maxItems.mjs
-function IsMaxItems(schema) {
-  return guard_exports.HasPropertyKey(schema, "maxItems") && guard_exports.IsNumber(schema.maxItems);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maxLength.mjs
-function IsMaxLength3(schema) {
-  return guard_exports.HasPropertyKey(schema, "maxLength") && guard_exports.IsNumber(schema.maxLength);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/maxProperties.mjs
-function IsMaxProperties(schema) {
-  return guard_exports.HasPropertyKey(schema, "maxProperties") && guard_exports.IsNumber(schema.maxProperties);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minimum.mjs
-function IsMinimum(schema) {
-  return guard_exports.HasPropertyKey(schema, "minimum") && (guard_exports.IsNumber(schema.minimum) || guard_exports.IsBigInt(schema.minimum));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minContains.mjs
-function IsMinContains(schema) {
-  return guard_exports.HasPropertyKey(schema, "minContains") && guard_exports.IsNumber(schema.minContains);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minItems.mjs
-function IsMinItems(schema) {
-  return guard_exports.HasPropertyKey(schema, "minItems") && guard_exports.IsNumber(schema.minItems);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minLength.mjs
-function IsMinLength3(schema) {
-  return guard_exports.HasPropertyKey(schema, "minLength") && guard_exports.IsNumber(schema.minLength);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/minProperties.mjs
-function IsMinProperties(schema) {
-  return guard_exports.HasPropertyKey(schema, "minProperties") && guard_exports.IsNumber(schema.minProperties);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/multipleOf.mjs
-function IsMultipleOf2(schema) {
-  return guard_exports.HasPropertyKey(schema, "multipleOf") && (guard_exports.IsNumber(schema.multipleOf) || guard_exports.IsBigInt(schema.multipleOf));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/not.mjs
-function IsNot(schema) {
-  return guard_exports.HasPropertyKey(schema, "not") && IsSchema(schema.not);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/oneOf.mjs
-function IsOneOf(schema) {
-  return guard_exports.HasPropertyKey(schema, "oneOf") && guard_exports.IsArray(schema.oneOf) && schema.oneOf.every((value) => IsSchema(value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/pattern.mjs
-function IsPattern(schema) {
-  return guard_exports.HasPropertyKey(schema, "pattern") && (guard_exports.IsString(schema.pattern) || schema.pattern instanceof RegExp);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/patternProperties.mjs
-function IsPatternProperties(schema) {
-  return guard_exports.HasPropertyKey(schema, "patternProperties") && guard_exports.IsObject(schema.patternProperties) && Object.values(schema.patternProperties).every((value) => IsSchema(value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/prefixItems.mjs
-function IsPrefixItems(schema) {
-  return guard_exports.HasPropertyKey(schema, "prefixItems") && guard_exports.IsArray(schema.prefixItems) && schema.prefixItems.every((schema2) => IsSchema(schema2));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/properties.mjs
-function IsProperties(schema) {
-  return guard_exports.HasPropertyKey(schema, "properties") && guard_exports.IsObject(schema.properties) && Object.values(schema.properties).every((value) => IsSchema(value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/propertyNames.mjs
-function IsPropertyNames(schema) {
-  return guard_exports.HasPropertyKey(schema, "propertyNames") && (guard_exports.IsObject(schema.propertyNames) || IsSchema(schema.propertyNames));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/recursiveAnchor.mjs
-function IsRecursiveAnchor(schema) {
-  return guard_exports.HasPropertyKey(schema, "$recursiveAnchor") && guard_exports.IsBoolean(schema.$recursiveAnchor);
-}
-function IsRecursiveAnchorTrue(schema) {
-  return IsRecursiveAnchor(schema) && guard_exports.IsEqual(schema.$recursiveAnchor, true);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/recursiveRef.mjs
-function IsRecursiveRef(schema) {
-  return guard_exports.HasPropertyKey(schema, "$recursiveRef") && guard_exports.IsString(schema.$recursiveRef);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/ref.mjs
-function IsRef(schema) {
-  return guard_exports.HasPropertyKey(schema, "$ref") && guard_exports.IsString(schema.$ref);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/required.mjs
-function IsRequired(schema) {
-  return guard_exports.HasPropertyKey(schema, "required") && guard_exports.IsArray(schema.required) && schema.required.every((value) => guard_exports.IsString(value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/then.mjs
-function IsThen(schema) {
-  return guard_exports.HasPropertyKey(schema, "then") && IsSchema(schema.then);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/type.mjs
-function IsType(schema) {
-  return guard_exports.HasPropertyKey(schema, "type") && (guard_exports.IsString(schema.type) || guard_exports.IsArray(schema.type) && schema.type.every((value) => guard_exports.IsString(value)));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/uniqueItems.mjs
-function IsUniqueItems(schema) {
-  return guard_exports.HasPropertyKey(schema, "uniqueItems") && guard_exports.IsBoolean(schema.uniqueItems);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/unevaluatedItems.mjs
-function IsUnevaluatedItems(schema) {
-  return guard_exports.HasPropertyKey(schema, "unevaluatedItems") && IsSchema(schema.unevaluatedItems);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/types/unevaluatedProperties.mjs
-function IsUnevaluatedProperties(schema) {
-  return guard_exports.HasPropertyKey(schema, "unevaluatedProperties") && IsSchema(schema.unevaluatedProperties);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_context.mjs
-var CheckContext = class {
-  constructor() {
-    const indices = /* @__PURE__ */ new Set();
-    const keys = /* @__PURE__ */ new Set();
-    this.stack = [{ indices, keys }];
-  }
-  // ----------------------------------------------------------------
-  // Stack
-  // ----------------------------------------------------------------
-  Push() {
-    const indices = /* @__PURE__ */ new Set();
-    const keys = /* @__PURE__ */ new Set();
-    this.stack.push({ indices, keys });
-    return true;
-  }
-  Pop() {
-    this.stack.pop();
-    return true;
-  }
-  // ----------------------------------------------------------------
-  // Top
-  // ----------------------------------------------------------------
-  AddIndex(index) {
-    this.GetIndices().add(index);
-    return true;
-  }
-  AddKey(key) {
-    this.GetKeys().add(key);
-    return true;
-  }
-  GetIndices() {
-    const top = this.stack[this.stack.length - 1];
-    return top.indices;
-  }
-  GetKeys() {
-    const top = this.stack[this.stack.length - 1];
-    return top.keys;
-  }
-  Merge(results) {
-    for (const context of results) {
-      context.GetIndices().forEach((value) => this.GetIndices().add(value));
-      context.GetKeys().forEach((value) => this.GetKeys().add(value));
-    }
-    return true;
-  }
-};
-var ErrorContext = class extends CheckContext {
-  constructor() {
-    super();
-    this.errors = [];
-  }
-  AtCapacity() {
-    return this.errors.length >= settings_exports.Get().maxErrors;
-  }
-  AddError(error) {
-    if (!this.AtCapacity())
-      this.errors.push(error);
-    return false;
-  }
-  GetErrors() {
-    return this.errors;
-  }
-};
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_refine.mjs
-function CheckRefine(_stack, _context, schema, value) {
-  return guard_exports.Every(schema["~refine"], 0, (refinement, _) => refinement.check(value));
-}
-function ErrorRefine(_stack, context, schemaPath, instancePath, schema, value) {
-  return guard_exports.EveryAll(schema["~refine"], 0, (refinement, index) => {
-    return refinement.check(value) || context.AddError({
-      keyword: "~refine",
-      schemaPath,
-      instancePath,
-      params: { index, message: refinement.error(value) }
-    });
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/additionalItems.mjs
-function IsValid(schema) {
-  return IsItems(schema) && guard_exports.IsArray(schema.items);
-}
-function CheckAdditionalItems(stack, context, schema, value) {
-  if (!IsValid(schema))
-    return true;
-  const isAdditionalItems = guard_exports.Every(value, 0, (item, index) => {
-    return guard_exports.IsLessThan(index, schema.items.length) || CheckSchemaPushStack(stack, context, schema.additionalItems, item) && context.AddIndex(index);
-  });
-  return isAdditionalItems;
-}
-function ErrorAdditionalItems(stack, context, schemaPath, instancePath, schema, value) {
-  if (!IsValid(schema))
-    return true;
-  const isAdditionalItems = guard_exports.Every(value, 0, (item, index) => {
-    const nextSchemaPath = `${schemaPath}/additionalItems`;
-    const nextInstancePath = `${instancePath}/${index}`;
-    return guard_exports.IsLessThan(index, schema.items.length) || ErrorSchemaPushStack(stack, context, nextSchemaPath, nextInstancePath, schema.additionalItems, item) && context.AddIndex(index);
-  });
-  return isAdditionalItems;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_regexp.mjs
-function UnicodeRegExp(pattern) {
-  return new RegExp(pattern, "u");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/additionalProperties.mjs
-function GetPropertyKeyAsPattern(key) {
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return `^${escaped}$`;
-}
-function GetPropertiesPattern(schema) {
-  const patterns = [];
-  if (IsPatternProperties(schema))
-    patterns.push(...guard_exports.Keys(schema.patternProperties));
-  if (IsProperties(schema))
-    patterns.push(...guard_exports.Keys(schema.properties).map(GetPropertyKeyAsPattern));
-  return guard_exports.IsEqual(patterns.length, 0) ? "(?!)" : `(${patterns.join("|")})`;
-}
-function CheckAdditionalProperties(stack, context, schema, value) {
-  const regexp = UnicodeRegExp(GetPropertiesPattern(schema));
-  const isAdditionalProperties = guard_exports.Every(guard_exports.Keys(value), 0, (key, _index) => {
-    return regexp.test(key) || CheckSchemaPushStack(stack, context, schema.additionalProperties, value[key]) && context.AddKey(key);
-  });
-  return isAdditionalProperties;
-}
-function ErrorAdditionalProperties(stack, context, schemaPath, instancePath, schema, value) {
-  const regexp = UnicodeRegExp(GetPropertiesPattern(schema));
-  const additionalProperties = [];
-  const isAdditionalProperties = guard_exports.EveryAll(guard_exports.Keys(value), 0, (key, _index) => {
-    const nextSchemaPath = `${schemaPath}/additionalProperties`;
-    const nextInstancePath = `${instancePath}/${key}`;
-    const isAdditionalProperty = regexp.test(key) || ErrorSchemaPushStack(stack, context, nextSchemaPath, nextInstancePath, schema.additionalProperties, value[key]) && context.AddKey(key);
-    if (!isAdditionalProperty)
-      additionalProperties.push(key);
-    return isAdditionalProperty;
-  });
-  return isAdditionalProperties || context.AddError({
-    keyword: "additionalProperties",
-    schemaPath,
-    instancePath,
-    params: { additionalProperties }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/allOf.mjs
-function CheckAllOf(stack, context, schema, value) {
-  const results = schema.allOf.reduce((result, schema2) => {
-    const nextContext = new CheckContext();
-    return CheckSchema(stack, nextContext, schema2, value) ? [...result, nextContext] : result;
-  }, []);
-  return guard_exports.IsEqual(results.length, schema.allOf.length) && context.Merge(results);
-}
-function ErrorAllOf(stack, context, schemaPath, instancePath, schema, value) {
-  const failedContexts = [];
-  const results = schema.allOf.reduce((result, schema2, index) => {
-    const nextSchemaPath = `${schemaPath}/allOf/${index}`;
-    const nextContext = new ErrorContext();
-    const isSchema = ErrorSchema(stack, nextContext, nextSchemaPath, instancePath, schema2, value);
-    if (!isSchema)
-      failedContexts.push(nextContext);
-    return isSchema ? [...result, nextContext] : result;
-  }, []);
-  const isAllOf = guard_exports.IsEqual(results.length, schema.allOf.length) && context.Merge(results);
-  if (!isAllOf)
-    failedContexts.forEach((failed) => failed.GetErrors().forEach((error) => context.AddError(error)));
-  return isAllOf;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/anyOf.mjs
-function CheckAnyOf(stack, context, schema, value) {
-  const results = schema.anyOf.reduce((result, schema2) => {
-    const nextContext = new CheckContext();
-    return CheckSchema(stack, nextContext, schema2, value) ? [...result, nextContext] : result;
-  }, []);
-  return guard_exports.IsGreaterThan(results.length, 0) && context.Merge(results);
-}
-function ErrorAnyOf(stack, context, schemaPath, instancePath, schema, value) {
-  const failedContexts = [];
-  const results = schema.anyOf.reduce((result, schema2, index) => {
-    const nextContext = new ErrorContext();
-    const nextSchemaPath = `${schemaPath}/anyOf/${index}`;
-    const isSchema = ErrorSchema(stack, nextContext, nextSchemaPath, instancePath, schema2, value);
-    if (!isSchema)
-      failedContexts.push(nextContext);
-    return isSchema ? [...result, nextContext] : result;
-  }, []);
-  const isAnyOf = guard_exports.IsGreaterThan(results.length, 0) && context.Merge(results);
-  if (!isAnyOf)
-    failedContexts.forEach((failed) => failed.GetErrors().forEach((error) => context.AddError(error)));
-  return isAnyOf || context.AddError({
-    keyword: "anyOf",
-    schemaPath,
-    instancePath,
-    params: {}
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/boolean.mjs
-function CheckSchemaBoolean(_stack, _context, schema, _value) {
-  return schema;
-}
-function ErrorSchemaBoolean(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckSchemaBoolean(stack, context, schema, value) || context.AddError({
-    keyword: "boolean",
-    schemaPath,
-    instancePath,
-    params: {}
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/const.mjs
-function CheckConst(_stack, _context, schema, value) {
-  return guard_exports.IsValueLike(schema.const) ? guard_exports.IsEqual(value, schema.const) : guard_exports.IsDeepEqual(value, schema.const);
-}
-function ErrorConst(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckConst(stack, context, schema, value) || context.AddError({
-    keyword: "const",
-    schemaPath,
-    instancePath,
-    params: { allowedValue: schema.const }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/contains.mjs
-function IsValid2(schema) {
-  return !(IsMinContains(schema) && guard_exports.IsEqual(schema.minContains, 0));
-}
-function CheckContains(stack, context, schema, value) {
-  if (!IsValid2(schema))
-    return true;
-  return !guard_exports.IsEqual(value.length, 0) && guard_exports.SomeAll(value, (item, index) => {
-    return CheckSchema(stack, context, schema.contains, item) && context.AddIndex(index);
-  });
-}
-function ErrorContains(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckContains(stack, context, schema, value) || context.AddError({
-    keyword: "contains",
-    schemaPath,
-    instancePath,
-    params: { minContains: 1 }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/dependencies.mjs
-function CheckDependencies(stack, context, schema, value) {
-  const isLength = guard_exports.IsEqual(guard_exports.Keys(value).length, 0);
-  const isEvery = guard_exports.Every(guard_exports.Entries(schema.dependencies), 0, ([key, schema2]) => {
-    return !guard_exports.HasPropertyKey(value, key) || (guard_exports.IsArray(schema2) ? schema2.every((key2) => guard_exports.HasPropertyKey(value, key2)) : CheckSchema(stack, context, schema2, value));
-  });
-  return isLength || isEvery;
-}
-function ErrorDependencies(stack, context, schemaPath, instancePath, schema, value) {
-  const isLength = guard_exports.IsEqual(guard_exports.Keys(value).length, 0);
-  const isEvery = guard_exports.EveryAll(guard_exports.Entries(schema.dependencies), 0, ([key, schema2]) => {
-    const nextSchemaPath = `${schemaPath}/dependencies/${key}`;
-    return !guard_exports.HasPropertyKey(value, key) || (guard_exports.IsArray(schema2) ? schema2.every((dependency) => guard_exports.HasPropertyKey(value, dependency) || context.AddError({
-      keyword: "dependencies",
-      schemaPath,
-      instancePath,
-      params: { property: key, dependencies: schema2 }
-    })) : ErrorSchema(stack, context, nextSchemaPath, instancePath, schema2, value));
-  });
-  return isLength || isEvery;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/dependentRequired.mjs
-function CheckDependentRequired(_stack, _context, schema, value) {
-  const isLength = guard_exports.IsEqual(guard_exports.Keys(value).length, 0);
-  const isEvery = guard_exports.Every(guard_exports.Entries(schema.dependentRequired), 0, ([key, keys]) => {
-    return !guard_exports.HasPropertyKey(value, key) || keys.every((key2) => guard_exports.HasPropertyKey(value, key2));
-  });
-  return isLength || isEvery;
-}
-function ErrorDependentRequired(_stack, context, schemaPath, instancePath, schema, value) {
-  const isLength = guard_exports.IsEqual(guard_exports.Keys(value).length, 0);
-  const isEveryEntry = guard_exports.EveryAll(guard_exports.Entries(schema.dependentRequired), 0, ([key, keys]) => {
-    return !guard_exports.HasPropertyKey(value, key) || guard_exports.EveryAll(keys, 0, (dependency) => guard_exports.HasPropertyKey(value, dependency) || context.AddError({
-      keyword: "dependentRequired",
-      schemaPath,
-      instancePath,
-      params: { property: key, dependencies: keys }
-    }));
-  });
-  return isLength || isEveryEntry;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/dependentSchemas.mjs
-function CheckDependentSchemas(stack, context, schema, value) {
-  const isLength = guard_exports.IsEqual(guard_exports.Keys(value).length, 0);
-  const isEvery = guard_exports.Every(guard_exports.Entries(schema.dependentSchemas), 0, ([key, schema2]) => {
-    return !guard_exports.HasPropertyKey(value, key) || CheckSchema(stack, context, schema2, value);
-  });
-  return isLength || isEvery;
-}
-function ErrorDependentSchemas(stack, context, schemaPath, instancePath, schema, value) {
-  const isLength = guard_exports.IsEqual(guard_exports.Keys(value).length, 0);
-  const isEvery = guard_exports.EveryAll(guard_exports.Entries(schema.dependentSchemas), 0, ([key, schema2]) => {
-    const nextSchemaPath = `${schemaPath}/dependentSchemas/${key}`;
-    return !guard_exports.HasPropertyKey(value, key) || ErrorSchema(stack, context, nextSchemaPath, instancePath, schema2, value);
-  });
-  return isLength || isEvery;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/dynamicRef.mjs
-function CheckDynamicRef(stack, context, schema, value) {
-  const target = stack.DynamicRef(schema) ?? false;
-  return IsSchema(target) && CheckSchema(stack, context, target, value);
-}
-function ErrorDynamicRef(stack, context, _schemaPath, instancePath, schema, value) {
-  const target = stack.DynamicRef(schema) ?? false;
-  return IsSchema(target) && ErrorSchema(stack, context, "#", instancePath, target, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/enum.mjs
-function CheckEnum(_stack, _context, schema, value) {
-  return guard_exports.Some(schema.enum, (option) => guard_exports.IsValueLike(option) ? guard_exports.IsEqual(value, option) : guard_exports.IsDeepEqual(value, option));
-}
-function ErrorEnum(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckEnum(stack, context, schema, value) || context.AddError({
-    keyword: "enum",
-    schemaPath,
-    instancePath,
-    params: { allowedValues: schema.enum }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/exclusiveMaximum.mjs
-function CheckExclusiveMaximum(_stack, _context, schema, value) {
-  return guard_exports.IsLessThan(value, schema.exclusiveMaximum);
-}
-function ErrorExclusiveMaximum(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckExclusiveMaximum(stack, context, schema, value) || context.AddError({
-    keyword: "exclusiveMaximum",
-    schemaPath,
-    instancePath,
-    params: { comparison: "<", limit: schema.exclusiveMaximum }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/exclusiveMinimum.mjs
-function CheckExclusiveMinimum(_stack, _context, schema, value) {
-  return guard_exports.IsGreaterThan(value, schema.exclusiveMinimum);
-}
-function ErrorExclusiveMinimum(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckExclusiveMinimum(stack, context, schema, value) || context.AddError({
-    keyword: "exclusiveMinimum",
-    schemaPath,
-    instancePath,
-    params: { comparison: ">", limit: schema.exclusiveMinimum }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/format.mjs
-var format_exports = {};
-__export(format_exports, {
-  Clear: () => Clear,
-  Entries: () => Entries2,
-  Get: () => Get2,
-  Has: () => Has,
-  IsDate: () => IsDate2,
-  IsDateTime: () => IsDateTime,
-  IsDuration: () => IsDuration,
-  IsEmail: () => IsEmail,
-  IsHostname: () => IsHostname2,
-  IsIPv4: () => IsIPv4,
-  IsIPv6: () => IsIPv6,
-  IsIdnEmail: () => IsIdnEmail,
-  IsIdnHostname: () => IsIdnHostname2,
-  IsIri: () => IsIri,
-  IsIriReference: () => IsIriReference,
-  IsJsonPointer: () => IsJsonPointer,
-  IsJsonPointerUriFragment: () => IsJsonPointerUriFragment,
-  IsRegex: () => IsRegex,
-  IsRelativeJsonPointer: () => IsRelativeJsonPointer,
-  IsTime: () => IsTime,
-  IsUri: () => IsUri,
-  IsUriReference: () => IsUriReference,
-  IsUriTemplate: () => IsUriTemplate,
-  IsUrl: () => IsUrl,
-  IsUuid: () => IsUuid,
-  Reset: () => Reset2,
-  Set: () => Set3,
-  Test: () => Test
-});
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/date.mjs
-var DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-var DATE = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
-function IsLeapYear(year) {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-}
-function IsDate2(value) {
-  const matches = DATE.exec(value);
-  if (!matches)
-    return false;
-  const year = +matches[1];
-  const month = +matches[2];
-  const day = +matches[3];
-  return month >= 1 && month <= 12 && day >= 1 && day <= (month === 2 && IsLeapYear(year) ? 29 : DAYS[month]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/time.mjs
-var TIME = /^(\d\d):(\d\d):(\d\d)(?:\.\d+)?(?:([Zz])|([+-])(\d\d):(\d\d))?$/;
-function IsTime(value, strictTimeZone = true) {
-  const matches = TIME.exec(value);
-  if (!matches)
-    return false;
-  if (strictTimeZone && !matches[4] && !matches[5])
-    return false;
-  const hr = +matches[1];
-  const min = +matches[2];
-  const sec = +matches[3];
-  if (hr > 23 || min > 59 || sec > 60)
-    return false;
-  if (matches[5]) {
-    const tzH2 = +matches[6];
-    const tzM2 = +matches[7];
-    if (tzH2 > 23 || tzM2 > 59)
-      return false;
-  }
-  if (sec < 60)
-    return true;
-  const tzSign = matches[5] === "-" ? -1 : 1;
-  const tzH = +(matches[6] || 0);
-  const tzM = +(matches[7] || 0);
-  const totalUtcMin = hr * 60 + min - tzSign * (tzH * 60 + tzM);
-  return (totalUtcMin % 1440 + 1440) % 1440 === 1439;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/date_time.mjs
-function IsDateTime(value) {
-  const dateTime = value.split(/T/i);
-  return dateTime.length === 2 && IsDate2(dateTime[0]) && IsTime(dateTime[1]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/duration.mjs
-var Duration = /^P((\d+Y(\d+M(\d+D)?)?|\d+M(\d+D)?|\d+D)(T(\d+H(\d+M(\d+S)?)?|\d+M(\d+S)?|\d+S))?|T(\d+H(\d+M(\d+S)?)?|\d+M(\d+S)?|\d+S)|\d+W)$/;
-function IsDuration(value) {
-  return Duration.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/email.mjs
-var Email = /^(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[^"\\]|\\[\x20-\x7e])*")@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*|\[(?:IPv6:[a-f0-9:]+|(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3})\])$/i;
-function IsEmail(value) {
-  return Email.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/pattern/pattern.mjs
-var RE_RULE_HYPHEN_PLACEMENT = /^(?!-).*(?<!-)$/;
-var RE_RULE_NOT_RESERVED_ACE = /^(?!..--)/;
-var RE_ASCII_LDH = /^[a-zA-Z0-9-]*$/;
-var RE_ASCII = new RegExp("^\\p{ASCII}*$", "u");
-var RE_NON_ASCII = /[^\p{ASCII}]/u;
-var RE_ASCII_DIGIT = /[0-9]/;
-var RE_ARABIC_INDIC_DIGIT = /[\u{0660}-\u{0669}]/u;
-var RE_EXT_ARABIC_INDIC_DIGIT = /[\u{06f0}-\u{06f9}]/u;
-var RE_COMMON_SEPARATOR = /[\u{002e}\u{002c}\u{003a}\u{002f}]/u;
-var RE_EUROPEAN_SEPARATOR = /[\u{002d}\u{002b}]/u;
-var RE_MARK_NONSPACING = new RegExp("\\p{Mn}", "u");
-var RE_MARK_SPACING_COMBINING = new RegExp("\\p{Mc}", "u");
-var RE_MARK_ENCLOSING = new RegExp("\\p{Me}", "u");
-var RE_COMBINING_MARK = /[\p{Mn}\p{Mc}\p{Me}]/u;
-var RE_LETTER = new RegExp("\\p{L}", "u");
-var RE_NUMBER_DECIMAL = new RegExp("\\p{Nd}", "u");
-var RE_SCRIPT_GREEK = new RegExp("\\p{Script=Greek}", "u");
-var RE_SCRIPT_HEBREW = new RegExp("\\p{Script=Hebrew}", "u");
-var RE_SCRIPT_JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
-var RE_SCRIPT_ARABIC_LETTER = /[\p{Script=Arabic}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Mandaic}]/u;
-var RE_VIRAMA = /[\u{094d}\u{09cd}\u{0a4d}\u{0acd}\u{0b4d}\u{0bcd}\u{0c4d}\u{0ccd}\u{0d3b}\u{0d3c}\u{0d4d}\u{0dca}\u{1b44}\u{1baa}\u{1bab}\u{a9c0}\u{11046}\u{1107f}\u{110b9}\u{11133}\u{11134}\u{111c0}\u{11235}\u{1134d}\u{11442}\u{114c2}\u{115bf}\u{1163f}\u{116b6}\u{11c3f}\u{11d44}\u{11d45}]/u;
-var RE_RFC5892_DISALLOWED = /[\u{0640}\u{07fa}\u{302e}\u{302f}\u{3031}\u{3032}\u{3033}\u{3034}\u{3035}\u{303b}]/u;
-var RE_CONTEXTO_EXCEPTIONS = /[\u{00b7}\u{0375}\u{05f3}\u{05f4}\u{200c}\u{200d}\u{30fb}]/u;
-var RE_PVALID_EXCEPTIONS = /[\u{00df}\u{03c2}\u{06fd}\u{06fe}\u{0f0b}\u{3007}]/u;
-var RE_EUROPEAN_NUMBER = new RegExp([
-  RE_ASCII_DIGIT,
-  RE_EXT_ARABIC_INDIC_DIGIT
-].map((regexp) => regexp.source).join("|"), "u");
-var RE_PERMITTED_CATEGORY = new RegExp([
-  RE_LETTER,
-  RE_EUROPEAN_SEPARATOR,
-  RE_COMMON_SEPARATOR,
-  RE_NUMBER_DECIMAL,
-  RE_MARK_NONSPACING,
-  RE_MARK_SPACING_COMBINING,
-  RE_CONTEXTO_EXCEPTIONS,
-  RE_PVALID_EXCEPTIONS
-].map((regexp) => regexp.source).join("|"), "u");
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/label/ascii.mjs
-function IsAsciiLabel(value) {
-  return RE_RULE_HYPHEN_PLACEMENT.test(value) && RE_RULE_NOT_RESERVED_ACE.test(value) && RE_ASCII_LDH.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/format/puny.mjs
-var PUNYCODE_BASE = 36;
-var PUNYCODE_TMIN = 1;
-var PUNYCODE_TMAX = 26;
-var PUNYCODE_SKEW = 38;
-var PUNYCODE_DAMP = 700;
-var PUNYCODE_INITIAL_BIAS = 72;
-var PUNYCODE_INITIAL_N = 128;
-function ThrowDontCare() {
-  throw null;
-}
-function IsAcePrefixed(value) {
-  return value.toLowerCase().startsWith("xn--");
-}
-function Adapt(delta, numPoints, firstTime) {
-  delta = firstTime ? Math.floor(delta / PUNYCODE_DAMP) : delta >> 1;
-  delta += Math.floor(delta / numPoints);
-  let k = 0;
-  while (delta > (PUNYCODE_BASE - PUNYCODE_TMIN) * PUNYCODE_TMAX >> 1) {
-    delta = Math.floor(delta / (PUNYCODE_BASE - PUNYCODE_TMIN));
-    k += PUNYCODE_BASE;
-  }
-  return k + Math.floor((PUNYCODE_BASE - PUNYCODE_TMIN + 1) * delta / (delta + PUNYCODE_SKEW));
-}
-function Decode(value) {
-  const output = [];
-  let n = PUNYCODE_INITIAL_N;
-  let i = 0;
-  let bias = PUNYCODE_INITIAL_BIAS;
-  const delimIdx = value.lastIndexOf("-");
-  if (delimIdx > 0) {
-    for (let j = 0; j < delimIdx; j++) {
-      const cp = value.charCodeAt(j);
-      if (cp >= 128)
-        ThrowDontCare();
-      output.push(cp);
-    }
-  }
-  let inIdx = delimIdx < 0 ? 0 : delimIdx + 1;
-  while (inIdx < value.length) {
-    const oldi = i;
-    let w = 1;
-    let k = PUNYCODE_BASE;
-    while (true) {
-      if (inIdx >= value.length)
-        ThrowDontCare();
-      const ch = value.charCodeAt(inIdx++);
-      let digit;
-      if (ch >= 97 && ch <= 122)
-        digit = ch - 97;
-      else if (ch >= 48 && ch <= 57)
-        digit = ch - 48 + 26;
-      else
-        ThrowDontCare();
-      i += digit * w;
-      const t = k <= bias ? PUNYCODE_TMIN : k >= bias + PUNYCODE_TMAX ? PUNYCODE_TMAX : k - bias;
-      if (digit < t)
-        break;
-      w *= PUNYCODE_BASE - t;
-      k += PUNYCODE_BASE;
-    }
-    const outLen = output.length + 1;
-    bias = Adapt(i - oldi, outLen, oldi === 0);
-    n += Math.floor(i / outLen);
-    i %= outLen;
-    output.splice(i, 0, n);
-    i++;
-  }
-  return String.fromCodePoint(...output);
-}
-function DigitToChar(digit) {
-  return digit < 26 ? String.fromCharCode(digit + 97) : String.fromCharCode(digit - 26 + 48);
-}
-var RE_REPLACE_NON_ASCII = new RegExp(RE_NON_ASCII.source, "gu");
-function Encode(input) {
-  const basic = input.replace(RE_REPLACE_NON_ASCII, "");
-  const basicLength = basic.length;
-  const result = basicLength > 0 ? [basic, "-"] : [];
-  const codePoints = Array.from(input, (char) => char.codePointAt(0));
-  let n = PUNYCODE_INITIAL_N;
-  let delta = 0;
-  let bias = PUNYCODE_INITIAL_BIAS;
-  let handledCPCount = basicLength;
-  while (handledCPCount < codePoints.length) {
-    let m = Infinity;
-    for (const cp of codePoints) {
-      if (cp >= n && cp < m)
-        m = cp;
-    }
-    delta += (m - n) * (handledCPCount + 1);
-    n = m;
-    for (const cp of codePoints) {
-      if (cp < n)
-        delta++;
-      if (cp === n) {
-        let q = delta;
-        for (let k = PUNYCODE_BASE; ; k += PUNYCODE_BASE) {
-          const t = k <= bias ? PUNYCODE_TMIN : k >= bias + PUNYCODE_TMAX ? PUNYCODE_TMAX : k - bias;
-          if (q < t)
-            break;
-          const digit = t + (q - t) % (PUNYCODE_BASE - t);
-          result.push(DigitToChar(digit));
-          q = Math.floor((q - t) / (PUNYCODE_BASE - t));
-        }
-        result.push(DigitToChar(q));
-        bias = Adapt(delta, handledCPCount + 1, handledCPCount === basicLength);
-        delta = 0;
-        handledCPCount++;
-      }
-    }
-    delta++;
-    n++;
-  }
-  return result.join("");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/format/bidi.mjs
-var RE_RTL_ALLOWED = /^(?:R|AL|AN|EN|ES|CS|ET|ON|BN|NSM)$/;
-var RE_LTR_ALLOWED = /^(?:L|EN|ES|CS|ET|ON|BN|NSM)$/;
-var RE_RTL_CLASSES = /^(?:R|AL|AN)$/;
-function HasBidiChars(value) {
-  if (IsAcePrefixed(value)) {
-    try {
-      return HasRightToLeftCharacters(Decode(value.slice(4).toLowerCase()));
-    } catch {
-      return false;
-    }
-  }
-  return HasRightToLeftCharacters(value);
-}
-function GetBidiClass(codePoint) {
-  const char = String.fromCodePoint(codePoint);
-  return RE_EUROPEAN_NUMBER.test(char) ? "EN" : RE_ARABIC_INDIC_DIGIT.test(char) ? "AN" : (
-    // Pattern.RE_EUROPEAN_SEPARATOR.test(char) ? 'ES' : // (no-spec-coverage)
-    // Pattern.RE_COMMON_SEPARATOR.test(char) ? 'CS' : // (no-spec-coverage)
-    RE_MARK_NONSPACING.test(char) ? "NSM" : RE_SCRIPT_HEBREW.test(char) ? "R" : RE_SCRIPT_ARABIC_LETTER.test(char) ? "AL" : RE_LETTER.test(char) ? "L" : "ON"
-  );
-}
-function HasRightToLeftCharacters(value) {
-  for (const ch of value)
-    if (RE_RTL_CLASSES.test(GetBidiClass(ch.codePointAt(0))))
-      return true;
-  return false;
-}
-function SatisfiesBidiRule(value) {
-  let isRtl = false;
-  let allowed = RE_LTR_ALLOWED;
-  let sawEN = false;
-  let sawAN = false;
-  let isFirst = true;
-  for (const ch of value) {
-    const bidiClass = GetBidiClass(ch.codePointAt(0));
-    if (isFirst) {
-      if (bidiClass !== "L" && bidiClass !== "R" && bidiClass !== "AL")
-        return false;
-      isRtl = bidiClass === "R" || bidiClass === "AL";
-      allowed = isRtl ? RE_RTL_ALLOWED : RE_LTR_ALLOWED;
-      isFirst = false;
-    }
-    if (!allowed.test(bidiClass))
-      return false;
-    if (bidiClass === "EN")
-      sawEN = true;
-    else if (bidiClass === "AN")
-      sawAN = true;
-  }
-  if (isRtl && sawEN && sawAN)
-    return false;
-  return true;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/label/unicode.mjs
-function ExceedsMaxALabelLength(value) {
-  return RE_NON_ASCII.test(value) && Encode(value).length + 4 > 63;
-}
-function HasInvalidHyphens(chars) {
-  if (chars[0] === "-" || chars[chars.length - 1] === "-")
-    return true;
-  return chars.slice(2).join("").startsWith("--");
-}
-function IsUnicodeLabel(value) {
-  if (ExceedsMaxALabelLength(value))
-    return false;
-  if (HasRightToLeftCharacters(value) && !SatisfiesBidiRule(value))
-    return false;
-  const chars = [...value];
-  const codePoints = chars.map((c) => c.codePointAt(0));
-  const length = codePoints.length;
-  if (HasInvalidHyphens(chars))
-    return false;
-  if (RE_COMBINING_MARK.test(chars[0]))
-    return false;
-  let hasJapanese = false;
-  for (let i = 0; i < length; i++) {
-    const codePoint = codePoints[i];
-    const char = chars[i];
-    if (RE_RFC5892_DISALLOWED.test(char))
-      return false;
-    if (!RE_PERMITTED_CATEGORY.test(char))
-      return false;
-    if (RE_SCRIPT_JAPANESE.test(char))
-      hasJapanese = true;
-    const prev = codePoints[i - 1], next = codePoints[i + 1];
-    switch (codePoint) {
-      case 183:
-        if (prev !== 108 || next !== 108)
-          return false;
-        break;
-      // MIDDLE DOT (Catalan)
-      case 885:
-        if (!next || !RE_SCRIPT_GREEK.test(chars[i + 1]))
-          return false;
-        break;
-      // Greek KERAIA
-      case 1523:
-      case 1524:
-        if (!prev || !RE_SCRIPT_HEBREW.test(chars[i - 1]))
-          return false;
-        break;
-      // Hebrew GERESH
-      case 8204:
-        if (!prev || prev < 128 && !RE_VIRAMA.test(chars[i - 1]))
-          return false;
-        break;
-      case 8205:
-        if (!prev || !RE_VIRAMA.test(chars[i - 1]))
-          return false;
-        break;
-      case 12539:
-        break;
-    }
-  }
-  if (value.includes("\u30FB") && !hasJapanese)
-    return false;
-  return true;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/label/puny.mjs
-function IsPunyLabel(value) {
-  if (!IsAcePrefixed(value))
-    return false;
-  try {
-    const body = value.slice(4).toLowerCase();
-    if (body.lastIndexOf("-") === 0)
-      return false;
-    const decoded = Decode(body);
-    if (!RE_NON_ASCII.test(decoded))
-      return false;
-    return IsUnicodeLabel(decoded);
-  } catch {
-    return false;
-  }
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/hostname.mjs
-function IsValidLabelLength(value) {
-  return value.length > 0 && value.length <= 63;
-}
-function IsLabel(value) {
-  return IsValidLabelLength(value) && (IsPunyLabel(value) || IsAsciiLabel(value));
-}
-function IsHostname(value) {
-  if (value.length === 0 || value.length > 253)
-    return false;
-  if (value.charCodeAt(value.length - 1) === 46)
-    return false;
-  return value.split(".").every((label) => IsLabel(label));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idna/idn-hostname.mjs
-function IsValidLabelLength2(value) {
-  return value.length > 0 && value.length <= 63;
-}
-function IsLabel2(value) {
-  return IsValidLabelLength2(value) && (IsPunyLabel(value) || IsUnicodeLabel(value));
-}
-function NormalizeHostname(value) {
-  return value.replace(/[\uff01-\uff5e]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 65248)).normalize("NFC").replace(/[\u00ad\u034f\u180b-\u180d\u200b\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/gu, "").replace(/[\u002E\u3002\uFF0E\uFF61]/g, ".");
-}
-function IsIdnHostname(value) {
-  if (value.length === 0 || value.includes(" "))
-    return false;
-  const normalized = NormalizeHostname(value);
-  if (normalized.length > 253)
-    return false;
-  const labels = normalized.split(".");
-  const hasBidiChars = labels.some((label) => HasBidiChars(label));
-  return labels.every((label) => IsLabel2(label) && (!hasBidiChars || SatisfiesBidiRule(label)));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/hostname.mjs
-function IsHostname2(value) {
-  return IsHostname(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idn_email.mjs
-var IdnEmail = /^(?:[A-Za-z0-9!#$%&'*+\/=?^_`{|}~\u{0080}-\u{10FFFF}-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~\u{0080}-\u{10FFFF}-]+)*|"(?:[^"\\]|\\.)*")@[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,62})(?<!-)(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,62})(?<!-))*$/iu;
-function IsIdnEmail(value) {
-  return IdnEmail.test(value.normalize("NFC"));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/idn_hostname.mjs
-function IsIdnHostname2(value) {
-  return IsIdnHostname(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/ipv4.mjs
-var IPv4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
-function IsIPv4(value) {
-  return IPv4.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/ipv6.mjs
-var IPv6 = /^(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:)?[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)$/i;
-function IsIPv6(value) {
-  return IPv6.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/iri_reference.mjs
-var InvalidIriChars = /[\x00-\x20\x7F\\]|%(?![0-9a-fA-F]{2})/;
-var MalformedScheme = /^[a-zA-Z][a-zA-Z0-9+\-.]*\/\//;
-function IsIriReference(value) {
-  return !InvalidIriChars.test(value) && !MalformedScheme.test(value) && URL.canParse(value, "http://example.com");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/iri.mjs
-var IpvFutureMatchMaxLength = 2048;
-var IpvFutureMatch = /\[[vV][0-9a-fA-F]+\.[^\]]+\]/;
-var InvalidIriChars2 = /[\x00-\x20<>\^`{|}\\]/;
-function NarrowIpvFuture(value) {
-  return value.length < IpvFutureMatchMaxLength ? value.replace(IpvFutureMatch, "[::1]") : value;
-}
-function IsIri(value) {
-  if (InvalidIriChars2.test(value))
-    return false;
-  return URL.canParse(NarrowIpvFuture(value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/json_pointer_uri_fragment.mjs
-var JsonPointerUriFragment = /^#(?:\/(?:[a-z0-9_\-.!$&'()*+,;:=@]|%[0-9a-f]{2}|~0|~1)*)*$/i;
-function IsJsonPointerUriFragment(value) {
-  return JsonPointerUriFragment.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/json_pointer.mjs
-var JsonPointer = /^(?:\/(?:[^~/]|~0|~1)*)*$/;
-function IsJsonPointer(value) {
-  return JsonPointer.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/regex.mjs
-function IsRegex(value) {
-  try {
-    new RegExp(value, "u");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/relative_json_pointer.mjs
-var RelativeJsonPointer = /^(?:0|[1-9][0-9]*)(?:#|(?:\/(?:[^~/]|~0|~1)*)*)$/;
-function IsRelativeJsonPointer(value) {
-  return RelativeJsonPointer.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/uri_reference.mjs
-var UriReference = /^(?:[a-z][a-z0-9+\-.]*:(?:\/\/(?:(?:[-a-z0-9._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:[\da-f]{1,4}:){6}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|::(?:[\da-f]{1,4}:){5}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:[\da-f]{1,4})?::(?:[\da-f]{1,4}:){4}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,1}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){3}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,2}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){2}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,3}[\da-f]{1,4})?::[\da-f]{1,4}:(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,4}[\da-f]{1,4})?::(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,5}[\da-f]{1,4})?::[\da-f]{1,4}|(?:(?:[\da-f]{1,4}:){0,6}[\da-f]{1,4})?::)|v[0-9a-f]+\.[-a-z0-9._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)|(?:[-a-z0-9._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:\/\/(?:(?:[-a-z0-9._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:[\da-f]{1,4}:){6}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|::(?:[\da-f]{1,4}:){5}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:[\da-f]{1,4})?::(?:[\da-f]{1,4}:){4}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,1}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){3}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,2}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){2}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,3}[\da-f]{1,4})?::[\da-f]{1,4}:(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,4}[\da-f]{1,4})?::(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,5}[\da-f]{1,4})?::[\da-f]{1,4}|(?:(?:[\da-f]{1,4}:){0,6}[\da-f]{1,4})?::)|v[0-9a-f]+\.[-a-z0-9._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)|(?:[-a-z0-9._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[-a-z0-9._~!$&'()*+,;=@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?)(?:\?(?:[-a-z0-9._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[-a-z0-9._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
-function IsUriReference(value) {
-  return UriReference.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/uri_template.mjs
-var UriTemplate = /^(?:(?:[^\x00-\x20"<>%\\^`{|}\x7f]|%[0-9a-f]{2})|\{[+#./;?&=,!@|]?(?:[a-z0-9_]|%[0-9a-f]{2})+(?:\.(?:[a-z0-9_]|%[0-9a-f]{2})+)*(?::[1-9]\d{0,3}|\*)?(?:,(?:[a-z0-9_]|%[0-9a-f]{2})+(?:\.(?:[a-z0-9_]|%[0-9a-f]{2})+)*(?::[1-9]\d{0,3}|\*)?)*\})*$/i;
-function IsUriTemplate(value) {
-  return UriTemplate.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/uri.mjs
-var Uri = /^[a-z][a-z0-9+\-.]*:(?:\/\/(?:(?:[-a-z0-9._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:[\da-f]{1,4}:){6}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|::(?:[\da-f]{1,4}:){5}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:[\da-f]{1,4})?::(?:[\da-f]{1,4}:){4}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,1}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){3}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,2}[\da-f]{1,4})?::(?:[\da-f]{1,4}:){2}(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,3}[\da-f]{1,4})?::[\da-f]{1,4}:(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,4}[\da-f]{1,4})?::(?:[\da-f]{1,4}:[\da-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))|(?:(?:[\da-f]{1,4}:){0,5}[\da-f]{1,4})?::[\da-f]{1,4}|(?:(?:[\da-f]{1,4}:){0,6}[\da-f]{1,4})?::)|v[0-9a-f]+\.[-a-z0-9._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)|(?:[-a-z0-9._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[-a-z0-9._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?(?:\?(?:[-a-z0-9._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[-a-z0-9._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
-function IsUri(value) {
-  return Uri.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/url.mjs
-function IsUrl(value) {
-  return URL.canParse(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/uuid.mjs
-var Uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-function IsUuid(value) {
-  return Uuid.test(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/format/_registry.mjs
-var formats = /* @__PURE__ */ new Map();
-function Clear() {
-  formats.clear();
-}
-function Entries2() {
-  return [...formats.entries()];
-}
-function Set3(format, check) {
-  formats.set(format, check);
-}
-function Has(format) {
-  return formats.has(format);
-}
-function Get2(format) {
-  return formats.get(format);
-}
-function Test(format, value) {
-  return formats.get(format)?.(value) ?? true;
-}
-function Reset2() {
-  Clear();
-  formats.set("date-time", IsDateTime);
-  formats.set("date", IsDate2);
-  formats.set("duration", IsDuration);
-  formats.set("email", IsEmail);
-  formats.set("hostname", IsHostname2);
-  formats.set("idn-email", IsIdnEmail);
-  formats.set("idn-hostname", IsIdnHostname2);
-  formats.set("ipv4", IsIPv4);
-  formats.set("ipv6", IsIPv6);
-  formats.set("iri-reference", IsIriReference);
-  formats.set("iri", IsIri);
-  formats.set("json-pointer-uri-fragment", IsJsonPointerUriFragment);
-  formats.set("json-pointer", IsJsonPointer);
-  formats.set("regex", IsRegex);
-  formats.set("relative-json-pointer", IsRelativeJsonPointer);
-  formats.set("time", IsTime);
-  formats.set("uri-reference", IsUriReference);
-  formats.set("uri-template", IsUriTemplate);
-  formats.set("uri", IsUri);
-  formats.set("url", IsUrl);
-  formats.set("uuid", IsUuid);
-}
-Reset2();
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/format.mjs
-function CheckFormat(_stack, _context, schema, value) {
-  return format_exports.Test(schema.format, value);
-}
-function ErrorFormat(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckFormat(stack, context, schema, value) || context.AddError({
-    keyword: "format",
-    schemaPath,
-    instancePath,
-    params: { format: schema.format }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/if.mjs
-function CheckIf(stack, context, schema, value) {
-  const thenSchema = IsThen(schema) ? schema.then : true;
-  const elseSchema = IsElse(schema) ? schema.else : true;
-  return CheckSchema(stack, context, schema.if, value) ? CheckSchema(stack, context, thenSchema, value) : CheckSchema(stack, context, elseSchema, value);
-}
-function ErrorIf(stack, context, schemaPath, instancePath, schema, value) {
-  const thenSchema = IsThen(schema) ? schema.then : true;
-  const elseSchema = IsElse(schema) ? schema.else : true;
-  const trueContext = new ErrorContext();
-  const isIf = ErrorSchema(stack, trueContext, `${schemaPath}/if`, instancePath, schema.if, value) ? ErrorSchema(stack, trueContext, `${schemaPath}/then`, instancePath, thenSchema, value) || context.AddError({
-    keyword: "if",
-    schemaPath,
-    instancePath,
-    params: { failingKeyword: "then" }
-  }) : ErrorSchema(stack, context, `${schemaPath}/else`, instancePath, elseSchema, value) || context.AddError({
-    keyword: "if",
-    schemaPath,
-    instancePath,
-    params: { failingKeyword: "else" }
-  });
-  if (isIf)
-    context.Merge([trueContext]);
-  return isIf;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/items.mjs
-function CheckItemsSized(stack, context, schema, value) {
-  return guard_exports.Every(schema.items, 0, (schema2, index) => {
-    return guard_exports.IsLessEqualThan(value.length, index) || CheckSchemaPushStack(stack, context, schema2, value[index]) && context.AddIndex(index);
-  });
-}
-function ErrorItemsSized(stack, context, schemaPath, instancePath, schema, value) {
-  return guard_exports.EveryAll(schema.items, 0, (schema2, index) => {
-    const nextSchemaPath = `${schemaPath}/items/${index}`;
-    const nextInstancePath = `${instancePath}/${index}`;
-    return guard_exports.IsLessEqualThan(value.length, index) || ErrorSchemaPushStack(stack, context, nextSchemaPath, nextInstancePath, schema2, value[index]) && context.AddIndex(index);
-  });
-}
-function CheckItemsUnsized(stack, context, schema, value) {
-  const offset = IsPrefixItems(schema) ? schema.prefixItems.length : 0;
-  return guard_exports.Every(value, offset, (element, index) => {
-    return CheckSchemaPushStack(stack, context, schema.items, element) && context.AddIndex(index);
-  });
-}
-function ErrorItemsUnsized(stack, context, schemaPath, instancePath, schema, value) {
-  const offset = IsPrefixItems(schema) ? schema.prefixItems.length : 0;
-  return guard_exports.EveryAll(value, offset, (element, index) => {
-    const nextSchemaPath = `${schemaPath}/items`;
-    const nextInstancePath = `${instancePath}/${index}`;
-    return ErrorSchemaPushStack(stack, context, nextSchemaPath, nextInstancePath, schema.items, element) && context.AddIndex(index);
-  });
-}
-function CheckItems(stack, context, schema, value) {
-  return IsItemsSized(schema) ? CheckItemsSized(stack, context, schema, value) : CheckItemsUnsized(stack, context, schema, value);
-}
-function ErrorItems(stack, context, schemaPath, instancePath, schema, value) {
-  return IsItemsSized(schema) ? ErrorItemsSized(stack, context, schemaPath, instancePath, schema, value) : ErrorItemsUnsized(stack, context, schemaPath, instancePath, schema, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maxContains.mjs
-function IsValid3(schema) {
-  return IsContains(schema);
-}
-function CheckMaxContains(stack, context, schema, value) {
-  if (!IsValid3(schema))
-    return true;
-  const count2 = guard_exports.Counted(value, (item) => CheckSchema(stack, context, schema.contains, item));
-  return guard_exports.IsLessEqualThan(count2, schema.maxContains);
-}
-function ErrorMaxContains(stack, context, schemaPath, instancePath, schema, value) {
-  const minContains = IsMinContains(schema) ? schema.minContains : 1;
-  return CheckMaxContains(stack, context, schema, value) || context.AddError({
-    keyword: "contains",
-    schemaPath,
-    instancePath,
-    params: { minContains, maxContains: schema.maxContains }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maximum.mjs
-function CheckMaximum(_stack, _context, schema, value) {
-  return guard_exports.IsLessEqualThan(value, schema.maximum);
-}
-function ErrorMaximum(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMaximum(stack, context, schema, value) || context.AddError({
-    keyword: "maximum",
-    schemaPath,
-    instancePath,
-    params: { comparison: "<=", limit: schema.maximum }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maxItems.mjs
-function CheckMaxItems(_stack, _context, schema, value) {
-  return guard_exports.IsLessEqualThan(value.length, schema.maxItems);
-}
-function ErrorMaxItems(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMaxItems(stack, context, schema, value) || context.AddError({
-    keyword: "maxItems",
-    schemaPath,
-    instancePath,
-    params: { limit: schema.maxItems }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maxLength.mjs
-function CheckMaxLength(_stack, _context, schema, value) {
-  return guard_exports.IsMaxLength(value, schema.maxLength);
-}
-function ErrorMaxLength(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMaxLength(stack, context, schema, value) || context.AddError({
-    keyword: "maxLength",
-    schemaPath,
-    instancePath,
-    params: { limit: schema.maxLength }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/maxProperties.mjs
-function CheckMaxProperties(_stack, _context, schema, value) {
-  return guard_exports.IsLessEqualThan(guard_exports.Keys(value).length, schema.maxProperties);
-}
-function ErrorMaxProperties(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMaxProperties(stack, context, schema, value) || context.AddError({
-    keyword: "maxProperties",
-    schemaPath,
-    instancePath,
-    params: { limit: schema.maxProperties }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minContains.mjs
-function IsValid4(schema) {
-  return IsContains(schema);
-}
-function CheckMinContains(stack, context, schema, value) {
-  if (!IsValid4(schema))
-    return true;
-  const count2 = guard_exports.Counted(value, (item, index) => CheckSchema(stack, context, schema.contains, item) && context.AddIndex(index));
-  return guard_exports.IsGreaterEqualThan(count2, schema.minContains);
-}
-function ErrorMinContains(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMinContains(stack, context, schema, value) || context.AddError({
-    keyword: "contains",
-    schemaPath,
-    instancePath,
-    params: { minContains: schema.minContains }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minimum.mjs
-function CheckMinimum(_stack, _context, schema, value) {
-  return guard_exports.IsGreaterEqualThan(value, schema.minimum);
-}
-function ErrorMinimum(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMinimum(stack, context, schema, value) || context.AddError({
-    keyword: "minimum",
-    schemaPath,
-    instancePath,
-    params: { comparison: ">=", limit: schema.minimum }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minItems.mjs
-function CheckMinItems(_stack, _context, schema, value) {
-  return guard_exports.IsGreaterEqualThan(value.length, schema.minItems);
-}
-function ErrorMinItems(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMinItems(stack, context, schema, value) || context.AddError({
-    keyword: "minItems",
-    schemaPath,
-    instancePath,
-    params: { limit: schema.minItems }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minLength.mjs
-function CheckMinLength(_stack, _context, schema, value) {
-  return guard_exports.IsMinLength(value, schema.minLength);
-}
-function ErrorMinLength(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMinLength(stack, context, schema, value) || context.AddError({
-    keyword: "minLength",
-    schemaPath,
-    instancePath,
-    params: { limit: schema.minLength }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/minProperties.mjs
-function CheckMinProperties(_stack, _context, schema, value) {
-  return guard_exports.IsGreaterEqualThan(guard_exports.Keys(value).length, schema.minProperties);
-}
-function ErrorMinProperties(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMinProperties(stack, context, schema, value) || context.AddError({
-    keyword: "minProperties",
-    schemaPath,
-    instancePath,
-    params: { limit: schema.minProperties }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/multipleOf.mjs
-function CheckMultipleOf(_stack, _context, schema, value) {
-  return guard_exports.IsMultipleOf(value, schema.multipleOf);
-}
-function ErrorMultipleOf(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckMultipleOf(stack, context, schema, value) || context.AddError({
-    keyword: "multipleOf",
-    schemaPath,
-    instancePath,
-    params: { multipleOf: schema.multipleOf }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/not.mjs
-function CheckNot(stack, context, schema, value) {
-  const nextContext = new CheckContext();
-  const isSchema = !CheckSchema(stack, nextContext, schema.not, value);
-  const isNot = isSchema && context.Merge([nextContext]);
-  return isNot;
-}
-function ErrorNot(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckNot(stack, context, schema, value) || context.AddError({
-    keyword: "not",
-    schemaPath,
-    instancePath,
-    params: {}
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/oneOf.mjs
-function CheckOneOf(stack, context, schema, value) {
-  const passedContexts = schema.oneOf.reduce((result, schema2) => {
-    const nextContext = new CheckContext();
-    return CheckSchema(stack, nextContext, schema2, value) ? [...result, nextContext] : result;
-  }, []);
-  return guard_exports.IsEqual(passedContexts.length, 1) && context.Merge(passedContexts);
-}
-function ErrorOneOf(stack, context, schemaPath, instancePath, schema, value) {
-  const failedContexts = [];
-  const passingSchemas = [];
-  const passedContexts = schema.oneOf.reduce((result, schema2, index) => {
-    const nextContext = new ErrorContext();
-    const nextSchemaPath = `${schemaPath}/oneOf/${index}`;
-    const isSchema = ErrorSchema(stack, nextContext, nextSchemaPath, instancePath, schema2, value);
-    if (isSchema)
-      passingSchemas.push(index);
-    if (!isSchema)
-      failedContexts.push(nextContext);
-    return isSchema ? [...result, nextContext] : result;
-  }, []);
-  const isOneOf = guard_exports.IsEqual(passedContexts.length, 1) && context.Merge(passedContexts);
-  if (!isOneOf && guard_exports.IsEqual(passingSchemas.length, 0))
-    failedContexts.forEach((failed) => failed.GetErrors().forEach((error) => context.AddError(error)));
-  return isOneOf || context.AddError({
-    keyword: "oneOf",
-    schemaPath,
-    instancePath,
-    params: { passingSchemas }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/pattern.mjs
-function CheckPattern(_stack, _context, schema, value) {
-  const regexp = guard_exports.IsString(schema.pattern) ? UnicodeRegExp(schema.pattern) : schema.pattern;
-  return regexp.test(value);
-}
-function ErrorPattern(stack, context, schemaPath, instancePath, schema, value) {
-  return CheckPattern(stack, context, schema, value) || context.AddError({
-    keyword: "pattern",
-    schemaPath,
-    instancePath,
-    params: { pattern: schema.pattern }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/patternProperties.mjs
-function CheckPatternProperties(stack, context, schema, value) {
-  return guard_exports.Every(guard_exports.Entries(schema.patternProperties), 0, ([pattern, schema2]) => {
-    const regexp = UnicodeRegExp(pattern);
-    return guard_exports.Every(guard_exports.Entries(value), 0, ([key, prop]) => {
-      return !regexp.test(key) || CheckSchemaPushStack(stack, context, schema2, prop) && context.AddKey(key);
-    });
-  });
-}
-function ErrorPatternProperties(stack, context, schemaPath, instancePath, schema, value) {
-  return guard_exports.EveryAll(guard_exports.Entries(schema.patternProperties), 0, ([pattern, schema2]) => {
-    const nextSchemaPath = `${schemaPath}/patternProperties/${pattern}`;
-    const regexp = UnicodeRegExp(pattern);
-    return guard_exports.EveryAll(guard_exports.Entries(value), 0, ([key, value2]) => {
-      const nextInstancePath = `${instancePath}/${key}`;
-      const notKey = !regexp.test(key);
-      return notKey || ErrorSchemaPushStack(stack, context, nextSchemaPath, nextInstancePath, schema2, value2) && context.AddKey(key);
-    });
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/prefixItems.mjs
-function CheckPrefixItems(stack, context, schema, value) {
-  return guard_exports.IsEqual(value.length, 0) || guard_exports.Every(schema.prefixItems, 0, (schema2, index) => {
-    return guard_exports.IsLessEqualThan(value.length, index) || CheckSchemaPushStack(stack, context, schema2, value[index]) && context.AddIndex(index);
-  });
-}
-function ErrorPrefixItems(stack, context, schemaPath, instancePath, schema, value) {
-  return guard_exports.IsEqual(value.length, 0) || guard_exports.EveryAll(schema.prefixItems, 0, (schema2, index) => {
-    const nextSchemaPath = `${schemaPath}/prefixItems/${index}`;
-    const nextInstancePath = `${instancePath}/${index}`;
-    return guard_exports.IsLessEqualThan(value.length, index) || ErrorSchemaPushStack(stack, context, nextSchemaPath, nextInstancePath, schema2, value[index]) && context.AddIndex(index);
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_exact_optional.mjs
-function IsExactOptional(required, key) {
-  return required.includes(key) || settings_exports.Get().exactOptionalPropertyTypes;
-}
-function InexactOptionalCheck(value, key) {
-  return guard_exports.IsUndefined(value[key]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/properties.mjs
-function CheckProperties(stack, context, schema, value) {
-  const required = IsRequired(schema) ? schema.required : [];
-  const isProperties = guard_exports.Every(guard_exports.Entries(schema.properties), 0, ([key, schema2]) => {
-    const isProperty = !guard_exports.HasPropertyKey(value, key) || CheckSchemaPushStack(stack, context, schema2, value[key]) && context.AddKey(key);
-    return IsExactOptional(required, key) ? isProperty : InexactOptionalCheck(value, key) || isProperty;
-  });
-  return isProperties;
-}
-function ErrorProperties(stack, context, schemaPath, instancePath, schema, value) {
-  const required = IsRequired(schema) ? schema.required : [];
-  const isProperties = guard_exports.EveryAll(guard_exports.Entries(schema.properties), 0, ([key, schema2]) => {
-    const nextSchemaPath = `${schemaPath}/properties/${key}`;
-    const nextInstancePath = `${instancePath}/${key}`;
-    const isProperty = () => !guard_exports.HasPropertyKey(value, key) || ErrorSchemaPushStack(stack, context, nextSchemaPath, nextInstancePath, schema2, value[key]) && context.AddKey(key);
-    return IsExactOptional(required, key) ? isProperty() : InexactOptionalCheck(value, key) || isProperty();
-  });
-  return isProperties;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/propertyNames.mjs
-function CheckPropertyNames(stack, context, schema, value) {
-  return guard_exports.Every(guard_exports.Keys(value), 0, (key, _index) => CheckSchema(stack, context, schema.propertyNames, key));
-}
-function ErrorPropertyNames(stack, context, schemaPath, instancePath, schema, value) {
-  const propertyNames = [];
-  const isPropertyNames = guard_exports.EveryAll(guard_exports.Keys(value), 0, (key, _index) => {
-    const nextInstancePath = `${instancePath}/${key}`;
-    const nextSchemaPath = `${schemaPath}/propertyNames`;
-    const isPropertyName = ErrorSchema(stack, context, nextSchemaPath, nextInstancePath, schema.propertyNames, key);
-    if (!isPropertyName)
-      propertyNames.push(key);
-    return isPropertyName;
-  });
-  return isPropertyNames || context.AddError({
-    keyword: "propertyNames",
-    schemaPath,
-    instancePath,
-    params: { propertyNames }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/recursiveRef.mjs
-function CheckRecursiveRef(stack, context, schema, value) {
-  const target = stack.RecursiveRef(schema) ?? false;
-  return IsSchema(target) && CheckSchema(stack, context, target, value);
-}
-function ErrorRecursiveRef(stack, context, _schemaPath, instancePath, schema, value) {
-  const target = stack.RecursiveRef(schema) ?? false;
-  return IsSchema(target) && ErrorSchema(stack, context, "#", instancePath, target, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/ref.mjs
-function CheckRef(stack, context, schema, value) {
-  const target = stack.Ref(schema) ?? false;
-  const nextContext = new CheckContext();
-  const result = IsSchema(target) && CheckSchema(stack, nextContext, target, value);
-  if (result)
-    context.Merge([nextContext]);
-  return result;
-}
-function ErrorRef(stack, context, _schemaPath, instancePath, schema, value) {
-  const target = stack.Ref(schema) ?? false;
-  const nextContext = new ErrorContext();
-  const result = IsSchema(target) && ErrorSchema(stack, nextContext, "#", instancePath, target, value);
-  if (result)
-    context.Merge([nextContext]);
-  if (!result)
-    nextContext.GetErrors().forEach((error) => context.AddError(error));
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/required.mjs
-function CheckRequired(_stack, _context, schema, value) {
-  return guard_exports.Every(schema.required, 0, (key) => guard_exports.HasPropertyKey(value, key));
-}
-function ErrorRequired(_stack, context, schemaPath, instancePath, schema, value) {
-  const requiredProperties = [];
-  const isRequired = guard_exports.EveryAll(schema.required, 0, (key) => {
-    const hasKey = guard_exports.HasPropertyKey(value, key);
-    if (!hasKey)
-      requiredProperties.push(key);
-    return hasKey;
-  });
-  return isRequired || context.AddError({
-    keyword: "required",
-    schemaPath,
-    instancePath,
-    params: { requiredProperties }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/type.mjs
-function CheckTypeName(_stack, _context, type, _schema, value) {
-  return (
-    // jsonschema
-    guard_exports.IsEqual(type, "object") ? guard_exports.IsObjectNotArray(value) : guard_exports.IsEqual(type, "array") ? guard_exports.IsArray(value) : guard_exports.IsEqual(type, "boolean") ? guard_exports.IsBoolean(value) : guard_exports.IsEqual(type, "integer") ? guard_exports.IsInteger(value) : guard_exports.IsEqual(type, "number") ? guard_exports.IsNumber(value) : guard_exports.IsEqual(type, "null") ? guard_exports.IsNull(value) : guard_exports.IsEqual(type, "string") ? guard_exports.IsString(value) : (
-      // xschema
-      guard_exports.IsEqual(type, "bigint") ? guard_exports.IsBigInt(value) : guard_exports.IsEqual(type, "constructor") ? guard_exports.IsConstructor(value) : guard_exports.IsEqual(type, "function") ? guard_exports.IsFunction(value) : guard_exports.IsEqual(type, "symbol") ? guard_exports.IsSymbol(value) : guard_exports.IsEqual(type, "undefined") ? guard_exports.IsUndefined(value) : guard_exports.IsEqual(type, "void") ? guard_exports.IsUndefined(value) : true
-    )
-  );
-}
-function CheckTypeNames(stack, context, types, schema, value) {
-  return guard_exports.Some(types, (type) => CheckTypeName(stack, context, type, schema, value));
-}
-function CheckType(stack, context, schema, value) {
-  return guard_exports.IsArray(schema.type) ? CheckTypeNames(stack, context, schema.type, schema, value) : CheckTypeName(stack, context, schema.type, schema, value);
-}
-function ErrorType(stack, context, schemaPath, instancePath, schema, value) {
-  const isType = guard_exports.IsArray(schema.type) ? CheckTypeNames(stack, context, schema.type, schema, value) : CheckTypeName(stack, context, schema.type, schema, value);
-  return isType || context.AddError({
-    keyword: "type",
-    schemaPath,
-    instancePath,
-    params: { type: schema.type }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/unevaluatedItems.mjs
-function CheckUnevaluatedItems(stack, context, schema, value) {
-  const indices = context.GetIndices();
-  return guard_exports.Every(value, 0, (item, index) => {
-    return (indices.has(index) || CheckSchema(stack, context, schema.unevaluatedItems, item)) && context.AddIndex(index);
-  });
-}
-function ErrorUnevaluatedItems(stack, context, schemaPath, instancePath, schema, value) {
-  const indices = context.GetIndices();
-  const unevaluatedItems = [];
-  const isUnevaluatedItems = guard_exports.EveryAll(value, 0, (item, index) => {
-    const nextContext = new ErrorContext();
-    const isEvaluatedItem = (indices.has(index) || ErrorSchema(stack, nextContext, schemaPath, instancePath, schema.unevaluatedItems, item)) && context.AddIndex(index);
-    if (!isEvaluatedItem)
-      unevaluatedItems.push(index);
-    return isEvaluatedItem;
-  });
-  return isUnevaluatedItems || context.AddError({
-    keyword: "unevaluatedItems",
-    schemaPath,
-    instancePath,
-    params: { unevaluatedItems }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/unevaluatedProperties.mjs
-function CheckUnevaluatedProperties(stack, context, schema, value) {
-  const keys = context.GetKeys();
-  return guard_exports.Every(guard_exports.Entries(value), 0, ([key, prop]) => {
-    return keys.has(key) || CheckSchema(stack, context, schema.unevaluatedProperties, prop) && context.AddKey(key);
-  });
-}
-function ErrorUnevaluatedProperties(stack, context, schemaPath, instancePath, schema, value) {
-  const keys = context.GetKeys();
-  const unevaluatedProperties = [];
-  const isUnevaluatedProperties = guard_exports.EveryAll(guard_exports.Entries(value), 0, ([key, prop]) => {
-    const nextContext = new ErrorContext();
-    const isEvaluatedProperty = keys.has(key) || ErrorSchema(stack, nextContext, schemaPath, instancePath, schema.unevaluatedProperties, prop) && context.AddKey(key);
-    if (!isEvaluatedProperty)
-      unevaluatedProperties.push(key);
-    return isEvaluatedProperty;
-  });
-  return isUnevaluatedProperties || context.AddError({
-    keyword: "unevaluatedProperties",
-    schemaPath,
-    instancePath,
-    params: { unevaluatedProperties }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/hashing/hash.mjs
-var hash_exports = {};
-__export(hash_exports, {
-  Hash: () => Hash,
-  HashCode: () => HashCode
-});
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/unreachable/unreachable.mjs
-function Unreachable() {
-  throw new Error("Unreachable");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/hashing/hash.mjs
-function InstanceKeys(value) {
-  const propertyKeys = /* @__PURE__ */ new Set();
-  let current = value;
-  while (current && current !== Object.prototype) {
-    for (const key of Reflect.ownKeys(current)) {
-      if (key !== "constructor" && typeof key !== "symbol")
-        propertyKeys.add(key);
-    }
-    current = Object.getPrototypeOf(current);
-  }
-  return [...propertyKeys];
-}
-function IsIEEE754(value) {
-  return typeof value === "number";
-}
-var ByteMarker;
-(function(ByteMarker2) {
-  ByteMarker2[ByteMarker2["Array"] = 0] = "Array";
-  ByteMarker2[ByteMarker2["BigInt"] = 1] = "BigInt";
-  ByteMarker2[ByteMarker2["Boolean"] = 2] = "Boolean";
-  ByteMarker2[ByteMarker2["Date"] = 3] = "Date";
-  ByteMarker2[ByteMarker2["Constructor"] = 4] = "Constructor";
-  ByteMarker2[ByteMarker2["Function"] = 5] = "Function";
-  ByteMarker2[ByteMarker2["Null"] = 6] = "Null";
-  ByteMarker2[ByteMarker2["Number"] = 7] = "Number";
-  ByteMarker2[ByteMarker2["Object"] = 8] = "Object";
-  ByteMarker2[ByteMarker2["RegExp"] = 9] = "RegExp";
-  ByteMarker2[ByteMarker2["String"] = 10] = "String";
-  ByteMarker2[ByteMarker2["Symbol"] = 11] = "Symbol";
-  ByteMarker2[ByteMarker2["TypeArray"] = 12] = "TypeArray";
-  ByteMarker2[ByteMarker2["Undefined"] = 13] = "Undefined";
-})(ByteMarker || (ByteMarker = {}));
-var Accumulator = BigInt("14695981039346656037");
-var [Prime, Size] = [BigInt("1099511628211"), BigInt(
-  "18446744073709551616"
-  /* 2 ^ 64 */
-)];
-var Bytes = Array.from({ length: 256 }).map((_, i) => BigInt(i));
-var F64 = new Float64Array(1);
-var F64In = new DataView(F64.buffer);
-var F64Out = new Uint8Array(F64.buffer);
-function FNV1A64_OP(byte) {
-  Accumulator = Accumulator ^ Bytes[byte];
-  Accumulator = Accumulator * Prime % Size;
-}
-function FromArray(value) {
-  FNV1A64_OP(ByteMarker.Array);
-  for (const item of value) {
-    FromValue(item);
-  }
-}
-function FromBigInt(value) {
-  FNV1A64_OP(ByteMarker.BigInt);
-  F64In.setBigInt64(0, value);
-  for (const byte of F64Out) {
-    FNV1A64_OP(byte);
-  }
-}
-function FromBoolean(value) {
-  FNV1A64_OP(ByteMarker.Boolean);
-  FNV1A64_OP(value ? 1 : 0);
-}
-function FromConstructor(value) {
-  FNV1A64_OP(ByteMarker.Constructor);
-  FromValue(value.toString());
-}
-function FromDate(value) {
-  FNV1A64_OP(ByteMarker.Date);
-  FromValue(value.getTime());
-}
-function FromFunction(value) {
-  FNV1A64_OP(ByteMarker.Function);
-  FromValue(value.toString());
-}
-function FromNull(_value) {
-  FNV1A64_OP(ByteMarker.Null);
-}
-function FromNumber(value) {
-  FNV1A64_OP(ByteMarker.Number);
-  F64In.setFloat64(
-    0,
-    value,
-    true
-    /* little-endian */
-  );
-  for (const byte of F64Out) {
-    FNV1A64_OP(byte);
-  }
-}
-function FromObject(value) {
-  FNV1A64_OP(ByteMarker.Object);
-  for (const key of InstanceKeys(value).sort()) {
-    FromValue(key);
-    FromValue(value[key]);
-  }
-}
-function FromRegExp(value) {
-  FNV1A64_OP(ByteMarker.RegExp);
-  FromString(value.toString());
-}
-var encoder = new TextEncoder();
-function FromString(value) {
-  FNV1A64_OP(ByteMarker.String);
-  for (const byte of encoder.encode(value)) {
-    FNV1A64_OP(byte);
-  }
-}
-function FromSymbol(value) {
-  FNV1A64_OP(ByteMarker.Symbol);
-  FromValue(value.toString());
-}
-function FromTypeArray(value) {
-  FNV1A64_OP(ByteMarker.TypeArray);
-  const buffer = new Uint8Array(value.buffer);
-  for (let i = 0; i < buffer.length; i++) {
-    FNV1A64_OP(buffer[i]);
-  }
-}
-function FromUndefined(_value) {
-  return FNV1A64_OP(ByteMarker.Undefined);
-}
-function FromValue(value) {
-  return globals_exports.IsTypeArray(value) ? FromTypeArray(value) : globals_exports.IsDate(value) ? FromDate(value) : globals_exports.IsRegExp(value) ? FromRegExp(value) : globals_exports.IsBoolean(value) ? FromBoolean(value.valueOf()) : globals_exports.IsString(value) ? FromString(value.valueOf()) : globals_exports.IsNumber(value) ? FromNumber(value.valueOf()) : IsIEEE754(value) ? FromNumber(value) : guard_exports.IsArray(value) ? FromArray(value) : guard_exports.IsBoolean(value) ? FromBoolean(value) : guard_exports.IsBigInt(value) ? FromBigInt(value) : guard_exports.IsConstructor(value) ? FromConstructor(value) : guard_exports.IsNull(value) ? FromNull(value) : guard_exports.IsObject(value) ? FromObject(value) : guard_exports.IsString(value) ? FromString(value) : guard_exports.IsSymbol(value) ? FromSymbol(value) : guard_exports.IsUndefined(value) ? FromUndefined(value) : guard_exports.IsFunction(value) ? FromFunction(value) : Unreachable();
-}
-function HashCode(value) {
-  Accumulator = BigInt("14695981039346656037");
-  FromValue(value);
-  return Accumulator;
-}
-function Hash(value) {
-  return HashCode(value).toString(16).padStart(16, "0");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/uniqueItems.mjs
-function IsValid5(schema) {
-  return !guard_exports.IsEqual(schema.uniqueItems, false);
-}
-function CheckUniqueItems(_stack, _context, schema, value) {
-  if (!IsValid5(schema))
-    return true;
-  const set = new Set(value.map(hash_exports.Hash)).size;
-  const isLength = value.length;
-  return guard_exports.IsEqual(set, isLength);
-}
-function ErrorUniqueItems(_stack, context, schemaPath, instancePath, schema, value) {
-  if (!IsValid5(schema))
-    return true;
-  const set = /* @__PURE__ */ new Set();
-  const duplicateItems = value.reduce((result, value2, index) => {
-    const hash3 = hash_exports.Hash(value2);
-    if (set.has(hash3))
-      return [...result, index];
-    set.add(hash3);
-    return result;
-  }, []);
-  const isUniqueItems = guard_exports.IsEqual(duplicateItems.length, 0);
-  return isUniqueItems || context.AddError({
-    keyword: "uniqueItems",
-    schemaPath,
-    instancePath,
-    params: { duplicateItems }
-  });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/schema.mjs
-function CheckSchemaPushStack(stack, context, schema, value) {
-  return context.Push() && CheckSchema(stack, context, schema, value) && context.Pop();
-}
-function CheckSchema(stack, context, schema, value) {
-  stack.Push(schema);
-  const result = IsSchemaBoolean(schema) ? CheckSchemaBoolean(stack, context, schema, value) : (!IsType(schema) || CheckType(stack, context, schema, value)) && (!(guard_exports.IsObject(value) && !guard_exports.IsArray(value)) || (!IsRequired(schema) || CheckRequired(stack, context, schema, value)) && (!IsAdditionalProperties(schema) || CheckAdditionalProperties(stack, context, schema, value)) && (!IsDependencies(schema) || CheckDependencies(stack, context, schema, value)) && (!IsDependentRequired(schema) || CheckDependentRequired(stack, context, schema, value)) && (!IsDependentSchemas(schema) || CheckDependentSchemas(stack, context, schema, value)) && (!IsPatternProperties(schema) || CheckPatternProperties(stack, context, schema, value)) && (!IsProperties(schema) || CheckProperties(stack, context, schema, value)) && (!IsPropertyNames(schema) || CheckPropertyNames(stack, context, schema, value)) && (!IsMinProperties(schema) || CheckMinProperties(stack, context, schema, value)) && (!IsMaxProperties(schema) || CheckMaxProperties(stack, context, schema, value))) && (!guard_exports.IsArray(value) || (!IsAdditionalItems(schema) || CheckAdditionalItems(stack, context, schema, value)) && (!IsContains(schema) || CheckContains(stack, context, schema, value)) && (!IsItems(schema) || CheckItems(stack, context, schema, value)) && (!IsMaxContains(schema) || CheckMaxContains(stack, context, schema, value)) && (!IsMaxItems(schema) || CheckMaxItems(stack, context, schema, value)) && (!IsMinContains(schema) || CheckMinContains(stack, context, schema, value)) && (!IsMinItems(schema) || CheckMinItems(stack, context, schema, value)) && (!IsPrefixItems(schema) || CheckPrefixItems(stack, context, schema, value)) && (!IsUniqueItems(schema) || CheckUniqueItems(stack, context, schema, value))) && (!guard_exports.IsString(value) || (!IsMaxLength3(schema) || CheckMaxLength(stack, context, schema, value)) && (!IsMinLength3(schema) || CheckMinLength(stack, context, schema, value)) && (!IsFormat(schema) || CheckFormat(stack, context, schema, value)) && (!IsPattern(schema) || CheckPattern(stack, context, schema, value))) && (!(guard_exports.IsNumber(value) || guard_exports.IsBigInt(value)) || (!IsExclusiveMaximum(schema) || CheckExclusiveMaximum(stack, context, schema, value)) && (!IsExclusiveMinimum(schema) || CheckExclusiveMinimum(stack, context, schema, value)) && (!IsMaximum(schema) || CheckMaximum(stack, context, schema, value)) && (!IsMinimum(schema) || CheckMinimum(stack, context, schema, value)) && (!IsMultipleOf2(schema) || CheckMultipleOf(stack, context, schema, value))) && (!IsRef(schema) || CheckRef(stack, context, schema, value)) && (!IsRecursiveRef(schema) || CheckRecursiveRef(stack, context, schema, value)) && (!IsDynamicRef(schema) || CheckDynamicRef(stack, context, schema, value)) && (!IsConst(schema) || CheckConst(stack, context, schema, value)) && (!IsEnum(schema) || CheckEnum(stack, context, schema, value)) && (!IsIf(schema) || CheckIf(stack, context, schema, value)) && (!IsNot(schema) || CheckNot(stack, context, schema, value)) && (!IsAllOf(schema) || CheckAllOf(stack, context, schema, value)) && (!IsAnyOf(schema) || CheckAnyOf(stack, context, schema, value)) && (!IsOneOf(schema) || CheckOneOf(stack, context, schema, value)) && (!IsUnevaluatedItems(schema) || (!guard_exports.IsArray(value) || CheckUnevaluatedItems(stack, context, schema, value))) && (!IsUnevaluatedProperties(schema) || (!guard_exports.IsObject(value) || CheckUnevaluatedProperties(stack, context, schema, value))) && (!IsRefine(schema) || CheckRefine(stack, context, schema, value));
-  stack.Pop(schema);
-  return result;
-}
-function ErrorSchemaPushStack(stack, context, schemaPath, instancePath, schema, value) {
-  return context.Push() && ErrorSchema(stack, context, schemaPath, instancePath, schema, value) && context.Pop();
-}
-function ErrorSchema(stack, context, schemaPath, instancePath, schema, value) {
-  if (context.AtCapacity())
-    return false;
-  stack.Push(schema);
-  const result = IsSchemaBoolean(schema) ? ErrorSchemaBoolean(stack, context, schemaPath, instancePath, schema, value) : !!(+(!IsType(schema) || ErrorType(stack, context, schemaPath, instancePath, schema, value)) & +(!(guard_exports.IsObject(value) && !guard_exports.IsArray(value)) || !!(+(!IsRequired(schema) || ErrorRequired(stack, context, schemaPath, instancePath, schema, value)) & +(!IsAdditionalProperties(schema) || ErrorAdditionalProperties(stack, context, schemaPath, instancePath, schema, value)) & +(!IsDependencies(schema) || ErrorDependencies(stack, context, schemaPath, instancePath, schema, value)) & +(!IsDependentRequired(schema) || ErrorDependentRequired(stack, context, schemaPath, instancePath, schema, value)) & +(!IsDependentSchemas(schema) || ErrorDependentSchemas(stack, context, schemaPath, instancePath, schema, value)) & +(!IsPatternProperties(schema) || ErrorPatternProperties(stack, context, schemaPath, instancePath, schema, value)) & +(!IsProperties(schema) || ErrorProperties(stack, context, schemaPath, instancePath, schema, value)) & +(!IsPropertyNames(schema) || ErrorPropertyNames(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinProperties(schema) || ErrorMinProperties(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMaxProperties(schema) || ErrorMaxProperties(stack, context, schemaPath, instancePath, schema, value)))) & +(!guard_exports.IsArray(value) || !!(+(!IsAdditionalItems(schema) || ErrorAdditionalItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsContains(schema) || ErrorContains(stack, context, schemaPath, instancePath, schema, value)) & +(!IsItems(schema) || ErrorItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMaxContains(schema) || ErrorMaxContains(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMaxItems(schema) || ErrorMaxItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinContains(schema) || ErrorMinContains(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinItems(schema) || ErrorMinItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsPrefixItems(schema) || ErrorPrefixItems(stack, context, schemaPath, instancePath, schema, value)) & +(!IsUniqueItems(schema) || ErrorUniqueItems(stack, context, schemaPath, instancePath, schema, value)))) & +(!guard_exports.IsString(value) || !!(+(!IsMaxLength3(schema) || ErrorMaxLength(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinLength3(schema) || ErrorMinLength(stack, context, schemaPath, instancePath, schema, value)) & +(!IsFormat(schema) || ErrorFormat(stack, context, schemaPath, instancePath, schema, value)) & +(!IsPattern(schema) || ErrorPattern(stack, context, schemaPath, instancePath, schema, value)))) & +(!(guard_exports.IsNumber(value) || guard_exports.IsBigInt(value)) || !!(+(!IsExclusiveMaximum(schema) || ErrorExclusiveMaximum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsExclusiveMinimum(schema) || ErrorExclusiveMinimum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMaximum(schema) || ErrorMaximum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMinimum(schema) || ErrorMinimum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsMultipleOf2(schema) || ErrorMultipleOf(stack, context, schemaPath, instancePath, schema, value)))) & +(!IsRef(schema) || ErrorRef(stack, context, schemaPath, instancePath, schema, value)) & +(!IsRecursiveRef(schema) || ErrorRecursiveRef(stack, context, schemaPath, instancePath, schema, value)) & +(!IsDynamicRef(schema) || ErrorDynamicRef(stack, context, schemaPath, instancePath, schema, value)) & +(!IsConst(schema) || ErrorConst(stack, context, schemaPath, instancePath, schema, value)) & +(!IsEnum(schema) || ErrorEnum(stack, context, schemaPath, instancePath, schema, value)) & +(!IsIf(schema) || ErrorIf(stack, context, schemaPath, instancePath, schema, value)) & +(!IsNot(schema) || ErrorNot(stack, context, schemaPath, instancePath, schema, value)) & +(!IsAllOf(schema) || ErrorAllOf(stack, context, schemaPath, instancePath, schema, value)) & +(!IsAnyOf(schema) || ErrorAnyOf(stack, context, schemaPath, instancePath, schema, value)) & +(!IsOneOf(schema) || ErrorOneOf(stack, context, schemaPath, instancePath, schema, value)) & +(!IsUnevaluatedItems(schema) || (!guard_exports.IsArray(value) || ErrorUnevaluatedItems(stack, context, schemaPath, instancePath, schema, value))) & +(!IsUnevaluatedProperties(schema) || (!guard_exports.IsObject(value) || ErrorUnevaluatedProperties(stack, context, schemaPath, instancePath, schema, value)))) && (!IsRefine(schema) || ErrorRefine(stack, context, schemaPath, instancePath, schema, value));
-  stack.Pop(schema);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/resolve/resolve.mjs
-var resolve_exports = {};
-__export(resolve_exports, {
-  DefaultBase: () => DefaultBase,
-  DynamicRef: () => DynamicRef,
-  Ref: () => Ref
-});
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/pointer/pointer.mjs
-var pointer_exports = {};
-__export(pointer_exports, {
-  Delete: () => Delete,
-  Get: () => Get3,
-  Has: () => Has2,
-  Indices: () => Indices,
-  Set: () => Set4
-});
-function AssertNotRoot(indices) {
-  if (indices.length === 0)
-    throw Error("Cannot set root");
-}
-function AssertCanSet(value) {
-  if (!guard_exports.IsObject(value))
-    throw Error("Cannot set value");
-}
-function AssertIndex(index) {
-  if (guard_exports.IsUnsafePropertyKey(index))
-    throw Error("Pointer contains unsafe property key");
-}
-function AssertIndices(indices) {
-  for (const index of indices)
-    AssertIndex(index);
-}
-function IsNumericIndex(index) {
-  return /^(0|[1-9]\d*)$/.test(index);
-}
-function TakeIndexRight(indices) {
-  return [
-    indices.slice(0, indices.length - 1),
-    indices.slice(indices.length - 1)[0]
-  ];
-}
-function HasIndex(index, value) {
-  return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, index);
-}
-function GetIndex(index, value) {
-  return guard_exports.IsObject(value) && !guard_exports.IsUnsafePropertyKey(index) ? value[index] : void 0;
-}
-function GetIndices(indices, value) {
-  return indices.reduce((value2, index) => GetIndex(index, value2), value);
-}
-function Indices(pointer) {
-  if (guard_exports.IsEqual(pointer.length, 0))
-    return [];
-  const indices = pointer.split("/").map((index) => index.replace(/~1/g, "/").replace(/~0/g, "~"));
-  return indices.length > 0 && indices[0] === "" ? indices.slice(1) : indices;
-}
-function Has2(value, pointer) {
-  let current = value;
-  return Indices(pointer).every((index) => {
-    if (!HasIndex(index, current))
-      return false;
-    current = current[index];
-    return true;
-  });
-}
-function Get3(value, pointer) {
-  const indices = Indices(pointer);
-  return GetIndices(indices, value);
-}
-function Set4(value, pointer, next) {
-  const indices = Indices(pointer);
-  AssertNotRoot(indices);
-  AssertIndices(indices);
-  const [head, index] = TakeIndexRight(indices);
-  const parent = GetIndices(head, value);
-  AssertCanSet(parent);
-  parent[index] = next;
-  return value;
-}
-function Delete(value, pointer) {
-  const indices = Indices(pointer);
-  AssertNotRoot(indices);
-  AssertIndices(indices);
-  const [head, index] = TakeIndexRight(indices);
-  const parent = GetIndices(head, value);
-  AssertCanSet(parent);
-  if (guard_exports.IsArray(parent) && IsNumericIndex(index)) {
-    parent.splice(+index, 1);
-  } else {
-    delete parent[index];
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/resolve/resolve.mjs
-var DefaultBase = new URL("https://json-schema.org");
-function MatchId(schema, base, ref) {
-  if (schema.$id === ref.hash)
-    return schema;
-  const absoluteId = new URL(schema.$id, base.href);
-  const absoluteRef = new URL(ref.href, base.href);
-  if (guard_exports.IsEqual(absoluteId.pathname, absoluteRef.pathname)) {
-    return ref.hash.startsWith("#") ? MatchHash(schema, base, ref) : schema;
-  }
-  return void 0;
-}
-function MatchAnchor(schema, base, ref) {
-  const absoluteAnchor = new URL(`#${schema.$anchor}`, base.href);
-  const absoluteRef = new URL(ref.href, base.href);
-  return guard_exports.IsEqual(absoluteAnchor.href, absoluteRef.href) ? schema : void 0;
-}
-function MatchDynamicAnchor(schema, base, ref) {
-  const absoluteAnchor = new URL(`#${schema.$dynamicAnchor}`, base.href);
-  const absoluteRef = new URL(ref.href, base.href);
-  return guard_exports.IsEqual(absoluteAnchor.href, absoluteRef.href) ? schema : void 0;
-}
-function MatchHash(schema, _base, ref) {
-  if (ref.href.endsWith("#"))
-    return schema;
-  if (!ref.hash.startsWith("#"))
-    return void 0;
-  const fragment = decodeURIComponent(ref.hash.slice(1));
-  if (!fragment.startsWith("/"))
-    return void 0;
-  return pointer_exports.Get(schema, fragment);
-}
-function Match2(schema, base, ref) {
-  if (IsId(schema)) {
-    const result = MatchId(schema, base, ref);
-    if (!guard_exports.IsUndefined(result))
-      return result;
-  }
-  if (IsAnchor(schema)) {
-    const result = MatchAnchor(schema, base, ref);
-    if (!guard_exports.IsUndefined(result))
-      return result;
-  }
-  if (IsDynamicAnchor(schema)) {
-    const result = MatchDynamicAnchor(schema, base, ref);
-    if (!guard_exports.IsUndefined(result))
-      return result;
-  }
-  return MatchHash(schema, base, ref);
-}
-function FromArray2(schema, base, ref) {
-  return schema.reduce((result, item) => {
-    const match = FromValue2(item, base, ref);
-    return !guard_exports.IsUndefined(match) ? match : result;
-  }, void 0);
-}
-function SkipProperty(key) {
-  return guard_exports.IsEqual(key, "const") || guard_exports.IsEqual(key, "enum");
-}
-function FromObject2(schema, base, ref) {
-  return guard_exports.Keys(schema).reduce((result, key) => {
-    if (SkipProperty(key))
-      return result;
-    const match = FromValue2(schema[key], base, ref);
-    return !guard_exports.IsUndefined(match) ? match : result;
-  }, void 0);
-}
-function FromValue2(schema, base, ref) {
-  const nextBase = IsSchemaObject(schema) && IsId(schema) ? new URL(schema.$id, base.href) : base;
-  if (IsSchemaObject(schema)) {
-    const result = Match2(schema, nextBase, ref);
-    if (!guard_exports.IsUndefined(result))
-      return result;
-  }
-  if (guard_exports.IsArray(schema))
-    return FromArray2(schema, nextBase, ref);
-  if (guard_exports.IsObject(schema))
-    return FromObject2(schema, nextBase, ref);
-  return void 0;
-}
-function CanonicalHref(url) {
-  return url.href.split("#")[0];
-}
-function RefContext(context, ref) {
-  return guard_exports.HasPropertyKey(context, ref) ? context[ref] : void 0;
-}
-function RefLocal(schema, base, ref) {
-  return FromValue2(schema, base, ref);
-}
-function RefRemote(context, base, ref) {
-  const targetDocumentHref = CanonicalHref(ref);
-  if (guard_exports.IsEqual(targetDocumentHref, CanonicalHref(base)))
-    return void 0;
-  if (!guard_exports.HasPropertyKey(context, targetDocumentHref))
-    return void 0;
-  const remoteSchema = context[targetDocumentHref];
-  const remoteBase = IsSchemaObject(remoteSchema) && IsId(remoteSchema) ? new URL(remoteSchema.$id, DefaultBase.href) : new URL(targetDocumentHref);
-  return FromValue2(remoteSchema, remoteBase, ref);
-}
-function Ref(context, schema, ref) {
-  const initialBase = IsId(schema) ? new URL(schema.$id, DefaultBase.href) : DefaultBase;
-  const initialRef = new URL(ref, initialBase.href);
-  return RefContext(context, ref) ?? RefLocal(schema, initialBase, initialRef) ?? RefRemote(context, initialBase, initialRef);
-}
-function DynamicRef(context, root, base, dynamicRef, dynamicAnchors) {
-  const fragmentTarget = dynamicRef.$dynamicRef.startsWith("#") ? Ref(context, base, dynamicRef.$dynamicRef) : Ref(context, root, dynamicRef.$dynamicRef);
-  if (guard_exports.IsUndefined(fragmentTarget))
-    return void 0;
-  if (!IsSchemaObject(fragmentTarget) || !IsDynamicAnchor(fragmentTarget))
-    return fragmentTarget;
-  const fragment = new URL(dynamicRef.$dynamicRef, DefaultBase).hash;
-  if (fragment.startsWith("#/"))
-    return fragmentTarget;
-  const anchorTarget = dynamicAnchors.find((anchor) => anchor.$dynamicAnchor === fragmentTarget.$dynamicAnchor);
-  return anchorTarget ?? fragmentTarget;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/engine/_stack.mjs
-var __classPrivateFieldGet = function(receiver, state, kind2, f) {
-  if (kind2 === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
-  if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
-  return kind2 === "m" ? f : kind2 === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
-};
-var _Stack_instances;
-var _Stack_PushResourceAnchors;
-var _Stack_PopResourceAnchors;
-var Stack = class {
-  constructor(context, schema) {
-    _Stack_instances.add(this);
-    this.context = context;
-    this.schema = schema;
-    this.ids = [];
-    this.anchors = [];
-    this.recursiveAnchors = [];
-    this.dynamicAnchors = [];
-  }
-  // ----------------------------------------------------------------
-  // Base
-  // ----------------------------------------------------------------
-  BaseURL() {
-    return this.ids.reduce((result, schema) => new URL(schema.$id, result), resolve_exports.DefaultBase);
-  }
-  Base() {
-    return this.ids[this.ids.length - 1] ?? this.schema;
-  }
-  // ----------------------------------------------------------------
-  // Stack
-  // ----------------------------------------------------------------
-  Push(schema) {
-    if (!IsSchemaObject(schema))
-      return;
-    if (IsId(schema)) {
-      this.ids.push(schema);
-      __classPrivateFieldGet(this, _Stack_instances, "m", _Stack_PushResourceAnchors).call(this, schema);
-    }
-    if (IsAnchor(schema))
-      this.anchors.push(schema);
-    if (IsRecursiveAnchorTrue(schema))
-      this.recursiveAnchors.push(schema);
-    if (IsDynamicAnchor(schema))
-      this.dynamicAnchors.push(schema);
-  }
-  Pop(schema) {
-    if (!IsSchemaObject(schema))
-      return;
-    if (IsId(schema)) {
-      this.ids.pop();
-      __classPrivateFieldGet(this, _Stack_instances, "m", _Stack_PopResourceAnchors).call(this, schema);
-    }
-    if (IsAnchor(schema))
-      this.anchors.pop();
-    if (IsRecursiveAnchorTrue(schema))
-      this.recursiveAnchors.pop();
-    if (IsDynamicAnchor(schema))
-      this.dynamicAnchors.pop();
-  }
-  // ----------------------------------------------------------------
-  // Ref
-  // ----------------------------------------------------------------
-  Ref(ref) {
-    const root = this.schema;
-    return !ref.$ref.startsWith("#") ? resolve_exports.Ref(this.context, root, ref.$ref) : resolve_exports.Ref(this.context, this.Base(), ref.$ref);
-  }
-  // ----------------------------------------------------------------
-  // RecursiveRef
-  // ----------------------------------------------------------------
-  RecursiveRef(recursiveRef) {
-    return IsRecursiveAnchorTrue(this.Base()) ? resolve_exports.Ref(this.context, this.recursiveAnchors[0], recursiveRef.$recursiveRef) : resolve_exports.Ref(this.context, this.Base(), recursiveRef.$recursiveRef);
-  }
-  // ----------------------------------------------------------------
-  // DynamicRef
-  // ----------------------------------------------------------------
-  DynamicRef(dynamicRef) {
-    const root = this.schema;
-    return resolve_exports.DynamicRef(this.context, root, this.Base(), dynamicRef, this.dynamicAnchors);
-  }
-};
-_Stack_instances = /* @__PURE__ */ new WeakSet(), _Stack_PushResourceAnchors = function _Stack_PushResourceAnchors2(schema, isRoot = true) {
-  if (!IsSchemaObject(schema))
-    return;
-  const current = schema;
-  if (!isRoot && IsId(current))
-    return;
-  if (!isRoot && IsDynamicAnchor(current))
-    this.dynamicAnchors.push(current);
-  for (const key of guard_exports.Keys(current))
-    __classPrivateFieldGet(this, _Stack_instances, "m", _Stack_PushResourceAnchors2).call(this, current[key], false);
-}, _Stack_PopResourceAnchors = function _Stack_PopResourceAnchors2(schema, isRoot = true) {
-  if (!IsSchemaObject(schema))
-    return;
-  const current = schema;
-  if (!isRoot && IsId(current))
-    return;
-  if (!isRoot && IsDynamicAnchor(current))
-    this.dynamicAnchors.pop();
-  for (const key of guard_exports.Keys(current))
-    __classPrivateFieldGet(this, _Stack_instances, "m", _Stack_PopResourceAnchors2).call(this, current[key], false);
-};
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/locale/en_US.mjs
-function en_US(error) {
-  switch (error.keyword) {
-    case "additionalProperties":
-      return "must not have additional properties";
-    case "anyOf":
-      return "must match a schema in anyOf";
-    case "boolean":
-      return "schema is false";
-    case "const":
-      return "must be equal to constant";
-    case "contains":
-      return "must contain at least 1 valid item";
-    case "dependencies":
-      return `must have properties ${error.params.dependencies.join(", ")} when property ${error.params.property} is present`;
-    case "dependentRequired":
-      return `must have properties ${error.params.dependencies.join(", ")} when property ${error.params.property} is present`;
-    case "enum":
-      return "must be equal to one of the allowed values";
-    case "exclusiveMaximum":
-      return `must be ${error.params.comparison} ${error.params.limit}`;
-    case "exclusiveMinimum":
-      return `must be ${error.params.comparison} ${error.params.limit}`;
-    case "format":
-      return `must match format "${error.params.format}"`;
-    case "if":
-      return `must match "${error.params.failingKeyword}" schema`;
-    case "maxItems":
-      return `must not have more than ${error.params.limit} items`;
-    case "maxLength":
-      return `must not have more than ${error.params.limit} characters`;
-    case "maxProperties":
-      return `must not have more than ${error.params.limit} properties`;
-    case "maximum":
-      return `must be ${error.params.comparison} ${error.params.limit}`;
-    case "minItems":
-      return `must not have fewer than ${error.params.limit} items`;
-    case "minLength":
-      return `must not have fewer than ${error.params.limit} characters`;
-    case "minProperties":
-      return `must not have fewer than ${error.params.limit} properties`;
-    case "minimum":
-      return `must be ${error.params.comparison} ${error.params.limit}`;
-    case "multipleOf":
-      return `must be multiple of ${error.params.multipleOf}`;
-    case "not":
-      return "must not be valid";
-    case "oneOf":
-      return "must match exactly one schema in oneOf";
-    case "pattern":
-      return `must match pattern "${error.params.pattern}"`;
-    case "propertyNames":
-      return `property names ${error.params.propertyNames.join(", ")} are invalid`;
-    case "required":
-      return `must have required properties ${error.params.requiredProperties.join(", ")}`;
-    case "type":
-      return typeof error.params.type === "string" ? `must be ${error.params.type}` : `must be either ${error.params.type.join(" or ")}`;
-    case "unevaluatedItems":
-      return "must not have unevaluated items";
-    case "unevaluatedProperties":
-      return "must not have unevaluated properties";
-    case "uniqueItems":
-      return `must not have duplicate items`;
-    case "~refine":
-      return error.params.message;
-    // deno-coverage-ignore - unreachable
-    default:
-      return "an unknown validation error occurred";
-  }
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/locale/_config.mjs
-var locale = en_US;
-function Get4() {
-  return locale;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/memory.mjs
-var memory_exports = {};
-__export(memory_exports, {
-  Assign: () => Assign,
-  Clone: () => Clone,
-  Create: () => Create,
-  Discard: () => Discard,
-  Metrics: () => Metrics,
-  Update: () => Update
-});
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/metrics.mjs
-var Metrics = {
-  assign: 0,
-  create: 0,
-  clone: 0,
-  discard: 0,
-  update: 0
-};
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/freeze.mjs
-function Freeze(value) {
-  return settings_exports.Get().immutableTypes ? Object.freeze(value) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/assign.mjs
-function Assign(left, right) {
-  Metrics.assign += 1;
-  return Freeze({ ...left, ...right });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/clone.mjs
-function FromClassInstance(value) {
-  return value;
-}
-function IsSchemaObject2(value) {
-  return guard_exports.HasPropertyKey(value, "~kind") || guard_exports.HasPropertyKey(value, "~unsafe");
-}
-function FromSchemaObject(value) {
-  const result = {};
-  for (const key of guard_exports.Keys(value)) {
-    if (guard_exports.IsUnsafePropertyKey(key))
-      continue;
-    const descriptor2 = Object.getOwnPropertyDescriptor(value, key);
-    descriptor2.value = FromValue3(descriptor2.value);
-    if (guard_exports.IsEqual(descriptor2.enumerable, true)) {
-      result[key] = descriptor2.value;
-    } else {
-      Object.defineProperty(result, key, descriptor2);
-    }
-  }
-  return result;
-}
-function FromPlainObject(value) {
-  const result = {};
-  for (const key of guard_exports.Keys(value)) {
-    if (guard_exports.IsUnsafePropertyKey(key))
-      continue;
-    result[key] = FromValue3(value[key]);
-  }
-  for (const key of guard_exports.Symbols(value)) {
-    result[key] = FromValue3(value[key]);
-  }
-  return result;
-}
-function FromObject3(value) {
-  return guard_exports.IsClassInstance(value) ? FromClassInstance(value) : IsSchemaObject2(value) ? FromSchemaObject(value) : FromPlainObject(value);
-}
-function FromArray3(value) {
-  return value.map((element) => FromValue3(element));
-}
-function FromTypedArray(value) {
-  return value.slice();
-}
-function FromRegExp2(value) {
-  return new RegExp(value.source, value.flags);
-}
-function FromMap(value) {
-  return new Map(FromValue3([...value.entries()]));
-}
-function FromSet(value) {
-  return new Set(FromValue3([...value.values()]));
-}
-function FromValue3(value) {
-  return globals_exports.IsTypeArray(value) ? FromTypedArray(value) : globals_exports.IsRegExp(value) ? FromRegExp2(value) : globals_exports.IsMap(value) ? FromMap(value) : globals_exports.IsSet(value) ? FromSet(value) : guard_exports.IsArray(value) ? FromArray3(value) : guard_exports.IsObject(value) ? FromObject3(value) : value;
-}
-function Clone(value) {
-  Metrics.clone += 1;
-  return FromValue3(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/create.mjs
-function MergeHidden(left, right) {
-  for (const key of Object.keys(right)) {
-    Object.defineProperty(left, key, {
-      configurable: true,
-      writable: true,
-      enumerable: false,
-      value: right[key]
-    });
-  }
-  return left;
-}
-function Merge(left, right) {
-  return { ...left, ...right };
-}
-function Create(hidden, enumerable, options = {}) {
-  Metrics.create += 1;
-  const withOptions = Merge(enumerable, options);
-  const withHidden = settings_exports.Get().enumerableKind ? Merge(withOptions, hidden) : MergeHidden(withOptions, hidden);
-  return Freeze(withHidden);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/discard.mjs
-function Discard(value, propertyKeys) {
-  Metrics.discard += 1;
-  const result = {};
-  for (const key of guard_exports.Keys(value)) {
-    if (propertyKeys.includes(key))
-      continue;
-    const descriptor2 = Object.getOwnPropertyDescriptor(value, key);
-    descriptor2.value = Clone(descriptor2.value);
-    Object.defineProperty(result, key, descriptor2);
-  }
-  return Freeze(result);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/system/memory/update.mjs
-function Update(current, hidden, enumerable) {
-  Metrics.update += 1;
-  const settings2 = settings_exports.Get();
-  const result = Clone(current);
-  for (const key of Object.keys(hidden)) {
-    Object.defineProperty(result, key, {
-      configurable: true,
-      writable: true,
-      enumerable: settings2.enumerableKind,
-      value: hidden[key]
-    });
-  }
-  for (const key of Object.keys(enumerable)) {
-    Object.defineProperty(result, key, {
-      configurable: true,
-      enumerable: true,
-      writable: true,
-      value: enumerable[key]
-    });
-  }
-  return Freeze(result);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/errors.mjs
-function Errors(...args) {
-  const [context, schema, value] = arguments_exports.Match(args, {
-    3: (context2, schema2, value2) => [context2, schema2, value2],
-    2: (schema2, value2) => [{}, schema2, value2]
-  });
-  const stack = new Stack(context, schema);
-  const errorContext = new ErrorContext();
-  const result = ErrorSchema(stack, errorContext, "#", "", schema, value);
-  const errors = errorContext.GetErrors();
-  const locale2 = Get4();
-  const localized = errors.map((error) => ({ ...error, message: locale2(error) }));
-  return [result, localized];
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/schema/check.mjs
-function Check(...args) {
-  const [context, schema, value] = arguments_exports.Match(args, {
-    3: (context2, schema2, value2) => [context2, schema2, value2],
-    2: (schema2, value2) => [{}, schema2, value2]
-  });
-  const stack = new Stack(context, schema);
-  const checkContext = new CheckContext();
-  return CheckSchema(stack, checkContext, schema, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/check/check.mjs
-function Check2(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  return Check(context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/errors/errors.mjs
-function Errors2(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  const [_, errors] = Errors(context, type, value);
-  return errors;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/assert/assert.mjs
-var AssertError = class extends Error {
-  constructor(source, value, errors) {
-    super(source);
-    Object.defineProperty(this, "cause", {
-      value: { source, errors, value },
-      writable: false,
-      configurable: false,
-      enumerable: false
-    });
-  }
-};
-function Assert(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  const check = Check2(context, type, value);
-  if (!check)
-    throw new AssertError("Assert", value, Errors2(context, type, value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/schema.mjs
-function IsKind(value, kind2) {
-  return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "~kind") && guard_exports.IsEqual(value["~kind"], kind2);
-}
-function IsSchema2(value) {
-  return guard_exports.IsObject(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/deferred.mjs
-function Deferred(action, parameters, options) {
-  return memory_exports.Create({ "~kind": "Deferred" }, { type: "deferred", action, parameters, options }, {});
-}
-function IsDeferred(value) {
-  return IsKind(value, "Deferred");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly/instantiate_add.mjs
-function AddReadonlyOperation(type) {
-  return memory_exports.Update(type, { "~readonly": true }, {});
-}
-function AddReadonlyAction(type, options) {
-  const result = memory_exports.Update(AddReadonlyOperation(type), {}, options);
-  return result;
-}
-function AddReadonlyInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return AddReadonlyAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/optional/instantiate_add.mjs
-function AddOptionalOperation(type) {
-  return memory_exports.Update(type, { "~optional": true }, {});
-}
-function AddOptionalAction(type, options) {
-  const result = memory_exports.Update(AddOptionalOperation(type), {}, options);
-  return result;
-}
-function AddOptionalInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return AddOptionalAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/array.mjs
-function _Array_(items, options) {
-  return memory_exports.Create({ "~kind": "Array" }, { type: "array", items }, options);
-}
-function IsArray2(value) {
-  return IsKind(value, "Array");
-}
-function ArrayOptions(type) {
-  return memory_exports.Discard(type, ["~kind", "type", "items"]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/constructor.mjs
-function Constructor(parameters, instanceType, options = {}) {
-  return memory_exports.Create({ "~kind": "Constructor" }, { type: "constructor", parameters, instanceType }, options);
-}
-function IsConstructor2(value) {
-  return IsKind(value, "Constructor");
-}
-function ConstructorOptions(type) {
-  return memory_exports.Discard(type, ["~kind", "type", "parameters", "instanceType"]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/function.mjs
-function _Function_(parameters, returnType, options = {}) {
-  return memory_exports.Create({ ["~kind"]: "Function" }, { type: "function", parameters, returnType }, options);
-}
-function IsFunction2(value) {
-  return IsKind(value, "Function");
-}
-function FunctionOptions(type) {
-  return memory_exports.Discard(type, ["~kind", "type", "parameters", "returnType"]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/ref.mjs
-function Ref2(ref, options) {
-  return memory_exports.Create({ ["~kind"]: "Ref" }, { $ref: ref }, options);
-}
-function IsRef2(value) {
-  return IsKind(value, "Ref");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/generic.mjs
-function Generic(parameters, expression) {
-  return memory_exports.Create({ "~kind": "Generic" }, { type: "generic", parameters, expression });
-}
-function IsGeneric(value) {
-  return IsKind(value, "Generic");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/any.mjs
-function Any(options) {
-  return memory_exports.Create({ ["~kind"]: "Any" }, {}, options);
-}
-function IsAny(value) {
-  return IsKind(value, "Any");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/never.mjs
-var NeverPattern = "(?!)";
-function Never(options) {
-  return memory_exports.Create({ "~kind": "Never" }, { not: {} }, options);
-}
-function IsNever(value) {
-  return IsKind(value, "Never");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_add_optional.mjs
-function AddOptionalDeferred(type, options = {}) {
-  return Deferred("AddOptional", [type], options);
-}
-function AddOptional(type, options = {}) {
-  return AddOptionalAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_optional.mjs
-function Optional(type) {
-  return AddOptional(type);
-}
-function IsOptional(value) {
-  return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~optional");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/properties.mjs
-function RequiredArray(properties) {
-  return guard_exports.Keys(properties).filter((key) => !IsOptional(properties[key]));
-}
-function PropertyKeys(properties) {
-  return guard_exports.Keys(properties);
-}
-function PropertyValues(properties) {
-  return guard_exports.Values(properties);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/object.mjs
-function _Object_(properties, options = {}) {
-  const requiredKeys = RequiredArray(properties);
-  const required = requiredKeys.length > 0 ? { required: requiredKeys } : {};
-  return memory_exports.Create({ "~kind": "Object" }, { type: "object", ...required, properties }, options);
-}
-function IsObject2(value) {
-  return IsKind(value, "Object");
-}
-function ObjectOptions(type) {
-  return memory_exports.Discard(type, ["~kind", "type", "properties", "required"]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/unknown.mjs
-function Unknown(options) {
-  return memory_exports.Create({ ["~kind"]: "Unknown" }, {}, options);
-}
-function IsUnknown(value) {
-  return IsKind(value, "Unknown");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/cyclic.mjs
-function Cyclic($defs, $ref, options) {
-  const defs = guard_exports.Keys($defs).reduce((result, key) => {
-    return { ...result, [key]: memory_exports.Update($defs[key], {}, { $id: key }) };
-  }, {});
-  return memory_exports.Create({ ["~kind"]: "Cyclic" }, { $defs: defs, $ref }, options);
-}
-function IsCyclic(value) {
-  return IsKind(value, "Cyclic");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/unsafe.mjs
-function Unsafe(schema) {
-  return memory_exports.Update(schema, { ["~unsafe"]: null }, {});
-}
-function IsUnsafe(value) {
-  return guard_exports.IsObjectNotArray(value) && guard_exports.HasPropertyKey(value, "~unsafe") && guard_exports.IsNull(value["~unsafe"]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/infer.mjs
-function Infer(...args) {
-  const [name, extends_] = arguments_exports.Match(args, {
-    2: (name2, extends_2) => [name2, extends_2, extends_2],
-    1: (name2) => [name2, Unknown(), Unknown()]
-  });
-  return memory_exports.Create({ ["~kind"]: "Infer" }, { type: "infer", name, extends: extends_ }, {});
-}
-function IsInfer(value) {
-  return IsKind(value, "Infer");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/dependent.mjs
-function Dependent(if_, then_, else_, options = {}) {
-  return memory_exports.Create({ "~kind": "Dependent" }, { if: if_, then: then_, else: else_ }, options);
-}
-function IsDependent(value) {
-  return IsKind(value, "Dependent");
-}
-function DependentOptions(type) {
-  return memory_exports.Discard(type, ["~kind", "if", "then", "else"]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/enum/typescript_enum_to_enum_values.mjs
-function IsTypeScriptEnumLike(value) {
-  return guard_exports.IsObjectNotArray(value);
-}
-function TypeScriptEnumToEnumValues(type) {
-  const keys = guard_exports.Keys(type).filter((key) => isNaN(key));
-  return keys.reduce((result, key) => [...result, type[key]], []);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/enum.mjs
-function IsEnumValue(value) {
-  return guard_exports.IsString(value) || guard_exports.IsNumber(value);
-}
-function Enum(value, options) {
-  const values = IsTypeScriptEnumLike(value) ? TypeScriptEnumToEnumValues(value) : value;
-  return memory_exports.Create({ "~kind": "Enum" }, { enum: values }, options);
-}
-function IsEnum2(value) {
-  return IsKind(value, "Enum");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/intersect.mjs
-function Intersect(types, options = {}) {
-  return memory_exports.Create({ "~kind": "Intersect" }, { allOf: types }, options);
-}
-function IsIntersect(value) {
-  return IsKind(value, "Intersect");
-}
-function IntersectOptions(type) {
-  return memory_exports.Discard(type, ["~kind", "allOf"]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_codec.mjs
-var EncodeBuilder = class {
-  constructor(type, decode2) {
-    this.type = type;
-    this.decode = decode2;
-  }
-  Encode(callback) {
-    const type = this.type;
-    const decode2 = IsCodec(type) ? (value) => this.decode(type["~codec"].decode(value)) : this.decode;
-    const encode2 = IsCodec(type) ? (value) => type["~codec"].encode(callback(value)) : callback;
-    const codec = { decode: decode2, encode: encode2 };
-    return memory_exports.Update(this.type, { "~codec": codec }, {});
-  }
-};
-var DecodeBuilder = class {
-  constructor(type) {
-    this.type = type;
-  }
-  Decode(callback) {
-    return new EncodeBuilder(this.type, callback);
-  }
-};
-function Codec(type) {
-  return new DecodeBuilder(type);
-}
-function Decode2(type, callback) {
-  return Codec(type).Decode(callback).Encode(() => {
-    throw Error("Encode not implemented");
-  });
-}
-function Encode2(type, callback) {
-  return Codec(type).Decode(() => {
-    throw Error("Decode not implemented");
-  }).Encode(callback);
-}
-function IsCodec(value) {
-  return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~codec") && guard_exports.IsObject(value["~codec"]) && guard_exports.HasPropertyKey(value["~codec"], "encode") && guard_exports.HasPropertyKey(value["~codec"], "decode");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_immutable.mjs
-function Immutable(type) {
-  return AddImmutable(type);
-}
-function IsImmutable(value) {
-  return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~immutable");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_add_readonly.mjs
-function AddReadonlyDeferred(type, options = {}) {
-  return Deferred("AddReadonly", [type], options);
-}
-function AddReadonly(type, options = {}) {
-  return AddReadonlyAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_readonly.mjs
-function Readonly(type) {
-  return AddReadonly(type);
-}
-function IsReadonly(value) {
-  return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~readonly");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/_refine.mjs
-function RefineAdd(type, refinement) {
-  const refinements = IsRefine2(type) ? [...type["~refine"], refinement] : [refinement];
-  return memory_exports.Update(type, { "~refine": refinements }, {});
-}
-function Refine(...args) {
-  const [type, check, error] = arguments_exports.Match(args, {
-    3: (type2, check2, error2) => [type2, check2, error2],
-    2: (type2, check2) => [type2, check2, () => "Refine Error"]
-  });
-  return RefineAdd(type, { check, error });
-}
-function IsRefinement(value) {
-  return guard_exports.IsObjectNotArray(value) && guard_exports.HasPropertyKey(value, "check") && guard_exports.HasPropertyKey(value, "error") && guard_exports.IsFunction(value.check) && guard_exports.IsFunction(value.error);
-}
-function IsRefine2(value) {
-  return IsSchema2(value) && guard_exports.HasPropertyKey(value, "~refine") && guard_exports.IsArray(value["~refine"]) && guard_exports.Every(value["~refine"], 0, (value2) => IsRefinement(value2));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/bigint.mjs
-var BigIntPattern = "-?(?:0|[1-9][0-9]*)n";
-function BigInt2(options) {
-  return memory_exports.Create({ "~kind": "BigInt" }, { type: "bigint" }, options);
-}
-function IsBigInt2(value) {
-  return IsKind(value, "BigInt");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/boolean.mjs
-function Boolean2(options) {
-  return memory_exports.Create({ "~kind": "Boolean" }, { type: "boolean" }, options);
-}
-function IsBoolean3(value) {
-  return IsKind(value, "Boolean");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/identifier.mjs
-function Identifier(name) {
-  return memory_exports.Create({ "~kind": "Identifier" }, { name });
-}
-function IsIdentifier(value) {
-  return IsKind(value, "Identifier");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/integer.mjs
-var IntegerPattern = "-?(?:0|[1-9][0-9]*)";
-function Integer(options) {
-  return memory_exports.Create({ "~kind": "Integer" }, { type: "integer" }, options);
-}
-function IsInteger2(value) {
-  return IsKind(value, "Integer");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/literal.mjs
-var InvalidLiteralValue = class extends Error {
-  constructor(value) {
-    super(`Invalid Literal value`);
-    Object.defineProperty(this, "cause", {
-      value: { value },
-      writable: false,
-      configurable: false,
-      enumerable: false
-    });
-  }
-};
-function LiteralTypeName(value) {
-  return guard_exports.IsBigInt(value) ? "bigint" : guard_exports.IsBoolean(value) ? "boolean" : guard_exports.IsNumber(value) ? "number" : guard_exports.IsString(value) ? "string" : (() => {
-    throw new InvalidLiteralValue(value);
-  })();
-}
-function Literal(value, options) {
-  return memory_exports.Create({ "~kind": "Literal" }, { type: LiteralTypeName(value), const: value }, options);
-}
-function IsLiteralValue(value) {
-  return guard_exports.IsBigInt(value) || guard_exports.IsBoolean(value) || guard_exports.IsNumber(value) || guard_exports.IsString(value);
-}
-function IsLiteralBigInt(value) {
-  return IsLiteral(value) && guard_exports.IsBigInt(value.const);
-}
-function IsLiteralBoolean(value) {
-  return IsLiteral(value) && guard_exports.IsBoolean(value.const);
-}
-function IsLiteralNumber(value) {
-  return IsLiteral(value) && guard_exports.IsNumber(value.const);
-}
-function IsLiteralString(value) {
-  return IsLiteral(value) && guard_exports.IsString(value.const);
-}
-function IsLiteral(value) {
-  return IsKind(value, "Literal");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/null.mjs
-function Null(options) {
-  return memory_exports.Create({ "~kind": "Null" }, { type: "null" }, options);
-}
-function IsNull2(value) {
-  return IsKind(value, "Null");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/number.mjs
-var NumberPattern = "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?";
-function Number2(options) {
-  return memory_exports.Create({ "~kind": "Number" }, { type: "number" }, options);
-}
-function IsNumber3(value) {
-  return IsKind(value, "Number");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/symbol.mjs
-function Symbol2(options) {
-  return memory_exports.Create({ "~kind": "Symbol" }, { type: "symbol" }, options);
-}
-function IsSymbol2(value) {
-  return IsKind(value, "Symbol");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/parameter.mjs
-function Parameter(...args) {
-  const [name, extends_, equals] = arguments_exports.Match(args, {
-    3: (name2, extends_2, equals2) => [name2, extends_2, equals2],
-    2: (name2, extends_2) => [name2, extends_2, extends_2],
-    1: (name2) => [name2, Unknown(), Unknown()]
-  });
-  return memory_exports.Create({ "~kind": "Parameter" }, { name, extends: extends_, equals }, {});
-}
-function IsParameter(value) {
-  return IsKind(value, "Parameter");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/string.mjs
-var StringPattern = ".*";
-function String2(options) {
-  return memory_exports.Create({ "~kind": "String" }, { type: "string" }, options);
-}
-function IsString3(value) {
-  return IsKind(value, "String");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/union.mjs
-function Union(anyOf, options = {}) {
-  return memory_exports.Create({ "~kind": "Union" }, { anyOf }, options);
-}
-function IsUnion(value) {
-  return IsKind(value, "Union");
-}
-function UnionOptions(type) {
-  return memory_exports.Discard(type, ["~kind", "anyOf"]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/patterns/pattern.mjs
-function ParsePatternIntoTypes(pattern) {
-  const parsed = Pattern(pattern);
-  const result = guard_exports.IsEqual(parsed.length, 2) ? parsed[0] : [];
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/is_finite.mjs
-function FromLiteral(_value) {
-  return true;
-}
-function FromTypesReduce(types) {
-  return guard_exports.ShiftLeft(types, (left, right) => FromType(left) ? FromTypesReduce(right) : false, () => true);
-}
-function FromTypes(types) {
-  const result = guard_exports.IsEqual(types.length, 0) ? false : FromTypesReduce(types);
-  return result;
-}
-function FromType(type) {
-  return IsUnion(type) ? FromTypes(type.anyOf) : IsLiteral(type) ? FromLiteral(type.const) : false;
-}
-function IsTemplateLiteralFinite(types) {
-  const result = FromTypes(types);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/create.mjs
-function TemplateLiteralCreate(pattern) {
-  return memory_exports.Create({ ["~kind"]: "TemplateLiteral" }, { type: "string", pattern }, {});
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/decode.mjs
-function FromLiteralPush(variants, value, result = []) {
-  return guard_exports.ShiftLeft(variants, (left, right) => FromLiteralPush(right, value, [...result, `${left}${value}`]), () => result);
-}
-function FromLiteral2(variants, value) {
-  return guard_exports.IsEqual(variants.length, 0) ? [`${value}`] : FromLiteralPush(variants, value);
-}
-function FromUnion(variants, types, result = []) {
-  return guard_exports.ShiftLeft(types, (left, right) => FromUnion(variants, right, [...result, ...FromType2(variants, left)]), () => result);
-}
-function FromType2(variants, type) {
-  const result = IsUnion(type) ? FromUnion(variants, type.anyOf) : IsLiteral(type) ? FromLiteral2(variants, type.const) : Unreachable();
-  return result;
-}
-function DecodeFromSpan(variants, types) {
-  return guard_exports.ShiftLeft(types, (left, right) => DecodeFromSpan(FromType2(variants, left), right), () => variants);
-}
-function VariantsToLiterals(variants) {
-  return variants.map((variant2) => Literal(variant2));
-}
-function DecodeTypesAsUnion(types) {
-  const variants = DecodeFromSpan([], types);
-  const literals = VariantsToLiterals(variants);
-  const result = Union(literals);
-  return result;
-}
-function DecodeTypes(types) {
-  return guard_exports.IsEqual(types.length, 0) ? Unreachable() : (
-    // Literal('') :
-    guard_exports.IsEqual(types.length, 1) && IsLiteral(types[0]) ? types[0] : DecodeTypesAsUnion(types)
-  );
-}
-function TemplateLiteralDecodeUnsafe(pattern) {
-  const types = ParsePatternIntoTypes(pattern);
-  const result = guard_exports.IsEqual(types.length, 0) ? String2() : IsTemplateLiteralFinite(types) ? DecodeTypes(types) : TemplateLiteralCreate(pattern);
-  return result;
-}
-function TemplateLiteralDecode(pattern) {
-  const decoded = TemplateLiteralDecodeUnsafe(pattern);
-  const result = IsTemplateLiteral(decoded) ? String2() : decoded;
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/record_create.mjs
-function CreateRecord(key, value) {
-  const type = "object";
-  const patternProperties = { [key]: value };
-  return memory_exports.Create({ ["~kind"]: "Record" }, { type, patternProperties });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_any.mjs
-function FromAnyKey(value) {
-  return CreateRecord(StringKey, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_boolean.mjs
-function FromBooleanKey(value) {
-  return _Object_({ true: value, false: value });
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/tuple.mjs
-function Tuple(types, options = {}) {
-  const [items, minItems, additionalItems] = [types, types.length, false];
-  return memory_exports.Create({ ["~kind"]: "Tuple" }, { type: "array", additionalItems, items, minItems }, options);
-}
-function IsTuple(value) {
-  return IsKind(value, "Tuple");
-}
-function TupleOptions(type) {
-  return memory_exports.Discard(type, ["~kind", "type", "items", "minItems", "additionalItems"]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly/instantiate_remove.mjs
-function RemoveReadonlyOperation(type) {
-  return memory_exports.Discard(type, ["~readonly"]);
-}
-function RemoveReadonlyAction(type, options) {
-  const result = memory_exports.Update(RemoveReadonlyOperation(type), {}, options);
-  return result;
-}
-function RemoveReadonlyInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return RemoveReadonlyAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_remove_readonly.mjs
-function RemoveReadonlyDeferred(type, options = {}) {
-  return Deferred("RemoveReadonly", [type], options);
-}
-function RemoveReadonly(type, options = {}) {
-  return RemoveReadonlyAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/optional/instantiate_remove.mjs
-function RemoveOptionalOperation(type) {
-  return memory_exports.Discard(type, ["~optional"]);
-}
-function RemoveOptionalAction(type, options) {
-  const result = memory_exports.Update(RemoveOptionalOperation(type), {}, options);
-  return result;
-}
-function RemoveOptionalInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return RemoveOptionalAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_remove_optional.mjs
-function RemoveOptionalDeferred(type, options = {}) {
-  return Deferred("RemoveOptional", [type], options);
-}
-function RemoveOptional(type, options = {}) {
-  return RemoveOptionalAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/tuple/to_object.mjs
-function TupleElementsToProperties(types) {
-  const result = types.reduceRight((result2, right, index) => {
-    return { [index]: right, ...result2 };
-  }, {});
-  return result;
-}
-function TupleToObject(type) {
-  const properties = TupleElementsToProperties(type.items);
-  const result = _Object_(properties);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/composite.mjs
-function CanComposite(type) {
-  return IsObject2(type) || IsTuple(type);
-}
-function IsReadonlyProperty(left, right) {
-  return IsReadonly(left) ? IsReadonly(right) ? true : false : false;
-}
-function IsOptionalProperty(left, right) {
-  return IsOptional(left) ? IsOptional(right) ? true : false : false;
-}
-function CompositeProperty(left, right) {
-  const isReadonly = IsReadonlyProperty(left, right);
-  const isOptional = IsOptionalProperty(left, right);
-  const evaluated = EvaluateIntersect([left, right]);
-  const property = RemoveReadonly(RemoveOptional(evaluated));
-  return isReadonly && isOptional ? AddReadonly(AddOptional(property)) : isReadonly && !isOptional ? AddReadonly(property) : !isReadonly && isOptional ? AddOptional(property) : property;
-}
-function CompositePropertyKey(left, right, key) {
-  return key in left ? key in right ? CompositeProperty(left[key], right[key]) : left[key] : key in right ? right[key] : Never();
-}
-function CompositeProperties(left, right) {
-  const keys = /* @__PURE__ */ new Set([...guard_exports.Keys(left), ...guard_exports.Keys(right)]);
-  const result = [...keys].reduce((result2, key) => {
-    return { ...result2, [key]: CompositePropertyKey(left, right, key) };
-  }, {});
-  return result;
-}
-function GetProperties(type) {
-  const result = IsObject2(type) ? type.properties : IsTuple(type) ? TupleElementsToProperties(type.items) : {};
-  return result;
-}
-function Composite(left, right) {
-  const leftProperties = GetProperties(left);
-  const rightProperties = GetProperties(right);
-  const properties = CompositeProperties(leftProperties, rightProperties);
-  const result = _Object_(properties);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/narrow.mjs
-function NarrowCompareRule(left, right) {
-  const result = Compare(left, right);
-  return guard_exports.IsEqual(result, CompareResultLeftInside) ? left : guard_exports.IsEqual(result, CompareResultRightInside) ? right : guard_exports.IsEqual(result, CompareResultEqual) ? right : Never();
-}
-function NarrowCompositeRule(left, right) {
-  const canCompositeLeft = CanComposite(left);
-  const canCompositeRight = CanComposite(right);
-  return canCompositeLeft && canCompositeRight ? Composite(left, right) : canCompositeLeft && !canCompositeRight ? left : !canCompositeLeft && canCompositeRight ? right : NarrowCompareRule(left, right);
-}
-function Narrow(left, right) {
-  return IsNever(left) ? left : IsAny(left) ? left : IsUnknown(left) ? right : IsNever(right) ? right : IsAny(right) ? right : IsUnknown(right) ? left : NarrowCompositeRule(left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/distribute.mjs
-function ShouldEvaluate(left, right) {
-  const result = IsUnion(left) || IsUnion(right);
-  return result;
-}
-function DistributeOperation(left, right) {
-  const evaluatedLeft = EvaluateType(left);
-  const evaluatedRight = EvaluateType(right);
-  const shouldEvaluate = ShouldEvaluate(evaluatedLeft, evaluatedRight);
-  const result = shouldEvaluate ? EvaluateIntersect([evaluatedLeft, evaluatedRight]) : Narrow(evaluatedLeft, evaluatedRight);
-  return result;
-}
-function DistributeType(type, types, result = []) {
-  return guard_exports.ShiftLeft(types, (left, right) => DistributeType(type, right, [...result, DistributeOperation(left, type)]), () => guard_exports.IsEqual(result.length, 0) ? [type] : result);
-}
-function DistributeUnion(types, distribution, result = []) {
-  return guard_exports.ShiftLeft(types, (left, right) => DistributeUnion(right, distribution, [...result, ...Distribute([left], distribution)]), () => result);
-}
-function Distribute(types, result = []) {
-  return guard_exports.ShiftLeft(types, (left, right) => IsUnion(left) ? Distribute(right, DistributeUnion(left.anyOf, result)) : Distribute(right, DistributeType(left, result)), () => result);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/exclude/operation.mjs
-function ExcludeType(left, right) {
-  const check = Extends({}, left, right);
-  const result = result_exports.IsExtendsTrueLike(check) ? [] : [left];
-  return result;
-}
-function ExcludeUnion(left, right, result = []) {
-  return guard_exports.ShiftLeft(left, (head, tail) => ExcludeUnion(tail, right, [...result, ...ExcludeType(head, right)]), () => result);
-}
-function ExcludeOperation(left, right) {
-  const evaluated = EvaluateType(left);
-  const canonical = IsUnion(evaluated) ? evaluated.anyOf : [evaluated];
-  const remaining = ExcludeUnion(canonical, right);
-  const result = EvaluateUnion(remaining);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/evaluate.mjs
-function EvaluateDependent(if_, then_, else_) {
-  const intersected = EvaluateIntersect([if_, then_]);
-  const excluded = ExcludeOperation(else_, if_);
-  const result = EvaluateUnion([intersected, excluded]);
-  return result;
-}
-function EvaluateEnum(values, result = []) {
-  return guard_exports.ShiftLeft(values, (left, right) => EvaluateEnum(right, [...result, Literal(left)]), () => EvaluateUnion(result));
-}
-function EvaluateIntersect(types) {
-  const distribution = Distribute(types);
-  const broadend = Broaden(distribution);
-  const result = EvaluateUnion(broadend);
-  return result;
-}
-function EvaluateTemplateLiteral(pattern) {
-  const evaluated = TemplateLiteralDecode(pattern);
-  const result = EvaluateType(evaluated);
-  return result;
-}
-function EvaluateUnion(types) {
-  const broadend = Broaden(types);
-  const result = EvaluateUnionFast(broadend);
-  return result;
-}
-function EvaluateType(type) {
-  const result = IsDependent(type) ? EvaluateDependent(type.if, type.then, type.else) : IsEnum2(type) ? EvaluateEnum(type.enum) : IsIntersect(type) ? EvaluateIntersect(type.allOf) : IsTemplateLiteral(type) ? EvaluateTemplateLiteral(type.pattern) : IsUnion(type) ? EvaluateUnion(type.anyOf) : type;
-  return result;
-}
-function EvaluateUnionFast(types) {
-  const result = guard_exports.IsEqual(types.length, 1) ? types[0] : guard_exports.IsEqual(types.length, 0) ? Never() : Union(types);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_enum.mjs
-function FromEnumKey(values, value) {
-  const unionKey = EvaluateEnum(values);
-  const result = FromKey(unionKey, value);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_integer.mjs
-function FromIntegerKey(_key, value) {
-  const result = CreateRecord(IntegerKey, value);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_intersect.mjs
-function FromIntersectKey(types, value) {
-  const evaluatedKey = EvaluateIntersect(types);
-  const result = FromKey(evaluatedKey, value);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_literal.mjs
-function FromLiteralKey(key, value) {
-  return guard_exports.IsString(key) || guard_exports.IsNumber(key) ? _Object_({ [key]: value }) : guard_exports.IsEqual(key, false) ? _Object_({ false: value }) : guard_exports.IsEqual(key, true) ? _Object_({ true: value }) : _Object_({});
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_number.mjs
-function FromNumberKey(_key, value) {
-  const result = CreateRecord(NumberKey, value);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_string.mjs
-function FromStringKey(key, value) {
-  return guard_exports.HasPropertyKey(key, "pattern") && (guard_exports.IsString(key.pattern) || key.pattern instanceof RegExp) ? CreateRecord(key.pattern.toString(), value) : CreateRecord(StringKey, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_template_literal.mjs
-function FromTemplateKey(pattern, value) {
-  const types = ParsePatternIntoTypes(pattern);
-  const finite = IsTemplateLiteralFinite(types);
-  const result = finite ? FromKey(EvaluateTemplateLiteral(pattern), value) : CreateRecord(pattern, value);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/flatten.mjs
-function FlattenType(type) {
-  const result = IsUnion(type) ? Flatten(type.anyOf) : [type];
-  return result;
-}
-function Flatten(types, result = []) {
-  return guard_exports.ShiftLeft(types, (left, right) => Flatten(right, [...result, ...FlattenType(left)]), () => result);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key_union.mjs
-function StringOrNumberCheck(types) {
-  return types.some((type) => IsString3(type) || IsNumber3(type) || IsInteger2(type));
-}
-function TryBuildRecord(types, value) {
-  return guard_exports.IsEqual(StringOrNumberCheck(types), true) ? CreateRecord(StringKey, value) : void 0;
-}
-function CreateProperties(types, value) {
-  return types.reduce((result, left) => {
-    return IsLiteral(left) && (guard_exports.IsString(left.const) || guard_exports.IsNumber(left.const)) ? { ...result, [left.const]: value } : result;
-  }, {});
-}
-function CreateObject(types, value) {
-  const properties = CreateProperties(types, value);
-  const result = _Object_(properties);
-  return result;
-}
-function FromUnionKey(types, value) {
-  const flattened = Flatten(types);
-  const record4 = TryBuildRecord(flattened, value);
-  return IsSchema2(record4) ? record4 : CreateObject(flattened, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/from_key.mjs
-function FromKey(key, value) {
-  const result = IsAny(key) ? FromAnyKey(value) : IsBoolean3(key) ? FromBooleanKey(value) : IsEnum2(key) ? FromEnumKey(key.enum, value) : IsInteger2(key) ? FromIntegerKey(key, value) : IsIntersect(key) ? FromIntersectKey(key.allOf, value) : IsLiteral(key) ? FromLiteralKey(key.const, value) : IsNumber3(key) ? FromNumberKey(key, value) : IsUnion(key) ? FromUnionKey(key.anyOf, value) : IsString3(key) ? FromStringKey(key, value) : IsTemplateLiteral(key) ? FromTemplateKey(key.pattern, value) : _Object_({});
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/record/instantiate.mjs
-function RecordAction(key, value, options) {
-  const result = CanInstantiate([key]) ? memory_exports.Update(FromKey(key, value), {}, options) : RecordDeferred(key, value, options);
-  return result;
-}
-function RecordInstantiate(context, state, key, value, options) {
-  const instantiatedKey = InstantiateType(context, state, key);
-  const instantiatedValue = InstantiateType(context, state, value);
-  return RecordAction(instantiatedKey, instantiatedValue, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/record.mjs
-var IntegerKey = `^${IntegerPattern}$`;
-var NumberKey = `^${NumberPattern}$`;
-var StringKey = `^${StringPattern}$`;
-function RecordDeferred(key, value, options = {}) {
-  return Deferred("Record", [key, value], options);
-}
-function Record(key, value, options = {}) {
-  return RecordAction(key, value, options);
-}
-function RecordFromPattern(pattern, value) {
-  return CreateRecord(pattern, value);
-}
-function RecordPatternToType(pattern) {
-  const result = guard_exports.IsEqual(pattern, StringKey) ? String2() : guard_exports.IsEqual(pattern, IntegerKey) ? Integer() : guard_exports.IsEqual(pattern, NumberKey) ? Number2() : TemplateLiteralDecodeUnsafe(pattern);
-  return result;
-}
-function RecordPattern(type) {
-  return guard_exports.Keys(type.patternProperties)[0];
-}
-function RecordKey(type) {
-  const pattern = RecordPattern(type);
-  const result = RecordPatternToType(pattern);
-  return result;
-}
-function RecordValue(type) {
-  return type.patternProperties[RecordPattern(type)];
-}
-function IsRecord(value) {
-  return IsKind(value, "Record");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/rest.mjs
-function Rest(type) {
-  return memory_exports.Create({ "~kind": "Rest" }, { type: "rest", items: type }, {});
-}
-function IsRest(value) {
-  return IsKind(value, "Rest");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/this.mjs
-function This(options) {
-  return memory_exports.Create({ ["~kind"]: "This" }, { $ref: "#" }, options);
-}
-function IsThis(value) {
-  return IsKind(value, "This");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/undefined.mjs
-function Undefined(options) {
-  return memory_exports.Create({ "~kind": "Undefined" }, { type: "undefined" }, options);
-}
-function IsUndefined2(value) {
-  return IsKind(value, "Undefined");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/void.mjs
-function Void(options) {
-  return memory_exports.Create({ "~kind": "Void" }, { type: "void" }, options);
-}
-function IsVoid(value) {
-  return IsKind(value, "Void");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/mapping.mjs
-function IntrinsicOrCall(ref, parameters) {
-  return guard_exports.IsEqual(ref, "Array") ? _Array_(parameters[0]) : guard_exports.IsEqual(ref, "Capitalize") ? CapitalizeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "ConstructorParameters") ? ConstructorParametersDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Evaluate") ? EvaluateDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Exclude") ? ExcludeDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Extract") ? ExtractDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Index") ? IndexDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "InstanceType") ? InstanceTypeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Lowercase") ? LowercaseDeferred(parameters[0]) : guard_exports.IsEqual(ref, "NonNullable") ? NonNullableDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Omit") ? OmitDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Parameters") ? ParametersDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Partial") ? PartialDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Pick") ? PickDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Readonly") ? ReadonlyObjectDeferred(parameters[0]) : guard_exports.IsEqual(ref, "KeyOf") ? KeyOfDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Record") ? RecordDeferred(parameters[0], parameters[1]) : guard_exports.IsEqual(ref, "Required") ? RequiredDeferred(parameters[0]) : guard_exports.IsEqual(ref, "ReturnType") ? ReturnTypeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Uncapitalize") ? UncapitalizeDeferred(parameters[0]) : guard_exports.IsEqual(ref, "Uppercase") ? UppercaseDeferred(parameters[0]) : CallConstruct(Ref2(ref), parameters);
-}
-function Unreachable2() {
-  throw Error("Unreachable");
-}
-function DelimitedDecode(input, result = []) {
-  return guard_exports.ShiftLeft(input, (left, right) => DelimitedDecode(right, [...result, left[1]]), () => result);
-}
-function Delimited(input) {
-  return guard_exports.IsEqual(input.length, 3) ? [input[0], ...DelimitedDecode(input[1])] : [];
-}
-function GenericParameterExtendsEqualsMapping(input) {
-  return Parameter(input[0], input[2], input[4]);
-}
-function GenericParameterExtendsMapping(input) {
-  return Parameter(input[0], input[2], input[2]);
-}
-function GenericParameterEqualsMapping(input) {
-  return Parameter(input[0], Unknown(), input[2]);
-}
-function GenericParameterIdentifierMapping(input) {
-  return Parameter(input, Unknown(), Unknown());
-}
-function GenericParameterMapping(input) {
-  return input;
-}
-function GenericParameterListMapping(input) {
-  return Delimited(input);
-}
-function GenericParametersMapping(input) {
-  return input[1];
-}
-function GenericCallArgumentListMapping(input) {
-  return Delimited(input);
-}
-function GenericCallArgumentsMapping(input) {
-  return input[1];
-}
-function GenericCallMapping(input) {
-  return IntrinsicOrCall(input[0], input[1]);
-}
-function OptionalSemiColonMapping(input) {
-  return null;
-}
-function KeywordStringMapping(input) {
-  return String2();
-}
-function KeywordNumberMapping(input) {
-  return Number2();
-}
-function KeywordBooleanMapping(input) {
-  return Boolean2();
-}
-function KeywordUndefinedMapping(input) {
-  return Undefined();
-}
-function KeywordNullMapping(input) {
-  return Null();
-}
-function KeywordIntegerMapping(input) {
-  return Integer();
-}
-function KeywordBigIntMapping(input) {
-  return BigInt2();
-}
-function KeywordUnknownMapping(input) {
-  return Unknown();
-}
-function KeywordAnyMapping(input) {
-  return Any();
-}
-function KeywordObjectMapping(input) {
-  return _Object_({});
-}
-function KeywordNeverMapping(input) {
-  return Never();
-}
-function KeywordSymbolMapping(input) {
-  return Symbol2();
-}
-function KeywordVoidMapping(input) {
-  return Void();
-}
-function KeywordThisMapping(input) {
-  return This();
-}
-function LiteralBigIntMapping(input) {
-  return Literal(BigInt(input));
-}
-function LiteralBooleanMapping(input) {
-  return Literal(guard_exports.IsEqual(input, "true"));
-}
-function LiteralNumberMapping(input) {
-  return Literal(parseFloat(input));
-}
-function LiteralStringMapping(input) {
-  return Literal(input);
-}
-function TemplateInterpolateMapping(input) {
-  return input[1];
-}
-function TemplateSpanMapping(input) {
-  return Literal(input);
-}
-function TemplateBodyMapping(input) {
-  return guard_exports.IsEqual(input.length, 3) ? [input[0], input[1], ...input[2]] : [input[0]];
-}
-function TemplateLiteralTypesMapping(input) {
-  return input[1];
-}
-function TemplateLiteralMapping(input) {
-  return TemplateLiteralDeferred(input);
-}
-function DependentMapping(input) {
-  return guard_exports.IsEqual(input.length, 6) ? Dependent(input[1], input[3], input[5]) : Dependent(input[1], input[3], Unknown());
-}
-function KeyOfMapping(input) {
-  return input.length > 0;
-}
-function IndexArrayMapping(input) {
-  return input.reduce((result, current) => {
-    return guard_exports.IsEqual(current.length, 3) ? [...result, [current[1]]] : [...result, []];
-  }, []);
-}
-function ExtendsMapping(input) {
-  return guard_exports.IsEqual(input.length, 6) ? [input[1], input[3], input[5]] : [];
-}
-function BaseMapping(input) {
-  return guard_exports.IsArray(input) && guard_exports.IsEqual(input.length, 3) ? input[1] : input;
-}
-function WithMapping(input) {
-  return guard_exports.IsEqual(input.length, 2) ? input[1] : [];
-}
-function FactorIndexArray(Type2, indexArray) {
-  return indexArray.reduce((result, left) => {
-    const _left = left;
-    return guard_exports.IsEqual(_left.length, 1) ? IndexDeferred(result, _left[0]) : guard_exports.IsEqual(_left.length, 0) ? _Array_(result) : Unreachable2();
-  }, Type2);
-}
-function FactorExtends(type, extend) {
-  return guard_exports.IsEqual(extend.length, 3) ? ConditionalDeferred(type, extend[0], extend[1], extend[2]) : type;
-}
-function FactorWith(type, withClause) {
-  return guard_exports.IsArray(withClause) && guard_exports.IsEqual(withClause.length, 0) ? type : WithDeferred(type, withClause);
-}
-function FactorMapping(input) {
-  const [keyOf, type, indexArray, extend, withClause] = input;
-  return FactorWith(keyOf ? FactorExtends(KeyOfDeferred(FactorIndexArray(type, indexArray)), extend) : FactorExtends(FactorIndexArray(type, indexArray), extend), withClause);
-}
-function ExprBinaryMapping(left, rest) {
-  return guard_exports.IsEqual(rest.length, 3) ? (() => {
-    const [operator, right, next] = rest;
-    const Schema = ExprBinaryMapping(right, next);
-    if (guard_exports.IsEqual(operator, "&")) {
-      return IsIntersect(Schema) ? Intersect([left, ...Schema.allOf]) : Intersect([left, Schema]);
-    }
-    if (guard_exports.IsEqual(operator, "|")) {
-      return IsUnion(Schema) ? Union([left, ...Schema.anyOf]) : Union([left, Schema]);
-    }
-    Unreachable2();
-  })() : left;
-}
-function ExprTermTailMapping(input) {
-  return input;
-}
-function ExprTermMapping(input) {
-  const [left, rest] = input;
-  return ExprBinaryMapping(left, rest);
-}
-function ExprTailMapping(input) {
-  return input;
-}
-function ExprMapping(input) {
-  const [left, rest] = input;
-  return ExprBinaryMapping(left, rest);
-}
-function ExprReadonlyMapping(input) {
-  return AddImmutableDeferred(input[1]);
-}
-function ExprPipeMapping(input) {
-  return input[1];
-}
-function GenericTypeMapping(input) {
-  return Generic(input[0], input[2]);
-}
-function InferTypeMapping(input) {
-  return guard_exports.IsEqual(input.length, 4) ? Infer(input[1], input[3]) : guard_exports.IsEqual(input.length, 2) ? Infer(input[1], Unknown()) : Unreachable2();
-}
-function TypeMapping(input) {
-  return input;
-}
-function PropertyKeyNumberMapping(input) {
-  return `${input}`;
-}
-function PropertyKeyIdentMapping(input) {
-  return input;
-}
-function PropertyKeyQuotedMapping(input) {
-  return input;
-}
-function PropertyKeyIndexMapping(input) {
-  return IsInteger2(input[3]) ? IntegerKey : IsNumber3(input[3]) ? NumberKey : IsSymbol2(input[3]) ? StringKey : IsString3(input[3]) ? StringKey : Unreachable2();
-}
-function PropertyKeyMapping(input) {
-  return input;
-}
-function ReadonlyMapping(input) {
-  return input.length > 0;
-}
-function OptionalMapping(input) {
-  return input.length > 0;
-}
-function PropertyMapping(input) {
-  const [isReadonly, key, isOptional, _colon, type] = input;
-  return {
-    [key]: isReadonly && isOptional ? AddReadonlyDeferred(AddOptionalDeferred(type)) : isReadonly && !isOptional ? AddReadonlyDeferred(type) : !isReadonly && isOptional ? AddOptionalDeferred(type) : type
-  };
-}
-function PropertyDelimiterMapping(input) {
-  return input;
-}
-function PropertyListMapping(input) {
-  return Delimited(input);
-}
-function PropertiesReduce(propertyList) {
-  return propertyList.reduce((result, left) => {
-    const isPatternProperties = guard_exports.HasPropertyKey(left, IntegerKey) || guard_exports.HasPropertyKey(left, NumberKey) || guard_exports.HasPropertyKey(left, StringKey);
-    return isPatternProperties ? [result[0], memory_exports.Assign(result[1], left)] : [memory_exports.Assign(result[0], left), result[1]];
-  }, [{}, {}]);
-}
-function PropertiesMapping(input) {
-  return PropertiesReduce(input[1]);
-}
-function _Object_Mapping(input) {
-  const [properties, patternProperties] = input;
-  const options = guard_exports.IsEqual(guard_exports.Keys(patternProperties).length, 0) ? {} : { patternProperties };
-  return _Object_(properties, options);
-}
-function ElementNamedMapping(input) {
-  return guard_exports.IsEqual(input.length, 5) ? AddReadonlyDeferred(AddOptionalDeferred(input[4])) : guard_exports.IsEqual(input.length, 3) ? input[2] : guard_exports.IsEqual(input.length, 4) ? guard_exports.IsEqual(input[2], "readonly") ? AddReadonlyDeferred(input[3]) : AddOptionalDeferred(input[3]) : Unreachable2();
-}
-function ElementBaseMapping(input) {
-  if (!guard_exports.IsArray(input) || !guard_exports.IsEqual(input.length, 3))
-    return input;
-  const [isReadonly, type, isOptional] = input;
-  return isReadonly && isOptional ? AddReadonlyDeferred(AddOptionalDeferred(type)) : isReadonly && !isOptional ? AddReadonlyDeferred(type) : !isReadonly && isOptional ? AddOptionalDeferred(type) : type;
-}
-function ElementMapping(input) {
-  return guard_exports.IsEqual(input.length, 2) ? Rest(input[1]) : guard_exports.IsEqual(input.length, 1) ? input[0] : Unreachable2();
-}
-function ElementListMapping(input) {
-  return Delimited(input);
-}
-function _Tuple_Mapping(input) {
-  return Tuple(input[1]);
-}
-function ParameterReadonlyOptionalMapping(input) {
-  return AddReadonlyDeferred(AddOptionalDeferred(input[4]));
-}
-function ParameterReadonlyMapping(input) {
-  return AddReadonlyDeferred(input[3]);
-}
-function ParameterOptionalMapping(input) {
-  return AddOptionalDeferred(input[3]);
-}
-function ParameterTypeMapping(input) {
-  return input[2];
-}
-function ParameterBaseMapping(input) {
-  return input;
-}
-function ParameterMapping(input) {
-  return guard_exports.IsEqual(input.length, 2) ? Rest(input[1]) : guard_exports.IsEqual(input.length, 1) ? input[0] : Unreachable2();
-}
-function ParameterListMapping(input) {
-  return Delimited(input);
-}
-function _Function_Mapping(input) {
-  return _Function_(input[1], input[4]);
-}
-function _Constructor_Mapping(input) {
-  return Constructor(input[2], input[5]);
-}
-function ApplyReadonly(state, type) {
-  return guard_exports.IsEqual(state, "remove") ? RemoveReadonlyDeferred(type) : guard_exports.IsEqual(state, "add") ? AddReadonlyDeferred(type) : type;
-}
-function MappedReadonlyMapping(input) {
-  return guard_exports.IsEqual(input.length, 2) && guard_exports.IsEqual(input[0], "-") ? "remove" : guard_exports.IsEqual(input.length, 2) && guard_exports.IsEqual(input[0], "+") ? "add" : guard_exports.IsEqual(input.length, 1) ? "add" : "none";
-}
-function ApplyOptional(state, type) {
-  return guard_exports.IsEqual(state, "remove") ? RemoveOptionalDeferred(type) : guard_exports.IsEqual(state, "add") ? AddOptionalDeferred(type) : type;
-}
-function MappedOptionalMapping(input) {
-  return guard_exports.IsEqual(input.length, 2) && guard_exports.IsEqual(input[0], "-") ? "remove" : guard_exports.IsEqual(input.length, 2) && guard_exports.IsEqual(input[0], "+") ? "add" : guard_exports.IsEqual(input.length, 1) ? "add" : "none";
-}
-function MappedAsMapping(input) {
-  return guard_exports.IsEqual(input.length, 2) ? [input[1]] : [];
-}
-function _Mapped_Mapping(input) {
-  return guard_exports.IsArray(input[6]) && guard_exports.IsEqual(input[6].length, 1) ? MappedDeferred(Identifier(input[3]), input[5], input[6][0], ApplyReadonly(input[1], ApplyOptional(input[8], input[10]))) : MappedDeferred(Identifier(input[3]), input[5], Ref2(input[3]), ApplyReadonly(input[1], ApplyOptional(input[8], input[10])));
-}
-function ReferenceMapping(input) {
-  return Ref2(input);
-}
-function WithBigIntMapping(input) {
-  return BigInt(input);
-}
-function WithNumberMapping(input) {
-  return parseFloat(input);
-}
-function WithBooleanMapping(input) {
-  return guard_exports.IsEqual(input, "true");
-}
-function WithStringMapping(input) {
-  return input;
-}
-function WithNullMapping(input) {
-  return null;
-}
-function WithUndefinedMapping(input) {
-  return void 0;
-}
-function WithPropertyMapping(input) {
-  return { [input[0]]: input[2] };
-}
-function WithPropertyListMapping(input) {
-  return Delimited(input);
-}
-function WithObjectMappingReduce(propertyList) {
-  return propertyList.reduce((result, left) => {
-    return memory_exports.Assign(result, left);
-  }, {});
-}
-function WithObjectMapping(input) {
-  return WithObjectMappingReduce(input[1]);
-}
-function WithElementListMapping(input) {
-  return Delimited(input);
-}
-function WithArrayMapping(input) {
-  return input[1];
-}
-function WithValueMapping(input) {
-  return input;
-}
-function PatternBigIntMapping(input) {
-  return BigInt2();
-}
-function PatternStringMapping(input) {
-  return String2();
-}
-function PatternNumberMapping(input) {
-  return Number2();
-}
-function PatternIntegerMapping(input) {
-  return Integer();
-}
-function PatternNeverMapping(input) {
-  return Never();
-}
-function PatternTextMapping(input) {
-  return Literal(input);
-}
-function PatternBaseMapping(input) {
-  return input;
-}
-function PatternGroupMapping(input) {
-  return Union(input[1]);
-}
-function PatternUnionMapping(input) {
-  return input.length === 3 ? [...input[0], ...input[2]] : input.length === 1 ? [...input[0]] : [];
-}
-function PatternTermMapping(input) {
-  return [input[0], ...input[1]];
-}
-function PatternBodyMapping(input) {
-  return input;
-}
-function PatternMapping(input) {
-  return input[1];
-}
-function InterfaceDeclarationHeritageListMapping(input) {
-  return Delimited(input);
-}
-function InterfaceDeclarationHeritageMapping(input) {
-  return guard_exports.IsEqual(input.length, 2) ? input[1] : [];
-}
-function InterfaceDeclarationGenericMapping(input) {
-  const parameters = input[2];
-  const heritage = input[3];
-  const [properties, patternProperties] = input[4];
-  const options = guard_exports.IsEqual(guard_exports.Keys(patternProperties).length, 0) ? {} : { patternProperties };
-  return { [input[1]]: Generic(parameters, InterfaceDeferred(heritage, properties, options)) };
-}
-function InterfaceDeclarationMapping(input) {
-  const heritage = input[2];
-  const [properties, patternProperties] = input[3];
-  const options = guard_exports.IsEqual(guard_exports.Keys(patternProperties).length, 0) ? {} : { patternProperties };
-  return { [input[1]]: InterfaceDeferred(heritage, properties, options) };
-}
-function TypeAliasDeclarationGenericMapping(input) {
-  return { [input[1]]: Generic(input[2], input[4]) };
-}
-function TypeAliasDeclarationMapping(input) {
-  return { [input[1]]: input[3] };
-}
-function ExportKeywordMapping(input) {
-  return null;
-}
-function ModuleDeclarationDelimiterMapping(input) {
-  return input;
-}
-function ModuleDeclarationListMapping(input) {
-  return Delimited(input);
-}
-function ModuleDeclarationMapping(input) {
-  return input[1];
-}
-function ModuleMapping(input) {
-  const [moduleDeclaration, moduleDeclarationList] = [input[0], input[1]];
-  return ModuleDeferred(memory_exports.Assign(moduleDeclaration, PropertiesReduce(moduleDeclarationList)[0]));
-}
-function ScriptMapping(input) {
-  return input;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/match.mjs
-function IsMatch(value) {
-  return IsEqual(value.length, 2);
-}
-function Match3(input, ok, fail2) {
-  return IsMatch(input) ? ok(input[0], input[1]) : fail2();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/take.mjs
-function TakeVariant(variant2, input) {
-  return IsEqual(input.indexOf(variant2), 0) ? [variant2, input.slice(variant2.length)] : [];
-}
-function Take(variants, input) {
-  for (let i = 0; i < variants.length; i++) {
-    const result = TakeVariant(variants[i], input);
-    if (IsMatch(result))
-      return result;
-  }
-  return [];
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/char.mjs
-function Range(start, end) {
-  return Array.from({ length: end - start + 1 }, (_, i) => String.fromCharCode(start + i));
-}
-var Alpha = [
-  ...Range(97, 122),
-  // Lowercase
-  ...Range(65, 90)
-  // Uppercase
-];
-var Zero = "0";
-var NonZero = Range(49, 57);
-var Digit = [Zero, ...NonZero];
-var WhiteSpace = " ";
-var NewLine = "\n";
-var UnderScore = "_";
-var Dot = ".";
-var DollarSign = "$";
-var Hyphen = "-";
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/trim.mjs
-var LineComment = "//";
-var OpenComment = "/*";
-var CloseComment = "*/";
-function DiscardMultilineComment(input) {
-  const index = input.indexOf(CloseComment);
-  const result = IsEqual(index, -1) ? "" : input.slice(index + 2);
-  return result;
-}
-function DiscardLineComment(input) {
-  const index = input.indexOf(NewLine);
-  const result = IsEqual(index, -1) ? "" : input.slice(index);
-  return result;
-}
-function TrimStartUntilNewline(input) {
-  return input.replace(/^[ \t\r\f\v]+/, "");
-}
-function TrimWhitespace(input) {
-  const trimmed = TrimStartUntilNewline(input);
-  return trimmed.startsWith(OpenComment) ? TrimWhitespace(DiscardMultilineComment(trimmed.slice(2))) : trimmed.startsWith(LineComment) ? TrimWhitespace(DiscardLineComment(trimmed.slice(2))) : trimmed;
-}
-function Trim(input) {
-  const trimmed = input.trimStart();
-  return trimmed.startsWith(OpenComment) ? Trim(DiscardMultilineComment(trimmed.slice(2))) : trimmed.startsWith(LineComment) ? Trim(DiscardLineComment(trimmed.slice(2))) : trimmed;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/optional.mjs
-function Optional2(value, input) {
-  return Match3(Take([value], input), (Optional4, Rest2) => [Optional4, Rest2], () => ["", input]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/internal/many.mjs
-function IsDiscard(discard, input) {
-  return discard.includes(input);
-}
-function Many(allowed, discard, input, result = "") {
-  return Match3(Take(allowed, input), (Char, Rest2) => IsDiscard(discard, Char) ? Many(allowed, discard, Rest2, result) : Many(allowed, discard, Rest2, `${result}${Char}`), () => [result, input]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/unsigned_integer.mjs
-function TakeNonZero(input) {
-  return Take(NonZero, input);
-}
-var AllowedDigits = [...Digit, UnderScore];
-function TakeDigits(input) {
-  return Many(AllowedDigits, [UnderScore], input);
-}
-function TakeUnsignedInteger(input) {
-  return Match3(Take([Zero], input), (Zero2, ZeroRest) => [Zero2, ZeroRest], () => Match3(
-    TakeNonZero(input),
-    (NonZero2, NonZeroRest) => Match3(TakeDigits(NonZeroRest), (Digits, DigitsRest) => [`${NonZero2}${Digits}`, DigitsRest], () => []),
-    // fail: did not match Digits
-    () => []
-  ));
-}
-function UnsignedInteger(input) {
-  return TakeUnsignedInteger(Trim(input));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/integer.mjs
-function TakeSign(input) {
-  return Optional2(Hyphen, input);
-}
-function TakeSignedInteger(input) {
-  return Match3(
-    TakeSign(input),
-    (Sign, SignRest) => Match3(UnsignedInteger(SignRest), (UnsignedInteger2, UnsignedIntegerRest) => [`${Sign}${UnsignedInteger2}`, UnsignedIntegerRest], () => []),
-    // fail: did not match unsigned integer
-    () => []
-  );
-}
-function Integer2(input) {
-  return TakeSignedInteger(Trim(input));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/bigint.mjs
-function TakeBigInt(input) {
-  return Match3(
-    Integer2(input),
-    (Integer3, IntegerRest) => Match3(Take(["n"], IntegerRest), (_N, NRest) => [`${Integer3}`, NRest], () => []),
-    // fail: did not match 'n'
-    () => []
-  );
-}
-function BigInt3(input) {
-  return TakeBigInt(input);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/const.mjs
-function TakeConst(const_, input) {
-  return Take([const_], input);
-}
-function Const(const_, input) {
-  return IsEqual(const_, "") ? ["", input] : const_.startsWith(NewLine) ? TakeConst(const_, TrimWhitespace(input)) : const_.startsWith(WhiteSpace) ? TakeConst(const_, input) : TakeConst(const_, Trim(input));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/ident.mjs
-var Initial = [...Alpha, UnderScore, DollarSign];
-function TakeInitial(input) {
-  return Take(Initial, input);
-}
-var Remaining = [...Initial, ...Digit];
-function TakeRemaining(input, result = "") {
-  return Match3(Take(Remaining, input), (Remaining2, RemainingRest) => TakeRemaining(RemainingRest, `${result}${Remaining2}`), () => [result, input]);
-}
-function TakeIdent(input) {
-  return Match3(
-    TakeInitial(input),
-    (Initial2, InitialRest) => Match3(TakeRemaining(InitialRest), (Remaining2, RemainingRest) => [`${Initial2}${Remaining2}`, RemainingRest], () => []),
-    // fail: did not match Remaining
-    () => []
-  );
-}
-function Ident(input) {
-  return TakeIdent(Trim(input));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/unsigned_number.mjs
-var AllowedDigits2 = [...Digit, UnderScore];
-function IsLeadingDot(input) {
-  return IsMatch(Take([Dot], input));
-}
-function TakeFractional(input) {
-  return Match3(Many(AllowedDigits2, [UnderScore], input), (Digits, DigitsRest) => IsEqual(Digits, "") ? [] : [Digits, DigitsRest], () => []);
-}
-function LeadingDot(input) {
-  return Match3(
-    Take([Dot], input),
-    (Dot2, DotRest) => Match3(TakeFractional(DotRest), (Fractional, FractionalRest) => [`0${Dot2}${Fractional}`, FractionalRest], () => []),
-    // fail: did not match Fractional
-    () => []
-  );
-}
-function LeadingInteger(input) {
-  return Match3(
-    UnsignedInteger(input),
-    (Integer3, IntegerRest) => Match3(
-      Take([Dot], IntegerRest),
-      (Dot2, DotRest) => Match3(TakeFractional(DotRest), (Fractional, FractionalRest) => [`${Integer3}${Dot2}${Fractional}`, FractionalRest], () => [`${Integer3}`, DotRest]),
-      // fail: did not match Fractional, use Integer
-      () => [`${Integer3}`, IntegerRest]
-    ),
-    // fail: did not match Dot, use Integer
-    () => []
-  );
-}
-function TakeUnsignedNumber(input) {
-  return IsLeadingDot(input) ? LeadingDot(input) : LeadingInteger(input);
-}
-function UnsignedNumber(input) {
-  return TakeUnsignedNumber(Trim(input));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/number.mjs
-function TakeSign2(input) {
-  return Optional2(Hyphen, input);
-}
-function TakeSignedNumber(input) {
-  return Match3(
-    TakeSign2(input),
-    (Sign, SignRest) => Match3(UnsignedNumber(SignRest), (UnsignedInteger2, UnsignedIntegerRest) => [`${Sign}${UnsignedInteger2}`, UnsignedIntegerRest], () => []),
-    // fail: did not match unsigned integer
-    () => []
-  );
-}
-function Number3(input) {
-  return TakeSignedNumber(Trim(input));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/until.mjs
-function TakeOne(input) {
-  const result = IsEqual(input, "") ? [] : [input.slice(0, 1), input.slice(1)];
-  return result;
-}
-function IsInputMatchSentinal(end, input) {
-  return ShiftLeft(end, (left, right) => input.startsWith(left) ? true : IsInputMatchSentinal(right, input), () => false);
-}
-function Until(end, input, result = "") {
-  return Match3(
-    TakeOne(input),
-    (One, Rest2) => IsInputMatchSentinal(end, input) ? [result, input] : Until(end, Rest2, `${result}${One}`),
-    () => []
-  );
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/span.mjs
-function MultiLine(start, end, input) {
-  return Match3(
-    Take([start], input),
-    (_, Rest2) => Match3(
-      Until([end], Rest2),
-      (Until2, UntilRest) => Match3(Take([end], UntilRest), (_2, Rest3) => [`${Until2}`, Rest3], () => []),
-      // fail: did not match End
-      () => []
-    ),
-    // fail: did not match Until
-    () => []
-  );
-}
-function SingleLine(start, end, input) {
-  return Match3(
-    Take([start], input),
-    (_, Rest2) => Match3(
-      Until([NewLine, end], Rest2),
-      (Until2, UntilRest) => Match3(Take([end], UntilRest), (_2, EndRest) => [`${Until2}`, EndRest], () => []),
-      // fail: did not match End
-      () => []
-    ),
-    // fail: did not match Until
-    () => []
-  );
-}
-function Span(start, end, multiLine, input) {
-  return multiLine ? MultiLine(start, end, Trim(input)) : SingleLine(start, end, Trim(input));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/string.mjs
-function TakeInitial2(quotes, input) {
-  return Take(quotes, input);
-}
-function TakeSpan(quote, input) {
-  return Span(quote, quote, false, input);
-}
-function TakeString(quotes, input) {
-  return Match3(TakeInitial2(quotes, input), (Initial2, InitialRest) => TakeSpan(Initial2, `${Initial2}${InitialRest}`), () => []);
-}
-function String3(quotes, input) {
-  return TakeString(quotes, Trim(input));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/token/until_1.mjs
-function Until_1(end, input) {
-  return Match3(Until(end, input), (Until2, UntilRest) => IsEqual(Until2, "") ? [] : [Until2, UntilRest], () => []);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/parser.mjs
-var If = (result, left, right = () => []) => result.length === 2 ? left(result) : right();
-var GenericParameterExtendsEquals = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("extends", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => If(Const("=", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [GenericParameterExtendsEqualsMapping(_0), input2]);
-var GenericParameterExtends = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("extends", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericParameterExtendsMapping(_0), input2]);
-var GenericParameterEquals = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("=", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericParameterEqualsMapping(_0), input2]);
-var GenericParameterIdentifier = (input) => If(Ident(input), ([_0, input2]) => [GenericParameterIdentifierMapping(_0), input2]);
-var GenericParameter = (input) => If(If(GenericParameterExtendsEquals(input), ([_0, input2]) => [_0, input2], () => If(GenericParameterExtends(input), ([_0, input2]) => [_0, input2], () => If(GenericParameterEquals(input), ([_0, input2]) => [_0, input2], () => If(GenericParameterIdentifier(input), ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [GenericParameterMapping(_0), input2]);
-var GenericParameterList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(GenericParameter(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => GenericParameterList_0(input2, [...result, _0]), () => [result, input]);
-var GenericParameterList = (input) => If(If(If(GenericParameter(input), ([_0, input2]) => If(GenericParameterList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [GenericParameterListMapping(_0), input2]);
-var GenericParameters = (input) => If(If(Const("<", input), ([_0, input2]) => If(GenericParameterList(input2), ([_1, input3]) => If(Const(">", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericParametersMapping(_0), input2]);
-var GenericCallArgumentList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => GenericCallArgumentList_0(input2, [...result, _0]), () => [result, input]);
-var GenericCallArgumentList = (input) => If(If(If(Type(input), ([_0, input2]) => If(GenericCallArgumentList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [GenericCallArgumentListMapping(_0), input2]);
-var GenericCallArguments = (input) => If(If(Const("<", input), ([_0, input2]) => If(GenericCallArgumentList(input2), ([_1, input3]) => If(Const(">", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericCallArgumentsMapping(_0), input2]);
-var GenericCall = (input) => If(If(Ident(input), ([_0, input2]) => If(GenericCallArguments(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [GenericCallMapping(_0), input2]);
-var OptionalSemiColon = (input) => If(If(If(Const(";", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [OptionalSemiColonMapping(_0), input2]);
-var KeywordString = (input) => If(Const("string", input), ([_0, input2]) => [KeywordStringMapping(_0), input2]);
-var KeywordNumber = (input) => If(Const("number", input), ([_0, input2]) => [KeywordNumberMapping(_0), input2]);
-var KeywordBoolean = (input) => If(Const("boolean", input), ([_0, input2]) => [KeywordBooleanMapping(_0), input2]);
-var KeywordUndefined = (input) => If(Const("undefined", input), ([_0, input2]) => [KeywordUndefinedMapping(_0), input2]);
-var KeywordNull = (input) => If(Const("null", input), ([_0, input2]) => [KeywordNullMapping(_0), input2]);
-var KeywordInteger = (input) => If(Const("integer", input), ([_0, input2]) => [KeywordIntegerMapping(_0), input2]);
-var KeywordBigInt = (input) => If(Const("bigint", input), ([_0, input2]) => [KeywordBigIntMapping(_0), input2]);
-var KeywordUnknown = (input) => If(Const("unknown", input), ([_0, input2]) => [KeywordUnknownMapping(_0), input2]);
-var KeywordAny = (input) => If(Const("any", input), ([_0, input2]) => [KeywordAnyMapping(_0), input2]);
-var KeywordObject = (input) => If(Const("object", input), ([_0, input2]) => [KeywordObjectMapping(_0), input2]);
-var KeywordNever = (input) => If(Const("never", input), ([_0, input2]) => [KeywordNeverMapping(_0), input2]);
-var KeywordSymbol = (input) => If(Const("symbol", input), ([_0, input2]) => [KeywordSymbolMapping(_0), input2]);
-var KeywordVoid = (input) => If(Const("void", input), ([_0, input2]) => [KeywordVoidMapping(_0), input2]);
-var KeywordThis = (input) => If(Const("this", input), ([_0, input2]) => [KeywordThisMapping(_0), input2]);
-var TemplateInterpolate = (input) => If(If(Const("${", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => If(Const("}", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [TemplateInterpolateMapping(_0), input2]);
-var TemplateSpan = (input) => If(Until(["${", "`"], input), ([_0, input2]) => [TemplateSpanMapping(_0), input2]);
-var TemplateBody = (input) => If(If(If(TemplateSpan(input), ([_0, input2]) => If(TemplateInterpolate(input2), ([_1, input3]) => If(TemplateBody(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If(If(TemplateSpan(input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If(If(TemplateSpan(input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => []))), ([_0, input2]) => [TemplateBodyMapping(_0), input2]);
-var TemplateLiteralTypes = (input) => If(If(Const("`", input), ([_0, input2]) => If(TemplateBody(input2), ([_1, input3]) => If(Const("`", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [TemplateLiteralTypesMapping(_0), input2]);
-var TemplateLiteral = (input) => If(TemplateLiteralTypes(input), ([_0, input2]) => [TemplateLiteralMapping(_0), input2]);
-var Dependent2 = (input) => If(If(If(Const("if", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => If(Const("then", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => If(Const("else", input5), ([_4, input6]) => If(Type(input6), ([_5, input7]) => [[_0, _1, _2, _3, _4, _5], input7])))))), ([_0, input2]) => [_0, input2], () => If(If(Const("if", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => If(Const("then", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [DependentMapping(_0), input2]);
-var LiteralBigInt = (input) => If(BigInt3(input), ([_0, input2]) => [LiteralBigIntMapping(_0), input2]);
-var LiteralBoolean = (input) => If(If(Const("true", input), ([_0, input2]) => [_0, input2], () => If(Const("false", input), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [LiteralBooleanMapping(_0), input2]);
-var LiteralNumber = (input) => If(Number3(input), ([_0, input2]) => [LiteralNumberMapping(_0), input2]);
-var LiteralString = (input) => If(String3(["'", '"'], input), ([_0, input2]) => [LiteralStringMapping(_0), input2]);
-var KeyOf = (input) => If(If(If(Const("keyof", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [KeyOfMapping(_0), input2]);
-var IndexArray_0 = (input, result = []) => If(If(If(Const("[", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => If(Const("]", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If(If(Const("[", input), ([_0, input2]) => If(Const("]", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => IndexArray_0(input2, [...result, _0]), () => [result, input]);
-var IndexArray = (input) => If(IndexArray_0(input), ([_0, input2]) => [IndexArrayMapping(_0), input2]);
-var Extends2 = (input) => If(If(If(Const("extends", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => If(Const("?", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => If(Const(":", input5), ([_4, input6]) => If(Type(input6), ([_5, input7]) => [[_0, _1, _2, _3, _4, _5], input7])))))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ExtendsMapping(_0), input2]);
-var Base = (input) => If(If(If(Const("(", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => If(Const(")", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If(KeywordString(input), ([_0, input2]) => [_0, input2], () => If(KeywordNumber(input), ([_0, input2]) => [_0, input2], () => If(KeywordBoolean(input), ([_0, input2]) => [_0, input2], () => If(KeywordUndefined(input), ([_0, input2]) => [_0, input2], () => If(KeywordNull(input), ([_0, input2]) => [_0, input2], () => If(KeywordInteger(input), ([_0, input2]) => [_0, input2], () => If(KeywordBigInt(input), ([_0, input2]) => [_0, input2], () => If(KeywordUnknown(input), ([_0, input2]) => [_0, input2], () => If(KeywordAny(input), ([_0, input2]) => [_0, input2], () => If(KeywordObject(input), ([_0, input2]) => [_0, input2], () => If(KeywordNever(input), ([_0, input2]) => [_0, input2], () => If(KeywordSymbol(input), ([_0, input2]) => [_0, input2], () => If(KeywordVoid(input), ([_0, input2]) => [_0, input2], () => If(KeywordThis(input), ([_0, input2]) => [_0, input2], () => If(LiteralBigInt(input), ([_0, input2]) => [_0, input2], () => If(LiteralBoolean(input), ([_0, input2]) => [_0, input2], () => If(LiteralNumber(input), ([_0, input2]) => [_0, input2], () => If(LiteralString(input), ([_0, input2]) => [_0, input2], () => If(TemplateLiteral(input), ([_0, input2]) => [_0, input2], () => If(Dependent2(input), ([_0, input2]) => [_0, input2], () => If(_Object_2(input), ([_0, input2]) => [_0, input2], () => If(_Tuple_(input), ([_0, input2]) => [_0, input2], () => If(_Constructor_(input), ([_0, input2]) => [_0, input2], () => If(_Function_2(input), ([_0, input2]) => [_0, input2], () => If(_Mapped_(input), ([_0, input2]) => [_0, input2], () => If(GenericCall(input), ([_0, input2]) => [_0, input2], () => If(Reference(input), ([_0, input2]) => [_0, input2], () => [])))))))))))))))))))))))))))), ([_0, input2]) => [BaseMapping(_0), input2]);
-var With = (input) => If(If(If(Const("with", input), ([_0, input2]) => If(WithObject(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [WithMapping(_0), input2]);
-var Factor = (input) => If(If(KeyOf(input), ([_0, input2]) => If(Base(input2), ([_1, input3]) => If(IndexArray(input3), ([_2, input4]) => If(Extends2(input4), ([_3, input5]) => If(With(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [FactorMapping(_0), input2]);
-var ExprTermTail = (input) => If(If(If(Const("&", input), ([_0, input2]) => If(Factor(input2), ([_1, input3]) => If(ExprTermTail(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ExprTermTailMapping(_0), input2]);
-var ExprTerm = (input) => If(If(Factor(input), ([_0, input2]) => If(ExprTermTail(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ExprTermMapping(_0), input2]);
-var ExprTail = (input) => If(If(If(Const("|", input), ([_0, input2]) => If(ExprTerm(input2), ([_1, input3]) => If(ExprTail(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ExprTailMapping(_0), input2]);
-var Expr = (input) => If(If(ExprTerm(input), ([_0, input2]) => If(ExprTail(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ExprMapping(_0), input2]);
-var ExprReadonly = (input) => If(If(Const("readonly", input), ([_0, input2]) => If(Expr(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ExprReadonlyMapping(_0), input2]);
-var ExprPipe = (input) => If(If(Const("|", input), ([_0, input2]) => If(Expr(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ExprPipeMapping(_0), input2]);
-var GenericType = (input) => If(If(GenericParameters(input), ([_0, input2]) => If(Const("=", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [GenericTypeMapping(_0), input2]);
-var InferType = (input) => If(If(If(Const("infer", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => If(Const("extends", input3), ([_2, input4]) => If(Expr(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [_0, input2], () => If(If(Const("infer", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [InferTypeMapping(_0), input2]);
-var Type = (input) => If(If(InferType(input), ([_0, input2]) => [_0, input2], () => If(ExprPipe(input), ([_0, input2]) => [_0, input2], () => If(ExprReadonly(input), ([_0, input2]) => [_0, input2], () => If(Expr(input), ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [TypeMapping(_0), input2]);
-var PropertyKeyNumber = (input) => If(Number3(input), ([_0, input2]) => [PropertyKeyNumberMapping(_0), input2]);
-var PropertyKeyIdent = (input) => If(Ident(input), ([_0, input2]) => [PropertyKeyIdentMapping(_0), input2]);
-var PropertyKeyQuoted = (input) => If(String3(["'", '"'], input), ([_0, input2]) => [PropertyKeyQuotedMapping(_0), input2]);
-var PropertyKeyIndex = (input) => If(If(Const("[", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => If(Const(":", input3), ([_2, input4]) => If(If(KeywordInteger(input4), ([_02, input5]) => [_02, input5], () => If(KeywordNumber(input4), ([_02, input5]) => [_02, input5], () => If(KeywordString(input4), ([_02, input5]) => [_02, input5], () => If(KeywordSymbol(input4), ([_02, input5]) => [_02, input5], () => [])))), ([_3, input5]) => If(Const("]", input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [PropertyKeyIndexMapping(_0), input2]);
-var PropertyKey = (input) => If(If(PropertyKeyNumber(input), ([_0, input2]) => [_0, input2], () => If(PropertyKeyIdent(input), ([_0, input2]) => [_0, input2], () => If(PropertyKeyQuoted(input), ([_0, input2]) => [_0, input2], () => If(PropertyKeyIndex(input), ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [PropertyKeyMapping(_0), input2]);
-var Readonly2 = (input) => If(If(If(Const("readonly", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ReadonlyMapping(_0), input2]);
-var Optional3 = (input) => If(If(If(Const("?", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [OptionalMapping(_0), input2]);
-var Property = (input) => If(If(Readonly2(input), ([_0, input2]) => If(PropertyKey(input2), ([_1, input3]) => If(Optional3(input3), ([_2, input4]) => If(Const(":", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [PropertyMapping(_0), input2]);
-var PropertyDelimiter = (input) => If(If(If(Const(",", input), ([_0, input2]) => If(Const("\n", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const(";", input), ([_0, input2]) => If(Const("\n", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const(",", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If(If(Const(";", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If(If(Const("\n", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => []))))), ([_0, input2]) => [PropertyDelimiterMapping(_0), input2]);
-var PropertyList_0 = (input, result = []) => If(If(PropertyDelimiter(input), ([_0, input2]) => If(Property(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => PropertyList_0(input2, [...result, _0]), () => [result, input]);
-var PropertyList = (input) => If(If(If(Property(input), ([_0, input2]) => If(PropertyList_0(input2), ([_1, input3]) => If(If(PropertyDelimiter(input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [PropertyListMapping(_0), input2]);
-var Properties = (input) => If(If(Const("{", input), ([_0, input2]) => If(PropertyList(input2), ([_1, input3]) => If(Const("}", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [PropertiesMapping(_0), input2]);
-var _Object_2 = (input) => If(Properties(input), ([_0, input2]) => [_Object_Mapping(_0), input2]);
-var ElementNamed = (input) => If(If(If(Ident(input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => If(Const(":", input3), ([_2, input4]) => If(Const("readonly", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [_0, input2], () => If(If(Ident(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(Const("readonly", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [_0, input2], () => If(If(Ident(input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => If(Const(":", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [_0, input2], () => If(If(Ident(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [ElementNamedMapping(_0), input2]);
-var ElementBase = (input) => If(If(ElementNamed(input), ([_0, input2]) => [_0, input2], () => If(If(Readonly2(input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => If(Optional3(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ElementBaseMapping(_0), input2]);
-var Element = (input) => If(If(If(Const("...", input), ([_0, input2]) => If(ElementBase(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(ElementBase(input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ElementMapping(_0), input2]);
-var ElementList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(Element(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => ElementList_0(input2, [...result, _0]), () => [result, input]);
-var ElementList = (input) => If(If(If(Element(input), ([_0, input2]) => If(ElementList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ElementListMapping(_0), input2]);
-var _Tuple_ = (input) => If(If(Const("[", input), ([_0, input2]) => If(ElementList(input2), ([_1, input3]) => If(Const("]", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_Tuple_Mapping(_0), input2]);
-var ParameterReadonlyOptional = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => If(Const(":", input3), ([_2, input4]) => If(Const("readonly", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [ParameterReadonlyOptionalMapping(_0), input2]);
-var ParameterReadonly = (input) => If(If(Ident(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(Const("readonly", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [ParameterReadonlyMapping(_0), input2]);
-var ParameterOptional = (input) => If(If(Ident(input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => If(Const(":", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [ParameterOptionalMapping(_0), input2]);
-var ParameterType = (input) => If(If(Ident(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(Type(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [ParameterTypeMapping(_0), input2]);
-var ParameterBase = (input) => If(If(ParameterReadonlyOptional(input), ([_0, input2]) => [_0, input2], () => If(ParameterReadonly(input), ([_0, input2]) => [_0, input2], () => If(ParameterOptional(input), ([_0, input2]) => [_0, input2], () => If(ParameterType(input), ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [ParameterBaseMapping(_0), input2]);
-var Parameter2 = (input) => If(If(If(Const("...", input), ([_0, input2]) => If(ParameterBase(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(ParameterBase(input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ParameterMapping(_0), input2]);
-var ParameterList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(Parameter2(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => ParameterList_0(input2, [...result, _0]), () => [result, input]);
-var ParameterList = (input) => If(If(If(Parameter2(input), ([_0, input2]) => If(ParameterList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ParameterListMapping(_0), input2]);
-var _Function_2 = (input) => If(If(Const("(", input), ([_0, input2]) => If(ParameterList(input2), ([_1, input3]) => If(Const(")", input3), ([_2, input4]) => If(Const("=>", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [_Function_Mapping(_0), input2]);
-var _Constructor_ = (input) => If(If(Const("new", input), ([_0, input2]) => If(Const("(", input2), ([_1, input3]) => If(ParameterList(input3), ([_2, input4]) => If(Const(")", input4), ([_3, input5]) => If(Const("=>", input5), ([_4, input6]) => If(Type(input6), ([_5, input7]) => [[_0, _1, _2, _3, _4, _5], input7])))))), ([_0, input2]) => [_Constructor_Mapping(_0), input2]);
-var MappedReadonly = (input) => If(If(If(Const("+", input), ([_0, input2]) => If(Const("readonly", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const("-", input), ([_0, input2]) => If(Const("readonly", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const("readonly", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [MappedReadonlyMapping(_0), input2]);
-var MappedOptional = (input) => If(If(If(Const("+", input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const("-", input), ([_0, input2]) => If(Const("?", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const("?", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])))), ([_0, input2]) => [MappedOptionalMapping(_0), input2]);
-var MappedAs = (input) => If(If(If(Const("as", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [MappedAsMapping(_0), input2]);
-var _Mapped_ = (input) => If(If(Const("{", input), ([_0, input2]) => If(MappedReadonly(input2), ([_1, input3]) => If(Const("[", input3), ([_2, input4]) => If(Ident(input4), ([_3, input5]) => If(Const("in", input5), ([_4, input6]) => If(Type(input6), ([_5, input7]) => If(MappedAs(input7), ([_6, input8]) => If(Const("]", input8), ([_7, input9]) => If(MappedOptional(input9), ([_8, input10]) => If(Const(":", input10), ([_9, input11]) => If(Type(input11), ([_10, input12]) => If(OptionalSemiColon(input12), ([_11, input13]) => If(Const("}", input13), ([_12, input14]) => [[_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12], input14]))))))))))))), ([_0, input2]) => [_Mapped_Mapping(_0), input2]);
-var Reference = (input) => If(Ident(input), ([_0, input2]) => [ReferenceMapping(_0), input2]);
-var WithBigInt = (input) => If(BigInt3(input), ([_0, input2]) => [WithBigIntMapping(_0), input2]);
-var WithNumber = (input) => If(Number3(input), ([_0, input2]) => [WithNumberMapping(_0), input2]);
-var WithBoolean = (input) => If(If(Const("true", input), ([_0, input2]) => [_0, input2], () => If(Const("false", input), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [WithBooleanMapping(_0), input2]);
-var WithString = (input) => If(String3(['"', "'"], input), ([_0, input2]) => [WithStringMapping(_0), input2]);
-var WithNull = (input) => If(Const("null", input), ([_0, input2]) => [WithNullMapping(_0), input2]);
-var WithUndefined = (input) => If(Const("undefined", input), ([_0, input2]) => [WithUndefinedMapping(_0), input2]);
-var WithProperty = (input) => If(If(PropertyKey(input), ([_0, input2]) => If(Const(":", input2), ([_1, input3]) => If(WithValue(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [WithPropertyMapping(_0), input2]);
-var WithPropertyList_0 = (input, result = []) => If(If(PropertyDelimiter(input), ([_0, input2]) => If(WithProperty(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => WithPropertyList_0(input2, [...result, _0]), () => [result, input]);
-var WithPropertyList = (input) => If(If(If(WithProperty(input), ([_0, input2]) => If(WithPropertyList_0(input2), ([_1, input3]) => If(If(PropertyDelimiter(input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [WithPropertyListMapping(_0), input2]);
-var WithObject = (input) => If(If(Const("{", input), ([_0, input2]) => If(WithPropertyList(input2), ([_1, input3]) => If(Const("}", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [WithObjectMapping(_0), input2]);
-var WithElementList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(WithValue(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => WithElementList_0(input2, [...result, _0]), () => [result, input]);
-var WithElementList = (input) => If(If(If(WithValue(input), ([_0, input2]) => If(WithElementList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [WithElementListMapping(_0), input2]);
-var WithArray = (input) => If(If(Const("[", input), ([_0, input2]) => If(WithElementList(input2), ([_1, input3]) => If(Const("]", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [WithArrayMapping(_0), input2]);
-var WithValue = (input) => If(If(WithBigInt(input), ([_0, input2]) => [_0, input2], () => If(WithNumber(input), ([_0, input2]) => [_0, input2], () => If(WithBoolean(input), ([_0, input2]) => [_0, input2], () => If(WithString(input), ([_0, input2]) => [_0, input2], () => If(WithNull(input), ([_0, input2]) => [_0, input2], () => If(WithUndefined(input), ([_0, input2]) => [_0, input2], () => If(WithObject(input), ([_0, input2]) => [_0, input2], () => If(WithArray(input), ([_0, input2]) => [_0, input2], () => [])))))))), ([_0, input2]) => [WithValueMapping(_0), input2]);
-var PatternBigInt = (input) => If(Const("-?(?:0|[1-9][0-9]*)n", input), ([_0, input2]) => [PatternBigIntMapping(_0), input2]);
-var PatternString = (input) => If(Const(".*", input), ([_0, input2]) => [PatternStringMapping(_0), input2]);
-var PatternNumber = (input) => If(Const("-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?", input), ([_0, input2]) => [PatternNumberMapping(_0), input2]);
-var PatternInteger = (input) => If(Const("-?(?:0|[1-9][0-9]*)", input), ([_0, input2]) => [PatternIntegerMapping(_0), input2]);
-var PatternNever = (input) => If(Const("(?!)", input), ([_0, input2]) => [PatternNeverMapping(_0), input2]);
-var PatternText = (input) => If(Until_1(["-?(?:0|[1-9][0-9]*)n", ".*", "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?", "-?(?:0|[1-9][0-9]*)", "(?!)", "(", ")", "$", "|"], input), ([_0, input2]) => [PatternTextMapping(_0), input2]);
-var PatternBase = (input) => If(If(PatternBigInt(input), ([_0, input2]) => [_0, input2], () => If(PatternString(input), ([_0, input2]) => [_0, input2], () => If(PatternNumber(input), ([_0, input2]) => [_0, input2], () => If(PatternInteger(input), ([_0, input2]) => [_0, input2], () => If(PatternNever(input), ([_0, input2]) => [_0, input2], () => If(PatternGroup(input), ([_0, input2]) => [_0, input2], () => If(PatternText(input), ([_0, input2]) => [_0, input2], () => []))))))), ([_0, input2]) => [PatternBaseMapping(_0), input2]);
-var PatternGroup = (input) => If(If(Const("(", input), ([_0, input2]) => If(PatternBody(input2), ([_1, input3]) => If(Const(")", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [PatternGroupMapping(_0), input2]);
-var PatternUnion = (input) => If(If(If(PatternTerm(input), ([_0, input2]) => If(Const("|", input2), ([_1, input3]) => If(PatternUnion(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If(If(PatternTerm(input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => []))), ([_0, input2]) => [PatternUnionMapping(_0), input2]);
-var PatternTerm = (input) => If(If(PatternBase(input), ([_0, input2]) => If(PatternBody(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [PatternTermMapping(_0), input2]);
-var PatternBody = (input) => If(If(PatternUnion(input), ([_0, input2]) => [_0, input2], () => If(PatternTerm(input), ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [PatternBodyMapping(_0), input2]);
-var Pattern = (input) => If(If(Const("^", input), ([_0, input2]) => If(PatternBody(input2), ([_1, input3]) => If(Const("$", input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [PatternMapping(_0), input2]);
-var InterfaceDeclarationHeritageList_0 = (input, result = []) => If(If(Const(",", input), ([_0, input2]) => If(Type(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => InterfaceDeclarationHeritageList_0(input2, [...result, _0]), () => [result, input]);
-var InterfaceDeclarationHeritageList = (input) => If(If(If(Type(input), ([_0, input2]) => If(InterfaceDeclarationHeritageList_0(input2), ([_1, input3]) => If(If(Const(",", input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [InterfaceDeclarationHeritageListMapping(_0), input2]);
-var InterfaceDeclarationHeritage = (input) => If(If(If(Const("extends", input), ([_0, input2]) => If(InterfaceDeclarationHeritageList(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [InterfaceDeclarationHeritageMapping(_0), input2]);
-var InterfaceDeclarationGeneric = (input) => If(If(Const("interface", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => If(GenericParameters(input3), ([_2, input4]) => If(InterfaceDeclarationHeritage(input4), ([_3, input5]) => If(Properties(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [InterfaceDeclarationGenericMapping(_0), input2]);
-var InterfaceDeclaration = (input) => If(If(Const("interface", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => If(InterfaceDeclarationHeritage(input3), ([_2, input4]) => If(Properties(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [InterfaceDeclarationMapping(_0), input2]);
-var TypeAliasDeclarationGeneric = (input) => If(If(Const("type", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => If(GenericParameters(input3), ([_2, input4]) => If(Const("=", input4), ([_3, input5]) => If(Type(input5), ([_4, input6]) => [[_0, _1, _2, _3, _4], input6]))))), ([_0, input2]) => [TypeAliasDeclarationGenericMapping(_0), input2]);
-var TypeAliasDeclaration = (input) => If(If(Const("type", input), ([_0, input2]) => If(Ident(input2), ([_1, input3]) => If(Const("=", input3), ([_2, input4]) => If(Type(input4), ([_3, input5]) => [[_0, _1, _2, _3], input5])))), ([_0, input2]) => [TypeAliasDeclarationMapping(_0), input2]);
-var ExportKeyword = (input) => If(If(If(Const("export", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ExportKeywordMapping(_0), input2]);
-var ModuleDeclarationDelimiter = (input) => If(If(If(Const(";", input), ([_0, input2]) => If(Const("\n", input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [_0, input2], () => If(If(Const(";", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => If(If(Const("\n", input), ([_0, input2]) => [[_0], input2]), ([_0, input2]) => [_0, input2], () => []))), ([_0, input2]) => [ModuleDeclarationDelimiterMapping(_0), input2]);
-var ModuleDeclarationList_0 = (input, result = []) => If(If(ModuleDeclarationDelimiter(input), ([_0, input2]) => If(ModuleDeclaration(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => ModuleDeclarationList_0(input2, [...result, _0]), () => [result, input]);
-var ModuleDeclarationList = (input) => If(If(If(ModuleDeclaration(input), ([_0, input2]) => If(ModuleDeclarationList_0(input2), ([_1, input3]) => If(If(ModuleDeclarationDelimiter(input3), ([_02, input4]) => [[_02], input4], () => [[], input3]), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [_0, input2], () => If([[], input], ([_0, input2]) => [_0, input2], () => [])), ([_0, input2]) => [ModuleDeclarationListMapping(_0), input2]);
-var ModuleDeclaration = (input) => If(If(ExportKeyword(input), ([_0, input2]) => If(If(InterfaceDeclarationGeneric(input2), ([_02, input3]) => [_02, input3], () => If(InterfaceDeclaration(input2), ([_02, input3]) => [_02, input3], () => If(TypeAliasDeclarationGeneric(input2), ([_02, input3]) => [_02, input3], () => If(TypeAliasDeclaration(input2), ([_02, input3]) => [_02, input3], () => [])))), ([_1, input3]) => If(OptionalSemiColon(input3), ([_2, input4]) => [[_0, _1, _2], input4]))), ([_0, input2]) => [ModuleDeclarationMapping(_0), input2]);
-var Module = (input) => If(If(ModuleDeclaration(input), ([_0, input2]) => If(ModuleDeclarationList(input2), ([_1, input3]) => [[_0, _1], input3])), ([_0, input2]) => [ModuleMapping(_0), input2]);
-var Script = (input) => If(If(Module(input), ([_0, input2]) => [_0, input2], () => If(GenericType(input), ([_0, input2]) => [_0, input2], () => If(Type(input), ([_0, input2]) => [_0, input2], () => []))), ([_0, input2]) => [ScriptMapping(_0), input2]);
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/patterns/template.mjs
-function ParseTemplateIntoTypes(template) {
-  const parsed = TemplateLiteralTypes(`\`${template}\``);
-  const result = guard_exports.IsEqual(parsed.length, 2) ? parsed[0] : Unreachable();
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/encode.mjs
-function JoinString(input) {
-  return input.join("|");
-}
-function UnwrapTemplateLiteralPattern(pattern) {
-  return pattern.slice(1, pattern.length - 1);
-}
-function EncodeLiteral(value, right, pattern) {
-  return EncodeTypes(right, `${pattern}${value}`);
-}
-function EncodeBigInt(right, pattern) {
-  return EncodeTypes(right, `${pattern}${BigIntPattern}`);
-}
-function EncodeInteger(right, pattern) {
-  return EncodeTypes(right, `${pattern}${IntegerPattern}`);
-}
-function EncodeNumber(right, pattern) {
-  return EncodeTypes(right, `${pattern}${NumberPattern}`);
-}
-function EncodeBoolean(right, pattern) {
-  return EncodeType(Union([Literal("false"), Literal("true")]), right, pattern);
-}
-function EncodeString(right, pattern) {
-  return EncodeTypes(right, `${pattern}${StringPattern}`);
-}
-function EncodeTemplateLiteral(templatePattern, right, pattern) {
-  return EncodeTypes(right, `${pattern}${UnwrapTemplateLiteralPattern(templatePattern)}`);
-}
-function EncodeTemplateLiteralDeferred(types, right, pattern) {
-  const templateLiteral = TemplateLiteralAction(types, {});
-  const result = EncodeType(templateLiteral, right, pattern);
-  return result;
-}
-function EncodeEnum(values, right, pattern) {
-  const evaluated = EvaluateEnum(values);
-  return EncodeType(evaluated, right, pattern);
-}
-function EncodeUnion(types, right, pattern, result = []) {
-  return guard_exports.ShiftLeft(types, (head, tail) => EncodeUnion(tail, right, pattern, [...result, EncodeType(head, [], "")]), () => EncodeTypes(right, `${pattern}(${JoinString(result)})`));
-}
-function EncodeType(type, right, pattern) {
-  return IsEnum2(type) ? EncodeEnum(type.enum, right, pattern) : IsInteger2(type) ? EncodeInteger(right, pattern) : IsLiteral(type) ? EncodeLiteral(type.const, right, pattern) : IsBigInt2(type) ? EncodeBigInt(right, pattern) : IsBoolean3(type) ? EncodeBoolean(right, pattern) : IsNumber3(type) ? EncodeNumber(right, pattern) : IsString3(type) ? EncodeString(right, pattern) : IsTemplateLiteral(type) ? EncodeTemplateLiteral(type.pattern, right, pattern) : IsTemplateLiteralDeferred(type) ? EncodeTemplateLiteralDeferred(type.parameters[0], right, pattern) : IsUnion(type) ? EncodeUnion(type.anyOf, right, pattern) : NeverPattern;
-}
-function EncodeTypes(types, pattern) {
-  return guard_exports.ShiftLeft(types, (left, right) => EncodeType(left, right, pattern), () => pattern);
-}
-function EncodePattern(types) {
-  const encoded = EncodeTypes(types, "");
-  const result = `^${encoded}$`;
-  return result;
-}
-function TemplateLiteralEncode(types) {
-  const pattern = EncodePattern(types);
-  const result = TemplateLiteralCreate(pattern);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/template_literal/instantiate.mjs
-function TemplateLiteralAction(types, options) {
-  const result = CanInstantiate(types) ? memory_exports.Update(TemplateLiteralEncode(types), {}, options) : TemplateLiteralDeferred(types, options);
-  return result;
-}
-function TemplateLiteralInstantiate(context, state, types, options) {
-  const instantiatedTypes = InstantiateTypes(context, state, types);
-  return TemplateLiteralAction(instantiatedTypes, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/template_literal.mjs
-function TemplateLiteralDeferred(types, options = {}) {
-  return Deferred("TemplateLiteral", [types], options);
-}
-function IsTemplateLiteralDeferred(value) {
-  return IsSchema2(value) && guard_exports.HasPropertyKey(value, "action") && guard_exports.IsEqual(value.action, "TemplateLiteral");
-}
-function TemplateLiteralFromTypes(types) {
-  return TemplateLiteralAction(types, {});
-}
-function TemplateLiteralFromString(template) {
-  const types = ParseTemplateIntoTypes(template);
-  return TemplateLiteralFromTypes(types);
-}
-function TemplateLiteral2(input, options = {}) {
-  const type = guard_exports.IsString(input) ? TemplateLiteralFromString(input) : TemplateLiteralFromTypes(input);
-  return memory_exports.Update(type, {}, options);
-}
-function IsTemplateLiteral(value) {
-  return IsKind(value, "TemplateLiteral");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/result.mjs
-var result_exports = {};
-__export(result_exports, {
-  ExtendsFalse: () => ExtendsFalse,
-  ExtendsTrue: () => ExtendsTrue,
-  ExtendsUnion: () => ExtendsUnion,
-  IsExtendsFalse: () => IsExtendsFalse,
-  IsExtendsTrue: () => IsExtendsTrue,
-  IsExtendsTrueLike: () => IsExtendsTrueLike,
-  IsExtendsUnion: () => IsExtendsUnion,
-  Match: () => Match4
-});
-function ExtendsUnion(inferred) {
-  return memory_exports.Create({ ["~kind"]: "ExtendsUnion" }, { inferred });
-}
-function IsExtendsUnion(value) {
-  return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "~kind") && guard_exports.HasPropertyKey(value, "inferred") && guard_exports.IsEqual(value["~kind"], "ExtendsUnion") && guard_exports.IsObject(value.inferred);
-}
-function ExtendsTrue(inferred) {
-  return memory_exports.Create({ ["~kind"]: "ExtendsTrue" }, { inferred });
-}
-function IsExtendsTrue(value) {
-  return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "~kind") && guard_exports.HasPropertyKey(value, "inferred") && guard_exports.IsEqual(value["~kind"], "ExtendsTrue") && guard_exports.IsObject(value.inferred);
-}
-function ExtendsFalse() {
-  return memory_exports.Create({ ["~kind"]: "ExtendsFalse" }, {});
-}
-function IsExtendsFalse(value) {
-  return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "~kind") && guard_exports.IsEqual(value["~kind"], "ExtendsFalse");
-}
-function IsExtendsTrueLike(value) {
-  return IsExtendsUnion(value) || IsExtendsTrue(value);
-}
-function Match4(result, true_, false_) {
-  return IsExtendsTrueLike(result) ? true_(result.inferred) : false_();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/extends_right.mjs
-function ExtendsRightInfer(inferred, name, left, right) {
-  return Match4(ExtendsLeft(inferred, left, right), (checkInferred) => ExtendsTrue(memory_exports.Assign(memory_exports.Assign(inferred, checkInferred), { [name]: left })), () => ExtendsFalse());
-}
-function ExtendsRightAny(inferred, _left) {
-  return ExtendsTrue(inferred);
-}
-function ExtendsRightDependent(inferred, left, if_, then_, else_) {
-  return Match4(ExtendsLeft(inferred, left, if_), (inferred2) => Match4(ExtendsLeft(inferred2, left, then_), (inferred3) => ExtendsTrue(inferred3), () => ExtendsFalse()), () => Match4(ExtendsLeft(inferred, left, else_), (inferred2) => ExtendsTrue(inferred2), () => ExtendsFalse()));
-}
-function ExtendsRightEnum(inferred, left, right) {
-  const evaluated = EvaluateEnum(right);
-  return ExtendsLeft(inferred, left, evaluated);
-}
-function ExtendsRightIntersect(inferred, left, right) {
-  return guard_exports.ShiftLeft(right, (head, tail) => Match4(ExtendsLeft(inferred, left, head), (inferred2) => ExtendsRightIntersect(inferred2, left, tail), () => ExtendsFalse()), () => ExtendsTrue(inferred));
-}
-function ExtendsRightTemplateLiteral(inferred, left, right) {
-  const evaluated = EvaluateTemplateLiteral(right);
-  return ExtendsLeft(inferred, left, evaluated);
-}
-function ExtendsRightUnion(inferred, left, right) {
-  return guard_exports.ShiftLeft(right, (head, tail) => Match4(ExtendsLeft(inferred, left, head), (inferred2) => ExtendsTrue(inferred2), () => ExtendsRightUnion(inferred, left, tail)), () => ExtendsFalse());
-}
-function ExtendsRight(inferred, left, right) {
-  return IsAny(right) ? ExtendsRightAny(inferred, left) : IsDependent(right) ? ExtendsRightDependent(inferred, left, right.if, right.then, right.else) : IsEnum2(right) ? ExtendsRightEnum(inferred, left, right.enum) : IsInfer(right) ? ExtendsRightInfer(inferred, right.name, left, right.extends) : IsIntersect(right) ? ExtendsRightIntersect(inferred, left, right.allOf) : IsTemplateLiteral(right) ? ExtendsRightTemplateLiteral(inferred, left, right.pattern) : IsUnion(right) ? ExtendsRightUnion(inferred, left, right.anyOf) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsFalse();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/any.mjs
-function ExtendsAny(inferred, left, right) {
-  return IsInfer(right) ? ExtendsRight(inferred, left, right) : IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsUnion(inferred);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/array.mjs
-function ExtendsImmutable(left, right) {
-  const isImmutableLeft = IsImmutable(left);
-  const isImmutableRight = IsImmutable(right);
-  return isImmutableLeft && isImmutableRight ? true : !isImmutableLeft && isImmutableRight ? true : isImmutableLeft && !isImmutableRight ? false : true;
-}
-function ExtendsArray(inferred, arrayLeft, left, right) {
-  return IsArray2(right) ? ExtendsImmutable(arrayLeft, right) ? ExtendsLeft(inferred, left, right.items) : ExtendsFalse() : ExtendsRight(inferred, arrayLeft, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/bigint.mjs
-function ExtendsBigInt(inferred, left, right) {
-  return IsBigInt2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/boolean.mjs
-function ExtendsBoolean(inferred, left, right) {
-  return IsBoolean3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/parameters.mjs
-function ParameterCompare(inferred, left, leftRest, right, rightRest) {
-  const checkLeft = IsInfer(right) ? left : right;
-  const checkRight = IsInfer(right) ? right : left;
-  const isLeftOptional = IsOptional(left);
-  const isRightOptional = IsOptional(right);
-  return !isLeftOptional && isRightOptional ? ExtendsFalse() : Match4(ExtendsLeft(inferred, checkLeft, checkRight), (inferred2) => ExtendsParameters(inferred2, leftRest, rightRest), () => ExtendsFalse());
-}
-function ParameterRight(inferred, left, leftRest, rightRest) {
-  return guard_exports.ShiftLeft(rightRest, (head, tail) => ParameterCompare(inferred, left, leftRest, head, tail), () => IsOptional(left) ? ExtendsTrue(inferred) : ExtendsFalse());
-}
-function ParametersLeft(inferred, left, rightRest) {
-  return guard_exports.ShiftLeft(left, (head, tail) => ParameterRight(inferred, head, tail, rightRest), () => ExtendsTrue(inferred));
-}
-function ExtendsParameters(inferred, left, right) {
-  return ParametersLeft(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/return_type.mjs
-function ExtendsReturnType(inferred, left, right) {
-  return IsVoid(right) ? ExtendsTrue(inferred) : ExtendsLeft(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/constructor.mjs
-function ExtendsConstructor(inferred, parameters, returnType, right) {
-  return IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : IsConstructor2(right) ? Match4(ExtendsParameters(inferred, parameters, right["parameters"]), (inferred2) => ExtendsReturnType(inferred2, returnType, right["instanceType"]), () => ExtendsFalse()) : ExtendsFalse();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/dependent.mjs
-function ExtendsDependent(inferred, if_, then_, else_, right) {
-  return Match4(ExtendsLeft(inferred, if_, right), () => ExtendsLeft(inferred, then_, right), () => ExtendsLeft(inferred, else_, right));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/enum.mjs
-function ExtendsEnum(inferred, left, right) {
-  const evaluated = EvaluateEnum(left);
-  return ExtendsLeft(inferred, evaluated, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/function.mjs
-function ExtendsFunction(inferred, parameters, returnType, right) {
-  return IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : IsFunction2(right) ? Match4(ExtendsParameters(inferred, parameters, right["parameters"]), (inferred2) => ExtendsReturnType(inferred2, returnType, right["returnType"]), () => ExtendsFalse()) : ExtendsFalse();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/integer.mjs
-function ExtendsInteger(inferred, left, right) {
-  return IsInteger2(right) ? ExtendsTrue(inferred) : IsNumber3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/intersect.mjs
-function ExtendsIntersect(inferred, left, right) {
-  const evaluated = EvaluateIntersect(left);
-  return ExtendsLeft(inferred, evaluated, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/literal.mjs
-function ExtendsLiteralValue(inferred, left, right) {
-  return left === right ? ExtendsTrue(inferred) : ExtendsFalse();
-}
-function ExtendsLiteralBigInt(inferred, left, right) {
-  return IsLiteral(right) ? ExtendsLiteralValue(inferred, left, right.const) : IsBigInt2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, Literal(left), right);
-}
-function ExtendsLiteralBoolean(inferred, left, right) {
-  return IsLiteral(right) ? ExtendsLiteralValue(inferred, left, right.const) : IsBoolean3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, Literal(left), right);
-}
-function ExtendsLiteralNumber(inferred, left, right) {
-  return IsLiteral(right) ? ExtendsLiteralValue(inferred, left, right.const) : IsNumber3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, Literal(left), right);
-}
-function ExtendsLiteralString(inferred, left, right) {
-  return IsLiteral(right) ? ExtendsLiteralValue(inferred, left, right.const) : IsString3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, Literal(left), right);
-}
-function ExtendsLiteral(inferred, left, right) {
-  return guard_exports.IsBigInt(left.const) ? ExtendsLiteralBigInt(inferred, left.const, right) : guard_exports.IsBoolean(left.const) ? ExtendsLiteralBoolean(inferred, left.const, right) : guard_exports.IsNumber(left.const) ? ExtendsLiteralNumber(inferred, left.const, right) : guard_exports.IsString(left.const) ? ExtendsLiteralString(inferred, left.const, right) : Unreachable();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/never.mjs
-function ExtendsNever(inferred, left, right) {
-  return IsInfer(right) ? ExtendsRight(inferred, left, right) : ExtendsTrue(inferred);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/null.mjs
-function ExtendsNull(inferred, left, right) {
-  return IsNull2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/number.mjs
-function ExtendsNumber(inferred, left, right) {
-  return IsNumber3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/object.mjs
-function ExtendsPropertyOptional(inferred, left, right) {
-  return IsOptional(left) ? IsOptional(right) ? ExtendsTrue(inferred) : ExtendsFalse() : ExtendsTrue(inferred);
-}
-function ExtendsProperty(inferred, left, right) {
-  return (
-    // Right TInfer<TNever> is TExtendsFalse
-    IsInfer(right) && IsNever(right.extends) ? ExtendsFalse() : Match4(ExtendsLeft(inferred, left, right), (inferred2) => ExtendsPropertyOptional(inferred2, left, right), () => ExtendsFalse())
-  );
-}
-function ExtractInferredProperties(keys, properties) {
-  return keys.reduce((result, key) => {
-    return key in properties ? IsExtendsTrueLike(properties[key]) ? { ...result, ...properties[key].inferred } : Unreachable() : Unreachable();
-  }, {});
-}
-function ExtendsPropertiesComparer(inferred, left, right) {
-  const properties = {};
-  for (const rightKey of guard_exports.Keys(right)) {
-    properties[rightKey] = rightKey in left ? ExtendsProperty({}, left[rightKey], right[rightKey]) : IsOptional(right[rightKey]) ? IsInfer(right[rightKey]) ? ExtendsTrue(memory_exports.Assign(inferred, { [right[rightKey].name]: right[rightKey].extends })) : ExtendsTrue(inferred) : ExtendsFalse();
-  }
-  const checked = guard_exports.Values(properties).every((result) => IsExtendsTrueLike(result));
-  const extracted = checked ? ExtractInferredProperties(guard_exports.Keys(properties), properties) : {};
-  return checked ? ExtendsTrue(extracted) : ExtendsFalse();
-}
-function ExtendsProperties(inferred, left, right) {
-  const compared = ExtendsPropertiesComparer(inferred, left, right);
-  return IsExtendsTrueLike(compared) ? ExtendsTrue(memory_exports.Assign(inferred, compared.inferred)) : ExtendsFalse();
-}
-function ExtendsObjectToObject(inferred, left, right) {
-  return ExtendsProperties(inferred, left, right);
-}
-function RecordMergeInferred(left, right) {
-  return guard_exports.Keys(right).reduce((result, key) => {
-    return {
-      ...result,
-      [key]: guard_exports.HasPropertyKey(left, key) ? IsUnion(result[key]) ? Union([...result[key].anyOf, right[key]]) : Union([left[key], right[key]]) : right[key]
-    };
-  }, left);
-}
-function ExtendsRecordComparer(properties, keys, type, result) {
-  return guard_exports.ShiftLeft(keys, (left, right) => Match4(ExtendsLeft({}, properties[left], type), (inferred) => ExtendsRecordComparer(properties, right, type, RecordMergeInferred(result, inferred)), () => ExtendsFalse()), () => ExtendsTrue(result));
-}
-function ExtendsObjectToRecord(inferred, properties, _pattern, value) {
-  const keys = guard_exports.Keys(properties);
-  const result = ExtendsRecordComparer(properties, keys, value, inferred);
-  return result;
-}
-function ExtendsObject(inferred, left, right) {
-  return IsRecord(right) ? ExtendsObjectToRecord(inferred, left, RecordPattern(right), RecordValue(right)) : IsObject2(right) ? ExtendsObjectToObject(inferred, left, right.properties) : ExtendsRight(inferred, _Object_(left), right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/record.mjs
-function FromObject4(inferred, properties) {
-  return guard_exports.IsEqual(guard_exports.Keys(properties).length, 0) ? ExtendsTrue(inferred) : ExtendsFalse();
-}
-function FromRecord(inferred, _leftKey, leftValue, _rightKey, rightValue) {
-  return ExtendsLeft(inferred, leftValue, rightValue);
-}
-function ExtendsRecord(inferred, leftPattern, leftValue, right) {
-  return IsRecord(right) ? FromRecord(inferred, RecordPatternToType(leftPattern), leftValue, RecordPatternToType(RecordPattern(right)), RecordValue(right)) : IsObject2(right) ? FromObject4(inferred, right.properties) : IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsFalse();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/string.mjs
-function ExtendsString(inferred, left, right) {
-  return IsString3(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/symbol.mjs
-function ExtendsSymbol(inferred, left, right) {
-  return IsSymbol2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/template_literal.mjs
-function ExtendsTemplateLiteral(inferred, left, right) {
-  const evaluated = EvaluateTemplateLiteral(left);
-  return ExtendsLeft(inferred, evaluated, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/inference.mjs
-function Inferrable(name, type) {
-  return memory_exports.Create({ "~kind": "Inferrable" }, { name, type }, {});
-}
-function IsInferable(value) {
-  return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "~kind") && guard_exports.HasPropertyKey(value, "name") && guard_exports.HasPropertyKey(value, "type") && guard_exports.IsEqual(value["~kind"], "Inferrable") && guard_exports.IsString(value.name) && guard_exports.IsObject(value.type);
-}
-function TryRestInferable(type) {
-  return IsRest(type) ? IsInfer(type.items) ? IsArray2(type.items.extends) ? Inferrable(type.items.name, type.items.extends.items) : IsUnknown(type.items.extends) ? Inferrable(type.items.name, type.items.extends) : void 0 : Unreachable() : void 0;
-}
-function TryInferable(type) {
-  return IsInfer(type) ? Inferrable(type.name, type.extends) : void 0;
-}
-function TryInferResults(rest, right, result = []) {
-  return guard_exports.ShiftLeft(rest, (head, tail) => Match4(ExtendsLeft({}, head, right), () => TryInferResults(tail, right, [...result, head]), () => void 0), () => result);
-}
-function InferTupleResult(inferred, name, left, right) {
-  const results = TryInferResults(left, right);
-  return guard_exports.IsArray(results) ? ExtendsTrue(memory_exports.Assign(inferred, { [name]: Tuple(results) })) : ExtendsFalse();
-}
-function InferUnionResult(inferred, name, left, right) {
-  const results = TryInferResults(left, right);
-  return guard_exports.IsArray(results) ? ExtendsTrue(memory_exports.Assign(inferred, { [name]: Union(results) })) : ExtendsFalse();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/tuple.mjs
-function Reverse(types) {
-  return [...types].reverse();
-}
-function ApplyReverse(types, reversed) {
-  return reversed ? Reverse(types) : types;
-}
-function Reversed(types) {
-  const first = types.length > 0 ? types[0] : void 0;
-  const inferrable = IsSchema2(first) ? TryRestInferable(first) : void 0;
-  return IsSchema2(inferrable);
-}
-function ElementsCompare(inferred, reversed, left, leftRest, right, rightRest) {
-  return Match4(ExtendsLeft(inferred, left, right), (checkInferred) => Elements(checkInferred, reversed, leftRest, rightRest), () => ExtendsFalse());
-}
-function ElementsLeft(inferred, reversed, leftRest, right, rightRest) {
-  const inferable = TryRestInferable(right);
-  return (
-    // Rest Inferrable Right Means we delegate to TInferTupleResult to Generate a Result
-    IsInferable(inferable) ? InferTupleResult(inferred, inferable["name"], ApplyReverse(leftRest, reversed), inferable["type"]) : guard_exports.ShiftLeft(leftRest, (head, tail) => ElementsCompare(inferred, reversed, head, tail, right, rightRest), () => ExtendsFalse())
-  );
-}
-function ElementsRight(inferred, reversed, leftRest, rightRest) {
-  return guard_exports.ShiftLeft(rightRest, (head, tail) => ElementsLeft(inferred, reversed, leftRest, head, tail), () => guard_exports.IsEqual(leftRest.length, 0) ? ExtendsTrue(inferred) : ExtendsFalse());
-}
-function Elements(inferred, reversed, leftRest, rightRest) {
-  return ElementsRight(inferred, reversed, leftRest, rightRest);
-}
-function ExtendsTupleToTuple(inferred, left, right) {
-  const instantiatedRight = InstantiateElements(inferred, State([], []), right);
-  const reversed = Reversed(instantiatedRight);
-  return Elements(inferred, reversed, ApplyReverse(left, reversed), ApplyReverse(instantiatedRight, reversed));
-}
-function ExtendsTupleToArray(inferred, left, right) {
-  const inferrable = TryInferable(right);
-  return IsInferable(inferrable) ? InferUnionResult(inferred, inferrable["name"], left, inferrable["type"]) : guard_exports.ShiftLeft(left, (head, tail) => Match4(ExtendsLeft(inferred, head, right), (inferred2) => ExtendsTupleToArray(inferred2, tail, right), () => ExtendsFalse()), () => ExtendsTrue(inferred));
-}
-function ExtendsTuple(inferred, left, right) {
-  const instantiatedLeft = InstantiateElements(inferred, State([], []), left);
-  return IsTuple(right) ? ExtendsTupleToTuple(inferred, instantiatedLeft, right.items) : IsArray2(right) ? ExtendsTupleToArray(inferred, instantiatedLeft, right.items) : ExtendsRight(inferred, Tuple(instantiatedLeft), right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/undefined.mjs
-function ExtendsUndefined(inferred, left, right) {
-  return IsVoid(right) ? ExtendsTrue(inferred) : IsUndefined2(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/union.mjs
-function ExtendsUnionSome(inferred, type, unionTypes) {
-  return guard_exports.ShiftLeft(unionTypes, (head, tail) => Match4(ExtendsLeft(inferred, type, head), (inferred2) => ExtendsTrue(inferred2), () => ExtendsUnionSome(inferred, type, tail)), () => ExtendsFalse());
-}
-function ExtendsUnionLeft(inferred, left, right) {
-  return guard_exports.ShiftLeft(left, (head, tail) => Match4(ExtendsUnionSome(inferred, head, right), (inferred2) => ExtendsUnionLeft(inferred2, tail, right), () => ExtendsFalse()), () => ExtendsTrue(inferred));
-}
-function ExtendsUnion2(inferred, left, right) {
-  const inferrable = TryInferable(right);
-  return IsInferable(inferrable) ? InferUnionResult(inferred, inferrable.name, left, inferrable.type) : IsUnion(right) ? ExtendsUnionLeft(inferred, left, right.anyOf) : ExtendsUnionLeft(inferred, left, [right]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/unknown.mjs
-function ExtendsUnknown(inferred, left, right) {
-  return IsInfer(right) ? ExtendsRight(inferred, left, right) : IsAny(right) ? ExtendsTrue(inferred) : IsUnknown(right) ? ExtendsTrue(inferred) : ExtendsFalse();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/void.mjs
-function ExtendsVoid(inferred, left, right) {
-  return IsVoid(right) ? ExtendsTrue(inferred) : ExtendsRight(inferred, left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/extends_left.mjs
-function ExtendsLeft(inferred, left, right) {
-  return IsAny(left) ? ExtendsAny(inferred, left, right) : IsArray2(left) ? ExtendsArray(inferred, left, left.items, right) : IsBigInt2(left) ? ExtendsBigInt(inferred, left, right) : IsBoolean3(left) ? ExtendsBoolean(inferred, left, right) : IsConstructor2(left) ? ExtendsConstructor(inferred, left.parameters, left.instanceType, right) : IsDependent(left) ? ExtendsDependent(inferred, left.if, left.then, left.else, right) : IsEnum2(left) ? ExtendsEnum(inferred, left.enum, right) : IsFunction2(left) ? ExtendsFunction(inferred, left.parameters, left.returnType, right) : IsInteger2(left) ? ExtendsInteger(inferred, left, right) : IsIntersect(left) ? ExtendsIntersect(inferred, left.allOf, right) : IsLiteral(left) ? ExtendsLiteral(inferred, left, right) : IsNever(left) ? ExtendsNever(inferred, left, right) : IsNull2(left) ? ExtendsNull(inferred, left, right) : IsNumber3(left) ? ExtendsNumber(inferred, left, right) : IsObject2(left) ? ExtendsObject(inferred, left.properties, right) : IsRecord(left) ? ExtendsRecord(inferred, RecordPattern(left), RecordValue(left), right) : IsString3(left) ? ExtendsString(inferred, left, right) : IsSymbol2(left) ? ExtendsSymbol(inferred, left, right) : IsTemplateLiteral(left) ? ExtendsTemplateLiteral(inferred, left.pattern, right) : IsTuple(left) ? ExtendsTuple(inferred, left.items, right) : IsUndefined2(left) ? ExtendsUndefined(inferred, left, right) : IsUnion(left) ? ExtendsUnion2(inferred, left.anyOf, right) : IsUnknown(left) ? ExtendsUnknown(inferred, left, right) : IsVoid(left) ? ExtendsVoid(inferred, left, right) : ExtendsFalse();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/interface/instantiate.mjs
-function InterfaceOperation(heritage, properties) {
-  const result = EvaluateIntersect([...heritage, _Object_(properties)]);
-  return result;
-}
-function InterfaceAction(heritage, properties, options) {
-  const result = CanInstantiate(heritage) ? memory_exports.Update(InterfaceOperation(heritage, properties), {}, options) : InterfaceDeferred(heritage, properties, options);
-  return result;
-}
-function InterfaceInstantiate(context, state, heritage, properties, options) {
-  const instantiatedHeritage = InstantiateTypes(context, state, heritage);
-  const instantiatedProperties = InstantiateProperties(context, state, properties);
-  return InterfaceAction(instantiatedHeritage, instantiatedProperties, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/interface.mjs
-function InterfaceDeferred(heritage, properties, options = {}) {
-  return Deferred("Interface", [heritage, properties], options);
-}
-function IsInterfaceDeferred(value) {
-  return IsSchema2(value) && guard_exports.HasPropertyKey(value, "action") && guard_exports.IsEqual(value.action, "Interface");
-}
-function Interface(heritage, properties, options = {}) {
-  return InterfaceAction(heritage, properties, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/check.mjs
-function FromRef(stack, context, ref) {
-  return stack.includes(ref) ? true : FromType3([...stack, ref], context, context[ref]);
-}
-function FromProperties(stack, context, properties) {
-  const types = PropertyValues(properties);
-  return FromTypes2(stack, context, types);
-}
-function FromTypes2(stack, context, types) {
-  return guard_exports.ShiftLeft(types, (left, right) => FromType3(stack, context, left) ? true : FromTypes2(stack, context, right), () => false);
-}
-function FromType3(stack, context, type) {
-  return IsRef2(type) ? FromRef(stack, context, type.$ref) : IsArray2(type) ? FromType3(stack, context, type.items) : IsConstructor2(type) ? FromTypes2(stack, context, [...type.parameters, type.instanceType]) : IsFunction2(type) ? FromTypes2(stack, context, [...type.parameters, type.returnType]) : IsInterfaceDeferred(type) ? FromProperties(stack, context, type.parameters[1]) : IsIntersect(type) ? FromTypes2(stack, context, type.allOf) : IsObject2(type) ? FromProperties(stack, context, type.properties) : IsUnion(type) ? FromTypes2(stack, context, type.anyOf) : IsTuple(type) ? FromTypes2(stack, context, type.items) : IsRecord(type) ? FromType3(stack, context, RecordValue(type)) : false;
-}
-function CyclicCheck(stack, context, type) {
-  const result = FromType3(stack, context, type);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/candidates.mjs
-function ResolveCandidateKeys(context, keys) {
-  return keys.reduce((result, left) => {
-    return CyclicCheck([left], context, context[left]) ? [...result, left] : result;
-  }, []);
-}
-function CyclicCandidates(context) {
-  const keys = PropertyKeys(context);
-  const result = ResolveCandidateKeys(context, keys);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/dependencies.mjs
-function FromRef2(context, ref, result) {
-  return result.includes(ref) ? result : ref in context ? FromType4(context, context[ref], [...result, ref]) : Unreachable();
-}
-function FromProperties2(context, properties, result) {
-  const types = PropertyValues(properties);
-  return FromTypes3(context, types, result);
-}
-function FromTypes3(context, types, result) {
-  return types.reduce((result2, left) => {
-    return FromType4(context, left, result2);
-  }, result);
-}
-function FromType4(context, type, result) {
-  return IsRef2(type) ? FromRef2(context, type.$ref, result) : IsArray2(type) ? FromType4(context, type.items, result) : IsConstructor2(type) ? FromTypes3(context, [...type.parameters, type.instanceType], result) : IsFunction2(type) ? FromTypes3(context, [...type.parameters, type.returnType], result) : IsInterfaceDeferred(type) ? FromProperties2(context, type.parameters[1], result) : IsIntersect(type) ? FromTypes3(context, type.allOf, result) : IsObject2(type) ? FromProperties2(context, type.properties, result) : IsUnion(type) ? FromTypes3(context, type.anyOf, result) : IsTuple(type) ? FromTypes3(context, type.items, result) : IsRecord(type) ? FromType4(context, RecordValue(type), result) : result;
-}
-function CyclicDependencies(context, key, type) {
-  const result = FromType4(context, type, [key]);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/extends.mjs
-function FromRef3(_ref) {
-  return Any();
-}
-function FromProperties3(properties) {
-  return guard_exports.Keys(properties).reduce((result, key) => {
-    return { ...result, [key]: FromType5(properties[key]) };
-  }, {});
-}
-function FromTypes4(types) {
-  return types.reduce((result, left) => {
-    return [...result, FromType5(left)];
-  }, []);
-}
-function FromType5(type) {
-  return IsRef2(type) ? FromRef3(type.$ref) : IsArray2(type) ? _Array_(FromType5(type.items), ArrayOptions(type)) : IsConstructor2(type) ? Constructor(FromTypes4(type.parameters), FromType5(type.instanceType)) : IsFunction2(type) ? _Function_(FromTypes4(type.parameters), FromType5(type.returnType)) : IsIntersect(type) ? Intersect(FromTypes4(type.allOf)) : IsObject2(type) ? _Object_(FromProperties3(type.properties)) : IsRecord(type) ? Record(RecordKey(type), FromType5(RecordValue(type))) : IsUnion(type) ? Union(FromTypes4(type.anyOf)) : IsTuple(type) ? Tuple(FromTypes4(type.items)) : type;
-}
-function CyclicAnyFromParameters(defs, ref) {
-  return ref in defs ? FromType5(defs[ref]) : Unknown();
-}
-function CyclicExtends(type) {
-  return CyclicAnyFromParameters(type.$defs, type.$ref);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/instantiate.mjs
-function CyclicInterface(context, heritage, properties) {
-  const instantiatedHeritage = InstantiateTypes(context, State([], []), heritage);
-  const instantiatedProperties = InstantiateProperties({}, State([], []), properties);
-  const evaluatedInterface = EvaluateIntersect([...instantiatedHeritage, _Object_(instantiatedProperties)]);
-  return evaluatedInterface;
-}
-function CyclicDefinitions(context, dependencies) {
-  const keys = guard_exports.Keys(context).filter((key) => dependencies.includes(key));
-  return keys.reduce((result, key) => {
-    const type = context[key];
-    const instantiatedType = IsInterfaceDeferred(type) ? CyclicInterface(context, type.parameters[0], type.parameters[1]) : type;
-    return { ...result, [key]: instantiatedType };
-  }, {});
-}
-function InstantiateCyclic(context, ref, type) {
-  const dependencies = CyclicDependencies(context, ref, type);
-  const definitions = CyclicDefinitions(context, dependencies);
-  const result = Cyclic(definitions, ref);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/cyclic/target.mjs
-function Resolve(defs, ref) {
-  return ref in defs ? IsRef2(defs[ref]) ? Resolve(defs, defs[ref].$ref) : defs[ref] : Never();
-}
-function CyclicTarget(defs, ref) {
-  const result = Resolve(defs, ref);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/extends/extends.mjs
-function Canonical(type) {
-  return IsCyclic(type) ? CyclicExtends(type) : IsUnsafe(type) ? Unknown() : type;
-}
-function Extends(inferred, left, right) {
-  const canonicalLeft = Canonical(left);
-  const canonicalRight = Canonical(right);
-  return ExtendsLeft(inferred, canonicalLeft, canonicalRight);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/compare.mjs
-var CompareResultEqual = 0;
-var CompareResultDisjoint = 1;
-var CompareResultLeftInside = 2;
-var CompareResultRightInside = 3;
-function Compare(left, right) {
-  const extendsCheck = [Extends({}, left, right), Extends({}, right, left)];
-  return result_exports.IsExtendsTrueLike(extendsCheck[0]) && result_exports.IsExtendsTrueLike(extendsCheck[1]) ? CompareResultEqual : result_exports.IsExtendsTrueLike(extendsCheck[0]) && result_exports.IsExtendsFalse(extendsCheck[1]) ? CompareResultLeftInside : result_exports.IsExtendsFalse(extendsCheck[0]) && result_exports.IsExtendsTrueLike(extendsCheck[1]) ? CompareResultRightInside : CompareResultDisjoint;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/broaden.mjs
-function BroadenFilter(type, types, result = [], all = types) {
-  return guard_exports.ShiftLeft(types, (left, right) => {
-    const compare = Compare(type, left);
-    return guard_exports.IsEqual(compare, CompareResultLeftInside) || guard_exports.IsEqual(compare, CompareResultEqual) ? all : guard_exports.IsEqual(compare, CompareResultDisjoint) ? BroadenFilter(type, right, [...result, left], all) : BroadenFilter(type, right, result, all);
-  }, () => [...result, type]);
-}
-function BroadenType(type, types, result) {
-  const evaluated = EvaluateType(type);
-  return IsAny(evaluated) ? [evaluated] : (
-    // terminate (always the most broad)
-    IsUnknown(evaluated) ? [evaluated] : (
-      // terminate (always the most broad)
-      IsNever(evaluated) ? BroadenTypes(types, result) : (
-        // ignored: never is dropped
-        IsObject2(evaluated) ? BroadenTypes(types, [...result, evaluated]) : (
-          // objects are always considered (too expensive to compare)
-          BroadenTypes(types, BroadenFilter(evaluated, result))
-        )
-      )
-    )
-  );
-}
-function BroadenTypes(types, result = []) {
-  return guard_exports.ShiftLeft(types, (left, right) => BroadenType(left, right, result), () => result);
-}
-function Broaden(types) {
-  const broadened = BroadenTypes(types);
-  const flattened = Flatten(broadened);
-  return flattened;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/evaluate/instantiate.mjs
-function EvaluateAction(type, options) {
-  const result = memory_exports.Update(EvaluateType(type), {}, options);
-  return result;
-}
-function EvaluateInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return EvaluateAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/call/distribute_arguments.mjs
-function CollectDistributionNames(expression, result = []) {
-  return (
-    // Conditional
-    IsDeferred(expression) && guard_exports.IsEqual(expression.action, "Conditional") ? IsRef2(expression.parameters[0]) ? CollectDistributionNames(expression.parameters[2], CollectDistributionNames(expression.parameters[3], [...result, expression.parameters[0]["$ref"]])) : CollectDistributionNames(expression.parameters[2], CollectDistributionNames(expression.parameters[3], result)) : IsDeferred(expression) && guard_exports.IsEqual(expression.action, "Mapped") ? IsDeferred(expression.parameters[1]) && guard_exports.IsEqual(expression.parameters[1].action, "KeyOf") && IsRef2(expression.parameters[1].parameters[0]) ? [...result, expression.parameters[1].parameters[0]["$ref"]] : result : result
-  );
-}
-function BuildDistributionArray(parameters, names) {
-  return parameters.reduce((result, left) => [...result, names.includes(left.name)], []);
-}
-function ZipDistributionArray(arguments_, distributionArray, result = []) {
-  return guard_exports.ShiftLeft(arguments_, (argumentLeft, argumentRight) => guard_exports.ShiftLeft(distributionArray, (booleanLeft, booleanRight) => ZipDistributionArray(argumentRight, booleanRight, [...result, [booleanLeft, argumentLeft]]), () => result), () => result);
-}
-function CanonicalArgument(type) {
-  return IsTemplateLiteral(type) ? EvaluateTemplateLiteral(type.pattern) : IsEnum2(type) ? EvaluateEnum(type.enum) : type;
-}
-function Expand(type) {
-  const canonicalArgument = CanonicalArgument(type);
-  return IsUnion(canonicalArgument) ? [...canonicalArgument.anyOf] : [canonicalArgument];
-}
-function Append(current, type) {
-  return current.reduce((result, left) => [...result, [...left, type]], []);
-}
-function Cross(current, variants) {
-  return variants.reduce((result, left) => {
-    return [...result, ...Append(current, left)];
-  }, []);
-}
-function Distribute2(zipped) {
-  return zipped.reduce((result, left) => {
-    return guard_exports.IsEqual(left[0], true) ? Cross(result, Expand(left[1])) : Cross(result, [left[1]]);
-  }, [[]]);
-}
-function DistributeArguments(parameters, arguments_, expression) {
-  const distributionNames = CollectDistributionNames(expression);
-  const distributionArray = BuildDistributionArray(parameters, distributionNames);
-  const zippedArguments = ZipDistributionArray(arguments_, distributionArray);
-  return IsDeferred(expression) && guard_exports.IsEqual(expression.action, "Conditional") ? Distribute2(zippedArguments) : IsDeferred(expression) && guard_exports.IsEqual(expression.action, "Mapped") ? Distribute2(zippedArguments) : [arguments_];
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/call/resolve_target.mjs
-function FromNotResolvable() {
-  return ["(not-resolvable)", Never()];
-}
-function FromNotGeneric() {
-  return ["(not-generic)", Never()];
-}
-function FromGeneric(name, parameters, expression) {
-  return [name, Generic(parameters, expression)];
-}
-function FromRef4(context, ref, arguments_) {
-  return ref in context ? FromType6(context, ref, context[ref], arguments_) : FromNotResolvable();
-}
-function FromType6(context, name, target, arguments_) {
-  return IsGeneric(target) ? FromGeneric(name, target.parameters, target.expression) : IsRef2(target) ? FromRef4(context, target.$ref, arguments_) : FromNotGeneric();
-}
-function ResolveTarget(context, target, arguments_) {
-  return FromType6(context, "(anonymous)", target, arguments_);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/call/resolve_arguments.mjs
-function AssertArgumentExtends(name, type, extends_) {
-  if (IsInfer(type) || IsCall(type) || result_exports.IsExtendsTrueLike(Extends({}, type, extends_)))
-    return;
-  const cause = { parameter: name, expect: extends_, actual: type };
-  throw new Error(`Argument for parameter ${name} does not satisfy constraint`, { cause });
-}
-function BindArgument(context, state, name, extends_, type) {
-  const instantiatedArgument = InstantiateType(context, state, type);
-  AssertArgumentExtends(name, instantiatedArgument, extends_);
-  return memory_exports.Assign(context, { [name]: instantiatedArgument });
-}
-function BindArguments(context, state, parameterLeft, parameterRight, arguments_) {
-  const instantiatedExtends = InstantiateType(context, state, parameterLeft.extends);
-  const instantiatedEquals = InstantiateType(context, state, parameterLeft.equals);
-  return guard_exports.ShiftLeft(arguments_, (left, right) => BindParameters(BindArgument(context, state, parameterLeft["name"], instantiatedExtends, left), state, parameterRight, right), () => BindParameters(BindArgument(context, state, parameterLeft["name"], instantiatedExtends, instantiatedEquals), state, parameterRight, []));
-}
-function BindParameters(context, state, parameters, arguments_) {
-  return guard_exports.ShiftLeft(parameters, (left, right) => BindArguments(context, state, left, right, arguments_), () => context);
-}
-function ResolveArgumentsContext(context, state, parameters, arguments_) {
-  return BindParameters(context, state, parameters, arguments_);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/call/instantiate.mjs
-var instantiationDepth = 0;
-var instantiationCount = 0;
-function InstantiationAssert() {
-  if (guard_exports.IsLessThan(instantiationCount, settings_exports.Get().maxInstantiationCount))
-    return;
-  throw Error("Type instantiation is excessively deep and possibly infinite");
-}
-function InstantiationIncrement() {
-  InstantiationAssert();
-  instantiationCount++;
-  instantiationDepth++;
-}
-function InstantiationDecrement() {
-  instantiationDepth--;
-  if (guard_exports.IsEqual(instantiationDepth, 0))
-    instantiationCount = 0;
-}
-function Peek(state) {
-  const result = guard_exports.IsGreaterThan(state.callstack.length, 0) ? state.callstack[state.callstack.length - 1] : "";
-  return result;
-}
-function IsTailCall(state, name) {
-  const result = guard_exports.IsEqual(Peek(state), name);
-  return result;
-}
-function CallDispatch(context, state, target, parameters, expression, arguments_) {
-  InstantiationIncrement();
-  try {
-    const argumentsContext = ResolveArgumentsContext(context, state, parameters, arguments_);
-    const returnType = InstantiateType(argumentsContext, State([...state["callstack"], target["$ref"]], state["visited"]), expression);
-    return InstantiateType(argumentsContext, State([], []), returnType);
-  } finally {
-    InstantiationDecrement();
-  }
-}
-function CallDistributed(context, state, target, parameters, expression, distributedArguments) {
-  return distributedArguments.reduce((result, arguments_) => {
-    const returnType = CallDispatch(context, state, target, parameters, expression, arguments_);
-    return [...result, returnType];
-  }, []);
-}
-function CallImmediate(context, state, target, parameters, expression, arguments_) {
-  const distributedArguments = DistributeArguments(parameters, arguments_, expression);
-  const returnTypes = CallDistributed(context, state, target, parameters, expression, distributedArguments);
-  const result = guard_exports.IsEqual(returnTypes.length, 1) ? returnTypes[0] : EvaluateUnion(returnTypes);
-  return result;
-}
-function CallInstantiate(context, state, target, arguments_) {
-  const instantiatedArguments = InstantiateTypes(context, state, arguments_);
-  const resolved2 = ResolveTarget(context, target, arguments_);
-  const name = resolved2[0];
-  const type = resolved2[1];
-  const result = IsGeneric(type) ? IsTailCall(state, name) ? CallConstruct(Ref2(name), instantiatedArguments) : CallImmediate(context, state, Ref2(name), type.parameters, type.expression, instantiatedArguments) : CallConstruct(target, instantiatedArguments);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/types/call.mjs
-function CallConstruct(target, arguments_) {
-  return memory_exports.Create({ ["~kind"]: "Call" }, { type: "call", target, arguments: arguments_ }, {});
-}
-function Call(target, arguments_) {
-  return CallInstantiate({}, State([], []), target, arguments_);
-}
-function IsCall(value) {
-  return IsKind(value, "Call");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/immutable/instantiate_remove.mjs
-function RemoveImmutableOperation(type) {
-  return memory_exports.Discard(type, ["~immutable"]);
-}
-function RemoveImmutableAction(type, options) {
-  const result = memory_exports.Update(RemoveImmutableOperation(type), {}, options);
-  return result;
-}
-function RemoveImmutableInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return RemoveImmutableAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/mapping.mjs
-function ApplyMapping(mapping, value) {
-  return mapping(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/from_literal.mjs
-function FromLiteral3(mapping, value) {
-  return guard_exports.IsString(value) ? Literal(ApplyMapping(mapping, value)) : Literal(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/from_template_literal.mjs
-function FromTemplateLiteral(mapping, pattern) {
-  const evaluated = EvaluateTemplateLiteral(pattern);
-  const result = FromType7(mapping, evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/from_union.mjs
-function FromUnion2(mapping, types) {
-  const result = types.map((type) => FromType7(mapping, type));
-  return Union(result);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/from_type.mjs
-function FromType7(mapping, type) {
-  return IsLiteral(type) ? FromLiteral3(mapping, type.const) : IsTemplateLiteral(type) ? FromTemplateLiteral(mapping, type.pattern) : IsUnion(type) ? FromUnion2(mapping, type.anyOf) : type;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/capitalize.mjs
-function CapitalizeDeferred(type, options = {}) {
-  return Deferred("Capitalize", [type], options);
-}
-function Capitalize(type, options = {}) {
-  return CapitalizeAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/lowercase.mjs
-function LowercaseDeferred(type, options = {}) {
-  return Deferred("Lowercase", [type], options);
-}
-function Lowercase(type, options = {}) {
-  return LowercaseAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/uncapitalize.mjs
-function UncapitalizeDeferred(type, options = {}) {
-  return Deferred("Uncapitalize", [type], options);
-}
-function Uncapitalize(type, options = {}) {
-  return UncapitalizeAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/uppercase.mjs
-function UppercaseDeferred(type, options = {}) {
-  return Deferred("Uppercase", [type], options);
-}
-function Uppercase(type, options = {}) {
-  return UppercaseAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/intrinsics/instantiate.mjs
-var CapitalizeMapping = (input) => input[0].toUpperCase() + input.slice(1);
-var LowercaseMapping = (input) => input.toLowerCase();
-var UncapitalizeMapping = (input) => input[0].toLowerCase() + input.slice(1);
-var UppercaseMapping = (input) => input.toUpperCase();
-function CapitalizeAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(FromType7(CapitalizeMapping, type), {}, options) : CapitalizeDeferred(type, options);
-  return result;
-}
-function LowercaseAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(FromType7(LowercaseMapping, type), {}, options) : LowercaseDeferred(type, options);
-  return result;
-}
-function UncapitalizeAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(FromType7(UncapitalizeMapping, type), {}, options) : UncapitalizeDeferred(type, options);
-  return result;
-}
-function UppercaseAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(FromType7(UppercaseMapping, type), {}, options) : UppercaseDeferred(type, options);
-  return result;
-}
-function CapitalizeInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return CapitalizeAction(instantiatedType, options);
-}
-function LowercaseInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return LowercaseAction(instantiatedType, options);
-}
-function UncapitalizeInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return UncapitalizeAction(instantiatedType, options);
-}
-function UppercaseInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return UppercaseAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/conditional.mjs
-function ConditionalDeferred(left, right, true_, false_, options = {}) {
-  return Deferred("Conditional", [left, right, true_, false_], options);
-}
-function Conditional(left, right, true_, false_, options = {}) {
-  return ConditionalAction({}, State([], []), left, right, true_, false_, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/conditional/instantiate.mjs
-function ConditionalOperation(context, state, left, right, true_, false_) {
-  const extendsResult = Extends(context, left, right);
-  return result_exports.IsExtendsUnion(extendsResult) ? Union([InstantiateType(extendsResult.inferred, state, true_), InstantiateType(context, state, false_)]) : result_exports.IsExtendsTrue(extendsResult) ? InstantiateType(extendsResult.inferred, state, true_) : InstantiateType(context, state, false_);
-}
-function ConditionalAction(context, state, left, right, true_, false_, options) {
-  const result = CanInstantiate([left, right]) ? memory_exports.Update(ConditionalOperation(context, state, left, right, true_, false_), {}, options) : ConditionalDeferred(left, right, true_, false_, options);
-  return result;
-}
-function ConditionalInstantiate(context, state, left, right, true_, false_, options) {
-  const instantiatedLeft = InstantiateType(context, state, left);
-  const instantiatedRight = InstantiateType(context, state, right);
-  return ConditionalAction(context, state, instantiatedLeft, instantiatedRight, true_, false_, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/constructor_parameters.mjs
-function ConstructorParametersDeferred(type, options = {}) {
-  return Deferred("ConstructorParameters", [type], options);
-}
-function ConstructorParameters(type, options = {}) {
-  return ConstructorParametersAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/constructor_parameters/instantiate.mjs
-function ConstructorParametersOperation(type) {
-  const parameters = IsConstructor2(type) ? type["parameters"] : [];
-  const instantiatedParameters = InstantiateElements({}, State([], []), parameters);
-  const result = Tuple(instantiatedParameters);
-  return result;
-}
-function ConstructorParametersAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(ConstructorParametersOperation(type), {}, options) : ConstructorParametersDeferred(type, options);
-  return result;
-}
-function ConstructorParametersInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return ConstructorParametersAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/exclude.mjs
-function ExcludeDeferred(left, right, options = {}) {
-  return Deferred("Exclude", [left, right], options);
-}
-function Exclude(left, right, options = {}) {
-  return ExcludeAction(left, right, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/exclude/instantiate.mjs
-function ExcludeAction(left, right, options) {
-  const result = CanInstantiate([left, right]) ? memory_exports.Update(ExcludeOperation(left, right), {}, options) : ExcludeDeferred(left, right, options);
-  return result;
-}
-function ExcludeInstantiate(context, state, left, right, options) {
-  const instantiatedLeft = InstantiateType(context, state, left);
-  const instantiatedRight = InstantiateType(context, state, right);
-  return ExcludeAction(instantiatedLeft, instantiatedRight, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/extract.mjs
-function ExtractDeferred(left, right, options = {}) {
-  return Deferred("Extract", [left, right], options);
-}
-function Extract(left, right, options = {}) {
-  return ExtractAction(left, right, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/extract/operation.mjs
-function ExtractType(left, right) {
-  const check = Extends({}, left, right);
-  const result = result_exports.IsExtendsTrueLike(check) ? [left] : [];
-  return result;
-}
-function ExtractUnion(left, right, result = []) {
-  return guard_exports.ShiftLeft(left, (head, tail) => ExtractUnion(tail, right, [...result, ...ExtractType(head, right)]), () => result);
-}
-function ExtractOperation(left, right) {
-  const evaluated = EvaluateType(left);
-  const canonical = IsUnion(evaluated) ? evaluated.anyOf : [evaluated];
-  const remaining = ExtractUnion(canonical, right);
-  const result = EvaluateUnion(remaining);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/extract/instantiate.mjs
-function ExtractAction(left, right, options) {
-  const result = CanInstantiate([left, right]) ? memory_exports.Update(ExtractOperation(left, right), {}, options) : ExtractDeferred(left, right, options);
-  return result;
-}
-function ExtractInstantiate(context, state, left, right, options) {
-  const instantiatedLeft = InstantiateType(context, state, left);
-  const instantiatedRight = InstantiateType(context, state, right);
-  return ExtractAction(instantiatedLeft, instantiatedRight, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/helpers/keys_to_indexer.mjs
-function KeysToLiterals(keys) {
-  return keys.reduce((result, left) => {
-    return IsLiteralValue(left) ? [...result, Literal(left)] : result;
-  }, []);
-}
-function KeysToIndexer(keys) {
-  const literals = KeysToLiterals(keys);
-  const result = Union(literals);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/indexed.mjs
-function IndexDeferred(type, indexer, options = {}) {
-  return Deferred("Index", [type, indexer], options);
-}
-function Index(type, indexer_or_keys, options = {}) {
-  const indexer = guard_exports.IsArray(indexer_or_keys) ? KeysToIndexer(indexer_or_keys) : indexer_or_keys;
-  return IndexAction(type, indexer, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_cyclic.mjs
-function FromCyclic(defs, ref) {
-  const target = CyclicTarget(defs, ref);
-  const result = FromType8(target);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_dependent.mjs
-function FromDependent(if_, then_, else_) {
-  const evaluated = EvaluateDependent(if_, then_, else_);
-  const result = FromType8(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_intersect.mjs
-function CollapseIntersectProperties(left, right) {
-  const leftKeys = guard_exports.Keys(left).filter((key) => !guard_exports.HasPropertyKey(right, key));
-  const rightKeys = guard_exports.Keys(right).filter((key) => !guard_exports.HasPropertyKey(left, key));
-  const sharedKeys = guard_exports.Keys(left).filter((key) => guard_exports.HasPropertyKey(right, key));
-  const leftProperties = leftKeys.reduce((result, key) => ({ ...result, [key]: left[key] }), {});
-  const rightProperties = rightKeys.reduce((result, key) => ({ ...result, [key]: right[key] }), {});
-  const sharedProperties = sharedKeys.reduce((result, key) => ({ ...result, [key]: EvaluateIntersect([left[key], right[key]]) }), {});
-  const unique = memory_exports.Assign(leftProperties, rightProperties);
-  const shared = memory_exports.Assign(unique, sharedProperties);
-  return shared;
-}
-function FromIntersect(types) {
-  return types.reduce((result, left) => {
-    return CollapseIntersectProperties(result, FromType8(left));
-  }, {});
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_object.mjs
-function FromObject5(properties) {
-  return properties;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_tuple.mjs
-function FromTuple(types) {
-  const object7 = TupleToObject(Tuple(types));
-  const result = FromType8(object7);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_union.mjs
-function CollapseUnionProperties(left, right) {
-  const sharedKeys = guard_exports.Keys(left).filter((key) => key in right);
-  const result = sharedKeys.reduce((result2, key) => {
-    return { ...result2, [key]: EvaluateUnion([left[key], right[key]]) };
-  }, {});
-  return result;
-}
-function ReduceVariants(types, result) {
-  return guard_exports.ShiftLeft(types, (left, right) => ReduceVariants(right, CollapseUnionProperties(result, FromType8(left))), () => result);
-}
-function FromUnion3(types) {
-  return guard_exports.ShiftLeft(types, (left, right) => ReduceVariants(right, FromType8(left)), () => Unreachable());
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/from_type.mjs
-function FromType8(type) {
-  return IsCyclic(type) ? FromCyclic(type.$defs, type.$ref) : IsDependent(type) ? FromDependent(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect(type.allOf) : IsUnion(type) ? FromUnion3(type.anyOf) : IsTuple(type) ? FromTuple(type.items) : IsObject2(type) ? FromObject5(type.properties) : {};
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/object/collapse.mjs
-function CollapseToObject(type) {
-  const properties = FromType8(type);
-  const result = _Object_(properties);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/helpers/keys.mjs
-var integerKeyPattern = new RegExp("^(?:0|[1-9][0-9]*)$");
-function ConvertToIntegerKey(value) {
-  const normal = `${value}`;
-  return integerKeyPattern.test(normal) ? parseInt(normal) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/from_array.mjs
-function NormalizeLiteral(value) {
-  return Literal(ConvertToIntegerKey(value));
-}
-function NormalizeIndexerTypes(types) {
-  return types.map((type) => NormalizeIndexer(type));
-}
-function NormalizeIndexer(type) {
-  return IsIntersect(type) ? Intersect(NormalizeIndexerTypes(type.allOf)) : IsUnion(type) ? Union(NormalizeIndexerTypes(type.anyOf)) : IsLiteral(type) ? NormalizeLiteral(type.const) : type;
-}
-function FromArray4(type, indexer) {
-  const normalizedIndexer = NormalizeIndexer(indexer);
-  const check = Extends({}, normalizedIndexer, Number2());
-  const result = (
-    // indexer
-    result_exports.IsExtendsTrueLike(check) ? type : IsLiteral(indexer) && guard_exports.IsEqual(indexer.const, "length") ? Number2() : Never()
-  );
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_cyclic.mjs
-function FromCyclic2(defs, ref) {
-  const target = CyclicTarget(defs, ref);
-  const result = FromType9(target);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_dependent.mjs
-function FromDependent2(if_, then_, else_) {
-  const evaluated = EvaluateDependent(if_, then_, else_);
-  const result = FromType9(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_enum.mjs
-function FromEnum(values) {
-  const evaluated = EvaluateEnum(values);
-  const result = FromType9(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_intersect.mjs
-function FromIntersect2(types) {
-  const evaluated = EvaluateIntersect(types);
-  const result = FromType9(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_literal.mjs
-function FromLiteral4(value) {
-  const result = [`${value}`];
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_template_literal.mjs
-function FromTemplateLiteral2(pattern) {
-  const evaluated = EvaluateTemplateLiteral(pattern);
-  const result = FromType9(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_union.mjs
-function FromUnion4(types) {
-  return types.reduce((result, left) => {
-    return [...result, ...FromType9(left)];
-  }, []);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/from_type.mjs
-function FromType9(type) {
-  return IsCyclic(type) ? FromCyclic2(type.$defs, type.$ref) : IsDependent(type) ? FromDependent2(type.if, type.then, type.else) : IsEnum2(type) ? FromEnum(type.enum) : IsIntersect(type) ? FromIntersect2(type.allOf) : IsLiteral(type) ? FromLiteral4(type.const) : IsTemplateLiteral(type) ? FromTemplateLiteral2(type.pattern) : IsUnion(type) ? FromUnion4(type.anyOf) : [];
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/to_indexable_keys.mjs
-function ToIndexableKeys(type) {
-  const result = FromType9(type);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/this/expand_this.mjs
-function FromTypes5(properties, types) {
-  return types.map((type) => FromType10(properties, type));
-}
-function FromType10(properties, type) {
-  return IsArray2(type) ? _Array_(FromType10(properties, type.items)) : IsConstructor2(type) ? Constructor(FromTypes5(properties, type.parameters), FromType10(properties, type.instanceType)) : IsFunction2(type) ? _Function_(FromTypes5(properties, type.parameters), FromType10(properties, type.returnType)) : IsTuple(type) ? Tuple(FromTypes5(properties, type.items)) : IsUnion(type) ? Union(FromTypes5(properties, type.anyOf)) : IsIntersect(type) ? Intersect(FromTypes5(properties, type.allOf)) : IsThis(type) ? _Object_(properties) : type;
-}
-function ExpandThis(properties, type) {
-  const result = FromType10(properties, type);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/from_object.mjs
-function IndexProperty(properties, key) {
-  const selectedType = key in properties ? properties[key] : Never();
-  const result = ExpandThis(properties, selectedType);
-  return result;
-}
-function IndexProperties(properties, keys) {
-  return keys.reduce((result, left) => {
-    return [...result, IndexProperty(properties, left)];
-  }, []);
-}
-function FromIndexer(properties, indexer) {
-  const keys = ToIndexableKeys(indexer);
-  const variants = IndexProperties(properties, keys);
-  const result = EvaluateUnion(variants);
-  return result;
-}
-var NumericKeyPattern = new RegExp(IntegerKey);
-function NumericKeys(keys) {
-  const result = keys.filter((key) => NumericKeyPattern.test(key));
-  return result;
-}
-function FromIndexerNumber(properties) {
-  const keys = PropertyKeys(properties);
-  const numericKeys = NumericKeys(keys);
-  const variants = IndexProperties(properties, numericKeys);
-  const result = EvaluateUnion(variants);
-  return result;
-}
-function FromObject6(properties, indexer) {
-  const result = IsNumber3(indexer) ? FromIndexerNumber(properties) : FromIndexer(properties, indexer);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/array_indexer.mjs
-function ConvertLiteral(value) {
-  return Literal(ConvertToIntegerKey(value));
-}
-function ArrayIndexerTypes(types) {
-  return types.map((type) => FormatArrayIndexer(type));
-}
-function FormatArrayIndexer(type) {
-  return IsIntersect(type) ? Intersect(ArrayIndexerTypes(type.allOf)) : IsUnion(type) ? Union(ArrayIndexerTypes(type.anyOf)) : IsLiteral(type) ? ConvertLiteral(type.const) : type;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/from_tuple.mjs
-function IndexElementsWithIndexer(types, indexer) {
-  return types.reduceRight((result, right, index) => {
-    const check = Extends({}, Literal(index), indexer);
-    return result_exports.IsExtendsTrueLike(check) ? [right, ...result] : result;
-  }, []);
-}
-function FromTupleWithIndexer(types, indexer) {
-  const formattedArrayIndexer = FormatArrayIndexer(indexer);
-  const elements = IndexElementsWithIndexer(types, formattedArrayIndexer);
-  return EvaluateUnionFast(elements);
-}
-function FromTupleWithoutIndexer(types) {
-  return EvaluateUnionFast(types);
-}
-function FromTuple2(types, indexer) {
-  return (
-    // length (intrinsic)
-    IsLiteral(indexer) && guard_exports.IsEqual(indexer.const, "length") ? Literal(types.length) : IsNumber3(indexer) || IsInteger2(indexer) ? FromTupleWithoutIndexer(types) : FromTupleWithIndexer(types, indexer)
-  );
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/from_type.mjs
-function FromType11(type, indexer) {
-  return IsArray2(type) ? FromArray4(type.items, indexer) : IsObject2(type) ? FromObject6(type.properties, indexer) : IsTuple(type) ? FromTuple2(type.items, indexer) : Never();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexed/instantiate.mjs
-function NormalizeType(type) {
-  const result = IsCyclic(type) || IsDependent(type) || IsIntersect(type) || IsUnion(type) ? CollapseToObject(type) : type;
-  return result;
-}
-function IndexAction(type, indexer, options) {
-  const result = CanInstantiate([type, indexer]) ? memory_exports.Update(FromType11(NormalizeType(type), indexer), {}, options) : IndexDeferred(type, indexer, options);
-  return result;
-}
-function IndexInstantiate(context, state, type, indexer, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  const instantiatedIndexer = InstantiateType(context, state, indexer);
-  return IndexAction(instantiatedType, instantiatedIndexer, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/instance_type.mjs
-function InstanceTypeDeferred(type, options = {}) {
-  return Deferred("InstanceType", [type], options);
-}
-function InstanceType(type, options = {}) {
-  return InstanceTypeAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/instance_type/instantiate.mjs
-function InstanceTypeOperation(type) {
-  return IsConstructor2(type) ? type["instanceType"] : Never();
-}
-function InstanceTypeAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(InstanceTypeOperation(type), {}, options) : InstanceTypeDeferred(type, options);
-  return result;
-}
-function InstanceTypeInstantiate(context, state, type, options = {}) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return InstanceTypeAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/keyof.mjs
-function KeyOfDeferred(type, options = {}) {
-  return Deferred("KeyOf", [type], options);
-}
-function KeyOf2(type, options = {}) {
-  return KeyOfAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_any.mjs
-function FromAny() {
-  return Union([Number2(), String2(), Symbol2()]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_array.mjs
-function FromArray5(_type) {
-  return Number2();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_object.mjs
-function FromPropertyKeys(keys) {
-  const result = keys.reduce((result2, left) => {
-    return IsLiteralValue(left) ? [...result2, Literal(ConvertToIntegerKey(left))] : Unreachable();
-  }, []);
-  return result;
-}
-function FromObject7(properties) {
-  const propertyKeys = guard_exports.Keys(properties);
-  const variants = FromPropertyKeys(propertyKeys);
-  const result = EvaluateUnionFast(variants);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_record.mjs
-function FromRecord2(type) {
-  return RecordKey(type);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_tuple.mjs
-function FromTuple3(types) {
-  const result = types.map((_, index) => Literal(index));
-  return EvaluateUnionFast(result);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/from_type.mjs
-function FromType12(type) {
-  return IsAny(type) ? FromAny() : IsArray2(type) ? FromArray5(type.items) : IsObject2(type) ? FromObject7(type.properties) : IsRecord(type) ? FromRecord2(type) : IsTuple(type) ? FromTuple3(type.items) : Never();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/keyof/instantiate.mjs
-function NormalizeType2(type) {
-  const result = IsCyclic(type) || IsDependent(type) || IsIntersect(type) || IsUnion(type) ? CollapseToObject(type) : type;
-  return result;
-}
-function KeyOfAction(type, options) {
-  return CanInstantiate([type]) ? memory_exports.Update(FromType12(NormalizeType2(type)), {}, options) : KeyOfDeferred(type, options);
-}
-function KeyOfInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return KeyOfAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/mapped.mjs
-function MappedDeferred(identifier, type, as, property, options = {}) {
-  return Deferred("Mapped", [identifier, type, as, property], options);
-}
-function Mapped(identifier, type, as, property, options = {}) {
-  return MappedAction({}, State([], []), identifier, type, as, property, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/mapped/mapped_variants.mjs
-function FromTemplateLiteral3(pattern) {
-  const evaluated = EvaluateTemplateLiteral(pattern);
-  const result = FromType13(evaluated);
-  return result;
-}
-function FromUnion5(types) {
-  return types.reduce((result, left) => {
-    return [...result, ...FromType13(left)];
-  }, []);
-}
-function FromEnum2(values) {
-  const evaluated = EvaluateEnum(values);
-  const result = FromType13(evaluated);
-  return result;
-}
-function FromLiteral5(value) {
-  const result = guard_exports.IsNumber(value) ? [Literal(`${value}`)] : [Literal(value)];
-  return result;
-}
-function FromType13(type) {
-  const result = IsEnum2(type) ? FromEnum2(type.enum) : IsLiteral(type) ? FromLiteral5(type.const) : IsTemplateLiteral(type) ? FromTemplateLiteral3(type.pattern) : IsUnion(type) ? FromUnion5(type.anyOf) : [type];
-  return result;
-}
-function MappedVariants(type) {
-  const result = FromType13(type);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/mapped/mapped_operation.mjs
-function CanonicalAs(instantiatedAs) {
-  const result = IsTemplateLiteral(instantiatedAs) ? EvaluateTemplateLiteral(instantiatedAs.pattern) : instantiatedAs;
-  return result;
-}
-function MappedVariant(context, state, identifier, variant2, as, property) {
-  const variantContext = memory_exports.Assign(context, { [identifier["name"]]: variant2 });
-  const instantiatedAs = InstantiateType(variantContext, state, as);
-  const canonicalAs = CanonicalAs(instantiatedAs);
-  const instantiatedProperty = InstantiateType(variantContext, state, property);
-  return IsLiteralNumber(canonicalAs) || IsLiteralString(canonicalAs) ? { [canonicalAs.const]: instantiatedProperty } : {};
-}
-function MappedProperties(context, state, identifier, variants, as, property) {
-  return variants.reduce((result, left) => {
-    return [...result, MappedVariant(context, state, identifier, left, as, property)];
-  }, []);
-}
-function MappedObjects(properties) {
-  return properties.reduce((result, left) => {
-    return [...result, _Object_(left)];
-  }, []);
-}
-function MappedOperation(context, state, identifier, type, as, property) {
-  const variants = MappedVariants(type);
-  const mappedProperties = MappedProperties(context, state, identifier, variants, as, property);
-  const mappedObjects = MappedObjects(mappedProperties);
-  const result = EvaluateIntersect(mappedObjects);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/mapped/instantiate.mjs
-function MappedAction(context, state, identifier, type, as, property, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(MappedOperation(context, state, identifier, type, as, property), {}, options) : MappedDeferred(identifier, type, as, property, options);
-  return result;
-}
-function MappedInstantiate(context, state, identifier, type, as, property, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return MappedAction(context, state, identifier, instantiatedType, as, property, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/module/instantiate.mjs
-function InstantiateCyclics(context, declarations2, cyclicKeys) {
-  const declarationContext = memory_exports.Assign(context, declarations2);
-  const declarationKeys = guard_exports.Keys(declarations2).filter((key) => cyclicKeys.includes(key));
-  return declarationKeys.reduce((result, key) => {
-    return { ...result, [key]: InstantiateCyclic(declarationContext, key, declarations2[key]) };
-  }, {});
-}
-function InstantiateNonCyclics(context, declarations2, cyclicKeys) {
-  const declarationContext = memory_exports.Assign(context, declarations2);
-  const declarationKeys = guard_exports.Keys(declarations2).filter((key) => !cyclicKeys.includes(key));
-  return declarationKeys.reduce((result, key) => {
-    return { ...result, [key]: InstantiateType(declarationContext, State([], []), declarations2[key]) };
-  }, {});
-}
-function InstantiateModule(context, declarations2, options) {
-  const cyclicCandidates = CyclicCandidates(declarations2);
-  const instantiatedCyclics = InstantiateCyclics(context, declarations2, cyclicCandidates);
-  const instantiatedNonCyclics = InstantiateNonCyclics(context, declarations2, cyclicCandidates);
-  const instantiatedModule = { ...instantiatedCyclics, ...instantiatedNonCyclics };
-  return memory_exports.Update(instantiatedModule, {}, options);
-}
-function ModuleInstantiate(context, _state, declarations2, options) {
-  const instantiatedModule = InstantiateModule(context, declarations2, options);
-  return instantiatedModule;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/non_nullable.mjs
-function NonNullableDeferred(type, options = {}) {
-  return Deferred("NonNullable", [type], options);
-}
-function NonNullable(type, options = {}) {
-  return NonNullableAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/non_nullable/instantiate.mjs
-function NonNullableOperation(type) {
-  const excluded = Union([Null(), Undefined()]);
-  return ExcludeAction(type, excluded, {});
-}
-function NonNullableAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(NonNullableOperation(type), {}, options) : NonNullableDeferred(type, options);
-  return result;
-}
-function NonNullableInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return NonNullableAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/omit.mjs
-function OmitDeferred(type, indexer, options = {}) {
-  return Deferred("Omit", [type, indexer], options);
-}
-function Omit(type, indexer_or_keys, options = {}) {
-  const indexer = guard_exports.IsArray(indexer_or_keys) ? KeysToIndexer(indexer_or_keys) : indexer_or_keys;
-  return OmitAction(type, indexer, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/indexable/to_indexable.mjs
-function ToIndexable(type) {
-  const collapsed = CollapseToObject(type);
-  const result = IsObject2(collapsed) ? collapsed.properties : Unreachable();
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/omit/from_type.mjs
-function FromKeys(properties, keys) {
-  const result = guard_exports.Keys(properties).reduce((result2, key) => {
-    return keys.includes(key) ? result2 : { ...result2, [key]: properties[key] };
-  }, {});
-  return result;
-}
-function FromType14(type, indexer) {
-  const indexable = ToIndexable(type);
-  const indexableKeys = ToIndexableKeys(indexer);
-  const omitted = FromKeys(indexable, indexableKeys);
-  const result = _Object_(omitted);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/omit/instantiate.mjs
-function OmitAction(type, indexer, options) {
-  const result = CanInstantiate([type, indexer]) ? memory_exports.Update(FromType14(type, indexer), {}, options) : OmitDeferred(type, indexer, options);
-  return result;
-}
-function OmitInstantiate(context, state, type, indexer, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  const instantiatedIndexer = InstantiateType(context, state, indexer);
-  return OmitAction(instantiatedType, instantiatedIndexer, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/parameters.mjs
-function ParametersDeferred(type, options = {}) {
-  return Deferred("Parameters", [type], options);
-}
-function Parameters(type, options = {}) {
-  return ParametersAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/parameters/instantiate.mjs
-function ParametersOperation(type) {
-  const parameters = IsFunction2(type) ? type["parameters"] : [];
-  const instantiatedParameters = InstantiateElements({}, State([], []), parameters);
-  const result = Tuple(instantiatedParameters);
-  return result;
-}
-function ParametersAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(ParametersOperation(type), {}, options) : ParametersDeferred(type, options);
-  return result;
-}
-function ParametersInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return ParametersAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/partial.mjs
-function PartialDeferred(type, options = {}) {
-  return Deferred("Partial", [type], options);
-}
-function Partial(type, options = {}) {
-  return PartialAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_cyclic.mjs
-function FromCyclic3(defs, ref) {
-  const target = CyclicTarget(defs, ref);
-  const partial = FromType15(target);
-  const result = Cyclic(memory_exports.Assign(defs, { [ref]: partial }), ref);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_dependent.mjs
-function FromDependent3(if_, then_, else_) {
-  const evaluated = EvaluateDependent(if_, then_, else_);
-  const result = FromType15(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_intersect.mjs
-function FromIntersect3(types) {
-  const evaluated = EvaluateIntersect(types);
-  const result = FromType15(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_union.mjs
-function FromUnion6(types) {
-  const result = types.map((type) => FromType15(type));
-  return Union(result);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_object.mjs
-function FromObject8(properties) {
-  const mapped = guard_exports.Keys(properties).reduce((result2, left) => {
-    return { ...result2, [left]: AddOptional(properties[left]) };
-  }, {});
-  const result = _Object_(mapped);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/from_type.mjs
-function FromType15(type) {
-  return IsCyclic(type) ? FromCyclic3(type.$defs, type.$ref) : IsDependent(type) ? FromDependent3(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect3(type.allOf) : IsUnion(type) ? FromUnion6(type.anyOf) : IsObject2(type) ? FromObject8(type.properties) : _Object_({});
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/partial/instantiate.mjs
-function PartialAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(FromType15(type), {}, options) : PartialDeferred(type, options);
-  return result;
-}
-function PartialInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return PartialAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/pick.mjs
-function PickDeferred(type, indexer, options = {}) {
-  return Deferred("Pick", [type, indexer], options);
-}
-function Pick(type, indexer_or_keys, options = {}) {
-  const indexer = guard_exports.IsArray(indexer_or_keys) ? KeysToIndexer(indexer_or_keys) : indexer_or_keys;
-  return PickAction(type, indexer, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/pick/from_type.mjs
-function FromKeys2(properties, keys) {
-  const result = guard_exports.Keys(properties).reduce((result2, key) => {
-    return keys.includes(key) ? memory_exports.Assign(result2, { [key]: properties[key] }) : result2;
-  }, {});
-  return result;
-}
-function FromType16(type, indexer) {
-  const indexable = ToIndexable(type);
-  const keys = ToIndexableKeys(indexer);
-  const applied = FromKeys2(indexable, keys);
-  const result = _Object_(applied);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/pick/instantiate.mjs
-function PickAction(type, indexer, options) {
-  const result = CanInstantiate([type, indexer]) ? memory_exports.Update(FromType16(type, indexer), {}, options) : PickDeferred(type, indexer, options);
-  return result;
-}
-function PickInstantiate(context, state, type, indexer, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  const instantiatedIndexer = InstantiateType(context, state, indexer);
-  return PickAction(instantiatedType, instantiatedIndexer, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/readonly_object.mjs
-function ReadonlyObjectDeferred(type, options = {}) {
-  return Deferred("ReadonlyObject", [type], options);
-}
-function ReadonlyObject(type, options = {}) {
-  return ReadonlyObjectAction(type, options);
-}
-var ReadonlyType = ReadonlyObject;
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_array.mjs
-function FromArray6(type) {
-  const result = AddImmutable(_Array_(type));
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_cyclic.mjs
-function FromCyclic4(defs, ref) {
-  const target = CyclicTarget(defs, ref);
-  const partial = FromType17(target);
-  const result = Cyclic(memory_exports.Assign(defs, { [ref]: partial }), ref);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_dependent.mjs
-function FromDependent4(if_, then_, else_) {
-  const evaluated = EvaluateDependent(if_, then_, else_);
-  const result = FromType17(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_intersect.mjs
-function FromIntersect4(types) {
-  const evaluated = EvaluateIntersect(types);
-  const result = FromType17(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_object.mjs
-function FromObject9(properties) {
-  const mapped = guard_exports.Keys(properties).reduce((result2, left) => {
-    return { ...result2, [left]: AddReadonly(properties[left]) };
-  }, {});
-  const result = _Object_(mapped);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_tuple.mjs
-function FromTuple4(types) {
-  const result = AddImmutable(Tuple(types));
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_union.mjs
-function FromUnion7(types) {
-  const result = types.map((type) => FromType17(type));
-  return Union(result);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/from_type.mjs
-function FromType17(type) {
-  return IsArray2(type) ? FromArray6(type.items) : IsCyclic(type) ? FromCyclic4(type.$defs, type.$ref) : IsDependent(type) ? FromDependent4(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect4(type.allOf) : IsObject2(type) ? FromObject9(type.properties) : IsTuple(type) ? FromTuple4(type.items) : IsUnion(type) ? FromUnion7(type.anyOf) : type;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/readonly_object/instantiate.mjs
-function ReadonlyObjectAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(FromType17(type), {}, options) : ReadonlyObjectDeferred(type);
-  return result;
-}
-function ReadonlyObjectInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return ReadonlyObjectAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/ref/instantiate.mjs
-function RefInstantiate(context, state, type, ref) {
-  return state.visited.includes(ref) ? type : ref in context ? InstantiateType(context, State(state["callstack"], [...state["visited"], ref]), context[ref]) : type;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_cyclic.mjs
-function FromCyclic5(defs, ref) {
-  const target = CyclicTarget(defs, ref);
-  const partial = FromType18(target);
-  const result = Cyclic(memory_exports.Assign(defs, { [ref]: partial }), ref);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_dependent.mjs
-function FromDependent5(if_, then_, else_) {
-  const evaluated = EvaluateDependent(if_, then_, else_);
-  const result = FromType18(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_intersect.mjs
-function FromIntersect5(types) {
-  const evaluated = EvaluateIntersect(types);
-  const result = FromType18(evaluated);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_union.mjs
-function FromUnion8(types) {
-  const result = types.map((type) => FromType18(type));
-  return Union(result);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_object.mjs
-function FromObject10(properties) {
-  const mapped = guard_exports.Keys(properties).reduce((result2, left) => {
-    return { ...result2, [left]: RemoveOptional(properties[left]) };
-  }, {});
-  const result = _Object_(mapped);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/from_type.mjs
-function FromType18(type) {
-  return IsCyclic(type) ? FromCyclic5(type.$defs, type.$ref) : IsDependent(type) ? FromDependent5(type.if, type.then, type.else) : IsIntersect(type) ? FromIntersect5(type.allOf) : IsUnion(type) ? FromUnion8(type.anyOf) : IsObject2(type) ? FromObject10(type.properties) : _Object_({});
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/required.mjs
-function RequiredDeferred(type, options = {}) {
-  return Deferred("Required", [type], options);
-}
-function Required(type, options = {}) {
-  return RequiredAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/required/instantiate.mjs
-function RequiredAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(FromType18(type), {}, options) : RequiredDeferred(type, options);
-  return result;
-}
-function RequiredInstantiate(context, state, type, options) {
-  const instaniatedType = InstantiateType(context, state, type);
-  return RequiredAction(instaniatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/return_type.mjs
-function ReturnTypeDeferred(type, options = {}) {
-  return Deferred("ReturnType", [type], options);
-}
-function ReturnType(type, options = {}) {
-  return ReturnTypeAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/return_type/instantiate.mjs
-function ReturnTypeOperation(type) {
-  return IsFunction2(type) ? type["returnType"] : Never();
-}
-function ReturnTypeAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(ReturnTypeOperation(type), {}, options) : ReturnTypeDeferred(type, options);
-  return result;
-}
-function ReturnTypeInstantiate(context, state, type, options = {}) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return ReturnTypeAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/with.mjs
-function WithDeferred(type, options) {
-  return Deferred("With", [type, options], {});
-}
-function With2(type, options) {
-  return WithAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/with/instantiate.mjs
-function WithAction(type, options) {
-  const result = CanInstantiate([type]) ? memory_exports.Update(type, {}, options) : WithDeferred(type, options);
-  return result;
-}
-function WithInstantiate(context, state, type, options) {
-  const instaniatedType = InstantiateType(context, state, type);
-  return WithAction(instaniatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/rest/spread.mjs
-function SpreadElement(type) {
-  const result = IsRest(type) ? IsTuple(type.items) ? RestSpread(type.items.items) : IsInfer(type.items) ? [type] : IsRef2(type.items) ? [type] : [Never()] : [type];
-  return result;
-}
-function RestSpread(types) {
-  const result = types.reduce((result2, left) => {
-    return [...result2, ...SpreadElement(left)];
-  }, []);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/instantiate.mjs
-function State(callstack, visited2) {
-  return { callstack, visited: visited2 };
-}
-function CanInstantiate(types) {
-  return guard_exports.ShiftLeft(types, (left, right) => IsRef2(left) ? false : CanInstantiate(right), () => true);
-}
-function InstantiateProperties(context, state, properties) {
-  return guard_exports.Keys(properties).reduce((result, key) => {
-    return { ...result, [key]: InstantiateType(context, state, properties[key]) };
-  }, {});
-}
-function InstantiateElements(context, state, types) {
-  const elements = InstantiateTypes(context, state, types);
-  const result = RestSpread(elements);
-  return result;
-}
-function InstantiateTypes(context, state, types) {
-  return types.map((type) => InstantiateType(context, state, type));
-}
-function WithModifiers(type, instantiatedType) {
-  const withOptional = IsOptional(type) ? AddOptionalAction(instantiatedType, {}) : instantiatedType;
-  const withReadonly = IsReadonly(type) ? AddReadonlyAction(withOptional, {}) : withOptional;
-  const withImmutable = IsImmutable(type) ? AddImmutableAction(withReadonly, {}) : withReadonly;
-  return withImmutable;
-}
-function InstantiateDeferred(context, state, action, parameters, options) {
-  return (
-    // Modifiers
-    guard_exports.IsEqual(action, "AddImmutable") ? AddImmutableInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "RemoveImmutable") ? RemoveImmutableInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "AddReadonly") ? AddReadonlyInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "RemoveReadonly") ? RemoveReadonlyInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "AddOptional") ? AddOptionalInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "RemoveOptional") ? RemoveOptionalInstantiate(context, state, parameters[0], options) : (
-      // Actions
-      guard_exports.IsEqual(action, "Capitalize") ? CapitalizeInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Conditional") ? ConditionalInstantiate(context, state, parameters[0], parameters[1], parameters[2], parameters[3], options) : guard_exports.IsEqual(action, "ConstructorParameters") ? ConstructorParametersInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Evaluate") ? EvaluateInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Exclude") ? ExcludeInstantiate(context, state, parameters[0], parameters[1], options) : guard_exports.IsEqual(action, "Extract") ? ExtractInstantiate(context, state, parameters[0], parameters[1], options) : guard_exports.IsEqual(action, "Index") ? IndexInstantiate(context, state, parameters[0], parameters[1], options) : guard_exports.IsEqual(action, "InstanceType") ? InstanceTypeInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Interface") ? InterfaceInstantiate(context, state, parameters[0], parameters[1], options) : guard_exports.IsEqual(action, "KeyOf") ? KeyOfInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Lowercase") ? LowercaseInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Mapped") ? MappedInstantiate(context, state, parameters[0], parameters[1], parameters[2], parameters[3], options) : guard_exports.IsEqual(action, "Module") ? ModuleInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "NonNullable") ? NonNullableInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Pick") ? PickInstantiate(context, state, parameters[0], parameters[1], options) : guard_exports.IsEqual(action, "Parameters") ? ParametersInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Partial") ? PartialInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Omit") ? OmitInstantiate(context, state, parameters[0], parameters[1], options) : guard_exports.IsEqual(action, "ReadonlyObject") ? ReadonlyObjectInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Record") ? RecordInstantiate(context, state, parameters[0], parameters[1], options) : guard_exports.IsEqual(action, "Required") ? RequiredInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "ReturnType") ? ReturnTypeInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "TemplateLiteral") ? TemplateLiteralInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Uncapitalize") ? UncapitalizeInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "Uppercase") ? UppercaseInstantiate(context, state, parameters[0], options) : guard_exports.IsEqual(action, "With") ? WithInstantiate(context, state, parameters[0], parameters[1]) : Deferred(action, parameters, options)
-    )
-  );
-}
-function InstantiateImmediate(context, state, type) {
-  const instantiatedType = IsRef2(type) ? RefInstantiate(context, state, type, type.$ref) : IsArray2(type) ? _Array_(InstantiateType(context, state, type.items), ArrayOptions(type)) : IsCall(type) ? CallInstantiate(context, state, type.target, type.arguments) : IsConstructor2(type) ? Constructor(InstantiateTypes(context, state, type.parameters), InstantiateType(context, state, type.instanceType), ConstructorOptions(type)) : IsFunction2(type) ? _Function_(InstantiateTypes(context, state, type.parameters), InstantiateType(context, state, type.returnType), FunctionOptions(type)) : IsDependent(type) ? Dependent(InstantiateType(context, state, type.if), InstantiateType(context, state, type.then), InstantiateType(context, state, type.else), DependentOptions(type)) : IsIntersect(type) ? Intersect(InstantiateTypes(context, state, type.allOf), IntersectOptions(type)) : IsObject2(type) ? _Object_(InstantiateProperties(context, state, type.properties), ObjectOptions(type)) : IsRecord(type) ? RecordFromPattern(RecordPattern(type), InstantiateType(context, state, RecordValue(type))) : IsRest(type) ? Rest(InstantiateType(context, state, type.items)) : IsTuple(type) ? Tuple(InstantiateElements(context, state, type.items), TupleOptions(type)) : IsUnion(type) ? Union(InstantiateTypes(context, state, type.anyOf), UnionOptions(type)) : type;
-  const withModifiers = WithModifiers(type, instantiatedType);
-  return withModifiers;
-}
-function InstantiateType(context, state, type) {
-  const result = IsDeferred(type) ? InstantiateDeferred(context, state, type.action, type.parameters, type.options) : InstantiateImmediate(context, state, type);
-  return result;
-}
-function Instantiate(context, type) {
-  return InstantiateType(context, State([], []), type);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/immutable/instantiate_add.mjs
-function AddImmutableOperation(type) {
-  return memory_exports.Update(type, { "~immutable": true }, {});
-}
-function AddImmutableAction(type, options) {
-  const result = memory_exports.Update(AddImmutableOperation(type), {}, options);
-  return result;
-}
-function AddImmutableInstantiate(context, state, type, options) {
-  const instantiatedType = InstantiateType(context, state, type);
-  return AddImmutableAction(instantiatedType, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/_add_immutable.mjs
-function AddImmutableDeferred(type, options = {}) {
-  return Deferred("AddImmutable", [type], options);
-}
-function AddImmutable(type, options = {}) {
-  return AddImmutableAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/evaluate.mjs
-function EvaluateDeferred(type, options = {}) {
-  return Deferred("Evaluate", [type], options);
-}
-function Evaluate(type, options = {}) {
-  return EvaluateAction(type, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/action/module.mjs
-function ModuleDeferred(declarations2, options = {}) {
-  return Deferred("Module", [declarations2], options);
-}
-function Module2(declarations2, options = {}) {
-  return ModuleInstantiate({}, State([], []), declarations2, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/engine/priority/priority.mjs
-function Comparer(left, right) {
-  const compareResult = Compare(left, right);
-  return guard_exports.IsEqual(compareResult, CompareResultRightInside) ? 1 : guard_exports.IsEqual(compareResult, CompareResultDisjoint) ? 1 : 0;
-}
-function Insert(type, types, result = []) {
-  return guard_exports.ShiftLeft(types, (left, right) => guard_exports.IsEqual(Comparer(type, left), 1) ? Insert(type, right, [...result, left]) : [...result, type, ...types], () => [...result, type]);
-}
-function Sort(types, result = []) {
-  return guard_exports.ShiftLeft(types, (left, right) => Sort(right, Insert(left, result)), () => result);
-}
-function Priority(types) {
-  const result = Sort(types);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/type/script/script.mjs
-function Script2(...args) {
-  const [context, input, options] = arguments_exports.Match(args, {
-    2: (script, options2) => guard_exports.IsString(script) ? [{}, script, options2] : [script, options2, {}],
-    3: (context2, script, options2) => [context2, script, options2],
-    1: (script) => [{}, script, {}]
-  });
-  const result = Script(input);
-  const parsed = guard_exports.IsArray(result) && guard_exports.IsEqual(result.length, 2) ? InstantiateType(context, State([], []), result[0]) : Never();
-  return memory_exports.Update(parsed, {}, options);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_array.mjs
-function FromArray7(context, type, value) {
-  if (!guard_exports.IsArray(value))
-    return value;
-  return value.map((value2) => FromType19(context, type.items, value2));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_cyclic.mjs
-function FromCyclic6(context, type, value) {
-  return FromType19({ ...context, ...type.$defs }, Ref2(type.$ref), value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_intersect.mjs
-function EvaluateIntersection(context, type) {
-  const additionalProperties = guard_exports.HasPropertyKey(type, "unevaluatedProperties") ? { additionalProperties: type.unevaluatedProperties } : {};
-  const instantiated = Instantiate(context, type);
-  const evaluated = Evaluate(instantiated);
-  return IsObject2(evaluated) ? With2(evaluated, additionalProperties) : evaluated;
-}
-function FromIntersect6(context, type, value) {
-  const evaluated = EvaluateIntersection(context, type);
-  return FromType19(context, evaluated, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/additional.mjs
-function GetAdditionalProperties(type) {
-  const additionalProperties = guard_exports.HasPropertyKey(type, "additionalProperties") ? type.additionalProperties : void 0;
-  return additionalProperties;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_object.mjs
-function FromObject11(context, type, value) {
-  if (!guard_exports.IsObject(value) || guard_exports.IsArray(value))
-    return value;
-  const additionalProperties = GetAdditionalProperties(type);
-  for (const key of guard_exports.Keys(value)) {
-    if (guard_exports.HasPropertyKey(type.properties, key)) {
-      value[key] = FromType19(context, type.properties[key], value[key]);
-      continue;
-    }
-    const unknownCheck = (
-      // 1. additionalProperties: true
-      guard_exports.IsBoolean(additionalProperties) && guard_exports.IsEqual(additionalProperties, true) || IsSchema2(additionalProperties) && Check2(context, additionalProperties, value[key])
-    );
-    if (unknownCheck) {
-      value[key] = FromType19(context, additionalProperties, value[key]);
-      continue;
-    }
-    delete value[key];
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_record.mjs
-function FromRecord3(context, type, value) {
-  if (!guard_exports.IsObject(value))
-    return value;
-  const additionalProperties = GetAdditionalProperties(type);
-  const [recordPattern, recordValue] = [new RegExp(RecordPattern(type)), RecordValue(type)];
-  for (const key of guard_exports.Keys(value)) {
-    if (recordPattern.test(key)) {
-      value[key] = FromType19(context, recordValue, value[key]);
-      continue;
-    }
-    const unknownCheck = (
-      // 1. additionalProperties: true
-      guard_exports.IsBoolean(additionalProperties) && guard_exports.IsEqual(additionalProperties, true) || IsSchema2(additionalProperties) && Check2(context, additionalProperties, value[key])
-    );
-    if (unknownCheck) {
-      value[key] = FromType19(context, additionalProperties, value[key]);
-      continue;
-    }
-    delete value[key];
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_ref.mjs
-function FromRef5(context, type, value) {
-  return guard_exports.HasPropertyKey(context, type.$ref) ? FromType19(context, context[type.$ref], value) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_tuple.mjs
-function FromTuple5(context, schema, value) {
-  if (!guard_exports.IsArray(value))
-    return value;
-  const length = Math.min(value.length, schema.items.length);
-  for (let index = 0; index < length; index++) {
-    value[index] = FromType19(context, schema.items[index], value[index]);
-  }
-  return guard_exports.IsGreaterThan(value.length, length) ? value.slice(0, length) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clone/clone.mjs
-function Clone2(value) {
-  return Clone(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_union.mjs
-function FromUnion9(context, type, value) {
-  for (const schema of type.anyOf) {
-    const clean = FromType19(context, schema, Clone2(value));
-    if (Check2(context, schema, clean))
-      return clean;
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/from_type.mjs
-function FromType19(context, type, value) {
-  return IsArray2(type) ? FromArray7(context, type, value) : IsCyclic(type) ? FromCyclic6(context, type, value) : IsIntersect(type) ? FromIntersect6(context, type, value) : IsObject2(type) ? FromObject11(context, type, value) : IsRecord(type) ? FromRecord3(context, type, value) : IsRef2(type) ? FromRef5(context, type, value) : IsTuple(type) ? FromTuple5(context, type, value) : IsUnion(type) ? FromUnion9(context, type, value) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/shared/union_priority_sort.mjs
-function Modifiers(type, next) {
-  for (const key of guard_default.Keys(type)) {
-    if (guard_default.HasPropertyKey(next, key))
-      continue;
-    next[key] = type[key];
-  }
-  return next;
-}
-function FromProperties4(properties) {
-  const result = {};
-  for (const key of guard_default.Keys(properties))
-    result[key] = FromType20(properties[key]);
-  return result;
-}
-function FromPriorityTypes(types) {
-  return FromTypes6(Priority(types));
-}
-function FromTypes6(types) {
-  return types.map((type) => FromType20(type));
-}
-function FromType20(type) {
-  const next = IsArray2(type) ? _Array_(FromType20(type.items), ArrayOptions(type)) : IsIntersect(type) ? Intersect(FromTypes6(type.allOf)) : IsUnion(type) ? Union(FromPriorityTypes(type.anyOf)) : IsObject2(type) ? _Object_(FromProperties4(type.properties)) : IsRecord(type) ? Record(RecordKey(type), FromType20(RecordValue(type))) : IsTuple(type) ? Tuple(FromTypes6(type.items)) : type;
-  return Modifiers(type, next);
-}
-function UnionPrioritySort(type) {
-  const result = FromType20(type);
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/clean/clean.mjs
-function Clean(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  const sorted = settings_exports.Get().unionPrioritySort ? UnionPrioritySort(type) : type;
-  return FromType19(context, sorted, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try.mjs
-var try_exports = {};
-__export(try_exports, {
-  Fail: () => Fail,
-  IsOk: () => IsOk,
-  Ok: () => Ok,
-  TryArray: () => TryArray,
-  TryBigInt: () => TryBigInt,
-  TryBoolean: () => TryBoolean,
-  TryNull: () => TryNull,
-  TryNumber: () => TryNumber,
-  TryString: () => TryString,
-  TryUndefined: () => TryUndefined
-});
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_result.mjs
-function IsOk(value) {
-  return guard_exports.IsObject(value) && guard_exports.HasPropertyKey(value, "value");
-}
-function Ok(value) {
-  return { value };
-}
-function Fail() {
-  return void 0;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_array.mjs
-function TryArray(value) {
-  return guard_exports.IsArray(value) ? Ok(value) : Ok([value]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_bigint.mjs
-function FromBoolean2(value) {
-  return guard_exports.IsEqual(value, true) ? Ok(BigInt(1)) : Ok(BigInt(0));
-}
-var bigintPattern = /^-?(0|[1-9]\d*)n$/;
-var decimalPattern = /^-?(0|[1-9]\d*)\.\d+$/;
-var integerPattern = /^-?(0|[1-9]\d*)$/;
-function IsStringBigIntLike(value) {
-  return bigintPattern.test(value);
-}
-function IsStringDecimalLike(value) {
-  return decimalPattern.test(value);
-}
-function IsStringIntegerLike(value) {
-  return integerPattern.test(value);
-}
-function FromString2(value) {
-  const lowercase = value.toLowerCase();
-  return IsStringBigIntLike(value) ? Ok(BigInt(value.slice(0, value.length - 1))) : IsStringDecimalLike(value) ? Ok(BigInt(value.split(".")[0])) : IsStringIntegerLike(value) ? Ok(BigInt(value)) : guard_exports.IsEqual(lowercase, "false") ? Ok(BigInt(0)) : guard_exports.IsEqual(lowercase, "true") ? Ok(BigInt(1)) : Fail();
-}
-function TryBigInt(value) {
-  return guard_exports.IsBigInt(value) ? Ok(value) : guard_exports.IsBoolean(value) ? FromBoolean2(value) : guard_exports.IsNumber(value) ? Ok(BigInt(Math.trunc(value))) : guard_exports.IsNull(value) ? Ok(BigInt(0)) : guard_exports.IsString(value) ? FromString2(value) : guard_exports.IsUndefined(value) ? Ok(BigInt(0)) : Fail();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_boolean.mjs
-function FromBigInt2(value) {
-  return guard_exports.IsEqual(value, BigInt(0)) ? Ok(false) : guard_exports.IsEqual(value, BigInt(1)) ? Ok(true) : Fail();
-}
-function FromNumber2(value) {
-  return guard_exports.IsEqual(value, 0) ? Ok(false) : guard_exports.IsEqual(value, 1) ? Ok(true) : Fail();
-}
-function FromString3(value) {
-  return guard_exports.IsEqual(value.toLowerCase(), "false") ? Ok(false) : guard_exports.IsEqual(value.toLowerCase(), "true") ? Ok(true) : guard_exports.IsEqual(value, "0") ? Ok(false) : guard_exports.IsEqual(value, "1") ? Ok(true) : Fail();
-}
-function TryBoolean(value) {
-  return guard_exports.IsBigInt(value) ? FromBigInt2(value) : guard_exports.IsBoolean(value) ? Ok(value) : guard_exports.IsNumber(value) ? FromNumber2(value) : guard_exports.IsNull(value) ? Ok(false) : guard_exports.IsString(value) ? FromString3(value) : guard_exports.IsUndefined(value) ? Ok(false) : Fail();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_null.mjs
-function FromBigInt3(value) {
-  return guard_exports.IsEqual(value, BigInt(0)) ? Ok(null) : Fail();
-}
-function FromBoolean3(value) {
-  return guard_exports.IsEqual(value, false) ? Ok(null) : Fail();
-}
-function FromNumber3(value) {
-  return guard_exports.IsEqual(value, 0) ? Ok(null) : Fail();
-}
-function FromString4(value) {
-  const lowercase = value.toLowerCase();
-  const predicate = guard_exports.IsEqual(lowercase, "undefined") || guard_exports.IsEqual(lowercase, "null") || guard_exports.IsEqual(value, "") || guard_exports.IsEqual(value, "0");
-  return predicate ? Ok(null) : Fail();
-}
-function TryNull(value) {
-  return guard_exports.IsBigInt(value) ? FromBigInt3(value) : guard_exports.IsBoolean(value) ? FromBoolean3(value) : guard_exports.IsNumber(value) ? FromNumber3(value) : guard_exports.IsNull(value) ? Ok(null) : guard_exports.IsString(value) ? FromString4(value) : guard_exports.IsUndefined(value) ? Ok(null) : Fail();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_number.mjs
-var maxBigInt = BigInt(Number.MAX_SAFE_INTEGER);
-var minBigInt = BigInt(Number.MIN_SAFE_INTEGER);
-function FromBigInt4(value) {
-  return value <= maxBigInt && value >= minBigInt ? Ok(Number(value)) : Fail();
-}
-function FromBoolean4(value) {
-  return Ok(value ? 1 : 0);
-}
-function FromString5(value) {
-  const coerced = +value;
-  if (guard_exports.IsNumber(coerced))
-    return Ok(coerced);
-  const lowercase = value.toLowerCase();
-  if (guard_exports.IsEqual(lowercase, "false"))
-    return Ok(0);
-  if (guard_exports.IsEqual(lowercase, "true"))
-    return Ok(1);
-  const result = TryBigInt(value);
-  if (IsOk(result))
-    return result.value <= maxBigInt && result.value >= minBigInt ? Ok(Number(result.value)) : Fail();
-  return Fail();
-}
-function TryNumber(value) {
-  return guard_exports.IsBigInt(value) ? FromBigInt4(value) : guard_exports.IsBoolean(value) ? FromBoolean4(value) : guard_exports.IsNumber(value) ? Ok(value) : guard_exports.IsNull(value) ? Ok(0) : guard_exports.IsString(value) ? FromString5(value) : guard_exports.IsUndefined(value) ? Ok(0) : Fail();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_string.mjs
-function TryString(value) {
-  return guard_exports.IsBigInt(value) ? Ok(value.toString()) : guard_exports.IsBoolean(value) ? Ok(value.toString()) : guard_exports.IsNumber(value) ? Ok(value.toString()) : guard_exports.IsNull(value) ? Ok("null") : guard_exports.IsString(value) ? Ok(value) : guard_exports.IsUndefined(value) ? Ok("") : Fail();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/try/try_undefined.mjs
-function FromBigInt5(value) {
-  return guard_exports.IsEqual(value, BigInt(0)) ? Ok(void 0) : Fail();
-}
-function FromBoolean5(value) {
-  return guard_exports.IsEqual(value, false) ? Ok(void 0) : Fail();
-}
-function FromNumber4(value) {
-  return guard_exports.IsEqual(value, 0) ? Ok(void 0) : Fail();
-}
-function FromString6(value) {
-  const lowercase = value.toLowerCase();
-  const predicate = guard_exports.IsEqual(lowercase, "undefined") || guard_exports.IsEqual(lowercase, "null") || guard_exports.IsEqual(value, "") || guard_exports.IsEqual(value, "0");
-  return predicate ? Ok(void 0) : Fail();
-}
-function TryUndefined(value) {
-  return guard_exports.IsBigInt(value) ? FromBigInt5(value) : guard_exports.IsBoolean(value) ? FromBoolean5(value) : guard_exports.IsNumber(value) ? FromNumber4(value) : guard_exports.IsNull(value) ? Ok(void 0) : guard_exports.IsString(value) ? FromString6(value) : guard_exports.IsUndefined(value) ? Ok(value) : Fail();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_array.mjs
-function FromArray8(context, type, value) {
-  const result = try_exports.TryArray(value);
-  return result.value.map((value2) => FromType21(context, type.items, value2));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_bigint.mjs
-function FromBigInt6(_context, _type, value) {
-  const result = try_exports.TryBigInt(value);
-  return try_exports.IsOk(result) ? result.value : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_boolean.mjs
-function FromBoolean6(_context, _type, value) {
-  const result = try_exports.TryBoolean(value);
-  return try_exports.IsOk(result) ? result.value : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_cyclic.mjs
-function FromCyclic7(context, type, value) {
-  return FromType21({ ...context, ...type.$defs }, Ref2(type.$ref), value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_enum.mjs
-function FromEnum3(context, type, value) {
-  return FromType21(context, Evaluate(type), value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_integer.mjs
-function FromInteger(_context, _type, value) {
-  const result = try_exports.TryNumber(value);
-  return try_exports.IsOk(result) ? Math.trunc(result.value) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_intersect.mjs
-function FromIntersect7(context, type, value) {
-  const instantiated = Instantiate(context, type);
-  const evaluated = Evaluate(instantiated);
-  return FromType21(context, evaluated, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_literal.mjs
-function FromLiteralBigInt(_context, type, value) {
-  const result = try_exports.TryBigInt(value);
-  return try_exports.IsOk(result) && guard_exports.IsEqual(type.const, result.value) ? result.value : value;
-}
-function FromLiteralBoolean(_context, type, value) {
-  const result = try_exports.TryBoolean(value);
-  return try_exports.IsOk(result) && guard_exports.IsEqual(type.const, result.value) ? result.value : value;
-}
-function FromLiteralNumber(_context, type, value) {
-  const result = try_exports.TryNumber(value);
-  return try_exports.IsOk(result) && guard_exports.IsEqual(type.const, result.value) ? result.value : value;
-}
-function FromLiteralString(_context, type, value) {
-  const result = try_exports.TryString(value);
-  return try_exports.IsOk(result) && guard_exports.IsEqual(type.const, result.value) ? result.value : value;
-}
-function FromLiteral6(context, type, value) {
-  if (guard_exports.IsEqual(type.const, value))
-    return value;
-  return IsLiteralBigInt(type) ? FromLiteralBigInt(context, type, value) : IsLiteralBoolean(type) ? FromLiteralBoolean(context, type, value) : IsLiteralNumber(type) ? FromLiteralNumber(context, type, value) : IsLiteralString(type) ? FromLiteralString(context, type, value) : Unreachable();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_null.mjs
-function FromNull2(_context, _type, value) {
-  const result = try_exports.TryNull(value);
-  return try_exports.IsOk(result) ? result.value : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_number.mjs
-function FromNumber5(_context, _type, value) {
-  const result = try_exports.TryNumber(value);
-  return try_exports.IsOk(result) ? result.value : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_additional.mjs
-function FromAdditionalProperties(context, entries, additionalProperties, value) {
-  const keys = guard_exports.Keys(value);
-  for (const [regexp, _] of entries) {
-    for (const key of keys) {
-      if (!regexp.test(key)) {
-        value[key] = FromType21(context, additionalProperties, value[key]);
-      }
-    }
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/shared/optional_undefined.mjs
-function IsOptionalUndefined(property, key, value) {
-  return IsOptional(property) && guard_exports.IsUndefined(value[key]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_object.mjs
-function FromProperties5(context, type, value) {
-  const entries = guard_exports.EntriesRegExp(type.properties);
-  const keys = guard_exports.Keys(value);
-  for (const [regexp, property] of entries) {
-    for (const key of keys) {
-      if (!regexp.test(key) || IsOptionalUndefined(property, key, value))
-        continue;
-      value[key] = FromType21(context, property, value[key]);
-    }
-  }
-  return guard_exports.HasPropertyKey(type, "additionalProperties") && guard_exports.IsObject(type.additionalProperties) ? FromAdditionalProperties(context, entries, type.additionalProperties, value) : value;
-}
-function FromObject12(context, type, value) {
-  return guard_exports.IsObjectNotArray(value) ? FromProperties5(context, type, value) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_record.mjs
-function FromPatternProperties(context, type, value) {
-  const entries = guard_exports.EntriesRegExp(type.patternProperties);
-  const keys = guard_exports.Keys(value);
-  for (const [regexp, schema] of entries) {
-    for (const key of keys) {
-      if (regexp.test(key)) {
-        value[key] = FromType21(context, schema, value[key]);
-      }
-    }
-  }
-  return guard_exports.HasPropertyKey(type, "additionalProperties") && guard_exports.IsObject(type.additionalProperties) ? FromAdditionalProperties(context, entries, type.additionalProperties, value) : value;
-}
-function FromRecord4(context, type, value) {
-  return guard_exports.IsObjectNotArray(value) ? FromPatternProperties(context, type, value) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_ref.mjs
-function FromRef6(context, type, value) {
-  return guard_exports.HasPropertyKey(context, type.$ref) ? FromType21(context, context[type.$ref], value) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_string.mjs
-function FromString7(_context, _type, value) {
-  const result = try_exports.TryString(value);
-  return try_exports.IsOk(result) ? result.value : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_template_literal.mjs
-function FromTemplateLiteral4(context, type, value) {
-  return FromType21(context, Evaluate(type), value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_tuple.mjs
-function FromTuple6(context, type, value) {
-  if (!guard_exports.IsArray(value))
-    return value;
-  for (let index = 0; index < Math.min(type.items.length, value.length); index++) {
-    value[index] = FromType21(context, type.items[index], value[index]);
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_undefined.mjs
-function FromUndefined2(_context, _type, value) {
-  const result = try_exports.TryUndefined(value);
-  return try_exports.IsOk(result) ? result.value : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_union.mjs
-function FromUnion10(context, type, value) {
-  const matched = type.anyOf.some((type2) => Check2(context, type2, value));
-  if (matched)
-    return value;
-  const candidates = type.anyOf.map((type2) => FromType21(context, type2, Clone2(value)));
-  const selected = candidates.find((value2) => Check2(context, type, value2));
-  return guard_exports.IsUndefined(selected) ? value : selected;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_void.mjs
-function FromVoid(_context, _type, value) {
-  const result = try_exports.TryUndefined(value);
-  return try_exports.IsOk(result) ? void 0 : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/from_type.mjs
-function FromType21(context, type, value) {
-  return IsArray2(type) ? FromArray8(context, type, value) : IsBigInt2(type) ? FromBigInt6(context, type, value) : IsBoolean3(type) ? FromBoolean6(context, type, value) : IsCyclic(type) ? FromCyclic7(context, type, value) : IsEnum2(type) ? FromEnum3(context, type, value) : IsInteger2(type) ? FromInteger(context, type, value) : IsIntersect(type) ? FromIntersect7(context, type, value) : IsLiteral(type) ? FromLiteral6(context, type, value) : IsNull2(type) ? FromNull2(context, type, value) : IsNumber3(type) ? FromNumber5(context, type, value) : IsObject2(type) ? FromObject12(context, type, value) : IsRecord(type) ? FromRecord4(context, type, value) : IsRef2(type) ? FromRef6(context, type, value) : IsString3(type) ? FromString7(context, type, value) : IsTemplateLiteral(type) ? FromTemplateLiteral4(context, type, value) : IsTuple(type) ? FromTuple6(context, type, value) : IsUndefined2(type) ? FromUndefined2(context, type, value) : IsUnion(type) ? FromUnion10(context, type, value) : IsVoid(type) ? FromVoid(context, type, value) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/convert/convert.mjs
-function Convert(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  return FromType21(context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_array.mjs
-function FromArray9(context, type, value) {
-  if (!guard_exports.IsArray(value))
-    return value;
-  for (let i = 0; i < value.length; i++) {
-    value[i] = FromType22(context, type.items, value[i]);
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_cyclic.mjs
-function FromCyclic8(context, type, value) {
-  return FromType22({ ...context, ...type.$defs }, Ref2(type.$ref), value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_default.mjs
-function FromDefault(type, value) {
-  if (!guard_exports.IsUndefined(value))
-    return value;
-  return guard_exports.IsFunction(type.default) ? type.default() : Clone2(type.default);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_intersect.mjs
-function FromIntersect8(context, type, value) {
-  const instantiated = Instantiate(context, type);
-  const evaluated = Evaluate(instantiated);
-  return FromType22(context, evaluated, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_object.mjs
-function FromObject13(context, type, value) {
-  if (!guard_exports.IsObject(value))
-    return value;
-  const knownPropertyKeys = guard_exports.Keys(type.properties);
-  for (const key of knownPropertyKeys) {
-    const propertyValue = FromType22(context, type.properties[key], value[key]);
-    const isUnassignableUndefined = guard_exports.IsUndefined(propertyValue) && (IsOptional(type.properties[key]) || !guard_exports.HasPropertyKey(type.properties[key], "default"));
-    if (isUnassignableUndefined)
-      continue;
-    value[key] = propertyValue;
-  }
-  if (!IsAdditionalProperties(type) || guard_exports.IsBoolean(type.additionalProperties))
-    return value;
-  for (const key of guard_exports.Keys(value)) {
-    if (knownPropertyKeys.includes(key))
-      continue;
-    value[key] = FromType22(context, type.additionalProperties, value[key]);
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_record.mjs
-function FromRecord5(context, type, value) {
-  if (!guard_exports.IsObject(value))
-    return value;
-  const [recordKey, recordValue] = [new RegExp(RecordPattern(type)), RecordValue(type)];
-  for (const key of guard_exports.Keys(value)) {
-    if (!(recordKey.test(key) && IsDefault(recordValue)))
-      continue;
-    value[key] = FromType22(context, recordValue, value[key]);
-  }
-  if (!IsAdditionalProperties(type))
-    return value;
-  for (const key of guard_exports.Keys(value)) {
-    if (recordKey.test(key))
-      continue;
-    value[key] = FromType22(context, type.additionalProperties, value[key]);
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_ref.mjs
-function FromRef7(context, type, value) {
-  return guard_exports.HasPropertyKey(context, type.$ref) ? FromType22(context, context[type.$ref], value) : value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_tuple.mjs
-function FromTuple7(context, schema, value) {
-  if (!guard_exports.IsArray(value))
-    return value;
-  const [items, max] = [schema.items, Math.max(schema.items.length, value.length)];
-  for (let i = 0; i < max; i++) {
-    if (i < items.length)
-      value[i] = FromType22(context, items[i], value[i]);
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_union.mjs
-function FromUnion11(context, schema, value) {
-  for (const inner of schema.anyOf) {
-    const result = FromType22(context, inner, Clone2(value));
-    if (Check2(context, inner, result)) {
-      return result;
-    }
-  }
-  return value;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/from_type.mjs
-function FromType22(context, type, value) {
-  const defaulted = IsDefault(type) ? FromDefault(type, value) : value;
-  return IsArray2(type) ? FromArray9(context, type, defaulted) : IsCyclic(type) ? FromCyclic8(context, type, defaulted) : IsIntersect(type) ? FromIntersect8(context, type, defaulted) : IsObject2(type) ? FromObject13(context, type, defaulted) : IsRecord(type) ? FromRecord5(context, type, defaulted) : IsRef2(type) ? FromRef7(context, type, defaulted) : IsTuple(type) ? FromTuple7(context, type, defaulted) : IsUnion(type) ? FromUnion11(context, type, defaulted) : defaulted;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/default/default.mjs
-function Default(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  return FromType22(context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/pipeline/pipeline.mjs
-function Pipeline(pipeline) {
-  return (...args) => {
-    const [context, type, value] = arguments_exports.Match(args, {
-      3: (context2, type2, value2) => [context2, type2, value2],
-      2: (type2, value2) => [{}, type2, value2]
-    });
-    return pipeline.reduce((result, func) => func(context, type, result), value);
-  };
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/callback.mjs
-function Decode3(_context, type, value) {
-  return type["~codec"].decode(value);
-}
-function Encode3(_context, type, value) {
-  return type["~codec"].encode(value);
-}
-function Callback(direction, context, type, value) {
-  if (!IsCodec(type))
-    return value;
-  return guard_exports.IsEqual(direction, "Decode") ? Decode3(context, type, value) : Encode3(context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_array.mjs
-function Decode4(direction, context, type, value) {
-  if (!guard_exports.IsArray(value))
-    return value;
-  for (let i = 0; i < value.length; i++) {
-    value[i] = FromType23(direction, context, type.items, value[i]);
-  }
-  return Callback(direction, context, type, value);
-}
-function Encode4(direction, context, type, value) {
-  const exterior = Callback(direction, context, type, value);
-  if (!guard_exports.IsArray(exterior))
-    return exterior;
-  for (let i = 0; i < exterior.length; i++) {
-    exterior[i] = FromType23(direction, context, type.items, exterior[i]);
-  }
-  return exterior;
-}
-function FromArray10(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode4(direction, context, type, value) : Encode4(direction, context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_cyclic.mjs
-function FromCyclic9(direction, context, type, value) {
-  value = FromType23(direction, { ...context, ...type.$defs }, Ref2(type.$ref), value);
-  return Callback(direction, context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_intersect.mjs
-function MergeInteriors(interiors) {
-  return interiors.reduce((results, interior) => ({ ...results, ...interior }), {});
-}
-function NonMatchingInterior(value, interiors) {
-  for (const interior of interiors)
-    if (!guard_exports.IsDeepEqual(value, interior))
-      return interior;
-  return value;
-}
-function Decode5(direction, context, type, value) {
-  if (guard_exports.IsEqual(type.allOf.length, 0))
-    return Callback(direction, context, type, value);
-  const interiors = type.allOf.map((schema) => FromType23(direction, context, schema, Clean(schema, Clone2(value))));
-  const structural = interiors.every((result) => guard_exports.IsObject(result));
-  const exterior = structural ? MergeInteriors(interiors) : NonMatchingInterior(value, interiors);
-  return Callback(direction, context, type, exterior);
-}
-function Encode5(direction, context, type, value) {
-  if (guard_exports.IsEqual(type.allOf.length, 0))
-    return Callback(direction, context, type, value);
-  const exterior = Callback(direction, context, type, value);
-  const interiors = type.allOf.map((schema) => FromType23(direction, context, schema, Clean(schema, Clone2(exterior))));
-  const structural = interiors.every((result) => guard_exports.IsObject(result));
-  if (structural)
-    return MergeInteriors(interiors);
-  return NonMatchingInterior(exterior, interiors);
-}
-function FromIntersect9(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode5(direction, context, type, value) : Encode5(direction, context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_object.mjs
-function Decode6(direction, context, type, value) {
-  if (!guard_exports.IsObjectNotArray(value))
-    return value;
-  for (const key of guard_exports.Keys(type.properties)) {
-    if (!guard_exports.HasPropertyKey(value, key) || IsOptionalUndefined(type.properties[key], key, value))
-      continue;
-    value[key] = FromType23(direction, context, type.properties[key], value[key]);
-  }
-  return Callback(direction, context, type, value);
-}
-function Encode6(direction, context, type, value) {
-  const exterior = Callback(direction, context, type, value);
-  if (!guard_exports.IsObjectNotArray(exterior))
-    return exterior;
-  for (const key of guard_exports.Keys(type.properties)) {
-    if (!guard_exports.HasPropertyKey(exterior, key) || IsOptionalUndefined(type.properties[key], key, exterior))
-      continue;
-    exterior[key] = FromType23(direction, context, type.properties[key], exterior[key]);
-  }
-  return exterior;
-}
-function FromObject14(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode6(direction, context, type, value) : Encode6(direction, context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_record.mjs
-function Decode7(direction, context, type, value) {
-  if (!guard_exports.IsObjectNotArray(value))
-    return value;
-  const regexp = new RegExp(RecordPattern(type));
-  for (const key of guard_exports.Keys(value)) {
-    if (!regexp.test(key))
-      continue;
-    value[key] = FromType23(direction, context, RecordValue(type), value[key]);
-  }
-  return Callback(direction, context, type, value);
-}
-function Encode7(direction, context, type, value) {
-  const exterior = Callback(direction, context, type, value);
-  if (!guard_exports.IsObjectNotArray(exterior))
-    return exterior;
-  const regexp = new RegExp(RecordPattern(type));
-  for (const key of guard_exports.Keys(exterior)) {
-    if (!regexp.test(key))
-      continue;
-    exterior[key] = FromType23(direction, context, RecordValue(type), exterior[key]);
-  }
-  return exterior;
-}
-function FromRecord6(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode7(direction, context, type, value) : Encode7(direction, context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_ref.mjs
-function ResolveRef(direction, context, type, value) {
-  return guard_exports.HasPropertyKey(context, type.$ref) ? FromType23(direction, context, context[type.$ref], value) : value;
-}
-function FromRef8(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Callback(direction, context, type, ResolveRef(direction, context, type, value)) : ResolveRef(direction, context, type, Callback(direction, context, type, value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_tuple.mjs
-function Decode8(direction, context, type, value) {
-  if (!guard_exports.IsArray(value))
-    return value;
-  for (let i = 0; i < Math.min(type.items.length, value.length); i++) {
-    value[i] = FromType23(direction, context, type.items[i], value[i]);
-  }
-  return Callback(direction, context, type, value);
-}
-function Encode8(direction, context, type, value) {
-  const exterior = Callback(direction, context, type, value);
-  if (!guard_exports.IsArray(exterior))
-    return value;
-  for (let i = 0; i < Math.min(type.items.length, exterior.length); i++) {
-    exterior[i] = FromType23(direction, context, type.items[i], exterior[i]);
-  }
-  return exterior;
-}
-function FromTuple8(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode8(direction, context, type, value) : Encode8(direction, context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_union.mjs
-function Decode9(direction, context, type, value) {
-  for (const schema of type.anyOf) {
-    if (!Check2(context, schema, value))
-      continue;
-    const variant2 = FromType23(direction, context, schema, value);
-    return Callback(direction, context, type, variant2);
-  }
-  return value;
-}
-function Encode9(direction, context, type, value) {
-  const exterior = Callback(direction, context, type, value);
-  for (const schema of type.anyOf) {
-    const variant2 = FromType23(direction, context, schema, Clone2(exterior));
-    if (!Check2(context, schema, variant2))
-      continue;
-    return variant2;
-  }
-  return exterior;
-}
-function FromUnion12(direction, context, type, value) {
-  return guard_exports.IsEqual(direction, "Decode") ? Decode9(direction, context, type, value) : Encode9(direction, context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/from_type.mjs
-function FromType23(direction, context, type, value) {
-  return IsArray2(type) ? FromArray10(direction, context, type, value) : IsCyclic(type) ? FromCyclic9(direction, context, type, value) : IsIntersect(type) ? FromIntersect9(direction, context, type, value) : IsObject2(type) ? FromObject14(direction, context, type, value) : IsRecord(type) ? FromRecord6(direction, context, type, value) : IsRef2(type) ? FromRef8(direction, context, type, value) : IsTuple(type) ? FromTuple8(direction, context, type, value) : IsUnion(type) ? FromUnion12(direction, context, type, value) : Callback(direction, context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/decode.mjs
-var DecodeError = class extends AssertError {
-  constructor(value, errors) {
-    super("Decode", value, errors);
-  }
-};
-function Assert2(context, type, value) {
-  if (!Check2(context, type, value))
-    throw new DecodeError(value, Errors2(context, type, value));
-  return value;
-}
-function DecodeUnsafe(context, type, value) {
-  const sorted = settings_exports.Get().unionPrioritySort ? UnionPrioritySort(type) : type;
-  return FromType23("Decode", context, sorted, value);
-}
-var Decoder = Pipeline([
-  (_context, _type, value) => Clone2(value),
-  (context, type, value) => Default(context, type, value),
-  (context, type, value) => Convert(context, type, value),
-  (context, type, value) => Clean(context, type, value),
-  (context, type, value) => Assert2(context, type, value),
-  (context, type, value) => DecodeUnsafe(context, type, value)
-]);
-function Decode10(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  return Decoder(context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/encode.mjs
-var EncodeError = class extends AssertError {
-  constructor(value, errors) {
-    super("Encode", value, errors);
-  }
-};
-function Assert3(context, type, value) {
-  if (!Check2(context, type, value))
-    throw new EncodeError(value, Errors2(context, type, value));
-  return value;
-}
-function EncodeUnsafe(context, type, value) {
-  const sorted = settings_exports.Get().unionPrioritySort ? UnionPrioritySort(type) : type;
-  return FromType23("Encode", context, sorted, value);
-}
-var Encoder = Pipeline([
-  (_context, _type, value) => Clone2(value),
-  (context, type, value) => EncodeUnsafe(context, type, value),
-  (context, type, value) => Default(context, type, value),
-  (context, type, value) => Convert(context, type, value),
-  (context, type, value) => Clean(context, type, value),
-  (context, type, value) => Assert3(context, type, value)
-]);
-function Encode10(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  return Encoder(context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/codec/has.mjs
-function FromArray11(context, type) {
-  return IsCodec(type) || FromType24(context, type.items);
-}
-function FromCyclic10(context, type) {
-  return IsCodec(type) || FromRef9({ ...context, ...type.$defs }, Ref2(type.$ref));
-}
-function FromIntersect10(context, type) {
-  return IsCodec(type) || type.allOf.some((type2) => FromType24(context, type2));
-}
-function FromObject15(context, type) {
-  return IsCodec(type) || guard_exports.Keys(type.properties).some((key) => {
-    return FromType24(context, type.properties[key]);
-  });
-}
-function FromRecord7(context, type) {
-  return IsCodec(type) || FromType24(context, RecordValue(type));
-}
-function FromRef9(context, type) {
-  if (visited.has(type.$ref))
-    return false;
-  visited.add(type.$ref);
-  return IsCodec(type) || guard_exports.HasPropertyKey(context, type.$ref) && FromType24(context, context[type.$ref]);
-}
-function FromTuple9(context, type) {
-  return IsCodec(type) || type.items.some((type2) => FromType24(context, type2));
-}
-function FromUnion13(context, type) {
-  return IsCodec(type) || type.anyOf.some((type2) => FromType24(context, type2));
-}
-function FromType24(context, type) {
-  return IsArray2(type) ? FromArray11(context, type) : IsCyclic(type) ? FromCyclic10(context, type) : IsIntersect(type) ? FromIntersect10(context, type) : IsObject2(type) ? FromObject15(context, type) : IsRecord(type) ? FromRecord7(context, type) : IsRef2(type) ? FromRef9(context, type) : IsTuple(type) ? FromTuple9(context, type) : IsUnion(type) ? FromUnion13(context, type) : IsCodec(type);
-}
-var visited = /* @__PURE__ */ new Set();
-function HasCodec(...args) {
-  const [context, type] = arguments_exports.Match(args, {
-    2: (context2, type2) => [context2, type2],
-    1: (type2) => [{}, type2]
-  });
-  visited.clear();
-  return FromType24(context, type);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/error.mjs
-var CreateError = class extends Error {
-  constructor(type, message) {
-    super(message);
-    this.type = type;
-  }
-};
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_default.mjs
-function FromDefault2(_context, schema) {
-  return guard_exports.IsFunction(schema.default) ? schema.default(schema) : guard_exports.IsObject(schema.default) ? Clone2(schema.default) : schema.default;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_array.mjs
-function FromArray12(context, type) {
-  if (IsUniqueItems(type) && !IsDefault(type))
-    throw new CreateError(type, "Arrays with uniqueItems constraints must specify a default annotation");
-  const length = IsMinItems(type) ? type.minItems : 0;
-  return Array.from({ length }, () => FromType25(context, type.items));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_bigint.mjs
-function FromBigInt7(_context, type) {
-  return IsExclusiveMinimum(type) ? BigInt(type.exclusiveMinimum) + BigInt(1) : IsMinimum(type) ? BigInt(type.minimum) : BigInt(0);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_boolean.mjs
-function FromBoolean7(_context, _type) {
-  return false;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_constructor.mjs
-function FromConstructor2(context, type) {
-  const instanceType = FromType25(context, type.instanceType);
-  return class {
-    constructor() {
-      Object.assign(this, instanceType);
-    }
-  };
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_cyclic.mjs
-function FromCyclic11(context, type) {
-  return FromType25({ ...context, ...type.$defs }, Ref2(type.$ref));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_enum.mjs
-function FromEnum4(context, type) {
-  return FromType25(context, Evaluate(type));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_function.mjs
-function FromFunction2(context, type) {
-  const returnType = FromType25(context, type.returnType);
-  return () => returnType;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_integer.mjs
-function FromInteger2(_context, type) {
-  return IsExclusiveMinimum(type) && guard_exports.IsNumber(type.exclusiveMinimum) ? type.exclusiveMinimum + 1 : IsMinimum(type) ? type.minimum : 0;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_intersect.mjs
-function FromIntersect11(context, type) {
-  const instantiated = Instantiate(context, type);
-  const evaluated = Evaluate(instantiated);
-  return FromType25(context, evaluated);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_literal.mjs
-function FromLiteral7(_context, type) {
-  return type.const;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_never.mjs
-function FromNever(_context, type) {
-  throw new CreateError(type, "Cannot create TNever types");
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_null.mjs
-function FromNull3(_context, _type) {
-  return null;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_number.mjs
-function FromNumber6(_context, type) {
-  return IsExclusiveMinimum(type) && guard_exports.IsNumber(type.exclusiveMinimum) ? type.exclusiveMinimum + 1 : IsMinimum(type) ? type.minimum : 0;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_object.mjs
-function FromObject16(context, type) {
-  const required = guard_exports.IsUndefined(type.required) ? [] : type.required;
-  return required.reduce((result, key) => {
-    return { ...result, [key]: FromType25(context, type.properties[key]) };
-  }, {});
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_record.mjs
-function FromRecord8(_context, type) {
-  if (IsMinProperties(type) && !IsDefault(type))
-    throw new CreateError(type, "Record with the minProperties constraint must have a default annotation");
-  return {};
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_ref.mjs
-function FromRef10(context, type) {
-  return guard_exports.HasPropertyKey(context, type.$ref) ? FromType25(context, context[type.$ref]) : (() => {
-    throw new CreateError(type, "Unable to deref Ref");
-  })();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_string.mjs
-function FromString8(_context, type) {
-  const needsDefault = (IsPattern(type) || IsFormat(type)) && !IsDefault(type);
-  if (needsDefault)
-    throw Error("Strings with format or pattern constraints must specify default");
-  const minLength = IsMinLength3(type) ? type.minLength : 0;
-  return "".padEnd(minLength);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_symbol.mjs
-function FromSymbol2(_context, _type) {
-  return /* @__PURE__ */ Symbol();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_template_literal.mjs
-function FromTemplateLiteral5(context, type) {
-  const decoded = TemplateLiteralDecode(type.pattern);
-  if (IsString3(decoded))
-    throw new CreateError(type, "Unable to create TemplateLiteral due to infinite type expansion");
-  return FromType25(context, decoded);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_tuple.mjs
-function FromTuple10(context, type) {
-  return Array.from({ length: type.minItems }, (_, i) => FromType25(context, type.items[i]));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_undefined.mjs
-function FromUndefined3(_context, _type) {
-  return void 0;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_union.mjs
-function FromUnion14(context, type) {
-  if (guard_exports.IsEqual(type.anyOf.length, 0)) {
-    throw Error("Unable to create Union with no variants");
-  }
-  return FromType25(context, type.anyOf[0]);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_void.mjs
-function FromVoid2(_context, _type) {
-  return void 0;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/from_type.mjs
-function FromType25(context, type) {
-  return (
-    // -----------------------------------------------------
-    // Default
-    // -----------------------------------------------------
-    IsDefault(type) ? FromDefault2(context, type) : (
-      // -----------------------------------------------------
-      // Types
-      // -----------------------------------------------------
-      IsArray2(type) ? FromArray12(context, type) : IsBigInt2(type) ? FromBigInt7(context, type) : IsBoolean3(type) ? FromBoolean7(context, type) : IsConstructor2(type) ? FromConstructor2(context, type) : IsCyclic(type) ? FromCyclic11(context, type) : IsEnum2(type) ? FromEnum4(context, type) : IsFunction2(type) ? FromFunction2(context, type) : IsInteger2(type) ? FromInteger2(context, type) : IsIntersect(type) ? FromIntersect11(context, type) : IsLiteral(type) ? FromLiteral7(context, type) : IsNever(type) ? FromNever(context, type) : IsNull2(type) ? FromNull3(context, type) : IsNumber3(type) ? FromNumber6(context, type) : IsObject2(type) ? FromObject16(context, type) : IsRecord(type) ? FromRecord8(context, type) : IsRef2(type) ? FromRef10(context, type) : IsString3(type) ? FromString8(context, type) : IsSymbol2(type) ? FromSymbol2(context, type) : IsTemplateLiteral(type) ? FromTemplateLiteral5(context, type) : IsTuple(type) ? FromTuple10(context, type) : IsUndefined2(type) ? FromUndefined3(context, type) : IsUnion(type) ? FromUnion14(context, type) : IsVoid(type) ? FromVoid2(context, type) : void 0
-    )
-  );
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/create/create.mjs
-function Create2(...args) {
-  const [context, type] = arguments_exports.Match(args, {
-    2: (context2, type2) => [context2, type2],
-    1: (type2) => [{}, type2]
-  });
-  return FromType25(context, type);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/equal/equal.mjs
-function Equal(left, right) {
-  return guard_exports.IsDeepEqual(left, right);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/hash/hash.mjs
-function Hash2(value) {
-  return hash_exports.Hash(value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/parse/parse.mjs
-var ParseError = class extends AssertError {
-  constructor(value, errors) {
-    super("Parse", value, errors);
-  }
-};
-function Assert4(context, type, value) {
-  if (!Check2(context, type, value))
-    throw new ParseError(value, Errors2(context, type, value));
-  return value;
-}
-var Parser = Pipeline([
-  (_context, _type, value) => Clone2(value),
-  (context, type, value) => Default(context, type, value),
-  (context, type, value) => Convert(context, type, value),
-  (context, type, value) => Clean(context, type, value),
-  (context, type, value) => Assert4(context, type, value)
-]);
-function Parse(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  const checked = Check2(context, type, value);
-  if (checked)
-    return value;
-  if (settings_exports.Get().correctiveParse)
-    return Parser(context, type, value);
-  throw new ParseError(value, Errors2(context, type, value));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/delta/diff.mjs
-function CreateUpdate(path18, value) {
-  return { type: "update", path: path18, value };
-}
-function CreateInsert(path18, value) {
-  return { type: "insert", path: path18, value };
-}
-function CreateDelete(path18) {
-  return { type: "delete", path: path18 };
-}
-function AssertCanDiffObject(value) {
-  if (guard_exports.IsObject(value) && guard_exports.IsEqual(guard_exports.Symbols(value).length, 0))
-    return;
-  throw new Error("Cannot create diffs for objects with symbols keys");
-}
-function* FromObject17(path18, left, right) {
-  if (!guard_exports.IsObject(right) || guard_exports.IsArray(right))
-    return yield CreateUpdate(path18, right);
-  AssertCanDiffObject(left);
-  AssertCanDiffObject(right);
-  const leftKeys = guard_exports.Keys(left);
-  const rightKeys = guard_exports.Keys(right);
-  for (const key of rightKeys) {
-    if (guard_exports.HasPropertyKey(left, key))
-      continue;
-    if (guard_exports.IsUnsafePropertyKey(key))
-      continue;
-    yield CreateInsert(`${path18}/${key}`, right[key]);
-  }
-  for (const key of leftKeys) {
-    if (!guard_exports.HasPropertyKey(right, key))
-      continue;
-    if (guard_exports.IsUnsafePropertyKey(key))
-      continue;
-    if (Equal(left, right))
-      continue;
-    yield* FromValue4(`${path18}/${key}`, left[key], right[key]);
-  }
-  for (const key of leftKeys) {
-    if (guard_exports.HasPropertyKey(right, key))
-      continue;
-    if (guard_exports.IsUnsafePropertyKey(key))
-      continue;
-    yield CreateDelete(`${path18}/${key}`);
-  }
-}
-function* FromArray13(path18, left, right) {
-  if (!guard_exports.IsArray(right))
-    return yield CreateUpdate(path18, right);
-  for (let i = 0; i < Math.min(left.length, right.length); i++) {
-    yield* FromValue4(`${path18}/${i}`, left[i], right[i]);
-  }
-  for (let i = 0; i < right.length; i++) {
-    if (i < left.length)
-      continue;
-    yield CreateInsert(`${path18}/${i}`, right[i]);
-  }
-  for (let i = left.length - 1; i >= 0; i--) {
-    if (i < right.length)
-      continue;
-    yield CreateDelete(`${path18}/${i}`);
-  }
-}
-function* FromTypedArray2(path18, left, right) {
-  const typeLeft = globalThis.Object.getPrototypeOf(left).constructor.name;
-  const typeRight = globalThis.Object.getPrototypeOf(right).constructor.name;
-  const predicate = globals_exports.IsTypeArray(right) && guard_exports.IsEqual(left.length, right.length) && guard_exports.IsEqual(typeLeft, typeRight);
-  if (predicate) {
-    for (let index = 0; index < Math.min(left.length, right.length); index++) {
-      yield* FromValue4(`${path18}/${index}`, left[index], right[index]);
-    }
-  } else {
-    return yield CreateUpdate(path18, right);
-  }
-}
-function* FromUnknown(path18, left, right) {
-  if (left === right)
-    return;
-  yield CreateUpdate(path18, right);
-}
-function* FromValue4(path18, left, right) {
-  return globals_exports.IsTypeArray(left) ? yield* FromTypedArray2(path18, left, right) : guard_exports.IsArray(left) ? yield* FromArray13(path18, left, right) : guard_exports.IsObject(left) ? yield* FromObject17(path18, left, right) : yield* FromUnknown(path18, left, right);
-}
-function Diff(current, next) {
-  return [...FromValue4("", current, next)];
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/delta/edit.mjs
-var Insert2 = _Object_({
-  type: Literal("insert"),
-  path: String2(),
-  value: Unknown()
-});
-var Update2 = Object({
-  type: Literal("update"),
-  path: String2(),
-  value: Unknown()
-});
-var Delete2 = _Object_({
-  type: Literal("delete"),
-  path: String2()
-});
-var Edit = Union([Insert2, Update2, Delete2]);
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/delta/patch.mjs
-function IsRoot(edits) {
-  return edits.length > 0 && edits[0].path === "" && edits[0].type === "update";
-}
-function IsEmpty(edits) {
-  return edits.length === 0;
-}
-function Patch(current, edits) {
-  if (IsRoot(edits))
-    return Clone2(edits[0].value);
-  if (IsEmpty(edits))
-    return Clone2(current);
-  const clone = Clone2(current);
-  for (const edit of edits) {
-    switch (edit.type) {
-      case "insert": {
-        pointer_exports.Set(clone, edit.path, edit.value);
-        break;
-      }
-      case "update": {
-        pointer_exports.Set(clone, edit.path, edit.value);
-        break;
-      }
-      case "delete": {
-        pointer_exports.Delete(clone, edit.path);
-        break;
-      }
-    }
-  }
-  return clone;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/error.mjs
-var RepairError = class extends Error {
-  constructor(context, type, value, message) {
-    super(message);
-    this.context = context;
-    this.type = type;
-    this.value = value;
-  }
-};
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_array.mjs
-function MakeUnique(values) {
-  const [hashes, result] = [/* @__PURE__ */ new Set(), []];
-  for (const value of values) {
-    const hash3 = Hash2(value);
-    if (hashes.has(hash3))
-      continue;
-    hashes.add(hash3);
-    result.push(value);
-  }
-  return result;
-}
-function FromArray14(context, type, value) {
-  if (Check2(context, type, value))
-    return value;
-  const created = guard_exports.IsArray(value) ? value : Create2(context, type);
-  const minimum = IsMinItems(type) && created.length < type.minItems ? [...created, ...Array.from({ length: type.minItems - created.length }, () => Create2(context, type))] : created;
-  const maximum = IsMaxItems(type) && minimum.length > type.maxItems ? minimum.slice(0, type.maxItems) : minimum;
-  const repaired = maximum.map((value2) => FromType26(context, type.items, value2));
-  if (!IsUniqueItems(type) || IsUniqueItems(type) && !guard_exports.IsEqual(type.uniqueItems, true))
-    return repaired;
-  const unique = MakeUnique(repaired);
-  if (!Check2(context, type, unique))
-    throw new RepairError(context, type, value, "Failed to repair Array due to uniqueItems constraint");
-  return unique;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_enum.mjs
-function FromEnum5(context, type, value) {
-  return FromType26(context, Evaluate(type), value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_intersect.mjs
-function FromIntersect12(context, type, value) {
-  const instantiated = Instantiate(context, type);
-  const evaluated = Evaluate(instantiated);
-  return FromType26(context, evaluated, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_object.mjs
-function FromObject18(context, type, value) {
-  if (Check2(context, type, value))
-    return value;
-  if (!guard_exports.IsObjectNotArray(value))
-    return Create2(context, type);
-  const required = new Set(guard_exports.IsUndefined(type.required) ? [] : type.required);
-  const result = {};
-  for (const [key, schema] of guard_exports.Entries(type.properties)) {
-    if (!required.has(key) && guard_exports.IsUndefined(value[key]))
-      continue;
-    result[key] = key in value ? FromType26(context, schema, value[key]) : Create2(context, schema);
-  }
-  const evaluatedKeys = guard_exports.Keys(type.properties);
-  if (IsAdditionalProperties(type) && guard_exports.IsObject(type.additionalProperties)) {
-    for (const key of guard_exports.Keys(value)) {
-      if (evaluatedKeys.includes(key))
-        continue;
-      result[key] = FromType26(context, type.additionalProperties, value[key]);
-    }
-  }
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_record.mjs
-function FromRecord9(context, type, value) {
-  if (Check2(context, type, value))
-    return value;
-  if (guard_exports.IsNull(value) || !guard_exports.IsObject(value) || guard_exports.IsArray(value))
-    return Create2(context, type);
-  const recordKey = new RegExp(RecordPattern(type));
-  const recordValue = RecordValue(type);
-  const evaluatedKeys = /* @__PURE__ */ new Set();
-  const result = {};
-  for (const [key, value_] of guard_exports.Entries(value)) {
-    if (!recordKey.test(key))
-      continue;
-    result[key] = FromType26(context, recordValue, value_);
-    evaluatedKeys.add(key);
-  }
-  if (IsAdditionalProperties(type)) {
-    for (const key of guard_exports.Keys(value)) {
-      if (evaluatedKeys.has(key))
-        continue;
-      result[key] = FromType26(context, type.additionalProperties, value[key]);
-    }
-  }
-  return result;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_ref.mjs
-function FromRef11(context, type, value) {
-  return guard_exports.HasPropertyKey(context, type.$ref) ? FromType26(context, context[type.$ref], value) : (() => {
-    throw new RepairError(context, type, value, "Unable to de-reference target type");
-  })();
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_template_literal.mjs
-function FromTemplateLiteral6(context, type, value) {
-  const decoded = TemplateLiteralDecode(type.pattern);
-  return FromType26(context, decoded, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_tuple.mjs
-function FromTuple11(context, schema, value) {
-  if (Check2(context, schema, value))
-    return value;
-  if (!guard_exports.IsArray(value))
-    return Create2(context, schema);
-  return schema.items.map((schema2, index) => FromType26(context, schema2, value[index]));
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/shared/union_score_select.mjs
-function Deref(context, type, value) {
-  return IsRef2(type) ? guard_exports.HasPropertyKey(context, type.$ref) ? Deref(context, context[type.$ref], value) : (() => {
-    throw new Error("Unable to Deref target");
-  })() : type;
-}
-function ScoreVariant(context, type, value) {
-  if (!(IsObject2(type) && guard_exports.IsObject(value)))
-    return 0;
-  const keys = guard_exports.Keys(value);
-  const entries = guard_exports.Entries(type.properties);
-  return entries.reduce((result, [key, schema]) => {
-    const literal2 = IsLiteral(schema) && guard_exports.IsEqual(schema.const, value[key]) ? 100 : 0;
-    const checks = Check2(context, schema, value[key]) ? 10 : 0;
-    const exists = keys.includes(key) ? 1 : 0;
-    return result + (literal2 + checks + exists);
-  }, 0);
-}
-function UnionScoreSelect(context, type, value) {
-  const schemas = type.anyOf.map((schema) => Deref(context, schema, value));
-  let [select, best] = [schemas[0], 0];
-  for (const schema of schemas) {
-    const score = ScoreVariant(context, schema, value);
-    if (score > best) {
-      select = schema;
-      best = score;
-    }
-  }
-  return select;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_union.mjs
-function RepairUnion(context, type, value) {
-  const union2 = Union(Flatten(type.anyOf));
-  const schema = UnionScoreSelect(context, union2, value);
-  return FromType26(context, schema, value);
-}
-function FromUnion15(context, type, value) {
-  if (Check2(context, type, value))
-    return Clone2(value);
-  if (IsDefault(type))
-    return Create2(context, type);
-  return RepairUnion(context, type, value);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_unknown.mjs
-function FromUnknown2(context, type, value) {
-  if (Check2(context, type, value))
-    return value;
-  const converted = Convert(context, type, value);
-  if (Check2(context, type, converted))
-    return converted;
-  return Create2(context, type);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/from_type.mjs
-function AssertRepairableValue(context, type, value) {
-  const unsupported = globals_exports.IsDate(value) || globals_exports.IsMap(value) || globals_exports.IsSet(value) || globals_exports.IsTypeArray(value) || guard_exports.IsConstructor(value) || guard_exports.IsFunction(value);
-  if (unsupported) {
-    throw new RepairError(context, type, value, "Value is not repairable");
-  }
-}
-function AssertRepairableType(context, type, value) {
-  const unsupported = IsConstructor2(type) || IsFunction2(type) || IsNever(type);
-  if (unsupported) {
-    throw new RepairError(context, type, value, "Type is not repairable");
-  }
-}
-function CreateWhenUndefined(context, type, value) {
-  return guard_exports.IsUndefined(value) && !IsUndefined2(type) ? Create2(context, type) : value;
-}
-function FinalizeRepair(context, type, repaired) {
-  return IsRefine2(type) ? Check2(context, type, repaired) ? repaired : Create2(context, type) : repaired;
-}
-function FromType26(context, type, value) {
-  AssertRepairableValue(context, type, value);
-  AssertRepairableType(context, type, value);
-  const candidate = CreateWhenUndefined(context, type, value);
-  const repaired = IsArray2(type) ? FromArray14(context, type, candidate) : IsEnum2(type) ? FromEnum5(context, type, candidate) : IsIntersect(type) ? FromIntersect12(context, type, candidate) : IsObject2(type) ? FromObject18(context, type, candidate) : IsRecord(type) ? FromRecord9(context, type, candidate) : IsRef2(type) ? FromRef11(context, type, candidate) : IsTemplateLiteral(type) ? FromTemplateLiteral6(context, type, candidate) : IsTuple(type) ? FromTuple11(context, type, candidate) : IsUnion(type) ? FromUnion15(context, type, candidate) : FromUnknown2(context, type, candidate);
-  return FinalizeRepair(context, type, repaired);
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/repair/repair.mjs
-function Repair(...args) {
-  const [context, type, value] = arguments_exports.Match(args, {
-    3: (context2, type2, value2) => [context2, type2, value2],
-    2: (type2, value2) => [{}, type2, value2]
-  });
-  const repaired = FromType26(context, type, value);
-  Assert(context, type, repaired);
-  return repaired;
-}
-
-// node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/value.mjs
-var value_exports = {};
-__export(value_exports, {
-  Assert: () => Assert,
-  Check: () => Check2,
-  Clean: () => Clean,
-  Clone: () => Clone2,
-  Convert: () => Convert,
-  Create: () => Create2,
-  Decode: () => Decode10,
-  Default: () => Default,
-  Diff: () => Diff,
-  Encode: () => Encode10,
-  Equal: () => Equal,
-  Errors: () => Errors2,
-  HasCodec: () => HasCodec,
-  Hash: () => Hash2,
-  Parse: () => Parse,
-  Patch: () => Patch,
-  Pointer: () => pointer_exports,
-  Repair: () => Repair
-});
-
-// src/async-settlement.ts
-var abortError = (signal) => {
-  const reason = signal.reason;
-  if (reason instanceof Error) return reason;
-  return new Error(typeof reason === "string" && reason ? reason : "Operation aborted");
-};
-var throwIfAborted = (signal) => {
-  if (signal?.aborted) throw abortError(signal);
-};
-var throwIfAbortedOrExpired = (signal, deadline) => {
-  throwIfAborted(signal);
-  deadline?.throwIfExpired();
-};
-var raceWithAbort = (operation, signal) => {
-  if (!signal) return Promise.resolve(operation);
-  if (signal.aborted) return Promise.reject(abortError(signal));
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (callback) => {
-      if (settled) return;
-      settled = true;
-      signal.removeEventListener("abort", onAbort);
-      callback();
-    };
-    const onAbort = () => finish(() => reject(abortError(signal)));
-    signal.addEventListener("abort", onAbort, { once: true });
-    Promise.resolve(operation).then(
-      (value) => finish(() => resolve(value)),
-      (error) => finish(() => reject(error))
-    );
-  });
-};
-var runAbortable = (signal, operation) => {
-  try {
-    throwIfAborted(signal);
-    return raceWithAbort(Promise.resolve(operation()), signal);
-  } catch (error) {
-    return Promise.reject(error);
-  }
-};
-var settleWithin = async (operations, timeoutMs) => {
-  const pending = [...operations].map((operation) => Promise.resolve(operation));
-  if (pending.length === 0) return true;
-  let timer;
-  try {
-    return await Promise.race([
-      Promise.allSettled(pending).then(() => true),
-      new Promise((resolve) => {
-        timer = setTimeout(() => resolve(false), Math.max(0, timeoutMs));
-      })
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-};
-
 // src/config.ts
 import fs from "node:fs";
 import os from "node:os";
-
-// src/runtime/source-limit.ts
-import { Buffer as Buffer2 } from "node:buffer";
-var DEFAULT_EXECUTOR_SOURCE_BYTES = 256 * 1024;
-var MIN_EXECUTOR_SOURCE_BYTES = 1024;
-var MAX_EXECUTOR_SOURCE_BYTES = 2 * 1024 * 1024;
-var MAX_FABRIC_PAYLOAD_KEYS = 128;
-var MAX_FABRIC_PAYLOAD_KEY_BYTES = 1024;
-var effectiveFabricSourceLimit = (value) => Number.isSafeInteger(value) ? Math.max(MIN_EXECUTOR_SOURCE_BYTES, Math.min(MAX_EXECUTOR_SOURCE_BYTES, value)) : DEFAULT_EXECUTOR_SOURCE_BYTES;
-var fabricSourceLimitError = (code2, maximum) => {
-  const bytes2 = Buffer2.byteLength(code2, "utf8");
-  return bytes2 > maximum ? `Fabric source exceeds ${maximum} bytes: received ${bytes2}` : void 0;
-};
-var fabricPayloadsLimitError = (payloads, maximum) => {
-  if (payloads === void 0) return void 0;
-  const keys = Object.keys(payloads);
-  if (keys.length > MAX_FABRIC_PAYLOAD_KEYS) return `Fabric payloads exceed ${MAX_FABRIC_PAYLOAD_KEYS} keys`;
-  let total = 0;
-  for (const key of keys) {
-    if (Buffer2.byteLength(key, "utf8") > MAX_FABRIC_PAYLOAD_KEY_BYTES) return "Fabric payload key is too large";
-    const value = payloads[key];
-    if (typeof value !== "string") return "Fabric payload values must be strings";
-    total += Buffer2.byteLength(key, "utf8") + Buffer2.byteLength(value, "utf8");
-    if (total > maximum) return `Fabric payloads exceed ${maximum} bytes: received ${total}`;
-  }
-  return void 0;
-};
-var fabricTranspiledLimitError = (code2) => {
-  const maximum = MAX_EXECUTOR_SOURCE_BYTES * 4;
-  const bytes2 = Buffer2.byteLength(code2, "utf8");
-  return bytes2 > maximum ? `Transpiled guest source exceeds ${maximum} bytes: received ${bytes2}` : void 0;
-};
-
-// src/config.ts
 var QUICKJS_MAX_MEMORY_LIMIT_BYTES = 4294967295;
 var MAX_EXECUTOR_MEMORY_LIMIT_BYTES = Math.min(
   QUICKJS_MAX_MEMORY_LIMIT_BYTES,
@@ -19081,118 +11014,14 @@ var fabricInfoCatalog = (actions) => {
 };
 
 // src/execution-service.ts
-import { randomUUID as randomUUID4 } from "node:crypto";
+import { randomUUID as randomUUID2 } from "node:crypto";
 
 // src/core/catalog-snapshot-store.ts
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { isProxy as isProxy2 } from "node:util/types";
+import { isProxy } from "node:util/types";
 
 // src/core/semantic-digest.ts
 import { createHash } from "node:crypto";
-
-// src/runtime/json-budget.ts
-import { isProxy } from "node:util/types";
-var MAX_FABRIC_JSON_CHARS = 8e6;
-var DEFAULT_FABRIC_JSON_CHARS = 2e6;
-var MAX_FABRIC_JSON_DEPTH = 64;
-var MAX_FABRIC_JSON_NODES = 1e5;
-var budgetError = (detail) => new Error(`Fabric host JSON is outside the bounded JSON contract: ${detail}`);
-var normalizedLimit = (value) => {
-  if (!Number.isSafeInteger(value) || value < 1) throw budgetError("invalid character limit");
-  return Math.min(value, MAX_FABRIC_JSON_CHARS);
-};
-var MAX_ARRAY_INDEX = 4294967294;
-var isArrayIndex = (key) => {
-  if (key === "0") return true;
-  if (!/^[1-9][0-9]*$/u.test(key)) return false;
-  const index = Number(key);
-  return Number.isSafeInteger(index) && index <= MAX_ARRAY_INDEX;
-};
-var preflight = (root, maxChars) => {
-  const seen = /* @__PURE__ */ new WeakSet();
-  const stack = [
-    { value: root, depth: 0, nested: false }
-  ];
-  let nodes = 0;
-  let rawChars = 0;
-  while (stack.length > 0) {
-    const { value, depth, nested } = stack.pop();
-    nodes += 1;
-    if (nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
-    if (value === null || typeof value === "boolean") continue;
-    if (typeof value === "string") {
-      rawChars += value.length;
-      if (rawChars > maxChars) throw budgetError(`more than ${maxChars} raw characters`);
-      continue;
-    }
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) throw budgetError("non-finite number");
-      continue;
-    }
-    if (value === void 0 && !nested) continue;
-    if (typeof value !== "object") throw budgetError(`unsupported ${typeof value} value`);
-    if (isProxy(value)) throw budgetError("proxy object");
-    if (depth >= MAX_FABRIC_JSON_DEPTH) throw budgetError("depth limit exceeded");
-    if (seen.has(value)) throw budgetError("cyclic or shared object graph");
-    seen.add(value);
-    if (Array.isArray(value)) {
-      if (value.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
-      const descriptors8 = Object.getOwnPropertyDescriptors(value);
-      if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors8).some((key) => key !== "length" && !isArrayIndex(key))) throw budgetError("non-index array property");
-      for (let index = value.length - 1; index >= 0; index--) {
-        const descriptor2 = descriptors8[String(index)];
-        if (!descriptor2 || !("value" in descriptor2)) throw budgetError("accessor or sparse array");
-        stack.push({ value: descriptor2.value, depth: depth + 1, nested: true });
-      }
-      continue;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw budgetError("non-plain object");
-    }
-    if (Object.getOwnPropertySymbols(value).length > 0) throw budgetError("symbol property");
-    const descriptors7 = Object.getOwnPropertyDescriptors(value);
-    const keys = Object.keys(descriptors7);
-    if (keys.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
-    for (let index = keys.length - 1; index >= 0; index--) {
-      const key = keys[index];
-      const descriptor2 = descriptors7[key];
-      if (!("value" in descriptor2)) throw budgetError("accessor property");
-      if (!descriptor2.enumerable) continue;
-      rawChars += key.length;
-      if (rawChars > maxChars) throw budgetError(`more than ${maxChars} raw characters`);
-      stack.push({ value: descriptor2.value, depth: depth + 1, nested: true });
-    }
-  }
-};
-var jsonStringPrefix = (value, contentChars) => {
-  if (!Number.isSafeInteger(contentChars) || contentChars < 0) throw budgetError("invalid string prefix budget");
-  let end = 0, used = 0;
-  while (end < value.length) {
-    const unit = value.charCodeAt(end), next = value.charCodeAt(end + 1);
-    const pair = unit >= 55296 && unit <= 56319 && next >= 56320 && next <= 57343;
-    const width = pair ? 2 : 1;
-    const cost = unit === 34 || unit === 92 ? 2 : unit < 32 ? [8, 9, 10, 12, 13].includes(unit) ? 2 : 6 : !pair && unit >= 55296 && unit <= 57343 ? 6 : width;
-    if (used + cost > contentChars) break;
-    used += cost;
-    end += width;
-  }
-  return value.slice(0, end);
-};
-var fabricJsonText = (value, maxChars = DEFAULT_FABRIC_JSON_CHARS) => {
-  const limit = normalizedLimit(maxChars);
-  preflight(value, limit);
-  if (value === void 0) return "null";
-  const serialized = JSON.stringify(value);
-  if (serialized === void 0) throw budgetError("value is not serializable");
-  if (serialized.length > limit) throw budgetError(`more than ${limit} serialized characters`);
-  return serialized;
-};
-var assertFabricJsonBudget = (value, maxChars = DEFAULT_FABRIC_JSON_CHARS) => {
-  void fabricJsonText(value, maxChars);
-};
-
-// src/core/semantic-digest.ts
 var compareCodeUnits = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var sortJson = (value) => {
   if (Array.isArray(value)) return value.map(sortJson);
@@ -19221,11 +11050,11 @@ var defaults = {
   now: Date.now
 };
 var methods = ["tools.listPage", "tools.searchPage", "tools.describePage", "mcp.toolsPage", "mcp.describePage"];
-var MAX_ARRAY_INDEX2 = 4294967294;
-var isArrayIndex2 = (key) => {
+var MAX_ARRAY_INDEX = 4294967294;
+var isArrayIndex = (key) => {
   if (!/^(0|[1-9][0-9]*)$/.test(key)) return false;
   const index = Number(key);
-  return Number.isSafeInteger(index) && index <= MAX_ARRAY_INDEX2;
+  return Number.isSafeInteger(index) && index <= MAX_ARRAY_INDEX;
 };
 var fail = (code2, message) => {
   throw new FabricRepairError(message, { code: code2, phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none" });
@@ -19247,8 +11076,8 @@ var CatalogSnapshotStore = class {
   }
   prune() {
     const now = this.policy.now();
-    for (const [id3, snapshot] of this.snapshots) {
-      if (![...snapshot.dependencies].every((dependency) => dependency.isCurrent()) || now - snapshot.created >= this.policy.absoluteMs || now - snapshot.touched >= this.policy.idleMs) this.snapshots.delete(id3);
+    for (const [id2, snapshot] of this.snapshots) {
+      if (![...snapshot.dependencies].every((dependency) => dependency.isCurrent()) || now - snapshot.created >= this.policy.absoluteMs || now - snapshot.touched >= this.policy.idleMs) this.snapshots.delete(id2);
     }
   }
   reserve(dependencies = []) {
@@ -19316,36 +11145,36 @@ var CatalogSnapshotStore = class {
               return;
             }
             if (value === null || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value)) return;
-            if (typeof value !== "object" || isProxy2(value) || depth >= 64 || seen.has(value)) quota();
+            if (typeof value !== "object" || isProxy(value) || depth >= 64 || seen.has(value)) quota();
             seen.add(value);
-            const array4 = Array.isArray(value);
-            if (!array4 && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) quota();
+            const array3 = Array.isArray(value);
+            if (!array3 && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) quota();
             if (Object.getOwnPropertySymbols(value).length) quota();
             const keys = Reflect.ownKeys(value);
             if (keys.length + nodes > p.reservationNodes + 1) quota();
-            if (array4 && value.length !== keys.length - 1) quota();
+            if (array3 && value.length !== keys.length - 1) quota();
             for (const key of keys) {
-              if (array4 && key === "length") continue;
+              if (array3 && key === "length") continue;
               const d = Object.getOwnPropertyDescriptor(value, key);
-              if (!("value" in d) || !d.enumerable || array4 && !isArrayIndex2(String(key))) quota();
+              if (!("value" in d) || !d.enumerable || array3 && !isArrayIndex(String(key))) quota();
               raw += String(key).length * 2;
               if (raw > p.reservationBytes) quota();
               walk(d.value, depth + 1);
             }
           };
-          if (isProxy2(descriptors7) || !Array.isArray(descriptors7)) quota();
+          if (isProxy(descriptors7) || !Array.isArray(descriptors7)) quota();
           walk(descriptors7, -1);
           if (method.endsWith("describePage") && descriptors7.length !== 1) quota();
           let bytes2 = 512 + snapshot.dependencies.size * 64 + nodes * 32 + (query?.length ?? 0) * 4;
           if (bytes2 > p.reservationBytes) quota();
           const entries = [];
           for (const descriptor2 of descriptors7) {
-            const text3 = fabricJsonText(descriptor2, Math.min(8e6, p.reservationBytes));
-            bytes2 += text3.length * 2 + Buffer.byteLength(text3) + 256;
+            const text2 = fabricJsonText(descriptor2, Math.min(8e6, p.reservationBytes));
+            bytes2 += text2.length * 2 + Buffer.byteLength(text2) + 256;
             if (bytes2 > p.reservationBytes) quota();
             const supplied = descriptor2 !== null && typeof descriptor2 === "object" ? descriptor2.descriptorDigest : void 0;
             const digest = typeof supplied === "string" && /^[a-fA-F0-9]{64}$/.test(supplied) ? supplied : semanticDigest("catalog-descriptor-v1", descriptor2);
-            entries.push({ text: text3, digest });
+            entries.push({ text: text2, digest });
           }
           if (bytes2 > p.reservationBytes) quota();
           Object.assign(snapshot, { method, query, entries, bytes: bytes2, nodes, touched: p.now() });
@@ -19377,8 +11206,8 @@ var CatalogSnapshotStore = class {
       return unavailable();
     }
     if (!Array.isArray(data) || data.length !== 6 || data[0] !== 1 || !data.slice(2).every(Number.isSafeInteger)) unavailable();
-    const [, id3, family, descriptor2, position] = data;
-    const snapshot = this.snapshots.get(id3), method = methods[family];
+    const [, id2, family, descriptor2, position] = data;
+    const snapshot = this.snapshots.get(id2), method = methods[family];
     if (!snapshot?.entries || !method || position < 0) unavailable();
     const describe = snapshot.method.startsWith("mcp.") ? "mcp.describePage" : "tools.describePage";
     if (descriptor2 === -1 ? method !== snapshot.method || method.endsWith("describePage") || position > snapshot.entries.length : method !== describe || descriptor2 < 0 || descriptor2 >= snapshot.entries.length || position > snapshot.entries[descriptor2].text.length) unavailable();
@@ -19396,8 +11225,8 @@ var CatalogSnapshotStore = class {
   }
   fits(value, budget) {
     try {
-      const text3 = fabricJsonText(value, budget.chars);
-      return Buffer.byteLength(text3) <= budget.bytes;
+      const text2 = fabricJsonText(value, budget.chars);
+      return Buffer.byteLength(text2) <= budget.bytes;
     } catch {
       return false;
     }
@@ -19552,1101 +11381,10 @@ var parseRemoteRef = (ref) => {
   }
 };
 
-// src/providers/local-shell.ts
-import { spawn } from "node:child_process";
-
-// src/providers/local-process-group.ts
-import { execFile } from "node:child_process";
-import { opendir, readFile } from "node:fs/promises";
-import { promisify } from "node:util";
-var uncertain = () => new Error("Local shell cleanup uncertain");
-var PROC_BATCH = 8;
-var PROC_ENTRY_LIMIT = 32768;
-async function localProcessGroupAlive(pid, end) {
-  try {
-    process.kill(-pid, 0);
-  } catch (error) {
-    const code2 = error.code;
-    if (code2 === "ESRCH") return false;
-    if (process.platform !== "darwin" || code2 !== "EPERM") throw uncertain();
-  }
-  const probeEnd = Math.min(end, performance.now() + 200);
-  const remaining = probeEnd - performance.now();
-  if (remaining <= 0) throw uncertain();
-  const controller = new AbortController();
-  const check = () => {
-    if (controller.signal.aborted || performance.now() >= probeEnd) throw uncertain();
-  };
-  let timer;
-  const timeout = new Promise((_resolve, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(uncertain());
-    }, remaining);
-  });
-  const observe = async () => {
-    if (process.platform === "darwin") {
-      const { stdout } = await promisify(execFile)("/bin/ps", ["-axo", "pgid=,stat="], {
-        encoding: "utf8",
-        env: { LC_ALL: "C" },
-        timeout: Math.max(1, Math.floor(remaining)),
-        signal: controller.signal,
-        maxBuffer: 4 * 1024 * 1024
-      });
-      check();
-      if (!stdout.trim()) throw uncertain();
-      for (const line of stdout.trim().split("\n")) {
-        check();
-        const match = /^\s*(\d+)\s+([A-Za-z+<>0-9-]+)\s*$/.exec(line);
-        if (!match) throw uncertain();
-        if (Number(match[1]) === pid && !match[2].startsWith("Z")) return true;
-      }
-      return false;
-    }
-    if (process.platform !== "linux") throw uncertain();
-    const live = async (entry) => {
-      check();
-      let stat;
-      try {
-        stat = await readFile(`/proc/${entry}/stat`, { encoding: "utf8", signal: controller.signal });
-      } catch (error) {
-        if (["ENOENT", "ESRCH"].includes(error.code ?? "")) return false;
-        throw uncertain();
-      }
-      check();
-      const close = stat.lastIndexOf(")");
-      const fields = stat.slice(close + 2).trim().split(/\s+/u);
-      if (!stat.startsWith(`${entry} (`) || close < 0 || !/^[A-Za-z]$/u.test(fields[0] ?? "") || !/^\d+$/u.test(fields[1] ?? "") || !/^\d+$/u.test(fields[2] ?? "")) throw uncertain();
-      return Number(fields[2]) === pid && !["Z", "X", "x"].includes(fields[0]);
-    };
-    if (await live(String(pid))) return true;
-    check();
-    const directory2 = await opendir("/proc");
-    let count2 = 0;
-    let batch = [];
-    for await (const entry of directory2) {
-      check();
-      if (++count2 > PROC_ENTRY_LIMIT) throw uncertain();
-      if (!/^\d+$/u.test(entry.name) || entry.name === String(pid)) continue;
-      batch.push(entry.name);
-      if (batch.length === PROC_BATCH) {
-        if ((await Promise.all(batch.map(live))).some(Boolean)) return true;
-        batch = [];
-      }
-    }
-    check();
-    return (await Promise.all(batch.map(live))).some(Boolean);
-  };
-  try {
-    return await Promise.race([observe(), timeout]);
-  } catch {
-    throw uncertain();
-  } finally {
-    clearTimeout(timer);
-    controller.abort();
-  }
-}
-
-// src/providers/local-shell.ts
-import { setTimeout as delay } from "node:timers/promises";
-var LocalShellExitError = class extends Error {
-  result;
-  constructor(result) {
-    super(`Local shell exited with code ${result.exitCode}`);
-    this.name = "LocalShellExitError";
-    this.result = result;
-    Object.defineProperty(this, "result", { enumerable: false });
-  }
-};
-function shellEnvironment() {
-  const env = {};
-  for (const key of ["HOME", "PATH", "TMPDIR", "LANG", "TERM", "TZ", "USER", "LOGNAME"]) {
-    if (process.env[key] !== void 0) env[key] = process.env[key];
-  }
-  for (const [key, value] of Object.entries(process.env)) {
-    if (/^LC_[A-Z_]+$/.test(key) && value !== void 0) env[key] = value;
-  }
-  return env;
-}
-async function sendGroup(pid, signal, end) {
-  try {
-    process.kill(-pid, signal);
-  } catch (error) {
-    const code2 = error.code;
-    if (code2 === "ESRCH") return;
-    if (process.platform === "darwin" && code2 === "EPERM" && !await localProcessGroupAlive(pid, end)) return;
-    throw new Error("Local shell cleanup uncertain");
-  }
-}
-async function runLocalShell(options) {
-  if (process.platform !== "linux" && process.platform !== "darwin") throw new Error("Local shell requires Linux or macOS");
-  const timeout = options.timeoutMs ?? 3e4;
-  const budget = options.maxOutputChars ?? 24e3;
-  if (!Number.isInteger(timeout) || timeout < 1 || timeout > 9e5) throw new Error("Local shell timeoutMs must be 1..900000");
-  if (!Number.isSafeInteger(budget) || budget < 256) throw new Error("Local shell maxOutputChars must be an integer >=256");
-  const check = () => {
-    try {
-      throwIfAbortedOrExpired(options.signal, options.deadline);
-    } catch {
-      throw new Error("Local shell cancelled or deadline expired");
-    }
-  };
-  check();
-  const result = { ok: false, exitCode: null, signal: null, stdout: "", stderr: "", truncated: false, stdoutTruncated: false, stderrTruncated: false };
-  const streamLimit = Math.floor((budget - 256) / 12);
-  let child;
-  try {
-    const isScript = typeof options.script === "string";
-    const executable = isScript && options.interpreter === "bash" ? "bash" : "/bin/sh";
-    const args = isScript ? [...executable === "bash" ? ["--noprofile", "--norc"] : [], "-c", options.script, "fabric-script", ...options.args ?? []] : ["-c", options.command];
-    child = spawn(executable, args, {
-      cwd: options.cwd,
-      env: shellEnvironment(),
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-  } catch {
-    throw new Error("Local shell spawn failed");
-  }
-  let exited = false;
-  let closed = false;
-  let failure;
-  child.on("error", () => {
-    failure = "Local shell spawn failed";
-  });
-  child.on("exit", (code2, signal) => {
-    exited = true;
-    result.exitCode = code2;
-    result.signal = signal;
-  });
-  child.on("close", () => {
-    closed = true;
-  });
-  for (const name of ["stdout", "stderr"]) {
-    let head = "";
-    let tail = "";
-    let total = 0;
-    const headLimit = Math.ceil(streamLimit / 2);
-    const tailLimit = streamLimit - headLimit;
-    child[name].setEncoding("utf8");
-    child[name].on("error", () => {
-      failure = "Local shell stream failed";
-    });
-    child[name].on("data", (data) => {
-      total += data.length;
-      const take = Math.min(headLimit - head.length, data.length);
-      head += data.slice(0, take);
-      if (tailLimit > 0) tail = (tail + data.slice(take)).slice(-tailLimit);
-      const truncated = total > streamLimit;
-      const marker = "\n\u2026 truncated \u2026\n";
-      if (!truncated) result[name] = head + tail;
-      else {
-        const room = Math.max(0, streamLimit - marker.length);
-        const prefix = Math.ceil(room / 2);
-        const suffix = room - prefix;
-        result[name] = streamLimit >= marker.length ? head.slice(0, prefix) + marker + (suffix ? tail.slice(-suffix) : "") : head + tail;
-        result[`${name}Truncated`] = true;
-        result.truncated = true;
-      }
-    });
-  }
-  const started = performance.now();
-  try {
-    while (!exited && !failure) {
-      check();
-      if (performance.now() - started >= timeout) throw new Error("Local shell timed out");
-      await delay(Math.min(10, timeout));
-    }
-  } catch (error) {
-    failure = error.message;
-  }
-  try {
-    if (child.pid !== void 0) {
-      let alive = true;
-      const termEnd = performance.now() + 200;
-      try {
-        await sendGroup(child.pid, "SIGTERM", termEnd);
-        while (performance.now() < termEnd) {
-          alive = await localProcessGroupAlive(child.pid, termEnd);
-          if (!alive) break;
-          await delay(Math.min(10, Math.max(0, termEnd - performance.now())));
-        }
-      } catch {
-        alive = true;
-      }
-      if (alive) {
-        const killEnd = performance.now() + 500;
-        await sendGroup(child.pid, "SIGKILL", killEnd);
-        while (performance.now() < killEnd) {
-          alive = await localProcessGroupAlive(child.pid, killEnd);
-          if (!alive) break;
-          await delay(Math.min(10, Math.max(0, killEnd - performance.now())));
-        }
-        if (alive) failure = "Local shell cleanup uncertain";
-      }
-    }
-    const closeEnd = performance.now() + 500;
-    while (!closed && performance.now() < closeEnd) await delay(10);
-    if (!closed) failure = "Local shell stream closure uncertain";
-  } catch {
-    failure = "Local shell cleanup uncertain";
-  } finally {
-    child.stdout.destroy();
-    child.stderr.destroy();
-  }
-  if (failure) throw new Error(failure);
-  check();
-  if (result.signal !== null || result.exitCode === null) throw new Error("Local shell terminated abnormally");
-  result.ok = result.exitCode === 0;
-  if (!result.ok && !options.settle) {
-    throw new LocalShellExitError(result);
-  }
-  return result;
-}
-
-// src/providers/probe-provider.ts
-import path3 from "node:path";
-import { randomUUID } from "node:crypto";
-
-// src/schema-validation.ts
-var MAX_VALIDATION_MESSAGE_CHARS = 2e3;
-var REDACTED_PROPERTY_SEGMENT = "<property>";
-var truncateString = (value, max) => value.length <= max ? value : `${value.slice(0, max)}\u2026`;
-var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var delegatedSchemaKeywords = /* @__PURE__ */ new Set([
-  "allOf",
-  "anyOf",
-  "contains",
-  "dependentSchemas",
-  "else",
-  "if",
-  "not",
-  "oneOf",
-  "pattern",
-  "patternProperties",
-  "propertyNames",
-  "then",
-  "uniqueItems"
-]);
-var walkLocallyBoundedSchema = (schema) => {
-  const stack = [{ value: schema, depth: 0 }];
-  const seen = /* @__PURE__ */ new Set();
-  let nodes = 0;
-  let stringChars = 0;
-  while (stack.length > 0) {
-    const { value, depth, propertyMap = false } = stack.pop();
-    nodes += 1;
-    if (nodes > 5e3 || depth > 32) return false;
-    if (typeof value === "string") {
-      stringChars += value.length;
-      if (stringChars > 1e5) return false;
-      continue;
-    }
-    if (typeof value !== "object" || value === null) continue;
-    if (seen.has(value)) return false;
-    seen.add(value);
-    if (Array.isArray(value)) {
-      for (const child of value) stack.push({ value: child, depth: depth + 1 });
-      continue;
-    }
-    for (const [key, child] of Object.entries(value)) {
-      if (!propertyMap && delegatedSchemaKeywords.has(key)) return false;
-      stack.push({ value: child, depth: depth + 1, propertyMap: !propertyMap && ["properties", "$defs", "definitions"].includes(key) });
-    }
-  }
-  return true;
-};
-var locallyBoundedSchemaCache = /* @__PURE__ */ new WeakMap();
-var locallyBoundedSchema = (schema) => {
-  const cached = locallyBoundedSchemaCache.get(schema);
-  if (cached !== void 0) return cached;
-  const result = walkLocallyBoundedSchema(schema);
-  locallyBoundedSchemaCache.set(schema, result);
-  return result;
-};
-var pointerPart = (value) => value.replaceAll("~", "~0").replaceAll("/", "~1");
-var decodePointerPart = (value) => value.replaceAll("~1", "/").replaceAll("~0", "~");
-var schemaForDynamicProperty = (schema, property) => {
-  const patterns = isRecord(schema.patternProperties) ? schema.patternProperties : void 0;
-  if (patterns) {
-    for (const [pattern, child] of Object.entries(patterns)) {
-      try {
-        if (new RegExp(pattern).test(property)) return child;
-      } catch {
-      }
-    }
-  }
-  return isRecord(schema.additionalProperties) ? schema.additionalProperties : void 0;
-};
-var traceSafePath = (schema, path18) => {
-  const rawParts = typeof path18 === "string" ? path18 === "" || path18 === "/" ? [] : path18.split("/").slice(1).map(decodePointerPart) : Array.isArray(path18) ? path18.filter(
-    (part) => typeof part === "string" || typeof part === "number"
-  ).map(String) : [];
-  const safeParts = [];
-  let current = schema;
-  for (const part of rawParts) {
-    if (!isRecord(current)) {
-      safeParts.push(REDACTED_PROPERTY_SEGMENT);
-      continue;
-    }
-    if (current.type === "array" && /^\d+$/.test(part)) {
-      safeParts.push(part);
-      current = Array.isArray(current.items) ? current.items[Number(part)] : current.items;
-      continue;
-    }
-    const properties = isRecord(current.properties) ? current.properties : void 0;
-    if (properties && Object.hasOwn(properties, part)) {
-      safeParts.push(part);
-      current = properties[part];
-      continue;
-    }
-    safeParts.push(REDACTED_PROPERTY_SEGMENT);
-    current = schemaForDynamicProperty(current, part);
-  }
-  return safeParts.map((part) => `/${pointerPart(part)}`).join("");
-};
-var prefixedPath = (schema, prefix, path18) => `${prefix}${traceSafePath(schema, path18)}` || "/";
-var traceSafeErrorMessage = (error) => {
-  if (error.keyword === "additionalProperties") return "must not have additional properties";
-  if (error.keyword === "propertyNames") return "property names are invalid";
-  return typeof error.message === "string" ? error.message : "Schema validation failed";
-};
-var validateSchemaValue = (schema, value, options = {}) => {
-  if (!isRecord(schema) || !locallyBoundedSchema(schema)) return { status: "unavailable" };
-  const prefix = options.pathPrefix ?? "";
-  try {
-    const messages = [];
-    for (const rawError of value_exports.Errors(schema, value)) {
-      const error = rawError;
-      const path18 = error.path ?? (options.includeInstancePath ? error.instancePath : void 0);
-      const parentPath = prefixedPath(schema, prefix, path18);
-      const safePath = error.keyword === "additionalProperties" || error.keyword === "propertyNames" ? `${parentPath === "/" ? "" : parentPath}/${REDACTED_PROPERTY_SEGMENT}` : parentPath;
-      messages.push(`${safePath}: ${traceSafeErrorMessage(error)}`);
-      if (messages.length >= 5) break;
-    }
-    if (messages.length === 0) return { status: "valid" };
-    return {
-      status: "invalid",
-      message: truncateString(
-        messages.join("; ") || `${prefixedPath(schema, prefix, void 0)}: Schema validation failed`,
-        MAX_VALIDATION_MESSAGE_CHARS
-      )
-    };
-  } catch {
-    return { status: "unavailable" };
-  }
-};
-var schemaValidationMessage = (schema, value) => {
-  const result = validateSchemaValue(schema, value, { includeInstancePath: true });
-  if (result.status === "valid") return void 0;
-  if (result.status === "unavailable") return "Schema validator failed";
-  return result.message.replace(/^\/: /, "");
-};
-
-// src/protocol.ts
-var FABRIC_COMMIT_ACKNOWLEDGEMENT = /* @__PURE__ */ Symbol("fabric.commitAcknowledgement");
-var fabricCommitAcknowledgement = (error) => {
-  if (!(error instanceof Error)) return void 0;
-  const marker = error[FABRIC_COMMIT_ACKNOWLEDGEMENT];
-  return marker?.version === 1 && ["set", "delete", "write", "edit"].includes(marker.operation) ? marker : void 0;
-};
-
-// src/providers/probe-contract.ts
-var object3 = (properties, required = []) => JSON.parse(JSON.stringify({ type: "object", properties, required, additionalProperties: false }));
-var text = (maxLength, minLength = 0) => ({ type: "string", minLength, maxLength });
-var array2 = (items, maxItems) => ({ type: "array", items, maxItems });
-var bool2 = { type: "boolean" };
-var id = text(36, 36);
-var kind = { enum: ["repository-code", "framework-semantic", "illustrative"] };
-var declarations = object3({
-  sdkVersions: array2(object3({ name: text(128, 1), version: text(256, 1) }, ["name", "version"]), 16),
-  packageVersions: array2(object3({ name: text(128, 1), version: text(256, 1) }, ["name", "version"]), 32),
-  environment: array2(object3({ name: text(128, 1), value: text(1024) }, ["name", "value"]), 16),
-  sourceReferences: array2(object3({ path: text(1024, 1), sha256: text(64, 64), note: text(1024) }, ["path"]), 16)
-});
-var PROBE_INPUT_SCHEMAS = {
-  discover: object3({ executables: { ...array2(text(64, 1), 16), minItems: 1 } }, ["executables"]),
-  create: object3({ label: text(160), kind, files: array2(object3({ path: text(240, 1), content: text(32768) }, ["path", "content"]), 16), declarations }, ["kind"]),
-  write: object3({ id, path: text(240, 1), content: text(32768) }, ["id", "path", "content"]),
-  run: object3({ id, script: text(16e3, 1), executable: text(4096, 1), interpreter: { enum: ["sh", "bash"] }, args: array2(text(4096), 64), timeoutMs: { type: "integer", minimum: 1, maximum: 9e5 }, settle: bool2, declarations }, ["id"])
-};
-var outputs = {
-  discover: object3({ executables: array2(object3({ name: text(64), path: text(4096), source: { enum: ["PATH", "conventional-sdk"] }, exists: bool2, executableFile: bool2 }, ["name", "path", "source", "exists", "executableFile"]), 640), caches: array2(object3({ path: text(4096), exists: bool2 }, ["path", "exists"]), 8), truncated: bool2, executed: { const: false }, versionsObserved: { const: false }, credentialsAssumed: { const: false } }, ["executables", "caches", "truncated", "executed", "versionsObserved", "credentialsAssumed"]),
-  create: object3({ id, kind, cwd: text(4096), manifestPath: text(4096), retained: { const: true }, productionProof: { const: false } }, ["id", "kind", "cwd", "manifestPath", "retained", "productionProof"]),
-  write: object3({ id, path: text(240), sha256: text(64), bytes: { type: "integer", minimum: 0 }, recordPath: text(4096), retained: { const: true } }, ["id", "path", "sha256", "bytes", "recordPath", "retained"]),
-  run: object3({ id, runId: id, kind, productionProof: { const: false }, recordPath: text(4096), ok: bool2, exitCode: { type: ["integer", "null"] }, signal: { type: ["string", "null"] }, stdout: text(2e4), stderr: text(2e4), truncated: bool2, stdoutTruncated: bool2, stderrTruncated: bool2 }, ["id", "runId", "kind", "productionProof", "recordPath", "ok", "exitCode", "signal", "stdout", "stderr", "truncated", "stdoutTruncated", "stderrTruncated"])
-};
-var descriptions = {
-  discover: "Read-only bounded PATH/conventional SDK presence and cache location checks. No commands, version detection, cache contents, installs, or credential assumptions. executableFile means a regular X_OK candidate, not a successful launch or usable SDK. Absence is limited to searched candidates.",
-  create: "Explicit approved fresh independent retained project outside the repository. Caller declares provenance kind/versions/source references, never production proof. No copying, installs, automatic tests, or deletion. IDs are host-owned and usable only by this provider instance.",
-  write: "Explicit individually approved create-only UTF-8 file in a retained owned probe project. Safe relative paths; no overwrite or deletion. Missing project subdirectories are created after approval.",
-  run: "Explicit approved HOST execution in this probe's owned project cwd using runLocalShell. Not filesystem/network confinement; no injected environment or implicit installs/tests/reruns. Literal scripts preserve the shell's last exit (no arbitrary pipeline parsing); executable+args uses a positional exec wrapper. Retains separate request/result records. settle catches only ordinary nonzero exits, never timeout/cancellation/abnormal termination. Quotas cover provider-managed data, not shell effects."
-};
-var PROBE_ACTION_DESCRIPTORS = JSON.parse(JSON.stringify(Object.entries(PROBE_INPUT_SCHEMAS).map(([name, inputSchema]) => ({
-  name,
-  description: descriptions[name],
-  inputSchema: name === "discover" ? inputSchema : { ...inputSchema, properties: { ...inputSchema.properties, _probePreparation: object3({ token: id, id, operationId: id, cwd: text(4096), recordPath: text(4096) }, ["token", "id", "operationId", "cwd", "recordPath"]), review: text(4096) } },
-  outputSchema: outputs[name],
-  risk: name === "run" ? "execute" : name === "discover" ? "read" : "write",
-  effect: { kind: name === "discover" ? "read" : "write", resources: ["*"] }
-}))));
-var PROBE_GUEST_DECLARATIONS = `
-type ProbeKind = "repository-code" | "framework-semantic" | "illustrative";
-type ProbeDeclarations = { sdkVersions?: {name:string;version:string}[]; packageVersions?: {name:string;version:string}[]; environment?: {name:string;value:string}[]; sourceReferences?: {path:string;sha256?:string;note?:string}[] };
-type ProbeHandle = {id:string;kind:ProbeKind;cwd:string;manifestPath:string;retained:true;productionProof:false};
-type ProbeWriteResult = {id:string;path:string;sha256:string;bytes:number;recordPath:string;retained:true};
-type ProbeRunResult = {id:string;runId:string;kind:ProbeKind;productionProof:false;recordPath:string;ok:boolean;exitCode:number|null;signal:string|null;stdout:string;stderr:string;truncated:boolean;stdoutTruncated:boolean;stderrTruncated:boolean};
-type ProbeDiscoveryResult = {executables:{name:string;path:string;source:"PATH"|"conventional-sdk";exists:boolean;executableFile:boolean}[];caches:{path:string;exists:boolean}[];truncated:boolean;executed:false;versionsObserved:false;credentialsAssumed:false};
-declare const probe: {
-  /** Presence-only, <=16 names; <=32 absolute PATH entries and <=8 conventional SDK directories. No execution/credential assumption. */
-  discover(args:{executables:string[]}):Promise<ProbeDiscoveryResult>;
-  /** Explicit approved independent retained project; declarations are unverified caller claims. IDs are instance-owned, not paths. */
-  create(args:{label?:string;kind:ProbeKind;files?:{path:string;content:string}[];declarations?:ProbeDeclarations}):Promise<ProbeHandle>;
-  /** Individually approved create-only file, safe relative path; no deletion/overwrite. */
-  write(args:{id:string;path:string;content:string}):Promise<ProbeWriteResult>;
-  /** Approved HOST authority, not network/filesystem isolation. No inferred tests/installs/reruns. Literal script returns shell last exit; executable+args execs directly. settle never catches hard failure. */
-  run(args:{id:string;args?:string[];timeoutMs?:number;settle?:boolean;declarations?:ProbeDeclarations}&({script:string;interpreter?:"sh"|"bash";executable?:never}|{executable:string;script?:never;interpreter?:never})):Promise<ProbeRunResult>;
-};
-`;
-
-// src/providers/probe-discovery.ts
-import fs2 from "node:fs";
-import path from "node:path";
-import os2 from "node:os";
-function discoverProbeExecutables(names, options, budget, check) {
-  const env = options.discoveryEnvironment ?? process.env;
-  const home = env.HOME ?? (options.discoveryEnvironment ? void 0 : os2.homedir());
-  const result = { executables: [], caches: [], truncated: false, executed: false, versionsObserved: false, credentialsAssumed: false };
-  const bounded3 = (value) => path.isAbsolute(value) && value.length <= 4e3 && !value.includes("\0");
-  const pathText = env.PATH ?? "";
-  const pathParts = pathText.slice(0, 32768).split(path.delimiter);
-  if (pathText.length > 32768) {
-    pathParts.pop();
-    result.truncated = true;
-  }
-  if (pathParts.length > 32) result.truncated = true;
-  const pathDirs = [...new Set(pathParts.slice(0, 32).filter((item) => {
-    if (!item || !bounded3(item)) {
-      result.truncated = true;
-      return false;
-    }
-    return true;
-  }))];
-  const sdkCandidates = [
-    ...env.DOTNET_ROOT ? [env.DOTNET_ROOT] : [],
-    ...home && bounded3(home) ? [path.join(home, ".dotnet"), path.join(home, ".cargo", "bin"), path.join(home, ".local", "bin")] : [],
-    "/usr/share/dotnet",
-    "/usr/local/share/dotnet",
-    "/opt/dotnet",
-    ...options.sdkDirectories ?? []
-  ];
-  const sdkDirs = [...new Set(sdkCandidates.filter(bounded3))].slice(0, 8);
-  if (sdkCandidates.length > 8) result.truncated = true;
-  const append = (list, item) => {
-    list.push(item);
-    if (JSON.stringify(result).length > budget) {
-      list.pop();
-      result.truncated = true;
-    }
-  };
-  const candidates = [];
-  for (const name of [...new Set(names)]) {
-    const seen = /* @__PURE__ */ new Set();
-    for (const [source, dirs] of [["PATH", pathDirs], ["conventional-sdk", sdkDirs]]) {
-      for (const dir of dirs) {
-        check();
-        const candidate = path.join(dir, name);
-        if (seen.has(candidate)) continue;
-        seen.add(candidate);
-        let exists = false;
-        let executableFile = false;
-        try {
-          const stat = fs2.statSync(candidate);
-          exists = true;
-          if (stat.isFile()) {
-            try {
-              fs2.accessSync(candidate, fs2.constants.X_OK);
-              executableFile = true;
-            } catch {
-            }
-          }
-        } catch (error) {
-          if (!["ENOENT", "ENOTDIR"].includes(error.code ?? "")) result.truncated = true;
-        }
-        candidates.push({ name, path: candidate, source, exists, executableFile });
-      }
-    }
-  }
-  candidates.sort((a, b) => Number(b.exists) - Number(a.exists));
-  for (const candidate of candidates.filter((item) => item.exists)) append(result.executables, candidate);
-  if (home && bounded3(home)) {
-    for (const relative of [".nuget/packages", ".local/share/NuGet", ".npm", ".cache/pip", ".cargo/registry"]) {
-      check();
-      const candidate = path.join(home, relative);
-      let exists = false;
-      try {
-        fs2.statSync(candidate);
-        exists = true;
-      } catch (error) {
-        if (!["ENOENT", "ENOTDIR"].includes(error.code ?? "")) result.truncated = true;
-      }
-      append(result.caches, { path: candidate, exists });
-    }
-  }
-  for (const candidate of candidates.filter((item) => !item.exists)) append(result.executables, candidate);
-  return result;
-}
-
-// src/providers/probe-storage.ts
-import fs4 from "node:fs";
-import path2 from "node:path";
-import { createHash as createHash2 } from "node:crypto";
-
-// src/providers/owned-file.ts
-import fs3 from "node:fs";
-function initializeOwnedFile(target, owned, initialize) {
-  const fd = fs3.openSync(target, fs3.constants.O_WRONLY | fs3.constants.O_CREAT | fs3.constants.O_EXCL | fs3.constants.O_NOFOLLOW, 384);
-  owned.created = true;
-  const errors = [];
-  let closeUncertain = false;
-  try {
-    const stat = fs3.fstatSync(fd);
-    owned.identity = { dev: stat.dev, ino: stat.ino };
-    initialize(fd);
-  } catch (error) {
-    errors.push(error);
-  } finally {
-    if (!owned.identity) {
-      try {
-        const stat = fs3.fstatSync(fd);
-        owned.identity = { dev: stat.dev, ino: stat.ino };
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-    try {
-      fs3.closeSync(fd);
-    } catch (error) {
-      closeUncertain = true;
-      errors.push(error);
-    }
-  }
-  if (errors.length) throw new AggregateError(errors, closeUncertain ? "owned file initialization failed; descriptor close uncertain (never retried)" : owned.identity ? "owned file initialization failed" : "uncertain lock/file: ownership identity unavailable; operator recovery required", { cause: errors[0] });
-}
-
-// src/providers/probe-storage.ts
-var probeHash = (text3) => createHash2("sha256").update(text3).digest("hex");
-var identity = (stat) => ({ dev: stat.dev, ino: stat.ino });
-var same = (stat, expected) => stat.dev === expected.dev && stat.ino === expected.ino;
-var missing = (error) => error.code === "ENOENT";
-var contains = (parent, child) => child === parent || child.startsWith(parent.endsWith(path2.sep) ? parent : parent + path2.sep);
-var privateDirectory = (stat) => {
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 63) !== 0 || process.getuid && stat.uid !== process.getuid()) throw new Error("probe directory must be private (0700) and host-owned");
-};
-var chain = (target) => {
-  const paths = [target];
-  while (paths[0] !== path2.parse(target).root) paths.unshift(path2.dirname(paths[0]));
-  return paths;
-};
-var directory = (target) => {
-  const stat = fs4.lstatSync(target);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("probe path is not a regular no-symlink directory");
-  return stat;
-};
-var ProbeStorage = class {
-  root;
-  probesRoot;
-  #ancestors = /* @__PURE__ */ new Map();
-  #missing = [];
-  #owned = /* @__PURE__ */ new Map();
-  constructor(root, probesRoot) {
-    this.root = fs4.realpathSync(root);
-    if (!directory(this.root).isDirectory()) throw new Error("probe workspace must be a directory");
-    if (!path2.isAbsolute(probesRoot) || path2.resolve(probesRoot) !== probesRoot || probesRoot.length > 3e3) throw new Error("probesRoot must be a bounded canonical absolute path");
-    if (contains(this.root, probesRoot) || contains(probesRoot, this.root)) throw new Error("probesRoot must be outside and not contain the repository");
-    this.probesRoot = probesRoot;
-    let absent = false;
-    for (const current of chain(probesRoot)) {
-      if (absent) {
-        this.#missing.push(current);
-        continue;
-      }
-      try {
-        this.#ancestors.set(current, identity(directory(current)));
-      } catch (error) {
-        if (!missing(error)) throw error;
-        absent = true;
-        this.#missing.push(current);
-      }
-    }
-    if (!absent) privateDirectory(directory(probesRoot));
-  }
-  verify() {
-    for (const [target, expected] of this.#ancestors) {
-      if (!same(directory(target), expected)) throw new Error("probe root/ancestor identity changed");
-    }
-    for (const target of this.#missing) {
-      try {
-        fs4.lstatSync(target);
-      } catch (error) {
-        if (missing(error)) continue;
-        throw error;
-      }
-      throw new Error("probe previously missing root was replaced externally");
-    }
-    if (!this.#missing.length) privateDirectory(directory(this.probesRoot));
-  }
-  countRoots(limit) {
-    this.verify();
-    if (this.#missing.length) return 0;
-    const entries = fs4.opendirSync(this.probesRoot);
-    let count2 = 0;
-    try {
-      while (entries.readSync()) {
-        count2++;
-        if (count2 >= limit) break;
-      }
-    } finally {
-      entries.closeSync();
-    }
-    return count2;
-  }
-  ensureRoot() {
-    this.verify();
-    while (this.#missing.length) {
-      const target = this.#missing[0];
-      fs4.mkdirSync(target, { mode: 448 });
-      const stat = directory(target);
-      privateDirectory(stat);
-      this.#ancestors.set(target, identity(stat));
-      this.#missing.shift();
-    }
-    this.verify();
-  }
-  createDirectory(target) {
-    this.verify();
-    if (!contains(this.probesRoot, target) || target === this.probesRoot) throw new Error("probe directory escaped owned root");
-    this.snapshot(path2.dirname(target));
-    fs4.mkdirSync(target, { mode: 448 });
-    const stat = directory(target);
-    privateDirectory(stat);
-    this.#owned.set(target, identity(stat));
-  }
-  snapshot(target) {
-    this.verify();
-    if (!contains(this.probesRoot, target)) throw new Error("probe directory escaped owned root");
-    const result = [];
-    for (const current of chain(target).filter((item) => contains(this.probesRoot, item))) {
-      const stat = directory(current);
-      privateDirectory(stat);
-      const expected = current === this.probesRoot ? this.#ancestors.get(current) : this.#owned.get(current);
-      if (!expected || !same(stat, expected)) throw new Error("probe directory identity is not host-owned or changed");
-      result.push({ path: current, identity: identity(stat) });
-    }
-    return result;
-  }
-  verifySnapshot(snapshot) {
-    for (const item of snapshot) {
-      const actual = this.snapshot(item.path).at(-1);
-      if (actual.identity.dev !== item.identity.dev || actual.identity.ino !== item.identity.ino) throw new Error("probe approval directory identity changed");
-    }
-  }
-  safeName(name) {
-    const parts = name.split("/");
-    if (name.length > 240 || parts.length > 8 || parts.some((part) => !/^[A-Za-z0-9_.-]{1,80}$/.test(part) || part === "." || part === "..")) throw new Error("probe file requires a bounded safe relative name (no traversal/symlinks)");
-    return parts;
-  }
-  /** Capture existing owned parents and require a missing final file. No writes. */
-  filePlan(project, name) {
-    const parts = this.safeName(name);
-    const snapshots = this.snapshot(project);
-    let current = project;
-    let absent = false;
-    for (const part of parts.slice(0, -1)) {
-      current = path2.join(current, part);
-      if (absent) continue;
-      try {
-        fs4.lstatSync(current);
-      } catch (error) {
-        if (missing(error)) {
-          absent = true;
-          continue;
-        }
-        throw error;
-      }
-      snapshots.push(...this.snapshot(current));
-    }
-    if (!absent) {
-      try {
-        fs4.lstatSync(path2.join(project, ...parts));
-      } catch (error) {
-        if (missing(error)) return snapshots;
-        throw error;
-      }
-      throw new Error("probe.write/create files are create-only; target already exists");
-    }
-    return snapshots;
-  }
-  writeProjectFile(project, name, content) {
-    this.filePlan(project, name);
-    const parts = this.safeName(name);
-    let current = project;
-    for (const part of parts.slice(0, -1)) {
-      current = path2.join(current, part);
-      try {
-        fs4.lstatSync(current);
-        this.snapshot(current);
-      } catch (error) {
-        if (!missing(error)) throw error;
-        this.createDirectory(current);
-      }
-    }
-    this.writeRecord(path2.join(project, ...parts), content);
-  }
-  /** Never overwrite or unlink anything, including a substituted symlink/hardlink. */
-  writeRecord(target, text3) {
-    const parents = this.snapshot(path2.dirname(target));
-    initializeOwnedFile(target, { created: false }, (fd) => {
-      const stat = fs4.fstatSync(fd);
-      if (!stat.isFile() || stat.nlink !== 1) throw new Error("probe record is not an independent regular file");
-      this.verifySnapshot(parents);
-      fs4.writeFileSync(fd, text3, "utf8");
-      fs4.fsyncSync(fd);
-      const actual = fs4.lstatSync(target);
-      if (!same(actual, identity(stat)) || actual.isSymbolicLink() || actual.nlink !== 1) throw new Error("probe file changed during publication; inspect retained data");
-    });
-  }
-};
-
-// src/providers/probe-provider.ts
-var reservations = /* @__PURE__ */ new Map();
-var hardLimit = (value, fallback, min, max, name) => {
-  const actual = value ?? fallback;
-  if (!Number.isSafeInteger(actual) || actual < min || actual > max) throw new Error(`probe ${name} must be ${min}..${max}`);
-  return actual;
-};
-var effectful = (name) => name !== "discover";
-var json = (value) => JSON.stringify(value, null, 2) + "\n";
-var fileBytes = (files) => files.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0);
-var observedEnvironment = () => {
-  const result = {};
-  for (const key of ["HOME", "PATH", "TMPDIR", "LANG", "TERM", "TZ", "USER", "LOGNAME", ...Object.keys(process.env).filter((key2) => /^LC_[A-Z_]+$/.test(key2)).sort()]) {
-    if (process.env[key] !== void 0) result[key] = process.env[key];
-  }
-  if (JSON.stringify(result).length > 16e3) throw new Error("probe shell environment exceeds retained approval budget");
-  return result;
-};
-var ProbeRunExitError = class extends Error {
-  result;
-  [FABRIC_COMMIT_ACKNOWLEDGEMENT] = { version: 1, operation: "write" };
-  constructor(result) {
-    super(`Probe command exited with code ${result.exitCode}; retained run ${result.runId}`);
-    this.name = "ProbeRunExitError";
-    this.result = result;
-    Object.defineProperty(this, "result", { enumerable: false });
-  }
-};
-var ProbeProvider = class {
-  name = "probe";
-  description = "Explicit approved retained independent probes with declared provenance; host execution, not production proof or network isolation";
-  #storage;
-  #options;
-  #budget;
-  #maxProbes;
-  #maxRuns;
-  #maxWrites;
-  #maxBytes;
-  #descriptors;
-  #probes = /* @__PURE__ */ new Map();
-  #prepared = /* @__PURE__ */ new Map();
-  #controller = new AbortController();
-  #pending = /* @__PURE__ */ new Set();
-  #closed = false;
-  constructor(options) {
-    this.#options = structuredClone(options);
-    this.#budget = Math.min(2e4, hardLimit(options.maxResultChars, 2e4, 1e3, Number.MAX_SAFE_INTEGER, "maxResultChars"));
-    this.#maxProbes = hardLimit(options.maxProbes, 64, 1, 1e3, "maxProbes");
-    this.#maxRuns = hardLimit(options.maxRunsPerProbe, 64, 1, 1e3, "maxRunsPerProbe");
-    this.#maxWrites = hardLimit(options.maxWritesPerProbe, 128, 1, 1e3, "maxWritesPerProbe");
-    this.#maxBytes = hardLimit(options.maxManagedBytesPerProbe, 8 * 1024 * 1024, 65536, 64 * 1024 * 1024, "maxManagedBytesPerProbe");
-    if (options.sdkDirectories && (options.sdkDirectories.length > 8 || options.sdkDirectories.some((dir) => !path3.isAbsolute(dir) || dir.length > 4e3 || dir.includes("\0")))) throw new Error("probe sdkDirectories must contain <=8 bounded absolute paths");
-    this.#storage = new ProbeStorage(options.root, options.probesRoot);
-    this.#descriptors = structuredClone(PROBE_ACTION_DESCRIPTORS);
-    for (const descriptor2 of this.#descriptors) descriptor2.effect = { kind: descriptor2.name === "discover" ? "read" : "write", resources: [...this.effectResources(descriptor2.name)] };
-  }
-  discoveryRevision() {
-    return "1";
-  }
-  async list() {
-    return structuredClone(this.#descriptors);
-  }
-  async describe(name) {
-    return structuredClone(this.#descriptors.find((item) => item.name === name));
-  }
-  effectResources(name) {
-    return name === "run" ? ["*"] : name === "discover" ? [] : [`probe-root:${this.#storage.probesRoot}`];
-  }
-  #check(context) {
-    if (this.#closed) throw new Error("probe provider is closed");
-    throwIfAbortedOrExpired(context.signal, context.deadline);
-    this.#controller.signal.throwIfAborted();
-    this.#storage.verify();
-  }
-  #resultBudget(context) {
-    return Math.min(this.#budget, hardLimit(context.maxResultChars, this.#budget, 1e3, Number.MAX_SAFE_INTEGER, "context maxResultChars"));
-  }
-  #bounded(value, budget) {
-    if (JSON.stringify(value).length > budget) throw new Error("probe result metadata exceeds maxResultChars");
-    return value;
-  }
-  #validate(name, args, prepared = false) {
-    if (!Object.hasOwn(PROBE_INPUT_SCHEMAS, name)) throw new Error(`Unknown probe action: ${name}`);
-    if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("probe arguments must be an object");
-    const invalid = schemaValidationMessage(prepared ? this.#descriptors.find((item) => item.name === name).inputSchema : PROBE_INPUT_SCHEMAS[name], args);
-    if (invalid) throw new Error(`Invalid probe.${name} arguments: ${invalid}`);
-    const serialized = JSON.stringify(args);
-    if (serialized.length > 64e3) throw new Error("probe exact arguments exceed 64000-character approval budget");
-    const checkText = (value) => {
-      if (typeof value === "string" && (value.includes("\0") || Buffer.from(value).toString("utf8") !== value)) throw new Error("probe arguments require valid UTF-8 without NUL");
-      if (Array.isArray(value)) value.forEach(checkText);
-      else if (value && typeof value === "object") Object.values(value).forEach(checkText);
-    };
-    checkText(args);
-    if (typeof args.id === "string" && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(args.id)) throw new Error("probe ID must be a host-issued UUID");
-    if (name === "discover" && args.executables.some((item) => !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(item))) throw new Error("Invalid probe executable name");
-    if (name === "run" && (typeof args.script === "string" === (typeof args.executable === "string") || args.executable !== void 0 && args.interpreter !== void 0)) throw new Error("probe.run requires script/interpreter OR executable, not both");
-    const declarations2 = args.declarations;
-    if (declarations2?.sourceReferences?.some((item) => item.sha256 !== void 0 && !/^[0-9a-f]{64}$/.test(item.sha256))) throw new Error("probe source sha256 declaration must be 64 lowercase hex characters");
-  }
-  #probe(id3) {
-    const probe = this.#probes.get(id3);
-    if (!probe || probe.blocked) throw new Error("probe ID is not owned by this instance or has uncertain retained state");
-    this.#storage.snapshot(probe.directory);
-    this.#storage.snapshot(probe.handle.cwd);
-    this.#storage.snapshot(probe.records);
-    return probe;
-  }
-  #quota(probe, name, bytes2) {
-    if (probe.bytes + bytes2 > this.#maxBytes || name === "run" && probe.runs >= this.#maxRuns || name === "write" && probe.writes >= this.#maxWrites) throw new Error("probe managed bytes/run/write quota exceeded (retained data is never deleted)");
-  }
-  #handle(id3, kind2) {
-    const directory2 = path3.join(this.#storage.probesRoot, id3);
-    return { id: id3, kind: kind2, cwd: path3.join(directory2, "project"), manifestPath: path3.join(directory2, "manifest.json"), retained: true, productionProof: false };
-  }
-  async prepareArguments(name, args, context) {
-    this.#validate(name, args);
-    this.#check(context);
-    const budget = this.#resultBudget(context);
-    if (!effectful(name)) return structuredClone(args);
-    const canonical = structuredClone(args);
-    const id3 = name === "create" ? randomUUID() : args.id;
-    const operationId = randomUUID();
-    const token = randomUUID();
-    let directories = [];
-    let environment;
-    let handle;
-    if (name === "create") {
-      if (this.#storage.countRoots(this.#maxProbes) >= this.#maxProbes) throw new Error("probe retained directory quota exceeded");
-      const files = args.files ?? [];
-      for (const file of files) this.#storage.safeName(file.path);
-      const names = files.map((file) => file.path);
-      if (names.some((file, i) => names.some((other, j) => i !== j && (file === other || other.startsWith(file + "/"))))) throw new Error("probe initial files overlap");
-      if (files.length > this.#maxWrites || fileBytes(files) > 32768) throw new Error("probe initial files exceed write/content quota");
-      handle = this.#handle(id3, args.kind);
-      this.#bounded(handle, budget);
-    } else {
-      const probe = this.#probe(id3);
-      handle = probe.handle;
-      directories = [...this.#storage.snapshot(probe.handle.cwd), ...this.#storage.snapshot(probe.records)];
-      if (name === "write") directories.push(...this.#storage.filePlan(handle.cwd, args.path));
-      else {
-        if (typeof args.executable === "string" && (!path3.isAbsolute(args.executable) && !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(args.executable))) throw new Error("probe executable must be an absolute path or a bare executable name");
-        canonical.timeoutMs = args.timeoutMs ?? 3e4;
-        canonical.settle = args.settle ?? false;
-        canonical.args = args.args ?? [];
-        if (typeof args.script === "string") canonical.interpreter = args.interpreter ?? "sh";
-        environment = observedEnvironment();
-      }
-    }
-    const recordPath = name === "create" ? handle.manifestPath : path3.join(this.#storage.probesRoot, id3, "records", `${name}-${operationId}.result.json`);
-    const metadata = { token, id: id3, operationId, cwd: handle.cwd, recordPath };
-    canonical._probePreparation = metadata;
-    canonical.review = `${name} retained probe ${id3}; kind=${handle.kind}; productionProof=false. Canonical cwd: ${JSON.stringify(handle.cwd)}. Record: ${JSON.stringify(recordPath)}. Exact files/script/argv/declarations are in these approved arguments. No deletion or implicit install/test/rerun. ${name === "run" ? 'HOST AUTHORITY: cwd is not filesystem/network confinement. Direct executable uses /bin/sh exec "$@"; scripts return the shell last exit. Environment declarations are not applied.' : "Provider-managed create-only writes, including retained evidence."}`;
-    if (environment) {
-      canonical.review += ` Forwarded environment: ${JSON.stringify(environment)}`;
-    }
-    if (canonical.review.length > 4096) throw new Error("probe exact environment/review exceeds approval budget");
-    this.#validate(name, canonical, true);
-    const outputBudget = name === "run" ? budget - JSON.stringify(this.#runEnvelope(metadata, handle.kind)).length - 128 : budget;
-    if (outputBudget < 256) throw new Error("probe run metadata exceeds result budget before execution");
-    if (name === "write") this.#bounded(this.#writeResult(metadata, args.path, args.content), budget);
-    const byteReservation = Buffer.byteLength(json(canonical)) * 2 + 8192 + budget + (name === "create" ? fileBytes(args.files ?? []) : name === "write" ? Buffer.byteLength(args.content) : 0);
-    if (name === "create") {
-      if (byteReservation > this.#maxBytes) throw new Error("probe managed byte quota exceeded");
-    } else this.#quota(this.#probe(id3), name, byteReservation);
-    for (const [key, entry] of this.#prepared) if (!entry.active && entry.expires < Date.now()) this.#prepared.delete(key);
-    while (this.#prepared.size >= 64) {
-      const victim = [...this.#prepared].find(([, entry]) => !entry.active);
-      if (!victim) throw new Error("probe preparation quota exceeded");
-      this.#prepared.delete(victim[0]);
-    }
-    this.#prepared.set(token, { name, signature: probeHash(JSON.stringify(canonical)), expires: Date.now() + 6e4, active: false, used: false, metadata, directories, ...environment ? { environment } : {}, byteReservation, outputBudget });
-    return canonical;
-  }
-  #entry(name, args) {
-    this.#validate(name, args, true);
-    const token = args._probePreparation?.token;
-    const entry = token ? this.#prepared.get(token) : void 0;
-    if (!entry || entry.name !== name || entry.signature !== probeHash(JSON.stringify(args)) || !entry.active && entry.expires < Date.now()) throw new Error("probe preparation missing, altered, or expired");
-    return entry;
-  }
-  async reserveInvocation(name, args, context) {
-    this.#check(context);
-    if (!effectful(name)) return () => {
-    };
-    const entry = this.#entry(name, args);
-    if (entry.active || entry.used) throw new Error("probe preparation already reserved/used");
-    const root = this.#storage.probesRoot;
-    if (reservations.has(root) || [...reservations.values()].some((item) => item.run) || name === "run" && reservations.size) throw new Error("probe overlapping effect reservation rejected");
-    entry.active = true;
-    reservations.set(root, { token: entry.metadata.token, run: name === "run" });
-    return () => {
-      if (reservations.get(root)?.token === entry.metadata.token) reservations.delete(root);
-      entry.active = false;
-      this.#prepared.delete(entry.metadata.token);
-    };
-  }
-  invoke(name, args, context) {
-    const pending = this.#invoke(name, args, context);
-    this.#pending.add(pending);
-    void pending.finally(() => this.#pending.delete(pending)).catch(() => {
-    });
-    return pending;
-  }
-  async #invoke(name, args, context) {
-    this.#check(context);
-    if (name === "discover") {
-      this.#validate(name, args);
-      return discoverProbeExecutables(args.executables, this.#options, this.#resultBudget(context), () => this.#check(context));
-    }
-    const entry = this.#entry(name, args);
-    if (!entry.active || entry.used) throw new Error("probe effect requires unused active registry reservation");
-    this.#storage.verifySnapshot(entry.directories);
-    if (entry.environment && JSON.stringify(entry.environment) !== JSON.stringify(observedEnvironment())) throw new Error("probe forwarded environment changed since approval");
-    if (name !== "create") {
-      const probe2 = this.#probe(entry.metadata.id);
-      this.#quota(probe2, name, entry.byteReservation);
-      for (const target of [entry.metadata.recordPath, entry.metadata.recordPath.replace(".result.json", ".request.json")]) {
-        this.#storage.filePlan(probe2.records, path3.basename(target));
-      }
-    }
-    entry.used = true;
-    if (name === "create") return this.#create(args, entry, context);
-    const probe = this.#probe(entry.metadata.id);
-    if (name === "write") {
-      this.#storage.filePlan(probe.handle.cwd, args.path);
-      this.#check(context);
-      probe.bytes += entry.byteReservation;
-      probe.writes++;
-      try {
-        this.#storage.writeRecord(entry.metadata.recordPath.replace(".result.json", ".request.json"), json({ schemaVersion: 1, operation: "write", approvedArguments: args, startedAt: (/* @__PURE__ */ new Date()).toISOString() }));
-        this.#storage.writeProjectFile(probe.handle.cwd, args.path, args.content);
-        const result = this.#writeResult(entry.metadata, args.path, args.content);
-        this.#storage.writeRecord(entry.metadata.recordPath, json(result));
-        this.#check(context);
-        return result;
-      } catch (cause) {
-        probe.blocked = true;
-        throw this.#retainedError("write", entry, cause);
-      }
-    }
-    return this.#run(args, probe, entry, context);
-  }
-  #retainedError(operation, entry, cause) {
-    const error = new Error(`Probe ${operation} failed after retained writes may have begun; inspect ${entry.metadata.id}/${entry.metadata.operationId} before any explicit retry`, { cause });
-    return error;
-  }
-  #create(args, entry, context) {
-    if (this.#storage.countRoots(this.#maxProbes) >= this.#maxProbes) throw new Error("probe retained directory quota exceeded");
-    this.#check(context);
-    const handle = this.#handle(entry.metadata.id, args.kind);
-    const directory2 = path3.dirname(handle.cwd);
-    const probe = { handle, directory: directory2, records: path3.join(directory2, "records"), declarations: structuredClone(args.declarations ?? {}), bytes: entry.byteReservation, writes: (args.files ?? []).length, runs: 0, blocked: false };
-    try {
-      this.#storage.ensureRoot();
-      this.#storage.createDirectory(directory2);
-      this.#storage.createDirectory(handle.cwd);
-      this.#storage.createDirectory(probe.records);
-      this.#probes.set(handle.id, probe);
-      this.#storage.writeRecord(handle.manifestPath, json({ schemaVersion: 1, ...handle, label: args.label ?? null, createdAt: (/* @__PURE__ */ new Date()).toISOString(), approvedArguments: args, declarations: { status: "caller-declared-unverified", ...probe.declarations }, files: (args.files ?? []).map((file) => ({ path: file.path, bytes: Buffer.byteLength(file.content), sha256: probeHash(file.content) })), evidence: "Independent probe only; kind is caller-declared, not proof about repository/production. Records are retained host files, not tamper-proof attestations.", execution: "Approved host authority, no network/filesystem confinement; no automatic execution/install/rerun. Managed quotas do not bound shell effects." }));
-      for (const file of args.files ?? []) this.#storage.writeProjectFile(handle.cwd, file.path, file.content);
-      this.#storage.writeRecord(path3.join(probe.records, `create-${entry.metadata.operationId}.result.json`), json({ complete: true, ...handle }));
-      this.#check(context);
-      return handle;
-    } catch (cause) {
-      probe.blocked = true;
-      throw this.#retainedError("create", entry, cause);
-    }
-  }
-  #writeResult(metadata, name, content) {
-    return { id: metadata.id, path: name, sha256: probeHash(content), bytes: Buffer.byteLength(content), recordPath: metadata.recordPath, retained: true };
-  }
-  #runEnvelope(metadata, kind2) {
-    return { id: metadata.id, runId: metadata.operationId, kind: kind2, productionProof: false, recordPath: metadata.recordPath };
-  }
-  async #run(args, probe, entry, context) {
-    this.#check(context);
-    probe.bytes += entry.byteReservation;
-    probe.runs++;
-    const input = typeof args.executable === "string" ? { script: 'exec "$@"', interpreter: "sh", args: [args.executable, ...args.args ?? []] } : { script: args.script, interpreter: args.interpreter ?? "sh", args: args.args ?? [] };
-    const startedAt = (/* @__PURE__ */ new Date()).toISOString();
-    const envelope = this.#runEnvelope(entry.metadata, probe.handle.kind);
-    try {
-      this.#storage.writeRecord(entry.metadata.recordPath.replace(".result.json", ".request.json"), json({ schemaVersion: 1, ...envelope, startedAt, cwd: probe.handle.cwd, approvedArguments: args, executedInput: input, environment: { policy: "runLocalShell allowlist; no declaration injection", observed: entry.environment }, declarations: { status: "caller-declared-unverified", project: probe.declarations, run: args.declarations ?? {} }, versionObservation: "No version detection performed. Command stdout/stderr are observations, never parsed into verified SDK/package claims.", semantics: "Literal scripts return shell last status; arbitrary pipeline correctness is not inferred. Explicit direct executable uses exec positional arguments. Host authority; not network confinement." }));
-    } catch (cause) {
-      probe.blocked = true;
-      throw this.#retainedError("run record", entry, cause);
-    }
-    let result;
-    try {
-      this.#check(context);
-      const shell = await runLocalShell({ ...input, cwd: probe.handle.cwd, timeoutMs: args.timeoutMs ?? 3e4, settle: true, maxOutputChars: entry.outputBudget, signal: context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal, ...context.deadline ? { deadline: context.deadline } : {} });
-      result = { ...envelope, ...shell };
-    } catch (cause) {
-      try {
-        this.#storage.verifySnapshot(entry.directories);
-        this.#storage.writeRecord(entry.metadata.recordPath, json({ schemaVersion: 1, ...envelope, startedAt, endedAt: (/* @__PURE__ */ new Date()).toISOString(), status: "hard-failure", result: null, evidenceUnavailable: true, reason: cause instanceof Error ? cause.message.slice(0, 512) : "Shell execution failed", note: "runLocalShell did not return diagnostic streams/exit/signal; cancellation, timeout and cleanup failure are not settled. External effects may have occurred." }));
-      } catch (recordFailure) {
-        probe.blocked = true;
-        throw this.#retainedError("run/retention", entry, new AggregateError([cause, recordFailure], "Execution and evidence retention failed"));
-      }
-      if (cause instanceof Error && /uncertain/.test(cause.message)) probe.blocked = true;
-      throw cause;
-    }
-    try {
-      this.#storage.verifySnapshot(entry.directories);
-      this.#storage.writeRecord(entry.metadata.recordPath, json({ schemaVersion: 1, startedAt, endedAt: (/* @__PURE__ */ new Date()).toISOString(), status: "completed", result }));
-    } catch (cause) {
-      probe.blocked = true;
-      throw this.#retainedError("run retention", entry, cause);
-    }
-    this.#check(context);
-    this.#bounded(result, this.#resultBudget(context));
-    if (!result.ok && args.settle !== true) throw new ProbeRunExitError(result);
-    return result;
-  }
-  async close() {
-    this.#closed = true;
-    this.#controller.abort(new Error("probe provider closed"));
-    await Promise.allSettled([...this.#pending]);
-    for (const [token, entry] of this.#prepared) if (!entry.active) this.#prepared.delete(token);
-  }
-};
-
 // src/core/catalog-resources.ts
 var MAX_CATALOG_NODES = 1e5;
 var catalogWeight = (value, maxChars = MAX_FABRIC_JSON_CHARS) => {
-  const text3 = fabricJsonText(value, maxChars);
+  const text2 = fabricJsonText(value, maxChars);
   let nodes = 0;
   const stack = [value];
   while (stack.length) {
@@ -20655,16 +11393,16 @@ var catalogWeight = (value, maxChars = MAX_FABRIC_JSON_CHARS) => {
     if (nodes > MAX_CATALOG_NODES) throw new Error("Fabric host JSON is outside the bounded JSON contract: node limit exceeded");
     if (current !== null && typeof current === "object") stack.push(...Object.values(current));
   }
-  return { bytes: text3.length * 2 + Buffer.byteLength(text3) + nodes * 48, nodes };
+  return { bytes: text2.length * 2 + Buffer.byteLength(text2) + nodes * 48, nodes };
 };
 
 // src/core/action-registry.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { randomUUID } from "node:crypto";
 var providerName = /^[a-z][a-z0-9_-]{0,63}$/u;
 var MAX_ACTION_REFERENCE_CHARS = 512;
 var MAX_SEARCH_QUERY_CHARS = 2e3;
 var compareCodeUnits2 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
-var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var resolved = (provider, descriptor2) => {
   fabricJsonText(descriptor2, MAX_FABRIC_JSON_CHARS);
   const copied = structuredClone(descriptor2);
@@ -20689,13 +11427,13 @@ var resolved = (provider, descriptor2) => {
 };
 var boundedResult = (value, maximum) => {
   if (!Number.isSafeInteger(maximum) || maximum < 1) throw new Error("Invalid Fabric result budget");
-  const text3 = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
-  if (text3.length <= maximum) return { value, chars: text3.length, truncated: false };
-  const envelope = { fabricTruncated: true, originalChars: text3.length, preview: "" };
+  const text2 = fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
+  if (text2.length <= maximum) return { value, chars: text2.length, truncated: false };
+  const envelope = { fabricTruncated: true, originalChars: text2.length, preview: "" };
   const available = maximum - JSON.stringify(envelope).length;
   if (available < 0) throw new Error("Fabric result budget cannot fit truncation metadata");
-  envelope.preview = jsonStringPrefix(text3, available);
-  return { value: envelope, chars: text3.length, truncated: true };
+  envelope.preview = jsonStringPrefix(text2, available);
+  return { value: envelope, chars: text2.length, truncated: true };
 };
 var overlaps = (left, right) => left.includes("*") || right.includes("*") || left.some((entry) => right.includes(entry));
 var deepFreeze = (value) => {
@@ -20709,8 +11447,8 @@ var normalizedTerms = (value) => [...new Set(
   value.split(/[^\p{L}\p{N}_.$-]+/u, 65).filter(Boolean).slice(0, 64)
 )];
 var boundedSearchField = (value) => {
-  const text3 = typeof value === "string" ? value : fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
-  return text3.slice(0, MAX_SEARCHABLE_DESCRIPTOR_CHARS).normalize("NFKC").toLowerCase();
+  const text2 = typeof value === "string" ? value : fabricJsonText(value, MAX_FABRIC_JSON_CHARS);
+  return text2.slice(0, MAX_SEARCHABLE_DESCRIPTOR_CHARS).normalize("NFKC").toLowerCase();
 };
 var indexedAction = (provider, action) => {
   const providerDescription = provider.description;
@@ -21179,7 +11917,7 @@ var ActionRegistry = class {
   }
   async invoke(ref, args, context, options) {
     throwIfAbortedOrExpired(context.signal, context.deadline);
-    if (!isRecord2(args)) throw new Error(`Arguments for ${ref} must be an object`);
+    if (!isRecord(args)) throw new Error(`Arguments for ${ref} must be an object`);
     const remote = parseRemoteRef(ref);
     if (!remote && options !== void 0) throw new Error("Invocation options require a canonical remote reference");
     if (remote) args = {
@@ -21200,13 +11938,13 @@ var ActionRegistry = class {
       throw error;
     }
     throwIfAbortedOrExpired(context.signal, context.deadline);
-    if (!isRecord2(prepared)) throw new Error(`Argument preparation for ${ref} must return an object`);
+    if (!isRecord(prepared)) throw new Error(`Argument preparation for ${ref} must return an object`);
     const invalid = schemaValidationMessage(action.inputSchema, prepared);
     if (invalid) throw argumentRepairError(ref, action.descriptorDigest, action.inputSchema, invalid);
     const canonicalArgs = deepFreeze(structuredClone(prepared));
     const resources = Object.freeze([...provider.effectResources?.(action.name, structuredClone(canonicalArgs), context) ?? action.effect?.resources ?? (action.risk === "write" ? ["*"] : [])]);
     const writeLike = action.risk === "write" || action.effect?.kind === "write";
-    const nestedToolCallId = `fabric_${randomUUID2()}`;
+    const nestedToolCallId = `fabric_${randomUUID()}`;
     if (context.audits.length >= (context.maxAuditEntries ?? Number.POSITIVE_INFINITY)) throw new FabricRepairError("Fabric audit entry quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
     const audit = { ref, nestedToolCallId, startedAt: Date.now() };
     const auditBudget = context.auditBudget ??= { bytes: Buffer.byteLength(JSON.stringify(context.audits), "utf8") };
@@ -21231,7 +11969,7 @@ var ActionRegistry = class {
       const invocationArgs = structuredClone(canonicalArgs);
       invocationStarted = true;
       const value = await provider.invoke(action.name, invocationArgs, context);
-      if (provider.name === "local" && (action.name === "write" || action.name === "edit") && isRecord2(value) && value.changed === true) {
+      if (provider.name === "local" && (action.name === "write" || action.name === "edit") && isRecord(value) && value.changed === true) {
         published = { version: 1, operation: action.name };
       }
       throwIfAbortedOrExpired(context.signal, context.deadline);
@@ -21513,1155 +12251,6 @@ declare function parallel<T>(
 declare function print(...values: unknown[]): void;
 `;
 
-// src/runtime/quickjs-runtime.ts
-import { performance as performance3 } from "node:perf_hooks";
-
-// node_modules/.pnpm/@jitl+quickjs-singlefile-mjs-release-sync@0.32.0/node_modules/@jitl/quickjs-singlefile-mjs-release-sync/dist/index.mjs
-var variant = { type: "sync", importFFI: () => import("./ffi-2CFDPMEQ.js").then((mod) => mod.QuickJSFFI), importModuleLoader: () => import("./emscripten-module-Q67P5WYC-K2EI3T2U.js").then((mod) => mod.default) };
-var src_default = variant;
-
-// node_modules/.pnpm/quickjs-emscripten-core@0.32.0/node_modules/quickjs-emscripten-core/dist/index.mjs
-async function newQuickJSWASMModuleFromVariant(variantOrPromise) {
-  let variant2 = smartUnwrap(await variantOrPromise), [wasmModuleLoader, QuickJSFFI, { QuickJSWASMModule: QuickJSWASMModule2 }] = await Promise.all([variant2.importModuleLoader().then(smartUnwrap), variant2.importFFI(), import("./module-ES6BEMUI-2A2DOREW.js").then(smartUnwrap)]), wasmModule = await wasmModuleLoader();
-  wasmModule.type = "sync";
-  let ffi = new QuickJSFFI(wasmModule);
-  return new QuickJSWASMModule2(wasmModule, ffi);
-}
-function smartUnwrap(val) {
-  return val && "default" in val && val.default ? val.default && "default" in val.default && val.default.default ? val.default.default : val.default : val;
-}
-
-// src/runtime/guest-stack-map.ts
-var BASE64_VALUES = (() => {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const table = /* @__PURE__ */ new Map();
-  for (let index = 0; index < alphabet.length; index += 1) {
-    table.set(alphabet[index], index);
-  }
-  return table;
-})();
-var decodeVlqSegment = (segment) => {
-  const values = [];
-  let index = 0;
-  while (index < segment.length) {
-    let value = 0;
-    let shift = 0;
-    let continuation = true;
-    while (continuation) {
-      const digit = BASE64_VALUES.get(segment[index]);
-      if (digit === void 0) return values;
-      index += 1;
-      continuation = (digit & 32) !== 0;
-      value += (digit & 31) * 2 ** shift;
-      shift += 5;
-    }
-    values.push((value & 1) === 1 ? -(value >> 1) : value >> 1);
-  }
-  return values;
-};
-var decodeMappings = (mappings) => {
-  const lines = [];
-  let sourceLine = 0;
-  let sourceColumn = 0;
-  for (const line of mappings.split(";")) {
-    const segments = [];
-    let generatedColumn = 0;
-    for (const rawSegment of line.split(",")) {
-      if (!rawSegment) continue;
-      const values = decodeVlqSegment(rawSegment);
-      if (values.length < 4) continue;
-      generatedColumn += values[0];
-      sourceLine += values[2];
-      sourceColumn += values[3];
-      segments.push({ generatedColumn, sourceLine, sourceColumn });
-    }
-    lines.push(segments);
-  }
-  return lines;
-};
-var createGuestStackMap = (sourceMapText) => {
-  if (!sourceMapText) return void 0;
-  let mappings;
-  try {
-    const parsed = JSON.parse(sourceMapText);
-    if (typeof parsed.mappings !== "string") return void 0;
-    mappings = parsed.mappings;
-  } catch {
-    return void 0;
-  }
-  let decoded;
-  return {
-    lookup(line, column) {
-      decoded ??= decodeMappings(mappings);
-      const segments = decoded[line - 1];
-      if (!segments) return void 0;
-      const target = column - 1;
-      let best;
-      for (const segment of segments) {
-        if (segment.generatedColumn > target) break;
-        best = segment;
-      }
-      best ??= segments[0];
-      if (!best) return void 0;
-      return { line: best.sourceLine, column: best.sourceColumn + 1 };
-    }
-  };
-};
-var GUEST_FRAME_PATTERN = /kiro-fabric-guest\.js:(\d+):(\d+)/g;
-var remapGuestErrorText = (text3, stackMap, guestLineCount) => {
-  if (!stackMap || !text3.includes("kiro-fabric-guest.js:")) return text3;
-  return text3.replace(GUEST_FRAME_PATTERN, (match, lineText, columnText) => {
-    const line = Number(lineText);
-    const mapped = stackMap.lookup(line, Number(columnText));
-    if (mapped) return `guest code:${mapped.line}:${mapped.column}`;
-    if (guestLineCount !== void 0 && line > guestLineCount) return "fabric driver";
-    return match;
-  });
-};
-
-// src/runtime/deadline.ts
-import { performance as performance2 } from "node:perf_hooks";
-var FabricDeadline = class {
-  constructor(timeoutMs, maximumMs, now = () => performance2.now()) {
-    this.now = now;
-    this.startedAt = now();
-    const maximum = Math.max(1, Math.floor(maximumMs));
-    this.maximumAt = this.startedAt + maximum;
-    this.#expiresAt = this.startedAt + Math.min(maximum, Math.max(1, Math.floor(timeoutMs)));
-  }
-  now;
-  startedAt;
-  maximumAt;
-  #expiresAt;
-  get expiresAt() {
-    return this.#expiresAt;
-  }
-  get effectiveTimeoutMs() {
-    return Math.round(this.#expiresAt - this.startedAt);
-  }
-  get expired() {
-    return this.now() >= this.#expiresAt;
-  }
-  remainingMs() {
-    return Math.max(0, this.#expiresAt - this.now());
-  }
-  extendTo(timeoutMs) {
-    if (this.expired || !Number.isFinite(timeoutMs)) return this.effectiveTimeoutMs;
-    const requested = this.startedAt + Math.max(1, Math.floor(timeoutMs));
-    this.#expiresAt = Math.min(this.maximumAt, Math.max(this.#expiresAt, requested));
-    return this.effectiveTimeoutMs;
-  }
-  throwIfExpired() {
-    if (this.expired) throw new Error(`Execution timed out after ${this.effectiveTimeoutMs}ms`);
-  }
-};
-
-// src/trace/tracer.ts
-import { randomUUID as randomUUID3 } from "node:crypto";
-
-// src/trace/trace-writer.ts
-import fs5 from "node:fs";
-import path4 from "node:path";
-var DEFAULT_MAX_BUFFER_LINES = 4096;
-var DEFAULT_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
-var DEFAULT_FLUSH_INTERVAL_MS = 250;
-var DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024;
-var DEFAULT_MAX_LINE_BYTES = 8 * 1024;
-var MAX_BUFFER_LINES = 1048576;
-var MAX_BUFFER_BYTES = 256 * 1024 * 1024;
-var MAX_FILE_BYTES = 1024 * 1024 * 1024;
-var MAX_LINE_BYTES = 1024 * 1024;
-var MAX_FLUSH_INTERVAL_MS = 6e4;
-var MIN_MAX_LINE_BYTES = 2;
-var boundedOption = (name, value, fallback, minimum, maximum) => {
-  if (value === void 0) return fallback;
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) {
-    throw new Error(`trace writer ${name} must be an integer between ${minimum} and ${maximum}`);
-  }
-  return value;
-};
-var LineRing = class {
-  constructor(capacity, maxBytes) {
-    this.capacity = capacity;
-    this.maxBytes = maxBytes;
-    this.#slots = new Array(capacity);
-  }
-  capacity;
-  maxBytes;
-  #slots;
-  #start = 0;
-  #size = 0;
-  #bytes = 0;
-  /** Returns how many lines were discarded: evicted oldest lines plus, when the
-   * line cannot fit the byte budget at all, the rejected line itself. */
-  push(line) {
-    const lineBytes = Buffer.byteLength(line, "utf8");
-    if (lineBytes > this.maxBytes) return 1;
-    let dropped = 0;
-    while (this.#size > 0 && (this.#size >= this.capacity || this.#bytes + lineBytes > this.maxBytes)) {
-      const index = this.#start;
-      this.#bytes -= Buffer.byteLength(this.#slots[index], "utf8");
-      this.#slots[index] = void 0;
-      this.#start = (this.#start + 1) % this.capacity;
-      this.#size -= 1;
-      dropped += 1;
-    }
-    this.#slots[(this.#start + this.#size) % this.capacity] = line;
-    this.#size += 1;
-    this.#bytes += lineBytes;
-    return dropped;
-  }
-  drain() {
-    const out = [];
-    for (let index = 0; index < this.#size; index += 1) {
-      out.push(this.#slots[(this.#start + index) % this.capacity]);
-    }
-    this.#slots.fill(void 0);
-    this.#start = 0;
-    this.#size = 0;
-    this.#bytes = 0;
-    return out;
-  }
-  get size() {
-    return this.#size;
-  }
-};
-var BufferedTraceWriter = class {
-  file;
-  #fd;
-  #ring;
-  #maxFileBytes;
-  #maxLineBytes;
-  #timer;
-  #onExit = () => {
-    this.#flushSync(true);
-  };
-  #writtenBytes = 0;
-  #dropped = 0;
-  #disabled = false;
-  #closed = false;
-  constructor(options) {
-    if (!path4.isAbsolute(options.file)) throw new Error("trace file must be an absolute path");
-    const maxBufferLines = boundedOption("maxBufferLines", options.maxBufferLines, DEFAULT_MAX_BUFFER_LINES, 1, MAX_BUFFER_LINES);
-    const maxBufferBytes = boundedOption("maxBufferBytes", options.maxBufferBytes, DEFAULT_MAX_BUFFER_BYTES, 1, MAX_BUFFER_BYTES);
-    const maxFileBytes = boundedOption("maxFileBytes", options.maxFileBytes, DEFAULT_MAX_FILE_BYTES, 1, MAX_FILE_BYTES);
-    const maxLineBytes = boundedOption("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES, MIN_MAX_LINE_BYTES, MAX_LINE_BYTES);
-    const flushIntervalMs = boundedOption("flushIntervalMs", options.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS, 1, MAX_FLUSH_INTERVAL_MS);
-    this.file = options.file;
-    const ring = new LineRing(maxBufferLines, maxBufferBytes);
-    this.#maxFileBytes = maxFileBytes;
-    this.#maxLineBytes = maxLineBytes;
-    fs5.mkdirSync(path4.dirname(options.file), { recursive: true, mode: 448 });
-    const descriptor2 = fs5.openSync(options.file, "wx", 384);
-    try {
-      this.#fd = descriptor2;
-      this.#ring = ring;
-      this.#timer = setInterval(() => {
-        this.#flushSync(true);
-      }, flushIntervalMs);
-      this.#timer.unref();
-      process.once("exit", this.#onExit);
-    } catch (error) {
-      try {
-        fs5.closeSync(descriptor2);
-      } catch {
-      }
-      try {
-        fs5.rmSync(options.file, { force: true });
-      } catch {
-      }
-      throw error;
-    }
-  }
-  get dropped() {
-    return this.#dropped;
-  }
-  get disabled() {
-    return this.#disabled;
-  }
-  write(line) {
-    if (this.#disabled || this.#closed) return;
-    const raw = `${line}
-`;
-    const bounded3 = Buffer.byteLength(raw, "utf8") <= this.#maxLineBytes ? raw : this.#truncatedLine(raw);
-    if (bounded3 === null) {
-      this.#dropped += 1;
-      return;
-    }
-    this.#dropped += this.#ring.push(bounded3);
-  }
-  /** Largest well-formed replacement that fits the per-line cap, newline
-   * included; null when no candidate fits at all. */
-  #truncatedLine(raw) {
-    const bytes2 = Buffer.byteLength(raw, "utf8");
-    const candidates = [
-      JSON.stringify({ v: 1, ev: "line.truncated", data: { bytes: bytes2 } }),
-      '{"line.truncated":true}',
-      '{"t":1}',
-      "{}"
-    ];
-    for (const candidate of candidates) {
-      const line = `${candidate}
-`;
-      if (Buffer.byteLength(line, "utf8") <= this.#maxLineBytes) return line;
-    }
-    return null;
-  }
-  #flushSync(fsync) {
-    if (this.#closed || this.#ring.size === 0) return;
-    const chunk = this.#ring.drain().join("");
-    const chunkBytes = Buffer.byteLength(chunk, "utf8");
-    try {
-      if (this.#writtenBytes + chunkBytes > this.#maxFileBytes) {
-        const marker = JSON.stringify({ v: 1, cat: "teardown", ev: "trace.truncated", data: { maxFileBytes: this.#maxFileBytes } });
-        const room = this.#maxFileBytes - this.#writtenBytes;
-        if (room > Buffer.byteLength(marker, "utf8") + 1) fs5.writeSync(this.#fd, `${marker}
-`);
-        this.#disabled = true;
-        return;
-      }
-      fs5.writeSync(this.#fd, chunk);
-      this.#writtenBytes += chunkBytes;
-      if (fsync) fs5.fsyncSync(this.#fd);
-    } catch {
-      this.#disabled = true;
-    }
-  }
-  flush() {
-    this.#flushSync(true);
-  }
-  close() {
-    if (this.#closed) return;
-    this.#flushSync(true);
-    this.#closed = true;
-    clearInterval(this.#timer);
-    process.removeListener("exit", this.#onExit);
-    try {
-      fs5.closeSync(this.#fd);
-    } catch {
-    }
-  }
-};
-var createTraceWriter = (options) => new BufferedTraceWriter(options);
-
-// src/trace/tracer.ts
-var traceFailureMetadata = (errorKind) => ({ errorKind });
-var MAX_EVENT_CHARS = 6e3;
-var NOOP_SPAN = Object.freeze({ id: "", end: () => void 0 });
-var DISABLED_TRACER = Object.freeze({
-  enabled: false,
-  file: void 0,
-  newExecutionId: () => "",
-  span: () => NOOP_SPAN,
-  event: () => void 0,
-  flush: () => void 0,
-  close: () => void 0
-});
-var monotonicUs = () => Number(process.hrtime.bigint() / 1000n);
-var ActiveFabricTracer = class {
-  enabled = true;
-  file;
-  #writer;
-  #closed = false;
-  #reportedDrops = 0;
-  #seq = 0;
-  #spanSeq = 0;
-  constructor(writer) {
-    this.#writer = writer;
-    this.file = writer.file;
-  }
-  newExecutionId() {
-    return `exec_${randomUUID3()}`;
-  }
-  #emit(event) {
-    if (this.#closed) return;
-    const sequenced = { ...event, seq: ++this.#seq };
-    let line;
-    try {
-      line = fabricJsonText(sequenced, MAX_EVENT_CHARS);
-    } catch {
-      const fallback = { v: 1, ts: event.ts, monoUs: event.monoUs, seq: sequenced.seq, cat: event.cat, ev: event.ev, ...event.execId ? { execId: event.execId } : {}, ...event.spanId ? { spanId: event.spanId } : {}, ...event.parentId ? { parentId: event.parentId } : {}, ...event.durUs !== void 0 ? { durUs: event.durUs } : {}, data: { traceDataError: true } };
-      line = fabricJsonText(fallback, MAX_EVENT_CHARS);
-    }
-    this.#writer.write(line);
-  }
-  span(cat, ev, execId, data, parentId) {
-    const id3 = `span_${++this.#spanSeq}`;
-    const startedUs = monotonicUs();
-    let ended = false;
-    return {
-      id: id3,
-      end: (endData) => {
-        if (ended) return;
-        ended = true;
-        this.#emit({
-          v: 1,
-          ts: (/* @__PURE__ */ new Date()).toISOString(),
-          monoUs: startedUs,
-          cat,
-          ev,
-          ...execId ? { execId } : {},
-          spanId: id3,
-          ...parentId ? { parentId } : {},
-          durUs: Math.max(0, monotonicUs() - startedUs),
-          ...data || endData ? { data: { ...data ?? {}, ...endData ?? {} } } : {}
-        });
-      }
-    };
-  }
-  event(cat, ev, execId, data) {
-    this.#emit({
-      v: 1,
-      ts: (/* @__PURE__ */ new Date()).toISOString(),
-      monoUs: monotonicUs(),
-      cat,
-      ev,
-      ...execId ? { execId } : {},
-      ...data ? { data } : {}
-    });
-  }
-  flush() {
-    this.#writer.flush();
-    const dropped = this.#writer.dropped;
-    if (dropped > this.#reportedDrops) {
-      const lost = dropped - this.#reportedDrops;
-      this.#reportedDrops = dropped;
-      this.event("teardown", "trace.dropped", void 0, { lost, total: dropped });
-      this.#writer.flush();
-    }
-  }
-  close() {
-    if (this.#closed) return;
-    this.flush();
-    this.#closed = true;
-    this.#writer.close();
-  }
-};
-var resolveTraceEnabled = (envValue, configured) => {
-  const normalized = envValue?.trim().toLowerCase();
-  if (normalized === "1" || normalized === "true" || normalized === "yes") return true;
-  if (normalized === "0" || normalized === "false" || normalized === "no") return false;
-  return configured;
-};
-var createFabricTracer = (options) => new ActiveFabricTracer(options.writer ?? createTraceWriter(options));
-
-// src/runtime/guest-bootstrap.ts
-var GUEST_SETUP = `
-(() => {
-  'use strict';
-  const bridge = globalThis.__fabricHostCall;
-  const prepareHostCall = globalThis.__fabricPrepareHostCall;
-  delete globalThis.__fabricHostCall;
-  delete globalThis.__fabricPrepareHostCall;
-
-  // Capture every validator/promise primordial before guest code can mutate it.
-  const apply = Reflect.apply;
-  const ownKeys = Reflect.ownKeys;
-  const objectGetPrototypeOf = Object.getPrototypeOf;
-  const objectPrototype = Object.prototype;
-  const arrayPrototype = Array.prototype;
-  const objectGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
-  const objectHasOwn = Object.hasOwn;
-  const objectKeys = Object.keys;
-  const objectCreate = Object.create;
-  const objectDefineProperty = Object.defineProperty;
-  const objectFreeze = Object.freeze;
-  const arrayIsArray = Array.isArray;
-  const numberIsFinite = Number.isFinite;
-  const stringCharCodeAt = String.prototype.charCodeAt;
-  const jsonParse = JSON.parse;
-  const jsonStringify = JSON.stringify;
-  const weakHas = WeakSet.prototype.has;
-  const weakAdd = WeakSet.prototype.add;
-  const weakDelete = WeakSet.prototype.delete;
-  const promiseThenMethod = Promise.prototype.then;
-  const promiseResolveMethod = Promise.resolve;
-  const promiseRaceMethod = Promise.race;
-  const promiseAllMethod = Promise.all;
-  const SafePromise = Promise;
-  const SafeArray = Array;
-  const SafeWeakSet = WeakSet;
-  const SafeTypeError = TypeError;
-  const SafeRangeError = RangeError;
-  const SafeError = Error;
-  const mathFloor = Math.floor;
-  const mathMin = Math.min;
-  const promiseThen = (promise, fulfilled, rejected) => apply(promiseThenMethod, promise, [fulfilled, rejected]);
-  const promiseResolve = (value) => apply(promiseResolveMethod, SafePromise, [value]);
-  const promiseRace = (values) => apply(promiseRaceMethod, SafePromise, [values]);
-  const promiseAll = (values) => apply(promiseAllMethod, SafePromise, [values]);
-  const configuredParallelLimit = globalThis.__fabricMaxParallelConcurrency;
-  delete globalThis.__fabricMaxParallelConcurrency;
-  if (typeof configuredParallelLimit !== 'number' || !numberIsFinite(configuredParallelLimit) || configuredParallelLimit < 1) {
-    throw new SafeTypeError('Fabric parallel limit is invalid');
-  }
-  const maxParallelConcurrency = mathFloor(configuredParallelLimit);
-
-  const codeGenerationDenied = function () { throw new SafeTypeError('Dynamic code generation is disabled'); };
-  const constructors = [
-    Function,
-    objectGetPrototypeOf(function* () {}).constructor,
-    objectGetPrototypeOf(async function () {}).constructor,
-    objectGetPrototypeOf(async function* () {}).constructor,
-  ];
-  for (const constructor of constructors) {
-    objectDefineProperty(constructor.prototype, 'constructor', {
-      value: codeGenerationDenied, writable: false, configurable: false,
-    });
-  }
-  objectDefineProperty(globalThis, 'eval', { value: codeGenerationDenied, writable: false, configurable: false });
-  objectDefineProperty(globalThis, 'Function', { value: codeGenerationDenied, writable: false, configurable: false });
-
-  // ECMAScript array indices stop at 2^32-2 (the maximum is 2^32-2, not 2^32-1).
-  // A larger all-digit key is an ordinary property that JSON serialization drops
-  // from the element list, so accepting it would let the guest return a value the
-  // host-side validator rejects and hide data from the caller.
-  const MAX_ARRAY_INDEX = '4294967294';
-  const arrayIndex = (key) => {
-    if (key === '0') return true;
-    if (!key || key[0] === '0') return false;
-    for (let index = 0; index < key.length; index++) {
-      const code = apply(stringCharCodeAt, key, [index]);
-      if (code < 48 || code > 57) return false;
-    }
-    return key.length < MAX_ARRAY_INDEX.length
-      || (key.length === MAX_ARRAY_INDEX.length && key <= MAX_ARRAY_INDEX);
-  };
-  const strictJsonText = (root) => {
-    const seen = new SafeWeakSet();
-    let nodes = 0;
-    const visit = (value, depth) => {
-      if (++nodes > 100000 || depth > 64) throw new SafeTypeError('Result exceeds strict JSON structural limits');
-      if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-      if (typeof value === 'number') {
-        if (!numberIsFinite(value)) throw new SafeTypeError('Result contains a non-finite number');
-        return value;
-      }
-      if (typeof value !== 'object') throw new SafeTypeError('Result contains a non-JSON value');
-      if (apply(weakHas, seen, [value])) throw new SafeTypeError('Result contains a cycle');
-      const prototype = objectGetPrototypeOf(value);
-      if (prototype !== objectPrototype && prototype !== arrayPrototype && prototype !== null) {
-        throw new SafeTypeError('Result contains an unsupported exotic object');
-      }
-      apply(weakAdd, seen, [value]);
-      const descriptors = objectGetOwnPropertyDescriptors(value);
-      for (const key of ownKeys(descriptors)) if (typeof key === 'symbol') throw new SafeTypeError('Result contains a symbol key');
-      let copy;
-      if (arrayIsArray(value)) {
-        copy = [];
-        for (const key of objectKeys(descriptors)) {
-          if (key !== 'length' && !arrayIndex(key)) throw new SafeTypeError('Result contains a non-index array property');
-        }
-        for (let index = 0; index < value.length; index++) {
-          const descriptor = descriptors[index];
-          if (!descriptor || !objectHasOwn(descriptor, 'value')) throw new SafeTypeError('Result contains an accessor or sparse array');
-          objectDefineProperty(copy, index, { value: visit(descriptor.value, depth + 1), enumerable: true, writable: true, configurable: true });
-        }
-      } else {
-        copy = objectCreate(null);
-        for (const key of objectKeys(descriptors)) {
-          const descriptor = descriptors[key];
-          if (!objectHasOwn(descriptor, 'value')) throw new SafeTypeError('Result contains an accessor');
-          objectDefineProperty(copy, key, { value: visit(descriptor.value, depth + 1), enumerable: true });
-        }
-      }
-      apply(weakDelete, seen, [value]);
-      return copy;
-    };
-    const text = apply(jsonStringify, JSON, [visit(root, 0)]);
-    if (typeof text !== 'string' || text.length > 8000000) throw new SafeTypeError('Result exceeds strict JSON byte limit');
-    return text;
-  };
-  const parseStrict = (text) => apply(jsonParse, JSON, [text]);
-  // Bounded print formatting runs inside the VM: an over-cap string is sliced
-  // here so the host never copies the whole value across the bridge. Mirrors the
-  // host formatter's JSON shape for non-strings and never throws.
-  const boundLog = (value, maxChars) => {
-    if (typeof maxChars !== 'number' || !numberIsFinite(maxChars) || maxChars <= 0) return '';
-    if (typeof value === 'string') return value.length <= maxChars ? value : value.slice(0, maxChars);
-    let text;
-    try { text = strictJsonText(value); }
-    catch { text = '[value outside bounded JSON]'; }
-    return text.length <= maxChars ? text : text.slice(0, maxChars);
-  };
-  // One execution-wide semaphore covers friendly APIs, tools.call, direct
-  // Promise.all fan-out, and nested parallel helpers alike. This queues excess
-  // bridge work before it reaches the host's fail-closed concurrency quota.
-  const hostCallWaiters = objectCreate(null);
-  let activeHostCalls = 0;
-  let hostWaiterHead = 0;
-  let hostWaiterTail = 0;
-  let hostCallsStopped = false;
-  let hostCallsStopReason;
-  const acquireHostCall = () => {
-    if (hostCallsStopped) {
-      return new SafePromise((_resolve, reject) => reject(hostCallsStopReason));
-    }
-    if (activeHostCalls < maxParallelConcurrency) {
-      activeHostCalls += 1;
-      return promiseResolve();
-    }
-    return new SafePromise((resolve, reject) => {
-      hostCallWaiters[hostWaiterTail++] = { resolve, reject };
-    });
-  };
-  const releaseHostCall = () => {
-    if (!hostCallsStopped && hostWaiterHead < hostWaiterTail) {
-      const waiter = hostCallWaiters[hostWaiterHead];
-      delete hostCallWaiters[hostWaiterHead++];
-      waiter.resolve();
-      return;
-    }
-    activeHostCalls -= 1;
-  };
-  const stopQueuedHostCalls = (reason) => {
-    if (hostCallsStopped) return;
-    hostCallsStopped = true;
-    hostCallsStopReason = reason;
-    while (hostWaiterHead < hostWaiterTail) {
-      const waiter = hostCallWaiters[hostWaiterHead];
-      delete hostCallWaiters[hostWaiterHead++];
-      waiter.reject(reason);
-    }
-  };
-  const call = (ref, args = {}) => {
-    // Snapshot and validate at API invocation, before a saturated semaphore
-    // can defer the bridge. Later guest mutation must not change exact args.
-    const argsText = strictJsonText(args);
-    prepareHostCall(ref, argsText);
-    return promiseThen(acquireHostCall(), () => {
-      let operation;
-      try {
-        operation = promiseThen(bridge(ref, argsText), parseStrict);
-      } catch (error) {
-        releaseHostCall();
-        throw error;
-      }
-      return promiseThen(operation, (value) => {
-        releaseHostCall();
-        return value;
-      }, (error) => {
-        releaseHostCall();
-        throw error;
-      });
-    });
-  };
-  const parallel = async (items, mapperOrOptions, maybeOptions) => {
-    if (!arrayIsArray(items)) throw new SafeTypeError('parallel expects an array');
-    const mapped = typeof mapperOrOptions === 'function';
-    if (!mapped) {
-      for (let index = 0; index < items.length; index++) {
-        if (typeof items[index] !== 'function') {
-          throw new SafeTypeError('parallel expects functions or an item mapper');
-        }
-      }
-    }
-    const itemCount = items.length;
-    if (itemCount === 0) return [];
-    const options = mapped ? maybeOptions : mapperOrOptions;
-    const requested = typeof options === 'number'
-      ? options
-      : options && typeof options === 'object' && options.concurrency !== undefined
-        ? options.concurrency
-        : maxParallelConcurrency;
-    if (typeof requested !== 'number' || !numberIsFinite(requested) || requested < 1) {
-      throw new SafeRangeError('parallel concurrency must be a positive finite number');
-    }
-    const concurrency = mathMin(itemCount, maxParallelConcurrency, mathFloor(requested));
-    const results = new SafeArray(itemCount);
-    const workers = new SafeArray(concurrency);
-    let cursor = 0;
-    let stopped = false;
-    for (let worker = 0; worker < concurrency; worker++) {
-      workers[worker] = (async () => {
-        while (!stopped && cursor < itemCount) {
-          const index = cursor++;
-          try {
-            results[index] = mapped
-              ? await apply(mapperOrOptions, undefined, [items[index], index])
-              : await apply(items[index], undefined, []);
-          } catch (error) {
-            stopped = true;
-            throw error;
-          }
-        }
-      })();
-    }
-    await promiseAll(workers);
-    return results;
-  };
-  let rejectExecution;
-  const executionGate = new SafePromise((_resolve, reject) => { rejectExecution = reject; });
-  const cancel = (message) => {
-    const reason = new SafeError(message);
-    stopQueuedHostCalls(reason);
-    rejectExecution(reason);
-  };
-  const run = (main) => promiseThen(promiseRace([promiseThen(promiseResolve(), main), executionGate]), strictJsonText);
-  globalThis.tools = objectFreeze({
-    providers: () => call("fabric.providers"),
-    list: () => call("fabric.list"),
-    listPage: (args = {}) => call("fabric.listPage", args),
-    searchPage: (args) => call("fabric.searchPage", args),
-    describePage: (args) => call("fabric.describePage", args),
-    search: (input) => call("fabric.search", typeof input === "string" ? { query: input } : input),
-    describe: (input) => call("fabric.describe", typeof input === "string" ? { ref: input } : input),
-    call: (input) => call("fabric.call", input),
-  });
-  globalThis.fabric = objectFreeze({
-    info: () => call("fabric.info"), help: (args) => call("fabric.help", args),
-    workspace: (args) => call("fabric.workspace", args),
-  });
-  globalThis.local = objectFreeze({
-    read: (args) => call("local.read", args), grep: (args) => call("local.grep", args),
-    readMany: (args) => call("local.readMany", args),
-    readEvidence: (args) => call("local.readEvidence", args),
-    find: (args) => call("local.find", args), list: (args = {}) => call("local.list", args),
-    write: (args) => call("local.write", args), edit: (args) => call("local.edit", args),
-    shell: (args) => call("local.shell", args),
-  });
-  globalThis.review = objectFreeze({
-    begin: (args) => call("review.begin", args), update: (args) => call("review.update", args),
-    finding: (args) => call("review.finding", args), status: (args) => call("review.status", args),
-    reconcile: (args) => call("review.reconcile", args), end: (args) => call("review.end", args),
-  });
-  globalThis.probe = objectFreeze({
-    discover: (args) => call("probe.discover", args), create: (args) => call("probe.create", args),
-    write: (args) => call("probe.write", args), run: (args) => call("probe.run", args),
-  });
-  globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args), checkpoint: (args) => call("artifacts.checkpoint", args) });
-  globalThis.memory = objectFreeze({
-    get: (args) => call("memory.get", args), set: (args) => call("memory.set", args),
-    delete: (args) => call("memory.delete", args), search: (args) => call("memory.search", args),
-    index: (args = {}) => call("memory.index", args),
-  });
-  globalThis.state = objectFreeze({
-    get: (args) => call("state.get", args), set: (args) => call("state.set", args),
-    list: (args = {}) => call("state.list", args), delete: (args) => call("state.delete", args),
-  });
-  globalThis.web = objectFreeze({
-    search: (args) => call("web.search", args), open: (args) => call("web.open", args),
-  });
-  globalThis.mcp = objectFreeze({
-    servers: (args = {}) => call("mcp.$servers", args),
-    tools: (args) => call("mcp.$tools", args),
-    toolsPage: (args) => call("mcp.$toolsPage", args),
-    describePage: (args) => call("mcp.$describePage", args),
-    describe: (args) => call("mcp.$describe", args),
-    call: (args) => call("mcp.$call", args),
-  });
-  objectDefineProperty(globalThis, 'parallel', { value: parallel, writable: false, configurable: false });
-  objectFreeze(globalThis.payloads);
-  return objectFreeze({ run, cancel, boundLog });
-})()
-`;
-
-// src/runtime/quickjs-runtime.ts
-var modulePromise;
-var quickJsModule = () => modulePromise ??= newQuickJSWASMModuleFromVariant(src_default);
-var formatValue = (value, maxChars = 1e5) => {
-  if (typeof value === "string") return value.slice(0, maxChars);
-  try {
-    return fabricJsonText(value, Math.max(1, maxChars));
-  } catch {
-    return "[value outside bounded JSON]";
-  }
-};
-var formatGuestFailure = (value) => {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    const { result: _diagnostic, ...message } = value;
-    return formatValue(message);
-  }
-  return formatValue(value);
-};
-var jsonHandle = (context, jsonObject, jsonParse, value, maxChars) => {
-  if (value === void 0 || value === null) return context.null;
-  if (typeof value === "string") {
-    assertFabricJsonBudget(value, maxChars);
-    return context.newString(value);
-  }
-  if (typeof value === "boolean") return value ? context.true : context.false;
-  if (typeof value === "number") {
-    assertFabricJsonBudget(value, maxChars);
-    return context.newNumber(value);
-  }
-  const serialized = context.newString(fabricJsonText(value, maxChars));
-  try {
-    return context.unwrapResult(context.callFunction(jsonParse, jsonObject, serialized));
-  } finally {
-    serialized.dispose();
-  }
-};
-var QUICKJS_MAX_STACK_SIZE_BYTES = 256 * 1024;
-var QuickJsRuntime = class {
-  async execute(code2, hostCall, options) {
-    const maximum = Math.max(1, Math.floor(options.maxTimeoutMs));
-    const requestedTimeoutMs = Math.min(maximum, Math.max(1, Math.floor(options.timeoutMs)));
-    if (options.signal?.aborted) return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
-    const sourceLimit = effectiveFabricSourceLimit(options.maxSourceBytes);
-    const inputLimit = effectiveFabricSourceLimit(options.maxInputBytes ?? options.maxSourceBytes);
-    const inputError = fabricSourceLimitError(code2, sourceLimit) ?? fabricPayloadsLimitError(options.payloads, inputLimit);
-    if (inputError) return { value: void 0, logs: [], terminationReason: "runtime_error", error: inputError, effectiveTimeoutMs: requestedTimeoutMs };
-    if (!Number.isSafeInteger(options.memoryLimitBytes) || options.memoryLimitBytes < 1 || options.memoryLimitBytes > 4294967295) {
-      return { value: void 0, logs: [], terminationReason: "runtime_error", error: "QuickJS memory limit is outside the WASM32 range", effectiveTimeoutMs: requestedTimeoutMs };
-    }
-    const tracer = options.tracer ?? DISABLED_TRACER;
-    const execId = options.execId;
-    const parentSpanId = options.parentSpanId;
-    const moduleCached = modulePromise !== void 0;
-    const moduleSpan = tracer.enabled ? tracer.span("init", "quickjs.module.acquire", execId, { cached: moduleCached }, parentSpanId) : void 0;
-    const module = await quickJsModule();
-    moduleSpan?.end();
-    if (options.signal?.aborted) {
-      return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
-    }
-    const contextSpan = tracer.enabled ? tracer.span("init", "quickjs.context.create", execId, void 0, parentSpanId) : void 0;
-    const context = module.newContext();
-    const runtime = context.runtime;
-    contextSpan?.end({ memoryLimitBytes: options.memoryLimitBytes, stackSizeBytes: QUICKJS_MAX_STACK_SIZE_BYTES });
-    const jsonObject = context.getProp(context.global, "JSON");
-    const jsonParse = context.getProp(jsonObject, "parse");
-    runtime.setMemoryLimit(options.memoryLimitBytes);
-    runtime.setMaxStackSize(QUICKJS_MAX_STACK_SIZE_BYTES);
-    const deadline = new FabricDeadline(requestedTimeoutMs, maximum);
-    let interrupted = false;
-    let timedOut = false;
-    let closing = false;
-    let teardownCutoff;
-    runtime.setInterruptHandler(() => {
-      if (options.signal?.aborted) return true;
-      if (teardownCutoff !== void 0 && performance3.now() >= teardownCutoff) return true;
-      if (!deadline.expired) return false;
-      interrupted = true;
-      return true;
-    });
-    const logs = [];
-    const maxLogChars = Math.max(0, options.maxLogChars ?? 1e5);
-    let logChars = 0;
-    const hostController = new AbortController();
-    const bridgeTasks = /* @__PURE__ */ new Set();
-    const pendingPromises = /* @__PURE__ */ new Set();
-    let deadlineTimer;
-    let rejectDeadline;
-    let abortListener;
-    let activeHandle;
-    let runExecution;
-    let cancelExecution;
-    let logFormatter;
-    const rejectGuestGraph = (reason) => {
-      if (cancelExecution && cancelExecution.alive !== false) {
-        const message = context.newString(reason.message.slice(0, 4096));
-        const called = context.callFunction(cancelExecution, context.global, message);
-        message.dispose();
-        if (called.error) called.error.dispose();
-        else called.value.dispose();
-      }
-      for (const promise of pendingPromises) {
-        if (promise.alive === false) continue;
-        const handle = context.newError(reason.message.slice(0, 4096));
-        promise.reject(handle);
-        handle.dispose();
-      }
-      for (let index = 0; index < 1024; index++) {
-        if (teardownCutoff !== void 0 && performance3.now() >= teardownCutoff) break;
-        const jobs = runtime.executePendingJobs();
-        if (jobs.error) {
-          jobs.error.dispose();
-          break;
-        }
-        if (jobs.value === 0) break;
-      }
-    };
-    const abortHost = (reason) => {
-      if (!hostController.signal.aborted) hostController.abort(reason);
-      rejectGuestGraph(reason);
-    };
-    const issuedFailures = /* @__PURE__ */ new Map();
-    const timeoutMessage = () => `Execution timed out after ${deadline.effectiveTimeoutMs}ms`;
-    const expire = () => {
-      if (closing || timedOut) return;
-      if (!deadline.expired) {
-        schedule();
-        return;
-      }
-      timedOut = true;
-      const error = new Error(timeoutMessage());
-      abortHost(error);
-      rejectDeadline?.(error);
-    };
-    const schedule = () => {
-      if (deadlineTimer) clearTimeout(deadlineTimer);
-      deadlineTimer = setTimeout(expire, Math.max(0, deadline.remainingMs()));
-    };
-    const extendForExactAction = (ref, args) => {
-      const floor = options.minimumTimeoutMsForHostCall?.(ref, args);
-      if (typeof floor !== "number" || !Number.isFinite(floor)) return;
-      const before = deadline.effectiveTimeoutMs;
-      const next = deadline.extendTo(floor);
-      if (next > before) schedule();
-    };
-    try {
-      const hostFunction = context.newFunction("__fabricHostCall", (refHandle, argsHandle) => {
-        const ref = context.getString(refHandle);
-        const argsText = context.getString(argsHandle);
-        const parsed = JSON.parse(argsText);
-        const args = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : {};
-        assertFabricJsonBudget(args);
-        extendForExactAction(ref, args);
-        const promise = context.newPromise();
-        pendingPromises.add(promise);
-        void promise.settled.then(
-          () => pendingPromises.delete(promise),
-          () => pendingPromises.delete(promise)
-        );
-        const rejectGuestPromise = (error) => {
-          if (closing || promise.alive === false) return;
-          const raw2 = error instanceof Error ? error.message : String(error);
-          const handle = context.newError(raw2.slice(0, 4096));
-          try {
-            if (error instanceof LocalShellExitError || error instanceof ProbeRunExitError) {
-              const diagnostic = jsonHandle(context, jsonObject, jsonParse, error.result, options.maxNestedResultChars);
-              try {
-                context.setProp(handle, "result", diagnostic);
-              } finally {
-                diagnostic.dispose();
-              }
-            }
-            const failure = fabricFailureMetadata(error);
-            if (failure) {
-              const text3 = JSON.stringify(failure);
-              if (issuedFailures.size >= 128) issuedFailures.delete(issuedFailures.keys().next().value);
-              issuedFailures.set(text3, failure);
-              const diagnostic = jsonHandle(context, jsonObject, jsonParse, failure, 32e3);
-              try {
-                context.setProp(handle, "failure", diagnostic);
-              } finally {
-                diagnostic.dispose();
-              }
-            }
-            promise.reject(handle);
-          } finally {
-            handle.dispose();
-          }
-        };
-        const raw = Promise.resolve().then(() => {
-          deadline.throwIfExpired();
-          return hostCall(ref, args, hostController.signal, deadline);
-        });
-        void raw.catch(() => void 0);
-        const task = runAbortable(hostController.signal, () => raw).then((value2) => {
-          if (closing || promise.alive === false) return;
-          try {
-            deadline.throwIfExpired();
-            const handle = context.newString(fabricJsonText(value2, options.maxNestedResultChars));
-            promise.resolve(handle);
-            handle.dispose();
-          } catch (error) {
-            rejectGuestPromise(error);
-          }
-        }, rejectGuestPromise).then(() => {
-          if (!closing) runtime.executePendingJobs();
-        }, () => {
-        });
-        bridgeTasks.add(task);
-        void task.then(
-          () => bridgeTasks.delete(task),
-          () => bridgeTasks.delete(task)
-        );
-        return promise.handle;
-      });
-      context.setProp(context.global, "__fabricHostCall", hostFunction);
-      hostFunction.dispose();
-      const prepareHostFunction = context.newFunction("__fabricPrepareHostCall", (refHandle, argsHandle) => {
-        const ref = context.getString(refHandle);
-        const parsed = JSON.parse(context.getString(argsHandle));
-        const args = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : {};
-        assertFabricJsonBudget(args);
-        extendForExactAction(ref, args);
-      });
-      context.setProp(context.global, "__fabricPrepareHostCall", prepareHostFunction);
-      prepareHostFunction.dispose();
-      const renderLogValue = (handle, maxChars) => {
-        const limit = Math.max(0, Math.floor(maxChars));
-        if (limit === 0) return "";
-        if (logFormatter && logFormatter.alive !== false) {
-          const budget = context.newNumber(limit);
-          try {
-            const formatted = context.callFunction(logFormatter, context.undefined, handle, budget);
-            if (!formatted.error) {
-              try {
-                const text3 = context.getString(formatted.value);
-                return text3.length > limit ? text3.slice(0, limit) : text3;
-              } finally {
-                formatted.value.dispose();
-              }
-            }
-            formatted.error.dispose();
-          } catch {
-          } finally {
-            budget.dispose();
-          }
-        }
-        return formatValue(context.dump(handle), limit).slice(0, limit);
-      };
-      const printFunction = context.newFunction("print", (...handles) => {
-        let remaining = maxLogChars - logChars;
-        if (remaining <= 0) return;
-        const parts = [];
-        for (const handle of handles) {
-          const separator = parts.length > 0 ? " " : "";
-          if (remaining <= separator.length) break;
-          const rendered = renderLogValue(handle, remaining - separator.length);
-          parts.push(`${separator}${rendered}`);
-          remaining -= separator.length + rendered.length;
-        }
-        const line = parts.join("");
-        if (line) logs.push(line);
-        logChars += line.length;
-      });
-      context.setProp(context.global, "print", printFunction);
-      printFunction.dispose();
-      const payloadHandle = jsonHandle(
-        context,
-        jsonObject,
-        jsonParse,
-        options.payloads ?? {},
-        MAX_FABRIC_JSON_CHARS
-      );
-      context.setProp(context.global, "payloads", payloadHandle);
-      payloadHandle.dispose();
-      const parallelLimitHandle = context.newNumber(Math.max(1, Math.min(64, Math.floor(options.maxConcurrentHostCalls ?? 1))));
-      context.setProp(context.global, "__fabricMaxParallelConcurrency", parallelLimitHandle);
-      parallelLimitHandle.dispose();
-      const setupSpan = tracer.enabled ? tracer.span("eval", "quickjs.eval.setup", execId, { sourceBytes: GUEST_SETUP.length }, parentSpanId) : void 0;
-      const setup = context.evalCode(GUEST_SETUP, "kiro-fabric-setup.js");
-      setupSpan?.end();
-      if (setup.error) {
-        const error = formatValue(context.dump(setup.error));
-        setup.error.dispose();
-        return { value: void 0, logs, terminationReason: "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
-      }
-      runExecution = context.getProp(setup.value, "run");
-      cancelExecution = context.getProp(setup.value, "cancel");
-      logFormatter = context.getProp(setup.value, "boundLog");
-      setup.value.dispose();
-      const bundle = options.transpiledCode === void 0 ? transpileFabricCodeWithSourceMap(code2) : { code: options.transpiledCode, sourceMap: options.transpiledSourceMap };
-      assertFabricTranspiledWrapper(bundle.code);
-      const transpiledError = fabricTranspiledLimitError(bundle.code);
-      if (transpiledError) return { value: void 0, logs, terminationReason: "runtime_error", error: transpiledError, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
-      const stackMap = createGuestStackMap(bundle.sourceMap);
-      const guestLineCount = bundle.code.split("\n").length;
-      const guestEvalSpan = tracer.enabled ? tracer.span("eval", "quickjs.eval.guest", execId, { sourceBytes: Buffer.byteLength(bundle.code, "utf8") }, parentSpanId) : void 0;
-      const evaluation = context.evalCode(bundle.code, "kiro-fabric-guest.js");
-      runtime.executePendingJobs();
-      guestEvalSpan?.end();
-      if (evaluation.error) {
-        const deadlineExceeded = interrupted || deadline.expired;
-        const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(evaluation.error)), stackMap, guestLineCount);
-        evaluation.error.dispose();
-        abortHost(new Error(error));
-        return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
-      }
-      evaluation.value.dispose();
-      const main = context.getProp(context.global, "__kiroFabricMain");
-      context.setProp(context.global, "__kiroFabricMain", context.undefined);
-      const invoked = context.callFunction(runExecution, context.undefined, main);
-      main.dispose();
-      if (invoked.error) {
-        const error = remapGuestErrorText(formatValue(context.dump(invoked.error)), stackMap, guestLineCount);
-        invoked.error.dispose();
-        return { value: void 0, logs, terminationReason: deadline.expired ? "timed_out" : "runtime_error", error: deadline.expired ? timeoutMessage() : error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
-      }
-      activeHandle = invoked.value;
-      const resolution = context.resolvePromise(activeHandle);
-      runtime.executePendingJobs();
-      const deadlineRace = new Promise((_resolve, reject) => {
-        rejectDeadline = reject;
-        schedule();
-      });
-      const cancellation = new Promise((_resolve, reject) => {
-        abortListener = () => {
-          const error = new Error("Execution cancelled");
-          abortHost(error);
-          reject(error);
-        };
-        if (options.signal?.aborted) abortListener();
-        else options.signal?.addEventListener("abort", abortListener, { once: true });
-      });
-      const runSpan = tracer.enabled ? tracer.span("eval", "quickjs.run", execId, void 0, parentSpanId) : void 0;
-      const settled = await Promise.race([resolution, deadlineRace, cancellation]);
-      activeHandle.dispose();
-      activeHandle = void 0;
-      runSpan?.end();
-      if (settled.error) {
-        const deadlineExceeded = timedOut || interrupted || deadline.expired;
-        const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatGuestFailure(context.dump(settled.error)), stackMap, guestLineCount);
-        const failureHandle = context.getProp(settled.error, "failure");
-        let failure;
-        try {
-          failure = issuedFailures.get(JSON.stringify(context.dump(failureHandle)));
-        } finally {
-          failureHandle.dispose();
-        }
-        settled.error.dispose();
-        abortHost(new Error(error));
-        return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded || failure?.code === "timeout" ? "timed_out" : "runtime_error", error, ...failure ? { failure } : {}, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
-      }
-      const serialized = context.getString(settled.value);
-      settled.value.dispose();
-      const value = JSON.parse(serialized);
-      assertFabricJsonBudget(value, MAX_FABRIC_JSON_CHARS);
-      deadline.throwIfExpired();
-      return { value, logs, terminationReason: "completed", effectiveTimeoutMs: deadline.effectiveTimeoutMs };
-    } catch (error) {
-      const deadlineExceeded = timedOut || interrupted || deadline.expired;
-      const message = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : error instanceof Error ? error.message : String(error);
-      abortHost(new Error(message));
-      return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error: message, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
-    } finally {
-      if (tracer.enabled) {
-        try {
-          const usageHandle = runtime.computeMemoryUsage();
-          try {
-            const raw = context.dump(usageHandle);
-            const usage = {};
-            for (const [key, entry] of Object.entries(raw)) if (typeof entry === "number" && Number.isFinite(entry)) usage[key] = entry;
-            tracer.event("eval", "quickjs.memory", execId, { usage, hostRssBytes: process.memoryUsage().rss });
-          } finally {
-            usageHandle.dispose();
-          }
-        } catch {
-        }
-      }
-      const teardownSpan = tracer.enabled ? tracer.span("teardown", "quickjs.teardown", execId, void 0, parentSpanId) : void 0;
-      closing = true;
-      if (deadlineTimer) clearTimeout(deadlineTimer);
-      if (abortListener) options.signal?.removeEventListener("abort", abortListener);
-      teardownCutoff = performance3.now() + Math.max(0, options.cleanupGraceMs ?? 100);
-      abortHost(new Error("Execution request ended"));
-      await settleWithin(bridgeTasks, Math.max(0, options.cleanupGraceMs ?? 100));
-      for (let index = 0; index < 1024; index++) {
-        if (performance3.now() >= teardownCutoff) break;
-        const jobs = runtime.executePendingJobs();
-        if (jobs.error) {
-          jobs.error.dispose();
-          break;
-        }
-        if (jobs.value === 0) break;
-      }
-      if (activeHandle?.alive !== false) activeHandle?.dispose();
-      for (const promise of pendingPromises) if (promise.alive !== false) promise.dispose();
-      if (cancelExecution && cancelExecution.alive !== false) cancelExecution.dispose();
-      if (runExecution && runExecution.alive !== false) runExecution.dispose();
-      if (logFormatter && logFormatter.alive !== false) logFormatter.dispose();
-      jsonParse.dispose();
-      jsonObject.dispose();
-      context.dispose();
-      teardownSpan?.end();
-    }
-  }
-};
-
 // src/execution-service.ts
 var FABRIC_COMPILER_TIMEOUT_MS = 1e4;
 var FABRIC_APPROVAL_TIMEOUT_MS = 3e4;
@@ -22712,18 +12301,18 @@ var FabricExecutionService = class {
   #executions = /* @__PURE__ */ new Set();
   #closeController = new AbortController();
   #closing;
-  #catalogNonce = randomUUID4();
+  #catalogNonce = randomUUID2();
   #catalogBinding;
   #catalogStore;
   /** Host-only authorization binding. Shared runtimes cannot silently change owners. */
   bindCatalog(binding) {
-    const identity2 = JSON.stringify(binding);
-    if (this.#catalogBinding === identity2 && this.#catalogStore) return;
+    const identity = JSON.stringify(binding);
+    if (this.#catalogBinding === identity && this.#catalogStore) return;
     if (this.#catalogBinding !== void 0 || this.#closeController.signal.aborted) {
       this.invalidateCatalogs();
       throw new Error("Catalog runtime already bound or revoked; create a new authorized runtime");
     }
-    this.#catalogBinding = identity2;
+    this.#catalogBinding = identity;
     this.#catalogStore = new CatalogSnapshotStore({ ...binding, runtimeNonce: this.#catalogNonce });
   }
   invalidateCatalogs() {
@@ -23081,10 +12670,10 @@ __export(typebox_exports, {
   Constructor: () => Constructor,
   ConstructorParameters: () => ConstructorParameters,
   Cyclic: () => Cyclic,
-  Decode: () => Decode2,
+  Decode: () => Decode,
   DecodeBuilder: () => DecodeBuilder,
   Dependent: () => Dependent,
-  Encode: () => Encode2,
+  Encode: () => Encode,
   EncodeBuilder: () => EncodeBuilder,
   Enum: () => Enum,
   Evaluate: () => Evaluate,
@@ -23104,52 +12693,52 @@ __export(typebox_exports, {
   Interface: () => Interface,
   Intersect: () => Intersect,
   IsAny: () => IsAny,
-  IsArray: () => IsArray2,
-  IsBigInt: () => IsBigInt2,
-  IsBoolean: () => IsBoolean3,
+  IsArray: () => IsArray,
+  IsBigInt: () => IsBigInt,
+  IsBoolean: () => IsBoolean,
   IsCall: () => IsCall,
   IsCodec: () => IsCodec,
-  IsConstructor: () => IsConstructor2,
+  IsConstructor: () => IsConstructor,
   IsCyclic: () => IsCyclic,
   IsDependent: () => IsDependent,
-  IsEnum: () => IsEnum2,
+  IsEnum: () => IsEnum,
   IsEnumValue: () => IsEnumValue,
-  IsFunction: () => IsFunction2,
+  IsFunction: () => IsFunction,
   IsGeneric: () => IsGeneric,
   IsIdentifier: () => IsIdentifier,
   IsImmutable: () => IsImmutable,
   IsInfer: () => IsInfer,
-  IsInteger: () => IsInteger2,
+  IsInteger: () => IsInteger,
   IsIntersect: () => IsIntersect,
   IsKind: () => IsKind,
   IsLiteral: () => IsLiteral,
   IsNever: () => IsNever,
-  IsNull: () => IsNull2,
-  IsNumber: () => IsNumber3,
-  IsObject: () => IsObject2,
+  IsNull: () => IsNull,
+  IsNumber: () => IsNumber,
+  IsObject: () => IsObject,
   IsOptional: () => IsOptional,
   IsParameter: () => IsParameter,
   IsReadonly: () => IsReadonly,
   IsRecord: () => IsRecord,
-  IsRef: () => IsRef2,
-  IsRefine: () => IsRefine2,
+  IsRef: () => IsRef,
+  IsRefine: () => IsRefine,
   IsRest: () => IsRest,
-  IsSchema: () => IsSchema2,
-  IsString: () => IsString3,
-  IsSymbol: () => IsSymbol2,
+  IsSchema: () => IsSchema,
+  IsString: () => IsString,
+  IsSymbol: () => IsSymbol,
   IsTemplateLiteral: () => IsTemplateLiteral,
   IsThis: () => IsThis,
   IsTuple: () => IsTuple,
-  IsUndefined: () => IsUndefined2,
+  IsUndefined: () => IsUndefined,
   IsUnion: () => IsUnion,
   IsUnknown: () => IsUnknown,
   IsUnsafe: () => IsUnsafe,
   IsVoid: () => IsVoid,
-  KeyOf: () => KeyOf2,
+  KeyOf: () => KeyOf,
   Literal: () => Literal,
   Lowercase: () => Lowercase,
   Mapped: () => Mapped,
-  Module: () => Module2,
+  Module: () => Module,
   Never: () => Never,
   NonNullable: () => NonNullable,
   Null: () => Null,
@@ -23168,15 +12757,15 @@ __export(typebox_exports, {
   RecordKey: () => RecordKey,
   RecordPattern: () => RecordPattern,
   RecordValue: () => RecordValue,
-  Ref: () => Ref2,
+  Ref: () => Ref,
   Refine: () => Refine,
   Required: () => Required,
   Rest: () => Rest,
   ReturnType: () => ReturnType,
-  Script: () => Script2,
+  Script: () => Script,
   String: () => String2,
   Symbol: () => Symbol2,
-  TemplateLiteral: () => TemplateLiteral2,
+  TemplateLiteral: () => TemplateLiteral,
   This: () => This,
   Tuple: () => Tuple,
   Uncapitalize: () => Uncapitalize,
@@ -23186,7 +12775,7 @@ __export(typebox_exports, {
   Unsafe: () => Unsafe,
   Uppercase: () => Uppercase,
   Void: () => Void,
-  With: () => With2
+  With: () => With
 });
 
 // src/kernel/fabric-exec-contract.ts
@@ -23208,10 +12797,10 @@ var fabricExecInputSchema = typebox_exports.Object({
   resultFormat: typebox_exports.Optional(typebox_exports.Union(FABRIC_EXEC_RESULT_FORMATS.map((value) => typebox_exports.Literal(value)))),
   timeoutMs: typebox_exports.Optional(typebox_exports.Integer({ minimum: 1, maximum: 9e5, description: "Requested guest deadline, capped by Fabric policy." }))
 }, { additionalProperties: false });
-var isRecord3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var FABRIC_EXEC_KEYS = /* @__PURE__ */ new Set(["code", "payloads", "resultFormat", "timeoutMs"]);
 var prepareFabricExecArgumentsWithDiagnostics = (input) => {
-  if (!isRecord3(input)) return { value: input, diagnostics: [] };
+  if (!isRecord2(input)) return { value: input, diagnostics: [] };
   const keys = Object.keys(input);
   if (keys.length > FABRIC_EXEC_KEYS.size || keys.some((key) => !FABRIC_EXEC_KEYS.has(key))) {
     return { value: { invalidFabricExecEnvelope: true }, diagnostics: [] };
@@ -23226,8 +12815,8 @@ var KIRO_MCP_DRAIN_TIMEOUT_MS = 3e3;
 var kiroMcpOuterDeadlineMs = (guestMaximumMs, compilerTimeoutMs) => guestMaximumMs + compilerTimeoutMs + KIRO_MCP_DEADLINE_GRACE_MS;
 
 // src/kiro/power/approver.ts
-import { createHash as createHash3 } from "node:crypto";
-import path5 from "node:path";
+import { createHash as createHash2 } from "node:crypto";
+import path from "node:path";
 var SECRET_KEY = /(?:apikey|authorization|authtoken|bearer|clientkey|clientsecret|cookie|credential|idtoken|passphrase|password|privatekey|refreshtoken|secret|session|token)/iu;
 var SECRET_VALUE = /^(?:(?:basic|bearer)\s+|gh[pousr]_|github_pat_|sk-[a-z0-9_-]{12,}|akia[0-9a-z]{12,}|eyj[a-z0-9_-]+\.[a-z0-9_-]+\.|-----begin\s)|(?:^|[?&])(?:api[_-]?key|password|secret|token)=/iu;
 var URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//iu;
@@ -23237,7 +12826,7 @@ var APPROVAL_MESSAGE_CHARS = 1500;
 var fabricApprovalIdentity = (action, args) => {
   const canonical = fabricJsonText({ schemaVersion: 1, ref: action.ref, risk: action.risk, args });
   return {
-    digest: createHash3("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex"),
+    digest: createHash2("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex"),
     chars: canonical.length
   };
 };
@@ -23278,9 +12867,9 @@ var summarize = (args, cwd) => {
     if (isSecretKey(key)) return "<redacted>";
     if (typeof value === "string") {
       if (SECRET_VALUE.test(value)) return "<redacted>";
-      if (path5.isAbsolute(value)) {
-        const relative = path5.relative(cwd, value);
-        return relative === "" ? "." : relative.startsWith("..") || path5.isAbsolute(relative) ? "<outside-workspace>" : relative;
+      if (path.isAbsolute(value)) {
+        const relative = path.relative(cwd, value);
+        return relative === "" ? "." : relative.startsWith("..") || path.isAbsolute(relative) ? "<outside-workspace>" : relative;
       }
       if (URL_VALUE.test(value) || /(?:url|uri|endpoint)/iu.test(key)) {
         try {
@@ -23330,7 +12919,7 @@ var KiroPowerFabricApprover = class {
     if (mode === "allow") return { decision: "allow" };
     if (mode === "deny") return { decision: "deny", reason: `${action.ref} is denied by Fabric policy` };
     if (mode !== "ask") return { decision: "deny", reason: `${action.ref} has invalid Fabric approval policy` };
-    const identity2 = fabricApprovalIdentity(action, args);
+    const identity = fabricApprovalIdentity(action, args);
     const localReview = action.provider === "local" && (action.risk === "write" || action.risk === "execute") ? typeof args.review === "string" ? args.review : (() => {
       throw new Error("Local effect lacks canonical review material");
     })() : void 0;
@@ -23341,7 +12930,7 @@ var KiroPowerFabricApprover = class {
       risk: action.risk,
       provider: action.provider,
       action: action.name,
-      summary: `Canonical request: sha256:${identity2.digest} (${identity2.chars} chars)
+      summary: `Canonical request: sha256:${identity.digest} (${identity.chars} chars)
 ${exactReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
       ...exactReview === void 0 ? {} : { reviewable: true },
       ...signal ? { signal } : {}
@@ -23357,56 +12946,56 @@ ${exactReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
 };
 
 // src/kiro/power/data-paths.ts
-import { createHash as createHash4, randomBytes as randomBytes2 } from "node:crypto";
-import fs6 from "node:fs";
-import path6 from "node:path";
-var isRecord4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var errorCode = (error) => isRecord4(error) && typeof error.code === "string" ? error.code : void 0;
+import { createHash as createHash3, randomBytes as randomBytes2 } from "node:crypto";
+import fs2 from "node:fs";
+import path2 from "node:path";
+var isRecord3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var errorCode = (error) => isRecord3(error) && typeof error.code === "string" ? error.code : void 0;
 var projectKiroPowerWorkspaceIdentity = (value) => {
-  if (!isRecord4(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path6.isAbsolute(value.canonicalPath) || typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
+  if (!isRecord3(value) || value.schemaVersion !== 1 || typeof value.canonicalPath !== "string" || !path2.isAbsolute(value.canonicalPath) || typeof value.deviceId !== "string" || !value.deviceId || typeof value.fileId !== "string" || !value.fileId) {
     throw new Error("Fabric workspace identity is malformed");
   }
   return Object.freeze({ schemaVersion: 1, canonicalPath: value.canonicalPath, deviceId: value.deviceId, fileId: value.fileId });
 };
 var sameIdentity = (left, right) => left.schemaVersion === right.schemaVersion && left.canonicalPath === right.canonicalPath && left.deviceId === right.deviceId && left.fileId === right.fileId;
-var kiroPowerMemoryNamespace = (identity2) => `project:${createHash4("sha256").update(identity2.canonicalPath).digest("hex")}`;
+var kiroPowerMemoryNamespace = (identity) => `project:${createHash3("sha256").update(identity.canonicalPath).digest("hex")}`;
 var assertCurrentUser = (stats, target) => {
   if (process.platform !== "win32" && typeof process.getuid === "function" && stats.uid !== process.getuid()) {
     throw new Error(`Fabric data path is owned by another user: ${target}`);
   }
 };
 var assertPrivateDirectory = (target) => {
-  const stats = fs6.lstatSync(target);
+  const stats = fs2.lstatSync(target);
   if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Fabric storage is not a regular directory: ${target}`);
   assertCurrentUser(stats, target);
   if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Fabric storage is not private: ${target}`);
   return stats;
 };
-var privateDirectory2 = (directory2, boundary) => {
-  const root = path6.resolve(boundary);
-  const rootStats = fs6.lstatSync(root);
+var privateDirectory = (directory, boundary) => {
+  const root = path2.resolve(boundary);
+  const rootStats = fs2.lstatSync(root);
   if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new Error(`Fabric storage root is not a regular directory: ${boundary}`);
   assertCurrentUser(rootStats, root);
-  const target = path6.resolve(directory2);
-  const relative = path6.relative(root, target);
-  if (relative === ".." || relative.startsWith(`..${path6.sep}`) || path6.isAbsolute(relative)) throw new Error(`Fabric data path escapes storage: ${directory2}`);
+  const target = path2.resolve(directory);
+  const relative = path2.relative(root, target);
+  if (relative === ".." || relative.startsWith(`..${path2.sep}`) || path2.isAbsolute(relative)) throw new Error(`Fabric data path escapes storage: ${directory}`);
   let cursor = root;
-  for (const segment of relative.split(path6.sep).filter(Boolean)) {
-    cursor = path6.join(cursor, segment);
+  for (const segment of relative.split(path2.sep).filter(Boolean)) {
+    cursor = path2.join(cursor, segment);
     try {
-      fs6.mkdirSync(cursor, { mode: 448 });
+      fs2.mkdirSync(cursor, { mode: 448 });
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
     }
-    const stats = fs6.lstatSync(cursor);
+    const stats = fs2.lstatSync(cursor);
     if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`Fabric data path contains a non-directory: ${cursor}`);
     assertCurrentUser(stats, cursor);
-    fs6.chmodSync(cursor, 448);
+    fs2.chmodSync(cursor, 448);
   }
   return target;
 };
 var privateFile = (target, maximum = 1024 * 1024) => {
-  const stats = fs6.lstatSync(target);
+  const stats = fs2.lstatSync(target);
   if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) {
     throw new Error(`Fabric data is not a bounded unaliased regular file: ${target}`);
   }
@@ -23415,12 +13004,12 @@ var privateFile = (target, maximum = 1024 * 1024) => {
   if (process.platform !== "win32" && (stats.mode & 63) !== 0) throw new Error(`Fabric data is not private: ${target}`);
   return stats;
 };
-var fsyncDirectory = (directory2) => {
-  const descriptor2 = fs6.openSync(directory2, "r");
+var fsyncDirectory = (directory) => {
+  const descriptor2 = fs2.openSync(directory, "r");
   try {
-    fs6.fsyncSync(descriptor2);
+    fs2.fsyncSync(descriptor2);
   } finally {
-    fs6.closeSync(descriptor2);
+    fs2.closeSync(descriptor2);
   }
 };
 var writeJsonAtomic = (target, value, exclusive = false) => {
@@ -23428,12 +13017,12 @@ var writeJsonAtomic = (target, value, exclusive = false) => {
 `;
   if (exclusive) {
     try {
-      const descriptor2 = fs6.openSync(target, "wx", 384);
+      const descriptor2 = fs2.openSync(target, "wx", 384);
       try {
-        fs6.writeFileSync(descriptor2, bytes2);
-        fs6.fsyncSync(descriptor2);
+        fs2.writeFileSync(descriptor2, bytes2);
+        fs2.fsyncSync(descriptor2);
       } finally {
-        fs6.closeSync(descriptor2);
+        fs2.closeSync(descriptor2);
       }
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
@@ -23441,60 +13030,60 @@ var writeJsonAtomic = (target, value, exclusive = false) => {
   } else {
     const temporary = `${target}.${process.pid}.${randomBytes2(8).toString("hex")}.tmp`;
     try {
-      const descriptor2 = fs6.openSync(temporary, "wx", 384);
+      const descriptor2 = fs2.openSync(temporary, "wx", 384);
       try {
-        fs6.writeFileSync(descriptor2, bytes2);
-        fs6.fsyncSync(descriptor2);
+        fs2.writeFileSync(descriptor2, bytes2);
+        fs2.fsyncSync(descriptor2);
       } finally {
-        fs6.closeSync(descriptor2);
+        fs2.closeSync(descriptor2);
       }
-      fs6.renameSync(temporary, target);
+      fs2.renameSync(temporary, target);
     } catch (error) {
-      fs6.rmSync(temporary, { force: true });
+      fs2.rmSync(temporary, { force: true });
       throw error;
     }
   }
   privateFile(target);
-  fs6.chmodSync(target, 384);
-  fsyncDirectory(path6.dirname(target));
+  fs2.chmodSync(target, 384);
+  fsyncDirectory(path2.dirname(target));
   return target;
 };
 var privateJson = (target, initial) => writeJsonAtomic(target, initial, true);
 var copyFileAtomic = (source, target) => {
   privateFile(source);
-  const bytes2 = fs6.readFileSync(source);
-  const sourceDigest = createHash4("sha256").update(bytes2).digest("hex");
+  const bytes2 = fs2.readFileSync(source);
+  const sourceDigest = createHash3("sha256").update(bytes2).digest("hex");
   const temporary = `${target}.${process.pid}.${randomBytes2(8).toString("hex")}.migration.tmp`;
   try {
-    const descriptor2 = fs6.openSync(temporary, "wx", 384);
+    const descriptor2 = fs2.openSync(temporary, "wx", 384);
     try {
-      fs6.writeFileSync(descriptor2, bytes2);
-      fs6.fsyncSync(descriptor2);
+      fs2.writeFileSync(descriptor2, bytes2);
+      fs2.fsyncSync(descriptor2);
     } finally {
-      fs6.closeSync(descriptor2);
+      fs2.closeSync(descriptor2);
     }
-    if (createHash4("sha256").update(fs6.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
+    if (createHash3("sha256").update(fs2.readFileSync(temporary)).digest("hex") !== sourceDigest) throw new Error("Legacy Power migration copy digest mismatch");
     try {
-      fs6.linkSync(temporary, target);
+      fs2.linkSync(temporary, target);
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
       privateFile(target);
-      if (createHash4("sha256").update(fs6.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
+      if (createHash3("sha256").update(fs2.readFileSync(target)).digest("hex") !== sourceDigest) throw new Error("Concurrent legacy Power migration produced different bytes");
     }
-    fs6.unlinkSync(temporary);
-    fsyncDirectory(path6.dirname(target));
+    fs2.unlinkSync(temporary);
+    fsyncDirectory(path2.dirname(target));
   } catch (error) {
-    fs6.rmSync(temporary, { force: true });
+    fs2.rmSync(temporary, { force: true });
     throw error;
   }
 };
 var migrateMcpConfiguration = (config) => {
-  const current = path6.join(config, "mcp.json");
-  const legacy = path6.join(config, "mcporter.json");
-  if (fs6.existsSync(current) || !fs6.existsSync(legacy)) return [];
+  const current = path2.join(config, "mcp.json");
+  const legacy = path2.join(config, "mcporter.json");
+  if (fs2.existsSync(current) || !fs2.existsSync(legacy)) return [];
   privateFile(legacy, 256 * 1024);
-  const parsed = JSON.parse(fs6.readFileSync(legacy, "utf8"));
-  if (!isRecord4(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting Fabric");
+  const parsed = JSON.parse(fs2.readFileSync(legacy, "utf8"));
+  if (!isRecord3(parsed)) throw new Error("Legacy mcporter configuration is malformed; repair or archive it before starting Fabric");
   copyFileAtomic(legacy, current);
   return ["config/mcporter.json -> config/mcp.json"];
 };
@@ -23507,16 +13096,16 @@ var LEGACY_CONFIG_FIELDS = {
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"]
 };
 var migrateLegacyFabricConfiguration = (root, config) => {
-  const legacy = path6.join(config, "fabric.json");
-  if (!fs6.existsSync(legacy)) return { migrated: [], ignored: [], quarantined: [] };
+  const legacy = path2.join(config, "fabric.json");
+  if (!fs2.existsSync(legacy)) return { migrated: [], ignored: [], quarantined: [] };
   privateFile(legacy, 256 * 1024);
-  const parsed = JSON.parse(fs6.readFileSync(legacy, "utf8"));
-  if (!isRecord4(parsed)) throw new Error("Legacy fabric configuration is malformed");
+  const parsed = JSON.parse(fs2.readFileSync(legacy, "utf8"));
+  if (!isRecord3(parsed)) throw new Error("Legacy fabric configuration is malformed");
   const projected = {};
   const ignored = [];
   for (const [section, raw] of Object.entries(parsed)) {
     const allowed = LEGACY_CONFIG_FIELDS[section];
-    if (!allowed || !isRecord4(raw)) {
+    if (!allowed || !isRecord3(raw)) {
       ignored.push(section);
       continue;
     }
@@ -23530,22 +13119,22 @@ var migrateLegacyFabricConfiguration = (root, config) => {
     }
     if (Object.keys(fields).length) projected[section] = fields;
   }
-  const current = path6.join(config, "config.json");
+  const current = path2.join(config, "config.json");
   const migrated = [];
-  if (!fs6.existsSync(current) && Object.keys(projected).length) {
+  if (!fs2.existsSync(current) && Object.keys(projected).length) {
     writeJsonAtomic(current, { schemaVersion: CURRENT_FABRIC_CONFIG_SCHEMA_VERSION, ...projected }, true);
     migrated.push("config/fabric.json -> allowlisted config/config.json");
   }
-  const quarantine = privateDirectory2(path6.join(root, "quarantine"), root);
-  const destination = path6.join(quarantine, "legacy-fabric.json");
-  if (!fs6.existsSync(destination)) fs6.renameSync(legacy, destination);
+  const quarantine = privateDirectory(path2.join(root, "quarantine"), root);
+  const destination = path2.join(quarantine, "legacy-fabric.json");
+  if (!fs2.existsSync(destination)) fs2.renameSync(legacy, destination);
   else {
-    const incoming = fs6.readFileSync(legacy);
-    if (fs6.readFileSync(destination).equals(incoming)) fs6.rmSync(legacy);
+    const incoming = fs2.readFileSync(legacy);
+    if (fs2.readFileSync(destination).equals(incoming)) fs2.rmSync(legacy);
     else {
-      const distinct = path6.join(quarantine, `legacy-fabric-${createHash4("sha256").update(incoming).digest("hex").slice(0, 16)}.json`);
-      if (!fs6.existsSync(distinct)) fs6.renameSync(legacy, distinct);
-      else if (fs6.readFileSync(distinct).equals(incoming)) fs6.rmSync(legacy);
+      const distinct = path2.join(quarantine, `legacy-fabric-${createHash3("sha256").update(incoming).digest("hex").slice(0, 16)}.json`);
+      if (!fs2.existsSync(distinct)) fs2.renameSync(legacy, distinct);
+      else if (fs2.readFileSync(distinct).equals(incoming)) fs2.rmSync(legacy);
       else throw new Error("Legacy fabric configuration quarantine collision with differing content");
     }
   }
@@ -23553,12 +13142,12 @@ var migrateLegacyFabricConfiguration = (root, config) => {
   return { migrated, ignored, quarantined: ["legacy fabric.json"] };
 };
 var prepareKiroPowerDataPaths = (pluginData) => {
-  const root = privateDirectory2(path6.join(pluginData, "fabric"), pluginData);
-  const config = privateDirectory2(path6.join(root, "config"), root);
+  const root = privateDirectory(path2.join(pluginData, "fabric"), pluginData);
+  const config = privateDirectory(path2.join(root, "config"), root);
   const mcpMigrated = migrateMcpConfiguration(config);
   const policy = migrateLegacyFabricConfiguration(root, config);
   if (mcpMigrated.length || policy.migrated.length || policy.quarantined.length) {
-    writeJsonAtomic(path6.join(root, "migration-report.json"), {
+    writeJsonAtomic(path2.join(root, "migration-report.json"), {
       schemaVersion: 2,
       migrated: [...mcpMigrated, ...policy.migrated],
       ignoredFields: policy.ignored.sort(),
@@ -23568,98 +13157,98 @@ var prepareKiroPowerDataPaths = (pluginData) => {
   return {
     root,
     config,
-    configFile: path6.join(config, "config.json"),
-    mcpConfig: privateJson(path6.join(config, "mcp.json"), { mcpServers: {}, imports: [] }),
-    artifacts: privateDirectory2(path6.join(root, "artifacts"), root),
-    projects: privateDirectory2(path6.join(root, "projects"), root)
+    configFile: path2.join(config, "config.json"),
+    mcpConfig: privateJson(path2.join(config, "mcp.json"), { mcpServers: {}, imports: [] }),
+    artifacts: privateDirectory(path2.join(root, "artifacts"), root),
+    projects: privateDirectory(path2.join(root, "projects"), root)
   };
 };
-var kiroPowerWorkspaceId = (identity2, generation = 3) => createHash4("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity2.canonicalPath).update("\0").update(identity2.deviceId).update("\0").update(identity2.fileId).digest("hex");
+var kiroPowerWorkspaceId = (identity, generation = 3) => createHash3("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0").update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
 var encodeName = (value) => encodeURIComponent(value).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
-var memoryNamespaceDirectory = (namespace) => `${encodeName(namespace)}-${createHash4("sha256").update(namespace).digest("hex").slice(0, 16)}`;
+var memoryNamespaceDirectory = (namespace) => `${encodeName(namespace)}-${createHash3("sha256").update(namespace).digest("hex").slice(0, 16)}`;
 var migrateCompatibleMemory = (sourceRoot, targetRoot, publishedMemoryRoot, namespace) => {
-  if (!fs6.existsSync(sourceRoot)) return false;
+  if (!fs2.existsSync(sourceRoot)) return false;
   assertPrivateDirectory(sourceRoot);
-  const sourceMemory = path6.join(sourceRoot, "memory");
-  if (!fs6.existsSync(sourceMemory)) return false;
+  const sourceMemory = path2.join(sourceRoot, "memory");
+  if (!fs2.existsSync(sourceMemory)) return false;
   assertPrivateDirectory(sourceMemory);
-  const rootMarker = path6.join(sourceMemory, ".kiro-fabric-owner");
+  const rootMarker = path2.join(sourceMemory, ".kiro-fabric-owner");
   privateFile(rootMarker, 8 * 1024);
-  const rootOwner = JSON.parse(fs6.readFileSync(rootMarker, "utf8"));
+  const rootOwner = JSON.parse(fs2.readFileSync(rootMarker, "utf8"));
   if (rootOwner.format !== 1 || rootOwner.owner !== "kiro-fabric" || rootOwner.kind !== "memory-root" || rootOwner.root !== sourceRoot) {
     throw new Error("Legacy memory root ownership is incompatible");
   }
   const namespaceName = memoryNamespaceDirectory(namespace);
-  const sourceNamespace = path6.join(sourceMemory, namespaceName);
+  const sourceNamespace = path2.join(sourceMemory, namespaceName);
   assertPrivateDirectory(sourceNamespace);
-  const namespaceMarker = path6.join(sourceNamespace, ".kiro-fabric-owner");
+  const namespaceMarker = path2.join(sourceNamespace, ".kiro-fabric-owner");
   privateFile(namespaceMarker, 8 * 1024);
-  const namespaceOwner = JSON.parse(fs6.readFileSync(namespaceMarker, "utf8"));
+  const namespaceOwner = JSON.parse(fs2.readFileSync(namespaceMarker, "utf8"));
   if (namespaceOwner.format !== 1 || namespaceOwner.owner !== "kiro-fabric" || namespaceOwner.kind !== "memory-namespace" || namespaceOwner.root !== sourceRoot || namespaceOwner.namespace !== namespace) throw new Error("Legacy memory namespace ownership is incompatible");
-  const sourceEntries = fs6.readdirSync(sourceNamespace, { withFileTypes: true });
+  const sourceEntries = fs2.readdirSync(sourceNamespace, { withFileTypes: true });
   if (sourceEntries.length > 130) throw new Error("Legacy memory entry limit exceeded");
-  const targetMemory = privateDirectory2(path6.join(targetRoot, "memory"), targetRoot);
-  const targetScoped = privateDirectory2(path6.join(targetMemory, "memory"), targetMemory);
-  writeJsonAtomic(path6.join(targetScoped, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: publishedMemoryRoot }, true);
-  const targetNamespace = privateDirectory2(path6.join(targetScoped, namespaceName), targetScoped);
-  writeJsonAtomic(path6.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: publishedMemoryRoot, namespace }, true);
+  const targetMemory = privateDirectory(path2.join(targetRoot, "memory"), targetRoot);
+  const targetScoped = privateDirectory(path2.join(targetMemory, "memory"), targetMemory);
+  writeJsonAtomic(path2.join(targetScoped, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: publishedMemoryRoot }, true);
+  const targetNamespace = privateDirectory(path2.join(targetScoped, namespaceName), targetScoped);
+  writeJsonAtomic(path2.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: publishedMemoryRoot, namespace }, true);
   let totalBytes = 0;
   for (const entry of sourceEntries) {
     if (entry.name === ".kiro-fabric-owner") continue;
     if (!entry.isFile() || !entry.name.endsWith(".json")) throw new Error("Legacy memory contains incompatible residue");
-    const source = path6.join(sourceNamespace, entry.name);
+    const source = path2.join(sourceNamespace, entry.name);
     const stats = privateFile(source, 16 * 1024);
     totalBytes += stats.size;
     if (totalBytes > 256 * 1024) throw new Error("Legacy memory namespace byte limit exceeded");
-    const value = JSON.parse(fs6.readFileSync(source, "utf8"));
+    const value = JSON.parse(fs2.readFileSync(source, "utf8"));
     if (value.format !== 1 || value.owner !== "kiro-fabric" || value.kind !== "memory-entry" || value.namespace !== namespace || typeof value.key !== "string" || value.key.trim() !== value.key || !value.key || `${encodeName(value.key)}.json` !== entry.name || typeof value.updatedAt !== "string" || !("value" in value)) throw new Error("Legacy memory entry is incompatible");
-    copyFileAtomic(source, path6.join(targetNamespace, entry.name));
+    copyFileAtomic(source, path2.join(targetNamespace, entry.name));
   }
   return true;
 };
-var validateWorkspaceObject = (identity2) => {
-  const canonical = fs6.realpathSync(identity2.canonicalPath);
-  const stats = fs6.statSync(canonical, { bigint: true });
-  if (canonical !== identity2.canonicalPath || String(stats.dev) !== identity2.deviceId || String(stats.ino) !== identity2.fileId) {
+var validateWorkspaceObject = (identity) => {
+  const canonical = fs2.realpathSync(identity.canonicalPath);
+  const stats = fs2.statSync(canonical, { bigint: true });
+  if (canonical !== identity.canonicalPath || String(stats.dev) !== identity.deviceId || String(stats.ino) !== identity.fileId) {
     throw new Error("Fabric workspace identity no longer matches the verified filesystem object");
   }
 };
 var validatePersistedIdentity = (file, expected) => {
   privateFile(file, 64 * 1024);
-  const persisted = projectKiroPowerWorkspaceIdentity(JSON.parse(fs6.readFileSync(file, "utf8")));
+  const persisted = projectKiroPowerWorkspaceIdentity(JSON.parse(fs2.readFileSync(file, "utf8")));
   if (!sameIdentity(persisted, expected)) throw new Error("Legacy workspace identity does not match the currently verified filesystem object");
 };
-var quarantineLegacyWorkspace = (projects, legacy, identity2) => {
-  if (!fs6.existsSync(legacy)) return void 0;
-  const quarantine = privateDirectory2(path6.join(projects, ".quarantine"), projects);
-  const destination = path6.join(quarantine, `workspace-v2-${kiroPowerWorkspaceId(identity2, 2)}`);
-  if (fs6.existsSync(destination)) throw new Error("Legacy workspace quarantine collision");
-  fs6.renameSync(legacy, destination);
+var quarantineLegacyWorkspace = (projects, legacy, identity) => {
+  if (!fs2.existsSync(legacy)) return void 0;
+  const quarantine = privateDirectory(path2.join(projects, ".quarantine"), projects);
+  const destination = path2.join(quarantine, `workspace-v2-${kiroPowerWorkspaceId(identity, 2)}`);
+  if (fs2.existsSync(destination)) throw new Error("Legacy workspace quarantine collision");
+  fs2.renameSync(legacy, destination);
   fsyncDirectory(quarantine);
   return destination;
 };
-var migrateWorkspaceGeneration = (projects, identity2) => {
-  const current = path6.join(projects, kiroPowerWorkspaceId(identity2, 3));
-  const legacy = path6.join(projects, kiroPowerWorkspaceId(identity2, 2));
-  if (!fs6.existsSync(legacy)) return { current, migrated: false };
+var migrateWorkspaceGeneration = (projects, identity) => {
+  const current = path2.join(projects, kiroPowerWorkspaceId(identity, 3));
+  const legacy = path2.join(projects, kiroPowerWorkspaceId(identity, 2));
+  if (!fs2.existsSync(legacy)) return { current, migrated: false };
   assertPrivateDirectory(legacy);
-  validatePersistedIdentity(path6.join(legacy, "workspace-identity.json"), identity2);
-  validateWorkspaceObject(identity2);
-  if (fs6.existsSync(current)) {
-    validatePersistedIdentity(path6.join(current, "workspace-identity.json"), identity2);
-    quarantineLegacyWorkspace(projects, legacy, identity2);
+  validatePersistedIdentity(path2.join(legacy, "workspace-identity.json"), identity);
+  validateWorkspaceObject(identity);
+  if (fs2.existsSync(current)) {
+    validatePersistedIdentity(path2.join(current, "workspace-identity.json"), identity);
+    quarantineLegacyWorkspace(projects, legacy, identity);
     return { current, migrated: true };
   }
-  const staging = path6.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity2).slice(0, 16)}-${process.pid}-${randomBytes2(8).toString("hex")}.tmp`);
-  fs6.mkdirSync(staging, { mode: 448 });
+  const staging = path2.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity).slice(0, 16)}-${process.pid}-${randomBytes2(8).toString("hex")}.tmp`);
+  fs2.mkdirSync(staging, { mode: 448 });
   let memoryMigrated = false;
   try {
-    writeJsonAtomic(path6.join(staging, "workspace-identity.json"), identity2, true);
-    memoryMigrated = migrateCompatibleMemory(legacy, staging, path6.join(current, "memory"), kiroPowerMemoryNamespace(identity2));
-    privateDirectory2(path6.join(staging, "memory"), staging);
-    privateDirectory2(path6.join(staging, "state"), staging);
-    privateDirectory2(path6.join(staging, "artifacts"), staging);
-    writeJsonAtomic(path6.join(staging, "migration-report.json"), {
+    writeJsonAtomic(path2.join(staging, "workspace-identity.json"), identity, true);
+    memoryMigrated = migrateCompatibleMemory(legacy, staging, path2.join(current, "memory"), kiroPowerMemoryNamespace(identity));
+    privateDirectory(path2.join(staging, "memory"), staging);
+    privateDirectory(path2.join(staging, "state"), staging);
+    privateDirectory(path2.join(staging, "artifacts"), staging);
+    writeJsonAtomic(path2.join(staging, "migration-report.json"), {
       schemaVersion: 2,
       sourceGeneration: 2,
       destinationGeneration: 3,
@@ -23668,19 +13257,19 @@ var migrateWorkspaceGeneration = (projects, identity2) => {
       complete: false
     }, true);
     try {
-      fs6.renameSync(staging, current);
+      fs2.renameSync(staging, current);
     } catch (error) {
       if (errorCode(error) !== "EEXIST" && errorCode(error) !== "ENOTEMPTY") throw error;
-      validatePersistedIdentity(path6.join(current, "workspace-identity.json"), identity2);
-      fs6.rmSync(staging, { recursive: true, force: true });
+      validatePersistedIdentity(path2.join(current, "workspace-identity.json"), identity);
+      fs2.rmSync(staging, { recursive: true, force: true });
     }
     fsyncDirectory(projects);
   } catch (error) {
-    fs6.rmSync(staging, { recursive: true, force: true });
+    fs2.rmSync(staging, { recursive: true, force: true });
     throw error;
   }
-  quarantineLegacyWorkspace(projects, legacy, identity2);
-  writeJsonAtomic(path6.join(current, "migration-report.json"), {
+  quarantineLegacyWorkspace(projects, legacy, identity);
+  writeJsonAtomic(path2.join(current, "migration-report.json"), {
     schemaVersion: 2,
     sourceGeneration: 2,
     destinationGeneration: 3,
@@ -23691,27 +13280,27 @@ var migrateWorkspaceGeneration = (projects, identity2) => {
   return { current, migrated: true };
 };
 var prepareKiroPowerProjectPaths = (projects, rawIdentity) => {
-  const identity2 = projectKiroPowerWorkspaceIdentity(rawIdentity);
-  const migration = migrateWorkspaceGeneration(projects, identity2);
-  if (!migration.migrated) validateWorkspaceObject(identity2);
-  const root = privateDirectory2(migration.current, projects);
-  const identityFile = privateJson(path6.join(root, "workspace-identity.json"), identity2);
-  validatePersistedIdentity(identityFile, identity2);
+  const identity = projectKiroPowerWorkspaceIdentity(rawIdentity);
+  const migration = migrateWorkspaceGeneration(projects, identity);
+  if (!migration.migrated) validateWorkspaceObject(identity);
+  const root = privateDirectory(migration.current, projects);
+  const identityFile = privateJson(path2.join(root, "workspace-identity.json"), identity);
+  validatePersistedIdentity(identityFile, identity);
   return {
     root,
     identityFile,
-    memory: privateDirectory2(path6.join(root, "memory"), root),
-    memoryNamespace: kiroPowerMemoryNamespace(identity2),
-    state: privateDirectory2(path6.join(root, "state"), root),
-    artifacts: privateDirectory2(path6.join(root, "artifacts"), root)
+    memory: privateDirectory(path2.join(root, "memory"), root),
+    memoryNamespace: kiroPowerMemoryNamespace(identity),
+    state: privateDirectory(path2.join(root, "state"), root),
+    artifacts: privateDirectory(path2.join(root, "artifacts"), root)
   };
 };
 
 // src/kiro/power/workspace-binding.ts
-import { createHash as createHash5 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 import { existsSync } from "node:fs";
-import os3 from "node:os";
-import path7 from "node:path";
+import os2 from "node:os";
+import path3 from "node:path";
 import { fileURLToPath } from "node:url";
 var kiroPowerWorkspaceRequestSchema = typebox_exports.Union([
   typebox_exports.Object({ action: typebox_exports.Literal("status") }, { additionalProperties: false }),
@@ -23740,7 +13329,7 @@ var kiroWorkspaceToolInputSchema = {
   required: ["action"],
   additionalProperties: false
 };
-var idFor = (root) => createHash5("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
+var idFor = (root) => createHash4("sha256").update("kiro-fabric-power-session-root-v1\0").update(root).digest("hex").slice(0, 16);
 var KiroPowerWorkspaceBinding = class {
   #pluginRoot;
   #pluginData;
@@ -23761,21 +13350,21 @@ var KiroPowerWorkspaceBinding = class {
       rejectFinalSymlink: true
     }).canonicalPath;
     this.#elicitor = options.elicitor;
-    this.#home = inspectCanonicalPath(os3.homedir(), { kind: "directory" }).canonicalPath;
-    this.#temporary = inspectCanonicalPath(os3.tmpdir(), { kind: "directory" }).canonicalPath;
+    this.#home = inspectCanonicalPath(os2.homedir(), { kind: "directory" }).canonicalPath;
+    this.#temporary = inspectCanonicalPath(os2.tmpdir(), { kind: "directory" }).canonicalPath;
     if (options.kiroHome !== void 0) {
-      if (!path7.isAbsolute(options.kiroHome)) throw new Error("Kiro home must be absolute");
+      if (!path3.isAbsolute(options.kiroHome)) throw new Error("Kiro home must be absolute");
       this.#kiroHome = inspectCanonicalPath(options.kiroHome, {
         kind: "directory",
         rejectFinalSymlink: true
       }).canonicalPath;
     } else {
-      const kiroHome = path7.join(this.#home, ".kiro");
+      const kiroHome = path3.join(this.#home, ".kiro");
       this.#kiroHome = existsSync(kiroHome) ? inspectCanonicalPath(kiroHome, { kind: "directory" }).canonicalPath : kiroHome;
     }
   }
   #canonical(candidate) {
-    if (!path7.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
+    if (!path3.isAbsolute(candidate)) throw new Error("workspace root must be absolute");
     const inspected = inspectCanonicalPath(candidate, {
       kind: "directory",
       rejectFinalSymlink: true
@@ -23783,7 +13372,7 @@ var KiroPowerWorkspaceBinding = class {
     const root = inspected.canonicalPath;
     const currentKiroHome = existsSync(this.#kiroHome) ? inspectCanonicalPath(this.#kiroHome, { kind: "directory" }).canonicalPath : this.#kiroHome;
     const overlapsKiroHome = canonicalPathContains(currentKiroHome, root) || canonicalPathContains(root, currentKiroHome);
-    const unsafe = [path7.parse(root).root, this.#home, this.#temporary, this.#pluginRoot, this.#pluginData];
+    const unsafe = [path3.parse(root).root, this.#home, this.#temporary, this.#pluginRoot, this.#pluginData];
     if (unsafe.includes(root) || overlapsKiroHome || canonicalPathContains(root, this.#home)) {
       throw new Error("workspace root is too broad or reserved");
     }
@@ -23796,7 +13385,7 @@ var KiroPowerWorkspaceBinding = class {
       id: idFor(root),
       root,
       lexicalPath: inspected.lexicalPath,
-      name: path7.basename(root) || "workspace",
+      name: path3.basename(root) || "workspace",
       ...inspected.identity
     };
   }
@@ -23807,7 +13396,7 @@ var KiroPowerWorkspaceBinding = class {
       let advertised;
       try {
         if (!item.uri.startsWith("file:")) continue;
-        advertised = path7.resolve(fileURLToPath(item.uri));
+        advertised = path3.resolve(fileURLToPath(item.uri));
         const candidate = this.#canonical(advertised);
         advertisedCanonicalRoots.add(candidate.root);
         candidates.push({ ...candidate, name: (item.name?.trim() || candidate.name).slice(0, 120) });
@@ -23881,7 +13470,7 @@ var KiroPowerWorkspaceBinding = class {
     return workspace ? { status: "bound", rootId: workspace.rootId, name: workspace.name, source: workspace.source } : { status: "unbound", requiresSelection: this.#candidates.length > 1 };
   }
   list() {
-    return { ...this.status(), roots: this.#candidates.map(({ id: id3, name }) => ({ rootId: id3, name })) };
+    return { ...this.status(), roots: this.#candidates.map(({ id: id2, name }) => ({ rootId: id2, name })) };
   }
   async prepareMutation(request, signal, chargeApproval) {
     if (request.action === "detach") return request;
@@ -24097,13 +13686,13 @@ var failureProgress = (result) => {
   const omitted = completed.length - summaries.length;
   const succeeded = completed.filter((audit) => audit.success === true).length;
   const committed = completed.filter((audit) => audit.commitAcknowledgement).length;
-  const uncertain2 = completed.filter((audit) => audit.effectOutcome === "uncertain").length;
+  const uncertain = completed.filter((audit) => audit.effectOutcome === "uncertain").length;
   const sampledCommitted = summaries.some((summary) => summary.commitAcknowledgement !== void 0);
   return [
     `
 
 Completed nested calls before the outer failure (arguments and results omitted): ${JSON.stringify({ total: completed.length, succeeded, failed: completed.length - succeeded, committed, sample: summaries, omitted })}.`,
-    ...uncertain2 > 0 ? ["Host command effects are uncertain; cancellation or failure is not rollback. Inspect the workspace and external state; never automatically retry the program."] : [],
+    ...uncertain > 0 ? ["Host command effects are uncertain; cancellation or failure is not rollback. Inspect the workspace and external state; never automatically retry the program."] : [],
     committed > 0 ? sampledCommitted ? "A listed mutation is known committed although acknowledgement failed; inspect the affected file or durable key before retrying." : "A mutation is known committed although acknowledgement failed (not shown in the sample); inspect the affected file or durable key before retrying." : "Inspect current state before retrying fabric_exec; completed calls may already have taken effect, and a blind retry can duplicate effects."
   ].join("\n");
 };
@@ -24125,10 +13714,10 @@ var truncateWithHint = (content, maximum, hint) => {
 };
 var projectFabricExecutionText = (options) => {
   const visibleMaximum = options.result.success ? options.maxOutputChars : Math.min(options.maxOutputChars, MAX_FAILURE_OUTPUT_CHARS);
-  const checkpointIds = [...new Set((options.result.checkpoints ?? options.result.failure?.checkpoints ?? []).slice(0, 8).map((handle) => handle.id).filter((id3) => /^ka_[a-f0-9]{48}$/u.test(id3)))];
+  const checkpointIds = [...new Set((options.result.checkpoints ?? options.result.failure?.checkpoints ?? []).slice(0, 8).map((handle) => handle.id).filter((id2) => /^ka_[a-f0-9]{48}$/u.test(id2)))];
   const failure = options.result.failure ? {
     ...options.result.failure,
-    ...options.result.failure.checkpoints ? { checkpoints: checkpointIds.map((id3) => ({ id: id3 })) } : {}
+    ...options.result.failure.checkpoints ? { checkpoints: checkpointIds.map((id2) => ({ id: id2 })) } : {}
   } : void 0;
   const value = options.result.success ? options.result.value : {
     status: options.result.status,
@@ -24173,13 +13762,13 @@ Ephemeral checkpoint handles (read with artifacts.read): ${JSON.stringify(checkp
     const hint = `
 
 Output exceeded ${visibleMaximum} characters. ${retention === "complete" ? "Full result" : "Canonical JSON result (formatting/logs/progress omitted)"} is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
-    const text3 = truncateWithHint(complete, visibleMaximum, hint);
+    const text2 = truncateWithHint(complete, visibleMaximum, hint);
     return {
-      text: text3,
+      text: text2,
       isError: !options.result.success,
       artifactId,
-      visibleChars: text3.length,
-      visibleBytes: Buffer.byteLength(text3, "utf8"),
+      visibleChars: text2.length,
+      visibleBytes: Buffer.byteLength(text2, "utf8"),
       overflowed: true,
       artifactRetained: true,
       retention,
@@ -24189,12 +13778,12 @@ Output exceeded ${visibleMaximum} characters. ${retention === "complete" ? "Full
     const hint = `
 
 Output exceeded ${visibleMaximum} characters and could not be retained within artifact bounds.`;
-    const text3 = truncateWithHint(complete, visibleMaximum, hint);
+    const text2 = truncateWithHint(complete, visibleMaximum, hint);
     return {
-      text: text3,
+      text: text2,
       isError: true,
-      visibleChars: text3.length,
-      visibleBytes: Buffer.byteLength(text3, "utf8"),
+      visibleChars: text2.length,
+      visibleBytes: Buffer.byteLength(text2, "utf8"),
       overflowed: true,
       artifactRetained: false,
       retention: "unavailable",
@@ -24204,21 +13793,21 @@ Output exceeded ${visibleMaximum} characters and could not be retained within ar
 };
 
 // src/kiro/runtime.ts
-import path16 from "node:path";
+import path12 from "node:path";
 
 // src/providers/review-provider.ts
-import { createHash as createHash7, randomUUID as randomUUID5 } from "node:crypto";
-import path9 from "node:path";
-import { performance as performance4 } from "node:perf_hooks";
+import { createHash as createHash6, randomUUID as randomUUID3 } from "node:crypto";
+import path5 from "node:path";
+import { performance as performance2 } from "node:perf_hooks";
 
 // src/providers/local-path.ts
-import fs7 from "node:fs";
-import path8 from "node:path";
-import { createHash as createHash6 } from "node:crypto";
+import fs3 from "node:fs";
+import path4 from "node:path";
+import { createHash as createHash5 } from "node:crypto";
 var LocalNonTextError = class extends Error {
 };
 var LOCAL_MAX_FILE_BYTES = 2 * 1024 * 1024;
-var localHash = (value) => createHash6("sha256").update(value).digest("hex");
+var localHash = (value) => createHash5("sha256").update(value).digest("hex");
 var localIdentity = (stat) => ({ dev: stat.dev, ino: stat.ino });
 var sameLocalIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino;
 var code = (error) => error?.code;
@@ -24240,21 +13829,21 @@ var LocalPaths = class {
   resolve(input) {
     this.verifyRoot();
     if (input.includes("\0") || input.split(/[\\/]/u).includes("..")) throw new Error("local path traversal is forbidden");
-    const resolved2 = path8.resolve(this.root, input);
-    const relative = path8.relative(this.root, resolved2);
-    if (relative === ".." || relative.startsWith(`..${path8.sep}`) || path8.isAbsolute(relative)) throw new Error("local path is outside workspace");
+    const resolved2 = path4.resolve(this.root, input);
+    const relative = path4.relative(this.root, resolved2);
+    if (relative === ".." || relative.startsWith(`..${path4.sep}`) || path4.isAbsolute(relative)) throw new Error("local path is outside workspace");
     return resolved2;
   }
   check(input, allowMissing = false) {
     const target = this.resolve(input);
-    const parts = path8.relative(this.root, target).split(path8.sep).filter(Boolean);
+    const parts = path4.relative(this.root, target).split(path4.sep).filter(Boolean);
     const parents = [{ path: this.root, identity: this.identity }];
     let current = this.root;
-    let stat = fs7.lstatSync(current);
+    let stat = fs3.lstatSync(current);
     for (let index = 0; index < parts.length; index++) {
-      current = path8.join(current, parts[index]);
+      current = path4.join(current, parts[index]);
       try {
-        stat = fs7.lstatSync(current);
+        stat = fs3.lstatSync(current);
       } catch (error) {
         if (allowMissing && index === parts.length - 1 && code(error) === "ENOENT") return { path: target, stat: null, parents };
         throw error;
@@ -24267,7 +13856,7 @@ var LocalPaths = class {
         parents.push({ path: current, identity: localIdentity(stat) });
       }
     }
-    const canonical = fs7.realpathSync(target);
+    const canonical = fs3.realpathSync(target);
     if (canonical !== target || !canonicalPathContains(this.root, canonical)) throw new Error("local path canonical containment changed");
     return { path: target, stat, parents };
   }
@@ -24280,33 +13869,33 @@ var LocalPaths = class {
     const found = this.check(input);
     if (!found.stat?.isFile()) throw new Error("local path must be a regular file");
     if (found.stat.size > LOCAL_MAX_FILE_BYTES) throw new Error("local file exceeds 2MiB byte limit");
-    const fd = fs7.openSync(found.path, fs7.constants.O_RDONLY | fs7.constants.O_NOFOLLOW | fs7.constants.O_NONBLOCK);
+    const fd = fs3.openSync(found.path, fs3.constants.O_RDONLY | fs3.constants.O_NOFOLLOW | fs3.constants.O_NONBLOCK);
     try {
-      const before = fs7.fstatSync(fd);
+      const before = fs3.fstatSync(fd);
       if (!before.isFile() || before.nlink !== 1 || !sameLocalIdentity(before, found.stat)) throw new Error("local file identity changed");
       const bytes2 = Buffer.alloc(Math.min(before.size + 1, LOCAL_MAX_FILE_BYTES + 1));
       let length = 0;
       while (length < bytes2.length) {
-        const count2 = fs7.readSync(fd, bytes2, length, bytes2.length - length, null);
+        const count2 = fs3.readSync(fd, bytes2, length, bytes2.length - length, null);
         if (!count2) break;
         length += count2;
       }
-      const after = fs7.fstatSync(fd);
+      const after = fs3.fstatSync(fd);
       if (length !== before.size || length > LOCAL_MAX_FILE_BYTES || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs || after.nlink !== 1) throw new Error("local file changed during bounded read");
       const data = bytes2.subarray(0, length);
       if (data.includes(0)) throw new LocalNonTextError("local binary file is unsupported");
-      let text3;
+      let text2;
       try {
-        text3 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data);
+        text2 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data);
       } catch {
         throw new LocalNonTextError("local file is not valid UTF-8");
       }
       this.verifyRoot();
       const again = this.check(found.path);
       if (!again.stat || !sameLocalIdentity(again.stat, before) || JSON.stringify(again.parents) !== JSON.stringify(found.parents)) throw new Error("local file identity changed during read");
-      return { text: text3, snapshot: { path: found.path, parents: found.parents, file: { identity: localIdentity(before), mode: before.mode, size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs, sha256: localHash(data) } } };
+      return { text: text2, snapshot: { path: found.path, parents: found.parents, file: { identity: localIdentity(before), mode: before.mode, size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs, sha256: localHash(data) } } };
     } finally {
-      fs7.closeSync(fd);
+      fs3.closeSync(fd);
     }
   }
   snapshot(input) {
@@ -24317,7 +13906,7 @@ var LocalPaths = class {
     if (JSON.stringify(this.snapshot(snapshot.path).snapshot) !== JSON.stringify(snapshot)) throw new Error("local approval snapshot conflict: file or parent identity/content changed");
   }
   relative(input) {
-    return path8.relative(this.root, input) || ".";
+    return path4.relative(this.root, input) || ".";
   }
 };
 
@@ -24328,36 +13917,36 @@ var COVERAGE = ["unknown", "retrieved", "traced", "verified", "blocked"];
 var FAILURE_CHECKS = ["before-effect", "after-effect", "retry-idempotency", "compensation", "acknowledgement", "consumer-visibility"];
 var MAX_FINDINGS = 32;
 var MAX_INPUT_CHARS = 64e3;
-var hash = (text3) => createHash7("sha256").update(text3).digest("hex");
-var id2 = (prefix) => `${prefix}_${randomUUID5()}`;
+var hash = (text2) => createHash6("sha256").update(text2).digest("hex");
+var id = (prefix) => `${prefix}_${randomUUID3()}`;
 var validId = (value, prefix) => new RegExp(`^${prefix}_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`, "u").test(value);
 var boundedInteger = (value, fallback, min, max) => {
   const result = value ?? fallback;
   if (!Number.isSafeInteger(result) || result < min || result > max) throw new Error("review option/budget is out of bounds");
   return result;
 };
-var text2 = (maxLength = 2e3) => ({ type: "string", minLength: 1, maxLength });
+var text = (maxLength = 2e3) => ({ type: "string", minLength: 1, maxLength });
 var integer2 = (minimum, maximum) => ({ type: "integer", minimum, maximum });
 var enumeration = (values) => ({ type: "string", enum: [...values] });
-var array3 = (items, maxItems, minItems = 0) => ({ type: "array", items, minItems, maxItems });
-var object4 = (properties, required = Object.keys(properties)) => ({ type: "object", properties, required: [...required], additionalProperties: false });
-var evidenceSchema = () => object4({
-  path: text2(512),
+var array2 = (items, maxItems, minItems = 0) => ({ type: "array", items, minItems, maxItems });
+var object3 = (properties, required = Object.keys(properties)) => ({ type: "object", properties, required: [...required], additionalProperties: false });
+var evidenceSchema = () => object3({
+  path: text(512),
   startLine: integer2(1, 2e6),
   endLine: integer2(1, 2e6),
   kind: enumeration(["source", "static-proof", "test", "probe"]),
-  rationale: text2(),
-  expectedSha256: text2(64)
+  rationale: text(),
+  expectedSha256: text(64)
 }, ["path", "startLine", "endLine", "kind", "rationale"]);
-var evidences = () => array3(evidenceSchema(), 8);
-var pages = () => object4({ taskId: text2(41), offset: integer2(0, 1e3), limit: integer2(1, 50) }, ["taskId"]);
+var evidences = () => array2(evidenceSchema(), 8);
+var pages = () => object3({ taskId: text(41), offset: integer2(0, 1e3), limit: integer2(1, 50) }, ["taskId"]);
 var descriptors = () => [
-  { name: "begin", description: "Begin an ephemeral task. paths are execution-path IDs, not filenames. Adds per-path default scenario and role/edge obligations; no source reads or execution.", inputSchema: object4({ objective: text2(1e3), paths: array3(text2(120), 8, 1), scenarios: array3(text2(120), 4) }, ["objective", "paths"]), risk: "write", effect: { kind: "write" } },
-  { name: "update", description: "Replace one in-memory obligation. Host-read evidence; traced needs note, verified needs contract and proof, blocked needs reason and nextAction. No semantic judgment.", inputSchema: object4({ taskId: text2(41), obligationId: text2(41), status: enumeration(COVERAGE), evidence: evidences(), note: text2(), contract: text2(), blocker: object4({ reason: text2(), nextAction: text2() }) }, ["taskId", "obligationId", "status"]), risk: "write", effect: { kind: "write" } },
-  { name: "finding", description: "Admit or replace a structured finding. Severity is independent of confidence. Confirmed is structural admission only; counterexamples/assumptions can prevent it. Never runs code.", inputSchema: object4({ taskId: text2(41), findingId: text2(41), title: text2(300), requestedStatus: enumeration(["candidate", "confirmed", "conditional", "disproved"]), severity: enumeration(["critical", "high", "medium", "low", "info"]), confidence: enumeration(["high", "medium", "low"]), caller: text2(), trigger: text2(), expectedContract: text2(), actualAction: text2(), consequence: text2(), evidence: evidences(), counterexample: object4({ verdict: enumeration(["not-checked", "survived", "disproved", "conditional"]), method: enumeration(["static-proof", "test", "probe"]), description: text2(), evidence: evidences() }), unresolvedAssumptions: array3(text2(), 8) }, ["taskId", "title", "requestedStatus", "severity", "confidence", "caller", "trigger", "expectedContract", "actualAction", "consequence", "evidence", "counterexample", "unresolvedAssumptions"]), risk: "write", effect: { kind: "write" } },
+  { name: "begin", description: "Begin an ephemeral task. paths are execution-path IDs, not filenames. Adds per-path default scenario and role/edge obligations; no source reads or execution.", inputSchema: object3({ objective: text(1e3), paths: array2(text(120), 8, 1), scenarios: array2(text(120), 4) }, ["objective", "paths"]), risk: "write", effect: { kind: "write" } },
+  { name: "update", description: "Replace one in-memory obligation. Host-read evidence; traced needs note, verified needs contract and proof, blocked needs reason and nextAction. No semantic judgment.", inputSchema: object3({ taskId: text(41), obligationId: text(41), status: enumeration(COVERAGE), evidence: evidences(), note: text(), contract: text(), blocker: object3({ reason: text(), nextAction: text() }) }, ["taskId", "obligationId", "status"]), risk: "write", effect: { kind: "write" } },
+  { name: "finding", description: "Admit or replace a structured finding. Severity is independent of confidence. Confirmed is structural admission only; counterexamples/assumptions can prevent it. Never runs code.", inputSchema: object3({ taskId: text(41), findingId: text(41), title: text(300), requestedStatus: enumeration(["candidate", "confirmed", "conditional", "disproved"]), severity: enumeration(["critical", "high", "medium", "low", "info"]), confidence: enumeration(["high", "medium", "low"]), caller: text(), trigger: text(), expectedContract: text(), actualAction: text(), consequence: text(), evidence: evidences(), counterexample: object3({ verdict: enumeration(["not-checked", "survived", "disproved", "conditional"]), method: enumeration(["static-proof", "test", "probe"]), description: text(), evidence: evidences() }), unresolvedAssumptions: array2(text(), 8) }, ["taskId", "title", "requestedStatus", "severity", "confidence", "caller", "trigger", "expectedContract", "actualAction", "consequence", "evidence", "counterexample", "unresolvedAssumptions"]), risk: "write", effect: { kind: "write" } },
   { name: "status", description: "Read a bounded page of last-known in-memory coverage/findings. No source reads or mutations; last-reconciled is not a current freshness guarantee. Ready is advisory only.", inputSchema: pages(), risk: "read", effect: { kind: "none" } },
   { name: "reconcile", description: "Explicit approved mutation: reread all evidence, invalidate stale coverage and downgrade stale findings, return paged unresolved IDs. Does not execute tools, prove semantics, or force a final answer.", inputSchema: pages(), risk: "write", effect: { kind: "write" } },
-  { name: "end", description: "Discard one in-memory task regardless of readiness; no durable state or automatic final answer.", inputSchema: object4({ taskId: text2(41) }), risk: "write", effect: { kind: "write" } }
+  { name: "end", description: "Discard one in-memory task regardless of readiness; no durable state or automatic final answer.", inputSchema: object3({ taskId: text(41) }), risk: "write", effect: { kind: "write" } }
 ];
 var ReviewSourceQuotaError = class extends Error {
 };
@@ -24373,7 +13962,7 @@ var ReviewProvider = class {
   #maxSessionChars;
   #taskTtlMs;
   #expiresAt;
-  #scope = `review:${randomUUID5()}`;
+  #scope = `review:${randomUUID3()}`;
   #descriptors = descriptors();
   #tasks = /* @__PURE__ */ new Map();
   #timers = /* @__PURE__ */ new Map();
@@ -24382,7 +13971,7 @@ var ReviewProvider = class {
   constructor(options) {
     const allowed = ["root", "maxResultChars", "maxTasks", "maxTaskChars", "maxSessionChars", "taskTtlMs", "sessionTtlMs", "sourceSnapshot", "now"];
     if (!options || Object.keys(options).some((key) => !allowed.includes(key))) throw new Error("Invalid review options");
-    if (typeof options.root !== "string" || !path9.isAbsolute(options.root) || path9.resolve(options.root) !== options.root || options.root.includes("\0")) throw new Error("review root must be canonical and absolute");
+    if (typeof options.root !== "string" || !path5.isAbsolute(options.root) || path5.resolve(options.root) !== options.root || options.root.includes("\0")) throw new Error("review root must be canonical and absolute");
     this.#root = options.root;
     this.#maxResultChars = Math.min(32e3, boundedInteger(options.maxResultChars, 16e3, 1e3, 8e6));
     this.#maxTasks = boundedInteger(options.maxTasks, 16, 1, 64);
@@ -24392,7 +13981,7 @@ var ReviewProvider = class {
     const sessionTtlMs = boundedInteger(options.sessionTtlMs, 288e5, 1, 864e5);
     if (options.now !== void 0 && typeof options.now !== "function") throw new Error("Invalid review clock");
     if (options.sourceSnapshot !== void 0 && typeof options.sourceSnapshot !== "function") throw new Error("Invalid review snapshot reader");
-    this.#now = options.now ?? (() => performance4.now());
+    this.#now = options.now ?? (() => performance2.now());
     const now = this.#now();
     if (!Number.isFinite(now)) throw new Error("Invalid review clock");
     this.#expiresAt = now + sessionTtlMs;
@@ -24506,9 +14095,9 @@ var ReviewProvider = class {
     const extras = (args.scenarios ?? []).map((value) => value.trim());
     if (new Set(extras).size !== extras.length) throw new Error("Duplicate review scenarios");
     const scenarios = [.../* @__PURE__ */ new Set([...DEFAULT_SCENARIOS, ...extras])];
-    const task = { taskId: id2("task"), objective: args.objective, revision: 1, expiresAt: Math.min(this.#expiresAt, this.#now() + this.#taskTtlMs), reconciled: false, obligations: [], findings: [] };
+    const task = { taskId: id("task"), objective: args.objective, revision: 1, expiresAt: Math.min(this.#expiresAt, this.#now() + this.#taskTtlMs), reconciled: false, obligations: [], findings: [] };
     const add = (target) => {
-      task.obligations.push({ type: "obligation", id: id2("obl"), ...target, status: "unknown", evidence: [], note: null, contract: null, blocker: null, stale: false });
+      task.obligations.push({ type: "obligation", id: id("obl"), ...target, status: "unknown", evidence: [], note: null, contract: null, blocker: null, stale: false });
     };
     for (const pathId of paths) {
       add({ kind: "path", pathId });
@@ -24538,10 +14127,10 @@ var ReviewProvider = class {
     return source;
   }
   #file(input) {
-    if (input.includes("\0") || input.includes("\\") || path9.isAbsolute(input) || input.split("/").some((part) => part === ".." || part === "." || part === "")) throw new Error("review evidence path must be normalized workspace-relative, without traversal");
-    const relative = path9.relative(this.#root, path9.resolve(this.#root, input));
-    if (!relative || relative.startsWith("..") || path9.isAbsolute(relative)) throw new Error("review evidence path is outside workspace");
-    return relative.split(path9.sep).join("/");
+    if (input.includes("\0") || input.includes("\\") || path5.isAbsolute(input) || input.split("/").some((part) => part === ".." || part === "." || part === "")) throw new Error("review evidence path must be normalized workspace-relative, without traversal");
+    const relative = path5.relative(this.#root, path5.resolve(this.#root, input));
+    if (!relative || relative.startsWith("..") || path5.isAbsolute(relative)) throw new Error("review evidence path is outside workspace");
+    return relative.split(path5.sep).join("/");
   }
   #capture(inputs, context, cache) {
     return inputs.map((input) => {
@@ -24589,7 +14178,7 @@ var ReviewProvider = class {
     if (index < 0 && task.findings.length >= MAX_FINDINGS) throw new Error("review finding quota exceeded");
     const cache = /* @__PURE__ */ new Map();
     const { taskId: _taskId, findingId: _findingId, ...fields } = args;
-    const finding = { ...fields, type: "finding", id: args.findingId ?? id2("find"), status: "candidate", evidence: this.#capture(args.evidence, context, cache), counterexample: { ...args.counterexample, evidence: this.#capture(args.counterexample.evidence, context, cache) }, admissionReasons: [], needsDowngrade: false };
+    const finding = { ...fields, type: "finding", id: args.findingId ?? id("find"), status: "candidate", evidence: this.#capture(args.evidence, context, cache), counterexample: { ...args.counterexample, evidence: this.#capture(args.counterexample.evidence, context, cache) }, admissionReasons: [], needsDowngrade: false };
     this.#admit(finding);
     if (index < 0) task.findings.push(finding);
     else task.findings[index] = finding;
@@ -24677,20 +14266,35 @@ var ReviewProvider = class {
 };
 
 // src/providers/web-provider.ts
-import fs8 from "node:fs";
-import path10 from "node:path";
-import { execFile as execFile2 } from "node:child_process";
+import fs4 from "node:fs";
+import path6 from "node:path";
+import { execFile } from "node:child_process";
 
 // src/providers/web-snippets.ts
 var pageSnippet = (url, expression, wait, settleMs, timeoutMs) => `
 let targetId, sessionId, browserContextId, expired = false, timer;
+let creation, creating = false, tabCleanup, contextCleanup, tabClosed = false, contextDisposed = false;
+let result, failure, failed = false;
+// pageBudget reserves one quarter of the total budget, i.e. one third
+// of this page budget, capped at 1s. Cleanup gets a separate bounded grace.
+const cleanupGraceMs = ${Math.max(1, Math.min(1e3, Math.floor(timeoutMs / 3)))};
 const check = () => { if (expired) throw new Error("Web page deadline expired"); };
+const create = (operation) => {
+  creating = true;
+  creation = Promise.resolve().then(operation).finally(() => { creating = false; });
+  return creation;
+};
 const close = () => {
-  if (targetId) session.closeTab(targetId, sessionId).catch(() => {});
-  if (browserContextId) session.Target.disposeBrowserContext({ browserContextId }).catch(() => {});
+  // Start both independently: a stuck tab close must not prevent disposal.
+  // Observe synchronous throws and rejections; never expose daemon diagnostics.
+  if (targetId && !tabCleanup) tabCleanup = Promise.resolve().then(() => session.closeTab(targetId, sessionId))
+    .then(() => { tabClosed = true; }, () => {});
+  if (browserContextId && !contextCleanup) contextCleanup = Promise.resolve().then(() => session.Target.disposeBrowserContext({ browserContextId }))
+    .then(() => { contextDisposed = true; }, () => {});
+  return Promise.all([tabCleanup, contextCleanup]);
 };
 try {
-  return await Promise.race([
+  result = await Promise.race([
     new Promise((_, reject) => { timer = setTimeout(() => { expired = true; reject(new Error("Web page timed out")); }, ${timeoutMs}); }),
     (async () => {
       if (!session.isConnected()) {
@@ -24700,13 +14304,13 @@ try {
       check();
       // Private storage/cookies per call. Unsupported transports must fail;
       // never silently fall back to the user's authenticated default profile.
-      const isolated = await session.Target.createBrowserContext({ disposeOnDetach: true });
+      const isolated = await create(() => session.Target.createBrowserContext({ disposeOnDetach: true }));
       browserContextId = isolated.browserContextId;
       if (typeof browserContextId !== "string" || !browserContextId) throw new Error("Private browser context unavailable");
-      if (expired) { close(); check(); }
-      const target = await session.Target.createTarget({ url: "about:blank", background: true, browserContextId });
+      if (expired) { await close(); check(); }
+      const target = await create(() => session.Target.createTarget({ url: "about:blank", background: true, browserContextId }));
       targetId = target.targetId;
-      if (expired) { close(); check(); }
+      if (expired) { await close(); check(); }
       ({ sessionId } = await session.Target.attachToTarget({ targetId, flatten: true }));
       check();
       await cdp(sessionId, "Page.enable", {});
@@ -24714,12 +14318,12 @@ try {
       await cdp(sessionId, "Page.setLifecycleEventsEnabled", { enabled: true });
       check();
       const wait = ${JSON.stringify(wait)};
-      const ready = wait === "load"
+      const ready = Promise.resolve().then(() => wait === "load"
         ? session.waitFor({ method: "Page.loadEventFired", sessionId, timeoutMs: ${timeoutMs} })
-        : session.waitFor({ method: "Page.lifecycleEvent", sessionId, predicate: (p) => p.name === (wait === "almostIdle" ? "networkAlmostIdle" : "networkIdle"), timeoutMs: ${timeoutMs} });
+        : session.waitFor({ method: "Page.lifecycleEvent", sessionId, predicate: (p) => p.name === (wait === "almostIdle" ? "networkAlmostIdle" : "networkIdle"), timeoutMs: ${timeoutMs} }));
       // Observe both promises immediately, including navigation failure. Do not
       // leave a rejected readiness promise unhandled in the shared daemon.
-      await Promise.all([ready, cdp(sessionId, "Page.navigate", { url: ${JSON.stringify(url)} }).then((navigation) => {
+      await Promise.all([ready, Promise.resolve().then(() => cdp(sessionId, "Page.navigate", { url: ${JSON.stringify(url)} })).then((navigation) => {
         if (navigation.errorText) throw new Error("Web navigation failed: " + navigation.errorText);
       })]);
       check();
@@ -24733,10 +14337,31 @@ try {
       return JSON.parse(evaluated.result.value);
     })(),
   ]);
+} catch (error) {
+  failed = true;
+  failure = error;
 } finally {
   clearTimeout(timer);
-  close();
 }
+let cleanupTimer;
+try {
+  await Promise.race([
+    // A creation already in flight may publish an owned ID after timeout.
+    // Keep this observer alive after grace expires, without blocking return.
+    Promise.all([close(), creation?.then(() => close(), () => close())]),
+    new Promise((resolve) => { cleanupTimer = setTimeout(resolve, cleanupGraceMs); }),
+  ]);
+} finally {
+  clearTimeout(cleanupTimer);
+}
+const uncertainty = [
+  creating ? "private resource creation still pending" : "",
+  targetId && !tabClosed ? "tab closure unconfirmed" : "",
+  browserContextId && !contextDisposed ? "private context disposal unconfirmed" : "",
+].filter(Boolean).join("; ");
+if (uncertainty) throw new Error((failed ? String(failure?.message || failure) + "; " : "") + "Web cleanup uncertain: " + uncertainty);
+if (failed) throw failure;
+return result;
 `;
 var webSearchSnippet = (query, limit, timeoutMs) => pageSnippet(
   "https://www.google.com/search?hl=en&q=" + encodeURIComponent(query) + "&num=" + limit,
@@ -24816,7 +14441,7 @@ function assertPublicWebInput(input) {
 
 // src/providers/web-provider.ts
 var jsonTree = (value) => JSON.parse(JSON.stringify(value));
-var object5 = (properties, required = []) => jsonTree({ type: "object", properties, required, additionalProperties: false });
+var object4 = (properties, required = []) => jsonTree({ type: "object", properties, required, additionalProperties: false });
 var string2 = { type: "string" };
 var boolean2 = { type: "boolean" };
 var integer3 = { type: "integer", minimum: 0 };
@@ -24830,11 +14455,11 @@ var DEFAULT_OPEN_TIMEOUT_MS = 45e3;
 var DEFAULT_OPEN_SELECTOR = "article, main, [role=main]";
 var MISSING_BROWSER_HARNESS = "browser-harness-js is required for web.search/web.open but was not found";
 var rawSchemas = {
-  search: object5({
+  search: object4({
     query: { type: "string", minLength: 1, maxLength: WEB_QUERY_MAX },
     limit: { type: "integer", minimum: 1, maximum: WEB_SEARCH_LIMIT_MAX }
   }, ["query"]),
-  open: object5({
+  open: object4({
     url: { type: "string", minLength: 1, maxLength: WEB_URL_MAX },
     selector: { type: "string", minLength: 1, maxLength: WEB_SELECTOR_MAX },
     wait: { enum: ["networkIdle", "almostIdle", "load"] },
@@ -24843,12 +14468,12 @@ var rawSchemas = {
   }, ["url"])
 };
 var outputSchemas = {
-  search: object5({
+  search: object4({
     source: { const: "google" },
     query: string2,
-    results: { type: "array", maxItems: WEB_SEARCH_LIMIT_MAX, items: object5({ title: string2, url: string2, snippet: string2 }, ["title", "url", "snippet"]) }
+    results: { type: "array", maxItems: WEB_SEARCH_LIMIT_MAX, items: object4({ title: string2, url: string2, snippet: string2 }, ["title", "url", "snippet"]) }
   }, ["source", "query", "results"]),
-  open: object5({
+  open: object4({
     url: string2,
     finalUrl: string2,
     title: string2,
@@ -24858,13 +14483,13 @@ var outputSchemas = {
     selector: string2
   }, ["url", "finalUrl", "title", "text", "chars", "truncated", "selector"])
 };
-var descriptions2 = {
+var descriptions = {
   search: "Browser-backed Google web search through browser-harness-js/CDP. Opens an isolated background tab in a fresh private Chromium context (no default-profile cookies), returns bounded {title,url,snippet} results, and closes the tab. Use to ground current/open-world facts before relying on memory or stale training data. Requires browser-harness-js on PATH and a Chromium browser with remote debugging and private-context support available. Network risk; read-only open-world emission.",
   open: "Open one http(s) URL through browser-harness-js/CDP and extract bounded readable text from article/main/[role=main] or a caller-supplied selector. Use after web.search to inspect a source page that may block curl/simple HTTP clients. Closes the isolated tab. Network risk; read-only open-world emission."
 };
 var descriptors2 = Object.keys(rawSchemas).map((name) => ({
   name,
-  description: descriptions2[name],
+  description: descriptions[name],
   inputSchema: rawSchemas[name],
   outputSchema: outputSchemas[name],
   risk: "network",
@@ -24872,11 +14497,11 @@ var descriptors2 = Object.keys(rawSchemas).map((name) => ({
   effect: { kind: "emission", resources: [name === "search" ? "web:google-search" : "web:open-url"] },
   annotations: { title: name === "search" ? "Search the web" : "Open a web page", readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true }
 }));
-var isRecord5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-var errorCode2 = (error) => isRecord5(error) && typeof error.code === "string" ? error.code : void 0;
+var isRecord4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var errorCode2 = (error) => isRecord4(error) && typeof error.code === "string" ? error.code : void 0;
 var clip = (value, maximum) => (typeof value === "string" ? value : value == null ? "" : String(value)).slice(0, maximum);
 var squish = (value, maximum) => clip(value, maximum).replace(/\s+/gu, " ").trim();
-var pathDirectories = () => (process.env.PATH ?? "").split(path10.delimiter).filter((entry) => path10.isAbsolute(entry));
+var pathDirectories = () => (process.env.PATH ?? "").split(path6.delimiter).filter((entry) => path6.isAbsolute(entry));
 var browserHarnessEnvironment = () => {
   const env = {};
   for (const key of [
@@ -24901,13 +14526,13 @@ var browserHarnessEnvironment = () => {
   ]) {
     if (process.env[key] !== void 0) env[key] = process.env[key];
   }
-  env.PATH = pathDirectories().join(path10.delimiter);
+  env.PATH = pathDirectories().join(path6.delimiter);
   return env;
 };
 function verifyBrowserHarnessExecutable(executable) {
   let stat;
   try {
-    stat = fs8.lstatSync(executable.path);
+    stat = fs4.lstatSync(executable.path);
   } catch (error) {
     if (errorCode2(error) === "ENOENT") throw new Error(MISSING_BROWSER_HARNESS);
     throw error;
@@ -24917,20 +14542,20 @@ function verifyBrowserHarnessExecutable(executable) {
   }
 }
 var executableCandidate = (target) => {
-  const real = fs8.realpathSync(target);
-  const stat = fs8.lstatSync(real);
+  const real = fs4.realpathSync(target);
+  const stat = fs4.lstatSync(real);
   const executable = { path: real, dev: stat.dev, ino: stat.ino };
   verifyBrowserHarnessExecutable(executable);
   return executable;
 };
 function resolveBrowserHarnessExecutable(command = "browser-harness-js") {
-  if (path10.isAbsolute(command)) return executableCandidate(command);
+  if (path6.isAbsolute(command)) return executableCandidate(command);
   if (!command.trim() || command.includes("\0") || command.includes("/") || command.includes("\\")) {
     throw new Error("browser-harness-js command must be absolute or a bare executable name");
   }
-  for (const directory2 of pathDirectories()) {
+  for (const directory of pathDirectories()) {
     try {
-      return executableCandidate(path10.join(directory2, command));
+      return executableCandidate(path6.join(directory, command));
     } catch (error) {
       const code2 = errorCode2(error);
       if (["ENOENT", "ENOTDIR"].includes(code2 ?? "")) continue;
@@ -24946,8 +14571,8 @@ var runBrowserHarness = async (options) => {
   const remaining = options.deadline ? Math.floor(options.deadline.remainingMs()) : options.timeoutMs;
   const timeoutMs = Math.max(1, Math.min(options.timeoutMs, remaining));
   return await new Promise((resolve, reject) => {
-    execFile2(options.executable.path, [options.code], {
-      cwd: path10.dirname(options.executable.path),
+    execFile(options.executable.path, [options.code], {
+      cwd: path6.dirname(options.executable.path),
       env: browserHarnessEnvironment(),
       encoding: "utf8",
       timeout: timeoutMs,
@@ -24971,14 +14596,14 @@ var runBrowserHarness = async (options) => {
   });
 };
 var jsonFromHarness = async (options, action) => {
-  const text3 = await runBrowserHarness(options);
+  const text2 = await runBrowserHarness(options);
   let parsed;
   try {
-    parsed = JSON.parse(text3);
+    parsed = JSON.parse(text2);
   } catch {
     throw new Error(`browser-harness-js returned invalid JSON for web.${action}`);
   }
-  if (!isRecord5(parsed)) throw new Error(`browser-harness-js returned invalid result for web.${action}`);
+  if (!isRecord4(parsed)) throw new Error(`browser-harness-js returned invalid result for web.${action}`);
   return parsed;
 };
 var normalizeHttpUrl = (value) => {
@@ -24992,9 +14617,9 @@ var normalizeHttpUrl = (value) => {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("web.open url must use http or https");
   if (parsed.username || parsed.password) throw new Error("web.open url must not contain credentials");
   assertPublicWebInput(value);
-  const text3 = parsed.toString();
-  if (text3.length > WEB_URL_MAX) throw new Error("web.open normalized URL is too long");
-  return text3;
+  const text2 = parsed.toString();
+  if (text2.length > WEB_URL_MAX) throw new Error("web.open normalized URL is too long");
+  return text2;
 };
 var MAX_PAGE_CLEANUP_HEADROOM_MS = 1e3;
 var pageBudget = (timeoutMs, context) => {
@@ -25084,7 +14709,7 @@ var WebProvider = class {
     }, "search");
     if (!Array.isArray(raw.results)) throw new Error("browser-harness-js returned invalid results for web.search");
     const results = raw.results.slice(0, limit).map((item) => {
-      const record4 = isRecord5(item) ? item : {};
+      const record4 = isRecord4(item) ? item : {};
       return { title: squish(record4.title, 300), url: typeof record4.url === "string" && record4.url.length <= WEB_URL_MAX ? record4.url : "", snippet: squish(record4.snippet, 600) };
     }).filter((item) => {
       try {
@@ -25111,15 +14736,15 @@ var WebProvider = class {
       ...context.deadline ? { deadline: context.deadline } : {}
     }, "open");
     if (typeof raw.text !== "string" || typeof raw.finalUrl !== "string" || typeof raw.title !== "string") throw new Error("browser-harness-js returned invalid result for web.open");
-    const text3 = clip(raw.text, maxChars);
-    const chars = Number.isSafeInteger(raw.chars) && raw.chars >= 0 ? raw.chars : text3.length;
+    const text2 = clip(raw.text, maxChars);
+    const chars = Number.isSafeInteger(raw.chars) && raw.chars >= 0 ? raw.chars : text2.length;
     return {
       url,
       finalUrl: normalizeHttpUrl(raw.finalUrl),
       title: squish(raw.title, 500),
-      text: text3,
+      text: text2,
       chars,
-      truncated: raw.truncated === true || chars > text3.length,
+      truncated: raw.truncated === true || chars > text2.length,
       selector
     };
   }
@@ -25127,8 +14752,8 @@ var WebProvider = class {
 
 // src/providers/state-provider.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
-import fs9 from "node:fs";
-import path11 from "node:path";
+import fs5 from "node:fs";
+import path7 from "node:path";
 var emptyEntries = () => /* @__PURE__ */ Object.create(null);
 var emptyDocument = () => ({ schemaVersion: 1, revision: 0, entries: emptyEntries() });
 var KEY_MAX = 512;
@@ -25141,14 +14766,14 @@ var descriptors3 = [
   { name: "list", description: "List bounded workspace state metadata", inputSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 1e3 } }, additionalProperties: false }, risk: "read", effect: { kind: "read" } },
   { name: "delete", description: "Atomically delete one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX }, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } }
 ];
-var isRecord6 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var hasExactKeys = (value, keys) => {
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
   return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
 };
-var errorCode3 = (error) => isRecord6(error) && typeof error.code === "string" ? error.code : void 0;
-var delay2 = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+var errorCode3 = (error) => isRecord5(error) && typeof error.code === "string" ? error.code : void 0;
+var delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 var processIsAlive = (pid) => {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
@@ -25161,16 +14786,16 @@ var processIsAlive = (pid) => {
   }
 };
 var privateRoot = (root) => {
-  fs9.mkdirSync(root, { recursive: true, mode: 448 });
-  const stat = fs9.lstatSync(root);
+  fs5.mkdirSync(root, { recursive: true, mode: 448 });
+  const stat = fs5.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error("state root must be a private regular directory");
   }
   if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new Error("state root must be owned by the current user");
   }
-  fs9.chmodSync(root, 448);
-  return fs9.realpathSync(root);
+  fs5.chmodSync(root, 448);
+  return fs5.realpathSync(root);
 };
 var StateCommitAcknowledgementError = class extends Error {
   constructor(revision, options, operation = "set") {
@@ -25196,8 +14821,8 @@ var StateProvider = class {
   #uncertainLock = false;
   constructor(root, options = {}) {
     this.#root = privateRoot(root);
-    this.#file = path11.join(this.#root, "state.json");
-    this.#lock = path11.join(this.#root, LOCK_NAME);
+    this.#file = path7.join(this.#root, "state.json");
+    this.#lock = path7.join(this.#root, LOCK_NAME);
     this.#maxEntries = options.maxEntries ?? 1e3;
     this.#maxValueChars = options.maxValueChars ?? 1e5;
     this.#maxTotalChars = options.maxTotalChars ?? 8e6;
@@ -25276,15 +14901,15 @@ var StateProvider = class {
   #read() {
     let descriptor2;
     try {
-      const lexicalStats = fs9.lstatSync(this.#file);
+      const lexicalStats = fs5.lstatSync(this.#file);
       if (!lexicalStats.isFile() || lexicalStats.isSymbolicLink() || lexicalStats.nlink !== 1) {
         throw new Error("state file is not a private regular file");
       }
-      descriptor2 = fs9.openSync(
+      descriptor2 = fs5.openSync(
         this.#file,
-        fs9.constants.O_RDONLY | (fs9.constants.O_NOFOLLOW ?? 0)
+        fs5.constants.O_RDONLY | (fs5.constants.O_NOFOLLOW ?? 0)
       );
-      const stat = fs9.fstatSync(descriptor2);
+      const stat = fs5.fstatSync(descriptor2);
       if (!stat.isFile() || stat.nlink !== 1 || stat.dev !== lexicalStats.dev || stat.ino !== lexicalStats.ino) {
         throw new Error("state file changed while it was being opened");
       }
@@ -25295,17 +14920,17 @@ var StateProvider = class {
         if ((stat.mode & 63) !== 0) throw new Error("state file permissions must be private");
       }
       if (stat.size > this.#maxTotalChars * 4) throw new Error("state document exceeds configured bounds");
-      const text3 = fs9.readFileSync(descriptor2, "utf8");
-      if (text3.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
-      const parsed = JSON.parse(text3);
-      if (!isRecord6(parsed) || !hasExactKeys(parsed, ["schemaVersion", "revision", "entries"]) || parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) || parsed.revision < 0 || !isRecord6(parsed.entries)) {
+      const text2 = fs5.readFileSync(descriptor2, "utf8");
+      if (text2.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
+      const parsed = JSON.parse(text2);
+      if (!isRecord5(parsed) || !hasExactKeys(parsed, ["schemaVersion", "revision", "entries"]) || parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) || parsed.revision < 0 || !isRecord5(parsed.entries)) {
         throw new Error("state file is malformed");
       }
       const entries = parsed.entries;
       if (Object.keys(entries).length > this.#maxEntries) throw new Error("state entry limit reached");
       const normalizedEntries = emptyEntries();
       for (const [key, entry] of Object.entries(entries)) {
-        if (key.length < 1 || key.length > KEY_MAX || !isRecord6(entry) || !hasExactKeys(entry, ["revision", "value", "updatedAt"]) || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || entry.revision > parsed.revision || !Number.isSafeInteger(entry.updatedAt) || entry.updatedAt < 0) {
+        if (key.length < 1 || key.length > KEY_MAX || !isRecord5(entry) || !hasExactKeys(entry, ["revision", "value", "updatedAt"]) || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || entry.revision > parsed.revision || !Number.isSafeInteger(entry.updatedAt) || entry.updatedAt < 0) {
           throw new Error("state file is malformed");
         }
         const value = JSON.stringify(entry.value);
@@ -25323,40 +14948,40 @@ var StateProvider = class {
       if (errorCode3(error) === "ENOENT") return emptyDocument();
       throw error;
     } finally {
-      if (descriptor2 !== void 0) fs9.closeSync(descriptor2);
+      if (descriptor2 !== void 0) fs5.closeSync(descriptor2);
     }
   }
   #write(document, beforeCommit) {
-    const text3 = `${JSON.stringify(document, null, 2)}
+    const text2 = `${JSON.stringify(document, null, 2)}
 `;
-    if (text3.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
-    const temporary = path11.join(
+    if (text2.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
+    const temporary = path7.join(
       this.#root,
       `.state-${process.pid}-${randomBytes3(8).toString("hex")}.tmp`
     );
     const owned = { created: false };
     try {
       initializeOwnedFile(temporary, owned, (descriptor2) => {
-        fs9.writeFileSync(descriptor2, text3);
-        fs9.fchmodSync(descriptor2, 384);
-        fs9.fsyncSync(descriptor2);
+        fs5.writeFileSync(descriptor2, text2);
+        fs5.fchmodSync(descriptor2, 384);
+        fs5.fsyncSync(descriptor2);
       });
       beforeCommit();
-      const current = fs9.lstatSync(temporary);
+      const current = fs5.lstatSync(temporary);
       if (!owned.identity || !current.isFile() || current.isSymbolicLink() || current.dev !== owned.identity.dev || current.ino !== owned.identity.ino) {
         throw new Error("uncertain state temporary publication: replacement preserved");
       }
-      fs9.renameSync(temporary, this.#file);
+      fs5.renameSync(temporary, this.#file);
     } catch (error) {
       if (owned.created) {
         try {
           if (!owned.identity) throw new Error("uncertain state temporary ownership; operator recovery required");
           try {
-            const current = fs9.lstatSync(temporary);
+            const current = fs5.lstatSync(temporary);
             if (!current.isFile() || current.isSymbolicLink() || current.dev !== owned.identity.dev || current.ino !== owned.identity.ino) {
               throw new Error("uncertain state temporary cleanup: replacement preserved");
             }
-            fs9.rmSync(temporary);
+            fs5.rmSync(temporary);
           } catch (cleanup) {
             if (errorCode3(cleanup) !== "ENOENT") throw cleanup;
           }
@@ -25367,11 +14992,11 @@ var StateProvider = class {
       throw error;
     }
   }
-  #releaseLock(identity2) {
+  #releaseLock(identity) {
     try {
-      const current = fs9.lstatSync(this.#lock);
-      if (current.isFile() && !current.isSymbolicLink() && current.dev === identity2.dev && current.ino === identity2.ino) {
-        fs9.rmSync(this.#lock);
+      const current = fs5.lstatSync(this.#lock);
+      if (current.isFile() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) {
+        fs5.rmSync(this.#lock);
       } else {
         throw new Error("uncertain state lock cleanup: replacement lock preserved");
       }
@@ -25385,44 +15010,44 @@ var StateProvider = class {
    * live lock is restored rather than deleted. Returns true when the stale lock
    * was reclaimed and acquisition may be retried immediately. */
   #reclaimStaleLock(inspected) {
-    const quarantine = path11.join(this.#root, `${LOCK_NAME}.reclaim-${randomBytes3(12).toString("hex")}`);
+    const quarantine = path7.join(this.#root, `${LOCK_NAME}.reclaim-${randomBytes3(12).toString("hex")}`);
     try {
-      fs9.renameSync(this.#lock, quarantine);
+      fs5.renameSync(this.#lock, quarantine);
     } catch (error) {
       if (errorCode3(error) === "ENOENT") return true;
       throw error;
     }
     const moved = (() => {
       try {
-        return fs9.lstatSync(quarantine);
+        return fs5.lstatSync(quarantine);
       } catch (error) {
         if (errorCode3(error) === "ENOENT") return void 0;
         throw error;
       }
     })();
     if (moved && moved.isFile() && !moved.isSymbolicLink() && moved.dev === inspected.dev && moved.ino === inspected.ino) {
-      fs9.rmSync(quarantine);
+      fs5.rmSync(quarantine);
       return true;
     }
     try {
-      fs9.linkSync(quarantine, this.#lock);
+      fs5.linkSync(quarantine, this.#lock);
     } catch (error) {
       if (errorCode3(error) !== "EEXIST") {
         this.#uncertainLock = true;
         throw new Error("uncertain state lock reclamation; operator recovery required", { cause: error });
       }
     }
-    fs9.rmSync(quarantine);
+    fs5.rmSync(quarantine);
     return false;
   }
   async #withMutationLock(context, operation) {
     if (this.#uncertainLock) throw new Error("uncertain state lock ownership; operator recovery required");
     const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
-    let identity2;
+    let identity;
     let operationError;
     let failed = false;
     try {
-      while (!identity2) {
+      while (!identity) {
         throwIfAbortedOrExpired(context.signal, context.deadline);
         if (this.#pendingLockCleanup) {
           this.#releaseLock(this.#pendingLockCleanup);
@@ -25432,22 +15057,22 @@ var StateProvider = class {
           const owned = { created: false };
           try {
             initializeOwnedFile(this.#lock, owned, (descriptor2) => {
-              fs9.writeFileSync(descriptor2, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}
+              fs5.writeFileSync(descriptor2, `${JSON.stringify({ pid: process.pid, acquiredAt: Date.now() })}
 `);
-              fs9.fsyncSync(descriptor2);
+              fs5.fsyncSync(descriptor2);
             });
           } catch (error) {
             if (!owned.created) throw error;
             if (!owned.identity) this.#uncertainLock = true;
             throw new AggregateError([error], owned.identity ? "state lock initialization failure; ownership cleanup required" : "state lock initialization failure; uncertain ownership identity unavailable; operator recovery required", { cause: error });
           } finally {
-            identity2 = owned.identity;
+            identity = owned.identity;
           }
         } catch (error) {
-          if (identity2 || errorCode3(error) !== "EEXIST") throw error;
+          if (identity || errorCode3(error) !== "EEXIST") throw error;
           let stat;
           try {
-            stat = fs9.lstatSync(this.#lock);
+            stat = fs5.lstatSync(this.#lock);
           } catch (statError) {
             if (errorCode3(statError) === "ENOENT") continue;
             throw statError;
@@ -25456,7 +15081,7 @@ var StateProvider = class {
           if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
             let ownerPid = 0;
             try {
-              const owner = JSON.parse(fs9.readFileSync(this.#lock, "utf8"));
+              const owner = JSON.parse(fs5.readFileSync(this.#lock, "utf8"));
               if (typeof owner.pid === "number") ownerPid = owner.pid;
             } catch (cause) {
               throw new Error("uncertain state lock owner; operator recovery required", { cause });
@@ -25465,7 +15090,7 @@ var StateProvider = class {
             if (!processIsAlive(ownerPid) && this.#reclaimStaleLock(stat)) continue;
           }
           if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
-          await delay2(10);
+          await delay(10);
         }
       }
       throwIfAbortedOrExpired(context.signal, context.deadline);
@@ -25477,11 +15102,11 @@ var StateProvider = class {
       operationError = error;
       throw error;
     } finally {
-      if (identity2) {
+      if (identity) {
         try {
-          this.#releaseLock(identity2);
+          this.#releaseLock(identity);
         } catch (cleanup) {
-          this.#pendingLockCleanup = identity2;
+          this.#pendingLockCleanup = identity;
           if (failed) throw new AggregateError([operationError, cleanup], "state mutation and lock cleanup failed; lock replacement or removal is uncertain", { cause: operationError });
           throw cleanup;
         }
@@ -25491,7 +15116,7 @@ var StateProvider = class {
 };
 
 // src/providers/local-provider.ts
-import fs10 from "node:fs";
+import fs6 from "node:fs";
 
 // src/providers/local-edit.ts
 function applyLocalEdits(original, edits) {
@@ -25518,9 +15143,9 @@ function applyLocalEdits(original, edits) {
 }
 
 // src/providers/local-provider.ts
-import path12 from "node:path";
-import { randomUUID as randomUUID6 } from "node:crypto";
-import { execFile as execFile3 } from "node:child_process";
+import path8 from "node:path";
+import { randomUUID as randomUUID4 } from "node:crypto";
+import { execFile as execFile2 } from "node:child_process";
 
 // src/providers/local-read-many.ts
 var LocalReadFailure = class extends Error {
@@ -25642,15 +15267,15 @@ function formatLocalEvidence(result) {
 
 // src/providers/local-line-index.ts
 var LocalLineIndex = class {
-  constructor(text3) {
-    this.text = text3;
+  constructor(text2) {
+    this.text = text2;
     let count2 = 0;
-    for (let at = text3.indexOf("\n"); at !== -1; at = text3.indexOf("\n", at + 1)) count2++;
-    if (text3.length && !text3.endsWith("\n")) count2++;
+    for (let at = text2.indexOf("\n"); at !== -1; at = text2.indexOf("\n", at + 1)) count2++;
+    if (text2.length && !text2.endsWith("\n")) count2++;
     this.#ends = new Uint32Array(count2);
     let index = 0;
-    for (let at = text3.indexOf("\n"); at !== -1; at = text3.indexOf("\n", at + 1)) this.#ends[index++] = at + 1;
-    if (index < count2) this.#ends[index] = text3.length;
+    for (let at = text2.indexOf("\n"); at !== -1; at = text2.indexOf("\n", at + 1)) this.#ends[index++] = at + 1;
+    if (index < count2) this.#ends[index] = text2.length;
   }
   text;
   #ends;
@@ -25665,43 +15290,43 @@ var LocalLineIndex = class {
 
 // src/providers/local-provider.ts
 var jsonTree2 = (value) => JSON.parse(JSON.stringify(value));
-var object6 = (properties, required = []) => jsonTree2({ type: "object", properties, required, additionalProperties: false });
+var object5 = (properties, required = []) => jsonTree2({ type: "object", properties, required, additionalProperties: false });
 var string3 = { type: "string" };
 var boolean3 = { type: "boolean" };
 var integer4 = { type: "integer", minimum: 0 };
-var identitySchema = object6({ dev: integer4, ino: integer4 }, ["dev", "ino"]);
+var identitySchema = object5({ dev: integer4, ino: integer4 }, ["dev", "ino"]);
 var pathSchema = { type: "string", minLength: 1, maxLength: 4096 };
 var count = { type: "integer", minimum: 1, maximum: 1e3 };
-var searchScopeSchema = object6({ path: string3, glob: string3, hidden: boolean3, ignoreFiles: { const: true }, snapshotScope: { const: "query-v1" } }, ["path", "hidden", "ignoreFiles"]);
+var searchScopeSchema = object5({ path: string3, glob: string3, hidden: boolean3, ignoreFiles: { const: true }, snapshotScope: { const: "query-v1" } }, ["path", "hidden", "ignoreFiles"]);
 var truncationSchema = { type: "array", maxItems: 4, items: { enum: ["match-text", "count", "output", "oversized-files"] } };
 var VCS_METADATA = /* @__PURE__ */ new Set([".git", ".hg", ".svn"]);
-var metadataSchema = object6({ token: { type: "string", minLength: 36, maxLength: 36 }, beforeSha256: { type: ["string", "null"] }, afterSha256: string3, identity: { ...identitySchema, type: ["object", "null"] }, parentIdentity: identitySchema }, ["token"]);
-var readWindowSchema = object6({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2e3 }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]);
-var textEditSchema = object6({ oldText: { type: "string", minLength: 1, maxLength: LOCAL_MAX_FILE_BYTES }, newText: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, all: boolean3 }, ["oldText", "newText"]);
+var metadataSchema = object5({ token: { type: "string", minLength: 36, maxLength: 36 }, beforeSha256: { type: ["string", "null"] }, afterSha256: string3, identity: { ...identitySchema, type: ["object", "null"] }, parentIdentity: identitySchema }, ["token"]);
+var readWindowSchema = object5({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2e3 }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]);
+var textEditSchema = object5({ oldText: { type: "string", minLength: 1, maxLength: LOCAL_MAX_FILE_BYTES }, newText: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, all: boolean3 }, ["oldText", "newText"]);
 var rawSchemas2 = {
-  read: object6({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2e3 } }, ["path"]),
-  readMany: object6({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1e3, maximum: 4e4 }, partial: boolean3 }, ["windows"]),
-  readEvidence: object6({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1e3, maximum: 4e4 }, partial: boolean3 }, ["windows"]),
-  grep: object6({ pattern: { type: "string", maxLength: 2e3 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2e3 }, literal: boolean3, ignoreCase: boolean3, hidden: boolean3, limit: count, paginate: boolean3, snapshotScope: { enum: ["query-v1"] }, cursor: { type: "string", minLength: 36, maxLength: 36 } }, ["pattern"]),
-  find: object6({ pattern: { type: "string", minLength: 1, maxLength: 2e3 }, path: pathSchema, hidden: boolean3, limit: count, paginate: boolean3, snapshotScope: { enum: ["query-v1"] }, cursor: { type: "string", minLength: 36, maxLength: 36 } }, ["pattern"]),
-  list: object6({ path: pathSchema, limit: count }),
-  write: object6({ path: pathSchema, content: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, overwrite: boolean3 }, ["path", "content"]),
-  edit: object6({ path: pathSchema, ...textEditSchema.properties, edits: { type: "array", minItems: 1, maxItems: 100, items: textEditSchema }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]),
-  shell: object6({ command: { type: "string", minLength: 1, maxLength: 8e3 }, script: { type: "string", minLength: 1, maxLength: 8e3 }, interpreter: { enum: ["bash", "sh"] }, args: { type: "array", maxItems: 64, items: { type: "string", maxLength: 8e3 } }, cwd: pathSchema, timeoutMs: { type: "integer", minimum: 1, maximum: 9e5 }, settle: boolean3 })
+  read: object5({ path: pathSchema, offset: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }, limit: { type: "integer", minimum: 1, maximum: 2e3 } }, ["path"]),
+  readMany: object5({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1e3, maximum: 4e4 }, partial: boolean3 }, ["windows"]),
+  readEvidence: object5({ windows: { type: "array", minItems: 1, maxItems: 32, items: readWindowSchema }, maxChars: { type: "integer", minimum: 1e3, maximum: 4e4 }, partial: boolean3 }, ["windows"]),
+  grep: object5({ pattern: { type: "string", maxLength: 2e3 }, path: pathSchema, glob: { type: "string", minLength: 1, maxLength: 2e3 }, literal: boolean3, ignoreCase: boolean3, hidden: boolean3, limit: count, paginate: boolean3, snapshotScope: { enum: ["query-v1"] }, cursor: { type: "string", minLength: 36, maxLength: 36 } }, ["pattern"]),
+  find: object5({ pattern: { type: "string", minLength: 1, maxLength: 2e3 }, path: pathSchema, hidden: boolean3, limit: count, paginate: boolean3, snapshotScope: { enum: ["query-v1"] }, cursor: { type: "string", minLength: 36, maxLength: 36 } }, ["pattern"]),
+  list: object5({ path: pathSchema, limit: count }),
+  write: object5({ path: pathSchema, content: { type: "string", maxLength: LOCAL_MAX_FILE_BYTES }, overwrite: boolean3 }, ["path", "content"]),
+  edit: object5({ path: pathSchema, ...textEditSchema.properties, edits: { type: "array", minItems: 1, maxItems: 100, items: textEditSchema }, expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path"]),
+  shell: object5({ command: { type: "string", minLength: 1, maxLength: 8e3 }, script: { type: "string", minLength: 1, maxLength: 8e3 }, interpreter: { enum: ["bash", "sh"] }, args: { type: "array", maxItems: 64, items: { type: "string", maxLength: 8e3 } }, cwd: pathSchema, timeoutMs: { type: "integer", minimum: 1, maximum: 9e5 }, settle: boolean3 })
 };
-var mutationOutput = object6({ path: string3, changed: boolean3, sha256: string3, bytes: integer4, identity: identitySchema }, ["path", "changed", "sha256", "bytes", "identity"]);
+var mutationOutput = object5({ path: string3, changed: boolean3, sha256: string3, bytes: integer4, identity: identitySchema }, ["path", "changed", "sha256", "bytes", "identity"]);
 var outputSchemas2 = {
   readEvidence: string3,
-  read: object6({ path: string3, text: string3, totalLines: integer4, truncated: boolean3, nextOffset: { type: "integer", minimum: 1 }, sha256: string3, identity: identitySchema }, ["path", "text", "totalLines", "truncated", "sha256", "identity"]),
-  readMany: object6({ files: { type: "array", maxItems: 32, items: object6({ path: string3, startLine: { type: "integer", minimum: 1 }, endLine: { type: ["integer", "null"] }, totalLines: integer4, sha256: string3, source: string3, truncated: boolean3, nextOffset: { type: "integer", minimum: 1 } }, ["path", "startLine", "endLine", "totalLines", "sha256", "source", "truncated"]) }, remaining: { type: "array", maxItems: 32, items: readWindowSchema }, complete: boolean3, unreadTails: { type: "array", maxItems: 32, items: readWindowSchema }, failures: { type: "array", maxItems: 32, items: object6({ index: { type: "integer", minimum: 0, maximum: 31 }, path: string3, code: { enum: ["read", "stale-hash"] }, message: { type: "string", maxLength: 200 } }, ["index", "path", "code", "message"]) } }, ["files", "remaining", "complete", "unreadTails"]),
-  grep: object6({ scope: searchScopeSchema, matches: { type: "array", maxItems: 1e3, items: object6({ path: string3, line: { type: "integer", minimum: 1 }, text: { type: "string", maxLength: 500 } }, ["path", "line", "text"]) }, truncated: boolean3, truncationReasons: truncationSchema, nextCursor: string3 }, ["scope", "matches", "truncated"]),
-  find: object6({ scope: searchScopeSchema, paths: { type: "array", maxItems: 1e3, items: string3 }, truncated: boolean3, truncationReasons: truncationSchema, nextCursor: string3 }, ["scope", "paths", "truncated"]),
-  list: object6({ entries: { type: "array", maxItems: 1e3, items: object6({ path: string3, type: { enum: ["file", "directory"] } }, ["path", "type"]) }, truncated: boolean3 }, ["entries", "truncated"]),
+  read: object5({ path: string3, text: string3, totalLines: integer4, truncated: boolean3, nextOffset: { type: "integer", minimum: 1 }, sha256: string3, identity: identitySchema }, ["path", "text", "totalLines", "truncated", "sha256", "identity"]),
+  readMany: object5({ files: { type: "array", maxItems: 32, items: object5({ path: string3, startLine: { type: "integer", minimum: 1 }, endLine: { type: ["integer", "null"] }, totalLines: integer4, sha256: string3, source: string3, truncated: boolean3, nextOffset: { type: "integer", minimum: 1 } }, ["path", "startLine", "endLine", "totalLines", "sha256", "source", "truncated"]) }, remaining: { type: "array", maxItems: 32, items: readWindowSchema }, complete: boolean3, unreadTails: { type: "array", maxItems: 32, items: readWindowSchema }, failures: { type: "array", maxItems: 32, items: object5({ index: { type: "integer", minimum: 0, maximum: 31 }, path: string3, code: { enum: ["read", "stale-hash"] }, message: { type: "string", maxLength: 200 } }, ["index", "path", "code", "message"]) } }, ["files", "remaining", "complete", "unreadTails"]),
+  grep: object5({ scope: searchScopeSchema, matches: { type: "array", maxItems: 1e3, items: object5({ path: string3, line: { type: "integer", minimum: 1 }, text: { type: "string", maxLength: 500 } }, ["path", "line", "text"]) }, truncated: boolean3, truncationReasons: truncationSchema, nextCursor: string3 }, ["scope", "matches", "truncated"]),
+  find: object5({ scope: searchScopeSchema, paths: { type: "array", maxItems: 1e3, items: string3 }, truncated: boolean3, truncationReasons: truncationSchema, nextCursor: string3 }, ["scope", "paths", "truncated"]),
+  list: object5({ entries: { type: "array", maxItems: 1e3, items: object5({ path: string3, type: { enum: ["file", "directory"] } }, ["path", "type"]) }, truncated: boolean3 }, ["entries", "truncated"]),
   write: mutationOutput,
   edit: mutationOutput,
-  shell: object6({ ok: boolean3, exitCode: { type: ["integer", "null"] }, signal: { type: ["string", "null"] }, stdout: string3, stderr: string3, truncated: boolean3, stdoutTruncated: boolean3, stderrTruncated: boolean3 }, ["ok", "exitCode", "signal", "stdout", "stderr", "truncated", "stdoutTruncated", "stderrTruncated"])
+  shell: object5({ ok: boolean3, exitCode: { type: ["integer", "null"] }, signal: { type: ["string", "null"] }, stdout: string3, stderr: string3, truncated: boolean3, stdoutTruncated: boolean3, stderrTruncated: boolean3 }, ["ok", "exitCode", "signal", "stdout", "stderr", "truncated", "stdoutTruncated", "stderrTruncated"])
 };
-var descriptions3 = {
+var descriptions2 = {
   readEvidence: "Explicit compact text packet: KIRO_LOCAL_EVIDENCE/1 header, numbered sources, final META JSON footer with ranges, full-file hashes, UTF-16 sourceOffset/sourceChars, remaining, unreadTails, complete and failures (always present). Same windows/defaults/path safety/partial failures/final snapshot checks as readMany. Default 32000/maxChars 1000..40000; full JSON-serialized returned string including escaping fits runtime and visible source allowances or rejects, never drops metadata. Continue remaining verbatim after repairing failures, then relevant unreadTails; tails may overlap remaining and omit prefixes/gaps. complete covers requested windows only; not proof of inspection. Return directly with resultFormat:text and headroom for other data/logs. No automatic inspection, steering or guaranteed delivery of discarded/remapped results.",
   read: "Read valid UTF-8, one-based offset; default 200/max 2000 lines, <=2MiB file, bounded JSON. Whole lines only; totalLines counts the whole file; truncated means unread file suffix. nextOffset is the next one-based line; stop at the requested end. Oversized single lines fail. No traversal, symlinks, hardlinks or special files.",
   readMany: "Read 1..32 numbered source windows with line ranges and hashes. Default 200/max 2000 lines per window; 32000 aggregate JSON chars, maxChars 1000..40000, clamped to runtime budgets. Read related callers/implementations/configs together; lower maxChars when returning other data. Return files plus remaining requests; continue remaining verbatim. Hash conflicts reject by default. partial:true retains independent successes and zero-based indexed failures (read/stale-hash), complete:false and failed requests in remaining; repair failed requests before retrying. Safety, cancellation and final snapshot drift remain hard failures. Same-file windows reuse one invocation-local snapshot, revalidated before return. complete covers requested windows only. unreadTails contains hash-bound suffix windows (<=2000 lines) after the last delivered line per file snapshot; finish remaining first to avoid overlapping reads. Empty tails do not cover omitted prefixes/gaps or other files. Same path protections as read; no hidden persistent ledger.",
@@ -25712,7 +15337,7 @@ var descriptions3 = {
   edit: "Exact approved edit: oldText/newText OR edits[1..100], optional expectedSha256. All anchors resolve against the original snapshot, must be disjoint, and validate before one complete diff approval/publication; unique unless per-edit all=true. Existing parent required. Identity/hash conflict detection and complete actual diff; no multi-operation transaction or hostile-race isolation.",
   shell: "Exact approved host command OR literal script in verified canonical cwd, not confinement. command uses /bin/sh; script uses interpreter bash/sh (default sh), args become positional $1... without outer expansion or scratch files. Workspace-wide lock, bounded head/tail output and deadline, TERM/KILL cleanup; ordinary nonzero exits expose error.result or return data with settle=true; no background jobs or network isolation. Deliberate process-group escapes are not contained."
 };
-var effectful2 = (name) => ["write", "edit", "shell"].includes(name);
+var effectful = (name) => ["write", "edit", "shell"].includes(name);
 var LocalCodingProvider = class {
   name = "local";
   description = "Verified workspace local coding with bounded reads and exact approved effects";
@@ -25736,19 +15361,19 @@ var LocalCodingProvider = class {
     if (!Number.isSafeInteger(this.#budget) || this.#budget < 256) throw new Error("local maxResultChars must be an integer >=256");
     if (options.maxReadManyChars !== void 0 && (!Number.isSafeInteger(options.maxReadManyChars) || options.maxReadManyChars < 256)) throw new Error("local maxReadManyChars must be an integer >=256");
     this.#readManyBudget = Math.min(4e4, options.maxResultChars ?? 4e4, options.maxReadManyChars ?? 4e4);
-    if (!path12.isAbsolute(options.lockRoot)) throw new Error("local lockRoot must be absolute");
-    let existing = path12.resolve(options.lockRoot);
-    while (!fs10.existsSync(existing)) existing = path12.dirname(existing);
-    const canonicalLockTarget = path12.resolve(fs10.realpathSync(existing), path12.relative(existing, path12.resolve(options.lockRoot)));
+    if (!path8.isAbsolute(options.lockRoot)) throw new Error("local lockRoot must be absolute");
+    let existing = path8.resolve(options.lockRoot);
+    while (!fs6.existsSync(existing)) existing = path8.dirname(existing);
+    const canonicalLockTarget = path8.resolve(fs6.realpathSync(existing), path8.relative(existing, path8.resolve(options.lockRoot)));
     if (canonicalPathContains(this.#paths.root, canonicalLockTarget)) throw new Error("local lockRoot must be outside the source workspace");
-    fs10.mkdirSync(options.lockRoot, { recursive: true, mode: 448 });
-    this.#lockRoot = fs10.realpathSync(options.lockRoot);
-    const lockStat = fs10.lstatSync(options.lockRoot);
+    fs6.mkdirSync(options.lockRoot, { recursive: true, mode: 448 });
+    this.#lockRoot = fs6.realpathSync(options.lockRoot);
+    const lockStat = fs6.lstatSync(options.lockRoot);
     if (this.#lockRoot !== options.lockRoot || !lockStat.isDirectory() || lockStat.isSymbolicLink() || (lockStat.mode & 63) !== 0 || process.getuid && lockStat.uid !== process.getuid()) throw new Error("local lockRoot must be a canonical private owned directory (0700)");
     this.#lockIdentity = localIdentity(lockStat);
     this.#descriptors = Object.keys(rawSchemas2).map((name) => {
       const raw = rawSchemas2[name];
-      return { name, description: descriptions3[name], inputSchema: effectful2(name) ? { ...raw, properties: { ...raw.properties, _localPreparation: metadataSchema, review: { type: "string", maxLength: 11e3 } } } : raw, outputSchema: outputSchemas2[name], risk: name === "shell" ? "execute" : effectful2(name) ? "write" : "read", effect: { kind: effectful2(name) ? "write" : "read", resources: [`local-workspace:${this.#paths.root}`] } };
+      return { name, description: descriptions2[name], inputSchema: effectful(name) ? { ...raw, properties: { ...raw.properties, _localPreparation: metadataSchema, review: { type: "string", maxLength: 11e3 } } } : raw, outputSchema: outputSchemas2[name], risk: name === "shell" ? "execute" : effectful(name) ? "write" : "read", effect: { kind: effectful(name) ? "write" : "read", resources: [`local-workspace:${this.#paths.root}`] } };
     });
   }
   discoveryRevision() {
@@ -25801,7 +15426,7 @@ var LocalCodingProvider = class {
     this.#validate(name, args);
     this.#check(context);
     const canonical = structuredClone(args);
-    if (!effectful2(name)) {
+    if (!effectful(name)) {
       if (name === "readMany" || name === "readEvidence") {
         canonical.windows = args.windows.map((window) => ({ ...window, path: this.#readWindowPath(window.path, args.partial === true) }));
         return canonical;
@@ -25810,12 +15435,12 @@ var LocalCodingProvider = class {
       return canonical;
     }
     let entry;
-    const token = randomUUID6();
+    const token = randomUUID4();
     let metadata;
     let review;
     if (name === "shell") {
-      const directory2 = this.#paths.directory(args.cwd ?? ".");
-      canonical.cwd = directory2.path;
+      const directory = this.#paths.directory(args.cwd ?? ".");
+      canonical.cwd = directory.path;
       canonical.timeoutMs = args.timeoutMs ?? 3e4;
       canonical.settle = args.settle ?? false;
       const shellValues = [args.command ?? args.script, ...args.args ?? []];
@@ -25824,11 +15449,11 @@ var LocalCodingProvider = class {
 Script: ${JSON.stringify(args.script)}
 Arguments: ${JSON.stringify(args.args ?? [])}`;
       review = `${sourceReview}
-Canonical cwd: ${JSON.stringify(directory2.path)}
+Canonical cwd: ${JSON.stringify(directory.path)}
 Timeout ms: ${canonical.timeoutMs}
 Settle ordinary nonzero: ${canonical.settle}`;
-      metadata = { token, identity: directory2.identity, parentIdentity: directory2.parents.at(-1).identity };
-      entry = { name, signature: "", directory: directory2, active: false };
+      metadata = { token, identity: directory.identity, parentIdentity: directory.parents.at(-1).identity };
+      entry = { name, signature: "", directory, active: false };
     } else {
       const captured = this.#paths.snapshot(args.path);
       canonical.path = captured.snapshot.path;
@@ -25873,9 +15498,9 @@ No content change`;
     const newEnd = after.length - suffix;
     const oldText = before.slice(prefix, oldEnd);
     const newText = after.slice(prefix, newEnd);
-    const lineAt = (text3, end) => {
+    const lineAt = (text2, end) => {
       let line = 1;
-      for (let index = 0; index < end; index++) if (text3.charCodeAt(index) === 10) line++;
+      for (let index = 0; index < end; index++) if (text2.charCodeAt(index) === 10) line++;
       return line;
     };
     const contextStart = Math.max(0, prefix - 200);
@@ -25897,12 +15522,12 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     return { token, entry };
   }
   #verifyLockRoot() {
-    const stat = fs10.lstatSync(this.#lockRoot);
-    if (!stat.isDirectory() || stat.isSymbolicLink() || !sameLocalIdentity(stat, this.#lockIdentity) || fs10.realpathSync(this.#lockRoot) !== this.#lockRoot || (stat.mode & 63) !== 0 || process.getuid && stat.uid !== process.getuid()) throw new Error("local lockRoot identity/privacy changed");
+    const stat = fs6.lstatSync(this.#lockRoot);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || !sameLocalIdentity(stat, this.#lockIdentity) || fs6.realpathSync(this.#lockRoot) !== this.#lockRoot || (stat.mode & 63) !== 0 || process.getuid && stat.uid !== process.getuid()) throw new Error("local lockRoot identity/privacy changed");
   }
   async reserveInvocation(name, args, context) {
     this.#check(context);
-    if (!effectful2(name)) return () => {
+    if (!effectful(name)) return () => {
     };
     try {
       this.#pendingRelease?.();
@@ -25912,7 +15537,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     const { token, entry } = this.#preparedEntry(name, args);
     if (entry.active) throw new Error("local invocation is already reserved");
     this.#verifyLockRoot();
-    const lock = path12.join(this.#lockRoot, `local-${localHash(this.#paths.root)}.lock`);
+    const lock = path8.join(this.#lockRoot, `local-${localHash(this.#paths.root)}.lock`);
     const owned = { created: false };
     let released = false;
     const release = () => {
@@ -25921,9 +15546,9 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
         this.#verifyLockRoot();
         if (!owned.identity) throw new Error("uncertain local lock: ownership identity unavailable; operator recovery required");
         try {
-          const stat = fs10.lstatSync(lock);
+          const stat = fs6.lstatSync(lock);
           if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || !sameLocalIdentity(stat, owned.identity)) throw new Error("local lock ownership changed; refusing to release uncertain lock");
-          fs10.unlinkSync(lock);
+          fs6.unlinkSync(lock);
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
@@ -25943,7 +15568,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     };
     try {
       initializeOwnedFile(lock, owned, (fd) => {
-        fs10.writeFileSync(fd, JSON.stringify({ pid: process.pid, token, root: this.#paths.root }));
+        fs6.writeFileSync(fd, JSON.stringify({ pid: process.pid, token, root: this.#paths.root }));
       });
       this.#verifyLockRoot();
     } catch (error) {
@@ -25966,9 +15591,9 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     return pending;
   }
   async #invoke(name, args, context) {
-    this.#validate(name, args, effectful2(name));
+    this.#validate(name, args, effectful(name));
     this.#check(context);
-    if (effectful2(name)) {
+    if (effectful(name)) {
       const { entry } = this.#preparedEntry(name, args);
       if (!entry.active) throw new Error("local effect requires an active registry reservation");
       if (name === "shell") {
@@ -26016,8 +15641,8 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     throw new Error(`Unknown local action: ${name}`);
   }
   #read(args, budget = this.#budget, captured) {
-    const { text: text3, snapshot } = captured ?? this.#paths.read(args.path);
-    const lines = captured?.lines ?? new LocalLineIndex(text3);
+    const { text: text2, snapshot } = captured ?? this.#paths.read(args.path);
+    const lines = captured?.lines ?? new LocalLineIndex(text2);
     const start = (args.offset ?? 1) - 1;
     const end = Math.min(lines.totalLines, start + (args.limit ?? 200));
     const empty = { path: this.#paths.relative(snapshot.path), text: "", totalLines: lines.totalLines, truncated: false, sha256: snapshot.file.sha256, identity: snapshot.file.identity };
@@ -26049,8 +15674,8 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     }
   }
   #list(args) {
-    const directory2 = this.#paths.directory(args.path ?? ".");
-    const handle = fs10.opendirSync(directory2.path);
+    const directory = this.#paths.directory(args.path ?? ".");
+    const handle = fs6.opendirSync(directory.path);
     const names = [];
     try {
       let item;
@@ -26068,7 +15693,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
         result.truncated = true;
         continue;
       }
-      const found = this.#paths.check(path12.join(directory2.path, name));
+      const found = this.#paths.check(path8.join(directory.path, name));
       result.entries.push({ path: this.#paths.relative(found.path), type: found.stat.isDirectory() ? "directory" : "file" });
       if (!this.#fits(result)) {
         result.entries.pop();
@@ -26076,7 +15701,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
         break;
       }
     }
-    if (JSON.stringify(this.#paths.directory(directory2.path)) !== JSON.stringify(directory2)) throw new Error("local.list directory identity changed");
+    if (JSON.stringify(this.#paths.directory(directory.path)) !== JSON.stringify(directory)) throw new Error("local.list directory identity changed");
     return this.#bounded(result);
   }
   async #rg(args, context) {
@@ -26084,7 +15709,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     const signal = context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal;
     verifySearchExecutable(this.#searchExecutable);
     const output = await new Promise((resolve, reject) => {
-      execFile3(this.#searchExecutable.path, ["--no-config", "--sort", "path", ...args], { cwd: this.#paths.root, env: searchEnvironment(), encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: Math.max(1, Math.min(1e4, Math.floor(context.deadline?.remainingMs() ?? 1e4))), killSignal: "SIGKILL", signal }, (error, stdout, stderr) => {
+      execFile2(this.#searchExecutable.path, ["--no-config", "--sort", "path", ...args], { cwd: this.#paths.root, env: searchEnvironment(), encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: Math.max(1, Math.min(1e4, Math.floor(context.deadline?.remainingMs() ?? 1e4))), killSignal: "SIGKILL", signal }, (error, stdout, stderr) => {
         if (!error || error.code === 1 && !error.killed) resolve(stdout);
         else if (error.code === "ENOENT") reject(new Error("ripgrep (rg) is required for local.grep/local.find but was not found"));
         else reject(new Error(`local rg failed or exceeded bounded work/output: ${String(error.code)} ${stderr.slice(0, 500)}`, { cause: error }));
@@ -26197,9 +15822,9 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
         }
         const data = record4.data;
         if (typeof data?.path?.text !== "string" || !Number.isSafeInteger(data.line_number) || !data.line_number || typeof data.lines?.text !== "string") throw new Error("local rg returned unsupported non-UTF-8 match data");
-        const text3 = data.lines.text.replace(/\r?\n$/u, "");
-        result.matches.push({ path: this.#paths.relative(this.#paths.check(data.path.text).path), line: data.line_number, text: text3.slice(0, 500) });
-        if (text3.length > 500) mark(result, "match-text");
+        const text2 = data.lines.text.replace(/\r?\n$/u, "");
+        result.matches.push({ path: this.#paths.relative(this.#paths.check(data.path.text).path), line: data.line_number, text: text2.slice(0, 500) });
+        if (text2.length > 500) mark(result, "match-text");
         if (!searchFits(result)) {
           result.matches.pop();
           mark(result, "output");
@@ -26264,7 +15889,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     const result = "paths" in entry.result ? { scope: { ...entry.result.scope }, paths: [], truncated: true } : { scope: { ...entry.result.scope }, matches: [], truncated: true };
     const records = "paths" in result ? result.paths : result.matches;
     const all = "paths" in entry.result ? entry.result.paths : entry.result.matches;
-    const next = randomUUID6();
+    const next = randomUUID4();
     result.nextCursor = next;
     result.truncated = true;
     result.truncationReasons = [...entry.result.truncationReasons ?? [], "count", "output"];
@@ -26302,26 +15927,26 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     this.#check(context);
     const sha256 = localHash(proposed);
     if (snapshot.file?.sha256 === sha256) return this.#bounded({ path: this.#paths.relative(snapshot.path), changed: false, sha256, bytes: Buffer.byteLength(proposed), identity: snapshot.file.identity });
-    const temporary = path12.join(path12.dirname(snapshot.path), `.fabric-local-${randomUUID6()}.tmp`);
+    const temporary = path8.join(path8.dirname(snapshot.path), `.fabric-local-${randomUUID4()}.tmp`);
     const owned = { created: false };
     let published = false;
     let operationError;
     try {
       initializeOwnedFile(temporary, owned, (fd) => {
-        fs10.writeFileSync(fd, proposed, "utf8");
-        fs10.fchmodSync(fd, snapshot.file ? snapshot.file.mode & 511 : 384);
-        fs10.fsyncSync(fd);
+        fs6.writeFileSync(fd, proposed, "utf8");
+        fs6.fchmodSync(fd, snapshot.file ? snapshot.file.mode & 511 : 384);
+        fs6.fsyncSync(fd);
       });
       this.#paths.revalidate(snapshot);
       this.#check(context);
-      if (!sameLocalIdentity(fs10.lstatSync(temporary), owned.identity)) throw new Error("local temporary file identity changed");
-      if (snapshot.file) fs10.renameSync(temporary, snapshot.path);
+      if (!sameLocalIdentity(fs6.lstatSync(temporary), owned.identity)) throw new Error("local temporary file identity changed");
+      if (snapshot.file) fs6.renameSync(temporary, snapshot.path);
       else {
-        fs10.linkSync(temporary, snapshot.path);
+        fs6.linkSync(temporary, snapshot.path);
       }
       published = true;
       entry.committed = true;
-      if (!snapshot.file) fs10.unlinkSync(temporary);
+      if (!snapshot.file) fs6.unlinkSync(temporary);
       const actual = this.#paths.read(snapshot.path).snapshot.file;
       if (actual.sha256 !== sha256 || !sameLocalIdentity(actual.identity, owned.identity)) throw new Error("local published verification conflict");
       this.#check(context);
@@ -26338,9 +15963,9 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
       try {
         if (owned.created) {
           if (!owned.identity) throw new Error("uncertain local temporary file: ownership identity unavailable");
-          const current = fs10.lstatSync(temporary);
+          const current = fs6.lstatSync(temporary);
           if (!current.isFile() || current.isSymbolicLink() || !sameLocalIdentity(current, owned.identity)) throw new Error("local temporary file ownership changed; refusing cleanup");
-          fs10.unlinkSync(temporary);
+          fs6.unlinkSync(temporary);
         }
       } catch (error) {
         if (error.code !== "ENOENT") {
@@ -26453,9 +16078,9 @@ var FabricBootstrapProvider = class {
       const source = DOCUMENTS[String(args.topic)];
       const offset = typeof args.offset === "number" ? args.offset : 0;
       const page = (size) => {
-        const text3 = source.slice(offset, offset + size);
-        const truncated = offset + text3.length < source.length;
-        return { topic: args.topic, text: text3, truncated, ...truncated ? { nextOffset: offset + text3.length } : {} };
+        const text2 = source.slice(offset, offset + size);
+        const truncated = offset + text2.length < source.length;
+        return { topic: args.topic, text: text2, truncated, ...truncated ? { nextOffset: offset + text2.length } : {} };
       };
       let high = Math.min(typeof args.limit === "number" ? args.limit : 16e3, Math.max(0, source.length - offset));
       const full = page(high);
@@ -26490,8 +16115,8 @@ var FabricBootstrapProvider = class {
 
 // src/kiro/artifacts.ts
 import { randomBytes as randomBytes4 } from "node:crypto";
-import fs11 from "node:fs";
-import path13 from "node:path";
+import fs7 from "node:fs";
+import path9 from "node:path";
 var ARTIFACT_ID = /^ka_[a-f0-9]{48}$/u;
 var MAX_ARTIFACT_RESIDUE_AGE_MS = 864e5;
 var KiroArtifactStoreError = class extends Error {
@@ -26520,22 +16145,22 @@ var ArtifactStore = class {
       if (!Number.isSafeInteger(value) || value < 1) throw new KiroArtifactStoreError("invalid artifact bounds");
     }
     if (options.root) {
-      fs11.mkdirSync(options.root, { recursive: true, mode: 448 });
-      const stat = fs11.lstatSync(options.root);
+      fs7.mkdirSync(options.root, { recursive: true, mode: 448 });
+      const stat = fs7.lstatSync(options.root);
       if (!stat.isDirectory() || stat.isSymbolicLink()) throw new KiroArtifactStoreError("artifact root must be a regular directory");
       if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
         throw new KiroArtifactStoreError("artifact root must be owned by the current user");
       }
-      fs11.chmodSync(options.root, 448);
-      const canonicalRoot = fs11.realpathSync(options.root);
-      for (const entry of fs11.readdirSync(canonicalRoot, { withFileTypes: true })) {
-        const target = path13.join(canonicalRoot, entry.name);
-        const targetStats = fs11.lstatSync(target);
+      fs7.chmodSync(options.root, 448);
+      const canonicalRoot = fs7.realpathSync(options.root);
+      for (const entry of fs7.readdirSync(canonicalRoot, { withFileTypes: true })) {
+        const target = path9.join(canonicalRoot, entry.name);
+        const targetStats = fs7.lstatSync(target);
         if (!entry.isFile() || targetStats.isSymbolicLink() || !ARTIFACT_ID.test(entry.name)) {
           throw new KiroArtifactStoreError(`artifact root contains an unsupported entry: ${entry.name}`);
         }
         if (this.#now() - targetStats.mtimeMs > MAX_ARTIFACT_RESIDUE_AGE_MS) {
-          fs11.rmSync(target);
+          fs7.rmSync(target);
         }
       }
       this.#root = canonicalRoot;
@@ -26551,55 +16176,55 @@ var ArtifactStore = class {
     this.sweep(this.#ttlMs, this.#maxArtifacts - 1);
     while (this.#entries.size && this.#totalChars + content.length > this.#maxTotalChars) this.#remove(this.#oldest());
     if (this.#totalChars + content.length > this.#maxTotalChars) throw new KiroArtifactStoreError("artifact quota exceeded");
-    let id3;
+    let id2;
     do
-      id3 = `ka_${randomBytes4(24).toString("hex")}`;
-    while (this.#entries.has(id3) || this.#root !== void 0 && fs11.existsSync(path13.join(this.#root, id3)));
+      id2 = `ka_${randomBytes4(24).toString("hex")}`;
+    while (this.#entries.has(id2) || this.#root !== void 0 && fs7.existsSync(path9.join(this.#root, id2)));
     const now = this.#now();
-    const file = this.#root ? path13.join(this.#root, id3) : void 0;
+    const file = this.#root ? path9.join(this.#root, id2) : void 0;
     if (file) {
-      const descriptor2 = fs11.openSync(file, "wx", 384);
+      const descriptor2 = fs7.openSync(file, "wx", 384);
       try {
         try {
-          fs11.writeFileSync(descriptor2, content);
-          fs11.fchmodSync(descriptor2, 384);
-          fs11.fsyncSync(descriptor2);
+          fs7.writeFileSync(descriptor2, content);
+          fs7.fchmodSync(descriptor2, 384);
+          fs7.fsyncSync(descriptor2);
         } finally {
-          fs11.closeSync(descriptor2);
+          fs7.closeSync(descriptor2);
         }
       } catch (error) {
         try {
-          fs11.rmSync(file, { force: true });
+          fs7.rmSync(file, { force: true });
         } catch (cleanup) {
           throw new AggregateError([error, cleanup], "artifact write and cleanup failed");
         }
         throw error;
       }
     }
-    this.#entries.set(id3, { content, createdAt: now, lastReadAt: now, ...file ? { file } : {} });
+    this.#entries.set(id2, { content, createdAt: now, lastReadAt: now, ...file ? { file } : {} });
     this.#totalChars += content.length;
-    return id3;
+    return id2;
   }
-  read(id3, offset = 0, limit = 12e3) {
+  read(id2, offset = 0, limit = 12e3) {
     this.#open();
-    if (!ARTIFACT_ID.test(id3)) throw new KiroArtifactStoreError("invalid artifact id");
+    if (!ARTIFACT_ID.test(id2)) throw new KiroArtifactStoreError("invalid artifact id");
     this.sweep(this.#ttlMs, this.#maxArtifacts);
-    const entry = this.#entries.get(id3);
+    const entry = this.#entries.get(id2);
     if (!entry) throw new KiroArtifactStoreError("artifact is unavailable or expired");
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1) throw new KiroArtifactStoreError("artifact offset and limit must be positive integers");
     if (offset > 0 && /[\uDC00-\uDFFF]/u.test(entry.content.charAt(offset)) && /[\uD800-\uDBFF]/u.test(entry.content.charAt(offset - 1))) throw new KiroArtifactStoreError("artifact offset splits a Unicode character");
     let end = Math.min(entry.content.length, offset + Math.min(limit, 16e3));
     if (end < entry.content.length && /[\uD800-\uDBFF]/u.test(entry.content.charAt(end - 1)) && /[\uDC00-\uDFFF]/u.test(entry.content.charAt(end))) end -= 1;
     if (end === offset && offset < entry.content.length) throw new KiroArtifactStoreError("artifact limit cannot fit one Unicode character");
-    const text3 = entry.content.slice(offset, end);
-    if (text3) entry.lastReadAt = this.#now();
-    const nextOffset = offset + text3.length;
-    return { id: id3, text: text3, offset, nextOffset, totalChars: entry.content.length, done: nextOffset >= entry.content.length };
+    const text2 = entry.content.slice(offset, end);
+    if (text2) entry.lastReadAt = this.#now();
+    const nextOffset = offset + text2.length;
+    return { id: id2, text: text2, offset, nextOffset, totalChars: entry.content.length, done: nextOffset >= entry.content.length };
   }
   sweep(maxAgeMs = this.#ttlMs, maxEntries = this.#maxArtifacts) {
     this.#open();
     const now = this.#now();
-    for (const [id3, entry] of this.#entries) if (now - entry.lastReadAt > maxAgeMs) this.#remove(id3);
+    for (const [id2, entry] of this.#entries) if (now - entry.lastReadAt > maxAgeMs) this.#remove(id2);
     while (this.#entries.size > maxEntries) this.#remove(this.#oldest());
   }
   #oldest() {
@@ -26607,25 +16232,25 @@ var ArtifactStore = class {
     if (!entries[0]) throw new KiroArtifactStoreError("artifact store is empty");
     return entries[0][0];
   }
-  #remove(id3) {
-    const entry = this.#entries.get(id3);
+  #remove(id2) {
+    const entry = this.#entries.get(id2);
     if (!entry) return;
-    if (entry.file) fs11.rmSync(entry.file, { force: true });
-    this.#entries.delete(id3);
+    if (entry.file) fs7.rmSync(entry.file, { force: true });
+    this.#entries.delete(id2);
     this.#totalChars -= entry.content.length;
   }
   close() {
     if (this.#closed) return;
-    for (const id3 of [...this.#entries.keys()]) this.#remove(id3);
+    for (const id2 of [...this.#entries.keys()]) this.#remove(id2);
     this.#closed = true;
   }
 };
 var createKiroArtifactStore = (options = {}) => new ArtifactStore(options);
 
 // src/kiro/mcp-provider.ts
-import { createHash as createHash8, randomBytes as randomBytes5 } from "node:crypto";
-import fs12 from "node:fs";
-import path14 from "node:path";
+import { createHash as createHash7, randomBytes as randomBytes5 } from "node:crypto";
+import fs8 from "node:fs";
+import path10 from "node:path";
 var descriptors5 = [
   {
     name: "$servers",
@@ -26689,7 +16314,7 @@ var descriptors5 = [
     effect: { kind: "emission" }
   }
 ];
-var isRecord7 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord6 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var MCP_CLOSE_GRACE_MS = 1e3;
 var MAX_MCP_DISCOVERY_PAGES = 100;
 var MAX_MCP_DISCOVERY_TOOLS = 1e3;
@@ -26701,17 +16326,17 @@ var MAX_MCP_ARGUMENT_FILE_BYTES = 16 * 1024 * 1024;
 var MAX_MCP_ARGUMENT_FILES_TOTAL_BYTES = 64 * 1024 * 1024;
 var MAX_EXPLICIT_MCP_CONFIG_BYTES = 256 * 1024;
 var fileDigest = (file, maximumBytes = MAX_MCP_TRANSPORT_FILE_BYTES) => {
-  const descriptor2 = fs12.openSync(file, fs12.constants.O_RDONLY | (fs12.constants.O_NOFOLLOW ?? 0));
+  const descriptor2 = fs8.openSync(file, fs8.constants.O_RDONLY | (fs8.constants.O_NOFOLLOW ?? 0));
   try {
-    const before = fs12.fstatSync(descriptor2, { bigint: true });
+    const before = fs8.fstatSync(descriptor2, { bigint: true });
     if (!before.isFile() || before.size > BigInt(maximumBytes)) {
       throw new Error(`MCP transport file is not regular or exceeds ${maximumBytes} bytes`);
     }
-    const digest = createHash8("sha256");
+    const digest = createHash7("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     let position = 0;
     while (position < Number(before.size)) {
-      const count2 = fs12.readSync(
+      const count2 = fs8.readSync(
         descriptor2,
         buffer,
         0,
@@ -26722,78 +16347,78 @@ var fileDigest = (file, maximumBytes = MAX_MCP_TRANSPORT_FILE_BYTES) => {
       digest.update(buffer.subarray(0, count2));
       position += count2;
     }
-    const after = fs12.fstatSync(descriptor2, { bigint: true });
+    const after = fs8.fstatSync(descriptor2, { bigint: true });
     if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.ctimeNs !== after.ctimeNs || before.mtimeNs !== after.mtimeNs || before.nlink !== after.nlink) {
       throw new Error("MCP transport file changed while hashing");
     }
     return digest.digest("hex");
   } finally {
-    fs12.closeSync(descriptor2);
+    fs8.closeSync(descriptor2);
   }
 };
 var sameFileIdentity = (left, right) => left.isFile() && right.isFile() && !left.isSymbolicLink() && !right.isSymbolicLink() && left.nlink === 1n && right.nlink === 1n && left.dev === right.dev && left.ino === right.ino;
 var sameFileVersion = (left, right) => sameFileIdentity(left, right) && left.size === right.size && left.ctimeNs === right.ctimeNs && left.mtimeNs === right.mtimeNs;
 var readExplicitMcpConfiguration = (configPath) => {
-  const lexical = fs12.lstatSync(configPath, { bigint: true });
+  const lexical = fs8.lstatSync(configPath, { bigint: true });
   if (!lexical.isFile() || lexical.isSymbolicLink() || lexical.nlink !== 1n || lexical.size > BigInt(MAX_EXPLICIT_MCP_CONFIG_BYTES)) {
     throw new Error("MCP configuration is not a bounded unaliased regular file");
   }
   if (process.platform !== "win32" && (typeof process.getuid === "function" && lexical.uid !== BigInt(process.getuid()) || (lexical.mode & 0o077n) !== 0n)) {
     throw new Error("MCP configuration is not private to the current user");
   }
-  const descriptor2 = fs12.openSync(configPath, fs12.constants.O_RDONLY | (fs12.constants.O_NOFOLLOW ?? 0));
+  const descriptor2 = fs8.openSync(configPath, fs8.constants.O_RDONLY | (fs8.constants.O_NOFOLLOW ?? 0));
   let opened;
   let after;
   const buffer = Buffer.allocUnsafe(MAX_EXPLICIT_MCP_CONFIG_BYTES + 1);
   let byteCount = 0;
   try {
-    opened = fs12.fstatSync(descriptor2, { bigint: true });
+    opened = fs8.fstatSync(descriptor2, { bigint: true });
     if (!sameFileIdentity(lexical, opened)) throw new Error("MCP configuration changed while opening");
     while (byteCount < buffer.length) {
-      const count2 = fs12.readSync(descriptor2, buffer, byteCount, buffer.length - byteCount, byteCount);
+      const count2 = fs8.readSync(descriptor2, buffer, byteCount, buffer.length - byteCount, byteCount);
       if (count2 === 0) break;
       byteCount += count2;
     }
     if (byteCount > MAX_EXPLICIT_MCP_CONFIG_BYTES) throw new Error("MCP configuration exceeds 262144 bytes");
-    after = fs12.fstatSync(descriptor2, { bigint: true });
+    after = fs8.fstatSync(descriptor2, { bigint: true });
   } finally {
-    fs12.closeSync(descriptor2);
+    fs8.closeSync(descriptor2);
   }
-  const current = fs12.lstatSync(configPath, { bigint: true });
+  const current = fs8.lstatSync(configPath, { bigint: true });
   if (!sameFileVersion(opened, after) || !sameFileVersion(opened, current)) {
     throw new Error("MCP configuration changed while reading");
   }
   const bytes2 = Buffer.from(buffer.subarray(0, byteCount));
   const parsed = JSON.parse(bytes2.toString("utf8"));
-  if (!isRecord7(parsed) || !isRecord7(parsed.mcpServers) || !Array.isArray(parsed.imports) || parsed.imports.length !== 0 || JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify(["imports", "mcpServers"])) {
+  if (!isRecord6(parsed) || !isRecord6(parsed.mcpServers) || !Array.isArray(parsed.imports) || parsed.imports.length !== 0 || JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify(["imports", "mcpServers"])) {
     throw new Error("MCP configuration must contain only mcpServers and imports: []");
   }
   const names = Object.keys(parsed.mcpServers);
   if (names.length > 128 || names.some((name) => !name || name.length > 256)) throw new Error("MCP configuration server names exceed product bounds");
   return {
     names: new Set(names),
-    digest: createHash8("sha256").update(bytes2).digest("hex"),
+    digest: createHash7("sha256").update(bytes2).digest("hex"),
     bytes: bytes2,
     stats: opened
   };
 };
-var fsyncDirectory2 = (directory2) => {
+var fsyncDirectory2 = (directory) => {
   if (process.platform === "win32") return;
-  const descriptor2 = fs12.openSync(directory2, "r");
+  const descriptor2 = fs8.openSync(directory, "r");
   try {
-    fs12.fsyncSync(descriptor2);
+    fs8.fsyncSync(descriptor2);
   } finally {
-    fs12.closeSync(descriptor2);
+    fs8.closeSync(descriptor2);
   }
 };
 var stageExplicitMcpConfiguration = (configPath, explicit) => {
-  const directory2 = path14.dirname(configPath);
-  const directoryStats = fs12.lstatSync(directory2, { bigint: true });
+  const directory = path10.dirname(configPath);
+  const directoryStats = fs8.lstatSync(directory, { bigint: true });
   if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink() || process.platform !== "win32" && (typeof process.getuid === "function" && directoryStats.uid !== BigInt(process.getuid()) || (directoryStats.mode & 0o077n) !== 0n)) {
     throw new Error("MCP configuration directory is not private to the current user");
   }
-  const stagedPath = path14.join(
-    directory2,
+  const stagedPath = path10.join(
+    directory,
     `.kiro-fabric-mcp-snapshot-${process.pid}-${randomBytes5(16).toString("hex")}.json`
   );
   let descriptor2;
@@ -26802,30 +16427,30 @@ var stageExplicitMcpConfiguration = (configPath, explicit) => {
     if (descriptor2 === void 0) return;
     const fd = descriptor2;
     descriptor2 = void 0;
-    fs12.closeSync(fd);
+    fs8.closeSync(fd);
   };
   try {
-    descriptor2 = fs12.openSync(
+    descriptor2 = fs8.openSync(
       stagedPath,
-      fs12.constants.O_WRONLY | fs12.constants.O_CREAT | fs12.constants.O_EXCL | (fs12.constants.O_NOFOLLOW ?? 0),
+      fs8.constants.O_WRONLY | fs8.constants.O_CREAT | fs8.constants.O_EXCL | (fs8.constants.O_NOFOLLOW ?? 0),
       384
     );
-    createdStats = fs12.fstatSync(descriptor2, { bigint: true });
-    fs12.writeFileSync(descriptor2, explicit.bytes);
-    fs12.fsyncSync(descriptor2);
-    const writtenStats = fs12.fstatSync(descriptor2, { bigint: true });
+    createdStats = fs8.fstatSync(descriptor2, { bigint: true });
+    fs8.writeFileSync(descriptor2, explicit.bytes);
+    fs8.fsyncSync(descriptor2);
+    const writtenStats = fs8.fstatSync(descriptor2, { bigint: true });
     close();
-    fsyncDirectory2(directory2);
+    fsyncDirectory2(directory);
     const verified = readExplicitMcpConfiguration(stagedPath);
     if (!sameFileIdentity(createdStats, writtenStats) || !sameFileIdentity(writtenStats, verified.stats) || verified.digest !== explicit.digest) {
       throw new Error("staged MCP configuration changed while writing");
     }
-    return { path: stagedPath, directory: directory2, digest: explicit.digest, stats: verified.stats };
+    return { path: stagedPath, directory, digest: explicit.digest, stats: verified.stats };
   } catch (error) {
     const errors = [error];
     if (createdStats === void 0 && descriptor2 !== void 0) {
       try {
-        createdStats = fs12.fstatSync(descriptor2, { bigint: true });
+        createdStats = fs8.fstatSync(descriptor2, { bigint: true });
       } catch (cleanup) {
         errors.push(cleanup);
       }
@@ -26837,10 +16462,10 @@ var stageExplicitMcpConfiguration = (configPath, explicit) => {
     }
     if (createdStats !== void 0) {
       try {
-        const current = fs12.lstatSync(stagedPath, { bigint: true });
+        const current = fs8.lstatSync(stagedPath, { bigint: true });
         if (sameFileIdentity(createdStats, current)) {
-          fs12.unlinkSync(stagedPath);
-          fsyncDirectory2(directory2);
+          fs8.unlinkSync(stagedPath);
+          fsyncDirectory2(directory);
         }
       } catch (cleanup) {
         if (cleanup.code !== "ENOENT") errors.push(cleanup);
@@ -26861,9 +16486,9 @@ var removeStagedMcpConfiguration = (staged) => {
     verification = error;
   }
   try {
-    const current = fs12.lstatSync(staged.path, { bigint: true });
+    const current = fs8.lstatSync(staged.path, { bigint: true });
     if (sameFileIdentity(staged.stats, current)) {
-      fs12.unlinkSync(staged.path);
+      fs8.unlinkSync(staged.path);
       fsyncDirectory2(staged.directory);
     }
   } catch (error) {
@@ -26887,22 +16512,22 @@ var assertNoAmbientMcporterOptions = () => {
 };
 var executablePath = (command, cwd = process.cwd()) => {
   if (command.includes("/") || command.includes("\\")) {
-    return fs12.realpathSync(path14.isAbsolute(command) ? command : path14.resolve(cwd, command));
+    return fs8.realpathSync(path10.isAbsolute(command) ? command : path10.resolve(cwd, command));
   }
-  for (const directory2 of (process.env.PATH ?? "").split(path14.delimiter)) {
-    if (!directory2) continue;
-    const candidate = path14.resolve(cwd, directory2, command);
+  for (const directory of (process.env.PATH ?? "").split(path10.delimiter)) {
+    if (!directory) continue;
+    const candidate = path10.resolve(cwd, directory, command);
     try {
-      if (fs12.statSync(candidate).isFile()) return fs12.realpathSync(candidate);
+      if (fs8.statSync(candidate).isFile()) return fs8.realpathSync(candidate);
     } catch {
     }
   }
   throw new Error(`Configured MCP executable cannot be resolved: ${command}`);
 };
-var environmentDigest = () => createHash8("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
+var environmentDigest = () => createHash7("sha256").update(JSON.stringify(Object.entries(process.env).filter((entry) => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))).digest("hex");
 var configDigest = (configPath) => configPath ? readExplicitMcpConfiguration(configPath).digest : null;
 var fileStatKey = (file) => {
-  const stats = fs12.statSync(file, { bigint: true });
+  const stats = fs8.statSync(file, { bigint: true });
   return `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.mtimeNs}:${stats.size}:${stats.nlink}:${Number(stats.isSymbolicLink())}`;
 };
 var boundArgumentStatKey = (entry) => {
@@ -26917,7 +16542,7 @@ var boundArgumentStatKey = (entry) => {
 };
 var canonicalizeStdioTransport = (server) => {
   if (server.command.kind !== "stdio") return server;
-  const cwd = fs12.realpathSync(server.command.cwd);
+  const cwd = fs8.realpathSync(server.command.cwd);
   const command = executablePath(server.command.command, cwd);
   return {
     ...server,
@@ -26932,10 +16557,10 @@ var resolveStdioArgumentFiles = (arguments_, cwd) => {
   let totalBytes = 0;
   for (const [argumentIndex, argument] of arguments_.entries()) {
     if (!argument || argument.includes("\0")) continue;
-    const candidate = path14.isAbsolute(argument) ? argument : path14.resolve(cwd, argument);
+    const candidate = path10.isAbsolute(argument) ? argument : path10.resolve(cwd, argument);
     try {
-      const resolvedPath = fs12.realpathSync(candidate);
-      const stats = fs12.statSync(resolvedPath);
+      const resolvedPath = fs8.realpathSync(candidate);
+      const stats = fs8.statSync(resolvedPath);
       if (!stats.isFile()) continue;
       if (stats.size > MAX_MCP_ARGUMENT_FILE_BYTES) {
         throw new Error(`Configured MCP stdio argument file exceeds ${MAX_MCP_ARGUMENT_FILE_BYTES} bytes`);
@@ -26972,7 +16597,7 @@ var executeApproval = (name, description) => {
 };
 var STDIO_APPROVAL = executeApproval("$stdio", "Start one explicitly configured stdio MCP server");
 var OAUTH_APPROVAL = executeApproval("$oauth", "Launch configured HTTP MCP authorization");
-var abortError2 = (signal) => signal.reason instanceof Error ? signal.reason : new Error(typeof signal.reason === "string" && signal.reason ? signal.reason : "MCP call cancelled");
+var abortError = (signal) => signal.reason instanceof Error ? signal.reason : new Error(typeof signal.reason === "string" && signal.reason ? signal.reason : "MCP call cancelled");
 var MCP_ANNOTATION_KEYS = /* @__PURE__ */ new Set([
   "title",
   "readOnlyHint",
@@ -26982,7 +16607,7 @@ var MCP_ANNOTATION_KEYS = /* @__PURE__ */ new Set([
 ]);
 var normalizeToolAnnotations = (value, index) => {
   if (value === void 0) return void 0;
-  if (!isRecord7(value) || Object.keys(value).some((key) => !MCP_ANNOTATION_KEYS.has(key)) || value.title !== void 0 && (typeof value.title !== "string" || value.title.length > 1e3) || ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"].some((key) => value[key] !== void 0 && typeof value[key] !== "boolean")) {
+  if (!isRecord6(value) || Object.keys(value).some((key) => !MCP_ANNOTATION_KEYS.has(key)) || value.title !== void 0 && (typeof value.title !== "string" || value.title.length > 1e3) || ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"].some((key) => value[key] !== void 0 && typeof value[key] !== "boolean")) {
     throw new Error(`Configured MCP tool annotations at index ${index} are malformed`);
   }
   return {
@@ -26996,7 +16621,7 @@ var normalizeToolAnnotations = (value, index) => {
 var normalizeServerTools = (value) => {
   if (!Array.isArray(value) || value.length > 1e3) throw new Error("Configured MCP tool list is malformed or exceeds product bounds");
   const tools = value.map((tool, index) => {
-    if (!isRecord7(tool) || typeof tool.name !== "string" || !tool.name || tool.name.length > 256 || tool.description !== void 0 && typeof tool.description !== "string" || !isRecord7(tool.inputSchema) || tool.outputSchema !== void 0 && !isRecord7(tool.outputSchema)) {
+    if (!isRecord6(tool) || typeof tool.name !== "string" || !tool.name || tool.name.length > 256 || tool.description !== void 0 && typeof tool.description !== "string" || !isRecord6(tool.inputSchema) || tool.outputSchema !== void 0 && !isRecord6(tool.outputSchema)) {
       throw new Error(`Configured MCP tool at index ${index} is malformed`);
     }
     remoteComponent(tool.name);
@@ -27051,10 +16676,10 @@ var resultProjection = (value) => {
   throw new Error("MCP projection must be full, text, or structured");
 };
 var normalizeMcpResult = (result, projection) => {
-  if (!isRecord7(result) || !Array.isArray(result.content)) {
+  if (!isRecord6(result) || !Array.isArray(result.content)) {
     assertFabricJsonBudget(result);
     if (projection === "text") return typeof result === "string" ? result : "";
-    if (projection === "structured") return isRecord7(result) ? result.structuredContent ?? null : null;
+    if (projection === "structured") return isRecord6(result) ? result.structuredContent ?? null : null;
     return result;
   }
   const projected = {
@@ -27063,13 +16688,13 @@ var normalizeMcpResult = (result, projection) => {
     ...result.isError === void 0 ? {} : { isError: result.isError }
   };
   assertFabricJsonBudget(projected);
-  const textContent = () => projected.content.filter((part) => isRecord7(part) && part.type === "text" && typeof part.text === "string").map((part) => part.text).join("\n");
+  const textContent = () => projected.content.filter((part) => isRecord6(part) && part.type === "text" && typeof part.text === "string").map((part) => part.text).join("\n");
   if (projected.isError === true) throw new Error((textContent() || "MCP tool returned an error").slice(0, 2e3));
   if (projection === "structured") return projected.structuredContent ?? null;
-  const text3 = textContent();
-  if (projection === "text") return text3;
+  const text2 = textContent();
+  if (projection === "text") return text2;
   return {
-    text: text3,
+    text: text2,
     content: projected.content,
     structuredContent: projected.structuredContent ?? null
   };
@@ -27114,7 +16739,7 @@ var KiroMcpProvider = class {
   }
   catalogDependencies(args) {
     if (this.#closed) return [{ isCurrent: () => false }];
-    if (isRecord7(args) && typeof args.server === "string") return [this.#tickets(args.server).revocation];
+    if (isRecord6(args) && typeof args.server === "string") return [this.#tickets(args.server).revocation];
     return [this.#globalCatalog];
   }
   invalidateDiscovery(server) {
@@ -27170,11 +16795,11 @@ var KiroMcpProvider = class {
     this.#config = config;
     this.#runtimeFactory = runtimeFactory ?? (async () => {
       assertNoAmbientMcporterOptions();
-      const { createRuntime, loadServerDefinitions } = await import("./dist-SI6ZW2DE.js");
+      const { createRuntime, loadServerDefinitions } = await import("./dist-SK2TVSKX.js");
       let servers = [];
       this.#loadedConfigDigest = null;
       if (this.#config.configPath) {
-        const configPath = path14.resolve(this.#config.configPath);
+        const configPath = path10.resolve(this.#config.configPath);
         const explicit = readExplicitMcpConfiguration(configPath);
         const staged = stageExplicitMcpConfiguration(configPath, explicit);
         try {
@@ -27185,7 +16810,7 @@ var KiroMcpProvider = class {
           }
           for (const server of servers) {
             const sources = server.sources ?? (server.source ? [server.source] : []);
-            if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) => source.kind !== "local" || path14.resolve(source.path) !== staged.path)) {
+            if (!explicit.names.has(server.name) || sources.length === 0 || sources.some((source) => source.kind !== "local" || path10.resolve(source.path) !== staged.path)) {
               throw new Error("mcporter loaded a server outside the explicit Fabric configuration snapshot");
             }
           }
@@ -27216,7 +16841,7 @@ var KiroMcpProvider = class {
     }
     remoteComponent(server);
     if (tool) remoteComponent(tool);
-    if (actionName === "$call" && args.args !== void 0 && !isRecord7(args.args)) {
+    if (actionName === "$call" && args.args !== void 0 && !isRecord6(args.args)) {
       throw new Error("MCP call args must be an object when provided");
     }
     if (actionName === "$call" && args.expectedDescriptorDigest !== void 0 && (typeof args.expectedDescriptorDigest !== "string" || !/^[a-f0-9]{64}$/u.test(args.expectedDescriptorDigest))) {
@@ -27267,7 +16892,7 @@ var KiroMcpProvider = class {
     const toolArgs = args.args === void 0 ? {} : args.args;
     const expectedDescriptorDigest = args.expectedDescriptorDigest;
     const projection = actionName === "$call" ? resultProjection(args.projection) : "full";
-    if (!server || (actionName === "$call" || actionName === "$describe") && !toolName || actionName === "$call" && (!isRecord7(toolArgs) || expectedDescriptorDigest !== void 0 && (typeof expectedDescriptorDigest !== "string" || !/^[a-f0-9]{64}$/u.test(expectedDescriptorDigest)))) {
+    if (!server || (actionName === "$call" || actionName === "$describe") && !toolName || actionName === "$call" && (!isRecord6(toolArgs) || expectedDescriptorDigest !== void 0 && (typeof expectedDescriptorDigest !== "string" || !/^[a-f0-9]{64}$/u.test(expectedDescriptorDigest)))) {
       throw new Error("MCP call requires non-empty server/tool strings and object args");
     }
     remoteComponent(server);
@@ -27480,7 +17105,7 @@ var KiroMcpProvider = class {
   #boundArgumentFiles(server, command) {
     const bound = this.#argumentFileBindings.get(server);
     if (bound !== void 0) return bound;
-    const resolved2 = resolveStdioArgumentFiles(command.args ?? [], fs12.realpathSync(command.cwd ?? this.#cwd));
+    const resolved2 = resolveStdioArgumentFiles(command.args ?? [], fs8.realpathSync(command.cwd ?? this.#cwd));
     this.#argumentFileBindings.set(server, resolved2);
     return resolved2;
   }
@@ -27506,11 +17131,11 @@ var KiroMcpProvider = class {
     };
     const details = definition.command.kind === "stdio" ? (() => {
       const executable = resolvedExecutable ?? executablePath(definition.command.command, definition.command.cwd);
-      const stats = fs12.statSync(executable, { bigint: true });
+      const stats = fs8.statSync(executable, { bigint: true });
       const configured = definition.env ?? {};
       const arguments_ = [...definition.command.args ?? []];
       const argumentFiles = resolvedArgumentFiles.map((entry) => {
-        const argumentStats = fs12.statSync(entry.resolvedPath, { bigint: true });
+        const argumentStats = fs8.statSync(entry.resolvedPath, { bigint: true });
         return {
           ...entry,
           digest: fileDigest(entry.resolvedPath, MAX_MCP_ARGUMENT_FILE_BYTES),
@@ -27524,17 +17149,17 @@ var KiroMcpProvider = class {
         executableDigest: fileDigest(executable),
         executableDevice: String(stats.dev),
         executableFile: String(stats.ino),
-        cwd: fs12.realpathSync(definition.command.cwd ?? this.#cwd),
+        cwd: fs8.realpathSync(definition.command.cwd ?? this.#cwd),
         arguments: arguments_,
         argumentFiles,
-        configuredEnvironmentDigest: createHash8("sha256").update(JSON.stringify(Object.entries(configured).sort(([left], [right]) => left.localeCompare(right)))).digest("hex")
+        configuredEnvironmentDigest: createHash7("sha256").update(JSON.stringify(Object.entries(configured).sort(([left], [right]) => left.localeCompare(right)))).digest("hex")
       };
     })() : { kind: "http", endpoint: definition.command.url.href };
     const unsigned = { ...base, ...details };
-    return { ...unsigned, digest: createHash8("sha256").update("kiro-fabric-mcp-transport-v2\0").update(JSON.stringify(unsigned)).digest("hex") };
+    return { ...unsigned, digest: createHash7("sha256").update("kiro-fabric-mcp-transport-v2\0").update(JSON.stringify(unsigned)).digest("hex") };
   }
   #assertTransportSnapshot(runtime, server, approved) {
-    if (!isRecord7(approved)) throw new Error("MCP call is missing its approved transport snapshot");
+    if (!isRecord6(approved)) throw new Error("MCP call is missing its approved transport snapshot");
     const current = this.#transportSnapshot(runtime, server);
     if (JSON.stringify(current) !== JSON.stringify(approved)) {
       this.#evict(server);
@@ -27602,7 +17227,7 @@ var KiroMcpProvider = class {
       normalizeServerTools(tools);
       const definition = runtime.getDefinition(server);
       return tools.filter((tool) => {
-        if (!isRecord7(tool) || typeof tool.name !== "string") return true;
+        if (!isRecord6(tool) || typeof tool.name !== "string") return true;
         if (definition.allowedTools !== void 0) return definition.allowedTools.includes(tool.name);
         if (definition.blockedTools !== void 0) return !definition.blockedTools.includes(tool.name);
         return true;
@@ -27698,7 +17323,7 @@ var KiroMcpProvider = class {
         dispatchState: label === "tool call" ? "dispatched" : "not_dispatched",
         effectOutcome: label === "tool call" ? "uncertain" : "none"
       });
-      const onAbort = () => terminate(classified(abortError2(signal).message, "provider_error"));
+      const onAbort = () => terminate(classified(abortError(signal).message, "provider_error"));
       const timer = setTimeout(
         () => terminate(classified(`MCP ${label} timed out after ${this.#config.callTimeoutMs}ms total`, "timeout")),
         timeoutMs
@@ -27714,13 +17339,13 @@ var KiroMcpProvider = class {
 };
 
 // src/kiro/memory-provider.ts
-import { createHash as createHash9 } from "node:crypto";
-import fs14 from "node:fs";
+import { createHash as createHash8 } from "node:crypto";
+import fs10 from "node:fs";
 
 // src/kiro/memory.ts
 import crypto from "node:crypto";
-import fs13 from "node:fs";
-import path15 from "node:path";
+import fs9 from "node:fs";
+import path11 from "node:path";
 var DEFAULT_MAX_NAMESPACE_ENTRIES = 128;
 var DEFAULT_MAX_NAMESPACE_BYTES = 256 * 1024;
 var DEFAULT_MAX_ENTRY_BYTES = 16 * 1024;
@@ -27767,21 +17392,21 @@ var normalizeKiroMemoryToken = (value, label) => {
 var encodeName2 = (value) => encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 var hashNamespace = (namespace) => crypto.createHash("sha256").update(namespace).digest("hex").slice(0, 16);
 var isWithinOrEqual = (root, candidate) => {
-  const relative = path15.relative(root, candidate);
+  const relative = path11.relative(root, candidate);
   if (relative === "" || relative === ".") return true;
-  if (path15.isAbsolute(relative)) return false;
-  return relative.split(path15.sep).filter(Boolean)[0] !== "..";
+  if (path11.isAbsolute(relative)) return false;
+  return relative.split(path11.sep).filter(Boolean)[0] !== "..";
 };
 var lstatOrNull = (target) => {
   try {
-    return fs13.lstatSync(target);
+    return fs9.lstatSync(target);
   } catch (error) {
     if (error.code === "ENOENT") return null;
     throw error;
   }
 };
 var errorCode4 = (error) => error instanceof Error && "code" in error ? String(error.code) : void 0;
-var delay3 = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+var delay2 = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 var processIsAlive2 = (pid) => {
   try {
     process.kill(pid, 0);
@@ -27793,53 +17418,53 @@ var processIsAlive2 = (pid) => {
   }
 };
 var recoverPendingMutationLock = (lockPath, pending) => {
-  const identity2 = pending.identity;
-  if (identity2 && !identity2.owner && pending.ownerDescriptor !== void 0) {
-    const owner = fs13.fstatSync(pending.ownerDescriptor);
-    identity2.owner = { dev: owner.dev, ino: owner.ino };
+  const identity = pending.identity;
+  if (identity && !identity.owner && pending.ownerDescriptor !== void 0) {
+    const owner = fs9.fstatSync(pending.ownerDescriptor);
+    identity.owner = { dev: owner.dev, ino: owner.ino };
   }
-  if (!identity2) throw new KiroMemoryScopeError("Kiro memory lock cleanup remains unresolved: ownership identity is unavailable");
-  releaseNamespaceMutationLock(lockPath, identity2);
+  if (!identity) throw new KiroMemoryScopeError("Kiro memory lock cleanup remains unresolved: ownership identity is unavailable");
+  releaseNamespaceMutationLock(lockPath, identity);
   if (pending.ownerDescriptor !== void 0) {
     const descriptor2 = pending.ownerDescriptor;
     pending.ownerDescriptor = void 0;
-    fs13.closeSync(descriptor2);
+    fs9.closeSync(descriptor2);
   }
 };
-var releaseNamespaceMutationLock = (lockPath, identity2, requireOwner = false) => {
+var releaseNamespaceMutationLock = (lockPath, identity, requireOwner = false) => {
   let current;
   try {
-    current = fs13.lstatSync(lockPath);
+    current = fs9.lstatSync(lockPath);
   } catch (error) {
     if (errorCode4(error) === "ENOENT") return;
     throw error;
   }
-  if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== identity2.directory.dev || current.ino !== identity2.directory.ino) {
+  if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== identity.directory.dev || current.ino !== identity.directory.ino) {
     throw new KiroMemoryScopeError("Refusing to clean up a replacement Kiro memory mutation lock");
   }
-  const ownerPath = path15.join(lockPath, MUTATION_LOCK_OWNER);
+  const ownerPath = path11.join(lockPath, MUTATION_LOCK_OWNER);
   try {
-    const owner = fs13.lstatSync(ownerPath);
+    const owner = fs9.lstatSync(ownerPath);
     let ownerToken;
     try {
-      ownerToken = JSON.parse(fs13.readFileSync(ownerPath, "utf8")).token;
+      ownerToken = JSON.parse(fs9.readFileSync(ownerPath, "utf8")).token;
     } catch {
     }
-    if (!identity2.owner || !owner.isFile() || owner.isSymbolicLink() || owner.dev !== identity2.owner.dev || owner.ino !== identity2.owner.ino || identity2.owner.token !== void 0 && ownerToken !== identity2.owner.token) {
+    if (!identity.owner || !owner.isFile() || owner.isSymbolicLink() || owner.dev !== identity.owner.dev || owner.ino !== identity.owner.ino || identity.owner.token !== void 0 && ownerToken !== identity.owner.token) {
       throw new KiroMemoryScopeError("Refusing to remove a foreign Kiro memory mutation lock owner");
     }
-    fs13.unlinkSync(ownerPath);
+    fs9.unlinkSync(ownerPath);
   } catch (error) {
     if (errorCode4(error) !== "ENOENT" || requireOwner) throw error;
   }
-  fs13.rmdirSync(lockPath);
+  fs9.rmdirSync(lockPath);
 };
 var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, beforeCommit) => {
-  const lockPath = path15.join(namespaceRoot, MUTATION_LOCK);
+  const lockPath = path11.join(namespaceRoot, MUTATION_LOCK);
   const deadline = performance.now() + MUTATION_LOCK_TIMEOUT_MS;
-  let identity2;
+  let identity;
   let operationError;
-  while (!identity2) {
+  while (!identity) {
     if (state.pending) {
       const pending = state.pending;
       recoverPendingMutationLock(lockPath, pending);
@@ -27848,10 +17473,10 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
     throwIfAborted(signal);
     beforeCommit?.();
     try {
-      fs13.mkdirSync(lockPath, { mode: 448 });
+      fs9.mkdirSync(lockPath, { mode: 448 });
       let stat;
       try {
-        stat = fs13.lstatSync(lockPath);
+        stat = fs9.lstatSync(lockPath);
       } catch (error) {
         state.pending = {};
         throw new AggregateError([error], "Kiro memory lock initialization failed; cleanup remains unresolved", { cause: error });
@@ -27859,37 +17484,37 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
       if (!stat.isDirectory() || stat.isSymbolicLink()) {
         throw new KiroMemoryScopeError("Kiro memory mutation lock is not a real directory");
       }
-      identity2 = { directory: { dev: stat.dev, ino: stat.ino } };
+      identity = { directory: { dev: stat.dev, ino: stat.ino } };
       let ownerDescriptor;
       try {
-        const ownerPath = path15.join(lockPath, MUTATION_LOCK_OWNER);
+        const ownerPath = path11.join(lockPath, MUTATION_LOCK_OWNER);
         const token = crypto.randomBytes(32).toString("hex");
         try {
-          ownerDescriptor = fs13.openSync(
+          ownerDescriptor = fs9.openSync(
             ownerPath,
-            fs13.constants.O_WRONLY | fs13.constants.O_CREAT | fs13.constants.O_EXCL | (fs13.constants.O_NOFOLLOW ?? 0),
+            fs9.constants.O_WRONLY | fs9.constants.O_CREAT | fs9.constants.O_EXCL | (fs9.constants.O_NOFOLLOW ?? 0),
             384
           );
-          const owner = fs13.fstatSync(ownerDescriptor);
-          identity2.owner = { dev: owner.dev, ino: owner.ino };
-          fs13.writeFileSync(ownerDescriptor, JSON.stringify({ pid: process.pid, acquiredAt: Date.now(), token }), "utf8");
-          identity2.owner.token = token;
+          const owner = fs9.fstatSync(ownerDescriptor);
+          identity.owner = { dev: owner.dev, ino: owner.ino };
+          fs9.writeFileSync(ownerDescriptor, JSON.stringify({ pid: process.pid, acquiredAt: Date.now(), token }), "utf8");
+          identity.owner.token = token;
         } finally {
-          if (ownerDescriptor !== void 0 && identity2.owner) {
+          if (ownerDescriptor !== void 0 && identity.owner) {
             const descriptor2 = ownerDescriptor;
             ownerDescriptor = void 0;
-            fs13.closeSync(descriptor2);
+            fs9.closeSync(descriptor2);
           }
         }
       } catch (error) {
-        const cleanupIdentity = identity2;
-        identity2 = void 0;
+        const cleanupIdentity = identity;
+        identity = void 0;
         try {
           releaseNamespaceMutationLock(lockPath, cleanupIdentity);
           if (ownerDescriptor !== void 0) {
             const descriptor2 = ownerDescriptor;
             ownerDescriptor = void 0;
-            fs13.closeSync(descriptor2);
+            fs9.closeSync(descriptor2);
           }
         } catch (cleanup) {
           state.pending = { identity: cleanupIdentity, ...ownerDescriptor === void 0 ? {} : { ownerDescriptor } };
@@ -27905,7 +17530,7 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
       if (errorCode4(error) !== "EEXIST") throw error;
       let stat;
       try {
-        stat = fs13.lstatSync(lockPath);
+        stat = fs9.lstatSync(lockPath);
       } catch (statError) {
         if (errorCode4(statError) === "ENOENT") continue;
         throw statError;
@@ -27914,13 +17539,13 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
         throw new KiroMemoryScopeError("Kiro memory mutation lock is foreign");
       }
       if (Date.now() - stat.mtimeMs > STALE_MUTATION_LOCK_MS) {
-        const ownerPath = path15.join(lockPath, MUTATION_LOCK_OWNER);
+        const ownerPath = path11.join(lockPath, MUTATION_LOCK_OWNER);
         let ownerStat;
         let owner;
         try {
-          ownerStat = fs13.lstatSync(ownerPath);
+          ownerStat = fs9.lstatSync(ownerPath);
           if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) throw new Error("invalid owner file");
-          owner = JSON.parse(fs13.readFileSync(ownerPath, "utf8"));
+          owner = JSON.parse(fs9.readFileSync(ownerPath, "utf8"));
           if (!owner || !Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.token !== "string" || !owner.token || !Number.isSafeInteger(owner.acquiredAt) || owner.acquiredAt <= 0) {
             throw new Error("invalid owner metadata");
           }
@@ -27931,7 +17556,7 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
           if (performance.now() >= deadline) {
             throw new KiroMemoryScopeError("Timed out waiting for a live Kiro memory mutation lock");
           }
-          await delay3(10);
+          await delay2(10);
           continue;
         }
         releaseNamespaceMutationLock(lockPath, {
@@ -27943,7 +17568,7 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
       if (performance.now() >= deadline) {
         throw new KiroMemoryScopeError("Timed out waiting for Kiro memory mutation lock");
       }
-      await delay3(10);
+      await delay2(10);
     }
   }
   try {
@@ -27958,10 +17583,10 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
     throw error;
   } finally {
     try {
-      releaseNamespaceMutationLock(lockPath, identity2);
+      releaseNamespaceMutationLock(lockPath, identity);
       state.pending = void 0;
     } catch (cleanup) {
-      state.pending = { identity: identity2 };
+      state.pending = { identity };
       if (operationError !== void 0) throw new AggregateError(
         [operationError, cleanup],
         "Kiro memory mutation and lock cleanup failed",
@@ -27972,15 +17597,15 @@ var withNamespaceMutationLock = async (namespaceRoot, state, operation, signal, 
   }
 };
 var ensureDirectory = (target) => {
-  fs13.mkdirSync(target, { recursive: true, mode: 448 });
-  const stat = fs13.lstatSync(target);
+  fs9.mkdirSync(target, { recursive: true, mode: 448 });
+  const stat = fs9.lstatSync(target);
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new KiroMemoryScopeError(`Kiro memory directory must be a real directory: ${target}`);
   }
   if (process.platform !== "win32" && typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new KiroMemoryScopeError(`Kiro memory directory is owned by another user: ${target}`);
   }
-  fs13.chmodSync(target, 448);
+  fs9.chmodSync(target, 448);
 };
 var assertPrivateDirectory2 = (target, stat) => {
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
@@ -27995,14 +17620,25 @@ var assertPrivateDirectory2 = (target, stat) => {
     }
   }
 };
+var readBounded = (descriptor2, budget, overflow) => {
+  const buffer = Buffer.alloc(budget + 1);
+  let bytes2 = 0;
+  while (bytes2 < buffer.length) {
+    const count2 = fs9.readSync(descriptor2, buffer, bytes2, buffer.length - bytes2, null);
+    if (count2 === 0) break;
+    bytes2 += count2;
+  }
+  if (bytes2 > budget) throw overflow();
+  return buffer.subarray(0, bytes2);
+};
 var readOwnershipMarker = (filePath) => {
   let descriptor2;
   try {
-    descriptor2 = fs13.openSync(
+    descriptor2 = fs9.openSync(
       filePath,
-      fs13.constants.O_RDONLY | (fs13.constants.O_NOFOLLOW ?? 0)
+      fs9.constants.O_RDONLY | (fs9.constants.O_NOFOLLOW ?? 0)
     );
-    const stat = fs13.fstatSync(descriptor2);
+    const stat = fs9.fstatSync(descriptor2);
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > 8 * 1024) {
       throw new KiroMemoryScopeError(`Kiro memory ownership marker is invalid: ${filePath}`);
     }
@@ -28014,14 +17650,18 @@ var readOwnershipMarker = (filePath) => {
         throw new KiroMemoryScopeError(`Kiro memory ownership marker is not private: ${filePath}`);
       }
     }
-    return JSON.parse(fs13.readFileSync(descriptor2, "utf8"));
+    return JSON.parse(readBounded(
+      descriptor2,
+      8 * 1024,
+      () => new KiroMemoryScopeError(`Kiro memory ownership marker is invalid: ${filePath}`)
+    ).toString("utf8"));
   } catch (error) {
     if (error instanceof KiroMemoryScopeError) throw error;
     throw new KiroMemoryScopeError(
       `Kiro memory directory is foreign or its ownership marker is unreadable: ${filePath}`
     );
   } finally {
-    if (descriptor2 !== void 0) fs13.closeSync(descriptor2);
+    if (descriptor2 !== void 0) fs9.closeSync(descriptor2);
   }
 };
 var ensureOwnedDirectory = (memoryRoot, target, marker) => {
@@ -28030,42 +17670,42 @@ var ensureOwnedDirectory = (memoryRoot, target, marker) => {
   let created = false;
   if (!existing) {
     try {
-      fs13.mkdirSync(target, { mode: 448 });
+      fs9.mkdirSync(target, { mode: 448 });
       created = true;
     } catch (error) {
       if (errorCode4(error) !== "EEXIST") throw error;
     }
   }
-  const stat = fs13.lstatSync(target);
+  const stat = fs9.lstatSync(target);
   assertPrivateDirectory2(target, stat);
-  const markerPath = path15.join(target, OWNERSHIP_MARKER);
+  const markerPath = path11.join(target, OWNERSHIP_MARKER);
   if (created) {
-    const temporaryMarker = path15.join(
+    const temporaryMarker = path11.join(
       target,
       `.kiro-fabric-owner-${process.pid}-${crypto.randomBytes(8).toString("hex")}.tmp`
     );
     try {
-      const descriptor2 = fs13.openSync(
+      const descriptor2 = fs9.openSync(
         temporaryMarker,
-        fs13.constants.O_WRONLY | fs13.constants.O_CREAT | fs13.constants.O_EXCL | (fs13.constants.O_NOFOLLOW ?? 0),
+        fs9.constants.O_WRONLY | fs9.constants.O_CREAT | fs9.constants.O_EXCL | (fs9.constants.O_NOFOLLOW ?? 0),
         384
       );
       try {
-        fs13.writeFileSync(descriptor2, `${JSON.stringify(marker)}
+        fs9.writeFileSync(descriptor2, `${JSON.stringify(marker)}
 `, "utf8");
-        fs13.fsyncSync(descriptor2);
+        fs9.fsyncSync(descriptor2);
       } finally {
-        fs13.closeSync(descriptor2);
+        fs9.closeSync(descriptor2);
       }
-      fs13.linkSync(temporaryMarker, markerPath);
-      fs13.unlinkSync(temporaryMarker);
+      fs9.linkSync(temporaryMarker, markerPath);
+      fs9.unlinkSync(temporaryMarker);
     } catch (error) {
       try {
-        fs13.unlinkSync(temporaryMarker);
+        fs9.unlinkSync(temporaryMarker);
       } catch {
       }
       try {
-        fs13.rmdirSync(target);
+        fs9.rmdirSync(target);
       } catch {
       }
       throw error;
@@ -28073,7 +17713,7 @@ var ensureOwnedDirectory = (memoryRoot, target, marker) => {
   } else if (!lstatOrNull(markerPath)) {
     let entries = [];
     try {
-      entries = fs13.readdirSync(target);
+      entries = fs9.readdirSync(target);
     } catch {
     }
     if (entries.every((name) => name.startsWith(".kiro-fabric-owner-"))) {
@@ -28094,9 +17734,9 @@ var assertNoSymlinkComponents = (root, target) => {
     throw new KiroMemoryScopeError(`Kiro memory path escapes its root: ${target}`);
   }
   let cursor = root;
-  const relative = path15.relative(root, target);
-  for (const part of relative.split(path15.sep).filter(Boolean)) {
-    cursor = path15.join(cursor, part);
+  const relative = path11.relative(root, target);
+  for (const part of relative.split(path11.sep).filter(Boolean)) {
+    cursor = path11.join(cursor, part);
     const stat = lstatOrNull(cursor);
     if (!stat) continue;
     if (stat.isSymbolicLink()) {
@@ -28105,10 +17745,10 @@ var assertNoSymlinkComponents = (root, target) => {
   }
 };
 var canonicalDirectory = (root) => {
-  const candidate = path15.resolve(normalizeKiroMemoryToken(root, "root"));
+  const candidate = path11.resolve(normalizeKiroMemoryToken(root, "root"));
   ensureDirectory(candidate);
-  const canonical = fs13.realpathSync(candidate);
-  const stat = fs13.statSync(canonical);
+  const canonical = fs9.realpathSync(candidate);
+  const stat = fs9.statSync(canonical);
   if (!stat.isDirectory()) {
     throw new KiroMemoryScopeError(`Kiro memory root is not a directory: ${canonical}`);
   }
@@ -28120,7 +17760,7 @@ var memoryNamespaceRoot = (root, namespace) => {
       "Kiro memory namespace is too long after filesystem-safe encoding"
     );
   }
-  return path15.join(root, MEMORY_DIR, `${encodeName2(namespace)}-${hashNamespace(namespace)}`);
+  return path11.join(root, MEMORY_DIR, `${encodeName2(namespace)}-${hashNamespace(namespace)}`);
 };
 var assertKiroMemoryKeyFits = (key) => {
   if (utf8Bytes(`${encodeName2(key)}.json`) > MAX_FILE_NAME_BYTES) {
@@ -28131,14 +17771,15 @@ var assertKiroMemoryKeyFits = (key) => {
 };
 var entryPath = (namespaceRoot, key) => {
   assertKiroMemoryKeyFits(key);
-  return path15.join(namespaceRoot, `${encodeName2(key)}.json`);
+  return path11.join(namespaceRoot, `${encodeName2(key)}.json`);
 };
-var readEntry = (filePath, expectedNamespace, maxValueChars) => {
+var readEntry = (filePath, expectedNamespace, maxValueChars, remainingBytes = DEFAULT_MAX_NAMESPACE_BYTES) => {
   let descriptor2;
   let raw;
+  let bytes2;
   try {
-    descriptor2 = fs13.openSync(filePath, fs13.constants.O_RDONLY | (fs13.constants.O_NOFOLLOW ?? 0));
-    const stat = fs13.fstatSync(descriptor2);
+    descriptor2 = fs9.openSync(filePath, fs9.constants.O_RDONLY | (fs9.constants.O_NOFOLLOW ?? 0));
+    const stat = fs9.fstatSync(descriptor2);
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > DEFAULT_MAX_ENTRY_BYTES) {
       throw new KiroMemoryScopeError(`Kiro memory entry must be a bounded regular file: ${filePath}`);
     }
@@ -28150,9 +17791,14 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
         throw new KiroMemoryScopeError(`Kiro memory entry must be private: ${filePath}`);
       }
     }
-    raw = fs13.readFileSync(descriptor2, "utf8");
+    const budget = Math.min(DEFAULT_MAX_ENTRY_BYTES, remainingBytes);
+    const overflow = () => remainingBytes < DEFAULT_MAX_ENTRY_BYTES ? namespaceBytesError(expectedNamespace) : new KiroMemoryScopeError(`Kiro memory entry must be a bounded regular file: ${filePath}`);
+    if (stat.size > budget) throw overflow();
+    const content = readBounded(descriptor2, budget, overflow);
+    bytes2 = content.length;
+    raw = content.toString("utf8");
   } finally {
-    if (descriptor2 !== void 0) fs13.closeSync(descriptor2);
+    if (descriptor2 !== void 0) fs9.closeSync(descriptor2);
   }
   let parsed;
   try {
@@ -28168,7 +17814,7 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
     encodedValue = JSON.stringify(parsed.value);
   } catch {
   }
-  if (parsed.namespace !== expectedNamespace || normalizeKiroMemoryToken(parsed.key, "key") !== parsed.key || entryPath(path15.dirname(filePath), parsed.key) !== filePath || encodedValue === void 0 || encodedValue.length > maxValueChars) {
+  if (parsed.namespace !== expectedNamespace || normalizeKiroMemoryToken(parsed.key, "key") !== parsed.key || entryPath(path11.dirname(filePath), parsed.key) !== filePath || encodedValue === void 0 || encodedValue.length > maxValueChars) {
     throw new KiroMemoryScopeError(`Kiro memory entry violates its configured scope: ${filePath}`);
   }
   return {
@@ -28176,7 +17822,7 @@ var readEntry = (filePath, expectedNamespace, maxValueChars) => {
     key: parsed.key,
     value: parsed.value,
     updatedAt: parsed.updatedAt,
-    bytes: utf8Bytes(raw)
+    bytes: bytes2
   };
 };
 var isUnsupportedDirectorySync = (error, phase) => {
@@ -28184,29 +17830,29 @@ var isUnsupportedDirectorySync = (error, phase) => {
   if (code2 === "EINVAL" || code2 === "ENOTSUP" || code2 === "EOPNOTSUPP") return true;
   return phase === "open" && process.platform === "win32" && (code2 === "EISDIR" || code2 === "EPERM" || code2 === "EACCES");
 };
-var syncDirectoryBestEffort = (directory2) => {
+var syncDirectoryBestEffort = (directory) => {
   let descriptor2;
   try {
     try {
-      descriptor2 = fs13.openSync(directory2, "r");
+      descriptor2 = fs9.openSync(directory, "r");
     } catch (error) {
       if (isUnsupportedDirectorySync(error, "open")) return;
       throw error;
     }
     try {
-      fs13.fsyncSync(descriptor2);
+      fs9.fsyncSync(descriptor2);
     } catch (error) {
       if (!isUnsupportedDirectorySync(error, "sync")) throw error;
     }
   } finally {
-    if (descriptor2 !== void 0) fs13.closeSync(descriptor2);
+    if (descriptor2 !== void 0) fs9.closeSync(descriptor2);
   }
 };
 var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
-  const directory2 = path15.dirname(filePath);
-  const temporary = path15.join(
-    directory2,
-    `.${path15.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+  const directory = path11.dirname(filePath);
+  const temporary = path11.join(
+    directory,
+    `.${path11.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
   );
   let descriptor2;
   let createdStats;
@@ -28214,23 +17860,23 @@ var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
     if (descriptor2 === void 0) return;
     const fd = descriptor2;
     descriptor2 = void 0;
-    fs13.closeSync(fd);
+    fs9.closeSync(fd);
   };
   try {
-    descriptor2 = fs13.openSync(temporary, "wx", 384);
-    createdStats = fs13.fstatSync(descriptor2);
-    fs13.writeFileSync(descriptor2, content, "utf8");
-    fs13.fsyncSync(descriptor2);
+    descriptor2 = fs9.openSync(temporary, "wx", 384);
+    createdStats = fs9.fstatSync(descriptor2);
+    fs9.writeFileSync(descriptor2, content, "utf8");
+    fs9.fsyncSync(descriptor2);
     close();
     beforeCommit?.();
-    fs13.renameSync(temporary, filePath);
+    fs9.renameSync(temporary, filePath);
     afterCommit?.();
-    syncDirectoryBestEffort(directory2);
+    syncDirectoryBestEffort(directory);
   } catch (error) {
     const errors = [error];
     if (createdStats === void 0 && descriptor2 !== void 0) {
       try {
-        createdStats = fs13.fstatSync(descriptor2);
+        createdStats = fs9.fstatSync(descriptor2);
       } catch (cleanup) {
         errors.push(cleanup);
       }
@@ -28243,7 +17889,7 @@ var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
     try {
       const current = lstatOrNull(temporary);
       if (createdStats && current?.isFile() && !current.isSymbolicLink() && current.dev === createdStats.dev && current.ino === createdStats.ino) {
-        fs13.rmSync(temporary, { force: true });
+        fs9.rmSync(temporary, { force: true });
       }
     } catch (cleanup) {
       errors.push(cleanup);
@@ -28252,25 +17898,43 @@ var writeJsonAtomic2 = (filePath, content, beforeCommit, afterCommit) => {
     throw error;
   }
 };
-var listEntryFiles = (namespaceRoot) => {
+var namespaceBytesError = (namespace) => new Error(
+  `Kiro memory namespace ${JSON.stringify(namespace)} exceeds ${DEFAULT_MAX_NAMESPACE_BYTES} bytes`
+);
+var listEntryFiles = (namespaceRoot, namespace, maxEntries) => {
+  let directory;
   try {
-    return fs13.readdirSync(namespaceRoot, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".json")).map((entry) => path15.join(namespaceRoot, entry.name)).sort((left, right) => left.localeCompare(right));
+    directory = fs9.opendirSync(namespaceRoot);
   } catch (error) {
-    if (error.code === "ENOENT") return [];
+    if (errorCode4(error) === "ENOENT") return [];
     throw error;
   }
-};
-var collectNamespaceEntries = (namespaceRoot, namespace, maxValueChars) => listEntryFiles(namespaceRoot).map((filePath) => readEntry(filePath, namespace, maxValueChars));
-var assertEntryFits = (namespaceRoot, next, targetPath, maxEntries, maxValueChars) => {
-  const entries = collectNamespaceEntries(namespaceRoot, next.namespace, maxValueChars);
-  let totalBytes = next.bytes;
-  let entryCount = 1;
-  for (const entry of entries) {
-    const currentPath = entryPath(namespaceRoot, entry.key);
-    if (currentPath === targetPath) continue;
-    totalBytes += entry.bytes;
-    entryCount += 1;
+  const files = [];
+  try {
+    let entry;
+    while ((entry = directory.readSync()) !== null) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      if (files.length === maxEntries) {
+        throw new Error(`Kiro memory namespace ${JSON.stringify(namespace)} exceeds ${maxEntries} entries`);
+      }
+      files.push(path11.join(namespaceRoot, entry.name));
+    }
+  } finally {
+    directory.closeSync();
   }
+  return files.sort((left, right) => left.localeCompare(right));
+};
+function* iterateNamespaceEntries(files, namespace, maxValueChars, initialBytes = 0, skipPath) {
+  let totalBytes = initialBytes;
+  for (const file of files) {
+    if (file === skipPath) continue;
+    const entry = readEntry(file, namespace, maxValueChars, DEFAULT_MAX_NAMESPACE_BYTES - totalBytes);
+    totalBytes += entry.bytes;
+    yield entry;
+  }
+}
+var assertEntryFits = (next, targetPath, maxEntries, maxValueChars, files) => {
+  const entryCount = files.length + (files.includes(targetPath) ? 0 : 1);
   if (next.bytes > DEFAULT_MAX_ENTRY_BYTES) {
     throw new Error(
       `Kiro memory entry exceeds ${DEFAULT_MAX_ENTRY_BYTES} bytes for namespace ${JSON.stringify(next.namespace)}`
@@ -28281,10 +17945,7 @@ var assertEntryFits = (namespaceRoot, next, targetPath, maxEntries, maxValueChar
       `Kiro memory namespace ${JSON.stringify(next.namespace)} exceeds ${maxEntries} entries`
     );
   }
-  if (totalBytes > DEFAULT_MAX_NAMESPACE_BYTES) {
-    throw new Error(
-      `Kiro memory namespace ${JSON.stringify(next.namespace)} exceeds ${DEFAULT_MAX_NAMESPACE_BYTES} bytes`
-    );
+  for (const _entry of iterateNamespaceEntries(files, next.namespace, maxValueChars, next.bytes, targetPath)) {
   }
 };
 var openKiroMemory = (namespace, root, limits = {}) => {
@@ -28292,7 +17953,7 @@ var openKiroMemory = (namespace, root, limits = {}) => {
   const maxValueChars = Number.isSafeInteger(limits.maxValueChars) && limits.maxValueChars > 0 ? Math.min(DEFAULT_MAX_ENTRY_BYTES, limits.maxValueChars) : DEFAULT_MAX_ENTRY_BYTES;
   const memoryNamespace = normalizeKiroMemoryToken(namespace, "namespace");
   const memoryRoot = canonicalDirectory(root);
-  const scopedRoot = path15.join(memoryRoot, MEMORY_DIR);
+  const scopedRoot = path11.join(memoryRoot, MEMORY_DIR);
   ensureOwnedDirectory(memoryRoot, scopedRoot, {
     format: MEMORY_FORMAT,
     owner: MEMORY_OWNER,
@@ -28352,6 +18013,7 @@ var openKiroMemory = (namespace, root, limits = {}) => {
             throw new Error(`Kiro memory value exceeds ${maxValueChars} configured characters`);
           }
           const normalizedValue = JSON.parse(encodedValue);
+          const files = listEntryFiles(namespaceRoot, memoryNamespace, maxEntries);
           const existing = lstatOrNull(filePath);
           if (existing) {
             if (!existing.isFile() || existing.isSymbolicLink()) {
@@ -28381,7 +18043,7 @@ var openKiroMemory = (namespace, root, limits = {}) => {
             updatedAt: entry.updatedAt
           });
           entry.bytes = utf8Bytes(content);
-          assertEntryFits(namespaceRoot, entry, filePath, maxEntries, maxValueChars);
+          assertEntryFits(entry, filePath, maxEntries, maxValueChars, files);
           throwIfAborted(signal);
           beforeCommit?.();
           writeJsonAtomic2(filePath, content, beforeCommit, () => {
@@ -28409,12 +18071,12 @@ var openKiroMemory = (namespace, root, limits = {}) => {
           const entry = readEntry(filePath, memoryNamespace, maxValueChars);
           if (entry.key !== normalizedKey) throw new KiroMemoryScopeError("Kiro memory entry identity mismatch");
           throwIfAborted(signal);
-          const current = fs13.lstatSync(filePath);
+          const current = fs9.lstatSync(filePath);
           if (current.dev !== before.dev || current.ino !== before.ino || current.nlink !== 1) {
             throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
           }
           beforeCommit?.();
-          fs13.unlinkSync(filePath);
+          fs9.unlinkSync(filePath);
           published = true;
           syncDirectoryBestEffort(namespaceRoot);
           beforeCommit?.();
@@ -28426,48 +18088,45 @@ var openKiroMemory = (namespace, root, limits = {}) => {
       }
     },
     async list() {
-      const entries = collectNamespaceEntries(namespaceRoot, memoryNamespace, maxValueChars).sort((left, right) => left.key.localeCompare(right.key));
-      if (entries.length > maxEntries) {
-        throw new Error(
-          `Kiro memory namespace ${JSON.stringify(memoryNamespace)} exceeds ${maxEntries} entries`
-        );
-      }
-      const totalBytes = entries.reduce((sum, entry) => sum + entry.bytes, 0);
-      if (totalBytes > DEFAULT_MAX_NAMESPACE_BYTES) {
-        throw new Error(
-          `Kiro memory namespace ${JSON.stringify(memoryNamespace)} exceeds ${DEFAULT_MAX_NAMESPACE_BYTES} bytes`
-        );
-      }
-      return entries;
+      return [...iterateNamespaceEntries(
+        listEntryFiles(namespaceRoot, memoryNamespace, maxEntries),
+        memoryNamespace,
+        maxValueChars
+      )].sort((left, right) => left.key.localeCompare(right.key));
     },
     async search(query, limit = 8) {
       const needle = query.trim().toLowerCase();
       if (!needle) return [];
       const capped = Math.max(1, Math.min(Math.floor(limit), maxEntries));
       const scored = [];
-      for (const entry of collectNamespaceEntries(namespaceRoot, memoryNamespace, maxValueChars)) {
+      for (const entry of iterateNamespaceEntries(
+        listEntryFiles(namespaceRoot, memoryNamespace, maxEntries),
+        memoryNamespace,
+        maxValueChars
+      )) {
         const haystack = `${entry.key}
 ${JSON.stringify(entry.value)}`.toLowerCase();
         const position = haystack.indexOf(needle);
         if (position === -1) continue;
         const score = (entry.key.toLowerCase().includes(needle) ? 0 : 1e5) + position;
         scored.push({ entry, score });
+        scored.sort(
+          (left, right) => left.score - right.score || right.entry.updatedAt.localeCompare(left.entry.updatedAt)
+        );
+        scored.length = Math.min(scored.length, Number.isNaN(capped) ? 0 : capped);
       }
-      return scored.sort(
-        (left, right) => left.score - right.score || right.entry.updatedAt.localeCompare(left.entry.updatedAt)
-      ).slice(0, capped).map(({ entry }) => entry);
+      return scored.map(({ entry }) => entry);
     },
     async index() {
-      const files = listEntryFiles(namespaceRoot);
-      if (files.length > maxEntries) {
-        throw new Error(
-          `Kiro memory namespace ${JSON.stringify(memoryNamespace)} exceeds ${maxEntries} entries`
-        );
+      const metadata = [];
+      for (const { key, bytes: bytes2, updatedAt } of iterateNamespaceEntries(
+        listEntryFiles(namespaceRoot, memoryNamespace, maxEntries),
+        memoryNamespace,
+        maxValueChars
+      )) {
+        metadata.push({ key, bytes: bytes2, updatedAt });
       }
-      return files.map((file) => {
-        const { key, bytes: bytes2, updatedAt } = readEntry(file, memoryNamespace, maxValueChars);
-        return { key, bytes: bytes2, updatedAt };
-      }).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      return metadata.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     }
   };
 };
@@ -28492,8 +18151,8 @@ var KiroMemoryProvider = class {
   #binding;
   constructor(options) {
     this.#root = options.root;
-    const canonicalWorkspace = fs14.realpathSync(options.cwd);
-    this.#namespace = options.namespace ?? `project:${createHash9("sha256").update(canonicalWorkspace).digest("hex")}`;
+    const canonicalWorkspace = fs10.realpathSync(options.cwd);
+    this.#namespace = options.namespace ?? `project:${createHash8("sha256").update(canonicalWorkspace).digest("hex")}`;
     this.#maxEntries = options.maxEntries;
     this.#maxValueChars = options.maxValueChars;
   }
@@ -28575,9 +18234,9 @@ var boundKiroArtifactRead = (page, maximum) => {
   if (!Number.isSafeInteger(maximum) || maximum < 1) throw new Error("invalid artifact response budget");
   const candidate = (length) => {
     if (length > 0 && length < page.text.length && /[\uD800-\uDBFF]/u.test(page.text.charAt(length - 1)) && /[\uDC00-\uDFFF]/u.test(page.text.charAt(length))) length--;
-    const text3 = page.text.slice(0, length);
-    const nextOffset = page.offset + text3.length;
-    return { ...page, text: text3, nextOffset, done: nextOffset >= page.totalChars };
+    const text2 = page.text.slice(0, length);
+    const nextOffset = page.offset + text2.length;
+    return { ...page, text: text2, nextOffset, done: nextOffset >= page.totalChars };
   };
   let low = 0, high = page.text.length;
   while (low < high) {
@@ -28613,12 +18272,12 @@ var KiroPowerArtifactsProvider = class {
     if (actionName === "checkpoint") {
       if (!("value" in args) || args.label !== void 0 && (typeof args.label !== "string" || args.label.length > 80 || /[\u0000-\u001f\u007f]/u.test(args.label))) throw new Error("invalid checkpoint arguments");
       const content = fabricJsonText({ ...args.label === void 0 ? {} : { label: args.label }, value: args.value }, 1e5);
-      const response = (id4) => ({ id: id4, retrieval: { ref: "artifacts.read", args: { id: id4 }, encoding: "json", ephemeral: true } });
+      const response = (id3) => ({ id: id3, retrieval: { ref: "artifacts.read", args: { id: id3 }, encoding: "json", ephemeral: true } });
       fabricJsonText(response(`ka_${"0".repeat(48)}`), maximum);
       const record4 = context.checkpoints?.reserve();
-      const id3 = this.#checkpoints.write(content);
-      record4?.({ id: id3, ...typeof args.label === "string" ? { label: args.label } : {} });
-      return response(id3);
+      const id2 = this.#checkpoints.write(content);
+      record4?.({ id: id2, ...typeof args.label === "string" ? { label: args.label } : {} });
+      return response(id2);
     }
     if (actionName !== "read") throw new Error(`Unknown artifacts action: ${actionName}`);
     let page;
@@ -28656,7 +18315,7 @@ var createKiroRuntime = (options) => {
       ...options.managedSearch ? { managedSearch: options.managedSearch } : {}
     }));
     registry.register(new ReviewProvider({ root: options.workspaceRoot, maxResultChars: config.executor.maxNestedResultChars }));
-    registry.register(new ProbeProvider({ root: options.workspaceRoot, probesRoot: options.probesRoot ?? path16.join(path16.dirname(options.localLockRoot), "probes"), maxResultChars: config.executor.maxNestedResultChars }));
+    registry.register(new ProbeProvider({ root: options.workspaceRoot, probesRoot: options.probesRoot ?? path12.join(path12.dirname(options.localLockRoot), "probes"), maxResultChars: config.executor.maxNestedResultChars }));
   } else {
     for (const name of ["local", "review", "probe"]) registry.markUnavailable(name, "verified workspace binding is required");
   }
@@ -28703,14 +18362,14 @@ var createKiroRuntime = (options) => {
 };
 
 // src/kiro/run-provenance.ts
-import { createHash as createHash10 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 var RUN_PROVENANCE_LIMITS = Object.freeze({ contentBytes: 1048576, entries: 32, totalBytes: 4194304, declarationJsonChars: 65536 });
 var record3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
-var hash2 = (value) => createHash10("sha256").update(value).digest("hex");
-function parseRunProvenanceDeclaration(json2) {
-  if (typeof json2 !== "string" || json2.length > RUN_PROVENANCE_LIMITS.declarationJsonChars) return void 0;
+var hash2 = (value) => createHash9("sha256").update(value).digest("hex");
+function parseRunProvenanceDeclaration(json) {
+  if (typeof json !== "string" || json.length > RUN_PROVENANCE_LIMITS.declarationJsonChars) return void 0;
   try {
-    const value = JSON.parse(json2);
+    const value = JSON.parse(json);
     if (value === null || typeof value !== "object" || Array.isArray(value)) return void 0;
     const r = record3(value);
     return {
@@ -28804,26 +18463,26 @@ var EXEC_DESCRIPTION = "Checked TypeScript; await/return. local.read({path,offse
 var MCP_INSTANCE_ID = `fmcp_${randomBytes6(16).toString("hex")}`;
 var MCP_STARTED_AT = (/* @__PURE__ */ new Date()).toISOString();
 var MCP_PARENT_PID = process.ppid;
-var isRecord8 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord7 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var bounded2 = (value, fallback, maximum = 800) => (value instanceof Error ? value.message : typeof value === "string" ? value : fallback).replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, maximum) || fallback;
 var toolError = (code2, error, issues) => ({
   content: [{ type: "text", text: JSON.stringify({ error: { code: code2, message: bounded2(error, "The request failed"), ...issues?.length ? { issues: issues.slice(0, 8).map((issue) => bounded2(issue, "invalid value", 200)) } : {} } }) }],
   isError: true
 });
 var supportsKiroElicitation = (capabilities) => {
-  if (!isRecord8(capabilities) || !isRecord8(capabilities.elicitation)) return false;
+  if (!isRecord7(capabilities) || !isRecord7(capabilities.elicitation)) return false;
   return Object.keys(capabilities.elicitation).length === 0 || Object.hasOwn(capabilities.elicitation, "form");
 };
 var installedKiroHomeFor = (runtimeRoot, dataRoot) => {
   const runtime = inspectCanonicalPath(runtimeRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
   const data = inspectCanonicalPath(dataRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
-  const installRoot = path17.dirname(data);
-  if (path17.basename(data) !== "data" || path17.basename(installRoot) !== "kiro-fabric") return void 0;
-  const generation = path17.basename(runtime) === "app" ? path17.dirname(runtime) : runtime;
-  if (!/^[a-f0-9]{64}$/u.test(path17.basename(generation)) || path17.dirname(generation) !== path17.join(installRoot, "runtime")) {
+  const installRoot = path13.dirname(data);
+  if (path13.basename(data) !== "data" || path13.basename(installRoot) !== "kiro-fabric") return void 0;
+  const generation = path13.basename(runtime) === "app" ? path13.dirname(runtime) : runtime;
+  if (!/^[a-f0-9]{64}$/u.test(path13.basename(generation)) || path13.dirname(generation) !== path13.join(installRoot, "runtime")) {
     throw new Error("installed Agent data root does not match its digest-named runtime layout");
   }
-  return inspectCanonicalPath(path17.dirname(installRoot), {
+  return inspectCanonicalPath(path13.dirname(installRoot), {
     kind: "directory",
     rejectFinalSymlink: true
   }).canonicalPath;
@@ -28836,12 +18495,12 @@ var workspaceRequest = (value) => {
 var TRACE_RETENTION_MAX_FILES = 16;
 var TRACE_RETENTION_MAX_AGE_MS = 7 * 864e5;
 var TRACE_FILE_NAME = /^fabric-\d+-[a-z0-9]+\.jsonl$/u;
-var sweepTraceDirectory = (directory2) => {
+var sweepTraceDirectory = (directory) => {
   try {
     const now = Date.now();
-    const candidates = fs15.readdirSync(directory2, { withFileTypes: true }).filter((entry) => entry.isFile() && !entry.isSymbolicLink() && TRACE_FILE_NAME.test(entry.name)).map((entry) => {
+    const candidates = fs11.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && !entry.isSymbolicLink() && TRACE_FILE_NAME.test(entry.name)).map((entry) => {
       try {
-        return { name: entry.name, mtimeMs: fs15.lstatSync(path17.join(directory2, entry.name)).mtimeMs };
+        return { name: entry.name, mtimeMs: fs11.lstatSync(path13.join(directory, entry.name)).mtimeMs };
       } catch {
         return void 0;
       }
@@ -28849,7 +18508,7 @@ var sweepTraceDirectory = (directory2) => {
     candidates.forEach((entry, index) => {
       if (index < TRACE_RETENTION_MAX_FILES && now - entry.mtimeMs <= TRACE_RETENTION_MAX_AGE_MS) return;
       try {
-        fs15.rmSync(path17.join(directory2, entry.name), { force: true });
+        fs11.rmSync(path13.join(directory, entry.name), { force: true });
       } catch {
       }
     });
@@ -28865,9 +18524,9 @@ var createAgentTracer = (data, version) => {
   }
   if (!resolveTraceEnabled(process.env.KIRO_FABRIC_DEBUG, configured)) return DISABLED_TRACER;
   try {
-    const directory2 = path17.join(data.root, "traces");
-    sweepTraceDirectory(directory2);
-    const file = path17.join(directory2, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
+    const directory = path13.join(data.root, "traces");
+    sweepTraceDirectory(directory);
+    const file = path13.join(directory, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
     const tracer = createFabricTracer({ file });
     tracer.event("init", "agent.mcp.start", void 0, {
       product: "kiro-fabric-agent",
@@ -28892,14 +18551,14 @@ var createKiroMcpServer = async (options) => {
     throw new Error("explicit Kiro home does not match the installed Agent storage layout");
   }
   const kiroHome = explicitKiroHome ?? inferredKiroHome;
-  const version = options.version ?? String(JSON.parse(readFileSync(path17.join(options.runtimeRoot, "package.json"), "utf8")).version);
-  const generationName = path17.basename(path17.dirname(options.runtimeRoot));
+  const version = options.version ?? String(JSON.parse(readFileSync(path13.join(options.runtimeRoot, "package.json"), "utf8")).version);
+  const generationName = path13.basename(path13.dirname(options.runtimeRoot));
   const runProvenance = buildRunProvenance({
     configured: options.runProvenance?.configured ?? parseRunProvenanceDeclaration(process.env.KIRO_FABRIC_RUN_DECLARATION) ?? {},
     observed: {
       ...options.runProvenance?.observed,
       runtimeVersion: version,
-      runtimeBundle: path17.basename(options.runtimeRoot) === "app" && /^[a-f0-9]{64}$/u.test(generationName) ? generationName : void 0
+      runtimeBundle: path13.basename(options.runtimeRoot) === "app" && /^[a-f0-9]{64}$/u.test(generationName) ? generationName : void 0
     }
   });
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
@@ -28919,7 +18578,7 @@ var createKiroMcpServer = async (options) => {
           message,
           requestedSchema: { type: "object", properties: { approved: { type: "boolean", title: "Approve once", default: false } }, required: ["approved"] }
         }, { ...signal ? { signal } : {}, timeout: timeoutMs });
-        const approved = isRecord8(result.content) && result.content.approved === true;
+        const approved = isRecord7(result.content) && result.content.approved === true;
         if (tracer.enabled) {
           tracer.event("eval", "approval.form.response", void 0, { elicitationId, action: result.action, approved });
           tracer.flush();
@@ -29003,15 +18662,15 @@ var createKiroMcpServer = async (options) => {
       mcpConfigPath: data.mcpConfig,
       artifactsRoot: project?.artifacts ?? data.artifacts,
       ...options.managedSearch ? { managedSearch: options.managedSearch } : {},
-      ...project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, workspaceRoot: workspace.canonicalPath, localLockRoot: path17.join(path17.dirname(project.state), "local-locks") } : {}
+      ...project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, workspaceRoot: workspace.canonicalPath, localLockRoot: path13.join(path13.dirname(project.state), "local-locks") } : {}
     });
   };
   const runtimeForIdentity = async () => {
     const observation = binding.workspaceObservation();
     const blocked = unavailableWorkspace() || observation.status === "temporarily-unavailable";
     const workspace = !blocked && observation.status === "verified" ? observation.workspace : void 0;
-    const identity2 = blocked ? `<unavailable>:${binding.bindingIdentity()}` : binding.bindingIdentity();
-    if (runtime && runtimeIdentity === identity2) return runtime;
+    const identity = blocked ? `<unavailable>:${binding.bindingIdentity()}` : binding.bindingIdentity();
+    if (runtime && runtimeIdentity === identity) return runtime;
     const authorizeCatalog = (current) => {
       const observed = inspectCanonicalPath(workspace?.canonicalPath ?? data.root, { kind: "directory", rejectFinalSymlink: true });
       current.service.bindCatalog({
@@ -29024,12 +18683,12 @@ var createKiroMcpServer = async (options) => {
     };
     if (runtime && runtimeIdentity === "<injected>") {
       authorizeCatalog(runtime);
-      runtimeIdentity = identity2;
+      runtimeIdentity = identity;
       return runtime;
     }
     await closeRuntime(new Error("workspace binding changed"));
     runtime = await createRuntimeFor(workspace);
-    runtimeIdentity = identity2;
+    runtimeIdentity = identity;
     runtimeGeneration += 1;
     authorizeCatalog(runtime);
     if (tracer.enabled) tracer.event("init", "runtime.start", void 0, { runtimeGeneration });
@@ -29170,7 +18829,7 @@ var createKiroMcpServer = async (options) => {
         });
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       } catch (error) {
-        const issues = isRecord8(error) && Array.isArray(error.issues) ? error.issues : void 0;
+        const issues = isRecord7(error) && Array.isArray(error.issues) ? error.issues : void 0;
         return toolError("workspace_request_failed", error, issues);
       }
     }
@@ -29180,10 +18839,10 @@ var createKiroMcpServer = async (options) => {
     const tracedError = (code2, error, issues) => {
       const response = toolError(code2, error, issues);
       if (tracer.enabled) {
-        const text3 = response.content[0].text;
+        const text2 = response.content[0].text;
         tracer.event("eval", "exec.projection", execId, {
-          visibleChars: text3.length,
-          visibleBytes: Buffer.byteLength(text3, "utf8"),
+          visibleChars: text2.length,
+          visibleBytes: Buffer.byteLength(text2, "utf8"),
           isError: true,
           overflowed: false,
           artifactRetained: false
@@ -29198,9 +18857,9 @@ var createKiroMcpServer = async (options) => {
       return tracedError("adapter_error", error);
     }
     const normalized = prepareFabricExecArgumentsWithDiagnostics(request.params.arguments ?? {});
-    const normalizedRecord = isRecord8(normalized.value) ? normalized.value : void 0;
+    const normalizedRecord = isRecord7(normalized.value) ? normalized.value : void 0;
     const absoluteInputError = typeof normalizedRecord?.code === "string" ? fabricSourceLimitError(normalizedRecord.code, MAX_EXECUTOR_SOURCE_BYTES) : void 0;
-    const absolutePayloadError = isRecord8(normalizedRecord?.payloads) ? fabricPayloadsLimitError(
+    const absolutePayloadError = isRecord7(normalizedRecord?.payloads) ? fabricPayloadsLimitError(
       normalizedRecord.payloads,
       MAX_EXECUTOR_SOURCE_BYTES
     ) : void 0;

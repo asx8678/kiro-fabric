@@ -37,7 +37,7 @@ const jsoncParserEsm = mcporterRequire.resolve("jsonc-parser/lib/esm/main.js");
 const banner = `import { createRequire as __createRequire } from "node:module";\nimport { fileURLToPath as __fileURLToPath } from "node:url";\nimport { dirname as __dirnameOf } from "node:path";\nglobalThis.__filename = __fileURLToPath(import.meta.url);\nglobalThis.__dirname = __dirnameOf(globalThis.__filename);\nconst require = __createRequire(import.meta.url);\n`;
 const result = await build({
   ...sharedEsbuildOptions,
-  entryPoints: [product.entrypoint, product.runtimeAssets.compilerWorker],
+  entryPoints: [product.entrypoint, product.runtimeAssets.compilerWorker, product.runtimeAssets.sandboxWorker],
   outdir,
   metafile: true,
   alias: { "jsonc-parser": jsoncParserEsm },
@@ -145,7 +145,7 @@ if (process.platform !== "win32" && typeof process.getuid === "function" && evid
 fs.chmodSync(evidenceDirectory, 0o700);
 fs.writeFileSync(path.join(evidenceDirectory, "agent-reachability.json"), `${JSON.stringify({
   schemaVersion: 1,
-  entrypoints: [product.entrypoint, product.runtimeAssets.compilerWorker],
+  entrypoints: [product.entrypoint, product.runtimeAssets.compilerWorker, product.runtimeAssets.sandboxWorker],
   sourceInputs,
   classifications: Object.fromEntries(Object.entries(byClass).map(([key, files]) => [key, files])),
   packageInputs,
@@ -190,6 +190,7 @@ const manifest = {
   product: product.product,
   entrypoint: "kiro/mcp-entry.js",
   compilerWorker: "runtime/compiler-worker-entry.js",
+  sandboxWorker: "runtime/sandbox-worker-entry.js",
   executor: "quickjs",
   sourceInputs,
   packageInputs,

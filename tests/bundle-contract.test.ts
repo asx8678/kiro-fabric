@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createBundleManifest, validateBundle, safePath, checkManifest, manifestDigest, compatibilityFor, readRegular, checkToolPins } from '../scripts/bundle-contract.mjs';
 import { fixture, fixtureTools } from './bundle-fixture.js';
 
-test('exact inventory, self exclusion, tamper and hardlink rejection',async()=>{const root=await fixture();try{const b=await validateBundle(root);expect(b.inventory).toHaveLength(15);expect(b.inventory.some((e:{path:string})=>e.path==='bundle-manifest.json')).toBe(false);await writeFile(path.join(root,'app/main.js'),'tampered');await expect(validateBundle(root)).rejects.toThrow();await link(path.join(root,'tools/node'),path.join(root,'app/link'));await expect(createBundleManifest(root,b.manifest)).rejects.toThrow();}finally{await rm(root,{recursive:true,force:true});}});
+test('exact inventory, self exclusion, tamper and hardlink rejection',async()=>{const root=await fixture();try{const b=await validateBundle(root);expect(b.inventory).toHaveLength(16);expect(b.inventory.some((e:{path:string})=>e.path==='bundle-manifest.json')).toBe(false);await writeFile(path.join(root,'app/main.js'),'tampered');await expect(validateBundle(root)).rejects.toThrow();await link(path.join(root,'tools/node'),path.join(root,'app/link'));await expect(createBundleManifest(root,b.manifest)).rejects.toThrow();}finally{await rm(root,{recursive:true,force:true});}});
 test.each(['../a','/a','a//b','a\\b','a:ads','a.','a\u0000b'])('unsafe path %s',p=>expect(()=>safePath(p)).toThrow());
 function resign(m:any){const {digest,...payload}=m;m.digest=manifestDigest(payload);return m;}
 test('exact semantic schema rejects truthy placeholders, extra fields and malformed pin types',async()=>{
@@ -20,7 +20,7 @@ test('exact semantic schema rejects truthy placeholders, extra fields and malfor
    m=>m.inventory.find((e:any)=>e.path==='app/main.js').role='executable',m=>m.inventory.find((e:any)=>e.path==='tools/node').mode=0o600,
   ];
   for(const change of changes){const m=structuredClone(original);change(m);expect(()=>checkManifest(resign(m)),change.toString()).toThrow();}
-  for(const required of ['app/kiro/mcp-entry.js','app/runtime/compiler-worker-entry.js','app/package.json','app/closure-manifest.json','notices/node-LICENSE','notices/rg-COPYING']){
+  for(const required of ['app/kiro/mcp-entry.js','app/runtime/compiler-worker-entry.js','app/runtime/sandbox-worker-entry.js','app/package.json','app/closure-manifest.json','notices/node-LICENSE','notices/rg-COPYING']){
    const m=structuredClone(original);m.inventory=m.inventory.filter((e:any)=>e.path!==required);expect(()=>checkManifest(resign(m))).toThrow(/Missing/);
   }
   for(const provenance of [{kind:'local-source',sourceDigest:'a'.repeat(64),gitHead:'b'.repeat(40),dirty:false},{kind:'release',sourceCommit:'c'.repeat(40)}])expect(()=>checkManifest(resign({...original,provenance}))).not.toThrow();

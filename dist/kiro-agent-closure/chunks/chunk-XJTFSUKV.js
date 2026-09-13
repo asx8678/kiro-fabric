@@ -16,7 +16,7 @@ import {
   applyModuleEvalRuntimeOptions,
   evalOptionsToFlags,
   intrinsicsToFlags
-} from "./chunk-YQ4ZVOWF.js";
+} from "./chunk-NWYPLJ5N.js";
 
 // node_modules/.pnpm/quickjs-emscripten-core@0.32.0/node_modules/quickjs-emscripten-core/dist/chunk-TAV5CUKK.mjs
 var QuickJSAsyncContext = class extends QuickJSContext {

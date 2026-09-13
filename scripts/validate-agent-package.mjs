@@ -11,7 +11,7 @@ import {
 const MAX_PACKAGE_FILES = 500;
 const MAX_PACKAGE_BYTES = 64 * 1024 * 1024;
 // Pin the reviewed product authority, including the closed guidance inventory.
-const AGENT_PRODUCT_SHA256 = "86de166804d847d674db65330403d0d3cd220713f66479d6716862ed5ce4aabd";
+const AGENT_PRODUCT_SHA256 = "d09991a9c7fe5fe32104c21cfae7e4c35229fe2d50cbc4aef3f9a57b20a392e9";
 const SCRIPT_FILES = [
   "agent-profile.mjs",
   "install-agent-user.mjs",
@@ -153,6 +153,7 @@ const validateClosure = (root) => {
   const closure = jsonFile(root, "runtime/closure-manifest.json");
   if (closure.schemaVersion !== 1 || closure.product !== "kiro-fabric-agent" ||
       closure.entrypoint !== "kiro/mcp-entry.js" || closure.compilerWorker !== "runtime/compiler-worker-entry.js" ||
+      closure.sandboxWorker !== "runtime/sandbox-worker-entry.js" ||
       closure.executor !== "quickjs" || !Array.isArray(closure.files)) {
     fail("closure identity drifted");
   }

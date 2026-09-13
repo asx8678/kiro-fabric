@@ -8,8 +8,10 @@ const required = [
   "dist/index.js",
   "dist/index.d.ts",
   "dist/runtime/compiler-worker-entry.js",
+  "dist/runtime/sandbox-worker-entry.js",
   "dist/kiro-agent-closure/kiro/mcp-entry.js",
   "dist/kiro-agent-closure/runtime/compiler-worker-entry.js",
+  "dist/kiro-agent-closure/runtime/sandbox-worker-entry.js",
   "dist/kiro-agent-closure/closure-manifest.json",
 ];
 for (const file of required) {
@@ -53,8 +55,10 @@ for (const removed of ["agent", "managed", "extension", "node-process", "orchest
 for (const entry of [
   "dist/index.js",
   "dist/runtime/compiler-worker-entry.js",
+  "dist/runtime/sandbox-worker-entry.js",
   "dist/kiro-agent-closure/kiro/mcp-entry.js",
   "dist/kiro-agent-closure/runtime/compiler-worker-entry.js",
+  "dist/kiro-agent-closure/runtime/sandbox-worker-entry.js",
 ]) {
   await import(`${pathToFileURL(path.resolve(entry)).href}?build-audit=${Date.now()}`);
 }

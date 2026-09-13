@@ -4,6 +4,7 @@
     "src/index.ts",
     "src/kiro/mcp-entry.ts",
     "src/runtime/compiler-worker-entry.ts",
+    "src/runtime/sandbox-worker-entry.ts",
     "tests/**/*.test.ts",
     "scripts/analyze-trace.mjs",
     "scripts/run-agent-dev.mjs"

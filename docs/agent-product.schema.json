@@ -10,7 +10,7 @@
     "product": { "const": "kiro-fabric-agent" },
     "entrypoint": { "const": "src/kiro/mcp-entry.ts" },
     "outputBundle": { "const": "dist/kiro-agent-closure" },
-    "runtimeAssets": { "type": "object", "additionalProperties": false, "required": ["compilerWorker"], "properties": { "compilerWorker": { "const": "src/runtime/compiler-worker-entry.ts" } } },
+    "runtimeAssets": { "type": "object", "additionalProperties": false, "required": ["compilerWorker", "sandboxWorker"], "properties": { "compilerWorker": { "const": "src/runtime/compiler-worker-entry.ts" }, "sandboxWorker": { "const": "src/runtime/sandbox-worker-entry.ts" } } },
     "tools": { "const": ["fabric_info", "fabric_workspace", "fabric_exec"] },
     "mountedProviders": { "const": ["artifacts","memory","state","mcp","local","fabric"] },
     "bundledAgentResources": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },

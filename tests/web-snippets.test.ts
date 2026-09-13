@@ -1,8 +1,21 @@
 import vm from "node:vm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { webOpenSnippet, webSearchSnippet } from "../src/providers/web-snippets.js";
 
-function browser(options: { fail?: string; delayedCreate?: boolean; delayedContext?: boolean; blocked?: boolean } = {}) {
+afterEach(() => { vi.useRealTimers(); });
+
+function deferred() {
+  let resolve!: () => void, reject!: (error: Error) => void;
+  const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+function browser(options: {
+  fail?: string; delayedCreate?: boolean; delayedContext?: boolean; blocked?: boolean;
+  context?: () => Promise<void>; target?: () => Promise<void>;
+  close?: () => Promise<void>; dispose?: () => Promise<void>;
+  ready?: () => Promise<void>; navigate?: () => Promise<void>;
+} = {}) {
   const events: string[] = [], closed: string[] = [], timers: ReturnType<typeof setTimeout>[] = [];
   let next = 0, nextContext = 0;
   const contexts = new Set<string>(), disposed: string[] = [];
@@ -27,13 +40,19 @@ function browser(options: { fail?: string; delayedCreate?: boolean; delayedConte
         expect(args.disposeOnDetach).toBe(true);
         if (options.fail === "context") throw new Error("private contexts unsupported");
         if (options.fail === "invalid-context") return { browserContextId: "" };
+        if (options.context) await options.context();
         if (options.delayedContext) await new Promise(resolve => setTimeout(resolve, 40));
         const browserContextId = `c${++nextContext}`; contexts.add(browserContextId); return { browserContextId };
       },
-      disposeBrowserContext: async ({ browserContextId }: { browserContextId: string }) => { disposed.push(browserContextId); contexts.delete(browserContextId); },
+      disposeBrowserContext: async ({ browserContextId }: { browserContextId: string }) => {
+        disposed.push(browserContextId);
+        if (options.dispose) await options.dispose();
+        contexts.delete(browserContextId);
+      },
       createTarget: async (args: { background: boolean; browserContextId: string }) => {
         expect(args.background).toBe(true);
         expect(contexts.has(args.browserContextId)).toBe(true);
+        if (options.target) await options.target();
         if (options.delayedCreate) await new Promise(resolve => setTimeout(resolve, 40));
         return { targetId: `t${++next}` };
       },
@@ -42,13 +61,16 @@ function browser(options: { fail?: string; delayedCreate?: boolean; delayedConte
         const sessionId = "s" + targetId; sessions.set(sessionId, targetId); return { sessionId };
       },
     },
-    closeTab: async (target: string) => { closed.push(target); },
-    waitFor: ({ sessionId }: { sessionId: string }) => { events.push(sessionId + ":wait"); return Promise.resolve(); },
+    closeTab: (target: string) => { closed.push(target); return options.close?.() ?? Promise.resolve(); },
+    waitFor: ({ sessionId }: { sessionId: string }) => { events.push(sessionId + ":wait"); return options.ready?.() ?? Promise.resolve(); },
     use: () => { throw new Error("must not change active tab"); },
   };
   const cdp = async (sid: string, method: string, args: { url?: string; expression?: string }) => {
     expect(sessions.has(sid)).toBe(true); events.push(sid + ":" + method);
-    if (method === "Page.navigate") { locations.set(sid, args.url!); return options.fail === "navigate" ? { errorText: "net::ERR_FAILED" } : {}; }
+    if (method === "Page.navigate") {
+      if (options.navigate) await options.navigate();
+      locations.set(sid, args.url!); return options.fail === "navigate" ? { errorText: "net::ERR_FAILED" } : {};
+    }
     if (method !== "Runtime.evaluate") return {};
     if (options.fail === "evaluate") return { exceptionDetails: { text: "evaluation failure" } };
     try {
@@ -61,6 +83,113 @@ function browser(options: { fail?: string; delayedCreate?: boolean; delayedConte
 }
 
 describe("actual browser snippets against a deterministic CDP/DOM fixture", () => {
+  it.each(["close", "dispose"] as const)("rejects successful extraction when %s rejects, without raw cleanup diagnostics", async operation => {
+    const b = browser({ [operation]: () => { throw new Error("PRIVATE_DAEMON_SENTINEL"); } });
+    const error = await b.run(webSearchSnippet("facts", 5, 300)).catch(error => error);
+    expect(String(error)).toContain(operation === "close" ? "tab closure unconfirmed" : "private context disposal unconfirmed");
+    expect(String(error)).not.toContain("PRIVATE_DAEMON_SENTINEL");
+    expect(b.closed).toEqual(["t1"]); expect(b.disposed).toEqual(["c1"]);
+  });
+  it.each(["close", "dispose"] as const)("bounds hung %s independently and preserves the original page failure", async operation => {
+    vi.useFakeTimers();
+    const b = browser({ fail: "evaluate", [operation]: () => new Promise(() => {}) });
+    let settled = false;
+    const outcome = b.run(webSearchSnippet("facts", 5, 300)).catch(error => { settled = true; return String(error); });
+    await vi.advanceTimersByTimeAsync(99);
+    expect(settled).toBe(false);
+    expect(b.disposed).toEqual(["c1"]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await outcome).toContain("evaluation failure; Web cleanup uncertain:");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it.each([750, 29_000])("awaits slow cleanup with proportional, capped grace for page budget %i", async budget => {
+    vi.useFakeTimers();
+    const disposal = deferred(), close = deferred();
+    const b = browser({ dispose: () => disposal.promise, close: () => close.promise });
+    let settled = false;
+    const outcome = b.run(webSearchSnippet("facts", 5, budget)).then(value => { settled = true; return value; });
+    const grace = Math.min(1000, Math.floor(budget / 3));
+    await vi.advanceTimersByTimeAsync(grace - 1);
+    expect(settled).toBe(false);
+    close.resolve(); disposal.resolve();
+    await expect(outcome).resolves.toMatchObject({ source: "google" });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it.each([750, 29_000])("limits hung disposal to reserved headroom for page budget %i", async budget => {
+    vi.useFakeTimers();
+    const b = browser({ dispose: () => new Promise(() => {}) });
+    let settled = false;
+    const outcome = b.run(webSearchSnippet("facts", 5, budget)).catch(error => { settled = true; return String(error); });
+    const grace = Math.min(1000, Math.floor(budget / 3));
+    await vi.advanceTimersByTimeAsync(grace - 1); expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await outcome).toContain("private context disposal unconfirmed");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it.each(["context", "target"] as const)("cleans late %s creation after grace even when cleanup rejects", async operation => {
+    vi.useFakeTimers();
+    const creation = deferred();
+    const b = browser({ [operation]: () => creation.promise, close: async () => { throw new Error("private close"); }, dispose: async () => { throw new Error("private disposal"); } });
+    const outcome = b.run(webSearchSnippet("facts", 5, 30)).catch(error => String(error));
+    await vi.advanceTimersByTimeAsync(40);
+    expect(await outcome).toContain("Web page timed out; Web cleanup uncertain: private resource creation still pending");
+    creation.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(b.disposed).toEqual(["c1"]);
+    expect(b.closed).toEqual(operation === "target" ? ["t1"] : []);
+    expect(b.events).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it.each(["context", "target"] as const)("awaits %s creation and disposal arriving inside cleanup grace", async operation => {
+    vi.useFakeTimers();
+    const creation = deferred(), disposal = deferred();
+    const b = browser({ [operation]: () => creation.promise, dispose: () => disposal.promise });
+    let settled = false;
+    const outcome = b.run(webSearchSnippet("facts", 5, 300)).catch(error => { settled = true; return String(error); });
+    await vi.advanceTimersByTimeAsync(310);
+    creation.resolve();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(settled).toBe(false);
+    disposal.resolve();
+    expect(await outcome).toBe("Error: Web page timed out");
+    expect(b.disposed).toEqual(["c1"]);
+    expect(b.closed).toEqual(operation === "target" ? ["t1"] : []);
+    expect(b.events).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("observes cleanup rejections arriving after the bounded response", async () => {
+    vi.useFakeTimers();
+    const close = deferred(), disposal = deferred();
+    const b = browser({ close: () => close.promise, dispose: () => disposal.promise });
+    const outcome = b.run(webSearchSnippet("facts", 5, 300)).catch(error => String(error));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await outcome).toContain("tab closure unconfirmed; private context disposal unconfirmed");
+    close.reject(new Error("private late close")); disposal.reject(new Error("private late disposal"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("observes navigation and readiness failures after a page timeout", async () => {
+    vi.useFakeTimers();
+    const ready = deferred(), navigation = deferred();
+    const b = browser({ ready: () => ready.promise, navigate: () => navigation.promise });
+    const outcome = b.run(webSearchSnippet("facts", 5, 300)).catch(error => String(error));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(await outcome).toBe("Error: Web page timed out");
+    ready.reject(new Error("late ready")); navigation.reject(new Error("late navigation"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(b.disposed).toEqual(["c1"]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("observes readiness rejection after navigation fails and cleanup completes", async () => {
+    vi.useFakeTimers();
+    const ready = deferred();
+    const b = browser({ fail: "navigate", ready: () => ready.promise });
+    await expect(b.run(webSearchSnippet("facts", 5, 300))).rejects.toThrow("Web navigation failed");
+    ready.reject(new Error("late readiness failure"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(b.disposed).toEqual(["c1"]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("extracts and deduplicates http(s) sources and preserves hostile query text as data", async () => {
     const b = browser(), query = '\"; process.exit(1); // ` ${evil}';
     expect(await b.run(webSearchSnippet(query, 5, 1000))).toEqual({ source: "google", query, results: [
