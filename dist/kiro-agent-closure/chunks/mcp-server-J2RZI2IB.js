@@ -12650,7 +12650,11 @@ var FabricExecutionService = class {
       try {
         await Promise.all([this.#compiler.close(), Promise.allSettled([...this.#executions])]);
       } finally {
-        await this.registry.close();
+        try {
+          await this.#runtime.close();
+        } finally {
+          await this.registry.close();
+        }
       }
     })();
   }

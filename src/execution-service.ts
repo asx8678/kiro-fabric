@@ -482,7 +482,11 @@ export class FabricExecutionService {
       this.#closeController.abort(new Error("Fabric execution service is closed"));
       try {
         await Promise.all([this.#compiler.close(), Promise.allSettled([...this.#executions])]);
-      } finally { await this.registry.close(); }
+      } finally {
+        // The sandbox runtime documents that a caller which stops serving must
+        // close it, or a pooled thread waits out its retirement window.
+        try { await this.#runtime.close(); } finally { await this.registry.close(); }
+      }
     })();
   }
 }

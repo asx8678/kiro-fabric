@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { Worker } from "node:worker_threads";
 import { QuickJsRuntime } from "../src/runtime/quickjs-runtime.js";
 
 const defaults = { timeoutMs: 500, maxTimeoutMs: 1_000, memoryLimitBytes: 32 * 1024 * 1024, maxSourceBytes: 64 * 1024, maxLogChars: 1_000 };
@@ -398,6 +399,7 @@ describe("QuickJS-only guest runtime", () => {
     expect(exhausted.terminationReason).toBe("runtime_error");
     const healthy = await runtime.execute("return { ok: true }", async () => null, defaults);
     expect(healthy).toMatchObject({ terminationReason: "completed", value: { ok: true } });
+    await runtime.close();
   });
 
   it("keeps the host event loop responsive during guest CPU work", async () => {
@@ -419,5 +421,18 @@ describe("QuickJS-only guest runtime", () => {
     expect(timerDelayMs).toBeLessThan(350);
     await expect(execution).resolves.toMatchObject({ terminationReason: "completed", value: "done" });
     await runtime.close();
+  });
+
+  it("terminates the pooled thread on close and stays usable afterwards", async () => {
+    const terminate = vi.spyOn(Worker.prototype, "terminate");
+    const runtime = new QuickJsRuntime();
+    try {
+      await runtime.execute("return 1", async () => null, defaults);
+      // The finished execution leaves one thread warm rather than paying for a
+      // fresh boot on the next call, so close is what actually releases it.
+      expect(terminate).not.toHaveBeenCalled();
+      await runtime.close();
+      expect(terminate).toHaveBeenCalledTimes(1);
+    } finally { vi.restoreAllMocks(); await runtime.close(); }
   });
 });

@@ -105,7 +105,10 @@ describe.skipIf(process.platform !== "linux" && process.platform !== "darwin")("
   }
   it("escalates TERM-resistant descendants and rejects signal exit even with settle", async () => {
     const { cwd } = await fixture();
-    const task = run({ command: "echo $$ > group; sh -c 'trap \"\" TERM; echo $$ > child; while :; do :; done' & wait", cwd, timeoutMs: 200, settle: true });
+    // 1s is startup headroom, not the assertion: the fixture must record its
+    // child PID before the deadline fires, or a loaded machine fails the
+    // handshake instead of exercising the TERM -> KILL escalation below.
+    const task = run({ command: "echo $$ > group; sh -c 'trap \"\" TERM; echo $$ > child; while :; do :; done' & wait", cwd, timeoutMs: 1_000, settle: true });
     const child = await recorded(cwd, "child");
     await expect(task).rejects.toThrow("timed out"); expect(await live(child)).toBe(false);
     await expect(run({ command: "kill -TERM $$", cwd, settle: true })).rejects.toThrow("abnormally");

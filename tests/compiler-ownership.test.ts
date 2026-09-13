@@ -3,6 +3,7 @@ import { ActionRegistry } from "../src/core/action-registry.js";
 import { normalizeFabricConfig } from "../src/config.js";
 import { FabricExecutionService } from "../src/execution-service.js";
 import { FabricCompilerPool } from "../src/runtime/type-checker.js";
+import { QuickJsRuntime } from "../src/runtime/quickjs-runtime.js";
 
 const workers = vi.hoisted(() => [] as Array<{
   terminated: number;
@@ -47,6 +48,15 @@ describe("compiler ownership and bounded admission", () => {
     await b.close();
     expect(workers[0]!.terminated).toBe(1);
     expect((await b.execute(options)).error).toContain("service is closed");
+  });
+
+  it("releases the sandbox runtime it owns when the service stops serving", async () => {
+    const owner = service();
+    const close = vi.spyOn(QuickJsRuntime.prototype, "close");
+    try {
+      await owner.close();
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally { close.mockRestore(); }
   });
 
   it("tracks concurrent completions and drains idle plus active workers once", async () => {

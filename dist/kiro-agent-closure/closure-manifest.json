@@ -233,7 +233,7 @@
       },
       {
         "path": "src/execution-service.ts",
-        "sha256": "d7d9ac9510531165b3acbde39ee2712169d2c482b3d786a6958c643032a6f65d"
+        "sha256": "cbbd8424e96b28868d3a1b56c908e509406ab9a44b8b28a6d821ff241d9f36d8"
       },
       {
         "path": "src/index.ts",
@@ -504,7 +504,7 @@
         "sha256": "efd3e11265c46f657fd78a9ab0426bbaf455ade35d5145b6b932f3b50d78cc62"
       }
     ],
-    "digest": "3167ef1ab9b46d84cb518dddbe53311befc64ab75285d1c6f88641e47c475856"
+    "digest": "5e7267ed15bfd5f8fcedd6fe69e719f48f794f11fa40969a3611744cda52c309"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -1091,9 +1091,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-KOSBF5HS.js",
-      "bytes": 920808,
-      "sha256": "7b850e37ba241131002a12f17f07b2b00d2f5802c052cd931b31b133ddcbbd49"
+      "path": "chunks/mcp-server-J2RZI2IB.js",
+      "bytes": 920893,
+      "sha256": "e24a603c06c37bc0d9c82a5bc80fc71a65159b3cbc654c703345893c6e6f50cf"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1113,7 +1113,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 73346,
-      "sha256": "885c9aca24476010b561030240c935ca08f1d229005e973d91a7b9f6ff005066"
+      "sha256": "630b53cc283770cb0674c2296efd15c7bac67c119aee72907b0aba3453ee6fcd"
     },
     {
       "path": "package.json",
@@ -1131,5 +1131,5 @@
       "sha256": "0c19522430f6436fcc4194057b57c06cd9ffb92d48e1db30bf90bb7502eea02a"
     }
   ],
-  "contentDigest": "eff801c3cc67b0215ee12cbf4bfd1aa06f66a0b7fb92ebc995b7a8f264a412a1"
+  "contentDigest": "32d99174d11fab759a4c6fc6f63755ca518e315103f4ed50afe5b5a025660833"
 }
