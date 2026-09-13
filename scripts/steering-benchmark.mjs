@@ -7,7 +7,7 @@ import { init, runOne, summary, loadPlan, rows, privateOutput } from './steering
 import { selftest } from './steering-benchmark/selftest.mjs';
 import { errorText } from './steering-benchmark/core.mjs';
 
-export const usage = `node scripts/steering-benchmark.mjs plan --manifest /private/manifest.json
+const usage = `node scripts/steering-benchmark.mjs plan --manifest /private/manifest.json
 node scripts/steering-benchmark.mjs init --manifest /private/manifest.json --out /private/new-output
 node scripts/steering-benchmark.mjs run --out /private/new-output [--index 0] [--count 1]
 node scripts/steering-benchmark.mjs summary --out /private/new-output

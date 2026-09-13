@@ -68,6 +68,11 @@ export const GUEST_SETUP = `
   objectDefineProperty(globalThis, 'eval', { value: codeGenerationDenied, writable: false, configurable: false });
   objectDefineProperty(globalThis, 'Function', { value: codeGenerationDenied, writable: false, configurable: false });
 
+  // ECMAScript array indices stop at 2^32-2 (the maximum is 2^32-2, not 2^32-1).
+  // A larger all-digit key is an ordinary property that JSON serialization drops
+  // from the element list, so accepting it would let the guest return a value the
+  // host-side validator rejects and hide data from the caller.
+  const MAX_ARRAY_INDEX = '4294967294';
   const arrayIndex = (key) => {
     if (key === '0') return true;
     if (!key || key[0] === '0') return false;
@@ -75,7 +80,8 @@ export const GUEST_SETUP = `
       const code = apply(stringCharCodeAt, key, [index]);
       if (code < 48 || code > 57) return false;
     }
-    return true;
+    return key.length < MAX_ARRAY_INDEX.length
+      || (key.length === MAX_ARRAY_INDEX.length && key <= MAX_ARRAY_INDEX);
   };
   const strictJsonText = (root) => {
     const seen = new SafeWeakSet();
@@ -100,7 +106,7 @@ export const GUEST_SETUP = `
       if (arrayIsArray(value)) {
         copy = [];
         for (const key of objectKeys(descriptors)) {
-          if (key !== 'length' && !arrayIndex(key)) throw new SafeTypeError('Result array contains a non-index property');
+          if (key !== 'length' && !arrayIndex(key)) throw new SafeTypeError('Result contains a non-index array property');
         }
         for (let index = 0; index < value.length; index++) {
           const descriptor = descriptors[index];

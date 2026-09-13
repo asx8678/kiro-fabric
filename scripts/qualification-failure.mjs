@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { writeFileAtomic } from "./atomic-file.mjs";
 
-export const QUALIFICATION_PHASES = Object.freeze([
+const QUALIFICATION_PHASES = Object.freeze([
   "preflight", "archive-validation", "driver-start", "authentication", "archive-installation",
   "client-contract", "coding-and-form", "interactive", "manual-compaction", "automatic-compaction",
   "resume", "headless", "evidence-validation", "publication",

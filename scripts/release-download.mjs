@@ -87,7 +87,7 @@ export async function downloadHttpsForTest(url,options,request){
 }
 /** Builtin Node HTTPS only; captures bytes before the caller verifies or extracts.
  * @param {string} url @param {DownloadOptions} options */
-export function downloadHttps(url,options){return downloadHttpsForTest(url,options,https.request);}
+function downloadHttps(url,options){return downloadHttpsForTest(url,options,https.request);}
 /** Internal pure fixture seam; production always binds verifyRelease, never a test key.
  * API hints are untrusted until the signature and exact candidate identity agree.
  * @param {DiscoveryOptions} options

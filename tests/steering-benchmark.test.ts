@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { makeCase, CASES, AUDIT, HELP_CODE, caseHashes } from '../scripts/steering-benchmark/cases.mjs';
 import { canonical, checkScope, inventory, object, putFiles, readJson, save, sha } from '../scripts/steering-benchmark/core.mjs';
 import { analyzeEvents, collect, eventCollector } from '../scripts/steering-benchmark/stream.mjs';
@@ -315,6 +315,34 @@ describe('bounded process collection', () => {
   it('records spawn errors', async () => {
     const r = await collect({ executable: path.join(root, 'absent'), args: [], cwd: root, maxOutputBytes: 1000, timeoutMs: 1000 });
     expect(r.spawnError).toContain('ENOENT'); expect(r.code).not.toBe(0);
+  });
+  it('releases every acquired stream descriptor when collection cannot start', async () => {
+    // Descriptor numbers are recycled after close, so count acquisitions and
+    // separately assert that every acquired descriptor was released.
+    const opened = new Set<number>(), closed = new Set<number>(), tracked = new Set<string>();
+    let openCount = 0;
+    const originalOpen = fs.openSync, originalClose = fs.closeSync;
+    vi.spyOn(fs, 'openSync').mockImplementation(((...args: Parameters<typeof fs.openSync>) => {
+      const descriptor = originalOpen(...args) as number;
+      if (typeof args[0] === 'string' && tracked.has(args[0])) { opened.add(descriptor); openCount += 1; }
+      return descriptor;
+    }) as typeof fs.openSync);
+    vi.spyOn(fs, 'closeSync').mockImplementation(((descriptor: number) => { closed.add(descriptor); return originalClose(descriptor); }) as typeof fs.closeSync);
+    try {
+      // Both streams resolve to one path, so the second exclusive create fails
+      // after the first descriptor is already open.
+      const duplicated = fresh('collector'), shared = path.join(duplicated, 'both');
+      tracked.add(shared);
+      await expect(collect({ executable: process.execPath, args: [], cwd: duplicated, stdoutPath: shared, stderrPath: shared, maxOutputBytes: 1024, timeoutMs: 1000 })).rejects.toThrow();
+      // A synchronous spawn rejection must release both descriptors.
+      const invalid = fresh('collector'), out = path.join(invalid, 'out'), err = path.join(invalid, 'err');
+      tracked.add(out); tracked.add(err);
+      await expect(collect({ executable: '', args: [], cwd: invalid, stdoutPath: out, stderrPath: err, maxOutputBytes: 1024, timeoutMs: 1000 })).rejects.toThrow();
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(openCount).toBe(3);
+    for (const descriptor of opened) expect(closed.has(descriptor)).toBe(true);
   });
 });
 

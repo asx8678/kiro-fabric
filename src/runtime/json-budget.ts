@@ -14,6 +14,18 @@ const normalizedLimit = (value: number): number => {
   return Math.min(value, MAX_FABRIC_JSON_CHARS);
 };
 
+/** ECMAScript array indices stop at 2^32-2. A larger all-digit own property is an
+ * ordinary property that JSON.stringify drops from the array's element list, so
+ * accepting it here would let the validated host view and the serialized view
+ * disagree about the same value. */
+const MAX_ARRAY_INDEX = 4_294_967_294;
+const isArrayIndex = (key: string): boolean => {
+  if (key === "0") return true;
+  if (!/^[1-9][0-9]*$/u.test(key)) return false;
+  const index = Number(key);
+  return Number.isSafeInteger(index) && index <= MAX_ARRAY_INDEX;
+};
+
 /**
  * Reject non-JSON values, accessors, cycles/shared object graphs, excessive
  * depth/node counts, and obvious character overflow before JSON.stringify can
@@ -51,7 +63,7 @@ const preflight = (root: unknown, maxChars: number): void => {
     if (Array.isArray(value)) {
       if (value.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
       const descriptors = Object.getOwnPropertyDescriptors(value);
-      if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some(key => key !== "length" && !/^(0|[1-9][0-9]*)$/u.test(key))) throw budgetError("non-index array property");
+      if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some(key => key !== "length" && !isArrayIndex(key))) throw budgetError("non-index array property");
       for (let index = value.length - 1; index >= 0; index--) {
         const descriptor = descriptors[String(index)];
         if (!descriptor || !("value" in descriptor)) throw budgetError("accessor or sparse array");

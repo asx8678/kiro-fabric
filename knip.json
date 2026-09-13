@@ -4,8 +4,11 @@
     "src/index.ts",
     "src/kiro/mcp-entry.ts",
     "src/runtime/compiler-worker-entry.ts",
-    "tests/**/*.test.ts"
+    "tests/**/*.test.ts",
+    "scripts/analyze-trace.mjs",
+    "scripts/run-agent-dev.mjs"
   ],
-  "project": ["src/**/*.ts", "tests/**/*.ts"],
+  "project": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.mjs"],
+  "exclude": ["duplicates"],
   "ignoreBinaries": ["mkfifo", "helm", "pwsh"]
 }

@@ -158,6 +158,9 @@ describe("QuickJS-only guest runtime", () => {
       "return Number.NaN as any",
       "const value: any = {}; Object.defineProperty(value, 'x', { get() { return 1 } }); return value",
       "const value: any[] = []; value[1] = 1; return value as any",
+      // 2^32-1 is digit-only but is not an array index; accepting it would let the
+      // guest return a value the host validator rejects.
+      "const value: any[] = [1]; Object.defineProperty(value, '4294967295', { value: 2, enumerable: true, configurable: true }); return value as any",
     ];
     for (const code of probes) {
       const result = await new QuickJsRuntime().execute(code, async () => null, defaults);

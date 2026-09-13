@@ -17,6 +17,14 @@ const defaults: CatalogStorePolicy = {
   softExpiryMs: 600_000, idleMs: 1_800_000, absoluteMs: 7_200_000, now: Date.now,
 };
 const methods: CatalogMethod[] = ["tools.listPage", "tools.searchPage", "tools.describePage", "mcp.toolsPage", "mcp.describePage"];
+/** ECMAScript array indices stop at 2^32-2; larger all-digit own properties are
+ * ordinary keys that JSON serialization omits from the element list. */
+const MAX_ARRAY_INDEX = 4_294_967_294;
+const isArrayIndex = (key: string): boolean => {
+  if (!/^(0|[1-9][0-9]*)$/.test(key)) return false;
+  const index = Number(key);
+  return Number.isSafeInteger(index) && index <= MAX_ARRAY_INDEX;
+};
 type Position = [number, string, number, number, number, number];
 interface Entry { text: string; digest: string }
 interface Snapshot { dependencies: Set<CatalogDependency>; id: string; method?: CatalogMethod; query?: string; entries?: Entry[]; bytes: number; nodes: number; created: number; touched: number; expires: number }
@@ -107,7 +115,7 @@ export class CatalogSnapshotStore {
             for (const key of keys) {
               if (array && key === "length") continue;
               const d = Object.getOwnPropertyDescriptor(value, key)!;
-              if (!("value" in d) || !d.enumerable || (array && !/^(0|[1-9][0-9]*)$/.test(String(key)))) quota();
+              if (!("value" in d) || !d.enumerable || (array && !isArrayIndex(String(key)))) quota();
               raw += String(key).length * 2;
               if (raw > p.reservationBytes) quota();
               walk(d.value, depth + 1);
@@ -181,13 +189,23 @@ export class CatalogSnapshotStore {
     const entries = s.entries!;
     const items: CatalogPage<unknown>["items"] = [];
     const page = (next: number): CatalogPage<unknown> => ({ items, total: entries.length, returned: items.length, complete: next === entries.length, ...(next < entries.length ? { nextCursor: this.token(s, method, -1, next) } : {}) });
+    const deferred = (entry: Entry, at: number) => ({ descriptorDigest: entry.digest, descriptorCursor: this.token(s, method.startsWith("mcp.") ? "mcp.describePage" : "tools.describePage", at, 0) });
     let next = position;
     while (next < entries.length && items.length < limit) {
       const entry = entries[next]!;
+      // A descriptor whose own serialized form already exceeds the envelope can
+      // never be returned inline. Emit the deferred cursor without a JSON.parse
+      // of the full text, which cursor replay would otherwise repeat every time.
+      if (entry.text.length > budget.chars || Buffer.byteLength(entry.text) > budget.bytes) {
+        items.push(deferred(entry, next));
+        if (!this.fits(page(next + 1), budget)) { items.pop(); break; }
+        next++;
+        continue;
+      }
       items.push({ descriptor: JSON.parse(entry.text) as unknown });
       if (!this.fits(page(next + 1), budget)) {
         items.pop();
-        items.push({ descriptorDigest: entry.digest, descriptorCursor: this.token(s, method.startsWith("mcp.") ? "mcp.describePage" : "tools.describePage", next, 0) });
+        items.push(deferred(entry, next));
         if (!this.fits(page(next + 1), budget)) { items.pop(); break; }
       }
       next++;

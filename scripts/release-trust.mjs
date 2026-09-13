@@ -1,7 +1,7 @@
 import { verify, createPublicKey } from 'node:crypto';
 import { canonical, sha256, TARGETS, LIMITS, PRODUCT, readRegular, checkCompatibility, exactFields } from './bundle-contract.mjs';
 export const PRODUCTION_TRUST_ROOT = '';
-export const RELEASE_DOMAIN = 'kiro-fabric.release.v1\0';
+const RELEASE_DOMAIN = 'kiro-fabric.release.v1\0';
 // Exact official sidecar name; promotion must publish this beside the archive.
 export const RELEASE_SBOM_SUFFIX = '.spdx.json';
 /** @param {any} v */

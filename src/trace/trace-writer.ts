@@ -5,15 +5,15 @@ export interface TraceWriterOptions {
   /** Absolute path for the JSONL trace file. Created private (0600); the
    * parent directory is created with 0700 and must stay under the Fabric data root. */
   file: string;
-  /** Ring capacity in lines; oldest lines drop with a counter when full. */
+  /** Ring capacity in lines (1..1_048_576); oldest lines drop with a counter when full. */
   maxBufferLines?: number;
-  /** Ring capacity in bytes; oldest lines drop with a counter when full. */
+  /** Ring capacity in bytes (1..268_435_456); oldest lines drop with a counter when full. */
   maxBufferBytes?: number;
-  /** Auto-flush interval. The timer is unref'd so it never holds the process. */
+  /** Auto-flush interval in ms (1..60_000). The timer is unref'd so it never holds the process. */
   flushIntervalMs?: number;
-  /** Hard file cap; the writer emits a truncation marker and disables itself. */
+  /** Hard file cap in bytes (1..1_073_741_824); the writer emits a truncation marker and disables itself. */
   maxFileBytes?: number;
-  /** Per-line cap; longer lines are truncated. */
+  /** Per-line cap in bytes (2..1_048_576); longer lines are truncated. */
   maxLineBytes?: number;
 }
 
@@ -31,13 +31,24 @@ const DEFAULT_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 const DEFAULT_FLUSH_INTERVAL_MS = 250;
 const DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_LINE_BYTES = 8 * 1024;
-/** Smallest cap that can still hold one well-formed JSON object without a newline. */
+/** Practical maxima. Every bound above is caller-supplied, so each is capped
+ * to keep worst-case ring allocation and file growth finite; the defaults sit
+ * comfortably inside them. Values outside the range are rejected before the
+ * writer touches the filesystem. */
+const MAX_BUFFER_LINES = 1_048_576;
+const MAX_BUFFER_BYTES = 256 * 1024 * 1024;
+const MAX_FILE_BYTES = 1024 * 1024 * 1024;
+const MAX_LINE_BYTES = 1024 * 1024;
+const MAX_FLUSH_INTERVAL_MS = 60_000;
+/** Smallest accepted cap. Caps below 3 cannot hold even `{}` plus its newline,
+ * so oversized lines are dropped and counted instead of being written without a
+ * terminator (which would merge two markers into one malformed JSONL record). */
 const MIN_MAX_LINE_BYTES = 2;
 
-const boundedOption = (name: string, value: number | undefined, fallback: number, minimum: number): number => {
+const boundedOption = (name: string, value: number | undefined, fallback: number, minimum: number, maximum: number): number => {
   if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum) {
-    throw new Error(`trace writer ${name} must be an integer of at least ${minimum}`);
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`trace writer ${name} must be an integer between ${minimum} and ${maximum}`);
   }
   return value;
 };
@@ -107,22 +118,35 @@ class BufferedTraceWriter implements TraceWriter {
     if (!path.isAbsolute(options.file)) throw new Error("trace file must be an absolute path");
     // Validate every bound before touching the filesystem so a rejected writer
     // cannot leave an empty trace file or an orphaned parent directory behind.
-    const maxBufferLines = boundedOption("maxBufferLines", options.maxBufferLines, DEFAULT_MAX_BUFFER_LINES, 1);
-    const maxBufferBytes = boundedOption("maxBufferBytes", options.maxBufferBytes, DEFAULT_MAX_BUFFER_BYTES, 1);
-    const maxFileBytes = boundedOption("maxFileBytes", options.maxFileBytes, DEFAULT_MAX_FILE_BYTES, 1);
-    const maxLineBytes = boundedOption("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES, MIN_MAX_LINE_BYTES);
-    const flushIntervalMs = boundedOption("flushIntervalMs", options.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS, 1);
+    const maxBufferLines = boundedOption("maxBufferLines", options.maxBufferLines, DEFAULT_MAX_BUFFER_LINES, 1, MAX_BUFFER_LINES);
+    const maxBufferBytes = boundedOption("maxBufferBytes", options.maxBufferBytes, DEFAULT_MAX_BUFFER_BYTES, 1, MAX_BUFFER_BYTES);
+    const maxFileBytes = boundedOption("maxFileBytes", options.maxFileBytes, DEFAULT_MAX_FILE_BYTES, 1, MAX_FILE_BYTES);
+    const maxLineBytes = boundedOption("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES, MIN_MAX_LINE_BYTES, MAX_LINE_BYTES);
+    const flushIntervalMs = boundedOption("flushIntervalMs", options.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS, 1, MAX_FLUSH_INTERVAL_MS);
     this.file = options.file;
-    fs.mkdirSync(path.dirname(options.file), { recursive: true, mode: 0o700 });
-    this.#fd = fs.openSync(options.file, "wx", 0o600);
-    this.#ring = new LineRing(maxBufferLines, maxBufferBytes);
+    // Build the ring before touching the filesystem. A capacity past the
+    // engine's array bounds throws RangeError, and opening first would leak the
+    // descriptor and leave an empty trace file behind on that rejection.
+    const ring = new LineRing(maxBufferLines, maxBufferBytes);
     this.#maxFileBytes = maxFileBytes;
     this.#maxLineBytes = maxLineBytes;
-    this.#timer = setInterval(() => {
-      this.#flushSync(true);
-    }, flushIntervalMs);
-    this.#timer.unref();
-    process.once("exit", this.#onExit);
+    fs.mkdirSync(path.dirname(options.file), { recursive: true, mode: 0o700 });
+    const descriptor = fs.openSync(options.file, "wx", 0o600);
+    try {
+      this.#fd = descriptor;
+      this.#ring = ring;
+      this.#timer = setInterval(() => {
+        this.#flushSync(true);
+      }, flushIntervalMs);
+      this.#timer.unref();
+      process.once("exit", this.#onExit);
+    } catch (error) {
+      // The exclusive create means this file is ours, so releasing both the
+      // descriptor and the partial artifact cannot touch foreign data.
+      try { fs.closeSync(descriptor); } catch { /* descriptor already released */ }
+      try { fs.rmSync(options.file, { force: true }); } catch { /* best effort */ }
+      throw error;
+    }
   }
 
   get dropped(): number {
@@ -140,10 +164,19 @@ class BufferedTraceWriter implements TraceWriter {
     // largest well-formed marker that fits, so every written line stays valid
     // JSONL and the byte bound holds.
     const bounded = Buffer.byteLength(raw, "utf8") <= this.#maxLineBytes ? raw : this.#truncatedLine(raw);
+    // Every written byte run must be a complete line. When the cap cannot hold
+    // even `{}\n`, drop the line and count it rather than emitting an
+    // unterminated marker that would merge with the next one.
+    if (bounded === null) {
+      this.#dropped += 1;
+      return;
+    }
     this.#dropped += this.#ring.push(bounded);
   }
 
-  #truncatedLine(raw: string): string {
+  /** Largest well-formed replacement that fits the per-line cap, newline
+   * included; null when no candidate fits at all. */
+  #truncatedLine(raw: string): string | null {
     const bytes = Buffer.byteLength(raw, "utf8");
     // Canonical shape matches the tracer event schema (`data` payload) and the
     // sibling `trace.truncated` marker. Shorter well-formed objects keep the
@@ -155,10 +188,10 @@ class BufferedTraceWriter implements TraceWriter {
       "{}",
     ];
     for (const candidate of candidates) {
-      if (Buffer.byteLength(`${candidate}\n`, "utf8") <= this.#maxLineBytes) return `${candidate}\n`;
-      if (Buffer.byteLength(candidate, "utf8") <= this.#maxLineBytes) return candidate;
+      const line = `${candidate}\n`;
+      if (Buffer.byteLength(line, "utf8") <= this.#maxLineBytes) return line;
     }
-    return "{}";
+    return null;
   }
 
   #flushSync(fsync: boolean): void {

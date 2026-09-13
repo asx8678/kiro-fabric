@@ -580,6 +580,14 @@ export class KiroMcpProvider implements FabricProvider {
   #tickets(server: string) {
     let tickets = this.#catalogTickets.get(server);
     if (!tickets) {
+      // Once the runtime is loaded, an unconfigured server can never publish
+      // inventory. Retaining its ticket would let speculative or quota-failed
+      // requests accumulate to capacity and then evict a valid server's
+      // authority, so hand back a non-retained ticket instead. The normal
+      // unknown-server path already revokes without rotating the aggregate.
+      if (this.#runtime !== undefined && !this.#runtime.listServers().includes(server)) {
+        return { revocation: catalogTicket(), inventory: catalogTicket() };
+      }
       if (this.#catalogTickets.size >= 128) this.#evict(this.#catalogTickets.keys().next().value!);
       tickets = { revocation: catalogTicket(), inventory: catalogTicket() };
       this.#catalogTickets.set(server, tickets);

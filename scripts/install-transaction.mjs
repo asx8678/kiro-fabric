@@ -20,7 +20,7 @@ const encode = bytes => bytes===null ? null : bytes.toString('base64');
 function decode(value) { if(value===null)return null; if(typeof value!=='string'||value.length>MAX*2)throw Error('recovery-required: backup bound'); const bytes=Buffer.from(value,'base64'); if(bytes.toString('base64')!==value)throw Error('recovery-required: backup encoding'); return bytes; }
 const names=['profile','launcher','releaseState','manifest'];
 const modeFor = name => name==='launcher'?0o700:0o600;
-export function publishControl(file, bytes, mode=0o600) {
+function publishControl(file, bytes, mode=0o600) {
  if(bytes===null) { if(s.lstat(file))fs.unlinkSync(file); syncDirectory(path.dirname(file)); return; }
  // The existing atomic writer syncs bytes before rename. Executable mode is
  // established on the prepared inode, never after publishing a 0600 launcher.

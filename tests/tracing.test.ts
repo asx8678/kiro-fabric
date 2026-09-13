@@ -105,6 +105,64 @@ describe("trace writer", () => {
     expect(() => JSON.parse(text.trim())).not.toThrow();
   });
 
+  it("never leaves an unterminated marker line at caps too small for one", () => {
+    const oversized = JSON.stringify({ ev: "large", pad: "x".repeat(4_096) });
+    for (const maxLineBytes of [2, 7, 22]) {
+      const file = path.join(temporary(), "trace.jsonl");
+      const writer = createTraceWriter({ file, maxLineBytes });
+      writer.write(oversized);
+      writer.write(oversized);
+      writer.close();
+      const text = fs.readFileSync(file, "utf8");
+      // Unterminated markers would merge into one malformed JSONL record, so a
+      // cap that cannot hold a marker plus its newline drops the line instead.
+      expect(text === "" || text.endsWith("\n"), String(maxLineBytes)).toBe(true);
+      for (const line of text.split("\n").filter(Boolean)) expect(() => JSON.parse(line), `${maxLineBytes}: ${line}`).not.toThrow();
+      // `{}\n` is the smallest marker (3 bytes): a 2-byte cap can hold nothing
+      // and drops both lines, while 7 and 22 bytes admit the fallback markers.
+      expect(writer.dropped, String(maxLineBytes)).toBe(maxLineBytes === 2 ? 2 : 0);
+    }
+  });
+
+  it("rejects an unusable ring capacity without leaving a trace file or descriptor", () => {
+    const file = path.join(temporary(), "trace.jsonl");
+    expect(() => createTraceWriter({ file, maxBufferLines: 2 ** 32 })).toThrow();
+    // The ring is built before the exclusive create, so the rejected writer
+    // cannot leave an empty trace file or a leaked descriptor behind.
+    expect(fs.existsSync(file)).toBe(false);
+    const writer = createTraceWriter({ file });
+    writer.write('{"ev":"ok"}');
+    writer.close();
+    expect(readEvents(file).map((event) => event.ev)).toEqual(["ok"]);
+  });
+
+  it("refuses a pre-existing symlink target and never touches its destination", () => {
+    const root = temporary();
+    const victim = path.join(root, "victim.jsonl");
+    fs.writeFileSync(victim, "PRESERVE", { mode: 0o600 });
+    for (const destination of [victim, path.join(root, "absent.jsonl")]) {
+      const link = path.join(root, `trace-${path.basename(destination)}.jsonl`);
+      fs.symlinkSync(destination, link);
+      // The trace file is created exclusively ('wx'), so a symlink at that path
+      // is refused instead of redirecting a private trace into another file.
+      expect(() => createTraceWriter({ file: link }), destination).toThrow();
+      expect(fs.lstatSync(link).isSymbolicLink(), destination).toBe(true);
+      if (destination === victim) expect(fs.readFileSync(victim, "utf8"), destination).toBe("PRESERVE");
+      else expect(fs.existsSync(destination), destination).toBe(false);
+    }
+  });
+
+  it("accepts each documented maximum bound", () => {
+    const file = path.join(temporary(), "trace.jsonl");
+    const writer = createTraceWriter({
+      file, maxBufferLines: 1_048_576, maxBufferBytes: 256 * 1024 * 1024,
+      maxFileBytes: 1024 * 1024 * 1024, maxLineBytes: 1024 * 1024, flushIntervalMs: 60_000,
+    });
+    writer.write('{"ev":"ok"}');
+    writer.close();
+    expect(readEvents(file).map((event) => event.ev)).toEqual(["ok"]);
+  });
+
   it("counts every eviction needed to admit one larger line", () => {
     const file = path.join(temporary(), "trace.jsonl");
     const writer = createTraceWriter({ file, maxBufferBytes: 64, maxLineBytes: 64 });
@@ -129,6 +187,11 @@ describe("trace writer", () => {
     { maxBufferLines: 0 }, { maxBufferLines: -1 }, { maxBufferLines: 1.5 },
     { maxBufferLines: Number.NaN }, { maxBufferBytes: 0 },
     { maxLineBytes: 0 }, { maxFileBytes: -1 }, { flushIntervalMs: 0 },
+    // Practical maxima: an over-range bound would otherwise let a caller request
+    // an unbounded ring allocation or an effectively uncapped trace file.
+    { maxBufferLines: 1_048_577 }, { maxBufferBytes: 256 * 1024 * 1024 + 1 },
+    { maxFileBytes: 1024 * 1024 * 1024 + 1 }, { maxLineBytes: 1024 * 1024 + 1 },
+    { flushIntervalMs: 60_001 }, { maxBufferLines: Number.MAX_SAFE_INTEGER },
   ])("rejects invalid writer bounds before creating a file: %j", (bounds) => {
     const file = path.join(temporary(), "trace.jsonl");
     expect(() => { const writer = createTraceWriter({ file, ...bounds }); writer.close(); }).toThrow(/must be/);

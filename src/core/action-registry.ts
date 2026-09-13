@@ -166,6 +166,9 @@ export class ActionRegistry {
     return () => { if (active) { active = false; this.#bytes -= bytes; this.#nodes -= nodes; } };
   }
   #pumpRaw(): void {
+    // A closed registry must never start queued producer work: providers may
+    // already have been closed and their resources released.
+    if (this.#closed) return;
     while (this.#rawQueue.length && this.#rawActive < 2) {
       let release: () => void;
       try { release = this.#reserve(RAW_BYTES, RAW_NODES); }
@@ -319,6 +322,7 @@ export class ActionRegistry {
     return record;
   }
   async #withIndexes<T>(use: (indexes: DiscoveryIndex[]) => T, signal?: AbortSignal): Promise<T> {
+    if (this.#closed) throw new Error("Fabric registry is closed");
     throwIfAbortedOrExpired(signal);
     const operationRelease = this.#reserve(2048 + this.#providers.size * 256, 32 + this.#providers.size * 4);
     const records: Array<[FabricProvider, DiscoveryRecord]> = [];
@@ -348,8 +352,10 @@ export class ActionRegistry {
   readonly #providers = new Map<string, FabricProvider>();
   readonly #unavailable = new Map<string, string>();
   readonly #activeWrites = new Map<string, { ref: string; resources: readonly string[] }>();
+  #closed = false;
 
   register(provider: FabricProvider): void {
+    if (this.#closed) throw new Error("Fabric registry is closed");
     if (!providerName.test(provider.name)) throw new Error(`Invalid Fabric provider name: ${provider.name}`);
     if (this.#providers.has(provider.name)) throw new Error(`Fabric provider already registered: ${provider.name}`);
     if (this.#providers.size >= 128) throw new Error("Fabric provider retention limit exceeded");
@@ -377,17 +383,23 @@ export class ActionRegistry {
   }
 
   async search(query: string, limit = 30, signal?: AbortSignal): Promise<ResolvedFabricAction[]> {
-    return (await this.searchAll(query, signal)).slice(0, Math.max(1, Math.min(100, Math.floor(limit))));
+    // Bound before ranking so a small page never clones the whole match set.
+    return this.#ranked(query, Math.max(1, Math.min(100, Math.floor(limit))), signal);
   }
 
   async searchAll(query: string, signal?: AbortSignal): Promise<ResolvedFabricAction[]> {
+    return this.#ranked(query, undefined, signal);
+  }
+
+  async #ranked(query: string, limit: number | undefined, signal?: AbortSignal): Promise<ResolvedFabricAction[]> {
     throwIfAbortedOrExpired(signal);
     if (query.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Fabric search query exceeds 2000 characters");
     const normalized = query.normalize("NFKC").trim().toLowerCase();
     if (!normalized) return [];
     if (normalized.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Normalized Fabric search query exceeds 2000 characters");
     const terms = normalizedTerms(normalized);
-    return this.#withIndexes(indexes => indexes.flatMap(index => index.entries)
+    return this.#withIndexes(indexes => {
+      const ranked = indexes.flatMap(index => index.entries)
       .map((entry) => {
         const { action, fields, tokens } = entry;
         let score = 0;
@@ -414,8 +426,12 @@ export class ActionRegistry {
         return { action, score };
       })
       .filter(({ score }) => score > 0)
-      .sort((left, right) => right.score - left.score || compareCodeUnits(left.action.ref, right.action.ref))
-      .map(({ action }) => structuredClone(action)), signal);
+      .sort((left, right) => right.score - left.score || compareCodeUnits(left.action.ref, right.action.ref));
+      const selected = limit === undefined ? ranked : ranked.slice(0, limit);
+      // Every candidate is ranked, but a limited search must not clone matches
+      // the caller will never receive.
+      return selected.map(({ action }) => structuredClone(action));
+    }, signal);
   }
 
   #releaseDescription(ref: string, record: DescriptionRecord): void {
@@ -592,6 +608,10 @@ export class ActionRegistry {
   }
 
   async close(): Promise<void> {
+    // Enter the terminal state first, then cancel queued producers, so no
+    // provider can be invoked after its own close() has resolved.
+    this.#closed = true;
+    while (this.#rawQueue.length) this.#rawQueue.shift()!.cancel();
     await Promise.allSettled([...this.#providers.values()].map((provider) => provider.close?.()));
     this.#providers.clear();
     for (const record of this.#discovery.values()) if (!record.pending && !record.users) record.release();

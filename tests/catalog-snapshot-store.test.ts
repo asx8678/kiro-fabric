@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CatalogSnapshotStore } from "../src/core/catalog-snapshot-store.js";
 import { FabricRepairError } from "../src/core/repair-error.js";
 import type { CatalogBinding, CatalogMethod } from "../src/core/catalog-contract.js";
@@ -154,5 +154,20 @@ describe("CatalogSnapshotStore", () => {
     const s = new CatalogSnapshotStore(binding), value = { a: "before", descriptorDigest: "invalid" }; const c = publish(s, [value], "tools.describePage"); value.a = "after";
     expect(reconstruct(s, c)).toEqual({ a: "before", descriptorDigest: "invalid" });
     expect(s.describePage(c).descriptorDigest).toMatch(/^[a-f0-9]{64}$/);
+  });
+  it("defers an oversized descriptor without parsing its serialized text", () => {
+    const s = new CatalogSnapshotStore(binding);
+    const descriptor = { ref: "remote/x", inputSchema: { text: "x".repeat(50_000) } };
+    const cursor = publish(s, [descriptor]);
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      const page = s.catalogPage(cursor, { maxBytes: 1000 }, 1000);
+      const item = page.items[0]!;
+      expect("descriptorCursor" in item).toBe(true);
+      // Cursor authentication may parse small control bodies; the 50k descriptor
+      // text must never be parsed just to discover it cannot fit inline.
+      expect(parse.mock.calls.some(([text]) => typeof text === "string" && text.length > 10_000)).toBe(false);
+      if ("descriptorCursor" in item) expect(reconstruct(s, item.descriptorCursor)).toEqual(descriptor);
+    } finally { parse.mockRestore(); }
   });
 });

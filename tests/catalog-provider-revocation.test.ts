@@ -109,6 +109,17 @@ describe("real provider catalog revocation dependencies", () => {
     await f.provider.close();
   });
 
+  it("never lets speculative unknown-server tickets evict a live server authority", async () => {
+    const f = setup();
+    const cursor = await f.open();
+    const saved = f.provider.catalogDependencies({ server: "a" });
+    for (let index = 0; index < 300; index += 1) f.provider.catalogDependencies({ server: `missing-${index}` });
+    expect(saved.every(ticket => ticket.isCurrent())).toBe(true);
+    expect(f.store.catalogPage(cursor).total).toBe(1);
+    expect(f.contacts()).toBe(1);
+    await f.provider.close();
+  });
+
   it("bounds server authorities and never resurrects evicted tickets", async () => {
     const f = setup(), old = f.provider.catalogDependencies({ server: "unused" });
     for (let i = 0; i < 129; i++) f.provider.catalogDependencies({ server: String(i) });

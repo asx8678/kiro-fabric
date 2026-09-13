@@ -99,4 +99,20 @@ describe("bounded host JSON boundary properties", () => {
       else expect(() => assertFabricJsonBudget(value, 1_000_000)).not.toThrow();
     }
   });
+
+  it("rejects own array properties that are not real array indices", () => {
+    // 2^32-1 is digit-only but is NOT an array index. It previously passed the
+    // index check, escaped value validation, and let a self-referential property
+    // reach unbounded catalog accounting.
+    const hostile: unknown[] = [];
+    Object.defineProperty(hostile, "4294967295", { value: hostile, enumerable: true, configurable: true, writable: true });
+    expect(() => fabricJsonText(hostile, 1_000)).toThrow("non-index array property");
+    for (const key of ["4294967295", "4294967296", "99999999999999999999", "00", "01", "-1", "1.0", " 1"]) {
+      const value: unknown[] = [];
+      Object.defineProperty(value, key, { value: 1, enumerable: true, configurable: true, writable: true });
+      expect(() => fabricJsonText(value, 1_000)).toThrow("non-index array property");
+    }
+    // Ordinary contiguous arrays remain accepted.
+    expect(fabricJsonText([1, 2, 3], 100)).toBe("[1,2,3]");
+  });
 });

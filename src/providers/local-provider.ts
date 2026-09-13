@@ -573,6 +573,10 @@ export class LocalCodingProvider implements FabricProvider {
     const key = JSON.stringify([this.#paths.root, name, Object.entries(args).filter(([key]) => key !== "cursor").sort(([a], [b]) => a.localeCompare(b))]);
     let entry = args.cursor ? this.#searchPages.get(args.cursor as string) : undefined;
     if (args.cursor && (!entry || entry.key !== key)) throw new Error("local search cursor invalid, expired, or query/provider mismatch");
+    // A fresh request against a full cache is rejected before any workspace
+    // enumeration or hashing. The identical guard below is still required: under
+    // concurrency every caller can pass this check before any of them inserts.
+    if (!entry && this.#searchPages.size >= 8) throw new Error("local search snapshot cache limit; wait for expiry");
     const fingerprint = await this.#searchFingerprint(name, args, context);
     if (entry && entry.fingerprint !== fingerprint) throw new Error("local search snapshot drift; restart pagination");
     if (!entry) {

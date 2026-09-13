@@ -20,7 +20,7 @@ export function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8')
 /** @param {string} file @param {unknown} value @param {boolean} [exclusive] */
 export function save(file, value, exclusive = true) { fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { mode: 0o600, flag: exclusive ? 'wx' : 'w' }); }
 /** @param {string} root @param {string} name */
-export function inside(root, name) {
+function inside(root, name) {
   assert.ok(name && !path.isAbsolute(name) && !name.split(/[\\/]/).some(x => x === '..' || x === ''), 'unsafe relative path');
   return path.join(root, name);
 }

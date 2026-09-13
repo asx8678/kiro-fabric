@@ -104,7 +104,7 @@ export function profileSnapshot(arm) {
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   return { raw, profile, dataRoot: data, profileIdentity: artifact(arm.profile), reviewHelp };
 }
-export function harnessIdentity() {
+function harnessIdentity() {
   const directory = path.dirname(fileURLToPath(import.meta.url));
   const files = [path.join(directory, '..', 'steering-benchmark.mjs'), ...fs.readdirSync(directory).filter(n => n.endsWith('.mjs')).sort().map(n => path.join(directory, n))];
   return files.map(file => ({ file: path.relative(path.join(directory, '..'), file), hash: sha(fs.readFileSync(file)) }));
@@ -118,7 +118,7 @@ function cliSettings(config) {
   return object(JSON.parse(result.stdout));
 }
 /** @param {Config} config */
-export function identity(config) {
+function identity(config) {
   const profiles = Object.fromEntries(Object.entries(config.arms).map(([name, arm]) => [name, profileSnapshot(arm)]));
   const roots = Object.values(profiles).map(p => fs.realpathSync(p.dataRoot)); assert.equal(new Set(roots).size, roots.length, 'arm data roots must be isolated');
   const paths = [...new Set([config.cli, config.python, process.execPath, ...config.runtimePaths, ...config.cliConfigPaths, ...Object.values(config.arms).flatMap(a => [...a.runtimePaths, ...a.configPaths])])].sort();

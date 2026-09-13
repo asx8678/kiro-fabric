@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { remoteRef } from "../src/core/remote-identity.js";
 import { markCatalogResult } from "../src/core/catalog-contract.js";
@@ -226,5 +226,52 @@ describe("canonical remote registry integration", () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe("Fabric registry is closed");
     expect(error).not.toBeInstanceOf(TypeError);
+  });
+
+  it("rejects a self-referential non-index array property instead of hanging accounting", async () => {
+    const registry = new ActionRegistry();
+    const hostile: unknown[] = [];
+    Object.defineProperty(hostile, "4294967295", { value: hostile, enumerable: true, configurable: true, writable: true });
+    registry.register({ name: "hostile", description: "hostile", async list() { return hostile as never; }, async describe() { return undefined; }, async invoke() { throw new Error("not invoked"); } });
+    await expect(registry.list()).rejects.toThrow(/non-index array property/);
+  });
+
+  it("cancels queued discovery on close so no provider is listed afterward", async () => {
+    const registry = new ActionRegistry();
+    const listed: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const make = (name: string) => ({
+      name, description: name,
+      async list() { listed.push(name); await gate; return [{ name: "set", description: "set", inputSchema: { type: "object" }, risk: "read" as const, effect: { kind: "none" as const } }]; },
+      async describe() { return undefined; },
+      async invoke() { throw new Error("not invoked"); },
+    });
+    registry.register(make("alpha")); registry.register(make("beta")); registry.register(make("gamma"));
+    const pending = registry.list().then(() => null, (error: unknown) => error);
+    await Promise.resolve();
+    expect(registry.discoveryUsage()).toMatchObject({ rawActive: 2, rawQueued: 1 });
+    await registry.close();
+    release();
+    expect(await pending).toBeInstanceOf(Error);
+    // gamma was still queued when close() entered its terminal state.
+    expect(listed).toEqual(["alpha", "beta"]);
+  });
+
+  it("clones only the matches a limited search returns", async () => {
+    const registry = new ActionRegistry();
+    const actions = Array.from({ length: 40 }, (_, index) => ({ name: `item${index}`, description: "shared match term", inputSchema: { type: "object" }, risk: "read" as const, effect: { kind: "none" as const } }));
+    // A stable discoveryRevision is what lets the registry cache the index, so
+    // this measures output cloning rather than index construction.
+    registry.register({ name: "bulk", description: "bulk", discoveryRevision: () => "r1", async list() { return actions; }, async describe(name) { return actions.find((entry) => entry.name === name); }, async invoke() { throw new Error("not invoked"); } });
+    expect(await registry.search("shared", 1)).toHaveLength(1);
+    const clone = vi.spyOn(globalThis, "structuredClone");
+    try {
+      expect(await registry.search("shared", 1)).toHaveLength(1);
+      expect(clone).toHaveBeenCalledTimes(1);
+      clone.mockClear();
+      expect(await registry.searchAll("shared")).toHaveLength(40);
+      expect(clone).toHaveBeenCalledTimes(40);
+    } finally { clone.mockRestore(); }
   });
 });

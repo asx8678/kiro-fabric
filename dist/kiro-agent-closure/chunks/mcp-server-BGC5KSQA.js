@@ -19101,6 +19101,13 @@ var normalizedLimit = (value) => {
   if (!Number.isSafeInteger(value) || value < 1) throw budgetError("invalid character limit");
   return Math.min(value, MAX_FABRIC_JSON_CHARS);
 };
+var MAX_ARRAY_INDEX = 4294967294;
+var isArrayIndex = (key) => {
+  if (key === "0") return true;
+  if (!/^[1-9][0-9]*$/u.test(key)) return false;
+  const index = Number(key);
+  return Number.isSafeInteger(index) && index <= MAX_ARRAY_INDEX;
+};
 var preflight = (root, maxChars) => {
   const seen = /* @__PURE__ */ new WeakSet();
   const stack = [
@@ -19131,7 +19138,7 @@ var preflight = (root, maxChars) => {
     if (Array.isArray(value)) {
       if (value.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
       const descriptors8 = Object.getOwnPropertyDescriptors(value);
-      if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors8).some((key) => key !== "length" && !/^(0|[1-9][0-9]*)$/u.test(key))) throw budgetError("non-index array property");
+      if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors8).some((key) => key !== "length" && !isArrayIndex(key))) throw budgetError("non-index array property");
       for (let index = value.length - 1; index >= 0; index--) {
         const descriptor2 = descriptors8[String(index)];
         if (!descriptor2 || !("value" in descriptor2)) throw budgetError("accessor or sparse array");
@@ -19214,6 +19221,12 @@ var defaults = {
   now: Date.now
 };
 var methods = ["tools.listPage", "tools.searchPage", "tools.describePage", "mcp.toolsPage", "mcp.describePage"];
+var MAX_ARRAY_INDEX2 = 4294967294;
+var isArrayIndex2 = (key) => {
+  if (!/^(0|[1-9][0-9]*)$/.test(key)) return false;
+  const index = Number(key);
+  return Number.isSafeInteger(index) && index <= MAX_ARRAY_INDEX2;
+};
 var fail = (code2, message) => {
   throw new FabricRepairError(message, { code: code2, phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none" });
 };
@@ -19314,7 +19327,7 @@ var CatalogSnapshotStore = class {
             for (const key of keys) {
               if (array4 && key === "length") continue;
               const d = Object.getOwnPropertyDescriptor(value, key);
-              if (!("value" in d) || !d.enumerable || array4 && !/^(0|[1-9][0-9]*)$/.test(String(key))) quota();
+              if (!("value" in d) || !d.enumerable || array4 && !isArrayIndex2(String(key))) quota();
               raw += String(key).length * 2;
               if (raw > p.reservationBytes) quota();
               walk(d.value, depth + 1);
@@ -19397,13 +19410,23 @@ var CatalogSnapshotStore = class {
     const entries = s.entries;
     const items = [];
     const page = (next2) => ({ items, total: entries.length, returned: items.length, complete: next2 === entries.length, ...next2 < entries.length ? { nextCursor: this.token(s, method, -1, next2) } : {} });
+    const deferred = (entry, at) => ({ descriptorDigest: entry.digest, descriptorCursor: this.token(s, method.startsWith("mcp.") ? "mcp.describePage" : "tools.describePage", at, 0) });
     let next = position;
     while (next < entries.length && items.length < limit) {
       const entry = entries[next];
+      if (entry.text.length > budget.chars || Buffer.byteLength(entry.text) > budget.bytes) {
+        items.push(deferred(entry, next));
+        if (!this.fits(page(next + 1), budget)) {
+          items.pop();
+          break;
+        }
+        next++;
+        continue;
+      }
       items.push({ descriptor: JSON.parse(entry.text) });
       if (!this.fits(page(next + 1), budget)) {
         items.pop();
-        items.push({ descriptorDigest: entry.digest, descriptorCursor: this.token(s, method.startsWith("mcp.") ? "mcp.describePage" : "tools.describePage", next, 0) });
+        items.push(deferred(entry, next));
         if (!this.fits(page(next + 1), budget)) {
           items.pop();
           break;
@@ -20621,6 +20644,7 @@ var ProbeProvider = class {
 };
 
 // src/core/catalog-resources.ts
+var MAX_CATALOG_NODES = 1e5;
 var catalogWeight = (value, maxChars = MAX_FABRIC_JSON_CHARS) => {
   const text3 = fabricJsonText(value, maxChars);
   let nodes = 0;
@@ -20628,6 +20652,7 @@ var catalogWeight = (value, maxChars = MAX_FABRIC_JSON_CHARS) => {
   while (stack.length) {
     const current = stack.pop();
     nodes++;
+    if (nodes > MAX_CATALOG_NODES) throw new Error("Fabric host JSON is outside the bounded JSON contract: node limit exceeded");
     if (current !== null && typeof current === "object") stack.push(...Object.values(current));
   }
   return { bytes: text3.length * 2 + Buffer.byteLength(text3) + nodes * 48, nodes };
@@ -20763,6 +20788,7 @@ var ActionRegistry = class {
     };
   }
   #pumpRaw() {
+    if (this.#closed) return;
     while (this.#rawQueue.length && this.#rawActive < 2) {
       let release;
       try {
@@ -20971,6 +20997,7 @@ var ActionRegistry = class {
     return record4;
   }
   async #withIndexes(use, signal) {
+    if (this.#closed) throw new Error("Fabric registry is closed");
     throwIfAbortedOrExpired(signal);
     const operationRelease = this.#reserve(2048 + this.#providers.size * 256, 32 + this.#providers.size * 4);
     const records = [];
@@ -21007,7 +21034,9 @@ var ActionRegistry = class {
   #providers = /* @__PURE__ */ new Map();
   #unavailable = /* @__PURE__ */ new Map();
   #activeWrites = /* @__PURE__ */ new Map();
+  #closed = false;
   register(provider) {
+    if (this.#closed) throw new Error("Fabric registry is closed");
     if (!providerName.test(provider.name)) throw new Error(`Invalid Fabric provider name: ${provider.name}`);
     if (this.#providers.has(provider.name)) throw new Error(`Fabric provider already registered: ${provider.name}`);
     if (this.#providers.size >= 128) throw new Error("Fabric provider retention limit exceeded");
@@ -21031,40 +21060,47 @@ var ActionRegistry = class {
     return this.#withIndexes((indexes) => indexes.flatMap((index) => index.entries.map((entry) => structuredClone(entry.action))).sort((left, right) => compareCodeUnits2(left.ref, right.ref)), signal);
   }
   async search(query, limit = 30, signal) {
-    return (await this.searchAll(query, signal)).slice(0, Math.max(1, Math.min(100, Math.floor(limit))));
+    return this.#ranked(query, Math.max(1, Math.min(100, Math.floor(limit))), signal);
   }
   async searchAll(query, signal) {
+    return this.#ranked(query, void 0, signal);
+  }
+  async #ranked(query, limit, signal) {
     throwIfAbortedOrExpired(signal);
     if (query.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Fabric search query exceeds 2000 characters");
     const normalized = query.normalize("NFKC").trim().toLowerCase();
     if (!normalized) return [];
     if (normalized.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Normalized Fabric search query exceeds 2000 characters");
     const terms = normalizedTerms(normalized);
-    return this.#withIndexes((indexes) => indexes.flatMap((index) => index.entries).map((entry) => {
-      const { action, fields, tokens } = entry;
-      let score = 0;
-      if (fields.ref === normalized) score += 1e3;
-      if (fields.name === normalized) score += 800;
-      if (fields.ref.startsWith(normalized)) score += 300;
-      else if (fields.ref.includes(normalized)) score += 120;
-      if (fields.description.includes(normalized)) score += 40;
-      if (fields.providerDescription.includes(normalized)) score += 20;
-      if (fields.schema.includes(normalized)) score += 10;
-      let matched = 0;
-      for (const term of terms) {
-        if (!Object.values(tokens).some((field) => field.has(term))) continue;
-        matched += 1;
-        if (tokens.ref.has(term) || tokens.name.has(term)) score += 30;
-        if (tokens.provider.has(term)) score += 20;
-        if (tokens.description.has(term)) score += 8;
-        if (tokens.providerDescription.has(term)) score += 4;
-        if (tokens.namespace.has(term)) score += 6;
-        if (tokens.annotations.has(term)) score += 2;
-        if (tokens.schema.has(term)) score += 2;
-      }
-      if (terms.length > 0 && matched === terms.length) score += 15;
-      return { action, score };
-    }).filter(({ score }) => score > 0).sort((left, right) => right.score - left.score || compareCodeUnits2(left.action.ref, right.action.ref)).map(({ action }) => structuredClone(action)), signal);
+    return this.#withIndexes((indexes) => {
+      const ranked = indexes.flatMap((index) => index.entries).map((entry) => {
+        const { action, fields, tokens } = entry;
+        let score = 0;
+        if (fields.ref === normalized) score += 1e3;
+        if (fields.name === normalized) score += 800;
+        if (fields.ref.startsWith(normalized)) score += 300;
+        else if (fields.ref.includes(normalized)) score += 120;
+        if (fields.description.includes(normalized)) score += 40;
+        if (fields.providerDescription.includes(normalized)) score += 20;
+        if (fields.schema.includes(normalized)) score += 10;
+        let matched = 0;
+        for (const term of terms) {
+          if (!Object.values(tokens).some((field) => field.has(term))) continue;
+          matched += 1;
+          if (tokens.ref.has(term) || tokens.name.has(term)) score += 30;
+          if (tokens.provider.has(term)) score += 20;
+          if (tokens.description.has(term)) score += 8;
+          if (tokens.providerDescription.has(term)) score += 4;
+          if (tokens.namespace.has(term)) score += 6;
+          if (tokens.annotations.has(term)) score += 2;
+          if (tokens.schema.has(term)) score += 2;
+        }
+        if (terms.length > 0 && matched === terms.length) score += 15;
+        return { action, score };
+      }).filter(({ score }) => score > 0).sort((left, right) => right.score - left.score || compareCodeUnits2(left.action.ref, right.action.ref));
+      const selected = limit === void 0 ? ranked : ranked.slice(0, limit);
+      return selected.map(({ action }) => structuredClone(action));
+    }, signal);
   }
   #releaseDescription(ref, record4) {
     if (record4.users) return;
@@ -21238,6 +21274,8 @@ var ActionRegistry = class {
     }
   }
   async close() {
+    this.#closed = true;
+    while (this.#rawQueue.length) this.#rawQueue.shift().cancel();
     await Promise.allSettled([...this.#providers.values()].map((provider) => provider.close?.()));
     this.#providers.clear();
     for (const record4 of this.#discovery.values()) if (!record4.pending && !record4.users) record4.release();
@@ -21629,11 +21667,16 @@ var DEFAULT_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 var DEFAULT_FLUSH_INTERVAL_MS = 250;
 var DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024;
 var DEFAULT_MAX_LINE_BYTES = 8 * 1024;
+var MAX_BUFFER_LINES = 1048576;
+var MAX_BUFFER_BYTES = 256 * 1024 * 1024;
+var MAX_FILE_BYTES = 1024 * 1024 * 1024;
+var MAX_LINE_BYTES = 1024 * 1024;
+var MAX_FLUSH_INTERVAL_MS = 6e4;
 var MIN_MAX_LINE_BYTES = 2;
-var boundedOption = (name, value, fallback, minimum) => {
+var boundedOption = (name, value, fallback, minimum, maximum) => {
   if (value === void 0) return fallback;
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum) {
-    throw new Error(`trace writer ${name} must be an integer of at least ${minimum}`);
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`trace writer ${name} must be an integer between ${minimum} and ${maximum}`);
   }
   return value;
 };
@@ -21699,22 +21742,36 @@ var BufferedTraceWriter = class {
   #closed = false;
   constructor(options) {
     if (!path4.isAbsolute(options.file)) throw new Error("trace file must be an absolute path");
-    const maxBufferLines = boundedOption("maxBufferLines", options.maxBufferLines, DEFAULT_MAX_BUFFER_LINES, 1);
-    const maxBufferBytes = boundedOption("maxBufferBytes", options.maxBufferBytes, DEFAULT_MAX_BUFFER_BYTES, 1);
-    const maxFileBytes = boundedOption("maxFileBytes", options.maxFileBytes, DEFAULT_MAX_FILE_BYTES, 1);
-    const maxLineBytes = boundedOption("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES, MIN_MAX_LINE_BYTES);
-    const flushIntervalMs = boundedOption("flushIntervalMs", options.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS, 1);
+    const maxBufferLines = boundedOption("maxBufferLines", options.maxBufferLines, DEFAULT_MAX_BUFFER_LINES, 1, MAX_BUFFER_LINES);
+    const maxBufferBytes = boundedOption("maxBufferBytes", options.maxBufferBytes, DEFAULT_MAX_BUFFER_BYTES, 1, MAX_BUFFER_BYTES);
+    const maxFileBytes = boundedOption("maxFileBytes", options.maxFileBytes, DEFAULT_MAX_FILE_BYTES, 1, MAX_FILE_BYTES);
+    const maxLineBytes = boundedOption("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES, MIN_MAX_LINE_BYTES, MAX_LINE_BYTES);
+    const flushIntervalMs = boundedOption("flushIntervalMs", options.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS, 1, MAX_FLUSH_INTERVAL_MS);
     this.file = options.file;
-    fs5.mkdirSync(path4.dirname(options.file), { recursive: true, mode: 448 });
-    this.#fd = fs5.openSync(options.file, "wx", 384);
-    this.#ring = new LineRing(maxBufferLines, maxBufferBytes);
+    const ring = new LineRing(maxBufferLines, maxBufferBytes);
     this.#maxFileBytes = maxFileBytes;
     this.#maxLineBytes = maxLineBytes;
-    this.#timer = setInterval(() => {
-      this.#flushSync(true);
-    }, flushIntervalMs);
-    this.#timer.unref();
-    process.once("exit", this.#onExit);
+    fs5.mkdirSync(path4.dirname(options.file), { recursive: true, mode: 448 });
+    const descriptor2 = fs5.openSync(options.file, "wx", 384);
+    try {
+      this.#fd = descriptor2;
+      this.#ring = ring;
+      this.#timer = setInterval(() => {
+        this.#flushSync(true);
+      }, flushIntervalMs);
+      this.#timer.unref();
+      process.once("exit", this.#onExit);
+    } catch (error) {
+      try {
+        fs5.closeSync(descriptor2);
+      } catch {
+      }
+      try {
+        fs5.rmSync(options.file, { force: true });
+      } catch {
+      }
+      throw error;
+    }
   }
   get dropped() {
     return this.#dropped;
@@ -21727,8 +21784,14 @@ var BufferedTraceWriter = class {
     const raw = `${line}
 `;
     const bounded3 = Buffer.byteLength(raw, "utf8") <= this.#maxLineBytes ? raw : this.#truncatedLine(raw);
+    if (bounded3 === null) {
+      this.#dropped += 1;
+      return;
+    }
     this.#dropped += this.#ring.push(bounded3);
   }
+  /** Largest well-formed replacement that fits the per-line cap, newline
+   * included; null when no candidate fits at all. */
   #truncatedLine(raw) {
     const bytes2 = Buffer.byteLength(raw, "utf8");
     const candidates = [
@@ -21738,12 +21801,11 @@ var BufferedTraceWriter = class {
       "{}"
     ];
     for (const candidate of candidates) {
-      if (Buffer.byteLength(`${candidate}
-`, "utf8") <= this.#maxLineBytes) return `${candidate}
+      const line = `${candidate}
 `;
-      if (Buffer.byteLength(candidate, "utf8") <= this.#maxLineBytes) return candidate;
+      if (Buffer.byteLength(line, "utf8") <= this.#maxLineBytes) return line;
     }
-    return "{}";
+    return null;
   }
   #flushSync(fsync) {
     if (this.#closed || this.#ring.size === 0) return;
@@ -21950,6 +22012,11 @@ var GUEST_SETUP = `
   objectDefineProperty(globalThis, 'eval', { value: codeGenerationDenied, writable: false, configurable: false });
   objectDefineProperty(globalThis, 'Function', { value: codeGenerationDenied, writable: false, configurable: false });
 
+  // ECMAScript array indices stop at 2^32-2 (the maximum is 2^32-2, not 2^32-1).
+  // A larger all-digit key is an ordinary property that JSON serialization drops
+  // from the element list, so accepting it would let the guest return a value the
+  // host-side validator rejects and hide data from the caller.
+  const MAX_ARRAY_INDEX = '4294967294';
   const arrayIndex = (key) => {
     if (key === '0') return true;
     if (!key || key[0] === '0') return false;
@@ -21957,7 +22024,8 @@ var GUEST_SETUP = `
       const code = apply(stringCharCodeAt, key, [index]);
       if (code < 48 || code > 57) return false;
     }
-    return true;
+    return key.length < MAX_ARRAY_INDEX.length
+      || (key.length === MAX_ARRAY_INDEX.length && key <= MAX_ARRAY_INDEX);
   };
   const strictJsonText = (root) => {
     const seen = new SafeWeakSet();
@@ -21982,7 +22050,7 @@ var GUEST_SETUP = `
       if (arrayIsArray(value)) {
         copy = [];
         for (const key of objectKeys(descriptors)) {
-          if (key !== 'length' && !arrayIndex(key)) throw new SafeTypeError('Result array contains a non-index property');
+          if (key !== 'length' && !arrayIndex(key)) throw new SafeTypeError('Result contains a non-index array property');
         }
         for (let index = 0; index < value.length; index++) {
           const descriptor = descriptors[index];
@@ -23471,7 +23539,16 @@ var migrateLegacyFabricConfiguration = (root, config) => {
   const quarantine = privateDirectory2(path6.join(root, "quarantine"), root);
   const destination = path6.join(quarantine, "legacy-fabric.json");
   if (!fs6.existsSync(destination)) fs6.renameSync(legacy, destination);
-  else fs6.rmSync(legacy);
+  else {
+    const incoming = fs6.readFileSync(legacy);
+    if (fs6.readFileSync(destination).equals(incoming)) fs6.rmSync(legacy);
+    else {
+      const distinct = path6.join(quarantine, `legacy-fabric-${createHash4("sha256").update(incoming).digest("hex").slice(0, 16)}.json`);
+      if (!fs6.existsSync(distinct)) fs6.renameSync(legacy, distinct);
+      else if (fs6.readFileSync(distinct).equals(incoming)) fs6.rmSync(legacy);
+      else throw new Error("Legacy fabric configuration quarantine collision with differing content");
+    }
+  }
   fsyncDirectory(quarantine);
   return { migrated, ignored, quarantined: ["legacy fabric.json"] };
 };
@@ -23500,7 +23577,7 @@ var prepareKiroPowerDataPaths = (pluginData) => {
 var kiroPowerWorkspaceId = (identity2, generation = 3) => createHash4("sha256").update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity2.canonicalPath).update("\0").update(identity2.deviceId).update("\0").update(identity2.fileId).digest("hex");
 var encodeName = (value) => encodeURIComponent(value).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 var memoryNamespaceDirectory = (namespace) => `${encodeName(namespace)}-${createHash4("sha256").update(namespace).digest("hex").slice(0, 16)}`;
-var migrateCompatibleMemory = (sourceRoot, targetRoot, namespace) => {
+var migrateCompatibleMemory = (sourceRoot, targetRoot, publishedMemoryRoot, namespace) => {
   if (!fs6.existsSync(sourceRoot)) return false;
   assertPrivateDirectory(sourceRoot);
   const sourceMemory = path6.join(sourceRoot, "memory");
@@ -23522,9 +23599,10 @@ var migrateCompatibleMemory = (sourceRoot, targetRoot, namespace) => {
   const sourceEntries = fs6.readdirSync(sourceNamespace, { withFileTypes: true });
   if (sourceEntries.length > 130) throw new Error("Legacy memory entry limit exceeded");
   const targetMemory = privateDirectory2(path6.join(targetRoot, "memory"), targetRoot);
-  writeJsonAtomic(path6.join(targetMemory, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: targetRoot }, true);
-  const targetNamespace = privateDirectory2(path6.join(targetMemory, namespaceName), targetMemory);
-  writeJsonAtomic(path6.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: targetRoot, namespace }, true);
+  const targetScoped = privateDirectory2(path6.join(targetMemory, "memory"), targetMemory);
+  writeJsonAtomic(path6.join(targetScoped, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: publishedMemoryRoot }, true);
+  const targetNamespace = privateDirectory2(path6.join(targetScoped, namespaceName), targetScoped);
+  writeJsonAtomic(path6.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: publishedMemoryRoot, namespace }, true);
   let totalBytes = 0;
   for (const entry of sourceEntries) {
     if (entry.name === ".kiro-fabric-owner") continue;
@@ -23577,7 +23655,7 @@ var migrateWorkspaceGeneration = (projects, identity2) => {
   let memoryMigrated = false;
   try {
     writeJsonAtomic(path6.join(staging, "workspace-identity.json"), identity2, true);
-    memoryMigrated = migrateCompatibleMemory(legacy, staging, kiroPowerMemoryNamespace(identity2));
+    memoryMigrated = migrateCompatibleMemory(legacy, staging, path6.join(current, "memory"), kiroPowerMemoryNamespace(identity2));
     privateDirectory2(path6.join(staging, "memory"), staging);
     privateDirectory2(path6.join(staging, "state"), staging);
     privateDirectory2(path6.join(staging, "artifacts"), staging);
@@ -24918,7 +24996,12 @@ var normalizeHttpUrl = (value) => {
   if (text3.length > WEB_URL_MAX) throw new Error("web.open normalized URL is too long");
   return text3;
 };
-var pageBudget = (timeoutMs, context) => Math.max(1, Math.floor(Math.min(3e4, timeoutMs, context.deadline?.remainingMs() ?? timeoutMs) - 1e3));
+var MAX_PAGE_CLEANUP_HEADROOM_MS = 1e3;
+var pageBudget = (timeoutMs, context) => {
+  const available = Math.min(3e4, timeoutMs, context.deadline?.remainingMs() ?? timeoutMs);
+  const headroom = Math.max(1, Math.min(MAX_PAGE_CLEANUP_HEADROOM_MS, Math.floor(available / 4)));
+  return Math.max(1, Math.floor(available - headroom));
+};
 var WebProvider = class {
   name = "web";
   description = "Browser-backed web search and page reading through browser-harness-js";
@@ -26168,6 +26251,7 @@ Unchanged suffix omitted: ${before.length - contextEnd} UTF-16 chars`;
     const key = JSON.stringify([this.#paths.root, name, Object.entries(args).filter(([key2]) => key2 !== "cursor").sort(([a], [b]) => a.localeCompare(b))]);
     let entry = args.cursor ? this.#searchPages.get(args.cursor) : void 0;
     if (args.cursor && (!entry || entry.key !== key)) throw new Error("local search cursor invalid, expired, or query/provider mismatch");
+    if (!entry && this.#searchPages.size >= 8) throw new Error("local search snapshot cache limit; wait for expiry");
     const fingerprint = await this.#searchFingerprint(name, args, context);
     if (entry && entry.fingerprint !== fingerprint) throw new Error("local search snapshot drift; restart pagination");
     if (!entry) {
@@ -27019,6 +27103,9 @@ var KiroMcpProvider = class {
   #tickets(server) {
     let tickets = this.#catalogTickets.get(server);
     if (!tickets) {
+      if (this.#runtime !== void 0 && !this.#runtime.listServers().includes(server)) {
+        return { revocation: catalogTicket(), inventory: catalogTicket() };
+      }
       if (this.#catalogTickets.size >= 128) this.#evict(this.#catalogTickets.keys().next().value);
       tickets = { revocation: catalogTicket(), inventory: catalogTicket() };
       this.#catalogTickets.set(server, tickets);

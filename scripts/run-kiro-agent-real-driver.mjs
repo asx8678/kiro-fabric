@@ -102,7 +102,7 @@ const resolveExecutable = (candidate) => {
   return resolved;
 };
 
-export const resolveKiroCli = (pathValue = process.env.PATH ?? "", explicit = process.env.KIRO_CLI_PATH) => {
+const resolveKiroCli = (pathValue = process.env.PATH ?? "", explicit = process.env.KIRO_CLI_PATH) => {
   if (explicit) {
     if (!path.isAbsolute(explicit)) throw new Error("KIRO_CLI_PATH must be absolute");
     return resolveExecutable(explicit);

@@ -93,6 +93,16 @@ describe("explicit query-v1 pagination",()=>{
     }finally{await f.close();await other.close();}
   });
 
+  it("rejects a fresh request on a full cache before fingerprinting the workspace",async()=>{
+    const f=fixture();try{
+      for(let i=0;i<8;i++)await f.find(query);
+      const read=vi.spyOn(LocalPaths.prototype,"read");read.mockClear();
+      await expect(f.find(query)).rejects.toThrow("cache limit");
+      // Capacity is decided before the snapshot fingerprint read the workspace.
+      expect(read).not.toHaveBeenCalled();
+    }finally{await f.close();}
+  });
+
   it("returns independent bounded pages and preserves match-text omissions",async()=>{
     const f=fixture(1200);try{
       f.put("a.ts","hit "+"x".repeat(550)+"\n");f.put("b.ts","hit "+"y".repeat(550)+"\n");

@@ -132,6 +132,22 @@ describe("browser-backed web provider", () => {
     await expect(f.provider.invoke("search", { query: "facts" }, { cwd: f.root, deadline })).rejects.toThrow("timed out");
     expect(captures()).toBe(before);
   });
+  it("scales browser cleanup headroom so a valid 1000ms timeout still has a usable budget", async () => {
+    const f = fixture();
+    const budgets = async (searchTimeoutMs: number): Promise<number[]> => {
+      const provider = new WebProvider({ executablePath: f.command, searchTimeoutMs });
+      await provider.invoke("search", { query: "facts" }, { cwd: f.root });
+      const calls = fs.readFileSync(f.calls, "utf8").trim().split("\n").map(line => JSON.parse(line) as string[]);
+      const code = calls[calls.length - 1]!.join("\n");
+      return [...code.matchAll(/timeoutMs: (\d+)/g)].map(match => Number(match[1]));
+    };
+    const minimum = await budgets(1_000);
+    expect(minimum.length).toBeGreaterThanOrEqual(3);
+    // A fixed 1000ms cleanup reserve previously left 1ms for connect, navigation
+    // and extraction on the documented 1000ms minimum.
+    expect(Math.min(...minimum)).toBeGreaterThanOrEqual(500);
+    expect(Math.min(...(await budgets(30_000)))).toBeGreaterThanOrEqual(29_000);
+  });
   it("loads web configuration without rewriting user consent or legacy files", () => {
     const f = fixture(), file = path.join(f.root, "config.json");
     const bytes = JSON.stringify({ web: { command: f.command, searchTimeoutMs: 1234 }, approvals: { network: "deny" } });

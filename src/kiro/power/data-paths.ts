@@ -165,7 +165,20 @@ const migrateLegacyFabricConfiguration = (root: string, config: string): { migra
   const quarantine = privateDirectory(path.join(root, "quarantine"), root);
   const destination = path.join(quarantine, "legacy-fabric.json");
   if (!fs.existsSync(destination)) fs.renameSync(legacy, destination);
-  else fs.rmSync(legacy);
+  else {
+    // A different legacy configuration can reappear after a downgrade, a manual
+    // recovery, or an older runtime start. Preserve every distinct raw input and
+    // deduplicate only byte-identical duplicates; deleting it here would destroy
+    // configuration evidence that nothing else retains.
+    const incoming = fs.readFileSync(legacy);
+    if (fs.readFileSync(destination).equals(incoming)) fs.rmSync(legacy);
+    else {
+      const distinct = path.join(quarantine, `legacy-fabric-${createHash("sha256").update(incoming).digest("hex").slice(0, 16)}.json`);
+      if (!fs.existsSync(distinct)) fs.renameSync(legacy, distinct);
+      else if (fs.readFileSync(distinct).equals(incoming)) fs.rmSync(legacy);
+      else throw new Error("Legacy fabric configuration quarantine collision with differing content");
+    }
+  }
   fsyncDirectory(quarantine);
   return { migrated, ignored, quarantined: ["legacy fabric.json"] };
 };
@@ -199,7 +212,7 @@ const kiroPowerWorkspaceId = (identity: KiroPowerWorkspaceIdentity, generation: 
 const encodeName = (value: string): string => encodeURIComponent(value).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 const memoryNamespaceDirectory = (namespace: string): string => `${encodeName(namespace)}-${createHash("sha256").update(namespace).digest("hex").slice(0, 16)}`;
 
-const migrateCompatibleMemory = (sourceRoot: string, targetRoot: string, namespace: string): boolean => {
+const migrateCompatibleMemory = (sourceRoot: string, targetRoot: string, publishedMemoryRoot: string, namespace: string): boolean => {
   if (!fs.existsSync(sourceRoot)) return false;
   assertPrivateDirectory(sourceRoot);
   const sourceMemory = path.join(sourceRoot, "memory");
@@ -221,10 +234,15 @@ const migrateCompatibleMemory = (sourceRoot: string, targetRoot: string, namespa
       namespaceOwner.root !== sourceRoot || namespaceOwner.namespace !== namespace) throw new Error("Legacy memory namespace ownership is incompatible");
   const sourceEntries = fs.readdirSync(sourceNamespace, { withFileTypes: true });
   if (sourceEntries.length > 130) throw new Error("Legacy memory entry limit exceeded");
+  // Mirror the runtime layout exactly: openKiroMemory(root) reads
+  // <root>/memory/<namespace>, and ownership markers must name the published
+  // memory root rather than the temporary staging directory they are written
+  // through (staging is renamed, so a staging named root would be invalid).
   const targetMemory = privateDirectory(path.join(targetRoot, "memory"), targetRoot);
-  writeJsonAtomic(path.join(targetMemory, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: targetRoot }, true);
-  const targetNamespace = privateDirectory(path.join(targetMemory, namespaceName), targetMemory);
-  writeJsonAtomic(path.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: targetRoot, namespace }, true);
+  const targetScoped = privateDirectory(path.join(targetMemory, "memory"), targetMemory);
+  writeJsonAtomic(path.join(targetScoped, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: publishedMemoryRoot }, true);
+  const targetNamespace = privateDirectory(path.join(targetScoped, namespaceName), targetScoped);
+  writeJsonAtomic(path.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: publishedMemoryRoot, namespace }, true);
   let totalBytes = 0;
   for (const entry of sourceEntries) {
     if (entry.name === ".kiro-fabric-owner") continue;
@@ -283,7 +301,7 @@ const migrateWorkspaceGeneration = (projects: string, identity: KiroPowerWorkspa
   let memoryMigrated = false;
   try {
     writeJsonAtomic(path.join(staging, "workspace-identity.json"), identity, true);
-    memoryMigrated = migrateCompatibleMemory(legacy, staging, kiroPowerMemoryNamespace(identity));
+    memoryMigrated = migrateCompatibleMemory(legacy, staging, path.join(current, "memory"), kiroPowerMemoryNamespace(identity));
     privateDirectory(path.join(staging, "memory"), staging);
     privateDirectory(path.join(staging, "state"), staging);
     privateDirectory(path.join(staging, "artifacts"), staging);

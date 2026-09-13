@@ -1,7 +1,7 @@
 import path from "node:path";
 
-export const AGENT_NAME = "kiro-fabric";
-export const MODEL_TOOLS = ["fabric_exec"];
+const AGENT_NAME = "kiro-fabric";
+const MODEL_TOOLS = ["fabric_exec"];
 export const AGENT_TOOLS = MODEL_TOOLS.map((name) => `@fabric/${name}`);
 export const FABRIC_TOOLS = ["fabric_info", "fabric_workspace", "fabric_exec"];
 // Raw compatibility endpoints above are not the model tool inventory.

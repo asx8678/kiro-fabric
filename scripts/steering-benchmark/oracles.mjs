@@ -14,7 +14,7 @@ import { REVIEW_REGRESSION_CASES, scoreReviewRegressions } from './review-regres
 /** @param {Case} s @param {Record<string,string>} files */
 function sourceHashes(s, files) { return Object.fromEntries(s.sources.map(p => [p, sha(files[p])])); }
 /** @param {Case} s */
-export function immutableHashes(s) { return Object.fromEntries(Object.entries(s.files).filter(([p]) => !s.allowed.includes(p)).map(([p, text]) => [p, sha(text)])); }
+function immutableHashes(s) { return Object.fromEntries(Object.entries(s.files).filter(([p]) => !s.allowed.includes(p)).map(([p, text]) => [p, sha(text)])); }
 /** @param {Case} s @param {string} text @param {Record<string,string>} finalSources */
 export function validateAudit(s, text, finalSources) {
   assert.ok(text.endsWith('\n'), 'missing/incomplete execution audit');
@@ -34,7 +34,7 @@ export function validateAudit(s, text, finalSources) {
 }
 /** Find structured tool output, never strip fences or infer execution from a command substring.
  * @param {unknown} value @param {unknown} expected @param {number} [depth] @returns {boolean} */
-export function containsStructured(value, expected, depth = 0) {
+function containsStructured(value, expected, depth = 0) {
   if (depth > 12 || value === undefined) return false;
   if (canonical(value) === canonical(expected)) return true;
   if (typeof value === 'string') { try { return containsStructured(JSON.parse(value), expected, depth + 1); } catch { return false; } }
@@ -66,7 +66,7 @@ export function validateAnswer(s, text, evidence) {
 /** Independently re-run immutable tests in a disposable copy, never append controller runs to agent audit.
  * These tests execute candidate-controlled Python, not a security sandbox.
  * @param {Case} s @param {Record<string,string>} sources @param {string} python */
-export async function probePython(s, sources, python) {
+async function probePython(s, sources, python) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'steering-probe-'));
   try {
     putFiles(root, { ...s.files, ...sources, [AUDIT]: '' });

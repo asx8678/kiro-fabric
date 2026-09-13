@@ -76,8 +76,21 @@ export async function collect(options) {
   assert.notEqual(process.platform, 'win32', 'live collection requires POSIX process groups');
   assert.ok(Number.isInteger(options.maxOutputBytes) && options.maxOutputBytes > 0 && options.timeoutMs > 0, 'invalid collector bounds');
   const start = performance.now(), grace = options.graceMs ?? 300;
-  const descriptors = [options.stdoutPath, options.stderrPath].map(p => p ? fs.openSync(p, 'wx', 0o600) : null);
-  const child = spawn(options.executable, options.args, { cwd: options.cwd, env: options.env ?? process.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  /** @type {(number|null)[]} */ const descriptors = [null, null];
+  /** Release every descriptor acquired so far exactly once. */
+  function releaseDescriptors() { for (let index = 0; index < descriptors.length; index += 1) { const fd = descriptors[index]; if (fd !== null) { descriptors[index] = null; fs.closeSync(fd); } } }
+  try {
+    const targets = [options.stdoutPath, options.stderrPath];
+    // Acquire incrementally: a failure on the second stream must still release
+    // the first descriptor instead of leaking it for the process lifetime.
+    for (let index = 0; index < targets.length; index += 1) if (targets[index]) descriptors[index] = fs.openSync(targets[index], 'wx', 0o600);
+  } catch (error) { releaseDescriptors(); throw error; }
+  const child = (() => {
+    // A synchronous spawn rejection (invalid argument) must release the stream
+    // descriptors opened above; only the asynchronous 'error' event is handled later.
+    try { return spawn(options.executable, options.args, { cwd: options.cwd, env: options.env ?? process.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }); }
+    catch (error) { releaseDescriptors(); throw error; }
+  })();
   /** @type {Collected} */ const result = { code: null, signal: null, stopReason: null, spawnError: null, wallMs: 0, outputBytes: 0, retainedBytes: 0, stdout: '', stderr: '' };
   /** @type {Buffer[][]} */ const chunks = [[], []];
   let buffer = '', closed = false;
@@ -120,7 +133,7 @@ export async function collect(options) {
   if (options.onLine && buffer.trim() && result.outputBytes <= options.maxOutputBytes) {
     try { const reason = options.onLine(Buffer.from(buffer, 'latin1').toString('utf8')); if (reason) result.stopReason = reason; } catch (error) { result.stopReason = 'event-handler: ' + errorText(error); }
   }
-  for (const fd of descriptors) if (fd !== null) fs.closeSync(fd);
+  releaseDescriptors();
   result.stdout = Buffer.concat(chunks[0]).toString('utf8'); result.stderr = Buffer.concat(chunks[1]).toString('utf8'); result.wallMs = performance.now() - start;
   return result;
 }

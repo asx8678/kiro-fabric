@@ -15,8 +15,10 @@ afterAll(() => {
   for (const root of roots) fs.rmSync(root, { recursive: true, force: true });
 });
 
+// High-cardinality reports legitimately exceed 1 MiB of pretty-printed JSON, and
+// the analyzer now flushes fully instead of silently truncating pipes.
 const run = (...args: string[]): string =>
-  execFileSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
+  execFileSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 
 const fixture = (events: Record<string, unknown>[]): string => {
   const file = path.join(temporary(), "fixture.jsonl");
@@ -153,12 +155,15 @@ describe("analyze-trace", () => {
       { ...base, seq: 5, monoUs: 5, ev: "exec.end", execId: "legacy", data: { status: "succeeded", resultChars: 9 } },
       { ...base, seq: 6, monoUs: 6, ev: "exec.projection", execId: "invalid", data: { visibleChars: -1, visibleBytes: "4", isError: 0 } },
     ];
-    const report = JSON.parse(run(fixture(events), "--json")) as { executionAttempts: number; executionFailures: number; executions: Array<Record<string, unknown>> };
+    const report = JSON.parse(run(fixture(events), "--json")) as { executionAttempts: number; executionFailures: number; executions: Array<Record<string, unknown>>; anomalies: Array<Record<string, unknown>> };
     expect(report.executionAttempts).toBe(3);
     expect(report.executionFailures).toBe(1);
     expect(report.executions.find((e) => e.execId === "new")).toMatchObject({ resultChars: 0, legacyResultChars: 0, resultValueChars: 7, projectionVisibleChars: 2, projectionVisibleBytes: 4, projectionIsError: true, projectionOverflowed: true, projectionArtifactRetained: true });
     expect(report.executions.find((e) => e.execId === "legacy")).toMatchObject({ legacyResultChars: 9, resultValueChars: null, projectionVisibleChars: null });
     expect(report.executions.find((e) => e.execId === "invalid")).toMatchObject({ attempts: 1, guestAttempts: 0, projectionVisibleChars: null, projectionVisibleBytes: null, projectionIsError: null });
+    expect(report.anomalies.filter((anomaly) => anomaly.kind === "failed-execution" && anomaly.execId === "new")).toEqual([
+      { kind: "failed-execution", execId: "new", status: "failed" },
+    ]);
   });
 
   it("counts projection-only request outcomes once and preserves unknown bridge sizes", () => {
@@ -176,6 +181,9 @@ describe("analyze-trace", () => {
     expect(report.executions.find((e) => e.execId === "both")).toMatchObject({ attempts: 1, guestAttempts: 1, failures: 1, requestStatus: "failed", guestStatus: "succeeded", status: "succeeded", bridgeArgsChars: null, bridgeArgsCharsKnownCount: 1, bridgeArgsCharsUnknownCount: 1, bridgeResultChars: null, bridgeResultCharsKnownCount: 1, bridgeResultCharsUnknownCount: 1 });
     expect(report.bridgeTable[0]).toMatchObject({ argsChars: null, argsCharsKnownCount: 1, argsCharsUnknownCount: 1, resultChars: null, resultCharsKnownCount: 1, resultCharsUnknownCount: 1 });
     expect(report.anomalies).toContainEqual({ kind: "failed-execution", execId: "early", status: "failed" });
+    expect(report.anomalies.filter((anomaly) => anomaly.kind === "failed-execution" && anomaly.execId === "both")).toEqual([
+      { kind: "failed-execution", execId: "both", status: "failed" },
+    ]);
   });
 
   it("counts all request evidence, unknown outcomes, incomplete coverage, and unknown heap values", () => {
@@ -194,6 +202,46 @@ describe("analyze-trace", () => {
     expect(report.executions.find((e: any) => e.execId === "marker-only")).toMatchObject({ requestStatus: "unknown", unknownOutcomes: 1 });
     expect(report.executions.find((e: any) => e.execId === "known-zero")).toMatchObject({ requestStatus: "succeeded", projectionVisibleChars: 0, projectionVisibleBytes: 0 });
     expect(report.memory).toMatchObject({ firstUsedBytes: null, lastUsedBytes: 10, deltaUsedBytes: null, maxUsedBytes: null, knownUsedBytesSnapshots: 1, unknownUsedBytesSnapshots: 1 });
+  });
+
+  it("preserves execution order and outcome totals at high cardinality", () => {
+    const executionCount = 2_000;
+    const expectedIds: string[] = [];
+    const events: Record<string, unknown>[] = [];
+    let seq = 1;
+    for (let index = 0; index < executionCount; index += 1) {
+      const execId = `high_${String(executionCount - index).padStart(4, "0")}`;
+      expectedIds.push(execId);
+      events.push({ ...base, seq: seq++, ev: "exec.start", execId });
+      if (index % 3 === 0) {
+        events.push({ ...base, seq: seq++, ev: "exec.end", execId, data: { status: "succeeded" } });
+      } else if (index % 3 === 2) {
+        events.push(
+          { ...base, seq: seq++, ev: "exec.end", execId, data: { status: "succeeded" } },
+          { ...base, seq: seq++, ev: "exec.projection", execId, data: { isError: true } },
+        );
+      }
+    }
+
+    const report = JSON.parse(run(fixture(events), "--json")) as {
+      executionAttempts: number;
+      guestExecutionAttempts: number;
+      executionFailures: number;
+      executionUnknownOutcomes: number;
+      executions: Array<{ execId: string; requestStatus: string }>;
+      anomalies: Array<{ kind: string; execId?: string }>;
+    };
+    expect(report).toMatchObject({
+      executionAttempts: executionCount,
+      guestExecutionAttempts: executionCount,
+      executionFailures: 666,
+      executionUnknownOutcomes: 667,
+    });
+    expect(report.executions.map((execution) => execution.execId)).toEqual(expectedIds);
+    expect(report.executions.slice(0, 3).map((execution) => execution.requestStatus)).toEqual(["succeeded", "unknown", "failed"]);
+    const failures = report.anomalies.filter((anomaly) => anomaly.kind === "failed-execution");
+    expect(failures).toHaveLength(666);
+    expect(new Set(failures.map((anomaly) => anomaly.execId)).size).toBe(666);
   });
 
   it("renders text by default and Chrome Trace with --chrome", () => {

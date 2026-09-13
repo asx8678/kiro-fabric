@@ -299,8 +299,15 @@ export function restoreConfigurationBackup(backupPath, kiroHome) {
         if (existing.isSymbolicLink() || !existing.isDirectory()) throw new Error(`restore target exists and is not a directory: ${directory.path}`);
         continue;
       }
-      fs.mkdirSync(destinationDirectory, { mode: directory.mode & 0o777 || 0o700 });
+      // Creation modes are masked by the process umask, so apply the exact
+      // recorded mode afterwards instead of trusting mkdirSync.
+      const directoryMode = directory.mode & 0o777 || 0o700;
+      fs.mkdirSync(destinationDirectory, { mode: directoryMode });
+      // Track the new directory before chmod: an untracked creation cannot be
+      // unwound, so a chmod failure would strand an empty directory and block a
+      // later retry with "already exists".
       written.push(destinationDirectory);
+      fs.chmodSync(destinationDirectory, directoryMode);
     }
     for (const relativePath of [...restoredFiles.map(file => file.path), ...manifest.symlinks.map(link => link.path)]) {
       if (s.lstat(path.join(kiroHome, relativePath))) throw new Error(`restore target already exists: ${relativePath}`);
@@ -310,20 +317,42 @@ export function restoreConfigurationBackup(backupPath, kiroHome) {
       const destination = path.join(kiroHome, file.path);
       // Restore the exact recorded original mode so Kiro can rewrite its own
       // settings/tokens after recovery (0600 stays 0600, not read-only 0400).
-      fs.writeFileSync(destination, source, { flag: "wx", mode: file.mode & 0o777 });
+      // Creation is exclusive and the mode is applied to the owned descriptor,
+      // so a restrictive umask cannot silently strip recorded permissions.
+      const fileMode = file.mode & 0o777 || 0o600;
+      const descriptor = fs.openSync(destination, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, fileMode);
+      // Track immediately after the exclusive create. A failure while writing or
+      // applying the mode must remove the owned file; otherwise the destination
+      // keeps a partial settings file and every retry fails as "already exists"
+      // without reporting that cleanup was incomplete.
       written.push(destination);
+      try { fs.writeFileSync(descriptor, source); fs.fchmodSync(descriptor, fileMode); } finally { fs.closeSync(descriptor); }
     }
     for (const link of manifest.symlinks) {
       fs.symlinkSync(link.target, path.join(kiroHome, link.path));
       written.push(path.join(kiroHome, link.path));
     }
   } catch (error) {
-    // Restore is all-or-nothing: unwind what this attempt created.
+    // Restore is all-or-nothing: unwind what this attempt created. Cleanup
+    // failures are collected instead of swallowed so a partially restored
+    // destination is reported rather than masking the primary failure.
+    const cleanup = [];
     for (const target of written.reverse()) {
       const stats = s.lstat(target);
       if (!stats) continue;
-      if (stats.isDirectory()) { try { fs.rmdirSync(target); } catch { /* non-empty parents unwind last */ } }
-      else fs.unlinkSync(target);
+      try {
+        if (stats.isDirectory()) fs.rmdirSync(target);
+        else fs.unlinkSync(target);
+      } catch (failure) {
+        // Non-empty parents are expected while unwinding children first.
+        if (stats.isDirectory() && ["ENOTEMPTY", "EEXIST", "ENOENT"].includes(failure?.code)) continue;
+        cleanup.push(failure);
+      }
+    }
+    if (cleanup.length) {
+      throw new AggregateError([error, ...cleanup],
+        `Restore failed and cleanup was incomplete: ${cleanup.length} target(s) were not removed; inspect the destination before retrying.`,
+        { cause: error });
     }
     throw error;
   }

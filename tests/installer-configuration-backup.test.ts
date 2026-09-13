@@ -445,17 +445,100 @@ describe("configuration backup", () => {
     }
   });
 
-  it("preserves original file modes on restore", () => {
+  it("preserves exact recorded modes under umask 077 without chmodding preexisting directories", () => {
+    const kiroHome = temporary();
+    seedConfiguration(kiroHome);
+    fs.chmodSync(path.join(kiroHome, "settings"), 0o750);
+    fs.chmodSync(path.join(kiroHome, "settings", "global.json"), 0o644);
+    fs.chmodSync(path.join(kiroHome, "executable.sh"), 0o755);
+    fs.chmodSync(path.join(kiroHome, "agents"), 0o750);
+    const backup = backupOf(kiroHome, "install");
+    const destination = temporary();
+    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    fs.mkdirSync(path.join(destination, "agents"), { mode: 0o711 });
+    fs.chmodSync(path.join(destination, "agents"), 0o711);
+    const previousUmask = process.umask(0o077);
+    try {
+      restoreConfigurationBackup(backup.path, destination);
+    } finally {
+      process.umask(previousUmask);
+    }
+    expect(fs.statSync(path.join(destination, "settings")).mode & 0o777).toBe(0o750);
+    expect(fs.statSync(path.join(destination, "settings", "global.json")).mode & 0o777).toBe(0o644);
+    expect(fs.statSync(path.join(destination, "executable.sh")).mode & 0o777).toBe(0o755);
+    expect(fs.statSync(path.join(destination, "agents")).mode & 0o777).toBe(0o711);
+  });
+
+  it("reports incomplete cleanup without masking the primary restore failure", () => {
     const kiroHome = temporary();
     seedConfiguration(kiroHome);
     const backup = backupOf(kiroHome, "install");
-    if (!backup) throw new Error("expected backup");
     const destination = temporary();
     fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
-    restoreConfigurationBackup(backup.path, destination);
-    expect(fs.statSync(path.join(destination, "settings", "global.json")).mode & 0o777).toBe(0o600);
-    expect(fs.statSync(path.join(destination, "executable.sh")).mode & 0o777).toBe(0o700);
-    expect(fs.statSync(path.join(destination, "settings")).mode & 0o777).toBe(0o700);
+    const stranded = path.join(destination, "settings", "global.json");
+    const originalSymlink = fs.symlinkSync;
+    vi.spyOn(fs, "symlinkSync").mockImplementation(((...args: Parameters<typeof fs.symlinkSync>) => {
+      if (args[1] === path.join(destination, "current-settings")) throw new Error("injected restore failure");
+      return originalSymlink(...args);
+    }) as typeof fs.symlinkSync);
+    const originalUnlink = fs.unlinkSync;
+    vi.spyOn(fs, "unlinkSync").mockImplementation(((...args: Parameters<typeof fs.unlinkSync>) => {
+      if (args[0] === stranded) throw new Error("injected cleanup failure");
+      return originalUnlink(...args);
+    }) as typeof fs.unlinkSync);
+
+    let failure: unknown;
+    try { restoreConfigurationBackup(backup.path, destination); } catch (error) { failure = error; }
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure).toMatchObject({ cause: expect.objectContaining({ message: "injected restore failure" }) });
+    expect((failure as Error).message).toContain("cleanup was incomplete");
+    expect(fs.existsSync(stranded)).toBe(true);
+    expect(fs.existsSync(path.join(destination, "executable.sh"))).toBe(false);
+    expect(fs.existsSync(path.join(destination, "agents", "foreign.json"))).toBe(false);
+  });
+
+  it("unwinds its own creations when a directory mode or file content write fails", () => {
+    const kiroHome = temporary();
+    seedConfiguration(kiroHome);
+    const backup = backupOf(kiroHome, "install");
+    for (const scenario of ["directory-chmod", "file-write", "file-fchmod"] as const) {
+      const destination = temporary();
+      fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+      const targetDirectory = path.join(destination, "settings");
+      const targetFile = path.join(targetDirectory, "global.json");
+      const originalOpen = fs.openSync, originalChmod = fs.chmodSync, originalFchmod = fs.fchmodSync, originalWrite = fs.writeFileSync;
+      let ownedDescriptor: number | undefined;
+      vi.spyOn(fs, "openSync").mockImplementation(((...args: Parameters<typeof fs.openSync>) => {
+        const descriptor = originalOpen(...args) as number;
+        if (args[0] === targetFile) ownedDescriptor = descriptor;
+        return descriptor;
+      }) as typeof fs.openSync);
+      vi.spyOn(fs, "chmodSync").mockImplementation(((...args: Parameters<typeof fs.chmodSync>) => {
+        if (scenario === "directory-chmod" && args[0] === targetDirectory) throw Object.assign(new Error("injected chmod failure"), { code: "EIO" });
+        return originalChmod(...args);
+      }) as typeof fs.chmodSync);
+      vi.spyOn(fs, "fchmodSync").mockImplementation(((...args: Parameters<typeof fs.fchmodSync>) => {
+        if (scenario === "file-fchmod" && args[0] === ownedDescriptor) throw Object.assign(new Error("injected fchmod failure"), { code: "EIO" });
+        return originalFchmod(...args);
+      }) as typeof fs.fchmodSync);
+      vi.spyOn(fs, "writeFileSync").mockImplementation(((target: unknown, data: unknown, options?: unknown) => {
+        if (scenario === "file-write" && target === ownedDescriptor && ownedDescriptor !== undefined) {
+          fs.writeSync(ownedDescriptor, "{");
+          throw Object.assign(new Error("injected write failure"), { code: "ENOSPC" });
+        }
+        return (originalWrite as (...rest: unknown[]) => unknown)(target, data, options);
+      }) as typeof fs.writeFileSync);
+      try {
+        expect(() => restoreConfigurationBackup(backup.path, destination), scenario).toThrow(/injected/u);
+        // Nothing this attempt created may survive: a stranded directory or a
+        // partial settings file would block the retry as "already exists".
+        expect(fs.existsSync(targetFile), scenario).toBe(false);
+        expect(fs.existsSync(targetDirectory), scenario).toBe(false);
+        vi.restoreAllMocks();
+        expect(() => restoreConfigurationBackup(backup.path, destination), scenario).not.toThrow();
+        expect(fs.readFileSync(targetFile, "utf8"), scenario).toBe('{"theme":"dark"}\n');
+      } finally { vi.restoreAllMocks(); }
+    }
   });
 
   it("exposes list and restore through the module CLI", () => {

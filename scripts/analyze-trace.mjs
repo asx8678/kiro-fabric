@@ -92,11 +92,22 @@ const analyze = (events, malformed) => {
     return parent.duration - covered;
   };
 
-  const execIds = [...new Set(events.map((event) => event.execId).filter(Boolean))];
+  // Group once by execution id. Per-execution analysis then reads its own bucket
+  // instead of rescanning the entire event list, which made distinct-execution
+  // traces quadratic in (events x executions).
+  const eventsByExecId = new Map();
+  for (const event of events) {
+    if (!event.execId) continue;
+    const bucket = eventsByExecId.get(event.execId);
+    if (bucket) bucket.push(event); else eventsByExecId.set(event.execId, [event]);
+  }
+  const execIds = [...eventsByExecId.keys()];
+  const execEndByExecId = new Map();
   const executions = execIds.map((execId) => {
-    const owned = events.filter((event) => event.execId === execId);
+    const owned = eventsByExecId.get(execId) ?? [];
     const end = owned.findLast((event) => event.ev === "exec.end");
     const projection = owned.findLast((event) => event.ev === "exec.projection");
+    if (end) execEndByExecId.set(execId, end);
     const ownedSpans = owned.filter((event) => event.spanId || event.durUs !== undefined);
     const bridge = ownedSpans.filter((event) => event.cat === "bridge");
     const approvals = ownedSpans.filter((event) => event.ev === "approval.wait");
@@ -202,20 +213,26 @@ const analyze = (events, malformed) => {
   if (malformed > 0) anomalies.push({ kind: "malformed-lines", count: malformed });
   for (const span of spans) if (!timing(span)) anomalies.push({ kind: "invalid-span-timing", spanId: span.spanId ?? null, ev: span.ev });
   for (const execution of executions) {
-    if (execution.failures && !events.some((event) => event.execId === execution.execId && event.ev === "exec.end")) {
+    if (!execution.failures) continue;
+    const end = execEndByExecId.get(execution.execId);
+    // A caller-visible failure is otherwise unattributed when the guest never
+    // ended, or when a successful guest outcome was overridden at the caller
+    // boundary (failed projection/overflow retention). The exec.end rule below
+    // covers the remaining case, so each execution reports exactly one anomaly.
+    if (!end || end.data?.status === "succeeded") {
       anomalies.push({ kind: "failed-execution", execId: execution.execId, status: execution.requestStatus });
     }
   }
+  let incompleteMarkers = 0;
   for (const event of events) {
-    if (event.ev === "trace.dropped") anomalies.push({ kind: "ring-drops", lost: event.data?.lost, total: event.data?.total });
-    if (event.ev === "trace.truncated") anomalies.push({ kind: "file-cap-truncated" });
-    if (event.ev === "line.truncated") anomalies.push({ kind: "line-truncated", bytes: nullableNumber(event.data?.bytes ?? event.bytes) });
+    if (event.ev === "trace.dropped") { incompleteMarkers += 1; anomalies.push({ kind: "ring-drops", lost: event.data?.lost, total: event.data?.total }); }
+    if (event.ev === "trace.truncated") { incompleteMarkers += 1; anomalies.push({ kind: "file-cap-truncated" }); }
+    if (event.ev === "line.truncated") { incompleteMarkers += 1; anomalies.push({ kind: "line-truncated", bytes: nullableNumber(event.data?.bytes ?? event.bytes) }); }
     if (event.ev === "exec.end" && event.data?.status && event.data.status !== "succeeded") anomalies.push({ kind: "failed-execution", execId: event.execId, status: event.data.status, typeErrors: event.data.typeErrors });
     if (event.cat === "bridge" && event.data?.error) anomalies.push({ kind: "bridge-error", ref: event.data.actionRef ?? event.ev, error: event.data.error });
     if (event.ev === "approval.wait" && event.data?.approved === false) anomalies.push({ kind: "approval-denied", ref: event.data.ref, error: event.data.error });
   }
   const observedExecutions = executions.filter((execution) => execution.attempts === 1);
-  const incompleteMarkers = events.filter((event) => event.ev === "trace.dropped" || event.ev === "trace.truncated" || event.ev === "line.truncated").length;
   return { file, events: events.length, malformedLines: malformed,
     executionAttempts: observedExecutions.length,
     guestExecutionAttempts: events.filter((event) => event.ev === "exec.start").length,
@@ -252,4 +269,7 @@ const { events, malformed } = readTrace(file);
 const report = analyze(events, malformed);
 if (chromeOut) { fs.mkdirSync(path.dirname(path.resolve(chromeOut)), { recursive: true }); fs.writeFileSync(chromeOut, JSON.stringify(toChromeTrace(events))); }
 process.stdout.write(asJson ? `${JSON.stringify(report, null, 2)}\n` : renderText(report));
-process.exit(report.anomalies.some((anomaly) => anomaly.kind === "malformed-lines") && report.events === 0 ? 1 : 0);
+// Never process.exit() here. A report larger than the OS pipe buffer (64 KiB)
+// leaves bytes queued on stdout, and process.exit() discards them, corrupting
+// piped/JSON output. exitCode lets Node drain stdout first, same status.
+process.exitCode = report.anomalies.some((anomaly) => anomaly.kind === "malformed-lines") && report.events === 0 ? 1 : 0;

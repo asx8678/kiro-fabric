@@ -204,8 +204,15 @@ const normalizeHttpUrl = (value: unknown): string => {
   return text;
 };
 
-const pageBudget = (timeoutMs: number, context: FabricInvocationContext): number =>
-  Math.max(1, Math.floor(Math.min(30_000, timeoutMs, context.deadline?.remainingMs() ?? timeoutMs) - 1_000));
+const MAX_PAGE_CLEANUP_HEADROOM_MS = 1_000;
+/** Reserves cleanup headroom without eating a small but valid budget: the
+ * documented 1000ms minimum previously yielded a 1ms page budget because the
+ * fixed reserve was subtracted from it. */
+const pageBudget = (timeoutMs: number, context: FabricInvocationContext): number => {
+  const available = Math.min(30_000, timeoutMs, context.deadline?.remainingMs() ?? timeoutMs);
+  const headroom = Math.max(1, Math.min(MAX_PAGE_CLEANUP_HEADROOM_MS, Math.floor(available / 4)));
+  return Math.max(1, Math.floor(available - headroom));
+};
 
 export class WebProvider implements FabricProvider {
   readonly name = "web";
