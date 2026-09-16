@@ -45,9 +45,21 @@ const compile = async (owner: FabricCompilerPool, input = request, result = succ
 describe("bounded successful compiler cache", () => {
   it("reuses a successful check without another worker dispatch", async () => {
     const owner = pool();
-    expect(await compile(owner)).toEqual(success);
-    expect(await owner.check({ ...request }, { timeoutMs: 100 })).toEqual(success);
+    expect(await compile(owner)).toEqual({ ...success, compileCache: "miss", compileWorker: "cold" });
+    expect(await owner.check({ ...request }, { timeoutMs: 100 })).toEqual({ ...success, compileCache: "hit" });
     expect(dispatches).toHaveLength(1);
+  });
+
+  it("reports cold, cache hit, warm, then cold after retirement without inheriting a hit's worker", async () => {
+    vi.useFakeTimers();
+    const owner = pool();
+    expect(await compile(owner)).toMatchObject({ compileCache: 'miss', compileWorker: 'cold' });
+    const hit = await owner.check(request);
+    expect(hit.compileCache).toBe('hit'); expect(hit).not.toHaveProperty('compileWorker');
+    expect(await compile(owner, { ...request, code: 'return false' })).toMatchObject({ compileCache: 'miss', compileWorker: 'warm' });
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(await compile(owner, { ...request, code: 'return null' })).toMatchObject({ compileCache: 'miss', compileWorker: 'cold' });
+    expect(workers).toHaveLength(2);
   });
 
   it("keys exact source and declarations without framing or Unicode aliases", async () => {
@@ -56,7 +68,7 @@ describe("bounded successful compiler cache", () => {
       { code: "bc", declarations: "a" }, { code: "c", declarations: "ab" },
       { code: "return '\ud800'", declarations: "" }, { code: "return '\ud801'", declarations: "" }];
     for (const input of inputs) await compile(owner, input);
-    for (const input of inputs) expect(await owner.check(input)).toEqual(success);
+    for (const input of inputs) expect(await owner.check(input)).toEqual({ ...success, compileCache: "hit" });
     expect(dispatches).toHaveLength(inputs.length);
   });
 
@@ -66,7 +78,7 @@ describe("bounded successful compiler cache", () => {
     input.code = "return false"; input.declarations = "changed declarations";
     dispatches.at(-1)!.worker.reply(success); await checking;
     expect(dispatches[0]!.request).toMatchObject(request);
-    expect(await owner.check(request)).toEqual(success);
+    expect(await owner.check(request)).toEqual({ ...success, compileCache: "hit" });
     await compile(owner, input);
     expect(dispatches).toHaveLength(2);
   });
@@ -76,9 +88,9 @@ describe("bounded successful compiler cache", () => {
     cold.javascript = "forged"; cold.sourceMap = "forged";
     cold.errors.push({ line: 1, column: 1, message: "forged" });
     const warm = await owner.check(request);
-    expect(warm).toEqual(success);
+    expect(warm).toEqual({ ...success, compileCache: "hit" });
     warm.javascript = "also forged"; warm.errors.push({ line: 0, column: 0, message: "forged" });
-    expect(await owner.check(request)).toEqual(success);
+    expect(await owner.check(request)).toEqual({ ...success, compileCache: "hit" });
     expect(dispatches).toHaveLength(1);
   });
 
@@ -87,8 +99,8 @@ describe("bounded successful compiler cache", () => {
     { errors: [] },
   ])("does not cache diagnostics or missing emitted code: %j", async (result) => {
     const owner = pool();
-    expect(await compile(owner, request, result)).toEqual(result);
-    expect(await compile(owner)).toEqual(success);
+    expect(await compile(owner, request, result)).toEqual({ ...result, compileCache: "miss", compileWorker: "cold" });
+    expect(await compile(owner)).toEqual({ ...success, compileCache: "miss", compileWorker: "warm" });
     expect(dispatches).toHaveLength(2);
   });
 
@@ -118,7 +130,7 @@ describe("bounded successful compiler cache", () => {
     const first = owner.check(request); const second = owner.check({ ...request });
     workers[0]!.reply(large); workers[1]!.reply(large);
     await Promise.all([first, second]);
-    expect(await owner.check(request)).toEqual(large);
+    expect(await owner.check(request)).toEqual({ ...large, compileCache: "hit" });
     expect(dispatches).toHaveLength(2);
   });
 
@@ -127,7 +139,7 @@ describe("bounded successful compiler cache", () => {
     const large = { ...success, sourceMap: "x".repeat(1_100_000) };
     const second = { ...request, code: "return false" };
     await compile(owner, request, large); await compile(owner, second, large);
-    expect(await owner.check(second)).toEqual(large);
+    expect(await owner.check(second)).toEqual({ ...large, compileCache: "hit" });
     await compile(owner, request);
     expect(dispatches).toHaveLength(3);
   });
@@ -136,7 +148,7 @@ describe("bounded successful compiler cache", () => {
     const owner = pool(); const huge = "x".repeat(2 * 1024 * 1024 + 1);
     const input = { ...request, ...(field === "source" ? { code: huge } : field === "declarations" ? { declarations: huge } : {}) };
     const result = { ...success, ...(field === "javascript" || field === "sourceMap" ? { [field]: huge } : {}) };
-    expect(await compile(owner, input, result)).toEqual(result);
+    expect(await compile(owner, input, result)).toEqual({ ...result, compileCache: field === "source" || field === "declarations" ? "bypass" : "miss", compileWorker: "cold" });
     await compile(owner, input, result);
     expect(dispatches).toHaveLength(2);
   });
@@ -146,7 +158,7 @@ describe("bounded successful compiler cache", () => {
     const owner = pool(); await compile(owner);
     await vi.advanceTimersByTimeAsync(30_001);
     expect(workers[0]!.terminated).toBe(1);
-    expect(await owner.check(request)).toEqual(success);
+    expect(await owner.check(request)).toEqual({ ...success, compileCache: "hit" });
     expect(workers).toHaveLength(1);
     await compile(pool()); expect(workers).toHaveLength(2);
   });
@@ -169,10 +181,10 @@ describe("bounded successful compiler cache", () => {
       const checking = owner.check(input, { workerUrl });
       expect(dispatches).toHaveLength(before + 1);
       dispatches.at(-1)!.worker.reply(custom);
-      expect(await checking).toEqual(custom);
+      expect(await checking).toEqual({ ...custom, compileCache: "bypass", compileWorker: "custom" });
     };
     await checkCustom(request);
-    expect(await owner.check(request)).toEqual(success);
+    expect(await owner.check(request)).toEqual({ ...success, compileCache: "hit" });
     const other = { ...request, code: "return false" };
     await checkCustom(other); await compile(owner, other);
     expect(dispatches).toHaveLength(4);

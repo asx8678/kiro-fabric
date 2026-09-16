@@ -194,18 +194,23 @@ const analyze = (events, malformed) => {
     execId: event.execId, monoUs: event.monoUs, memoryUsedBytes: event.data.usage.memory_used_size,
     mallocBytes: event.data.usage.malloc_size, objectCount: event.data.usage.object_count, hostRssBytes: event.data.hostRssBytes,
   }));
-  const memoryValues = memorySeries.map((point) => point.memoryUsedBytes);
-  const knownMemoryValues = memoryValues.filter(finiteNonnegative);
-  const firstMemory = memoryValues[0];
-  const lastMemory = memoryValues.at(-1);
+  let knownMemoryCount = 0;
+  let maxMemory = 0;
+  for (const { memoryUsedBytes } of memorySeries) {
+    if (!finiteNonnegative(memoryUsedBytes)) continue;
+    knownMemoryCount += 1;
+    maxMemory = Math.max(maxMemory, memoryUsedBytes);
+  }
+  const firstMemory = memorySeries[0]?.memoryUsedBytes;
+  const lastMemory = memorySeries.at(-1)?.memoryUsedBytes;
   const memory = memorySeries.length === 0 ? undefined : {
     snapshots: memorySeries.length,
-    knownUsedBytesSnapshots: knownMemoryValues.length,
-    unknownUsedBytesSnapshots: memorySeries.length - knownMemoryValues.length,
+    knownUsedBytesSnapshots: knownMemoryCount,
+    unknownUsedBytesSnapshots: memorySeries.length - knownMemoryCount,
     firstUsedBytes: nullableNumber(firstMemory),
     lastUsedBytes: nullableNumber(lastMemory),
     deltaUsedBytes: finiteNonnegative(firstMemory) && finiteNonnegative(lastMemory) ? lastMemory - firstMemory : null,
-    maxUsedBytes: knownMemoryValues.length === memorySeries.length ? Math.max(...knownMemoryValues) : null,
+    maxUsedBytes: knownMemoryCount === memorySeries.length ? maxMemory : null,
     series: memorySeries,
   };
 
@@ -233,7 +238,24 @@ const analyze = (events, malformed) => {
     if (event.ev === "approval.wait" && event.data?.approved === false) anomalies.push({ kind: "approval-denied", ref: event.data.ref, error: event.data.error });
   }
   const observedExecutions = executions.filter((execution) => execution.attempts === 1);
-  return { file, events: events.length, malformedLines: malformed,
+  const compileResults = events.filter((event) => event.ev === "compile.result");
+  const compileSpans = spans.filter((event) => event.ev === "compile");
+  const countMatching = (value, key) => compileResults.filter((event) => event.data?.[key] === value).length;
+  // Failed and legacy spans have no cache classification; never infer cold or hit.
+  const compileClass = (span) => span.data?.failed === true ? "failed" : span.data?.cache === "hit" ? "cacheHit"
+    : ["cold", "warm", "custom"].includes(span.data?.worker) ? span.data.worker : "unknown";
+  const compile = compileResults.length === 0 && compileSpans.length === 0 ? undefined : {
+    samples: compileResults.length,
+    cacheHits: countMatching("hit", "cache"), cacheMisses: countMatching("miss", "cache"), cacheBypasses: countMatching("bypass", "cache"),
+    cacheUnknown: compileResults.filter((event) => !["hit", "miss", "bypass"].includes(event.data?.cache)).length,
+    coldWorkers: countMatching("cold", "worker"), warmWorkers: countMatching("warm", "worker"), customWorkers: countMatching("custom", "worker"),
+    typeErrorChecks: compileResults.filter((event) => finiteNonnegative(event.data?.typeErrors) && event.data.typeErrors > 0).length,
+    typeErrors: summarizeCounts(compileResults.map((event) => event.data?.typeErrors)),
+    // Span samples differ from result samples on failures and old/partial traces.
+    latency: Object.fromEntries(["cacheHit", "cold", "warm", "custom", "failed", "unknown"].map((kind) => [kind,
+      summarizeDurations(compileSpans.filter((span) => compileClass(span) === kind).map((span) => timing(span)?.duration))])),
+  };
+  return { file, events: events.length, malformedLines: malformed, compile,
     executionAttempts: observedExecutions.length,
     guestExecutionAttempts: events.filter((event) => event.ev === "exec.start").length,
     executionFailures: observedExecutions.reduce((sum, execution) => sum + execution.failures, 0),
@@ -253,6 +275,10 @@ const renderText = (report) => {
   for (const row of report.bridgeTable) lines.push(`  ${row.ref.padEnd(28)} n=${String(row.count).padStart(3)} total=${formatUs(row.totalUs).padStart(8)} p95=${formatUs(row.p95Us).padStart(8)} max=${formatUs(row.maxUs).padStart(8)} args=${row.argsChars ?? "unknown"} chars result=${row.resultChars ?? "unknown"} chars errors=${row.errors}`);
   lines.push("", "span table (by event):");
   for (const row of report.spanTable) lines.push(`  ${row.ev.padEnd(28)} n=${String(row.count).padStart(3)} total=${formatUs(row.totalUs).padStart(8)} self=${formatUs(row.totalSelfUs).padStart(8)} p95=${formatUs(row.p95Us).padStart(8)} max=${formatUs(row.maxUs).padStart(8)}`);
+  if (report.compile) {
+    lines.push("", `compiler: samples=${report.compile.samples} cache hits=${report.compile.cacheHits} misses=${report.compile.cacheMisses} bypasses=${report.compile.cacheBypasses} unknown=${report.compile.cacheUnknown} workers cold=${report.compile.coldWorkers} warm=${report.compile.warmWorkers} custom=${report.compile.customWorkers} type-error checks=${report.compile.typeErrorChecks}`);
+    for (const [kind, stats] of Object.entries(report.compile.latency)) lines.push(`  ${kind} n=${stats.count} total=${formatUs(stats.totalUs)} mean=${formatUs(stats.meanUs)} p95=${formatUs(stats.p95Us)}`);
+  }
   if (report.memory) lines.push("", `quickjs heap: snapshots=${report.memory.snapshots} used ${report.memory.firstUsedBytes} -> ${report.memory.lastUsedBytes} bytes (delta ${report.memory.deltaUsedBytes}, max ${report.memory.maxUsedBytes})`);
   if (report.anomalies.length) { lines.push("", "anomalies:"); for (const anomaly of report.anomalies) lines.push(`  ${JSON.stringify(anomaly)}`); }
   return `${lines.join("\n")}\n`;

@@ -52,7 +52,7 @@ import {
   type FabricTracer,
 } from "../trace/tracer.js";
 
-const EXEC_DESCRIPTION = "Checked TypeScript; await/return. local.read({path,offset?,limit?})->{text:string,totalLines,truncated,nextOffset?}, not a string/array. local.readMany({windows,maxChars?,partial?})->{files,remaining,complete,unreadTails}; complete=windows only. local.readEvidence({windows,maxChars?,partial?})->string packet+metadata. local.grep({pattern,path?,glob?,literal?,hidden?,limit?})->{matches,scope,truncated}; local.find({pattern,path?,hidden?,limit?})->{paths,scope,truncated}. local.edit({path,oldText,newText,all?}); local.shell({command,settle:true})->{ok,exitCode,stdout,stderr,truncated}; scripts: {script,interpreter:'bash',args?}. Optional review/probe APIs: tools.describe. hidden:true; ignore rules still apply; fabric.help({topic:'review'}). No native fallback.";
+const EXEC_DESCRIPTION = "Checked TypeScript; await/return. local.read({path,offset?,limit?})->{text:string,totalLines,truncated,nextOffset?}, not a string/array. local.readMany({windows,maxChars?,partial?})->{files,remaining,complete,unreadTails}; complete=windows only. local.readEvidence({windows,maxChars?,partial?})->string packet+metadata. local.grep({pattern,path?,glob?,literal?,hidden?,limit?})->{matches,scope,truncated}; local.find({pattern,path?,hidden?,limit?})->{paths,scope,truncated}. local.edit({path,expectedSha256,oldText,newText,all?}); local.write overwrite requires expectedSha256 from read; local.shell({command,settle:true})->{ok,exitCode,stdout,stderr,truncated}; scripts: {script,interpreter:'bash',args?}. Optional review/probe APIs: tools.describe. hidden:true; ignore rules still apply; fabric.help({topic:'review'}). No native fallback.";
 const MCP_INSTANCE_ID = `fmcp_${randomBytes(16).toString("hex")}`;
 const MCP_STARTED_AT = new Date().toISOString();
 const MCP_PARENT_PID = process.ppid;
@@ -601,7 +601,18 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         });
         tracer.flush();
       }
-      return { content: [{ type: "text" as const, text: projection.text }], ...(projection.isError ? { isError: true } : {}) };
+      return {
+        content: [{ type: "text" as const, text: projection.text }],
+        // Additive host metadata; never wrap or rewrite the program's returned value.
+        structuredContent: {
+          executionStatus: projection.executionStatus,
+          deliveryStatus: projection.deliveryStatus,
+          retryProgram: projection.retryProgram,
+          ...(projection.receiptId === undefined ? {} : { receiptId: projection.receiptId }),
+          ...(projection.artifactId === undefined ? {} : { artifactId: projection.artifactId }),
+        },
+        ...(projection.isError ? { isError: true } : {}),
+      };
     } catch (error) { return tracedError("adapter_error", error); }
     finally {
       if (timer) clearTimeout(timer);

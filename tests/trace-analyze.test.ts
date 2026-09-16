@@ -18,7 +18,7 @@ afterAll(() => {
 // High-cardinality reports legitimately exceed 1 MiB of pretty-printed JSON, and
 // the analyzer now flushes fully instead of silently truncating pipes.
 const run = (...args: string[]): string =>
-  execFileSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  execFileSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 20_000, killSignal: "SIGKILL" });
 
 const fixture = (events: Record<string, unknown>[]): string => {
   const file = path.join(temporary(), "fixture.jsonl");
@@ -41,6 +41,26 @@ const sampleEvents = [
 ];
 
 describe("analyze-trace", () => {
+  it("separates compiler cache outcomes, worker latency and incomplete observations", () => {
+    const outcomes = [{ cache: 'miss', worker: 'cold', typeErrors: 0 }, { cache: 'hit', typeErrors: 0 },
+      { cache: 'miss', worker: 'warm', typeErrors: 2 }, { cache: 'bypass', worker: 'custom', typeErrors: 0 }, { cache: 'future' }];
+    const events: Record<string, unknown>[] = outcomes.flatMap((data, index) => [
+      { ...base, seq: index * 2, ev: 'compile', cat: 'eval', spanId: `c${index}`, monoUs: 100, durUs: (index + 1) * 1000, data },
+      { ...base, seq: index * 2 + 1, ev: 'compile.result', cat: 'eval', data },
+    ]);
+    events.push({ ...base, seq: 11, ev: 'compile', spanId: 'failed', monoUs: 100, durUs: 10, data: { failed: true } },
+      { ...base, seq: 12, ev: 'compile', spanId: 'legacy', monoUs: 100, durUs: -1 });
+    const file = fixture(events), report = JSON.parse(run(file, '--json'));
+    expect(report.compile).toMatchObject({ samples: 5, cacheHits: 1, cacheMisses: 2, cacheBypasses: 1, cacheUnknown: 1,
+      coldWorkers: 1, warmWorkers: 1, customWorkers: 1, typeErrorChecks: 1, typeErrors: { total: null, knownCount: 4, unknownCount: 1 } });
+    expect(report.compile.latency).toMatchObject({ cold: { count: 1, totalUs: 1000 }, cacheHit: { count: 1, totalUs: 2000 },
+      warm: { count: 1, p95Us: 3000 }, custom: { count: 1, totalUs: 4000 }, failed: { count: 1, totalUs: 10 },
+      unknown: { count: 2, knownCount: 1, unknownCount: 1, totalUs: null } });
+    expect(run(file)).toContain('cache hits=1 misses=2 bypasses=1 unknown=1');
+    const legacy = JSON.parse(run(fixture(sampleEvents), '--json'));
+    expect(legacy.compile).toMatchObject({ samples: 0, latency: { unknown: { count: 1, totalUs: 40000 }, cold: { count: 0, meanUs: null } } });
+    expect(JSON.parse(run(fixture([]), '--json')).compile).toBeUndefined();
+  });
   it("builds per-execution span trees with self time and bridge payload totals", () => {
     const report = JSON.parse(run(fixture(sampleEvents), "--json")) as {
       events: number;
@@ -202,6 +222,23 @@ describe("analyze-trace", () => {
     expect(report.executions.find((e: any) => e.execId === "marker-only")).toMatchObject({ requestStatus: "unknown", unknownOutcomes: 1 });
     expect(report.executions.find((e: any) => e.execId === "known-zero")).toMatchObject({ requestStatus: "succeeded", projectionVisibleChars: 0, projectionVisibleBytes: 0 });
     expect(report.memory).toMatchObject({ firstUsedBytes: null, lastUsedBytes: 10, deltaUsedBytes: null, maxUsedBytes: null, knownUsedBytesSnapshots: 1, unknownUsedBytesSnapshots: 1 });
+  });
+
+  it("aggregates 150000 memory snapshots without argument spreading and preserves unknowns", () => {
+    const count = 150_000;
+    const events = Array.from({ length: count }, (_, index) => ({
+      ...base, seq: index + 1, ev: "quickjs.memory", data: { usage: { memory_used_size: index === 1 ? count : index } },
+    }));
+    const report = JSON.parse(run(fixture(events), "--json"));
+    expect(report.memory).toMatchObject({ snapshots: count, knownUsedBytesSnapshots: count,
+      unknownUsedBytesSnapshots: 0, firstUsedBytes: 0, lastUsedBytes: count - 1,
+      deltaUsedBytes: count - 1, maxUsedBytes: count });
+    expect(report.memory.series).toHaveLength(count);
+    events[1]!.data.usage.memory_used_size = -1;
+    const unknown = JSON.parse(run(fixture(events), "--json"));
+    expect(unknown.memory).toMatchObject({ knownUsedBytesSnapshots: count - 1,
+      unknownUsedBytesSnapshots: 1, firstUsedBytes: 0, lastUsedBytes: count - 1,
+      deltaUsedBytes: count - 1, maxUsedBytes: null });
   });
 
   it("preserves execution order and outcome totals at high cardinality", () => {

@@ -105,7 +105,13 @@ describe("cached compilation with real code-mode executions", () => {
     try {
       const first = await owner.check(input);
       expect(first.errors).toEqual([]); expect(first.javascript).toBeDefined();
-      expect(await owner.check(input)).toEqual(first);
+      expect(first.compileCache).toBe("miss");
+      // compileCache/compileWorker are observational counters: the compilation
+      // payload must stay identical across a cache hit even though they differ.
+      const semantic = (result: { errors: unknown[]; javascript?: string }) => ({ errors: result.errors, javascript: result.javascript });
+      const cached = await owner.check(input);
+      expect(cached.compileCache).toBe("hit");
+      expect(semantic(cached)).toEqual(semantic(first));
       const changedType = await owner.check({ ...input, declarations: "type JsonValue = string; declare const token: number;" });
       expect(changedType.errors.length).toBeGreaterThan(0); expect(changedType.javascript).toBeUndefined();
       const changedSource = await owner.check({ ...input, code: "return missingName;" });
