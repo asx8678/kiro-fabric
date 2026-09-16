@@ -8,6 +8,7 @@ import { collect } from './stream.mjs';
 import { BUG_CASES, probeProject } from './projects.mjs';
 import { REVIEW_CASES, scoreReview } from './reviews.mjs';
 import { REVIEW_REGRESSION_CASES, scoreReviewRegressions } from './review-regressions.mjs';
+import { TASK_BEHAVIOR_CASES, scoreTaskBehavior } from './task-behavior.mjs';
 
 /** @typedef {import('./cases.mjs').Case} Case */
 /** @typedef {import('./stream.mjs').Evidence} Evidence */
@@ -49,6 +50,7 @@ export function validateAnswer(s, text, evidence) {
     return undefined;
   }
   const answer = JSON.parse(text); // Raw JSON only: no Markdown repair or fence stripping.
+  if (TASK_BEHAVIOR_CASES.includes(s.id)) return scoreTaskBehavior(s, answer);
   if (REVIEW_REGRESSION_CASES.includes(s.id)) return scoreReviewRegressions(s, answer);
   if (REVIEW_CASES.includes(s.id)) return scoreReview(s, answer);
   if (s.id !== 'fabric-help') assert.deepEqual(answer, s.expected, 'exact answer/schema');
@@ -102,6 +104,12 @@ export async function validate(options) {
   check('answer', () => {
     const score = validateAnswer(s, evidence.finalText, evidence);
     if (score) {
+      if (TASK_BEHAVIOR_CASES.includes(s.id)) {
+        // Same finite score contract, different units. Never pool task obligations
+        // (including task-review-nofix) into infrastructure-review metrics.
+        assert.ok(score.truePositives === score.expected && score.falsePositives === 0 && score.duplicates === 0, 'controlled task outcomes');
+        return;
+      }
       result.review = score;
       if (REVIEW_REGRESSION_CASES.includes(s.id)) {
         const regression = /** @type {import('./review-regressions.mjs').RegressionDiagnostics} */ (score['regressions']);

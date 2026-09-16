@@ -72,18 +72,21 @@ export async function runOne(output, index, signal) {
     /** @type {Row} */ const row = { index: next, arm: item.arm, caseId: item.caseId, qualification: item.qualification, state: 'started', credits: null, stopReason: null, ok: false, startedAt: new Date().toISOString(), budget };
     save(path.join(root, 'results', String(next).padStart(4, '0') + '.json'), row);
     try {
+      /** @type {NodeJS.ProcessEnv} */ const env = { ...process.env, ...plan.config.env, KIRO_FABRIC_LAUNCH_WORKSPACE: workspace };
       putFiles(workspace, spec.files); fs.writeFileSync(path.join(base, 'prompt.txt'), spec.prompt, { mode: 0o600, flag: 'wx' });
       if (item.arm !== 'native') {
         const snapshot = plan.identity.profiles[item.arm];
         putFiles(workspace, { [`.kiro/agents/steering-${item.arm}.json`]: JSON.stringify({ ...snapshot.profile, name: 'steering-' + item.arm }) + '\n' });
       }
       if (item.arm === 'native' && plan.config.nativeWorkspacePermissions) {
-        row.nativePermission = createNativeFixturePolicy(workspace, plan.config.python); updateRow(root, row);
+        // Resolve HOME exactly as the client does, including its working directory
+        // for relative overrides. Never fall back after an explicit HOME fails.
+        row.nativePermission = createNativeFixturePolicy(workspace, plan.config.python, env.HOME === undefined ? undefined : path.resolve(workspace, env.HOME)); updateRow(root, row);
       }
       const before = inventory(workspace); save(path.join(base, 'before.json'), before);
       row.command = commandFor(plan, item, workspace, spec.prompt); save(path.join(base, 'command.json'), row.command);
       const stream = eventCollector(plan.config.maxCalls);
-      const result = await collect({ ...row.command, env: { ...process.env, ...plan.config.env, KIRO_FABRIC_LAUNCH_WORKSPACE: workspace }, maxOutputBytes: plan.config.maxOutputBytes, timeoutMs: plan.config.timeoutMs, stdoutPath: path.join(base, 'client.jsonl'), stderrPath: path.join(base, 'stderr.log'), signal, onLine: stream.onLine });
+      const result = await collect({ ...row.command, env, maxOutputBytes: plan.config.maxOutputBytes, timeoutMs: plan.config.timeoutMs, stdoutPath: path.join(base, 'client.jsonl'), stderrPath: path.join(base, 'stderr.log'), signal, onLine: stream.onLine });
       const { stdout: _stdout, stderr: _stderr, ...metrics } = result; row.process = metrics;
       row.evidence = analyzeEvents(stream.events); row.credits = row.evidence.credits;
       if (item.arm !== 'native' && item.caseId.startsWith('review-')) row.reviewHelp = reviewHelpDelivery(row.evidence, plan.identity.profiles[item.arm]?.reviewHelp?.text);

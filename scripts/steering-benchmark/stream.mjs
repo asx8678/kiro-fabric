@@ -68,7 +68,7 @@ export function analyzeEvents(events) {
   if (turns && !invalidUsage) out.credits = out.usage.filter(r => r.unit === 'credit').reduce((sum, r) => sum + Number(r.usage), 0);
   return out;
 }
-/** @typedef {{code:number|null,signal:NodeJS.Signals|null,stopReason:string|null,spawnError:string|null,wallMs:number,outputBytes:number,retainedBytes:number,stdout:string,stderr:string}} Collected */
+/** @typedef {{code:number|null,signal:NodeJS.Signals|null,stopReason:string|null,spawnError:string|null,outputError:string|null,wallMs:number,outputBytes:number,retainedBytes:number,stdout:string,stderr:string}} Collected */
 /** Combined retention cap applies BEFORE writing either stream. On stop, TERM then KILL the group and drain pipes.
  * @param {{executable:string,args:string[],cwd:string,env?:NodeJS.ProcessEnv,maxOutputBytes:number,timeoutMs:number,graceMs?:number,stdoutPath?:string,stderrPath?:string,signal?:AbortSignal,onLine?:(line:string)=>string|null}} options
  * @returns {Promise<Collected>} */
@@ -78,7 +78,15 @@ export async function collect(options) {
   const start = performance.now(), grace = options.graceMs ?? 300;
   /** @type {(number|null)[]} */ const descriptors = [null, null];
   /** Release every descriptor acquired so far exactly once. */
-  function releaseDescriptors() { for (let index = 0; index < descriptors.length; index += 1) { const fd = descriptors[index]; if (fd !== null) { descriptors[index] = null; fs.closeSync(fd); } } }
+  function releaseDescriptors() {
+    let failure;
+    for (let index = 0; index < descriptors.length; index += 1) {
+      const fd = descriptors[index]; if (fd === null) continue;
+      descriptors[index] = null;
+      try { fs.closeSync(fd); } catch (error) { failure ??= error; }
+    }
+    if (failure) throw failure;
+  }
   try {
     const targets = [options.stdoutPath, options.stderrPath];
     // Acquire incrementally: a failure on the second stream must still release
@@ -91,8 +99,9 @@ export async function collect(options) {
     try { return spawn(options.executable, options.args, { cwd: options.cwd, env: options.env ?? process.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }); }
     catch (error) { releaseDescriptors(); throw error; }
   })();
-  /** @type {Collected} */ const result = { code: null, signal: null, stopReason: null, spawnError: null, wallMs: 0, outputBytes: 0, retainedBytes: 0, stdout: '', stderr: '' };
+  /** @type {Collected} */ const result = { code: null, signal: null, stopReason: null, spawnError: null, outputError: null, wallMs: 0, outputBytes: 0, retainedBytes: 0, stdout: '', stderr: '' };
   /** @type {Buffer[][]} */ const chunks = [[], []];
+  const failedWrites = new Set();
   let buffer = '', closed = false;
   /** @type {NodeJS.Timeout | undefined} */ let killTimer, drainTimer;
   /** @type {()=>void} */ let finish = () => {};
@@ -109,7 +118,21 @@ export async function collect(options) {
   function receive(chunk, stream) {
     result.outputBytes += chunk.length;
     const kept = chunk.subarray(0, Math.max(0, options.maxOutputBytes - result.retainedBytes));
-    if (kept.length) { result.retainedBytes += kept.length; chunks[stream].push(kept); if (descriptors[stream] !== null) fs.writeSync(descriptors[stream], kept); }
+    if (kept.length) {
+      result.retainedBytes += kept.length; chunks[stream].push(kept);
+      if (descriptors[stream] !== null && !failedWrites.has(stream)) {
+        try {
+          const written = fs.writeSync(descriptors[stream], kept);
+          assert.equal(written, kept.length, `short write: ${written}/${kept.length} bytes`);
+        } catch (error) {
+          // Archive failure must not escape the emitter or discard charge evidence.
+          // Stop boundedly, but keep draining/parsing the capped in-memory stream.
+          failedWrites.add(stream);
+          result.outputError ??= `${stream === 0 ? 'stdout' : 'stderr'}: ${errorText(error)}`;
+          stop('output-write: ' + result.outputError);
+        }
+      }
+    }
     if (result.outputBytes > options.maxOutputBytes) stop('combined-output-limit');
     if (stream === 0 && options.onLine) {
       // Decode only complete byte lines, so split UTF-8 chunks cannot corrupt evidence.
@@ -125,15 +148,19 @@ export async function collect(options) {
   child.on('error', error => { result.spawnError = errorText(error); });
   const abort = () => stop('canceled');
   const timeout = setTimeout(() => stop('wall-time-limit'), options.timeoutMs);
-  await new Promise(resolve => {
-    finish = () => { clearTimeout(timeout); clearTimeout(killTimer); clearTimeout(drainTimer); options.signal?.removeEventListener('abort', abort); resolve(undefined); };
-    child.on('close', (code, signal) => { result.code = code; result.signal = signal; closed = true; if (!result.stopReason) { kill('SIGKILL'); finish(); } });
-    options.signal?.addEventListener('abort', abort, { once: true }); if (options.signal?.aborted) abort();
-  });
-  if (options.onLine && buffer.trim() && result.outputBytes <= options.maxOutputBytes) {
-    try { const reason = options.onLine(Buffer.from(buffer, 'latin1').toString('utf8')); if (reason) result.stopReason = reason; } catch (error) { result.stopReason = 'event-handler: ' + errorText(error); }
+  try {
+    await new Promise(resolve => {
+      finish = () => { clearTimeout(timeout); clearTimeout(killTimer); clearTimeout(drainTimer); options.signal?.removeEventListener('abort', abort); resolve(undefined); };
+      child.on('close', (code, signal) => { result.code = code; result.signal = signal; closed = true; if (!result.stopReason) { kill('SIGKILL'); finish(); } });
+      options.signal?.addEventListener('abort', abort, { once: true }); if (options.signal?.aborted) abort();
+    });
+    if (options.onLine && buffer.trim() && result.outputBytes <= options.maxOutputBytes) {
+      try { const reason = options.onLine(Buffer.from(buffer, 'latin1').toString('utf8')); if (reason) result.stopReason ??= reason; } catch (error) { result.stopReason ??= 'event-handler: ' + errorText(error); }
+    }
+  } finally {
+    try { releaseDescriptors(); }
+    catch (error) { result.outputError ??= errorText(error); result.stopReason ??= 'output-close: ' + result.outputError; }
   }
-  releaseDescriptors();
   result.stdout = Buffer.concat(chunks[0]).toString('utf8'); result.stderr = Buffer.concat(chunks[1]).toString('utf8'); result.wallMs = performance.now() - start;
   return result;
 }

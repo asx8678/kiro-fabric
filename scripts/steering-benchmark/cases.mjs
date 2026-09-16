@@ -2,9 +2,10 @@ import { sha, digest } from './core.mjs';
 import { BUG_CASES, makeBugCase } from './projects.mjs';
 import { REVIEW_CASES, makeReviewCase } from './reviews.mjs';
 import { REVIEW_REGRESSION_CASES, makeRegressionReviewCase } from './review-regressions.mjs';
+import { TASK_BEHAVIOR_CASES, makeTaskBehaviorCase } from './task-behavior.mjs';
 
 export const CASES = ['explain', 'json160', 'microcalc', 'read24', 'range', 'target-edit', 'multi-edit', 'parser', 'rename-api', 'invoice', 'exit7', 'fabric-help', 'github-advisory'];
-export const ALL_CASES = [...CASES, ...BUG_CASES, ...REVIEW_CASES, ...REVIEW_REGRESSION_CASES];
+export const ALL_CASES = [...CASES, ...BUG_CASES, ...REVIEW_CASES, ...REVIEW_REGRESSION_CASES, ...TASK_BEHAVIOR_CASES];
 export const AUDIT = 'execution-audit.jsonl';
 export const HELP_CODE = "return await fabric.help({topic:'overview'});";
 const common = 'Work only inside this disposable workspace. Do not access network, install dependencies, use persistent memory, or delegate. Do not modify tests or fixture scripts. Avoid unnecessary output. ';
@@ -13,6 +14,7 @@ const common = 'Work only inside this disposable workspace. Do not access networ
 const pad = n => String(n).padStart(2, '0');
 /** @param {string} id @param {string} seed @param {string} [python] @returns {Case} */
 export function makeCase(id, seed, python = 'python3') {
+  if (TASK_BEHAVIOR_CASES.includes(id)) return makeTaskBehaviorCase(id, seed);
   if (REVIEW_REGRESSION_CASES.includes(id)) return makeRegressionReviewCase(id, seed);
   if (BUG_CASES.includes(id)) return makeBugCase(id, seed);
   if (REVIEW_CASES.includes(id)) return makeReviewCase(id, seed);

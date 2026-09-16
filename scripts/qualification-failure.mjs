@@ -126,7 +126,9 @@ export function finalizeQualificationDiagnostic(output, authHome) {
   if (!["removed", "failed"].includes(authHome)) throw new Error("Invalid auth cleanup outcome");
   let previous;
   try {
-    const fd = fs.openSync(output, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    // Inspect the opened descriptor before reading; a writerless FIFO must not
+    // block open itself and prevent the always-run cleanup diagnostic.
+    const fd = fs.openSync(output, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
     try {
       const stat = fs.fstatSync(fd);
       if (!stat.isFile() || stat.nlink !== 1 || stat.size > 4096) throw new Error("Unsafe diagnostic input");

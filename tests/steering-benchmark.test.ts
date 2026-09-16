@@ -8,6 +8,7 @@ import { analyzeEvents, collect, eventCollector } from '../scripts/steering-benc
 import { validate, validateAnswer, validateAudit } from '../scripts/steering-benchmark/oracles.mjs';
 import { syntheticEvents, solvedTrial, selftest } from '../scripts/steering-benchmark/selftest.mjs';
 import { ARMS, artifact, budgetGate, createPlan, executable, parseConfig, profileSnapshot, schedule, verifyPlan } from '../scripts/steering-benchmark/plan.mjs';
+import { AGENT_PROMPTS, generateAgentProfile } from '../scripts/agent-profile.mjs';
 import { commandFor, init, loadPlan, rows, runOne, summarizeRows } from '../scripts/steering-benchmark/runner.mjs';
 import { main } from '../scripts/steering-benchmark.mjs';
 import { detailedStats } from '../scripts/steering-benchmark/metrics.mjs';
@@ -37,6 +38,118 @@ function cloneWorkspace(id: string): Trial {
   fs.cpSync(base.workspace, workspace, { recursive: true, preserveTimestamps: true });
   return { ...base, workspace };
 }
+
+import { TASK_BEHAVIOR_CASES, makeTaskBehaviorCase, scoreTaskBehavior, TASK_BEHAVIOR_LIMITATIONS } from '../scripts/steering-benchmark/task-behavior.mjs';
+
+type TaskAnswer = { schema: string; status: string; changedPaths: string[]; outcomes: { kind: string; evidence: { path: string; line: number; text: string }[]; result: Record<string, unknown> }[] };
+const taskAnswer = (spec: ReturnType<typeof makeCase>) => structuredClone(spec.expected) as TaskAnswer;
+
+describe('offline single-turn task behavior', () => {
+  it.each(TASK_BEHAVIOR_CASES)('%s accepts two seeded controls without emitting review metrics', async id => {
+    for (const seed of ['alpha', 'beta']) {
+      const t = await solvedTrial(fresh('task'), id, python, seed);
+      expect(t.spec).toEqual(makeTaskBehaviorCase(id, seed));
+      expect(caseHashes(t.spec)).toEqual(caseHashes(makeCase(id, seed)));
+      expect(caseHashes(t.spec)).not.toEqual(caseHashes(makeCase(id, seed + '-other')));
+      expect(scoreTaskBehavior(t.spec, t.spec.expected)).toMatchObject({ falsePositives: 0, duplicates: 0, recall: 1 });
+      const result = await validate(t);
+      expect(result).toMatchObject({ ok: true, failures: [] });
+      expect(result).not.toHaveProperty('review');
+      fs.writeFileSync(path.join(t.workspace, '.unauthorized'), 'effect');
+      expect((await validate(t)).failures.some(f => f.check === 'scope')).toBe(true);
+    }
+  });
+  it.each(TASK_BEHAVIOR_CASES)('%s independently rejects missing outcomes, false claims and malformed answers', async id => {
+    const t = await solvedTrial(fresh('task-negative'), id, python);
+    const omitted = taskAnswer(t.spec); omitted.outcomes.pop();
+    const falseClaim = taskAnswer(t.spec); falseClaim.status = 'tests-passed-and-all-fixed';
+    const claimedEdit = taskAnswer(t.spec); claimedEdit.changedPaths = ['invented.mjs'];
+    const duplicate = taskAnswer(t.spec); duplicate.outcomes.push(duplicate.outcomes[0]!);
+    const wrongLine = taskAnswer(t.spec); wrongLine.outcomes[0]!.evidence[0]!.line++;
+    const wrongText = taskAnswer(t.spec); wrongText.outcomes[0]!.evidence[0]!.text += ' stale';
+    const stale = taskAnswer(makeCase(id, 'different-seed'));
+    for (const bad of [omitted, falseClaim, claimedEdit, duplicate, wrongLine, wrongText, stale, null, {}, []]) {
+      const result = await validate({ ...t, evidence: { ...t.evidence, finalText: JSON.stringify(bad) } });
+      expect(result.failures.some(f => f.check === 'answer')).toBe(true);
+    }
+    for (const finalText of ['', 'not json', '```json\n' + t.evidence.finalText + '\n```']) {
+      expect((await validate({ ...t, evidence: { ...t.evidence, finalText } })).ok).toBe(false);
+    }
+  });
+  it('does not credit filler plans, arbitrary references, or decoy findings', () => {
+    const plan = makeCase('task-plan', 'alpha');
+    for (const field of ['change', 'risk', 'check']) {
+      const bad = taskAnswer(plan); bad.outcomes[0]!.result[field] = 'Inspect files and do the right thing.';
+      expect(scoreTaskBehavior(plan, bad).falsePositives).toBe(1);
+    }
+    const bad = taskAnswer(plan);
+    bad.outcomes[0]!.evidence = [{ path: 'README.md', line: 1, text: plan.files['README.md']!.split('\n')[0]! }];
+    expect(scoreTaskBehavior(plan, bad).falsePositives).toBe(1);
+    const spec = makeCase('task-review-nofix', 'alpha');
+    for (const kind of ['zero-page-size', 'empty-mean-cost']) {
+      const decoy = taskAnswer(spec); decoy.outcomes[0]!.kind = kind;
+      expect(scoreTaskBehavior(spec, decoy).falsePositives).toBe(1);
+    }
+    for (const field of ['consequence', 'witness', 'counterexample']) {
+      const bad = taskAnswer(spec); delete bad.outcomes[0]!.result[field];
+      expect(scoreTaskBehavior(spec, bad).falsePositives).toBe(1);
+    }
+    expect(TASK_BEHAVIOR_LIMITATIONS.join(' ')).toContain('not general task quality');
+    expect(TASK_BEHAVIOR_LIMITATIONS.join(' ')).toContain('do not prove internal reasoning');
+  });
+  it('rejects tempting repairs on read-only tasks and extra repairs inside the authorized file', async () => {
+    for (const id of ['task-plan', 'task-review-nofix', 'task-scope-negative']) {
+      const t = await solvedTrial(fresh('read-only'), id, python);
+      const pager = Object.keys(t.spec.files).find(p => p.startsWith('src/pager-'))!;
+      fs.writeFileSync(path.join(t.workspace, pager), t.spec.files[pager]!.replace('page.items.length < pageSize', 'page.nextCursor === null'));
+      expect((await validate(t)).failures.some(f => f.check === 'scope')).toBe(true);
+    }
+    const t = await solvedTrial(fresh('narrow'), 'task-narrow-fix', python);
+    const pager = t.spec.allowed[0]!;
+    for (const contents of [t.spec.files[pager]!, t.spec.solution[pager]!.replace('owner.toLowerCase()', 'owner')]) {
+      fs.writeFileSync(path.join(t.workspace, pager), contents);
+      expect((await validate(t)).failures.some(f => f.check === 'filesystem-data')).toBe(true);
+    }
+    fs.writeFileSync(path.join(t.workspace, pager), t.spec.solution[pager]!);
+    fs.writeFileSync(path.join(t.workspace, 'src/label.mjs'), 'export function label(item) { return item.id; }\n');
+    expect((await validate(t)).failures.some(f => f.check === 'scope')).toBe(true);
+  });
+  it('independently derives all deep ledger outcomes beyond default pages', () => {
+    const spec = makeCase('task-deep-read', 'alpha'), answer = taskAnswer(spec), outcome = answer.outcomes[0]!;
+    const file = Object.keys(spec.files).find(p => p.endsWith('.jsonl'))!;
+    const rows = spec.files[file]!.split('\n').map(line => JSON.parse(line) as { id: string; account: string; status: string; cents: number });
+    const matching = rows.filter(r => r.account === outcome.result.account && r.status === 'posted');
+    expect(outcome.result.ids).toEqual(matching.map(r => r.id));
+    expect(outcome.result.totalCents).toBe(matching.reduce((sum, r) => sum + r.cents, 0));
+    expect(outcome.evidence.at(-1)!.line).toBeGreaterThan(2500);
+    expect(spec.files[file]!.length).toBeGreaterThan(50000);
+    const partial = taskAnswer(spec); partial.outcomes[0]!.evidence.pop();
+    expect(scoreTaskBehavior(spec, partial).falsePositives).toBe(1);
+    const wrong = taskAnswer(spec); wrong.outcomes[0]!.result.totalCents = 0;
+    expect(scoreTaskBehavior(spec, wrong).falsePositives).toBe(1);
+  });
+  it('executes the reachable pagination defect and correct decoys independently', async () => {
+    for (const seed of ['alpha', 'beta']) {
+      const spec = makeCase('task-review-nofix', seed), workspace = fresh('task-probe');
+      putFiles(workspace, spec.files);
+      const data = Object.keys(spec.files).find(p => p.startsWith('data/pages-'))!;
+      const program = `import assert from 'node:assert/strict'; import fs from 'node:fs';
+        import {catalog} from './src/catalog.mjs'; import {normalizePageSize,defaultPageSize} from './src/options.mjs';
+        const {pages,pageSize}=JSON.parse(fs.readFileSync(${JSON.stringify(data)},'utf8'));
+        const fetchPage=async ({cursor})=>pages.find(p=>p.cursor===cursor);
+        const actual=await catalog(fetchPage,pageSize);
+        assert.deepEqual(actual.items,pages[0].items);
+        assert.equal(actual.count,1); assert.equal(actual.meanCost,pages[0].items[0].cost);
+        assert.deepEqual((await catalog(async()=>({...pages[0],nextCursor:null}))).items,pages[0].items);
+        assert.deepEqual(await catalog(async()=>({items:[],nextCursor:null})),{items:[],count:0,meanCost:0});
+        assert.equal(normalizePageSize(0),1); assert.equal(normalizePageSize(-7),1);
+        assert.equal(normalizePageSize(1.5),defaultPageSize); assert.equal(normalizePageSize(999),defaultPageSize);`;
+      const probe = await collect({ executable: process.execPath, args: ['--input-type=module', '-e', program], cwd: workspace, maxOutputBytes: 65536, timeoutMs: 10000 });
+      expect(probe.code, probe.stderr).toBe(0);
+      expect(probe.stopReason).toBeNull();
+    }
+  });
+});
 
 describe('complete benign contract oracles', () => {
   it.each(CASES)('accepts solved %s including independent Python probes', async id => {
@@ -312,6 +425,65 @@ describe('bounded process collection', () => {
     const r = await collect({ executable: process.execPath, args: ['-e', `console.log(${JSON.stringify(text)});setInterval(()=>{},1000)`], cwd: directory, maxOutputBytes: 65536, timeoutMs: 3000, graceMs: 30, onLine: stream.onLine });
     expect(r.stopReason).toBe('tool-call-limit'); expect(stream.events).toHaveLength(2);
   });
+  it.each(['stdout-throw', 'stderr-throw', 'stdout-short', 'stderr-short'])('bounds cleanup and retains evidence after a %s write failure', async mode => {
+    const directory = fresh('collector-write'), pidFile = path.join(directory, 'pids.json');
+    const events = syntheticEvents('[]').map(e => JSON.stringify(e)).join('\n') + '\n';
+    const descendant = `const fs=require('node:fs');process.on('SIGTERM',()=>{});fs.writeFileSync(${JSON.stringify(pidFile)},JSON.stringify([process.ppid,process.pid]));process.stdout.write(${JSON.stringify(events)});setTimeout(()=>process.stderr.write('stderr evidence\\n'),50);setInterval(()=>{},1000)`;
+    const client = `process.on('SIGTERM',()=>{});require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendant)}],{stdio:'inherit'});setInterval(()=>{},1000)`;
+    // Isolate fault injection: the old bug throws out of the data emitter. The
+    // diagnostic handler keeps that harness alive only until its bounded timeout.
+    const harness = `
+      import fs from 'node:fs';
+      import {collect,eventCollector,analyzeEvents} from ${JSON.stringify(new URL('../scripts/steering-benchmark/stream.mjs', import.meta.url).href)};
+      const opened=[],closed=[],escaped=[];
+      const open=fs.openSync,write=fs.writeSync,close=fs.closeSync;
+      fs.openSync=(...args)=>{const fd=open(...args);opened.push(fd);return fd};
+      fs.closeSync=fd=>{closed.push(fd);return close(fd)};
+      let injected=false;
+      fs.writeSync=(fd,buffer,...args)=>{
+        if(fd===opened[${mode.startsWith('stdout') ? 0 : 1}]) {
+          injected=true;
+          ${mode.endsWith('throw') ? "throw new Error('injected ENOSPC')" : 'return write(fd,buffer.subarray(0,1))'};
+        }
+        return write(fd,buffer,...args);
+      };
+      process.on('uncaughtException',error=>escaped.push(error.message));
+      const stream=eventCollector(40);
+      const result=await collect({executable:process.execPath,args:['-e',${JSON.stringify(client)}],cwd:${JSON.stringify(directory)},stdoutPath:'out',stderrPath:'err',maxOutputBytes:65536,timeoutMs:1500,graceMs:30,onLine:stream.onLine});
+      console.log(JSON.stringify({result,diskBytes:['out','err'].map(file=>fs.statSync(file).size),credits:analyzeEvents(stream.events).credits,injected,escaped,opened,closed,stillOpen:opened.filter(fd=>{try{fs.fstatSync(fd);return true}catch{return false}})}));
+    `;
+    try {
+      const outer = await collect({ executable: process.execPath, args: ['--input-type=module', '-e', harness], cwd: directory, maxOutputBytes: 65536, timeoutMs: 4000, graceMs: 30 });
+      expect(outer.code).toBe(0); expect(outer.stopReason).toBeNull();
+      const report = JSON.parse(outer.stdout);
+      expect(report.injected).toBe(true); expect(report.escaped).toEqual([]);
+      expect(report.result.stopReason).toMatch(/^output-write: /);
+      expect(report.result.stopReason).toContain(mode.endsWith('throw') ? 'injected ENOSPC' : 'short write');
+      expect(report.result.outputError).toContain(mode.startsWith('stdout') ? 'stdout: ' : 'stderr: ');
+      const failedStream = mode.startsWith('stdout') ? 'stdout' : 'stderr';
+      expect(report.diskBytes[mode.startsWith('stdout') ? 0 : 1]).toBeLessThan(Buffer.byteLength(report.result[failedStream]));
+      expect(report.result.retainedBytes).toBe(Buffer.byteLength(report.result.stdout) + Buffer.byteLength(report.result.stderr));
+      expect(report.result.wallMs).toBeLessThan(1400);
+      expect(report.result.stdout).toContain('runFinished'); expect(report.credits).toBe(0.1);
+      expect(report.opened).toHaveLength(2); expect(report.closed).toEqual(report.opened); expect(report.stillOpen).toEqual([]);
+      const pids: number[] = JSON.parse(fs.readFileSync(pidFile, 'utf8'));
+      expect(pids).toHaveLength(2);
+      // An orphan can briefly be a zombie until init reaps it; it is not running.
+      for (const pid of pids) {
+        let running = true;
+        for (let attempt = 0; attempt < 30 && running; attempt++) {
+          try { process.kill(pid, 0); running = process.platform !== 'linux' || !/\) Z /.test(fs.readFileSync(`/proc/${pid}/stat`, 'utf8')); }
+          catch (error) { if (!['ESRCH', 'ENOENT'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error; running = false; }
+          if (running) await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        expect(running).toBe(false);
+      }
+    } finally {
+      if (fs.existsSync(pidFile)) for (const pid of JSON.parse(fs.readFileSync(pidFile, 'utf8')) as number[]) {
+        try { process.kill(pid, 'SIGKILL'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+      }
+    }
+  });
   it('records spawn errors', async () => {
     const r = await collect({ executable: path.join(root, 'absent'), args: [], cwd: root, maxOutputBytes: 1000, timeoutMs: 1000 });
     expect(r.spawnError).toContain('ENOENT'); expect(r.code).not.toBe(0);
@@ -352,7 +524,8 @@ function manifestFixture() {
     const bundle = path.join(directory, name + '-bundle'), data = path.join(directory, name + '-data'); fs.mkdirSync(bundle); fs.mkdirSync(data);
     putFiles(bundle, { 'app/kiro/mcp-entry.js': 'export {};', 'tools/node': 'fixture-node', 'tools/rg': 'fixture-rg', 'resources/skills/fabric-exec/SKILL.md': 'fixture skill', 'resources/steering/fabric.md': 'fixture steering' });
     const profile = path.join(directory, name + '.json'), config = path.join(data, 'config.json'); save(config, {});
-    save(profile, { name: 'kiro-fabric', includeMcpJson: false, includePowers: false, tools: ['@fabric/fabric_exec'], resources: [`skill://${bundle}/resources/skills/fabric-exec/SKILL.md`, `file://${bundle}/resources/steering/fabric.md`], mcpServers: { fabric: { command: bundle + '/tools/node', args: [bundle + '/app/kiro/mcp-entry.js'], waitForReady: true, env: { KIRO_FABRIC_BUNDLE_ROOT: bundle, KIRO_FABRIC_RUNTIME_ROOT: bundle + '/app', KIRO_FABRIC_EXPECTED_NODE: bundle + '/tools/node', KIRO_FABRIC_RG: bundle + '/tools/rg', KIRO_FABRIC_DATA_ROOT: data } } } });
+    save(profile, generateAgentProfile({ nodePath: bundle + '/tools/node', runtimeRoot: bundle + '/app', dataRoot: data,
+      skillPath: bundle + '/resources/skills/fabric-exec/SKILL.md', steeringPath: bundle + '/resources/steering/fabric.md', bundleRoot: bundle, rgPath: bundle + '/tools/rg' }));
     return { profile, runtimePaths: [bundle], configPaths: [config] };
   }
   const arms = { old: makeArm('old'), pass1: makeArm('pass1'), pass2: makeArm('pass2') };
@@ -416,6 +589,55 @@ describe('portable plans, drift refusal and spend gates', () => {
     if (kind === 'profile') fs.appendFileSync(f.value.arms.pass2.profile, ' ');
     if (kind === 'plan') present(plan.runs[0]).hashes.prompt = 'changed';
     expect(() => verifyPlan(plan)).toThrow();
+  });
+  it('schedules guidance-mode arms on identical tasks and rejects mode-mismatched resources', () => {
+    const f = manifestFixture(), arm = f.value.arms.pass1;
+    const profile = JSON.parse(fs.readFileSync(arm.profile, 'utf8')) as Record<string, unknown>;
+    profile.prompt = AGENT_PROMPTS.minimal; profile.resources = []; profile.hooks = [];
+    fs.writeFileSync(arm.profile, JSON.stringify(profile));
+    expect(profileSnapshot(arm).guidanceMode).toBe('minimal');
+    const plan = createPlan(f.manifest);
+    expect(plan.identity.profiles.pass1!.guidanceMode).toBe('minimal');
+    expect(plan.identity.profiles.old!.guidanceMode).toBe('standard');
+    verifyPlan(plan);
+    const minimalRuns = plan.runs.filter(r => r.arm === 'pass1' && !r.qualification);
+    expect(minimalRuns.length).toBeGreaterThan(0);
+    for (const run of minimalRuns) {
+      const standard = plan.runs.find(r => r.arm === 'old' && r.caseId === run.caseId && r.round === run.round)!;
+      expect(standard.seed).toBe(run.seed);
+      expect(standard.hashes).toEqual(run.hashes);
+    }
+    const mismatched = arm.profile + '.mismatched';
+    fs.writeFileSync(mismatched, JSON.stringify({ ...profile, resources: [`skill://${arm.runtimePaths[0]}/resources/skills/fabric-exec/SKILL.md`] }));
+    expect(() => profileSnapshot({ ...arm, profile: mismatched })).toThrow(/coherent resources/);
+    const unknown = arm.profile + '.unknown';
+    fs.writeFileSync(unknown, JSON.stringify({ ...profile, prompt: 'not a guidance mode' }));
+    expect(() => profileSnapshot({ ...arm, profile: unknown, guidanceMode: 'minimal' })).toThrow(/guidance mode/);
+  });
+  it('preserves historical profiles as unknown and validates explicit mode declarations', () => {
+    const f = manifestFixture(), arm = f.value.arms.old, profile = object(readJson(arm.profile));
+    profile.prompt = 'historical frozen prompt'; save(arm.profile, profile, false);
+    expect(profileSnapshot(arm).guidanceMode).toBe('unknown');
+    expect(() => profileSnapshot({ ...arm, guidanceMode: 'standard' })).toThrow(/guidance mode/);
+    expect(() => parseConfig({ ...f.value, arms: { old: { ...arm, guidanceMode: 'typo' } } }, f.directory)).toThrow(/guidance mode/);
+    expect(parseConfig({ ...f.value, arms: { old: { ...arm, guidanceMode: 'review' } } }, f.directory).arms.old!.guidanceMode).toBe('review');
+  });
+  it.each(['standard', 'review', 'minimal'] as const)('validates %s hooks and reports all three matched mode arms', mode => {
+    const f = manifestFixture();
+    for (const [name, guidanceMode] of [['old', 'standard'], ['pass1', 'review'], ['pass2', 'minimal']] as const) {
+      const arm = f.value.arms[name], profile = object(readJson(arm.profile));
+      profile.prompt = AGENT_PROMPTS[guidanceMode];
+      if (guidanceMode === 'minimal') { profile.resources = []; profile.hooks = []; }
+      save(arm.profile, profile, false);
+    }
+    const plan = createPlan(f.manifest);
+    expect(Object.fromEntries(Object.entries(plan.identity.profiles).map(([name, profile]) => [name, profile.guidanceMode])))
+      .toEqual({ old: 'standard', pass1: 'review', pass2: 'minimal' });
+    expect(plan.identity.harness.some(file => file.file === 'agent-profile.mjs')).toBe(true);
+    const arm = f.value.arms[mode === 'standard' ? 'old' : mode === 'review' ? 'pass1' : 'pass2'], profile = object(readJson(arm.profile));
+    profile.hooks = mode === 'minimal' ? [{ name: 'unexpected steering' }] : [];
+    save(arm.profile, profile, false);
+    expect(() => profileSnapshot(arm)).toThrow(/coherent hooks/);
   });
   it('freezes alias target path, rejects mixed bundles and unisolated data roots', () => {
     const f = manifestFixture(), link = path.join(f.directory, 'alias'); fs.symlinkSync(f.value.arms.old.runtimePaths[0], link);
