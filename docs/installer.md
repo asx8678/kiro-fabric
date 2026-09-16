@@ -240,10 +240,29 @@ from a configuration backup.
   configuration files are recorded as `skipped`, not copied. Managed controls,
   unsafe ownership/modes, and unexpected filesystem changes still fail closed.
   Skipped entries are not restorable from that backup.
-- Retention keeps the 20 most recent backups (matched by exact name pattern);
-  a retention failure never destroys the fresh backup.
+- Retention targets 20 verified backups, always reserving a slot for the fresh
+  returned destination (including same-second names and clock rollback). Other
+  verified backups are ordered by their timestamp-shaped names. A name alone is
+  not ownership: retention checks the same-home manifest, exact tree inventory,
+  ownership, modes, link counts and content hashes before deletion. Unknown,
+  corrupt, modified, foreign-owned or unexpectedly linked material is preserved
+  and does not count toward the target. Recorded symlinks are checked without
+  following them; skipped hardlinks must remain absent from the snapshot.
+- Housekeeping examines at most 256 root entries, with a shared 20,000-entry /
+  256 MiB read budget, a 4 MiB manifest limit, and the normal file/depth bounds.
+  Exceeding a bound preserves evidence rather than forcing the retention target;
+  disk usage can therefore grow beyond 20 backups. Retention is best-effort and
+  never deletes the fresh backup. Remove ambiguous material only after review.
 - The JSON result reports the backup as `configurationBackup`, and human
   output prints `Prior configuration backup: <path>`.
+
+The legacy `install-agent-user.mjs` update path likewise retains **all** owned
+runtime generations: an active session may still open files from any older
+runtime, not merely the previous one. It has no session-liveness proof for safe
+pruning. The existing 256-generation capacity remains enforced: admitting a new
+generation at that cap fails before mutation, without removing any runtime;
+reusing an already owned generation remains allowed. Explicit uninstall retains
+its ownership-checked removal behavior and should only run after sessions stop.
 
 Restore is explicit, never automatic. Use the installed launcher or the
 source module:

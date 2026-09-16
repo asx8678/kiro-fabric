@@ -18,6 +18,11 @@ const MAX_ENTRIES = 20000;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_DEPTH = 32;
 const RETAINED_BACKUPS = 20;
+// Housekeeping is deliberately bounded across the entire pass, not per tree.
+// Oversized/ambiguous evidence stays on disk for explicit operator review.
+const MAX_RETENTION_CANDIDATES = 256;
+const MAX_RETENTION_BYTES = 256 * 1024 * 1024;
+const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 const MANIFEST = "backup-manifest.json";
 const STAMP = /^\d{8}T\d{6}Z-[a-f0-9]{16}$/;
 // Managed by the installation transaction (which keeps its own before/after
@@ -66,10 +71,11 @@ const isSafeOrdinaryHardlink = (stats, relativePath) => !MANAGED_CONTROLS.includ
 
 // Both inventory and copy use bounded descriptor reads. Recheck the path and
 // inode so a file becoming a hardlink/symlink after inventory is not copied.
-const readConfigurationFile = (sourcePath, relativePath) => {
+const readConfigurationFile = (sourcePath, relativePath, maxBytes = MAX_FILE_BYTES, budget) => {
   s.assertNoUnsafeSymlinkComponents(sourcePath);
   const stats = s.assertSafeFile(sourcePath, `configuration file ${relativePath}`);
-  if (stats.size > MAX_FILE_BYTES) throw new Error(`configuration file exceeds backup bound: ${relativePath}`);
+  if (stats.size > maxBytes) throw new Error(`configuration file exceeds backup bound: ${relativePath}`);
+  if (budget && (budget.bytes -= stats.size + 1) < 0) throw new Error("backup retention byte bound exceeded");
   const descriptor = fs.openSync(sourcePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   const unchanged = actual => ["dev", "ino", "uid", "gid", "mode", "nlink", "size", "mtimeMs", "ctimeMs"].every(key => actual[key] === stats[key]);
   const changed = () => { throw new Error(`configuration changed during backup: ${relativePath}`); };
@@ -198,7 +204,7 @@ export function createConfigurationBackup(kiroHome, options = {}) {
     fsyncDirectory(root);
     // Retention is housekeeping, not part of the backup's atomic unit: a
     // retention failure must never destroy the fresh backup.
-    try { retainBoundedBackups(root); } catch { /* keep all backups on retention failure */ }
+    try { retainBoundedBackups(root, destination, kiroHome); } catch { /* keep all backups on retention failure */ }
     return { path: destination, files: files.length, directories: directories.length, symlinks: symlinks.length, skipped: skipped.length, manifestSha256, sourceRoot, excludes };
   } catch (error) {
     // Never leave a partial backup that could be trusted as complete.
@@ -220,12 +226,131 @@ function syncBackupTree(root) {
   visit(root);
 }
 
-function retainBoundedBackups(root) {
-  const entries = fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory() && STAMP.test(entry.name)).map(entry => entry.name).sort();
-  for (const name of entries.slice(0, Math.max(0, entries.length - RETAINED_BACKUPS))) {
-    fs.rmSync(path.join(root, name), { recursive: true, force: true });
+// Unlike readdirSync, this never materializes an unbounded foreign directory.
+function boundedEntries(directory, budget) {
+  const handle = fs.opendirSync(directory), entries = [];
+  try {
+    for (let entry; (entry = handle.readSync());) {
+      if (--budget.entries < 0) throw new Error("backup retention entry bound exceeded");
+      entries.push(entry);
+    }
+  } finally { handle.closeSync(); }
+  return entries;
+}
+
+const sameEvidence = (left, right) => ["dev", "ino", "uid", "gid", "mode", "nlink", "size", "mtimeMs", "ctimeMs"]
+  .every(key => left[key] === right[key]);
+
+// A timestamp is not ownership. Require a complete, same-home manifest and
+// exact tree closure, safe ownership, original snapshot modes and content.
+// Skipped hardlinks/special files must remain absent; recorded symlinks are
+// compared as links and are never followed. Any doubt preserves the whole tree.
+function inspectRetainedBackup(directory, kiroHome, budget) {
+  s.assertNoUnsafeSymlinkComponents(directory);
+  s.assertSafeDirectory(directory, { private: true });
+  const snapshot = new Map([[directory, fs.lstatSync(directory)]]);
+  const manifestPath = path.join(directory, MANIFEST);
+  const { bytes, stats } = readConfigurationFile(manifestPath, MANIFEST, MAX_MANIFEST_BYTES, budget);
+  if ((stats.mode & 0o7777) !== 0o600) throw new Error("modified backup manifest mode");
+  snapshot.set(manifestPath, stats);
+  const manifest = JSON.parse(bytes.toString());
+  if (manifest.schemaVersion !== 1 || manifest.kiroHome !== kiroHome ||
+      typeof manifest.time !== "string" || !Number.isFinite(Date.parse(manifest.time)) ||
+      !(manifest.command === null || typeof manifest.command === "string") ||
+      !(manifest.sourceRoot === undefined || manifest.sourceRoot === null ||
+        (typeof manifest.sourceRoot === "string" && path.isAbsolute(manifest.sourceRoot))) ||
+      !Array.isArray(manifest.excludes) || !manifest.excludes.includes("kiro-fabric") ||
+      !MANAGED_CONTROLS.every(control => manifest.excludes.includes(control))) throw new Error("foreign backup manifest");
+  const expected = new Map(), skipped = new Set();
+  let count = 0;
+  for (const kind of ["directories", "files", "symlinks", "skipped"]) {
+    const records = manifest[kind];
+    if (!Array.isArray(records) || (count += records.length) > MAX_ENTRIES) throw new Error("invalid backup inventory");
+    for (const record of records) {
+      const relative = record?.path;
+      if (typeof relative !== "string" || relative.split("/").some(part => !part || part === "." || part === "..") ||
+          relative.includes("\\") || relative.split("/").length > MAX_DEPTH + 1 || relative === MANIFEST ||
+          relative === "kiro-fabric" || relative.startsWith("kiro-fabric/") || expected.has(relative) || skipped.has(relative)) throw new Error("invalid backup path");
+      assertContainedRelative(relative, directory);
+      if (kind === "skipped") {
+        if (!["hardlinked", "non-regular"].includes(record.reason)) throw new Error("invalid skipped entry");
+        skipped.add(relative);
+      } else {
+        if (kind === "files" && (!Number.isSafeInteger(record.size) || record.size < 0 || record.size > MAX_FILE_BYTES ||
+            !/^[a-f0-9]{64}$/.test(record.sha256))) throw new Error("invalid backup file");
+        if (kind === "symlinks" && typeof record.target !== "string") throw new Error("invalid backup symlink");
+        if (kind !== "symlinks" && (!Number.isInteger(record.mode) || record.mode < 0 || record.mode > 0o777 || (record.mode & 0o022))) throw new Error("invalid backup mode");
+        expected.set(relative, { kind, record });
+      }
+    }
   }
-  if (entries.length > RETAINED_BACKUPS) fsyncDirectory(root);
+  const visit = (target, relative, depth) => {
+    if (depth > MAX_DEPTH) throw new Error("backup retention depth exceeded");
+    s.assertNoUnsafeSymlinkComponents(target);
+    s.assertSafeDirectory(target, { private: true });
+    const before = fs.lstatSync(target);
+    if ((before.mode & 0o7777) !== 0o700) throw new Error("modified backup directory mode");
+    snapshot.set(target, before);
+    for (const entry of boundedEntries(target, budget)) {
+      if (!relative && entry.name === MANIFEST) continue;
+      const name = relative ? `${relative}/${entry.name}` : entry.name;
+      const item = expected.get(name), child = path.join(target, entry.name);
+      if (!item) throw new Error("unrecorded backup entry");
+      const actual = fs.lstatSync(child), { kind, record } = item;
+      if (typeof process.getuid === "function" && actual.uid !== process.getuid()) throw new Error("foreign backup entry");
+      if (kind === "directories" && actual.isDirectory()) visit(child, name, depth + 1);
+      else if (kind === "symlinks" && actual.isSymbolicLink() && actual.nlink === 1 && fs.readlinkSync(child) === record.target) snapshot.set(child, actual);
+      else if (kind === "files" && actual.isFile() && actual.size === record.size && (actual.mode & 0o7777) === ((record.mode & 0o555) | 0o400)) {
+        const content = readConfigurationFile(child, name, MAX_FILE_BYTES, budget);
+        if (!sameEvidence(actual, content.stats) || s.hash(content.bytes) !== record.sha256) throw new Error("modified backup content");
+        snapshot.set(child, content.stats);
+      } else throw new Error("modified backup entry");
+      expected.delete(name);
+    }
+    if (!sameEvidence(before, fs.lstatSync(target))) throw new Error("backup changed during retention");
+  };
+  visit(directory, "", 0);
+  if (expected.size) throw new Error("missing backup entries");
+  for (const [target, before] of snapshot) {
+    s.assertNoUnsafeSymlinkComponents(path.dirname(target));
+    if (!sameEvidence(before, fs.lstatSync(target))) throw new Error("backup changed during retention");
+  }
+  return snapshot;
+}
+
+function retainBoundedBackups(root, fresh, kiroHome) {
+  const entries = boundedEntries(root, { entries: MAX_RETENTION_CANDIDATES })
+    .filter(entry => entry.isDirectory() && STAMP.test(entry.name) && path.join(root, entry.name) !== fresh)
+    .map(entry => entry.name).sort();
+  if (entries.length < RETAINED_BACKUPS) return;
+  const budget = { entries: MAX_ENTRIES, bytes: MAX_RETENTION_BYTES }, verified = [];
+  for (const name of entries) {
+    const directory = path.join(root, name);
+    try { inspectRetainedBackup(directory, kiroHome, budget); verified.push(directory); } catch { /* preserve unknown evidence */ }
+    if (budget.entries < 0 || budget.bytes < 0) return;
+  }
+  for (const directory of verified.slice(0, Math.max(0, verified.length - RETAINED_BACKUPS + 1))) {
+    // Revalidate immediately before deletion. Delete only enumerated entries,
+    // never recursively sweep up new/foreign material added after validation.
+    const snapshot = inspectRetainedBackup(directory, kiroHome, budget);
+    const manifestPath = path.join(directory, MANIFEST);
+    const deletionOrder = [...snapshot].sort(([left], [right]) => right.split(path.sep).length - left.split(path.sep).length ||
+      Number(left === manifestPath) - Number(right === manifestPath));
+    // Keep the manifest until all recorded children have been removed, leaving
+    // useful recovery evidence if a non-recursive removal encounters new data.
+    for (const [target, before] of deletionOrder) {
+      s.assertNoUnsafeSymlinkComponents(path.dirname(target));
+      const now = fs.lstatSync(target);
+      if (before.isDirectory()) {
+        if (!["dev", "ino", "uid", "gid", "mode"].every(key => before[key] === now[key])) throw new Error("backup directory changed during deletion");
+        fs.rmdirSync(target);
+      } else {
+        if (!sameEvidence(before, now)) throw new Error("backup entry changed during deletion");
+        fs.unlinkSync(target);
+      }
+    }
+    fsyncDirectory(root);
+  }
 }
 
 /** List retained configuration backups, newest last. */
