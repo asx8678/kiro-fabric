@@ -45,9 +45,9 @@ describe("review coverage contracts", () => {
     f.put("ignored/.azure-pipelines/decoy.yml", "filePath: decoy\n");
     f.put("scripts/cleanup.ps1", "$apiKeys[$idx]\n");
     const normal = await f.call("grep", { pattern: "filePath", path: "." }) as LocalGrepResult;
-    expect(normal).toEqual({ scope: { path: ".", hidden: false, ignoreFiles: true }, matches: [], truncated: false });
+    expect(normal).toEqual({ scope: { path: ".", hidden: false, ignoreFiles: true }, matches: [], truncated: false, scopeExhausted: true });
     const hidden = await f.call("grep", { pattern: "filePath", path: ".", hidden: true }) as LocalGrepResult;
-    expect(hidden).toEqual({ scope: { path: ".", hidden: true, ignoreFiles: true }, matches: [{ path: ".azure-pipelines/cleanup.yml", line: 1, text: "filePath: scripts/cleanup.ps1" }], truncated: false });
+    expect(hidden).toEqual({ scope: { path: ".", hidden: true, ignoreFiles: true }, matches: [{ path: ".azure-pipelines/cleanup.yml", line: 1, text: "filePath: scripts/cleanup.ps1" }], truncated: false, scopeExhausted: true });
     const found = await f.call("find", { pattern: "**/*", hidden: true }) as LocalFindResult;
     expect(found.paths).toEqual([".azure-pipelines/cleanup.yml", ".github/workflows/test.yml", ".gitignore", "scripts/cleanup.ps1"]);
     expect(found.scope).toEqual({ path: ".", glob: "**/*", hidden: true, ignoreFiles: true });
@@ -57,7 +57,7 @@ describe("review coverage contracts", () => {
       expect(schemaValidationMessage(descriptor!.outputSchema!, { ...value })).toBeUndefined();
     }
     for (const pattern of ["ignored/**", ".git/**", "nested/.hg/**", ".svn/**"]) {
-      expect(await f.call("find", { pattern, hidden: true })).toEqual({ scope: { path: ".", glob: pattern, hidden: true, ignoreFiles: true }, paths: [], truncated: false });
+      expect(await f.call("find", { pattern, hidden: true })).toEqual({ scope: { path: ".", glob: pattern, hidden: true, ignoreFiles: true }, paths: [], truncated: false, scopeExhausted: true });
     }
     await expect(f.call("grep", { pattern: "secret", path: ".git", hidden: true })).rejects.toThrow("VCS metadata");
     await expect(f.call("find", { pattern: "*", path: ".git/config", hidden: true })).rejects.toThrow("VCS metadata");

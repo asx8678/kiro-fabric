@@ -20,7 +20,7 @@ it("collects late matches and preserves default compatibility", async () => {
   const got = []; let cursor: string | undefined;
   do { const page = await f.call("grep", { ...args, ...(cursor ? { cursor } : {}) }); got.push(...page.matches!); cursor = page.nextCursor; } while (cursor);
   expect(got.map(m => [m.path, m.line])).toEqual([["a", 1], ["a", 2], ["z", 1]]);
-  expect(await f.call("find", { pattern: "**/*" })).toEqual({ scope: { path: ".", glob: "**/*", hidden: false, ignoreFiles: true }, paths: ["a", "z"], truncated: false });
+  expect(await f.call("find", { pattern: "**/*" })).toEqual({ scopeExhausted: true, scope: { path: ".", glob: "**/*", hidden: false, ignoreFiles: true }, paths: ["a", "z"], truncated: false });
 });
 it("rejects forged, mismatched, consumed and foreign cursors and invalid limits", async () => {
   const f = fixture(), other = fixture(); for (const name of ["a", "b"]) fs.writeFileSync(path.join(f.root, name), "x");

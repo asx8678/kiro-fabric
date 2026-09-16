@@ -31,7 +31,7 @@ it("resolves every edit on the original snapshot and publishes one approved resu
 it("late missing and overlapping anchors fail atomically before approval", async () => {
   const f = fixture(); f.put("x", "abcdef");
   for (const oldText of ["missing", "bc"]) {
-    await expect(f.call("edit", { path: "x", edits: [{ oldText: "abc", newText: "Z" }, { oldText, newText: "Q" }] })).rejects.toThrow(/not found|overlap/);
+    await expect(f.call("edit", { path: "x", expectedSha256: hash("abcdef"), edits: [{ oldText: "abc", newText: "Z" }, { oldText, newText: "Q" }] })).rejects.toThrow(/not found|overlap/);
     expect(fs.readFileSync(path.join(f.root, "x"), "utf8")).toBe("abcdef");
   }
   expect(f.approve).not.toHaveBeenCalled();
