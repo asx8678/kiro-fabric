@@ -1209,7 +1209,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         const manifestHash = createHash4("sha256").update(readFileSync(path6.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-J2RZI2IB.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-P2IQY6TR.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {} });
     } finally {
       release?.();
@@ -1306,7 +1306,7 @@ var invoked = process.argv[1] ? realpathSync(process.argv[1]) : "";
 var self = realpathSync(fileURLToPath(import.meta.url));
 if (invoked === self) {
   if (process.argv[2] === "--first-prompt-hook") {
-    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-ZJXFYYL6.js");
+    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-XSB56XZI.js");
     process.exit(await runFirstPromptHook(process.argv.length === 4 ? process.argv[3] : void 0));
   }
   process.exit(await runKiroMcpProcess());

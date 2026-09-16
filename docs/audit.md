@@ -159,10 +159,12 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 - `src/trace/trace-writer.ts`
 - `src/trace/tracer.ts`
 - `tests/action-registry.test.ts`
+- `tests/action-registry-lifecycle.test.ts` — terminal closure guards at admission, dequeue, and each dispatch boundary; queued and in-flight calls reject as closed without provider contact.
 - `tests/agent-profile.test.ts`
 - `tests/agent-user-install.test.ts`
 - `tests/approval-projection.test.ts`
 - `tests/archive.test.ts`
+- `tests/artifact-startup-recovery.test.ts` — shared artifact-root startup tolerates exact concurrent disappearance of residue entries while foreign entries and other failures still reject.
 - `tests/artifacts-state.test.ts`
 - `tests/compiler-isolation.test.ts`
 - `tests/compiler-ownership.test.ts`
@@ -181,7 +183,11 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 - `tests/mcp-process-lifecycle.test.ts`
 - `tests/migration.test.ts`
 - `tests/package-boundary.test.ts`
+- `tests/qualification-driver-capture.test.ts` — offline pressure collector binds compaction success at any bounded attempt to the whole seed-adjacent interval and rejects intervening tools/manual compacts.
 - `tests/quickjs-runtime.test.ts`
+- `tests/quickjs-worker-lifecycle.test.ts` — extended watchdog rescheduling anchored at the fixed deadline, hard-max capping, host-call cancellation and bounded drain on worker fault/close, and stale cross-execution message rejection.
+- `tests/quickjs-worker-protocol.test.ts` — per-execution message IDs; stale replies, aborts, expiry and floors cannot target a reused pooled slot; duplicate run messages are ignored.
+- `tests/state-boundary-regressions.test.ts` — state-root identity/privacy revalidation on every operation; versioned stale-lock recovery with exclusive per-token claims, real SIGKILL two-reclaimer arbitration, and fail-closed preservation of legacy/interrupted evidence.
 - `tests/release-artifacts.test.ts`
 - `tests/release-evidence.test.ts`
 - `tests/sbom-identity.test.ts`
@@ -244,6 +250,7 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `src/installation/bundle-contract.mjs`
 - `src/installation/installer-lock.mjs`
 - `src/installation/pinned-recovery.mjs` — embedded bounded child for macOS inode-pinned claim inspection, exclusive empty creation and exact publication; no parent cwd mutation or pathname recovery fallback.
+- `src/installation/pinned-directory-child.mjs` — src-side mirror of `scripts/pinned-directory-child.mjs`; fixed allowlisted single-component operations under a caller-held parent descriptor (Linux `/proc/self/fd` alias or verified child), used by `src/providers/state-provider.ts` for anchored lock/claim deletion after root rename detection.
 - `src/kiro/managed-generation.ts`
 - `tests/bundle-archive.test.ts`
 - `tests/bundle-contract.test.ts`
@@ -292,6 +299,7 @@ These entries extend the implementation inventory, not historical native or rele
 These entries extend the implementation inventory; observed statistics are descriptive, not release qualification.
 
 - `scripts/steering-benchmark/projects.mjs` — dependency-free TinyShop bug catalog: eight seeded bug classes plus an all-bugs project, public reproductions, controller-held edge-case checks and bounded Node probes.
+- `scripts/steering-benchmark/task-behavior.mjs` — opt-in single-turn plan, review-only, exact scoped repair, deep-ledger and read-only diagnosis fixtures; finite proposition/source-evidence grading, not proof of model reasoning, complete read coverage or credit savings.
 - `scripts/steering-benchmark/native-policy.mjs` — opt-in workspace-scoped native shell consent: exclusive per-workspace policy creation, identity recording and verified cleanup without touching global rules.
 - `scripts/steering-benchmark/metrics.mjs` — coverage-aware statistics separating strict compliance, independent repair quality, latency and outer-call traffic; unknown telemetry stays null.
 - `scripts/agent-comparison.mjs` — offline example export, oracle selftest and report generation; no inference in any command.
@@ -341,6 +349,7 @@ These entries document later changes, not a revision to historical results or ev
 - `scripts/steering-benchmark/reviews.mjs` — seeded read-only infrastructure, cleanup and boundary fixtures; source-line/caller-consumer grading; independent Node/Bash qualification of defects and false-positive controls.
 - `tests/review-benchmark.test.ts` — recall/precision, duplicate/forged evidence rejection, read-only scope, failure-inclusive cost and equal-model/effort regression.
 - `tests/local-review-coverage.test.ts` — hidden CI discovery, ignore/VCS/alias safeguards, bounded scope metadata and whole-file line/continuation checks.
+- `tests/local-search-read.test.ts` — deterministic guest search→read composition: deduplicated match paths, merged and capped context windows with explicit continuation, zero-match short-circuit, and explicit requested-range/scope-exhaustion reporting.
 - `tests/review-execution.test.ts` — real compiler/guest execution of dictionary repairs, no effects on validation failure, visible diagnostic hints and numbered source with range/EOF metadata.
 - `tests/local-read-many.test.ts` — aggregate source budgets, complete continuations, changed-file rejection and unsafe-path controls.
 - `tests/source-packets.test.ts` — checked runtime and visible projection of related source batches, complete evidence with fewer calls, and nested/visible budget clamps.
