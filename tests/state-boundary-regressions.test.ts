@@ -5,6 +5,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { buildSync } from "esbuild";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StateProvider } from "../src/providers/state-provider.js";
+import { ActionRegistry } from "../src/core/action-registry.js";
+import { validateSchemaValue } from "../src/schema-validation.js";
 import { FabricDeadline } from "../src/runtime/deadline.js";
 
 const roots: string[] = [];
@@ -276,5 +278,68 @@ describe("state recovery arbitration", () => {
     expect(fs.readFileSync(claim, "utf8")).toBe("partial recovery evidence");
     expect(fs.existsSync(lock)).toBe(true);
     expect(fs.existsSync(path.join(root, "state.json"))).toBe(false);
+  });
+});
+
+describe("state key bounds", () => {
+  it.each([
+    { name: "astral", key: "\u{1F600}".repeat(257) },
+    { name: "combining", key: "a" + "\u0301".repeat(512) },
+  ])("rejects a schema-admitted $name key without poisoning existing state", async ({ key }) => {
+    const { root, provider, context } = fixture();
+    const registry = new ActionRegistry();
+    registry.register(provider);
+    const scoped = { ...context, audits: [], maxResultChars: 16_000, approve: async () => {} };
+    try {
+      await registry.invoke("state.set", { key: "healthy", value: "unrelated" }, scoped);
+      const file = path.join(root, "state.json");
+      const before = fs.readFileSync(file);
+      const args = { key, value: "poison" };
+      const descriptor = await provider.describe("set");
+      expect(validateSchemaValue(descriptor?.inputSchema, args)).toEqual({ status: "valid" });
+      await expect(registry.invoke("state.set", args, scoped)).rejects.toThrow("state key exceeds configured bounds");
+      expect(fs.readFileSync(file)).toEqual(before);
+      expect(fs.readdirSync(root)).toEqual(["state.json"]);
+      expect(await registry.invoke("state.get", { key: "healthy" }, scoped)).toMatchObject({ value: "unrelated", revision: 1 });
+      expect(await registry.invoke("state.list", {}, scoped)).toMatchObject({ revision: 1, entries: [{ key: "healthy", revision: 1 }] });
+      expect(await registry.invoke("state.delete", { key: "healthy", expectedRevision: 1 }, scoped)).toEqual({ key: "healthy", deleted: true, revision: 2 });
+    } finally { await registry.close(); }
+  });
+
+  it.each([
+    { name: "ASCII", key: "a".repeat(512) },
+    { name: "astral", key: "\u{1F600}".repeat(256) },
+    { name: "combining", key: "a" + "\u0301".repeat(511) },
+  ])("round-trips a $name key at the persisted UTF-16 limit after reopening", async ({ key }) => {
+    const { root, provider, context } = fixture();
+    expect(key.length).toBe(512);
+    await expect(provider.invoke("set", { key, value: "boundary" }, context)).resolves.toEqual({ key, revision: 1 });
+    const reopened = new StateProvider(root);
+    expect(await reopened.invoke("get", { key }, context)).toMatchObject({ key, value: "boundary", revision: 1 });
+    expect(await reopened.invoke("list", {}, context)).toMatchObject({ revision: 1, entries: [{ key, revision: 1 }] });
+    expect(await reopened.invoke("delete", { key, expectedRevision: 1 }, context)).toEqual({ key, deleted: true, revision: 2 });
+  });
+
+  it("rejects invalid direct-provider keys before opening state files or locks", async () => {
+    const { root, provider, context } = fixture();
+    const open = vi.spyOn(fs, "openSync");
+    for (const key of ["", undefined, null, 42, "a".repeat(513), "\u{1F600}".repeat(257)]) {
+      for (const action of ["get", "set", "delete"]) {
+        await expect(provider.invoke(action, { key, value: "invalid" }, context)).rejects.toThrow("state key exceeds configured bounds");
+      }
+    }
+    expect(open).not.toHaveBeenCalled();
+    expect(fs.readdirSync(root)).toEqual([]);
+  });
+
+  it("preserves existing malformed state instead of silently repairing or discarding it", async () => {
+    const { root, provider, context } = fixture();
+    const file = path.join(root, "state.json");
+    const text = JSON.stringify({ schemaVersion: 1, revision: 1, entries: {
+      ["\u{1F600}".repeat(257)]: { revision: 1, value: "retained evidence", updatedAt: 1 },
+    } });
+    fs.writeFileSync(file, text, { mode: 0o600 });
+    await expect(provider.invoke("get", { key: "healthy" }, context)).rejects.toThrow("state file is malformed");
+    expect(fs.readFileSync(file, "utf8")).toBe(text);
   });
 });

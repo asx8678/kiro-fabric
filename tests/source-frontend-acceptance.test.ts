@@ -30,11 +30,13 @@ export const findReusableSourceBundle = async () => null;
 export const buildCompleteBundle = async options => { if(options.archive !== false || options.root !== ${JSON.stringify(source)}) throw Error('wrong source build boundary'); return {root:${JSON.stringify(bundle.root)}}; };
 `, loader: "js" }));
     } }] });
+    // esbuild uses the ambient umask; this generated file is backed up as configuration.
+    fs.chmodSync(entry, 0o600);
     const result = spawnSync(process.execPath, [entry, "--source", "--yes", "--non-interactive", "--json", "--no-shell-integration"], { cwd: root, env: { HOME: home, KIRO_HOME: source, PATH: bin, TMPDIR: root, SHELL: "", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 60000 });
     expect(result.error).toBeUndefined(); expect(result.stderr).toBe(""); expect(result.stdout.trim().split("\n")).toHaveLength(1);
     const output = JSON.parse(result.stdout); expect(output.exitCode).toBe(result.status);
     expect(fs.readFileSync(log, "utf8")).toBe("install --frozen-lockfile\nrun build\n");
-    expect(output.configurationBackup).toMatchObject({ sourceRoot: source, excludes: expect.arrayContaining([".tmp", "node_modules"]) });
+    expect(output.configurationBackup, JSON.stringify(output)).toMatchObject({ sourceRoot: source, excludes: expect.arrayContaining([".tmp", "node_modules"]) });
     expect(fs.readFileSync(path.join(output.configurationBackup.path, "settings.json"), "utf8")).toBe("private fixture configuration");
     expect(fs.existsSync(path.join(output.configurationBackup.path, ".tmp"))).toBe(false);
     expect(fs.readFileSync(path.join(source, "settings.json"), "utf8")).toBe("private fixture configuration");

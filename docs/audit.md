@@ -99,6 +99,7 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 - `scripts/agent-profile.mjs`
 - `scripts/analyze-trace.mjs`
 - `scripts/assert-build-artifacts.mjs`
+- `scripts/normalize-artifact-modes.mjs` — removes group/other write bits from build outputs without widening private modes; rejects links and special files.
 - `scripts/assert-kiro-home-unchanged.mjs`
 - `scripts/atomic-file.mjs`
 - `scripts/build-agent-dev.mjs`
@@ -325,6 +326,7 @@ These entries record implementation coverage, not measured live speedups or auth
 - `tests/local-code-mode-fixes.test.ts` — atomic edit/hash guards, partial read failures and invocation snapshot reuse.
 - `tests/local-search-cursor.test.ts` — opaque single-use TTL cursors, bounded cache and enumeration/content drift checks.
 - `tests/build-input-provenance.test.ts` — stale source/guidance rejection and captured resource integrity.
+- `tests/artifact-modes.test.ts` — exact permission-bit removal, idempotence, build ordering and link-target preservation.
 - `tests/roundtrip-recipes.test.ts` — composed bounded discovery/read/probe examples and diagnostic-to-source chains.
 
 ## Code-mode efficiency and calibration additions (current implementation)

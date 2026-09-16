@@ -738,6 +738,27 @@ describe("real-client release evidence", () => {
     }
   });
 
+  it.each([
+    ["extra context-disclosure tool", "@fabric/fabric_exec\ndisclose_context"],
+    ["model-authored inventory", "mcp_fabric_fabric_exec\ndisclose_context\nNATIVE_UNAVAILABLE"],
+    ["one-tag picker that omits client tools", [
+      "/tools · 1 tag",
+      "────────────────────────────────────────",
+      "search: type to filter",
+      "Name                 Source      Description",
+      "@fabric/fabric_exec  mcp         Checked TypeScript; await/return",
+      "────────────────────────────────────────",
+      "esc to close",
+    ].join("\n")],
+  ])("keeps %s blocked as incomplete single-tool evidence", (_label, text) => {
+    expect(() => assertStrictToolInventory(text)).toThrow("BLOCKED");
+    try {
+      assertStrictToolInventory(text);
+    } catch (error) {
+      expect(error).toMatchObject({ inventoryStatus: "unverified", gate: "nativeToolVisibility" });
+    }
+  });
+
   it("requires the bootstrap plus effect exec, rejecting missing and extra executions", () => {
     for (const count of [0, 1, 3]) {
       const wrongCount = structuredClone(valid);

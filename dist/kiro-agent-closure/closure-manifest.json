@@ -13,7 +13,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "0e959f88850a20e6aa335decdb272a9861c761beeca9bfbb50f29f36ad6d7fc1"
+        "sha256": "fd85aa9e7cc9c03ee71d47ec286f463463efbbd896971b4494b3901390f569c6"
       },
       {
         "path": "pnpm-lock.yaml",
@@ -41,11 +41,11 @@
       },
       {
         "path": "scripts/build-inputs.mjs",
-        "sha256": "06f230b69a0ca7ff51c56da0cc9c3818caf9b1f6ac1603701d0ee696d36f3a79"
+        "sha256": "c1c1e1269ce959e99478701ec710dc54f2ec624681588467d32f3ce593f934b3"
       },
       {
         "path": "scripts/build-kiro-closure.mjs",
-        "sha256": "317f90a9d5663668aca060d4236ea5f56a7e6bfb153731409ff8ffb3a28ca749"
+        "sha256": "885af3176a538b13db349c7783aed824219374252d31df2c7ef331412ee76e7d"
       },
       {
         "path": "scripts/build-private-tools.mjs",
@@ -144,12 +144,16 @@
         "sha256": "5709cbe79367825790e30b56b18866e168d12cec91f16b244336b530193c471c"
       },
       {
+        "path": "scripts/normalize-artifact-modes.mjs",
+        "sha256": "62b2ebf7dbfda3906bebe45f820afea2443dcae0df0977c94dd08c9f53d72f92"
+      },
+      {
         "path": "scripts/package-identity.mjs",
         "sha256": "93cb954e0bc3a5644148250577fb6a894869a2c1d50117fa6e2782738018596a"
       },
       {
         "path": "scripts/package-policy.mjs",
-        "sha256": "c758ee5eab70ce5efe7fe9beec12050e8daee95ec5133fcca2621584543dc013"
+        "sha256": "bd2f5f7f4bd735514cb271300e7c8a8f3eefed72c5f0bdc73b0d74c394449930"
       },
       {
         "path": "scripts/pinned-directory-child.mjs",
@@ -437,7 +441,7 @@
       },
       {
         "path": "src/providers/state-provider.ts",
-        "sha256": "210e73cc429a801ca6774ca9ec939a831bc5dc3dc22f2dea8c6bce57ec50dcbd"
+        "sha256": "fb514a59019abf407af26b7b47f31b4a24f3a0e10f35838c1d1185202691e1c6"
       },
       {
         "path": "src/providers/web-privacy.ts",
@@ -512,7 +516,7 @@
         "sha256": "efd3e11265c46f657fd78a9ab0426bbaf455ade35d5145b6b932f3b50d78cc62"
       }
     ],
-    "digest": "426ef19a09d5b00cec76c269df211cde6714a1089b90ba3c8298cdf4f7a63774"
+    "digest": "67e86fe52ef2509b1f99549a1951ed742605e187dc5c1f03643a49605b842b68"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -1100,9 +1104,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-P2IQY6TR.js",
-      "bytes": 956639,
-      "sha256": "3667404654bd1c007cdcb651cd9edb219beaf9058f00da93a2111d275776d864"
+      "path": "chunks/mcp-server-GIDPTQVV.js",
+      "bytes": 957028,
+      "sha256": "d948fe18c91cc180215b3bfb8ff0c6c3c03c72c460ff6bc64c1b400fc1d4a8fe"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1122,7 +1126,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 73346,
-      "sha256": "ccafa16df6243b97dc5eb55d5e9d6b4df93536c3ad5c775c05e3f947167b4e3b"
+      "sha256": "c0be868039ddd084ca35514351c9046cf72e23556a441bf3f30794f7ba9bb5b9"
     },
     {
       "path": "package.json",
@@ -1140,5 +1144,5 @@
       "sha256": "2fb388d1d0d3bde083dc715ccef97b6bc4768378c0ea4c591f5c782bfacb4783"
     }
   ],
-  "contentDigest": "837e3917d044128802336b17245ca358041f9809a61ac32d1cd80f7e005af84b"
+  "contentDigest": "f89b4310b333d5b890b767c2604ff2a3db20abed57ecf8c93ff35a00ce65fa4a"
 }

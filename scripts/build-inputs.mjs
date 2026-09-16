@@ -33,7 +33,7 @@ function inventory(root, directory) {
 export function captureBuildInputs(root) {
   const names = new Set(["package.json", "pnpm-lock.yaml", "agent-product.json", "build-toolchain.json", "tsconfig.json", "tsconfig.build.json"]);
   for (const directory of ["src", "skills", "resources"]) for (const name of inventory(root, directory)) names.add(name);
-  const queue = ["build.mjs", "build-kiro-closure.mjs", "build-inputs.mjs", "assert-build-artifacts.mjs", "build-agent-dev.mjs", "build-complete-bundle.mjs", "generate-agent-guidance.mjs", "agent-profile.mjs", "install-agent-user.mjs", "validate-agent-package.mjs", "install-manager.mjs"].map(name => `scripts/${name}`);
+  const queue = ["build.mjs", "build-kiro-closure.mjs", "build-inputs.mjs", "normalize-artifact-modes.mjs", "assert-build-artifacts.mjs", "build-agent-dev.mjs", "build-complete-bundle.mjs", "generate-agent-guidance.mjs", "agent-profile.mjs", "install-agent-user.mjs", "validate-agent-package.mjs", "install-manager.mjs"].map(name => `scripts/${name}`);
   while (queue.length) {
     const name = queue.pop();
     if (names.has(name)) continue;

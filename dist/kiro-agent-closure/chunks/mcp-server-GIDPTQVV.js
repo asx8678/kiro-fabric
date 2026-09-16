@@ -15099,6 +15099,7 @@ function runPinnedDirectoryOperation(options) {
 var emptyEntries = () => /* @__PURE__ */ Object.create(null);
 var emptyDocument = () => ({ schemaVersion: 1, revision: 0, entries: emptyEntries() });
 var KEY_MAX = 512;
+var validStateKey = (key) => typeof key === "string" && key.length >= 1 && key.length <= KEY_MAX;
 var LOCK_NAME = ".state-mutation.lock";
 var LOCK_TIMEOUT_MS = 5e3;
 var STALE_LOCK_MS = 3e4;
@@ -15107,10 +15108,10 @@ var MAX_LOCK_BYTES = 4096;
 var sameFile = (left, right) => left.dev === right.dev && left.ino === right.ino;
 var sameBigFile = (left, right) => left.dev === BigInt(right.dev) && left.ino === BigInt(right.ino);
 var descriptors3 = [
-  { name: "get", description: "Read one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
-  { name: "set", description: "Atomically set one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX }, value: {}, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
+  { name: "get", description: "Read one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX, description: "1 to 512 UTF-16 code units" } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
+  { name: "set", description: "Atomically set one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX, description: "1 to 512 UTF-16 code units" }, value: {}, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
   { name: "list", description: "List bounded workspace state metadata", inputSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 1e3 } }, additionalProperties: false }, risk: "read", effect: { kind: "read" } },
-  { name: "delete", description: "Atomically delete one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX }, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } }
+  { name: "delete", description: "Atomically delete one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX, description: "1 to 512 UTF-16 code units" }, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } }
 ];
 var isRecord5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var hasExactKeys = (value, keys) => {
@@ -15190,6 +15191,9 @@ var StateProvider = class {
   }
   async invoke(actionName, args, context) {
     throwIfAbortedOrExpired(context.signal, context.deadline);
+    if ((actionName === "get" || actionName === "set" || actionName === "delete") && !validStateKey(args.key)) {
+      throw new Error("state key exceeds configured bounds");
+    }
     if (actionName === "get") {
       const entry = this.#read().entries[args.key];
       return entry ? { key: args.key, ...entry } : { key: args.key, found: false };
@@ -15304,7 +15308,7 @@ var StateProvider = class {
       if (Object.keys(entries).length > this.#maxEntries) throw new Error("state entry limit reached");
       const normalizedEntries = emptyEntries();
       for (const [key, entry] of Object.entries(entries)) {
-        if (key.length < 1 || key.length > KEY_MAX || !isRecord5(entry) || !hasExactKeys(entry, ["revision", "value", "updatedAt"]) || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || entry.revision > parsed.revision || !Number.isSafeInteger(entry.updatedAt) || entry.updatedAt < 0) {
+        if (!validStateKey(key) || !isRecord5(entry) || !hasExactKeys(entry, ["revision", "value", "updatedAt"]) || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || entry.revision > parsed.revision || !Number.isSafeInteger(entry.updatedAt) || entry.updatedAt < 0) {
           throw new Error("state file is malformed");
         }
         const value = JSON.stringify(entry.value);

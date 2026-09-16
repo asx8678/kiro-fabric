@@ -16,6 +16,9 @@ interface StateDocument { schemaVersion: 1; revision: number; entries: Record<st
 const emptyEntries = (): Record<string, StateEntry> => Object.create(null) as Record<string, StateEntry>;
 const emptyDocument = (): StateDocument => ({ schemaVersion: 1, revision: 0, entries: emptyEntries() });
 const KEY_MAX = 512;
+// Match the persisted UTF-16 limit; schema maxLength may count Unicode differently.
+const validStateKey = (key: unknown): key is string =>
+  typeof key === "string" && key.length >= 1 && key.length <= KEY_MAX;
 const LOCK_NAME = ".state-mutation.lock";
 const LOCK_TIMEOUT_MS = 5_000;
 const STALE_LOCK_MS = 30_000;
@@ -28,10 +31,10 @@ const sameBigFile = (left: { dev: bigint; ino: bigint }, right: { dev: number; i
   left.dev === BigInt(right.dev) && left.ino === BigInt(right.ino);
 
 const descriptors: readonly FabricActionDescriptor[] = [
-  { name: "get", description: "Read one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
-  { name: "set", description: "Atomically set one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX }, value: {}, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
+  { name: "get", description: "Read one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX, description: "1 to 512 UTF-16 code units" } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
+  { name: "set", description: "Atomically set one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX, description: "1 to 512 UTF-16 code units" }, value: {}, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
   { name: "list", description: "List bounded workspace state metadata", inputSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 1000 } }, additionalProperties: false }, risk: "read", effect: { kind: "read" } },
-  { name: "delete", description: "Atomically delete one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX }, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
+  { name: "delete", description: "Atomically delete one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX, description: "1 to 512 UTF-16 code units" }, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
 ];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -125,6 +128,9 @@ export class StateProvider implements FabricProvider {
     context: FabricInvocationContext,
   ): Promise<unknown> {
     throwIfAbortedOrExpired(context.signal, context.deadline);
+    if ((actionName === "get" || actionName === "set" || actionName === "delete") && !validStateKey(args.key)) {
+      throw new Error("state key exceeds configured bounds");
+    }
     if (actionName === "get") {
       const entry = this.#read().entries[args.key as string];
       return entry ? { key: args.key, ...entry } : { key: args.key, found: false };
@@ -246,7 +252,7 @@ export class StateProvider implements FabricProvider {
       if (Object.keys(entries).length > this.#maxEntries) throw new Error("state entry limit reached");
       const normalizedEntries = emptyEntries();
       for (const [key, entry] of Object.entries(entries)) {
-        if (key.length < 1 || key.length > KEY_MAX || !isRecord(entry) ||
+        if (!validStateKey(key) || !isRecord(entry) ||
             !hasExactKeys(entry, ["revision", "value", "updatedAt"]) ||
             !Number.isSafeInteger(entry.revision) || (entry.revision as number) < 1 ||
             (entry.revision as number) > (parsed.revision as number) ||

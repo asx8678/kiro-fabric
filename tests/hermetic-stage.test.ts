@@ -10,6 +10,15 @@ import { buildAgentDev } from "../scripts/build-agent-dev.mjs";
 import { packagingFixture, put } from "./installer-packaging-fixture.js";
 const roots: string[] = [];
 const fixture = () => { const root = packagingFixture(); roots.push(root); return root; };
+const copyPackageFixture = (source: string, destination: string): void => {
+  fs.cpSync(source, destination, { recursive: true });
+  // cpSync creates every destination directory using the ambient umask.
+  // Make only this test-owned copy private; keep the product validator unchanged.
+  fs.chmodSync(destination, 0o700);
+  for (const entry of fs.readdirSync(destination, { recursive: true, withFileTypes: true })) {
+    if (entry.isDirectory()) fs.chmodSync(path.join(entry.parentPath, entry.name), 0o700);
+  }
+};
 afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 const digestTree = (root: string): string => {
   const digest = createHash("sha256"), pending = [root];
@@ -31,7 +40,8 @@ describe("hermetic staging", () => {
   it("imports the actual staged installer with the checkout unavailable", async () => {
     const root = fixture(), staged = await buildAgentDev({ root });
     const isolated = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "standalone-agent-"))); roots.push(isolated);
-    const standalone = path.join(isolated, "package"); fs.cpSync(staged.generation, standalone, { recursive: true });
+    const standalone = path.join(isolated, "package");
+    copyPackageFixture(staged.generation, standalone);
     expect(fs.readFileSync(path.join(standalone, "scripts/filesystem-boundary.mjs"))).toEqual(fs.readFileSync(path.join(root, "src/installation/filesystem-boundary.mjs")));
     fs.rmSync(root, { recursive: true });
     expect(validateAgentPackage(standalone).ok).toBe(true);
@@ -40,7 +50,7 @@ describe("hermetic staging", () => {
   });
   it("preserves historical three-script packages while rejecting incomplete or unknown new closures", async () => {
     const root = fixture(), staged = await buildAgentDev({ root }), legacy = path.join(root, "legacy-package");
-    fs.cpSync(staged.generation, legacy, { recursive: true });
+    copyPackageFixture(staged.generation, legacy);
     fs.unlinkSync(path.join(legacy, "scripts/filesystem-boundary.mjs"));
     expect(() => validateAgentPackage(legacy)).toThrow(/dependency.*missing/);
     const historical = fs.readFileSync(new URL("./fixtures/installer-history/d33de003/install-agent-user.mjs.txt", import.meta.url), "utf8");
