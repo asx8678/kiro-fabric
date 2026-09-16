@@ -38,7 +38,7 @@ const inject = (method: "write" | "permissions" | "sync" | "close", matches: (fi
 const temporaryWriter = async (kind: "memory" | "mcp") => {
   const root = temporary();
   const matches = (file: string) => kind === "memory"
-    ? path.basename(file).startsWith(".fixture.json.") && file.endsWith(".tmp")
+    ? path.basename(file).startsWith(".kiro-fabric-memory-") && file.endsWith(".tmp")
     : path.basename(file).startsWith(".kiro-fabric-mcp-snapshot-");
   const remaining = () => fs.readdirSync(root, { recursive: true, encoding: "utf8" }).map((file) => path.join(root, file)).filter(matches);
   if (kind === "memory") {

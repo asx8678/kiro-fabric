@@ -39,6 +39,26 @@ describe("Fabric memory confinement", () => {
     expect(() => provider.prepareArguments("set", { key: "a".repeat(200), value: true })).not.toThrow();
   });
 
+  it.each(["a".repeat(235), "é".repeat(39) + "a"])("writes maximum encoded entry basenames atomically (%s)", async (key) => {
+    const root = temporary();
+    const memory = openKiroMemory("workspace", root);
+    expect(Buffer.byteLength(`${encodeURIComponent(key)}.json`)).toBe(240);
+    const rename = vi.spyOn(fs, "renameSync");
+    await expect(memory.set(key, "first")).resolves.toMatchObject({ key, value: "first" });
+    await expect(memory.set(key, "second")).resolves.toMatchObject({ key, value: "second" });
+    await expect(memory.get(key)).resolves.toMatchObject({ value: "second" });
+    await expect(memory.list()).resolves.toHaveLength(1);
+    expect(rename).toHaveBeenCalledTimes(2);
+    for (const [from, to] of rename.mock.calls) {
+      expect(path.dirname(String(from))).toBe(path.dirname(String(to)));
+      expect(Buffer.byteLength(path.basename(String(from)))).toBeLessThan(100);
+      expect(fs.existsSync(from)).toBe(false);
+      expect(fs.statSync(to).mode & 0o077).toBe(0);
+    }
+    expect(rename.mock.calls[0]![0]).not.toBe(rename.mock.calls[1]![0]);
+    await expect(memory.delete(key)).resolves.toEqual({ key, deleted: true });
+  });
+
   it("bounds namespace names the same way as entry keys", async () => {
     expect(() => openKiroMemory("n".repeat(300), temporary())).toThrow("namespace is too long after filesystem-safe encoding");
     // A namespace within the bound still opens and serves requests.

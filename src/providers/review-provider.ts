@@ -242,7 +242,7 @@ export class ReviewProvider implements FabricProvider {
   #file(input: string): string {
     if (input.includes("\0") || input.includes("\\") || path.isAbsolute(input) || input.split("/").some(part => part === ".." || part === "." || part === "")) throw new Error("review evidence path must be normalized workspace-relative, without traversal");
     const relative = path.relative(this.#root, path.resolve(this.#root, input));
-    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("review evidence path is outside workspace");
+    if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error("review evidence path is outside workspace");
     return relative.split(path.sep).join("/");
   }
   #capture(inputs: ReviewEvidenceInput[], context: FabricInvocationContext, cache: Map<string, Source>): ReviewEvidence[] {

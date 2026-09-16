@@ -321,6 +321,24 @@ describe("QuickJS-only guest runtime", () => {
     });
   });
 
+  it("keeps a real worker alive past the original backstop for an exact queued floor", async () => {
+    const runtime = new QuickJsRuntime();
+    try {
+      const result = await runtime.execute(
+        `return await Promise.all([tools.providers(), tools.call({ ref: "mcp.$call", args: {} })])`,
+        async (ref) => {
+          // The first call holds the only host slot beyond the original
+          // 100ms + cleanup + 1000ms watchdog. The queued exact call owns the floor.
+          if (ref === "fabric.providers") await new Promise(resolve => setTimeout(resolve, 1_500));
+          return ref;
+        },
+        { ...defaults, timeoutMs: 100, maxTimeoutMs: 4_000, maxConcurrentHostCalls: 1,
+          minimumTimeoutMsForHostCall: (ref, args) => ref === "fabric.call" && args.ref === "mcp.$call" ? 4_000 : undefined },
+      );
+      expect(result).toMatchObject({ terminationReason: "completed", effectiveTimeoutMs: 4_000, value: ["fabric.providers", "fabric.call"] });
+    } finally { await runtime.close(); }
+  });
+
   it("fails closed on malformed bounded parallel requests", async () => {
     const result = await new QuickJsRuntime().execute(
       "return await parallel([async () => 1], { concurrency: 0 })",
@@ -425,14 +443,18 @@ describe("QuickJS-only guest runtime", () => {
 
   it("terminates the pooled thread on close and stays usable afterwards", async () => {
     const terminate = vi.spyOn(Worker.prototype, "terminate");
+    const post = vi.spyOn(Worker.prototype, "postMessage");
     const runtime = new QuickJsRuntime();
     try {
-      await runtime.execute("return 1", async () => null, defaults);
-      // The finished execution leaves one thread warm rather than paying for a
-      // fresh boot on the next call, so close is what actually releases it.
-      expect(terminate).not.toHaveBeenCalled();
+      await expect(runtime.execute("return 1", async () => null, defaults)).resolves.toMatchObject({ terminationReason: "completed", value: 1 });
+      const worker = post.mock.contexts[post.mock.calls.findIndex(([message]) => message.type === "run")];
+      expect(worker).toBeDefined();
+      // Count this runtime's thread only: earlier tests' spare workers may
+      // independently hit their 10s idle retirement during this assertion.
+      const terminations = () => terminate.mock.contexts.filter(context => context === worker);
+      expect(terminations()).toHaveLength(0);
       await runtime.close();
-      expect(terminate).toHaveBeenCalledTimes(1);
+      expect(terminations()).toHaveLength(1);
     } finally { vi.restoreAllMocks(); await runtime.close(); }
   });
 });

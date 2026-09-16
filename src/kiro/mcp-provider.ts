@@ -986,11 +986,24 @@ export class KiroMcpProvider implements FabricProvider {
    * they start, and those appearances must not invalidate the approved
    * transport or shift the approved digest; their literal argument strings
    * remain bound either way. Files that existed at first resolution keep
-   * their full stat and byte binding for the lifetime of this runtime.
+   * their full stat and byte binding for the lifetime of this runtime, but
+   * their argument aliases must still resolve to the approved canonical paths.
    */
   #boundArgumentFiles(server: string, command: Extract<ServerDefinition["command"], { kind: "stdio" }>): ResolvedStdioArgumentFile[] {
     const bound = this.#argumentFileBindings.get(server);
-    if (bound !== undefined) return bound;
+    if (bound !== undefined) {
+      const cwd = fs.realpathSync(command.cwd ?? this.#cwd);
+      for (const entry of bound) {
+        // Freeze membership, not resolution: mcporter uses the original argv,
+        // including symlinks in the filename or any parent directory. Never
+        // suppress resolution errors here as we do for initially absent outputs.
+        const argument = command.args?.[entry.argumentIndex];
+        if (argument !== entry.argument || fs.realpathSync(path.resolve(cwd, argument)) !== entry.resolvedPath) {
+          throw new Error("MCP transport changed after approval: stdio argument file alias changed");
+        }
+      }
+      return bound;
+    }
     const resolved = resolveStdioArgumentFiles(command.args ?? [], fs.realpathSync(command.cwd ?? this.#cwd));
     this.#argumentFileBindings.set(server, resolved);
     return resolved;

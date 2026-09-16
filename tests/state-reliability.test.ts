@@ -58,7 +58,8 @@ describe("state ownership fault matrix", () => {
       rename(from, to);
       if (fault === "replacement") { rename(lock, `${lock}.original`); fs.writeFileSync(lock, "foreign"); }
       if (fault === "lstat") vi.spyOn(fs, "lstatSync").mockImplementation(((file: fs.PathLike) => { if (String(file) === lock) throw new Error("release stat"); return stat(file); }) as typeof fs.lstatSync);
-      if (fault === "rm") vi.spyOn(fs, "rmSync").mockImplementation((file, options) => { if (String(file) === lock) throw new Error("release rm"); rm(file, options); });
+      // Release deletes through the descriptor-anchored /proc/self/fd alias on Linux, so match by basename, not the lexical path.
+      if (fault === "rm") vi.spyOn(fs, "rmSync").mockImplementation((file, options) => { if (path.basename(String(file)) === ".state-mutation.lock") throw new Error("release rm"); rm(file, options); });
     });
     const error = await provider.invoke("set", { key: "key", value: true }, context).catch(e => e);
     expect(error).toMatchObject({ committed: true, revision: 1 });

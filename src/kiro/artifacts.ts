@@ -55,15 +55,27 @@ class ArtifactStore implements KiroArtifactStore {
       const canonicalRoot = fs.realpathSync(options.root);
       for (const entry of fs.readdirSync(canonicalRoot, { withFileTypes: true })) {
         const target = path.join(canonicalRoot, entry.name);
-        const targetStats = fs.lstatSync(target);
-        if (!entry.isFile() || targetStats.isSymbolicLink() || !ARTIFACT_ID.test(entry.name)) {
+        // Reject foreign entries even if they disappear after enumeration.
+        if (!entry.isFile() || !ARTIFACT_ID.test(entry.name)) {
+          throw new KiroArtifactStoreError(`artifact root contains an unsupported entry: ${entry.name}`);
+        }
+        let targetStats: fs.Stats;
+        try { targetStats = fs.lstatSync(target); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw error;
+        }
+        if (!targetStats.isFile() || targetStats.isSymbolicLink()) {
           throw new KiroArtifactStoreError(`artifact root contains an unsupported entry: ${entry.name}`);
         }
         // Another Fabric process may own a fresh valid artifact in this shared
         // private root. Reclaim only residue older than the product-wide
         // maximum lifetime; this process never imports it into its own quota.
         if (this.#now() - targetStats.mtimeMs > MAX_ARTIFACT_RESIDUE_AGE_MS) {
-          fs.rmSync(target);
+          try { fs.rmSync(target); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
         }
       }
       this.#root = canonicalRoot;

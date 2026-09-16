@@ -626,7 +626,9 @@ const writeJsonAtomic = (filePath: string, content: string, beforeCommit?: () =>
   const directory = path.dirname(filePath);
   const temporary = path.join(
     directory,
-    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
+    // Independent of the encoded key: a valid final basename can already be
+    // 240 bytes. Keep the same-directory exclusive create and atomic rename.
+    `.kiro-fabric-memory-${crypto.randomBytes(16).toString("hex")}.tmp`,
   );
   let descriptor: number | undefined;
   let createdStats: fs.Stats | undefined;
