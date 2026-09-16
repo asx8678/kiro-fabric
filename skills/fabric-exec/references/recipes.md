@@ -47,7 +47,9 @@ The search and source share one output allowance; lower the 40000-character enve
 ```ts
 // Recipe: exact edit then verification
 const path = payloads.path;
-const change = await local.edit({path, oldText:payloads.oldText, newText:payloads.newText});
+const before = await local.read({path, limit:2000});
+if (before.truncated) throw new Error("Incomplete input: narrow/read remaining lines");
+const change = await local.edit({path, expectedSha256:before.sha256, oldText:payloads.oldText, newText:payloads.newText});
 const r = await local.read({path, limit:80});
 if (r.sha256 !== change.sha256) throw new Error("File changed after edit; inspect before recovery");
 return {path, changed:change.changed, verifiedSha256:r.sha256, text:r.text, truncated:r.truncated};

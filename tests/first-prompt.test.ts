@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -76,6 +77,16 @@ function put(f: ReturnType<typeof fixture>, file: string, source = "fixture\n") 
 }
 
 describe("first submitted prompt context", () => {
+  it("keeps the first hook a short task reminder, not a second workflow or tool recipe", () => {
+    expect(Buffer.byteLength(FIRST_PROMPT_GUIDANCE)).toBeLessThan(400);
+    expect(FIRST_PROMPT_GUIDANCE.split("\n")).toHaveLength(3);
+    expect(FIRST_PROMPT_GUIDANCE).toMatch(/^<fabric_initial_investigation>\n[\s\S]*\n<\/fabric_initial_investigation>$/);
+    for (const clause of ["standing task contract", "answer, plan, review or authorized implementation",
+      "Resume the next unresolved acceptance check", "do not widen scope by default",
+      "Stop at acceptance", "exact blocker without claiming completion"]) expect(FIRST_PROMPT_GUIDANCE).toContain(clause);
+    expect(FIRST_PROMPT_GUIDANCE).not.toMatch(/```|local\.|fabric\.help|runtime availability|coverage ledger/);
+  });
+
   it("executes the review runtime discovery and preserves every batched probe outcome", async () => {
     const f = fixture();
     const { runtime } = await starter(f);
@@ -119,7 +130,9 @@ describe("first submitted prompt context", () => {
       expect(name).toMatch(/^[a-f0-9]{64}\.json$/u);
       const target = path.join(directory, name);
       expect(fs.statSync(target).mode & 0o777).toBe(0o600);
-      expect(JSON.parse(fs.readFileSync(target, "utf8"))).toEqual({ schemaVersion: 1, guidanceSha256: expect.stringMatching(/^[a-f0-9]{64}$/u) });
+      expect(JSON.parse(fs.readFileSync(target, "utf8"))).toEqual({
+        schemaVersion: 1, guidanceSha256: createHash("sha256").update(FIRST_PROMPT_GUIDANCE).digest("hex"),
+      });
     }
   });
 

@@ -62,6 +62,10 @@ describe("explicit profile guidance modes", () => {
       "host authority, not filesystem confinement", "uncertain cleanup fail even with settle:true",
       "never blindly replay an effectful program", "session/task keys and revision checks"]) expect(profile.prompt).toContain(clause);
     expect(profile.prompt.match(/@fabric\/\w+/g)).toEqual(["@fabric/fabric_exec"]);
+    expect(profile.prompt).toContain("including pure computation, formatting or verification");
+    expect(profile.prompt).toContain("Match requested format exactly");
+    expect(profile.prompt).toMatch(/JSON-only[^.]*commentary[^.]*before\/between tools/);
+    expect(profile.prompt).toContain("Never hide failures");
     expect(() => generateAgentProfile({ ...options, guidanceMode, nodePath: "relative" })).toThrow(/absolute/);
     expect(() => generateAgentProfile({ ...options, guidanceMode, dataRoot: "/bad\npath" })).toThrow(/control characters/);
   });
@@ -72,6 +76,7 @@ describe("explicit profile guidance modes", () => {
     expect(profile.hooks).toEqual([]);
     expect(profile.prompt).toBe(MINIMAL_AGENT_PROMPT);
     expect(profile.prompt).not.toMatch(/review|finding|coverage ledger|fabric\.help|bootstrap.*help/i);
+    expect(profile.prompt).not.toMatch(/task contract|acceptance ledger|plan privately|simplest credible method|next unresolved check|stop and deliver/i);
     expect(JSON.stringify(profile)).not.toMatch(/first-prompt-hook|skill:\/\/|file:\/\//);
     const bundleRoot = path.resolve("/generation");
     const bundled = {
@@ -94,7 +99,7 @@ describe("explicit profile guidance modes", () => {
     expect(review.prompt).toBe(`${STANDARD_AGENT_PROMPT}\n\n${REVIEW_CORE_PROMPT}`);
     expect(standard.prompt).not.toContain("Explicit review mode");
     expect(REVIEW_CORE_PROMPT.length).toBeLessThan(1000);
-    for (const clause of ["core paths", "scenarios", "fetched", "traced", "expected contract", "counterexample",
+    for (const clause of ["core paths", "scenarios", "not just fetched samples", "fetched", "traced", "expected contract", "caller-to-consumer consequence", "counterexample",
       "real SDK", "available and authorized", "No finding quota or call cap", "No forced fixes", "without guidance injection"])
       expect(REVIEW_CORE_PROMPT).toContain(clause);
     expect(review.resources).toEqual(standard.resources);

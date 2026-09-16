@@ -109,7 +109,10 @@ describe("compiled task guidance", () => {
       /identifying delegated evidence as reported/i, /Do not claim live model-quality or token-cost improvements/i]) {
       expect(BUNDLED_GUIDANCE.workflow).toMatch(rule);
     }
-    expect(BUNDLED_GUIDANCE.skill).toContain("no routine tool narration or repeated recap");
+    // Reporting policy moved to the standing contract, not optional task help.
+    expect(AGENT_PROMPT).toContain("No tool narration/repeated recap");
+    expect(AGENT_PROMPT).toContain("progress only for milestones, plan changes or blockers");
+    expect(BUNDLED_GUIDANCE.skill).toContain("The standing prompt owns task boundaries, planning, acceptance and output");
     expect(BUNDLED_GUIDANCE.guide).toContain("Call-shape catalogue, not an executable program");
     expect(BUNDLED_GUIDANCE.recipes).toContain("stdoutOmitted");
     expect(BUNDLED_GUIDANCE.recipes).toContain("not required acceptance evidence or requested output");

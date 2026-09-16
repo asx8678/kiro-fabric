@@ -4,13 +4,13 @@ Explicit, optional task help for reviews, audits and bug finding, not an automat
 
 ## Short review core
 
-Map core paths and success/failure/non-default scenarios from entrypoint through configuration, caller/guards and consumer to consequence. Keep a coverage ledger with separate **fetched** ranges/hashes, **traced** paths/scenarios and unresolved/blocked scope. Retrieval is not understanding; complete windows, syntax checks and green builds do not establish semantic correctness. Follow productive leads without a finding quota or call cap as a stopping rule; runtime budgets remain binding. No findings is a valid result.
+Apply the standing review contract. For each requested core path and success/failure/non-default scenario, record **fetched** ranges/hashes separately from **traced** caller -> configuration/guards -> consumer -> consequence and unresolved/blocked coverage. Complete windows, syntax checks and green builds do not establish semantic correctness. An initial sample is not the requested coverage. No findings is valid; neither a finding quota nor a call cap ends investigation, but runtime budgets remain binding.
 
-Use real SDK/parser/runtime probes only when available and authorized. Inspect imports/effects and identify stubs; an imitation is not a real SDK execution. Missing executable, SDK/module or required input is unavailable evidence, not a pass or finding. Network effects need explicit authorization.
+For real SDK/parser/runtime probes, inspect imports/effects and identify stubs: an imitation is not a real SDK execution. Missing executable, SDK/module or input is unavailable evidence, not a pass or finding. Use only available, authorized probes; network effects require explicit authorization.
 
-Persisted memory/state is workspace-shared, not chat-private; use explicit session/task keys and revision checks, not global scratch keys. Keep unrequested ledgers in context. The optional review provider instead owns instance/session-local ephemeral tasks; do not silently load another session's state.
+Keep unrequested ledgers in context. Persisted memory/state is workspace-shared; use session/task keys and revision checks, not global scratch keys. The optional review provider owns instance/session-local ephemeral tasks; never adopt another session's state.
 
-Use the admission gate below and report supported findings, checks run/unrun, material blockers and uninspected scope in the requested format. Recipes below are optional mechanisms, never permission or automatic execution.
+The gate below operationalizes finding admission. At acceptance, report supported findings, checks run/unrun, material blockers and uninspected scope; repeat unchanged passing checks only for a concrete reason. Recipes remain optional mechanisms, not permission.
 
 ## Finding-evidence gate
 
