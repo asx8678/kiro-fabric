@@ -12,7 +12,15 @@ import { reviewHelpDelivery } from './review-delivery.mjs';
 
 /** @typedef {import('./plan.mjs').Plan} Plan */
 /** @typedef {ReturnType<typeof reviewHelpDelivery>} ReviewDelivery */
-/** @typedef {{index:number,arm:string,caseId:string,qualification:boolean,state:string,credits:number|null,stopReason:string|null,ok:boolean,startedAt:string,finishedAt?:string,validation?:import('./oracles.mjs').Validation,evidence?:import('./stream.mjs').Evidence,reviewHelp?:ReviewDelivery,process?:Omit<import('./stream.mjs').Collected,'stdout'|'stderr'>,error?:string,command?:{executable:string,args:string[],cwd:string},budget?:{spent:number,projected:number|null},nativePermission?:ReturnType<typeof createNativeFixturePolicy>}} Row */
+/** @typedef {{index:number,arm:string,caseId:string,qualification:boolean,state:string,credits:number|null,stopReason:string|null,ok:boolean,startedAt:string,finishedAt?:string,validation?:import('./oracles.mjs').Validation,evidence?:import('./stream.mjs').Evidence,reviewHelp?:ReviewDelivery,process?:Omit<import('./stream.mjs').Collected,'stdout'|'stderr'>,error?:string,command?:{executable:string,args:string[],cwd:string},budget?:{spent:number|null,projected:number|null,knownSpentLowerBound?:number},nativePermission?:ReturnType<typeof createNativeFixturePolicy>}} Row */
+/** Known spend is a lower bound, never a substitute for missing charge evidence.
+ * @param {{credits:number|null}[]} attempts @param {number} planned */
+export function attemptBudget(attempts, planned) {
+  const known = attempts.filter(r => typeof r.credits === 'number' && Number.isFinite(r.credits) && r.credits >= 0);
+  const knownSpentLowerBound = known.reduce((n, r) => n + Number(r.credits), 0);
+  const spent = known.length === attempts.length ? knownSpentLowerBound : null;
+  return { spent, knownSpentLowerBound, projected: spent !== null && attempts.length >= 8 ? spent / attempts.length * planned : null };
+}
 /** @param {string} output */
 export function privateOutput(output) { const root = fs.realpathSync(output), st = fs.lstatSync(output); assert.ok(st.isDirectory() && !st.isSymbolicLink() && (st.mode & 0o077) === 0, 'output must be a private non-symlink directory'); return root; }
 /** @param {string} output @returns {Plan} */
@@ -103,12 +111,11 @@ export async function runOne(output, index, signal) {
         try { removeNativeFixturePolicy(row.nativePermission); }
         catch (error) { row.stopReason ??= 'native-policy-cleanup-failure'; row.ok = false; row.error = errorText(error); }
       }
-      row.state = 'finished'; row.finishedAt = new Date().toISOString(); updateRow(root, row);
-    }
-    if (next >= 7) {
-      row.budget = { spent: previous.reduce((n, r) => n + Number(r.credits), 0) + (row.credits ?? 0), projected: row.credits === null || previous.some(r => r.credits === null) ? null : (previous.reduce((n, r) => n + Number(r.credits), 0) + row.credits) / (next + 1) * plan.runs.length };
+      row.state = 'finished'; row.finishedAt = new Date().toISOString();
+      row.budget = attemptBudget([...previous, row], plan.runs.length);
       updateRow(root, row);
     }
+
     return row;
   } finally { fs.rmdirSync(lock); }
 }

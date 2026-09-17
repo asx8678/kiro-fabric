@@ -1,4 +1,10 @@
-# Unreleased
+# Changelog
+
+## 0.65.0
+
+Prepared source release; not published or release-qualified. Historical 0.64.0 evidence remains historical and does not qualify these bytes.
+
+- **Breaking mutation contract:** `local.edit` requires `expectedSha256`; `local.write` replacing an existing file requires both `overwrite: true` and `expectedSha256`. Use the digest returned by the read that supplied the edit anchors or replacement source, not a hash of a bounded text excerpt. Create-only writes omit the digest. Stale or missing binding fails closed before approval; reread and reconsider the change rather than retrying blindly. See [migration and release checklist](docs/release.md#0650-migration).
 
 - Make repository reviews coverage-led rather than brevity-led: exempt audits from the routine 120-word default, follow high-risk scripts/overrides/consumers, falsify suspected defects, and report unreviewed scope. Ship task-loaded `fabric.help({topic:"review"})` guidance without adding model tools or raising execution budgets.
 - Add `hidden:true` to local grep/find with explicit search `scope`, retaining ignore rules, VCS exclusions and path protections. Include `totalLines` in reads and optimize recursive all-files manifests to one ripgrep launch. These additive result fields change exact serialized result shapes; `truncated:false` is not whole-repository completeness.
@@ -34,8 +40,6 @@
 - Add process/runtime lifecycle identity plus objective multi-turn, compaction, shutdown, and resume qualification gates.
 - Warn on install when a leftover Power may duplicate `@fabric`.
 - Point CI at `tests/agent-user-install.test.ts` instead of the removed Power install test.
-
-# Changelog
 
 ## 0.64.0
 

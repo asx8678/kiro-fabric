@@ -27,7 +27,7 @@ import {
 } from "../runtime/source-limit.js";
 import { KIRO_MCP_DRAIN_TIMEOUT_MS, kiroMcpOuterDeadlineMs } from "./deadlines.js";
 import { inspectCanonicalPath } from "./canonical-path.js";
-import { KiroPowerApprover, KiroPowerFabricApprover } from "./power/approver.js";
+import { KiroPowerApprover, KiroPowerFabricApprover, kiroElicitationFailureReason } from "./power/approver.js";
 import { prepareKiroPowerDataPaths, prepareKiroPowerProjectPaths } from "./power/data-paths.js";
 import {
   KiroPowerWorkspaceBinding,
@@ -209,7 +209,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         return { action: result.action, ...(approved ? { approved: true } : {}) };
       } catch (error) {
         if (tracer.enabled) {
-          tracer.event("eval", "approval.form.response", undefined, { elicitationId, action: "error", approved: false });
+          tracer.event("eval", "approval.form.response", undefined, { elicitationId, action: "error", approved: false, reason: kiroElicitationFailureReason(error) });
           tracer.flush();
         }
         throw error;
@@ -382,7 +382,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       workspace: workspaceValue("status"), providers,
       tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
       lifecycle: lifecycleInfo, interpreter, actions: actionCatalog.actions, catalog: actionCatalog.catalog,
-      nativeKiroTools: { owner: "kiro", availability: "not-exposed" },
+      nativeKiroTools: { owner: "kiro", availability: "not-exposed", scope: "fabric-local", modelInventoryVerified: false },
     };
   };
 

@@ -81,6 +81,14 @@ Relevant implementation: `src/kiro/mcp-server.ts` sends MCP form elicitation; `s
 
 Earlier session reporting recorded `pnpm run check` with 77 files, 1,213 tests passed and four skipped. Those are historical component-gate results, not a fresh live-approval test or release certification. The four skipped tests are unrelated to the four failed tool batches above. An interrupted earlier reinstall left a healthy installation with no pending journal/lock. That snapshot and an unchanged activation ID do not prove that no transaction was ever started; do not infer exact interrupted control flow from them.
 
+## Local diagnostics versus client certification
+
+Fabric-local tool inventory (including this MCP server's `tools/list` and Fabric's nested catalog) describes only tools registered by Fabric. It is not the authoritative complete Kiro model-visible inventory: the client may add tools independently. The observed `/tools` picker omitted `disclose_context` and must not be certified as a complete inventory or used to pass the exact single-tool gate.
+
+Local approval diagnostics must retain only sanitized typed reasons. A missing-handler diagnosis requires a matching error identifying `No handler registered for method: _kiro/mcp/elicitation`; capability advertisement, cancellation, timeout, or generic denial alone does not establish that defect. Approval remains fail closed, with no fallback effects or policy relaxation. See [unpublished upstream client issue drafts](upstream-client-issues.md).
+
+Current source defaults must be checked independently of the historical installed defaults above. Approval retests must explicitly configure `execute: ask` (as well as `write: ask` and `network: ask`) rather than assume shell commands prompt by default.
+
 ## Required retest after a client fix
 
 1. Obtain a Kiro v3 client/UI that actually handles `_kiro/mcp/elicitation`; check the normal updater. Keep write/execute/network at `ask`. A different ACP client is not proof that the native Kiro TUI works.

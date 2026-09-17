@@ -1,5 +1,48 @@
 # Release
 
+## 0.65.0 migration
+
+`package.json` is the canonical version source for the prepared 0.65.0 release. This is release preparation, not publication or qualification. Preserve historical 0.64.0 reports, archives and observations; never relabel them as 0.65.0 evidence.
+
+**Breaking change:** every `local.edit` needs `expectedSha256`. Replacing an existing file with `local.write` needs `overwrite: true` and `expectedSha256`, even for a no-op. Use the whole-file `sha256` returned by the read that supplied the anchors/source, never a digest computed from a bounded `text` excerpt. These are checked TypeScript snippets inside `fabric_exec` (named string payloads supply replacement content):
+
+```ts
+const before = await local.read({path: "src/example.ts", offset: 1, limit: 100});
+return await local.edit({
+  path: "src/example.ts", expectedSha256: before.sha256,
+  oldText: "old-name", newText: "new-name"
+});
+```
+
+For a complete replacement, inspect the entire source first (continue bounded reads when `truncated`, checking the same digest across windows):
+
+```ts
+const before = await local.read({path: "example.txt", offset: 1, limit: 2000});
+if (before.truncated) throw new Error("Read the remaining source before replacing it");
+return await local.write({
+  path: "example.txt", overwrite: true, expectedSha256: before.sha256,
+  content: payloads.replacement
+});
+```
+
+Creation remains create-only by default and omits the digest; the parent must already exist:
+
+```ts
+return await local.write({path: "new-example.txt", content: payloads.content});
+```
+
+Missing/stale bindings fail before approval. On conflict, reread and reassess anchors/content; do not blindly retry with a refreshed hash. A successful mutation's returned `sha256` can bind an intentional follow-up on that resulting content. A digest cannot bind a missing file. Snapshot binding does not bypass per-effect approval or provide hostile-race isolation or a multi-operation transaction.
+
+## Prepared-release checklist
+
+- [ ] Confirm the canonical package version, newest versioned changelog heading and intended tag agree (`0.65.0` / `v0.65.0`). Run source-only regressions with `pnpm exec vitest run tests/release-workflow.test.ts tests/local-provider.test.ts`.
+- [ ] Regenerate rather than hand-edit closure manifests, guidance, staged packages, archives and SBOMs. Run `pnpm run check`, `pnpm run audit:deps`, and finish with a fresh `pnpm run build`; run artifact-dependent checks against the rebuilt bytes. A coordinator may perform these after parallel source work; deferred checks are not passes.
+- [ ] Preserve historical evidence unchanged. Obtain new exact-commit/exact-byte qualification for any future release; never reuse 0.64.0 evidence for 0.65.0.
+- [ ] Keep native Kiro approval and complete authoritative model-tool inventory BLOCKED: observed missing `_kiro/mcp/elicitation` handlers and `disclose_context` are not resolved by local tests or the incomplete `/tools` picker. Approval probes must explicitly set `execute: ask` rather than assume the current default. Headless success is not interactive approve/decline evidence.
+- [ ] Satisfy the production signing, complete-bundle, four-native-target and authenticated-client gates below independently. Unknown benchmark charges remain unknown; local release hygiene proves no benchmark superiority.
+- [ ] Only after separate maintainer authorization and all gates pass, follow the signed annotated-tag workflow and exact qualified-asset promotion. This preparation authorizes no commit, tag, publication or installation.
+
+
 ## Complete installer distribution gate
 
 Complete installer distribution is currently BLOCKED. Production readiness is checked before legacy artifact reads/promotion; legacy candidate reports cannot become installer release-ready even when their historical authenticated evidence is valid. Genuine production trust/signing, signed final-byte metadata, release-pinned bootstrap artifacts and complete-bundle exact-client qualification are required. The existing annotated-tag, commit, signature and captured-archive gates are retained; no newly compressed artifact inherits qualification.

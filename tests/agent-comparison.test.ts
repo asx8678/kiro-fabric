@@ -80,7 +80,7 @@ describe('TinyShop independent bug contracts', () => {
   });
   it('rejects a public-example-only patch with held-out checks', async () => {
     const spec = makeBugCase('bug-money', 'alpha');
-    const expected = /, (\d+)\);/.exec(spec.files['tests/public.mjs']!)![1];
+    const expected = /, (\d+)\);/.exec(spec.files['tests/checks.mjs']!)![1];
     await expect(probeProject(spec, { 'src/money.mjs': `export function totalCents(){return ${expected};}\n` })).rejects.toThrow('held-out project contract');
   });
   it('accepts behaviorally equivalent repairs and rejects unchanged code via real validation', async () => {
@@ -88,7 +88,9 @@ describe('TinyShop independent bug contracts', () => {
     try {
       const trial = await solvedTrial(root, 'bug-money', process.execPath);
       fs.appendFileSync(path.join(trial.workspace, 'src/money.mjs'), '\n// Equivalent implementation.\n');
-      expect((await validate(trial)).ok).toBe(true);
+      const equivalent = await validate(trial);
+      expect(equivalent.probe).toMatchObject({ ok: true });
+      expect(equivalent.failures.map(f => f.check)).toEqual(['execution-audit']); // Changed bytes require a fresh agent test run.
       fs.writeFileSync(path.join(trial.workspace, 'src/money.mjs'), trial.spec.files['src/money.mjs']!);
       expect((await validate(trial)).failures.some(f => f.check === 'independent-tests')).toBe(true);
       fs.writeFileSync(path.join(trial.workspace, 'tests/public.mjs'), 'process.exit(0);');

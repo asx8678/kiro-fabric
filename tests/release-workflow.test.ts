@@ -31,6 +31,35 @@ const fixture = () => {
   return { root, env: { PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? "/usr/bin:/bin"}`, HOME: home, KIRO_HOME: kiroHome } };
 };
 
+describe("canonical release version consistency (source-only)", () => {
+  const version = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")).version as string;
+  const changelog = fs.readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
+  const docs = fs.readFileSync(new URL("../docs/release.md", import.meta.url), "utf8");
+
+  it("prepares 0.65.0 with matching changelog and migration headings", () => {
+    expect(version).toBe("0.65.0");
+    const headings = [...changelog.matchAll(/^## (\d+\.\d+\.\d+)$/gmu)].map(match => match[1]);
+    expect(headings[0]).toBe(version);
+    expect(headings.filter(heading => heading === version)).toHaveLength(1);
+    expect(headings).toContain("0.64.0");
+    expect(changelog).toContain("Replaced all prior integration modes with one Kiro Power product.");
+    expect(docs).toContain(`## ${version} migration`);
+    expect(docs).toContain(`v${version}`);
+  });
+
+  it.each([["v0.65.0", 0], ["v0.64.0", 1], ["0.65.0", 1]] as const)("binds the canonical package to tag %s (status %i)", (tag, status) => {
+    const { root, env } = fixture();
+    fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ version }));
+    const result = spawnSync("bash", ["--noprofile", "--norc", "-euc", run(step(release, "Bind tag to package version"))], {
+      cwd: root, env: { ...env, TAG: tag }, encoding: "utf8", timeout: 10_000,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(status);
+    expect(fs.readdirSync(env.KIRO_HOME)).toEqual([]);
+  });
+});
+
 describe("installer production fail-closed gates", () => {
   it.each(["--require-release-ready", "--assets"])("blocks %s before any legacy artifact read or promotion", flag => {
     const { root, env } = fixture();

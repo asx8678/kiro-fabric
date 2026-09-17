@@ -6,6 +6,8 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 
 - `tests/installer-capability-fixture.ts` — native inode-anchored directory traversal probe for crash-recovery qualification.
 
+- `tests/remediation-regressions.test.ts` — fail-closed approval diagnostics, unknown benchmark spend, and TinyShop agent execution-audit regressions.
+
 ## Canonical observed tool discovery and continuation
 
 - `src/core/remote-identity.ts` — exact RFC3986 canonical remote identity and strict decode-once validation.

@@ -34,6 +34,25 @@ const fabricApprovalIdentity = (action: ResolvedFabricAction, args: Record<strin
   };
 };
 
+export type KiroApprovalFailureReason = "unsupported" | "missing_handler" | "request_failed" | "declined" | "cancelled" | "not_approved" | "review_too_large";
+export type KiroApprovalResult = { approved: true } | { approved: false; reason: KiroApprovalFailureReason };
+
+/** Classify only the matching client error; never retain its text, data or cause. */
+export const kiroElicitationFailureReason = (error: unknown): KiroApprovalFailureReason => {
+  try {
+    const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+    return /(?:^|\n|: )No handler registered for method: _kiro\/mcp\/elicitation\s*$/u.test(message)
+      ? "missing_handler" : "request_failed";
+  } catch { return "request_failed"; }
+};
+
+class KiroApprovalError extends Error {
+  constructor(ref: string, readonly reason: KiroApprovalFailureReason) {
+    super(`${ref} approval was denied or unavailable (${reason})`);
+    this.name = "KiroApprovalError";
+  }
+}
+
 export class KiroPowerApprover {
   constructor(
     readonly adapter: KiroPowerElicitationAdapter,
@@ -41,25 +60,31 @@ export class KiroPowerApprover {
   ) {}
   async approveOnce(request: { risk: string; provider: string; action: string; summary: string; reviewable?: boolean; signal?: AbortSignal }): Promise<boolean> {
     request.signal?.throwIfAborted();
-    if (!this.adapter.supported()) return false;
+    const result = await this.approveOnceResult(request);
+    request.signal?.throwIfAborted();
+    return result.approved;
+  }
+  async approveOnceResult(request: { risk: string; provider: string; action: string; summary: string; reviewable?: boolean; signal?: AbortSignal }): Promise<KiroApprovalResult> {
     try {
+      if (request.signal?.aborted) return { approved: false, reason: "cancelled" };
+      if (!this.adapter.supported()) return { approved: false, reason: "unsupported" };
       const header = `Risk: ${bounded(request.risk, 64)}\nAction: ${bounded(`${request.provider}.${request.action}`, 256)}\n`;
       const review = request.reviewable
         ? request.summary.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/gu, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`)
         : bounded(request.summary, Math.max(0, APPROVAL_MESSAGE_CHARS - header.length));
       // Exact local material must never acquire an invisible authorized suffix.
-      if (request.reviewable && header.length + review.length > 12_000) return false;
+      if (request.reviewable && header.length + review.length > 12_000) return { approved: false, reason: "review_too_large" };
       const result = await this.adapter.request({
         title: "Approve one Fabric action",
         message: `${header}${review}`,
         ...(request.signal ? { signal: request.signal } : {}),
         timeoutMs: this.timeoutMs,
       });
-      request.signal?.throwIfAborted();
-      return result.action === "accept" && result.approved === true;
-    } catch {
-      if (request.signal?.aborted) request.signal.throwIfAborted();
-      return false;
+      if (request.signal?.aborted) return { approved: false, reason: "cancelled" };
+      if (result?.action === "accept" && result.approved === true) return { approved: true };
+      return { approved: false, reason: result?.action === "decline" ? "declined" : result?.action === "cancel" ? "cancelled" : "not_approved" };
+    } catch (error) {
+      return { approved: false, reason: request.signal?.aborted ? "cancelled" : kiroElicitationFailureReason(error) };
     }
   }
 }
@@ -140,8 +165,8 @@ export class KiroPowerFabricApprover implements FabricExecutionApprover {
     return {
       decision: "ask",
       prompt: async () => {
-        const approved = await this.elicitation.approveOnce(request);
-        if (!approved) throw new Error(`${ref} approval was denied or unavailable`);
+        const result = await this.elicitation.approveOnceResult(request);
+        if (!result.approved) throw new KiroApprovalError(ref, result.reason);
       },
     };
   }

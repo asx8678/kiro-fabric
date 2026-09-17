@@ -1,6 +1,6 @@
 {
   "name": "kiro-fabric",
-  "version": "0.64.0",
+  "version": "0.65.0",
   "description": "Library API for Kiro Fabric; the native Kiro Agent ships as a self-installing release archive",
   "type": "module",
   "main": "./dist/index.js",

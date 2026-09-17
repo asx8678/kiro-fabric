@@ -15,7 +15,7 @@ export const ARMS = ['old', 'pass1', 'pass2', 'fabric', 'native'];
 /** @param {unknown} value @param {string} name */
 function text(value, name) { assert.ok(typeof value === 'string' && value.length > 0 && !/[\x00-\x1f]/.test(value), 'invalid ' + name); return String(value); }
 /** @param {unknown} value @param {number} fallback @param {number} min @param {number} max */
-function number(value, fallback, min, max) { const n = value ?? fallback; assert.ok(typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max, 'numeric bounds'); return Number(n); }
+function number(value, fallback, min, max) { const n = value === undefined ? fallback : value; assert.ok(typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max, 'numeric bounds'); return Number(n); }
 /** Resolve a named executable via declared PATH, without running a shell or scanning directories.
  * @param {string} name @param {string} [searchPath] */
 export function executable(name, searchPath = process.env.PATH ?? '') {

@@ -20,17 +20,18 @@ function immutableHashes(s) { return Object.fromEntries(Object.entries(s.files).
 export function validateAudit(s, text, finalSources) {
   assert.ok(text.endsWith('\n'), 'missing/incomplete execution audit');
   const rows = text.trimEnd().split('\n').map(line => object(JSON.parse(line)));
-  assert.equal(rows.length, s.id === 'parser' ? 2 : 1, 'missing/duplicate execution records');
+  const beforeAfter = s.id === 'parser' || BUG_CASES.includes(s.id);
+  assert.equal(rows.length, beforeAfter ? 2 : 1, 'missing/duplicate execution records');
   const initial = sourceHashes(s, s.files), final = sourceHashes(s, finalSources), fixtures = immutableHashes(s);
   for (const [i, row] of rows.entries()) {
     assert.deepEqual(Object.keys(row).sort(), ['exit', 'fixtures', 'kind', 'post', 'pre', 'seq'], 'audit schema');
     assert.equal(row.seq, i, 'execution order'); assert.equal(row.kind, s.id, 'execution kind');
     assert.deepEqual(row.fixtures, fixtures, 'immutable controller fixture hashes');
-    const expected = s.id === 'parser' && i === 0 ? initial : final;
+    const expected = beforeAfter && i === 0 ? initial : final;
     assert.deepEqual(row.pre, expected, 'execution pre-source hashes'); assert.deepEqual(row.post, expected, 'execution post-source hashes');
-    assert.equal(row.exit, s.id === 'exit7' ? 7 : s.id === 'parser' && i === 0 ? 1 : 0, 'execution exit');
+    assert.equal(row.exit, s.id === 'exit7' ? 7 : beforeAfter && i === 0 ? 1 : 0, 'execution exit');
   }
-  if (s.id === 'parser') assert.notEqual(canonical(initial), canonical(final), 'parser unchanged');
+  if (beforeAfter) assert.notEqual(canonical(initial), canonical(final), 'repair unchanged');
   return rows;
 }
 /** Find structured tool output, never strip fences or infer execution from a command substring.
