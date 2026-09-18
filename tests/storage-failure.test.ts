@@ -6,6 +6,7 @@ import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
 import { openKiroMemory } from "../src/kiro/memory.js";
 import { KiroMcpProvider } from "../src/kiro/mcp-provider.js";
 import { StateCommitAcknowledgementError, StateProvider } from "../src/providers/state-provider.js";
+import * as pinnedDirectory from "../src/installation/pinned-directory-child.mjs";
 
 const roots: string[] = [];
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-write-fault-")); roots.push(root); return root; };
@@ -38,7 +39,7 @@ const inject = (method: "write" | "permissions" | "sync" | "close", matches: (fi
 const temporaryWriter = async (kind: "memory" | "mcp") => {
   const root = temporary();
   const matches = (file: string) => kind === "memory"
-    ? path.basename(file).startsWith(".fixture.json.") && file.endsWith(".tmp")
+    ? path.basename(file).startsWith(".kiro-fabric-memory-") && file.endsWith(".tmp")
     : path.basename(file).startsWith(".kiro-fabric-mcp-snapshot-");
   const remaining = () => fs.readdirSync(root, { recursive: true, encoding: "utf8" }).map((file) => path.join(root, file)).filter(matches);
   if (kind === "memory") {
@@ -323,10 +324,16 @@ describe("operation-owned storage failure cleanup", () => {
   });
 
   it("reports a committed revision and recovers same-provider writes after transient lock removal failure", async () => {
-    const root = temporary(); const provider = new StateProvider(root); const remove = fs.rmSync;
+    const root = temporary(); const provider = new StateProvider(root);
+    const remove = fs.rmSync, removePinned = pinnedDirectory.runPinnedDirectoryOperation;
     vi.spyOn(fs, "rmSync").mockImplementation((file, options) => {
       if (path.basename(String(file)) === ".state-mutation.lock") throw new Error("injected lock removal failure");
       remove(file, options);
+    });
+    // Darwin removes through the pinned child rather than the Linux rmSync alias.
+    vi.spyOn(pinnedDirectory, "runPinnedDirectoryOperation").mockImplementation(options => {
+      if (options.operation === "unlink" && options.name === ".state-mutation.lock") throw new Error("injected lock removal failure");
+      return removePinned(options);
     });
     await expect(provider.invoke("set", { key: "fixture", value: true }, { cwd: root })).rejects.toMatchObject({ committed: true, revision: 1 });
     vi.restoreAllMocks();

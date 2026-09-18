@@ -6,6 +6,7 @@ import { CASES, makeCase, HELP_CODE } from './cases.mjs';
 import { putFiles, inventory, save } from './core.mjs';
 import { analyzeEvents, collect } from './stream.mjs';
 import { validate } from './oracles.mjs';
+import { BUG_CASES } from './projects.mjs';
 
 /** Synthetic ACP only qualifies local oracles; NEVER include it in measured run rows.
  * @param {string} answer @param {{tools?:boolean,help?:boolean,credits?:number,mode?:string}} [options] @returns {unknown[]} */
@@ -24,10 +25,10 @@ export async function solvedTrial(root, id, python, seed = 'oracle-seed') {
   const spec = makeCase(id, seed, python), workspace = path.join(root, id); fs.mkdirSync(workspace, { mode: 0o700 }); putFiles(workspace, spec.files);
   const before = inventory(workspace);
   /** @param {number} expected */
-  async function execute(expected) { const r = await collect({ executable: python, args: ['-B', 'tools/test_fixture.py'], cwd: workspace, maxOutputBytes: 65536, timeoutMs: 10000 }); assert.equal(r.code, expected, r.stderr); assert.equal(r.stopReason, null); }
-  if (id === 'parser') await execute(1);
+  async function execute(expected) { const r = await collect({ executable: BUG_CASES.includes(id) ? process.execPath : python, args: BUG_CASES.includes(id) ? ['tests/public.mjs'] : ['-B', 'tools/test_fixture.py'], cwd: workspace, maxOutputBytes: 65536, timeoutMs: 10000 }); assert.equal(r.code, expected, r.stderr); assert.equal(r.stopReason, null); }
+  if (id === 'parser' || BUG_CASES.includes(id)) await execute(1);
   for (const [name, text] of Object.entries(spec.solution)) fs.writeFileSync(path.join(workspace, name), text, { mode: 0o600 });
-  if (id === 'parser' || id === 'rename-api') await execute(0);
+  if (id === 'parser' || id === 'rename-api' || BUG_CASES.includes(id)) await execute(0);
   if (id === 'exit7') await execute(7);
   const answer = id === 'explain' ? String(spec.expected) : id === 'fabric-help' ? JSON.stringify({ topic: 'overview', text: 'Immutable synthetic bundled overview for local oracle qualification.', truncated: false }) : JSON.stringify(spec.expected);
   const evidence = analyzeEvents(syntheticEvents(answer, { tools: !spec.noTools, help: id === 'fabric-help' }));

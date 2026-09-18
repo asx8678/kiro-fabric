@@ -417,6 +417,151 @@ describe("configuration backup", () => {
     expect(fs.lstatSync(file).size).toBe(65 * 1024 * 1024);
   });
 
+  it.each(["same second", "clock rollback"])("retention protects the returned backup during %s", kind => {
+    const kiroHome = temporary();
+    seedConfiguration(kiroHome);
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
+      for (let index = 0; index < 20; index += 1) {
+        const backup = backupOf(kiroHome, "install");
+        // Deterministically sort every older random suffix above the new one.
+        fs.renameSync(backup.path, path.join(path.dirname(backup.path), `20300101T000000Z-ffffffffffff${index.toString(16).padStart(4, "0")}`));
+      }
+      if (kind === "clock rollback") vi.setSystemTime(new Date("2020-01-01T00:00:00Z"));
+      const fresh = backupOf(kiroHome, "update");
+      expect(fs.existsSync(fresh.path)).toBe(true);
+      expect(createHash("sha256").update(fs.readFileSync(path.join(fresh.path, "backup-manifest.json"))).digest("hex")).toBe(fresh.manifestSha256);
+      expect(fs.readdirSync(path.dirname(fresh.path))).toHaveLength(20);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each(["unknown", "corrupt", "modified", "extra file", "extra directory", "missing file", "hardlink", "manifest hardlink", "symlink", "manifest symlink", "wrong home", "duplicate path", "oversized manifest", "oversized file", "mode"])(
+    "retention preserves %s evidence in timestamp-shaped directories", kind => {
+      const kiroHome = temporary(), outside = temporary();
+      seedConfiguration(kiroHome);
+      const backup = backupOf(kiroHome, "install");
+      const old = path.join(path.dirname(backup.path), "20000101T000000Z-0000000000000000");
+      fs.renameSync(backup.path, old);
+      const manifestPath = path.join(old, "backup-manifest.json"), file = path.join(old, "settings/global.json");
+      const external = path.join(outside, "evidence");
+      fs.writeFileSync(external, "external evidence", { mode: 0o600 });
+      if (kind === "unknown") fs.unlinkSync(manifestPath);
+      if (kind === "corrupt") fs.writeFileSync(manifestPath, "not JSON");
+      if (kind === "modified") { fs.chmodSync(file, 0o600); fs.writeFileSync(file, "changed"); }
+      if (kind === "extra file") fs.writeFileSync(path.join(old, "foreign"), "keep", { mode: 0o600 });
+      if (kind === "extra directory") fs.mkdirSync(path.join(old, "foreign"), { mode: 0o700 });
+      if (kind === "missing file") fs.unlinkSync(file);
+      if (kind === "hardlink") fs.linkSync(file, path.join(outside, "hardlink"));
+      if (kind === "manifest hardlink") fs.linkSync(manifestPath, path.join(outside, "hardlink"));
+      if (kind === "symlink" || kind === "manifest symlink") { const target = kind === "symlink" ? file : manifestPath; fs.unlinkSync(target); fs.symlinkSync(external, target); }
+      if (kind === "wrong home" || kind === "duplicate path") {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+        if (kind === "wrong home") manifest.kiroHome = outside;
+        else manifest.files.push(manifest.files[0]);
+        fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+      }
+      if (kind === "oversized manifest" || kind === "oversized file") {
+        const target = kind === "oversized manifest" ? manifestPath : file;
+        fs.chmodSync(target, 0o600);
+        const fd = fs.openSync(target, "r+");
+        try { fs.ftruncateSync(fd, 65 * 1024 * 1024); } finally { fs.closeSync(fd); }
+      }
+      if (kind === "mode") fs.chmodSync(file, 0o444);
+      const before = treeDigest(old), externalBefore = treeDigest(outside);
+      for (let index = 0; index < 21; index += 1) backupOf(kiroHome, "update");
+      expect(fs.existsSync(old)).toBe(true);
+      expect(treeDigest(old)).toBe(before);
+      expect(treeDigest(outside)).toBe(externalBefore);
+    },
+  );
+
+  it.each(["foreign file", "foreign directory", "foreign symlink", "symlink hardlink", "directory mode", "manifest mode", "deep tree"])(
+    "retention preserves %s without treating it as owned disposable content", kind => {
+      const kiroHome = temporary(), outside = temporary();
+      seedConfiguration(kiroHome);
+      const backup = backupOf(kiroHome, "install"), old = path.join(path.dirname(backup.path), "20000101T000000Z-0000000000000000");
+      fs.renameSync(backup.path, old);
+      const target = kind === "foreign file" ? path.join(old, "settings/global.json")
+        : kind === "foreign symlink" || kind === "symlink hardlink" ? path.join(old, "current-settings") : path.join(old, "settings");
+      if (kind === "symlink hardlink") fs.linkSync(target, path.join(outside, "link-evidence"));
+      if (kind === "directory mode") fs.chmodSync(target, 0o500);
+      if (kind === "manifest mode") fs.chmodSync(path.join(old, "backup-manifest.json"), 0o400);
+      if (kind === "deep tree") fs.mkdirSync(path.join(old, ...Array.from({ length: 34 }, () => "foreign")), { recursive: true, mode: 0o700 });
+      const before = treeDigest(old);
+      const lstat = fs.lstatSync;
+      if (kind.startsWith("foreign")) vi.spyOn(fs, "lstatSync").mockImplementation(((...args: Parameters<typeof fs.lstatSync>) => {
+        const stats = lstat(...args);
+        if (args[0] === target && stats) Reflect.set(stats, "uid", Number(stats.uid) + 1);
+        return stats;
+      }) as typeof fs.lstatSync);
+      for (let index = 0; index < 21; index += 1) backupOf(kiroHome, "update");
+      expect(fs.existsSync(old)).toBe(true);
+      expect(treeDigest(old)).toBe(before);
+      vi.restoreAllMocks();
+      if (kind === "directory mode") fs.chmodSync(target, 0o700);
+    },
+  );
+
+  it("bounds retention root enumeration and leaves overflow evidence untouched", () => {
+    const kiroHome = temporary();
+    const first = backupOf(kiroHome, "install"), root = path.dirname(first.path);
+    for (let index = 0; index < 256; index += 1) {
+      fs.mkdirSync(path.join(root, `20000101T000000Z-${index.toString(16).padStart(16, "0")}`), { mode: 0o700 });
+    }
+    const opened = vi.spyOn(fs, "openSync"), fresh = backupOf(kiroHome, "update");
+    expect(fs.existsSync(fresh.path)).toBe(true);
+    expect(fs.readdirSync(root)).toHaveLength(258);
+    expect(opened.mock.calls.some(([file]) => typeof file === "string" && file.includes("20000101T"))).toBe(false);
+  });
+
+  it("does not open oversized retention manifests", () => {
+    const kiroHome = temporary();
+    const first = backupOf(kiroHome, "install"), root = path.dirname(first.path);
+    const old = path.join(root, "20000101T000000Z-0000000000000000");
+    fs.renameSync(first.path, old);
+    const manifest = path.join(old, "backup-manifest.json");
+    fs.truncateSync(manifest, 5 * 1024 * 1024);
+    for (let index = 0; index < 19; index += 1) backupOf(kiroHome, "update");
+    const opened = vi.spyOn(fs, "openSync");
+    backupOf(kiroHome, "update");
+    expect(opened.mock.calls.some(([file]) => file === manifest)).toBe(false);
+    expect(fs.lstatSync(manifest).size).toBe(5 * 1024 * 1024);
+  });
+
+  it("bounds a growing retention manifest descriptor read and preserves the changed tree", () => {
+    const kiroHome = temporary();
+    const first = backupOf(kiroHome, "install"), root = path.dirname(first.path);
+    const old = path.join(root, "20000101T000000Z-0000000000000000");
+    fs.renameSync(first.path, old);
+    const manifest = path.join(old, "backup-manifest.json"), size = fs.lstatSync(manifest).size;
+    for (let index = 0; index < 19; index += 1) backupOf(kiroHome, "update");
+    const open = fs.openSync, read = fs.readSync, close = fs.closeSync;
+    let descriptor: number | undefined, bytes = 0, injected = false;
+    vi.spyOn(fs, "openSync").mockImplementation((...args) => {
+      const result = open(...args);
+      if (args[0] === manifest) descriptor = result;
+      return result;
+    });
+    vi.spyOn(fs, "closeSync").mockImplementation(fd => {
+      if (fd === descriptor) descriptor = undefined;
+      close(fd);
+    });
+    vi.spyOn(fs, "readSync").mockImplementation(((...args: Parameters<typeof fs.readSync>) => {
+      const count = read(...args);
+      if (args[0] === descriptor) {
+        bytes += count;
+        if (!injected) { injected = true; fs.truncateSync(manifest, 65 * 1024 * 1024); }
+      }
+      return count;
+    }) as typeof fs.readSync);
+    const fresh = backupOf(kiroHome, "update");
+    expect(injected).toBe(true);
+    expect(bytes).toBeLessThanOrEqual(size + 1);
+    expect(fs.existsSync(fresh.path)).toBe(true);
+    expect(fs.lstatSync(manifest).size).toBe(65 * 1024 * 1024);
+  });
+
   it("retains a bounded number of backups", () => {
     const kiroHome = temporary();
     fs.writeFileSync(path.join(kiroHome, "settings.txt"), "x", { mode: 0o600 });

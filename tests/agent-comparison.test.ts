@@ -14,6 +14,33 @@ import { main } from '../scripts/agent-comparison.mjs';
 type Row = Parameters<typeof detailedStats>[0][number];
 const row = (index: number, arm: string, ok: boolean, credits: number | null): Row => ({ index, arm, ok, credits, caseId: 'bug-money', qualification: false, state: 'finished', stopReason: null, startedAt: 'test' });
 
+import { TASK_BEHAVIOR_CASES } from '../scripts/steering-benchmark/task-behavior.mjs';
+
+describe('opt-in task scheduling', () => {
+  it('selects balanced old/fabric pairs using existing runIndices', () => {
+    const arm = { profile: '/unused', runtimePaths: ['/unused'], configPaths: ['/unused'] };
+    const base = { cli: process.execPath, python: process.execPath, runtimePaths: [process.execPath], cliConfigPaths: [process.execPath], arms: { old: arm, fabric: arm }, repetitions: 2 };
+    expect(schedule(parseConfig(base, process.cwd())).some(r => TASK_BEHAVIOR_CASES.includes(r.caseId))).toBe(false);
+    const config = parseConfig({ ...base, cases: TASK_BEHAVIOR_CASES }, process.cwd());
+    const full = schedule(config);
+    const runIndices = full.filter(r => r.arm !== 'native').map(r => r.index);
+    const selected = schedule(parseConfig({ ...base, cases: TASK_BEHAVIOR_CASES, runIndices }, process.cwd()));
+    expect(selected).toHaveLength(20);
+    expect(selected.map(r => r.sourceIndex)).toEqual(runIndices);
+    for (const id of TASK_BEHAVIOR_CASES) {
+      expect(ALL_CASES).toContain(id); expect(CASES).not.toContain(id);
+      const first = selected.filter(r => r.caseId === id && r.round === 0);
+      const second = selected.filter(r => r.caseId === id && r.round === 1);
+      expect(first.map(r => r.arm)).toEqual(second.map(r => r.arm).reverse());
+      for (const pair of [first, second]) {
+        expect(new Set(pair.map(r => r.arm))).toEqual(new Set(['old', 'fabric']));
+        expect(pair[0]!.hashes).toEqual(pair[1]!.hashes);
+        expect(pair[0]!.seed).toBe(pair[1]!.seed);
+      }
+    }
+  });
+});
+
 describe('TinyShop independent bug contracts', () => {
   it('counterbalances Default, old Fabric and the candidate on identical Auto repair/review cases', () => {
     const arm = { profile: '/unused', runtimePaths: ['/unused'], configPaths: ['/unused'] };
@@ -53,7 +80,7 @@ describe('TinyShop independent bug contracts', () => {
   });
   it('rejects a public-example-only patch with held-out checks', async () => {
     const spec = makeBugCase('bug-money', 'alpha');
-    const expected = /, (\d+)\);/.exec(spec.files['tests/public.mjs']!)![1];
+    const expected = /, (\d+)\);/.exec(spec.files['tests/checks.mjs']!)![1];
     await expect(probeProject(spec, { 'src/money.mjs': `export function totalCents(){return ${expected};}\n` })).rejects.toThrow('held-out project contract');
   });
   it('accepts behaviorally equivalent repairs and rejects unchanged code via real validation', async () => {
@@ -61,7 +88,9 @@ describe('TinyShop independent bug contracts', () => {
     try {
       const trial = await solvedTrial(root, 'bug-money', process.execPath);
       fs.appendFileSync(path.join(trial.workspace, 'src/money.mjs'), '\n// Equivalent implementation.\n');
-      expect((await validate(trial)).ok).toBe(true);
+      const equivalent = await validate(trial);
+      expect(equivalent.probe).toMatchObject({ ok: true });
+      expect(equivalent.failures.map(f => f.check)).toEqual(['execution-audit']); // Changed bytes require a fresh agent test run.
       fs.writeFileSync(path.join(trial.workspace, 'src/money.mjs'), trial.spec.files['src/money.mjs']!);
       expect((await validate(trial)).failures.some(f => f.check === 'independent-tests')).toBe(true);
       fs.writeFileSync(path.join(trial.workspace, 'tests/public.mjs'), 'process.exit(0);');
@@ -69,7 +98,7 @@ describe('TinyShop independent bug contracts', () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
   it('preserves legacy defaults; pairs selected cases and validates selection', () => {
-    expect(CASES).toHaveLength(13); expect(ALL_CASES).toHaveLength(30);
+    expect(CASES).toHaveLength(13); expect(ALL_CASES).toHaveLength(35);
     const base = { cli: process.execPath, python: process.execPath, arms: {}, runtimePaths: [process.execPath], cliConfigPaths: [process.execPath], cases: BUG_CASES, model: 'test-model' };
     const config = parseConfig({ ...base, nativeTrustTools: ['fs_read', 'fs_write', 'str_replace', 'execute_bash'] }, process.cwd());
     const fakePlan = { config } as Parameters<typeof commandFor>[0];
@@ -100,6 +129,19 @@ describe('TinyShop independent bug contracts', () => {
 });
 
 describe('quality-first, coverage-aware statistics', () => {
+  it('reports guidance modes without requiring historical identity metadata and validates Fabric-only pairs', () => {
+    const arm = { profile: '/unused', runtimePaths: ['/unused'], configPaths: ['/unused'] };
+    const config = parseConfig({ cli: process.execPath, python: process.execPath, runtimePaths: [process.execPath], cliConfigPaths: [process.execPath], arms: { old: arm, pass1: arm, pass2: arm }, cases: ['bug-money'] }, process.cwd());
+    const runs = schedule(config).filter(r => r.arm !== 'native').map((r, index) => ({ ...r, index }));
+    const plan = { config, runs, limitations: [] } as unknown as Parameters<typeof comparisonMetrics>[0];
+    expect(comparisonMetrics(plan, []).guidanceModes).toEqual({ old: 'unknown', pass1: 'unknown', pass2: 'unknown' });
+    const identity = { profiles: { old: { guidanceMode: 'standard' }, pass1: { guidanceMode: 'review' }, pass2: { guidanceMode: 'minimal' } } } as unknown as typeof plan.identity;
+    const report = comparisonMetrics({ ...plan, identity }, []);
+    expect(report.guidanceModes).toEqual({ old: 'standard', pass1: 'review', pass2: 'minimal' });
+    expect(comparisonMarkdown(report)).toContain('old=standard, pass1=review, pass2=minimal');
+    expect(report.executedAttempts).toBe(0);
+    expect(() => comparisonMetrics({ ...plan, runs: runs.map(r => r.arm === 'pass1' ? { ...r, seed: 'drift' } : r) }, [])).toThrow('unmatched fixture identities');
+  });
   it('pairs old/candidate outer exchanges without inventing hidden telemetry or rewarding failures', () => {
     const arm = { profile: '/unused', runtimePaths: ['/unused'], configPaths: ['/unused'] };
     const config = parseConfig({ cli: process.execPath, python: process.execPath, runtimePaths: [process.execPath], cliConfigPaths: [process.execPath], arms: { old: arm, fabric: arm }, cases: ['bug-money'] }, process.cwd());
@@ -133,6 +175,33 @@ describe('quality-first, coverage-aware statistics', () => {
     }]);
     const drift = { ...plan, runs: plan.runs.map(r => r.arm === 'old' ? { ...r, seed: 'drift' } : r) };
     expect(() => comparisonMetrics(drift, rows)).toThrow('unmatched');
+  });
+  it.each(['fabric-only', 'mixed', 'native-only'])('reports unavailable native ratios for a %s continuation without dropping costs', mode => {
+    const arm = { profile: '/unused', runtimePaths: ['/unused'], configPaths: ['/unused'] };
+    const base = { cli: process.execPath, python: process.execPath, runtimePaths: [process.execPath], cliConfigPaths: [process.execPath], arms: { old: arm, fabric: arm }, cases: ['bug-money'] };
+    const full = schedule(parseConfig(base, process.cwd()));
+    const runIndices = full.filter(r => mode === 'native-only' ? r.arm === 'native' : mode === 'fabric-only' ? r.arm !== 'native' : r.arm !== 'native' || r.round === 0).map(r => r.index);
+    const config = parseConfig({ ...base, runIndices }, process.cwd());
+    const plan = { config, runs: schedule(config), limitations: [] } as unknown as Parameters<typeof comparisonMetrics>[0];
+    const rows = plan.runs.map(r => row(r.index, r.arm, r.round === 0, 0.2));
+    const report = comparisonMetrics(plan, rows);
+    expect(report.allAttempts).toMatchObject({ attempts: rows.length, reportedCredits: expect.closeTo(rows.length * 0.2) });
+    expect(report.unrunAttempts).toBe(0);
+    for (const pair of report.pairs) {
+      if (mode === 'mixed' && pair.round === 0) expect(pair).toMatchObject({ completed: true, bothPassCreditRatio: 1 });
+      else expect(pair).toMatchObject({ completed: false, bothPass: false, nativePass: null, nativeCredits: null, fabricCredits: 0.2, bothPassCreditRatio: null, bothPassWallRatio: null });
+    }
+    expect(report.pairs).toHaveLength(mode === 'native-only' ? 0 : 4);
+    expect(comparisonMarkdown(report)).toContain(`${rows.length}/${rows.length} attempts`);
+    expect(comparisonCsv(plan, rows).trim().split('\n')).toHaveLength(rows.length + 1);
+  });
+  it.each(['seed', 'prompt', 'fixtures', 'oracle'])('rejects a present native counterpart with mismatched %s identity', field => {
+    const arm = { profile: '/unused', runtimePaths: ['/unused'], configPaths: ['/unused'] };
+    const config = parseConfig({ cli: process.execPath, python: process.execPath, runtimePaths: [process.execPath], cliConfigPaths: [process.execPath], arms: { fabric: arm }, cases: ['bug-money'] }, process.cwd());
+    const runs = schedule(config).map(r => r.arm !== 'native' ? r : field === 'seed' ? { ...r, seed: 'drift' } : { ...r, hashes: { ...r.hashes, [field]: 'drift' } });
+    const plan = { config, runs, limitations: [] } as unknown as Parameters<typeof comparisonMetrics>[0];
+    // Identity validation must not depend on whether either attempt has run yet.
+    expect(() => comparisonMetrics(plan, [])).toThrow('unmatched fixture identities');
   });
   it('includes failures in cost per success and never imputes missing telemetry', () => {
     const stats = detailedStats([row(0, 'fabric', true, 0.2), row(1, 'fabric', false, 0.4)]);

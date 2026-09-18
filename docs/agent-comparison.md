@@ -82,7 +82,7 @@ const before = await local.shell({
 });
 if (before.ok || before.exitCode !== 1) throw new Error('Expected failing fixture');
 await local.edit({
-  path: 'src/money.mjs', oldText,
+  path: 'src/money.mjs', expectedSha256: source.sha256, oldText,
   newText: 'sum + item.priceCents * item.quantity, 0',
 });
 const after = await local.shell({
@@ -305,9 +305,35 @@ Relevant manifest fields (identity paths omitted here; the real manifest require
 
 `arms.fabric` names the snapshotted Fabric profile, complete bundle root and preinitialized private config paths; native is implicit. Legacy `old`, `pass1`, `pass2` arm names remain supported. `model` is passed identically to both agents and checked against returned session configuration. `auto` does **not** identify the actual routed model/revision; use an available explicit model ID for a tighter future experiment. Optional `effort` (low/medium/high/xhigh/max) is passed identically with `--effort` and checked against the returned ACP `effort` configuration option. If the client omits that evidence or reports a mismatch, the trial fails identity qualification; do not infer equal effort from model identity alone.
 
+### Comparing standard, review and minimal guidance
+
+This is a comparison protocol, **not a measured winner or authorization to spend credits**. The preparation and offline tests need no inference. Use the existing arm slots with explicit mode declarations; these names do not imply different runtime versions:
+
+```json
+{
+  "arms": {
+    "old": {"guidanceMode":"standard", "profile":"/private/profiles/standard.json", "runtimePaths":["/private/shared-bundle"], "configPaths":["/private/standard-data/config.json"]},
+    "pass1": {"guidanceMode":"review", "profile":"/private/profiles/review.json", "runtimePaths":["/private/shared-bundle"], "configPaths":["/private/review-data/config.json"]},
+    "pass2": {"guidanceMode":"minimal", "profile":"/private/profiles/minimal.json", "runtimePaths":["/private/shared-bundle"], "configPaths":["/private/minimal-data/config.json"]}
+  },
+  "cases": ["fabric-help", "bug-money", "review-boundaries", "review-adherence"],
+  "repetitions": 2
+}
+```
+
+Merge these fields into the complete manifest above, with real identity paths and an operator-approved budget. Native remains an implicit fourth arm and consumes credits too.
+
+1. Run `pnpm run build`. Prepare one immutable complete standalone bundle containing that build. Generate each profile with `generateAgentProfile` from `scripts/agent-profile.mjs`, passing the same `nodePath`, `runtimeRoot`, `bundleRoot`, `rgPath`, `skillPath`, `steeringPath`, the selected `guidanceMode`, and a **different private `dataRoot` per arm**. Preinitialize each private config with identical policies and trace settings. Do not modify normal installed profiles or reuse their mutable data.
+2. Keep runtime, fixtures, requested model/effort, approvals, environment and observation machinery identical; only the mode's prompt/resources/hooks differ. Pin an available model ID for this series; run Auto as a separate stratum if needed. Mode resources/hooks are checked against the generated profile: minimal has neither. Historical/custom prompts without a mode declaration remain `unknown`; declaring a mode requires matching current prompt bytes. Mode identity is configured evidence, not proof of delivery or hidden model routing.
+3. Run `node scripts/steering-benchmark.mjs plan --manifest /private/modes.json` then `node scripts/steering-benchmark.mjs init --manifest /private/modes.json --out /private/new-mode-results`. These commands do no inference. The frozen plan preserves paired seeds/fixture hashes and rotated/reversed order. Inspect it and the spend estimate **before** authorizing a run; do not alter a frozen plan.
+4. Only after explicit spend approval, use `node scripts/steering-benchmark.mjs run --out /private/new-mode-results --count 2`. Continue in small approved batches under existing time/call/output/credit stops. Keep failed attempts and unknown usage in the ledger. Export with `node scripts/agent-comparison.mjs report --out /private/new-mode-results --dest /private/new-mode-report`; JSON and Markdown record `guidanceModes` per Fabric arm. Compare per-case quality before aggregate cost. Existing ratios are against native, not a claim of pairwise mode speedups.
+5. Enable private tracing consistently for all Fabric arms as described in [tracing.md](tracing.md). Analyze each captured file with `node scripts/analyze-trace.mjs /private/trace.jsonl --json`. `compile.result` records cache `hit`/`miss`/`bypass`, worker `cold`/`warm`/`custom`, and diagnostic counts. Hits use no worker; oversized inputs and custom workers bypass cache lookup. Compile spans provide count/mean/p95 timing strata, including failed and unknown observations. Cold means a newly allocated compiler worker, not a cold OS or model cache. Each new server has its own pool; do not assume warmth survives CLI attempts. Older traces retain unknown classification. Existing span/bridge tables separately expose runtime and provider/approval latency.
+
+Use strict pass rate, held-out checks, scope violations, review precision/recall and reported credits (including failures) as the primary measures. Inspect call evidence for unnecessary reads, repeated continuations and verification quality. Compiler diagnostic checks are **not automatically repair-turn counts**; correlate execution IDs with the captured conversation for that assessment. These qualitative judgments are not new automatic scores. Report tracing overhead and missing observations; do not infer tokens, settled billing or guidance delivery from prompt length. Keep the smallest guidance that preserves measured quality. No live comparison was performed as part of this implementation.
+
 ### Current native v3 shell policy
 
-Tool trust is insufficient for shell execution. With the explicit `nativeWorkspacePermissions:true` option, the controller creates a new `HOME/.kiro/workspace-roots/<normalized-workspace-SHA256-prefix>/permissions.json` only for that unique disposable workspace. The policy permits Node, fixture Python (`-B`) and `cd` shell commands. Existing policy directories are refused rather than overwritten. File/directory identities and content hashes are recorded in the attempt row. After the trial the controller removes only its unchanged policy file, and removes its directory only if empty. Global permission rules and the default native agent are unchanged.
+Tool trust is insufficient for shell execution. With the explicit `nativeWorkspacePermissions:true` option, the controller creates a new `HOME/.kiro/workspace-roots/<normalized-workspace-SHA256-prefix>/permissions.json` only for that unique disposable workspace. The policy uses the client's effective `HOME` (manifest `env.HOME` overrides the inherited value; relative values resolve from the disposable workspace). An invalid override fails closed, without writing consent in the controller's home. The policy permits Node, fixture Python (`-B`) and `cd` shell commands. Existing policy directories are refused rather than overwritten. File/directory identities and content hashes are recorded in the attempt row. After the trial the controller removes only its unchanged policy file, and removes its directory only if empty. Global permission rules and the default native agent are unchanged.
 
 This is **not** a network/process/filesystem sandbox: Node and Python can execute candidate code, and prompts are not security enforcement. Use a separate OS account/container for adversarial work. If the controller is killed, inspect the exact `nativePermission.path` in the durable row before manual cleanup; never delete unrelated user policy. Cleanup drift stops the run.
 
@@ -329,7 +355,7 @@ Admission uses a conservative per-attempt reserve and stops on a completed run a
 
 ### Operator-authorized continuation after re-login
 
-Do not clear a stopped row or edit its charge to zero. If the operator explicitly reauthorizes work after resolving an account limit, create a separate manifest/output directory and retain the old series and exact harness. Optional `runIndices` is a strictly increasing subset of the original full schedule, using the same `cases`, `seed` and `repetitions`; it preserves prompts/fixtures/oracles and records each `sourceIndex`. Include both members of each pair when using the paired report. Out-of-range, duplicate and unordered indices are rejected.
+Do not clear a stopped row or edit its charge to zero. If the operator explicitly reauthorizes work after resolving an account limit, create a separate manifest/output directory and retain the old series and exact harness. Optional `runIndices` is a strictly increasing subset of the original full schedule, using the same `cases`, `seed` and `repetitions`; it preserves prompts/fixtures/oracles and records each `sourceIndex`. Include both members of each pair to obtain paired ratios. Reports also accept partial continuations: an omitted counterpart leaves its pair incomplete and ratios `null`, without dropping observed attempt costs. Present counterparts must still match seed, prompt, fixture and oracle identities. Out-of-range, duplicate and unordered indices are rejected.
 
 Carry known spend forward, keep unknown rejected charges explicitly unknown, reserve headroom and do not silently reset the original overall budget. A new authorization is not a billing receipt. Mark the authentication boundary and report the continuation as a separate stratum rather than pooling it into the unchanged pre-login headline matrix.
 
@@ -360,6 +386,8 @@ Use **A = immutable old Fabric**, **B = candidate Fabric**, with Default as a se
 ## Statistics and interpretation
 
 Reports are `comparison.json`, `comparison.md` and `attempts.csv`. Raw attempts retain commands, prompts, outputs, before/after filesystem evidence, validation failures, session/request IDs and reported usage. Keep these private: real future tasks could contain confidential source.
+
+A stream archive write error or short write triggers bounded process-group termination and descriptor cleanup. `process.outputError` records the archive failure; the attempt remains stopped, not a successful run. Capped in-memory collection continues during shutdown so observed charge evidence is retained. `retainedBytes` measures in-memory retention, not proof that all bytes reached disk; archives may be incomplete after an output error.
 
 - **Strict pass**: process/usage/model/routing, exact output format/answer, allowed filesystem changes and independent checks all pass.
 - **Independent project repair**: for TinyShop only, both public and held-out tests pass and all non-answer validity checks pass. An extra-prose/JSON failure remains a strict failure; the repair count is a separate quality dimension, not a retroactive relabeling. It proves controller-observed behavior, not that every claimed model-side test was executed.

@@ -412,6 +412,38 @@ describe("QuickJS trace hooks", () => {
     expect(events.every((event) => event.data?.error === undefined)).toBe(true);
   });
 
+  it("records pool-observed cache and worker outcomes through real execution traces", async () => {
+    const file = path.join(temporary(), "compile-trace.jsonl");
+    const tracer = createFabricTracer({ file });
+    const service = new FabricExecutionService(new ActionRegistry(), normalizeFabricConfig({ executor: { timeoutMs: 5_000 } }), "/workspace");
+    const programs = ["return 'compiler-private-payload'", "return 'compiler-private-payload'", "return 2", "return missingCompileFixtureName"];
+    const ids: string[] = [];
+    try {
+      for (const [index, code] of programs.entries()) {
+        const execId = tracer.newExecutionId(); ids.push(execId);
+        const result = await service.execute({ code, tracer, execId, approver: { async approve() {} } });
+        expect(result.success, JSON.stringify(result)).toBe(index !== 3);
+      }
+    } finally { await service.close(); tracer.close(); }
+    const events = readEvents(file);
+    const results = events.filter(event => event.ev === "compile.result");
+    expect(results.map(event => event.execId)).toEqual(ids);
+    expect(results.map(event => event.data)).toEqual([
+      { cache: "miss", worker: "cold", typeErrors: 0 },
+      { cache: "hit", typeErrors: 0 },
+      { cache: "miss", worker: "warm", typeErrors: 0 },
+      { cache: "miss", worker: "warm", typeErrors: expect.any(Number) },
+    ]);
+    expect(results[3]!.data!.typeErrors).toBeGreaterThan(0);
+    for (const event of results) {
+      const span = events.find(span => span.ev === "compile" && span.execId === event.execId);
+      expect(span?.data?.cache).toBe(event.data?.cache);
+      expect(span?.data?.worker).toBe(event.data?.worker);
+      expect(span?.durUs).toBeGreaterThanOrEqual(0);
+    }
+    expect(fs.readFileSync(file, "utf8")).not.toContain("compiler-private-payload");
+  });
+
   it("emits exec.end on type-check failure with the error count", async () => {
     const file = path.join(temporary(), "trace.jsonl");
     const tracer = createFabricTracer({ file });

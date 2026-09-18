@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StateProvider } from "../src/providers/state-provider.js";
+import * as pinnedDirectory from "../src/installation/pinned-directory-child.mjs";
 import { fabricCommitAcknowledgement } from "../src/protocol.js";
 import { normalizeFabricConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
@@ -15,6 +16,20 @@ const fixture = () => {
 };
 afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 const causes = (error: unknown): string => error instanceof AggregateError ? `${error.message} ${error.errors.map(causes).join(" ")}` : error instanceof Error ? `${error.message} ${error.cause ? causes(error.cause) : ""}` : String(error);
+
+/** Fail the active platform's removal seam without weakening any assertions.
+ * Linux uses the descriptor alias with rmSync; Darwin uses the pinned child. */
+function failLockRemoval(message: string): void {
+  const rm = fs.rmSync, removePinned = pinnedDirectory.runPinnedDirectoryOperation;
+  vi.spyOn(fs, "rmSync").mockImplementation((file, options) => {
+    if (path.basename(String(file)) === ".state-mutation.lock") throw new Error(message);
+    rm(file, options);
+  });
+  vi.spyOn(pinnedDirectory, "runPinnedDirectoryOperation").mockImplementation(options => {
+    if (options.operation === "unlink" && options.name === ".state-mutation.lock") throw new Error(message);
+    return removePinned(options);
+  });
+}
 
 describe("state ownership fault matrix", () => {
   for (const target of ["lock", "temporary"] as const) {
@@ -53,12 +68,12 @@ describe("state ownership fault matrix", () => {
   }
   it.each(["lstat", "rm", "replacement"] as const)("release %s reports proof and retains deferred responsibility", async (fault) => {
     const { root, provider, context } = fixture(); const lock = path.join(root, ".state-mutation.lock");
-    const rename = fs.renameSync, stat = fs.lstatSync, rm = fs.rmSync;
+    const rename = fs.renameSync, stat = fs.lstatSync;
     vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
       rename(from, to);
       if (fault === "replacement") { rename(lock, `${lock}.original`); fs.writeFileSync(lock, "foreign"); }
       if (fault === "lstat") vi.spyOn(fs, "lstatSync").mockImplementation(((file: fs.PathLike) => { if (String(file) === lock) throw new Error("release stat"); return stat(file); }) as typeof fs.lstatSync);
-      if (fault === "rm") vi.spyOn(fs, "rmSync").mockImplementation((file, options) => { if (String(file) === lock) throw new Error("release rm"); rm(file, options); });
+      if (fault === "rm") failLockRemoval("release rm");
     });
     const error = await provider.invoke("set", { key: "key", value: true }, context).catch(e => e);
     expect(error).toMatchObject({ committed: true, revision: 1 });
@@ -73,11 +88,11 @@ describe("state ownership fault matrix", () => {
     expect(await provider.invoke("delete", { key: "key", expectedRevision: 1 }, context)).toMatchObject({ revision: 2 });
   });
   it("preserves operation and cleanup causes without claiming noop or precommit", async () => {
-    const { provider, context } = fixture(); const rm = fs.rmSync;
-    vi.spyOn(fs, "rmSync").mockImplementation((file, options) => { if (String(file).endsWith(".lock")) throw new Error("cleanup cause"); rm(file, options); });
+    const { provider, context } = fixture();
+    failLockRemoval("cleanup cause");
     for (const args of [{ key: "missing" }, { key: "missing", expectedRevision: 9 }]) {
       // Restore cleanup for the deferred retry, then fail this operation's release.
-      if ("expectedRevision" in args) { vi.restoreAllMocks(); await provider.invoke("delete", { key: "missing" }, context); vi.spyOn(fs, "rmSync").mockImplementation(() => { throw new Error("cleanup cause"); }); }
+      if ("expectedRevision" in args) { vi.restoreAllMocks(); await provider.invoke("delete", { key: "missing" }, context); failLockRemoval("cleanup cause"); }
       const error = await provider.invoke("delete", args, context).catch(e => e);
       expect(fabricCommitAcknowledgement(error)).toBeUndefined(); expect(causes(error)).toContain("cleanup cause");
       if ("expectedRevision" in args) expect(causes(error)).toContain("revision conflict");
@@ -112,9 +127,9 @@ describe("state execution acknowledgement", () => {
     if (operation === "delete") await provider.invoke("set", { key: "PRIVATE-key", value: "PRIVATE-value" }, context);
     const registry = new ActionRegistry(); registry.register(provider);
     const service = new FabricExecutionService(registry, normalizeFabricConfig({ executor: { timeoutMs: 5000 } }), root);
-    const controller = new AbortController(); const rename = fs.renameSync, rm = fs.rmSync; let publications = 0;
+    const controller = new AbortController(); const rename = fs.renameSync; let publications = 0;
     vi.spyOn(fs, "renameSync").mockImplementation((from, to) => { rename(from, to); publications++; if (fault === "aborted") controller.abort(new Error("PRIVATE abort")); if (fault === "timed_out") vi.spyOn(performance, "now").mockReturnValue(Number.MAX_SAFE_INTEGER); });
-    if (fault === "cleanup") vi.spyOn(fs, "rmSync").mockImplementation((file, options) => { if (String(file).endsWith(".lock")) throw new Error("PRIVATE cleanup"); rm(file, options); });
+    if (fault === "cleanup") failLockRemoval("PRIVATE cleanup");
     try {
       const result = await service.execute({ code: `return await state.${operation}({key:'PRIVATE-key'${operation === "set" ? ",value:'PRIVATE-value'" : ""}})`, signal: controller.signal, approver: { async approve() {} } });
       if (fault !== "cleanup") expect(result.status).toBe(fault);

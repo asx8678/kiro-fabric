@@ -32,7 +32,7 @@ export const codingFixtureSpec = (nonce) => {
     ['local.grep', { pattern: 'sum', path: directory, literal: true, limit: 20 }],
     ['local.read', { path: source, offset: 1, limit: 20 }],
     ['local.shell', shell],
-    ['local.edit', { path: source, oldText: 'a - b', newText: 'a + b' }],
+    ['local.edit', { path: source, expectedSha256: digest(before), oldText: 'a - b', newText: 'a + b' }],
     ['local.read', { path: source, offset: 1, limit: 20 }],
     ['local.shell', shell],
   ])).map(([ref, args]) => ({ ref, input: { code: `return await ${ref}(${JSON.stringify(args)});`, resultFormat: 'json', timeoutMs: 180000 } }));

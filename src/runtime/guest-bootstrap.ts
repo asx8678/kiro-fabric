@@ -268,13 +268,59 @@ export const GUEST_SETUP = `
     info: () => call("fabric.info"), help: (args) => call("fabric.help", args),
     workspace: (args) => call("fabric.workspace", args),
   });
+  // Guest composition only: both calls retain registry validation, read approvals,
+  // quotas and cancellation. Never auto-drain search pages or read continuations.
+  const searchRead = async (input) => {
+    const args = parseStrict(strictJsonText(input));
+    if (!args || typeof args !== 'object' || arrayIsArray(args)) throw new SafeTypeError('local.searchRead expects an object');
+    const { contextLines = 3, maxWindows = 8, maxChars, ...query } = args;
+    const integerInRange = (value, min, max) => typeof value === 'number' && numberIsFinite(value) && mathFloor(value) === value && value >= min && value <= max;
+    if (!integerInRange(contextLines, 0, 50)) throw new SafeRangeError('local.searchRead contextLines must be an integer in 0..50');
+    if (!integerInRange(maxWindows, 1, 32)) throw new SafeRangeError('local.searchRead maxWindows must be an integer in 1..32');
+    if (maxChars !== undefined && !integerInRange(maxChars, 1000, 40000)) throw new SafeRangeError('local.searchRead maxChars must be an integer in 1000..40000');
+    if (objectHasOwn(query, 'paginate') || objectHasOwn(query, 'cursor') || objectHasOwn(query, 'snapshotScope')) throw new SafeTypeError('local.searchRead does not paginate; use local.grep for search pages');
+    const search = await call('local.grep', query);
+    const byPath = objectCreate(null);
+    for (const match of search.matches) {
+      if (!objectHasOwn(byPath, match.path)) byPath[match.path] = [];
+      byPath[match.path].push(match.line);
+    }
+    const windows = [];
+    const append = (path, start, end) => {
+      for (let offset = start; offset <= end; offset += 2000) {
+        windows.push({ path, offset, limit: mathMin(2000, end - offset + 1) });
+      }
+    };
+    for (const path of objectKeys(byPath).sort()) {
+      const lines = byPath[path].sort((left, right) => left - right);
+      let start = 0, end = 0;
+      for (const line of lines) {
+        const from = line > contextLines ? line - contextLines : 1, to = line + contextLines;
+        if (start && from <= end + 1) { if (to > end) end = to; continue; }
+        if (start) append(path, start, end);
+        start = from; end = to;
+      }
+      if (start) append(path, start, end);
+    }
+    const selected = windows.slice(0, maxWindows), deferred = windows.slice(maxWindows);
+    const read = selected.length
+      ? await call('local.readMany', { windows: selected, ...(maxChars === undefined ? {} : { maxChars }) })
+      : { files: [], remaining: [], complete: true, unreadTails: [] };
+    // Preserve observed snapshots for later windows on already-read files.
+    const hashes = objectCreate(null);
+    for (const file of read.files) hashes[file.path] = file.sha256;
+    for (const window of deferred) if (objectHasOwn(hashes, window.path)) window.expectedSha256 = hashes[window.path];
+    // Unlike a single readMany response, this backlog may exceed 32 windows.
+    // Return all of it; callers continue in <=32-window chunks, never by re-searching.
+    return { ...search, ...read, remaining: [...read.remaining, ...deferred], complete: read.complete && deferred.length === 0 };
+  };
   globalThis.local = objectFreeze({
     read: (args) => call("local.read", args), grep: (args) => call("local.grep", args),
     readMany: (args) => call("local.readMany", args),
     readEvidence: (args) => call("local.readEvidence", args),
     find: (args) => call("local.find", args), list: (args = {}) => call("local.list", args),
     write: (args) => call("local.write", args), edit: (args) => call("local.edit", args),
-    shell: (args) => call("local.shell", args),
+    shell: (args) => call("local.shell", args), searchRead,
   });
   globalThis.review = objectFreeze({
     begin: (args) => call("review.begin", args), update: (args) => call("review.update", args),

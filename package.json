@@ -1,6 +1,6 @@
 {
   "name": "kiro-fabric",
-  "version": "0.64.0",
+  "version": "0.65.0",
   "description": "Library API for Kiro Fabric; the native Kiro Agent ships as a self-installing release archive",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,6 +29,7 @@
     "docs/configuration.md",
     "docs/installer.md",
     "docs/linux-validation.md",
+    "docs/coding-readiness-2026-09-09.md",
     "docs/release.md",
     "docs/tracing.md",
     "README.md",
@@ -38,7 +39,7 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "build": "node scripts/generate-agent-guidance.mjs && node scripts/build.mjs && node scripts/build-kiro-closure.mjs && node scripts/assert-build-artifacts.mjs",
+    "build": "node scripts/generate-agent-guidance.mjs && node scripts/build.mjs && node scripts/build-kiro-closure.mjs && node scripts/normalize-artifact-modes.mjs && node scripts/assert-build-artifacts.mjs",
     "guidance:check": "node scripts/generate-agent-guidance.mjs --check",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.scripts.json",
     "audit:deps": "pnpm audit --audit-level moderate",

@@ -13,7 +13,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "0e959f88850a20e6aa335decdb272a9861c761beeca9bfbb50f29f36ad6d7fc1"
+        "sha256": "163e96c98f17170d0fd7fc09b2c2557121405a80778f40bcb07717199f8af779"
       },
       {
         "path": "pnpm-lock.yaml",
@@ -25,7 +25,7 @@
       },
       {
         "path": "scripts/agent-profile.mjs",
-        "sha256": "ab65992760cb8ad05195a34310b97ae551d4832718dd2f31c10bcab0f44faabb"
+        "sha256": "bb12535c58f407976839c928e20afd58c5d1213d0f8e176849a17fd6ad0ae039"
       },
       {
         "path": "scripts/assert-build-artifacts.mjs",
@@ -41,11 +41,11 @@
       },
       {
         "path": "scripts/build-inputs.mjs",
-        "sha256": "06f230b69a0ca7ff51c56da0cc9c3818caf9b1f6ac1603701d0ee696d36f3a79"
+        "sha256": "c1c1e1269ce959e99478701ec710dc54f2ec624681588467d32f3ce593f934b3"
       },
       {
         "path": "scripts/build-kiro-closure.mjs",
-        "sha256": "317f90a9d5663668aca060d4236ea5f56a7e6bfb153731409ff8ffb3a28ca749"
+        "sha256": "885af3176a538b13db349c7783aed824219374252d31df2c7ef331412ee76e7d"
       },
       {
         "path": "scripts/build-private-tools.mjs",
@@ -77,7 +77,7 @@
       },
       {
         "path": "scripts/install-agent-user.mjs",
-        "sha256": "3bc6a4d0e8e27c686572abc30d747e505f0b4038c420b56602bed0da85dbb3f5"
+        "sha256": "c0867847a54ff97a9eecb2c71420dba861722248fc82967077873c9e0d48ee75"
       },
       {
         "path": "scripts/install-manager.mjs",
@@ -97,7 +97,7 @@
       },
       {
         "path": "scripts/installer-configuration-backup.mjs",
-        "sha256": "2ddb3ffee93d99c1073b6c065ae8b2df2ed99013d1f485bab2ae2382d3173a79"
+        "sha256": "3205a5675d27b0d64fd18801b50350f1e5daf5a31bde5b1f1f5ac3a928e8d895"
       },
       {
         "path": "scripts/installer-diagnostics.mjs",
@@ -144,16 +144,20 @@
         "sha256": "2bf7d18abd798c5e5875d5ac893f49208304111bfc7ba132c4f769079e0e43c2"
       },
       {
+        "path": "scripts/normalize-artifact-modes.mjs",
+        "sha256": "62b2ebf7dbfda3906bebe45f820afea2443dcae0df0977c94dd08c9f53d72f92"
+      },
+      {
         "path": "scripts/package-identity.mjs",
         "sha256": "93cb954e0bc3a5644148250577fb6a894869a2c1d50117fa6e2782738018596a"
       },
       {
         "path": "scripts/package-policy.mjs",
-        "sha256": "c758ee5eab70ce5efe7fe9beec12050e8daee95ec5133fcca2621584543dc013"
+        "sha256": "bd2f5f7f4bd735514cb271300e7c8a8f3eefed72c5f0bdc73b0d74c394449930"
       },
       {
         "path": "scripts/pinned-directory-child.mjs",
-        "sha256": "66e1a595e6716179c245ff729ef9112687c0b40d5974925669d4362d8652862e"
+        "sha256": "6bdb2087b69f312299d40d7b5243fef63028d3ba66f43f006d611f5f0819c629"
       },
       {
         "path": "scripts/private-extraction.mjs",
@@ -173,23 +177,23 @@
       },
       {
         "path": "skills/fabric-exec/SKILL.md",
-        "sha256": "648cc9ca029fdf2ae98935524639cb825b0b573b7366e3902605760e91576682"
+        "sha256": "0db292bede80b3ae396e48ad8b7fb9fb1f6ea4f466e9563cbf701c37428216dc"
       },
       {
         "path": "skills/fabric-exec/references/api.md",
-        "sha256": "977bf656d88a34a8a5a55e481b4ee2db01e13aa9e92688afdda0e67e5ada0391"
+        "sha256": "a3914a9fe3a727d212c71b34558b2d93f79985a40dff14c393138c39ed1ca7b7"
       },
       {
         "path": "skills/fabric-exec/references/recipes.md",
-        "sha256": "155b9728624211d16e38268ca640023dcd050856e27a2ff9cf4cb06bf68ca1c6"
+        "sha256": "7222473154b62b0fcb125c2b0254f2a6f9b8744be2222c3190661d0ab0556b34"
       },
       {
         "path": "skills/fabric-exec/references/review.md",
-        "sha256": "e75e20e169e901f2ff278e23e09ac5d0180419e8db3c216967bf36a65c9aa348"
+        "sha256": "88d29dafca2cc8bee0c2a58da5d63c3417f88efd579b6ea26b0f40ca519278e7"
       },
       {
         "path": "skills/fabric-exec/references/workflow.md",
-        "sha256": "335ef70b75401a907b10048f6175cfca4bad1029cb68acc80c73d774e58af9d4"
+        "sha256": "f21c8f0bfaa4a9648e8520439af18023586a283c8f3249f05ccf68c192fd9d78"
       },
       {
         "path": "src/async-settlement.ts",
@@ -229,7 +233,7 @@
       },
       {
         "path": "src/core/action-registry.ts",
-        "sha256": "4b00b9777733f2d902ee68ebeaa7bddcc32034fbab3496d52e6827866bdbd446"
+        "sha256": "dd31bcca927e7ab6edf76ac2cce28ca0df28a146bac2796393cf0160745959f1"
       },
       {
         "path": "src/core/catalog-contract.ts",
@@ -265,7 +269,7 @@
       },
       {
         "path": "src/execution-service.ts",
-        "sha256": "16b860883f06f52edfe850c57f16eaa6660cd1e21790c1321e802002c8c11b49"
+        "sha256": "70a98a0608e4cb13c5a4a89501182628c326e5842cd839cd8d8ae1df927e6192"
       },
       {
         "path": "src/index.ts",
@@ -284,6 +288,14 @@
         "sha256": "3d354acb221f537e8c27a7b4181cefc19a8cc11416d2e04b64c86447e5414e29"
       },
       {
+        "path": "src/installation/pinned-directory-child.d.mts",
+        "sha256": "0b3a13946ed51839731bc1d1f65b79deed5c4e10695b0261b0e83957e02a2eac"
+      },
+      {
+        "path": "src/installation/pinned-directory-child.mjs",
+        "sha256": "6bdb2087b69f312299d40d7b5243fef63028d3ba66f43f006d611f5f0819c629"
+      },
+      {
         "path": "src/installation/pinned-recovery.mjs",
         "sha256": "db5b181094730927b0402b2ce51c796857eb0c3b607fc3427268a51bb293f26c"
       },
@@ -297,7 +309,7 @@
       },
       {
         "path": "src/kiro/artifacts.ts",
-        "sha256": "47b32d9c4b1be396867de0d116583ae33c3e5645779227e9b477d69346ac4640"
+        "sha256": "d397a96b77e47d3763aff456486b341e46e528ba50063f37d08cd2c17ccb1f2c"
       },
       {
         "path": "src/kiro/bootstrap-provider.ts",
@@ -313,7 +325,7 @@
       },
       {
         "path": "src/kiro/first-prompt-guidance.ts",
-        "sha256": "947d5b98420307e604719b6ee1c50f297e965fe20bd9d6224b27870238b3ab2f"
+        "sha256": "afb6c5b61640af22f1fc831ca1437fa0bf0410bd089d5a60a428a67092b69d48"
       },
       {
         "path": "src/kiro/first-prompt-hook.ts",
@@ -321,7 +333,7 @@
       },
       {
         "path": "src/kiro/generated-guidance.ts",
-        "sha256": "69fd647a3ede0c5cb92ba440a784cf2e651aab7796d5a6adf08b91e57187df46"
+        "sha256": "39ac6ae03857d9d0077440279f8d877afd99ec5026c2a299ed78952e0ea7bf9b"
       },
       {
         "path": "src/kiro/info-catalog.ts",
@@ -337,11 +349,11 @@
       },
       {
         "path": "src/kiro/mcp-provider.ts",
-        "sha256": "1434a97fed8f7380e8a26087946223328a5e0c91d34d878fcd0b1a30b9d3eb28"
+        "sha256": "80e37c58afeefeb7b2c3e0b509b9a9b383be341680b3c9ad525dc70c2aac94b0"
       },
       {
         "path": "src/kiro/mcp-server.ts",
-        "sha256": "9aed08b46ae4e5a6ba18beed11335301aacc6edf7d02c5a688837f2b804c5e8a"
+        "sha256": "30b77071cfa290bf95fa239038802f4b00c4cdb301c2fb1017477916b4e9a71b"
       },
       {
         "path": "src/kiro/memory-provider.ts",
@@ -349,7 +361,7 @@
       },
       {
         "path": "src/kiro/memory.ts",
-        "sha256": "f1412015eba64b4c0999e956ae5c8eac15577ff4772e98c776c2c12fc7361f93"
+        "sha256": "adcf8d2c37128a9e44013bf757afb15cfc81b4f70fbac89d38268f249f4f941b"
       },
       {
         "path": "src/kiro/power/agent-launch-context.ts",
@@ -357,7 +369,7 @@
       },
       {
         "path": "src/kiro/power/approver.ts",
-        "sha256": "0c7cdfa19e9bf1f8e07d06ef4e85beffe61b9120dc89d94be9cfae5a11e10759"
+        "sha256": "4c3fc01c28bddd98a39e2724ebd8f5738b7344d1de1062f1cd9eb7068fc42fba"
       },
       {
         "path": "src/kiro/power/artifacts-provider.ts",
@@ -377,7 +389,7 @@
       },
       {
         "path": "src/kiro/projection.ts",
-        "sha256": "367a4548ffba93e4d57cb2a6ab9b146c850b5dce0ca55303ee16a6d6691d8730"
+        "sha256": "c6b7a83587a195199772166735845e2c7e894e44d78c2b14f2260f8e57c4a2bd"
       },
       {
         "path": "src/kiro/run-provenance.ts",
@@ -401,11 +413,11 @@
       },
       {
         "path": "src/providers/local-contract.ts",
-        "sha256": "2b133fd0f5ba2a5fe76e5a445043492930c69f57ef585b52bc5c3335a9d9deee"
+        "sha256": "778243480e3c1be3dc0da0c7c7160bc8b6e091bea9f02eb54c9e81bb09b0623d"
       },
       {
         "path": "src/providers/local-edit.ts",
-        "sha256": "82432606d8b0b7403b6f1574895ff55e8b50872b14070af0b038b37b01b697b4"
+        "sha256": "fed7fcb3b6088afa8116942c744d323191cfbf1fec24c6579c451f748a5e305a"
       },
       {
         "path": "src/providers/local-evidence.ts",
@@ -429,7 +441,7 @@
       },
       {
         "path": "src/providers/local-provider.ts",
-        "sha256": "0e3741a3ae6d08b15b3cd138fdfe7a99d0e1f45f80354b61e3f546b19d9ec16f"
+        "sha256": "1ceb3f870cdcb3091bcdc2b463d2fd7a1e78eb98fc78176c5515050c5f4719b9"
       },
       {
         "path": "src/providers/local-read-many.ts",
@@ -465,11 +477,11 @@
       },
       {
         "path": "src/providers/review-provider.ts",
-        "sha256": "c016deefa19ee1de311e3faa0fd318aca921b9cb742b2f72fac81cfc53e6b5ce"
+        "sha256": "4fae4a7dc82e1868df492085dd757300014bcbd6d741c73dc9b14b63b1b2affa"
       },
       {
         "path": "src/providers/state-provider.ts",
-        "sha256": "11a00235946a67177c0f611a214a37febf5454f34ed300fe214f99910243e654"
+        "sha256": "116be4799ab9d60db79cd54e18966e71b3428124f16c81900837f53535c00310"
       },
       {
         "path": "src/providers/web-privacy.ts",
@@ -493,7 +505,7 @@
       },
       {
         "path": "src/runtime/guest-bootstrap.ts",
-        "sha256": "de99e51cd8030a2996c4bf34ca88bb2ca039d2f881722105a9b4476071c4f4be"
+        "sha256": "2f22da0698ac4c8aea72234c12512dfaec180cc7e69a0588a4d898a827613658"
       },
       {
         "path": "src/runtime/guest-stack-map.ts",
@@ -509,11 +521,11 @@
       },
       {
         "path": "src/runtime/quickjs-runtime.ts",
-        "sha256": "6407fa9220ba2d8ac97b2037c6223f8639b750c41621ab70acbc8cc73489f4c8"
+        "sha256": "1a998c8d67f8657669f2322dc07b9a26b4717b49cc3946de2f2a3432aefe683d"
       },
       {
         "path": "src/runtime/sandbox-worker-entry.ts",
-        "sha256": "bb4f4467c7b0f5e7dfc077de8ad2167a745f8c995698bac216c9768ae95570e0"
+        "sha256": "684d799b41bb531a86ed13ef5f6afac227ce9bdfba5c4bb7e532f012f5789eca"
       },
       {
         "path": "src/runtime/source-limit.ts",
@@ -521,7 +533,7 @@
       },
       {
         "path": "src/runtime/type-checker.ts",
-        "sha256": "96269cdba8c16b6058aa1d794d58553e479fd1aebba8078b9ca21ea0f9973978"
+        "sha256": "817ac67587fce46df3a3ca879c698def1008621a9f055291c87060dc0b54d3ed"
       },
       {
         "path": "src/schema-validation.ts",
@@ -544,7 +556,7 @@
         "sha256": "efd3e11265c46f657fd78a9ab0426bbaf455ade35d5145b6b932f3b50d78cc62"
       }
     ],
-    "digest": "a3be786925b7ad6c7ffe1595f9243810d5ef25c422109cdbb5b2d3c71ab13266"
+    "digest": "328d0d3575a70baf7a43498c64010b78adb6409fbe36672f53042c6594a80188"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -574,6 +586,7 @@
     "src/installation/bundle-contract.mjs",
     "src/installation/filesystem-boundary.mjs",
     "src/installation/installer-lock.mjs",
+    "src/installation/pinned-directory-child.mjs",
     "src/installation/pinned-recovery.mjs",
     "src/kernel/fabric-exec-contract.ts",
     "src/kiro/artifacts.ts",
@@ -786,16 +799,6 @@
       "sha256": "5070930182d992bdda9eebdd854147bc15d1234390f08313be433a2db1b74c13"
     },
     {
-      "path": "chunks/chunk-5CIPARYU.js",
-      "bytes": 9997395,
-      "sha256": "e9ac0883ac615a329771bded20d3d3189a90d963c305c781794de2422bf83e4c"
-    },
-    {
-      "path": "chunks/chunk-5SGMVAOB.js",
-      "bytes": 526511,
-      "sha256": "8abe0ffa82e4440b3b733bc0943f9fda51ed789febe18ef8cb3aa21815816810"
-    },
-    {
       "path": "chunks/chunk-762YYRNE.js",
       "bytes": 6351,
       "sha256": "12c662f81f2039cf0f67d47791a73f2434fac18a1b02d734ce9d19a47d550445"
@@ -811,9 +814,19 @@
       "sha256": "dd5c2650ca7bd1ecc4fb6e0100d212e1b18a4266f7d13ccd1e697521a7d0ddda"
     },
     {
+      "path": "chunks/chunk-COO732H5.js",
+      "bytes": 531255,
+      "sha256": "ccf819d932bb29833bb0ff9e3d8a722738690381a0d982dff29aad7fb617b457"
+    },
+    {
       "path": "chunks/chunk-G3LABT6U.js",
       "bytes": 845,
       "sha256": "6dc6eeff440eb4fffa4714ec7c315318a60b4ac00f0917ed6217a3d64882e81d"
+    },
+    {
+      "path": "chunks/chunk-ITY6W7FO.js",
+      "bytes": 9997652,
+      "sha256": "5ee43fd2c89750c6cf5f38f9d90005b0a82bdbca3ccaadf85b91a26772efa43c"
     },
     {
       "path": "chunks/chunk-K2USGJPF.js",
@@ -846,9 +859,9 @@
       "sha256": "3fc1eab2740db3b7ce5d26cd25b473f3aa2e4cfb53ad6b60f66ad286d6251844"
     },
     {
-      "path": "chunks/first-prompt-hook-ZJXFYYL6.js",
-      "bytes": 4097,
-      "sha256": "37e37990f5a329a262f640749a7b254c6f47d15ca59d93a63017ba22a1711ae0"
+      "path": "chunks/first-prompt-hook-XSB56XZI.js",
+      "bytes": 4071,
+      "sha256": "d369709e98026d40fac0a4344a2ddeedbe9eeb8323874f989a550f6cc2b0ac78"
     },
     {
       "path": "chunks/launch-2BNCRUIP.js",
@@ -1141,9 +1154,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-TA5ARTJB.js",
-      "bytes": 995595,
-      "sha256": "2557496032ba70d0bb8207827fda16756df3accaa4f865c8bc5e875a4fb49d1e"
+      "path": "chunks/mcp-server-DM2MNXVA.js",
+      "bytes": 1033169,
+      "sha256": "6f4740ed3256184f3a1fd8503f3cdc4fba721c6f02ebab9d574d1267818fc399"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1163,23 +1176,23 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 73652,
-      "sha256": "eaad977d144d23dc78eb0f375e3a92bdf438645aa785a509f2600fbe6d019ea3"
+      "sha256": "3a8f492ad58817793877a7bec75528facd1a5003d7daaa64625f59e75b442279"
     },
     {
       "path": "package.json",
       "bytes": 104,
-      "sha256": "ee5e99e81718885e5d6ddfe9d70473484c62256826c66601ecd37b481b324785"
+      "sha256": "86c93933ea3405e887ee0070bf2841881b987357d4e4ecf49f7db7b127eedba8"
     },
     {
       "path": "runtime/compiler-worker-entry.js",
       "bytes": 902,
-      "sha256": "6d825b4ba59ed48605a170138ea24c09f61b442eda7fb28648f4d4b5271f45e8"
+      "sha256": "7493826fe73240bce3e7f00f37c9a4fc464cb6e8c4852d4326f3301055c882ef"
     },
     {
       "path": "runtime/sandbox-worker-entry.js",
-      "bytes": 4807,
-      "sha256": "8662ae3ee346d8570f5b99d1d639a693a453699b1f3426583bd079fba300236b"
+      "bytes": 4911,
+      "sha256": "efaf8bc6ea774c4b923bf017871369c41f46a73a8f560eaedb8612a31537a73f"
     }
   ],
-  "contentDigest": "d2ed88dac17d4d3eeb283774c6df328bd1d8b22211fcf652ca1ef7e5364863a0"
+  "contentDigest": "ce16db4ec06b3c94ec6c1d3841b080354152ca9facf7256410b4a9bb91c784f2"
 }

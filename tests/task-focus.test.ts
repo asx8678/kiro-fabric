@@ -5,8 +5,8 @@ import { FIRST_PROMPT_GUIDANCE } from "../src/kiro/first-prompt-guidance.js";
 
 describe("task-focused standing guidance", () => {
   it("binds each step to an unresolved requirement rather than activity for its own sake", () => {
-    for (const clause of ["next unresolved check", "Each step must resolve that check", "Follow the user's latest scope", "leave unrelated cleanup alone", "not unrequested reports", "Reuse established facts unless inputs change"]) expect(AGENT_PROMPT).toContain(clause);
-    expect(AGENT_PROMPT).toContain("When all required checks pass, stop and deliver");
+    for (const clause of ["next unresolved check", "Each step must resolve an open check", "Follow the user's latest scope", "necessary dependencies and checks are in scope, optional cleanup is not", "not unrequested reports", "Reuse established facts only while relevant inputs are unchanged", "source or configuration changes invalidate dependent verification"]) expect(AGENT_PROMPT).toContain(clause);
+    expect(AGENT_PROMPT).toContain("When acceptance is satisfied, stop and deliver");
     expect(AGENT_PROMPT).toContain("Never label a request complete while a required outcome remains blocked");
   });
 
@@ -16,11 +16,13 @@ describe("task-focused standing guidance", () => {
   });
 
   it("reserves broad review bootstrap for broad scope and leaves focused requests focused", () => {
-    expect(AGENT_PROMPT).toContain("For broad repository reviews/audits");
-    expect(AGENT_PROMPT).toContain("Review-only does not authorize edits");
-    expect(FIRST_PROMPT_GUIDANCE).toContain("answer, review or authorized implementation");
-    expect(FIRST_PROMPT_GUIDANCE).toContain("not a broad audit by default");
-    expect(FIRST_PROMPT_GUIDANCE).toContain("Preserve required scope and verification");
+    expect(AGENT_PROMPT).toContain("Do not invent a broad audit for a focused task");
+    expect(AGENT_PROMPT).toContain("For reviews: trace core paths and success/failure/non-default scenarios");
+    expect(AGENT_PROMPT).toContain("Answer, plan and review do not authorize implementation");
+    expect(FIRST_PROMPT_GUIDANCE).toContain("answer, plan, review or authorized implementation");
+    expect(FIRST_PROMPT_GUIDANCE).toContain("do not widen scope by default");
+    expect(FIRST_PROMPT_GUIDANCE).toContain("Resume the next unresolved acceptance check");
+    expect(FIRST_PROMPT_GUIDANCE).toContain("Stop at acceptance or report the exact blocker without claiming completion");
   });
 
   it("keeps task rules in the generated profile without adding first-turn prompt noise", () => {

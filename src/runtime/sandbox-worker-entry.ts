@@ -34,9 +34,9 @@ if (port) {
   // arrives after its execution ended can then never resolve a later call.
   let nextCallId = 0;
   let nextSpanToken = 0;
-  let active: { controller: AbortController; pending: Map<number, PendingCall>; deadline?: FabricDeadline } | undefined;
-
-  const post = (message: SandboxWorkerMessage): void => { port.postMessage(message); };
+  type Execution = { executionId: string; controller: AbortController; pending: Map<number, PendingCall>; deadline?: FabricDeadline };
+  let active: Execution | undefined;
+  type MessagePayload<T = SandboxWorkerMessage> = T extends unknown ? Omit<T, "executionId"> : never;
 
   /** Class identity cannot cross the thread boundary, so a host failure is
    * rebuilt from its transferred shape. The guest therefore sees exactly the
@@ -65,11 +65,14 @@ if (port) {
   const start = async (request: Extract<SandboxWorkerRequest, { type: "run" }>): Promise<void> => {
     const controller = new AbortController();
     const pending = new Map<number, PendingCall>();
-    active = { controller, pending };
+    const state: Execution = { executionId: request.executionId, controller, pending };
+    active = state;
+    // Capture identity in every asynchronous callback, never read a later run's
+    // identity from `active` when forwarding a late abort/span/result.
+    const post = (message: MessagePayload): void => { port.postMessage({ ...message, executionId: state.executionId } satisfies SandboxWorkerMessage); };
 
     const hostCall: FabricHostCall = (ref, args, signal, deadline) => new Promise<unknown>((resolve, reject) => {
-      const state = active;
-      if (state) state.deadline = deadline;
+      state.deadline = deadline;
       const id = ++nextCallId;
       pending.set(id, { resolve, reject, deadline });
       signal.addEventListener("abort", () => {
@@ -112,8 +115,7 @@ if (port) {
       // Forward the exact-action report so the host can extend the deadline it
       // mirrors before this guest queues behind a saturated host-call slot.
       onPrepareHostCall: (ref, args, deadline) => {
-        const state = active;
-        if (state) state.deadline = deadline;
+        state.deadline = deadline;
         post({ type: "prepare", ref, args });
       },
     };
@@ -122,16 +124,21 @@ if (port) {
     } catch (error) {
       post({ type: "fatal", message: (error instanceof Error ? error.message : String(error)).slice(0, 4_096) });
     } finally {
-      active = undefined;
+      if (active === state) active = undefined;
       pending.clear();
       tracer.flush();
     }
   };
 
   port.on("message", (message: SandboxWorkerRequest) => {
-    if (message.type === "run") { void start(message); return; }
+    if (message.type === "run") {
+      // A pooled slot is strictly single-flight; a duplicate run cannot replace
+      // the controller and pending calls of an execution still being torn down.
+      if (!active) void start(message);
+      return;
+    }
     const state = active;
-    if (!state) return;
+    if (!state || message.executionId !== state.executionId) return;
     if (message.type === "abort") {
       state.controller.abort(new Error(message.message));
       return;

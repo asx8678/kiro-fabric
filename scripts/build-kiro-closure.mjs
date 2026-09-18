@@ -153,6 +153,7 @@ fs.writeFileSync(path.join(evidenceDirectory, "agent-reachability.json"), `${JSO
     "scripts/package-policy.mjs",
     "scripts/build.mjs",
     "scripts/build-kiro-closure.mjs",
+    "scripts/normalize-artifact-modes.mjs",
     "scripts/assert-build-artifacts.mjs",
     "scripts/build-agent-dev.mjs",
     "scripts/validate-agent-package.mjs",

@@ -11,6 +11,7 @@ import { generateAgentProfile } from "../scripts/agent-profile.mjs";
 import {
   assertRealClientEvidence as assertRealClientEvidenceRaw,
   REAL_CLIENT_AUTOMATIC_COMPACTION_CYCLES,
+  REAL_CLIENT_AUTO_COMPACTION_MAX_PRESSURE_TURNS,
   REAL_CLIENT_AUTO_COMPACTION_PRESSURE_CHARS,
   REAL_CLIENT_MANUAL_COMPACTION_CYCLES,
   REAL_CLIENT_NATIVE_TOOLS,
@@ -25,6 +26,7 @@ import {
 } from "../scripts/real-client-evidence.mjs";
 import {
   acpFormInteractionObserved,
+  buildRealClientTranscript,
   acpPriorUserMessageObserved,
   acpSessionLoadObserved,
   acpUserPromptFacts,
@@ -693,6 +695,32 @@ const valid = {
 };
 
 describe("real-client release evidence", () => {
+  it("validates transcripts emitted by the real driver's named-capture producer regardless of capture order", () => {
+    // Capture order in the driver: installation/settings precede coding. The
+    // wire contract puts coding first; do not construct this through that list.
+    const captures = Object.fromEntries([
+      ...transcript.filter(entry => entry.kind !== "coding-qualification").slice(0, 13),
+      transcript.find(entry => entry.kind === "coding-qualification")!,
+      ...transcript.filter(entry => entry.kind !== "coding-qualification").slice(13),
+    ].map(entry => [entry.kind, Buffer.from(entry.raw, "base64")] as [string, Buffer]));
+    expect(Object.keys(captures)[0]).toBe("archive-installation");
+    expect(Object.keys(captures)[13]).toBe("coding-qualification");
+    const produced = buildRealClientTranscript(captures);
+    expect(() => assertRealClientEvidence({ ...valid, transcript: produced }, digest, { qualification: true, archiveDigest, commit })).not.toThrow();
+    expect(produced).toEqual(transcript);
+    expect(buildRealClientTranscript(Object.fromEntries(Object.entries(captures).reverse()))).toEqual(transcript);
+    expect(() => assertRealClientEvidence({ ...valid, transcript: [...produced].reverse() }, digest, { qualification: true, archiveDigest, commit })).toThrow("transcript identity");
+  });
+
+  it("rejects incomplete, extra and oversized named captures instead of hiding producer drift", () => {
+    const captures = Object.fromEntries(transcript.map(entry => [entry.kind, Buffer.from(entry.raw, "base64")]));
+    const missing = { ...captures }; delete missing["coding-qualification"];
+    expect(() => buildRealClientTranscript(missing)).toThrow();
+    expect(() => buildRealClientTranscript({ ...captures, unexpected: Buffer.from("secret") })).toThrow();
+    expect(() => buildRealClientTranscript({ ...missing, unexpected: Buffer.from("secret") })).toThrow();
+    expect(() => buildRealClientTranscript({ ...captures, "coding-qualification": Buffer.alloc(128_001) })).toThrow();
+  });
+
   it("never accepts sanitized failure/progress reports as authenticated qualification", () => {
     const recorder = qualificationFailureRecorder(undefined, "driver");
     recorder.phase("publication"); recorder.failure(new Error("fixture failure")); recorder.cleanup("processes", "complete");
@@ -707,6 +735,27 @@ describe("real-client release evidence", () => {
       "@fabric/fabric_exec\nfs_read", "@fabric/fabric_exec\n@other/unknown", "@fabric/fabric_exec\n@fabric/fabric_info",
       "@fabric/fabric_exec\nunknown unparsed footer"]) {
       expect(() => assertStrictToolInventory(text)).toThrow("BLOCKED");
+    }
+  });
+
+  it.each([
+    ["extra context-disclosure tool", "@fabric/fabric_exec\ndisclose_context"],
+    ["model-authored inventory", "mcp_fabric_fabric_exec\ndisclose_context\nNATIVE_UNAVAILABLE"],
+    ["one-tag picker that omits client tools", [
+      "/tools · 1 tag",
+      "────────────────────────────────────────",
+      "search: type to filter",
+      "Name                 Source      Description",
+      "@fabric/fabric_exec  mcp         Checked TypeScript; await/return",
+      "────────────────────────────────────────",
+      "esc to close",
+    ].join("\n")],
+  ])("keeps %s blocked as incomplete single-tool evidence", (_label, text) => {
+    expect(() => assertStrictToolInventory(text)).toThrow("BLOCKED");
+    try {
+      assertStrictToolInventory(text);
+    } catch (error) {
+      expect(error).toMatchObject({ inventoryStatus: "unverified", gate: "nativeToolVisibility" });
     }
   });
 
@@ -1381,6 +1430,32 @@ describe("real-client release evidence", () => {
     const forgedEvent = structuredClone(valid);
     forgedEvent.qualificationGates.compaction.eventOutputDigest = "0".repeat(64);
     expect(() => assertRealClientEvidence(forgedEvent, digest, { qualification: true, archiveDigest, commit })).toThrow("event-bound");
+  });
+
+  it.each([2, REAL_CLIENT_AUTO_COMPACTION_MAX_PRESSURE_TURNS])("validates a complete %i-turn automatic pressure transcript without relaxing its bounds", pressureTurns => {
+    const report = structuredClone(valid);
+    const series = report.qualificationGates.compactionSeries;
+    const attempts = Array.from({ length: pressureTurns }, (_, index) => ({
+      ...automaticPressureSummary.attempts[0]!, index: index + 1,
+      pressureMarkerDigest: qualificationValueDigest(`pressure-${index}`),
+    }));
+    Object.assign(series.automatic, { pressureTurns,
+      totalPressureChars: attempts.reduce((sum, attempt) => sum + attempt.promptChars, 0),
+      pressureMarkerDigest: attempts.at(-1)!.pressureMarkerDigest });
+    report.lifecycle.interactive.automaticCompaction.pressureTurns = pressureTurns;
+    const pressure = transcriptEntry("interactive-automatic-compaction-pressure", JSON.stringify({ attempts, event: series.automatic }));
+    const events = transcriptEntry("interactive-compaction-series-acp-events", JSON.stringify({
+      manualCycleCount: series.manualCycleCount, automaticCycleCount: series.automaticCycleCount,
+      manual: series.manual, automatic: series.automatic,
+    }));
+    series.automaticPressureOutputDigest = pressure.digest;
+    series.eventOutputDigest = events.digest;
+    report.transcript = report.transcript.map(entry => entry.kind === pressure.kind ? pressure : entry.kind === events.kind ? events : entry);
+    expect(() => assertRealClientEvidence(report, digest, { qualification: true, archiveDigest, commit })).not.toThrow();
+    for (const invalid of [0, REAL_CLIENT_AUTO_COMPACTION_MAX_PRESSURE_TURNS + 1]) {
+      series.automatic.pressureTurns = invalid;
+      expect(() => assertRealClientEvidence(report, digest, { qualification: true, archiveDigest, commit })).toThrow("natural automatic compaction gate");
+    }
   });
 
   it("requires three ordered manual cycles and one natural automatic cycle in the same recording", () => {

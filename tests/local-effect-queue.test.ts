@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { normalizeFabricConfig } from "../src/config.js";
@@ -52,7 +53,9 @@ describe("Code Mode local effect FIFO", () => {
   });
   it("prepares queued edits only after predecessors commit, including tools.call", async () => {
     const f = fixture();
-    const result = await f.run('return await Promise.all([local.write({path:"x",content:"before"}),tools.call({ref:"local.edit",args:{path:"x",oldText:"before",newText:"after"}}),local.shell({command:"cat x"})]);');
+    // A known fixture hash preserves this deliberately queued preparation probe.
+    const expectedSha256 = createHash("sha256").update("before").digest("hex");
+    const result = await f.run(`return await Promise.all([local.write({path:"x",content:"before"}),tools.call({ref:"local.edit",args:{path:"x",expectedSha256:"${expectedSha256}",oldText:"before",newText:"after"}}),local.shell({command:"cat x"})]);`);
     expect(result.success, result.error).toBe(true);
     expect(result.value).toMatchObject([{}, {}, { stdout: "after" }]);
     expect(fs.readFileSync(path.join(f.root, "x"), "utf8")).toBe("after");

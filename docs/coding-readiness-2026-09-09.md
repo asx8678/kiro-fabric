@@ -6,6 +6,23 @@
 
 This report records an operator-authorized local investigation, not release certification. Existing uncommitted work was preserved. No credentials, raw conversation contents, or complete private logs are copied into the repository. No issue, PR, commit, or release was created by this investigation.
 
+## 2026-09-16 Linux retest
+
+This follow-up used the existing authenticated installation and the real native TUI in a private PTY, not a mocked or alternate ACP client. Fabric was 0.64.0, source base `f613c91` plus the inherited uncommitted fixes, and the tested generation was `114019ef7cf63bf21df77ba5a2398760460b0382bf429737a71506e3cb3b68dd`. The official `kiro-cli update --non-interactive` upgraded 2.21.1 to **2.22.0**; both versions were tested with the same profile and disposable file. No login, policy override, permanent approval, commit, or release was performed. The older platform/version evidence below remains a historical snapshot, including its then-current execute default.
+
+| Remaining gate | Observed result and scope |
+|---|---|
+| First-turn Fabric call | Correct `kiro-cli chat --v3 --agent kiro-fabric ...` selection executes Fabric. Earlier options-before-`chat` probes selected `vibe`; they do not establish a Fabric startup race. |
+| Successful interactive edit approval | **BLOCKED on both clients.** A real `_kiro/mcp/elicitation` form request for the exact fixture diff received the matching JSON-RPC response with `No handler registered for method: _kiro/mcp/elicitation`. The final Fabric result was `approval_denied`, `dispatchState: not_dispatched`, `effectOutcome: none`; the fixture remained `before-approval-check\n`. |
+| Negative-effect safety | **PASS for this missing-handler case only.** File bytes were preserved. This is not evidence that a user-declined or user-accepted edit UI works. |
+| Exact model-visible single-tool filtering | **BLOCKED on both clients.** ACP recorded `disclose_context` and `@fabric/fabric_exec`. Only the bundled skill's `allow_once` prompt was accepted; no edit form was rendered or accepted. This is an extra client tool, not a demonstrated native filesystem bypass. |
+| Complete inventory source | `/tools` rendered `1 tag` and one `@fabric/fabric_exec` row but omitted the observed `disclose_context` call. It is not a complete model inventory. Do not normalize that subset into passing release evidence or trust a model-authored `NATIVE_UNAVAILABLE` answer. |
+| Production signing and platform qualification | **BLOCKED / not provisioned.** A maintainer-owned production trust root, final-byte signed metadata and exact-artifact platform/lifecycle evidence remain necessary. Source installation does not replace those gates. |
+
+Private evidence is retained under `.tmp/readiness-closeout-Hg7tTI/`: `interactive-acp.jsonl` and `updated-acp.jsonl` contain the 2.21.1/2.22.0 request-response pairs; `tools.txt` and `updated-tools.txt` preserve the tag views; `verify-live.mjs` writes a sanitized `verification.json`. Sessions were `sess_ef8ff3b8-8f3b-4f4b-9d2e-54eb1d733f3a` and `sess_160f3c9d-a827-4bc4-9b69-0fc5f5706d9b`. Logs stay ignored/private; this summary is not release certification. Both owned TUI sessions were stopped after the probes.
+
+The safe solution is a native Kiro client with a working form-elicitation handler and an authoritative complete tool inventory/filter. Updating to 2.22.0 did **not** close either gate. Do not patch an installed binary, allow writes to avoid the dialog, use shell/native tools as an edit fallback, or broaden the required one-tool inventory to make certification pass. Retest accepted and declined exact effects on a compatible client, then the complete inventory and existing lifecycle gates. Production signing requires a separate maintainer decision; test keys are not a remedy. The repository's full `pnpm run check` validates local components, not these external gates.
+
 ## Observed setup and ownership
 
 - Repository HEAD at diagnosis: `5010a2c177b5d65b948ad75ea21f548c44f123de`, plus existing local changes. A fetch during the earlier update found HEAD equal to `origin/main`; this is a dated observation, not a continuing freshness guarantee.
@@ -63,6 +80,14 @@ Relevant implementation: `src/kiro/mcp-server.ts` sends MCP form elicitation; `s
 | Signed release and lifecycle certification | Separate gates remain unqualified; the production trust root is absent. |
 
 Earlier session reporting recorded `pnpm run check` with 77 files, 1,213 tests passed and four skipped. Those are historical component-gate results, not a fresh live-approval test or release certification. The four skipped tests are unrelated to the four failed tool batches above. An interrupted earlier reinstall left a healthy installation with no pending journal/lock. That snapshot and an unchanged activation ID do not prove that no transaction was ever started; do not infer exact interrupted control flow from them.
+
+## Local diagnostics versus client certification
+
+Fabric-local tool inventory (including this MCP server's `tools/list` and Fabric's nested catalog) describes only tools registered by Fabric. It is not the authoritative complete Kiro model-visible inventory: the client may add tools independently. The observed `/tools` picker omitted `disclose_context` and must not be certified as a complete inventory or used to pass the exact single-tool gate.
+
+Local approval diagnostics must retain only sanitized typed reasons. A missing-handler diagnosis requires a matching error identifying `No handler registered for method: _kiro/mcp/elicitation`; capability advertisement, cancellation, timeout, or generic denial alone does not establish that defect. Approval remains fail closed, with no fallback effects or policy relaxation. See [unpublished upstream client issue drafts](upstream-client-issues.md).
+
+Current source defaults must be checked independently of the historical installed defaults above. Approval retests must explicitly configure `execute: ask` (as well as `write: ask` and `network: ask`) rather than assume shell commands prompt by default.
 
 ## Required retest after a client fix
 

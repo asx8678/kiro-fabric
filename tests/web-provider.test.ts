@@ -134,11 +134,14 @@ describe("browser-backed web provider", () => {
   });
   it("scales browser cleanup headroom so a valid 1000ms timeout still has a usable budget", async () => {
     const f = fixture();
+    // Inspect the generated budget through a real subprocess without charging
+    // Node cold-start latency against the 1000ms behavior under test.
+    const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+    fs.writeFileSync(f.command, `#!/bin/sh\nprintf '%s' "$1" > ${quote(f.calls)}\nprintf '%s\\n' ${quote(JSON.stringify(search))}\n`);
     const budgets = async (searchTimeoutMs: number): Promise<number[]> => {
       const provider = new WebProvider({ executablePath: f.command, searchTimeoutMs });
       await provider.invoke("search", { query: "facts" }, { cwd: f.root });
-      const calls = fs.readFileSync(f.calls, "utf8").trim().split("\n").map(line => JSON.parse(line) as string[]);
-      const code = calls[calls.length - 1]!.join("\n");
+      const code = fs.readFileSync(f.calls, "utf8");
       return [...code.matchAll(/timeoutMs: (\d+)/g)].map(match => Number(match[1]));
     };
     const minimum = await budgets(1_000);

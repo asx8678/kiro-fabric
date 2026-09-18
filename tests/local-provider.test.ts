@@ -61,7 +61,7 @@ describe("LocalCodingProvider read contracts", () => {
       'return await local.readMany({windows:[{path:"x"}]});',
       'return await local.readEvidence({windows:[{path:"x"}]});',
       'return await local.find({pattern:"*"});', 'return await local.list();',
-      'return await local.write({path:"x",content:"x"});', 'return await local.edit({path:"x",oldText:"x",newText:"y"});',
+      'return await local.write({path:"x",content:"x"});', 'return await local.edit({path:"x",expectedSha256:"a".repeat(64),oldText:"x",newText:"y"});',
       'return await local.shell({command:"true"});',
       'return await local.shell({script:"printf hello",interpreter:"bash",args:["literal"]});',
     ];
@@ -74,7 +74,7 @@ describe("LocalCodingProvider read contracts", () => {
     const f = fixture(); f.put("x", "x");
     const args: Record<string, Record<string, unknown>> = {
       read: { path: "x" }, readMany: { windows: [{ path: "x" }] }, readEvidence: { windows: [{ path: "x" }] }, grep: { pattern: "x" }, find: { pattern: "*" }, list: {},
-      write: { path: "new", content: "x" }, edit: { path: "x", oldText: "x", newText: "y" }, shell: { command: "true" },
+      write: { path: "new", content: "x" }, edit: { path: "x", expectedSha256: hash("x"), oldText: "x", newText: "y" }, shell: { command: "true" },
     };
     const descriptors = await f.provider.list();
     expect(() => fabricJsonText(descriptors)).not.toThrow();
@@ -186,9 +186,9 @@ describe("LocalCodingProvider read contracts", () => {
     f.put(".gitignore", "ignored.txt\n"); f.put("ignored.txt", "Hello.[x]\n"); f.put(".hidden.txt", "Hello.[x]\n");
     f.put("b.txt", "nothing\nHello.[x]\n"); f.put("a.txt", "HELLO.[x]\n"); f.put("c.md", "Hello.[x]\n");
     const [found, matches] = await Promise.all([f.call("find", { pattern: "*.txt" }), f.call("grep", { pattern: "hello.[x]", literal: true, ignoreCase: true, glob: "*.txt" })]);
-    expect(found).toEqual({ scope: searchScope("*.txt"), paths: ["a.txt", "b.txt"], truncated: false });
-    expect(matches).toEqual({ scope: searchScope("*.txt"), matches: [{ path: "a.txt", line: 1, text: "HELLO.[x]" }, { path: "b.txt", line: 2, text: "Hello.[x]" }], truncated: false });
-    expect(await f.call("grep", { pattern: "no-match", literal: true })).toEqual({ scope: searchScope(), matches: [], truncated: false });
+    expect(found).toEqual({ scopeExhausted: true, scope: searchScope("*.txt"), paths: ["a.txt", "b.txt"], truncated: false });
+    expect(matches).toEqual({ scopeExhausted: true, scope: searchScope("*.txt"), matches: [{ path: "a.txt", line: 1, text: "HELLO.[x]" }, { path: "b.txt", line: 2, text: "Hello.[x]" }], truncated: false });
+    expect(await f.call("grep", { pattern: "no-match", literal: true })).toEqual({ scopeExhausted: true, scope: searchScope(), matches: [], truncated: false });
   });
   it("does not fail a bounded listing because of an unsafe entry beyond the limit", async () => {
     const f = fixture();
@@ -204,7 +204,7 @@ describe("LocalCodingProvider read contracts", () => {
     const f = fixture(512);
     for (let index = 0; index < 12; index++) f.put(`${String(index).padStart(2, "0")}.txt`, "match\n".repeat(10));
     const found = await f.call("find", { pattern: "*.txt", limit: 2 }) as LocalFindResult;
-    expect(found).toEqual({ scope: searchScope("*.txt"), paths: ["00.txt", "01.txt"], truncated: true, truncationReasons: ["count"] });
+    expect(found).toEqual({ scopeExhausted: false, scope: searchScope("*.txt"), paths: ["00.txt", "01.txt"], truncated: true, truncationReasons: ["count"] });
     const matches = await f.call("grep", { pattern: "match", limit: 1000 }) as LocalGrepResult;
     expect(matches.matches.length).toBeGreaterThan(0); expect(matches.truncated).toBe(true);
     expect(JSON.stringify(matches).length).toBeLessThanOrEqual(512);
@@ -218,7 +218,7 @@ describe("LocalCodingProvider read contracts", () => {
   });
   it("skips binary/invalid UTF-8 search content without relaxing alias checks and flags oversized omissions", async () => {
     const f = fixture(); f.put("text", "needle\n"); f.put("image", Buffer.from([0, 1, 2])); f.put("invalid", Buffer.from([0xff, 0xfe]));
-    expect(await f.call("grep", { pattern: "needle" })).toEqual({ scope: searchScope(), matches: [{ path: "text", line: 1, text: "needle" }], truncated: false });
+    expect(await f.call("grep", { pattern: "needle" })).toEqual({ scopeExhausted: true, scope: searchScope(), matches: [{ path: "text", line: 1, text: "needle" }], truncated: false });
     f.put("oversized", Buffer.alloc(2 * 1024 * 1024 + 1));
     expect(await f.call("grep", { pattern: "needle" })).toMatchObject({ matches: [{ path: "text", line: 1, text: "needle" }], truncated: true });
     fs.linkSync(path.join(f.root, "image"), path.join(f.root, "image-alias"));
@@ -229,7 +229,7 @@ describe("LocalCodingProvider read contracts", () => {
     const config = path.join(f.base, "rg-config"); fs.writeFileSync(config, "--invalid-config-option\n");
     vi.stubEnv("RIPGREP_CONFIG_PATH", config);
     fs.symlinkSync(path.join(f.root, "text"), path.join(f.root, "alias"));
-    expect(await f.call("find", { pattern: "*" })).toEqual({ scope: searchScope("*"), paths: ["text"], truncated: false });
+    expect(await f.call("find", { pattern: "*" })).toEqual({ scopeExhausted: true, scope: searchScope("*"), paths: ["text"], truncated: false });
     f.put("a", `needle${"x".repeat(1200000)}\n`); f.put("b", `needle${"x".repeat(1200000)}\n`);
     await expect(f.call("grep", { pattern: "needle" })).rejects.toThrow(/bounded work\/output/);
   });
@@ -249,13 +249,13 @@ describe("LocalCodingProvider read contracts", () => {
     fs.unlinkSync(path.join(f.root, "y"));
     vi.stubEnv("PATH", path.join(f.base, "no-executable"));
     // Executable selection is pinned at startup, not repeated from changed PATH.
-    expect(await f.call("find", { pattern: "*" })).toEqual({ scope: searchScope("*"), paths: ["x"], truncated: false });
+    expect(await f.call("find", { pattern: "*" })).toEqual({ scopeExhausted: true, scope: searchScope("*"), paths: ["x"], truncated: false });
     expect(() => f.second()).toThrow(/ripgrep .*required.*not found/);
   });
   it.each([
     ["read", { path: 5 }], ["read", { path: "x", offset: 0 }], ["grep", { pattern: "x", literal: "yes" }],
     ["find", { pattern: "*", extra: true }], ["list", { limit: 0 }], ["write", { path: "x", content: 5 }],
-    ["edit", { path: "x", oldText: "", newText: "y" }], ["shell", { command: "true", timeoutMs: "10" }],
+    ["edit", { path: "x", expectedSha256: hash("x"), oldText: "", newText: "y" }], ["shell", { command: "true", timeoutMs: "10" }],
   ])("preserves meaningful direct/generic malformed arguments for %s", async (name, args) => {
     const f = fixture(); f.put("x", "x");
     const approve = vi.fn(async () => {});
@@ -264,6 +264,89 @@ describe("LocalCodingProvider read contracts", () => {
     expect(approve).not.toHaveBeenCalled();
     const descriptor = await f.provider.describe(name as string);
     expect(schemaValidationMessage(descriptor!.inputSchema, args)).toBeTruthy();
+  });
+});
+
+describe("LocalCodingProvider snapshot-bound mutations", () => {
+  const mutations = [
+    { name: "edit", form: "single", args: { oldText: "old", newText: "new" } },
+    { name: "edit", form: "batch", args: { edits: [{ oldText: "old", newText: "new" }] } },
+    { name: "write", form: "overwrite", args: { content: "new", overwrite: true } },
+  ];
+  it.each(mutations)("rejects missing/malformed hashes before approval for $form", async ({ name, args }) => {
+    const f = fixture(); f.put("x", "old");
+    const approve = vi.fn(async () => {});
+    for (const pin of [{}, ...[null, 42, "", "a".repeat(63), "a".repeat(65), "A".repeat(64), "g".repeat(64)].map(expectedSha256 => ({ expectedSha256 }))]) {
+      const input = { path: "x", ...args, ...pin };
+      await expect(f.provider.prepareArguments(name, input, f.context(approve))).rejects.toThrow(/expectedSha256/);
+      await expect(f.call(name, input, f.context(approve))).rejects.toThrow(/expectedSha256/);
+      expect(fs.readFileSync(path.join(f.root, "x"), "utf8")).toBe("old");
+    }
+    expect(approve).not.toHaveBeenCalled();
+    expect(fs.readdirSync(f.root)).toEqual(["x"]);
+    if (fs.existsSync(f.lockRoot)) expect(fs.readdirSync(f.lockRoot)).toEqual([]);
+  });
+  it.each(mutations)("rejects stale whole-file hashes even when anchors still match for $form", async ({ name, args }) => {
+    const f = fixture(); f.put("x", "old\ncontext\n");
+    const before = await f.call("read", { path: "x" }) as LocalReadResult;
+    const drift = "old\nexternal change\n"; f.put("x", drift);
+    const approve = vi.fn(async () => {});
+    const failure = await f.call(name, { path: "x", ...args, expectedSha256: before.sha256 }, f.context(approve)).catch(error => error as Error);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/expectedSha256 conflict; reread/);
+    expect((failure as Error).message).not.toContain(hash(drift));
+    expect(approve).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(f.root, "x"), "utf8")).toBe(drift);
+  });
+  it("accepts read hashes and chains returned mutation hashes including no-ops", async () => {
+    const f = fixture(); f.put("x", "old");
+    const before = await f.call("read", { path: "x" }) as LocalReadResult;
+    const changed = await f.call("edit", { path: "x", expectedSha256: before.sha256, oldText: "old", newText: "new" }) as LocalMutationResult;
+    expect(changed).toMatchObject({ changed: true, sha256: hash("new") });
+    const rewritten = await f.call("write", { path: "x", overwrite: true, expectedSha256: changed.sha256, content: "replacement" }) as LocalMutationResult;
+    expect(rewritten).toMatchObject({ changed: true, sha256: hash("replacement") });
+    expect(await f.call("write", { path: "x", overwrite: true, expectedSha256: rewritten.sha256, content: "replacement" })).toMatchObject({ changed: false });
+    expect(await f.call("edit", { path: "x", expectedSha256: rewritten.sha256, edits: [{ oldText: "replacement", newText: "replacement" }] })).toMatchObject({ changed: false });
+    const approve = vi.fn(async () => {});
+    for (const args of [{ path: "x", overwrite: true, content: "replacement" }, { path: "x", overwrite: true, content: "replacement", expectedSha256: before.sha256 }]) {
+      await expect(f.call("write", args, f.context(approve))).rejects.toThrow(/expectedSha256/);
+    }
+    expect(approve).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(f.root, "x"), "utf8")).toBe("replacement");
+  });
+  it("keeps creation hash-free but never recreates a deleted hash-bound file", async () => {
+    const f = fixture(); f.put("empty", "");
+    const before = await f.call("read", { path: "empty" }) as LocalReadResult;
+    expect(await f.call("write", { path: "empty", content: "filled", overwrite: true, expectedSha256: before.sha256 })).toMatchObject({ changed: true });
+    fs.unlinkSync(path.join(f.root, "empty"));
+    const approve = vi.fn(async () => {});
+    for (const overwrite of [false, true]) {
+      await expect(f.call("write", { path: "empty", content: "recreated", overwrite, expectedSha256: before.sha256 }, f.context(approve))).rejects.toThrow(/cannot bind a missing file/);
+      expect(fs.existsSync(path.join(f.root, "empty"))).toBe(false);
+    }
+    expect(approve).not.toHaveBeenCalled();
+    expect(await f.call("write", { path: "new", content: "created" })).toMatchObject({ changed: true });
+    expect(await f.call("write", { path: "upsert", content: "created", overwrite: true })).toMatchObject({ changed: true });
+    await expect(f.call("write", { path: "new", content: "forbidden", expectedSha256: hash("created") })).rejects.toThrow(/create-only/);
+  });
+  it("still rejects overwrite drift during approval with a valid precondition", async () => {
+    const f = fixture(); f.put("x", "old");
+    const before = await f.call("read", { path: "x" }) as LocalReadResult;
+    const approve = vi.fn(async () => { f.put("x", "external"); });
+    await expect(f.call("write", { path: "x", overwrite: true, expectedSha256: before.sha256, content: "new" }, f.context(approve))).rejects.toThrow(/conflict/);
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync(path.join(f.root, "x"), "utf8")).toBe("external");
+    expect(fs.readdirSync(f.lockRoot)).toEqual([]);
+  });
+  it("publishes matching required edit and optional write hash contracts", async () => {
+    const f = fixture();
+    const edit = (await f.provider.describe("edit"))!;
+    const write = (await f.provider.describe("write"))!;
+    expect(edit.inputSchema.required).toContain("expectedSha256");
+    expect(write.inputSchema.required).not.toContain("expectedSha256");
+    expect(write.inputSchema.properties).toHaveProperty("expectedSha256");
+    expect(typeCheckFabricCode('return await local.edit({path:"x",oldText:"a",newText:"b"});', fabricGuestDeclarations).errors.length).toBeGreaterThan(0);
+    expect(typeCheckFabricCode('return await local.write({path:"x",overwrite:true,expectedSha256:"a".repeat(64),content:"b"});', fabricGuestDeclarations).errors).toEqual([]);
   });
 });
 
@@ -287,12 +370,12 @@ describe("LocalCodingProvider exact effects and lock lifetime", () => {
     expect(fs.statSync(path.join(f.root, "new")).nlink).toBe(1);
     expect(fs.readdirSync(f.lockRoot)).toEqual([]);
     await expect(f.call("write", { path: "new", content: "again" })).rejects.toThrow(/create-only/);
-    expect(await f.call("write", { path: "new", content: "hello\n", overwrite: true })).toMatchObject({ changed: false });
+    expect(await f.call("write", { path: "new", content: "hello\n", overwrite: true, expectedSha256: hash("hello\n") })).toMatchObject({ changed: false });
   });
   it("preserves typed effect results even with a 256-character bridge budget", async () => {
     const f = fixture(256);
     const created = await f.call("write", { path: "x", content: "old" });
-    const edited = await f.call("edit", { path: "x", oldText: "old", newText: "new" });
+    const edited = await f.call("edit", { path: "x", expectedSha256: hash("old"), oldText: "old", newText: "new" });
     const shell = await f.call("shell", { command: "printf output" });
     expect(created).toMatchObject({ changed: true, sha256: hash("old") });
     expect(edited).toMatchObject({ changed: true, sha256: hash("new") });
@@ -338,23 +421,116 @@ describe("LocalCodingProvider exact effects and lock lifetime", () => {
     const f = fixture();
     const before = `${"prefix\n".repeat(6000)}old-token\n${"suffix\n".repeat(6000)}`;
     const after = before.replace("old-token", "new-token"); f.put("large-source", before);
-    const result = await f.call("edit", { path: "large-source", oldText: "old-token", newText: "new-token" }, f.context(async (_action, args) => {
+    const result = await f.call("edit", { path: "large-source", expectedSha256: hash(before), oldText: "old-token", newText: "new-token" }, f.context(async (_action, args) => {
       const review = args.review as string;
       expect(review.length).toBeLessThan(2000);
       expect(review).toContain(`sha256:${hash(before)}`); expect(review).toContain(`sha256:${hash(after)}`);
       expect(review).toContain("original lines 6001-6001");
       expect(review).toContain('\n-"old"\n+"new"');
-      expect(review).toContain("Unchanged prefix omitted: 41800 UTF-16 chars");
+      expect(review).toContain("Unchanged prefix omitted: 41979 UTF-16 chars");
       expect(review).toContain("Unchanged suffix omitted:");
     }));
     expect(result).toMatchObject({ changed: true, sha256: hash(after) });
     expect(fs.readFileSync(path.join(f.root, "large-source"), "utf8")).toBe(after);
   });
+  it("bounds a two-hunk preview instead of repeating the unchanged middle", async () => {
+    const f = fixture();
+    const lines = Array.from({ length: 1000 }, (_, index) => `line ${index + 1}: value-${index}`).join("\n") + "\n";
+    const after = lines.replace("value-0", "value-A").replace("value-999", "value-99B");
+    f.put("two-hunks", lines);
+    const approve = vi.fn<NonNullable<FabricRegistryInvocationContext["approve"]>>(async (_action, args) => {
+      const review = args.review as string;
+      expect(review.length).toBeLessThan(2000);
+      expect(review).toContain(`sha256:${hash(lines)}`);
+      expect(review).toContain(`sha256:${hash(after)}`);
+      expect(review).toContain("@@ change 1/2: original lines 1-1");
+      expect(review).toContain("@@ change 2/2: original lines 1000-1000");
+      expect(review).toContain('\n-"0"\n+"A"');
+      expect(review).toContain('\n-"9"\n+"B"');
+      expect(review).toMatch(/Unchanged region omitted: \d+ UTF-16 chars \(\d+ line breaks;/);
+      expect(review).not.toContain("line 500:");
+      expect(review).not.toContain("Unchanged prefix omitted:");
+      expect(review).not.toContain("Unchanged suffix omitted:");
+    });
+    const result = await f.call("edit", {
+      path: "two-hunks", expectedSha256: hash(lines),
+      edits: [{ oldText: "value-0", newText: "value-A" }, { oldText: "value-999", newText: "value-99B" }],
+    }, f.context(approve));
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ changed: true, sha256: hash(after) });
+    expect(fs.readFileSync(path.join(f.root, "two-hunks"), "utf8")).toBe(after);
+  });
+  it.each([
+    { name: "nearby out-of-order edits", before: "alpha beta", after: "beta gamma", edits: [{ oldText: "beta", newText: "gamma" }, { oldText: "alpha", newText: "beta" }], hunks: 2 },
+    { name: "adjacent deletion and replacement", before: "abcd", after: "C\nD", edits: [{ oldText: "ab", newText: "" }, { oldText: "cd", newText: "C\nD" }], hunks: 2 },
+    { name: "insertions within anchors", before: "head tail", after: "head-new tail!", edits: [{ oldText: "head", newText: "head-new" }, { oldText: "tail", newText: "tail!" }], hunks: 2 },
+    { name: "no-op anchors", before: "keep\nold\n", after: "keep\nnew\n", edits: [{ oldText: "keep", newText: "keep" }, { oldText: "old", newText: "new" }], hunks: 1 },
+    { name: "distant all=true occurrences", before: `old\n${"gap\n".repeat(1000)}old\n`, after: `new\n${"gap\n".repeat(1000)}new\n`, edits: [{ oldText: "old", newText: "new", all: true }], hunks: 2 },
+    { name: "CRLF and UTF-16 surrogate boundaries", before: "\uFEFF😀 A\r\nB 😀\r\n", after: "\uFEFF🙂 A\r\nB 🙂\r\n", edits: [{ oldText: "😀", newText: "🙂", all: true }], hunks: 2 },
+    { name: "multiline changes shifting subsequent lines", before: "first\nmiddle\nlast", after: "FIRST\nMORE\nmiddle\nEND", edits: [{ oldText: "first", newText: "FIRST\nMORE" }, { oldText: "last", newText: "END" }], hunks: 2 },
+    { name: "long single-line gaps", before: `old${"x".repeat(10000)}old`, after: `new${"x".repeat(10000)}new`, edits: [{ oldText: "old", newText: "new", all: true }], hunks: 2 },
+  ])("renders complete exact hunks with unchanged context for $name", async ({ before, after, edits, hunks }) => {
+    const f = fixture(); f.put("exact-hunks", before);
+    const approve = vi.fn<NonNullable<FabricRegistryInvocationContext["approve"]>>(async (_action, args) => {
+      const review = args.review as string;
+      const blocks = [...review.matchAll(/^@@ change (\d+)\/(\d+): original lines (\d+)-(\d+), UTF-16 \[(\d+),(\d+)\); proposed lines (\d+)-(\d+), UTF-16 \[(\d+),(\d+)\) @@\n context-before (.*)\n-(.*)\n\+(.*)\n context-after (.*)$/gm)];
+      expect(blocks).toHaveLength(hunks);
+      expect(review.length).toBeLessThan(2000);
+      const lineAt = (text: string, offset: number) => text.slice(0, offset).split("\n").length;
+      let previousBefore = 0, previousAfter = 0, previousContextEnd = 0, reconstructed = "";
+      for (const [index, block] of blocks.entries()) {
+        const beforeStart = Number(block[5]), beforeEnd = Number(block[6]);
+        const afterStart = Number(block[9]), afterEnd = Number(block[10]);
+        const contextBefore = JSON.parse(block[11]!) as string, contextAfter = JSON.parse(block[14]!) as string;
+        const removed = JSON.parse(block[12]!) as string, added = JSON.parse(block[13]!) as string;
+        expect([Number(block[1]), Number(block[2])]).toEqual([index + 1, hunks]);
+        expect([Number(block[3]), Number(block[4]), Number(block[7]), Number(block[8])]).toEqual([
+          lineAt(before, beforeStart), lineAt(before, beforeEnd), lineAt(after, afterStart), lineAt(after, afterEnd),
+        ]);
+        expect(beforeStart).toBeGreaterThanOrEqual(previousBefore);
+        expect(afterStart).toBeGreaterThanOrEqual(previousAfter);
+        expect(removed).toBe(before.slice(beforeStart, beforeEnd));
+        expect(added).toBe(after.slice(afterStart, afterEnd));
+        expect(before.slice(previousBefore, beforeStart)).toBe(after.slice(previousAfter, afterStart));
+        expect(contextBefore).toBe(before.slice(beforeStart - contextBefore.length, beforeStart));
+        expect(contextAfter).toBe(before.slice(beforeEnd, beforeEnd + contextAfter.length));
+        expect(beforeStart - contextBefore.length).toBeGreaterThanOrEqual(previousContextEnd);
+        expect(beforeEnd + contextAfter.length).toBeLessThanOrEqual(Number(blocks[index + 1]?.[5] ?? before.length));
+        for (const context of [contextBefore, contextAfter]) {
+          expect(context.length).toBeLessThanOrEqual(200);
+          expect(context.split("\n").length - 1).toBeLessThanOrEqual(3);
+        }
+        reconstructed += before.slice(previousBefore, beforeStart) + added;
+        previousBefore = beforeEnd; previousAfter = afterEnd; previousContextEnd = beforeEnd + contextAfter.length;
+      }
+      expect(before.slice(previousBefore)).toBe(after.slice(previousAfter));
+      expect(reconstructed + before.slice(previousBefore)).toBe(after);
+    });
+    await f.call("edit", { path: "exact-hunks", expectedSha256: hash(before), edits }, f.context(approve));
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync(path.join(f.root, "exact-hunks"), "utf8")).toBe(after);
+  });
+  it("refuses too many complete hunks rather than silently dropping occurrences", async () => {
+    const f = fixture(); const before = "old\n".repeat(200); f.put("many-hunks", before);
+    const approve = vi.fn(async () => {});
+    await expect(f.call("edit", { path: "many-hunks", expectedSha256: hash(before), oldText: "old", newText: "new", all: true }, f.context(approve))).rejects.toThrow(/approval budget/);
+    expect(approve).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(f.root, "many-hunks"), "utf8")).toBe(before);
+  });
+  it("still refuses an edit whose changed text alone exceeds the approval budget", async () => {
+    const f = fixture();
+    const large = "x".repeat(12000);
+    f.put("oversized", `head\n${large}\ntail\n`);
+    const approve = vi.fn(async () => {});
+    await expect(f.call("edit", { path: "oversized", expectedSha256: hash(`head\n${large}\ntail\n`), oldText: large, newText: "y".repeat(12000) }, f.context(approve))).rejects.toThrow(/approval budget/);
+    expect(approve).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(f.root, "oversized"), "utf8")).toBe(`head\n${large}\ntail\n`);
+  });
   it("revalidates after temporary file preparation and publishes new files atomically create-only", async () => {
     const f = fixture(); f.put("existing", "old");
     const originalSync = fs.fsyncSync;
     vi.spyOn(fs, "fsyncSync").mockImplementationOnce((fd) => { originalSync(fd); f.put("existing", "external"); });
-    await expect(f.call("write", { path: "existing", content: "approved", overwrite: true })).rejects.toThrow(/conflict/);
+    await expect(f.call("write", { path: "existing", content: "approved", overwrite: true, expectedSha256: hash("old") })).rejects.toThrow(/conflict/);
     expect(fs.readFileSync(path.join(f.root, "existing"), "utf8")).toBe("external");
     const originalLink = fs.linkSync;
     vi.spyOn(fs, "linkSync").mockImplementationOnce((oldPath, newPath) => { fs.writeFileSync(newPath, "racing create"); originalLink(oldPath, newPath); });
@@ -365,14 +541,14 @@ describe("LocalCodingProvider exact effects and lock lifetime", () => {
   });
   it("enforces exact unique anchors, all=true replacements, no-change and ordinary mode preservation", async () => {
     const f = fixture(); f.put("edit", "old old\n"); fs.chmodSync(path.join(f.root, "edit"), 0o751);
-    await expect(f.call("edit", { path: "edit", oldText: "absent", newText: "x" })).rejects.toThrow(/not found/);
-    await expect(f.call("edit", { path: "edit", oldText: "old", newText: "x" })).rejects.toThrow(/not unique/);
-    expect(await f.call("edit", { path: "edit", oldText: "old", newText: "$&", all: true })).toMatchObject({ changed: true, sha256: hash("$& $&\n") });
+    await expect(f.call("edit", { path: "edit", expectedSha256: hash("old old\n"), oldText: "absent", newText: "x" })).rejects.toThrow(/not found/);
+    await expect(f.call("edit", { path: "edit", expectedSha256: hash("old old\n"), oldText: "old", newText: "x" })).rejects.toThrow(/not unique/);
+    expect(await f.call("edit", { path: "edit", expectedSha256: hash("old old\n"), oldText: "old", newText: "$&", all: true })).toMatchObject({ changed: true, sha256: hash("$& $&\n") });
     expect(fs.readFileSync(path.join(f.root, "edit"), "utf8")).toBe("$& $&\n");
     expect(fs.statSync(path.join(f.root, "edit")).mode & 0o777).toBe(0o751);
-    expect(await f.call("edit", { path: "edit", oldText: "$& $&", newText: "$& $&" })).toMatchObject({ changed: false });
+    expect(await f.call("edit", { path: "edit", expectedSha256: hash("$& $&\n"), oldText: "$& $&", newText: "$& $&" })).toMatchObject({ changed: false });
     f.put("overlap", "aaa");
-    await expect(f.call("edit", { path: "overlap", oldText: "aa", newText: "x" })).rejects.toThrow(/not unique/);
+    await expect(f.call("edit", { path: "overlap", expectedSha256: hash("aaa"), oldText: "aa", newText: "x" })).rejects.toThrow(/not unique/);
   });
   it.each(["content", "file", "parent", "symlink", "hardlink", "root"])("rejects approval-time %s replacement", async (kind) => {
     const f = fixture(); fs.mkdirSync(path.join(f.root, "dir")); f.put("dir/x", "old");
@@ -385,7 +561,7 @@ describe("LocalCodingProvider exact effects and lock lifetime", () => {
       if (kind === "hardlink") fs.linkSync(file, `${file}-alias`);
       if (kind === "root") { fs.renameSync(f.root, `${f.root}-old`); fs.mkdirSync(f.root); fs.mkdirSync(path.join(f.root, "dir")); f.put("dir/x", "old"); }
     });
-    await expect(f.call("edit", { path: "dir/x", oldText: "old", newText: "approved" }, ctx)).rejects.toThrow(/conflict|identity|symlink|hardlink/);
+    await expect(f.call("edit", { path: "dir/x", expectedSha256: hash("old"), oldText: "old", newText: "approved" }, ctx)).rejects.toThrow(/conflict|identity|symlink|hardlink/);
     expect(fs.readFileSync(path.join(f.root, "dir/x"), "utf8")).not.toBe("approved");
     expect(fs.readdirSync(f.lockRoot)).toEqual([]);
   });
@@ -490,7 +666,7 @@ describe("LocalCodingProvider exact effects and lock lifetime", () => {
       const lock = path.join(f.lockRoot, fs.readdirSync(f.lockRoot)[0]!);
       originalRename(lock, `${lock}-owned`); fs.writeFileSync(lock, "uncertain", { mode: 0o600 });
     });
-    await expect(f.call("write", { path: "existing", content: "new", overwrite: true }, ctx)).rejects.toThrow(/committed/);
+    await expect(f.call("write", { path: "existing", content: "new", overwrite: true, expectedSha256: hash("old") }, ctx)).rejects.toThrow(/committed/);
     expect(fs.readFileSync(path.join(f.root, "existing"), "utf8")).toBe("new");
     expect(ctx.audits[0]?.commitAcknowledgement).toEqual({ version: 1, operation: "write" });
     expect(ctx.audits[0]?.success).toBe(false);

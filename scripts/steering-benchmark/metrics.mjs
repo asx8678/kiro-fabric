@@ -117,6 +117,13 @@ export function comparisonMetrics(plan, all) {
   assert.equal(new Set(all.map(r => r.index)).size, all.length, 'duplicate attempt');
   for (const row of all) { const run = plan.runs[row.index]; assert.ok(run && run.arm === row.arm && run.caseId === row.caseId && run.qualification === row.qualification, 'row/plan mismatch'); }
   const arms = [...new Set(plan.runs.map(r => r.arm))];
+  // Validate Fabric-only mode pairs too (native can be absent in continuations).
+  const identities = new Map();
+  for (const run of plan.runs.filter(r => !r.qualification)) {
+    const key = JSON.stringify([run.caseId, run.round]), previous = identities.get(key);
+    if (previous) assert.ok(previous.seed === run.seed && JSON.stringify(previous.hashes) === JSON.stringify(run.hashes), 'unmatched fixture identities');
+    else identities.set(key, run);
+  }
   const comparable = all.filter(r => !r.qualification);
   const cases = [...new Set(plan.runs.filter(r => !r.qualification).map(r => r.caseId))];
   const cells = cases.map(caseId => ({ caseId, arms: Object.fromEntries(arms.map(arm => [arm, detailedStats(comparable.filter(r => r.arm === arm && r.caseId === caseId))])) }));
@@ -124,8 +131,10 @@ export function comparisonMetrics(plan, all) {
   for (const arm of arms.filter(a => a !== 'native')) {
     for (const run of plan.runs.filter(r => r.arm === arm && !r.qualification)) {
       const nativeRun = plan.runs.find(r => r.arm === 'native' && r.caseId === run.caseId && r.round === run.round);
-      assert.ok(nativeRun && nativeRun.seed === run.seed && JSON.stringify(nativeRun.hashes) === JSON.stringify(run.hashes), 'unmatched fixture identities');
-      const fabric = all.find(r => r.index === run.index), native = all.find(r => r.index === nativeRun.index);
+      // Continuation schedules may omit a counterpart; absence is not identity
+      // drift. Validate every present pair even before either attempt executes.
+      if (nativeRun) assert.ok(nativeRun.seed === run.seed && JSON.stringify(nativeRun.hashes) === JSON.stringify(run.hashes), 'unmatched fixture identities');
+      const fabric = all.find(r => r.index === run.index), native = nativeRun ? all.find(r => r.index === nativeRun.index) : undefined;
       const completed = !!fabric && !!native && fabric.state === 'finished' && native.state === 'finished';
       const bothPass = completed && fabric.ok && native.ok;
       const ratio = (a, b) => bothPass && typeof a === 'number' && typeof b === 'number' && Number.isFinite(a) && Number.isFinite(b) && a >= 0 && b > 0 ? a / b : null;
@@ -151,16 +160,17 @@ export function comparisonMetrics(plan, all) {
       oldOuterToolCalls, candidateOuterToolCalls, bothPassOuterCallDelta: delta,
       bothPassOuterCallReduction: delta !== null && oldOuterToolCalls !== null && oldOuterToolCalls > 0 ? -delta / oldOuterToolCalls : null };
   }) : [];
-  return { schemaVersion: 1, plannedAttempts: plan.runs.length, executedAttempts: all.length, unrunAttempts: plan.runs.length - all.length,
+  return { schemaVersion: 1, guidanceModes: Object.fromEntries(arms.filter(name => name !== 'native').map(name => [name, plan.identity?.profiles?.[name]?.guidanceMode ?? 'unknown'])), plannedAttempts: plan.runs.length, executedAttempts: all.length, unrunAttempts: plan.runs.length - all.length,
     requestedModel: plan.config.model ?? 'auto', requestedEffort: plan.config.effort ?? null, actualRoutedModel: null,
     allAttempts: detailedStats(all), comparison: Object.fromEntries(arms.map(arm => [arm, detailedStats(comparable.filter(r => r.arm === arm))])),
     qualification: detailedStats(all.filter(r => r.qualification)), cases, cells, pairs, oldFabricOuterCallPairs,
-    limitations: ['Outer-call reductions are observed tool exchanges, not hidden model-request counts or speedups; compare matched quality and source coverage first.', 'Outer serialized argument/result UTF-16 character counts are not tokens, complete prompts, inner effects or wire-byte counts.', 'Unknown or incomplete telemetry remains null. Total credits include failed attempts; help qualification is excluded uniformly.', 'Auto does not pin the routed model. Repeated order-balanced observations are descriptive, not causal savings or settled billing.', ...plan.limitations] };
+    limitations: ['Guidance modes are recorded per arm; a mode comparison still requires identical fixtures, model, effort and observation machinery, and stays descriptive about quality and cost.', 'Outer-call reductions are observed tool exchanges, not hidden model-request counts or speedups; compare matched quality and source coverage first.', 'Outer serialized argument/result UTF-16 character counts are not tokens, complete prompts, inner effects or wire-byte counts.', 'Unknown or incomplete telemetry remains null. Omitted continuation counterparts leave pairs incomplete and ratios unavailable; present counterparts must match fixture identities. Total credits include failed attempts; help qualification is excluded uniformly.', 'Auto does not pin the routed model. Repeated order-balanced observations are descriptive, not causal savings or settled billing.', ...plan.limitations] };
 }
 /** @param {ReturnType<typeof comparisonMetrics>} report */
 export function comparisonMarkdown(report) {
   const format = value => value === null ? 'unknown' : typeof value === 'number' ? String(Math.round(value * 1000) / 1000) : String(value);
   const lines = ['# Kiro default vs Fabric Code Mode', '', `${report.executedAttempts}/${report.plannedAttempts} attempts executed; ${report.unrunAttempts} unrun. Requested model: ${report.requestedModel}.`, '',
+    'Guidance modes (configured, not proof of delivery): ' + Object.entries(report.guidanceModes).map(([arm, mode]) => `${arm}=${mode}`).join(', '), '',
     '## Finding validation and severity calibration', '',
     '| Agent | Scored / eligible | Grounded | Validated / expected | Substantial recall | Inflated / understated | Unsafe fixes | Violations | Credits / validated finding |',
     '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |'];

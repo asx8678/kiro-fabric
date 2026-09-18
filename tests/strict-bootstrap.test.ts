@@ -61,6 +61,27 @@ const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "
 };
 
 describe("strict checked workspace bootstrap", () => {
+  it("recovers a partial-failure receipt through the checked guest without replaying the write", async () => {
+    const f = await fixture(1, false, undefined, undefined, { write: "allow" });
+    const filename = "receipt-write.txt";
+    const failed = await f.call('await local.write({path:payloads.path,content:payloads.value}); throw new Error(payloads.failure);', { path: filename, value: "PRIVATE content", failure: "PRIVATE error" });
+    expect(failed.isError).toBe(true);
+    expect(failed.structuredContent).toMatchObject({ executionStatus: "failed", deliveryStatus: "inline", retryProgram: false, receiptId: expect.stringMatching(/^ka_[a-f0-9]{48}$/u) });
+    const id = failed.structuredContent.receiptId;
+    expect(failed.content[0].text).toContain(id);
+    const file = path.join(f.projects[0]!, filename);
+    const before = fs.statSync(file);
+    const recovered = await f.call('let text = ""; let offset = 0; let pages = 0; for (;;) { const page = await artifacts.read({id:payloads.id,offset,limit:200}); text += page.text; pages++; offset = page.nextOffset; if (page.done) break; } return {receipt:JSON.parse(text),pages};', { id });
+    expect(recovered.isError, recovered.content[0].text).not.toBe(true);
+    const value = f.value(recovered);
+    expect(value.pages).toBeGreaterThan(1);
+    expect(value.receipt).toMatchObject({ schemaVersion: 1, executionStatus: "failed", retryProgram: false, counts: { recorded: 1, shown: 1, succeeded: 1, omitted: 0 }, entries: [{ ref: "local.write", outcome: "succeeded" }] });
+    expect(JSON.stringify(value.receipt)).not.toMatch(/PRIVATE|receipt-write/);
+    expect(fs.readFileSync(file, "utf8")).toBe("PRIVATE content");
+    expect(fs.statSync(file)).toMatchObject({ ino: before.ino, mtimeMs: before.mtimeMs });
+    expect(recovered.structuredContent).toEqual({ executionStatus: "succeeded", deliveryStatus: "inline", retryProgram: false });
+    expect(wire.forms).toHaveLength(0);
+  });
   it("returns all compiler failures with one repair hint and executes no partial program", async () => {
     const f = await fixture();
     const assignments = Array.from({ length: 50 }, (_, index) => `out["key${index}"] = ${index};`).join("\n");
@@ -84,7 +105,9 @@ describe("strict checked workspace bootstrap", () => {
     const expectedPath = location === "absent" ? undefined : location === "root" ? "README.md" : "app/README.md";
     if (location === "nested") fs.mkdirSync(path.join(root, "app"));
     if (expectedPath) fs.writeFileSync(path.join(root, expectedPath), "# Discovered project\n");
-    expect(AGENT_PROMPT).toContain("discovery -> bounded observed starter reads in the same exec");
+    expect(AGENT_PROMPT).toContain("compose mechanical dependencies in one execution");
+    expect(AGENT_PROMPT).toContain("Otherwise discover paths before reads");
+    expect(BUNDLED_GUIDANCE.skill).toContain("discovery -> bounded observed starter reads in the same exec");
     const code = BUNDLED_GUIDANCE.review.match(/```ts\n(\/\/ Recipe: initial review evidence\n[\s\S]*?)\n```/)?.[1];
     expect(code).toBeDefined();
     const first = await f.call(code!);
@@ -154,7 +177,7 @@ describe("strict checked workspace bootstrap", () => {
     expect(description).toContain("ignore rules still apply");
     expect(description).toContain("fabric.help({topic:'review'})");
     expect(description).toContain("local.grep({pattern,path?,glob?,literal?,hidden?,limit?})");
-    expect(description).toContain("local.edit({path,oldText,newText,all?})");
+    expect(description).toContain("local.edit({path,expectedSha256,oldText,newText,all?})");
     expect(description).toContain("settle:true");
     expect(description).toContain("stdout,stderr");
     expect(description.length).toBeLessThanOrEqual(850);
@@ -182,7 +205,7 @@ describe("strict checked workspace bootstrap", () => {
     const search = await f.call(recipe("discover then read without a model round trip"), searchInput);
     expect(search.isError, search.content[0].text).not.toBe(true);
     expect(f.value(search)).toEqual({
-      search: { scope: { path: ".", hidden: true, ignoreFiles: true }, matches: [{ path: "config café.json", line: 1, text: '{"id": "example", "retryLimit": 3}' }], truncated: false },
+      search: { scope: { path: ".", hidden: true, ignoreFiles: true }, matches: [{ path: "config café.json", line: 1, text: '{"id": "example", "retryLimit": 3}' }], truncated: false, scopeExhausted: true },
       evidence: { complete: true, remaining: [], unreadTails: [], files: [{ path: "config café.json", startLine: 1, endLine: 1, source: '1: {"id": "example", "retryLimit": 3}', totalLines: 1, sha256: expect.stringMatching(/^[a-f0-9]{64}$/u), truncated: false }] },
     });
     const distant = Array.from({ length: 450 }, (_, i) => `quiet line ${i + 1}`);
@@ -206,7 +229,7 @@ describe("strict checked workspace bootstrap", () => {
     expect(f.value(farEdit).text).not.toContain('"where":999');
     expect(fs.readFileSync(path.join(root, "far.txt"), "utf8").split("\n")[399]).toContain('"where":999');
     fs.writeFileSync(path.join(root, "intervening.txt"), "value=old\n");
-    const interrupted = recipe("exact edit then verification").replace("const r = await local.read", "await local.write({path,content:payloads.intervening,overwrite:true}); const r = await local.read");
+    const interrupted = recipe("exact edit then verification").replace("const r = await local.read", "await local.write({path,content:payloads.intervening,overwrite:true,expectedSha256:change.sha256}); const r = await local.read");
     const conflict = await f.call(interrupted, { path: "intervening.txt", oldText: "value=old", newText: "value=new", intervening: "other change\n" });
     expect(conflict.isError).toBe(true);
     expect(conflict.content[0].text).toContain("File changed after edit");
@@ -270,14 +293,14 @@ describe("strict checked workspace bootstrap", () => {
     const original = "first=old\nsecond=old\ndecoy:first=new\n";
     const payloads = { path: "same.txt", oldFirst: "first=old", newFirst: "first=new", oldSecond: "second=old", newSecond: "second=new", intervening: original + "external change\n" };
     fs.writeFileSync(target, original);
-    const between = code.replace("const change = await local.edit", "await local.write({path,content:payloads.intervening,overwrite:true}); const change = await local.edit");
+    const between = code.replace("const change = await local.edit", "await local.write({path,content:payloads.intervening,overwrite:true,expectedSha256:before.sha256}); const change = await local.edit");
     const conflict = await f.call(between, payloads);
     expect(conflict.isError).toBe(true);
     expect(conflict.content[0].text).toContain("expectedSha256 conflict");
     // Stale input rejects before either replacement; external changes survive.
     expect(fs.readFileSync(target, "utf8")).toBe(payloads.intervening);
     fs.writeFileSync(target, original);
-    const after = code.replace("const r = await local.read", "await local.write({path,content:payloads.intervening,overwrite:true}); const r = await local.read");
+    const after = code.replace("const r = await local.read", "await local.write({path,content:payloads.intervening,overwrite:true,expectedSha256:change.sha256}); const r = await local.read");
     const stale = await f.call(after, payloads);
     expect(stale.isError).toBe(true);
     expect(stale.content[0].text).toContain("File changed after edit");
@@ -466,7 +489,7 @@ describe("strict checked workspace bootstrap", () => {
     const write = await f.call('return await local.write({path:"denied.txt",content:"must not exist"})');
     expect(write.isError).toBe(true);
     expect(fs.existsSync(path.join(f.projects[0]!, "denied.txt"))).toBe(false);
-    const edit = await f.call('return await local.edit({path:"fixture.txt",oldText:"source",newText:"changed"})');
+    const edit = await f.call('return await local.edit({path:"fixture.txt",expectedSha256:payloads.sha256,oldText:"source",newText:"changed"})', { sha256: f.value(read).sha256 });
     expect(edit.isError).toBe(true); expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toContain("source:");
     const shell = await f.call('return await local.shell({command:"printf altered > fixture.txt",settle:true})');
     expect(shell.isError, shell.content[0].text).not.toBe(true);
@@ -494,6 +517,27 @@ describe("strict checked workspace bootstrap", () => {
     const malformed = await f.call('return await tools.call({ref:"local.read",args:{path:12}})');
     expect(malformed.isError).toBe(true);
   });
+  it("rejects unbound edits in preflight and unbound dynamic mutations before approval", async () => {
+    const f = await fixture(); wire.approve = true;
+    const typed = await f.call('await local.write({path:"must-not-exist",content:"never"}); return await local.edit({path:"fixture.txt",oldText:"source",newText:"changed"});');
+    expect(typed.isError).toBe(true);
+    expect(typed.content[0].text).toContain("TypeScript validation failed");
+    expect(fs.existsSync(path.join(f.projects[0]!, "must-not-exist"))).toBe(false);
+    for (const [ref, args] of [
+      ["local.edit", { path: "fixture.txt", oldText: "source", newText: "changed" }],
+      ["local.write", { path: "fixture.txt", overwrite: true, content: "changed" }],
+    ] as const) {
+      const dynamic = await f.call(`return await tools.call({ref:${JSON.stringify(ref)},args:${JSON.stringify(args)}});`);
+      expect(dynamic.isError).toBe(true);
+      expect(dynamic.content[0].text).toContain("expectedSha256");
+    }
+    expect(wire.forms).toHaveLength(0);
+    expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toBe("source:project-a\n");
+    const bound = await f.call('const before = await local.readMany({windows:[{path:"fixture.txt"}]}); return await local.edit({path:"fixture.txt",expectedSha256:before.files[0].sha256,edits:[{oldText:"source",newText:"changed"}]});');
+    expect(bound.isError, bound.content[0].text).not.toBe(true);
+    expect(wire.forms).toHaveLength(1);
+    expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toBe("changed:project-a\n");
+  });
   it("runs the documented coding example against real fixture tests, with compact output", async () => {
     const f = await fixture(); wire.approve = true;
     const root = f.projects[0]!;
@@ -507,7 +551,9 @@ describe("strict checked workspace bootstrap", () => {
     ]);
     if (manifest.truncated) throw new Error("Read the remaining manifest first");
     const packageName = JSON.parse(manifest.text).name;
-    const change = await local.edit({path:"src/example.js",oldText:payloads.oldText,newText:payloads.newText});
+    const source = await local.read({path:"src/example.js",limit:2000});
+    if (source.truncated) throw new Error("Incomplete source");
+    const change = await local.edit({path:"src/example.js",expectedSha256:source.sha256,oldText:payloads.oldText,newText:payloads.newText});
     const test = await local.shell({command:"node --test test.mjs",timeoutMs:120000,settle:true});
     return {packageName,inspectedMatches:search.matches.length,searchTruncated:search.truncated,changed:change.changed,testsPassed:test.ok,failureEvidence:test.ok?"":(test.stdout+test.stderr).slice(-2000),testOutputTruncated:test.truncated};`;
     const response = await f.call(code, { oldText: "return 2", newText: "return 3" });
@@ -520,7 +566,7 @@ describe("strict checked workspace bootstrap", () => {
 
   it("returns partial progress after a later failure and never retries completed edits", async () => {
     const f = await fixture(); wire.approve = true;
-    const response = await f.call('await local.edit({path:"fixture.txt",oldText:"source",newText:"changed"}); await local.shell({command:"exit 7"}); return true;');
+    const response = await f.call('const before = await local.read({path:"fixture.txt"}); await local.edit({path:"fixture.txt",expectedSha256:before.sha256,oldText:"source",newText:"changed"}); await local.shell({command:"exit 7"}); return true;');
     expect(response.isError).toBe(true);
     expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toBe("changed:project-a\n");
     expect(response.content[0].text).toContain('"ref":"local.edit","outcome":"succeeded"');

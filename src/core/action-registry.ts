@@ -207,12 +207,16 @@ export class ActionRegistry {
   }
   #raw<T>(record: Load<T>, operation: (admission: Admission) => Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
+      this.#assertOpen();
       const job = {
         start: (admission: Admission) => {
           delete record.cancelQueued;
+          // Recheck at dequeue as well as admission: closure is terminal even
+          // when a producer was waiting for another provider's raw slot.
+          if (this.#closed) { reject(new Error("Fabric registry is closed")); admission.release(); return; }
           void operation(admission).then(resolve, reject).finally(() => admission.release());
         },
-        cancel: () => { delete record.cancelQueued; reject(discoveryQuota()); },
+        cancel: () => { delete record.cancelQueued; reject(this.#closed ? new Error("Fabric registry is closed") : discoveryQuota()); },
       };
       record.cancelQueued = () => {
         const position = this.#rawQueue.indexOf(job);
@@ -258,7 +262,9 @@ export class ActionRegistry {
     }
   }
   async #buildIndex(provider: FabricProvider, record: DiscoveryRecord, admission: Admission): Promise<DiscoveryIndex> {
+    this.#assertOpen();
     const raw = await provider.list();
+    this.#assertOpen();
     const weight = rawWeight(raw);
     admission.resize(weight.bytes, weight.nodes);
     const releases: Array<() => void> = [];
@@ -300,6 +306,7 @@ export class ActionRegistry {
     }
   }
   #acquire(provider: FabricProvider): DiscoveryRecord {
+    this.#assertOpen();
     const revision = provider.discoveryRevision?.(), cached = this.#discovery.get(provider);
     if (cached && (cached.pending || cached.revision === revision)) {
       cached.users++; this.#discovery.delete(provider); this.#discovery.set(provider, cached); return cached;
@@ -312,6 +319,7 @@ export class ActionRegistry {
       let before = revision;
       for (let attempt = 0; attempt < 2; attempt++) {
         const index = await this.#raw(record, admission => this.#buildIndex(provider, record, admission));
+        this.#assertOpen();
         const after = provider.discoveryRevision?.();
         if (before === after) { record.revision = after; return index; }
         record.release(); before = after;
@@ -333,6 +341,7 @@ export class ActionRegistry {
     try {
       for (const provider of this.#providers.values()) records.push([provider, this.#acquire(provider)]);
       await this.#wait(records.map(([, record]) => record), signal);
+      this.#assertOpen();
       const indexes = records.map(([, record]) => record.value!);
       let bytes = 1024, nodes = 16;
       for (const index of indexes) for (const entry of index.entries) {
@@ -348,6 +357,7 @@ export class ActionRegistry {
   }
 
   catalogDependencies(providerName?: string, args?: Record<string, unknown>): readonly CatalogDependency[] {
+    this.#assertOpen();
     return providerName === undefined
       ? [...this.#providers.values()].flatMap(provider => [...(provider.catalogDependencies?.(args) ?? [])])
       : this.#providers.get(providerName)?.catalogDependencies?.(args) ?? [];
@@ -357,6 +367,10 @@ export class ActionRegistry {
   readonly #unavailable = new Map<string, string>();
   readonly #activeWrites = new Map<string, { ref: string; resources: readonly string[] }>();
   #closed = false;
+
+  #assertOpen(): void {
+    if (this.#closed) throw new Error("Fabric registry is closed");
+  }
 
   register(provider: FabricProvider): void {
     if (this.#closed) throw new Error("Fabric registry is closed");
@@ -396,6 +410,7 @@ export class ActionRegistry {
   }
 
   async #ranked(query: string, limit: number | undefined, signal?: AbortSignal): Promise<ResolvedFabricAction[]> {
+    this.#assertOpen();
     throwIfAbortedOrExpired(signal);
     if (query.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Fabric search query exceeds 2000 characters");
     const normalized = query.normalize("NFKC").trim().toLowerCase();
@@ -442,6 +457,7 @@ export class ActionRegistry {
     if (this.#descriptions.get(ref) === record) this.#descriptions.delete(ref);
   }
   async describe(ref: string, signal?: AbortSignal): Promise<ResolvedFabricAction> {
+    this.#assertOpen();
     throwIfAbortedOrExpired(signal);
     const release = this.#reserve(1024 + ref.length * 4, 16);
     let record = this.#descriptions.get(ref);
@@ -456,6 +472,7 @@ export class ActionRegistry {
         });
       } else record.users++;
       await this.#wait([record], signal);
+      this.#assertOpen();
       const descriptor = record.value!, weight = catalogWeight(descriptor);
       const cloneRelease = this.#reserve(weight.bytes, weight.nodes);
       try { return structuredClone(descriptor); } finally { cloneRelease(); }
@@ -477,6 +494,7 @@ export class ActionRegistry {
     } finally { scratch(); }
   }
   async #describe(ref: string, record: DescriptionRecord, admission: Admission): Promise<ResolvedFabricAction> {
+    this.#assertOpen();
     if (parseRemoteRef(ref)) {
       const observed = this.#providers.get("mcp")?.observedActions?.().filter(entry => entry.ref === ref) ?? [];
       if (observed.length !== 1) throw new Error(`Unknown or ambiguous Fabric action: ${ref}`);
@@ -491,11 +509,13 @@ export class ActionRegistry {
     const provider = this.#providers.get(ref.slice(0, separator));
     if (!provider) throw new Error(`Unknown Fabric provider: ${ref.slice(0, separator)}`);
     const descriptor = await provider.describe(ref.slice(separator + 1));
+    this.#assertOpen();
     if (!descriptor) throw new Error(`Unknown Fabric action: ${ref}`);
     return this.#retainDescriptor(provider, descriptor, record, admission);
   }
 
   async invoke(ref: string, args: Record<string, unknown>, context: FabricRegistryInvocationContext, options?: { expectedDescriptorDigest?: string; projection?: "full" | "text" | "structured" }): Promise<unknown> {
+    this.#assertOpen();
     throwIfAbortedOrExpired(context.signal, context.deadline);
     if (!isRecord(args)) throw new Error(`Arguments for ${ref} must be an object`);
     const remote = parseRemoteRef(ref);
@@ -505,6 +525,7 @@ export class ActionRegistry {
       ...(options?.projection === undefined ? {} : { projection: options.projection }),
     };
     const action = await this.describe(remote ? "mcp.$call" : ref, context.signal);
+    this.#assertOpen();
     // A concurrent close() clears providers between describe and dispatch. Fail
     // with an explicit, attributable error instead of an undefined dereference.
     const provider = this.#providers.get(action.provider);
@@ -516,10 +537,11 @@ export class ActionRegistry {
         ? await runAbortable(context.signal, () => provider.prepareArguments!(action.name, structuredClone(args), context))
         : structuredClone(args);
     } catch (error) {
-      if (provider.name === "mcp") provider.invalidateDiscovery?.(typeof args.server === "string" ? args.server : undefined);
+      if (!this.#closed && provider.name === "mcp") provider.invalidateDiscovery?.(typeof args.server === "string" ? args.server : undefined);
       throw error;
     }
     throwIfAbortedOrExpired(context.signal, context.deadline);
+    this.#assertOpen();
     if (!isRecord(prepared)) throw new Error(`Argument preparation for ${ref} must return an object`);
     const invalid = schemaValidationMessage(action.inputSchema, prepared);
     if (invalid) throw argumentRepairError(ref, action.descriptorDigest, action.inputSchema, invalid);
@@ -554,11 +576,14 @@ export class ActionRegistry {
     try {
       // Provider-owned cross-process intent is acquired before human approval.
       // Do not abort-race acquisition: a late lock must never be leaked.
+      this.#assertOpen();
       releaseReservation = await provider.reserveInvocation?.(action.name, structuredClone(canonicalArgs), context);
+      this.#assertOpen();
       throwIfAbortedOrExpired(context.signal, context.deadline);
       // Approval cleanup remains part of the reservation lifetime. Racing the
       // promise would release write intent while an elicitation was still live.
       await context.approve(structuredClone(action), structuredClone(canonicalArgs));
+      this.#assertOpen();
       throwIfAbortedOrExpired(context.signal, context.deadline);
       const invocationArgs = structuredClone(canonicalArgs);
       // Providers receive the request signal and own cancellation cleanup.
@@ -587,7 +612,7 @@ export class ActionRegistry {
       audit.resultTruncated = bounded.truncated;
       return bounded.value;
     } catch (error) {
-      if (provider.name === "mcp" && !(error instanceof FabricRepairError && error.failure.code === "catalog_requires_paging")) provider.invalidateDiscovery?.(typeof canonicalArgs.server === "string" ? canonicalArgs.server : undefined);
+      if (!this.#closed && provider.name === "mcp" && !(error instanceof FabricRepairError && error.failure.code === "catalog_requires_paging")) provider.invalidateDiscovery?.(typeof canonicalArgs.server === "string" ? canonicalArgs.server : undefined);
       audit.endedAt = Date.now();
       audit.success = false;
       audit.error = error instanceof Error ? error.message.slice(0, 1_000) : String(error).slice(0, 1_000);

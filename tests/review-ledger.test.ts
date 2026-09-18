@@ -219,6 +219,15 @@ describe("host-read evidence and explicit stale reconciliation", () => {
     expect((await status(provider, taskId)).entries.slice(0, 2)).toMatchObject([{ status: "unknown", stale: true }, { status: "verified", stale: false }]);
   });
 
+  it.each(["..notes.ts", "..notes/entry.ts", "src/..notes.ts"])("accepts normalized dot-prefixed evidence %s", async (file) => {
+    const { provider, files, reader } = make();
+    files[file] = "valid evidence\n";
+    const { taskId } = await begin(provider); const target = (await entries(provider, taskId))[0]!.id;
+    await update(provider, taskId, target, { evidence: [proof(file)] });
+    expect(reader).toHaveBeenCalledWith(file, expect.anything());
+    expect((await status(provider, taskId)).entries[0]).toMatchObject({ status: "verified", evidence: [{ path: file }] });
+  });
+
   it("uses real LocalPaths reads by default without writing source", async () => {
     const provider = new ReviewProvider({ root }); providers.push(provider);
     const { taskId } = await begin(provider); const target = (await entries(provider, taskId))[0]!.id;
@@ -226,7 +235,7 @@ describe("host-read evidence and explicit stale reconciliation", () => {
     expect((await status(provider, taskId)).entries[0]).toMatchObject({ status: "verified", evidence: [{ path: "src/providers/review-contract.ts" }] });
     await call(provider, "reconcile", { taskId });
     expect((await status(provider, taskId)).coverage.verified).toBe(1);
-    for (const file of ["../outside.ts", "/etc/passwd", "a/../service.ts", "./service.ts", "a\\service.ts", "service.ts\0"]) {
+    for (const file of ["../outside.ts", "../workspace-sibling/file.ts", "/etc/passwd", "a/../service.ts", "./service.ts", "a//service.ts", "a/", "..", "a\\service.ts", "service.ts\0"]) {
       await expect(update(provider, taskId, target, { evidence: [proof(file)] })).rejects.toThrow(/path/);
     }
   });

@@ -211911,10 +211911,13 @@ var FabricCompilerPool = class {
       if (cached) {
         this.#cache.delete(cacheKey);
         this.#cache.set(cacheKey, cached);
-        resolve({ ...cached.result, errors: [] });
+        const hit = { ...cached.result, errors: [], compileCache: "hit" };
+        delete hit.compileWorker;
+        resolve(hit);
         return;
       }
       const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? DEFAULT_COMPILER_TIMEOUT_MS, 6e4));
+      const compileWorker = options.workerUrl !== void 0 ? "custom" : this.#idle ? "warm" : "cold";
       const state = this.#acquire(options.workerUrl);
       const id = ++this.#nextId;
       let settled = false;
@@ -211926,7 +211929,7 @@ var FabricCompilerPool = class {
         options.signal?.removeEventListener("abort", onAbort);
         const complete = () => {
           if (error) reject(error);
-          else resolve(result);
+          else resolve({ ...result, compileCache: cacheKey === void 0 ? "bypass" : "miss", compileWorker });
         };
         if (error) {
           void this.#terminate(state).then(complete);

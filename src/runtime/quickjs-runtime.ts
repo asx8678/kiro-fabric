@@ -2,6 +2,7 @@ import { fabricFailureMetadata } from "../core/repair-error.js";
 import { FABRIC_COMMIT_ACKNOWLEDGEMENT, type FabricFailureMetadata } from "../protocol.js";
 import { performance } from "node:perf_hooks";
 import { Worker } from "node:worker_threads";
+import { randomUUID } from "node:crypto";
 import releaseSyncVariant from "@jitl/quickjs-singlefile-mjs-release-sync";
 import { newQuickJSWASMModuleFromVariant, newVariant } from "quickjs-emscripten-core";
 import { runAbortable, settleWithin } from "../async-settlement.js";
@@ -546,7 +547,7 @@ interface SandboxWorkerOptions {
   parentSpanId?: string;
 }
 
-export type SandboxWorkerRequest =
+export type SandboxWorkerRequest = { executionId: string } & (
   | { type: "run"; code: string; options: SandboxWorkerOptions }
   | {
       type: "hostResult";
@@ -564,9 +565,9 @@ export type SandboxWorkerRequest =
     }
   | { type: "extend"; floorMs: number; id?: number }
   | { type: "expire" }
-  | { type: "abort"; message: string };
+  | { type: "abort"; message: string });
 
-export type SandboxWorkerMessage =
+export type SandboxWorkerMessage = { executionId: string } & (
   | { type: "hostCall"; id: number; ref: string; args: Record<string, unknown> }
   | { type: "prepare"; ref: string; args: Record<string, unknown> }
   | { type: "spanStart"; token: number; cat: string; ev: string; execId?: string; parentId?: string; data?: Record<string, unknown> }
@@ -575,7 +576,7 @@ export type SandboxWorkerMessage =
   | { type: "hostAbort"; message: string }
   | { type: "flush" }
   | { type: "result"; result: FabricSandboxResult }
-  | { type: "fatal"; message: string };
+  | { type: "fatal"; message: string });
 
 /** Idle window before a spare worker is retired. */
 const SANDBOX_WORKER_IDLE_MS = 10_000;
@@ -677,7 +678,7 @@ export class QuickJsRuntime {
     slot.busy = false;
     slot.handler = undefined;
     slot.fault = undefined;
-    if (this.#closed || this.#idle !== undefined) { void this.#terminate(slot); return; }
+    if (this.#closed || !this.#slots.has(slot) || this.#idle !== undefined) { void this.#terminate(slot); return; }
     this.#idle = slot;
     slot.idleTimer = setTimeout(() => { void this.#terminate(slot); }, SANDBOX_WORKER_IDLE_MS);
     slot.idleTimer.unref();
@@ -727,6 +728,9 @@ export class QuickJsRuntime {
     slot.busy = true;
     const tracer = options.tracer ?? DISABLED_TRACER;
     const controller = new AbortController();
+    const executionId = randomUUID();
+    const hostCalls = new Set<Promise<unknown>>();
+    const startedAt = performance.now();
     // The mirrored host deadline is created on first bridge contact, after the
     // worker has actually started. Worker startup and VM initialization must
     // not consume the guest's execution allowance. The worker stays the
@@ -736,14 +740,16 @@ export class QuickJsRuntime {
     const hostDeadline = (): FabricDeadline => mirror ??= new FabricDeadline(requestedTimeoutMs, maximum);
     const cleanupGraceMs = Math.max(0, options.cleanupGraceMs ?? 100);
     const spans = new Map<number, ReturnType<FabricTracer["span"]>>();
-    let deadlineCeilingMs = requestedTimeoutMs;
     let settled = false;
     let backstop: NodeJS.Timeout | undefined;
 
     const onAbort = (): void => {
+      if (settled) return;
       const reason = options.signal?.reason instanceof Error ? options.signal.reason : new Error("Execution cancelled");
       if (!controller.signal.aborted) controller.abort(reason);
-      slot.worker.postMessage({ type: "abort", message: reason.message.slice(0, 4_096) } satisfies SandboxWorkerRequest);
+      try {
+        slot.worker.postMessage({ type: "abort", executionId, message: reason.message.slice(0, 4_096) } satisfies SandboxWorkerRequest);
+      } catch (error) { slot.fault?.(error instanceof Error ? error.message : String(error)); }
     };
 
     try {
@@ -751,37 +757,54 @@ export class QuickJsRuntime {
         const detach = (): void => {
           if (backstop) clearTimeout(backstop);
           options.signal?.removeEventListener("abort", onAbort);
+          slot.handler = undefined;
+          slot.fault = undefined;
         };
-        const settle = (result: FabricSandboxResult): void => {
+        // Seal this execution before aborting: cooperative cleanup and late
+        // replies must never post into a slot that may subsequently be reused.
+        const finish = (result: FabricSandboxResult | undefined, error?: Error, terminate = false): void => {
           if (settled) return;
           settled = true;
           detach();
-          this.#release(slot);
-          resolve(result);
+          if (!controller.signal.aborted) controller.abort(error ?? new Error(result?.error ?? "Execution finished"));
+          if (terminate) void this.#terminate(slot);
+          void settleWithin(hostCalls, cleanupGraceMs).then(() => {
+            if (!terminate) this.#release(slot);
+            if (error) reject(error); else resolve(result!);
+          });
         };
-        const fault = (message: string): void => {
-          if (settled) return;
-          settled = true;
-          detach();
-          void this.#terminate(slot);
-          reject(new Error(message));
+        const fault = (message: string): void => finish(undefined, new Error(message), true);
+        const scheduleBackstop = (): void => {
+          if (backstop) clearTimeout(backstop);
+          // Floors are anchored to the first bridge contact, not each message.
+          // Use the accepted, capped deadline, never the raw requested floor.
+          const expiresAt = mirror?.expiresAt ?? startedAt + requestedTimeoutMs;
+          backstop = setTimeout(() => {
+            const effectiveTimeoutMs = mirror?.effectiveTimeoutMs ?? requestedTimeoutMs;
+            finish(options.signal?.aborted
+              ? sandboxCancelledResult(effectiveTimeoutMs)
+              : { value: undefined, logs: [], terminationReason: "timed_out", error: `Execution timed out after ${effectiveTimeoutMs}ms`, effectiveTimeoutMs }, undefined, true);
+          }, Math.max(0, expiresAt + cleanupGraceMs + SANDBOX_WORKER_BACKSTOP_MS - performance.now()));
+          backstop.unref();
         };
         slot.fault = fault;
-        slot.handler = (message) => {
+        const handle = (message: SandboxWorkerMessage): void => {
+          if (settled || message.executionId !== executionId) return;
           if (message.type === "prepare" || message.type === "hostCall") {
             // Exactly the sequence the in-process bridge used: the host decides
             // the floor from the canonical ref and args and extends in step.
             const deadline = hostDeadline();
             const floor = options.minimumTimeoutMsForHostCall?.(message.ref, message.args);
             if (typeof floor === "number" && Number.isFinite(floor)) {
-              deadline.extendTo(floor);
-              deadlineCeilingMs = Math.max(deadlineCeilingMs, floor);
-              slot.worker.postMessage({ type: "extend", floorMs: floor, ...(message.type === "hostCall" ? { id: message.id } : {}) } satisfies SandboxWorkerRequest);
+              const accepted = deadline.extendTo(floor);
+              scheduleBackstop();
+              slot.worker.postMessage({ type: "extend", executionId, floorMs: accepted, ...(message.type === "hostCall" ? { id: message.id } : {}) } satisfies SandboxWorkerRequest);
             }
             if (message.type === "prepare") return;
           }
           if (message.type === "hostCall") {
             const call = Promise.resolve().then(() => {
+              if (settled || controller.signal.aborted) throw new Error("Execution ended before provider dispatch");
               const deadline = hostDeadline();
               try {
                 deadline.throwIfExpired();
@@ -789,25 +812,29 @@ export class QuickJsRuntime {
                 // The host clock is authoritative for the guest window, but the
                 // VM thread cannot see it. Tell the VM to expire too, or the
                 // guest would report an ordinary failure instead of a timeout.
-                slot.worker.postMessage({ type: "expire" } satisfies SandboxWorkerRequest);
+                slot.worker.postMessage({ type: "expire", executionId } satisfies SandboxWorkerRequest);
                 throw error;
               }
               return hostCall(message.ref, message.args, controller.signal, deadline);
             });
             // A detached failure must not become an unhandled rejection; the
             // guest learns about it through this structured reply.
-            void call.catch(() => undefined);
+            hostCalls.add(call);
+            void call.then(() => hostCalls.delete(call), () => hostCalls.delete(call));
             void call.then(
-              (value) => slot.worker.postMessage({ type: "hostResult", id: message.id, ok: true, value } satisfies SandboxWorkerRequest),
+              (value) => {
+                if (!settled) slot.worker.postMessage({ type: "hostResult", executionId, id: message.id, ok: true, value } satisfies SandboxWorkerRequest);
+              },
               (error: unknown) => {
+                if (settled) return;
                 // A provider can observe the host window closing after it already
                 // published (post-commit acknowledgement). The VM must classify
                 // that rejection as the timeout the host saw, not as a plain
                 // provider failure, or the committed effect would be misreported.
-                if (hostDeadline().expired) slot.worker.postMessage({ type: "expire" } satisfies SandboxWorkerRequest);
-                slot.worker.postMessage({ type: "hostResult", id: message.id, ok: false, ...transferredHostFailure(error) } satisfies SandboxWorkerRequest);
+                if (hostDeadline().expired) slot.worker.postMessage({ type: "expire", executionId } satisfies SandboxWorkerRequest);
+                slot.worker.postMessage({ type: "hostResult", executionId, id: message.id, ok: false, ...transferredHostFailure(error) } satisfies SandboxWorkerRequest);
               },
-            );
+            ).catch((error: unknown) => fault(error instanceof Error ? error.message : String(error)));
             return;
           }
           if (message.type === "spanStart") {
@@ -833,24 +860,19 @@ export class QuickJsRuntime {
             return;
           }
           if (message.type === "flush") { tracer.flush(); return; }
-          if (message.type === "result") { settle(message.result); return; }
+          if (message.type === "result") { finish(message.result); return; }
           fault(message.message);
         };
-        backstop = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          const timedOut = mirror?.expired === true;
-          void this.#terminate(slot);
-          options.signal?.removeEventListener("abort", onAbort);
-          resolve(timedOut
-            ? { value: undefined, logs: [], terminationReason: "timed_out", error: `Execution timed out after ${mirror?.effectiveTimeoutMs ?? requestedTimeoutMs}ms`, effectiveTimeoutMs: mirror?.effectiveTimeoutMs ?? requestedTimeoutMs }
-            : sandboxCancelledResult(mirror?.effectiveTimeoutMs ?? requestedTimeoutMs));
-        }, deadlineCeilingMs + cleanupGraceMs + SANDBOX_WORKER_BACKSTOP_MS);
-        backstop.unref();
+        slot.handler = (message) => {
+          try { handle(message); }
+          catch (error) { fault(error instanceof Error ? error.message : String(error)); }
+        };
+        scheduleBackstop();
         options.signal?.addEventListener("abort", onAbort, { once: true });
         if (options.signal?.aborted) onAbort();
-        slot.worker.postMessage({
+        try { slot.worker.postMessage({
           type: "run",
+          executionId,
           code,
           options: {
             timeoutMs: options.timeoutMs,
@@ -869,7 +891,8 @@ export class QuickJsRuntime {
             ...(options.execId === undefined ? {} : { execId: options.execId }),
             ...(options.parentSpanId === undefined ? {} : { parentSpanId: options.parentSpanId }),
           },
-        } satisfies SandboxWorkerRequest);
+        } satisfies SandboxWorkerRequest); }
+        catch (error) { fault(error instanceof Error ? error.message : String(error)); }
       });
     } catch (error) {
       void this.#terminate(slot);
@@ -883,6 +906,9 @@ export class QuickJsRuntime {
     this.#closed = true;
     const slots = [...this.#slots];
     this.#idle = undefined;
-    return Promise.all(slots.map((slot) => this.#terminate(slot))).then(() => undefined);
+    return Promise.all(slots.map((slot) => {
+      slot.fault?.("Sandbox runtime is closed");
+      return this.#terminate(slot);
+    })).then(() => undefined);
   }
 }

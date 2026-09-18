@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Runtime, ServerDefinition, ServerToolInfo } from "mcporter";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { normalizeFabricConfig, type FabricMcpConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { FabricExecutionService } from "../src/execution-service.js";
@@ -580,10 +580,60 @@ await server.connect(new StdioServerTransport());
     }
   });
 
-  it("keeps the approved transport stable when the server creates an argument-named file", async () => {
+  describe.each(["prepare", "use", "execute approval"] as const)("bound argument alias at %s", (boundary) => {
+    it.each(["file retarget", "parent retarget", "file deletion", "parent deletion", "uncertain resolution"] as const)("rejects %s with zero transport contact", async (drift) => {
+      if (process.platform === "win32") return;
+      const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-mcp-argument-alias-"));
+      for (const directory of ["first", "second"]) {
+        fs.mkdirSync(path.join(temporary, directory));
+        fs.writeFileSync(path.join(temporary, directory, "server.mjs"), "same approved bytes\n");
+      }
+      const parentAlias = drift.startsWith("parent");
+      const alias = path.join(temporary, "alias");
+      fs.symlinkSync(path.join(temporary, "first", ...(parentAlias ? [] : ["server.mjs"])), alias);
+      const argument = parentAlias ? "alias/server.mjs" : "alias";
+      const onConnect = vi.fn();
+      const listTools = vi.fn(async () => [{ name: "echo", inputSchema: { type: "object" } }]);
+      const callTool = vi.fn(async () => true);
+      const provider = new KiroMcpProvider(temporary, config, async () => fakeRuntime({
+        definition: { name: "configured", command: { kind: "stdio", command: process.execPath, args: [argument], cwd: temporary } },
+        onConnect, listTools, callTool,
+      }));
+      const mutate = () => {
+        if (drift === "uncertain resolution") {
+          const realpath = fs.realpathSync;
+          vi.spyOn(fs, "realpathSync").mockImplementation((target, options) => {
+            if (String(target) === path.join(temporary, argument)) throw Object.assign(new Error("resolution uncertain"), { code: "EACCES" });
+            return realpath(target, options as never);
+          });
+        } else {
+          fs.unlinkSync(alias);
+          if (drift.endsWith("retarget")) fs.symlinkSync(path.join(temporary, "second", ...(parentAlias ? [] : ["server.mjs"])), alias);
+        }
+      };
+      try {
+        const args = { server: "configured", tool: "echo", args: {} };
+        const prepared = await provider.prepareArguments("$call", args, context());
+        if (boundary !== "execute approval") mutate();
+        const operation = boundary === "prepare"
+          ? provider.prepareArguments("$call", args, context())
+          : provider.invoke("$call", prepared, context(undefined, async () => { if (boundary === "execute approval") mutate(); }));
+        await expect(operation).rejects.toThrow();
+        expect(onConnect).not.toHaveBeenCalled();
+        expect(listTools).not.toHaveBeenCalled();
+        expect(callTool).not.toHaveBeenCalled();
+      } finally {
+        vi.restoreAllMocks();
+        await provider.close();
+        fs.rmSync(temporary, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it.each(["downstream.pid", "downstream.log", "output.json"])("keeps the approved transport stable when the server creates %s", async (outputName) => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-mcp-script-appear-"));
     const script = path.join(temporary, "server.mjs");
-    const pidFile = path.join(temporary, "downstream.pid");
+    const pidFile = path.join(temporary, outputName);
     fs.writeFileSync(script, "export default 'server';\n", { mode: 0o600 });
     let calls = 0;
     const server: ServerDefinition = {

@@ -14,6 +14,7 @@ import {
 } from "../scripts/agent-profile.mjs";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { FabricBootstrapProvider } from "../src/kiro/bootstrap-provider.js";
+import { BUNDLED_GUIDANCE } from "../src/kiro/generated-guidance.js";
 import { LOCAL_GUEST_DECLARATIONS } from "../src/providers/local-contract.js";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
@@ -32,24 +33,20 @@ const options = {
 
 const steering = readFileSync(new URL("../resources/steering/fabric.md", import.meta.url), "utf8");
 
-// Contract clauses, not whole sentences: tolerate punctuation and connective
-// prose changes while keeping obligations in the prompt even without steering.
+const skill = readFileSync(new URL("../skills/fabric-exec/SKILL.md", import.meta.url), "utf8");
+
+// Task/safety obligations remain standing, even without optional steering.
+// Former inline API mechanics are mapped below to canonical AND delivered help.
 const promptContracts: Array<[string, RegExp]> = [
   ["strict one-tool Code Mode", /strict\s+always-on\s+Code Mode/i],
   ["no native fallback", /no native tools?[^.]*\bfallback/i],
   ["conversation without dummy calls", /conversation[^.]*(?:without|no)[^.]*empty tool calls/i],
   ["discovery before reads without a presumed README", /discover paths before reads; never assume README[.]md exists/i],
-  ["closed shallow-list interface", /local[.]list accepts only path\/limit: direct children, no depth/i],
   ["search before bounded reads", /search[^.]*before reading[^.]*located ranges/i],
   ["independent batching and dependent sequencing", /batch independent[^.]*(?:sequence|sequential)[^.]*dependent[^.]*search\/read\/edit\/verify/i],
   ["awaited compact output", /await calls[^.]*return compact results/i],
   ["named edit payloads", /payloads for edit content/i],
-  ["local workspace namespace", /local\s+(?:handles|holds)[^.]*workspace files\/search\/shell/i],
-  ["configured MCP namespace", /mcp\s+(?:handles|calls)[^.]*explicitly configured external capabilities/i],
-  ["durable memory and revisioned state roles", /memory\s+(?:holds|stores)[^.]*durable facts[^.]*state\s+(?:holds|stores)[^.]*revisioned task progress/i],
-  ["create-only write default", /write[^.]*create-only unless\s+overwrite\s*:\s*true/i],
-  ["exact unique edit anchor", /edit[^.]*exact nonempty unique anchor unless\s+all\s*:\s*true/i],
-  ["single verified root auto-binding", /single verified root[^.]*auto(?:matically|-binds)/i],
+  ["single verified root auto-binding", /single verified roots?[^.]*auto(?:matically|-binds?)/i],
   ["separate workspace selection", /fabric\.workspace\(\{action:\s*["']select["'],\s*rootId\}\)[^.]*separate execution[^.]*workspace effects/i],
   ["selection commits only on success", /pending selection[^.]*commits? only[^.]*successful (?:execution|settlement)/i],
   ["no cwd substitution", /never[^.]*process cwd[^.]*workspace/i],
@@ -57,7 +54,6 @@ const promptContracts: Array<[string, RegExp]> = [
   ["on-demand browser grounding", /use web[.]search.*web[.]open.*ground facts/i],
   ["web still requires consent", /browser-harness-js.*normal network approval/i],
   ["nested approval is independent", /outer tool (?:allowance|permission)[^.]*(?:never|does not) approve[^.]*nested effects[^.]*each (?:nested )?action[^.]*Fabric approval policy/i],
-  ["no background guarantee", /no background job guarantee/i],
   ["settle cannot swallow denial or cleanup failures", /denial[^.]*timeout[^.]*cancellation[^.]*uncertain cleanup[^.]*fail[^.]*settle\s*:\s*true/i],
   ["partial-effect recovery, not automatic replay", /propagate failures[^.]*inspect partial (?:effects|progress)[^.]*before retrying[^.]*never[^.]*replay[^.]*effectful program/i],
   ["verified completion", /verif(?:y|ication)[^.]*before[^.]*claim(?:ing)? completion/i],
@@ -67,10 +63,46 @@ const promptContracts: Array<[string, RegExp]> = [
   ["intentional non-secret persistence only", /store only[^.]*intentional[^.]*non-secret[^.]*durable facts(?:\/| or )task state/i],
   ["no conversation mirroring", /never mirror[^.]*(?:whole|entire) conversation/i],
 ];
+const mechanicsContracts: Array<[string, RegExp]> = [
+  ["closed shallow-list interface", /local[.]list`? only when direct children are needed: path\/limit only, no depth/i],
+  ["local workspace namespace", /local\s+(?:handles|holds)[^.]*workspace files\/search\/shell/i],
+  ["configured MCP namespace", /mcp\s+(?:handles|calls)[^.]*explicitly configured external capabilities/i],
+  ["durable memory and revisioned state roles", /memory\s+(?:holds|stores)[^.]*durable facts[^.]*state\s+(?:holds|stores)[^.]*revisioned task progress/i],
+  ["create-only write default", /write[^.]*create-only unless\s+overwrite\s*:\s*true/i],
+  ["exact unique edit anchor", /edit[^.]*exact nonempty unique anchor unless\s+all\s*:\s*true/i],
+  ["no background guarantee", /no background job guarantee/i],
+];
 
 describe("Kiro Agent profile generation", () => {
   it.each(promptContracts)("keeps the standing contract: %s", (_name, rule) => {
     expect(AGENT_PROMPT).toMatch(rule);
+  });
+
+  it.each(mechanicsContracts)("keeps execution mechanics in canonical and delivered help: %s", (_name, rule) => {
+    expect(skill).toMatch(rule);
+    expect(BUNDLED_GUIDANCE.skill).toMatch(rule);
+  });
+
+  it("sets explicit task boundaries and proportional private planning without widening scope", () => {
+    for (const rule of [/answer explains; plan proposes work; review investigates and reports; implement makes authorized changes and verifies them/i,
+      /answer, plan and review do not authorize implementation/i,
+      /necessary dependencies and checks are in scope, optional cleanup is not/i,
+      /do not invent a broad audit for a focused task/i,
+      /plan privately in proportion to uncertainty and risk/i,
+      /requested outcome, key uncertainty, simplest credible method, evidence needed for acceptance/i,
+      /straightforward work may need only one check, not a formal plan/i,
+      /acceptance ledger in context, not unrequested reports/i]) expect(AGENT_PROMPT).toMatch(rule);
+  });
+
+  it("resumes unresolved checks, replans on evidence and stops at acceptance or honest blockers", () => {
+    for (const rule of [/next unresolved check/i, /resume at that check after interruptions or compaction, not from the beginning/i,
+      /replan only when new evidence or changed scope invalidates the approach/i,
+      /adds no evidence, change the hypothesis or method rather than repeat it/i,
+      /repeat unchanged passing checks only for a concrete reason/i,
+      /changed dependencies or invalidated evidence/i,
+      /specific missing evidence, prerequisite or permission and continue independent work/i,
+      /when acceptance is satisfied, stop and deliver/i,
+      /otherwise report the unresolved checks and exact blockers, not success/i]) expect(AGENT_PROMPT).toMatch(rule);
   });
 
   it("avoids ritual discovery and preserves complete requested output and evidence", () => {
@@ -97,7 +129,7 @@ describe("Kiro Agent profile generation", () => {
     expect(profile.prompt).not.toMatch(/(?:<=|at most)\s*\d+\s*words/i);
     expect(profile.prompt).toContain("Match requested format exactly");
     expect(profile.prompt).toContain("no prose/fences around JSON");
-    expect(profile.prompt).toContain("do not copy raw data through the model");
+    expect(profile.prompt).toMatch(/do not copy raw data through the model/i);
   });
 
   it("resolves tool bans before workflow advice, including pure computations", () => {
@@ -127,7 +159,13 @@ describe("Kiro Agent profile generation", () => {
   });
 
   it("makes review coverage mandatory without a findings quota or a brevity cutoff", () => {
-    for (const clause of ["Complete every requested outcome", "productive next step", "no arbitrary word target", "An initial sample is not a coverage limit", "Review help is optional, not a required bootstrap", "coverage ledger", "local.readMany", "Trace callers", "Try to disprove", "unreviewed scope", "conditional risks", "hidden:true", "totalLines", "zero matches is not whole-repo absence"]) expect(AGENT_PROMPT).toContain(clause);
+    for (const clause of ["Complete every requested outcome", "productive next step", "no arbitrary word target", "Review help is optional, not a required bootstrap", "coverage ledger", "local.readMany", "Trace callers", "Try to disprove", "unreviewed scope", "conditional risks", "zero matches is not whole-repo absence"]) expect(AGENT_PROMPT).toContain(clause);
+    expect(AGENT_PROMPT).toMatch(/an initial sample is not a coverage limit/i);
+    for (const clause of ["hidden:true", "totalLines"]) expect(skill).toContain(clause);
+    for (const clause of ["success/failure/non-default scenarios", "caller through configuration/guards and consumer to consequence",
+      "Fetched is not traced", "structural checks and green builds do not establish semantic correctness",
+      "Complete every requested review area with evidence or an explicit blocker", "expected contract", "proof and counterexample verdict"])
+      expect(AGENT_PROMPT).toContain(clause);
     expect(typeCheckFabricCode('return await local.find({pattern:"**/*",hidden:true,limit:200});', fabricGuestDeclarations).errors).toEqual([]);
   });
 
@@ -154,23 +192,23 @@ describe("Kiro Agent profile generation", () => {
     const skill = readFileSync(new URL("../skills/fabric-exec/SKILL.md", import.meta.url), "utf8");
     const api = readFileSync(new URL("../skills/fabric-exec/references/api.md", import.meta.url), "utf8");
     const workflow = readFileSync(new URL("../skills/fabric-exec/references/workflow.md", import.meta.url), "utf8");
-    for (const text of [AGENT_PROMPT, skill, api, workflow]) {
+    // Policy stays standing; the exact discovery/transform recipes now live in help.
+    expect(AGENT_PROMPT).toMatch(/compose mechanical dependencies in one exec/i);
+    expect(AGENT_PROMPT).toContain("yield only for model judgment, safety/authorization, budget limits or recovery");
+    expect(AGENT_PROMPT).toMatch(/batch independent calls, sequence dependent search\/read\/edit\/verify with sequential awaits/i);
+    for (const text of [skill, api, workflow]) {
       expect(text).toContain("discovery -> bounded observed starter reads in the same exec");
-      if (text === AGENT_PROMPT) {
-        expect(text).toMatch(/compose mechanical dependencies in one exec/i);
-        expect(text).toContain("yield only for model judgment, safety/authorization, budget limits or recovery");
-        expect(text).toContain("Batch causal chains with sequential awaits");
-        expect(text).toContain("known-schema transform -> authorized write -> verification");
-        expect(text).toContain("Fewer nested operations do not imply fewer model round trips");
-      } else {
-        expect(text).toContain("standing execution/yield policy");
-        expect(text).not.toContain("Fewer nested operations do not imply fewer model round trips");
-      }
+      expect(text).toContain("standing execution/yield policy");
+    }
+    for (const clause of ["Batch causal chains with sequential awaits", "known-schema transform -> authorized write -> verification",
+      "Fewer nested operations do not imply fewer model round trips"]) expect(skill).toContain(clause);
+    for (const text of [AGENT_PROMPT, api, workflow]) expect(text).not.toContain("Fewer nested operations do not imply fewer model round trips");
+    for (const text of [AGENT_PROMPT, skill, api, workflow]) {
       expect(text).toContain("aggregate output headroom");
       expect(text).toContain("continuation metadata");
       expect(text).not.toMatch(/(?:at most|no more than)\s+\d+\s+(?:tool |nested |exec )?calls/i);
     }
-    for (const text of [AGENT_PROMPT, skill, api]) {
+    for (const text of [skill, api]) {
       expect(text).toContain(discovery);
       expect(text).toMatch(/only when direct children are needed/);
       expect(text).not.toContain("begin inspection with `local.list");
@@ -195,18 +233,20 @@ describe("Kiro Agent profile generation", () => {
     expect(AGENT_PROMPT.match(/@fabric\/\w+/g)).toEqual(["@fabric/fabric_exec"]);
   });
 
-  it("keeps line versus character offsets and a shell deadline with outer cleanup headroom", () => {
-    expect(AGENT_PROMPT).toMatch(/local\.read offsets[^.]*one-based lines/i);
-    expect(AGENT_PROMPT).toMatch(/overview\/api[^.]*zero-based character offset\/limit paging/i);
-    expect(AGENT_PROMPT).toMatch(/shell[^.]*host \/bin\/sh/i);
-    const maximum = Number(AGENT_PROMPT.match(/timeoutMs\s*<=\s*(\d+)/)?.[1]);
-    const shell = Number(AGENT_PROMPT.match(/local\.shell\([^)]*timeoutMs:\s*(\d+)/)?.[1]);
-    const outer = Number(AGENT_PROMPT.match(/outer timeoutMs:\s*(\d+)/)?.[1]);
-    expect(maximum).toBe(FABRIC_MAX_GUEST_TIMEOUT_MS);
-    expect(shell).toBeGreaterThan(0);
-    expect(outer).toBeLessThanOrEqual(maximum);
-    expect(outer).toBeGreaterThan(shell + FABRIC_COMPILER_TIMEOUT_MS + KIRO_MCP_DEADLINE_GRACE_MS);
-    expect(AGENT_PROMPT).toMatch(/outer timeoutMs[^.]*overhead and cleanup/i);
+  it("keeps line versus character offsets and a shell deadline with outer cleanup headroom in help", () => {
+    for (const text of [skill, BUNDLED_GUIDANCE.skill]) {
+      expect(text).toMatch(/local\.read offsets[^.]*one-based lines/i);
+      expect(text).toMatch(/help uses zero-based UTF-16 offset\/limit paging/i);
+      expect(text).toMatch(/shell[^.]*host \/bin\/sh/i);
+      const maximum = Number(text.match(/timeoutMs\s*<=\s*(\d+)/)?.[1]);
+      const shell = Number(text.match(/local\.shell\([^)]*timeoutMs:\s*(\d+)/)?.[1]);
+      const outer = Number(text.match(/outer timeoutMs:\s*(\d+)/)?.[1]);
+      expect(maximum).toBe(FABRIC_MAX_GUEST_TIMEOUT_MS);
+      expect(shell).toBeGreaterThan(0);
+      expect(outer).toBeLessThanOrEqual(maximum);
+      expect(outer).toBeGreaterThan(shell + FABRIC_COMPILER_TIMEOUT_MS + KIRO_MCP_DEADLINE_GRACE_MS);
+      expect(text).toMatch(/outer timeoutMs[^.]*overhead and cleanup/i);
+    }
   });
 
   it("retains nonduplicated installation and host-authority boundaries in steering", () => {

@@ -10,10 +10,10 @@ import {
   LocalShellExitError,
   ProbeRunExitError,
   runQuickJsSandbox
-} from "../chunks/chunk-5SGMVAOB.js";
+} from "../chunks/chunk-COO732H5.js";
 import {
   FabricRepairError
-} from "../chunks/chunk-5CIPARYU.js";
+} from "../chunks/chunk-ITY6W7FO.js";
 import "../chunks/chunk-G3LABT6U.js";
 import "../chunks/chunk-XJTFSUKV.js";
 import "../chunks/chunk-NWYPLJ5N.js";
@@ -26,9 +26,6 @@ if (port) {
   let nextCallId = 0;
   let nextSpanToken = 0;
   let active;
-  const post = (message) => {
-    port.postMessage(message);
-  };
   const rebuildHostError = (message) => {
     const text = message.error ?? "Provider failed";
     const error = message.shellKind === "shell" ? new LocalShellExitError(message.shellResult) : message.shellKind === "probe" ? new ProbeRunExitError(message.shellResult) : message.failure ? new FabricRepairError(text, message.failure) : new Error(text);
@@ -45,10 +42,13 @@ if (port) {
   const start = async (request) => {
     const controller = new AbortController();
     const pending = /* @__PURE__ */ new Map();
-    active = { controller, pending };
+    const state = { executionId: request.executionId, controller, pending };
+    active = state;
+    const post = (message) => {
+      port.postMessage({ ...message, executionId: state.executionId });
+    };
     const hostCall = (ref, args, signal, deadline) => new Promise((resolve, reject) => {
-      const state = active;
-      if (state) state.deadline = deadline;
+      state.deadline = deadline;
       const id = ++nextCallId;
       pending.set(id, { resolve, reject, deadline });
       signal.addEventListener("abort", () => {
@@ -86,8 +86,7 @@ if (port) {
       // Forward the exact-action report so the host can extend the deadline it
       // mirrors before this guest queues behind a saturated host-call slot.
       onPrepareHostCall: (ref, args, deadline) => {
-        const state = active;
-        if (state) state.deadline = deadline;
+        state.deadline = deadline;
         post({ type: "prepare", ref, args });
       }
     };
@@ -96,18 +95,18 @@ if (port) {
     } catch (error) {
       post({ type: "fatal", message: (error instanceof Error ? error.message : String(error)).slice(0, 4096) });
     } finally {
-      active = void 0;
+      if (active === state) active = void 0;
       pending.clear();
       tracer.flush();
     }
   };
   port.on("message", (message) => {
     if (message.type === "run") {
-      void start(message);
+      if (!active) void start(message);
       return;
     }
     const state = active;
-    if (!state) return;
+    if (!state || message.executionId !== state.executionId) return;
     if (message.type === "abort") {
       state.controller.abort(new Error(message.message));
       return;

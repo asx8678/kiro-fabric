@@ -122,7 +122,7 @@ describe("private artifacts and state", () => {
     expect(fs.readFileSync(lock, "utf8")).toBe("replacement");
   });
 
-  it("never deletes a live lock that replaced a stale lock during reclamation", async () => {
+  it("never moves an unversioned stale lock into a competing live owner window", async () => {
     const root = temporary();
     const provider = new StateProvider(root);
     const lock = path.join(root, ".state-mutation.lock");
@@ -145,14 +145,12 @@ describe("private artifacts and state", () => {
       }
       return realRename(from, to);
     }) as typeof fs.renameSync);
-    const controller = new AbortController();
-    const pending = provider.invoke("set", { key: "first", value: 1 }, { cwd: root, signal: controller.signal });
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    controller.abort(new Error("stop waiting for the live lock"));
-    await expect(pending).rejects.toThrow();
-    expect(swapped).toBe(true);
-    // The live owner's lock must survive with its own identity and content.
-    expect(JSON.parse(fs.readFileSync(lock, "utf8")).pid).toBe(process.pid);
+    await expect(provider.invoke("set", { key: "first", value: 1 }, { cwd: root })).rejects.toThrow(/legacy.*recovery/);
+    // Recovery never reaches a rename, so it cannot expose the vacant pathname
+    // that previously let a third writer enter while a live lock was displaced.
+    expect(swapped).toBe(false);
+    expect(JSON.parse(fs.readFileSync(lock, "utf8")).pid).toBe(2_147_483_647);
+    expect(fs.existsSync(path.join(root, "state.json"))).toBe(false);
     expect(fs.readdirSync(root).filter((name) => name.includes("reclaim-"))).toEqual([]);
   });
 

@@ -9,7 +9,7 @@ import {
   assertFabricTranspiledWrapper,
   fabricFailureMetadata,
   transpileFabricCodeWithSourceMap
-} from "./chunk-5CIPARYU.js";
+} from "./chunk-ITY6W7FO.js";
 import {
   QuickJSEmscriptenModuleError,
   debugLog
@@ -9761,6 +9761,7 @@ var createFabricTracer = (options) => new ActiveFabricTracer(options.writer ?? c
 // src/runtime/quickjs-runtime.ts
 import { performance as performance3 } from "node:perf_hooks";
 import { Worker } from "node:worker_threads";
+import { randomUUID as randomUUID3 } from "node:crypto";
 
 // node_modules/.pnpm/@jitl+quickjs-singlefile-mjs-release-sync@0.32.0/node_modules/@jitl/quickjs-singlefile-mjs-release-sync/dist/index.mjs
 var variant = { type: "sync", importFFI: () => import("./ffi-2CFDPMEQ.js").then((mod) => mod.QuickJSFFI), importModuleLoader: () => import("./emscripten-module-Q67P5WYC-K2EI3T2U.js").then((mod) => mod.default) };
@@ -10182,13 +10183,59 @@ var GUEST_SETUP = `
     info: () => call("fabric.info"), help: (args) => call("fabric.help", args),
     workspace: (args) => call("fabric.workspace", args),
   });
+  // Guest composition only: both calls retain registry validation, read approvals,
+  // quotas and cancellation. Never auto-drain search pages or read continuations.
+  const searchRead = async (input) => {
+    const args = parseStrict(strictJsonText(input));
+    if (!args || typeof args !== 'object' || arrayIsArray(args)) throw new SafeTypeError('local.searchRead expects an object');
+    const { contextLines = 3, maxWindows = 8, maxChars, ...query } = args;
+    const integerInRange = (value, min, max) => typeof value === 'number' && numberIsFinite(value) && mathFloor(value) === value && value >= min && value <= max;
+    if (!integerInRange(contextLines, 0, 50)) throw new SafeRangeError('local.searchRead contextLines must be an integer in 0..50');
+    if (!integerInRange(maxWindows, 1, 32)) throw new SafeRangeError('local.searchRead maxWindows must be an integer in 1..32');
+    if (maxChars !== undefined && !integerInRange(maxChars, 1000, 40000)) throw new SafeRangeError('local.searchRead maxChars must be an integer in 1000..40000');
+    if (objectHasOwn(query, 'paginate') || objectHasOwn(query, 'cursor') || objectHasOwn(query, 'snapshotScope')) throw new SafeTypeError('local.searchRead does not paginate; use local.grep for search pages');
+    const search = await call('local.grep', query);
+    const byPath = objectCreate(null);
+    for (const match of search.matches) {
+      if (!objectHasOwn(byPath, match.path)) byPath[match.path] = [];
+      byPath[match.path].push(match.line);
+    }
+    const windows = [];
+    const append = (path, start, end) => {
+      for (let offset = start; offset <= end; offset += 2000) {
+        windows.push({ path, offset, limit: mathMin(2000, end - offset + 1) });
+      }
+    };
+    for (const path of objectKeys(byPath).sort()) {
+      const lines = byPath[path].sort((left, right) => left - right);
+      let start = 0, end = 0;
+      for (const line of lines) {
+        const from = line > contextLines ? line - contextLines : 1, to = line + contextLines;
+        if (start && from <= end + 1) { if (to > end) end = to; continue; }
+        if (start) append(path, start, end);
+        start = from; end = to;
+      }
+      if (start) append(path, start, end);
+    }
+    const selected = windows.slice(0, maxWindows), deferred = windows.slice(maxWindows);
+    const read = selected.length
+      ? await call('local.readMany', { windows: selected, ...(maxChars === undefined ? {} : { maxChars }) })
+      : { files: [], remaining: [], complete: true, unreadTails: [] };
+    // Preserve observed snapshots for later windows on already-read files.
+    const hashes = objectCreate(null);
+    for (const file of read.files) hashes[file.path] = file.sha256;
+    for (const window of deferred) if (objectHasOwn(hashes, window.path)) window.expectedSha256 = hashes[window.path];
+    // Unlike a single readMany response, this backlog may exceed 32 windows.
+    // Return all of it; callers continue in <=32-window chunks, never by re-searching.
+    return { ...search, ...read, remaining: [...read.remaining, ...deferred], complete: read.complete && deferred.length === 0 };
+  };
   globalThis.local = objectFreeze({
     read: (args) => call("local.read", args), grep: (args) => call("local.grep", args),
     readMany: (args) => call("local.readMany", args),
     readEvidence: (args) => call("local.readEvidence", args),
     find: (args) => call("local.find", args), list: (args = {}) => call("local.list", args),
     write: (args) => call("local.write", args), edit: (args) => call("local.edit", args),
-    shell: (args) => call("local.shell", args),
+    shell: (args) => call("local.shell", args), searchRead,
   });
   globalThis.review = objectFreeze({
     begin: (args) => call("review.begin", args), update: (args) => call("review.update", args),
@@ -10723,7 +10770,7 @@ var QuickJsRuntime = class {
     slot.busy = false;
     slot.handler = void 0;
     slot.fault = void 0;
-    if (this.#closed || this.#idle !== void 0) {
+    if (this.#closed || !this.#slots.has(slot) || this.#idle !== void 0) {
       void this.#terminate(slot);
       return;
     }
@@ -10768,69 +10815,92 @@ var QuickJsRuntime = class {
     slot.busy = true;
     const tracer = options.tracer ?? DISABLED_TRACER;
     const controller = new AbortController();
+    const executionId = randomUUID3();
+    const hostCalls = /* @__PURE__ */ new Set();
+    const startedAt = performance3.now();
     let mirror;
     const hostDeadline = () => mirror ??= new FabricDeadline(requestedTimeoutMs, maximum);
     const cleanupGraceMs = Math.max(0, options.cleanupGraceMs ?? 100);
     const spans = /* @__PURE__ */ new Map();
-    let deadlineCeilingMs = requestedTimeoutMs;
     let settled = false;
     let backstop;
     const onAbort = () => {
+      if (settled) return;
       const reason = options.signal?.reason instanceof Error ? options.signal.reason : new Error("Execution cancelled");
       if (!controller.signal.aborted) controller.abort(reason);
-      slot.worker.postMessage({ type: "abort", message: reason.message.slice(0, 4096) });
+      try {
+        slot.worker.postMessage({ type: "abort", executionId, message: reason.message.slice(0, 4096) });
+      } catch (error) {
+        slot.fault?.(error instanceof Error ? error.message : String(error));
+      }
     };
     try {
       return await new Promise((resolve, reject) => {
         const detach = () => {
           if (backstop) clearTimeout(backstop);
           options.signal?.removeEventListener("abort", onAbort);
+          slot.handler = void 0;
+          slot.fault = void 0;
         };
-        const settle = (result) => {
+        const finish = (result, error, terminate = false) => {
           if (settled) return;
           settled = true;
           detach();
-          this.#release(slot);
-          resolve(result);
+          if (!controller.signal.aborted) controller.abort(error ?? new Error(result?.error ?? "Execution finished"));
+          if (terminate) void this.#terminate(slot);
+          void settleWithin(hostCalls, cleanupGraceMs).then(() => {
+            if (!terminate) this.#release(slot);
+            if (error) reject(error);
+            else resolve(result);
+          });
         };
-        const fault = (message) => {
-          if (settled) return;
-          settled = true;
-          detach();
-          void this.#terminate(slot);
-          reject(new Error(message));
+        const fault = (message) => finish(void 0, new Error(message), true);
+        const scheduleBackstop = () => {
+          if (backstop) clearTimeout(backstop);
+          const expiresAt = mirror?.expiresAt ?? startedAt + requestedTimeoutMs;
+          backstop = setTimeout(() => {
+            const effectiveTimeoutMs = mirror?.effectiveTimeoutMs ?? requestedTimeoutMs;
+            finish(options.signal?.aborted ? sandboxCancelledResult(effectiveTimeoutMs) : { value: void 0, logs: [], terminationReason: "timed_out", error: `Execution timed out after ${effectiveTimeoutMs}ms`, effectiveTimeoutMs }, void 0, true);
+          }, Math.max(0, expiresAt + cleanupGraceMs + SANDBOX_WORKER_BACKSTOP_MS - performance3.now()));
+          backstop.unref();
         };
         slot.fault = fault;
-        slot.handler = (message) => {
+        const handle = (message) => {
+          if (settled || message.executionId !== executionId) return;
           if (message.type === "prepare" || message.type === "hostCall") {
             const deadline = hostDeadline();
             const floor = options.minimumTimeoutMsForHostCall?.(message.ref, message.args);
             if (typeof floor === "number" && Number.isFinite(floor)) {
-              deadline.extendTo(floor);
-              deadlineCeilingMs = Math.max(deadlineCeilingMs, floor);
-              slot.worker.postMessage({ type: "extend", floorMs: floor, ...message.type === "hostCall" ? { id: message.id } : {} });
+              const accepted = deadline.extendTo(floor);
+              scheduleBackstop();
+              slot.worker.postMessage({ type: "extend", executionId, floorMs: accepted, ...message.type === "hostCall" ? { id: message.id } : {} });
             }
             if (message.type === "prepare") return;
           }
           if (message.type === "hostCall") {
             const call = Promise.resolve().then(() => {
+              if (settled || controller.signal.aborted) throw new Error("Execution ended before provider dispatch");
               const deadline = hostDeadline();
               try {
                 deadline.throwIfExpired();
               } catch (error) {
-                slot.worker.postMessage({ type: "expire" });
+                slot.worker.postMessage({ type: "expire", executionId });
                 throw error;
               }
               return hostCall(message.ref, message.args, controller.signal, deadline);
             });
-            void call.catch(() => void 0);
+            hostCalls.add(call);
+            void call.then(() => hostCalls.delete(call), () => hostCalls.delete(call));
             void call.then(
-              (value) => slot.worker.postMessage({ type: "hostResult", id: message.id, ok: true, value }),
+              (value) => {
+                if (!settled) slot.worker.postMessage({ type: "hostResult", executionId, id: message.id, ok: true, value });
+              },
               (error) => {
-                if (hostDeadline().expired) slot.worker.postMessage({ type: "expire" });
-                slot.worker.postMessage({ type: "hostResult", id: message.id, ok: false, ...transferredHostFailure(error) });
+                if (settled) return;
+                if (hostDeadline().expired) slot.worker.postMessage({ type: "expire", executionId });
+                slot.worker.postMessage({ type: "hostResult", executionId, id: message.id, ok: false, ...transferredHostFailure(error) });
               }
-            );
+            ).catch((error) => fault(error instanceof Error ? error.message : String(error)));
             return;
           }
           if (message.type === "spanStart") {
@@ -10856,43 +10926,47 @@ var QuickJsRuntime = class {
             return;
           }
           if (message.type === "result") {
-            settle(message.result);
+            finish(message.result);
             return;
           }
           fault(message.message);
         };
-        backstop = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          const timedOut = mirror?.expired === true;
-          void this.#terminate(slot);
-          options.signal?.removeEventListener("abort", onAbort);
-          resolve(timedOut ? { value: void 0, logs: [], terminationReason: "timed_out", error: `Execution timed out after ${mirror?.effectiveTimeoutMs ?? requestedTimeoutMs}ms`, effectiveTimeoutMs: mirror?.effectiveTimeoutMs ?? requestedTimeoutMs } : sandboxCancelledResult(mirror?.effectiveTimeoutMs ?? requestedTimeoutMs));
-        }, deadlineCeilingMs + cleanupGraceMs + SANDBOX_WORKER_BACKSTOP_MS);
-        backstop.unref();
+        slot.handler = (message) => {
+          try {
+            handle(message);
+          } catch (error) {
+            fault(error instanceof Error ? error.message : String(error));
+          }
+        };
+        scheduleBackstop();
         options.signal?.addEventListener("abort", onAbort, { once: true });
         if (options.signal?.aborted) onAbort();
-        slot.worker.postMessage({
-          type: "run",
-          code,
-          options: {
-            timeoutMs: options.timeoutMs,
-            maxTimeoutMs: options.maxTimeoutMs,
-            memoryLimitBytes: options.memoryLimitBytes,
-            ...options.maxSourceBytes === void 0 ? {} : { maxSourceBytes: options.maxSourceBytes },
-            ...options.maxInputBytes === void 0 ? {} : { maxInputBytes: options.maxInputBytes },
-            ...options.maxLogChars === void 0 ? {} : { maxLogChars: options.maxLogChars },
-            ...options.maxNestedResultChars === void 0 ? {} : { maxNestedResultChars: options.maxNestedResultChars },
-            ...options.maxConcurrentHostCalls === void 0 ? {} : { maxConcurrentHostCalls: options.maxConcurrentHostCalls },
-            ...options.payloads === void 0 ? {} : { payloads: options.payloads },
-            ...options.transpiledCode === void 0 ? {} : { transpiledCode: options.transpiledCode },
-            ...options.transpiledSourceMap === void 0 ? {} : { transpiledSourceMap: options.transpiledSourceMap },
-            ...options.cleanupGraceMs === void 0 ? {} : { cleanupGraceMs: options.cleanupGraceMs },
-            tracerEnabled: tracer.enabled,
-            ...options.execId === void 0 ? {} : { execId: options.execId },
-            ...options.parentSpanId === void 0 ? {} : { parentSpanId: options.parentSpanId }
-          }
-        });
+        try {
+          slot.worker.postMessage({
+            type: "run",
+            executionId,
+            code,
+            options: {
+              timeoutMs: options.timeoutMs,
+              maxTimeoutMs: options.maxTimeoutMs,
+              memoryLimitBytes: options.memoryLimitBytes,
+              ...options.maxSourceBytes === void 0 ? {} : { maxSourceBytes: options.maxSourceBytes },
+              ...options.maxInputBytes === void 0 ? {} : { maxInputBytes: options.maxInputBytes },
+              ...options.maxLogChars === void 0 ? {} : { maxLogChars: options.maxLogChars },
+              ...options.maxNestedResultChars === void 0 ? {} : { maxNestedResultChars: options.maxNestedResultChars },
+              ...options.maxConcurrentHostCalls === void 0 ? {} : { maxConcurrentHostCalls: options.maxConcurrentHostCalls },
+              ...options.payloads === void 0 ? {} : { payloads: options.payloads },
+              ...options.transpiledCode === void 0 ? {} : { transpiledCode: options.transpiledCode },
+              ...options.transpiledSourceMap === void 0 ? {} : { transpiledSourceMap: options.transpiledSourceMap },
+              ...options.cleanupGraceMs === void 0 ? {} : { cleanupGraceMs: options.cleanupGraceMs },
+              tracerEnabled: tracer.enabled,
+              ...options.execId === void 0 ? {} : { execId: options.execId },
+              ...options.parentSpanId === void 0 ? {} : { parentSpanId: options.parentSpanId }
+            }
+          });
+        } catch (error) {
+          fault(error instanceof Error ? error.message : String(error));
+        }
       });
     } catch (error) {
       void this.#terminate(slot);
@@ -10905,7 +10979,10 @@ var QuickJsRuntime = class {
     this.#closed = true;
     const slots = [...this.#slots];
     this.#idle = void 0;
-    return Promise.all(slots.map((slot) => this.#terminate(slot))).then(() => void 0);
+    return Promise.all(slots.map((slot) => {
+      slot.fault?.("Sandbox runtime is closed");
+      return this.#terminate(slot);
+    })).then(() => void 0);
   }
 };
 

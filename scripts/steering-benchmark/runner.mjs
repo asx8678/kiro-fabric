@@ -12,7 +12,15 @@ import { reviewHelpDelivery } from './review-delivery.mjs';
 
 /** @typedef {import('./plan.mjs').Plan} Plan */
 /** @typedef {ReturnType<typeof reviewHelpDelivery>} ReviewDelivery */
-/** @typedef {{index:number,arm:string,caseId:string,qualification:boolean,state:string,credits:number|null,stopReason:string|null,ok:boolean,startedAt:string,finishedAt?:string,validation?:import('./oracles.mjs').Validation,evidence?:import('./stream.mjs').Evidence,reviewHelp?:ReviewDelivery,process?:Omit<import('./stream.mjs').Collected,'stdout'|'stderr'>,error?:string,command?:{executable:string,args:string[],cwd:string},budget?:{spent:number,projected:number|null},nativePermission?:ReturnType<typeof createNativeFixturePolicy>}} Row */
+/** @typedef {{index:number,arm:string,caseId:string,qualification:boolean,state:string,credits:number|null,stopReason:string|null,ok:boolean,startedAt:string,finishedAt?:string,validation?:import('./oracles.mjs').Validation,evidence?:import('./stream.mjs').Evidence,reviewHelp?:ReviewDelivery,process?:Omit<import('./stream.mjs').Collected,'stdout'|'stderr'>,error?:string,command?:{executable:string,args:string[],cwd:string},budget?:{spent:number|null,projected:number|null,knownSpentLowerBound?:number},nativePermission?:ReturnType<typeof createNativeFixturePolicy>}} Row */
+/** Known spend is a lower bound, never a substitute for missing charge evidence.
+ * @param {{credits:number|null}[]} attempts @param {number} planned */
+export function attemptBudget(attempts, planned) {
+  const known = attempts.filter(r => typeof r.credits === 'number' && Number.isFinite(r.credits) && r.credits >= 0);
+  const knownSpentLowerBound = known.reduce((n, r) => n + Number(r.credits), 0);
+  const spent = known.length === attempts.length ? knownSpentLowerBound : null;
+  return { spent, knownSpentLowerBound, projected: spent !== null && attempts.length >= 8 ? spent / attempts.length * planned : null };
+}
 /** @param {string} output */
 export function privateOutput(output) { const root = fs.realpathSync(output), st = fs.lstatSync(output); assert.ok(st.isDirectory() && !st.isSymbolicLink() && (st.mode & 0o077) === 0, 'output must be a private non-symlink directory'); return root; }
 /** @param {string} output @returns {Plan} */
@@ -72,18 +80,21 @@ export async function runOne(output, index, signal) {
     /** @type {Row} */ const row = { index: next, arm: item.arm, caseId: item.caseId, qualification: item.qualification, state: 'started', credits: null, stopReason: null, ok: false, startedAt: new Date().toISOString(), budget };
     save(path.join(root, 'results', String(next).padStart(4, '0') + '.json'), row);
     try {
+      /** @type {NodeJS.ProcessEnv} */ const env = { ...process.env, ...plan.config.env, KIRO_FABRIC_LAUNCH_WORKSPACE: workspace };
       putFiles(workspace, spec.files); fs.writeFileSync(path.join(base, 'prompt.txt'), spec.prompt, { mode: 0o600, flag: 'wx' });
       if (item.arm !== 'native') {
         const snapshot = plan.identity.profiles[item.arm];
         putFiles(workspace, { [`.kiro/agents/steering-${item.arm}.json`]: JSON.stringify({ ...snapshot.profile, name: 'steering-' + item.arm }) + '\n' });
       }
       if (item.arm === 'native' && plan.config.nativeWorkspacePermissions) {
-        row.nativePermission = createNativeFixturePolicy(workspace, plan.config.python); updateRow(root, row);
+        // Resolve HOME exactly as the client does, including its working directory
+        // for relative overrides. Never fall back after an explicit HOME fails.
+        row.nativePermission = createNativeFixturePolicy(workspace, plan.config.python, env.HOME === undefined ? undefined : path.resolve(workspace, env.HOME)); updateRow(root, row);
       }
       const before = inventory(workspace); save(path.join(base, 'before.json'), before);
       row.command = commandFor(plan, item, workspace, spec.prompt); save(path.join(base, 'command.json'), row.command);
       const stream = eventCollector(plan.config.maxCalls);
-      const result = await collect({ ...row.command, env: { ...process.env, ...plan.config.env, KIRO_FABRIC_LAUNCH_WORKSPACE: workspace }, maxOutputBytes: plan.config.maxOutputBytes, timeoutMs: plan.config.timeoutMs, stdoutPath: path.join(base, 'client.jsonl'), stderrPath: path.join(base, 'stderr.log'), signal, onLine: stream.onLine });
+      const result = await collect({ ...row.command, env, maxOutputBytes: plan.config.maxOutputBytes, timeoutMs: plan.config.timeoutMs, stdoutPath: path.join(base, 'client.jsonl'), stderrPath: path.join(base, 'stderr.log'), signal, onLine: stream.onLine });
       const { stdout: _stdout, stderr: _stderr, ...metrics } = result; row.process = metrics;
       row.evidence = analyzeEvents(stream.events); row.credits = row.evidence.credits;
       if (item.arm !== 'native' && item.caseId.startsWith('review-')) row.reviewHelp = reviewHelpDelivery(row.evidence, plan.identity.profiles[item.arm]?.reviewHelp?.text);
@@ -100,12 +111,11 @@ export async function runOne(output, index, signal) {
         try { removeNativeFixturePolicy(row.nativePermission); }
         catch (error) { row.stopReason ??= 'native-policy-cleanup-failure'; row.ok = false; row.error = errorText(error); }
       }
-      row.state = 'finished'; row.finishedAt = new Date().toISOString(); updateRow(root, row);
-    }
-    if (next >= 7) {
-      row.budget = { spent: previous.reduce((n, r) => n + Number(r.credits), 0) + (row.credits ?? 0), projected: row.credits === null || previous.some(r => r.credits === null) ? null : (previous.reduce((n, r) => n + Number(r.credits), 0) + row.credits) / (next + 1) * plan.runs.length };
+      row.state = 'finished'; row.finishedAt = new Date().toISOString();
+      row.budget = attemptBudget([...previous, row], plan.runs.length);
       updateRow(root, row);
     }
+
     return row;
   } finally { fs.rmdirSync(lock); }
 }

@@ -15,7 +15,7 @@ import path from "node:path";
 // src/kiro/first-prompt-guidance.ts
 var FIRST_PROMPT_GUIDANCE = `
 <fabric_initial_investigation>
-Apply the standing task contract to this request: answer, review or authorized implementation. Start with the next unresolved acceptance check, not a broad audit by default. Preserve required scope and verification; report the exact blocker if unable to proceed.
+Apply the standing task contract: answer, plan, review or authorized implementation. Resume the next unresolved acceptance check; do not widen scope by default. Stop at acceptance or report the exact blocker without claiming completion.
 </fabric_initial_investigation>
 `.trim();
 

@@ -54,6 +54,40 @@ describe("offline nonqualifying failure evidence", () => {
     await expect(runRealKiroAgentDriver({ authMode: "invalid-offline-mode", failureOutput: f.output, isolatedHome: f.raw })).rejects.toThrow(/auth-mode/);
     expect(JSON.parse(fs.readFileSync(f.output, "utf8"))).toMatchObject({ component: "driver", phase: "preflight", qualifying: false, cleanup: { processes: "complete" } }); expect(fs.existsSync(f.raw)).toBe(false);
   });
+  it.skipIf(process.platform === "win32")("replaces a writerless FIFO without blocking diagnostic cleanup", () => {
+    const f = fixture();
+    const made = spawnSync("mkfifo", [f.output], { encoding: "utf8", timeout: 2000 });
+    expect(made.status).toBe(0);
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", `
+      import { finalizeQualificationDiagnostic } from './scripts/qualification-failure.mjs';
+      finalizeQualificationDiagnostic(process.argv[1], 'removed');
+    `, f.output], { encoding: "utf8", timeout: 2000, killSignal: "SIGKILL" });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(fs.lstatSync(f.output).isFile()).toBe(true);
+    expect(fs.statSync(f.output).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(fs.readFileSync(f.output, "utf8"))).toMatchObject({
+      qualifying: false, ok: false, phase: "preflight", reason: "interrupted", cleanup: { authHome: "removed" },
+    });
+    expect(fs.readdirSync(f.root)).toEqual(["safe.json"]);
+  });
+  it.each(["symlink", "hardlink", "oversized"])("does not read unsafe %s diagnostic input or overwrite its linked target", kind => {
+    const f = fixture();
+    const target = path.join(f.root, "untrusted.json");
+    const bytes = JSON.stringify({ component: "driver", phase: "resume", raw: "secret" }) + (kind === "oversized" ? " ".repeat(4096) : "");
+    fs.writeFileSync(target, bytes);
+    if (kind === "symlink") fs.symlinkSync(target, f.output);
+    else if (kind === "hardlink") fs.linkSync(target, f.output);
+    else fs.writeFileSync(f.output, bytes);
+    expect(finalizeQualificationDiagnostic(f.output, "removed")).toMatchObject({
+      component: "wrapper", phase: "preflight", qualifying: false, ok: false, cleanup: { authHome: "removed" },
+    });
+    expect(fs.readFileSync(target, "utf8")).toBe(bytes);
+    expect(fs.lstatSync(f.output).isFile()).toBe(true);
+    expect(fs.statSync(f.output).mode & 0o777).toBe(0o600);
+    expect(fs.readFileSync(f.output, "utf8")).not.toContain("secret");
+    expect(fs.readdirSync(f.root).sort()).toEqual(["safe.json", "untrusted.json"]);
+  });
   it("reprojects CI fallback input instead of uploading arbitrary preexisting fields", () => {
     const f = fixture();
     fs.writeFileSync(f.output, JSON.stringify({ component: "driver", phase: "resume", phases: ["preflight", "secret-phase", "resume"], reason: "in-progress", raw: "secret transcript", cleanup: { processes: "pending" } }));

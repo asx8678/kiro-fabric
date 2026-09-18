@@ -283,7 +283,12 @@ export class FabricExecutionService {
       if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: compileStatus, elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: 0, resultChars: 0, resultValueChars: null });
       return { status: compileStatus, success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: aborted ? "Execution cancelled" : error instanceof Error ? error.message : String(error), ...(failure ? { failure } : {}), effectiveTimeoutMs };
     }
-    compileSpan?.end({ errors: checked.errors.length });
+    compileSpan?.end({ errors: checked.errors.length, ...(checked.compileCache === undefined ? {} : { cache: checked.compileCache }), ...(checked.compileWorker === undefined ? {} : { worker: checked.compileWorker }) });
+    // Separate request-level counters keep compile cost measurable without
+    // reading compiler internals or changing any guest-visible behavior.
+    if (tracer.enabled && checked.compileCache !== undefined) tracer.event("eval", "compile.result", execId, {
+      cache: checked.compileCache, ...(checked.compileWorker === undefined ? {} : { worker: checked.compileWorker }), typeErrors: checked.errors.length,
+    });
     if (checked.errors.length) {
       if (tracer.enabled) tracer.event("eval", "exec.end", execId, { status: "failed", elapsedMs: performance.now() - started, audits: 0, logs: 0, typeErrors: checked.errors.length, resultChars: 0, resultValueChars: null });
       return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: "TypeScript validation failed", typeErrors: checked.errors, effectiveTimeoutMs };

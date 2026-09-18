@@ -14,6 +14,7 @@ import {
   REAL_CLIENT_NATIVE_TOOLS,
   REAL_CLIENT_PROFILE_TOOLS,
   REAL_CLIENT_TOOLS,
+  REAL_CLIENT_TRANSCRIPT_KINDS,
   REAL_CLIENT_MODEL_TOOLS,
   assertStrictToolInventory,
   codingFixtureSpec,
@@ -922,7 +923,7 @@ const waitForAcpCompactionInterval = async (file, startOffset, sessionId, timeou
   throw new Error("Kiro ACP recording did not contain a causally paired manual /compact request, status sequence, and response");
 };
 
-const automaticCompactionInInterval = (file, startOffset, sessionId, pressureMarker) => {
+export const automaticCompactionInInterval = (file, startOffset, sessionId, pressureMarker) => {
   const bytes = lstat(file)?.isFile() ? fs.readFileSync(file) : Buffer.alloc(0);
   const frames = bytes.length >= startOffset ? parseAcpJsonlFrames(bytes, startOffset, bytes.length) : [];
   const events = completedAcpAutomaticCompactions(frames, sessionId, pressureMarker);
@@ -1200,19 +1201,22 @@ const manualCompactionCycle = async ({ session, recordFile, dataRoot, traceId, s
   };
 };
 
-const automaticCompactionCycle = async ({ session, recordFile, dataRoot, traceId, sessionId }) => {
+// The pressure collector is also exercised offline with an in-process ACP
+// recorder. Production always uses the real TUI sender and recording observer.
+export const collectAutomaticCompactionPressure = async ({ recordFile, sessionId, sendPressure,
+  observePressure = (start, marker) => waitForAutomaticCompactionInInterval(recordFile, start, sessionId, marker) }) => {
   const attempts = [];
+  // The gate covers ALL bounded attempts, not just the successful prompt.
+  // This keeps it seed-adjacent and forbids intervening tools/manual compacts
+  // even when they appeared on an earlier pressure turn.
+  const intervalStartOffset = fs.readFileSync(recordFile).length;
   for (let index = 1; index <= REAL_CLIENT_AUTO_COMPACTION_MAX_PRESSURE_TURNS; index += 1) {
     const pressureMarker = `kiro-auto-compact-${randomBytes(18).toString("hex")}-${index}`;
     const opaqueContext = randomBytes(Math.ceil(REAL_CLIENT_AUTO_COMPACTION_PRESSURE_CHARS * 3 / 4))
       .toString("base64")
       .slice(0, REAL_CLIENT_AUTO_COMPACTION_PRESSURE_CHARS);
     const prompt = `Automatic context-compaction qualification ${pressureMarker}. Keep the following opaque text in this conversation context. Do not call any tool. Reply with only ACK-${pressureMarker}.\n${opaqueContext}`;
-    const intervalStartOffset = fs.readFileSync(recordFile).length;
-    const terminalCursor = session.capture.cursor();
-    session.send(prompt);
-    await waitForQuiet(session, terminalCursor, TURN_TIMEOUT_MS);
-    const terminalOutput = session.capture.slice(terminalCursor);
+    const terminalOutput = await sendPressure(prompt);
     attempts.push({
       index,
       promptChars: prompt.length,
@@ -1220,57 +1224,69 @@ const automaticCompactionCycle = async ({ session, recordFile, dataRoot, traceId
       terminalBytes: terminalOutput.length,
       terminalDigest: hash(terminalOutput),
     });
-    const observed = await waitForAutomaticCompactionInInterval(recordFile, intervalStartOffset, sessionId, pressureMarker);
-    if (!observed) continue;
-    const trace = traceSessions(dataRoot).find((entry) => entry.id === traceId);
-    if (!trace) throw new Error("Fabric trace disappeared during automatic compaction");
-    assertSingleRuntime(trace);
-    const mcp = lifecycleIdentity(trace);
-    const sessionCursor = session.capture.cursor();
-    session.send("/session-id");
-    await waitForQuiet(session, sessionCursor, 120_000);
-    const sessionOutput = session.capture.slice(sessionCursor);
-    const sessionIdAfter = sessionIdFromOutput(sessionOutput);
-    if (!sessionIdAfter) throw new Error("Kiro /session-id after automatic compaction did not yield a structural UUID");
-    const completed = completedAcpCompactionNotifications(
-      acpFrames(recordFile, intervalStartOffset, observed.endOffset),
-      [sessionId],
-    );
-    if (completed.length !== 1 || completed[0].frameDigest !== observed.event.completedFrameDigest) {
-      throw new Error("automatic compaction completion is not bound to its pressure interval");
-    }
-    return {
-      pressureMarker,
-      sessionOutput,
-      trace,
-      mcp,
-      attempts,
-      gate: {
-        trigger: observed.event.trigger,
-        eventCount: completed.length,
-        method: completed[0].method,
-        status: completed[0].status,
-        sessionId: completed[0].sessionId,
-        frameDigest: completed[0].frameDigest,
-        intervalStartOffset,
-        intervalEndOffset: observed.endOffset,
-        sessionIdBefore: sessionId,
-        sessionIdAfter,
-        sessionIdChanged: sessionId !== sessionIdAfter,
-        pressureTurns: attempts.length,
-        totalPressureChars: attempts.reduce((total, attempt) => total + attempt.promptChars, 0),
-        pressureMarkerDigest: observed.event.pressureMarkerDigest,
-        promptRequestIdDigest: observed.event.promptRequestIdDigest,
-        promptFrameDigest: observed.event.promptFrameDigest,
-        startedFrameDigest: observed.event.startedFrameDigest,
-        completedFrameDigest: observed.event.completedFrameDigest,
-        manualCommandAbsent: observed.event.manualCommandAbsent,
-        toolCallsAbsent: observed.event.toolCallsAbsent,
-        settingMutated: false,
-      },
-    };
+    const observed = await observePressure(intervalStartOffset, pressureMarker);
+    if (observed) return { pressureMarker, attempts, intervalStartOffset, observed };
   }
   throw new Error(`Kiro automatic compaction was not structurally observed after ${REAL_CLIENT_AUTO_COMPACTION_MAX_PRESSURE_TURNS} bounded natural pressure turns; the installed client exposes no supported threshold override and qualification does not mutate user settings`);
+};
+
+const automaticCompactionCycle = async ({ session, recordFile, dataRoot, traceId, sessionId }) => {
+  const { pressureMarker, attempts, intervalStartOffset, observed } = await collectAutomaticCompactionPressure({
+    recordFile, sessionId,
+    sendPressure: async (prompt) => {
+      const cursor = session.capture.cursor();
+      session.send(prompt);
+      await waitForQuiet(session, cursor, TURN_TIMEOUT_MS);
+      return session.capture.slice(cursor);
+    },
+  });
+  const trace = traceSessions(dataRoot).find((entry) => entry.id === traceId);
+  if (!trace) throw new Error("Fabric trace disappeared during automatic compaction");
+  assertSingleRuntime(trace);
+  const mcp = lifecycleIdentity(trace);
+  const sessionCursor = session.capture.cursor();
+  session.send("/session-id");
+  await waitForQuiet(session, sessionCursor, 120_000);
+  const sessionOutput = session.capture.slice(sessionCursor);
+  const sessionIdAfter = sessionIdFromOutput(sessionOutput);
+  if (!sessionIdAfter) throw new Error("Kiro /session-id after automatic compaction did not yield a structural UUID");
+  const completed = completedAcpCompactionNotifications(
+    acpFrames(recordFile, intervalStartOffset, observed.endOffset),
+    [sessionId],
+  );
+  if (completed.length !== 1 || completed[0].frameDigest !== observed.event.completedFrameDigest) {
+    throw new Error("automatic compaction completion is not bound to its pressure interval");
+  }
+  return {
+    pressureMarker,
+    sessionOutput,
+    trace,
+    mcp,
+    attempts,
+    gate: {
+      trigger: observed.event.trigger,
+      eventCount: completed.length,
+      method: completed[0].method,
+      status: completed[0].status,
+      sessionId: completed[0].sessionId,
+      frameDigest: completed[0].frameDigest,
+      intervalStartOffset,
+      intervalEndOffset: observed.endOffset,
+      sessionIdBefore: sessionId,
+      sessionIdAfter,
+      sessionIdChanged: sessionId !== sessionIdAfter,
+      pressureTurns: attempts.length,
+      totalPressureChars: attempts.reduce((total, attempt) => total + attempt.promptChars, 0),
+      pressureMarkerDigest: observed.event.pressureMarkerDigest,
+      promptRequestIdDigest: observed.event.promptRequestIdDigest,
+      promptFrameDigest: observed.event.promptFrameDigest,
+      startedFrameDigest: observed.event.startedFrameDigest,
+      completedFrameDigest: observed.event.completedFrameDigest,
+      manualCommandAbsent: observed.event.manualCommandAbsent,
+      toolCallsAbsent: observed.event.toolCallsAbsent,
+      settingMutated: false,
+    },
+  };
 };
 
 const findArtifacts = (dataRoot) => walk(dataRoot).filter((entry) => !entry.directory && ARTIFACT_ID.test(path.basename(entry.relative)));
@@ -1729,6 +1745,18 @@ const finalizeCompactionSeries = (interactiveRecord, manualCompactions, automati
     event: automaticCompaction.gate,
   })}\n`);
   return { compactionSeriesSummary, compactionSeriesOutput, automaticPressureOutput };
+};
+
+/** Serialize the driver's named captures through one production seam.
+ * @param {Record<string, string | Buffer>} captures */
+export const buildRealClientTranscript = (captures) => {
+  // Capture chronology is not wire order. Keep the validator's exact ordered
+  // contract, rejecting drift rather than silently dropping unknown captures.
+  if (Object.keys(captures).length !== REAL_CLIENT_TRANSCRIPT_KINDS.length ||
+      REAL_CLIENT_TRANSCRIPT_KINDS.some(kind => !Object.hasOwn(captures, kind))) {
+    throw new Error("Driver transcript captures do not match the evidence contract");
+  }
+  return REAL_CLIENT_TRANSCRIPT_KINDS.map(kind => transcriptEntry(kind, captures[kind]));
 };
 
 const runRealKiroAgentDriverImplementation = async ({
@@ -2678,67 +2706,67 @@ const runRealKiroAgentDriverImplementation = async ({
       resolutionContextsBeforeDigest: resolutionWorkspaceBeforeDigest,
       resolutionContextsAfterDigest: resolutionWorkspaceAfterDigest,
     },
-    transcript: [
-      transcriptEntry("archive-installation", installResult.combined),
-      transcriptEntry("kiro-version", version.combined),
-      transcriptEntry("kiro-help-all", help.combined),
-      transcriptEntry("kiro-chat-help", chatHelp.combined),
-      transcriptEntry("kiro-agent-validate-help", agentValidateHelp.combined),
-      transcriptEntry("agent-validation-workspace", resolutionRuns[0].validation.combined),
-      transcriptEntry("agent-list-workspace", resolutionRuns[0].listing.combined),
-      transcriptEntry("agent-validation-unrelated", resolutionRuns[1].validation.combined),
-      transcriptEntry("agent-list-unrelated", resolutionRuns[1].listing.combined),
-      transcriptEntry("agent-validation-nested", resolutionRuns[2].validation.combined),
-      transcriptEntry("agent-list-nested", resolutionRuns[2].listing.combined),
-      transcriptEntry("resource-inheritance-setting", inheritance.combined),
-      transcriptEntry("automatic-compaction-setting", autoCompaction.combined),
-      transcriptEntry("coding-qualification", JSON.stringify(coding)),
-      transcriptEntry("form-probe-start", formStartOutput),
-      transcriptEntry("form-probe-mcp-startup", JSON.stringify(formRequestTrace.start)),
-      transcriptEntry("form-probe-trace-request", JSON.stringify(form.requests[0])),
-      transcriptEntry("form-probe-trace-response", JSON.stringify(form.responses[0])),
-      transcriptEntry("form-probe-request", formRequestOutput),
-      transcriptEntry("form-probe-response", formResponseOutput),
-      transcriptEntry("form-probe-shutdown", formShutdownOutput),
-      transcriptEntry("interactive-start", interactiveStartOutput),
-      transcriptEntry("interactive-tools", toolsOutput),
-      transcriptEntry("interactive-mcp-startup", JSON.stringify(turn1.trace.start)),
-      transcriptEntry("interactive-turn-1", turn1.output),
-      transcriptEntry("interactive-turn-2", turn2.output),
-      transcriptEntry("interactive-turn-3", turn3.output),
-      transcriptEntry("interactive-context-seed-acp-call", turn3CallOutput),
-      transcriptEntry("interactive-session-id", sessionOutput),
-      transcriptEntry("interactive-compaction", compactionOutput),
-      transcriptEntry("interactive-compaction-acp-event", compactionAcpOutput),
-      transcriptEntry("interactive-compaction-series-acp-events", compactionSeriesOutput),
-      transcriptEntry("interactive-context-source-acp-event", contextSourceOutput),
-      transcriptEntry("interactive-post-compaction-session-id", postCompactSessionOutput),
-      transcriptEntry("interactive-post-compaction", postCompact.output),
-      transcriptEntry("interactive-post-compaction-acp-call", postCompactCallOutput),
-      transcriptEntry("interactive-manual-compaction-2-context-seed", manualVerification2.seedTurn.output),
-      transcriptEntry("interactive-manual-compaction-2", manualCompaction2.terminalOutput),
-      transcriptEntry("interactive-manual-compaction-2-session-id", manualCompaction2.sessionOutput),
-      transcriptEntry("interactive-post-manual-compaction-2", manualVerification2.turn.output),
-      transcriptEntry("interactive-manual-compaction-3-context-seed", manualVerification3.seedTurn.output),
-      transcriptEntry("interactive-manual-compaction-3", manualCompaction3.terminalOutput),
-      transcriptEntry("interactive-manual-compaction-3-session-id", manualCompaction3.sessionOutput),
-      transcriptEntry("interactive-post-manual-compaction-3", manualVerification3.turn.output),
-      transcriptEntry("interactive-automatic-compaction-context-seed", automaticSeedTurn.output),
-      transcriptEntry("interactive-automatic-compaction-pressure", automaticPressureOutput),
-      transcriptEntry("interactive-automatic-compaction-session-id", automaticCompaction.sessionOutput),
-      transcriptEntry("interactive-post-automatic-compaction", automaticVerification.output),
-      transcriptEntry("interactive-compaction-cycle-context-sources", compactedFactsOutput),
-      transcriptEntry("interactive-compaction-cycle-acp-calls", compactionCycleCallOutput),
-      transcriptEntry("interactive-shutdown", shutdownOutput),
-      transcriptEntry("resume-start", resumeStartOutput),
-      transcriptEntry("resume-mcp-startup", JSON.stringify(resumeTurn.trace.start)),
-      transcriptEntry("resume-session-id", resumedSessionOutput),
-      transcriptEntry("resume-turn", resumeTurn.output),
-      transcriptEntry("resume-acp-call", resumeCallOutput),
-      transcriptEntry("resume-shutdown", resumeShutdownOutput),
-      transcriptEntry("headless-selection", headlessCapture.slice()),
-      transcriptEntry("automatic-compaction-setting-final", autoCompactionFinal.combined),
-    ],
+    transcript: buildRealClientTranscript({
+      "archive-installation": installResult.combined,
+      "kiro-version": version.combined,
+      "kiro-help-all": help.combined,
+      "kiro-chat-help": chatHelp.combined,
+      "kiro-agent-validate-help": agentValidateHelp.combined,
+      "agent-validation-workspace": resolutionRuns[0].validation.combined,
+      "agent-list-workspace": resolutionRuns[0].listing.combined,
+      "agent-validation-unrelated": resolutionRuns[1].validation.combined,
+      "agent-list-unrelated": resolutionRuns[1].listing.combined,
+      "agent-validation-nested": resolutionRuns[2].validation.combined,
+      "agent-list-nested": resolutionRuns[2].listing.combined,
+      "resource-inheritance-setting": inheritance.combined,
+      "automatic-compaction-setting": autoCompaction.combined,
+      "coding-qualification": JSON.stringify(coding),
+      "form-probe-start": formStartOutput,
+      "form-probe-mcp-startup": JSON.stringify(formRequestTrace.start),
+      "form-probe-trace-request": JSON.stringify(form.requests[0]),
+      "form-probe-trace-response": JSON.stringify(form.responses[0]),
+      "form-probe-request": formRequestOutput,
+      "form-probe-response": formResponseOutput,
+      "form-probe-shutdown": formShutdownOutput,
+      "interactive-start": interactiveStartOutput,
+      "interactive-tools": toolsOutput,
+      "interactive-mcp-startup": JSON.stringify(turn1.trace.start),
+      "interactive-turn-1": turn1.output,
+      "interactive-turn-2": turn2.output,
+      "interactive-turn-3": turn3.output,
+      "interactive-context-seed-acp-call": turn3CallOutput,
+      "interactive-session-id": sessionOutput,
+      "interactive-compaction": compactionOutput,
+      "interactive-compaction-acp-event": compactionAcpOutput,
+      "interactive-compaction-series-acp-events": compactionSeriesOutput,
+      "interactive-context-source-acp-event": contextSourceOutput,
+      "interactive-post-compaction-session-id": postCompactSessionOutput,
+      "interactive-post-compaction": postCompact.output,
+      "interactive-post-compaction-acp-call": postCompactCallOutput,
+      "interactive-manual-compaction-2-context-seed": manualVerification2.seedTurn.output,
+      "interactive-manual-compaction-2": manualCompaction2.terminalOutput,
+      "interactive-manual-compaction-2-session-id": manualCompaction2.sessionOutput,
+      "interactive-post-manual-compaction-2": manualVerification2.turn.output,
+      "interactive-manual-compaction-3-context-seed": manualVerification3.seedTurn.output,
+      "interactive-manual-compaction-3": manualCompaction3.terminalOutput,
+      "interactive-manual-compaction-3-session-id": manualCompaction3.sessionOutput,
+      "interactive-post-manual-compaction-3": manualVerification3.turn.output,
+      "interactive-automatic-compaction-context-seed": automaticSeedTurn.output,
+      "interactive-automatic-compaction-pressure": automaticPressureOutput,
+      "interactive-automatic-compaction-session-id": automaticCompaction.sessionOutput,
+      "interactive-post-automatic-compaction": automaticVerification.output,
+      "interactive-compaction-cycle-context-sources": compactedFactsOutput,
+      "interactive-compaction-cycle-acp-calls": compactionCycleCallOutput,
+      "interactive-shutdown": shutdownOutput,
+      "resume-start": resumeStartOutput,
+      "resume-mcp-startup": JSON.stringify(resumeTurn.trace.start),
+      "resume-session-id": resumedSessionOutput,
+      "resume-turn": resumeTurn.output,
+      "resume-acp-call": resumeCallOutput,
+      "resume-shutdown": resumeShutdownOutput,
+      "headless-selection": headlessCapture.slice(),
+      "automatic-compaction-setting-final": autoCompactionFinal.combined,
+    }),
   };
   record.phase("evidence-validation");
   const evidenceBytes = Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`);

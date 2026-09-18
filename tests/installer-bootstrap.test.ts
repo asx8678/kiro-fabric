@@ -36,7 +36,13 @@ async function bootstrapFixture(target='linux-x64'){
   await writeFile(temp+'/bin/sysctl','#!/bin/bash\nprintf "%s\\n" "${FIXTURE_TRANSLATED:-0}"\n',{mode:0o700});
   // Exercise the preferred sha256sum interface using the native portable hash tool.
   await writeFile(temp+'/bin/sha256sum','#!/bin/bash\nexec shasum -a 256 "$@"\n',{mode:0o700});
-  const run=(args:string[]=[],env:Record<string,string>={})=>spawnSync('/bin/bash',[temp+'/install.sh',...args],{encoding:'utf8',timeout:5000,env:{PATH:temp+'/bin',HOME:temp,...env}});
+  // Real platform tools may cold-start slowly under the full suite; this is a
+  // harness safety bound, not a bootstrap performance requirement.
+  const run=(args:string[]=[],env:Record<string,string>={})=>{
+   const result=spawnSync('/bin/bash',[temp+'/install.sh',...args],{encoding:'utf8',timeout:15000,env:{PATH:temp+'/bin',HOME:temp,...env}});
+   expect(result.error,result.stderr).toBeUndefined();
+   return result;
+  };
   return {root,temp,capture,script,run,cleanup:async()=>{await rm(root,{recursive:true,force:true});await rm(temp,{recursive:true,force:true});}};
  }catch(e){await rm(root,{recursive:true,force:true});await rm(temp,{recursive:true,force:true});throw e;}
 }

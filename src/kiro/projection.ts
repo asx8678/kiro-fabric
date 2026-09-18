@@ -4,6 +4,14 @@ import type { FabricExecutionResult } from "../execution-service.js";
 export interface KiroProjectionResult {
   text: string;
   isError: boolean;
+  /** Execution outcome, independent of whether its output could be delivered. */
+  executionStatus: "succeeded" | "failed" | "aborted" | "timed_out";
+  /** Output delivery outcome, independent of the execution outcome. */
+  deliveryStatus: "inline" | "artifact" | "unavailable";
+  /** Fabric never replays a program automatically; this recovery instruction is not a capability. */
+  retryProgram: false;
+  /** Bounded issued-operation receipt artifact for partial failures, when retained. */
+  receiptId?: string;
   artifactId?: string;
   visibleChars: number;
   visibleBytes: number;
@@ -84,6 +92,46 @@ const failureProgress = (result: FabricExecutionResult): string => {
   ].join("\n");
 };
 
+type FabricAudit = FabricExecutionResult["audits"][number];
+const MAX_RECEIPT_ENTRIES = 64;
+/** Bounded recovery receipt: operation identity, outcome class and timing only.
+ * Arguments, source, result contents and operation error text are never recorded,
+ * so an echoed value cannot leak through recovery metadata. */
+const recoveryReceipt = (result: FabricExecutionResult) => {
+  if (result.success || result.audits.length === 0) return undefined;
+  const outcome = (audit: FabricAudit) => audit.commitAcknowledgement ? "committed"
+    : audit.effectOutcome === "uncertain" ? "uncertain"
+      : audit.endedAt === undefined ? "issued"
+        : audit.success === true ? "succeeded" : "failed";
+  const edge = MAX_RECEIPT_ENTRIES / 2;
+  const sampled = result.audits.length <= MAX_RECEIPT_ENTRIES ? result.audits
+    : [...result.audits.slice(0, edge), ...result.audits.slice(-edge)];
+  const entries = sampled.map((audit) => ({
+    ref: audit.ref.length <= MAX_FAILURE_PROGRESS_REF_CHARS ? audit.ref : `${safePrefix(audit.ref, MAX_FAILURE_PROGRESS_REF_CHARS - 1)}…`,
+    ...(audit.ref.length > MAX_FAILURE_PROGRESS_REF_CHARS ? { refTruncated: true } : {}),
+    nestedToolCallId: safePrefix(audit.nestedToolCallId, 64),
+    outcome: outcome(audit),
+    startedAt: audit.startedAt,
+    ...(audit.endedAt === undefined ? {} : { endedAt: audit.endedAt, elapsedMs: audit.endedAt - audit.startedAt }),
+    ...(audit.resultChars === undefined ? {} : { resultChars: audit.resultChars }),
+    ...(audit.resultTruncated === undefined ? {} : { resultTruncated: audit.resultTruncated }),
+  }));
+  // Counts cover every recorded call, including entries omitted from the sample.
+  const totals = { committed: 0, uncertain: 0, issued: 0, succeeded: 0, failed: 0 };
+  for (const audit of result.audits) totals[outcome(audit)]++;
+  return {
+    schemaVersion: 1,
+    executionStatus: result.status,
+    retryProgram: false,
+    counts: {
+      recorded: result.audits.length, shown: entries.length, omitted: result.audits.length - entries.length,
+      ...totals,
+    },
+    note: "Bounded audit receipt, not an exactly-once guarantee. Counts cover all recorded calls; entries sample the first/last calls when omitted > 0. Truncated refs are not callable identities. Audits begin before approval; issued does not prove provider dispatch, and failed does not prove no effects. Absence is not proof of non-dispatch. Arguments, source, result contents and error text are excluded. Inspect state; never replay blindly. This artifact is ephemeral and subject to eviction/expiry.",
+    entries,
+  };
+};
+
 const truncateMiddle = (content: string, maximum: number): string => {
   if (content.length <= maximum) return content;
   if (maximum <= 0) return "";
@@ -127,6 +175,12 @@ export const projectFabricExecutionText = (options: {
         ...(options.result.lastShellFailure ? { lastShellFailure: options.result.lastShellFailure } : {}),
         effectiveTimeoutMs: options.result.effectiveTimeoutMs,
       };
+  const receipt = recoveryReceipt(options.result);
+  let receiptId: string | undefined;
+  if (receipt) {
+    try { receiptId = options.writeArtifact(JSON.stringify(receipt)); }
+    catch { receiptId = undefined; }
+  }
   const body = stringify(value, options.resultFormat);
   const diagnostics = options.normalizationDiagnostics?.length
     ? `\n\nNormalization diagnostics: ${JSON.stringify(options.normalizationDiagnostics)}`
@@ -137,10 +191,22 @@ export const projectFabricExecutionText = (options: {
   const progress = failureProgress(options.result);
   // Never surface labels or nested evidence in recovery metadata, including failure.checkpoints.
   const checkpoints = checkpointIds.length ? `\n\nEphemeral checkpoint handles (read with artifacts.read): ${JSON.stringify(checkpointIds)}` : "";
-  const complete = `${body}${diagnostics}${logs}${progress}${checkpoints}`;
+  const counts = receipt ? JSON.stringify(receipt.counts) : "";
+  const recoveryNotice = receipt
+    ? `\n\nRecovery receipt${receiptId === undefined ? " (unavailable)" : ` ${receiptId}`}: ${counts}. ${receiptId === undefined ? "" : `Read it with await artifacts.read({ id: ${JSON.stringify(receiptId)} }). `}retryProgram: false; inspect the listed operations before rerunning.`
+    : "";
+  // Keep the recovery handle in the reserved suffix even if logs/progress are elided.
+  const recoveryHint = receipt
+    ? `\nRecovery receipt${receiptId === undefined ? " unavailable" : ` ${receiptId} (artifacts.read)`}; retryProgram: false.`
+    : "";
+  const complete = `${body}${diagnostics}${logs}${progress}${recoveryNotice}${checkpoints}`;
   if (complete.length <= visibleMaximum) return {
     text: complete,
     isError: !options.result.success,
+    executionStatus: options.result.status,
+    deliveryStatus: "inline",
+    retryProgram: false,
+    ...(receiptId === undefined ? {} : { receiptId }),
     visibleChars: complete.length,
     visibleBytes: Buffer.byteLength(complete, "utf8"),
     overflowed: false,
@@ -160,10 +226,14 @@ export const projectFabricExecutionText = (options: {
       retention = "canonical";
     }
     const hint = `\n\nOutput exceeded ${visibleMaximum} characters. ${retention === "complete" ? "Full result" : "Canonical JSON result (formatting/logs/progress omitted)"} is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
-    const text = truncateWithHint(complete, visibleMaximum, hint);
+    const text = truncateWithHint(complete, visibleMaximum, `${hint}${recoveryHint}`);
     return {
       text,
       isError: !options.result.success,
+      executionStatus: options.result.status,
+      deliveryStatus: "artifact",
+      retryProgram: false,
+      ...(receiptId === undefined ? {} : { receiptId }),
       artifactId,
       visibleChars: text.length,
       visibleBytes: Buffer.byteLength(text, "utf8"),
@@ -173,11 +243,15 @@ export const projectFabricExecutionText = (options: {
       checkpointIds,
     };
   } catch {
-    const hint = `\n\nOutput exceeded ${visibleMaximum} characters and could not be retained within artifact bounds.`;
-    const text = truncateWithHint(complete, visibleMaximum, hint);
+    const hint = `\n\nOutput could not be retained; execution: ${options.result.status}; delivery: unavailable; retryProgram: false. Effects may already be applied; inspect state.`;
+    const text = truncateWithHint(complete, visibleMaximum, `${hint}${recoveryHint}`);
     return {
       text,
       isError: true,
+      executionStatus: options.result.status,
+      deliveryStatus: "unavailable",
+      retryProgram: false,
+      ...(receiptId === undefined ? {} : { receiptId }),
       visibleChars: text.length,
       visibleBytes: Buffer.byteLength(text, "utf8"),
       overflowed: true,

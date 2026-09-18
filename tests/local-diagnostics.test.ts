@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { normalizeFabricConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
@@ -51,8 +52,8 @@ it.each(["write", "edit"] as const)("%s commit acknowledgement survives cleanup 
   const { base, root, service } = fixture(); fs.writeFileSync(path.join(root, "target"), "PRIVATE-old");
   const controller = new AbortController(); const rename = fs.renameSync;
   vi.spyOn(fs, "renameSync").mockImplementation((from, to) => { rename(from, to); if (String(to) === path.join(root, "target")) controller.abort(new Error("PRIVATE cause")); });
-  const code = operation === "write" ? 'return await local.write({path:"target",content:"PRIVATE-new",overwrite:true});' : 'return await local.edit({path:"target",oldText:"PRIVATE-old",newText:"PRIVATE-new"});';
-  const result = await service.execute({ code, approver: approve, signal: controller.signal });
+  const code = operation === "write" ? 'return await local.write({path:"target",content:"PRIVATE-new",overwrite:true,expectedSha256:payloads.sha256});' : 'return await local.edit({path:"target",oldText:"PRIVATE-old",newText:"PRIVATE-new",expectedSha256:payloads.sha256});';
+  const result = await service.execute({ code, payloads: { sha256: createHash("sha256").update("PRIVATE-old").digest("hex") }, approver: approve, signal: controller.signal });
   expect(result.status).toBe("aborted"); expect(result.audits[0]?.commitAcknowledgement).toEqual({ version: 1, operation });
   expect(project(result).text).toContain("known committed"); expect(project(result).text).not.toContain("PRIVATE"); expect(fs.readFileSync(path.join(root, "target"), "utf8")).toBe("PRIVATE-new");
   expect(fs.readdirSync(path.join(base, "locks"))).toEqual([]);

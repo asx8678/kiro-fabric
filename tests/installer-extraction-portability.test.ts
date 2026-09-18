@@ -6,6 +6,7 @@ import { gzipSync } from 'node:zlib';
 import { afterEach, expect, test, vi } from 'vitest';
 import { extractPrivateEntries } from '../scripts/private-extraction.mjs';
 import { pinnedDirectoryIdentity, pinnedEntryIdentity, runPinnedDirectoryOperation, writePinnedDirectoryStream } from '../scripts/pinned-directory-child.mjs';
+import { runPinnedDirectoryOperation as runStatePinnedDirectoryOperation } from '../src/installation/pinned-directory-child.mjs';
 import { captureDirectoryAncestry } from '../src/installation/filesystem-boundary.mjs';
 import { createBundleArchive, encodeBundleTar, extractBundleArchiveBytes, extractLegacyAgentArchiveBytes } from '../scripts/bundle-archive.mjs';
 import { fixture } from './bundle-fixture.js';
@@ -306,6 +307,37 @@ test('fixed child operations support guarded metadata publication and nonrecursi
   run({ operation: 'unlink', name: 'record', expected: snapshot(path.join(root, 'record')) });
   run({ operation: 'rmdir', name: 'dir', expected: snapshot(path.join(root, 'dir')) });
   expect(fs.readdirSync(root)).toEqual([]); expect(process.cwd()).toBe(cwd); expect(fs.fstatSync(parent.fd).isDirectory()).toBe(true);
+});
+
+test.each([
+  { name: 'installer', run: runPinnedDirectoryOperation },
+  { name: 'state', run: runStatePinnedDirectoryOperation },
+])('$name unlink succeeds when a successor reuses the name', ({ run }) => {
+  forceChild(); const root = temp(), parent = hold(root), leaf = path.join(root, 'lock');
+  fs.writeFileSync(leaf, 'original', { mode: 0o600 });
+  const expected = snapshot(leaf);
+  // Keep the old inode allocated so a successor cannot immediately reuse it.
+  const originalFd = fs.openSync(leaf, fs.constants.O_RDONLY); held.push(originalFd);
+  intercept(() => result => {
+    expect(JSON.parse(result.stdout)).toEqual({ ok: true, result: null });
+    fs.writeFileSync(leaf, 'successor', { flag: 'wx', mode: 0o600 });
+  });
+  expect(run({ ...parent, operation: 'unlink', name: 'lock', expected })).toBeNull();
+  expect(fs.readFileSync(leaf, 'utf8')).toBe('successor');
+  expect(fs.fstatSync(originalFd).nlink).toBe(0);
+  expect(snapshot(leaf).ino).not.toBe(expected.ino);
+});
+
+test.each([
+  { name: 'installer', run: runPinnedDirectoryOperation },
+  { name: 'state', run: runStatePinnedDirectoryOperation },
+])('$name unlink rejects an acknowledgement while the original inode remains', ({ run }) => {
+  forceChild(); const root = temp(), parent = hold(root), leaf = path.join(root, 'lock');
+  fs.writeFileSync(leaf, 'original', { mode: 0o600 });
+  const expected = snapshot(leaf);
+  intercept(call => inject(call, "require('node:fs').unlinkSync = () => {};"));
+  expect(() => run({ ...parent, operation: 'unlink', name: 'lock', expected })).toThrow('Pinned directory removed name changed');
+  expect(fs.readFileSync(leaf, 'utf8')).toBe('original');
 });
 
 test.each(['unlink', 'rmdir', 'rename'] as const)('%s refuses a replaced leaf before any removal/publication', operation => {

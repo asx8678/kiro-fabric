@@ -30,7 +30,7 @@ it.each([128, 600])("amortizes managed rg launches for %i tiny files without cac
   for (let i = 0; i < count; i++) fs.writeFileSync(path.join(f.root, `${String(i).padStart(4, "0")}.txt`), "ordinary content\n");
   const launches = vi.spyOn(childProcess, "execFile"), hashes = vi.spyOn(fs, "readFileSync");
   syncBuiltinESMExports();
-  expect(await f.call("grep", { pattern: "absent", limit: 1 })).toEqual({ scope: searchScope(), matches: [], truncated: false });
+  expect(await f.call("grep", { pattern: "absent", limit: 1 })).toEqual({ scope: searchScope(), matches: [], truncated: false, scopeExhausted: true });
   const expected = 1 + Math.ceil(count / 256);
   expect(launches.mock.calls.filter(([file]) => file === target)).toHaveLength(expected);
   expect(hashes.mock.calls.filter(([file]) => file === target)).toHaveLength(expected);
@@ -44,7 +44,7 @@ it("discovers a hidden-aware all-files manifest with one rg launch", async () =>
   fs.writeFileSync(path.join(f.root, ".ci/job.yml"), "x");
   const launches = vi.spyOn(childProcess, "execFile"); syncBuiltinESMExports();
   expect(await f.call("find", { pattern: "**/*", hidden: true })).toEqual({
-    paths: [".ci/job.yml", "root.txt"], truncated: false,
+    paths: [".ci/job.yml", "root.txt"], truncated: false, scopeExhausted: true,
     scope: { path: ".", glob: "**/*", hidden: true, ignoreFiles: true },
   });
   expect(launches).toHaveBeenCalledTimes(1);
@@ -55,8 +55,8 @@ it("a narrow glob remains useful above 10000 files without including ignored or 
   for (let index = 0; index < 10001; index++) fs.writeFileSync(path.join(f.root, `f${index}.txt`), "irrelevant");
   fs.writeFileSync(path.join(f.root, "selected.ts"), "needle\n"); fs.writeFileSync(path.join(f.root, ".hidden.ts"), "needle");
   fs.writeFileSync(path.join(f.root, ".gitignore"), "ignored.ts\n"); fs.writeFileSync(path.join(f.root, "ignored.ts"), "needle");
-  expect(await f.call("find", { pattern: "*.ts", limit: 1 })).toEqual({ scope: searchScope("*.ts"), paths: ["selected.ts"], truncated: false });
-  expect(await f.call("grep", { pattern: "needle", glob: "*.ts", limit: 1 })).toEqual({ scope: searchScope("*.ts"), matches: [{ path: "selected.ts", line: 1, text: "needle" }], truncated: false });
+  expect(await f.call("find", { pattern: "*.ts", limit: 1 })).toEqual({ scope: searchScope("*.ts"), paths: ["selected.ts"], truncated: false, scopeExhausted: true });
+  expect(await f.call("grep", { pattern: "needle", glob: "*.ts", limit: 1 })).toEqual({ scope: searchScope("*.ts"), matches: [{ path: "selected.ts", line: 1, text: "needle" }], truncated: false, scopeExhausted: true });
   await expect(f.call("grep", { pattern: "needle", limit: 1 })).rejects.toThrow(/narrow path or glob/);
 });
 it("caps only eligible glob intersection, not ignored glob matches", async () => {
@@ -64,14 +64,14 @@ it("caps only eligible glob intersection, not ignored glob matches", async () =>
   fs.writeFileSync(path.join(f.root, ".gitignore"), "ignored/\n");
   for (let index = 0; index < 10001; index++) fs.writeFileSync(path.join(f.root, "ignored", `f${index}.ts`), "needle");
   fs.writeFileSync(path.join(f.root, "selected.ts"), "needle\n");
-  expect(await f.call("find", { pattern: "*.ts", limit: 1 })).toEqual({ scope: searchScope("*.ts"), paths: ["selected.ts"], truncated: false });
+  expect(await f.call("find", { pattern: "*.ts", limit: 1 })).toEqual({ scope: searchScope("*.ts"), paths: ["selected.ts"], truncated: false, scopeExhausted: true });
 });
 
 it("limit 1 stops expensive snapshots before exhausting aggregate bytes and discloses remaining work", async () => {
   const f = fixture(); const text = "needle\n" + "x".repeat(2 * 1024 * 1024 - 7);
   for (let index = 0; index < 18; index++) fs.writeFileSync(path.join(f.root, `${String(index).padStart(2, "0")}.txt`), text);
   const open = vi.spyOn(fs, "openSync");
-  expect(await f.call("grep", { pattern: "needle", limit: 1 })).toEqual({ scope: searchScope(), matches: [{ path: "00.txt", line: 1, text: "needle" }], truncated: true, truncationReasons: ["count"] });
+  expect(await f.call("grep", { pattern: "needle", limit: 1 })).toEqual({ scope: searchScope(), matches: [{ path: "00.txt", line: 1, text: "needle" }], truncated: true, scopeExhausted: false, truncationReasons: ["count"] });
   expect(open.mock.calls.filter(([target]) => String(target).endsWith(".txt"))).toHaveLength(2);
   await expect(f.call("grep", { pattern: "not-found", limit: 1 })).rejects.toThrow(/aggregate search work limit; narrow path or glob/);
 });

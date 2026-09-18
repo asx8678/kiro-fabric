@@ -12,6 +12,10 @@ export interface FabricTypeError {
 }
 
 export interface FabricTypeCheckResult {
+  /** Pool-observed cache outcome; custom workers/oversized inputs bypass lookup. Absent for synchronous checks. */
+  compileCache?: "hit" | "miss" | "bypass";
+  /** Worker used on a miss/bypass: retained idle (warm), fresh (cold), or caller-supplied URL. Absent on a hit. */
+  compileWorker?: "cold" | "warm" | "custom";
   errors: FabricTypeError[];
   javascript?: string;
   sourceMap?: string;
@@ -358,10 +362,16 @@ export class FabricCompilerPool {
       const cached = cacheKey === undefined ? undefined : this.#cache.get(cacheKey);
       if (cached) {
         this.#cache.delete(cacheKey!); this.#cache.set(cacheKey!, cached);
-        resolve({ ...cached.result, errors: [] });
+        const hit: FabricTypeCheckResult = { ...cached.result, errors: [], compileCache: "hit" };
+        // The recorded worker class belongs to the original miss, not this hit.
+        delete hit.compileWorker;
+        resolve(hit);
         return;
       }
       const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? DEFAULT_COMPILER_TIMEOUT_MS, 60_000));
+      // Classify the worker before acquisition in this same tick: a retained
+      // idle worker already paid startup, a fresh one has not.
+      const compileWorker: "cold" | "warm" | "custom" = options.workerUrl !== undefined ? "custom" : this.#idle ? "warm" : "cold";
       const state = this.#acquire(options.workerUrl);
       const id = ++this.#nextId;
       let settled = false;
@@ -371,7 +381,7 @@ export class FabricCompilerPool {
         state.pending = undefined;
         clearTimeout(timer);
         options.signal?.removeEventListener("abort", onAbort);
-        const complete = (): void => { if (error) reject(error); else resolve(result!); };
+        const complete = (): void => { if (error) reject(error); else resolve({ ...result!, compileCache: cacheKey === undefined ? "bypass" : "miss", compileWorker }); };
         if (error) { void this.#terminate(state).then(complete); return; }
         this.#remember(cacheKey, result!);
         state.uses += 1;

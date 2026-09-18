@@ -139,6 +139,7 @@ describe("actual MCP CallTool handler projection behavior", () => {
     harness.executeResult = baseResult("héllo 🌍");
     const response = await call(handler, "fabric_exec", { code: "PRIVATE source", resultFormat: "text" });
     expect(response.content[0].text).toBe("héllo 🌍");
+    expect(response.structuredContent).toEqual({ executionStatus: "succeeded", deliveryStatus: "inline", retryProgram: false });
     const [event] = projections();
     expect(projections()).toHaveLength(1);
     expect(event!.data).toEqual({ visibleChars: 8, visibleBytes: 11, isError: false, overflowed: false, artifactRetained: false });
@@ -191,6 +192,8 @@ describe("actual MCP CallTool handler projection behavior", () => {
     expect(response.content[0].text.length).toBeLessThanOrEqual(100);
     expect(response.content[0].text.length).toBeGreaterThan(0);
     expect(response.isError === true).toBe(retentionFails);
+    expect(response.structuredContent).toEqual({ executionStatus: "succeeded", deliveryStatus: retained ? "artifact" : "unavailable", retryProgram: false, ...(retained ? { artifactId: "artifact-safe" } : {}) });
+    expect(harness.artifactWrites).toHaveLength(retentionFails ? 2 : 1);
     expect(projections()).toHaveLength(1);
     expect(projections()[0]!.data).toEqual({ visibleChars: response.content[0].text.length, visibleBytes: Buffer.byteLength(response.content[0].text), isError: retentionFails, overflowed: true, artifactRetained: retained });
     expect(JSON.stringify(harness.events)).not.toMatch(/秘密|PRIVATE|return secret/);

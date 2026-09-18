@@ -4,16 +4,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { CASES, ALL_CASES, makeCase, caseHashes } from './cases.mjs';
+import { AGENT_PROMPTS, generateAgentProfile } from '../agent-profile.mjs';
 import { object, readJson, regularText, digest, sha, inventory, limitations } from './core.mjs';
 
 export const ARMS = ['old', 'pass1', 'pass2', 'fabric', 'native'];
-/** @typedef {{profile:string,runtimePaths:string[],configPaths:string[]}} ArmConfig */
+/** @typedef {'standard'|'review'|'minimal'} GuidanceMode */
+/** @typedef {{profile:string,runtimePaths:string[],configPaths:string[],guidanceMode?:GuidanceMode}} ArmConfig */
 /** @typedef {{cli:string,python:string,runtimePaths:string[],cliConfigPaths:string[],arms:Record<string,ArmConfig>,nativeMode:string,repetitions:number,seed:string,plannedCredits:number,creditCeiling:number,priorCredits:number,reserveCredits:number,maxCalls:number,timeoutMs:number,maxOutputBytes:number,env:Record<string,string>,snapshotCliSettings?:boolean,cases?:string[],model?:string,effort?:string,nativeTrustTools?:string[],nativeWorkspacePermissions?:boolean,runIndices?:number[],singleRunCreditLimit?:number}} Config */
 /** @typedef {{index:number,caseId:string,round:number,seed:string,arm:string,qualification:boolean,hashes:ReturnType<typeof caseHashes>,sourceIndex?:number}} Run */
 /** @param {unknown} value @param {string} name */
 function text(value, name) { assert.ok(typeof value === 'string' && value.length > 0 && !/[\x00-\x1f]/.test(value), 'invalid ' + name); return String(value); }
 /** @param {unknown} value @param {number} fallback @param {number} min @param {number} max */
-function number(value, fallback, min, max) { const n = value ?? fallback; assert.ok(typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max, 'numeric bounds'); return Number(n); }
+function number(value, fallback, min, max) { const n = value === undefined ? fallback : value; assert.ok(typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max, 'numeric bounds'); return Number(n); }
 /** Resolve a named executable via declared PATH, without running a shell or scanning directories.
  * @param {string} name @param {string} [searchPath] */
 export function executable(name, searchPath = process.env.PATH ?? '') {
@@ -41,7 +43,11 @@ export function parseConfig(value, base) {
   /** @type {Record<string,string>} */ const env = {};
   for (const [key, v] of Object.entries(raw.env ? object(raw.env) : {})) env[key] = text(v, 'environment value');
   /** @type {Record<string,ArmConfig>} */ const parsedArms = {};
-  for (const name of Object.keys(arms)) { const a = object(arms[name]); parsedArms[name] = { profile: path.resolve(base, text(a.profile, name + ' profile')), runtimePaths: paths(a.runtimePaths, base), configPaths: paths(a.configPaths, base) }; }
+  for (const name of Object.keys(arms)) {
+    const a = object(arms[name]), guidanceMode = a.guidanceMode;
+    assert.ok(guidanceMode === undefined || guidanceMode === 'standard' || guidanceMode === 'review' || guidanceMode === 'minimal', 'invalid guidance mode');
+    parsedArms[name] = { profile: path.resolve(base, text(a.profile, name + ' profile')), runtimePaths: paths(a.runtimePaths, base), configPaths: paths(a.configPaths, base), ...(guidanceMode === undefined ? {} : { guidanceMode: /** @type {GuidanceMode} */ (guidanceMode) }) };
+  }
   const config = {
     cli: executable(text(raw.cli ?? 'kiro-cli', 'CLI'), env.PATH), python: executable(text(raw.python ?? 'python3', 'Python'), env.PATH),
     runtimePaths: paths(raw.runtimePaths, base), cliConfigPaths: paths(raw.cliConfigPaths, base), arms: parsedArms,
@@ -90,7 +96,19 @@ export function profileSnapshot(arm) {
   assert.equal(env.KIRO_FABRIC_RUNTIME_ROOT, app, 'coherent app root'); assert.equal(fabric.command, node, 'coherent Node');
   assert.equal(env.KIRO_FABRIC_EXPECTED_NODE, node); assert.equal(env.KIRO_FABRIC_RG, path.join(bundle, 'tools', 'rg'));
   assert.deepEqual(fabric.args, [path.join(app, 'kiro', 'mcp-entry.js')], 'coherent entry');
-  assert.deepEqual(profile.resources, [`skill://${path.join(bundle, 'resources', 'skills', 'fabric-exec', 'SKILL.md')}`, `file://${path.join(bundle, 'resources', 'steering', 'fabric.md')}`], 'coherent resources');
+  // Exact current prompt bytes identify a mode, not an arm label. Older/custom
+  // profiles remain comparable as unknown instead of being mislabeled standard.
+  const guidanceMode = Object.entries(AGENT_PROMPTS).find(([, prompt]) => prompt === profile.prompt)?.[0] ?? 'unknown';
+  if (arm.guidanceMode !== undefined) assert.equal(guidanceMode, arm.guidanceMode, 'declared guidance mode must match profile prompt');
+  const expectedResources = guidanceMode === 'minimal' ? []
+    : [`skill://${path.join(bundle, 'resources', 'skills', 'fabric-exec', 'SKILL.md')}`, `file://${path.join(bundle, 'resources', 'steering', 'fabric.md')}`];
+  assert.deepEqual(profile.resources, expectedResources, 'coherent resources for the guidance mode');
+  if (guidanceMode !== 'unknown') {
+    const expected = generateAgentProfile({ nodePath: node, runtimeRoot: app, dataRoot: text(env.KIRO_FABRIC_DATA_ROOT, 'private data root'),
+      skillPath: path.join(bundle, 'resources', 'skills', 'fabric-exec', 'SKILL.md'), steeringPath: path.join(bundle, 'resources', 'steering', 'fabric.md'),
+      guidanceMode: /** @type {GuidanceMode} */ (guidanceMode) });
+    assert.deepEqual(profile.hooks ?? [], expected.hooks, 'coherent hooks for the guidance mode');
+  }
   assert.ok(arm.runtimePaths.includes(bundle), 'bundle root must be frozen explicitly');
   const data = text(env.KIRO_FABRIC_DATA_ROOT, 'private data root'); assert.ok(path.isAbsolute(data), 'absolute data root');
   assert.ok(!data.startsWith(bundle + path.sep) && data !== bundle, 'mutable data cannot be in immutable bundle');
@@ -102,11 +120,11 @@ export function profileSnapshot(arm) {
     assert.ok(text.trim() && !text.includes('\0') && text.length <= 100000, 'invalid frozen review guidance');
     reviewHelp = { path: reviewPath, sha256: sha(text), text };
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  return { raw, profile, dataRoot: data, profileIdentity: artifact(arm.profile), reviewHelp };
+  return { raw, profile, guidanceMode, dataRoot: data, profileIdentity: artifact(arm.profile), reviewHelp };
 }
 function harnessIdentity() {
   const directory = path.dirname(fileURLToPath(import.meta.url));
-  const files = [path.join(directory, '..', 'steering-benchmark.mjs'), ...fs.readdirSync(directory).filter(n => n.endsWith('.mjs')).sort().map(n => path.join(directory, n))];
+  const files = [path.join(directory, '..', 'steering-benchmark.mjs'), path.join(directory, '..', 'agent-profile.mjs'), ...fs.readdirSync(directory).filter(n => n.endsWith('.mjs')).sort().map(n => path.join(directory, n))];
   return files.map(file => ({ file: path.relative(path.join(directory, '..'), file), hash: sha(fs.readFileSync(file)) }));
 }
 /** Global settings share a volatile session DB, so re-read their bounded projection rather than hashing that DB.
