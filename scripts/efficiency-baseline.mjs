@@ -20,6 +20,7 @@ const SPECS = [
   { id: "parallel-8", recipe: "Read first line of records 00..07 with concurrency 8", reads: 8 },
   { id: "search-edit-verify", recipe: "Literal search record 07 (limit 1), read lines 1..2, uniquely replace status=before with status=after, verify exact file", reads: null },
   { id: "bounded-help", recipe: "Default api page plus complete api paging (limit 16000, <=16 pages, <=100000 UTF-16 chars)", reads: null },
+  { id: "continuity-recovery", recipe: "Built task view, fixed illustrative probe failure, exact recall, cold recovery and stale pointers", reads: null },
 ];
 const CONFIG = {
   executor: { timeoutMs: 10000, maxTimeoutMs: 10000, maxNestedResultChars: 200000, maxOutputChars: 200000, maxProviderCalls: 64 },
@@ -152,10 +153,91 @@ async function measure(operation, boundary) {
   return row;
 }
 
+// Closed offline fixture only: no user command/script/path/config inputs.
+async function probeContinuity(row, temporary, workspace, report) {
+  const api = await import(pathToFileURL(path.join(ROOT, "dist/index.js")).href);
+  const command = "printf continuity_fixture_failure >&2; exit 7";
+  const options = {
+    cwd: workspace, workspaceRoot: workspace, continuityRoot: path.join(temporary, "continuity"),
+    configFile: path.join(temporary, "absent-config.json"), mcpConfigPath: path.join(temporary, "absent-mcp.json"), artifactsRoot: path.join(temporary, "continuity-artifacts"),
+    config: api.normalizeFabricConfig({ ...CONFIG, continuity: { enabled: true, captureFailureOutput: true } }),
+  };
+  const open = () => {
+    const runtime = api.createKiroRuntime(options);
+    // Bind only the retained illustrative-probe provider: no search dependency, local shell, or PATH-selected rg.
+    runtime.registry.register(new api.ProbeProvider({ root: workspace, probesRoot: path.join(temporary, "probes") }));
+    return runtime;
+  };
+  let runtime = open(), returnedChars = 0, executions = 0, shellCalls = 0;
+  const approver = { async approve(action, args) {
+    assert.ok(["continuity.create", "continuity.checkpoint", "continuity.read", "continuity.recall", "continuity.expand", "probe.create", "probe.run"].includes(action.ref));
+    if (action.ref === "probe.create") assert.equal(args.kind, "illustrative");
+    if (action.ref === "probe.run") {
+      assert.equal(args.script, command); assert.equal(args.interpreter, "sh"); assert.equal(args.settle, true);
+      assert.match(args.review, /kind=illustrative; productionProof=false/);
+    }
+  } };
+  const execute = async (code, payloads = {}, expectSuccess = true) => {
+    const result = await runtime.service.execute({ code, payloads, approver, workspaceBound: true });
+    executions++; validateExecutionResult(result);
+    shellCalls += result.audits.filter(audit => audit.ref === "probe.run").length;
+    assert.equal(result.success, expectSuccess, JSON.stringify({ error: result.error, typeErrors: result.typeErrors }));
+    if (result.success) returnedChars += jsonChars(result.value);
+    return result;
+  };
+  try {
+    report.continuityEffectiveConfig = runtime.service.config;
+    report.continuityEffectiveConfigSha256 = sha256(JSON.stringify(runtime.service.config));
+    const created = await execute(`
+      const task = await continuity.create({objective:"Recover the fixed diagnostic",constraints:["Do not rerun commands to recover evidence"]});
+      const fixture = await probe.create({kind:"illustrative",label:"Fixed offline continuity diagnostic"});
+      const result = await probe.run({id:fixture.id,script:payloads.command,settle:true});
+      const saved = await continuity.checkpoint({taskId:task.taskId,expectedRevision:task.revision,requestId:"fixture",captureCurrentExecution:true,
+        facts:Array.from({length:24},(_,i) => ({kind:"decision" as const,text:"Routine history "+i+" "+"x".repeat(100)})),
+        checks:[{id:"diagnostic",text:"Fixed diagnostic command",status:result.ok?"passed":"failed",evidence:"captured"}]});
+      const view = await continuity.read({taskId:saved.taskId,view:"task",maxSummaryBytes:1800});
+      const recalled = await continuity.recall({taskId:saved.taskId,query:"continuity_fixture_failure",outcome:"failed",limit:3});
+      if (!recalled.hits[0]) throw new Error("Missing retained failure");
+      const exact = await tools.call(recalled.hits[0].follow);
+      const all = await continuity.expand({taskId:saved.taskId,expectedRevision:saved.revision,hash:saved.hash,limit:64});
+      return {saved,view,recalled,exact,all};`, { command });
+    const value = created.value;
+    assert.equal(value.view.checks[0].commandOutcome, "failed");
+    assert.equal(value.view.checks[0].freshness, "unbound");
+    assert.equal(value.view.checks[0].inputBinding, "unbound");
+    assert.equal(value.view.checks[0].needsAttention, true);
+    assert.equal(value.view.coverage.semanticValidation, false);
+    assert.ok(value.view.coverage.omittedRecords > 0);
+    assert.ok(Buffer.byteLength(value.view.summary) <= 1800);
+    assert.equal(value.recalled.hits.length, 1);
+    assert.equal(value.exact.records[0].command.exitCode, 7);
+    assert.equal(value.exact.records[0].diagnostic.text, "continuity_fixture_failure");
+    assert.equal(value.all.nextSequence, null);
+    assert.equal(value.all.records.length, value.saved.admittedRecords);
+    const readCode = `return await continuity.read({taskId:payloads.taskId,view:"task",maxSummaryBytes:1800});`;
+    const selector = { taskId: value.saved.taskId };
+    await runtime.close(); runtime = open();
+    assert.deepEqual((await execute(readCode, selector)).value, value.view);
+    await execute(`return await continuity.checkpoint({taskId:payloads.taskId,expectedRevision:Number(payloads.revision),requestId:"advance",checks:[{id:"diagnostic",text:"Unsupported completion claim",status:"passed"}]});`,
+      { ...selector, revision: String(value.saved.revision) });
+    const unbound = (await execute(readCode, selector)).value.checks[0];
+    assert.equal(unbound.needsAttention, true); assert.equal(unbound.commandOutcome, "unobserved");
+    const stale = await execute(`return await tools.call(JSON.parse(payloads.pointer) as {ref:string;args:JsonObject});`, { pointer: JSON.stringify(value.recalled.hits[0].follow) }, false);
+    assert.match(stale.error, /revision conflict/);
+    assert.equal(shellCalls, 1);
+    row.returnedChars = returnedChars; row.artifactRereads = 0;
+    row.result = { verified: true, executions, shellCalls, coldRecovery: true, sourceFreshness: "unbound-illustrative-probe",
+      stalePointerRejected: true, unsupportedPassNeedsAttention: true, exactFailureRecovered: true,
+      taskViewJsonChars: jsonChars(value.view), taskSummaryBytes: Buffer.byteLength(value.view.summary),
+      recallJsonChars: jsonChars(value.recalled), exactFailureJsonChars: jsonChars(value.exact), fullRecordsJsonChars: jsonChars(value.all),
+      omittedRecords: value.view.coverage.omittedRecords, semanticValidation: false };
+  } finally { await runtime.close(); }
+}
+
 async function probe(report) {
   // Deliberately ignore TMPDIR, HOME, PATH, NODE_OPTIONS and all Fabric/MCP settings.
   // Only our private directory is writable; this is not a hostile-code OS sandbox.
-  const temporary = fs.mkdtempSync("/tmp/kiro-efficiency-baseline-");
+  const temporary = fs.realpathSync(fs.mkdtempSync("/tmp/kiro-efficiency-baseline-"));
   const savedEnv = { ...process.env };
   /** @type {{ service: any, close(): Promise<void> } | undefined} */
   let runtime;
@@ -166,7 +248,7 @@ async function probe(report) {
     const workspace = path.join(temporary, "workspace");
     fs.mkdirSync(workspace, { mode: 0o700 });
     for (let i = 0; i < 64; i++) fs.writeFileSync(path.join(workspace, fileName(i)), fixtureText(i), { mode: 0o600 });
-    for (const task of report.tasks.filter((entry) => entry.id !== "bounded-help")) {
+    for (const task of report.tasks.filter((entry) => !["bounded-help", "continuity-recovery"].includes(entry.id))) {
       task.fixtureProbe = await measure(async (row) => {
         let returnedChars = 0;
         const returned = (value) => { returnedChars += jsonChars(value); return value; };
@@ -224,6 +306,10 @@ async function probe(report) {
       assert.ok(result.audits.every((audit) => audit.ref === "fabric.help"));
       row.artifactRereads = 0;
     }, "built Fabric library execution value JSON; NOT MCP projection or client");
+    await runtime?.close(); runtime = undefined;
+    report.tasks.find(entry => entry.id === "continuity-recovery").runtimeProbe = await measure(
+      row => probeContinuity(row, temporary, fs.realpathSync(workspace), report),
+      "built Fabric successful execution values (including full baseline records); NOT MCP projection or client");
   } finally {
     try { await runtime?.close(); }
     finally {
@@ -236,12 +322,12 @@ async function probe(report) {
 
 export async function main(args = process.argv.slice(2)) {
   const mode = parseArgs(args);
-  if (mode === "--help") { process.stdout.write("Offline C1: manifest (no tasks run) | probe (disposable Node fixtures + built Fabric help). JSON to stdout. No paths, commands, network, Kiro or profile options.\n"); return 0; }
+  if (mode === "--help") { process.stdout.write("Offline C1: manifest (no tasks run) | probe (disposable Node fixtures + built Fabric help and continuity; one fixed /bin/sh diagnostic command). JSON to stdout. No paths, commands, network, Kiro or profile options.\n"); return 0; }
   const report = {
     schemaVersion: 1, kind: "offline-efficiency-preparation-not-economic-benchmark", mode, timestamp: new Date().toISOString(),
     identity: identity(), identityStableDuringProbe: null,
     fixture: { version: 1, files: 64, sha256: sha256(JSON.stringify(Array.from({ length: 64 }, (_, i) => [fileName(i), fixtureText(i)]))) },
-    requestedConfig: CONFIG, requestedConfigSha256: sha256(JSON.stringify(CONFIG)), effectiveConfig: null, effectiveConfigSha256: null,
+    requestedConfig: CONFIG, requestedConfigSha256: sha256(JSON.stringify(CONFIG)), effectiveConfig: null, effectiveConfigSha256: null, continuityEffectiveConfig: null, continuityEffectiveConfigSha256: null,
     conditions: { order: SPECS.map((task) => task.id), helpRuntime: "fresh service, one execution including first compilation; latency includes import/setup", osPageCache: null, modelCache: null },
     tasks: SPECS.map((task) => ({ ...task, fixtureProbe: unknownMeasurement(), runtimeProbe: unknownMeasurement(), clientMeasurement: unknownMeasurement() })),
     economic: { comparableTasksAttempted: 0, comparableTasksSucceeded: 0, model: null, client: null, account: null, inputTokens: null, outputTokens: null, billableCachedTokens: null, billableUncachedTokens: null, credits: null, billedCost: null, costPerSuccessfulTask: null },

@@ -153,6 +153,47 @@ describe("immutable discovery indexes", () => {
     expect(split).toHaveBeenCalledTimes(7);
     split.mockRestore(); hash.mockRestore();
   });
+  it("matches full-search prefixes for mixed scores, ties, providers and limit edge cases", async () => {
+    const registry = new ActionRegistry();
+    for (const name of ["zeta", "alpha"]) {
+      const actions: FabricActionDescriptor[] = Array.from({ length: 120 }, (_, i) => ({
+        name: `read${(i * 37) % 120}`, description: i % 3 ? "retrieve document" : "write document", risk: "read",
+        namespace: i % 2 ? "files" : "documents", inputSchema: { type: "object", properties: { [i % 5 ? "path" : "documentId"]: { type: "string" } } },
+      }));
+      registry.register({ name, description: "document operations", discoveryRevision: () => "1", async list() { return actions; }, async describe(action) { return actions.find(entry => entry.name === action); }, async invoke() {} });
+    }
+    try {
+      for (const query of ["document", "alpha.read7", "read7", "retrieve document", "documentId", "ＦＩＬＥＳ", "missing"]) {
+        const all = await registry.searchAll(query);
+        for (const limit of [1, 2, 7, 30, 99, 100, 500, 0, -4, 1.9, NaN, Infinity, -Infinity]) {
+          const capped = Math.max(1, Math.min(100, Math.floor(limit)));
+          expect(await registry.search(query, limit)).toEqual(all.slice(0, capped));
+        }
+      }
+    } finally { await registry.close(); }
+  });
+  it("sorts only the retained top k, not all 500 matching actions", async () => {
+    const f = fixture();
+    f.actions.splice(0, f.actions.length, ...Array.from({ length: 500 }, (_, i) => ({ name: `read${(i * 37) % 500}`, description: "retrieve document", risk: "read" as const, inputSchema: { type: "object" } })));
+    const all = await f.registry.searchAll("document"), sizes: number[] = [];
+    const nativeSort = Array.prototype.sort;
+    const sort = vi.spyOn(Array.prototype, "sort").mockImplementation(function(this: unknown[], compare) {
+      const first = this[0];
+      if (first && typeof first === "object" && "action" in first && "score" in first) sizes.push(this.length);
+      return nativeSort.call(this, compare);
+    });
+    try {
+      for (const limit of [1, 7, 30]) expect(await f.registry.search("document", limit)).toEqual(all.slice(0, limit));
+    } finally { sort.mockRestore(); await f.registry.close(); }
+    expect(sizes).toEqual([1, 7, 30]);
+  });
+  it("keeps discovery validation and failures even for a NaN result limit", async () => {
+    const f = fixture(); f.list.mockRejectedValueOnce(new Error("offline"));
+    await expect(f.registry.search("document", NaN)).rejects.toThrow("offline");
+    expect(await f.registry.search("document", NaN)).toEqual([]);
+    expect(f.list).toHaveBeenCalledTimes(2);
+    await f.registry.close();
+  });
   it("clones outputs, ignores mutations until revision changes, and exposes all matches", async () => {
     const f = fixture(); const listed = await f.registry.list(); listed[0]!.description = "corrupted";
     f.actions[0]!.description = "changed";

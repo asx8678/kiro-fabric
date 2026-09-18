@@ -292,6 +292,7 @@ describe("Agent product boundary", () => {
     expect(report.scope).toBe("component-mcp-only");
     expect(report.authenticatedKiro).toBe("NOT TESTED");
     expect(report.checks).toContain("structured-read-and-search");
+    expect(report.checks).toContain("continuity-disabled-by-default");
     expect(report.checks).toContain("idempotent-info");
     expect(report.checks).toContain("single-runtime-generation");
     expect(report.checks).toContain("form-elicitation-decline");

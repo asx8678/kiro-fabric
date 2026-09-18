@@ -43,3 +43,5 @@ Confirm that Kiro CLI is available, its version is >=2.21.1, and the validation 
 Do not delete configuration or rerun with `sudo`. A failed installation is not a guarantee that nothing changed; preserve any reported backups or recovery evidence.
 
 See [installation details](docs/installer.md) for prerequisites and recovery.
+
+Optional [deterministic task recovery](docs/configuration.md#deterministic-task-recovery-opt-in) provides durable declared checkpoints, explicit host-operation capture, and reproducible summaries. Disabled by default; it does not replace Kiro's native compaction.

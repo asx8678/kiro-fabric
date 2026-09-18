@@ -842,6 +842,7 @@ function roleFor(p) {
   throw Error("Unknown bundle entry: " + p);
 }
 var REQUIRED_APP = ["app/kiro/mcp-entry.js", "app/runtime/compiler-worker-entry.js", "app/runtime/sandbox-worker-entry.js", "app/package.json", "app/closure-manifest.json"];
+var HISTORICAL_REQUIRED_APP = REQUIRED_APP.filter((p) => p !== "app/runtime/sandbox-worker-entry.js");
 function compatibilityFor(target) {
   if (!TARGETS.includes(target)) throw Error("Unsupported target");
   const linux = target.startsWith("linux-");
@@ -910,7 +911,7 @@ function checkToolPins(tools, inventory, target) {
     }
   }
 }
-function checkInventory(inventory) {
+function checkInventoryFor(inventory, requiredApp) {
   if (!Array.isArray(inventory) || inventory.length > LIMITS.entries) throw Error("Inventory bound");
   const seen = /* @__PURE__ */ new Set();
   const aliases = /* @__PURE__ */ new Map();
@@ -934,19 +935,19 @@ function checkInventory(inventory) {
     bytes += e.size;
   }
   if (bytes > LIMITS.bytes) throw Error("Bundle byte bound");
-  for (const p of [...REQUIRED_APP, "tools/node", "tools/rg", "manager/install-manager.mjs", "resources/steering/fabric.md", "resources/skills/fabric-exec/SKILL.md", "notices/node-LICENSE", "notices/rg-LICENSE-MIT", "notices/rg-COPYING", "notices/rg-UNLICENSE"]) if (!inventory.some((e) => e.path === p && e.size > 0)) throw Error("Missing required entry: " + p);
+  for (const p of [...requiredApp, "tools/node", "tools/rg", "manager/install-manager.mjs", "resources/steering/fabric.md", "resources/skills/fabric-exec/SKILL.md", "notices/node-LICENSE", "notices/rg-LICENSE-MIT", "notices/rg-COPYING", "notices/rg-UNLICENSE"]) if (!inventory.some((e) => e.path === p && e.size > 0)) throw Error("Missing required entry: " + p);
   if (!inventory.some((e) => e.path.startsWith("resources/skills/fabric-exec/references/"))) throw Error("Missing resource closure");
   return bytes;
 }
 function manifestDigest(payload) {
   return sha256("kiro-fabric.bundle.v1\0" + canonical(payload));
 }
-function checkManifest(m) {
+function checkManifestFor(m, requiredApp) {
   exactFields(m, ["compatibility", "digest", "inventory", "product", "provenance", "schema", "target", "tools", "version"]);
   if (m.schema !== 1 || m.product !== PRODUCT || !TARGETS.includes(m.target) || !isStable(m.version)) throw Error("Manifest identity");
   checkCompatibility(m.compatibility, m.target);
   checkProvenance(m.provenance);
-  const bytes = checkInventory(m.inventory);
+  const bytes = checkInventoryFor(m.inventory, requiredApp);
   checkToolPins(m.tools, m.inventory, m.target);
   const { digest, ...payload } = m;
   if (!isHash(digest) || digest !== manifestDigest(payload)) throw Error("Manifest digest mismatch");
@@ -1052,21 +1053,24 @@ async function scan(root) {
   for (const p of directories) if (!inventory.some((e) => e.path.startsWith(p + "/"))) throw Error("Empty/unknown directory");
   return inventory.sort((a, b) => byteOrder(a.path, b.path));
 }
-async function createBundleManifest(root, { version, target, compatibility, provenance, tools }) {
+async function createManifestFor(root, { version, target, compatibility, provenance, tools }, requiredApp) {
   const guard = await checkRoot(root);
   root = guard.root;
   const payload = { schema: 1, product: PRODUCT, version, target, compatibility, provenance, tools, inventory: await scan(root) };
   guard.check();
   const manifest = { ...payload, digest: manifestDigest(payload) };
-  checkManifest(manifest);
+  checkManifestFor(manifest, requiredApp);
   return manifest;
 }
 async function validateBundle(root) {
+  return validateBundleFor(root, REQUIRED_APP);
+}
+async function validateBundleFor(root, requiredApp) {
   const guard = await checkRoot(root);
   root = guard.root;
   const raw = await readRegular(path3.join(root, "bundle-manifest.json"), LIMITS.manifest, { mode: 384 }), manifest = JSON.parse(raw.toString("utf8"));
   if (!raw.equals(Buffer.from(canonical(manifest) + "\n"))) throw Error("Noncanonical manifest bytes");
-  const bytes = checkManifest(manifest), actual = await createBundleManifest(root, manifest);
+  const bytes = checkManifestFor(manifest, requiredApp), actual = await createManifestFor(root, manifest, requiredApp);
   if (canonical(actual) !== canonical(manifest)) throw Error("Bundle inventory mismatch");
   guard.check();
   return { root, digest: manifest.digest, manifest, version: manifest.version, inventory: manifest.inventory, bytes };
@@ -1209,7 +1213,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         const manifestHash = createHash4("sha256").update(readFileSync(path6.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-J2RZI2IB.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-TA5ARTJB.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {} });
     } finally {
       release?.();

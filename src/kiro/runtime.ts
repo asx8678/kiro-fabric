@@ -13,6 +13,7 @@ import {
 import { FabricExecutionService } from "../execution-service.js";
 import type { FabricProviderStatus } from "../protocol.js";
 import { StateProvider } from "../providers/state-provider.js";
+import { ContinuityProvider } from "../providers/continuity-provider.js";
 import { LocalCodingProvider } from "../providers/local-provider.js";
 import { FabricBootstrapProvider } from "./bootstrap-provider.js";
 import { createKiroArtifactStore, type KiroArtifactStore } from "./artifacts.js";
@@ -35,6 +36,8 @@ export interface KiroRuntimeOptions {
   memoryRoot?: string;
   memoryNamespace?: string;
   stateRoot?: string;
+  /** Private verified-project storage; never inferred from cwd. Only used when enabled. */
+  continuityRoot?: string;
   config?: FabricConfig;
   /** Host-issued client/workspace authorization; never accepted from guest arguments. */
   catalogBinding?: Omit<import("../core/catalog-contract.js").CatalogBinding, "runtimeNonce">;
@@ -98,6 +101,12 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   else registry.markUnavailable("memory", config.memory.enabled ? "workspace binding is required" : "disabled by configuration");
   if (options.stateRoot && config.state.enabled) registry.register(new StateProvider(options.stateRoot, config.state));
   else registry.markUnavailable("state", config.state.enabled ? "workspace binding is required" : "disabled by configuration");
+  if (options.workspaceRoot && options.continuityRoot && config.continuity.enabled) {
+    registry.register(new ContinuityProvider(options.continuityRoot, {
+      ...config.continuity, workspaceRoot: options.workspaceRoot,
+      maxResultBytes: Math.floor(Math.min(config.executor.maxNestedResultChars, config.executor.maxOutputChars) * 0.8),
+    }));
+  } else registry.markUnavailable("continuity", config.continuity.enabled ? "verified workspace binding is required" : "disabled by configuration");
   const service = new FabricExecutionService(registry, config, options.cwd);
   if (options.catalogBinding) service.bindCatalog(options.catalogBinding);
   return {

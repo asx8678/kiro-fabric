@@ -295,7 +295,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       mcpConfigPath: data.mcpConfig,
       artifactsRoot: project?.artifacts ?? data.artifacts,
       ...(options.managedSearch ? { managedSearch: options.managedSearch } : {}),
-      ...(project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, workspaceRoot: workspace.canonicalPath, localLockRoot: path.join(path.dirname(project.state), "local-locks") } : {}),
+      ...(project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, continuityRoot: project.continuity, workspaceRoot: workspace.canonicalPath, localLockRoot: path.join(path.dirname(project.state), "local-locks") } : {}),
     });
   };
   const runtimeForIdentity = async (): Promise<KiroRuntime> => {

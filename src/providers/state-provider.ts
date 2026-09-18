@@ -81,6 +81,8 @@ export class StateProvider implements FabricProvider {
   readonly #maxEntries: number;
   readonly #maxValueChars: number;
   readonly #maxTotalChars: number;
+  readonly #maxValueBytes: number;
+  readonly #maxTotalBytes: number;
   #pendingLockCleanup: { dev: number; ino: number } | undefined;
   #uncertainLock = false;
 
@@ -88,6 +90,9 @@ export class StateProvider implements FabricProvider {
     maxEntries?: number;
     maxValueChars?: number;
     maxTotalChars?: number;
+    /** Optional stricter UTF-8 caps for private adapters; public state defaults are unchanged. */
+    maxValueBytes?: number;
+    maxTotalBytes?: number;
   } = {}) {
     this.#root = privateRoot(root);
     this.#file = path.join(this.#root, "state.json");
@@ -95,6 +100,8 @@ export class StateProvider implements FabricProvider {
     this.#maxEntries = options.maxEntries ?? 1_000;
     this.#maxValueChars = options.maxValueChars ?? 100_000;
     this.#maxTotalChars = options.maxTotalChars ?? 8_000_000;
+    this.#maxValueBytes = options.maxValueBytes ?? Infinity;
+    this.#maxTotalBytes = options.maxTotalBytes ?? Infinity;
   }
 
   discoveryRevision(): string { return "1"; }
@@ -152,7 +159,7 @@ export class StateProvider implements FabricProvider {
         }
 
         const serialized = JSON.stringify(args.value);
-        if (serialized === undefined || serialized.length > this.#maxValueChars) {
+        if (serialized === undefined || serialized.length > this.#maxValueChars || Buffer.byteLength(serialized, "utf8") > this.#maxValueBytes) {
           throw new Error("state value exceeds configured bounds");
         }
         if (!current && Object.keys(document.entries).length >= this.#maxEntries) {
@@ -198,9 +205,9 @@ export class StateProvider implements FabricProvider {
         }
         if ((stat.mode & 0o077) !== 0) throw new Error("state file permissions must be private");
       }
-      if (stat.size > this.#maxTotalChars * 4) throw new Error("state document exceeds configured bounds");
+      if (stat.size > Math.min(this.#maxTotalChars * 4, this.#maxTotalBytes)) throw new Error("state document exceeds configured bounds");
       const text = fs.readFileSync(descriptor, "utf8");
-      if (text.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
+      if (text.length > this.#maxTotalChars || Buffer.byteLength(text, "utf8") > this.#maxTotalBytes) throw new Error("state document exceeds configured bounds");
       const parsed = JSON.parse(text) as unknown;
       if (!isRecord(parsed) || !hasExactKeys(parsed, ["schemaVersion", "revision", "entries"]) ||
           parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) ||
@@ -219,7 +226,7 @@ export class StateProvider implements FabricProvider {
           throw new Error("state file is malformed");
         }
         const value = JSON.stringify(entry.value);
-        if (value === undefined || value.length > this.#maxValueChars) {
+        if (value === undefined || value.length > this.#maxValueChars || Buffer.byteLength(value, "utf8") > this.#maxValueBytes) {
           throw new Error("state value exceeds configured bounds");
         }
         normalizedEntries[key] = entry as unknown as StateEntry;
@@ -239,7 +246,7 @@ export class StateProvider implements FabricProvider {
 
   #write(document: StateDocument, beforeCommit: () => void): void {
     const text = `${JSON.stringify(document, null, 2)}\n`;
-    if (text.length > this.#maxTotalChars) throw new Error("state document exceeds configured bounds");
+    if (text.length > this.#maxTotalChars || Buffer.byteLength(text, "utf8") > this.#maxTotalBytes) throw new Error("state document exceeds configured bounds");
     const temporary = path.join(
       this.#root,
       `.state-${process.pid}-${randomBytes(8).toString("hex")}.tmp`,

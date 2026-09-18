@@ -59,13 +59,15 @@ describe("offline efficiency preparation", () => {
     const result = run("manifest");
     expect(result.status, result.stderr).toBe(0);
     const report = JSON.parse(result.stdout);
-    expect(report.tasks.map((task: any) => task.id)).toEqual(["sequential-17", "sequential-64", "parallel-8", "search-edit-verify", "bounded-help"]);
-    expect(report.tasks.map((task: any) => task.reads)).toEqual([17, 64, 8, null, null]);
+    expect(report.tasks.map((task: any) => task.id)).toEqual(["sequential-17", "sequential-64", "parallel-8", "search-edit-verify", "bounded-help", "continuity-recovery"]);
+    expect(report.tasks.map((task: any) => task.reads)).toEqual([17, 64, 8, null, null, null]);
     for (const task of report.tasks) for (const field of ["fixtureProbe", "runtimeProbe", "clientMeasurement"]) {
       expect(task[field].status).toBe("unrun");
       for (const [key, value] of Object.entries(task[field])) if (key !== "status") expect(value).toBeNull();
     }
     expect(report.effectiveConfig).toBeNull();
+    expect(report.continuityEffectiveConfig).toBeNull();
+    expect(report.continuityEffectiveConfigSha256).toBeNull();
     expect(report.identity.sourceMatchesBuild).toBeNull();
     expect(report.identity.installedProfile).toBeNull();
     for (const section of ["source", "runtime", "configuration", "harness", "dependencies"]) expect(report.identity[section].sha256).toMatch(/^[a-f0-9]{64}$/);
@@ -99,6 +101,16 @@ describe("offline efficiency preparation", () => {
     expect(help.result.expandedSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(help.returnedChars).toBeGreaterThan(help.result.expandedChars);
     expect(report.effectiveConfig).toMatchObject({ mcp: { enabled: false }, memory: { enabled: false }, state: { enabled: false }, approvals: { execute: "deny", network: "deny", write: "deny" } });
+    const continuity = report.tasks[5].runtimeProbe;
+    expect(continuity).toMatchObject({ status: "succeeded", attempts: 1, retries: 0, artifactRereads: 0,
+      result: { verified: true, shellCalls: 1, coldRecovery: true, stalePointerRejected: true,
+        unsupportedPassNeedsAttention: true, exactFailureRecovered: true, semanticValidation: false } });
+    expect(continuity.result.taskSummaryBytes).toBeLessThanOrEqual(1800);
+    expect(continuity.result.omittedRecords).toBeGreaterThan(0);
+    expect(continuity.result.taskViewJsonChars).toBeLessThan(continuity.result.fullRecordsJsonChars);
+    expect(continuity.returnedChars).toBeGreaterThan(continuity.result.fullRecordsJsonChars);
+    expect(report.continuityEffectiveConfig.continuity).toMatchObject({ enabled: true, captureFailureOutput: true });
+    expect(report.continuityEffectiveConfigSha256).toMatch(/^[a-f0-9]{64}$/);
     // Shared-tree builds can drift; such runs must not be accepted as stable.
     expect(report.identityStableDuringProbe).toBe(true);
     for (const task of report.tasks) expect(task.clientMeasurement.latencyMs).toBeNull();
@@ -121,6 +133,8 @@ describe("offline efficiency preparation", () => {
     expect(report.tasks.slice(0, 4).every((task: any) => task.fixtureProbe.success)).toBe(true);
     expect(report.tasks[4].runtimeProbe).toMatchObject({ status: "failed", success: false, attempts: 1, retries: 0, returnedChars: null, artifactRereads: null });
     expect(report.tasks[4].runtimeProbe.error).toMatch(/Cannot find module/);
+    expect(report.tasks[5].runtimeProbe).toMatchObject({ status: "failed", attempts: 1, retries: 0, returnedChars: null });
+    expect(report.tasks[5].runtimeProbe.error).toMatch(/Cannot find module/);
     expect(report.economic.billedCost).toBeNull();
     expect(fs.existsSync(path.join(checkout, "dist"))).toBe(false);
   });

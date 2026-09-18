@@ -19,6 +19,12 @@ export { ActionRegistry } from "./core/action-registry.js";
 export { LocalCodingProvider } from "./providers/local-provider.js";
 export { formatLocalEvidence } from "./providers/local-evidence.js";
 export { ReviewProvider } from "./providers/review-provider.js";
+export { ContinuityProvider } from "./providers/continuity-provider.js";
+export type { ContinuityFact, ContinuityFactKind, ContinuityRecord, ContinuityCheck, ContinuityCheckRecord } from "./continuity/records.js";
+export type { ContinuityReadResult } from "./continuity/render.js";
+export type { ContinuityTaskView, ContinuityCheckAssessment } from "./continuity/task-view.js";
+export type { ContinuityRecallArguments, ContinuityRecallResult } from "./continuity/recall.js";
+export type { ContinuityHandle, ContinuityStoreOptions } from "./continuity/store.js";
 export { buildRunProvenance, parseRunProvenanceDeclaration } from "./kiro/run-provenance.js";
 export type { RunProvenanceInput, RunProvenanceConfiguredInput, RunProvenanceObservedInput, RunProvenanceManifest } from "./kiro/run-provenance.js";
 export { ProbeProvider, ProbeRunExitError } from "./providers/probe-provider.js";
@@ -62,6 +68,7 @@ export type {
   FabricConfig as FabricPowerConfig,
   FabricResultFormat,
   FabricStateConfig,
+  FabricContinuityConfig,
   FabricTracingConfig,
 } from "./config.js";
 export {

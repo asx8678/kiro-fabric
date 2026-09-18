@@ -62,6 +62,15 @@ export interface FabricStateConfig {
   maxTotalChars: number;
 }
 
+export interface FabricContinuityConfig {
+  enabled: boolean;
+  captureFailureOutput: boolean;
+  maxTasks: number;
+  maxTaskBytes: number;
+  maxTotalBytes: number;
+  maxSummaryBytes: number;
+}
+
 export interface FabricArtifactsConfig {
   maxArtifacts: number;
   maxArtifactChars: number;
@@ -80,6 +89,7 @@ export interface FabricConfig {
   web: FabricWebConfig;
   memory: FabricMemoryConfig;
   state: FabricStateConfig;
+  continuity: FabricContinuityConfig;
   artifacts: FabricArtifactsConfig;
   tracing: FabricTracingConfig;
 }
@@ -130,6 +140,7 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
     maxValueChars: 100_000,
     maxTotalChars: 8_000_000,
   },
+  continuity: { enabled: false, captureFailureOutput: false, maxTasks: 32, maxTaskBytes: 131_072, maxTotalBytes: 4_194_304, maxSummaryBytes: 8_192 },
   artifacts: {
     maxArtifacts: 32,
     maxArtifactChars: 2_000_000,
@@ -170,6 +181,7 @@ const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
   web: ["enabled", "command", "searchTimeoutMs", "openTimeoutMs"],
   memory: ["enabled", "maxEntries", "maxValueChars"],
   state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
+  continuity: ["enabled", "captureFailureOutput", "maxTasks", "maxTaskBytes", "maxTotalBytes", "maxSummaryBytes"],
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
   tracing: ["enabled"],
 };
@@ -244,6 +256,8 @@ export const normalizeFabricConfig = (
   const web = record(root.web) ?? {};
   const memory = record(root.memory) ?? {};
   const state = record(root.state) ?? {};
+  const continuity = record(root.continuity) ?? {};
+  const continuityDefaults = defaults.continuity ?? DEFAULT_FABRIC_CONFIG.continuity;
   const artifacts = record(root.artifacts) ?? {};
   const tracing = record(root.tracing) ?? {};
   const timeoutMs = integer(executor.timeoutMs, defaults.executor.timeoutMs, 1, 900_000);
@@ -297,6 +311,14 @@ export const normalizeFabricConfig = (
       maxEntries: integer(state.maxEntries, defaults.state.maxEntries, 1, 10_000),
       maxValueChars: integer(state.maxValueChars, defaults.state.maxValueChars, 1_000, 2_000_000),
       maxTotalChars: integer(state.maxTotalChars, defaults.state.maxTotalChars, 4_096, 32_000_000),
+    },
+    continuity: {
+      enabled: bool(continuity.enabled, continuityDefaults.enabled),
+      captureFailureOutput: bool(continuity.captureFailureOutput, continuityDefaults.captureFailureOutput ?? false),
+      maxTasks: integer(continuity.maxTasks, continuityDefaults.maxTasks, 1, 32),
+      maxTaskBytes: integer(continuity.maxTaskBytes, continuityDefaults.maxTaskBytes, 4_096, 131_072),
+      maxTotalBytes: integer(continuity.maxTotalBytes, continuityDefaults.maxTotalBytes, 4_096, 4_194_304),
+      maxSummaryBytes: integer(continuity.maxSummaryBytes, continuityDefaults.maxSummaryBytes, 1_024, 16_384),
     },
     artifacts: {
       maxArtifacts: integer(artifacts.maxArtifacts, defaults.artifacts.maxArtifacts, 1, 128),

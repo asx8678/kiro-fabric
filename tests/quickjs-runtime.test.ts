@@ -1,12 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Worker } from "node:worker_threads";
 import { QuickJsRuntime } from "../src/runtime/quickjs-runtime.js";
 
 const defaults = { timeoutMs: 500, maxTimeoutMs: 1_000, memoryLimitBytes: 32 * 1024 * 1024, maxSourceBytes: 64 * 1024, maxLogChars: 1_000 };
 
+const runtimes: QuickJsRuntime[] = [];
+const runtimeFixture = (): QuickJsRuntime => {
+  const runtime = new QuickJsRuntime();
+  runtimes.push(runtime);
+  return runtime;
+};
+// Do not let earlier tests' idle retirement fire during a later worker spy.
+afterEach(async () => { await Promise.all(runtimes.splice(0).map(runtime => runtime.close())); });
+
 describe("QuickJS-only guest runtime", () => {
   it("exposes payloads and no host process or module loader", async () => {
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       "return { value: payloads.value, processType: typeof (globalThis as any).process, requireType: typeof (globalThis as any).require }",
       async () => { throw new Error("unexpected host call"); },
       { ...defaults, payloads: { value: "ok" } },
@@ -30,7 +39,7 @@ describe("QuickJS-only guest runtime", () => {
     ];
     let calls = 0;
     for (const code of probes) {
-      const result = await new QuickJsRuntime().execute(code, async () => { calls += 1; return null; }, {
+      const result = await runtimeFixture().execute(code, async () => { calls += 1; return null; }, {
         ...defaults,
         payloads: { program: "return 42" },
       });
@@ -41,13 +50,13 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("returns a controlled timeout", async () => {
-    const result = await new QuickJsRuntime().execute("while (true) {}", async () => null, { ...defaults, timeoutMs: 20, maxTimeoutMs: 20 });
+    const result = await runtimeFixture().execute("while (true) {}", async () => null, { ...defaults, timeoutMs: 20, maxTimeoutMs: 20 });
     expect(result.terminationReason).toBe("timed_out");
     expect(result.error).toContain("timed out");
   });
 
   it("times out a guest-owned promise that can never settle", async () => {
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       "return await new Promise(() => undefined)",
       async () => { throw new Error("unexpected host call"); },
       { ...defaults, timeoutMs: 20 },
@@ -57,7 +66,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("reports timeout after synchronous host work starves the deadline timer", async () => {
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       "return await tools.call({ ref: 'test.blocking', args: {} })",
       async () => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 40); return "committed"; },
       { ...defaults, timeoutMs: 10, maxTimeoutMs: 10 },
@@ -71,7 +80,7 @@ describe("QuickJS-only guest runtime", () => {
     let providerStarted!: () => void;
     const started = new Promise<void>((resolve) => { providerStarted = resolve; });
     const controller = new AbortController();
-    const execution = new QuickJsRuntime().execute(
+    const execution = runtimeFixture().execute(
       "return await tools.call({ ref: 'test.wait', args: {} })",
       async (_ref, _args, signal) => new Promise((_resolve, reject) => {
         providerStarted();
@@ -93,7 +102,7 @@ describe("QuickJS-only guest runtime", () => {
     let mutationAt = 0;
     let providerStarted!: () => void;
     const started = new Promise<void>((resolve) => { providerStarted = resolve; });
-    const execution = new QuickJsRuntime().execute(
+    const execution = runtimeFixture().execute(
       "return await tools.call({ ref: 'test.noncooperative', args: {} })",
       async () => new Promise((resolve) => { providerStarted(); setTimeout(() => { mutationAt = Date.now(); resolve(true); }, 200); }),
       { ...defaults, signal: controller.signal, cleanupGraceMs: 10 },
@@ -120,7 +129,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("survives 1000 repeated cancellation and timeout settlements", { timeout: 60_000 }, async () => {
-    const runtime = new QuickJsRuntime();
+    const runtime = runtimeFixture();
     const before = process.memoryUsage().heapUsed;
     for (let index = 0; index < 1_000; index++) {
       const result = index % 2 === 0
@@ -134,7 +143,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("turns invalid or oversized host results into controlled guest errors", async () => {
-    const oversized = await new QuickJsRuntime().execute(
+    const oversized = await runtimeFixture().execute(
       "return await tools.call({ ref: 'test.large', args: {} })",
       async () => ({ value: "x".repeat(100) }),
       { ...defaults, maxNestedResultChars: 20 },
@@ -142,7 +151,7 @@ describe("QuickJS-only guest runtime", () => {
     expect(oversized.terminationReason).toBe("runtime_error");
     expect(oversized.error).toContain("bounded JSON contract");
 
-    const nonFinite = await new QuickJsRuntime().execute(
+    const nonFinite = await runtimeFixture().execute(
       "return await tools.call({ ref: 'test.nan', args: {} })",
       async () => Number.NaN,
       defaults,
@@ -152,7 +161,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("keeps run handles and strict JSON primordials private from guest tampering", async () => {
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       `
       (globalThis as any).__fabricRun = () => 'forged';
       (globalThis as any).__fabricCancelExecution = () => undefined;
@@ -183,11 +192,11 @@ describe("QuickJS-only guest runtime", () => {
       "const value: any[] = [1]; Object.defineProperty(value, '4294967295', { value: 2, enumerable: true, configurable: true }); return value as any",
     ];
     for (const code of probes) {
-      const result = await new QuickJsRuntime().execute(code, async () => null, defaults);
+      const result = await runtimeFixture().execute(code, async () => null, defaults);
       expect(result.terminationReason, code).toBe("runtime_error");
       expect(result.error, code).toMatch(/Result contains|strict JSON/u);
     }
-    const valid = await new QuickJsRuntime().execute(
+    const valid = await runtimeFixture().execute(
       "return { nested: [null, true, 2.5, 'ok'], empty: {} }",
       async () => null,
       defaults,
@@ -196,7 +205,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("keeps source and payload limits independent", async () => {
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       "return payloads.value.length",
       async () => null,
       { ...defaults, maxSourceBytes: 1_024, maxInputBytes: 4_096, payloads: { value: "x".repeat(2_000) } },
@@ -206,11 +215,11 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("bounds source, payload, and log output", async () => {
-    const source = await new QuickJsRuntime().execute("x".repeat(2_000), async () => null, { ...defaults, maxSourceBytes: 1_024 });
+    const source = await runtimeFixture().execute("x".repeat(2_000), async () => null, { ...defaults, maxSourceBytes: 1_024 });
     expect(source.terminationReason).toBe("runtime_error");
-    const payload = await new QuickJsRuntime().execute("return 1", async () => null, { ...defaults, maxSourceBytes: 1_024, payloads: { value: "x".repeat(2_000) } });
+    const payload = await runtimeFixture().execute("return 1", async () => null, { ...defaults, maxSourceBytes: 1_024, payloads: { value: "x".repeat(2_000) } });
     expect(payload.terminationReason).toBe("runtime_error");
-    const logs = await new QuickJsRuntime().execute("print('x'.repeat(100)); return true", async () => null, { ...defaults, maxLogChars: 10 });
+    const logs = await runtimeFixture().execute("print('x'.repeat(100)); return true", async () => null, { ...defaults, maxLogChars: 10 });
     expect(logs.logs.join("").length).toBeLessThanOrEqual(10);
   });
 
@@ -219,14 +228,14 @@ describe("QuickJS-only guest runtime", () => {
     ["a large object", "print({ value: 'x'.repeat(200000) });return true"],
     ["a non-JSON value", "print(() => 1);return true"],
   ])("never exceeds the log character budget for %s", async (_label, code) => {
-    const result = await new QuickJsRuntime().execute(code, async () => null, { ...defaults, maxLogChars: 16, timeoutMs: 2_000, maxTimeoutMs: 2_000 });
+    const result = await runtimeFixture().execute(code, async () => null, { ...defaults, maxLogChars: 16, timeoutMs: 2_000, maxTimeoutMs: 2_000 });
     expect(result.terminationReason).toBe("completed");
     expect(result.logs.join("").length).toBeLessThanOrEqual(16);
   });
 
   it("bounds teardown by the cleanup grace instead of the execution deadline", async () => {
     const before = Date.now();
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       "const p = tools.call({ ref: 'test.never', args: {} });p.catch(() => { while (true) {} });return true",
       () => new Promise(() => {}),
       { ...defaults, timeoutMs: 5_000, maxTimeoutMs: 5_000, cleanupGraceMs: 25 },
@@ -239,7 +248,7 @@ describe("QuickJS-only guest runtime", () => {
   it("provides ordered fan-out bounded by the configured host-call concurrency", async () => {
     let active = 0;
     let maximum = 0;
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       `return await parallel([0, 1], async (group) =>
         await parallel([3, 1, 2], async (value, index) =>
           await tools.call({ ref: 'test.wait', args: { value, index: group * 3 + index } }),
@@ -262,7 +271,7 @@ describe("QuickJS-only guest runtime", () => {
   it("queues direct Promise.all bridge fan-out behind the execution-wide host-call cap", async () => {
     let active = 0;
     let maximum = 0;
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       "return await Promise.all([0, 1, 2, 3].map((index) => tools.call({ ref: 'test.wait', args: { index } })))",
       async (_ref, args) => {
         active += 1;
@@ -278,7 +287,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("snapshots exact call arguments before a saturated host-call queue", async () => {
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       `
       const first = tools.call({ ref: "test.wait", args: { index: 0 } });
       const mutable = { index: 1 };
@@ -296,7 +305,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("extends an exact queued action deadline before waiting for a host-call slot", async () => {
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       `return await Promise.all([
         tools.providers(),
         tools.call({ ref: "mcp.$call", args: {} }),
@@ -322,7 +331,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("fails closed on malformed bounded parallel requests", async () => {
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       "return await parallel([async () => 1], { concurrency: 0 })",
       async () => null,
       { ...defaults, maxConcurrentHostCalls: 2 },
@@ -332,7 +341,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("keeps bounded parallel scheduling independent of guest-mutated primordials", async () => {
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       `
       Promise.all = (() => { throw new Error("forged Promise.all"); }) as any;
       Math.min = (() => 99) as any;
@@ -348,7 +357,7 @@ describe("QuickJS-only guest runtime", () => {
 
   it("stops dequeuing bounded parallel work after the first failure", async () => {
     const started: number[] = [];
-    const result = await new QuickJsRuntime().execute(
+    const result = await runtimeFixture().execute(
       "return await parallel([0, 1, 2, 3], async (index) => tools.call({ ref: 'test.step', args: { index } }), 2)",
       async (_ref, args) => {
         const index = Number((args.args as Record<string, unknown>).index);
@@ -370,7 +379,7 @@ describe("QuickJS-only guest runtime", () => {
     // QuickJS allocator, so setMemoryLimit alone does not bound them. The fixed
     // memory maximum must turn an over-limit allocation into a controlled error
     // instead of growing host memory or rejecting the execution.
-    const overLimit = await new QuickJsRuntime().execute(
+    const overLimit = await runtimeFixture().execute(
       "const buffers = [new ArrayBuffer(4000000), new ArrayBuffer(4000000), new ArrayBuffer(4000000)]; return buffers.length",
       async () => null,
       { ...defaults, memoryLimitBytes: 8 * 1024 * 1024, timeoutMs: 2_000, maxTimeoutMs: 2_000 },
@@ -381,7 +390,7 @@ describe("QuickJS-only guest runtime", () => {
 
     // The ceiling must not make the limit unusable: an allocation inside the
     // configured bound still succeeds.
-    const withinLimit = await new QuickJsRuntime().execute(
+    const withinLimit = await runtimeFixture().execute(
       "const buffers = [new ArrayBuffer(2000000), new ArrayBuffer(2000000)]; return buffers.reduce((total, buffer) => total + buffer.byteLength, 0)",
       async () => null,
       { ...defaults, memoryLimitBytes: 8 * 1024 * 1024, timeoutMs: 2_000, maxTimeoutMs: 2_000 },
@@ -390,7 +399,7 @@ describe("QuickJS-only guest runtime", () => {
   });
 
   it("keeps later executions healthy after one exhausts the VM heap", async () => {
-    const runtime = new QuickJsRuntime();
+    const runtime = runtimeFixture();
     const exhausted = await runtime.execute(
       "const buffers = [new ArrayBuffer(4000000), new ArrayBuffer(4000000), new ArrayBuffer(4000000)]; return buffers.length",
       async () => null,
@@ -407,7 +416,7 @@ describe("QuickJS-only guest runtime", () => {
     // the whole synchronous guest run, delaying timers, unrelated requests and
     // even the delivery of the guest's own cancellation. The VM now runs on its
     // own thread, so a host timer must fire while the guest is still busy.
-    const runtime = new QuickJsRuntime();
+    const runtime = runtimeFixture();
     let timerDelayMs = Number.POSITIVE_INFINITY;
     const started = performance.now();
     const timer = new Promise<void>((resolve) => setTimeout(() => { timerDelayMs = performance.now() - started; resolve(); }, 20));
@@ -425,9 +434,9 @@ describe("QuickJS-only guest runtime", () => {
 
   it("terminates the pooled thread on close and stays usable afterwards", async () => {
     const terminate = vi.spyOn(Worker.prototype, "terminate");
-    const runtime = new QuickJsRuntime();
+    const runtime = runtimeFixture();
     try {
-      await runtime.execute("return 1", async () => null, defaults);
+      await expect(runtime.execute("return 1", async () => null, defaults)).resolves.toMatchObject({ terminationReason: "completed", value: 1 });
       // The finished execution leaves one thread warm rather than paying for a
       // fresh boot on the next call, so close is what actually releases it.
       expect(terminate).not.toHaveBeenCalled();

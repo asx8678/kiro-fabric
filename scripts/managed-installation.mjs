@@ -3,7 +3,7 @@ import path from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { installerSafety as s, resolveKiroHome } from './install-agent-user.mjs';
-import { validateBundle, checkManifest, canonical, readRegular } from './bundle-contract.mjs';
+import { validateBundle, validateInstalledBundle, checkManifest, checkInstalledManifest, canonical, readRegular } from './bundle-contract.mjs';
 import { checkReleaseAdmission } from './release-trust.mjs';
 import { generateAgentProfile } from './agent-profile.mjs';
 import { readGenerationProfiles, retainGenerationProfile } from './installer-profile-store.mjs';
@@ -77,7 +77,7 @@ export async function inspectCompleteInstallation(kiroHome,{verifyGenerations=tr
  for(const dir of [p.base,p.runtime,p.data,path.join(p.data,'fabric'),path.dirname(p.launcher),path.dirname(p.journal)]){s.assertSafeDirectory(dir,{private:true});if((fs.lstatSync(dir).mode&0o7777)!==0o700)throw Error('managed directory mode must be 0700');}
  const known=new Set([...owner.runtimeGenerations.map(r=>r.name),...oldNames]);
  for(const name of fs.readdirSync(p.runtime)){if(!known.has(name))throw Error('unowned runtime entry: '+name);}
- const generations=[];for(const r of owner.runtimeGenerations){const root=path.join(p.runtime,r.name),rawManifest=readControl(path.join(root,'bundle-manifest.json'));if(!rawManifest||s.hash(rawManifest)!==r.manifestSha256)throw Error('modified generation manifest');const m=JSON.parse(rawManifest.toString());checkManifest(m);if(rawManifest.toString()!==canonical(m)+'\n'||m.digest!==r.name)throw Error('generation identity mismatch');generations.push(verifyGenerations?await validateBundle(root):{root,digest:m.digest,manifest:m,version:m.version,inventory:m.inventory});}
+ const generations=[];for(const r of owner.runtimeGenerations){const root=path.join(p.runtime,r.name),rawManifest=readControl(path.join(root,'bundle-manifest.json'));if(!rawManifest||s.hash(rawManifest)!==r.manifestSha256)throw Error('modified generation manifest');const m=JSON.parse(rawManifest.toString());checkInstalledManifest(m);if(rawManifest.toString()!==canonical(m)+'\n'||m.digest!==r.name)throw Error('generation identity mismatch');generations.push(verifyGenerations?await validateInstalledBundle(root):{root,digest:m.digest,manifest:m,version:m.version,inventory:m.inventory});}
  if(digest(readControl(p.profile))!==owner.profileSha256||digest(readControl(p.launcher,0o700))!==owner.launcherSha256)throw Error('modified profile/launcher');
  if(owner.launcherSha256!==s.hash(completeGenerationLauncher(owner.currentRuntime)))throw Error('launcher binding mismatch');
  if(owner.status==='active')validateGenerationProfile(p,owner.currentRuntime,readControl(p.profile));
@@ -197,7 +197,7 @@ async function commit(state,ctx,o,trust,profile=o.status==='retired'?null:bytes(
  else if(!state.legacy&&(readControl(p.manifest)!==null||readControl(p.profile)!==null||readControl(p.launcher,0o700)!==null||readControl(p.releaseState)!==null))throw Error('unowned control appeared before activation');
  // Recheck all old immutable resources immediately before the first live write.
  // A candidate marker is expected here, so verify via the already bound records.
- for(const r of o.runtimeGenerations){const b=await validateBundle(path.join(p.runtime,r.name));if(b.digest!==r.name||s.hash(canonical(b.manifest)+'\n')!==r.manifestSha256)throw Error('generation changed before activation');}
+ for(const r of o.runtimeGenerations){const retained=old?.runtimeGenerations.some(prior=>prior.name===r.name&&prior.manifestSha256===r.manifestSha256);const b=await (retained?validateInstalledBundle:validateBundle)(path.join(p.runtime,r.name));if(b.digest!==r.name||s.hash(canonical(b.manifest)+'\n')!==r.manifestSha256)throw Error('generation changed before activation');}
  const candidate=candidateRecord(p);if(candidate){const st=fs.lstatSync(path.join(p.runtime,candidate.manifest.digest));if(String(st.dev)!==candidate.stageIdentity?.dev||String(st.ino)!==candidate.stageIdentity?.ino)throw Error('candidate inode changed before activation');}
  if(state.legacy){if(!readControl(p.manifest)?.equals(state.legacy.bytes)||digest(readControl(p.profile))!==state.legacy.manifest.profileSha256||readControl(p.launcher,0o700)!==null||readControl(p.releaseState)!==null)throw Error('legacy controls changed');legacyNames(o.legacy,p);}
  const allowed=new Set([...o.runtimeGenerations.map(r=>r.name),...legacyNames(o.legacy,p)]);for(const name of fs.readdirSync(p.runtime))if(!allowed.has(name))throw Error('unowned runtime appeared before activation');

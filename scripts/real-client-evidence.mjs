@@ -287,15 +287,7 @@ const exactFabricExecEvidence = (value, label, sessionId, recordingDigest, expec
   return value;
 };
 
-export const assertRealClientEvidence = (report, packageDigest, options = {}) => {
-  if (!report || typeof report !== "object") fail("report must be an object");
-  if (options.qualification === true && (report.kind !== "kiro-fabric.real-client-qualification" || report.schemaVersion !== 13 || report.ok !== true)) fail("qualification identity is invalid");
-  if (report.packageDigest !== packageDigest || !SHA256.test(report.packageDigest)) fail("package digest is invalid");
-  if (!options.archiveDigest || report.archiveDigest !== options.archiveDigest || !SHA256.test(report.archiveDigest)) fail("archive digest is invalid");
-  if (!options.commit || report.commit !== options.commit || !GIT_OBJECT_ID.test(report.commit)) fail("commit is invalid");
-  if (Object.hasOwn(report, "powerActivated") || Object.hasOwn(report, "customAgentSelected")) fail("model self-attestation fields are forbidden");
-  if (!equal(report.tools, REAL_CLIENT_TOOLS)) fail("Fabric tool surface is invalid");
-
+const assertEvidenceInstallation = (report, packageDigest, options) => {
   const authentication = report.authentication;
   const apiKeyAuthentication = authentication?.mode === "api-key" &&
     authentication.verification === "authenticated-kiro-commands" &&
@@ -325,27 +317,10 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
       within(installation.releaseRoot, installation.profile) || within(installation.releaseRoot, installation.runtime) || within(installation.releaseRoot, installation.data)) {
     fail("installed files are not an independent global Agent installation");
   }
+  return { installation, installedRoot };
+};
 
-  const kiro = report.kiro;
-  if (!kiro || typeof kiro.path !== "string" || !path.isAbsolute(kiro.path) || !SHA256.test(kiro.digest ?? "") ||
-      typeof kiro.version !== "string" || !kiro.version || !["--agent-engine", "--engine", "--v3"].includes(kiro.headlessEngineSelector) ||
-      !["--path", "positional"].includes(kiro.agentValidateSyntax)) fail("Kiro binary/help identity is incomplete");
-  if (!SHA256.test(report.driver?.digest ?? "") || report.driver?.version !== "repository-driver-v11") fail("driver identity is invalid");
-
-  const gates = report.qualificationGates;
-  const codingGate = assertCodingQualification(gates?.coding);
-  const nativeVisibility = gates?.nativeToolVisibility;
-  if (!nativeVisibility || nativeVisibility.source !== "kiro-tui-/tools" || nativeVisibility.command !== "/tools" ||
-      nativeVisibility.observed !== true || !equal(nativeVisibility.profileTools, REAL_CLIENT_PROFILE_TOOLS) ||
-      !equal(nativeVisibility.nativeTools, REAL_CLIENT_NATIVE_TOOLS) || !equal(nativeVisibility.fabricTools, REAL_CLIENT_MODEL_TOOLS) ||
-      !SHA256.test(nativeVisibility.outputDigest ?? "")) fail("native tool visibility gate is incomplete");
-  const formGate = gates?.formElicitation;
-  if (!formGate || formGate.source !== "kiro-tui-form" || formGate.observed !== true || formGate.requestCount !== 1 ||
-      formGate.responseCount !== 1 || formGate.terminalPromptObserved !== true || formGate.terminalResponseObserved !== true || formGate.approved !== false ||
-      formGate.failedClosed !== true || formGate.acpStructuralEventObserved !== true || !SHA256.test(formGate.acpRecordingDigest ?? "") ||
-      !SHA256.test(formGate.requestOutputDigest ?? "") || !SHA256.test(formGate.responseOutputDigest ?? "")) {
-    fail("form elicitation gate is incomplete");
-  }
+const assertCompactionGates = (gates) => {
   const compactionGate = gates?.compaction;
   if (!compactionGate || compactionGate.source !== "kiro-acp-command-exchange" || compactionGate.observed !== true ||
       compactionGate.eventCount !== 1 || compactionGate.method !== "_kiro.dev/compaction/status" ||
@@ -426,6 +401,10 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
       automaticCompactionGate.intervalEndOffset <= automaticCompactionGate.intervalStartOffset) {
     fail("natural automatic compaction gate is incomplete");
   }
+  return { compactionGate, compactionSeries, firstSeriesCycle, automaticCompactionGate };
+};
+
+const assertConversationContinuityGate = (gates, compactionSeries, automaticCompactionGate) => {
   const continuityGate = gates?.conversationContinuity;
   if (!continuityGate || continuityGate.source !== "kiro-acp-resume" || continuityGate.observed !== true ||
       !SESSION_ID.test(continuityGate.sessionIdBeforeResume ?? "") || continuityGate.sessionIdBeforeResume !== continuityGate.sessionIdAfterResume ||
@@ -472,10 +451,10 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
       new Set(compactedFacts.map((fact) => fact.preCompactionPromptFrameDigest)).size !== compactedFacts.length) {
     fail("compacted conversational fact series is not unique and legacy-bound");
   }
-  const fabricExecGate = gates?.fabricExecIntegrity;
-  if (!fabricExecGate || fabricExecGate.source !== "kiro-acp-session-tool-call" || fabricExecGate.observed !== true ||
-      !fabricExecGate.contextSeed || !fabricExecGate.postCompaction || !fabricExecGate.resume) fail("fabric_exec integrity gate is incomplete");
+  return { continuityGate, compactedFact, compactedFacts };
+};
 
+const assertEvidenceCommands = (report, installation, installedRoot, kiro) => {
   const commands = report.commands;
   const installCommand = command(commands?.install, "archive installation");
   if (!/(?:^|[/\\])node(?:\.exe)?$/iu.test(installCommand.executable) ||
@@ -523,6 +502,47 @@ export const assertRealClientEvidence = (report, packageDigest, options = {}) =>
     exactKiroCommand(context.validate, `validation context ${index}`, kiro.path, validateArgv);
     exactKiroCommand(context.list, `agent list context ${index}`, kiro.path, ["agent", "list"]);
   }
+
+};
+
+export const assertRealClientEvidence = (report, packageDigest, options = {}) => {
+  if (!report || typeof report !== "object") fail("report must be an object");
+  if (options.qualification === true && (report.kind !== "kiro-fabric.real-client-qualification" || report.schemaVersion !== 13 || report.ok !== true)) fail("qualification identity is invalid");
+  if (report.packageDigest !== packageDigest || !SHA256.test(report.packageDigest)) fail("package digest is invalid");
+  if (!options.archiveDigest || report.archiveDigest !== options.archiveDigest || !SHA256.test(report.archiveDigest)) fail("archive digest is invalid");
+  if (!options.commit || report.commit !== options.commit || !GIT_OBJECT_ID.test(report.commit)) fail("commit is invalid");
+  if (Object.hasOwn(report, "powerActivated") || Object.hasOwn(report, "customAgentSelected")) fail("model self-attestation fields are forbidden");
+  if (!equal(report.tools, REAL_CLIENT_TOOLS)) fail("Fabric tool surface is invalid");
+
+  const { installation, installedRoot } = assertEvidenceInstallation(report, packageDigest, options);
+
+  const kiro = report.kiro;
+  if (!kiro || typeof kiro.path !== "string" || !path.isAbsolute(kiro.path) || !SHA256.test(kiro.digest ?? "") ||
+      typeof kiro.version !== "string" || !kiro.version || !["--agent-engine", "--engine", "--v3"].includes(kiro.headlessEngineSelector) ||
+      !["--path", "positional"].includes(kiro.agentValidateSyntax)) fail("Kiro binary/help identity is incomplete");
+  if (!SHA256.test(report.driver?.digest ?? "") || report.driver?.version !== "repository-driver-v11") fail("driver identity is invalid");
+
+  const gates = report.qualificationGates;
+  const codingGate = assertCodingQualification(gates?.coding);
+  const nativeVisibility = gates?.nativeToolVisibility;
+  if (!nativeVisibility || nativeVisibility.source !== "kiro-tui-/tools" || nativeVisibility.command !== "/tools" ||
+      nativeVisibility.observed !== true || !equal(nativeVisibility.profileTools, REAL_CLIENT_PROFILE_TOOLS) ||
+      !equal(nativeVisibility.nativeTools, REAL_CLIENT_NATIVE_TOOLS) || !equal(nativeVisibility.fabricTools, REAL_CLIENT_MODEL_TOOLS) ||
+      !SHA256.test(nativeVisibility.outputDigest ?? "")) fail("native tool visibility gate is incomplete");
+  const formGate = gates?.formElicitation;
+  if (!formGate || formGate.source !== "kiro-tui-form" || formGate.observed !== true || formGate.requestCount !== 1 ||
+      formGate.responseCount !== 1 || formGate.terminalPromptObserved !== true || formGate.terminalResponseObserved !== true || formGate.approved !== false ||
+      formGate.failedClosed !== true || formGate.acpStructuralEventObserved !== true || !SHA256.test(formGate.acpRecordingDigest ?? "") ||
+      !SHA256.test(formGate.requestOutputDigest ?? "") || !SHA256.test(formGate.responseOutputDigest ?? "")) {
+    fail("form elicitation gate is incomplete");
+  }
+  const { compactionGate, compactionSeries, firstSeriesCycle, automaticCompactionGate } = assertCompactionGates(gates);
+  const { continuityGate, compactedFact, compactedFacts } = assertConversationContinuityGate(gates, compactionSeries, automaticCompactionGate);
+  const fabricExecGate = gates?.fabricExecIntegrity;
+  if (!fabricExecGate || fabricExecGate.source !== "kiro-acp-session-tool-call" || fabricExecGate.observed !== true ||
+      !fabricExecGate.contextSeed || !fabricExecGate.postCompaction || !fabricExecGate.resume) fail("fabric_exec integrity gate is incomplete");
+
+  assertEvidenceCommands(report, installation, installedRoot, kiro);
 
   const lifecycle = report.lifecycle;
   if (!lifecycle || !SESSION_ID.test(lifecycle.sessionId ?? "") || lifecycle.totalMcpStartupCount !== 4) fail("Kiro session/startup identity is invalid");

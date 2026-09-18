@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { installerSafety as s } from './install-agent-user.mjs';
-import { validateBundle, canonical } from './bundle-contract.mjs';
+import { validateInstalledBundle, canonical } from './bundle-contract.mjs';
 
 const MAX = 8 * 1024 * 1024;
 const HASH = /^[a-f0-9]{64}$/;
@@ -51,7 +51,7 @@ export async function recoverInstallTransaction(kiroHome,{onPhase=()=>{}}={}) {
  const actual=identity(readControl(p.manifest));const committed=actual===j.afterOwnerSha256;
  if(!committed&&actual!==j.beforeOwnerSha256)throw Error('recovery-required: conflicting actual owner');
  const selected=decode(j.controls.manifest[committed?'after':'before']);
- if(selected){const o=JSON.parse(selected.toString());if(o.schemaVersion===3){if(!Array.isArray(o.runtimeGenerations)||o.runtimeGenerations.length>256)throw Error('recovery-required: generation bound');for(const r of o.runtimeGenerations){fields(r,['name','manifestSha256']);if(!HASH.test(r.name)||!HASH.test(r.manifestSha256))throw Error('recovery-required: generation identity');const bundle=await validateBundle(path.join(p.runtime,r.name));if(bundle.digest!==r.name||s.hash(canonical(bundle.manifest)+'\n')!==r.manifestSha256)throw Error('recovery-required: modified retained generation');}}}
+ if(selected){const o=JSON.parse(selected.toString());if(o.schemaVersion===3){if(!Array.isArray(o.runtimeGenerations)||o.runtimeGenerations.length>256)throw Error('recovery-required: generation bound');for(const r of o.runtimeGenerations){fields(r,['name','manifestSha256']);if(!HASH.test(r.name)||!HASH.test(r.manifestSha256))throw Error('recovery-required: generation identity');const bundle=await validateInstalledBundle(path.join(p.runtime,r.name));if(bundle.digest!==r.name||s.hash(canonical(bundle.manifest)+'\n')!==r.manifestSha256)throw Error('recovery-required: modified retained generation');}}}
  const next=JSON.parse(decode(j.controls.manifest.after).toString());
  if(next.legacy){const legacy=next.legacy,e=legacy.evidence,m=JSON.parse(Buffer.from(legacy.manifestBase64,'base64').toString());if(m.schemaVersion===1){if(e.runtimeRoot!==path.join(p.runtime,m.packageDigest)||e.skillRoot!==path.join(p.skills,'fabric-exec')||!HASH.test(m.packageDigest))throw Error('recovery-required: legacy path');s.assertSameTree(e.runtimeRoot,e.runtimeTree,'legacy runtime');s.assertSameTree(e.skillRoot,e.skillTree,'legacy skill');}else if(m.schemaVersion===2){s.assertSameTree(path.join(p.skills,'fabric-exec'),e.skill,'legacy skill');if(!Array.isArray(e.runtimeGenerations)||e.runtimeGenerations.length>256)throw Error('legacy capacity');for(const r of e.runtimeGenerations){if(!HASH.test(r.name))throw Error('legacy identity');s.assertSameTree(path.join(p.runtime,r.name),r.tree,'legacy runtime');}}else throw Error('recovery-required: legacy schema');}
  // Validate every control before touching any: foreign bytes are never removed.

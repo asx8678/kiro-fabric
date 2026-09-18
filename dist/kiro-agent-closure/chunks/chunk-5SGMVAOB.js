@@ -8230,6 +8230,14 @@ var fabricTranspiledLimitError = (code) => {
   return bytes > maximum ? `Transpiled guest source exceeds ${maximum} bytes: received ${bytes}` : void 0;
 };
 
+// src/protocol.ts
+var FABRIC_COMMIT_ACKNOWLEDGEMENT = /* @__PURE__ */ Symbol("fabric.commitAcknowledgement");
+var fabricCommitAcknowledgement = (error) => {
+  if (!(error instanceof Error)) return void 0;
+  const marker = error[FABRIC_COMMIT_ACKNOWLEDGEMENT];
+  return marker?.version === 1 && ["set", "delete", "write", "edit"].includes(marker.operation) ? marker : void 0;
+};
+
 // src/providers/local-shell.ts
 import { spawn } from "node:child_process";
 
@@ -8481,14 +8489,6 @@ async function runLocalShell(options) {
   }
   return result;
 }
-
-// src/protocol.ts
-var FABRIC_COMMIT_ACKNOWLEDGEMENT = /* @__PURE__ */ Symbol("fabric.commitAcknowledgement");
-var fabricCommitAcknowledgement = (error) => {
-  if (!(error instanceof Error)) return void 0;
-  const marker = error[FABRIC_COMMIT_ACKNOWLEDGEMENT];
-  return marker?.version === 1 && ["set", "delete", "write", "edit"].includes(marker.operation) ? marker : void 0;
-};
 
 // src/providers/probe-provider.ts
 import path3 from "node:path";
@@ -10205,6 +10205,11 @@ var GUEST_SETUP = `
     delete: (args) => call("memory.delete", args), search: (args) => call("memory.search", args),
     index: (args = {}) => call("memory.index", args),
   });
+  globalThis.continuity = objectFreeze({
+    create: (args) => call("continuity.create", args), checkpoint: (args) => call("continuity.checkpoint", args),
+    read: (args) => call("continuity.read", args), recall: (args) => call("continuity.recall", args), list: (args = {}) => call("continuity.list", args),
+    expand: (args) => call("continuity.expand", args), delete: (args) => call("continuity.delete", args),
+  });
   globalThis.state = objectFreeze({
     get: (args) => call("state.get", args), set: (args) => call("state.set", args),
     list: (args = {}) => call("state.list", args), delete: (args) => call("state.delete", args),
@@ -11036,12 +11041,12 @@ export {
   jsonStringPrefix,
   fabricJsonText,
   assertFabricJsonBudget,
+  FABRIC_COMMIT_ACKNOWLEDGEMENT,
+  fabricCommitAcknowledgement,
   LocalShellExitError,
   runLocalShell,
   validateSchemaValue,
   schemaValidationMessage,
-  FABRIC_COMMIT_ACKNOWLEDGEMENT,
-  fabricCommitAcknowledgement,
   PROBE_GUEST_DECLARATIONS,
   initializeOwnedFile,
   ProbeRunExitError,

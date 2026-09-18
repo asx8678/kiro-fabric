@@ -346,6 +346,8 @@ export const prepareKiroPowerProjectPaths = (projects: string, rawIdentity: Kiro
     memory: privateDirectory(path.join(root, "memory"), root),
     memoryNamespace: kiroPowerMemoryNamespace(identity),
     state: privateDirectory(path.join(root, "state"), root),
+    // Do not create optional continuity storage until the provider is enabled.
+    continuity: path.join(root, "continuity"),
     artifacts: privateDirectory(path.join(root, "artifacts"), root),
   };
 };

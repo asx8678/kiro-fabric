@@ -15,6 +15,8 @@ import { fabricCommitAcknowledgement, type FabricCommitAcknowledgement } from ".
 import { schemaValidationMessage } from "../schema-validation.js";
 import { fabricJsonText, jsonStringPrefix, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js";
 import { semanticDigest } from "./semantic-digest.js";
+import { observeContinuity, type ContinuityOperationObserver } from "../continuity/execution.js";
+import { rankedActions } from "./ranked-actions.js";
 
 export interface FabricCallAudit {
   ref: string;
@@ -32,6 +34,8 @@ export interface FabricCallAudit {
 }
 
 export interface FabricRegistryInvocationContext extends FabricInvocationContext {
+  /** Execution-owned observer; observation must never change provider outcomes. */
+  operationObserver?: ContinuityOperationObserver;
   formatCatalogResult?(value: unknown, method: CatalogMethod): unknown;
   audits: FabricCallAudit[];
   maxResultChars: number;
@@ -399,38 +403,35 @@ export class ActionRegistry {
     if (normalized.length > MAX_SEARCH_QUERY_CHARS) throw new Error("Normalized Fabric search query exceeds 2000 characters");
     const terms = normalizedTerms(normalized);
     return this.#withIndexes(indexes => {
-      const ranked = indexes.flatMap(index => index.entries)
-      .map((entry) => {
-        const { action, fields, tokens } = entry;
-        let score = 0;
-        if (fields.ref === normalized) score += 1_000;
-        if (fields.name === normalized) score += 800;
-        if (fields.ref.startsWith(normalized)) score += 300;
-        else if (fields.ref.includes(normalized)) score += 120;
-        if (fields.description.includes(normalized)) score += 40;
-        if (fields.providerDescription.includes(normalized)) score += 20;
-        if (fields.schema.includes(normalized)) score += 10;
-        let matched = 0;
-        for (const term of terms) {
-          if (!Object.values(tokens).some((field) => field.has(term))) continue;
-          matched += 1;
-          if (tokens.ref.has(term) || tokens.name.has(term)) score += 30;
-          if (tokens.provider.has(term)) score += 20;
-          if (tokens.description.has(term)) score += 8;
-          if (tokens.providerDescription.has(term)) score += 4;
-          if (tokens.namespace.has(term)) score += 6;
-          if (tokens.annotations.has(term)) score += 2;
-          if (tokens.schema.has(term)) score += 2;
+      const matches = function* () {
+        for (const index of indexes) for (const { action, fields, tokens } of index.entries) {
+          let score = 0;
+          if (fields.ref === normalized) score += 1_000;
+          if (fields.name === normalized) score += 800;
+          if (fields.ref.startsWith(normalized)) score += 300;
+          else if (fields.ref.includes(normalized)) score += 120;
+          if (fields.description.includes(normalized)) score += 40;
+          if (fields.providerDescription.includes(normalized)) score += 20;
+          if (fields.schema.includes(normalized)) score += 10;
+          let matched = 0;
+          const tokenFields = Object.values(tokens);
+          for (const term of terms) {
+            if (!tokenFields.some(field => field.has(term))) continue;
+            matched += 1;
+            if (tokens.ref.has(term) || tokens.name.has(term)) score += 30;
+            if (tokens.provider.has(term)) score += 20;
+            if (tokens.description.has(term)) score += 8;
+            if (tokens.providerDescription.has(term)) score += 4;
+            if (tokens.namespace.has(term)) score += 6;
+            if (tokens.annotations.has(term)) score += 2;
+            if (tokens.schema.has(term)) score += 2;
+          }
+          if (terms.length > 0 && matched === terms.length) score += 15;
+          if (score > 0) yield { action, score };
         }
-        if (terms.length > 0 && matched === terms.length) score += 15;
-        return { action, score };
-      })
-      .filter(({ score }) => score > 0)
-      .sort((left, right) => right.score - left.score || compareCodeUnits(left.action.ref, right.action.ref));
-      const selected = limit === undefined ? ranked : ranked.slice(0, limit);
-      // Every candidate is ranked, but a limited search must not clone matches
-      // the caller will never receive.
-      return selected.map(({ action }) => structuredClone(action));
+      };
+      // Score every candidate, but retain and clone only the requested top k.
+      return rankedActions(matches(), limit).map(action => structuredClone(action));
     }, signal);
   }
 
@@ -508,6 +509,7 @@ export class ActionRegistry {
     // with an explicit, attributable error instead of an undefined dereference.
     const provider = this.#providers.get(action.provider);
     if (!provider) throw new Error("Fabric registry is closed");
+    observeContinuity(context.operationObserver, observer => observer.resolve(action.ref, action.risk));
     let prepared: Record<string, unknown>;
     try {
       prepared = provider.prepareArguments
@@ -525,6 +527,7 @@ export class ActionRegistry {
     // Preparation, schema validation, and resource calculation all precede approval.
     // The frozen canonical snapshot is never normalized or mutated afterwards.
     const canonicalArgs = deepFreeze(structuredClone(prepared));
+    observeContinuity(context.operationObserver, observer => observer.prepare(canonicalArgs));
     const resources = Object.freeze([...(provider.effectResources?.(action.name, structuredClone(canonicalArgs), context)
       ?? action.effect?.resources
       ?? (action.risk === "write" ? ["*"] : []))]);
@@ -563,7 +566,9 @@ export class ActionRegistry {
       // MCP, which closes its contacted server) finishes cleanup before the
       // registry reports cancellation to the guest.
       invocationStarted = true;
+      observeContinuity(context.operationObserver, observer => observer.dispatch());
       const value = await provider.invoke(action.name, invocationArgs, context);
+      observeContinuity(context.operationObserver, observer => observer.result(value));
       if (provider.name === "local" && (action.name === "write" || action.name === "edit") && isRecord(value) && value.changed === true) {
         published = { version: 1, operation: action.name };
       }
@@ -587,6 +592,7 @@ export class ActionRegistry {
       audit.success = false;
       audit.error = error instanceof Error ? error.message.slice(0, 1_000) : String(error).slice(0, 1_000);
       const acknowledgement = fabricCommitAcknowledgement(error) ?? published;
+      observeContinuity(context.operationObserver, observer => observer.acknowledge(error));
       if (invocationStarted && provider.name === "local" && action.name === "shell") audit.effectOutcome = "uncertain";
       if (acknowledgement) audit.commitAcknowledgement = acknowledgement;
       throw error;

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ContinuityExecution, observeContinuity } from "./continuity/execution.js";
 import { CatalogSnapshotStore } from "./core/catalog-snapshot-store.js";
 import type { CatalogBinding, CatalogReservation } from "./core/catalog-contract.js";
 import { catalogMethodForBridge, catalogUnavailable, continueCatalog, publishCatalog, validateCatalogRequest } from "./core/catalog-execution.js";
@@ -106,6 +107,77 @@ export const exactHostActionReference = (
 ): string | undefined => bridgeRef === "fabric.call"
   ? typeof args.ref === "string" ? args.ref : undefined
   : bridgeRef;
+
+interface ExecutionApprovals {
+  chargeApproval(prompt: () => Promise<void>): Promise<void>;
+  approve(
+    action: ResolvedFabricAction,
+    args: Record<string, unknown>,
+    signal: AbortSignal,
+    deadline: import("./runtime/deadline.js").FabricDeadline,
+    parentSpanId: string | undefined,
+  ): Promise<void>;
+}
+
+/** One budget shared by registry/nested transport approvals and provider-owned prompts.
+ * Keep reservation synchronous before interaction; this controller owns no dispatch
+ * or settlement state and must not move approval earlier in registry invocation. */
+const createExecutionApprovals = (
+  config: FabricConfig,
+  options: FabricExecutionOptions,
+  tracer: FabricTracer,
+): ExecutionApprovals => {
+  const execId = options.execId;
+  let approvalRequests = 0;
+  let pendingApprovals = 0;
+  // Reserve an interactive prompt against this execution's approval budget.
+  // Provider-owned elicitations (manual workspace attachment) use this so a
+  // zero-prompt policy is enforced for every dialog, not only registry ones.
+  const chargeApproval = async (prompt: () => Promise<void>): Promise<void> => {
+    if (approvalRequests >= config.executor.maxApprovalRequests) throw new FabricRepairError("Fabric approval request quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
+    if (pendingApprovals >= config.executor.maxPendingApprovals) throw new FabricRepairError("Fabric pending approval quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
+    approvalRequests += 1;
+    pendingApprovals += 1;
+    try { await prompt(); } finally { pendingApprovals -= 1; }
+  };
+  return {
+    chargeApproval,
+    approve: async (action, exactArgs, signal, deadline, parentSpanId) => {
+      throwIfAbortedOrExpired(signal, deadline);
+      // The registry and nested MCP transport stages share this callback.
+      // Never infer permission from risk or re-evaluate a prepared policy.
+      const plan = options.approver.prepareApproval
+        ? await options.approver.prepareApproval(action, exactArgs, signal)
+        : { decision: "ask" as const, prompt: () => options.approver.approve(action, exactArgs, signal) };
+      throwIfAbortedOrExpired(signal, deadline);
+      if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new Error("Invalid Fabric approval plan");
+      switch (plan.decision) {
+        case "allow": return;
+        case "deny":
+          if (typeof plan.reason !== "string") throw new Error("Invalid Fabric approval plan");
+          throw new FabricRepairError(plan.reason, { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
+        case "ask":
+          if (typeof plan.prompt !== "function") throw new Error("Invalid Fabric approval plan");
+          break;
+        default: throw new Error("Invalid Fabric approval plan");
+      }
+      // Only actual approval waits (or conservative legacy calls) are
+      // traced here. Trace ref/risk only, never arguments.
+      const approvalSpan = tracer.enabled ? tracer.span("eval", "approval.wait", execId, { ref: action.ref, risk: action.risk }, parentSpanId) : undefined;
+      try {
+        // Reserve atomically before interaction. Rejected admission
+        // consumes neither counter; admitted attempts retain total usage
+        // on failure.
+        await chargeApproval(plan.prompt);
+        throwIfAbortedOrExpired(signal, deadline);
+        approvalSpan?.end({ approved: true });
+      } catch (error) {
+        approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });
+        throw error instanceof FabricRepairError ? error : new FabricRepairError(error instanceof Error ? error.message : String(error), { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
+      }
+    },
+  };
+};
 
 export class FabricExecutionService {
   readonly #runtime = new QuickJsRuntime();
@@ -217,14 +289,19 @@ export class FabricExecutionService {
       return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: "TypeScript validation failed", typeErrors: checked.errors, effectiveTimeoutMs };
     }
 
+    const captureEnabled = this.config.continuity.enabled && options.workspaceBound !== false && options.workspaceUnavailable !== true &&
+      this.registry.providers().some(provider => provider.name === "continuity" && provider.available);
+    let continuity: ContinuityExecution | undefined;
+    let captureFailed = false;
+    if (captureEnabled) {
+      try { continuity = new ContinuityExecution(undefined, undefined, this.config.continuity.captureFailureOutput); } catch { captureFailed = true; }
+    }
     const checkpoints = createCheckpointJournal();
     let interruptedFailure: FabricFailureMetadata | undefined;
     const audits: FabricCallAudit[] = [];
     const auditBudget = { bytes: 0 };
     let providerCalls = 0;
     let activeProviderCalls = 0;
-    let approvalRequests = 0;
-    let pendingApprovals = 0;
     let workspaceCalls = false;
     let switchRequested = false;
     const localSettlements = new Set<Promise<unknown>>();
@@ -232,23 +309,14 @@ export class FabricExecutionService {
     // but never prepare a queued local mutation against a predecessor's old state.
     let localEffectTail: Promise<unknown> = Promise.resolve();
     let lastShellFailure: LocalShellResult | undefined;
-    // Reserve an interactive prompt against this execution's approval budget.
-    // Provider-owned elicitations (manual workspace attachment) use this so a
-    // zero-prompt policy is enforced for every dialog, not only registry ones.
-    const chargeApproval = async (prompt: () => Promise<void>): Promise<void> => {
-      if (approvalRequests >= this.config.executor.maxApprovalRequests) throw new FabricRepairError("Fabric approval request quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
-      if (pendingApprovals >= this.config.executor.maxPendingApprovals) throw new FabricRepairError("Fabric pending approval quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
-      approvalRequests += 1;
-      pendingApprovals += 1;
-      try { await prompt(); } finally { pendingApprovals -= 1; }
-    };
+    const approvals = createExecutionApprovals(this.config, options, tracer);
     const providerContext = (signal: AbortSignal, deadline: import("./runtime/deadline.js").FabricDeadline) => ({
       cwd: this.cwd,
       checkpoints,
       maxResultChars: this.config.executor.maxNestedResultChars,
       signal,
       deadline,
-      chargeApproval,
+      chargeApproval: approvals.chargeApproval,
       ...(options.bootstrap ? { bootstrap: options.bootstrap } : {}),
     });
     const executeSpan = tracer.enabled ? tracer.span("eval", "execute", execId) : undefined;
@@ -261,13 +329,24 @@ export class FabricExecutionService {
         activeProviderCalls -= 1;
         throw new FabricRepairError("Fabric concurrent provider call quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
       }
+      // Admission order precedes asynchronous descriptor resolution, approvals and local FIFO waits.
+      let operation: ReturnType<ContinuityExecution["admit"]> | undefined;
+      if (continuity) {
+        try { operation = continuity.admit(ref === "fabric.call" ? args.ref : ref); }
+        catch { captureFailed = true; }
+      }
+      let operationFailed = false;
+      let operationError: unknown;
       // One span per host-bridge call, parented to the execute span. Byte
       // sizes attribute cost to payload volume, not just provider latency.
       const bridgeSpan = tracer.enabled ? tracer.span("bridge", ref, execId, { argsChars: traceJsonChars(args) }, executeSpanId) : undefined;
       let bridgeEnd: Record<string, unknown> = {};
       let catalogReservation: CatalogReservation | undefined;
       try {
-        const context = providerContext(signal, deadline);
+        const context = { ...providerContext(signal, deadline), ...(captureEnabled ? { continuityCapture: () => {
+          if (captureFailed || !operation) throw new Error("continuity capture is incomplete: recorder failed; prior checkpoint retained");
+          return operation.capture();
+        } } : {}) };
         if (ref === "fabric.providers") { const value = this.registry.providers(); if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) }; return value; }
         const pageMethod = catalogMethodForBridge(ref);
         if (pageMethod) {
@@ -309,12 +388,13 @@ export class FabricExecutionService {
           switchRequested = true;
         } else if (!actionRef.startsWith("fabric.")) {
           if (switchRequested) throw new Error("Workspace calls cannot follow a pending workspace switch; use the next execution");
-          const requiresWorkspace = /^(local|memory|state|review|probe)\./u.test(actionRef);
+          const requiresWorkspace = /^(local|memory|state|review|probe|continuity)\./u.test(actionRef);
           if ((options.workspaceUnavailable === true || (options.workspaceBound === false && requiresWorkspace)) && actionRef !== "artifacts.read") throw new Error("Verified workspace binding is required; use fabric.workspace in a separate bootstrap execution");
           workspaceCalls = true;
         }
         const invoke = () => this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
           ...context,
+          ...(operation ? { operationObserver: operation.observer } : {}),
           audits,
           auditBudget,
           maxAuditEntries: this.config.executor.maxAuditEntries,
@@ -329,40 +409,7 @@ export class FabricExecutionService {
               throw error;
             }
           },
-          approve: async (action, exactArgs) => {
-            throwIfAbortedOrExpired(signal, deadline);
-            // The registry and nested MCP transport stages share this callback.
-            // Never infer permission from risk or re-evaluate a prepared policy.
-            const plan = options.approver.prepareApproval
-              ? await options.approver.prepareApproval(action, exactArgs, signal)
-              : { decision: "ask" as const, prompt: () => options.approver.approve(action, exactArgs, signal) };
-            throwIfAbortedOrExpired(signal, deadline);
-            if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new Error("Invalid Fabric approval plan");
-            switch (plan.decision) {
-              case "allow": return;
-              case "deny":
-                if (typeof plan.reason !== "string") throw new Error("Invalid Fabric approval plan");
-                throw new FabricRepairError(plan.reason, { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
-              case "ask":
-                if (typeof plan.prompt !== "function") throw new Error("Invalid Fabric approval plan");
-                break;
-              default: throw new Error("Invalid Fabric approval plan");
-            }
-            // Only actual approval waits (or conservative legacy calls) are
-            // traced here. Trace ref/risk only, never arguments.
-            const approvalSpan = tracer.enabled ? tracer.span("eval", "approval.wait", execId, { ref: action.ref, risk: action.risk }, bridgeSpan?.id) : undefined;
-            try {
-              // Reserve atomically before interaction. Rejected admission
-              // consumes neither counter; admitted attempts retain total usage
-              // on failure.
-              await chargeApproval(plan.prompt);
-              throwIfAbortedOrExpired(signal, deadline);
-              approvalSpan?.end({ approved: true });
-            } catch (error) {
-              approvalSpan?.end({ approved: false, ...traceFailureMetadata("approval_failed") });
-              throw error instanceof FabricRepairError ? error : new FabricRepairError(error instanceof Error ? error.message : String(error), { code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: action.ref });
-            }
-          },
+          approve: (action, exactArgs) => approvals.approve(action, exactArgs, signal, deadline, bridgeSpan?.id),
         }, ref === "fabric.call" && (args.expectedDescriptorDigest !== undefined || args.projection !== undefined) ? {
           ...(args.expectedDescriptorDigest !== undefined ? { expectedDescriptorDigest: args.expectedDescriptorDigest as string } : {}),
           ...(args.projection !== undefined ? { projection: args.projection as "full" | "text" | "structured" } : {}),
@@ -388,6 +435,10 @@ export class FabricExecutionService {
         if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value), ...(actionRef !== ref ? { actionRef } : {}) };
         return value;
       } catch (error) {
+        operationFailed = true; operationError = error;
+        if (error instanceof LocalShellExitError || error instanceof ProbeRunExitError) {
+          observeContinuity(operation?.observer, observer => observer.result(error.result));
+        }
         if (bridgeSpan) bridgeEnd = { ok: false, ...traceFailureMetadata("provider_failed") };
         const failure = fabricFailureMetadata(error);
         if (failure) {
@@ -401,6 +452,8 @@ export class FabricExecutionService {
         catalogReservation?.release();
         bridgeSpan?.end(bridgeEnd);
         activeProviderCalls -= 1;
+        // Registry invocation and reservation cleanup have both settled here.
+        observeContinuity(operation?.observer, observer => observer.settle(!operationFailed, operationError));
       }
     }, {
       timeoutMs: effectiveTimeoutMs,

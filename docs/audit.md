@@ -23,6 +23,34 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 
 The five friendly page methods do not expand outer tools. MCP calls always re-enumerate current authoritative schemas before dispatch; observed metadata and continuations never grant execution permission. Discovery retention uses conservative partitions within 64MiB/1M nodes rather than sharing an unbounded general artifact store. Known provider revocation is checked synchronously on every cursor read and publication; it never triggers network revalidation or replay. Revoked snapshot memory is pruned on the next store operation, remains within the fixed store quotas meanwhile, and is cleared on runtime invalidation. Successful discovery binds its new page to the resulting inventory epoch rather than the pre-discovery epoch. Index producers reserve a 7MiB/100,000-node raw handoff before provider list/describe, with at most two producers; additional loads wait only for reserved capacity and reject if pinned indexes prevent progress. Raw validation limits serialization to one quarter of that byte allowance before accepting its measured weight. Consumer subscriptions detach on failure/cancellation; uncooperative active producers remain charged until settlement. The bounds cover host-owned discovery retention, not arbitrary allocation inside trusted provider implementations or caller-owned returned values. Tests and builds are not live-client approval qualification.
 
+## Deterministic continuity and behavior-preserving optimization
+
+Continuity remains explicit and opt-in: declared checks and historical host receipts are not semantic proof, automatic conversation recovery, or native compaction. Rendering measures each original record once and uses incremental UTF-8/escaped-JSON budgets; output ordering, omissions and exact-fit boundaries remain compatible. Limited discovery uses bounded top-k selection with the existing score/ref ordering; full discovery and safety quotas are unchanged.
+
+- `src/continuity/execution.ts` — execution-local admission, settlement and closed-prefix observations.
+- `src/continuity/records.ts` — strict versioned records, normalized identities, hashes and quotas.
+- `src/continuity/store.ts` — private durable checkpoints, CAS and idempotent publication.
+- `src/continuity/render.ts` — version-compatible declaration/receipt projection.
+- `src/continuity/task-view.ts` — check assessment and priority-based task views.
+- `src/continuity/summary-budget.ts` — reusable line weights and exact incremental summary/envelope budgets.
+- `src/continuity/recall.ts` — bounded, source-bound search and expansion pointers.
+- `src/providers/continuity-contract.ts` — closed action schemas and checked guest declarations.
+- `src/providers/continuity-provider.ts` — explicit recovery operations and source freshness checks.
+- `src/core/ranked-actions.ts` — bounded worst-first heap for limited discovery results.
+- `tests/continuity-core.test.ts` — normalization, reproducible output and record rejection.
+- `tests/continuity-store.test.ts` — durable publication, revision conflicts and quotas.
+- `tests/continuity-provider.test.ts` — provider contracts and registration.
+- `tests/continuity-execution.test.ts` — checked execution and recovery boundaries.
+- `tests/continuity-capture.test.ts` — closed-prefix capture and publication semantics.
+- `tests/continuity-observation.test.ts` — host observation and failure boundaries.
+- `tests/continuity-task.test.ts` — linked evidence, freshness, recall and cold recovery.
+- `tests/continuity-rendering.test.ts` — pre-optimization output/error fingerprints, exact byte boundaries and serialization work bounds.
+- `tests/fixtures/continuity-rendering.ts` — deterministic mixed-version rendering fixtures and budget matrices.
+- `tests/execution-refactor.test.ts` — shared per-execution approval budgets, failed-prompt cleanup and reset.
+- `tests/installed-bundle-history.test.ts` — installed bundle/history compatibility.
+
+The execution approval controller and qualification/validation phase helpers remain private; public APIs, approval ordering and qualification gates are retained.
+
 ## Browser-backed fact grounding
 
 - `src/providers/web-provider.ts` — opt-in trusted CLI discovery, bounded execution, closed contracts, private-context requests and withheld raw diagnostics.

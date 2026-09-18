@@ -166,15 +166,20 @@ describe("strict checked workspace bootstrap", () => {
     const skill = fs.readFileSync(new URL("../skills/fabric-exec/references/recipes.md", import.meta.url), "utf8");
     const recipes = [...skill.matchAll(/```ts\n(\/\/ Recipe:[\s\S]*?)\n```/g)].map(match => match[1]!);
     expect(recipes.length).toBeGreaterThanOrEqual(8);
+    const recipe = (title: string): string => {
+      const matches = recipes.filter(code => code.startsWith(`// Recipe: ${title}\n`));
+      expect(matches, `documented recipe: ${title}`).toHaveLength(1);
+      return matches[0]!;
+    };
     fs.writeFileSync(path.join(root, "one.txt"), "  café 🛰 full first line  \r\nsecond\r\n");
     fs.writeFileSync(path.join(root, "two.txt"), "\nnot the first line\n");
-    const read = await f.call(recipes[0]!);
+    const read = await f.call(recipe("complete first lines from supplied paths"));
     expect(read.isError, read.content[0].text).not.toBe(true);
     expect(f.value(read)).toEqual(["  café 🛰 full first line  ", ""]);
     fs.writeFileSync(path.join(root, "config café.json"), '{"id": "example", "retryLimit": 3}\n');
     fs.writeFileSync(path.join(root, "decoy.json"), '{"id": "other", "description": "example"}\n');
     const searchInput = { symbol: '"id": "example"', path: "." };
-    const search = await f.call(recipes[1]!, searchInput);
+    const search = await f.call(recipe("discover then read without a model round trip"), searchInput);
     expect(search.isError, search.content[0].text).not.toBe(true);
     expect(f.value(search)).toEqual({
       search: { scope: { path: ".", hidden: true, ignoreFiles: true }, matches: [{ path: "config café.json", line: 1, text: '{"id": "example", "retryLimit": 3}' }], truncated: false },
@@ -183,7 +188,7 @@ describe("strict checked workspace bootstrap", () => {
     const distant = Array.from({ length: 450 }, (_, i) => `quiet line ${i + 1}`);
     for (const line of [400, 401, 420]) distant[line - 1] = `{"id": "example", "where":${line}}`;
     fs.writeFileSync(path.join(root, "far.txt"), distant.join("\n") + "\n");
-    const farSearch = await f.call(recipes[1]!, searchInput);
+    const farSearch = await f.call(recipe("discover then read without a model round trip"), searchInput);
     expect(farSearch.isError, farSearch.content[0].text).not.toBe(true);
     const ranges = (f.value(farSearch).evidence.files as Array<{ path: string; startLine: number; source: string; truncated: boolean }>).filter(r => r.path === "far.txt");
     expect(ranges.map(r => r.startLine)).toEqual([397, 417]);
@@ -191,42 +196,42 @@ describe("strict checked workspace bootstrap", () => {
     expect(ranges[0]!.source).toContain('"where":401');
     expect(ranges[1]!.source).toContain('"where":420');
     expect(ranges.every(r => r.truncated)).toBe(true);
-    const edit = await f.call(recipes[2]!, { path: "config café.json", oldText: '"retryLimit": 3', newText: '"retryLimit": 7' });
+    const edit = await f.call(recipe("exact edit then verification"), { path: "config café.json", oldText: '"retryLimit": 3', newText: '"retryLimit": 7' });
     expect(edit.isError, edit.content[0].text).not.toBe(true);
     expect(JSON.parse(f.value(edit).text)).toEqual({ id: "example", retryLimit: 7 });
     expect(fs.readFileSync(path.join(root, "decoy.json"), "utf8")).toBe('{"id": "other", "description": "example"}\n');
-    const farEdit = await f.call(recipes[2]!, { path: "far.txt", oldText: '"where":400', newText: '"where":999' });
+    const farEdit = await f.call(recipe("exact edit then verification"), { path: "far.txt", oldText: '"where":400', newText: '"where":999' });
     expect(farEdit.isError, farEdit.content[0].text).not.toBe(true);
     expect(f.value(farEdit)).toMatchObject({ changed: true, truncated: true, verifiedSha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
     expect(f.value(farEdit).text).not.toContain('"where":999');
     expect(fs.readFileSync(path.join(root, "far.txt"), "utf8").split("\n")[399]).toContain('"where":999');
     fs.writeFileSync(path.join(root, "intervening.txt"), "value=old\n");
-    const interrupted = recipes[2]!.replace("const r = await local.read", "await local.write({path,content:payloads.intervening,overwrite:true}); const r = await local.read");
+    const interrupted = recipe("exact edit then verification").replace("const r = await local.read", "await local.write({path,content:payloads.intervening,overwrite:true}); const r = await local.read");
     const conflict = await f.call(interrupted, { path: "intervening.txt", oldText: "value=old", newText: "value=new", intervening: "other change\n" });
     expect(conflict.isError).toBe(true);
     expect(conflict.content[0].text).toContain("File changed after edit");
     expect(fs.readFileSync(path.join(root, "intervening.txt"), "utf8")).toBe("other change\n");
-    const shell = await f.call(recipes[4]!, { command: "printf '%s\\n' 'diagnostic: expected'; exit 7" });
+    const shell = await f.call(recipe("bounded evidence from expected nonzero commands"), { command: "printf '%s\\n' 'diagnostic: expected'; exit 7" });
     expect(shell.isError, shell.content[0].text).not.toBe(true);
     expect(f.value(shell)).toMatchObject({ ok: false, exitCode: 7, stdout: "diagnostic: expected\n", stderr: "", truncated: false });
-    const noisy = await f.call(recipes[4]!, { command: "i=0; while [ $i -lt 400 ]; do printf 'noise-'; i=$((i+1)); done; exit 7" });
+    const noisy = await f.call(recipe("bounded evidence from expected nonzero commands"), { command: "i=0; while [ $i -lt 400 ]; do printf 'noise-'; i=$((i+1)); done; exit 7" });
     expect(noisy.isError, noisy.content[0].text).not.toBe(true);
     expect(f.value(noisy)).toMatchObject({ ok: false, exitCode: 7, truncated: true });
     expect(f.value(noisy).stdout.length).toBe(1200);
     fs.writeFileSync(path.join(root, "same.txt"), "first=old\nsecond=old\nkeep=this\n");
-    const multi = await f.call(recipes[3]!, { path: "same.txt", oldFirst: "first=old", newFirst: "first=new", oldSecond: "second=old", newSecond: "second=new" });
+    const multi = await f.call(recipe("snapshot-bound same-file edits"), { path: "same.txt", oldFirst: "first=old", newFirst: "first=new", oldSecond: "second=old", newSecond: "second=new" });
     expect(multi.isError, multi.content[0].text).not.toBe(true);
     expect(f.value(multi)).toEqual({ path: "same.txt", verified: true, verifiedSha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
     expect(fs.readFileSync(path.join(root, "same.txt"), "utf8")).toBe("first=new\nsecond=new\nkeep=this\n");
     for (const [file, group, amount] of [["a.json", "café", 20], ["b.json", "café", -3], ["c.json", "other", -2]]) {
       fs.writeFileSync(path.join(root, String(file)), JSON.stringify({ group, amount }));
     }
-    const pipeline = await f.call(recipes.find(code => code.includes('// Recipe: known-schema read compute write verify'))!, { paths: JSON.stringify(["a.json", "b.json", "c.json"]), outputPath: "totals.json" });
+    const pipeline = await f.call(recipe("known-schema read compute write verify"), { paths: JSON.stringify(["a.json", "b.json", "c.json"]), outputPath: "totals.json" });
     expect(pipeline.isError, pipeline.content[0].text).not.toBe(true);
     expect(f.value(pipeline)).toEqual({ path: "totals.json", groups: 2, verified: true });
     expect(JSON.parse(fs.readFileSync(path.join(root, "totals.json"), "utf8"))).toEqual({ totals: { café: 17, other: -2 } });
     wire.approve = false;
-    expect((await f.call(recipes[4]!, { command: "printf must-be-denied" })).isError).toBe(true);
+    expect((await f.call(recipe("bounded evidence from expected nonzero commands"), { command: "printf must-be-denied" })).isError).toBe(true);
   });
 
   it("keeps quiet command results small without hiding failure, warning or omission evidence", async () => {

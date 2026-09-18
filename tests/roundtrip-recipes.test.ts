@@ -8,6 +8,9 @@ import { FabricExecutionService } from "../src/execution-service.js";
 import { LocalCodingProvider } from "../src/providers/local-provider.js";
 import { FabricBootstrapProvider } from "../src/kiro/bootstrap-provider.js";
 import { BUNDLED_GUIDANCE } from "../src/kiro/generated-guidance.js";
+import { ContinuityProvider } from "../src/providers/continuity-provider.js";
+import type { ContinuityCaptureMetadata, ContinuityRecord } from "../src/continuity/records.js";
+import type { ContinuityHandle } from "../src/continuity/store.js";
 
 const fixtures: { root: string; service: FabricExecutionService }[] = [];
 afterEach(async () => {
@@ -16,15 +19,17 @@ afterEach(async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-function fixture(helpBudget = 20000) {
+function fixture(helpBudget = 20000, continuity = false) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-roundtrip-")));
   const workspace = path.join(root, "workspace"); fs.mkdirSync(workspace);
   const registry = new ActionRegistry();
   registry.register(new FabricBootstrapProvider(helpBudget));
   registry.register(new LocalCodingProvider({ root: workspace, lockRoot: path.join(root, "locks") }));
-  const service = new FabricExecutionService(registry, normalizeFabricConfig({ executor: { timeoutMs: 10000 } }), workspace);
+  const config = normalizeFabricConfig({ executor: { timeoutMs: 10000 }, continuity: { enabled: continuity } });
+  if (continuity) registry.register(new ContinuityProvider(path.join(root, "continuity"), config.continuity));
+  const service = new FabricExecutionService(registry, config, workspace);
   fixtures.push({ root, service });
-  return { workspace, service };
+  return { root, workspace, service };
 }
 const approver = { prepareApproval: () => ({ decision: "allow" as const }), async approve() {} };
 function recipe(name: string, topic = "review") {
@@ -35,6 +40,38 @@ function recipe(name: string, topic = "review") {
 }
 
 describe("composed review execution boundaries", () => {
+  it.each([undefined, "Keep the declared constraint"])("executes the published continuity recipe with optional constraint %s", async constraint => {
+    const { root, workspace, service } = fixture(20000, true);
+    const payloads = {
+      objective: "Recover this explicit task", path: "capture.txt", content: "PRIVATE_RECIPE_BODY",
+      command: "printf PRIVATE_RECIPE_OUTPUT; exit 7", requestId: "recipe-capture", nextStep: "Investigate the nonzero check",
+      ...(constraint === undefined ? {} : { constraint }),
+    };
+    const result = await service.execute({ code: recipe("explicit checkpoint of declared facts plus the current settled host prefix", "recipes"), payloads, approver, workspaceBound: true });
+    expect(result.success, result.error).toBe(true);
+    expect(result.value).toMatchObject({ operations: "selected-prefixes", commandOk: false, exitCode: 7,
+      capture: { capturedOperations: 2, throughOperation: 3, excludedOperations: 1, unsupportedOperations: 0 } });
+    expect(result.audits.map(a => a.ref)).toEqual(["continuity.create", "local.write", "local.shell", "continuity.checkpoint", "continuity.read"]);
+    const saved = result.value as ContinuityHandle & { capture: ContinuityCaptureMetadata };
+    const expanded = await service.execute({
+      code: 'return await continuity.expand({taskId:payloads.taskId,expectedRevision:Number(payloads.revision),hash:payloads.hash,limit:64});',
+      payloads: { taskId: saved.taskId, revision: String(saved.revision), hash: saved.hash }, approver, workspaceBound: true,
+    });
+    expect(expanded.success, expanded.error).toBe(true);
+    const page = expanded.value as { records: ContinuityRecord[]; nextSequence: number | null };
+    expect(page.nextSequence).toBeNull();
+    expect(page.records.filter(record => record.provenance === "declared").map(record => record.text))
+      .toEqual([payloads.objective, ...(constraint === undefined ? [] : [constraint]), payloads.nextStep]);
+    expect(page.records.filter(record => record.kind === "operation")).toEqual([
+      expect.objectContaining({ ref: "local.write", effectOutcome: "committed", path: "capture.txt", executionId: saved.capture.executionId }),
+      expect.objectContaining({ ref: "local.shell", outcome: "succeeded", effectOutcome: "uncertain", command: { ok: false, exitCode: 7, signal: null }, executionId: saved.capture.executionId }),
+    ]);
+    expect(fs.readFileSync(path.join(workspace, payloads.path), "utf8")).toBe(payloads.content);
+    const stored = fs.readFileSync(path.join(root, "continuity", "state.json"), "utf8");
+    expect(stored).not.toMatch(/PRIVATE_RECIPE_(?:BODY|OUTPUT)/);
+    expect(stored).not.toContain(payloads.command);
+  });
+
   it("delivers review help and observed source in one execution, skipping only already-known help", async () => {
     const { workspace, service } = fixture();
     fs.writeFileSync(path.join(workspace, "check.mjs"), "export const value = 1;\n");

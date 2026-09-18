@@ -72,6 +72,34 @@ if (r.truncated) throw new Error("Final read incomplete; inspect remaining lines
 return {path,verified:true,verifiedSha256:r.sha256};
 ```
 
+## Deterministic continuity capture (opt-in)
+
+Requires `continuity.enabled: true`, verified workspace binding, and normal write/execute approval. The path must be an authorized new file; the command must be an inspected, authorized local check. This is recovery, not `/compact`. Await earlier calls before capture. Do not persist secrets in declarations.
+
+```ts
+// Recipe: explicit checkpoint of declared facts plus the current settled host prefix
+const task = await continuity.create({
+  objective: payloads.objective,
+  ...(payloads.constraint ? {constraints:[payloads.constraint]} : {}),
+});
+await local.write({path:payloads.path,content:payloads.content});
+const command = await local.shell({command:payloads.command,timeoutMs:20000,settle:true});
+const checkpoint = await continuity.checkpoint({
+  taskId: task.taskId,
+  expectedRevision: task.revision,
+  requestId: payloads.requestId,
+  facts: [{kind:"next-step",text:payloads.nextStep}],
+  captureCurrentExecution: true,
+});
+const read = await continuity.read({taskId:checkpoint.taskId,expectedRevision:checkpoint.revision});
+return {taskId:checkpoint.taskId,revision:checkpoint.revision,hash:checkpoint.hash,capture:checkpoint.capture ?? null,
+  operations:read.coverage.operations,commandOk:command.ok,exitCode:command.exitCode};
+```
+
+Save the returned task selector, revision/hash, and capture metadata. Hard failures may leave effects without a checkpoint; a nonzero settled command is captured, not declared a successful check. After a lost acknowledgement, inspect `list`/`read` and explicitly identify the task (never pick newest automatically). Retry **only** the checkpoint with the original task ID, request ID, expected revision, facts and capture flag: a committed retry returns the saved prefix, not a new capture. Do not rerun this entire recipe—creation is not idempotent and repeating local work can duplicate effects.
+
+Later, after an MCP restart, `read`/`expand` the explicitly selected task with its saved revision/hash; follow expansion's `nextSequence` until null. Never treat stored receipts as conversation history or as proof that later work did not happen.
+
 ## Expected nonzero commands
 
 ```ts

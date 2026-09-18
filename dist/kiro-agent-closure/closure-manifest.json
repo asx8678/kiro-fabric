@@ -85,7 +85,7 @@
       },
       {
         "path": "scripts/install-transaction.mjs",
-        "sha256": "4dc00cef15334811e2dfda43ef5b317a84ebea8a50760325d1fbe652dd301f1e"
+        "sha256": "1a58dca0784c726dcd83a139dc9760d7f88c939283e5c7ba0d2a7f1733991c08"
       },
       {
         "path": "scripts/installer-artifacts.mjs",
@@ -141,7 +141,7 @@
       },
       {
         "path": "scripts/managed-installation.mjs",
-        "sha256": "5709cbe79367825790e30b56b18866e168d12cec91f16b244336b530193c471c"
+        "sha256": "2bf7d18abd798c5e5875d5ac893f49208304111bfc7ba132c4f769079e0e43c2"
       },
       {
         "path": "scripts/package-identity.mjs",
@@ -177,11 +177,11 @@
       },
       {
         "path": "skills/fabric-exec/references/api.md",
-        "sha256": "bae64f2dd23c9ed36b48b9f59e905e4ff57a021fe5985537094a72d7b73a463e"
+        "sha256": "977bf656d88a34a8a5a55e481b4ee2db01e13aa9e92688afdda0e67e5ada0391"
       },
       {
         "path": "skills/fabric-exec/references/recipes.md",
-        "sha256": "3fc532dc2ded9fb8935964d46f3c7f5224b9e99449aec63db7f1e131a1098c6b"
+        "sha256": "155b9728624211d16e38268ca640023dcd050856e27a2ff9cf4cb06bf68ca1c6"
       },
       {
         "path": "skills/fabric-exec/references/review.md",
@@ -197,11 +197,39 @@
       },
       {
         "path": "src/config.ts",
-        "sha256": "2fbf528991d6377baedf8ddd6cfecd9cf442dbfbbc5db3469f4eff189c374b63"
+        "sha256": "88ba698c72c2b231f1a6ebcd74a0d33fc856da12002619a9837a68e94dcd8406"
+      },
+      {
+        "path": "src/continuity/execution.ts",
+        "sha256": "02eee40845f97403e36decc6c59dcf2a26487d4718e5535ebb8d6e8442362654"
+      },
+      {
+        "path": "src/continuity/recall.ts",
+        "sha256": "df8ea597bc1b455f29f2bc947dc1bb8111f4f34edbb249d0bb9922a0bf0a23ec"
+      },
+      {
+        "path": "src/continuity/records.ts",
+        "sha256": "fdd0ac36f0907cf5f57bf6f80d067f5c95b833a676ee399fbac38d5d84510dc4"
+      },
+      {
+        "path": "src/continuity/render.ts",
+        "sha256": "6cc77d0d5466cd2ca86c4244ee0138b95886c38dbff60fc6099c8b9c7178d998"
+      },
+      {
+        "path": "src/continuity/store.ts",
+        "sha256": "c2c829ac96f2c22aed7ba17e8dbc7aa84f647700059d51d38aa353704e45fef4"
+      },
+      {
+        "path": "src/continuity/summary-budget.ts",
+        "sha256": "8ca2a64b4f6355ae7fab408e817af1840d9078bc04560cb80ede22d32ceeed4a"
+      },
+      {
+        "path": "src/continuity/task-view.ts",
+        "sha256": "92b417d3ad5945b9e7785dde0d6a1914f242904cc04c5d5cb0da84373113a901"
       },
       {
         "path": "src/core/action-registry.ts",
-        "sha256": "21ab6ab46871a18e3e17ade2bf6688c620365e733c918c9c8c72cd157c465cd7"
+        "sha256": "4b00b9777733f2d902ee68ebeaa7bddcc32034fbab3496d52e6827866bdbd446"
       },
       {
         "path": "src/core/catalog-contract.ts",
@@ -220,6 +248,10 @@
         "sha256": "16d03a19bbb7466013bd90a7d07f1c14925177d66b0bbd9ad5048bc5c1e9ad1d"
       },
       {
+        "path": "src/core/ranked-actions.ts",
+        "sha256": "f6fc0488534892010bac2175da4e1ec9e7ed12292dc808fcc719d945b6b38e08"
+      },
+      {
         "path": "src/core/remote-identity.ts",
         "sha256": "e8de7b80af05b857f6a7d11a3f1c94b8c43a0d27c11fce7de5b1b062e248db3d"
       },
@@ -233,15 +265,15 @@
       },
       {
         "path": "src/execution-service.ts",
-        "sha256": "cbbd8424e96b28868d3a1b56c908e509406ab9a44b8b28a6d821ff241d9f36d8"
+        "sha256": "16b860883f06f52edfe850c57f16eaa6660cd1e21790c1321e802002c8c11b49"
       },
       {
         "path": "src/index.ts",
-        "sha256": "f714c6b1b943a2602286e6f8eb0806a786fcecd3e8e2cff833ab668f86e00800"
+        "sha256": "df9726dab1087b568692b41cccceeca95a3f45485785c69b9f3db1d081439927"
       },
       {
         "path": "src/installation/bundle-contract.mjs",
-        "sha256": "c279a463421be6a29b8df80d2326c116d08685f8703bfb6498e8ae3d6ceb7a85"
+        "sha256": "d41e739b8502ff6d7b83d1a6c07f42989106afcc63b3d16392f985f66a15e319"
       },
       {
         "path": "src/installation/filesystem-boundary.mjs",
@@ -289,7 +321,7 @@
       },
       {
         "path": "src/kiro/generated-guidance.ts",
-        "sha256": "f1cea1972a193fec7aeb22e8b149616be429d3e235113fbd6995583d2a0048f9"
+        "sha256": "69fd647a3ede0c5cb92ba440a784cf2e651aab7796d5a6adf08b91e57187df46"
       },
       {
         "path": "src/kiro/info-catalog.ts",
@@ -309,7 +341,7 @@
       },
       {
         "path": "src/kiro/mcp-server.ts",
-        "sha256": "998e463ec793b9e68914e26f7cfb4d849b13f93bc2c2245962de54fea7fa55af"
+        "sha256": "9aed08b46ae4e5a6ba18beed11335301aacc6edf7d02c5a688837f2b804c5e8a"
       },
       {
         "path": "src/kiro/memory-provider.ts",
@@ -333,7 +365,7 @@
       },
       {
         "path": "src/kiro/power/data-paths.ts",
-        "sha256": "a560d2ef473d73a16e27a05a53725b44a50f2e05a6efbb1608a6a0fe3b5de6eb"
+        "sha256": "b70d273320af4168199ba359b772d4e384f5bce13e9a437fdf8f4432f75641bc"
       },
       {
         "path": "src/kiro/power/workspace-binding.ts",
@@ -353,11 +385,19 @@
       },
       {
         "path": "src/kiro/runtime.ts",
-        "sha256": "636061bf70373630e282586d799aedd144fcd8c9bb3913e72d7459cd86fa606d"
+        "sha256": "7c77091c158a8f250aa8d2b6fa941a3c756180f6f332d540c277fb1107aa2d50"
       },
       {
         "path": "src/protocol.ts",
-        "sha256": "318d81c9a8357ef2467ddee77d3a709458775442c27d8d54800c95588e822e30"
+        "sha256": "e9913dcab02a5553e8448f618196177cc8df3f23401750561331fbd27acb768e"
+      },
+      {
+        "path": "src/providers/continuity-contract.ts",
+        "sha256": "7cff2052fdf45585189a588236743fd6472ecf9f65b0efccc607b7d6e786faac"
+      },
+      {
+        "path": "src/providers/continuity-provider.ts",
+        "sha256": "290ea4e3618456d357148476269e7b78bd8ba79dff1f78fac57b47a805710abf"
       },
       {
         "path": "src/providers/local-contract.ts",
@@ -429,7 +469,7 @@
       },
       {
         "path": "src/providers/state-provider.ts",
-        "sha256": "0b6c70476241744a656596735f7f9179c5b28f083e66a9afe75442e289aff3ed"
+        "sha256": "11a00235946a67177c0f611a214a37febf5454f34ed300fe214f99910243e654"
       },
       {
         "path": "src/providers/web-privacy.ts",
@@ -453,7 +493,7 @@
       },
       {
         "path": "src/runtime/guest-bootstrap.ts",
-        "sha256": "dbe012140eb831b47bf5a98e176b9b0435727a9c59fafd3698a045f9f60970a4"
+        "sha256": "de99e51cd8030a2996c4bf34ca88bb2ca039d2f881722105a9b4476071c4f4be"
       },
       {
         "path": "src/runtime/guest-stack-map.ts",
@@ -461,7 +501,7 @@
       },
       {
         "path": "src/runtime/guest-types.ts",
-        "sha256": "02e8c4e3289881cf3944e629a95b2b78bcf5176f05cf7417846315ef5741104b"
+        "sha256": "0a59087d996465be2ecdd300d47996eec8d23f8bc122647cf8f98ba3b323390c"
       },
       {
         "path": "src/runtime/json-budget.ts",
@@ -504,7 +544,7 @@
         "sha256": "efd3e11265c46f657fd78a9ab0426bbaf455ade35d5145b6b932f3b50d78cc62"
       }
     ],
-    "digest": "5e7267ed15bfd5f8fcedd6fe69e719f48f794f11fa40969a3611744cda52c309"
+    "digest": "a3be786925b7ad6c7ffe1595f9243810d5ef25c422109cdbb5b2d3c71ab13266"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -514,11 +554,19 @@
   "sourceInputs": [
     "src/async-settlement.ts",
     "src/config.ts",
+    "src/continuity/execution.ts",
+    "src/continuity/recall.ts",
+    "src/continuity/records.ts",
+    "src/continuity/render.ts",
+    "src/continuity/store.ts",
+    "src/continuity/summary-budget.ts",
+    "src/continuity/task-view.ts",
     "src/core/action-registry.ts",
     "src/core/catalog-contract.ts",
     "src/core/catalog-execution.ts",
     "src/core/catalog-resources.ts",
     "src/core/catalog-snapshot-store.ts",
+    "src/core/ranked-actions.ts",
     "src/core/remote-identity.ts",
     "src/core/repair-error.ts",
     "src/core/semantic-digest.ts",
@@ -552,6 +600,8 @@
     "src/kiro/run-provenance.ts",
     "src/kiro/runtime.ts",
     "src/protocol.ts",
+    "src/providers/continuity-contract.ts",
+    "src/providers/continuity-provider.ts",
     "src/providers/local-contract.ts",
     "src/providers/local-edit.ts",
     "src/providers/local-evidence.ts",
@@ -741,6 +791,11 @@
       "sha256": "e9ac0883ac615a329771bded20d3d3189a90d963c305c781794de2422bf83e4c"
     },
     {
+      "path": "chunks/chunk-5SGMVAOB.js",
+      "bytes": 526511,
+      "sha256": "8abe0ffa82e4440b3b733bc0943f9fda51ed789febe18ef8cb3aa21815816810"
+    },
+    {
       "path": "chunks/chunk-762YYRNE.js",
       "bytes": 6351,
       "sha256": "12c662f81f2039cf0f67d47791a73f2434fac18a1b02d734ce9d19a47d550445"
@@ -769,11 +824,6 @@
       "path": "chunks/chunk-NWYPLJ5N.js",
       "bytes": 55190,
       "sha256": "525ad8dfa5132c9706d6057efb5fe914ba20c1db3b8004029a69a2a6bab7e011"
-    },
-    {
-      "path": "chunks/chunk-SJK3F6QR.js",
-      "bytes": 526090,
-      "sha256": "c463bb34c05c46df6c2fb7f6b1ab205b9034383e058aa3778a6c2d8ff261cfca"
     },
     {
       "path": "chunks/chunk-XJTFSUKV.js",
@@ -1091,9 +1141,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-J2RZI2IB.js",
-      "bytes": 920893,
-      "sha256": "e24a603c06c37bc0d9c82a5bc80fc71a65159b3cbc654c703345893c6e6f50cf"
+      "path": "chunks/mcp-server-TA5ARTJB.js",
+      "bytes": 995595,
+      "sha256": "2557496032ba70d0bb8207827fda16756df3accaa4f865c8bc5e875a4fb49d1e"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1112,8 +1162,8 @@
     },
     {
       "path": "kiro/mcp-entry.js",
-      "bytes": 73346,
-      "sha256": "630b53cc283770cb0674c2296efd15c7bac67c119aee72907b0aba3453ee6fcd"
+      "bytes": 73652,
+      "sha256": "eaad977d144d23dc78eb0f375e3a92bdf438645aa785a509f2600fbe6d019ea3"
     },
     {
       "path": "package.json",
@@ -1128,8 +1178,8 @@
     {
       "path": "runtime/sandbox-worker-entry.js",
       "bytes": 4807,
-      "sha256": "0c19522430f6436fcc4194057b57c06cd9ffb92d48e1db30bf90bb7502eea02a"
+      "sha256": "8662ae3ee346d8570f5b99d1d639a693a453699b1f3426583bd079fba300236b"
     }
   ],
-  "contentDigest": "32d99174d11fab759a4c6fc6f63755ca518e315103f4ed50afe5b5a025660833"
+  "contentDigest": "d2ed88dac17d4d3eeb283774c6df328bd1d8b22211fcf652ca1ef7e5364863a0"
 }

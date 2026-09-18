@@ -28,6 +28,8 @@ Pagination retains its default unfiltered-scope consistency contract. Opt-in `sn
 
 ## Session and process lifecycle
 
+The opt-in [deterministic task recovery provider](configuration.md#deterministic-task-recovery-opt-in) stores explicit caller-declared checkpoints and, when requested, a closed prefix of host-observed operations from the current execution. It renders bounded reproducible summaries from original records. It does not capture conversation, replace Kiro `/compact`, or inject recovery automatically. The [implementation plan](deterministic-compaction-plan.md) still treats native context replacement as a separate host-gated track.
+
 Kiro owns conversation history, resume, and context compaction. The repository-owned lifecycle contract is that one selected Kiro CLI OS process starts one private Fabric stdio MCP process and keeps that transport throughout ordinary turns and compaction, including a compaction-induced logical chat-session transition if the client implements one. Repeated checked `fabric.info()` calls (and operator-only `fabric_info`) are idempotent; no mandatory health-check ritual is required. They report the same random `mcpInstanceId`, PID, start timestamp, and runtime generation; they do not initialize another process or runtime. Whether a particular Kiro build honors that contract through `/compact` remains blocked until the authenticated real-client gate observes it on the exact release commit.
 
 The Fabric MCP process caches one runtime for the currently verified workspace identity. A verified workspace-root change can close that inner runtime and increment its runtime generation without starting a second MCP process. These lower lifecycle events are also not MCP restarts:

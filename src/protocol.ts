@@ -63,6 +63,8 @@ export interface FabricInvocationContext {
   cwd: string;
   maxResultChars?: number;
   checkpoints?: { reserve(): (handle: FabricCheckpointHandle) => void };
+  /** Host-only closed admission prefix for this call; never supplied by guest arguments. */
+  continuityCapture?: () => import("./continuity/execution.js").ContinuityCapture;
   signal?: AbortSignal;
   /** Host-only absolute monotonic deadline. Providers must check it at commit boundaries. */
   deadline?: FabricDeadline;

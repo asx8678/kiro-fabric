@@ -1390,6 +1390,347 @@ const assertOneObservedMcpProcess = (observer, kiroPid, label) => {
   if (observed.length !== 1) throw new Error(`${label} observed ${observed.length} Fabric MCP processes instead of one`);
 };
 
+const runCodingAndFormQualification = async ({
+  homeRoot, executable, interactiveArgv, workspaceRoot, authenticatedEnvironment,
+  protectedValues, mcpEntry, nonce, dataRoot, knownBeforeFormProbe,
+}) => {
+  const formRecord = path.join(homeRoot, "form-probe-acp.jsonl");
+  const formProbe = startPty(executable, interactiveArgv, {
+    cwd: workspaceRoot,
+    env: { ...authenticatedEnvironment, KIRO_ACP_RECORD_PATH: formRecord },
+    forbiddenValues: protectedValues,
+  });
+  const formObserver = observeMcpProcesses(mcpEntry, formProbe.child.pid);
+  const formStartCursor = formProbe.capture.cursor();
+  await maybeTrustWorkspace(formProbe);
+  const formStartOutput = formProbe.capture.slice(formStartCursor);
+  const codingSpec = codingFixtureSpec(nonce);
+  const codingDirectory = path.join(workspaceRoot, codingSpec.directory);
+  fs.mkdirSync(codingDirectory, { mode: 0o700 });
+  fs.writeFileSync(path.join(workspaceRoot, codingSpec.source), codingSpec.before, { flag: 'wx', mode: 0o600 });
+  fs.writeFileSync(path.join(codingDirectory, 'test.mjs'), codingSpec.test, { flag: 'wx', mode: 0o600 });
+  const codingProbe = () => {
+    const result = spawnSync(process.execPath, [path.join(codingDirectory, 'test.mjs')], { cwd: workspaceRoot, encoding: 'utf8', timeout: 120000, maxBuffer: MAX_COMMAND_BYTES });
+    if (result.error || result.signal) throw new Error('coding independent test probe failed');
+    return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr };
+  };
+  const coding = { source: 'kiro-acp-local-fixture', nonce, firstTurnSingleRead: true,
+    beforeSha256: hash(fs.readFileSync(path.join(workspaceRoot, codingSpec.source))), afterSha256: '',
+    testSha256: hash(fs.readFileSync(path.join(codingDirectory, 'test.mjs'))),
+    sessionId: '', acpRecordingDigest: '', probes: { before: codingProbe(), after: undefined }, steps: [] };
+  coding.steps.push(await runCodingStep({ session: formProbe, recordFile: formRecord, dataRoot: dataRoot, excludedIds: knownBeforeFormProbe, spec: codingSpec, index: 0 }));
+  coding.sessionId = coding.steps[0].call.sessionId;
+  const formPromptCursor = formProbe.capture.cursor();
+  formProbe.send(qualificationPrompt({
+    code: "return await memory.set({ key: payloads.key, value: { probe: payloads.nonce } })",
+    payloads: { key: `qualification-form-${nonce}`, nonce },
+    resultFormat: "json",
+  }));
+  const formRequestTrace = await waitForTrace(dataRoot, (candidate) => {
+    if (knownBeforeFormProbe.has(candidate.id)) return false;
+    const metrics = formMetrics(candidate);
+    return metrics.requests.length === 1 && candidate.events.some((event) => event.ev === "tool.fabric_info") &&
+      candidate.events.some((event) => event.ev === "tool.fabric_exec");
+  }, 120_000);
+  assertSingleRuntime(formRequestTrace);
+  const formClientCapabilities = clientCapabilities(formRequestTrace);
+  await waitForTerminalText(formProbe, formPromptCursor, /(?=[\s\S]*Approve once)(?=[\s\S]*Risk:\s*write)[\s\S]/iu, 30_000);
+  const formRequestOutput = formProbe.capture.slice(formPromptCursor);
+  const formResponseCursor = formProbe.capture.cursor();
+  formProbe.send("n");
+  let formFinalTrace;
+  try {
+    formFinalTrace = await waitForTrace(dataRoot, (candidate) => {
+      if (candidate.id !== formRequestTrace.id) return false;
+      const metrics = formMetrics(candidate);
+      return metrics.responses.length === 1 && metrics.failed.length === 1 && metrics.denied.length === 1 && metrics.writeErrors.length === 1;
+    }, 15_000);
+  } catch {
+    // Escape is a safe dismissal fallback if this Kiro TUI does not accept
+    // the boolean form's default-false value through `n` + Enter.
+    formProbe.sendRaw("\x1b");
+    formFinalTrace = await waitForTrace(dataRoot, (candidate) => {
+      if (candidate.id !== formRequestTrace.id) return false;
+      const metrics = formMetrics(candidate);
+      return metrics.responses.length === 1 && metrics.failed.length === 1 && metrics.denied.length === 1 && metrics.writeErrors.length === 1;
+    }, 30_000);
+  }
+  await waitForQuiet(formProbe, formResponseCursor, 120_000);
+  const formResponseOutput = formProbe.capture.slice(formResponseCursor);
+  const form = formMetrics(formFinalTrace);
+  const formRequest = form.requests[0]?.data;
+  const formResponse = form.responses[0]?.data;
+  if (!formRequest?.elicitationId || formRequest.elicitationId !== formResponse?.elicitationId ||
+      !["accept", "decline", "cancel"].includes(formResponse?.action) || formResponse.approved !== false) {
+    throw new Error("form-elicitation request/response identity is incomplete");
+  }
+  for (let index = 1; index < codingSpec.steps.length; index++) {
+    coding.steps.push(await runCodingStep({ session: formProbe, recordFile: formRecord, dataRoot: dataRoot, excludedIds: knownBeforeFormProbe, spec: codingSpec, index }));
+  }
+  coding.afterSha256 = hash(fs.readFileSync(path.join(workspaceRoot, codingSpec.source)));
+  if (hash(fs.readFileSync(path.join(codingDirectory, 'test.mjs'))) !== coding.testSha256) throw new Error('coding fixture test was modified');
+  coding.probes.after = codingProbe();
+  fs.rmSync(codingDirectory, { recursive: true });
+  const formProcess = validateObservedProcess(formObserver, formFinalTrace, {
+    executable,
+    requiredArgs: ["--v3", "--agent", "kiro-fabric"],
+  });
+  assertOneObservedMcpProcess(formObserver, formProcess.kiroPid, "form probe");
+  const formDescendants = observedDescendants(formProcess.identity.pid);
+  const formShutdownCursor = formProbe.capture.cursor();
+  formProbe.send("/quit");
+  const formExit = await waitForExit(formProbe.child, 120_000);
+  formObserver.stop();
+  if (formProbe.capture.failure()) throw formProbe.capture.failure();
+  if (formExit.code !== 0) throw new Error(`form-probe Kiro exited ${formExit.code ?? formExit.signal}`);
+  await waitUntilDead(formProcess.kiroPid);
+  await waitUntilDead(formProcess.identity.pid);
+  await waitUntilObservedDead(formDescendants);
+  formObserver.release();
+  const formShutdownOutput = formProbe.capture.slice(formShutdownCursor);
+  const formTrace = traceSessions(dataRoot, false).find((entry) => entry.id === formRequestTrace.id);
+  if (!formTrace?.events.some((event) => event.ev === "runtime.stop" && event.data?.runtimeGeneration === 1)) {
+    throw new Error("form-probe Fabric MCP did not record a graceful runtime drain");
+  }
+  const formRecording = recordingEvidence(formRecord, protectedValues);
+  coding.acpRecordingDigest = formRecording.digest;
+  for (const step of coding.steps) step.call.acpRecordingDigest = formRecording.digest;
+  assertCodingQualification(coding);
+  const formRecordingFrames = acpFrames(formRecord);
+  if (!acpFormInteractionObserved(formRecordingFrames)) throw new Error("Kiro ACP recording did not contain a structural form-elicitation event");
+  if (durableContains(dataRoot, "memory", nonce)) throw new Error("declined form probe mutated durable memory");
+  return { coding, formStartOutput, formRequestTrace, formClientCapabilities, formRequestOutput,
+    formResponseOutput, form, formRequest, formResponse, formProcess, formDescendants,
+    formShutdownOutput, formTrace, formRecording };
+};
+
+const runRepeatedManualCompactionQualification = async ({
+  firstManualCompaction, sessionId, interactive, interactiveRecord, dataRoot,
+  interactiveId, knownBeforeInteractive, interactiveIdentity, nonce, memoryKey, stateKey, artifactId,
+}) => {
+  const manualCompactions = [firstManualCompaction];
+  const manualVerificationTurns = [];
+  const compactionCycleContextSeeds = [];
+  const compactionCycleCalls = [];
+  for (let index = 2; index <= REAL_CLIENT_MANUAL_COMPACTION_CYCLES; index += 1) {
+    const fact = `context-manual-${index}-${randomBytes(24).toString("hex")}`;
+    const contextKey = `qualification-compacted-context-manual-${index}-${nonce}`;
+    const seedArguments = {
+      code: sentinelVerificationCode(false),
+      payloads: { nonce, memoryKey, stateKey },
+      resultFormat: "json",
+    };
+    const seedPrompt = contextSeedPrompt(seedArguments, fact, `manual compaction cycle ${index}`);
+    const seedRecordingOffset = fs.readFileSync(interactiveRecord).length;
+    const seedTurn = await runInteractiveTurn({
+      session: interactive,
+      dataRoot: dataRoot,
+      targetId: interactiveId,
+      excludedIds: knownBeforeInteractive,
+      prompt: seedPrompt,
+      expectedRefs: ["memory.get", "state.get"],
+      name: `manual-compaction-${index}-context-seed`,
+    });
+    const seedAcp = await waitForAcpFabricExec(interactiveRecord, seedRecordingOffset, {
+      sessionId,
+      expectedArguments: seedArguments,
+      expectedResult: { verified: true },
+    });
+    const compactionBoundaryOffset = fs.readFileSync(interactiveRecord).length;
+    const seedFrames = acpFrames(interactiveRecord, seedRecordingOffset, compactionBoundaryOffset);
+    const finalizedSeedCalls = completedAcpFabricExecCalls(seedFrames, {
+      sessionId,
+      expectedArguments: seedArguments,
+      expectedResult: { verified: true },
+    });
+    if (finalizedSeedCalls.length !== 1 ||
+        qualificationValueDigest(finalizedSeedCalls[0]) !== qualificationValueDigest(seedAcp.call) ||
+        acpToolDataContaining(seedFrames, fact).length !== 0) {
+      throw new Error(`manual compaction cycle ${index} conversation fact leaked into pre-compaction tool data`);
+    }
+    const cycle = await manualCompactionCycle({
+      session: interactive,
+      recordFile: interactiveRecord,
+      dataRoot: dataRoot,
+      traceId: interactiveId,
+      sessionId,
+      index,
+    });
+    if (JSON.stringify(cycle.mcp) !== JSON.stringify(interactiveIdentity)) {
+      throw new Error(`Fabric MCP identity changed during manual compaction cycle ${index}`);
+    }
+    if (cycle.gate.intervalStartOffset !== compactionBoundaryOffset) {
+      throw new Error(`manual compaction cycle ${index} is not adjacent to its conversation-only context seed`);
+    }
+    if (acpToolDataContaining(
+      acpFrames(interactiveRecord, seedRecordingOffset, cycle.gate.intervalEndOffset),
+      fact,
+    ).length !== 0) {
+      throw new Error(`manual compaction cycle ${index} conversation fact appeared in structural tool data before compaction completed`);
+    }
+    manualCompactions.push(cycle);
+    sessionId = cycle.gate.sessionIdAfter;
+    const publicPayloads = { nonce, memoryKey, stateKey, artifactId, contextKey };
+    const argumentsValue = {
+      code: postCompactionVerificationCode,
+      payloads: { ...publicPayloads, contextFact: fact },
+      resultFormat: "json",
+    };
+    const expectedResult = { verified: true, artifactVerified: true, contextCaptured: true };
+    const prompt = postCompactionPrompt({
+      code: postCompactionVerificationCode,
+      payloads: publicPayloads,
+      boundary: `manual compaction cycle ${index}`,
+    });
+    if (prompt.includes(fact)) throw new Error(`manual compaction cycle ${index} post-compaction prompt restated its fact`);
+    const recordingOffset = fs.readFileSync(interactiveRecord).length;
+    const turn = await runInteractiveTurn({
+      session: interactive,
+      dataRoot: dataRoot,
+      targetId: interactiveId,
+      excludedIds: knownBeforeInteractive,
+      prompt,
+      expectedRefs: ["memory.get", "state.get", "artifacts.read", "state.set"],
+      name: `post-manual-compaction-${index}`,
+    });
+    if (JSON.stringify(turn.evidence.mcp) !== JSON.stringify(interactiveIdentity)) {
+      throw new Error(`Fabric MCP identity changed after manual compaction cycle ${index}`);
+    }
+    const acp = await waitForAcpFabricExec(interactiveRecord, recordingOffset, {
+      sessionId,
+      expectedArguments: argumentsValue,
+      expectedResult,
+    });
+    const recordingEndOffset = fs.readFileSync(interactiveRecord).length;
+    const finalized = completedAcpFabricExecCalls(
+      acpFrames(interactiveRecord, recordingOffset, recordingEndOffset),
+      { sessionId, expectedArguments: argumentsValue, expectedResult },
+    );
+    if (finalized.length !== 1 || qualificationValueDigest(finalized[0]) !== qualificationValueDigest(acp.call)) {
+      throw new Error(`manual compaction cycle ${index} verification changed before the next cycle`);
+    }
+    if (acp.call.observedContextFactDigest !== qualificationValueDigest(fact) ||
+        !durableContains(dataRoot, "state", fact)) {
+      throw new Error(`manual compaction cycle ${index} did not structurally recall and persist its conversation-only fact`);
+    }
+    manualVerificationTurns.push({
+      index,
+      fact,
+      contextKey,
+      seedRecordingOffset,
+      seedTurn,
+      seedAcp,
+      turn,
+      acp,
+      argumentsValue,
+      expectedResult,
+    });
+    compactionCycleContextSeeds.push({ kind: "manual", cycle: index, ...seedAcp.call });
+    compactionCycleCalls.push({ kind: "manual", cycle: index, ...acp.call });
+  }
+
+  if (manualCompactions.length !== REAL_CLIENT_MANUAL_COMPACTION_CYCLES) {
+    throw new Error("required repeated manual compaction cycles were not completed");
+  }
+  const manualCompaction2 = manualCompactions[1];
+  const manualCompaction3 = manualCompactions[2];
+  const manualVerification2 = manualVerificationTurns[0];
+  const manualVerification3 = manualVerificationTurns[1];
+  if (!manualCompaction2 || !manualCompaction3 || !manualVerification2 || !manualVerification3) {
+    throw new Error("manual compaction cycle evidence is incomplete");
+  }
+  return { sessionId, manualCompactions, manualVerificationTurns, compactionCycleContextSeeds,
+    compactionCycleCalls, manualCompaction2, manualCompaction3, manualVerification2, manualVerification3 };
+};
+
+const runHeadlessQualification = async ({
+  selector, nonce, executable, workspaceRoot, authenticatedEnvironment,
+  protectedValues, mcpEntry, dataRoot,
+}) => {
+  const headlessPrompt = qualificationPrompt({ code: "return { nonce: payloads.nonce, providers: await tools.providers() }", payloads: { nonce }, resultFormat: "json" });
+  const headlessArgv = ["chat", ...(selector === "--v3" ? ["--v3"] : [selector, "v3"]), "--agent", "kiro-fabric", "--no-interactive", "--require-mcp-startup", "--output-format", "stream-json", headlessPrompt];
+  const knownBeforeHeadless = new Set(traceSessions(dataRoot).map((entry) => entry.id));
+  const headlessChild = trackQualificationChild(spawn(executable, headlessArgv, { cwd: workspaceRoot, env: environmentAt(authenticatedEnvironment, workspaceRoot), stdio: ["ignore", "pipe", "pipe"] }));
+  const headlessCapture = attachCapture(headlessChild, MAX_COMMAND_BYTES, protectedValues);
+  const headlessObserver = observeMcpProcesses(mcpEntry, headlessChild.pid);
+  const headlessExit = await waitForExit(headlessChild);
+  headlessObserver.stop();
+  if (headlessCapture.failure()) throw headlessCapture.failure();
+  if (headlessExit.code !== 0) throw new Error(`headless Kiro exited ${headlessExit.code ?? headlessExit.signal}: ${headlessCapture.slice().toString("utf8").slice(0, 2_000)}`);
+  assertStreamJson(headlessCapture.stdout());
+  const headlessTrace = await waitForTrace(dataRoot, (candidate) => {
+    if (knownBeforeHeadless.has(candidate.id)) return false;
+    const metrics = turnMetrics(candidate, 0);
+    return metrics.fabricInfoCalls >= 1 && metrics.fabricExecCalls === 2 && metrics.execSucceeded && candidate.events.some((event) => event.ev === "tool.fabric_workspace");
+  }, 30_000);
+  assertSingleRuntime(headlessTrace);
+  const headlessProcess = validateObservedProcess(headlessObserver, headlessTrace, {
+    executable,
+    requiredArgs: ["chat", selector, "--agent", "kiro-fabric", "--no-interactive", "--require-mcp-startup", "--output-format", "stream-json"],
+    expectedKiroPid: headlessChild.pid,
+  });
+  const headlessIdentity = headlessProcess.identity;
+  assertOneObservedMcpProcess(headlessObserver, headlessProcess.kiroPid, "headless Kiro");
+  await waitUntilDead(headlessProcess.kiroPid);
+  await waitUntilDead(headlessIdentity.pid);
+  headlessObserver.release();
+  return { headlessArgv, headlessChild, headlessCapture, headlessTrace, headlessIdentity };
+};
+
+const finalizeCompactionSeries = (interactiveRecord, manualCompactions, automaticCompaction) => {
+  const finalizedManualCompactions = manualCompactions.map((cycle) => {
+    const frames = acpFrames(interactiveRecord, cycle.gate.intervalStartOffset, cycle.gate.intervalEndOffset);
+    const exchanges = completedAcpManualCompactions(frames, cycle.gate.sessionIdBefore);
+    const notifications = completedAcpCompactionNotifications(frames, [cycle.gate.sessionIdBefore]);
+    if (exchanges.length !== 1 || notifications.length !== 1 ||
+        qualificationValueDigest(exchanges[0]) !== qualificationValueDigest(cycle.gate.manualExchange) ||
+        notifications[0].frameDigest !== cycle.gate.frameDigest) {
+      throw new Error(`manual compaction cycle ${cycle.gate.index} changed in the final ACP recording`);
+    }
+    return cycle.gate;
+  });
+  const automaticFrames = acpFrames(
+    interactiveRecord,
+    automaticCompaction.gate.intervalStartOffset,
+    automaticCompaction.gate.intervalEndOffset,
+  );
+  const finalizedAutomatic = completedAcpAutomaticCompactions(
+    automaticFrames,
+    automaticCompaction.gate.sessionIdBefore,
+    automaticCompaction.pressureMarker,
+  );
+  const automaticNotifications = completedAcpCompactionNotifications(
+    automaticFrames,
+    [automaticCompaction.gate.sessionIdBefore],
+  );
+  if (finalizedAutomatic.length !== 1 || automaticNotifications.length !== 1 ||
+      qualificationValueDigest(finalizedAutomatic[0]) !== qualificationValueDigest({
+        sessionId: automaticCompaction.gate.sessionId,
+        trigger: automaticCompaction.gate.trigger,
+        pressureMarkerDigest: automaticCompaction.gate.pressureMarkerDigest,
+        promptRequestIdDigest: automaticCompaction.gate.promptRequestIdDigest,
+        promptFrameDigest: automaticCompaction.gate.promptFrameDigest,
+        startedFrameDigest: automaticCompaction.gate.startedFrameDigest,
+        completedFrameDigest: automaticCompaction.gate.completedFrameDigest,
+        manualCommandAbsent: automaticCompaction.gate.manualCommandAbsent,
+        toolCallsAbsent: automaticCompaction.gate.toolCallsAbsent,
+      }) || automaticNotifications[0].frameDigest !== automaticCompaction.gate.frameDigest) {
+    throw new Error("automatic compaction changed in the final ACP recording");
+  }
+  const compactionSeriesSummary = {
+    manualCycleCount: finalizedManualCompactions.length,
+    automaticCycleCount: 1,
+    manual: finalizedManualCompactions,
+    automatic: automaticCompaction.gate,
+  };
+  const compactionSeriesOutput = Buffer.from(`${JSON.stringify(compactionSeriesSummary)}\n`);
+  const automaticPressureOutput = Buffer.from(`${JSON.stringify({
+    attempts: automaticCompaction.attempts,
+    event: automaticCompaction.gate,
+  })}\n`);
+  return { compactionSeriesSummary, compactionSeriesOutput, automaticPressureOutput };
+};
+
 const runRealKiroAgentDriverImplementation = async ({
   packageRoot, packageDigest, archiveDigest, commit, driverDigest, output, workspace,
   kiroHome, isolatedHome, installCwd, authMode, subscriptionLogin = false,
@@ -1552,111 +1893,12 @@ const runRealKiroAgentDriverImplementation = async ({
   const knownBeforeFormProbe = new Set(traceSessions(installed.data).map((entry) => entry.id));
   const interactiveArgv = REAL_CLIENT_INTERACTIVE_COMMAND.slice(1);
   record.phase("coding-and-form");
-  const formRecord = path.join(homeRoot, "form-probe-acp.jsonl");
-  const formProbe = startPty(executable, interactiveArgv, {
-    cwd: workspaceRoot,
-    env: { ...authenticatedEnvironment, KIRO_ACP_RECORD_PATH: formRecord },
-    forbiddenValues: protectedValues,
+  const { coding, formStartOutput, formRequestTrace, formClientCapabilities, formRequestOutput,
+    formResponseOutput, form, formRequest, formResponse, formProcess, formDescendants,
+    formShutdownOutput, formTrace, formRecording } = await runCodingAndFormQualification({
+    homeRoot, executable, interactiveArgv, workspaceRoot, authenticatedEnvironment,
+    protectedValues, mcpEntry, nonce, dataRoot: installed.data, knownBeforeFormProbe,
   });
-  const formObserver = observeMcpProcesses(mcpEntry, formProbe.child.pid);
-  const formStartCursor = formProbe.capture.cursor();
-  await maybeTrustWorkspace(formProbe);
-  const formStartOutput = formProbe.capture.slice(formStartCursor);
-  const codingSpec = codingFixtureSpec(nonce);
-  const codingDirectory = path.join(workspaceRoot, codingSpec.directory);
-  fs.mkdirSync(codingDirectory, { mode: 0o700 });
-  fs.writeFileSync(path.join(workspaceRoot, codingSpec.source), codingSpec.before, { flag: 'wx', mode: 0o600 });
-  fs.writeFileSync(path.join(codingDirectory, 'test.mjs'), codingSpec.test, { flag: 'wx', mode: 0o600 });
-  const codingProbe = () => {
-    const result = spawnSync(process.execPath, [path.join(codingDirectory, 'test.mjs')], { cwd: workspaceRoot, encoding: 'utf8', timeout: 120000, maxBuffer: MAX_COMMAND_BYTES });
-    if (result.error || result.signal) throw new Error('coding independent test probe failed');
-    return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr };
-  };
-  const coding = { source: 'kiro-acp-local-fixture', nonce, firstTurnSingleRead: true,
-    beforeSha256: hash(fs.readFileSync(path.join(workspaceRoot, codingSpec.source))), afterSha256: '',
-    testSha256: hash(fs.readFileSync(path.join(codingDirectory, 'test.mjs'))),
-    sessionId: '', acpRecordingDigest: '', probes: { before: codingProbe(), after: undefined }, steps: [] };
-  coding.steps.push(await runCodingStep({ session: formProbe, recordFile: formRecord, dataRoot: installed.data, excludedIds: knownBeforeFormProbe, spec: codingSpec, index: 0 }));
-  coding.sessionId = coding.steps[0].call.sessionId;
-  const formPromptCursor = formProbe.capture.cursor();
-  formProbe.send(qualificationPrompt({
-    code: "return await memory.set({ key: payloads.key, value: { probe: payloads.nonce } })",
-    payloads: { key: `qualification-form-${nonce}`, nonce },
-    resultFormat: "json",
-  }));
-  const formRequestTrace = await waitForTrace(installed.data, (candidate) => {
-    if (knownBeforeFormProbe.has(candidate.id)) return false;
-    const metrics = formMetrics(candidate);
-    return metrics.requests.length === 1 && candidate.events.some((event) => event.ev === "tool.fabric_info") &&
-      candidate.events.some((event) => event.ev === "tool.fabric_exec");
-  }, 120_000);
-  assertSingleRuntime(formRequestTrace);
-  const formClientCapabilities = clientCapabilities(formRequestTrace);
-  await waitForTerminalText(formProbe, formPromptCursor, /(?=[\s\S]*Approve once)(?=[\s\S]*Risk:\s*write)[\s\S]/iu, 30_000);
-  const formRequestOutput = formProbe.capture.slice(formPromptCursor);
-  const formResponseCursor = formProbe.capture.cursor();
-  formProbe.send("n");
-  let formFinalTrace;
-  try {
-    formFinalTrace = await waitForTrace(installed.data, (candidate) => {
-      if (candidate.id !== formRequestTrace.id) return false;
-      const metrics = formMetrics(candidate);
-      return metrics.responses.length === 1 && metrics.failed.length === 1 && metrics.denied.length === 1 && metrics.writeErrors.length === 1;
-    }, 15_000);
-  } catch {
-    // Escape is a safe dismissal fallback if this Kiro TUI does not accept
-    // the boolean form's default-false value through `n` + Enter.
-    formProbe.sendRaw("\x1b");
-    formFinalTrace = await waitForTrace(installed.data, (candidate) => {
-      if (candidate.id !== formRequestTrace.id) return false;
-      const metrics = formMetrics(candidate);
-      return metrics.responses.length === 1 && metrics.failed.length === 1 && metrics.denied.length === 1 && metrics.writeErrors.length === 1;
-    }, 30_000);
-  }
-  await waitForQuiet(formProbe, formResponseCursor, 120_000);
-  const formResponseOutput = formProbe.capture.slice(formResponseCursor);
-  const form = formMetrics(formFinalTrace);
-  const formRequest = form.requests[0]?.data;
-  const formResponse = form.responses[0]?.data;
-  if (!formRequest?.elicitationId || formRequest.elicitationId !== formResponse?.elicitationId ||
-      !["accept", "decline", "cancel"].includes(formResponse?.action) || formResponse.approved !== false) {
-    throw new Error("form-elicitation request/response identity is incomplete");
-  }
-  for (let index = 1; index < codingSpec.steps.length; index++) {
-    coding.steps.push(await runCodingStep({ session: formProbe, recordFile: formRecord, dataRoot: installed.data, excludedIds: knownBeforeFormProbe, spec: codingSpec, index }));
-  }
-  coding.afterSha256 = hash(fs.readFileSync(path.join(workspaceRoot, codingSpec.source)));
-  if (hash(fs.readFileSync(path.join(codingDirectory, 'test.mjs'))) !== coding.testSha256) throw new Error('coding fixture test was modified');
-  coding.probes.after = codingProbe();
-  fs.rmSync(codingDirectory, { recursive: true });
-  const formProcess = validateObservedProcess(formObserver, formFinalTrace, {
-    executable,
-    requiredArgs: ["--v3", "--agent", "kiro-fabric"],
-  });
-  assertOneObservedMcpProcess(formObserver, formProcess.kiroPid, "form probe");
-  const formDescendants = observedDescendants(formProcess.identity.pid);
-  const formShutdownCursor = formProbe.capture.cursor();
-  formProbe.send("/quit");
-  const formExit = await waitForExit(formProbe.child, 120_000);
-  formObserver.stop();
-  if (formProbe.capture.failure()) throw formProbe.capture.failure();
-  if (formExit.code !== 0) throw new Error(`form-probe Kiro exited ${formExit.code ?? formExit.signal}`);
-  await waitUntilDead(formProcess.kiroPid);
-  await waitUntilDead(formProcess.identity.pid);
-  await waitUntilObservedDead(formDescendants);
-  formObserver.release();
-  const formShutdownOutput = formProbe.capture.slice(formShutdownCursor);
-  const formTrace = traceSessions(installed.data, false).find((entry) => entry.id === formRequestTrace.id);
-  if (!formTrace?.events.some((event) => event.ev === "runtime.stop" && event.data?.runtimeGeneration === 1)) {
-    throw new Error("form-probe Fabric MCP did not record a graceful runtime drain");
-  }
-  const formRecording = recordingEvidence(formRecord, protectedValues);
-  coding.acpRecordingDigest = formRecording.digest;
-  for (const step of coding.steps) step.call.acpRecordingDigest = formRecording.digest;
-  assertCodingQualification(coding);
-  const formRecordingFrames = acpFrames(formRecord);
-  if (!acpFormInteractionObserved(formRecordingFrames)) throw new Error("Kiro ACP recording did not contain a structural form-elicitation event");
-  if (durableContains(installed.data, "memory", nonce)) throw new Error("declined form probe mutated durable memory");
 
   fs.writeFileSync(configFile, qualificationConfig("allow"), { encoding: "utf8", mode: 0o600 });
   fs.chmodSync(configFile, 0o600);
@@ -1818,137 +2060,13 @@ const runRealKiroAgentDriverImplementation = async ({
     throw new Error("post-compaction fabric_exec evidence changed before Kiro shutdown");
   }
 
-  const manualCompactions = [firstManualCompaction];
-  const manualVerificationTurns = [];
-  const compactionCycleContextSeeds = [];
-  const compactionCycleCalls = [];
-  for (let index = 2; index <= REAL_CLIENT_MANUAL_COMPACTION_CYCLES; index += 1) {
-    const fact = `context-manual-${index}-${randomBytes(24).toString("hex")}`;
-    const contextKey = `qualification-compacted-context-manual-${index}-${nonce}`;
-    const seedArguments = {
-      code: sentinelVerificationCode(false),
-      payloads: { nonce, memoryKey, stateKey },
-      resultFormat: "json",
-    };
-    const seedPrompt = contextSeedPrompt(seedArguments, fact, `manual compaction cycle ${index}`);
-    const seedRecordingOffset = fs.readFileSync(interactiveRecord).length;
-    const seedTurn = await runInteractiveTurn({
-      session: interactive,
-      dataRoot: installed.data,
-      targetId: interactiveId,
-      excludedIds: knownBeforeInteractive,
-      prompt: seedPrompt,
-      expectedRefs: ["memory.get", "state.get"],
-      name: `manual-compaction-${index}-context-seed`,
-    });
-    const seedAcp = await waitForAcpFabricExec(interactiveRecord, seedRecordingOffset, {
-      sessionId,
-      expectedArguments: seedArguments,
-      expectedResult: { verified: true },
-    });
-    const compactionBoundaryOffset = fs.readFileSync(interactiveRecord).length;
-    const seedFrames = acpFrames(interactiveRecord, seedRecordingOffset, compactionBoundaryOffset);
-    const finalizedSeedCalls = completedAcpFabricExecCalls(seedFrames, {
-      sessionId,
-      expectedArguments: seedArguments,
-      expectedResult: { verified: true },
-    });
-    if (finalizedSeedCalls.length !== 1 ||
-        qualificationValueDigest(finalizedSeedCalls[0]) !== qualificationValueDigest(seedAcp.call) ||
-        acpToolDataContaining(seedFrames, fact).length !== 0) {
-      throw new Error(`manual compaction cycle ${index} conversation fact leaked into pre-compaction tool data`);
-    }
-    const cycle = await manualCompactionCycle({
-      session: interactive,
-      recordFile: interactiveRecord,
-      dataRoot: installed.data,
-      traceId: interactiveId,
-      sessionId,
-      index,
-    });
-    if (JSON.stringify(cycle.mcp) !== JSON.stringify(interactiveIdentity)) {
-      throw new Error(`Fabric MCP identity changed during manual compaction cycle ${index}`);
-    }
-    if (cycle.gate.intervalStartOffset !== compactionBoundaryOffset) {
-      throw new Error(`manual compaction cycle ${index} is not adjacent to its conversation-only context seed`);
-    }
-    if (acpToolDataContaining(
-      acpFrames(interactiveRecord, seedRecordingOffset, cycle.gate.intervalEndOffset),
-      fact,
-    ).length !== 0) {
-      throw new Error(`manual compaction cycle ${index} conversation fact appeared in structural tool data before compaction completed`);
-    }
-    manualCompactions.push(cycle);
-    sessionId = cycle.gate.sessionIdAfter;
-    const publicPayloads = { nonce, memoryKey, stateKey, artifactId, contextKey };
-    const argumentsValue = {
-      code: postCompactionVerificationCode,
-      payloads: { ...publicPayloads, contextFact: fact },
-      resultFormat: "json",
-    };
-    const expectedResult = { verified: true, artifactVerified: true, contextCaptured: true };
-    const prompt = postCompactionPrompt({
-      code: postCompactionVerificationCode,
-      payloads: publicPayloads,
-      boundary: `manual compaction cycle ${index}`,
-    });
-    if (prompt.includes(fact)) throw new Error(`manual compaction cycle ${index} post-compaction prompt restated its fact`);
-    const recordingOffset = fs.readFileSync(interactiveRecord).length;
-    const turn = await runInteractiveTurn({
-      session: interactive,
-      dataRoot: installed.data,
-      targetId: interactiveId,
-      excludedIds: knownBeforeInteractive,
-      prompt,
-      expectedRefs: ["memory.get", "state.get", "artifacts.read", "state.set"],
-      name: `post-manual-compaction-${index}`,
-    });
-    if (JSON.stringify(turn.evidence.mcp) !== JSON.stringify(interactiveIdentity)) {
-      throw new Error(`Fabric MCP identity changed after manual compaction cycle ${index}`);
-    }
-    const acp = await waitForAcpFabricExec(interactiveRecord, recordingOffset, {
-      sessionId,
-      expectedArguments: argumentsValue,
-      expectedResult,
-    });
-    const recordingEndOffset = fs.readFileSync(interactiveRecord).length;
-    const finalized = completedAcpFabricExecCalls(
-      acpFrames(interactiveRecord, recordingOffset, recordingEndOffset),
-      { sessionId, expectedArguments: argumentsValue, expectedResult },
-    );
-    if (finalized.length !== 1 || qualificationValueDigest(finalized[0]) !== qualificationValueDigest(acp.call)) {
-      throw new Error(`manual compaction cycle ${index} verification changed before the next cycle`);
-    }
-    if (acp.call.observedContextFactDigest !== qualificationValueDigest(fact) ||
-        !durableContains(installed.data, "state", fact)) {
-      throw new Error(`manual compaction cycle ${index} did not structurally recall and persist its conversation-only fact`);
-    }
-    manualVerificationTurns.push({
-      index,
-      fact,
-      contextKey,
-      seedRecordingOffset,
-      seedTurn,
-      seedAcp,
-      turn,
-      acp,
-      argumentsValue,
-      expectedResult,
-    });
-    compactionCycleContextSeeds.push({ kind: "manual", cycle: index, ...seedAcp.call });
-    compactionCycleCalls.push({ kind: "manual", cycle: index, ...acp.call });
-  }
-
-  if (manualCompactions.length !== REAL_CLIENT_MANUAL_COMPACTION_CYCLES) {
-    throw new Error("required repeated manual compaction cycles were not completed");
-  }
-  const manualCompaction2 = manualCompactions[1];
-  const manualCompaction3 = manualCompactions[2];
-  const manualVerification2 = manualVerificationTurns[0];
-  const manualVerification3 = manualVerificationTurns[1];
-  if (!manualCompaction2 || !manualCompaction3 || !manualVerification2 || !manualVerification3) {
-    throw new Error("manual compaction cycle evidence is incomplete");
-  }
+  const repeatedManual = await runRepeatedManualCompactionQualification({
+    firstManualCompaction, sessionId, interactive, interactiveRecord, dataRoot: installed.data,
+    interactiveId, knownBeforeInteractive, interactiveIdentity, nonce, memoryKey, stateKey, artifactId,
+  });
+  sessionId = repeatedManual.sessionId;
+  const { manualCompactions, manualVerificationTurns, compactionCycleContextSeeds,
+    compactionCycleCalls, manualCompaction2, manualCompaction3, manualVerification2, manualVerification3 } = repeatedManual;
   const automaticFact = `context-automatic-1-${randomBytes(24).toString("hex")}`;
   const automaticContextKey = `qualification-compacted-context-automatic-1-${nonce}`;
   record.phase("automatic-compaction");
@@ -2147,33 +2265,10 @@ const runRealKiroAgentDriverImplementation = async ({
 
   const selector = headlessSelector(chatHelp.combined.toString("utf8"));
   record.phase("headless");
-  const headlessPrompt = qualificationPrompt({ code: "return { nonce: payloads.nonce, providers: await tools.providers() }", payloads: { nonce }, resultFormat: "json" });
-  const headlessArgv = ["chat", ...(selector === "--v3" ? ["--v3"] : [selector, "v3"]), "--agent", "kiro-fabric", "--no-interactive", "--require-mcp-startup", "--output-format", "stream-json", headlessPrompt];
-  const knownBeforeHeadless = new Set(traceSessions(installed.data).map((entry) => entry.id));
-  const headlessChild = trackQualificationChild(spawn(executable, headlessArgv, { cwd: workspaceRoot, env: environmentAt(authenticatedEnvironment, workspaceRoot), stdio: ["ignore", "pipe", "pipe"] }));
-  const headlessCapture = attachCapture(headlessChild, MAX_COMMAND_BYTES, protectedValues);
-  const headlessObserver = observeMcpProcesses(mcpEntry, headlessChild.pid);
-  const headlessExit = await waitForExit(headlessChild);
-  headlessObserver.stop();
-  if (headlessCapture.failure()) throw headlessCapture.failure();
-  if (headlessExit.code !== 0) throw new Error(`headless Kiro exited ${headlessExit.code ?? headlessExit.signal}: ${headlessCapture.slice().toString("utf8").slice(0, 2_000)}`);
-  assertStreamJson(headlessCapture.stdout());
-  const headlessTrace = await waitForTrace(installed.data, (candidate) => {
-    if (knownBeforeHeadless.has(candidate.id)) return false;
-    const metrics = turnMetrics(candidate, 0);
-    return metrics.fabricInfoCalls >= 1 && metrics.fabricExecCalls === 2 && metrics.execSucceeded && candidate.events.some((event) => event.ev === "tool.fabric_workspace");
-  }, 30_000);
-  assertSingleRuntime(headlessTrace);
-  const headlessProcess = validateObservedProcess(headlessObserver, headlessTrace, {
-    executable,
-    requiredArgs: ["chat", selector, "--agent", "kiro-fabric", "--no-interactive", "--require-mcp-startup", "--output-format", "stream-json"],
-    expectedKiroPid: headlessChild.pid,
+  const { headlessArgv, headlessChild, headlessCapture, headlessTrace, headlessIdentity } = await runHeadlessQualification({
+    selector, nonce, executable, workspaceRoot, authenticatedEnvironment,
+    protectedValues, mcpEntry, dataRoot: installed.data,
   });
-  const headlessIdentity = headlessProcess.identity;
-  assertOneObservedMcpProcess(headlessObserver, headlessProcess.kiroPid, "headless Kiro");
-  await waitUntilDead(headlessProcess.kiroPid);
-  await waitUntilDead(headlessIdentity.pid);
-  headlessObserver.release();
 
   const autoCompactionFinal = runSync(executable, autoCompactionArgv, {
     cwd: workspaceRoot,
@@ -2240,56 +2335,8 @@ const runRealKiroAgentDriverImplementation = async ({
     intervalEndOffset: compactionRecordingEndOffset,
     manualExchange: compactionInterval.exchange,
   })}\n`);
-  const finalizedManualCompactions = manualCompactions.map((cycle) => {
-    const frames = acpFrames(interactiveRecord, cycle.gate.intervalStartOffset, cycle.gate.intervalEndOffset);
-    const exchanges = completedAcpManualCompactions(frames, cycle.gate.sessionIdBefore);
-    const notifications = completedAcpCompactionNotifications(frames, [cycle.gate.sessionIdBefore]);
-    if (exchanges.length !== 1 || notifications.length !== 1 ||
-        qualificationValueDigest(exchanges[0]) !== qualificationValueDigest(cycle.gate.manualExchange) ||
-        notifications[0].frameDigest !== cycle.gate.frameDigest) {
-      throw new Error(`manual compaction cycle ${cycle.gate.index} changed in the final ACP recording`);
-    }
-    return cycle.gate;
-  });
-  const automaticFrames = acpFrames(
-    interactiveRecord,
-    automaticCompaction.gate.intervalStartOffset,
-    automaticCompaction.gate.intervalEndOffset,
-  );
-  const finalizedAutomatic = completedAcpAutomaticCompactions(
-    automaticFrames,
-    automaticCompaction.gate.sessionIdBefore,
-    automaticCompaction.pressureMarker,
-  );
-  const automaticNotifications = completedAcpCompactionNotifications(
-    automaticFrames,
-    [automaticCompaction.gate.sessionIdBefore],
-  );
-  if (finalizedAutomatic.length !== 1 || automaticNotifications.length !== 1 ||
-      qualificationValueDigest(finalizedAutomatic[0]) !== qualificationValueDigest({
-        sessionId: automaticCompaction.gate.sessionId,
-        trigger: automaticCompaction.gate.trigger,
-        pressureMarkerDigest: automaticCompaction.gate.pressureMarkerDigest,
-        promptRequestIdDigest: automaticCompaction.gate.promptRequestIdDigest,
-        promptFrameDigest: automaticCompaction.gate.promptFrameDigest,
-        startedFrameDigest: automaticCompaction.gate.startedFrameDigest,
-        completedFrameDigest: automaticCompaction.gate.completedFrameDigest,
-        manualCommandAbsent: automaticCompaction.gate.manualCommandAbsent,
-        toolCallsAbsent: automaticCompaction.gate.toolCallsAbsent,
-      }) || automaticNotifications[0].frameDigest !== automaticCompaction.gate.frameDigest) {
-    throw new Error("automatic compaction changed in the final ACP recording");
-  }
-  const compactionSeriesSummary = {
-    manualCycleCount: finalizedManualCompactions.length,
-    automaticCycleCount: 1,
-    manual: finalizedManualCompactions,
-    automatic: automaticCompaction.gate,
-  };
-  const compactionSeriesOutput = Buffer.from(`${JSON.stringify(compactionSeriesSummary)}\n`);
-  const automaticPressureOutput = Buffer.from(`${JSON.stringify({
-    attempts: automaticCompaction.attempts,
-    event: automaticCompaction.gate,
-  })}\n`);
+  const { compactionSeriesSummary, compactionSeriesOutput, automaticPressureOutput } =
+    finalizeCompactionSeries(interactiveRecord, manualCompactions, automaticCompaction);
   const contextSources = acpUserPromptFacts(preCompactionRecordingFrames, sessionIdBeforeCompaction, conversationFact);
   if (contextSources.length !== 1) throw new Error("Kiro ACP recording did not contain exactly one pre-compaction user prompt with the conversational fact");
   const contextSource = contextSources[0];

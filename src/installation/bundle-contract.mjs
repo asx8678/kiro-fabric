@@ -43,6 +43,9 @@ export function roleFor(p) {
   throw Error('Unknown bundle entry: '+p);
 }
 export const REQUIRED_APP = ['app/kiro/mcp-entry.js','app/runtime/compiler-worker-entry.js','app/runtime/sandbox-worker-entry.js','app/package.json','app/closure-manifest.json'];
+// Older owned generations predate the sandbox worker. This historical contract
+// is for retained-installation verification only, never new bundle admission.
+const HISTORICAL_REQUIRED_APP = REQUIRED_APP.filter(p => p !== 'app/runtime/sandbox-worker-entry.js');
 /** Stable upstream platform contract; never derived from running node --version.
  * Evidence: https://github.com/nodejs/node/blob/v24.20.0/BUILDING.md
  * @param {string} target */
@@ -106,7 +109,9 @@ export function checkToolPins(tools,inventory,target){
  }
 }
 /** @param {any} inventory */
-export function checkInventory(inventory) {
+export function checkInventory(inventory) { return checkInventoryFor(inventory, REQUIRED_APP); }
+/** @param {any} inventory @param {string[]} requiredApp */
+function checkInventoryFor(inventory, requiredApp) {
  if(!Array.isArray(inventory)||inventory.length>LIMITS.entries)throw Error('Inventory bound');
  const seen=new Set();const aliases=new Map();let bytes=0;let previous='';
  for(const e of inventory){
@@ -119,18 +124,23 @@ export function checkInventory(inventory) {
   bytes+=e.size;
  }
  if(bytes>LIMITS.bytes)throw Error('Bundle byte bound');
- for(const p of [...REQUIRED_APP,'tools/node','tools/rg','manager/install-manager.mjs','resources/steering/fabric.md','resources/skills/fabric-exec/SKILL.md','notices/node-LICENSE','notices/rg-LICENSE-MIT','notices/rg-COPYING','notices/rg-UNLICENSE'])if(!inventory.some(e=>e.path===p&&e.size>0))throw Error('Missing required entry: '+p);
+ for(const p of [...requiredApp,'tools/node','tools/rg','manager/install-manager.mjs','resources/steering/fabric.md','resources/skills/fabric-exec/SKILL.md','notices/node-LICENSE','notices/rg-LICENSE-MIT','notices/rg-COPYING','notices/rg-UNLICENSE'])if(!inventory.some(e=>e.path===p&&e.size>0))throw Error('Missing required entry: '+p);
  if(!inventory.some(e=>e.path.startsWith('resources/skills/fabric-exec/references/')))throw Error('Missing resource closure');
  return bytes;
 }
 /** @param {any} payload */
 export function manifestDigest(payload){return sha256('kiro-fabric.bundle.v1\0'+canonical(payload));}
 /** @param {any} m */
-export function checkManifest(m){
+export function checkManifest(m){ return checkManifestFor(m, REQUIRED_APP); }
+/** Historical shape check only; caller must bind the manifest to owned installation evidence.
+ * @param {any} m */
+export function checkInstalledManifest(m){ return checkManifestFor(m, HISTORICAL_REQUIRED_APP); }
+/** @param {any} m @param {string[]} requiredApp */
+function checkManifestFor(m, requiredApp){
  exactFields(m,['compatibility','digest','inventory','product','provenance','schema','target','tools','version']);
  if(m.schema!==1||m.product!==PRODUCT||!TARGETS.includes(m.target)||!isStable(m.version))throw Error('Manifest identity');
  checkCompatibility(m.compatibility,m.target);checkProvenance(m.provenance);
- const bytes=checkInventory(m.inventory);checkToolPins(m.tools,m.inventory,m.target);
+ const bytes=checkInventoryFor(m.inventory,requiredApp);checkToolPins(m.tools,m.inventory,m.target);
  const {digest,...payload}=m;if(!isHash(digest)||digest!==manifestDigest(payload))throw Error('Manifest digest mismatch');return bytes;
 }
 /** @param {import('node:fs').Stats} s */
@@ -219,17 +229,26 @@ async function scan(root){
  return inventory.sort((a,b)=>byteOrder(a.path,b.path));
 }
 /** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any}} options */
-export async function createBundleManifest(root,{version,target,compatibility,provenance,tools}){
+export async function createBundleManifest(root,options){ return createManifestFor(root,options,REQUIRED_APP); }
+/** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any}} options @param {string[]} requiredApp */
+async function createManifestFor(root,{version,target,compatibility,provenance,tools},requiredApp){
  const guard=await checkRoot(root);root=guard.root;
  const payload={schema:1,product:PRODUCT,version,target,compatibility,provenance,tools,inventory:await scan(root)};
- guard.check();const manifest={...payload,digest:manifestDigest(payload)};checkManifest(manifest);return manifest;
+ guard.check();const manifest={...payload,digest:manifestDigest(payload)};checkManifestFor(manifest,requiredApp);return manifest;
 }
-/** @param {string} root */
-export async function validateBundle(root){
+/** Strict admission for all new builds, archives and candidates. @param {string} root */
+export async function validateBundle(root){ return validateBundleFor(root,REQUIRED_APP); }
+/** Verify historical owned bytes, not eligibility for new installation or rollback.
+ * Caller must verify the owner-recorded manifest hash and generation digest.
+ * Every declared file (including a declared sandbox worker) is still required.
+ * @param {string} root */
+export async function validateInstalledBundle(root){ return validateBundleFor(root,HISTORICAL_REQUIRED_APP); }
+/** @param {string} root @param {string[]} requiredApp */
+async function validateBundleFor(root,requiredApp){
  const guard=await checkRoot(root);root=guard.root;
  const raw=await readRegular(path.join(root,'bundle-manifest.json'),LIMITS.manifest,{mode:384}),manifest=JSON.parse(raw.toString('utf8'));
  if(!raw.equals(Buffer.from(canonical(manifest)+'\n')))throw Error('Noncanonical manifest bytes');
- const bytes=checkManifest(manifest),actual=await createBundleManifest(root,manifest);
+ const bytes=checkManifestFor(manifest,requiredApp),actual=await createManifestFor(root,manifest,requiredApp);
  if(canonical(actual)!==canonical(manifest))throw Error('Bundle inventory mismatch');
  guard.check();return {root,digest:manifest.digest,manifest,version:manifest.version,inventory:manifest.inventory,bytes};
 }
