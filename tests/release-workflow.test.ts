@@ -36,27 +36,12 @@ describe("canonical release version consistency (source-only)", () => {
   const changelog = fs.readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
   const docs = fs.readFileSync(new URL("../docs/release.md", import.meta.url), "utf8");
 
-  it("prepares 0.65.0 with matching changelog and migration headings", () => {
-    expect(version).toBe("0.65.0");
+  it("matches the package version to changelog and migration headings", () => {
     const headings = [...changelog.matchAll(/^## (\d+\.\d+\.\d+)$/gmu)].map(match => match[1]);
     expect(headings[0]).toBe(version);
     expect(headings.filter(heading => heading === version)).toHaveLength(1);
-    expect(headings).toContain("0.64.0");
-    expect(changelog).toContain("Replaced all prior integration modes with one Kiro Power product.");
     expect(docs).toContain(`## ${version} migration`);
     expect(docs).toContain(`v${version}`);
-  });
-
-  it.each([["v0.65.0", 0], ["v0.64.0", 1], ["0.65.0", 1]] as const)("binds the canonical package to tag %s (status %i)", (tag, status) => {
-    const { root, env } = fixture();
-    fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ version }));
-    const result = spawnSync("bash", ["--noprofile", "--norc", "-euc", run(step(release, "Bind tag to package version"))], {
-      cwd: root, env: { ...env, TAG: tag }, encoding: "utf8", timeout: 10_000,
-    });
-    expect(result.error).toBeUndefined();
-    expect(result.stderr).toBe("");
-    expect(result.status).toBe(status);
-    expect(fs.readdirSync(env.KIRO_HOME)).toEqual([]);
   });
 });
 
@@ -144,6 +129,7 @@ describe("actual release workflow shell regression", () => {
   it.each([
     ["v1.2.3", 0],
     ["v1.2.4", 1],
+    ["1.2.3", 1],
     ["", 1],
     ['v$(touch injected)', 1],
     ['v`touch injected`', 1],
@@ -189,13 +175,16 @@ describe("actual release workflow shell regression", () => {
     expect(release).not.toContain("pnpm run agent:archive");
   });
 
-  it.each(["ci", "release", "release-candidate", "kiro-agent-real"])("declares Node 24 package manager and ripgrep prerequisites in %s", name => {
+  it.each(["ci", "release", "release-candidate", "kiro-agent-real"])("declares the repository Node and package manager prerequisites in %s", name => {
     const text = workflow(name);
-    expect(text).toContain("node-version: 24");
+    const { engines, packageManager } = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    const minimumNode = String(engines.node).match(/^>=(\d+)(?:\.\d+)*$/);
+    expect(minimumNode, "Update this check if the supported Node range changes shape").not.toBeNull();
+    expect(text).toContain(`node-version: ${minimumNode![1]}`);
     expect(text).not.toContain("corepack");
     const jobs = name === "ci" ? text.split("  macos-stage:") : [text];
     for (const job of jobs) {
-      expect(job).toContain("npm install --global pnpm@11.20.0");
+      expect(job).toContain(packageManager);
       expect(job).toContain("command -v rg");
       expect(job).toContain("rg --version");
       expect(job.indexOf("rg --version")).toBeLessThan(job.indexOf("pnpm install --frozen-lockfile"));

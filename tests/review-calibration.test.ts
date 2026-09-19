@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { caseHashes } from '../scripts/steering-benchmark/cases.mjs';
 import { checkScope, inventory, putFiles } from '../scripts/steering-benchmark/core.mjs';
-import { makeReviewCase, scoreReview } from '../scripts/steering-benchmark/reviews.mjs';
+import { scoreReview } from '../scripts/steering-benchmark/reviews.mjs';
 import { collect } from '../scripts/steering-benchmark/stream.mjs';
 import { makeCalibrationReviewCase, probeCalibrationReviewFixture, REVIEW_CALIBRATION_SCHEMA, scoreReviewCalibration } from '../scripts/steering-benchmark/review-calibration.mjs';
 import type { ReviewCalibration, Assessment } from '../scripts/steering-benchmark/review-calibration.mjs';
@@ -229,17 +229,4 @@ describe('finite opt-in review calibration v1', () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   }, 20000);
 
-  it('preserves older fixture, prompt and oracle pins', () => {
-    const pins = {
-      'review-infra': ['6c24cc4496f2692b9e82d347642bc155478ce963d7041487c9627e0d18658fd2', 'df0aa26d435f9476796b32c06926ae19abf2e4e2cee6288920333a3dc7e58841', 'a667eff3ae8a3c09c894bc76d9a6290b8dbea3e345e30b54ae0f3930502e5d1d'],
-      'review-contracts': ['cf36b33506c6b4f03e95d2f90a3f9f8e140ebc872f0e23434cd5e34e7d75ad26', '07b5e0ac00b12b1acaaba8605d9fcc57e271d8b11c80f30adc0983d30f61e6cd', 'bdcebe08554a22ae1dabb9c9e36184af83a1df803ccef9cc0b709e3ae74ab78e'],
-      'review-boundaries': ['6f70685608908cea8fc5416e5d1e32481fcf53d3586f8ba1a8849b97bac9a4bb', '97fc9d4d3827a11b5d1327d064559550cd84c3729d191ec3c04514391493a54e', '22bce23717837b6fc835d2744a33db8969ac3bc3c64784d08d2ccf870e14a653'],
-      'review-evidence': ['1a112982deea9351135b8842847a8b2dfb755c58009fa848f9bcd23d1d26a3f9', 'aa73bf062aec7ea694030c755a279a512ff77b841f68e95b7477ba8687d7d765', '4061513a28f3636f171ade46658b911161eee384920144b263e92a19e27c27d3'],
-    };
-    for (const [id, [prompt, fixtures, oracle]] of Object.entries(pins)) {
-      const s = makeReviewCase(id, 'quality-legacy-pin');
-      expect(caseHashes(s)).toEqual({ prompt, fixtures, oracle });
-      expect(scoreReview(s, s.expected)).not.toHaveProperty('calibration');
-    }
-  });
 });

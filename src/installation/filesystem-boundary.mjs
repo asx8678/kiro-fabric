@@ -5,7 +5,7 @@ import path from 'node:path';
 /** @typedef {{label?:string,platform?:string,uid?:number,allowMacAliases?:boolean}} AncestryOptions */
 /** The narrowly scoped administrator-controlled macOS exception, not descendants.
  * @param {string} directory @param {import('node:fs').Stats} stat @param {string} [platform] */
-export function trustedMacApplications(directory,stat,platform=process.platform){
+function trustedMacApplications(directory,stat,platform=process.platform){
  return platform==='darwin'&&directory==='/Applications'&&stat.uid===0&&stat.gid===80&&(stat.mode&0o7777)===0o775;
 }
 /** @param {string} directory @param {import('node:fs').Stats} stat @param {AncestryOptions} [options] */

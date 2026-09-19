@@ -1,5 +1,7 @@
 import type { LocalReadManyResult, LocalReadResult, LocalReadWindow, LocalSourceWindow } from "./local-contract.js";
 
+import { largestFittingInteger } from "../bounded-search.js";
+
 export class LocalReadFailure extends Error {}
 
 function summarizeWindows(files: LocalSourceWindow[], remaining: LocalReadWindow[]): LocalReadManyResult {
@@ -74,15 +76,10 @@ export function readManyWindows(
       };
       return summarize([...files, file], remainder);
     };
-    let high = lines.length;
+    const high = lines.length;
     let result = page(high);
     if (!fits(result)) {
-      let low = 0;
-      while (low < high) {
-        const mid = Math.ceil((low + high) / 2);
-        if (fits(page(mid))) low = mid;
-        else high = mid - 1;
-      }
+      const low = largestFittingInteger(0, high, count => fits(page(count)));
       if (!low) {
         if (files.length) return pending(index);
         throw new Error(`${operation} single line or metadata exceeds budget; increase maxChars or narrow the batch`);

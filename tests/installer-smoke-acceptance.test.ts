@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import childProcess, { type SpawnSyncOptionsWithStringEncoding } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { LocalCodingProvider } from "../src/providers/local-provider.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
@@ -14,7 +16,7 @@ const sentinel = "fabric-smoke-fixture-acceptance";
 const success = () => ({ read: { path: "probe.txt", text: `${sentinel}\n`, totalLines: 1, truncated: false }, search: { matches: [{ path: "probe.txt", line: 1, text: sentinel }], truncated: false } });
 const frame = (value: unknown) => ({ result: { content: [{ type: "text", text: JSON.stringify(value) }] } });
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
 describe("independent installer read and search acceptance", () => {
   it("accepts the exact fixture JSON, with an explicitly checked TypeScript program", () => {
@@ -57,6 +59,34 @@ describe("independent installer read and search acceptance", () => {
     if (behavior === "success") expect(await smokeCandidate(bundle.root)).toEqual({ integrity: "PASS", privateTools: "PASS", backend: "PASS", authenticatedKiro: "NOT TESTED" });
     else await expect(smokeCandidate(bundle.root)).rejects.toThrow(behavior === "empty-search" ? /checked search/ : behavior === "extra-tool" ? /inventory mismatch/ : /out of order/);
   }, 60000);
+  it("retries private-tool timeouts once and still rejects bad versions before backend startup", async () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "smoke-probe-retry-"))); roots.push(root);
+    const bundle = await acceptanceBundle(path.join(root, "bundle"), "success"), nativeSpawn = childProcess.spawnSync;
+    const counts = new Map<string, number>();
+    let mode = "recovered";
+    const spawn = vi.spyOn(childProcess, "spawn");
+    vi.spyOn(childProcess, "spawnSync").mockImplementation(((file: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) => {
+      if (![path.join(bundle.root, "tools/node"), path.join(bundle.root, "tools/rg")].includes(file)) return nativeSpawn(file, args, options);
+      const count = (counts.get(file) ?? 0) + 1; counts.set(file, count);
+      expect(options).toMatchObject({ timeout: 5000, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] });
+      const output = { pid: 0, output: [], stdout: "", stderr: "", signal: null };
+      if (mode === "exit") return { ...output, status: 7 };
+      if (count === 1 || mode === "timeout") return { ...output, status: null, error: Object.assign(new Error("fixture timeout"), { code: "ETIMEDOUT" }) };
+      if (mode === "wrong-version") return { ...output, status: 0, stdout: "wrong version\n" };
+      return nativeSpawn(file, args, options);
+    }) as typeof childProcess.spawnSync);
+    syncBuiltinESMExports();
+    expect(await smokeCandidate(bundle.root)).toMatchObject({ privateTools: "PASS", backend: "PASS", authenticatedKiro: "NOT TESTED" });
+    expect(counts.get(path.join(bundle.root, "tools/node"))).toBe(2);
+    expect(counts.get(path.join(bundle.root, "tools/rg"))).toBe(2);
+    for (mode of ["timeout", "wrong-version", "exit"]) {
+      counts.clear(); spawn.mockClear();
+      await expect(smokeCandidate(bundle.root)).rejects.toThrow("Candidate private node version/compatibility check failed");
+      expect(counts.get(path.join(bundle.root, "tools/node"))).toBe(mode === "exit" ? 1 : 2);
+      expect(counts.has(path.join(bundle.root, "tools/rg"))).toBe(false);
+      expect(spawn).not.toHaveBeenCalled();
+    }
+  });
   it("accepts real structured local read and ripgrep results, not a serialized sentinel", async () => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "installer-smoke-contract-"))); roots.push(root);
     const workspace = path.join(root, "workspace"); fs.mkdirSync(workspace, { mode: 0o700 });

@@ -12,6 +12,7 @@ import { ProbeProvider, ProbeRunExitError } from "../src/providers/probe-provide
 import { PROBE_ACTION_DESCRIPTORS, PROBE_GUEST_DECLARATIONS } from "../src/providers/probe-contract.js";
 import type { ProbeDiscoveryResult, ProbeHandle, ProbeProviderOptions, ProbeRunResult, ProbeWriteResult } from "../src/providers/probe-contract.js";
 import { FabricDeadline } from "../src/runtime/deadline.js";
+import { shellEnvironment } from "../src/providers/local-shell.js";
 import { schemaValidationMessage } from "../src/schema-validation.js";
 import { fabricJsonText } from "../src/runtime/json-budget.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
@@ -183,6 +184,33 @@ describe("ProbeProvider executed evidence", () => {
     expect(request.environment.observed).not.toHaveProperty("PROBE_DECLARED_ONLY");
     expect(request.versionObservation).toContain("No version detection performed");
     expect(request.semantics).toContain("last status");
+  });
+
+  it("uses the same allowlist for approval, retained evidence and actual execution", async () => {
+    vi.stubEnv("LC_Z_FABRIC", "last"); vi.stubEnv("LC_A_FABRIC", "first");
+    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "not-forwarded"); vi.stubEnv("NODE_OPTIONS", "--no-warnings");
+    const f = fixture(); const h = await f.create();
+    const expected = shellEnvironment();
+    const result = await f.call("run", {
+      id: h.id, executable: process.execPath,
+      args: ["-e", 'process.stdout.write(JSON.stringify({a:process.env.LC_A_FABRIC,z:process.env.LC_Z_FABRIC,secret:process.env.AWS_SECRET_ACCESS_KEY??null,loader:process.env.NODE_OPTIONS??null}))'],
+    }, f.context(async (_action, prepared) => {
+      expect(prepared.review).toContain(`Forwarded environment: ${JSON.stringify(expected)}`);
+    })) as ProbeRunResult;
+    expect(JSON.parse(result.stdout)).toEqual({ a: "first", z: "last", secret: null, loader: null });
+    const observed = readJson(result.recordPath.replace(".result.json", ".request.json")).environment.observed;
+    expect(JSON.stringify(observed)).toBe(JSON.stringify(expected));
+  });
+
+  it("still rejects forwarded environment drift during approval before execution", async () => {
+    vi.stubEnv("LC_FABRIC_TEST", "before");
+    const f = fixture(); const h = await f.create();
+    const beforeRecords = fs.readdirSync(f.records(h));
+    await expect(f.call("run", { id: h.id, script: "printf executed > should-not-run" }, f.context(async () => {
+      vi.stubEnv("LC_FABRIC_TEST", "after");
+    }))).rejects.toThrow("probe forwarded environment changed since approval");
+    expect(fs.existsSync(path.join(h.cwd, "should-not-run"))).toBe(false);
+    expect(fs.readdirSync(f.records(h))).toEqual(beforeRecords);
   });
 
   it("bounds escaped stdout/stderr with explicit retained truncation", async () => {

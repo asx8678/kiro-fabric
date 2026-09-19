@@ -10,7 +10,7 @@ import {
   LocalShellExitError,
   ProbeRunExitError,
   runQuickJsSandbox
-} from "../chunks/chunk-COO732H5.js";
+} from "../chunks/chunk-JS3MGVA3.js";
 import {
   FabricRepairError
 } from "../chunks/chunk-ITY6W7FO.js";

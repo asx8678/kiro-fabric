@@ -1,3 +1,4 @@
+import { largestFittingInteger } from "../../bounded-search.js";
 import { throwIfAbortedOrExpired } from "../../async-settlement.js";
 import type { FabricActionDescriptor, FabricInvocationContext, FabricProvider } from "../../protocol.js";
 import { fabricJsonText } from "../../runtime/json-budget.js";
@@ -12,11 +13,8 @@ export interface KiroArtifactCheckpointResult {
   id: string;
   retrieval: { ref: "artifacts.read"; args: { id: string }; encoding: "json"; ephemeral: true };
 }
-/** Host-only execution-scoped reservation hook; no raw evidence crosses it. */
-export interface KiroArtifactInvocationContext extends FabricInvocationContext {
-  maxResultChars?: number;
-  checkpoints?: { reserve(): (handle: { id: string; label?: string }) => void };
-}
+/** Compatibility name for the shared host-only invocation context. */
+export type KiroArtifactInvocationContext = FabricInvocationContext;
 const descriptor: FabricActionDescriptor = {
   name: "read", description: "Read a bounded UTF-16-offset chunk of an opaque ephemeral artifact; advance using nextOffset",
   inputSchema: { type: "object", properties: { id: { ...idSchema }, offset: { type: "integer", minimum: 0 }, limit: { type: "integer", minimum: 1, maximum: 16000 } }, required: ["id"], additionalProperties: false },
@@ -39,12 +37,7 @@ const boundKiroArtifactRead = (page: KiroArtifactReadResult, maximum: number): K
     const nextOffset = page.offset + text.length;
     return { ...page, text, nextOffset, done: nextOffset >= page.totalChars };
   };
-  let low = 0, high = page.text.length;
-  while (low < high) {
-    const mid = Math.ceil((low + high) / 2);
-    if (JSON.stringify(candidate(mid)).length <= maximum) low = mid;
-    else high = mid - 1;
-  }
+  const low = largestFittingInteger(0, page.text.length, length => JSON.stringify(candidate(length)).length <= maximum);
   const result = candidate(low);
   if (JSON.stringify(result).length > maximum || (!result.done && !result.text.length)) throw new Error("artifact response budget cannot fit metadata and one Unicode character");
   return result;

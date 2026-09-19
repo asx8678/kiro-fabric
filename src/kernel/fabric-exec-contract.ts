@@ -41,17 +41,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const FABRIC_EXEC_KEYS = new Set(["code", "payloads", "resultFormat", "timeoutMs"]);
 
 /** Copy the canonical envelope without repairing or interpreting any field. */
-export const prepareFabricExecArgumentsWithDiagnostics = (input: unknown): PreparedFabricExecArguments => {
-  if (!isRecord(input)) return { value: input, diagnostics: [] };
+export const prepareFabricExecArguments = (input: unknown): unknown => {
+  if (!isRecord(input)) return input;
   const keys = Object.keys(input);
   if (keys.length > FABRIC_EXEC_KEYS.size || keys.some((key) => !FABRIC_EXEC_KEYS.has(key))) {
-    return { value: { invalidFabricExecEnvelope: true }, diagnostics: [] };
+    return { invalidFabricExecEnvelope: true };
   }
-  return { value: { ...input }, diagnostics: [] };
+  return { ...input };
 };
 
-export const prepareFabricExecArguments = (input: unknown): unknown =>
-  prepareFabricExecArgumentsWithDiagnostics(input).value;
+/** @deprecated Use prepareFabricExecArguments. Strict inputs are never repaired. */
+export const prepareFabricExecArgumentsWithDiagnostics = (input: unknown): PreparedFabricExecArguments =>
+  ({ value: prepareFabricExecArguments(input), diagnostics: [] });
 
 export const fabricExecInputSchemaJson = (): Record<string, unknown> =>
   JSON.parse(JSON.stringify(fabricExecInputSchema)) as Record<string, unknown>;

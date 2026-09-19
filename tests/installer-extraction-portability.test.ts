@@ -30,6 +30,10 @@ afterEach(() => {
   for (const fd of held.splice(0)) { try { fs.closeSync(fd); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EBADF') throw error; } }
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
+test('installer and runtime share the pinned-directory implementation', () => {
+  expect(runPinnedDirectoryOperation).toBe(runStatePinnedDirectoryOperation);
+});
+
 function forceChild(code = 'ENOTDIR') {
   const original = fs.statSync;
   return vi.spyOn(fs, 'statSync').mockImplementation(((...args: Parameters<typeof fs.statSync>) => {

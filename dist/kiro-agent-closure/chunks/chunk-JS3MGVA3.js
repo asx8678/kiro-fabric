@@ -8344,13 +8344,10 @@ var LocalShellExitError = class extends Error {
     Object.defineProperty(this, "result", { enumerable: false });
   }
 };
-function shellEnvironment() {
+function shellEnvironment(source = process.env) {
   const env = {};
-  for (const key of ["HOME", "PATH", "TMPDIR", "LANG", "TERM", "TZ", "USER", "LOGNAME"]) {
-    if (process.env[key] !== void 0) env[key] = process.env[key];
-  }
-  for (const [key, value] of Object.entries(process.env)) {
-    if (/^LC_[A-Z_]+$/.test(key) && value !== void 0) env[key] = value;
+  for (const key of ["HOME", "PATH", "TMPDIR", "LANG", "TERM", "TZ", "USER", "LOGNAME", ...Object.keys(source).filter((key2) => /^LC_[A-Z_]+$/.test(key2)).sort()]) {
+    if (source[key] !== void 0) env[key] = source[key];
   }
   return env;
 }
@@ -9007,10 +9004,7 @@ var effectful = (name) => name !== "discover";
 var json = (value) => JSON.stringify(value, null, 2) + "\n";
 var fileBytes = (files) => files.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0);
 var observedEnvironment = () => {
-  const result = {};
-  for (const key of ["HOME", "PATH", "TMPDIR", "LANG", "TERM", "TZ", "USER", "LOGNAME", ...Object.keys(process.env).filter((key2) => /^LC_[A-Z_]+$/.test(key2)).sort()]) {
-    if (process.env[key] !== void 0) result[key] = process.env[key];
-  }
+  const result = shellEnvironment();
   if (JSON.stringify(result).length > 16e3) throw new Error("probe shell environment exceeds retained approval budget");
   return result;
 };

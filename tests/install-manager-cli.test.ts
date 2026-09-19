@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import childProcess, { type SpawnSyncOptionsWithStringEncoding } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkKiro, managerErrorResult, parseManagerArguments, selectedHome, shellQuote } from "../scripts/install-manager.mjs";
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 describe("installed manager command contract", () => {
   it("preserves commit truth and classifies structured failures without substring matches", () => {
     expect(managerErrorResult(Object.assign(new Error("EIO: fsync failed"), { committed: true, recoveryRequired: true }))).toMatchObject({ committed: true, exitCode: 7, outcome: "committed-cleanup-required" });
@@ -36,6 +38,36 @@ describe("installed manager command contract", () => {
       expect(fs.statSync(path.join(bin, linked)).nlink).toBe(2);
     }
     expect(checkKiro({ PATH: bin, HOME: "/caller/home", KIRO_HOME: "/caller/kiro", FORBIDDEN_HELP_ENV: "must-not-leak" })).toMatchObject({ executable: path.join(bin, "kiro-cli"), version: "2.21.1", authentication: "NOT TESTED" });
+  });
+  it.each(["recovered", "timeout", "exit", "bad-version", "bad-help"])("keeps CLI retry and output validation bounded (%s)", mode => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "manager-probe-retry-"))); roots.push(root); fs.chmodSync(root, 0o700);
+    const executable = path.join(root, "kiro-cli");
+    fs.writeFileSync(executable, "#!/bin/sh\nexit 99\n", { mode: 0o700 });
+    const calls = new Map<string, number>();
+    const spawn = vi.spyOn(childProcess, "spawnSync").mockImplementation(((file: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) => {
+      expect(file).toBe(executable);
+      expect(options).toMatchObject({ timeout: 5000, maxBuffer: 16384, stdio: ["ignore", "pipe", "pipe"] });
+      expect(options.env).not.toHaveProperty("FORBIDDEN_HELP_ENV");
+      const key = args.join(" "), count = (calls.get(key) ?? 0) + 1; calls.set(key, count);
+      const failed = { pid: 0, output: [], stdout: "", stderr: "", signal: null };
+      if (mode === "exit") return { ...failed, status: 7 };
+      if (count === 1 || mode === "timeout") return { ...failed, status: null, error: Object.assign(new Error("timeout fixture"), { code: "ETIMEDOUT" }) };
+      return { ...failed, status: 0, stdout: args[0] === "--version" ? (mode === "bad-version" ? "kiro-cli 1.0.0" : "kiro-cli 2.21.1") : (mode === "bad-help" ? "no supported flags" : "--path") };
+    }) as unknown as typeof childProcess.spawnSync);
+    syncBuiltinESMExports();
+    const check = () => checkKiro({ PATH: root, FORBIDDEN_HELP_ENV: "secret" });
+    if (mode === "recovered") expect(check()).toMatchObject({ version: "2.21.1", authentication: "NOT TESTED" });
+    else expect(check).toThrow(/preflight failed|Unsupported Kiro client/);
+    expect(calls.get("--version")).toBe(mode === "exit" ? 1 : 2);
+    expect(calls.get("agent validate --help")).toBe(["recovered", "bad-help"].includes(mode) ? 2 : undefined);
+    for (const call of spawn.mock.calls) {
+      const options = call[2] as SpawnSyncOptionsWithStringEncoding;
+      expect(fs.existsSync(String(options.cwd))).toBe(false);
+    }
+    if (mode === "recovered") {
+      expect(spawn.mock.calls[0]).toEqual(spawn.mock.calls[1]);
+      expect(spawn.mock.calls[2]).toEqual(spawn.mock.calls[3]);
+    }
   });
   it.each(["sibling", "hard-linked sibling", "directory"])("refuses unsafe Kiro %s before executing helper code", kind => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "manager-kiro-trust-"))); roots.push(root); fs.chmodSync(root, 0o700);

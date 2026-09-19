@@ -17,7 +17,7 @@ import { FABRIC_COMPILER_TIMEOUT_MS, effectiveFabricTimeout } from "../execution
 import {
   fabricExecInputSchema,
   fabricExecInputSchemaJson,
-  prepareFabricExecArgumentsWithDiagnostics,
+  prepareFabricExecArguments,
   type FabricExecInput,
 } from "../kernel/fabric-exec-contract.js";
 import {
@@ -474,8 +474,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     } catch (error) {
       return tracedError("adapter_error", error);
     }
-    const normalized = prepareFabricExecArgumentsWithDiagnostics(request.params.arguments ?? {});
-    const normalizedRecord = isRecord(normalized.value) ? normalized.value : undefined;
+    const normalized = prepareFabricExecArguments(request.params.arguments ?? {});
+    const normalizedRecord = isRecord(normalized) ? normalized : undefined;
     const absoluteInputError = typeof normalizedRecord?.code === "string"
       ? fabricSourceLimitError(normalizedRecord.code, MAX_EXECUTOR_SOURCE_BYTES)
       : undefined;
@@ -488,11 +488,11 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     if (absoluteInputError || absolutePayloadError) {
       return tracedError("invalid_exec_arguments", absoluteInputError ?? absolutePayloadError!);
     }
-    if (!Value.Check(fabricExecInputSchema, normalized.value)) {
-      const errors = [...Value.Errors(fabricExecInputSchema, normalized.value)].map((entry) => entry.message);
+    if (!Value.Check(fabricExecInputSchema, normalized)) {
+      const errors = [...Value.Errors(fabricExecInputSchema, normalized)].map((entry) => entry.message);
       return tracedError("invalid_exec_arguments", "Invalid fabric_exec arguments", errors);
     }
-    const input = normalized.value as FabricExecInput;
+    const input = normalized as FabricExecInput;
     const controller = new AbortController();
     const cancel = (): void => controller.abort(extra.signal.reason ?? new Error("MCP request cancelled"));
     if (extra.signal.aborted) cancel(); else extra.signal.addEventListener("abort", cancel, { once: true });
@@ -568,7 +568,6 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         resultFormat: input.resultFormat ?? current.service.config.executor.resultFormat,
         maxOutputChars: current.service.config.executor.maxOutputChars - (pendingMutation ? 512 : 0),
         writeArtifact: (content) => current.artifacts.write(content),
-        normalizationDiagnostics: normalized.diagnostics,
       });
       if (pendingMutation && !projection.isError) {
         // Release OUR lease before entering a transition that drains leases.

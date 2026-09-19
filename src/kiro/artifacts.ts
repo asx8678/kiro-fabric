@@ -4,7 +4,7 @@ import path from "node:path";
 
 const ARTIFACT_ID = /^ka_[a-f0-9]{48}$/u;
 const MAX_ARTIFACT_RESIDUE_AGE_MS = 86_400_000;
-interface StoredArtifact { content: string; createdAt: number; lastReadAt: number; file?: string }
+interface StoredArtifact { content: string; lastReadAt: number; file?: string }
 export interface KiroArtifactReadResult { id: string; text: string; offset: number; nextOffset: number; totalChars: number; done: boolean }
 export interface KiroArtifactStore {
   write(content: string): string;
@@ -109,7 +109,7 @@ class ArtifactStore implements KiroArtifactStore {
         throw error;
       }
     }
-    this.#entries.set(id, { content, createdAt: now, lastReadAt: now, ...(file ? { file } : {}) });
+    this.#entries.set(id, { content, lastReadAt: now, ...(file ? { file } : {}) });
     this.#totalChars += content.length;
     return id;
   }

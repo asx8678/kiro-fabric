@@ -1316,7 +1316,7 @@ const contextSeedPrompt = (input, fact, boundary = "manual compaction") => `Reme
 
 const postCompactionPrompt = ({ code, payloads, boundary = "/compact" }) => `This is the post-compaction Kiro Fabric qualification turn. First call @fabric/fabric_exec with ${JSON.stringify({code: 'return {info: await fabric.info(), workspace: await fabric.workspace({action:"status"})};', resultFormat:"json"})}. Then call @fabric/fabric_exec exactly once. Use this exact code: ${JSON.stringify(code)}. Use resultFormat "json". Use these exact payload fields: ${JSON.stringify(payloads)}, and add one further string field named contextFact whose value is the exact unpredictable conversational fact I asked you to remember before ${boundary}. Do not ask me to repeat it, do not use any tool to recover it, and do not repeat it in prose. Do not use native file, shell, web, or subagent tools. Briefly summarize only the returned tool result; do not make claims about process identity, agent selection, or qualification success.`;
 
-export const sentinelVerificationCode = (includeArtifact) => `
+const sentinelSetup = `
 const record = (value: JsonValue): JsonObject | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
 const field = (value: JsonValue, name: string): JsonValue | undefined => record(value)?.[name];
@@ -1327,32 +1327,22 @@ const nestedString = (value: JsonValue, outer: string, inner: string): string | 
 };
 const memoryValue = await memory.get({ key: payloads.memoryKey });
 const stateValue = await state.get({ key: payloads.stateKey });
-${includeArtifact ? "const artifactValue = await artifacts.read({ id: payloads.artifactId, limit: 16000 });" : ""}
-if (nestedString(memoryValue, "value", "nonce") !== payloads.nonce ||
+`;
+
+const durableSentinelMismatch = `nestedString(memoryValue, "value", "nonce") !== payloads.nonce ||
     nestedString(memoryValue, "value", "kind") !== "durable-memory" ||
     nestedString(stateValue, "value", "nonce") !== payloads.nonce ||
-    nestedString(stateValue, "value", "kind") !== "durable-state"${includeArtifact ? " ||\n    !(typeof field(artifactValue, \"text\") === \"string\" && (field(artifactValue, \"text\") as string).includes(payloads.nonce))" : ""}) {
+    nestedString(stateValue, "value", "kind") !== "durable-state"`;
+
+export const sentinelVerificationCode = (includeArtifact) => `${sentinelSetup}${includeArtifact ? "const artifactValue = await artifacts.read({ id: payloads.artifactId, limit: 16000 });" : ""}
+if (${durableSentinelMismatch}${includeArtifact ? " ||\n    !(typeof field(artifactValue, \"text\") === \"string\" && (field(artifactValue, \"text\") as string).includes(payloads.nonce))" : ""}) {
   throw new Error("qualification sentinel mismatch");
 }
 return { verified: true${includeArtifact ? ", artifactVerified: true" : ""} };
 `;
 
-export const postCompactionVerificationCode = `
-const record = (value: JsonValue): JsonObject | undefined =>
-  typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
-const field = (value: JsonValue, name: string): JsonValue | undefined => record(value)?.[name];
-const nestedString = (value: JsonValue, outer: string, inner: string): string | undefined => {
-  const nested = field(value, outer);
-  const found = nested === undefined ? undefined : field(nested, inner);
-  return typeof found === "string" ? found : undefined;
-};
-const memoryValue = await memory.get({ key: payloads.memoryKey });
-const stateValue = await state.get({ key: payloads.stateKey });
-const artifactValue = await artifacts.read({ id: payloads.artifactId, limit: 16000 });
-if (nestedString(memoryValue, "value", "nonce") !== payloads.nonce ||
-    nestedString(memoryValue, "value", "kind") !== "durable-memory" ||
-    nestedString(stateValue, "value", "nonce") !== payloads.nonce ||
-    nestedString(stateValue, "value", "kind") !== "durable-state" ||
+export const postCompactionVerificationCode = `${sentinelSetup}const artifactValue = await artifacts.read({ id: payloads.artifactId, limit: 16000 });
+if (${durableSentinelMismatch} ||
     !(typeof field(artifactValue, "text") === "string" && (field(artifactValue, "text") as string).includes(payloads.nonce)) ||
     payloads.contextFact.length < 32) {
   throw new Error("qualification post-compaction sentinel mismatch");
@@ -1361,24 +1351,10 @@ await state.set({ key: payloads.contextKey, value: { fact: payloads.contextFact,
 return { verified: true, artifactVerified: true, contextCaptured: true };
 `;
 
-export const resumeVerificationCode = `
-const record = (value: JsonValue): JsonObject | undefined =>
-  typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
-const field = (value: JsonValue, name: string): JsonValue | undefined => record(value)?.[name];
-const nestedString = (value: JsonValue, outer: string, inner: string): string | undefined => {
-  const nested = field(value, outer);
-  const found = nested === undefined ? undefined : field(nested, inner);
-  return typeof found === "string" ? found : undefined;
-};
-const memoryValue = await memory.get({ key: payloads.memoryKey });
-const stateValue = await state.get({ key: payloads.stateKey });
-let artifactUnavailable = false;
+export const resumeVerificationCode = `${sentinelSetup}let artifactUnavailable = false;
 try { await artifacts.read({ id: payloads.artifactId, limit: 16000 }); }
 catch { artifactUnavailable = true; }
-if (nestedString(memoryValue, "value", "nonce") !== payloads.nonce ||
-    nestedString(memoryValue, "value", "kind") !== "durable-memory" ||
-    nestedString(stateValue, "value", "nonce") !== payloads.nonce ||
-    nestedString(stateValue, "value", "kind") !== "durable-state" ||
+if (${durableSentinelMismatch} ||
     !artifactUnavailable) {
   throw new Error("qualification resume sentinel mismatch");
 }

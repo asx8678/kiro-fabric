@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { runInstallerProbe } from "./installer-probe.mjs";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { resolveKiroHome, installerSafety } from "./install-agent-user.mjs";
@@ -121,7 +122,7 @@ export function checkKiro(env = process.env) {
     // Keep that explicit installation directory, not the caller's ambient PATH.
     const probeEnv = { HOME: temporary, KIRO_HOME: path.join(temporary, ".kiro"), PATH: [path.dirname(executable), "/usr/bin", "/bin"].join(path.delimiter), LANG: "C", LC_ALL: "C" };
     const run = args => {
-      const result = spawnSync(executable, args, { env: probeEnv, cwd: temporary, encoding: "utf8", timeout: 5000, maxBuffer: 16384, stdio: ["ignore", "pipe", "pipe"] });
+      const result = runInstallerProbe(executable, args, { env: probeEnv, cwd: temporary, encoding: "utf8", timeout: 5000, maxBuffer: 16384, stdio: ["ignore", "pipe", "pipe"] });
       if (result.error || result.status !== 0) throw new InstallerError("Kiro CLI help/version preflight failed; authentication was not attempted", 4, "prerequisite");
       return result.stdout + result.stderr;
     };
@@ -174,7 +175,7 @@ export async function doctorInstallation(home, env = process.env, { sourceRoot =
   if (owner?.schemaVersion === 3 && checks.some(check => check.id === "installation" && check.status === "PASS")) {
     for (const tool of ["node", "rg"]) await check(`private-${tool}`, () => {
       const executable = path.join(home, "kiro-fabric", "runtime", owner.currentRuntime, "tools", tool);
-      const result = spawnSync(executable, tool === "node" ? ["--version"] : ["--no-config", "--version"], { env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 5000, maxBuffer: 4096 });
+      const result = runInstallerProbe(executable, tool === "node" ? ["--version"] : ["--no-config", "--version"], { env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 5000, maxBuffer: 4096 });
       if (result.error || result.status !== 0) throw new Error(`Private ${tool} version check failed`);
       return display(result.stdout.trim());
     });

@@ -828,8 +828,16 @@ describe("real-client release evidence", () => {
     expect(subscriptionWhoamiAuthenticated({ status: 0, stdout: Buffer.from("not logged in\n"), stderr: Buffer.alloc(0) })).toBe(false);
     expect(subscriptionWhoamiAuthenticated({ status: 0, stdout: Buffer.alloc(0), stderr: Buffer.from("login required") })).toBe(false);
   });
-  it("type-checks nonce-bound same-process and resumed sentinel programs", () => {
-    for (const code of [sentinelVerificationCode(false), sentinelVerificationCode(true), postCompactionVerificationCode, resumeVerificationCode]) {
+  it("preserves and type-checks nonce-bound same-process and resumed sentinel programs", () => {
+    // Source bytes form part of qualification provenance; sharing snippets must not change them.
+    const programs = [
+      [sentinelVerificationCode(false), "4d1ef4a972b18b4ecd5e2a9d1f7ced6f42a5d31e1edc48d34b047cd4ae0fe619"],
+      [sentinelVerificationCode(true), "b5f4dd99c443f7feb7d4bd2e02e51588c05a3559ef42ea4f13ca860298ce7b9e"],
+      [postCompactionVerificationCode, "68d617af5231679feb883751a7670b3af2789f5dba7efa87a6e6bf6195326ce3"],
+      [resumeVerificationCode, "34fb3e2424b499e86ee24737e472a8370bbca39fd5fad746ab1afb6b7bcb4564"],
+    ] as const;
+    for (const [code, expectedHash] of programs) {
+      expect(createHash("sha256").update(code).digest("hex")).toBe(expectedHash);
       expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors).toEqual([]);
     }
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fabricInfoActions, fabricInfoCatalog, MAX_INFO_CATALOG_BYTES } from "../src/kiro/info-catalog.js";
+import { fabricInfoCatalog, MAX_INFO_CATALOG_BYTES } from "../src/kiro/info-catalog.js";
 
 const action = (ref: string) => ({ ref, risk: "read" as const, descriptorDigest: "a".repeat(64) });
 const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value), "utf8");
@@ -26,7 +26,6 @@ describe("fabric_info action catalog", () => {
     expect(result.catalog.complete).toBe(false);
     expect(result.catalog.returned).toBe(result.actions.length);
     expect(result.actions).toEqual(actions.slice(0, result.actions.length).map(({ ref }) => ref));
-    expect(fabricInfoActions(actions)).toEqual(result.actions);
     expect(bytes(result)).toBeLessThanOrEqual(MAX_INFO_CATALOG_BYTES);
     expect(bytes({ ...result, actions: [...result.actions, actions[result.actions.length]!.ref], catalog: { ...result.catalog, returned: result.actions.length + 1 } })).toBeGreaterThan(MAX_INFO_CATALOG_BYTES);
   });

@@ -10,6 +10,8 @@ Kiro Fabric is one native custom-agent product. The selected agent owns one stdi
 
 ## Canonical observed tool discovery and continuation
 
+- `src/bounded-search.ts` — shared integer search for fitting page envelopes; callers retain EOF, Unicode and progress checks.
+- `tests/bounded-search.test.ts` — threshold, nonzero-offset, empty-range and predicate-failure coverage.
 - `src/core/remote-identity.ts` — exact RFC3986 canonical remote identity and strict decode-once validation.
 - `src/core/catalog-contract.ts` — separate typed paging contracts and non-serializable host result provenance.
 - `src/core/catalog-execution.ts` — exclusive-selector validation, metadata-only continuation and actionable legacy paging recovery.
@@ -369,7 +371,7 @@ These entries record implementation and regression coverage, not live-model qual
 - `tests/mcp-projection.test.ts` — opt-in full/text/structured views, canonical approval, unchanged remote arguments/errors and pre-bridge projection.
 - `tests/local-query-pagination.test.ts` — explicit query-v1 scope, reduced selective-query I/O, membership/content/ignore drift, unsafe files, bounded independent pages and cursor lifecycle.
 - `tests/compiler-cache.test.ts` / `tests/code-mode-cache.test.ts` — bounded compiler-output reuse and fresh policy/payload/provider/guest execution.
-- `tests/projection-noise.test.ts` / `tests/task-focus.test.ts` — diagnostic hint deduplication and focused task guidance.
+- `tests/projection-noise.test.ts` / `tests/agent-profile.test.ts` — diagnostic hint deduplication and profile/prompt-size contracts.
 - `scripts/steering-benchmark/review-calibration.mjs` — finite controller-owned consequence, severity and recommendation calibration with independent inert probes.
 - `tests/review-calibration.test.ts` / `tests/review-calibration-integration.test.ts` — fixture mutation, grounding, calibrated admission, private oracle hashes and failure-aware comparison metrics.
 - `tests/review-runtime-controls.test.ts` — optional offline Helm/PowerShell qualification; missing binaries remain explicit skips.
@@ -402,6 +404,7 @@ New implementation files:
 - `scripts/installer-ci-cache.mjs`
 - `scripts/installer-cli-contract.mjs`
 - `scripts/installer-diagnostics.mjs`
+- `scripts/installer-probe.mjs` — read-only help/version probes with one timeout-only retry and unchanged per-attempt limits.
 - `scripts/installer-profile-publication.mjs`
 - `scripts/installer-profile-store.mjs`
 - `scripts/installer-smoke-contract.mjs`
@@ -423,6 +426,7 @@ Regression and acceptance files:
 - `tests/installer-native-zsh-acceptance.test.ts`
 - `tests/installer-packaging-cache.test.ts`
 - `tests/installer-presentation.test.ts` — version/backup presentation, cancellation without mutation, and single-envelope JSON output.
+- `tests/installer-probe.test.ts` — identical-argument timeout retry, bounded attempts and no retry for other failures.
 - `tests/installer-profile-publication.test.ts`
 - `tests/installer-smoke-acceptance.test.ts`
 - `tests/installer-smoke-bundle-acceptance.test.ts`

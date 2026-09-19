@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   fabricExecInputSchema,
   fabricExecInputSchemaJson,
+  prepareFabricExecArguments,
   prepareFabricExecArgumentsWithDiagnostics,
 } from "../src/kernel/fabric-exec-contract.js";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
@@ -15,6 +16,25 @@ describe("fabric_exec contract", () => {
     const removedAlias = `str${"ings"}`;
     expect(Value.Check(fabricExecInputSchema, { code: "return 1", [removedAlias]: { value: "no" } })).toBe(false);
     expect(Object.keys(fabricExecInputSchemaJson().properties as object)).toEqual(["code", "payloads", "resultFormat", "timeoutMs"]);
+  });
+
+  it("copies canonical envelopes and keeps the legacy diagnostics wrapper compatible", () => {
+    const input = { code: "return payloads.value", payloads: { value: "ok" } };
+    const prepared = prepareFabricExecArguments(input);
+    expect(prepared).toEqual(input);
+    expect(prepared).not.toBe(input);
+    expect(prepareFabricExecArgumentsWithDiagnostics(input)).toEqual({ value: prepared, diagnostics: [] });
+    expect(Value.Check(fabricExecInputSchema, prepared)).toBe(true);
+  });
+
+  it("preserves strict rejection of nonobjects and unknown envelope fields", () => {
+    for (const input of [null, undefined, "malformed", [], {},
+      { code: "return 1", extra: true },
+      { code: "return 1", payloads: {}, resultFormat: "json", timeoutMs: 1, extra: true }]) {
+      const prepared = prepareFabricExecArguments(input);
+      expect(Value.Check(fabricExecInputSchema, prepared)).toBe(false);
+      expect(prepareFabricExecArgumentsWithDiagnostics(input)).toEqual({ value: prepared, diagnostics: [] });
+    }
   });
 
   it("rejects encoded payload maps without repair", () => {

@@ -9,7 +9,7 @@
     "scripts/analyze-trace.mjs",
     "scripts/run-agent-dev.mjs"
   ],
-  "project": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.mjs"],
+  "project": ["src/**/*.{ts,mjs}", "tests/**/*.ts", "scripts/**/*.mjs"],
   "exclude": ["duplicates"],
   "ignoreBinaries": ["mkfifo", "helm", "pwsh"]
 }

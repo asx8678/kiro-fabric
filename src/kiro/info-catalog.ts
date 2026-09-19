@@ -67,8 +67,3 @@ export const fabricInfoCatalog = (
   }
   return packageCatalog(refs, actions.length, "refs");
 };
-
-/** Legacy helper retained for callers that only consume the array. */
-export const fabricInfoActions = (
-  actions: readonly Pick<ResolvedFabricAction, "ref" | "risk" | "descriptorDigest">[],
-): unknown[] => fabricInfoCatalog(actions).actions;

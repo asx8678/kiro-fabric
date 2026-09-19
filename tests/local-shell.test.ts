@@ -4,9 +4,27 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { runLocalShell } from "../src/providers/local-shell.js";
+import { runLocalShell, shellEnvironment } from "../src/providers/local-shell.js";
 import * as processGroup from "../src/providers/local-process-group.js";
 import { FabricDeadline } from "../src/runtime/deadline.js";
+
+describe("shared shell environment policy", () => {
+  it("selects only the allowlist with stable locale ordering and fresh results", () => {
+    const source = {
+      LC_Z_TEST: "z", AWS_SECRET_ACCESS_KEY: "secret", HOME: "/home/test", LC_A_TEST: "a",
+      PATH: "/usr/bin", TMPDIR: undefined, LANG: "C", TERM: "dumb", TZ: "UTC", USER: "test", LOGNAME: "test",
+      BASH_ENV: "/untrusted", NODE_OPTIONS: "--no-warnings", LC_lower: "no", LC_TEST1: "no", LC_: "no",
+    };
+    const expected = { HOME: "/home/test", PATH: "/usr/bin", LANG: "C", TERM: "dumb", TZ: "UTC", USER: "test", LOGNAME: "test", LC_A_TEST: "a", LC_Z_TEST: "z" };
+    const selected = shellEnvironment(source);
+    expect(selected).toEqual(expected);
+    expect(JSON.stringify(selected)).toBe(JSON.stringify(expected));
+    selected.HOME = "changed";
+    expect(shellEnvironment(source)).toEqual(expected);
+    expect(source.HOME).toBe("/home/test");
+    expect(shellEnvironment({})).toEqual({});
+  });
+});
 
 const roots: string[] = [];
 const controllers: AbortController[] = [];

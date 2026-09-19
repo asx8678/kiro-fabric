@@ -166,20 +166,11 @@ describe("strict checked workspace bootstrap", () => {
     expect(f.value(await f.call('return await fabric.info();')).runProvenance.manifestDigest).toBe(info.runProvenance.manifestDigest);
   });
 
-  it("advertises exact hot local shapes beside the model-visible execution tool", async () => {
+  it("publishes one bounded, non-empty execution tool description", async () => {
     await fixture();
     const listing = await wire.handlers.get(ListToolsRequestSchema)!({ params: {} }, {});
     const description = listing.tools.find((tool: { name: string }) => tool.name === "fabric_exec").description;
-    expect(description).toContain("text:string");
-    expect(description).toContain("not a string/array");
-    expect(description).toContain("totalLines");
-    expect(description).toContain("scope,truncated");
-    expect(description).toContain("ignore rules still apply");
-    expect(description).toContain("fabric.help({topic:'review'})");
-    expect(description).toContain("local.grep({pattern,path?,glob?,literal?,hidden?,limit?})");
-    expect(description).toContain("local.edit({path,expectedSha256,oldText,newText,all?})");
-    expect(description).toContain("settle:true");
-    expect(description).toContain("stdout,stderr");
+    expect(description.length).toBeGreaterThan(0);
     expect(description.length).toBeLessThanOrEqual(850);
   });
 

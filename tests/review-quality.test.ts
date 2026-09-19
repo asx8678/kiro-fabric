@@ -152,7 +152,9 @@ describe('opt-in controlled review adherence v1', () => {
     for (const [id, [prompt, fixtures, oracle]] of Object.entries(pins)) {
       const s = makeReviewCase(id, 'quality-legacy-pin');
       expect(caseHashes(s)).toEqual({ prompt, fixtures, oracle });
-      expect(scoreReview(s, s.expected)).not.toHaveProperty('quality');
+      const legacy = scoreReview(s, s.expected);
+      expect(legacy).not.toHaveProperty('quality');
+      expect(legacy).not.toHaveProperty('calibration');
       expect(() => scoreReview(s, answer())).toThrow();
     }
   });

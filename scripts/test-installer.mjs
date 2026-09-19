@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 // Bundle integration deliberately runs only AFTER Main/CI stages real artifacts.
 export const INSTALLER_SUITES = Object.freeze({
   contracts: Object.freeze([
-    "installer-platform", "bundle-archive", "release-trust", "release-download", "installer-bootstrap", "source-bootstrap",
+    "installer-platform", "installer-probe", "bundle-archive", "release-trust", "release-download", "installer-bootstrap", "source-bootstrap",
     "private-tools", "installer-home", "installer-home-preparation", "installer-configuration-backup", "installer-shell-integration",
     "installer-cli-contract", "installer-presentation", "installer-manager-acceptance", "installer-diagnostics", "installer-profile-publication", "installer-executable-trust", "installer-boundary-regressions",
     "install-manager-start", "launch-profile", "agent-launch-context", "source-installer-contract", "source-frontend-acceptance",

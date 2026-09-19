@@ -2,18 +2,8 @@ import { spawn } from "node:child_process";
 import { localProcessGroupAlive as groupAlive } from "./local-process-group.js";
 import { setTimeout as delay } from "node:timers/promises";
 import { throwIfAbortedOrExpired } from "../async-settlement.js";
-import type { LocalShellOptions } from "./local-contract.js";
-
-export interface LocalShellResult {
-  ok: boolean;
-  exitCode: number | null;
-  signal: string | null;
-  stdout: string;
-  stderr: string;
-  truncated: boolean;
-  stdoutTruncated: boolean;
-  stderrTruncated: boolean;
-}
+import type { LocalShellOptions, LocalShellResult } from "./local-contract.js";
+export type { LocalShellResult } from "./local-contract.js";
 
 /** Only ordinary, fully reaped nonzero exits carry explicit diagnostic data. */
 export class LocalShellExitError extends Error {
@@ -28,13 +18,11 @@ export class LocalShellExitError extends Error {
 
 // An allowlist, not a backend credential denylist. Never include ambient auth,
 // shell startup hooks, loader options, or language-runtime injection variables.
-function shellEnvironment(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const key of ["HOME", "PATH", "TMPDIR", "LANG", "TERM", "TZ", "USER", "LOGNAME"]) {
-    if (process.env[key] !== undefined) env[key] = process.env[key];
-  }
-  for (const [key, value] of Object.entries(process.env)) {
-    if (/^LC_[A-Z_]+$/.test(key) && value !== undefined) env[key] = value;
+export function shellEnvironment(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env: Record<string, string> = {};
+  // Stable locale ordering also binds probe approval/evidence to this policy.
+  for (const key of ["HOME", "PATH", "TMPDIR", "LANG", "TERM", "TZ", "USER", "LOGNAME", ...Object.keys(source).filter(key => /^LC_[A-Z_]+$/.test(key)).sort()]) {
+    if (source[key] !== undefined) env[key] = source[key];
   }
   return env;
 }

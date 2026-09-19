@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { isProxy } from "node:util/types";
+import { largestFittingInteger } from "../bounded-search.js";
 import type { CatalogDependency, CatalogBinding, CatalogMethod, CatalogReservation, CatalogPageOptions, CatalogPage, DescriptorJsonPage } from "./catalog-contract.js";
 import { FabricRepairError } from "./repair-error.js";
 import { semanticDigest } from "./semantic-digest.js";
@@ -27,7 +28,7 @@ const isArrayIndex = (key: string): boolean => {
 };
 type Position = [number, string, number, number, number, number];
 interface Entry { text: string; digest: string }
-interface Snapshot { dependencies: Set<CatalogDependency>; id: string; method?: CatalogMethod; query?: string; entries?: Entry[]; bytes: number; nodes: number; created: number; touched: number; expires: number }
+interface Snapshot { dependencies: Set<CatalogDependency>; id: string; method?: CatalogMethod; entries?: Entry[]; bytes: number; nodes: number; created: number; touched: number; expires: number }
 const fail = (code: "catalog_quota_exceeded" | "catalog_page_budget" | "catalog_cursor_unavailable", message: string): never => {
   throw new FabricRepairError(message, { code, phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none" });
 };
@@ -137,7 +138,7 @@ export class CatalogSnapshotStore {
             entries.push({ text, digest });
           }
           if (bytes > p.reservationBytes) quota();
-          Object.assign(snapshot, { method, query, entries, bytes, nodes, touched: p.now() });
+          Object.assign(snapshot, { method, entries, bytes, nodes, touched: p.now() });
           active = false;
           return this.token(snapshot, method, method.endsWith("describePage") ? 0 : -1, 0);
         } catch (error) {
@@ -219,8 +220,7 @@ export class CatalogSnapshotStore {
     if (descriptor < 0) unavailable();
     const budget = this.budgets(options.maxBytes, maxChars), entry = s.entries![descriptor]!;
     const page = (end: number): DescriptorJsonPage => ({ text: entry.text.slice(position, end), encoding: "json", totalChars: entry.text.length, descriptorDigest: entry.digest, complete: end === entry.text.length, ...(end < entry.text.length ? { nextCursor: this.token(s, method, descriptor, end) } : {}) });
-    let low = position, high = Math.min(entry.text.length, position + Math.min(budget.bytes, budget.chars));
-    while (low < high) { const mid = Math.ceil((low + high) / 2); if (this.fits(page(mid), budget)) low = mid; else high = mid - 1; }
+    let low = largestFittingInteger(position, Math.min(entry.text.length, position + Math.min(budget.bytes, budget.chars)), end => this.fits(page(end), budget));
     // Do not split UTF-16 surrogate pairs across chunks.
     if (low < entry.text.length && low > position && /[\uD800-\uDBFF]/.test(entry.text[low - 1]!) && /[\uDC00-\uDFFF]/.test(entry.text[low]!)) low--;
     const result = page(low);

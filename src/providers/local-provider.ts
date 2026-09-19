@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { largestFittingInteger } from "../bounded-search.js";
 import { applyLocalEditsWithRegions, type LocalEditRegion, type LocalTextEdit } from "./local-edit.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -446,11 +447,7 @@ export class LocalCodingProvider implements FabricProvider {
     // smaller. All remaining candidates retain it and have monotone sizes.
     const complete = page(end - start);
     if (this.#fits(complete, budget)) return complete;
-    let low = 0, high = end - start - 1;
-    while (low < high) {
-      const mid = Math.ceil((low + high) / 2);
-      if (this.#fits(page(mid), budget)) low = mid; else high = mid - 1;
-    }
+    const low = largestFittingInteger(0, end - start - 1, count => this.#fits(page(count), budget));
     if (!low) throw new Error("local.read single line exceeds configured character budget");
     return this.#bounded(page(low), budget);
   }

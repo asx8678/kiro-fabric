@@ -155,7 +155,6 @@ export const projectFabricExecutionText = (options: {
   resultFormat: FabricExecResultFormat;
   maxOutputChars: number;
   writeArtifact(content: string): string;
-  normalizationDiagnostics?: readonly { field: string; repair: string }[];
 }): KiroProjectionResult => {
   const visibleMaximum = options.result.success
     ? options.maxOutputChars
@@ -182,9 +181,6 @@ export const projectFabricExecutionText = (options: {
     catch { receiptId = undefined; }
   }
   const body = stringify(value, options.resultFormat);
-  const diagnostics = options.normalizationDiagnostics?.length
-    ? `\n\nNormalization diagnostics: ${JSON.stringify(options.normalizationDiagnostics)}`
-    : "";
   const logs = options.result.logs.length
     ? `\n\nFabric logs: ${JSON.stringify(options.result.logs)}`
     : "";
@@ -199,7 +195,7 @@ export const projectFabricExecutionText = (options: {
   const recoveryHint = receipt
     ? `\nRecovery receipt${receiptId === undefined ? " unavailable" : ` ${receiptId} (artifacts.read)`}; retryProgram: false.`
     : "";
-  const complete = `${body}${diagnostics}${logs}${progress}${recoveryNotice}${checkpoints}`;
+  const complete = `${body}${logs}${progress}${recoveryNotice}${checkpoints}`;
   if (complete.length <= visibleMaximum) return {
     text: complete,
     isError: !options.result.success,

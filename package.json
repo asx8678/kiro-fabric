@@ -44,6 +44,7 @@
     "typecheck": "tsc --noEmit && tsc --project tsconfig.scripts.json",
     "audit:deps": "pnpm audit --audit-level moderate",
     "test": "pnpm run build && pnpm run test:built",
+    "test:fast": "vitest run --config vitest.fast.config.ts",
     "test:built": "node scripts/build-agent-dev.mjs && node scripts/build-complete-bundle.mjs && vitest run --reporter=default --reporter=json --outputFile=.tmp/vitest-report.json",
     "test:installer": "node scripts/test-installer.mjs run",
     "lint:dead": "knip",

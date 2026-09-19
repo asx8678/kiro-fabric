@@ -4,7 +4,7 @@ import { throwIfAbortedOrExpired } from "../async-settlement.js";
 import { schemaValidationMessage } from "../schema-validation.js";
 import { FABRIC_COMMIT_ACKNOWLEDGEMENT } from "../protocol.js";
 import type { FabricActionDescriptor, FabricInvocationContext, FabricProvider } from "../protocol.js";
-import { runLocalShell } from "./local-shell.js";
+import { runLocalShell, shellEnvironment } from "./local-shell.js";
 import { PROBE_ACTION_DESCRIPTORS, PROBE_INPUT_SCHEMAS } from "./probe-contract.js";
 import type { ProbeCreateArguments, ProbeDeclarations, ProbeFile, ProbeHandle, ProbeProviderOptions, ProbeRunArguments, ProbeRunResult, ProbeWriteResult } from "./probe-contract.js";
 import { discoverProbeExecutables } from "./probe-discovery.js";
@@ -30,13 +30,9 @@ const hardLimit = (value: number | undefined, fallback: number, min: number, max
 const effectful = (name: string): boolean => name !== "discover";
 const json = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 const fileBytes = (files: ProbeFile[]): number => files.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0);
-// Mirrors runLocalShell's allowlist, solely to retain/review the actual forwarded
-// environment. Declarations do not override it; no other ambient keys are read.
+// Retain/review the shell's exact allowlist; declarations never override it.
 const observedEnvironment = (): Record<string, string> => {
-  const result: Record<string, string> = {};
-  for (const key of ["HOME", "PATH", "TMPDIR", "LANG", "TERM", "TZ", "USER", "LOGNAME", ...Object.keys(process.env).filter(key => /^LC_[A-Z_]+$/.test(key)).sort()]) {
-    if (process.env[key] !== undefined) result[key] = process.env[key];
-  }
+  const result = shellEnvironment();
   if (JSON.stringify(result).length > 16000) throw new Error("probe shell environment exceeds retained approval budget");
   return result;
 };

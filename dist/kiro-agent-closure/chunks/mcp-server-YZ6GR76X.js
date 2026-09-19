@@ -182,7 +182,7 @@ import {
   traceFailureMetadata,
   validateSchemaValue,
   value_exports
-} from "./chunk-COO732H5.js";
+} from "./chunk-JS3MGVA3.js";
 import {
   FabricCompilerPool,
   FabricCompilerTimeoutError,
@@ -11236,6 +11236,18 @@ var ContinuityExecution = class {
 // src/core/catalog-snapshot-store.ts
 import { createHmac, randomBytes as randomBytes2, timingSafeEqual } from "node:crypto";
 import { isProxy } from "node:util/types";
+
+// src/bounded-search.ts
+function largestFittingInteger(lower, upper, fits) {
+  while (lower < upper) {
+    const middle = Math.ceil((lower + upper) / 2);
+    if (fits(middle)) lower = middle;
+    else upper = middle - 1;
+  }
+  return lower;
+}
+
+// src/core/catalog-snapshot-store.ts
 var defaults = {
   // Conservative runtime-wide partition: 32MiB snapshots + 16MiB MCP + 16MiB index.
   maxSnapshots: 32,
@@ -11376,7 +11388,7 @@ var CatalogSnapshotStore = class {
             entries.push({ text: text3, digest: digest2 });
           }
           if (bytes2 > p.reservationBytes) quota();
-          Object.assign(snapshot2, { method, query, entries, bytes: bytes2, nodes, touched: p.now() });
+          Object.assign(snapshot2, { method, entries, bytes: bytes2, nodes, touched: p.now() });
           active = false;
           return this.token(snapshot2, method, method.endsWith("describePage") ? 0 : -1, 0);
         } catch (error) {
@@ -11471,12 +11483,7 @@ var CatalogSnapshotStore = class {
     if (descriptor2 < 0) unavailable();
     const budget = this.budgets(options.maxBytes, maxChars), entry = s.entries[descriptor2];
     const page = (end) => ({ text: entry.text.slice(position, end), encoding: "json", totalChars: entry.text.length, descriptorDigest: entry.digest, complete: end === entry.text.length, ...end < entry.text.length ? { nextCursor: this.token(s, method, descriptor2, end) } : {} });
-    let low = position, high = Math.min(entry.text.length, position + Math.min(budget.bytes, budget.chars));
-    while (low < high) {
-      const mid = Math.ceil((low + high) / 2);
-      if (this.fits(page(mid), budget)) low = mid;
-      else high = mid - 1;
-    }
+    let low = largestFittingInteger(position, Math.min(entry.text.length, position + Math.min(budget.bytes, budget.chars)), (end) => this.fits(page(end), budget));
     if (low < entry.text.length && low > position && /[\uD800-\uDBFF]/.test(entry.text[low - 1]) && /[\uDC00-\uDFFF]/.test(entry.text[low])) low--;
     const result = page(low);
     if (low === position && position < entry.text.length || !this.fits(result, budget)) fail("catalog_page_budget", "Descriptor page cannot advance within the requested envelope budget.");
@@ -13391,13 +13398,13 @@ var fabricExecInputSchema = typebox_exports.Object({
 }, { additionalProperties: false });
 var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var FABRIC_EXEC_KEYS = /* @__PURE__ */ new Set(["code", "payloads", "resultFormat", "timeoutMs"]);
-var prepareFabricExecArgumentsWithDiagnostics = (input) => {
-  if (!isRecord2(input)) return { value: input, diagnostics: [] };
+var prepareFabricExecArguments = (input) => {
+  if (!isRecord2(input)) return input;
   const keys = Object.keys(input);
   if (keys.length > FABRIC_EXEC_KEYS.size || keys.some((key) => !FABRIC_EXEC_KEYS.has(key))) {
-    return { value: { invalidFabricExecEnvelope: true }, diagnostics: [] };
+    return { invalidFabricExecEnvelope: true };
   }
-  return { value: { ...input }, diagnostics: [] };
+  return { ...input };
 };
 var fabricExecInputSchemaJson = () => JSON.parse(JSON.stringify(fabricExecInputSchema));
 
@@ -13409,6 +13416,15 @@ var kiroMcpOuterDeadlineMs = (guestMaximumMs, compilerTimeoutMs) => guestMaximum
 // src/kiro/power/approver.ts
 import { createHash as createHash3 } from "node:crypto";
 import path from "node:path";
+var APPROVAL_FAILURE_GUIDANCE = {
+  unsupported: "This client has not advertised MCP form elicitation. Use a compatible client; do not weaken approval policy.",
+  missing_handler: "This client reported no handler for _kiro/mcp/elicitation. Use a client with working approval forms; do not weaken approval policy.",
+  request_failed: "The approval request failed; no explicit approval was obtained.",
+  declined: "The client returned a decline decision.",
+  cancelled: "The approval wait was cancelled.",
+  not_approved: "The client returned no explicit approval.",
+  review_too_large: "The exact review material exceeded the approval form bound. Narrow the action before requesting approval."
+};
 var SECRET_KEY = /(?:apikey|authorization|authtoken|bearer|clientkey|clientsecret|cookie|credential|idtoken|passphrase|password|privatekey|refreshtoken|secret|session|token)/iu;
 var SECRET_VALUE = /^(?:(?:basic|bearer)\s+|gh[pousr]_|github_pat_|sk-[a-z0-9_-]{12,}|akia[0-9a-z]{12,}|eyj[a-z0-9_-]+\.[a-z0-9_-]+\.|-----begin\s)|(?:^|[?&])(?:api[_-]?key|password|secret|token)=/iu;
 var URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//iu;
@@ -13432,7 +13448,7 @@ var kiroElicitationFailureReason = (error) => {
 };
 var KiroApprovalError = class extends Error {
   constructor(ref, reason) {
-    super(`${ref} approval was denied or unavailable (${reason})`);
+    super(`${ref} approval was denied or unavailable (${reason}): ${APPROVAL_FAILURE_GUIDANCE[reason]} This action was not dispatched.`);
     this.reason = reason;
     this.name = "KiroApprovalError";
   }
@@ -14385,9 +14401,6 @@ var projectFabricExecutionText = (options) => {
     }
   }
   const body = stringify(value, options.resultFormat);
-  const diagnostics = options.normalizationDiagnostics?.length ? `
-
-Normalization diagnostics: ${JSON.stringify(options.normalizationDiagnostics)}` : "";
   const logs = options.result.logs.length ? `
 
 Fabric logs: ${JSON.stringify(options.result.logs)}` : "";
@@ -14401,7 +14414,7 @@ Ephemeral checkpoint handles (read with artifacts.read): ${JSON.stringify(checkp
 Recovery receipt${receiptId === void 0 ? " (unavailable)" : ` ${receiptId}`}: ${counts}. ${receiptId === void 0 ? "" : `Read it with await artifacts.read({ id: ${JSON.stringify(receiptId)} }). `}retryProgram: false; inspect the listed operations before rerunning.` : "";
   const recoveryHint = receipt ? `
 Recovery receipt${receiptId === void 0 ? " unavailable" : ` ${receiptId} (artifacts.read)`}; retryProgram: false.` : "";
-  const complete = `${body}${diagnostics}${logs}${progress}${recoveryNotice}${checkpoints}`;
+  const complete = `${body}${logs}${progress}${recoveryNotice}${checkpoints}`;
   if (complete.length <= visibleMaximum) return {
     text: complete,
     isError: !options.result.success,
@@ -16875,15 +16888,10 @@ function readManyWindows(windows, budget, read, partial = false, delivery = {}) 
       };
       return summarize2([...files, file], remainder);
     };
-    let high = lines.length;
+    const high = lines.length;
     let result = page(high);
     if (!fits(result)) {
-      let low = 0;
-      while (low < high) {
-        const mid = Math.ceil((low + high) / 2);
-        if (fits(page(mid))) low = mid;
-        else high = mid - 1;
-      }
+      const low = largestFittingInteger(0, high, (count3) => fits(page(count3)));
       if (!low) {
         if (files.length) return pending(index);
         throw new Error(`${operation} single line or metadata exceeds budget; increase maxChars or narrow the batch`);
@@ -17372,12 +17380,7 @@ No content change`;
     };
     const complete = page(end - start);
     if (this.#fits(complete, budget)) return complete;
-    let low = 0, high = end - start - 1;
-    while (low < high) {
-      const mid = Math.ceil((low + high) / 2);
-      if (this.#fits(page(mid), budget)) low = mid;
-      else high = mid - 1;
-    }
+    const low = largestFittingInteger(0, end - start - 1, (count3) => this.#fits(page(count3), budget));
     if (!low) throw new Error("local.read single line exceeds configured character budget");
     return this.#bounded(page(low), budget);
   }
@@ -17758,15 +17761,10 @@ var FabricBootstrapProvider = class {
         const truncated = offset + text3.length < source.length;
         return { topic: args.topic, text: text3, truncated, ...truncated ? { nextOffset: offset + text3.length } : {} };
       };
-      let high = Math.min(typeof args.limit === "number" ? args.limit : 16e3, Math.max(0, source.length - offset));
+      const high = Math.min(typeof args.limit === "number" ? args.limit : 16e3, Math.max(0, source.length - offset));
       const full = page(high);
       if (JSON.stringify(full).length <= this.maxResultChars) return full;
-      let low = 0;
-      while (low < high) {
-        const mid = Math.ceil((low + high) / 2);
-        if (JSON.stringify(page(mid)).length <= this.maxResultChars) low = mid;
-        else high = mid - 1;
-      }
+      const low = largestFittingInteger(0, high, (size) => JSON.stringify(page(size)).length <= this.maxResultChars);
       if (low === 0) throw new Error("Nested result budget too small for help progress");
       return page(low);
     }
@@ -17890,7 +17888,7 @@ var ArtifactStore = class {
         throw error;
       }
     }
-    this.#entries.set(id2, { content, createdAt: now, lastReadAt: now, ...file ? { file } : {} });
+    this.#entries.set(id2, { content, lastReadAt: now, ...file ? { file } : {} });
     this.#totalChars += content.length;
     return id2;
   }
@@ -19939,12 +19937,7 @@ var boundKiroArtifactRead = (page, maximum) => {
     const nextOffset = page.offset + text3.length;
     return { ...page, text: text3, nextOffset, done: nextOffset >= page.totalChars };
   };
-  let low = 0, high = page.text.length;
-  while (low < high) {
-    const mid = Math.ceil((low + high) / 2);
-    if (JSON.stringify(candidate(mid)).length <= maximum) low = mid;
-    else high = mid - 1;
-  }
+  const low = largestFittingInteger(0, page.text.length, (length) => JSON.stringify(candidate(length)).length <= maximum);
   const result = candidate(low);
   if (JSON.stringify(result).length > maximum || !result.done && !result.text.length) throw new Error("artifact response budget cannot fit metadata and one Unicode character");
   return result;
@@ -20564,8 +20557,8 @@ var createKiroMcpServer = async (options) => {
     } catch (error) {
       return tracedError("adapter_error", error);
     }
-    const normalized = prepareFabricExecArgumentsWithDiagnostics(request.params.arguments ?? {});
-    const normalizedRecord = isRecord7(normalized.value) ? normalized.value : void 0;
+    const normalized = prepareFabricExecArguments(request.params.arguments ?? {});
+    const normalizedRecord = isRecord7(normalized) ? normalized : void 0;
     const absoluteInputError = typeof normalizedRecord?.code === "string" ? fabricSourceLimitError(normalizedRecord.code, MAX_EXECUTOR_SOURCE_BYTES) : void 0;
     const absolutePayloadError = isRecord7(normalizedRecord?.payloads) ? fabricPayloadsLimitError(
       normalizedRecord.payloads,
@@ -20574,11 +20567,11 @@ var createKiroMcpServer = async (options) => {
     if (absoluteInputError || absolutePayloadError) {
       return tracedError("invalid_exec_arguments", absoluteInputError ?? absolutePayloadError);
     }
-    if (!value_exports.Check(fabricExecInputSchema, normalized.value)) {
-      const errors = [...value_exports.Errors(fabricExecInputSchema, normalized.value)].map((entry) => entry.message);
+    if (!value_exports.Check(fabricExecInputSchema, normalized)) {
+      const errors = [...value_exports.Errors(fabricExecInputSchema, normalized)].map((entry) => entry.message);
       return tracedError("invalid_exec_arguments", "Invalid fabric_exec arguments", errors);
     }
-    const input = normalized.value;
+    const input = normalized;
     const controller = new AbortController();
     const cancel = () => controller.abort(extra.signal.reason ?? new Error("MCP request cancelled"));
     if (extra.signal.aborted) cancel();
@@ -20651,8 +20644,7 @@ var createKiroMcpServer = async (options) => {
         result,
         resultFormat: input.resultFormat ?? current.service.config.executor.resultFormat,
         maxOutputChars: current.service.config.executor.maxOutputChars - (pendingMutation ? 512 : 0),
-        writeArtifact: (content) => current.artifacts.write(content),
-        normalizationDiagnostics: normalized.diagnostics
+        writeArtifact: (content) => current.artifacts.write(content)
       });
       if (pendingMutation && !projection.isError) {
         active.delete(execution);

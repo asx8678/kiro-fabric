@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { runInstallerProbe } from "./installer-probe.mjs";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { validateBundle } from "./bundle-contract.mjs";
@@ -11,7 +12,7 @@ export async function smokeCandidate(bundleRoot) {
   const bundle = await validateBundle(bundleRoot);
   const node = path.join(bundle.root, "tools", "node"), rg = path.join(bundle.root, "tools", "rg");
   const version = (executable, args, expected) => {
-    const probe = spawnSync(executable, args, { env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 5000, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] });
+    const probe = runInstallerProbe(executable, args, { env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 5000, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] });
     if (probe.error || probe.status !== 0 || !probe.stdout.startsWith(expected)) throw new Error(`Candidate private ${path.basename(executable)} version/compatibility check failed`);
   };
   version(node, ["--version"], `v${bundle.manifest.tools.node.version}\n`);

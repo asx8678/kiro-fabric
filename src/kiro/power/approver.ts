@@ -19,6 +19,18 @@ export interface KiroPowerElicitationAdapter {
   }): Promise<{ action: "accept" | "decline" | "cancel"; approved?: boolean }>;
 }
 
+/** Static diagnostics, never raw client errors. Only a matching observed error
+ * establishes a missing handler; capabilities alone do not prove UI readiness. */
+const APPROVAL_FAILURE_GUIDANCE: Record<KiroApprovalFailureReason, string> = {
+  unsupported: "This client has not advertised MCP form elicitation. Use a compatible client; do not weaken approval policy.",
+  missing_handler: "This client reported no handler for _kiro/mcp/elicitation. Use a client with working approval forms; do not weaken approval policy.",
+  request_failed: "The approval request failed; no explicit approval was obtained.",
+  declined: "The client returned a decline decision.",
+  cancelled: "The approval wait was cancelled.",
+  not_approved: "The client returned no explicit approval.",
+  review_too_large: "The exact review material exceeded the approval form bound. Narrow the action before requesting approval.",
+};
+
 const SECRET_KEY = /(?:apikey|authorization|authtoken|bearer|clientkey|clientsecret|cookie|credential|idtoken|passphrase|password|privatekey|refreshtoken|secret|session|token)/iu;
 const SECRET_VALUE = /^(?:(?:basic|bearer)\s+|gh[pousr]_|github_pat_|sk-[a-z0-9_-]{12,}|akia[0-9a-z]{12,}|eyj[a-z0-9_-]+\.[a-z0-9_-]+\.|-----begin\s)|(?:^|[?&])(?:api[_-]?key|password|secret|token)=/iu;
 const URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//iu;
@@ -48,7 +60,7 @@ export const kiroElicitationFailureReason = (error: unknown): KiroApprovalFailur
 
 class KiroApprovalError extends Error {
   constructor(ref: string, readonly reason: KiroApprovalFailureReason) {
-    super(`${ref} approval was denied or unavailable (${reason})`);
+    super(`${ref} approval was denied or unavailable (${reason}): ${APPROVAL_FAILURE_GUIDANCE[reason]} This action was not dispatched.`);
     this.name = "KiroApprovalError";
   }
 }

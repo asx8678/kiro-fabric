@@ -42,7 +42,7 @@ If you see:
 Kiro Fabric: Kiro CLI help/version preflight failed; authentication was not attempted
 ```
 
-The installer could not complete a CLI check with a temporary home, a restricted environment, and a 5-second timeout. This is not an authentication failure.
+The installer could not complete a CLI check with a temporary home and a restricted environment. Read-only CLI help/version and private-tool version probes allow two attempts only when the first returns `ETIMEDOUT`, retaining the 5-second timeout per attempt. Other failures are not retried. This is not an authentication failure.
 
 Run these commands in the same terminal:
 
@@ -52,7 +52,7 @@ kiro-cli --version
 kiro-cli agent validate --help
 ```
 
-Confirm that Kiro CLI is available, its version is >=2.21.1, and the validation help includes `--path`. If a command fails, resolve that CLI error first. If both CLI commands succeed, retry the installer once: the isolated check may have timed out. If it still fails, report the outputs above and the installer error; normal CLI checks can pass while isolated checks fail.
+Confirm that Kiro CLI is available, its version is >=2.21.1, and the validation help includes `--path`. If a command fails, resolve that CLI error first. If both CLI commands succeed but preflight still fails, report the outputs above and the installer error; normal CLI checks can pass while isolated checks fail. The bounded timeout retry is already automatic; do not repeatedly rerun the whole installation.
 
 If the installer instead reports `Unsafe Kiro CLI directory ancestry` or `unsafe shell integration file permissions`, inspect the named path's ownership and permissions. For your own trusted path, remove group/other write access (`chmod go-w <path>`); for shell configuration you can instead use `--no-shell-integration`. `umask 022` affects newly created paths only—it does not repair existing permissions. Preview the install with `bash ./install.sh --source --dry-run --json`.
 
@@ -63,3 +63,11 @@ Do not delete configuration or rerun with `sudo`. A failed installation is not a
 See [installation details](docs/installer.md) for prerequisites and recovery.
 
 Optional [deterministic task recovery](docs/configuration.md#deterministic-task-recovery-opt-in) provides durable declared checkpoints, explicit host-operation capture, and reproducible summaries. Disabled by default; it does not replace Kiro's native compaction.
+
+## Development checks
+
+- `pnpm run test:fast` — curated source-focused checks for the edit loop; no build or installer staging step. The selection lives in `vitest.fast.config.ts`.
+- `pnpm test` — build, stage the installer artifacts, and run the full test suite, including benchmark and acceptance tests.
+- `pnpm run check` — required before committing/releasing: typecheck, build, full tests, dead-code lint, certification and SBOM checks.
+
+The fast subset is not acceptance evidence. Run the relevant full test module for changed behavior (`pnpm exec vitest run tests/<name>.test.ts`); built-runtime/installer modules need the artifacts prepared by `pnpm test`. Both lanes remain serial. Only the full `test:built` command writes `.tmp/vitest-report.json`, so fast runs do not replace suite-wide timing evidence.

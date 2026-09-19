@@ -24,7 +24,7 @@ export function exactFields(value,keys){
  if(!value || Object.getPrototypeOf(value)!==Object.prototype || canonical(Object.keys(value).sort())!==canonical([...keys].sort())) throw Error('Invalid schema fields: '+keys.join(','));
 }
 /** @param {any} v */
-export const isHash = v => typeof v==='string' && /^[a-f0-9]{64}$/.test(v);
+const isHash = v => typeof v==='string' && /^[a-f0-9]{64}$/.test(v);
 /** @param {any} v */
 export const isStable = v => typeof v==='string' && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v) && v.split('.').every(n=>Number.isSafeInteger(Number(n)));
 /** @param {any} p @returns {string} */
@@ -33,7 +33,7 @@ export function safePath(p) {
   return p;
 }
 /** @param {string} p */
-export function roleFor(p) {
+function roleFor(p) {
   safePath(p);
   if(p==='tools/node'||p==='tools/rg') return 'executable';
   if(p==='manager/install-manager.mjs') return 'manager';
@@ -60,7 +60,7 @@ export function checkCompatibility(value,target){
  if(canonical(value)!==canonical(compatibilityFor(target)))throw Error('Compatibility mismatch');
 }
 /** @param {any} p */
-export function checkProvenance(p){
+function checkProvenance(p){
  if(p?.kind==='local-source'){
   exactFields(p,['kind','sourceDigest','gitHead','dirty']);
   if(!isHash(p.sourceDigest)||(p.gitHead!==null && (typeof p.gitHead!=='string'|| !/^[a-f0-9]{40}$/.test(p.gitHead)))||typeof p.dirty!=='boolean')throw Error('Invalid source provenance');
@@ -108,8 +108,6 @@ export function checkToolPins(tools,inventory,target){
   }
  }
 }
-/** @param {any} inventory */
-export function checkInventory(inventory) { return checkInventoryFor(inventory, REQUIRED_APP); }
 /** @param {any} inventory @param {string[]} requiredApp */
 function checkInventoryFor(inventory, requiredApp) {
  if(!Array.isArray(inventory)||inventory.length>LIMITS.entries)throw Error('Inventory bound');

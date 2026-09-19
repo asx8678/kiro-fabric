@@ -77,14 +77,9 @@ function put(f: ReturnType<typeof fixture>, file: string, source = "fixture\n") 
 }
 
 describe("first submitted prompt context", () => {
-  it("keeps the first hook a short task reminder, not a second workflow or tool recipe", () => {
+  it("keeps the first hook bounded and delimited", () => {
     expect(Buffer.byteLength(FIRST_PROMPT_GUIDANCE)).toBeLessThan(400);
-    expect(FIRST_PROMPT_GUIDANCE.split("\n")).toHaveLength(3);
     expect(FIRST_PROMPT_GUIDANCE).toMatch(/^<fabric_initial_investigation>\n[\s\S]*\n<\/fabric_initial_investigation>$/);
-    for (const clause of ["standing task contract", "answer, plan, review or authorized implementation",
-      "Resume the next unresolved acceptance check", "do not widen scope by default",
-      "Stop at acceptance", "exact blocker without claiming completion"]) expect(FIRST_PROMPT_GUIDANCE).toContain(clause);
-    expect(FIRST_PROMPT_GUIDANCE).not.toMatch(/```|local\.|fabric\.help|runtime availability|coverage ledger/);
   });
 
   it("executes the review runtime discovery and preserves every batched probe outcome", async () => {

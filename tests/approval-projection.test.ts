@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { fabricJsonText } from "../src/runtime/json-budget.js";
-import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
+import { DEFAULT_FABRIC_CONFIG, normalizeFabricConfig } from "../src/config.js";
+import { ActionRegistry } from "../src/core/action-registry.js";
+import { FabricExecutionService } from "../src/execution-service.js";
 import type { FabricCallAudit } from "../src/core/action-registry.js";
 import { KiroPowerApprover, KiroPowerFabricApprover } from "../src/kiro/power/approver.js";
 import { projectFabricExecutionText } from "../src/kiro/projection.js";
@@ -125,6 +127,43 @@ describe("Fabric approval and projection", () => {
     await expect(absentApprover.approve(action, { key: "a" })).rejects.toThrow("denied or unavailable");
     const declined = new KiroPowerApprover({ supported: () => true, async request() { return { action: "decline" }; } });
     await expect(new KiroPowerFabricApprover({ ...DEFAULT_FABRIC_CONFIG.approvals, write: "ask" }, declined, "/workspace").approve(action, { key: "a" })).rejects.toThrow("denied or unavailable");
+  });
+
+  it.each(["unsupported", "missing_handler", "request_failed"] as const)("projects safe %s diagnostics without replaying a previous effect", async reason => {
+    const registry = new ActionRegistry(), invoke = vi.fn(async () => "committed");
+    const descriptor = { name: "write", description: "fixture mutation", risk: "write" as const, inputSchema: { type: "object" }, effect: { kind: "write" as const, resources: ["fixture"] } };
+    registry.register({ name: "fixture", description: "approval boundary", list: async () => [descriptor], describe: async () => descriptor, invoke });
+    let supportChecks = 0, requests = 0;
+    const bridge = new KiroPowerApprover({
+      supported: () => ++supportChecks === 1 || reason !== "unsupported",
+      request: async () => {
+        if (++requests === 1) return { action: "accept", approved: true };
+        throw new Error(reason === "missing_handler"
+          ? "SECRET-client-detail: No handler registered for method: _kiro/mcp/elicitation"
+          : "SECRET-client-detail: No handler registered for method: another/method");
+      },
+    });
+    const config = normalizeFabricConfig({ approvals: { write: "ask" } });
+    const service = new FabricExecutionService(registry, config, "/workspace");
+    try {
+      const result = await service.execute({
+        code: 'await tools.call({ref:"fixture.write"}); return await tools.call({ref:"fixture.write"});',
+        approver: new KiroPowerFabricApprover(config.approvals, bridge, "/workspace"),
+      });
+      expect(result.success, result.error).toBe(false);
+      expect(result.failure).toMatchObject({ code: "approval_denied", ref: "fixture.write", dispatchState: "not_dispatched", effectOutcome: "none" });
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(requests).toBe(reason === "unsupported" ? 1 : 2);
+      expect(result.audits.map(audit => audit.success)).toEqual([true, false]);
+      const projected = projectFabricExecutionText({ result, resultFormat: "text", maxOutputChars: 10_000, writeArtifact: () => { throw new Error("unexpected artifact"); } });
+      expect(projected.isError).toBe(true);
+      expect(projected.text).toContain(`(${reason})`);
+      expect(projected.text).toContain("This action was not dispatched");
+      expect(projected.text).toContain('"succeeded":1');
+      expect(projected.text).not.toContain("SECRET-client-detail");
+      if (reason === "missing_handler") expect(projected.text).toContain("Use a client with working approval forms");
+      else expect(projected.text).not.toContain("no handler for _kiro/mcp/elicitation");
+    } finally { await service.close(); }
   });
 
   it("redacts secret-like keys, bearer values, URLs, and outside paths", async () => {
@@ -275,15 +314,14 @@ describe("Fabric approval and projection", () => {
     expect(result).toMatchObject({ visibleChars: 4, visibleBytes: 8, overflowed: false, artifactRetained: false, isError: false });
   });
 
-  it("includes diagnostics and logs in the retained failure projection", () => {
+  it("includes errors and logs in the retained failure projection", () => {
     let retained = "";
     const result = projectFabricExecutionText({
       result: { status: "failed", success: false, error: "outer", logs: [`guest log ${"x".repeat(300)}`], audits: [], elapsedMs: 1, effectiveTimeoutMs: 100 },
       resultFormat: "json", maxOutputChars: 180,
-      normalizationDiagnostics: [{ field: "resultFormat", repair: "defaulted" }],
       writeArtifact(content) { retained = content; return "ka_test"; },
     });
-    expect(retained).toContain("Normalization diagnostics");
+    expect(JSON.parse(retained.split("\n\nFabric logs:")[0]!)).toMatchObject({ error: "outer" });
     expect(retained).toContain("guest log");
     expect(result).toMatchObject({ isError: true, overflowed: true, artifactRetained: true, artifactId: "ka_test" });
     expect(result.visibleChars).toBe(result.text.length);

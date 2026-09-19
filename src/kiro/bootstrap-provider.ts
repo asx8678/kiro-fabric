@@ -1,4 +1,5 @@
 import { Value } from "typebox/value";
+import { largestFittingInteger } from "../bounded-search.js";
 import { throwIfAbortedOrExpired } from "../async-settlement.js";
 import type { FabricActionDescriptor, FabricInvocationContext, FabricProvider } from "../protocol.js";
 import { fabricGuestDeclarations } from "../runtime/guest-types.js";
@@ -38,15 +39,10 @@ export class FabricBootstrapProvider implements FabricProvider {
         return { topic: args.topic, text, truncated, ...(truncated ? { nextOffset: offset + text.length } : {}) };
       };
       // Serve the requested topic in one page when it fits the existing limits.
-      let high = Math.min(typeof args.limit === "number" ? args.limit : 16000, Math.max(0, source.length - offset));
+      const high = Math.min(typeof args.limit === "number" ? args.limit : 16000, Math.max(0, source.length - offset));
       const full = page(high);
       if (JSON.stringify(full).length <= this.maxResultChars) return full;
-      let low = 0;
-      while (low < high) {
-        const mid = Math.ceil((low + high) / 2);
-        if (JSON.stringify(page(mid)).length <= this.maxResultChars) low = mid;
-        else high = mid - 1;
-      }
+      const low = largestFittingInteger(0, high, size => JSON.stringify(page(size)).length <= this.maxResultChars);
       if (low === 0) throw new Error("Nested result budget too small for help progress");
       return page(low);
     }
