@@ -61,14 +61,24 @@ describe("deadline policy", () => {
       executor: { timeoutMs: 1_000, maxTimeoutMs: 100_000 },
       mcp: { callTimeoutMs: 1_000 },
     });
-    const result = await new FabricExecutionService(registry, config, "/workspace").execute({
-      code: "await tools.call({ ref: 'mcp.$call', args: {} }); await tools.providers(); return true;",
-      approver: { async approve() {} },
-    });
-    expect(result.success, JSON.stringify(result)).toBe(true);
-    expect(result.effectiveTimeoutMs).toBe(
-      1_000 + FABRIC_APPROVAL_TIMEOUT_MS * 2 + FABRIC_PROVIDER_TIMEOUT_GRACE_MS,
-    );
+    const service = new FabricExecutionService(registry, config, "/workspace");
+    const approver = { async approve() {} };
+    try {
+      // This tests dynamic action floors, not cold compiler startup. Prime the
+      // worker with a separate harness budget; the measured call stays at 1000ms.
+      const ready = await service.execute({ code: "return true;", timeoutMs: 5_000, approver });
+      expect(ready.success, JSON.stringify(ready)).toBe(true);
+      expect(ready.audits).toEqual([]);
+      const observedTimeouts: number[] = [];
+      const result = await service.execute({
+        code: "await tools.call({ ref: 'mcp.$call', args: {} }); await tools.providers(); return true;",
+        approver, onEffectiveTimeoutChange: value => { observedTimeouts.push(value); },
+      });
+      expect(result.success, JSON.stringify(result)).toBe(true);
+      const floor = 1_000 + FABRIC_APPROVAL_TIMEOUT_MS * 2 + FABRIC_PROVIDER_TIMEOUT_GRACE_MS;
+      expect(result.effectiveTimeoutMs).toBe(floor);
+      expect(observedTimeouts).toEqual([1_000, floor]);
+    } finally { await service.close(); }
   });
 
   it("enforces total, concurrent, and approval quotas deterministically", async () => {

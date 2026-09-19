@@ -120,6 +120,32 @@ describe("continuity provider and checked integration", () => {
     await expect(provider.invoke("list", { offset: 0, expectedIndexRevision: indexRevision }, context)).rejects.toThrow("index changed");
     await expect(provider.invoke("read", { taskId: created.taskId, maxSummaryBytes: 1 }, context)).rejects.toThrow("budget too small");
   });
+  it("requires revision-bound list continuations and detects mutations by another provider", async () => {
+    const f = fixture();
+    const created = await f.run('for (let i = 0; i < 3; i++) await continuity.create({objective:"Task " + i}); return await continuity.list({limit:1});');
+    expect(created.success, created.error).toBe(true);
+    const first = created.value as { indexRevision: number; tasks: { taskId: string; revision: number }[]; nextOffset: number };
+    expect(first.nextOffset).toBe(1);
+    const file = path.join(f.continuityRoot, "state.json"), before = fs.readFileSync(file);
+    const unguarded = await f.run(`return await continuity.list({offset:${first.nextOffset},limit:1});`);
+    expect(unguarded.success).toBe(false);
+    expect(unguarded.error).toContain("continuation requires index revision");
+    expect(fs.readFileSync(file)).toEqual(before);
+    const continuation = `return await continuity.list({offset:${first.nextOffset},limit:1,expectedIndexRevision:${first.indexRevision}});`;
+    const second = await f.run(continuation);
+    expect(second.success, second.error).toBe(true);
+    expect(second.value).toMatchObject({ indexRevision: first.indexRevision, nextOffset: 2, total: 3 });
+    expect((second.value as { tasks: { taskId: string }[] }).tasks[0]!.taskId).not.toBe(first.tasks[0]!.taskId);
+    const other = new ContinuityProvider(f.continuityRoot, defaults);
+    await other.invoke("delete", { taskId: first.tasks[0]!.taskId, expectedRevision: first.tasks[0]!.revision }, { cwd: f.root });
+    const stale = await f.run(continuation);
+    expect(stale.success).toBe(false);
+    expect(stale.error).toContain("index changed");
+    const restarted = await f.run('return await continuity.list({offset:0,limit:32});');
+    expect(restarted.success, restarted.error).toBe(true);
+    expect(restarted.value).toMatchObject({ total: 2, nextOffset: null });
+    expect((restarted.value as { tasks: { taskId: string }[] }).tasks[0]!.taskId).toBe((second.value as { tasks: { taskId: string }[] }).tasks[0]!.taskId);
+  });
   it("loads opt-in configuration strictly without rewriting or enabling legacy configs", () => {
     const f = fixture(false);
     fs.writeFileSync(f.configFile, JSON.stringify({ continuity: { enabled: true, maxTasks: 4 } }), { mode: 0o600 });

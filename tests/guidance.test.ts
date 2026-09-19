@@ -44,6 +44,19 @@ describe("compiled task guidance", () => {
     const code = BUNDLED_GUIDANCE.guide.split("## Browser-backed web grounding")[1]!.match(/```ts\n([\s\S]*?)```/)![1]!;
     expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors).toEqual([]);
   });
+  it("surfaces opt-in continuity and storage lifetimes without automatic task selection or policy changes", () => {
+    const skill = BUNDLED_GUIDANCE.skill, workflow = BUNDLED_GUIDANCE.workflow;
+    expect(skill).toMatch(/Mounted namespaces include[^\n]*`continuity`/);
+    for (const namespace of ["memory", "state", "continuity", "artifacts", "review"]) expect(skill).toContain(`| \`${namespace}\` |`);
+    for (const clause of ["survives restart", "quota/TTL-bound", "not restart recovery", "Normal approvals still apply", "never enable it or change permissions implicitly"]) expect(skill).toContain(clause);
+    for (const clause of ["reuse it across meaningful milestones", "task/session-scoped state key", 'never a shared global "latest task" key', "expectedIndexRevision", "partial page cannot prove absence", "original task ID, request ID, expected revision, facts, checks and capture flag", "never the earlier work"]) expect(workflow).toContain(clause);
+    const code = BUNDLED_GUIDANCE.recipes.match(/```ts\n(\/\/ Recipe: resume the explicitly selected durable task after restart or compaction\n[\s\S]*?)\n```/)?.[1];
+    expect(code).toBeDefined();
+    expect(typeCheckFabricCode(code!, fabricGuestDeclarations).errors).toEqual([]);
+    expect(code).not.toContain("continuity.list");
+    expect(code).toContain('view:"task"');
+  });
+
   it("ships a finding proof gate and does not confuse validation with correctness", () => {
     for (const clause of ["Finding-evidence gate", "concrete trigger", "observable consequence", "counterexample checked", "suspected/unverified", "maintenance concern", "missed saves", "snapshot semantics", "loop has no iterations", "variable groups", "renders correctly"])
       expect(BUNDLED_GUIDANCE.review + BUNDLED_GUIDANCE.recipes).toContain(clause);

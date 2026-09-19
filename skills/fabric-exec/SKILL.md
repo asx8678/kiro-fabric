@@ -9,13 +9,23 @@ compatibility: Kiro CLI v3 with the Kiro Fabric Agent enabled
 
 The standing prompt owns task boundaries, planning, acceptance and output; this resource owns execution mechanics. Read only needed help and reuse known paths, context and descriptors. Examples never grant permission.
 
-Use `@fabric/fabric_exec` for tools, with a checked TypeScript function body. No native fallback. QuickJS has no OS, filesystem, environment, imports, timers or direct networking. Mounted namespaces include `local`, `fabric`, `artifacts`, `memory`, `state`, `web`, `mcp`, and the explicitly invoked `review`/`probe` APIs. Their availability is not permission to load guidance or run a review; see optional typed operations in guide help.
+Use `@fabric/fabric_exec` for tools, with a checked TypeScript function body. No native fallback. QuickJS has no OS, filesystem, environment, imports, timers or direct networking. Mounted namespaces include `local`, `fabric`, `artifacts`, `memory`, `state`, `continuity`, `web`, `mcp`, and the explicitly invoked `review`/`probe` APIs. `continuity` is opt-in durable task checkpointing; see the storage roles below and the deterministic continuity recipes. Their availability is not permission to load guidance or run a review; see optional typed operations in guide help.
 
 Known task paths bypass discovery. For unfamiliar broad reviews, discovery -> bounded observed starter reads in the same exec: use `local.find({pattern:"**/*",hidden:true,limit:200})`, then derive `local.readMany` windows from returned paths. Narrow on truncation; ignore rules apply. Use `local.list` only when direct children are needed: path/limit only, no depth. Never assume README.md exists. Follow the standing execution/yield policy. Batch causal chains with sequential awaits: discovery -> bounded observed reads, known-schema transform -> authorized write -> verification. Fewer nested operations do not imply fewer model round trips.
 
 Load unknown call shapes with `tools.describe`. Immutable `fabric.help` topics: `overview`, `api`, `skill`, `guide`, `recipes`, `workflow`, `review`. Help uses zero-based UTF-16 offset/limit paging; follow `nextOffset` on truncation. Do not reload help already present. Optional `fabric.help({topic:"review"})` supplies review mechanics, never an automatic bootstrap. Return requested help text with continuations, not a loaded flag. Single verified roots need no preliminary workspace status call.
 
-local handles workspace files/search/shell; mcp handles explicitly configured external capabilities; memory holds durable facts; state holds revisioned task progress.
+local handles workspace files/search/shell; mcp handles explicitly configured external capabilities. Choose storage by purpose and lifetime; do not mirror the same task ledger into every store:
+
+| API | Purpose | Lifetime / scope |
+| --- | --- | --- |
+| `memory` | Durable project facts and lookup | Workspace-shared; survives restart |
+| `state` | Arbitrary structured values with revision checks | Workspace-shared; survives restart |
+| `continuity` | Explicit task checkpoints, checks and recall | Opt-in, workspace-shared, explicit task ID; survives restart |
+| `artifacts` | Large outputs and selected intermediate evidence | Ephemeral, quota/TTL-bound; not restart recovery |
+| `review` | Detailed review findings and coverage | In-memory runtime/task TTL; not restart recovery |
+
+When enabled and workspace-bound, use continuity for meaningful milestones in long or interruptible work, not every small read or answer. Reuse the selected task across checkpoints. It keeps declared facts and optionally settled host receipts, not conversation history or automatic compaction. Normal approvals still apply; never enable it or change permissions implicitly. Workflow/recipes help covers explicit resume and safe retry.
 
 JSON-only delivery includes all visible output: Kiro concatenates that text into finalText, including commentary before/between tools. Keep it inside the standing output contract, not just the final message.
 

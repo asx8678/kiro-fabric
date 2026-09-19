@@ -25,7 +25,7 @@ export const CONTINUITY_ACTION_DESCRIPTORS: readonly FabricActionDescriptor[] = 
   ["checkpoint", "Append declarations/checks and optionally capture settled host receipts; bounded evidence links, revision CAS and idempotent publication", "write"],
   ["read", "Bounded history or task view; task view rechecks linked workspace hashes, not semantic correctness or whole-repository freshness", "read"],
   ["recall", "Search retained records of an explicit task; literal AND terms, structural filters, bounded snippets and revision/hash-bound expansion", "read"],
-  ["list", "Page task metadata in this workspace; explicitly select a task, never infer the latest chat", "read"],
+  ["list", "Page task metadata in this workspace; continuations require expectedIndexRevision. Explicitly select a task, never infer the latest chat", "read"],
   ["expand", "Expand exact admitted records using a revision/hash-bound source pointer", "read"],
   ["delete", "Delete a selected durable task with mandatory revision checking", "write"],
 ].map(([name, description, risk]) => ({ name: name!, description: description!, risk: risk as "read" | "write", effect: { kind: risk as "read" | "write" }, inputSchema: schemas[name!]! }));
@@ -57,6 +57,7 @@ declare const continuity: Readonly<{
   read(args:{taskId:string;expectedRevision?:number;maxSummaryBytes?:number;view?:"history"}):Promise<ContinuityReadResult>;
   /** Defaults: 5 hits, 200 characters each. Follow next verbatim; expand before relying on snippets. No match means no match in retained records, not absence of behavior. */
   recall(args:ContinuityRecallArguments):Promise<ContinuityRecallResult>;
+  /** Nonzero offsets require the indexRevision from the first page as expectedIndexRevision; restart listing on conflict. */
   list(args?:{offset?:number;limit?:number;expectedIndexRevision?:number}):Promise<ContinuityListResult>;
   expand(args:{taskId:string;expectedRevision:number;hash:string;fromSequence?:number;limit?:number}):Promise<ContinuityExpandResult>;
   delete(args:{taskId:string;expectedRevision:number}):Promise<{taskId:string;deleted:true}>;

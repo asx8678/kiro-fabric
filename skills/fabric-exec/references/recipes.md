@@ -102,6 +102,27 @@ Save the returned task selector, revision/hash, and capture metadata. Hard failu
 
 Later, after an MCP restart, `read`/`expand` the explicitly selected task with its saved revision/hash; follow expansion's `nextSequence` until null. Never treat stored receipts as conversation history or as proof that later work did not happen.
 
+## Deterministic continuity resume (opt-in)
+
+Requires enabled continuity, the same verified workspace and normal read approval. Supply the exact `{taskId,revision,hash}` returned by the selected task's checkpoint; no list lookup is needed for a known selector. This recipe is read-only and rechecks linked-file freshness, not semantic correctness or the whole repository. Never assume the newest task belongs to the current conversation.
+
+```ts
+// Recipe: resume the explicitly selected durable task after restart or compaction
+const saved = JSON.parse(payloads.savedSelector) as {taskId?:unknown;revision?:unknown;hash?:unknown} | null;
+if (!saved || typeof saved.taskId !== "string" || !/^ct_[a-f0-9]{32}$/.test(saved.taskId) ||
+    typeof saved.revision !== "number" || !Number.isSafeInteger(saved.revision) || saved.revision < 1 ||
+    typeof saved.hash !== "string" || !/^[a-f0-9]{64}$/.test(saved.hash)) {
+  throw new Error("Invalid saved continuity selector; supply taskId, revision and hash");
+}
+const task = await continuity.read({taskId:saved.taskId,expectedRevision:saved.revision,view:"task"});
+if (task.hash !== saved.hash) throw new Error("Continuity source hash mismatch; inspect before resuming");
+return {...task, ...(task.omittedRanges.length ? {expand:{ref:"continuity.expand",args:{
+  taskId:task.taskId,expectedRevision:task.revision,hash:task.hash,fromSequence:task.omittedRanges[0]!.fromSequence,
+}}} : {})};
+```
+
+Missing tasks and revision/hash conflicts stop recovery: inspect the explicitly selected task before accepting any newer selector, never silently drop these guards. If the selector was lost, page `continuity.list` with `nextOffset` and `expectedIndexRevision` and obtain explicit selection; absence from one page proves nothing. Inspect `checks` for stale/unavailable inputs. Expand omitted records before relying on them, following `nextSequence` within ordinary output/call budgets and across executions when needed. Summaries and receipts never authorize replay of commands or edits.
+
 ## Expected nonzero commands
 
 ```ts

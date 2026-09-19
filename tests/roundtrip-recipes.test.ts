@@ -26,7 +26,7 @@ function fixture(helpBudget = 20000, continuity = false) {
   registry.register(new FabricBootstrapProvider(helpBudget));
   registry.register(new LocalCodingProvider({ root: workspace, lockRoot: path.join(root, "locks") }));
   const config = normalizeFabricConfig({ executor: { timeoutMs: 10000 }, continuity: { enabled: continuity } });
-  if (continuity) registry.register(new ContinuityProvider(path.join(root, "continuity"), config.continuity));
+  if (continuity) registry.register(new ContinuityProvider(path.join(root, "continuity"), { ...config.continuity, workspaceRoot: workspace }));
   const service = new FabricExecutionService(registry, config, workspace);
   fixtures.push({ root, service });
   return { root, workspace, service };
@@ -70,6 +70,83 @@ describe("composed review execution boundaries", () => {
     const stored = fs.readFileSync(path.join(root, "continuity", "state.json"), "utf8");
     expect(stored).not.toMatch(/PRIVATE_RECIPE_(?:BODY|OUTPUT)/);
     expect(stored).not.toContain(payloads.command);
+  });
+
+  it("resumes the saved task after reopening, reports omissions and rechecks linked-file freshness without replay", async () => {
+    const { root, workspace, service } = fixture(20000, true);
+    const input = path.join(workspace, "input.txt"); fs.writeFileSync(input, "observed input\n");
+    const checkpoint = await service.execute({
+      code: 'const task = await continuity.create({objective:"Resume only this task"}); await local.read({path:"input.txt"}); await local.shell({command:"true"}); return await continuity.checkpoint({taskId:task.taskId,expectedRevision:task.revision,requestId:"resume-test",facts:Array.from({length:20},(_,i)=>({kind:"decision" as const,text:String(i)+"x".repeat(1000)})),checks:[{id:"input-check",text:"Observed input before command",status:"passed",evidence:"captured"}],captureCurrentExecution:true});',
+      approver, workspaceBound: true,
+    });
+    expect(checkpoint.success, checkpoint.error).toBe(true);
+    const saved = checkpoint.value as ContinuityHandle;
+    const newer = await service.execute({ code: 'return await continuity.create({objective:"Unrelated newer task"});', approver });
+    expect(newer.success, newer.error).toBe(true);
+    const file = path.join(root, "continuity", "state.json"), original = fs.readFileSync(file);
+    await service.close();
+    const config = normalizeFabricConfig({ executor: { timeoutMs: 10000 }, continuity: { enabled: true } });
+    const registry = new ActionRegistry();
+    registry.register(new ContinuityProvider(path.join(root, "continuity"), { ...config.continuity, workspaceRoot: workspace }));
+    const reopened = new FabricExecutionService(registry, config, workspace); fixtures.push({ root, service: reopened });
+    const resume = () => reopened.execute({ code: recipe("resume the explicitly selected durable task after restart or compaction", "recipes"),
+      payloads: { savedSelector: JSON.stringify(saved) }, approver, workspaceBound: true });
+    const result = await resume();
+    expect(result.success, result.error).toBe(true);
+    expect(result.audits.map(a => a.ref)).toEqual(["continuity.read"]);
+    expect(result.value).toMatchObject({ taskId: saved.taskId, revision: saved.revision, hash: saved.hash, view: "task",
+      checks: [{ id: "input-check", commandOutcome: "passed", freshness: "unchanged", inputBinding: "observed-before-command", needsAttention: false }],
+      coverage: { conversation: "not-captured", semanticValidation: false, sourceScope: "linked-files-only" } });
+    const value = result.value as unknown as { omittedRanges: { fromSequence: number }[]; expand: { ref: string; args: Record<string, unknown> } };
+    expect(value.omittedRanges.length).toBeGreaterThan(0);
+    expect(value.expand).toEqual({ ref: "continuity.expand", args: { taskId: saved.taskId, expectedRevision: saved.revision, hash: saved.hash, fromSequence: value.omittedRanges[0]!.fromSequence } });
+    const expanded = await reopened.execute({ code: 'return await tools.call({ref:payloads.ref,args:JSON.parse(payloads.args)});',
+      payloads: { ref: value.expand.ref, args: JSON.stringify(value.expand.args) }, approver });
+    expect(expanded.success, expanded.error).toBe(true);
+    const records = (expanded.value as unknown as { records: ContinuityRecord[] }).records;
+    expect(records[0]!.sequence).toBe(value.omittedRanges[0]!.fromSequence);
+    fs.writeFileSync(input, "changed input\n");
+    const stale = await resume();
+    expect(stale.success, stale.error).toBe(true);
+    expect(stale.value).toMatchObject({ checks: [{ freshness: "stale", needsAttention: true }] });
+    expect(stale.audits.map(a => a.ref)).toEqual(["continuity.read"]);
+    expect(fs.readFileSync(file)).toEqual(original);
+    expect(fs.readFileSync(input, "utf8")).toBe("changed input\n");
+  });
+
+  it("rejects invalid, missing, stale and mismatched saved selectors without changing stored tasks", async () => {
+    const { root, service } = fixture(20000, true);
+    const created = await service.execute({ code: 'return await continuity.create({objective:"Selected task"});', approver });
+    expect(created.success, created.error).toBe(true);
+    const saved = created.value as ContinuityHandle;
+    const file = path.join(root, "continuity", "state.json"), original = fs.readFileSync(file);
+    const code = recipe("resume the explicitly selected durable task after restart or compaction", "recipes");
+    for (const [selector, message, called] of [
+      [null, "Invalid saved continuity selector", false],
+      [{ taskId: saved.taskId }, "Invalid saved continuity selector", false],
+      [{ ...saved, revision: 0 }, "Invalid saved continuity selector", false],
+      [{ ...saved, revision: saved.revision + 1 }, "revision conflict", true],
+      [{ ...saved, hash: "0".repeat(64) }, "source hash mismatch", true],
+      [{ ...saved, taskId: "ct_" + "0".repeat(32) }, "task not found", true],
+    ] as const) {
+      const result = await service.execute({ code, payloads: { savedSelector: JSON.stringify(selector) }, approver });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain(message);
+      expect(result.audits.map(a => a.ref)).toEqual(called ? ["continuity.read"] : []);
+      expect(fs.readFileSync(file)).toEqual(original);
+    }
+    for (const enabled of [true, false]) {
+      const other = fixture(20000, enabled);
+      const result = await other.service.execute({ code, payloads: { savedSelector: JSON.stringify(saved) }, approver });
+      expect(result.success).toBe(false);
+      if (enabled) expect(result.error).toContain("task not found");
+      expect(result.audits.every(a => a.ref === "continuity.read")).toBe(true);
+      expect(fs.readFileSync(file)).toEqual(original);
+    }
+    const denied = await service.execute({ code, payloads: { savedSelector: JSON.stringify(saved) },
+      approver: { prepareApproval: () => ({ decision: "deny", reason: "resume read denied" }), async approve() { throw new Error("unexpected prompt"); } } });
+    expect(denied.success).toBe(false); expect(denied.error).toContain("resume read denied");
+    expect(fs.readFileSync(file)).toEqual(original);
   });
 
   it("delivers review help and observed source in one execution, skipping only already-known help", async () => {

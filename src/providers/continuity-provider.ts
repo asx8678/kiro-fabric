@@ -26,7 +26,7 @@ export class ContinuityProvider implements FabricProvider {
     this.#store = new ContinuityStore(root, options);
     if (options.workspaceRoot) this.#paths = new LocalPaths(options.workspaceRoot);
   }
-  discoveryRevision(): string { return "3"; }
+  discoveryRevision(): string { return "4"; }
   async list() { return structuredClone([...CONTINUITY_ACTION_DESCRIPTORS]); }
   async describe(name: string) { return structuredClone(CONTINUITY_ACTION_DESCRIPTORS.find(action => action.name === name)); }
   effectResources(): readonly string[] { return ["continuity:store"]; }
@@ -63,6 +63,7 @@ export class ContinuityProvider implements FabricProvider {
       return recallContinuity(source, args as unknown as ContinuityRecallArguments, budget);
     }
     if (name === "list") {
+      if (((args.offset as number | undefined) ?? 0) > 0 && args.expectedIndexRevision === undefined) throw new Error("continuity list continuation requires index revision");
       const source = await this.#store.list(context);
       if (args.expectedIndexRevision !== undefined && args.expectedIndexRevision !== source.indexRevision) throw new Error("continuity task index changed; restart listing");
       const offset = (args.offset as number | undefined) ?? 0, limit = (args.limit as number | undefined) ?? 16;
