@@ -3,7 +3,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { acquireInstallationLock } from "../installation/installer-lock.mjs";
-import { managedInstallationBase, validateManagedAdmission, validateManagedGeneration } from "./managed-generation.js";
+import { managedInstallationBase, validateManagedAdmission, validateManagedGeneration, resolveManagedFoveaParser } from "./managed-generation.js";
 import { fileURLToPath } from "node:url";
 import { resolveKiroAgentLaunchContext } from "./power/agent-launch-context.js";
 
@@ -32,11 +32,13 @@ export const startKiroMcpServer = (): Promise<{ close(): Promise<void> }> =>
           const manifestHash = createHash("sha256").update(readFileSync(path.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
           validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
         }
+        const managedParser = launch.managedGeneration ? await resolveManagedFoveaParser(launch.managedGeneration) : undefined;
         const { createKiroMcpServer } = await import("./mcp-server.js");
-        server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...(launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}), ...(managedSearch ? { managedSearch } : {}) });
+        server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...(launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}), ...(managedSearch ? { managedSearch } : {}), ...(managedParser ? { managedParser } : {}) });
       } finally { release?.(); }
       return server;
     } catch (error) {
+      processServerTask = undefined;
       await server?.close();
       throw error;
     }

@@ -72,6 +72,8 @@ describe("installer production fail-closed gates", () => {
     for (const file of ["installed-independence", "installer-lock", "install-transaction", "managed-installation", "installer-smoke-bundle-acceptance"]) expect(installerSuiteFiles("bundle")).toContain(`tests/${file}.test.ts`);
     expect(body).toContain('export HOME="$root/home" KIRO_HOME="$root/kiro"');
     expect(ci.indexOf("Assert actual native target")).toBeLessThan(ci.indexOf("Build and exercise the complete native bundle"));
+    expect(ci).toContain("with: { persist-credentials: false, fetch-depth: 0 }");
+    expect(installerSuiteFiles("bundle")).toContain("tests/fovea/historical-manager-migration.test.ts");
   });
   it("runs Linux cleanup, search and startup regressions on every native target", () => {
     const ci = workflow("ci");

@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { canonical } from "./bundle-contract.mjs";
+import { vendoredSbomPackages } from "./generate-vendored-sbom.mjs";
 import { captureLegacyArtifact, LEGACY_ARCHIVE_LIMITS, extractLegacyAgentArchiveBytes } from "./bundle-archive.mjs";
 import fs from "node:fs";
 import os from "node:os";
@@ -27,7 +29,14 @@ export const validateReleaseArtifacts = (stage, archivePath, sbomPath, closureRo
     throw new Error("SBOM is not bound to the exact complete staged Agent package");
   }
   const closureManifest = JSON.parse(fs.readFileSync(path.join(closureRoot, "closure-manifest.json"), "utf8"));
-  const sbomDependencies = (sbom.packages ?? []).slice(1)
+  const expectedVendored = vendoredSbomPackages(closureManifest);
+  const vendoredIds = new Set(expectedVendored.map(entry => entry.SPDXID));
+  const dependencies = (sbom.packages ?? []).slice(1);
+  const actualVendored = dependencies.filter(entry => vendoredIds.has(entry.SPDXID));
+  const byId = (left, right) => left.SPDXID.localeCompare(right.SPDXID);
+  // Compare full vendored provenance, not just npm-style name/version/license.
+  // Unknown IDs remain in the dependency inventory and fail the exact comparison.
+  const sbomDependencies = dependencies.filter(entry => !vendoredIds.has(entry.SPDXID))
     .map((entry) => ({ name: entry.name, version: entry.versionInfo, license: entry.licenseDeclared }))
     .sort((left, right) => left.name.localeCompare(right.name));
   const closureDependencies = [...closureManifest.packageInputs]
@@ -36,7 +45,8 @@ export const validateReleaseArtifacts = (stage, archivePath, sbomPath, closureRo
   if (sbom.spdxVersion !== "SPDX-2.3" ||
       sbom.packages?.[0]?.name !== "kiro-fabric" ||
       sbom.packages?.[0]?.versionInfo !== packageResult.version ||
-      JSON.stringify(sbomDependencies) !== JSON.stringify(closureDependencies)) {
+      JSON.stringify(sbomDependencies) !== JSON.stringify(closureDependencies) ||
+      canonical(actualVendored.sort(byId)) !== canonical(expectedVendored.sort(byId))) {
     throw new Error("SBOM dependency inventory does not match the exact Agent closure");
   }
   return { packageResult, packageDigest, sbomDigest, sbomFileDigest, archiveDigest, archiveBytes, sbomBytes, sbom: { size: sbomBytes.length, sha256: sbomFileDigest } };

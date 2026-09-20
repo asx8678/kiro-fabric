@@ -47,11 +47,13 @@ function versionChange(previous, bundle) {
     const comparison = compareVersions(bundle.version, previous.version);
     action = comparison > 0 ? "Upgrade to newer version" : comparison < 0 ? "Install older version (downgrade)" : "Replace same-version generation";
   }
-  return { previous, target: { version: bundle.version, generation: bundle.digest, node: bundle.manifest.tools.node.version, ripgrep: bundle.manifest.tools.rg.version }, action };
+  const fovea = bundle.manifest.schema === 2 ? JSON.parse(fs.readFileSync(path.join(bundle.root, "app/fovea/component.json"), "utf8")) : undefined;
+  return { previous, target: { version: bundle.version, generation: bundle.digest, node: bundle.manifest.tools.node.version, ripgrep: bundle.manifest.tools.rg.version,
+    ...(fovea ? { fovea: { upstreamVersion: fovea.version, portVersion: fovea.portVersion, parserVersion: bundle.manifest.tools["ast-grep"].version, activation: "explicit authorized analysis; automatic native-client lifecycle unqualified; existing settings preserved" } } : {}) }, action };
 }
 
 function formatVersionChange(change) {
-  return `Previously installed: ${display(installedVersionLabel(change.previous))}\nTarget version: ${display(change.target.version)} (verified bundle)\nChange: ${display(change.action)}\nPrivate tools: Node ${display(change.target.node)}, ripgrep ${display(change.target.ripgrep)}\n`;
+  return `Previously installed: ${display(installedVersionLabel(change.previous))}\nTarget version: ${display(change.target.version)} (verified bundle)\nChange: ${display(change.action)}\nPrivate tools: Node ${display(change.target.node)}, ripgrep ${display(change.target.ripgrep)}\n${change.target.fovea ? `Fovea: ${display(change.target.fovea.upstreamVersion)} (port ${display(change.target.fovea.portVersion)}), ast-grep ${display(change.target.fovea.parserVersion)}\nActivation: ${display(change.target.fovea.activation)}\n` : ""}`;
 }
 
 export function managerContext(script = fileURLToPath(import.meta.url)) {

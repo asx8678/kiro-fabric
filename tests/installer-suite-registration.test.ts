@@ -11,6 +11,8 @@ describe("executable installer/native acceptance registry", () => {
     for (const file of files) expect(fs.existsSync(file), file).toBe(true);
     expect(installerSuiteFiles("contracts")).not.toContain("tests/installed-independence.test.ts");
     expect(installerSuiteFiles("bundle")).toContain("tests/installer-smoke-bundle-acceptance.test.ts");
+    expect(installerSuiteFiles("bundle")).toContain("tests/fovea/historical-manager-migration.test.ts");
+    expect(installerSuiteFiles("contracts")).not.toContain("tests/fovea/historical-manager-migration.test.ts");
   });
   it("lists the exact executable selection and forwards nonzero test exits", () => {
     const list = spawnSync(process.execPath, ["scripts/test-installer.mjs", "list", "contracts"], { encoding: "utf8", timeout: 10000 });

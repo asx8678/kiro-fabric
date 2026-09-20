@@ -60,6 +60,8 @@ export interface FabricFailureMetadata {
 }
 
 export interface FabricInvocationContext {
+  /** Host-only trusted facts; never accepted from guest arguments. */
+  foveaObservation?: import("./fovea/observations.js").FoveaInvocationObservation;
   cwd: string;
   maxResultChars?: number;
   checkpoints?: { reserve(): (handle: FabricCheckpointHandle) => void };
@@ -83,7 +85,14 @@ export interface FabricInvocationContext {
   };
 }
 
+export interface FabricProviderRequirements {
+  verifiedWorkspace?: boolean;
+  settlement?: boolean;
+}
+
 export interface FabricProvider {
+  /** Provider-owned authority, not part of guest-visible action descriptors. */
+  requirements?: Readonly<FabricProviderRequirements>;
   name: string;
   description: string;
   /** Synchronous, local and side-effect-free; undefined opts out of discovery caching. */

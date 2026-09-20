@@ -20,7 +20,7 @@ export const INSTALLER_SUITES = Object.freeze({
     "hermetic-stage", "build-input-provenance", "bundle-sbom-artifacts",
   ]),
   bundle: Object.freeze([
-    "installed-independence", "installer-lock", "installer-lock-release", "pinned-recovery", "install-transaction", "managed-installation", "installer-smoke-bundle-acceptance",
+    "installed-independence", "installer-lock", "installer-lock-release", "pinned-recovery", "install-transaction", "managed-installation", "installer-smoke-bundle-acceptance", "fovea/historical-manager-migration",
   ]),
 });
 export function installerSuiteFiles(suite = "all") {

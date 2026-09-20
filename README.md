@@ -1,5 +1,7 @@
 # Install Kiro Fabric
 
+Native repository intelligence: see [Fovea usage and qualification](skills/fabric-exec/references/fovea.md). Explicit analysis is implemented; automatic native-client lifecycle/delivery is not yet qualified.
+
 Requires Bash, Git, Node >=24, pnpm **11.20.0**, tar/gzip, and Kiro CLI >=2.21.1 with v3 support on PATH.
 
 From your Kiro Fabric checkout, run:

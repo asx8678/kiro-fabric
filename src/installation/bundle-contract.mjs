@@ -35,7 +35,7 @@ export function safePath(p) {
 /** @param {string} p */
 function roleFor(p) {
   safePath(p);
-  if(p==='tools/node'||p==='tools/rg') return 'executable';
+  if(p==='tools/node'||p==='tools/rg'||p==='tools/ast-grep') return 'executable';
   if(p==='manager/install-manager.mjs') return 'manager';
   if(p.startsWith('app/')) return 'app';
   if(p==='resources/steering/fabric.md'||p==='resources/skills/fabric-exec/SKILL.md'||p.startsWith('resources/skills/fabric-exec/references/')) return 'resource';
@@ -45,19 +45,23 @@ function roleFor(p) {
 export const REQUIRED_APP = ['app/kiro/mcp-entry.js','app/runtime/compiler-worker-entry.js','app/runtime/sandbox-worker-entry.js','app/package.json','app/closure-manifest.json'];
 // Older owned generations predate the sandbox worker. This historical contract
 // is for retained-installation verification only, never new bundle admission.
+export const FOVEA_REQUIRED_APP = [...REQUIRED_APP, 'app/fovea/engine-entry.js', 'app/kiro/fovea-hook.js', 'app/fovea/component.json', 'app/fovea/upstream.json', 'app/fovea/UPSTREAM-LICENSE.txt', 'app/fovea/ast-grep-LICENSE.txt', 'tools/ast-grep', 'resources/skills/fabric-exec/references/fovea.md'];
 const HISTORICAL_REQUIRED_APP = REQUIRED_APP.filter(p => p !== 'app/runtime/sandbox-worker-entry.js');
 /** Stable upstream platform contract; never derived from running node --version.
  * Evidence: https://github.com/nodejs/node/blob/v24.20.0/BUILDING.md
- * @param {string} target */
-export function compatibilityFor(target){
- if(!TARGETS.includes(target))throw Error('Unsupported target');
+ * Schema 2 additionally binds the measured linux-x64 parser ELF GLIBC_2.34 floor.
+ * @param {string} target @param {number} [schema] */
+export function compatibilityFor(target,schema=1){
+ if(!TARGETS.includes(target)||![1,2].includes(schema))throw Error('Unsupported target/schema');
  const linux=target.startsWith('linux-');
- return {minNode:'24.20.0',minKiro:'2.21.1',minGlibc:linux?'2.28':null,minKernel:linux?'4.18':null,minMacOS:linux?null:'13.5',libc:linux?'glibc':'system'};
+ return {minNode:'24.20.0',minKiro:'2.21.1',minGlibc:linux?(schema===2&&target==='linux-x64'?'2.34':'2.28'):null,minKernel:linux?'4.18':null,minMacOS:linux?null:'13.5',libc:linux?'glibc':'system'};
 }
-/** @param {any} value @param {string} target */
-export function checkCompatibility(value,target){
+/** Release metadata may describe either reviewed generation version. Bundle
+ * admission always passes its explicit schema.
+ * @param {any} value @param {string} target @param {number} [schema] */
+export function checkCompatibility(value,target,schema){
  exactFields(value,['minNode','minKiro','minGlibc','minKernel','minMacOS','libc']);
- if(canonical(value)!==canonical(compatibilityFor(target)))throw Error('Compatibility mismatch');
+ if(!(schema===undefined?[1,2]:[schema]).some(version=>canonical(value)===canonical(compatibilityFor(target,version))))throw Error('Compatibility mismatch');
 }
 /** @param {any} p */
 function checkProvenance(p){
@@ -76,9 +80,11 @@ function pinURL(url,hosts){
  if(u.protocol!=='https:'||!hosts.includes(u.hostname)||u.port||u.username||u.password||u.hash||u.search)throw Error('Unapproved pin URL');
 }
 /** Validate the actual acquirePrivateTools().tools shape, optionally against inventory.
- * @param {any} tools @param {any[] | undefined} [inventory] @param {string} [target] */
-export function checkToolPins(tools,inventory,target){
- exactFields(tools,['node','rg']);
+ * @param {any} tools @param {any[] | undefined} [inventory] @param {string} [target] @param {number} [schema] */
+export function checkToolPins(tools,inventory,target,schema=tools&&Object.hasOwn(tools,'ast-grep')?2:1){
+ if(schema!==1&&schema!==2)throw Error('Unsupported tool schema');
+ exactFields(tools,schema===2?['node','rg','ast-grep']:['node','rg']);
+ if(schema===2)checkParserPin(tools['ast-grep'],inventory,target);
  const destinations=new Set();let total=0;
  for(const tool of ['node','rg']){
   const pin=tools[tool];exactFields(pin,['version','url','size','sha256','checksumUrl','members']);
@@ -106,6 +112,24 @@ export function checkToolPins(tools,inventory,target){
    destinations.add(m.path);members.add(m.member);
    if(inventory){const e=inventory.find(e=>e.path===m.path);if(!e||e.size!==m.size||e.sha256!==m.sha256)throw Error('Tool inventory mismatch: '+m.path);}
   }
+ }
+}
+/** Closed npm platform archive/member contract. Whole SHA-512 is the pinned
+ * reference lock identity; SHA-256 and member hashes bind the captured artifact.
+ * @param {any} pin @param {any[] | undefined} inventory @param {string} [target] */
+function checkParserPin(pin,inventory,target){
+ exactFields(pin,['version','url','size','sha256','integrity','members']);
+ if(pin.version!=='0.45.3'||!isHash(pin.sha256)||!/^sha512-[A-Za-z0-9+/]{86}==$/.test(pin.integrity)||!Number.isSafeInteger(pin.size)||pin.size<1||pin.size>32*1024*1024)throw Error('Invalid parser pin');
+ pinURL(pin.url,['registry.npmjs.org']);
+ const targets=target===undefined?TARGETS:[target];
+ if(!targets.some(t=>TARGETS.includes(t)&&pin.url==='https://registry.npmjs.org/@ast-grep/cli-'+t+(t.startsWith('linux')?'-gnu':'')+'/-/cli-'+t+(t.startsWith('linux')?'-gnu':'')+'-0.45.3.tgz'))throw Error('Parser target URL mismatch');
+ const required=[['package/ast-grep','tools/ast-grep'],['package/package.json','notices/ast-grep-package.json'],['package/README.md','notices/ast-grep-README.md']];
+ if(!Array.isArray(pin.members)||pin.members.length!==required.length)throw Error('Parser members');
+ for(const [member,destination] of required){
+  const m=pin.members.find((/** @type {any} */ m)=>m.path===destination);
+  exactFields(m,['member','path','size','sha256']);
+  if(m.member!==member||!Number.isSafeInteger(m.size)||m.size<1||m.size>64*1024*1024||!isHash(m.sha256))throw Error('Invalid parser member');
+  if(inventory){const e=inventory.find(e=>e.path===destination);if(!e||e.size!==m.size||e.sha256!==m.sha256)throw Error('Parser inventory mismatch: '+destination);}
  }
 }
 /** @param {any} inventory @param {string[]} requiredApp */
@@ -136,9 +160,10 @@ export function checkInstalledManifest(m){ return checkManifestFor(m, HISTORICAL
 /** @param {any} m @param {string[]} requiredApp */
 function checkManifestFor(m, requiredApp){
  exactFields(m,['compatibility','digest','inventory','product','provenance','schema','target','tools','version']);
- if(m.schema!==1||m.product!==PRODUCT||!TARGETS.includes(m.target)||!isStable(m.version))throw Error('Manifest identity');
- checkCompatibility(m.compatibility,m.target);checkProvenance(m.provenance);
- const bytes=checkInventoryFor(m.inventory,requiredApp);checkToolPins(m.tools,m.inventory,m.target);
+ if(![1,2].includes(m.schema)||m.product!==PRODUCT||!TARGETS.includes(m.target)||!isStable(m.version))throw Error('Manifest identity');
+ checkCompatibility(m.compatibility,m.target,m.schema);checkProvenance(m.provenance);
+ const bytes=checkInventoryFor(m.inventory,m.schema===2?FOVEA_REQUIRED_APP:requiredApp);checkToolPins(m.tools,m.inventory,m.target,m.schema);
+ if(m.schema===1&&m.inventory.some((/** @type {any} */ e)=>e.path==='tools/ast-grep'))throw Error('Parser requires schema 2');
  const {digest,...payload}=m;if(!isHash(digest)||digest!==manifestDigest(payload))throw Error('Manifest digest mismatch');return bytes;
 }
 /** @param {import('node:fs').Stats} s */
@@ -231,7 +256,7 @@ export async function createBundleManifest(root,options){ return createManifestF
 /** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any}} options @param {string[]} requiredApp */
 async function createManifestFor(root,{version,target,compatibility,provenance,tools},requiredApp){
  const guard=await checkRoot(root);root=guard.root;
- const payload={schema:1,product:PRODUCT,version,target,compatibility,provenance,tools,inventory:await scan(root)};
+ const payload={schema:Object.hasOwn(tools,'ast-grep')?2:1,product:PRODUCT,version,target,compatibility,provenance,tools,inventory:await scan(root)};
  guard.check();const manifest={...payload,digest:manifestDigest(payload)};checkManifestFor(manifest,requiredApp);return manifest;
 }
 /** Strict admission for all new builds, archives and candidates. @param {string} root */

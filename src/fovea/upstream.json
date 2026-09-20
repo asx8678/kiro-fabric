@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "component": "fovea",
+  "portVersion": "0.1.1",
+  "portStatus": "implemented-unverified",
+  "upstreamRepository": "https://github.com/monotykamary/pi-fovea",
+  "upstreamCommit": "b594483868d27b7eb37a9b185c59ce812f8a9c01",
+  "upstreamVersion": "0.29.2",
+  "upstreamLicense": "MIT",
+  "referenceHostRepository": "https://github.com/monotykamary/pi-fabric",
+  "referenceHostCommit": "2ee51683452dc359702880f408e0b8a4bfcb9646",
+  "referenceHostVersion": "0.92.34",
+  "targetBaselineRepository": "https://github.com/asx8678/kiro-fabric",
+  "targetBaselineCommit": "1dd4df19aac5e3ab4e404a4b43a133e59da6488a",
+  "targetBaselineVersion": "0.65.0",
+  "engineIpcVersion": 1,
+  "configFormat": "fovea.v1",
+  "cacheFormats": {
+    "facts": "fovea-facts-v1",
+    "graph": "fovea-graph-v1",
+    "session": "fovea-session-v1",
+    "result": "fovea-result-v1"
+  },
+  "deterministicExtraction": {
+    "contract": "production-batched-v17-vs-scheduled-reference-v1",
+    "coreCacheHeader": 17,
+    "sourcePublication": "bounded parallel read windows, input-order commit",
+    "parserPublication": "declared rule/source/start order, outer before inner, capture tie-break; preserve every match",
+    "divergence": "Stabilizes uncontrolled upstream parser/read scheduling. Older core caches are invalidated; no automatic migration.",
+    "evidence": "docs/fovea/production-cold.md"
+  },
+  "parser": {
+    "name": "ast-grep",
+    "upstreamRange": "^0.45.3",
+    "referenceResolved": "@ast-grep/cli@0.45.3",
+    "acquisitionEvidence": {
+      "kind": "npm-platform-tarball",
+      "note": "All four 0.45.3 npm platform tarballs acquired and verified against these reference bun.lock SHA-512 integrities. Exact archive SHA-256, sizes and fixed-member SHA-256 pins are in build-toolchain.json. Only linux-x64 was executed; other platforms remain unqualified. MIT license is vendored from the 0.45.3 upstream tag and recorded in component.json.",
+      "integrity": {
+        "@ast-grep/cli@0.45.3": "sha512-Cm07SHb8Q8dJfAQhrPOveAGuuzznmf6IjQa2+0Yvjt8Qfo+XIVbEIo0Prng+UDVMlaCS/FkF2eA8M3F6z4+0Wg==",
+        "@ast-grep/cli-darwin-arm64@0.45.3": "sha512-6RZg4gRMJcSJtEJuaW5z33qfwXD7kRDGZ0T0dTxVxsLSw5BkeAjR8REysxUwPWZn+oOkzPyZ3y7/qNnSI/diIA==",
+        "@ast-grep/cli-darwin-x64@0.45.3": "sha512-4z6ZknTMSlTirQuJ4xihXoLfG7YwAOxFCqkKuGAxAiP+K70zivib8R19vUoFJDy4s+rjyGNDdrm45/ClC5tITQ==",
+        "@ast-grep/cli-linux-arm64-gnu@0.45.3": "sha512-T/N+Fl/pMqNjuyPV9PbTSR2bTlZrLKiCyHzJax6QNaOOVviXjEscROrAc6c0lFfc+Z07gW7Rt3oZKZdLEExutQ==",
+        "@ast-grep/cli-linux-x64-gnu@0.45.3": "sha512-HbxIy6tZa8zn4J2hG8KVIo9n4+INAgVB8l2DyHqYxGKxnod8u2B4hfTGxbMm+BjBvYxKW4oGLZtYqInMyxidyQ=="
+      }
+    },
+    "runtimeAuthority": "exact-generation descriptor only; no PATH/environment selection in production"
+  },
+  "rules": {
+    "identity": "builtin-rules-v1",
+    "note": "Built-in rule identity to be pinned with the ported rule set."
+  },
+  "surface": {
+    "namespace": "repo",
+    "guestFacade": "repo.*",
+    "provider": "FoveaProvider",
+    "host": "FoveaHost",
+    "engine": "FoveaEngine"
+  }
+}

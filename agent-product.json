@@ -6,11 +6,32 @@
   "outputBundle": "dist/kiro-agent-closure",
   "runtimeAssets": {
     "compilerWorker": "src/runtime/compiler-worker-entry.ts",
-    "sandboxWorker": "src/runtime/sandbox-worker-entry.ts"
+    "sandboxWorker": "src/runtime/sandbox-worker-entry.ts",
+    "foveaEngine": "src/fovea/engine-entry.ts",
+    "foveaHook": "src/kiro/fovea-hook.ts"
   },
-  "tools": ["fabric_info", "fabric_workspace", "fabric_exec"],
-  "mountedProviders": ["artifacts", "memory", "state", "mcp", "local", "fabric"],
-  "bundledAgentResources": ["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md", "skills/fabric-exec/references/review.md"],
+  "tools": [
+    "fabric_info",
+    "fabric_workspace",
+    "fabric_exec"
+  ],
+  "mountedProviders": [
+    "artifacts",
+    "memory",
+    "state",
+    "mcp",
+    "local",
+    "repo",
+    "fabric"
+  ],
+  "bundledAgentResources": [
+    "skills/fabric-exec/SKILL.md",
+    "skills/fabric-exec/references/api.md",
+    "skills/fabric-exec/references/recipes.md",
+    "skills/fabric-exec/references/workflow.md",
+    "skills/fabric-exec/references/review.md",
+    "skills/fabric-exec/references/fovea.md"
+  ],
   "allowedPackageDependencies": [
     "@jitl/quickjs-singlefile-mjs-release-sync",
     "@modelcontextprotocol/sdk",
@@ -20,10 +41,22 @@
     "typescript"
   ],
   "forbiddenRuntimeModules": [
-    "src/actors/", "src/agents/", "src/capture/", "src/compaction/", "src/components/",
-    "src/residency/", "src/schema/", "src/ui/", "src/verification/", "src/worker/",
-    "src/worker.ts", "src/runtime/node-process-runtime.ts", "src/runtime/node-process-child-source.ts",
-    "src/kiro/acp-process.ts", "src/kiro/acp-worker.ts", "src/kiro/agent-worker-entry.ts",
+    "src/actors/",
+    "src/agents/",
+    "src/capture/",
+    "src/compaction/",
+    "src/components/",
+    "src/residency/",
+    "src/schema/",
+    "src/ui/",
+    "src/verification/",
+    "src/worker/",
+    "src/worker.ts",
+    "src/runtime/node-process-runtime.ts",
+    "src/runtime/node-process-child-source.ts",
+    "src/kiro/acp-process.ts",
+    "src/kiro/acp-worker.ts",
+    "src/kiro/agent-worker-entry.ts",
     "src/kiro/management-entry.ts"
   ]
 }

@@ -322,6 +322,51 @@ export const GUEST_SETUP = `
     write: (args) => call("local.write", args), edit: (args) => call("local.edit", args),
     shell: (args) => call("local.shell", args), searchRead,
   });
+  const focusRead = async (input) => {
+    const args = parseStrict(strictJsonText(input));
+    if (!args || typeof args !== 'object' || arrayIsArray(args)) throw new SafeTypeError('repo.focusRead expects an object');
+    const { maxWindows = 4, maxChars = 14000, partial = true, ...query } = args;
+    const integerInRange = (value, min, max) => typeof value === 'number' && numberIsFinite(value) && mathFloor(value) === value && value >= min && value <= max;
+    if (!integerInRange(maxWindows, 1, 32) || !integerInRange(maxChars, 1000, 40000) || typeof partial !== 'boolean') throw new SafeRangeError('Invalid repo.focusRead read budget');
+    const navigation = await call('repo.focus', query);
+    // The snapshot hash is mandatory when supplied. Never remove a stale hash
+    // and reread old line numbers; return the reader failure and refresh focus.
+    const windows = navigation.reads.slice(0, maxWindows);
+    const sources = windows.length ? await call('local.readMany', { windows, maxChars, partial }) : null;
+    return { navigation, sources, deferredReads: navigation.reads.slice(maxWindows) };
+  };
+  const repoGrep = async (input) => {
+    const args = parseStrict(strictJsonText(input));
+    if (!args || typeof args !== 'object' || arrayIsArray(args) || typeof args.pattern !== 'string') throw new SafeTypeError('repo.grep expects a search object');
+    // Local contracts validate every option. Keep exact matching separate from
+    // hints, and never reinterpret native regex/glob/cursor semantics.
+    const settings = await call('repo.settings', {});
+    const mode = settings.config.tools.grepMode;
+    const symbolLike = /^[A-Za-z_$][A-Za-z0-9_$]*(?:[.#:][A-Za-z_$][A-Za-z0-9_$]*)*$/.test(args.pattern) || /^(?:[.][/]|[/])?[A-Za-z0-9_@.-]+(?:[/][A-Za-z0-9_@.{}:$-]+)+$/.test(args.pattern);
+    const bare = objectKeys(args).length === 1;
+    let advisory = null, diagnostic;
+    const hint = async () => {
+      try { const value = await call('repo.augment', { query: args.pattern, ...(args.path === undefined ? {} : {path: args.path}), maxTokens: settings.config.tools.grepAugmentBudget }); return value.status === 'ok' ? value : null; }
+      catch (_) { diagnostic = 'Graph hint unavailable; exact native search remains authoritative.'; return null; }
+    };
+    if (mode === 'replace' && bare && symbolLike) {
+      advisory = await hint();
+      if (advisory) return { native: null, advisory, replacement: true };
+    }
+    const native = await call('local.grep', args);
+    if (mode === 'augment' && symbolLike) advisory = await hint();
+    return { native, advisory, replacement: false, ...(diagnostic ? { diagnostic } : {}) };
+  };
+  globalThis.repo = objectFreeze({
+    status: (args = {}) => call('repo.status', args), sketch: (args = {}) => call('repo.sketch', args),
+    focus: (args) => call('repo.focus', args), augment: (args) => call('repo.augment', args), grep: repoGrep, dwell: (args = {}) => call('repo.dwell', args),
+    impact: (args = {}) => call('repo.impact', args), result: (args) => call('repo.result', args),
+    searchResult: (args) => call('repo.searchResult', args), anchors: (args = {}) => call('repo.anchors', args),
+    rules: (args = {}) => call('repo.rules', args), adoptRules: (args) => call('repo.adoptRules', args),
+    settings: (args = {}) => call('repo.settings', args), configure: (args) => call('repo.configure', args),
+    reset: (args = {}) => call('repo.reset', args), reload: (args = {}) => call('repo.reload', args),
+    sync: (args = {}) => call('repo.sync', args), focusRead,
+  });
   globalThis.review = objectFreeze({
     begin: (args) => call("review.begin", args), update: (args) => call("review.update", args),
     finding: (args) => call("review.finding", args), status: (args) => call("review.status", args),

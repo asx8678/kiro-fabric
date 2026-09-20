@@ -4,9 +4,9 @@ import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { acquirePrivateTools, verifyPrivateToolCache } from "./build-private-tools.mjs";
-import { canonical, createBundleManifest, validateBundle, sha256, checkToolPins } from "./bundle-contract.mjs";
+import { canonical, createBundleManifest, validateBundle, sha256, checkToolPins, compatibilityFor } from "./bundle-contract.mjs";
 import { writeBundleArchive } from "./bundle-archive.mjs";
-import { detectInstallerPlatform, compatibilityFor, assertUnprivilegedInstaller } from "./installer-platform.mjs";
+import { detectInstallerPlatform, assertUnprivilegedInstaller } from "./installer-platform.mjs";
 import { captureBuildInputs, validateBuildInputProvenance, verifyBuildClosure, verifyClosureIntegrity, verifyBuildCapture, verifyCapturedInputs } from "./build-inputs.mjs";
 import { artifactRecords, artifactKind, cacheDirectory, exists, privateDirectory, publishCacheJson, readCacheJson, recordInstallerArtifact, withInstallerArtifactLease } from "./installer-artifacts.mjs";
 
@@ -183,7 +183,7 @@ export async function buildCompleteBundleForTest(options, deps) {
     fs.mkdirSync(staging, { mode: 0o700 });
     try {
       copyClosure(path.join(root, "dist/kiro-agent-closure"), path.join(staging, "app"));
-      for (const tool of ["node", "rg"]) for (const member of pins[tool].members) {
+      for (const tool of Object.keys(pins)) for (const member of pins[tool].members) {
         const file = path.join(staging, member.path);
         fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
         fs.copyFileSync(path.join(cache, member.path), file, fs.constants.COPYFILE_EXCL);
@@ -198,7 +198,7 @@ export async function buildCompleteBundleForTest(options, deps) {
       verifyCapturedInputs(staging, initialBuild, mappings);
       verifyBuildCapture(root, path.join(staging, "app"), initialBuild); verifyBoundary(context);
       const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-      const manifest = await createBundleManifest(staging, { version: pkg.version, target: context.target, compatibility: compatibilityFor(context.target), provenance: context.provenance, tools: pins });
+      const manifest = await createBundleManifest(staging, { version: pkg.version, target: context.target, compatibility: compatibilityFor(context.target, Object.hasOwn(pins, "ast-grep") ? 2 : 1), provenance: context.provenance, tools: pins });
       fs.writeFileSync(path.join(staging, "bundle-manifest.json"), canonical(manifest) + "\n", { mode: 0o600, flag: "wx" });
       const verified = await validateBundle(staging);
       const destination = path.join(parent, `kiro-fabric-bundle-${context.target}-${verified.digest}`);

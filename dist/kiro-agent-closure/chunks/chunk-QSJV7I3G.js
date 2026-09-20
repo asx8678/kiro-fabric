@@ -11,12 +11,63 @@ import {
   transpileFabricCodeWithSourceMap
 } from "./chunk-ITY6W7FO.js";
 import {
+  MAX_FABRIC_JSON_CHARS,
+  assertFabricJsonBudget,
+  fabricJsonText
+} from "./chunk-WZ4PGM3F.js";
+import {
   QuickJSEmscriptenModuleError,
   debugLog
 } from "./chunk-NWYPLJ5N.js";
 import {
   __export
 } from "./chunk-AE4E2KSU.js";
+
+// src/runtime/deadline.ts
+import { performance as performance2 } from "node:perf_hooks";
+var FabricDeadline = class {
+  constructor(timeoutMs, maximumMs, now = () => performance2.now()) {
+    this.now = now;
+    this.startedAt = now();
+    const maximum = Math.max(1, Math.floor(maximumMs));
+    this.maximumAt = this.startedAt + maximum;
+    this.#expiresAt = this.startedAt + Math.min(maximum, Math.max(1, Math.floor(timeoutMs)));
+  }
+  now;
+  startedAt;
+  maximumAt;
+  #expiresAt;
+  get expiresAt() {
+    return this.#expiresAt;
+  }
+  get effectiveTimeoutMs() {
+    return Math.round(this.#expiresAt - this.startedAt);
+  }
+  get expired() {
+    return this.now() >= this.#expiresAt;
+  }
+  remainingMs() {
+    return Math.max(0, this.#expiresAt - this.now());
+  }
+  extendTo(timeoutMs) {
+    if (this.expired || !Number.isFinite(timeoutMs)) return this.effectiveTimeoutMs;
+    const requested = this.startedAt + Math.max(1, Math.floor(timeoutMs));
+    this.#expiresAt = Math.min(this.maximumAt, Math.max(this.#expiresAt, requested));
+    return this.effectiveTimeoutMs;
+  }
+  throwIfExpired() {
+    if (this.expired) throw new Error(`Execution timed out after ${this.effectiveTimeoutMs}ms`);
+  }
+  /** Force the deadline to have passed, without touching the clock.
+   *
+   * The VM runs on its own thread and cannot observe a host clock the host
+   * itself controls (for example a clock the embedder has replaced). When the
+   * authoritative host side reports the deadline as passed, the VM must reach
+   * the same conclusion instead of completing on a clock that disagrees. */
+  expireNow() {
+    this.#expiresAt = this.startedAt;
+  }
+};
 
 // node_modules/.pnpm/typebox@1.3.25/node_modules/typebox/build/value/value.mjs
 var value_exports = {};
@@ -9315,156 +9366,8 @@ var ProbeProvider = class {
   }
 };
 
-// src/runtime/deadline.ts
-import { performance as performance2 } from "node:perf_hooks";
-var FabricDeadline = class {
-  constructor(timeoutMs, maximumMs, now = () => performance2.now()) {
-    this.now = now;
-    this.startedAt = now();
-    const maximum = Math.max(1, Math.floor(maximumMs));
-    this.maximumAt = this.startedAt + maximum;
-    this.#expiresAt = this.startedAt + Math.min(maximum, Math.max(1, Math.floor(timeoutMs)));
-  }
-  now;
-  startedAt;
-  maximumAt;
-  #expiresAt;
-  get expiresAt() {
-    return this.#expiresAt;
-  }
-  get effectiveTimeoutMs() {
-    return Math.round(this.#expiresAt - this.startedAt);
-  }
-  get expired() {
-    return this.now() >= this.#expiresAt;
-  }
-  remainingMs() {
-    return Math.max(0, this.#expiresAt - this.now());
-  }
-  extendTo(timeoutMs) {
-    if (this.expired || !Number.isFinite(timeoutMs)) return this.effectiveTimeoutMs;
-    const requested = this.startedAt + Math.max(1, Math.floor(timeoutMs));
-    this.#expiresAt = Math.min(this.maximumAt, Math.max(this.#expiresAt, requested));
-    return this.effectiveTimeoutMs;
-  }
-  throwIfExpired() {
-    if (this.expired) throw new Error(`Execution timed out after ${this.effectiveTimeoutMs}ms`);
-  }
-  /** Force the deadline to have passed, without touching the clock.
-   *
-   * The VM runs on its own thread and cannot observe a host clock the host
-   * itself controls (for example a clock the embedder has replaced). When the
-   * authoritative host side reports the deadline as passed, the VM must reach
-   * the same conclusion instead of completing on a clock that disagrees. */
-  expireNow() {
-    this.#expiresAt = this.startedAt;
-  }
-};
-
 // src/trace/tracer.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-
-// src/runtime/json-budget.ts
-import { isProxy } from "node:util/types";
-var MAX_FABRIC_JSON_CHARS = 8e6;
-var DEFAULT_FABRIC_JSON_CHARS = 2e6;
-var MAX_FABRIC_JSON_DEPTH = 64;
-var MAX_FABRIC_JSON_NODES = 1e5;
-var budgetError = (detail) => new Error(`Fabric host JSON is outside the bounded JSON contract: ${detail}`);
-var normalizedLimit = (value) => {
-  if (!Number.isSafeInteger(value) || value < 1) throw budgetError("invalid character limit");
-  return Math.min(value, MAX_FABRIC_JSON_CHARS);
-};
-var MAX_ARRAY_INDEX = 4294967294;
-var isArrayIndex = (key) => {
-  if (key === "0") return true;
-  if (!/^[1-9][0-9]*$/u.test(key)) return false;
-  const index = Number(key);
-  return Number.isSafeInteger(index) && index <= MAX_ARRAY_INDEX;
-};
-var preflight = (root, maxChars) => {
-  const seen = /* @__PURE__ */ new WeakSet();
-  const stack = [
-    { value: root, depth: 0, nested: false }
-  ];
-  let nodes = 0;
-  let rawChars = 0;
-  while (stack.length > 0) {
-    const { value, depth, nested } = stack.pop();
-    nodes += 1;
-    if (nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
-    if (value === null || typeof value === "boolean") continue;
-    if (typeof value === "string") {
-      rawChars += value.length;
-      if (rawChars > maxChars) throw budgetError(`more than ${maxChars} raw characters`);
-      continue;
-    }
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) throw budgetError("non-finite number");
-      continue;
-    }
-    if (value === void 0 && !nested) continue;
-    if (typeof value !== "object") throw budgetError(`unsupported ${typeof value} value`);
-    if (isProxy(value)) throw budgetError("proxy object");
-    if (depth >= MAX_FABRIC_JSON_DEPTH) throw budgetError("depth limit exceeded");
-    if (seen.has(value)) throw budgetError("cyclic or shared object graph");
-    seen.add(value);
-    if (Array.isArray(value)) {
-      if (value.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
-      const descriptors2 = Object.getOwnPropertyDescriptors(value);
-      if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors2).some((key) => key !== "length" && !isArrayIndex(key))) throw budgetError("non-index array property");
-      for (let index = value.length - 1; index >= 0; index--) {
-        const descriptor = descriptors2[String(index)];
-        if (!descriptor || !("value" in descriptor)) throw budgetError("accessor or sparse array");
-        stack.push({ value: descriptor.value, depth: depth + 1, nested: true });
-      }
-      continue;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw budgetError("non-plain object");
-    }
-    if (Object.getOwnPropertySymbols(value).length > 0) throw budgetError("symbol property");
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    const keys = Object.keys(descriptors);
-    if (keys.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
-    for (let index = keys.length - 1; index >= 0; index--) {
-      const key = keys[index];
-      const descriptor = descriptors[key];
-      if (!("value" in descriptor)) throw budgetError("accessor property");
-      if (!descriptor.enumerable) continue;
-      rawChars += key.length;
-      if (rawChars > maxChars) throw budgetError(`more than ${maxChars} raw characters`);
-      stack.push({ value: descriptor.value, depth: depth + 1, nested: true });
-    }
-  }
-};
-var jsonStringPrefix = (value, contentChars) => {
-  if (!Number.isSafeInteger(contentChars) || contentChars < 0) throw budgetError("invalid string prefix budget");
-  let end = 0, used = 0;
-  while (end < value.length) {
-    const unit = value.charCodeAt(end), next = value.charCodeAt(end + 1);
-    const pair = unit >= 55296 && unit <= 56319 && next >= 56320 && next <= 57343;
-    const width = pair ? 2 : 1;
-    const cost = unit === 34 || unit === 92 ? 2 : unit < 32 ? [8, 9, 10, 12, 13].includes(unit) ? 2 : 6 : !pair && unit >= 55296 && unit <= 57343 ? 6 : width;
-    if (used + cost > contentChars) break;
-    used += cost;
-    end += width;
-  }
-  return value.slice(0, end);
-};
-var fabricJsonText = (value, maxChars = DEFAULT_FABRIC_JSON_CHARS) => {
-  const limit = normalizedLimit(maxChars);
-  preflight(value, limit);
-  if (value === void 0) return "null";
-  const serialized = JSON.stringify(value);
-  if (serialized === void 0) throw budgetError("value is not serializable");
-  if (serialized.length > limit) throw budgetError(`more than ${limit} serialized characters`);
-  return serialized;
-};
-var assertFabricJsonBudget = (value, maxChars = DEFAULT_FABRIC_JSON_CHARS) => {
-  void fabricJsonText(value, maxChars);
-};
 
 // src/trace/trace-writer.ts
 import fs4 from "node:fs";
@@ -10231,6 +10134,51 @@ var GUEST_SETUP = `
     write: (args) => call("local.write", args), edit: (args) => call("local.edit", args),
     shell: (args) => call("local.shell", args), searchRead,
   });
+  const focusRead = async (input) => {
+    const args = parseStrict(strictJsonText(input));
+    if (!args || typeof args !== 'object' || arrayIsArray(args)) throw new SafeTypeError('repo.focusRead expects an object');
+    const { maxWindows = 4, maxChars = 14000, partial = true, ...query } = args;
+    const integerInRange = (value, min, max) => typeof value === 'number' && numberIsFinite(value) && mathFloor(value) === value && value >= min && value <= max;
+    if (!integerInRange(maxWindows, 1, 32) || !integerInRange(maxChars, 1000, 40000) || typeof partial !== 'boolean') throw new SafeRangeError('Invalid repo.focusRead read budget');
+    const navigation = await call('repo.focus', query);
+    // The snapshot hash is mandatory when supplied. Never remove a stale hash
+    // and reread old line numbers; return the reader failure and refresh focus.
+    const windows = navigation.reads.slice(0, maxWindows);
+    const sources = windows.length ? await call('local.readMany', { windows, maxChars, partial }) : null;
+    return { navigation, sources, deferredReads: navigation.reads.slice(maxWindows) };
+  };
+  const repoGrep = async (input) => {
+    const args = parseStrict(strictJsonText(input));
+    if (!args || typeof args !== 'object' || arrayIsArray(args) || typeof args.pattern !== 'string') throw new SafeTypeError('repo.grep expects a search object');
+    // Local contracts validate every option. Keep exact matching separate from
+    // hints, and never reinterpret native regex/glob/cursor semantics.
+    const settings = await call('repo.settings', {});
+    const mode = settings.config.tools.grepMode;
+    const symbolLike = /^[A-Za-z_$][A-Za-z0-9_$]*(?:[.#:][A-Za-z_$][A-Za-z0-9_$]*)*$/.test(args.pattern) || /^(?:[.][/]|[/])?[A-Za-z0-9_@.-]+(?:[/][A-Za-z0-9_@.{}:$-]+)+$/.test(args.pattern);
+    const bare = objectKeys(args).length === 1;
+    let advisory = null, diagnostic;
+    const hint = async () => {
+      try { const value = await call('repo.augment', { query: args.pattern, ...(args.path === undefined ? {} : {path: args.path}), maxTokens: settings.config.tools.grepAugmentBudget }); return value.status === 'ok' ? value : null; }
+      catch (_) { diagnostic = 'Graph hint unavailable; exact native search remains authoritative.'; return null; }
+    };
+    if (mode === 'replace' && bare && symbolLike) {
+      advisory = await hint();
+      if (advisory) return { native: null, advisory, replacement: true };
+    }
+    const native = await call('local.grep', args);
+    if (mode === 'augment' && symbolLike) advisory = await hint();
+    return { native, advisory, replacement: false, ...(diagnostic ? { diagnostic } : {}) };
+  };
+  globalThis.repo = objectFreeze({
+    status: (args = {}) => call('repo.status', args), sketch: (args = {}) => call('repo.sketch', args),
+    focus: (args) => call('repo.focus', args), augment: (args) => call('repo.augment', args), grep: repoGrep, dwell: (args = {}) => call('repo.dwell', args),
+    impact: (args = {}) => call('repo.impact', args), result: (args) => call('repo.result', args),
+    searchResult: (args) => call('repo.searchResult', args), anchors: (args = {}) => call('repo.anchors', args),
+    rules: (args = {}) => call('repo.rules', args), adoptRules: (args) => call('repo.adoptRules', args),
+    settings: (args = {}) => call('repo.settings', args), configure: (args) => call('repo.configure', args),
+    reset: (args = {}) => call('repo.reset', args), reload: (args = {}) => call('repo.reload', args),
+    sync: (args = {}) => call('repo.sync', args), focusRead,
+  });
   globalThis.review = objectFreeze({
     begin: (args) => call("review.begin", args), update: (args) => call("review.update", args),
     finding: (args) => call("review.finding", args), status: (args) => call("review.status", args),
@@ -10981,6 +10929,7 @@ var QuickJsRuntime = class {
 };
 
 export {
+  FabricDeadline,
   IsKind,
   IsSchema2 as IsSchema,
   _Array_,
@@ -11099,6 +11048,9 @@ export {
   Module2 as Module,
   Script2 as Script,
   value_exports,
+  validateSchemaValue,
+  schemaValidationMessage,
+  localProcessGroupAlive,
   throwIfAborted,
   throwIfAbortedOrExpired,
   runAbortable,
@@ -11108,21 +11060,14 @@ export {
   MAX_EXECUTOR_SOURCE_BYTES,
   fabricSourceLimitError,
   fabricPayloadsLimitError,
-  MAX_FABRIC_JSON_CHARS,
-  jsonStringPrefix,
-  fabricJsonText,
-  assertFabricJsonBudget,
   FABRIC_COMMIT_ACKNOWLEDGEMENT,
   fabricCommitAcknowledgement,
   LocalShellExitError,
   runLocalShell,
-  validateSchemaValue,
-  schemaValidationMessage,
   PROBE_GUEST_DECLARATIONS,
   initializeOwnedFile,
   ProbeRunExitError,
   ProbeProvider,
-  FabricDeadline,
   traceFailureMetadata,
   DISABLED_TRACER,
   resolveTraceEnabled,

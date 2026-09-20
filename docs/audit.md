@@ -147,6 +147,8 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 - `scripts/package-policy.mjs`
 - `scripts/real-client-evidence.mjs`
 - `scripts/release-artifacts.mjs`
+- `scripts/packed-runtime-imports.mjs` — AST-based exact packed ESM inventory checks, excluding comments/string contents.
+- `tests/packed-runtime-imports.test.ts` — Git-marker false-positive regression and missing static/export/dynamic-literal dependency rejection.
 - `scripts/release-candidate-report.mjs`
 - `scripts/run-agent-dev.mjs`
 - `scripts/run-kiro-agent-real-driver.mjs`
@@ -442,3 +444,90 @@ Regression and acceptance files:
 Historical module bytes in `tests/fixtures/installer-history/c0f65e9/agent-profile.mjs.txt`, `tests/fixtures/installer-history/c0f65e9/managed-installation.mjs.txt` and `tests/fixtures/installer-history/d33de003/install-agent-user.mjs.txt` are hash-pinned test data, so shallow/offline checkouts need no historical Git subprocess. The native suite registry is shared with CI; passing Linux child-strategy tests does not claim native macOS qualification. SBOM producers retain legacy names and emit archive-linked snapshots with exact size/hash descriptors; no signing key or qualification bypass is introduced. Failure publications are sanitized and nonqualifying; transcript-bound private success evidence is not silently stripped and published as proof.
 
 Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces SIGKILL between owner unlink and directory removal, then verifies durable release-marker recovery, positive birth identity, preserved foreign evidence and retained committed transaction provenance. `src/installation/installer-lock.mjs` and `src/installation/pinned-recovery.mjs` keep public lock APIs unchanged. Legacy ownerless locks without proof remain preserved; this is not an age-based force-clean mechanism.
+
+## Native Fovea implementation and acceptance
+
+- `scripts/fovea-capability-probe.mjs` — native integration, managed distribution or isolated qualification support.
+- `scripts/fovea-reference-harness.mjs` — native integration, managed distribution or isolated qualification support.
+- `scripts/fovea-lifecycle-harness.mjs` — development-only exact-archive lifecycle replay with pinned parser, private reports and bounded subprocesses; no native qualification claim.
+- `tests/fovea/fixtures/lifecycle-driver.mjs` — real pinned Fovea extension and Pi Fabric capture pipeline driven by explicitly synthetic runner/read/write/edit tools, not Pi/Kiro UI.
+- `tests/fovea/reference-lifecycle.test.ts` — reference lifecycle/mutation/provenance assertions and actual native publication/delivery comparisons; visible skip when pinned Git objects are unavailable.
+- `scripts/generate-vendored-sbom.mjs` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/config.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/core/anchors.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/astgrep.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/asyncutil.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/basins.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/bend.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/build.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/cochange.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/context.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/discover.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/extract.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/git.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/graph.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/heat.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/join.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/ops.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/protocols.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/provenance.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/render.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/result-budget.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/session.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/source.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/state.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/sync.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/temp-storage.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/core/types.ts` — pinned upstream-derived deterministic analysis API.
+- `src/fovea/delivery.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/engine-entry.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/engine-process.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/engine.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/git-executable.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/host.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/observations.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/parser-executable.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/protocol.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/provenance-journal.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/result-store.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/root-leases.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/scheduler.ts` — native integration, managed distribution or isolated qualification support.
+- `src/fovea/source-access.ts` — bounded SHA-256 snapshot policy over descriptor capabilities; no source-path reopen.
+- `src/fovea/source-platform.ts` — Linux descriptor-relative operations, complete bounded reads, closed platform selection and canonical root traversal.
+- `src/fovea/source-platform-darwin.ts` — trusted Darwin ABI adapter contract; production provisioning and native Darwin execution unqualified, no `/dev/fd` or PATH fallback.
+- `src/fovea/source-platform-native.ts` — opaque capability bridge for a trusted POSIX binding; no production binary loader or guest-selected path.
+- `src/fovea/source-platform-native.c` — N-API openat/fdopendir implementation exercised by fixture compilation; not packaged or enabled in production.
+- `tests/fovea/source-platform-native.test.ts` — compiled native POSIX capture, descriptor ownership, no-follow, resource bounds and cleanup probes; Linux execution is not Darwin qualification.
+- `tests/fovea/source-platform.test.ts` — descriptor-relative capture and platform contract/race probes.
+- `tests/fovea/source-platform-bounds.test.ts` — shared enumeration/read budgets, short reads, mutation checks and cleanup.
+- `tests/fovea/production-batching.test.ts` — ordered bounded source publication, real batched parser repeatability and cache-header invalidation.
+- `tests/fovea/historical-manager-migration.test.ts` — exact archived schema-1 manager, schema-2 handoff, retained runtime coexistence, rollback and interrupted-activation recovery.
+- `src/kiro/fovea-hook.ts` — native integration, managed distribution or isolated qualification support.
+- `src/providers/repo-contract.ts` — native integration, managed distribution or isolated qualification support.
+- `src/providers/repo-provider.ts` — native integration, managed distribution or isolated qualification support.
+- `tests/fovea/capability.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/config-project.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/core-basins.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/core-conserved-heat.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/core-heat.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/engine-languages.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/engine-review.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/engine.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/guest-focus-read.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/guest-grep.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/host-boundaries.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/host-process.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/observations.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/packaging.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/reference-differential.test.ts` — warm-fact operation compatibility, cold-core exact-parser/FIFO-input replay, and separate unqualified independent-cold repeatability probe; see Fovea parity ledger.
+- `tests/fovea/cold-inputs.test.ts` — fail-closed parser tape identity, exact output/error bytes, quota/corruption/unconsumed-request guards and source-read scheduling recovery.
+- `tests/fovea/fixtures/cold-inputs.mjs` — development-only generated subprocess entry; FIFO source-read dependency adapter and exact parser tape. Not shipped or a production determinism claim.
+- `tests/fovea/reference.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+
+## Native Fovea implementation and acceptance
+
+- `tests/fovea/provenance.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `src/kiro/fovea-context.ts` — bounded host-owned post-settlement collection and transport emission ledger; activation requires a trusted qualified capability.
+- `tests/fovea/context-delivery.test.ts` — replay, budget, cancellation, revocation, and emission-not-acknowledgment regressions.
+- `tests/fovea/coverage-contract.test.ts` — real engine coverage packet/schema and guest typing checks.
+- `tests/fovea/mcp-context.test.ts` — real built MCP collector/default-off integration; not native-client evidence.

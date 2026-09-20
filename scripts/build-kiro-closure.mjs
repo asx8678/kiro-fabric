@@ -37,7 +37,7 @@ const jsoncParserEsm = mcporterRequire.resolve("jsonc-parser/lib/esm/main.js");
 const banner = `import { createRequire as __createRequire } from "node:module";\nimport { fileURLToPath as __fileURLToPath } from "node:url";\nimport { dirname as __dirnameOf } from "node:path";\nglobalThis.__filename = __fileURLToPath(import.meta.url);\nglobalThis.__dirname = __dirnameOf(globalThis.__filename);\nconst require = __createRequire(import.meta.url);\n`;
 const result = await build({
   ...sharedEsbuildOptions,
-  entryPoints: [product.entrypoint, product.runtimeAssets.compilerWorker, product.runtimeAssets.sandboxWorker],
+  entryPoints: [product.entrypoint, ...Object.values(product.runtimeAssets)],
   outdir,
   metafile: true,
   alias: { "jsonc-parser": jsoncParserEsm },
@@ -112,7 +112,20 @@ while (queue.length) {
 for (const name of [...libraries].sort()) fs.copyFileSync(path.join(tsLib, name), path.join(chunks, name));
 fs.writeFileSync(path.join(outdir, "package.json"), `${JSON.stringify({ name: "kiro-fabric-agent-runtime", version: pkg.version, type: "module", private: true }, null, 2)}\n`);
 
-const noticeParts = ["Kiro Fabric bundled third-party license notices\n"];
+const foveaComponent = JSON.parse(fs.readFileSync(path.join(root, "src/fovea/component.json"), "utf8"));
+const foveaUpstream = JSON.parse(fs.readFileSync(path.join(root, "src/fovea/upstream.json"), "utf8"));
+if (foveaComponent.commit !== foveaUpstream.upstreamCommit || foveaComponent.version !== foveaUpstream.upstreamVersion ||
+    createHash("sha256").update(fs.readFileSync(path.join(root, "src/fovea/ast-grep-LICENSE.txt"))).digest("hex") !== foveaComponent.parser.licenseSha256) throw new Error("Fovea component provenance/license drifted");
+for (const name of ["component.json", "upstream.json", "ast-grep-LICENSE.txt"]) {
+  fs.mkdirSync(path.join(outdir, "fovea"), { recursive: true });
+  fs.copyFileSync(path.join(root, "src/fovea", name), path.join(outdir, "fovea", name));
+}
+fs.copyFileSync(path.join(root, "src/fovea/core/UPSTREAM-LICENSE.txt"), path.join(outdir, "fovea/UPSTREAM-LICENSE.txt"));
+const noticeParts = ["Kiro Fabric bundled third-party license notices\n",
+  "\n===== Vendored Fovea (MIT; see fovea/component.json) =====\n",
+  fs.readFileSync(path.join(root, "src/fovea/core/UPSTREAM-LICENSE.txt"), "utf8"),
+  "\n===== ast-grep 0.45.3 (MIT; private native parser) =====\n",
+  fs.readFileSync(path.join(root, "src/fovea/ast-grep-LICENSE.txt"), "utf8")];
 for (const record of records) {
   const candidates = fs.readdirSync(record.root).filter((name) => /^(?:licen[cs]e|notice|thirdpartynotice)/iu.test(name)).sort();
   if (!candidates.length) throw new Error(`Bundled dependency has no discoverable license text: ${record.name}@${record.version}`);
@@ -145,7 +158,7 @@ if (process.platform !== "win32" && typeof process.getuid === "function" && evid
 fs.chmodSync(evidenceDirectory, 0o700);
 fs.writeFileSync(path.join(evidenceDirectory, "agent-reachability.json"), `${JSON.stringify({
   schemaVersion: 1,
-  entrypoints: [product.entrypoint, product.runtimeAssets.compilerWorker, product.runtimeAssets.sandboxWorker],
+  entrypoints: [product.entrypoint, ...Object.values(product.runtimeAssets)],
   sourceInputs,
   classifications: Object.fromEntries(Object.entries(byClass).map(([key, files]) => [key, files])),
   packageInputs,
@@ -192,9 +205,12 @@ const manifest = {
   entrypoint: "kiro/mcp-entry.js",
   compilerWorker: "runtime/compiler-worker-entry.js",
   sandboxWorker: "runtime/sandbox-worker-entry.js",
+  foveaEngine: "fovea/engine-entry.js",
+  foveaHook: "kiro/fovea-hook.js",
   executor: "quickjs",
   sourceInputs,
   packageInputs,
+  vendoredComponents: [foveaComponent],
   files: evidenceFiles,
   contentDigest: digest.digest("hex"),
 };

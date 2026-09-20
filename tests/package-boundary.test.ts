@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { assertPackedRuntimeImports } from "../scripts/packed-runtime-imports.mjs";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { assertPackagePolicy, isPackedPackageFileAllowed } from "../scripts/package-policy.mjs";
@@ -99,13 +100,24 @@ describe("Agent product boundary", () => {
       const target = path.join(root, entry);
       return fs.statSync(target).isDirectory() ? files(target) : [target];
     });
-    const body = selected.map((file) => fs.readFileSync(file, "utf8")).join("\n");
+    // Pinned-reference environment configuration is development-only.
+    const referenceHarnesses = ["scripts/fovea-reference-harness.mjs", "scripts/fovea-lifecycle-harness.mjs"];
+    const body = selected.filter(file => !referenceHarnesses.includes(path.relative(root, file))).map((file) => fs.readFileSync(file, "utf8")).join("\n");
+    const closure = fs.readFileSync(path.join(root, "dist/kiro-agent-closure/closure-manifest.json"), "utf8");
+    for (const harness of referenceHarnesses) expect(closure).not.toContain(harness);
+    expect(closure).not.toContain('tests/fovea/fixtures/cold-inputs.mjs');
     const forbidden = [
       `@earendil-works/${"pi"}-`, `@mariozechner/${"pi"}-`, `PI_CODING_${"AGENT"}_DIR`,
       `managed-${"main"}`, `internal-${"child"}`, `kiro-fabric-${"dev"}`,
       `fullCode${"Mode"}`,
     ];
     for (const term of forbidden) expect(body).not.toContain(term);
+    // The exact development exceptions above must never permit Pi host imports
+    // or environment configuration in either shipped library or Agent JS.
+    for (const file of files(path.join(root, "dist")).filter(file => file.endsWith(".js"))) {
+      const emitted = fs.readFileSync(file, "utf8");
+      for (const term of forbidden.slice(0, 3)) expect(emitted.includes(term), `${path.relative(root, file)} contains ${term}`).toBe(false);
+    }
     expect(body).not.toContain(String.fromCodePoint(960));
     expect(body).not.toMatch(new RegExp(`\\b(?:${["k", "pi", "agents"].join("|")})\\.[A-Za-z_$]`, "u"));
     expect(body).not.toContain(`.${"pi"}/`);
@@ -151,13 +163,7 @@ describe("Agent product boundary", () => {
     expect([...included].some((file) => /^dist\/chunks\/[^/]+\.js$/u.test(file))).toBe(true);
     expect([...included].some((file) => file.startsWith("src/") || file.startsWith("tests/") || file.startsWith("scripts/"))).toBe(false);
     expect([...included].some((file) => file.startsWith(".kiro/") || file.startsWith("skills/") || file.startsWith("dist/kiro-agent-closure/") || file === "agent-product.json")).toBe(false);
-    for (const file of [...included].filter((entry) => entry.endsWith(".js"))) {
-      const text = fs.readFileSync(path.join(root, file), "utf8");
-      for (const match of text.matchAll(/(?:from\s*|import\()\s*["'](\.[^"']+)["']/gu)) {
-        const target = path.normalize(path.join(path.dirname(file), match[1]!)).replaceAll("\\", "/");
-        expect(included.has(target), `${file} -> ${target}`).toBe(true);
-      }
-    }
+    assertPackedRuntimeImports(included, file => fs.readFileSync(path.join(root, file), "utf8"));
 
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-npm-pack-"));
     try {

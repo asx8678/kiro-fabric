@@ -834,7 +834,7 @@ function safePath(p) {
 }
 function roleFor(p) {
   safePath(p);
-  if (p === "tools/node" || p === "tools/rg") return "executable";
+  if (p === "tools/node" || p === "tools/rg" || p === "tools/ast-grep") return "executable";
   if (p === "manager/install-manager.mjs") return "manager";
   if (p.startsWith("app/")) return "app";
   if (p === "resources/steering/fabric.md" || p === "resources/skills/fabric-exec/SKILL.md" || p.startsWith("resources/skills/fabric-exec/references/")) return "resource";
@@ -842,15 +842,16 @@ function roleFor(p) {
   throw Error("Unknown bundle entry: " + p);
 }
 var REQUIRED_APP = ["app/kiro/mcp-entry.js", "app/runtime/compiler-worker-entry.js", "app/runtime/sandbox-worker-entry.js", "app/package.json", "app/closure-manifest.json"];
+var FOVEA_REQUIRED_APP = [...REQUIRED_APP, "app/fovea/engine-entry.js", "app/kiro/fovea-hook.js", "app/fovea/component.json", "app/fovea/upstream.json", "app/fovea/UPSTREAM-LICENSE.txt", "app/fovea/ast-grep-LICENSE.txt", "tools/ast-grep", "resources/skills/fabric-exec/references/fovea.md"];
 var HISTORICAL_REQUIRED_APP = REQUIRED_APP.filter((p) => p !== "app/runtime/sandbox-worker-entry.js");
-function compatibilityFor(target) {
-  if (!TARGETS.includes(target)) throw Error("Unsupported target");
+function compatibilityFor(target, schema = 1) {
+  if (!TARGETS.includes(target) || ![1, 2].includes(schema)) throw Error("Unsupported target/schema");
   const linux = target.startsWith("linux-");
-  return { minNode: "24.20.0", minKiro: "2.21.1", minGlibc: linux ? "2.28" : null, minKernel: linux ? "4.18" : null, minMacOS: linux ? null : "13.5", libc: linux ? "glibc" : "system" };
+  return { minNode: "24.20.0", minKiro: "2.21.1", minGlibc: linux ? schema === 2 && target === "linux-x64" ? "2.34" : "2.28" : null, minKernel: linux ? "4.18" : null, minMacOS: linux ? null : "13.5", libc: linux ? "glibc" : "system" };
 }
-function checkCompatibility(value, target) {
+function checkCompatibility(value, target, schema) {
   exactFields(value, ["minNode", "minKiro", "minGlibc", "minKernel", "minMacOS", "libc"]);
-  if (canonical(value) !== canonical(compatibilityFor(target))) throw Error("Compatibility mismatch");
+  if (!(schema === void 0 ? [1, 2] : [schema]).some((version) => canonical(value) === canonical(compatibilityFor(target, version)))) throw Error("Compatibility mismatch");
 }
 function checkProvenance(p) {
   if (p?.kind === "local-source") {
@@ -866,8 +867,10 @@ function pinURL(url, hosts) {
   const u = new URL(url);
   if (u.protocol !== "https:" || !hosts.includes(u.hostname) || u.port || u.username || u.password || u.hash || u.search) throw Error("Unapproved pin URL");
 }
-function checkToolPins(tools, inventory, target) {
-  exactFields(tools, ["node", "rg"]);
+function checkToolPins(tools, inventory, target, schema = tools && Object.hasOwn(tools, "ast-grep") ? 2 : 1) {
+  if (schema !== 1 && schema !== 2) throw Error("Unsupported tool schema");
+  exactFields(tools, schema === 2 ? ["node", "rg", "ast-grep"] : ["node", "rg"]);
+  if (schema === 2) checkParserPin(tools["ast-grep"], inventory, target);
   const destinations = /* @__PURE__ */ new Set();
   let total = 0;
   for (const tool of ["node", "rg"]) {
@@ -911,6 +914,24 @@ function checkToolPins(tools, inventory, target) {
     }
   }
 }
+function checkParserPin(pin, inventory, target) {
+  exactFields(pin, ["version", "url", "size", "sha256", "integrity", "members"]);
+  if (pin.version !== "0.45.3" || !isHash(pin.sha256) || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(pin.integrity) || !Number.isSafeInteger(pin.size) || pin.size < 1 || pin.size > 32 * 1024 * 1024) throw Error("Invalid parser pin");
+  pinURL(pin.url, ["registry.npmjs.org"]);
+  const targets = target === void 0 ? TARGETS : [target];
+  if (!targets.some((t) => TARGETS.includes(t) && pin.url === "https://registry.npmjs.org/@ast-grep/cli-" + t + (t.startsWith("linux") ? "-gnu" : "") + "/-/cli-" + t + (t.startsWith("linux") ? "-gnu" : "") + "-0.45.3.tgz")) throw Error("Parser target URL mismatch");
+  const required = [["package/ast-grep", "tools/ast-grep"], ["package/package.json", "notices/ast-grep-package.json"], ["package/README.md", "notices/ast-grep-README.md"]];
+  if (!Array.isArray(pin.members) || pin.members.length !== required.length) throw Error("Parser members");
+  for (const [member, destination] of required) {
+    const m = pin.members.find((m2) => m2.path === destination);
+    exactFields(m, ["member", "path", "size", "sha256"]);
+    if (m.member !== member || !Number.isSafeInteger(m.size) || m.size < 1 || m.size > 64 * 1024 * 1024 || !isHash(m.sha256)) throw Error("Invalid parser member");
+    if (inventory) {
+      const e = inventory.find((e2) => e2.path === destination);
+      if (!e || e.size !== m.size || e.sha256 !== m.sha256) throw Error("Parser inventory mismatch: " + destination);
+    }
+  }
+}
 function checkInventoryFor(inventory, requiredApp) {
   if (!Array.isArray(inventory) || inventory.length > LIMITS.entries) throw Error("Inventory bound");
   const seen = /* @__PURE__ */ new Set();
@@ -944,11 +965,12 @@ function manifestDigest(payload) {
 }
 function checkManifestFor(m, requiredApp) {
   exactFields(m, ["compatibility", "digest", "inventory", "product", "provenance", "schema", "target", "tools", "version"]);
-  if (m.schema !== 1 || m.product !== PRODUCT || !TARGETS.includes(m.target) || !isStable(m.version)) throw Error("Manifest identity");
-  checkCompatibility(m.compatibility, m.target);
+  if (![1, 2].includes(m.schema) || m.product !== PRODUCT || !TARGETS.includes(m.target) || !isStable(m.version)) throw Error("Manifest identity");
+  checkCompatibility(m.compatibility, m.target, m.schema);
   checkProvenance(m.provenance);
-  const bytes = checkInventoryFor(m.inventory, requiredApp);
-  checkToolPins(m.tools, m.inventory, m.target);
+  const bytes = checkInventoryFor(m.inventory, m.schema === 2 ? FOVEA_REQUIRED_APP : requiredApp);
+  checkToolPins(m.tools, m.inventory, m.target, m.schema);
+  if (m.schema === 1 && m.inventory.some((e) => e.path === "tools/ast-grep")) throw Error("Parser requires schema 2");
   const { digest, ...payload } = m;
   if (!isHash(digest) || digest !== manifestDigest(payload)) throw Error("Manifest digest mismatch");
   return bytes;
@@ -1056,7 +1078,7 @@ async function scan(root) {
 async function createManifestFor(root, { version, target, compatibility, provenance, tools }, requiredApp) {
   const guard = await checkRoot(root);
   root = guard.root;
-  const payload = { schema: 1, product: PRODUCT, version, target, compatibility, provenance, tools, inventory: await scan(root) };
+  const payload = { schema: Object.hasOwn(tools, "ast-grep") ? 2 : 1, product: PRODUCT, version, target, compatibility, provenance, tools, inventory: await scan(root) };
   guard.check();
   const manifest = { ...payload, digest: manifestDigest(payload) };
   checkManifestFor(manifest, requiredApp);
@@ -1077,6 +1099,16 @@ async function validateBundleFor(root, requiredApp) {
 }
 
 // src/kiro/managed-generation.ts
+async function resolveManagedFoveaParser(context) {
+  const bundle = await validateBundle(context.bundleRoot);
+  if (bundle.root !== context.bundleRoot || context.expectedNode !== path4.join(bundle.root, "tools/node") || context.rg !== path4.join(bundle.root, "tools/rg")) throw new Error("managed parser generation containment mismatch");
+  const base = managedInstallationBase(bundle.root);
+  if (base && path4.basename(bundle.root) !== bundle.digest) throw new Error("managed parser generation digest mismatch");
+  if (bundle.manifest.schema === 1) return void 0;
+  const parser = bundle.inventory.find((entry) => entry.path === "tools/ast-grep");
+  if (!parser || bundle.manifest.tools["ast-grep"].version !== "0.45.3") throw new Error("managed parser identity missing");
+  return { path: path4.join(bundle.root, "tools/ast-grep"), sha256: parser.sha256, version: "0.45.3", generationRoot: bundle.root };
+}
 var digestPattern = /^[a-f0-9]{64}$/u;
 function inferManagedGeneration(runtimeRoot, env) {
   const parent = path4.dirname(runtimeRoot);
@@ -1213,13 +1245,15 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         const manifestHash = createHash4("sha256").update(readFileSync(path6.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-YZ6GR76X.js");
-      server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {} });
+      const managedParser = launch.managedGeneration ? await resolveManagedFoveaParser(launch.managedGeneration) : void 0;
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-JKIUK4Q3.js");
+      server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {}, ...managedParser ? { managedParser } : {} });
     } finally {
       release?.();
     }
     return server;
   } catch (error) {
+    processServerTask = void 0;
     await server?.close();
     throw error;
   }

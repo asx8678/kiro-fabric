@@ -1,0 +1,368 @@
+{
+  "schemaVersion": 3,
+  "harness": "fovea-capability-probe",
+  "run": "2d3b3b0b-47e6-4c9c-91a2-68a29c956ab3",
+  "generatedAt": "2026-09-20T17:27:52.293Z",
+  "surface": "headless",
+  "mode": "native",
+  "qualified": false,
+  "automatic": false,
+  "gates": [
+    {
+      "id": "H01",
+      "surface": "headless",
+      "status": "environment-blocked",
+      "requirement": "same session and MCP instance across multiple turns",
+      "blocker": "isolated-auth-unavailable",
+      "remaining": "Correlate resumed turns with authoritative session and MCP instance identities.",
+      "evidence": [
+        "chat-new"
+      ]
+    },
+    {
+      "id": "H02",
+      "surface": "headless",
+      "status": "environment-blocked",
+      "requirement": "concurrent session-to-host mapping and ambiguity rejection",
+      "blocker": "isolated-auth-unavailable",
+      "remaining": "Correlate concurrent same-workspace sessions with hosts and exercise ambiguous routing rejection.",
+      "evidence": [
+        "chat-new"
+      ]
+    },
+    {
+      "id": "H03",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "readiness, authorized binding and first-hook ordering",
+      "blocker": null,
+      "remaining": "Instrument real engine-ready, authorized binding and first-hook ordering.",
+      "evidence": []
+    },
+    {
+      "id": "H04",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "prompt marker delivered to intended model turn",
+      "blocker": null,
+      "remaining": "Observe hook marker in actual intended model input, not model prose or hook stdout.",
+      "evidence": []
+    },
+    {
+      "id": "H05",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "post-tool marker delivered without changing result or error",
+      "blocker": null,
+      "remaining": "Exercise successful and failed tool results plus next-step marker delivery.",
+      "evidence": []
+    },
+    {
+      "id": "H06",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "stop marker causes bounded continuation, not merely hook firing",
+      "blocker": null,
+      "remaining": "Exercise stop-hook bounded continuation through documented native semantics.",
+      "evidence": []
+    },
+    {
+      "id": "H07",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "cancel stops automatic work and queued user input wins",
+      "blocker": null,
+      "remaining": "Exercise native cancellation and queued-input precedence; process timeout is not cancellation evidence.",
+      "evidence": []
+    },
+    {
+      "id": "H08",
+      "surface": "headless",
+      "status": "environment-blocked",
+      "requirement": "new/resume/clear/compact/profile-swap signals or safe recovery",
+      "blocker": "isolated-auth-unavailable",
+      "remaining": "Verify new/resume identity plus clear, compact and profile-swap signals or safe recovery.",
+      "evidence": [
+        "chat-new"
+      ]
+    },
+    {
+      "id": "H09",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "visible/model-only/disabled and status/settings/reset/reload",
+      "blocker": null,
+      "remaining": "Exercise each presentation mode and status/settings/reset/reload on its claimed surface.",
+      "evidence": []
+    },
+    {
+      "id": "H10",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "accepted/declined exact effects and workspace revocation",
+      "blocker": null,
+      "remaining": "Native-TUI accept/decline/revoke exact effects not exercised; no effects authorized by this harness.",
+      "evidence": []
+    },
+    {
+      "id": "H11",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "authoritative complete model-visible tool inventory",
+      "blocker": null,
+      "remaining": "Capture authoritative complete model-visible inventory; stream envelopes and picker counts do not suffice.",
+      "evidence": []
+    },
+    {
+      "id": "H12",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "old session retains generation-matched engine and hooks",
+      "blocker": null,
+      "remaining": "Generation update with a retained native session not exercised; no installer/activation in this harness.",
+      "evidence": []
+    }
+  ],
+  "probes": [
+    {
+      "id": "version",
+      "args": [
+        "--version"
+      ],
+      "status": "observed",
+      "reason": null,
+      "exitCode": 0,
+      "error": null,
+      "stopReason": null,
+      "cleanup": "leader-closed",
+      "bytes": 16,
+      "diagnostics": [],
+      "accountAbsent": false,
+      "events": [],
+      "jsonLines": 0,
+      "nonJsonLines": 0,
+      "eventsTruncated": false,
+      "version": "2.22.0",
+      "supportedSwitches": [],
+      "documentsJsonLines": false
+    },
+    {
+      "id": "help",
+      "args": [
+        "--help"
+      ],
+      "status": "observed",
+      "reason": null,
+      "exitCode": 0,
+      "error": null,
+      "stopReason": null,
+      "cleanup": "leader-closed",
+      "bytes": 825,
+      "diagnostics": [],
+      "accountAbsent": false,
+      "events": [],
+      "jsonLines": 0,
+      "nonJsonLines": 0,
+      "eventsTruncated": false,
+      "version": null,
+      "supportedSwitches": [],
+      "documentsJsonLines": false
+    },
+    {
+      "id": "chat-help",
+      "args": [
+        "chat",
+        "--help"
+      ],
+      "status": "observed",
+      "reason": null,
+      "exitCode": 0,
+      "error": null,
+      "stopReason": null,
+      "cleanup": "leader-closed",
+      "bytes": 3826,
+      "diagnostics": [],
+      "accountAbsent": false,
+      "events": [],
+      "jsonLines": 0,
+      "nonJsonLines": 0,
+      "eventsTruncated": false,
+      "version": null,
+      "supportedSwitches": [
+        "--v3",
+        "--agent",
+        "--output-format",
+        "--require-mcp-startup",
+        "--resume",
+        "--resume-id",
+        "--list-sessions",
+        "--format"
+      ],
+      "documentsJsonLines": true
+    },
+    {
+      "id": "agent-help",
+      "args": [
+        "agent",
+        "--help"
+      ],
+      "status": "observed",
+      "reason": null,
+      "exitCode": 0,
+      "error": null,
+      "stopReason": null,
+      "cleanup": "leader-closed",
+      "bytes": 871,
+      "diagnostics": [],
+      "accountAbsent": false,
+      "events": [],
+      "jsonLines": 0,
+      "nonJsonLines": 0,
+      "eventsTruncated": false,
+      "version": null,
+      "supportedSwitches": [],
+      "documentsJsonLines": false
+    },
+    {
+      "id": "identity",
+      "args": [
+        "whoami",
+        "--format",
+        "json"
+      ],
+      "status": "environment-blocked",
+      "reason": "isolated-auth-unavailable",
+      "exitCode": 1,
+      "error": null,
+      "stopReason": null,
+      "cleanup": "leader-closed",
+      "bytes": 17,
+      "diagnostics": [],
+      "accountAbsent": true,
+      "events": [],
+      "jsonLines": 0,
+      "nonJsonLines": 0,
+      "eventsTruncated": false,
+      "version": null,
+      "supportedSwitches": [],
+      "documentsJsonLines": false
+    },
+    {
+      "id": "chat-new",
+      "args": [
+        "chat",
+        "--v3",
+        "--output-format",
+        "stream-json",
+        "Reply only FOVEA_PROBE_READY. Do not use tools, read files, run commands, or change anything."
+      ],
+      "status": "environment-blocked",
+      "reason": "isolated-auth-unavailable",
+      "exitCode": 1,
+      "error": null,
+      "stopReason": null,
+      "cleanup": "leader-closed",
+      "bytes": 271,
+      "diagnostics": [
+        {
+          "code": "auth-browser-unavailable",
+          "text": "Failed to open browser for authentication."
+        },
+        {
+          "code": "browser-url-open-failed",
+          "text": "error: Failed to open URL"
+        }
+      ],
+      "accountAbsent": false,
+      "events": [],
+      "jsonLines": 0,
+      "nonJsonLines": 1,
+      "eventsTruncated": false,
+      "version": null,
+      "supportedSwitches": [],
+      "documentsJsonLines": false
+    },
+    {
+      "id": "sessions-after-new",
+      "args": [
+        "chat",
+        "--v3",
+        "--list-sessions",
+        "--format",
+        "json"
+      ],
+      "status": "environment-blocked",
+      "reason": "isolated-auth-unavailable",
+      "exitCode": 1,
+      "error": null,
+      "stopReason": null,
+      "cleanup": "leader-closed",
+      "bytes": 271,
+      "diagnostics": [
+        {
+          "code": "auth-browser-unavailable",
+          "text": "Failed to open browser for authentication."
+        },
+        {
+          "code": "browser-url-open-failed",
+          "text": "error: Failed to open URL"
+        }
+      ],
+      "accountAbsent": false,
+      "events": [],
+      "jsonLines": 0,
+      "nonJsonLines": 0,
+      "eventsTruncated": false,
+      "version": null,
+      "supportedSwitches": [],
+      "documentsJsonLines": false
+    },
+    {
+      "id": "chat-resume",
+      "args": [
+        "chat",
+        "--v3",
+        "--output-format",
+        "stream-json",
+        "--resume",
+        "Reply only FOVEA_PROBE_READY. Do not use tools, read files, run commands, or change anything."
+      ],
+      "status": "untested",
+      "dependency": "chat-new",
+      "reason": "isolated-auth-unavailable",
+      "events": []
+    },
+    {
+      "id": "concurrent-a",
+      "args": [
+        "chat",
+        "--v3",
+        "--output-format",
+        "stream-json",
+        "Reply only FOVEA_PROBE_READY. Do not use tools, read files, run commands, or change anything."
+      ],
+      "status": "untested",
+      "dependency": "chat-new",
+      "reason": "isolated-auth-unavailable",
+      "events": []
+    },
+    {
+      "id": "concurrent-b",
+      "args": [
+        "chat",
+        "--v3",
+        "--output-format",
+        "stream-json",
+        "Reply only FOVEA_PROBE_READY. Do not use tools, read files, run commands, or change anything."
+      ],
+      "status": "untested",
+      "dependency": "chat-new",
+      "reason": "isolated-auth-unavailable",
+      "events": []
+    }
+  ],
+  "scopeRemoved": true,
+  "isolation": {
+    "status": "ready"
+  }
+}

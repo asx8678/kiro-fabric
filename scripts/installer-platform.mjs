@@ -36,4 +36,3 @@ export function detectInstallerPlatform(observation = {}) {
 export function assertUnprivilegedInstaller(env = process.env) {
   if ((typeof process.getuid === "function" && process.getuid() === 0) || env.SUDO_USER || env.SUDO_UID || env.SUDO_GID) throw Object.assign(new Error("Do not run the Fabric installer with sudo or as root"), { code: "PREREQUISITE" });
 }
-export const compatibilityFor = (target) => ({ minNode: "24.20.0", minKiro: "2.21.1", minGlibc: target.startsWith("linux-") ? "2.28" : null, minKernel: target.startsWith("linux-") ? "4.18" : null, minMacOS: target.startsWith("darwin-") ? "13.5" : null, libc: target.startsWith("linux-") ? "glibc" : "system" });

@@ -1,0 +1,89 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { createFoveaDirectory, privateFoveaDirectory } from './config.js';
+
+export interface ProvenanceTransition { path: string; beforeSha256: string | null; afterSha256: string | null }
+interface ProvenanceRecord extends ProvenanceTransition { sequence: number; origin: string }
+export interface ProvenanceJournal { version: 1; worktree: string; sequence: number; records: ProvenanceRecord[] }
+export const PROVENANCE_MAX_RECORDS = 128;
+const MAX_BYTES = 48_000;
+const hash = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/u.test(v);
+const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+export function validProvenanceTransition(v: unknown): v is ProvenanceTransition {
+  return object(v) && typeof v.path === 'string' && v.path.length > 0 && v.path.length <= 512 &&
+    !v.path.includes('\\') && !/[\x00-\x1f\x7f]/u.test(v.path) && !path.posix.isAbsolute(v.path) &&
+    v.path.split('/').every(p => !!p && p !== '.' && p !== '..') &&
+    (v.beforeSha256 === null || hash(v.beforeSha256)) && (v.afterSha256 === null || hash(v.afterSha256));
+}
+export function validateProvenanceJournal(v: unknown, worktree: string): ProvenanceJournal {
+  if (!object(v) || Object.keys(v).sort().join(',') !== 'records,sequence,version,worktree' || v.version !== 1 || !hash(worktree) || v.worktree !== worktree ||
+      !Number.isSafeInteger(v.sequence) || (v.sequence as number) < 0 || !Array.isArray(v.records) || v.records.length > PROVENANCE_MAX_RECORDS) throw new Error('Invalid provenance journal');
+  let previous = (v.sequence as number) - v.records.length;
+  for (const r of v.records) {
+    if (!validProvenanceTransition(r) || Object.keys(r).sort().join(',') !== 'afterSha256,beforeSha256,origin,path,sequence' ||
+        !object(r) || !hash(r.origin) || r.sequence !== ++previous) throw new Error('Invalid provenance record');
+  }
+  if (previous !== v.sequence || Buffer.byteLength(JSON.stringify(v), 'utf8') > MAX_BYTES) throw new Error('Invalid provenance bounds');
+  return v as unknown as ProvenanceJournal;
+}
+
+/** Host-authored, per-physical-worktree ledger. No source reads, conversation
+ * identifiers, arguments, navigation or permission grants are persisted here.
+ * Lock contention/unsafe or malformed storage fails closed; callers mark a gap.
+ * Descriptor-relative publication uses the same private/no-follow/exclusive
+ * lock discipline as config, without holding any source-file locks. */
+export class FoveaProvenanceJournal {
+  readonly directory: string;
+  constructor(foveaRoot: string) { this.directory = createFoveaDirectory(foveaRoot, 'provenance'); }
+  private access<T>(worktree: string, fn: (file: string, directory: number) => T): T {
+    if (!hash(worktree) || process.platform !== 'linux') throw new Error('Unsupported provenance storage');
+    privateFoveaDirectory(this.directory);
+    const fd = fs.openSync(this.directory, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
+    try {
+      const s = fs.fstatSync(fd), current = fs.lstatSync(this.directory);
+      if (s.dev !== current.dev || s.ino !== current.ino || (s.mode & 0o077) || s.uid !== process.getuid?.()) throw new Error('Unsafe provenance directory');
+      return fn(`/proc/self/fd/${fd}/${worktree}.json`, fd);
+    } finally { fs.closeSync(fd); }
+  }
+  private load(file: string, worktree: string): ProvenanceJournal {
+    let fd: number;
+    try { fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK); }
+    catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, worktree, sequence: 0, records: [] }; throw e; }
+    try {
+      const s = fs.fstatSync(fd);
+      if (!s.isFile() || s.nlink !== 1 || (s.mode & 0o077) || s.uid !== process.getuid?.() || s.size > MAX_BYTES) throw new Error('Unsafe provenance file');
+      const bytes = Buffer.alloc(MAX_BYTES + 1), n = fs.readSync(fd, bytes, 0, bytes.length, 0);
+      if (n > MAX_BYTES) throw new Error('Provenance byte limit');
+      return validateProvenanceJournal(JSON.parse(bytes.subarray(0, n).toString('utf8')), worktree);
+    } finally { fs.closeSync(fd); }
+  }
+  read(worktree: string): ProvenanceJournal { return this.access(worktree, file => this.load(file, worktree)); }
+  append(worktree: string, origin: string, transitions: readonly ProvenanceTransition[]): void {
+    if (!hash(origin) || transitions.length > PROVENANCE_MAX_RECORDS || transitions.some(t => !validProvenanceTransition(t))) throw new Error('Invalid provenance admission');
+    this.access(worktree, (file, directory) => {
+      const lockPath = file + '.lock';
+      const lock = fs.openSync(lockPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW, 0o600);
+      const identity = fs.fstatSync(lock);
+      const tmp = file + `.${randomBytes(16).toString('hex')}.tmp`;
+      try {
+        const journal = this.load(file, worktree);
+        for (const t of transitions) {
+          if (t.beforeSha256 === t.afterSha256) continue;
+          if (!Number.isSafeInteger(journal.sequence + 1)) throw new Error('Provenance sequence exhausted');
+          journal.records.push({ path: t.path, beforeSha256: t.beforeSha256, afterSha256: t.afterSha256, origin, sequence: ++journal.sequence });
+        }
+        while (journal.records.length > PROVENANCE_MAX_RECORDS || Buffer.byteLength(JSON.stringify(journal), 'utf8') > MAX_BYTES) journal.records.shift();
+        const fd = fs.openSync(tmp, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW, 0o600);
+        try { fs.writeFileSync(fd, JSON.stringify(journal)); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+        fs.renameSync(tmp, file); fs.fsyncSync(directory);
+      } finally {
+        try { fs.unlinkSync(tmp); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+        fs.closeSync(lock);
+        const current = fs.lstatSync(lockPath);
+        if (identity.dev !== current.dev || identity.ino !== current.ino) throw new Error('Provenance lock replaced');
+        fs.unlinkSync(lockPath);
+      }
+    });
+  }
+}

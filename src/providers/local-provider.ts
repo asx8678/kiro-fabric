@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { observeFovea } from "../fovea/observations.js";
 import { largestFittingInteger } from "../bounded-search.js";
 import { applyLocalEditsWithRegions, type LocalEditRegion, type LocalTextEdit } from "./local-edit.js";
 import path from "node:path";
@@ -89,6 +90,7 @@ interface Prepared {
  * Node pathname revalidation does not close malicious same-user TOCTOU races. */
 export class LocalCodingProvider implements FabricProvider {
   readonly name = "local";
+  readonly requirements = { verifiedWorkspace: true, settlement: true };
   readonly description = "Verified workspace local coding with bounded reads and exact approved effects";
   readonly #paths: LocalPaths;
   readonly #lockRoot: string;
@@ -243,6 +245,7 @@ export class LocalCodingProvider implements FabricProvider {
       this.#prepared.delete(victim[0]);
     }
     this.#prepared.set(token, entry);
+    if (entry.snapshot) observeFovea(context, { phase: "prepared", transitions: [{ path: entry.snapshot.path, beforeSha256: entry.snapshot.file?.sha256 ?? null, afterSha256: localHash(entry.proposed!) }] });
     return canonical;
   }
   #review(target: string, before: string, after: string, regions: readonly LocalEditRegion[]): string {
@@ -395,7 +398,12 @@ export class LocalCodingProvider implements FabricProvider {
       }
       return this.#publish(name, entry, context);
     }
-    if (name === "read") return this.#read(args);
+    if (name === "read") {
+      const result = this.#read(args);
+      const source = { path: path.resolve(this.#paths.root, result.path), sha256: result.sha256 };
+      observeFovea(context, { phase: "access", paths: [source.path], sources: [source] });
+      return result;
+    }
     if (name === "readMany" || name === "readEvidence") {
       const windows = (args.windows as LocalReadWindow[]).map(window => ({ ...window, path: this.#paths.relative(this.#readWindowPath(window.path, args.partial === true)) }));
       const budget = Math.min(this.#readManyBudget, (args.maxChars as number | undefined) ?? 32000,
@@ -418,10 +426,16 @@ export class LocalCodingProvider implements FabricProvider {
         return this.#read({ ...window }, budget, captured);
       }, args.partial === true, name === "readEvidence" ? { serialize: formatLocalEvidence, operation: "local.readEvidence" } : {});
       for (const captured of snapshots.values()) { this.#check(context); this.#paths.revalidate(captured.snapshot); }
-      return this.#bounded(name === "readEvidence" ? formatLocalEvidence(result) : result, budget);
+      const bounded = this.#bounded(name === "readEvidence" ? formatLocalEvidence(result) : result, budget);
+      const sources = result.files.map(file => ({ path: path.resolve(this.#paths.root, file.path), sha256: file.sha256 }));
+      if (sources.length) observeFovea(context, { phase: "access", paths: sources.map(source => source.path), sources });
+      return bounded;
     }
-    if (name === "list") return this.#list(args);
-    if (name === "find" || name === "grep") return await this.#search(name, args, context);
+    if (name === "list" || name === "find" || name === "grep") {
+      const result = name === "list" ? this.#list(args) : await this.#search(name, args, context);
+      observeFovea(context, { phase: "access", paths: [args.path as string] });
+      return result;
+    }
     throw new Error(`Unknown local action: ${name}`);
   }
   #read(args: Record<string, unknown>, budget = this.#budget, captured?: ReturnType<LocalPaths["read"]> & { lines: LocalLineIndex }): LocalReadResult {
@@ -695,7 +709,11 @@ export class LocalCodingProvider implements FabricProvider {
     this.#paths.revalidate(snapshot);
     this.#check(context);
     const sha256 = localHash(proposed);
-    if (snapshot.file?.sha256 === sha256) return this.#bounded({ path: this.#paths.relative(snapshot.path), changed: false, sha256, bytes: Buffer.byteLength(proposed), identity: snapshot.file.identity });
+    if (snapshot.file?.sha256 === sha256) {
+      const result = this.#bounded({ path: this.#paths.relative(snapshot.path), changed: false, sha256, bytes: Buffer.byteLength(proposed), identity: snapshot.file.identity });
+      observeFovea(context, { phase: "access", paths: [snapshot.path], sources: [{ path: snapshot.path, sha256 }] });
+      return result;
+    }
     const temporary = path.join(path.dirname(snapshot.path), `.fabric-local-${randomUUID()}.tmp`);
     const owned: OwnedFile = { created: false };
     let published = false;
@@ -713,6 +731,7 @@ export class LocalCodingProvider implements FabricProvider {
       else { fs.linkSync(temporary, snapshot.path); }
       published = true;
       entry.committed = true;
+      observeFovea(context, { phase: "committed", paths: [snapshot.path], transitions: [{ path: snapshot.path, beforeSha256: snapshot.file?.sha256 ?? null, afterSha256: sha256 }] });
       if (!snapshot.file) fs.unlinkSync(temporary);
       const actual = this.#paths.read(snapshot.path).snapshot.file!;
       if (actual.sha256 !== sha256 || !sameLocalIdentity(actual.identity, owned.identity!)) throw new Error("local published verification conflict");

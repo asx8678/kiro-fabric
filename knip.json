@@ -3,13 +3,20 @@
   "entry": [
     "src/index.ts",
     "src/kiro/mcp-entry.ts",
+    "src/fovea/engine-entry.ts",
+    "src/kiro/fovea-hook.ts",
+    "src/fovea/core/*.ts",
+    "scripts/fovea-capability-probe.mjs",
+    "scripts/fovea-reference-harness.mjs",
+    "scripts/fovea-lifecycle-harness.mjs",
     "src/runtime/compiler-worker-entry.ts",
     "src/runtime/sandbox-worker-entry.ts",
     "tests/**/*.test.ts",
+    "tests/fovea/fixtures/cold-inputs.mjs",
     "scripts/analyze-trace.mjs",
     "scripts/run-agent-dev.mjs"
   ],
   "project": ["src/**/*.{ts,mjs}", "tests/**/*.ts", "scripts/**/*.mjs"],
   "exclude": ["duplicates"],
-  "ignoreBinaries": ["mkfifo", "helm", "pwsh"]
+  "ignoreBinaries": ["mkfifo", "helm", "pwsh", "cc"]
 }

@@ -109,7 +109,7 @@ try {
   }
   const providers = info.providers?.map((provider) => provider.name).sort();
   const disabledProviders = ["continuity", "web"];
-  if (JSON.stringify(providers) !== JSON.stringify(["artifacts", "continuity", "fabric", "local", "mcp", "memory", "probe", "review", "state", "web"]) ||
+  if (JSON.stringify(providers) !== JSON.stringify(["artifacts", "continuity", "fabric", "local", "mcp", "memory", "probe", "repo", "review", "state", "web"]) ||
       info.providers.some((provider) => provider.available !== !disabledProviders.includes(provider.name)) ||
       disabledProviders.some((name) => info.providers.find((provider) => provider.name === name)?.reason !== "disabled by configuration")) {
     throw new Error("fabric_info provider set is incomplete");
@@ -201,7 +201,7 @@ try {
     lifecycle: info.lifecycle,
     scope: "component-mcp-only",
     authenticatedKiro: "NOT TESTED",
-    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "eight-enabled-providers", "web-disabled-by-default", "continuity-disabled-by-default", "declared-versus-observed-provenance", "checked-execution", "structured-read-and-search", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
+    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "nine-enabled-providers", "web-disabled-by-default", "continuity-disabled-by-default", "declared-versus-observed-provenance", "checked-execution", "structured-read-and-search", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
   };
   const serialized = `${JSON.stringify(report, null, 2)}\n`;
   if (jsonOutput) writeFileAtomic(jsonOutput, serialized);

@@ -17,6 +17,10 @@ export type { CatalogBinding, CatalogMethod, CatalogPageOptions, CatalogContinua
 export { remoteRef, parseRemoteRef, MAX_REMOTE_REF_CHARS } from "./core/remote-identity.js";
 export { ActionRegistry } from "./core/action-registry.js";
 export { LocalCodingProvider } from "./providers/local-provider.js";
+export { FoveaProvider } from "./providers/repo-provider.js";
+export { FoveaHost } from "./fovea/host.js";
+export type { FoveaHostOptions, FoveaBoundClient } from "./fovea/host.js";
+export type { RepoNavigationPacket, RepoReadWindow, RepoCoverage, RepoSourceCoverage, RepoSourceCoverageReason, RepoImportCoverage, RepoImportCoverageExample } from "./providers/repo-contract.js";
 export { formatLocalEvidence } from "./providers/local-evidence.js";
 export { ReviewProvider } from "./providers/review-provider.js";
 export { ContinuityProvider } from "./providers/continuity-provider.js";

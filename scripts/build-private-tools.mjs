@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile, mkdir, mkdtemp, writeFile, rm, chmod, lstat, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -5,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { sha256, TARGETS, checkToolPins } from './bundle-contract.mjs';
 import { captureArtifactTree } from './installer-artifacts.mjs';
-const HOSTS=new Set(['nodejs.org','github.com','release-assets.githubusercontent.com']);
+const HOSTS=new Set(['nodejs.org','github.com','release-assets.githubusercontent.com','registry.npmjs.org']);
 /** Bounded upstream acquisition, one overall deadline including redirect bodies.
  * @param {string} url @param {{sha256:string,size?:number,max?:number}} options */
 export async function downloadVerified(url,{sha256:digest,size,max=96*1024*1024}){
@@ -68,10 +69,10 @@ export async function acquirePrivateToolsForTest(target,destination,{pins,qualif
  const temp=await mkdtemp(path.join(tmpdir(),'fabric-tools-'));
  try{
   const files=[];
-  for(const tool of ['node','rg']){const pin=pins[tool];const archive=await download(pin.url,pin);if(archive.length!==pin.size||sha256(archive)!==pin.sha256)throw Error('Tool archive capture mismatch');const archivePath=path.join(temp,tool+'.tar.gz');await writeFile(archivePath,archive,{mode:384});
-   for(const member of pin.members){const bytes=extract(archivePath,member.member);if(bytes.length!==member.size||sha256(bytes)!==member.sha256)throw Error('Installed tool member mismatch');files.push({path:member.path,bytes,mode:member.path==='tools/'+tool?448:384});}
+  for(const tool of Object.keys(pins)){const pin=pins[tool];const archive=await download(pin.url,{...pin,max:tool==='ast-grep'?32*1024*1024:96*1024*1024});if(archive.length!==pin.size||sha256(archive)!==pin.sha256||(pin.integrity&&'sha512-'+createHash('sha512').update(archive).digest('base64')!==pin.integrity))throw Error('Tool archive capture mismatch');const archivePath=path.join(temp,tool+'.tar.gz');await writeFile(archivePath,archive,{mode:384});
+   for(const member of pin.members){const bytes=extract(archivePath,member.member,member.size);if(bytes.length!==member.size||sha256(bytes)!==member.sha256)throw Error('Installed tool member mismatch');files.push({path:member.path,bytes,mode:member.path==='tools/'+tool?448:384});}
   }
-  for(const file of files){if(!/^(tools\/(node|rg)|notices\/[a-zA-Z0-9._-]+)$/.test(file.path))throw Error('Unsafe pin destination');const parent=path.dirname(path.join(destination,file.path));await mkdir(parent,{recursive:true,mode:448});const s=await lstat(parent);if(!s.isDirectory()||s.isSymbolicLink()||(s.mode&4095)!==448||s.uid!==process.getuid?.())throw Error('Unsafe private tool directory');await writeFile(path.join(destination,file.path),file.bytes,{flag:'wx',mode:file.mode});await chmod(path.join(destination,file.path),file.mode);}
+  for(const file of files){if(!/^(tools\/(node|rg|ast-grep)|notices\/[a-zA-Z0-9._-]+)$/.test(file.path))throw Error('Unsafe pin destination');const parent=path.dirname(path.join(destination,file.path));await mkdir(parent,{recursive:true,mode:448});const s=await lstat(parent);if(!s.isDirectory()||s.isSymbolicLink()||(s.mode&4095)!==448||s.uid!==process.getuid?.())throw Error('Unsafe private tool directory');await writeFile(path.join(destination,file.path),file.bytes,{flag:'wx',mode:file.mode});await chmod(path.join(destination,file.path),file.mode);}
   return {target,tools:pins,bytes:files.reduce((n,f)=>n+f.bytes.length,0),qualification};
  }finally{await rm(temp,{recursive:true,force:true});}
 }

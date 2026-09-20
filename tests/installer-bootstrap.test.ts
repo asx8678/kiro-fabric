@@ -146,7 +146,7 @@ test('platform mapping and upstream system floors reject unsupported hosts befor
   await writeFile(f.temp+'/bin/sw_vers','#!/bin/bash\nprintf "%s\\n" "${FIXTURE_MACOS:-13.5}"\n',{mode:0o700});
   await rm(f.temp+'/bin/mktemp');await writeFile(f.temp+'/bin/mktemp','#!/bin/bash\nprintf "STATE CREATED" >&2\nexit 77\n',{mode:0o700});
   for(const [env,message] of [
-   [{FIXTURE_OS:'FreeBSD'},'unsupported platform'],[{FIXTURE_ARCH:'riscv64'},'unsupported platform'],[{FIXTURE_LIBC:'musl 1.2'},'unsupported libc'],[{FIXTURE_LIBC:'glibc 2.27'},'unsupported glibc'],[{FIXTURE_KERNEL:'4.17.0'},'unsupported kernel'],[{FIXTURE_OS:'Darwin',FIXTURE_MACOS:'13.4'},'unsupported macOS'],[{FIXTURE_ARCH:'aarch64'},'unsupported target'],[{FIXTURE_OS:'Darwin',FIXTURE_ARCH:'arm64'},'unsupported target'],
+   [{FIXTURE_OS:'FreeBSD'},'unsupported platform'],[{FIXTURE_ARCH:'riscv64'},'unsupported platform'],[{FIXTURE_LIBC:'musl 1.2'},'unsupported libc'],[{FIXTURE_LIBC:'glibc 2.27'},'unsupported glibc'],[{FIXTURE_KERNEL:'4.17.0'},'unsupported kernel'],[{FIXTURE_OS:'Darwin',FIXTURE_MACOS:'13.4'},'unsupported target'],[{FIXTURE_ARCH:'aarch64'},'unsupported target'],[{FIXTURE_OS:'Darwin',FIXTURE_ARCH:'arm64'},'unsupported target'],
   ] as [Record<string,string>,string][]){const r=f.run(['--from-archive',f.temp+'/bundle.tar.gz'],env);expect(r.stderr).toContain(message);expect(r.stderr).not.toContain('STATE CREATED');}
   for(const kernel of ['4.18.0','4.18+local','6.12.25+rpt-rpi-2712','6.12.0+','6.6.87.2-microsoft-standard-WSL2']){
    expect(detectInstallerPlatform({platform:'linux',arch:'x64',glibc:'2.28',osVersion:kernel}).target).toBe('linux-x64');
@@ -156,6 +156,18 @@ test('platform mapping and upstream system floors reject unsupported hosts befor
    expect(()=>detectInstallerPlatform({platform:'linux',arch:'x64',glibc:'2.28',osVersion:kernel})).toThrow();
    const rejected=f.run(['--from-archive',f.temp+'/bundle.tar.gz'],{FIXTURE_KERNEL:kernel});expect(rejected.stderr,kernel).toContain('unsupported kernel');expect(rejected.stderr,kernel).not.toContain('STATE CREATED');
   }
+ }finally{await f.cleanup();}
+});
+test('pinned Darwin target enforces the macOS floor before mktemp',async()=>{
+ const f=await bootstrapFixture('darwin-x64');try{
+  await rm(f.temp+'/bin/uname');await writeFile(f.temp+'/bin/uname','#!/bin/bash\ncase "$1" in -s) printf "Darwin\\n" ;; -m) printf "x86_64\\n" ;; esac\n',{mode:0o700});
+  await writeFile(f.temp+'/bin/sw_vers','#!/bin/bash\nprintf "%s\\n" "$FIXTURE_MACOS"\n',{mode:0o700});
+  await rm(f.temp+'/bin/mktemp');await writeFile(f.temp+'/bin/mktemp','#!/bin/bash\nprintf "STATE CREATED" >&2\nexit 77\n',{mode:0o700});
+  // Selection precedes target-specific floors: the Linux-only fixture cannot test this gate.
+  const rejected=f.run(['--from-archive',f.temp+'/bundle.tar.gz'],{FIXTURE_MACOS:'13.4'});
+  expect(rejected.status).not.toBe(0);expect(rejected.stderr).toContain('unsupported macOS');expect(rejected.stderr).not.toContain('STATE CREATED');
+  const accepted=f.run(['--from-archive',f.temp+'/bundle.tar.gz'],{FIXTURE_MACOS:'13.5'});
+  expect(accepted.stderr).toContain('STATE CREATED');expect(accepted.stderr).not.toContain('unsupported macOS');
  }finally{await f.cleanup();}
 });
 test('portable shasum fallback works without sha256sum',async()=>{

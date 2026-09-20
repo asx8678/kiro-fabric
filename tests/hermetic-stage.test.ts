@@ -56,6 +56,49 @@ describe("hermetic staging", () => {
     const historical = fs.readFileSync(new URL("./fixtures/installer-history/d33de003/install-agent-user.mjs.txt", import.meta.url), "utf8");
     expect(createHash("sha256").update(historical).digest("hex")).toBe("26588cd40f6d201ab84f8ac6018c14189412a57c250f02692188a3796b71f3fb");
     put(legacy, "scripts/install-agent-user.mjs", historical);
+    // Exact pre-Fovea authority bytes; no Git checkout or current-product derivation.
+    const productBytes = `{
+  "$schema": "./docs/agent-product.schema.json",
+  "schemaVersion": 1,
+  "product": "kiro-fabric-agent",
+  "entrypoint": "src/kiro/mcp-entry.ts",
+  "outputBundle": "dist/kiro-agent-closure",
+  "runtimeAssets": {
+    "compilerWorker": "src/runtime/compiler-worker-entry.ts",
+    "sandboxWorker": "src/runtime/sandbox-worker-entry.ts"
+  },
+  "tools": ["fabric_info", "fabric_workspace", "fabric_exec"],
+  "mountedProviders": ["artifacts", "memory", "state", "mcp", "local", "fabric"],
+  "bundledAgentResources": ["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md", "skills/fabric-exec/references/review.md"],
+  "allowedPackageDependencies": [
+    "@jitl/quickjs-singlefile-mjs-release-sync",
+    "@modelcontextprotocol/sdk",
+    "mcporter",
+    "quickjs-emscripten-core",
+    "typebox",
+    "typescript"
+  ],
+  "forbiddenRuntimeModules": [
+    "src/actors/", "src/agents/", "src/capture/", "src/compaction/", "src/components/",
+    "src/residency/", "src/schema/", "src/ui/", "src/verification/", "src/worker/",
+    "src/worker.ts", "src/runtime/node-process-runtime.ts", "src/runtime/node-process-child-source.ts",
+    "src/kiro/acp-process.ts", "src/kiro/acp-worker.ts", "src/kiro/agent-worker-entry.ts",
+    "src/kiro/management-entry.ts"
+  ]
+}
+`;
+    expect(createHash("sha256").update(productBytes).digest("hex")).toBe("d09991a9c7fe5fe32104c21cfae7e4c35229fe2d50cbc4aef3f9a57b20a392e9");
+    put(legacy, "agent-product.json", productBytes);
+    fs.unlinkSync(path.join(legacy, "skills/fabric-exec/references/fovea.md"));
+    const manifest = JSON.parse(fs.readFileSync(path.join(legacy, "runtime/closure-manifest.json"), "utf8"));
+    manifest.files = manifest.files.filter((entry: { path: string }) => !entry.path.startsWith("fovea/") && entry.path !== "kiro/fovea-hook.js");
+    delete manifest.foveaEngine; delete manifest.foveaHook; delete manifest.vendoredComponents;
+    fs.rmSync(path.join(legacy, "runtime/fovea"), { recursive: true });
+    fs.unlinkSync(path.join(legacy, "runtime/kiro/fovea-hook.js"));
+    const digest = createHash("sha256");
+    for (const entry of manifest.files) digest.update(entry.path).update("\0").update(fs.readFileSync(path.join(legacy, "runtime", entry.path)));
+    manifest.contentDigest = digest.digest("hex");
+    put(legacy, "runtime/closure-manifest.json", JSON.stringify(manifest));
     expect(validateAgentPackage(legacy).ok).toBe(true);
     const probe = spawnSync(process.execPath, ["--input-type=module", "-e", `await import(${JSON.stringify(pathToFileURL(path.join(legacy, "scripts/install-agent-user.mjs")).href)});`], { cwd: legacy, encoding: "utf8", timeout: 10000 });
     expect(probe.status, probe.stderr).toBe(0);

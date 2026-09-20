@@ -16,6 +16,7 @@
     "dist/chunks/*.js",
     "dist/runtime/compiler-worker-entry.js",
     "dist/runtime/sandbox-worker-entry.js",
+    "dist/fovea/engine-entry.js",
     "dist/**/*.d.ts",
     "!dist/kiro-agent-closure/**/*",
     "docs/architecture.md",

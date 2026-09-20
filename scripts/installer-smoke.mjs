@@ -11,23 +11,25 @@ import { assertInstallerSmokeResult, installerSmokeInput } from "./installer-smo
 export async function smokeCandidate(bundleRoot) {
   const bundle = await validateBundle(bundleRoot);
   const node = path.join(bundle.root, "tools", "node"), rg = path.join(bundle.root, "tools", "rg");
-  const version = (executable, args, expected) => {
+  const version = (executable, args, expected, exact = false) => {
     const probe = runInstallerProbe(executable, args, { env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 5000, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] });
-    if (probe.error || probe.status !== 0 || !probe.stdout.startsWith(expected)) throw new Error(`Candidate private ${path.basename(executable)} version/compatibility check failed`);
+    if (probe.error || probe.status !== 0 || (exact ? probe.stdout !== expected : !probe.stdout.startsWith(expected))) throw new Error(`Candidate private ${path.basename(executable)} version/compatibility check failed`);
   };
   version(node, ["--version"], `v${bundle.manifest.tools.node.version}\n`);
   version(rg, ["--no-config", "--version"], `ripgrep ${bundle.manifest.tools.rg.version}`);
+  if (bundle.manifest.schema === 2) version(path.join(bundle.root, "tools", "ast-grep"), ["--version"], "ast-grep 0.45.3\n", true);
   const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-candidate-smoke-")));
   fs.chmodSync(temporary, 0o700);
   const workspace = path.join(temporary, "workspace"), data = path.join(temporary, "data"), home = path.join(temporary, "home");
   for (const dir of [workspace, data, home]) fs.mkdirSync(dir, { mode: 0o700 });
   const sentinel = `fabric-smoke-${randomBytes(12).toString("hex")}`;
   fs.writeFileSync(path.join(workspace, "probe.txt"), `${sentinel}\n`, { mode: 0o600 });
+  if (bundle.manifest.schema === 2) fs.writeFileSync(path.join(workspace, "fovea-probe.ts"), "export function foveaInstallerProbe() { return 1; }\n", { mode: 0o600 });
   try {
     await new Promise((resolve, reject) => {
       const child = spawn(node, [path.join(bundle.root, "app", "kiro", "mcp-entry.js")], { cwd: workspace,
         env: { HOME: home, KIRO_HOME: path.join(home, ".kiro"), PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C", KIRO_FABRIC_BUNDLE_ROOT: bundle.root, KIRO_FABRIC_RUNTIME_ROOT: path.join(bundle.root, "app"), KIRO_FABRIC_EXPECTED_NODE: node, KIRO_FABRIC_RG: rg, KIRO_FABRIC_DATA_ROOT: data }, stdio: ["pipe", "pipe", "pipe"] });
-      let buffer = "", diagnostic = "", passed = false, failure, expectedResponse = 1;
+      let buffer = "", diagnostic = "", passed = false, failure, expectedResponse = 1, focusIdentity, snapshotIdentity;
       const fail = (error) => { failure ??= error; child.kill("SIGTERM"); };
       const timer = setTimeout(() => fail(new Error("Candidate backend smoke timed out")), 30000);
       const killer = setTimeout(() => child.kill("SIGKILL"), 33000);
@@ -56,8 +58,26 @@ export async function smokeCandidate(bundleRoot) {
             expectedResponse = 3;
             send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "fabric_exec", arguments: installerSmokeInput(sentinel) } });
           } else if (frame.id === 3 && !frame.method) {
-            try { assertInstallerSmokeResult(frame, sentinel); expectedResponse = 4; passed = true; child.stdin.end(); }
-            catch (error) { fail(error); }
+            try {
+              assertInstallerSmokeResult(frame, sentinel); expectedResponse = 4;
+              if (bundle.manifest.schema !== 2) { passed = true; child.stdin.end(); }
+              else send({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "fabric_exec", arguments: { resultFormat: "json", code: 'return {map:await repo.focus({query:"foveaInstallerProbe",maxTokens:256}),health:await repo.status()};' } } });
+            } catch (error) { fail(error); }
+          } else if ((frame.id === 4 || frame.id === 5) && !frame.method && bundle.manifest.schema === 2) {
+            try {
+              const result = frame.result;
+              if (frame.error || result?.isError || result?.content?.length !== 1 || result.content[0]?.type !== "text" || result.content[0].text.length > 64000) throw new Error("Candidate Fovea checked query failed");
+              const value = JSON.parse(result.content[0].text), map = value.map, health = value.health;
+              if (!map || map.status !== "ok" || map.advisory !== true || !/^[a-f0-9]{64}$/u.test(map.sourceSnapshotId) || !map.focusId || health?.engineStarts !== 1 || !health.engineActive) throw new Error("Candidate Fovea engine/state contract failed");
+              if (frame.id === 4) {
+                if (!map.reads?.some(read => read.path === "fovea-probe.ts" && /^[a-f0-9]{64}$/u.test(read.expectedSha256))) throw new Error("Candidate Fovea hash-bound extraction failed");
+                focusIdentity = map.focusId; snapshotIdentity = map.sourceSnapshotId; expectedResponse = 5;
+                send({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "fabric_exec", arguments: { resultFormat: "json", code: 'return {map:await repo.dwell({maxTokens:256}),health:await repo.status()};' } } });
+              } else {
+                if (map.focusId !== focusIdentity || map.sourceSnapshotId !== snapshotIdentity) throw new Error("Candidate Fovea state lost across checked executions");
+                expectedResponse = 6; passed = true; child.stdin.end();
+              }
+            } catch (error) { fail(error); }
           }
         }
       });

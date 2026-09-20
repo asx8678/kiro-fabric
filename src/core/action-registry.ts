@@ -1,3 +1,4 @@
+import { observeFovea } from "../fovea/observations.js";
 import { catalogWeight } from "./catalog-resources.js";
 import { parseRemoteRef } from "./remote-identity.js";
 import { catalogResultMethod, type CatalogMethod, type CatalogDependency } from "./catalog-contract.js";
@@ -8,6 +9,7 @@ import type {
   FabricActionDescriptor,
   FabricInvocationContext,
   FabricProvider,
+  FabricProviderRequirements,
   FabricProviderStatus,
   ResolvedFabricAction,
 } from "../protocol.js";
@@ -388,6 +390,19 @@ export class ActionRegistry {
 
   has(name: string): boolean { return this.#providers.has(name); }
 
+  /** Trusted provider registration only; descriptors and guest namespaces confer no authority. */
+  requirements(ref: string): Readonly<FabricProviderRequirements> {
+    const name = parseRemoteRef(ref) ? "mcp" : ref.slice(0, ref.indexOf("."));
+    const provider = this.#providers.get(name);
+    if (!provider && !["local", "memory", "state", "review", "probe", "continuity", "mcp"].includes(name)) return {};
+    // Preserve policy even when an unbound workspace has not mounted the provider.
+    // Preserve established built-in policy for providers predating explicit requirements.
+    return {
+      verifiedWorkspace: ["local", "memory", "state", "review", "probe", "continuity"].includes(name) || provider?.requirements?.verifiedWorkspace === true,
+      settlement: ["local", "mcp", "probe", "review"].includes(name) || provider?.requirements?.settlement === true,
+    };
+  }
+
   providers(): FabricProviderStatus[] {
     return [
       ...[...this.#providers.values()].map((provider) => ({ name: provider.name, description: provider.description, available: true as const })),
@@ -550,6 +565,7 @@ export class ActionRegistry {
     // The frozen canonical snapshot is never normalized or mutated afterwards.
     const canonicalArgs = deepFreeze(structuredClone(prepared));
     observeContinuity(context.operationObserver, observer => observer.prepare(canonicalArgs));
+    if (provider.name !== "local" || (action.name !== "write" && action.name !== "edit")) observeFovea(context, { phase: "prepared" });
     const resources = Object.freeze([...(provider.effectResources?.(action.name, structuredClone(canonicalArgs), context)
       ?? action.effect?.resources
       ?? (action.risk === "write" ? ["*"] : []))]);
@@ -583,6 +599,7 @@ export class ActionRegistry {
       // Approval cleanup remains part of the reservation lifetime. Racing the
       // promise would release write intent while an elicitation was still live.
       await context.approve(structuredClone(action), structuredClone(canonicalArgs));
+      observeFovea(context, { phase: "approved" });
       this.#assertOpen();
       throwIfAbortedOrExpired(context.signal, context.deadline);
       const invocationArgs = structuredClone(canonicalArgs);
@@ -619,17 +636,24 @@ export class ActionRegistry {
       const acknowledgement = fabricCommitAcknowledgement(error) ?? published;
       observeContinuity(context.operationObserver, observer => observer.acknowledge(error));
       if (invocationStarted && provider.name === "local" && action.name === "shell") audit.effectOutcome = "uncertain";
-      if (acknowledgement) audit.commitAcknowledgement = acknowledgement;
+      if (acknowledgement) {
+        audit.commitAcknowledgement = acknowledgement;
+        observeFovea(context, { phase: "failed", uncertain: true });
+      }
       throw error;
     } finally {
       try { await releaseReservation?.(); }
       catch (error) {
         audit.endedAt = Date.now(); audit.success = false;
         audit.error = "Effect reservation cleanup failed; inspect state before retrying";
-        if (published) audit.commitAcknowledgement = published;
+        if (published) {
+          audit.commitAcknowledgement = published;
+          observeFovea(context, { phase: "failed", uncertain: true });
+        }
         if (invocationStarted && provider.name === "local" && action.name === "shell") audit.effectOutcome = "uncertain";
         throw error;
       } finally {
+        if (invocationStarted && action.risk === "execute") observeFovea(context, { phase: audit.success ? "access" : "failed", uncertain: true });
         this.#activeWrites.delete(nestedToolCallId);
         // Reserve worst-case terminal capacity before prompting, then retain only
         // actual escaped UTF-8 bytes after every terminal/cleanup path settles.

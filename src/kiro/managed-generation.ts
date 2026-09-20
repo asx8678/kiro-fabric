@@ -2,7 +2,25 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { validateBundle } from "../installation/bundle-contract.mjs";
+import type { ParserDescriptor } from "../fovea/parser-executable.js";
 import { resolveSearchExecutable, type ManagedSearchExecutable } from "../providers/local-executable.js";
+
+export type ManagedFoveaParser = ParserDescriptor;
+
+/** Separate admission keeps the existing managedSearch contract unchanged.
+ * Never select a parser from PATH or from mutable environment overrides.
+ * Historical generations are valid rollback targets but do not supply Fovea.
+ */
+export async function resolveManagedFoveaParser(context: ManagedGenerationContext): Promise<ManagedFoveaParser | undefined> {
+  const bundle = await validateBundle(context.bundleRoot);
+  if (bundle.root !== context.bundleRoot || context.expectedNode !== path.join(bundle.root, "tools/node") || context.rg !== path.join(bundle.root, "tools/rg")) throw new Error("managed parser generation containment mismatch");
+  const base = managedInstallationBase(bundle.root);
+  if (base && path.basename(bundle.root) !== bundle.digest) throw new Error("managed parser generation digest mismatch");
+  if (bundle.manifest.schema === 1) return undefined;
+  const parser = bundle.inventory.find((entry: { path: string }) => entry.path === "tools/ast-grep");
+  if (!parser || bundle.manifest.tools["ast-grep"].version !== "0.45.3") throw new Error("managed parser identity missing");
+  return { path: path.join(bundle.root, "tools/ast-grep"), sha256: parser.sha256, version: "0.45.3", generationRoot: bundle.root };
+}
 
 const digestPattern = /^[a-f0-9]{64}$/u;
 export interface ManagedGenerationContext { bundleRoot: string; expectedNode: string; rg: string }

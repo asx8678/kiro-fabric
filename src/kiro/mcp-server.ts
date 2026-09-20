@@ -1,4 +1,8 @@
 import { randomBytes } from "node:crypto";
+import { collectFoveaContext, FoveaResponseDelivery, type FoveaPostToolCapability } from "./fovea-context.js";
+import { FabricDeadline } from "../runtime/deadline.js";
+import { FoveaHost, type FoveaBoundClient } from "../fovea/host.js";
+import type { FoveaParserDescriptor } from "../fovea/protocol.js";
 import fs, { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -77,6 +81,10 @@ export interface KiroMcpServerOptions {
   /** Explicit user-selected project supplied by the installed start launcher; never MCP cwd. */
   launchWorkspaceRoot?: string;
   managedSearch?: KiroRuntimeOptions["managedSearch"];
+  managedParser?: FoveaParserDescriptor;
+  /** Trusted embedder qualification only. Managed/native profiles leave this absent
+   * until real-client delivery and analysis-scope gates pass; minimal stays off. */
+  foveaPostToolContext?: FoveaPostToolCapability;
   version?: string;
   /** Explicit host metadata: launch JSON may supply configured, never observed. */
   runProvenance?: RunProvenanceInput;
@@ -187,6 +195,14 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
   const data = prepareKiroPowerDataPaths(options.dataRoot);
   const tracer = createAgentTracer(data, version);
+  // Process owner lives above replaceable workspace runtimes. Construction is
+  // idle: no parser child or indexing starts until an authorized analysis query.
+  const fovea = new FoveaHost({ dataRoot: data.root, configFile: path.join(data.config, "fovea.v1.json"),
+    ...(options.managedParser ? { parser: options.managedParser } : {}),
+    entrypoint: path.join(options.runtimeRoot, "fovea", "engine-entry.js") });
+  const foveaClients = new WeakMap<KiroRuntime, FoveaBoundClient>();
+  const foveaDelivery = new FoveaResponseDelivery();
+  const foveaConversation = `host_${randomBytes(24).toString("hex")}`;
   const fabricApprover = new KiroPowerApprover({
     supported: () => supportsKiroElicitation(server.getClientCapabilities()),
     request: async ({ title: _title, message, signal, timeoutMs }) => {
@@ -250,6 +266,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     if (!current) return;
     // Revoke cursor access synchronously, before abort/drain/transport cleanup.
     current.service.invalidateCatalogs();
+    // Revoke analysis publication/retrieval before waiting for active work.
+    await foveaClients.get(current)?.close();
     const leases = [...active].filter((item) => item.runtime === current);
     const drained = knownDrained ?? await drain(leases, reason);
     if (!drained) await Promise.allSettled(leases.map((item) => item.settled));
@@ -289,14 +307,21 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   const createRuntimeFor = async (workspace?: KiroPowerBoundWorkspace): Promise<KiroRuntime> => {
     const project = workspace ? prepareKiroPowerProjectPaths(data.projects, workspace) : undefined;
     const create = options.prepareRuntime ?? createKiroRuntime;
-    return create({
+    const client = workspace ? fovea.bind({ canonicalPath: workspace.canonicalPath, deviceId: workspace.deviceId, fileId: workspace.fileId,
+      conversationId: foveaConversation, conversationEpoch: 0, authorizationEpoch: runtimeGeneration + 1 }) : undefined;
+    try {
+    const created = await create({
       cwd: workspace?.canonicalPath ?? data.root,
       configFile: data.configFile,
       mcpConfigPath: data.mcpConfig,
       artifactsRoot: project?.artifacts ?? data.artifacts,
       ...(options.managedSearch ? { managedSearch: options.managedSearch } : {}),
+      ...(client ? { foveaClient: client } : {}),
       ...(project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, continuityRoot: project.continuity, workspaceRoot: workspace.canonicalPath, localLockRoot: path.join(path.dirname(project.state), "local-locks") } : {}),
     });
+    if (client) foveaClients.set(created, client);
+    return created;
+    } catch (error) { await client?.close(); throw error; }
   };
   const runtimeForIdentity = async (): Promise<KiroRuntime> => {
     const observation = binding.workspaceObservation();
@@ -557,18 +582,37 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
         signal: controller.signal,
         approver,
+        ...(foveaClients.get(current) ? { operationObserver: foveaClients.get(current)!.observer } : {}),
         bootstrap,
         workspaceBound: workspaceVerified,
         workspaceUnavailable: unavailableWorkspace() || binding.workspaceObservation().status === "temporarily-unavailable",
         onEffectiveTimeoutChange: scheduleOuterDeadline,
         ...(execId !== undefined ? { tracer, execId } : {}),
       });
-      const projection = projectFabricExecutionText({
+      let projection = projectFabricExecutionText({
         result,
         resultFormat: input.resultFormat ?? current.service.config.executor.resultFormat,
         maxOutputChars: current.service.config.executor.maxOutputChars - (pendingMutation ? 512 : 0),
         writeArtifact: (content) => current.artifacts.write(content),
       });
+      const contextClient = foveaClients.get(current);
+      if (contextClient && workspaceVerified && !pendingMutation &&
+          options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true) {
+        // No extension of the original outer deadline. Analysis has its own
+        // bounded cleanup scope and never holds a source-effect reservation.
+        const remaining = Math.min(2000, Math.max(0, outerStarted + outerDeadline - performance.now()));
+        if (remaining > 0 && !controller.signal.aborted) {
+          const automatic = new AbortController();
+          const timer = setTimeout(() => automatic.abort(new Error("Fovea context budget elapsed")), remaining);
+          try {
+            const context = await collectFoveaContext(contextClient, projection, {
+              cwd: current.service.cwd, signal: AbortSignal.any([controller.signal, automatic.signal]),
+              deadline: new FabricDeadline(remaining, remaining),
+            }, current.service.config.executor.maxOutputChars);
+            if (!context.delivery || foveaDelivery.track(extra.requestId, context.delivery, extra.signal, projection.text)) projection = context.projection;
+          } finally { clearTimeout(timer); }
+        }
+      }
       if (pendingMutation && !projection.isError) {
         // Release OUR lease before entering a transition that drains leases.
         // The source program is already settled and cannot issue later calls.
@@ -620,7 +664,13 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     }
   });
 
-  await server.connect(new StdioServerTransport());
+  const transport = new StdioServerTransport();
+  if (options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true) {
+    const send = transport.send.bind(transport);
+    transport.send = message => foveaDelivery.send(message, send);
+  }
+  try { await server.connect(transport); }
+  catch (error) { await closeRuntime(new Error("MCP startup failed")); await fovea.close(); tracer.close(); throw error; }
   let closeTask: Promise<void> | undefined;
   return { close() {
     runtime?.service.invalidateCatalogs();
@@ -632,7 +682,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
           const drained = await drain([...active], reason);
           await closeRuntime(reason, drained);
         });
-      } finally { await server.close(); tracer.close(); }
+      } finally { foveaDelivery.close(); try { await fovea.close(); } finally { await server.close(); tracer.close(); } }
     })();
     return closeTask;
   } };

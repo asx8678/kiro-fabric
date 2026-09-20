@@ -7,12 +7,20 @@ import { pathToFileURL } from "node:url";
 const required = [
   "dist/index.js",
   "dist/index.d.ts",
+  "dist/fovea/engine-entry.js",
+  "dist/kiro/fovea-hook.js",
   "dist/runtime/compiler-worker-entry.js",
   "dist/runtime/sandbox-worker-entry.js",
   "dist/kiro-agent-closure/kiro/mcp-entry.js",
   "dist/kiro-agent-closure/runtime/compiler-worker-entry.js",
   "dist/kiro-agent-closure/runtime/sandbox-worker-entry.js",
   "dist/kiro-agent-closure/closure-manifest.json",
+  "dist/kiro-agent-closure/fovea/engine-entry.js",
+  "dist/kiro-agent-closure/kiro/fovea-hook.js",
+  "dist/kiro-agent-closure/fovea/component.json",
+  "dist/kiro-agent-closure/fovea/upstream.json",
+  "dist/kiro-agent-closure/fovea/UPSTREAM-LICENSE.txt",
+  "dist/kiro-agent-closure/fovea/ast-grep-LICENSE.txt",
 ];
 for (const file of required) {
   if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {

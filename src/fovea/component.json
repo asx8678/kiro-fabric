@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "fovea-vendored-core",
+  "version": "0.29.2",
+  "portVersion": "0.1.1",
+  "license": "MIT",
+  "repository": "https://github.com/monotykamary/pi-fovea",
+  "commit": "b594483868d27b7eb37a9b185c59ce812f8a9c01",
+  "scope": "Native port of src/core; no Pi production runtime dependency",
+  "licensePath": "fovea/UPSTREAM-LICENSE.txt",
+  "parser": {
+    "name": "ast-grep",
+    "version": "0.45.3",
+    "pins": "build-toolchain.json",
+    "license": "MIT",
+    "licensePath": "fovea/ast-grep-LICENSE.txt",
+    "licenseSource": "https://raw.githubusercontent.com/ast-grep/ast-grep/0.45.3/LICENSE",
+    "licenseSha256": "81471889c77b2161a3e4dcdb1b2e6ca382e485766132d92d5fe1d7497e7dd2d9"
+  }
+}

@@ -48,9 +48,16 @@ vi.mock("../src/kiro/canonical-path.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("../src/kiro/canonical-path.js")>(),
   inspectCanonicalPath: (value: string) => ({ canonicalPath: value, lexicalPath: value, identity: { dev: 1n, ino: 1n, ctimeNs: 1n } }),
 }));
+// This suite isolates MCP projection/queue behavior; Fovea has real-process
+// ownership and filesystem tests under tests/fovea/host-process.test.ts.
+vi.mock("../src/fovea/host.js", () => ({ FoveaHost: class {
+  hostInstanceId = "fovea-test-owner";
+  async close() {}
+  bind() { throw new Error("Unbound projection fixture must not create an analysis lease"); }
+} }));
 vi.mock("../src/kiro/power/data-paths.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("../src/kiro/power/data-paths.js")>(),
-  prepareKiroPowerDataPaths: (root: string) => ({ root, configFile: `${root}/config.json`, mcpConfig: `${root}/mcp.json`, projects: `${root}/projects`, artifacts: `${root}/artifacts` }),
+  prepareKiroPowerDataPaths: (root: string) => ({ root, config: root, configFile: `${root}/config.json`, mcpConfig: `${root}/mcp.json`, projects: `${root}/projects`, artifacts: `${root}/artifacts` }),
   prepareKiroPowerProjectPaths: () => ({ artifacts: "/artifacts", memory: "/memory", memoryNamespace: "ns", state: "/state" }),
 }));
 vi.mock("../src/kiro/power/workspace-binding.js", async (importOriginal) => {

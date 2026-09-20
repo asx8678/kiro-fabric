@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { assertTrackedGitWorktreeClean } from "./package-identity.mjs";
+import { assertPackedRuntimeImports } from "./packed-runtime-imports.mjs";
 import { isPackedPackageFileAllowed } from "./package-policy.mjs";
 import { assertRealClientEvidence } from "./real-client-evidence.mjs";
 import { validateReleaseArtifacts, writeReleaseAssetSnapshots } from "./release-artifacts.mjs";
@@ -34,14 +35,7 @@ for (const required of ["dist/index.js", "dist/runtime/compiler-worker-entry.js"
 if (!packedFiles.some((file) => /^dist\/chunks\/[^/]+\.js$/u.test(file))) {
   throw new Error("packed artifact is missing the main runtime chunk");
 }
-const packedSet = new Set(packedFiles);
-for (const file of packedFiles.filter((entry) => entry.endsWith(".js"))) {
-  const text = fs.readFileSync(file, "utf8");
-  for (const match of text.matchAll(/(?:from\s*|import\()\s*["'](\.[^"']+)["']/gu)) {
-    const target = path.normalize(path.join(path.dirname(file), match[1])).replaceAll("\\", "/");
-    if (!packedSet.has(target)) throw new Error(`packed runtime import is missing: ${file} -> ${target}`);
-  }
-}
+assertPackedRuntimeImports(packedFiles);
 const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
 if (head.status !== 0) throw new Error("Cannot bind release candidate to HEAD");
 const commit = head.stdout.trim();

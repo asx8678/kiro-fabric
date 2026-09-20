@@ -61,6 +61,23 @@ describe("release artifact content validation and snapshot promotion", () => {
     expect(() => validateReleaseArtifacts(stage, archive, wrong, closure)).toThrow("SBOM dependency inventory");
   });
 
+  it.each(["missing", "duplicate", "unknown", "commit", "license", "source", "npm-disguise"])("rejects %s vendored Fovea inventory", mutation => {
+    const document = JSON.parse(sbomBytes.toString("utf8"));
+    const index = document.packages.findIndex((entry: { name: string }) => entry.name === "fovea-vendored-core");
+    expect(index).toBeGreaterThan(0);
+    const vendored = document.packages[index];
+    if (mutation === "missing") document.packages.splice(index, 1);
+    if (mutation === "duplicate") document.packages.push({ ...vendored });
+    if (mutation === "unknown") document.packages.push({ ...vendored, SPDXID: "SPDXRef-vendored-unknown", name: "unknown" });
+    if (mutation === "commit") vendored.downloadLocation = vendored.downloadLocation.replace(/[a-f0-9]{40}$/, "0".repeat(40));
+    if (mutation === "license") vendored.licenseDeclared = "NOASSERTION";
+    if (mutation === "source") vendored.sourceInfo = "unverified port";
+    if (mutation === "npm-disguise") vendored.SPDXID = "SPDXRef-Package-fovea-vendored-core";
+    const wrong = path.join(root, `vendored-${mutation}.spdx.json`);
+    fs.writeFileSync(wrong, JSON.stringify(document));
+    expect(() => validateReleaseArtifacts(stage, archive, wrong, closure)).toThrow("SBOM dependency inventory");
+  });
+
   it("rejects bounded archive/SBOM inputs and malicious legacy headers before promotion", () => {
     const huge = path.join(root, "oversized");
     fs.writeFileSync(huge, ""); fs.truncateSync(huge, 80 * 1024 * 1024 + 1);

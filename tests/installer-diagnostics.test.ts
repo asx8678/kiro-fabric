@@ -20,7 +20,9 @@ function fixture() {
   for (const dir of [source, closure, ...["scripts", "src", "skills", "resources"].map(name => path.join(source, name))]) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   for (const file of ["pnpm-lock.yaml", "agent-product.json", "build-toolchain.json", "tsconfig.json", "tsconfig.build.json"]) fs.writeFileSync(path.join(source, file), "{}", { mode: 0o600 });
   fs.writeFileSync(path.join(source, "package.json"), JSON.stringify({ name: "kiro-fabric", version: "1.0.0", scripts: { build: "touch forbidden-build" } }), { mode: 0o600 });
-  for (const script of ["build", "build-kiro-closure", "build-inputs", "normalize-artifact-modes", "assert-build-artifacts", "build-agent-dev", "build-complete-bundle", "generate-agent-guidance", "agent-profile", "install-agent-user", "validate-agent-package", "install-manager"]) fs.writeFileSync(path.join(source, "scripts", `${script}.mjs`), 'throw Error("Do not execute this checkout");', { mode: 0o600 });
+  for (const script of ["build", "build-kiro-closure", "build-inputs", "normalize-artifact-modes", "assert-build-artifacts", "build-agent-dev", "build-complete-bundle", "generate-agent-sbom", "generate-bundle-sbom", "generate-vendored-sbom", "generate-agent-guidance", "agent-profile", "install-agent-user", "validate-agent-package", "install-manager"]) fs.writeFileSync(path.join(source, "scripts", `${script}.mjs`), 'throw Error("Do not execute this checkout");', { mode: 0o600 });
+  // Preserve the SBOM import edge while keeping every checkout module inert.
+  for (const script of ["generate-agent-sbom", "generate-bundle-sbom"]) fs.writeFileSync(path.join(source, "scripts", `${script}.mjs`), 'import "./generate-vendored-sbom.mjs"; throw Error("Do not execute this checkout");', { mode: 0o600 });
   fs.writeFileSync(path.join(source, "src/main.ts"), "// source identity fixture", { mode: 0o600 });
   const inputs = captureBuildInputs(source), content = Buffer.from("// inert build fixture"), contentDigest = createHash("sha256").update("main.js\0").update(content).digest("hex");
   fs.writeFileSync(path.join(closure, "main.js"), content, { mode: 0o600 });

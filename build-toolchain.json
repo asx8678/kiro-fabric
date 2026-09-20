@@ -4,7 +4,14 @@
     "production": "BLOCKED: complete native bundle measurements and four-target qualification required",
     "native": "linux-x64 only: acquired private Node --version and rg --version passed with empty environment/PATH unavailable; full installed bundle and other native targets NOT TESTED",
     "minimumSystems": "Node 24 upstream BUILDING.md: Linux kernel >=4.18 glibc >=2.28; macOS >=13.5. rg ancillary requirements require native verification",
-    "upstream": "https://github.com/nodejs/node/blob/v24.20.0/BUILDING.md"
+    "upstream": "https://github.com/nodejs/node/blob/v24.20.0/BUILDING.md",
+    "parser": "ast-grep 0.45.3: all four npm platform tarballs verified against pinned reference SHA-512; full/member SHA-256 measured. Only linux-x64 --version executed with PATH unavailable. Other native execution and minimum-system qualification NOT TESTED.",
+    "parserAbiInspection": {
+      "linux-x64": "ELF SHT_GNU_verneed: maximum required GLIBC_2.34 (libc.so.6); libm requires GLIBC_2.29. Schema-2 minimum glibc raised to 2.34.",
+      "linux-arm64": "ELF SHT_GNU_verneed: maximum required GLIBC_2.18; Node remains the declared glibc 2.28 floor. Not executed.",
+      "darwin-arm64": "Mach-O LC_BUILD_VERSION macOS minimum 11.0.0; Node remains macOS 13.5 floor. Not executed.",
+      "darwin-x64": "Mach-O LC_VERSION_MIN_MACOSX minimum 10.12.0; Node remains macOS 13.5 floor. Not executed."
+    }
   },
   "targets": {
     "darwin-arm64": {
@@ -59,6 +66,33 @@
             "path": "notices/rg-UNLICENSE",
             "size": 1211,
             "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+          }
+        ]
+      },
+      "ast-grep": {
+        "version": "0.45.3",
+        "url": "https://registry.npmjs.org/@ast-grep/cli-darwin-arm64/-/cli-darwin-arm64-0.45.3.tgz",
+        "size": 8151061,
+        "sha256": "3975513c7cce01bbdc68543c1618aa8b04a75b54fd0142d08805e906dca7cdc7",
+        "integrity": "sha512-6RZg4gRMJcSJtEJuaW5z33qfwXD7kRDGZ0T0dTxVxsLSw5BkeAjR8REysxUwPWZn+oOkzPyZ3y7/qNnSI/diIA==",
+        "members": [
+          {
+            "member": "package/ast-grep",
+            "path": "tools/ast-grep",
+            "size": 51126144,
+            "sha256": "5651f0c6dcbbf2f7813297f9eb8f6ba00fb4ee2d81410a8138ac6151416f31ad"
+          },
+          {
+            "member": "package/package.json",
+            "path": "notices/ast-grep-package.json",
+            "size": 551,
+            "sha256": "1bbee03f3de8f2e721c0dd226ff12e68025e93407d19870ab56e000309b788bb"
+          },
+          {
+            "member": "package/README.md",
+            "path": "notices/ast-grep-README.md",
+            "size": 96,
+            "sha256": "db02939c5a98e2a1ccb3d71bad35b2e299c92f5d95d05ba7e044c07bb7db2ff2"
           }
         ]
       }
@@ -117,6 +151,33 @@
             "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
           }
         ]
+      },
+      "ast-grep": {
+        "version": "0.45.3",
+        "url": "https://registry.npmjs.org/@ast-grep/cli-darwin-x64/-/cli-darwin-x64-0.45.3.tgz",
+        "size": 8097329,
+        "sha256": "75a69dc05c97174749cbb4ff8a79b8b30f4db6b52a5728784a3af3f8364b0559",
+        "integrity": "sha512-4z6ZknTMSlTirQuJ4xihXoLfG7YwAOxFCqkKuGAxAiP+K70zivib8R19vUoFJDy4s+rjyGNDdrm45/ClC5tITQ==",
+        "members": [
+          {
+            "member": "package/ast-grep",
+            "path": "tools/ast-grep",
+            "size": 51373948,
+            "sha256": "bb4464f0e13046dcd7f7b06177007a747bcee2cbe395c64a5b575f548fde053f"
+          },
+          {
+            "member": "package/package.json",
+            "path": "notices/ast-grep-package.json",
+            "size": 547,
+            "sha256": "6bcb743ce598f553408ed4d12e70375f347751b2a1562c4ea99f611364435e2b"
+          },
+          {
+            "member": "package/README.md",
+            "path": "notices/ast-grep-README.md",
+            "size": 93,
+            "sha256": "73efeb6b146931d16f4ee9e9aed5192a3e73ef2196ebf66d83ac8df29347c61d"
+          }
+        ]
       }
     },
     "linux-arm64": {
@@ -173,6 +234,33 @@
             "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
           }
         ]
+      },
+      "ast-grep": {
+        "version": "0.45.3",
+        "url": "https://registry.npmjs.org/@ast-grep/cli-linux-arm64-gnu/-/cli-linux-arm64-gnu-0.45.3.tgz",
+        "size": 8050867,
+        "sha256": "cb2243c783debf759ac3c75390d64c3811b7d6b7e1b742aea0ce61d7c1b136ac",
+        "integrity": "sha512-T/N+Fl/pMqNjuyPV9PbTSR2bTlZrLKiCyHzJax6QNaOOVviXjEscROrAc6c0lFfc+Z07gW7Rt3oZKZdLEExutQ==",
+        "members": [
+          {
+            "member": "package/ast-grep",
+            "path": "tools/ast-grep",
+            "size": 51995576,
+            "sha256": "0025bec1e0bc1e00de234b38e86177aa81d5971f1d44869b841d77cb936c2af9"
+          },
+          {
+            "member": "package/package.json",
+            "path": "notices/ast-grep-package.json",
+            "size": 582,
+            "sha256": "fb074c0b2a5c1d82f440fe054aaccba89c09b195a827943fd30f975aa4547b20"
+          },
+          {
+            "member": "package/README.md",
+            "path": "notices/ast-grep-README.md",
+            "size": 104,
+            "sha256": "b37ef401ec67575700b99b9021187c6b9c4b0ab0d33a41ec96c402f2bac580db"
+          }
+        ]
       }
     },
     "linux-x64": {
@@ -227,6 +315,33 @@
             "path": "notices/rg-UNLICENSE",
             "size": 1211,
             "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+          }
+        ]
+      },
+      "ast-grep": {
+        "version": "0.45.3",
+        "url": "https://registry.npmjs.org/@ast-grep/cli-linux-x64-gnu/-/cli-linux-x64-gnu-0.45.3.tgz",
+        "size": 8237848,
+        "sha256": "53828b0acd21dde9f866be2c8513135bf90db9f0c2d931475b8029c534be4ce9",
+        "integrity": "sha512-HbxIy6tZa8zn4J2hG8KVIo9n4+INAgVB8l2DyHqYxGKxnod8u2B4hfTGxbMm+BjBvYxKW4oGLZtYqInMyxidyQ==",
+        "members": [
+          {
+            "member": "package/ast-grep",
+            "path": "tools/ast-grep",
+            "size": 52360880,
+            "sha256": "7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a"
+          },
+          {
+            "member": "package/package.json",
+            "path": "notices/ast-grep-package.json",
+            "size": 578,
+            "sha256": "505b95eda4b51afa5d226f752e9082d0491a6c44a663bf121317a13f837c8891"
+          },
+          {
+            "member": "package/README.md",
+            "path": "notices/ast-grep-README.md",
+            "size": 101,
+            "sha256": "72adfd7933c2144cd0ae2962e2cafe9e59a065d691ab96bcf27a3e40c1456c3f"
           }
         ]
       }

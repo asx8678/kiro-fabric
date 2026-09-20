@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { vendoredSbomPackages } from "./generate-vendored-sbom.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { writeFileAtomic } from "./atomic-file.mjs";
@@ -26,6 +27,7 @@ const dependencies = closure.packageInputs.map(({ name, version, license }) => (
   licenseDeclared: typeof license === "string" && license ? license : "NOASSERTION",
   supplier: "NOASSERTION",
 }));
+dependencies.push(...vendoredSbomPackages(closure));
 const packages = [{
   SPDXID: rootId,
   name: pkg.name,

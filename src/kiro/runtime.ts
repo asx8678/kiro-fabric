@@ -1,4 +1,6 @@
 import path from "node:path";
+import { FoveaProvider } from "../providers/repo-provider.js";
+import type { FoveaBoundClient } from "../fovea/host.js";
 import { ReviewProvider } from "../providers/review-provider.js";
 import { ProbeProvider } from "../providers/probe-provider.js";
 import type { ManagedSearchExecutable } from "../providers/local-executable.js";
@@ -32,6 +34,8 @@ export interface KiroRuntimeOptions {
   /** Explicit retained probe storage outside source; defaults beside local locks. */
   probesRoot?: string;
   managedSearch?: ManagedSearchExecutable;
+  /** Borrowed host-owned analysis lease; provider disposal never closes its engine. */
+  foveaClient?: FoveaBoundClient;
   browserHarnessExecutable?: BrowserHarnessExecutable;
   memoryRoot?: string;
   memoryNamespace?: string;
@@ -75,6 +79,8 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   } else {
     for (const name of ["local", "review", "probe"]) registry.markUnavailable(name, "verified workspace binding is required");
   }
+  if (options.workspaceRoot && options.foveaClient) registry.register(new FoveaProvider(options.foveaClient));
+  else registry.markUnavailable("repo", "verified workspace and persistent host binding are required");
   registry.register(new KiroPowerArtifactsProvider(artifacts, config.artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));
   else registry.markUnavailable("mcp", "disabled by configuration");

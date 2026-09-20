@@ -1,3 +1,4 @@
+import { vendoredSbomPackages } from "./generate-vendored-sbom.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,14 +14,15 @@ export async function generateBundleSbom(root) {
   const closure = JSON.parse(closureBytes.toString("utf8"));
   const packages = [{ SPDXID: "SPDXRef-Fabric", name: "kiro-fabric", versionInfo: bundle.version, downloadLocation: "https://github.com/asx8678/kiro-fabric", filesAnalyzed: false, licenseConcluded: "NOASSERTION", licenseDeclared: "MIT", checksums: [{ algorithm: "SHA256", checksumValue: bundle.digest }] }];
   for (const component of closure.packageInputs) packages.push({ SPDXID: `SPDXRef-npm-${component.name.replace(/[^A-Za-z0-9.-]/gu, "-")}`, name: component.name, versionInfo: component.version, downloadLocation: `https://registry.npmjs.org/${component.name}`, filesAnalyzed: false, licenseConcluded: "NOASSERTION", licenseDeclared: component.license || "NOASSERTION", checksums: [] });
-  for (const name of ["node", "rg"]) {
+  packages.push(...vendoredSbomPackages(closure));
+  for (const name of Object.keys(bundle.manifest.tools)) {
     const tool = bundle.manifest.tools[name], executable = tool.members.find(member => member.path === `tools/${name}`);
-    packages.push({ SPDXID: `SPDXRef-binary-${name}`, name: name === "node" ? "Node.js" : "ripgrep", versionInfo: tool.version, downloadLocation: tool.url, filesAnalyzed: false, licenseConcluded: "NOASSERTION", licenseDeclared: name === "node" ? "MIT" : "MIT OR Unlicense", checksums: [{ algorithm: "SHA256", checksumValue: executable.sha256 }] });
+    packages.push({ SPDXID: `SPDXRef-binary-${name}`, name: name === "node" ? "Node.js" : name === "rg" ? "ripgrep" : "ast-grep", versionInfo: tool.version, downloadLocation: tool.url, filesAnalyzed: false, licenseConcluded: "NOASSERTION", licenseDeclared: name === "rg" ? "MIT OR Unlicense" : "MIT", checksums: [{ algorithm: "SHA256", checksumValue: executable.sha256 }] });
   }
   return { spdxVersion: "SPDX-2.3", dataLicense: "CC0-1.0", SPDXID: "SPDXRef-DOCUMENT", name: `kiro-fabric-${bundle.manifest.target}`, documentNamespace: `https://github.com/asx8678/kiro-fabric/sbom/${bundle.digest}`, creationInfo: { created: "1970-01-01T00:00:00.000Z", creators: ["Tool: kiro-fabric-complete-bundle-sbom"] }, packages,
     files: bundle.inventory.map((entry, index) => ({ SPDXID: `SPDXRef-File-${index}`, fileName: entry.path, checksums: [{ algorithm: "SHA256", checksumValue: entry.sha256 }], licenseConcluded: "NOASSERTION", copyrightText: "NOASSERTION" })),
     relationships: [{ spdxElementId: "SPDXRef-DOCUMENT", relationshipType: "DESCRIBES", relatedSpdxElement: "SPDXRef-Fabric" }, ...packages.slice(1).map(component => ({ spdxElementId: "SPDXRef-Fabric", relationshipType: "DEPENDS_ON", relatedSpdxElement: component.SPDXID }))],
-    documentComment: "Complete app/private Node/private ripgrep/manager/resources inventory. Node and ripgrep embedded component attribution is retained in exact upstream LICENSE/COPYING notices. OS libraries and project-specific tools remain external. Native qualification is separate from this SBOM." };
+    documentComment: "Complete app/private Node/private ripgrep/private ast-grep/manager/resources inventory. Vendored Fovea is explicitly attributed, not an npm runtime dependency. Parser notices and the upstream MIT license are retained. Node and ripgrep embedded component attribution is retained in exact upstream LICENSE/COPYING notices. OS libraries and project-specific tools remain external. Native qualification is separate from this SBOM." };
 }
 /** Generate data-only sidecars; this does NOT sign or qualify a release.
  * Archive descriptors name captured bytes; promotion must authenticate snapshots.

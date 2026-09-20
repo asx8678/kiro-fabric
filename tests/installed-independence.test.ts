@@ -38,7 +38,7 @@ async function checkedLocalTools(backend: Backend, cwd: string, env: Record<stri
             send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
           } else if (frame.id === 2 && !frame.method) {
             expect(frame.result.tools.map((tool: { name: string }) => tool.name).sort()).toEqual(['fabric_exec', 'fabric_info', 'fabric_workspace']);
-            send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'fabric_exec', arguments: { code: 'return {read: await local.read({path:"probe.txt",limit:1}), grep: await local.grep({pattern:payloads.sentinel,path:"."}), shell: await local.shell({command:"printf shell-enabled"})};', payloads: { sentinel } } } });
+            send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'fabric_exec', arguments: { code: 'return {read: await local.read({path:"probe.txt",limit:1}), grep: await local.grep({pattern:payloads.sentinel,path:"."}), shell: await local.shell({command:"printf shell-enabled"}), navigation: await repo.focus({query:"installationGraphProbe",maxTokens:256})};', payloads: { sentinel } } } });
           } else if (frame.id === 3 && !frame.method) {
             expect(frame.error).toBeUndefined();
             expect(frame.result.isError, JSON.stringify(frame.result)).not.toBe(true);
@@ -46,6 +46,9 @@ async function checkedLocalTools(backend: Backend, cwd: string, env: Record<stri
             expect(result).toContain('read'); expect(result).toContain('grep');
             expect(result).toContain('shell-enabled');
             expect(result.split(sentinel).length - 1).toBeGreaterThanOrEqual(2);
+            const value = JSON.parse(frame.result.content[0].text);
+            expect(value.navigation).toMatchObject({status:'ok', advisory:true});
+            expect(value.navigation.reads).toContainEqual(expect.objectContaining({path:'analysis.ts', expectedSha256:expect.stringMatching(/^[a-f0-9]{64}$/)}));
             passed = true; child.stdin.end();
           }
         } catch (error) { fail(error as Error); }
@@ -97,6 +100,7 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect(preparation.stderr).toBe('');
     const installed = JSON.parse(preparation.stdout);
     expect(installed.outcome).toBe('activated');
+    expect(installed.installationChange.target.fovea).toMatchObject({upstreamVersion:'0.29.2',portVersion:'0.1.1',parserVersion:'0.45.3',activation:expect.stringContaining('unqualified')});
     expect(installed.warnings).toContainEqual(expect.stringContaining(`Launch from your project directory with: ${installed.commands.start}`));
     expect(installed.warnings).toContainEqual(expect.stringContaining('kiro-cli --v3 --agent kiro-fabric works without shell setup'));
     expect(installed.shellIntegration).toMatchObject({ status: 'configured', file: path.join(home, '.bashrc') });
@@ -121,6 +125,7 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect(await fs.readFile(installed.paths.launcher)).toEqual(completeGenerationLauncher(installed.digest));
     // A fresh install must work without either a shell handoff or roots capability.
     await fs.writeFile(path.join(cwd, 'probe.txt'), 'independence-sentinel\n', { mode: 0o600 });
+    await fs.writeFile(path.join(cwd, 'analysis.ts'), 'export function installationGraphProbe() { return 1; }\n', { mode: 0o600 });
     await checkedLocalTools(profile.mcpServers.fabric, cwd, env, { roots: 'unsupported' });
     for (const executable of [installed.paths.launcher, profile.mcpServers.fabric.command, path.join(generation, 'tools/rg')]) expect((await fs.stat(executable)).mode & 0o777).toBe(0o700);
     const controls = async () => Promise.all([installed.paths.manifest, installed.paths.profile, installed.paths.launcher].map(file => fs.readFile(file)));
@@ -172,6 +177,7 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     await fs.mkdir(secondProject, { mode: 0o700 });
     const secondSentinel = 'independence-sentinel-second-project';
     await fs.writeFile(path.join(secondProject, 'probe.txt'), secondSentinel + '\n', { mode: 0o600 });
+    await fs.writeFile(path.join(secondProject, 'analysis.ts'), 'export function installationGraphProbe() { return 2; }\n', { mode: 0o600 });
     // Startup admission is deliberately fail-fast under the installation lock.
     // Launch separately to test per-project binding, not simultaneous admission.
     await checkedLocalTools(updatedProfile.mcpServers.fabric, cwd, env, { roots: 'empty' });

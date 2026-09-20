@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { FoveaObservationExecution, type FoveaObserver } from "./fovea/observations.js";
 import { ContinuityExecution, observeContinuity } from "./continuity/execution.js";
 import { CatalogSnapshotStore } from "./core/catalog-snapshot-store.js";
 import type { CatalogBinding, CatalogReservation } from "./core/catalog-contract.js";
@@ -40,6 +41,8 @@ export interface FabricExecutionApprover {
 }
 
 export interface FabricExecutionOptions {
+  /** Independent trusted host observer; no continuity or tracing dependency. */
+  operationObserver?: FoveaObserver;
   code: string;
   payloads?: Record<string, string>;
   timeoutMs?: number;
@@ -301,6 +304,7 @@ export class FabricExecutionService {
     if (captureEnabled) {
       try { continuity = new ContinuityExecution(undefined, undefined, this.config.continuity.captureFailureOutput); } catch { captureFailed = true; }
     }
+    const observations = options.operationObserver ? new FoveaObservationExecution(options.operationObserver) : undefined;
     const checkpoints = createCheckpointJournal();
     let interruptedFailure: FabricFailureMetadata | undefined;
     const audits: FabricCallAudit[] = [];
@@ -340,6 +344,7 @@ export class FabricExecutionService {
         try { operation = continuity.admit(ref === "fabric.call" ? args.ref : ref); }
         catch { captureFailed = true; }
       }
+      const observation = observations?.operation(typeof (ref === "fabric.call" ? args.ref : ref) === "string" ? (ref === "fabric.call" ? args.ref : ref) as string : "fabric.call");
       let operationFailed = false;
       let operationError: unknown;
       // One span per host-bridge call, parented to the execute span. Byte
@@ -348,7 +353,7 @@ export class FabricExecutionService {
       let bridgeEnd: Record<string, unknown> = {};
       let catalogReservation: CatalogReservation | undefined;
       try {
-        const context = { ...providerContext(signal, deadline), ...(captureEnabled ? { continuityCapture: () => {
+        const context = { ...providerContext(signal, deadline), ...(observation ? { foveaObservation: observation } : {}), ...(captureEnabled ? { continuityCapture: () => {
           if (captureFailed || !operation) throw new Error("continuity capture is incomplete: recorder failed; prior checkpoint retained");
           return operation.capture();
         } } : {}) };
@@ -393,7 +398,7 @@ export class FabricExecutionService {
           switchRequested = true;
         } else if (!actionRef.startsWith("fabric.")) {
           if (switchRequested) throw new Error("Workspace calls cannot follow a pending workspace switch; use the next execution");
-          const requiresWorkspace = /^(local|memory|state|review|probe|continuity)\./u.test(actionRef);
+          const requiresWorkspace = this.registry.requirements(actionRef).verifiedWorkspace === true;
           if ((options.workspaceUnavailable === true || (options.workspaceBound === false && requiresWorkspace)) && actionRef !== "artifacts.read") throw new Error("Verified workspace binding is required; use fabric.workspace in a separate bootstrap execution");
           workspaceCalls = true;
         }
@@ -429,7 +434,7 @@ export class FabricExecutionService {
           localEffectTail = invocation;
           void localEffectTail.catch(() => {});
         }
-        if (/^(local|mcp|probe|review)[./]/u.test(actionRef)) localSettlements.add(invocation);
+        if (this.registry.requirements(actionRef).settlement) localSettlements.add(invocation);
         let value: unknown;
         try { value = await invocation; }
         catch (error) {
@@ -458,6 +463,8 @@ export class FabricExecutionService {
         bridgeSpan?.end(bridgeEnd);
         activeProviderCalls -= 1;
         // Registry invocation and reservation cleanup have both settled here.
+        if (operationFailed) observation?.observe({ phase: "failed" });
+        observation?.observe({ phase: "settled" });
         observeContinuity(operation?.observer, observer => observer.settle(!operationFailed, operationError));
       }
     }, {
@@ -497,6 +504,9 @@ export class FabricExecutionService {
     // QuickJS may detach bridge promises on cancellation. Local host effects
     // retain this execution lease until their bounded cleanup really settles.
     await Promise.allSettled([...localSettlements]);
+    // Untracked custom providers may outlive an interrupted guest. Never deliver
+    // a misleading complete prefix or late facts after this execution returns.
+    if (activeProviderCalls > 0) observations?.gap();
     executeSpan?.end({ termination: result.terminationReason, effectiveTimeoutMs: result.effectiveTimeoutMs });
     let status = statusFor(result.terminationReason);
     let outputError = result.error;

@@ -24,7 +24,7 @@ export function generateInstallerBootstrap(captures){
   const node=parsed.manifest.inventory.find((/** @type {any} */ e)=>e.path==='tools/node');const manager=parsed.manifest.inventory.find((/** @type {any} */ e)=>e.path==='manager/install-manager.mjs');
   // Current declared layout has no executable ancillaries; native qualification is pending. Any future ancillary
   // role/layout requires manifest support, fixed pins here, and native evidence.
-  cases.push(`  ${m.target}) archive_url=${quote(m.archive.url)}; archive_size=${m.archive.size}; archive_hash=${quote(m.archive.sha256)}; sbom_size=${m.sbom.size}; sbom_hash=${quote(m.sbom.sha256)}; node_size=${node.size}; node_hash=${quote(node.sha256)}; manager_size=${manager.size}; manager_hash=${quote(manager.sha256)} ;;`);
+  cases.push(`  ${m.target}) archive_url=${quote(m.archive.url)}; archive_size=${m.archive.size}; archive_hash=${quote(m.archive.sha256)}; sbom_size=${m.sbom.size}; sbom_hash=${quote(m.sbom.sha256)}; node_size=${node.size}; node_hash=${quote(node.sha256)}; manager_size=${manager.size}; manager_hash=${quote(manager.sha256)}; glibc_min=${quote(m.compatibility.minGlibc ?? '')} ;;`);
  }
  return `#!/bin/bash
 # Generated pinned RELEASE bootstrap. Save, inspect, then run; never curl | bash.
@@ -84,6 +84,10 @@ case "$os/$arch" in
   Linux/x86_64) target=linux-x64 ;;
   *) fail 'unsupported platform' ;;
 esac
+case "$target" in
+${cases.join('\n')}
+  *) fail 'unsupported target for this pinned bootstrap' ;;
+esac
 # Check recorded upstream floors without executing the bundled Node as a probe.
 version_floor() {
   local value=$1 minimum_major=$2 minimum_minor=$3 major minor rest
@@ -96,9 +100,9 @@ version_floor() {
 }
 if [ "$os" = Linux ]; then
   command -v getconf >/dev/null 2>&1 || fail 'missing prerequisite: getconf (glibc)'
-  libc=$(getconf GNU_LIBC_VERSION 2>/dev/null) || fail 'unsupported libc: glibc >=2.28 required'
+  libc=$(getconf GNU_LIBC_VERSION 2>/dev/null) || fail "unsupported libc: glibc >=$glibc_min required"
   case "$libc" in 'glibc '*) libc=\${libc#glibc } ;; *) fail 'unsupported libc: glibc required' ;; esac
-  version_floor "$libc" 2 28 || fail 'unsupported glibc: >=2.28 required'
+  version_floor "$libc" "\${glibc_min%%.*}" "\${glibc_min#*.}" || fail "unsupported glibc: >=$glibc_min required"
   kernel=$(uname -r)
   # Match installer-platform.mjs: numeric components plus Linux LOCALVERSION,
   # including +rpt suffixes and WSL fourth components, not arbitrary garbage.
@@ -110,10 +114,6 @@ else
   macos=$(sw_vers -productVersion) || fail 'cannot determine macOS version'
   version_floor "$macos" 13 5 || fail 'unsupported macOS: >=13.5 required'
 fi
-case "$target" in
-${cases.join('\n')}
-  *) fail 'unsupported target for this pinned bootstrap' ;;
-esac
 # Fixed /tmp template: no caller-controlled TMPDIR, no state/home changes yet.
 tmp=$(mktemp -d /tmp/kiro-fabric-bootstrap.XXXXXXXX) || fail 'private temporary directory unavailable'
 [ -d "$tmp" ] && [ ! -L "$tmp" ] || fail 'unsafe temporary directory'

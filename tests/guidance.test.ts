@@ -37,7 +37,9 @@ describe("compiled task guidance", () => {
     expect(fs.readFileSync(path.join(root, "src/kiro/generated-guidance.ts"), "utf8")).toBe(renderAgentGuidance(root));
     expect(Object.isFrozen(BUNDLED_GUIDANCE)).toBe(true);
     const product = JSON.parse(fs.readFileSync(path.join(root, "agent-product.json"), "utf8"));
-    expect(product.bundledAgentResources).toEqual(Object.values(GUIDANCE_FILES));
+    // Fovea is a packaged reference, not a compiled fabric.help topic.
+    expect(product.bundledAgentResources).toEqual([...Object.values(GUIDANCE_FILES), "skills/fabric-exec/references/fovea.md"]);
+    expect(fs.readFileSync(path.join(root, "skills/fabric-exec/references/fovea.md"), "utf8").trim()).not.toBe("");
   });
 
   it("has matching public schemas and checked guest topic declarations", async () => {

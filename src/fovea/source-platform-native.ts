@@ -1,0 +1,110 @@
+import { constants } from 'node:fs';
+import {
+  assertSourceComponent, SourcePlatformUnavailableError,
+  type SourceHandle, type SourcePlatform, type SourceStat,
+} from './source-platform.js';
+import type { DarwinSourceBinding } from './source-platform-darwin.js';
+
+declare const nativeToken: unique symbol;
+/** Opaque, native-tagged object; not an integer fd, pathname, or serialized ID. */
+export interface NativeSourceToken { readonly [nativeToken]: true }
+type NativeStat = Omit<SourceStat, 'isFile' | 'isDirectory'>;
+/** Low-level exports of source-platform-native.c. Binary loading/authentication
+ * is deliberately outside this adapter; no paths, dynamic imports or env knobs. */
+export interface PosixSourceBinding {
+  readonly abiVersion: 1;
+  readonly platform: 'linux' | 'darwin';
+  openRoot(): Promise<NativeSourceToken>;
+  openAt(parent: NativeSourceToken, name: string, kind: 'directory' | 'entry'): Promise<NativeSourceToken>;
+  stat(handle: NativeSourceToken): Promise<NativeStat>;
+  read(handle: NativeSourceToken, length: number): Promise<Buffer>;
+  close(handle: NativeSourceToken): Promise<void>;
+  openDirectory(parent: NativeSourceToken): Promise<NativeSourceToken>;
+  readDirectory(stream: NativeSourceToken): Promise<string[]>;
+  closeDirectory(stream: NativeSourceToken): Promise<void>;
+}
+
+/** Shared actual POSIX implementation: Linux probes compile the same C source
+ * without pretending that its platform is Darwin. A host must authenticate the
+ * native binary before passing these exports; ABI checks are not authentication. */
+export function createNativeSourcePlatform(binding: PosixSourceBinding): SourcePlatform {
+  const methods = ['openRoot', 'openAt', 'stat', 'read', 'close', 'openDirectory', 'readDirectory', 'closeDirectory'] as const;
+  if (!binding || binding.abiVersion !== 1 || !['linux', 'darwin'].includes(binding.platform) || binding.platform !== process.platform ||
+      methods.some(name => typeof binding[name] !== 'function')) {
+    throw new SourcePlatformUnavailableError(process.platform, 'invalid or foreign trusted POSIX source binding ABI 1');
+  }
+  const handles = new WeakMap<SourceHandle, NativeSourceToken>();
+  const token = (handle: SourceHandle): NativeSourceToken => {
+    const value = handles.get(handle);
+    if (!value) throw Object.assign(new Error('Foreign or closed source handle'), { code: 'EBADF' });
+    return value;
+  };
+  const retain = (value: NativeSourceToken): SourceHandle => {
+    let closing: Promise<void> | undefined;
+    const handle: SourceHandle = {
+      async stat() {
+        const info = await binding.stat(token(handle));
+        return { ...info, isFile: () => (info.mode & constants.S_IFMT) === constants.S_IFREG,
+          isDirectory: () => (info.mode & constants.S_IFMT) === constants.S_IFDIR };
+      },
+      async read(buffer, offset, length, position) {
+        if (!Buffer.isBuffer(buffer) || !Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) ||
+            length < 0 || length > 65_536 || offset > buffer.length - length || position !== null) throw new Error('Invalid native source read bounds');
+        // Native work never borrows a JS buffer pointer across an async boundary.
+        const bytes = await binding.read(token(handle), length);
+        if (!Buffer.isBuffer(bytes) || bytes.length > length) throw new Error('Invalid native source read result');
+        bytes.copy(buffer, offset);
+        return { bytesRead: bytes.length };
+      },
+      close() {
+        if (!closing) {
+          const capability = token(handle);
+          // Mark closed only when native close has settled, and permit a retry
+          // after EBUSY. Native operations reject simultaneous use rather than
+          // queue unbounded work or close a descriptor under an in-flight read.
+          closing = binding.close(capability).then(() => { handles.delete(handle); }, (error: unknown) => {
+            if ((error as NodeJS.ErrnoException).code === 'EBUSY') closing = undefined;
+            else handles.delete(handle);
+            throw error;
+          });
+        }
+        return closing;
+      },
+    };
+    handles.set(handle, value);
+    return handle;
+  };
+  return {
+    async openRootDirectory() { return retain(await binding.openRoot()); },
+    async openChild(directory, name, kind) {
+      assertSourceComponent(name);
+      return retain(await binding.openAt(token(directory), name, kind));
+    },
+    async *entries(directory) {
+      const stream = await binding.openDirectory(token(directory));
+      try {
+        for (;;) {
+          const batch = await binding.readDirectory(stream);
+          if (!Array.isArray(batch) || batch.length > 128) throw new Error('Invalid native directory batch');
+          if (!batch.length) return;
+          for (const name of batch) { assertSourceComponent(name); yield name; }
+        }
+      } finally { await binding.closeDirectory(stream); }
+    },
+  };
+}
+
+/** Owner's verified Darwin loader can feed this into createDarwinSourcePlatform.
+ * Never relabel a Linux test binary as Darwin. */
+export function createNativeDarwinSourceBinding(binding: PosixSourceBinding): DarwinSourceBinding {
+  if (binding?.platform !== 'darwin') throw new SourcePlatformUnavailableError('darwin', 'native binary was not compiled for Darwin');
+  const platform = createNativeSourcePlatform(binding);
+  return {
+    abiVersion: 1, platform: 'darwin', openRootDirectory: () => platform.openRootDirectory(),
+    openAt: (parent, name, kind) => platform.openChild(parent, name, kind),
+    readDirectory(parent, batchSize) {
+      if (batchSize !== 128) throw new Error('Invalid native source directory batch size');
+      return platform.entries(parent);
+    },
+  };
+}

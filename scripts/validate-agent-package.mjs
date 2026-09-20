@@ -11,7 +11,8 @@ import {
 const MAX_PACKAGE_FILES = 500;
 const MAX_PACKAGE_BYTES = 64 * 1024 * 1024;
 // Pin the reviewed product authority, including the closed guidance inventory.
-const AGENT_PRODUCT_SHA256 = "d09991a9c7fe5fe32104c21cfae7e4c35229fe2d50cbc4aef3f9a57b20a392e9";
+const HISTORICAL_AGENT_PRODUCT_SHA256 = "d09991a9c7fe5fe32104c21cfae7e4c35229fe2d50cbc4aef3f9a57b20a392e9";
+const AGENT_PRODUCT_SHA256 = "03709859804c014f43678d4e5aa5ae4dc4926d09cdbabd1b24b846d8f4be39de";
 const SCRIPT_FILES = [
   "agent-profile.mjs",
   "install-agent-user.mjs",
@@ -148,7 +149,7 @@ const assertExactNames = (actual, expected, label) => {
   if (JSON.stringify(normalizedActual) !== JSON.stringify(normalizedExpected)) fail(`${label} inventory drifted`);
 };
 
-const validateClosure = (root) => {
+const validateClosure = (root, fovea = false) => {
   const runtime = path.join(root, "runtime");
   const closure = jsonFile(root, "runtime/closure-manifest.json");
   if (closure.schemaVersion !== 1 || closure.product !== "kiro-fabric-agent" ||
@@ -172,6 +173,12 @@ const validateClosure = (root) => {
     if (bytes.length !== entry.bytes || hash(bytes) !== entry.sha256) fail(`closure digest: ${entry.path}`);
     contentDigest.update(entry.path).update("\0").update(bytes);
     expected.push(entry.path);
+  }
+  if (fovea) {
+    for (const name of ["fovea/engine-entry.js", "kiro/fovea-hook.js", "fovea/component.json", "fovea/upstream.json", "fovea/UPSTREAM-LICENSE.txt", "fovea/ast-grep-LICENSE.txt"]) {
+      if (!seen.has(name) || !fs.statSync(path.join(runtime, name)).size) fail(`Fovea asset missing: ${name}`);
+    }
+    if (!Array.isArray(closure.vendoredComponents) || !closure.vendoredComponents.some(component => component.name === "fovea-vendored-core")) fail("Fovea attribution missing");
   }
   if (contentDigest.digest("hex") !== closure.contentDigest) fail("closure content digest drifted");
   const actual = walkPackage(runtime)
@@ -214,13 +221,15 @@ export const validateAgentPackage = (input) => {
   }
 
   const product = jsonFile(root, "agent-product.json");
-  if (hash(fs.readFileSync(path.join(root, "agent-product.json"))) !== AGENT_PRODUCT_SHA256) {
+  const productHash = hash(fs.readFileSync(path.join(root, "agent-product.json")));
+  const fovea = productHash === AGENT_PRODUCT_SHA256;
+  if (!fovea && productHash !== HISTORICAL_AGENT_PRODUCT_SHA256) {
     fail("agent product authority digest drifted");
   }
   if (product.schemaVersion !== 1 || product.product !== "kiro-fabric-agent" ||
       product.entrypoint !== "src/kiro/mcp-entry.ts" || product.outputBundle !== "dist/kiro-agent-closure" ||
       JSON.stringify(product.tools) !== JSON.stringify(FABRIC_TOOLS) ||
-      JSON.stringify(product.bundledAgentResources) !== JSON.stringify(["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md", "skills/fabric-exec/references/review.md"])) {
+      JSON.stringify(product.bundledAgentResources) !== JSON.stringify(["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md", "skills/fabric-exec/references/review.md", ...(fovea ? ["skills/fabric-exec/references/fovea.md"] : [])])) {
     fail("agent product contract drifted");
   }
 
@@ -251,12 +260,12 @@ export const validateAgentPackage = (input) => {
   assertExactNames(fs.readdirSync(path.join(root, "skills")), ["fabric-exec"], "skills root");
   const skillFiles = walkPackage(path.join(root, "skills", "fabric-exec"))
     .map((file) => normalize(path.relative(path.join(root, "skills", "fabric-exec"), file)));
-  assertExactNames(skillFiles, ["SKILL.md", "references/api.md", "references/recipes.md", "references/workflow.md", "references/review.md"], "skill");
+  assertExactNames(skillFiles, ["SKILL.md", "references/api.md", "references/recipes.md", "references/workflow.md", "references/review.md", ...(fovea ? ["references/fovea.md"] : [])], "skill");
 
   const skill = snapshotTree(path.join(root, "skills", "fabric-exec"));
   assertExactNames(skill.directories.map((entry) => entry.path), [".", "references"], "skill directory");
 
-  const runtime = validateClosure(root);
+  const runtime = validateClosure(root, fovea);
   return {
     ok: true,
     root,
